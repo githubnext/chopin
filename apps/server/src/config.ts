@@ -6,14 +6,29 @@
  * than a puzzling behaviour three screens later.
  */
 
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
+
+/**
+ * The installation root.
+ *
+ * Derived from this file rather than the working directory, because the server
+ * is usually started through a workspace filter and so runs with its own
+ * package as the current directory — which is nobody's idea of where a room's
+ * data belongs, or of what an agent should be reading.
+ */
+const ROOT = resolve(import.meta.dir, "../../..");
 
 export type Config = {
 	host: string;
 	port: number;
 	/** When set, required at the WebSocket upgrade. */
 	key: string | undefined;
-	/** What the agent is allowed to read. Printed at boot; never inferred later. */
+	/**
+	 * What the agent is allowed to read.
+	 *
+	 * Defaults to the installation root and is printed at boot, because the
+	 * extent of what an agent can read should never have to be guessed at.
+	 */
 	workingDir: string;
 	/** Where room state is written. */
 	dataDir: string;
@@ -48,8 +63,8 @@ export function load(): Config {
 		host: process.env.SERVER_HOST || "127.0.0.1",
 		port: port(),
 		key: process.env.ACCESS_KEY || undefined,
-		workingDir: resolve(process.env.WORKING_DIR || process.cwd()),
-		dataDir: resolve(process.env.DATA_DIR || "data"),
+		workingDir: resolve(process.env.WORKING_DIR || ROOT),
+		dataDir: resolve(process.env.DATA_DIR || join(ROOT, "data")),
 		model: process.env.MODEL || DEFAULT_MODEL,
 		devClient: process.env.DEV_CLIENT || undefined,
 	};
