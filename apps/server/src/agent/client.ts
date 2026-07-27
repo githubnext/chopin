@@ -16,7 +16,7 @@ import { CopilotClient, RuntimeConnection } from "@github/copilot-sdk";
 
 import { locate } from "./cli";
 import { gate } from "./permissions";
-import { NAME, planner } from "./planner";
+import { NAME, planner, TOOLS } from "./planner";
 
 import type { CopilotSession, SessionConfig, Tool } from "@github/copilot-sdk";
 import type { Config } from "../config";
@@ -41,6 +41,8 @@ function configure(config: Config, toolbox: Toolbox): SessionConfig {
 		enableSkills: true,
 		skillDirectories: [`${config.workingDir}/.agents/skills`],
 		tools: toolbox.tools,
+		// The real allowlist. See `TOOLS` for why it cannot live on the agent.
+		availableTools: TOOLS,
 		mcpServers: config.token
 			? {
 				github: {
@@ -86,7 +88,9 @@ function connect(config: Config): CopilotClient {
 		// the bundled JavaScript and spawns `node`, which under Bun is a literal
 		// string that may not resolve to anything.
 		connection: RuntimeConnection.forStdio({ path: cli.path }),
-		logLevel: "warning",
+		// The CLI's own warnings reach our stderr as `[CLI subprocess]` lines, and
+		// a server that fails to connect says so there and nowhere else.
+		logLevel: "info",
 		gitHubToken: config.token,
 	});
 }
@@ -113,6 +117,50 @@ export async function probe(config: Config, toolbox: Toolbox): Promise<void> {
 	}
 }
 
+/**
+ * Report what the planner can actually call.
+ *
+ * A tool filter is matched against names by the runtime, and an entry that
+ * matches nothing is dropped without a word. There is no other place that
+ * truth is visible: the agent simply behaves as though it never had the tool,
+ * and explains its way around the absence rather than reporting it — which is
+ * how a planner can spend a turn apologising for having no GitHub access while
+ * its prompt insists it has.
+ *
+ * Runs against a real session rather than the boot probe, because the probe
+ * has no room and therefore none of the plan tools; auditing it would report a
+ * set nobody ever gets. Costs one line per session, and is never fatal — a
+ * diagnostic that can stop a turn is worse than no diagnostic.
+ */
+async function audit(session: CopilotSession, config: Config): Promise<void> {
+	try {
+		await session.rpc.tools.initializeAndValidate();
+		let { tools } = await session.rpc.tools.getCurrentMetadata();
+
+		if (!tools) {
+			console.warn("[agent] the tool list is not initialised");
+		} else {
+			let names = tools.map(tool => tool.namespacedName || tool.name).sort();
+			console.log(`[agent] ${names.length} tools: ${names.join(", ")}`);
+		}
+	} catch (err) {
+		console.warn("[agent] could not read the tool list:", err);
+	}
+
+	if (!config.token) return;
+
+	try {
+		// Throws when the server never connected, which is the distinction
+		// worth having: no tools because none were offered, or no tools
+		// because the ones offered were not matched.
+		let { tools } = await session.rpc.mcp.listTools({ serverName: "github" });
+		console.log(`[agent] github mcp: ${tools.length} tools offered`);
+	} catch (err) {
+		let reason = err instanceof Error ? err.message : String(err);
+		console.warn(`[agent] github mcp is not connected: ${reason}`);
+	}
+}
+
 /** Open a room's session, resuming the conversation when there is one. */
 export async function open(
 	config: Config,
@@ -128,6 +176,7 @@ export async function open(
 		try {
 			let session = await started.resumeSession(previous, settings);
 			await session.rpc.agent.select({ name: NAME });
+			await audit(session, config);
 			return { agent: { session, id: previous }, resumed: true };
 		} catch {
 			// The session is gone — a cleared ~/.copilot, a CLI upgrade, an
@@ -138,6 +187,7 @@ export async function open(
 
 	let session = await started.createSession(settings);
 	await session.rpc.agent.select({ name: NAME });
+	await audit(session, config);
 	return { agent: { session, id: session.sessionId }, resumed: false };
 }
 

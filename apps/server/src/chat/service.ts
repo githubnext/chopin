@@ -430,6 +430,35 @@ export function translate(context: Room, event: SessionEvent): void {
 			return;
 		}
 
+		/*
+		 * A refused tool never executes, so it produces no start and no
+		 * completion — without this it leaves no trace at all, and the agent
+		 * quietly works around a boundary nobody can see it hitting. Which is
+		 * indistinguishable, from the outside, from a tool it never had.
+		 */
+		case "permission.completed": {
+			let { result, toolCallId } = event.data;
+			if (!toolCallId || !result.kind.startsWith("denied")) return;
+
+			let feedback = "feedback" in result && typeof result.feedback === "string"
+				? result.feedback
+				: undefined;
+
+			let activity: Wire.Activity = {
+				id: toolCallId,
+				name: named(chat, toolCallId),
+				status: "failed",
+				result: feedback ?? "Refused.",
+			};
+			broadcast(server, room, {
+				kind: "chat:tool",
+				ts: 0,
+				entry: attach(chat, activity),
+				activity,
+			});
+			return;
+		}
+
 		case "session.error": {
 			say(chat, server, room, {
 				id: ulid(),

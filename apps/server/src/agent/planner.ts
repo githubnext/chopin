@@ -24,11 +24,13 @@ export const NAME = "chopin-plan";
 /**
  * Tools the planner may use.
  *
- * Names are bare here. The `builtin:` and `mcp:` prefixes belong to
- * session-wide filters, not to a custom agent's list — the runtime matches
- * these against tool names directly, so a prefixed entry matches nothing and is
- * dropped without a word. An agent that silently loses a tool looks exactly
- * like an agent that chose not to use it.
+ * Expressed as the session's filter rather than the agent's own list, and that
+ * distinction is load-bearing: a custom agent's `tools` cannot admit an MCP
+ * tool at all. Not by wildcard, not by exact name, not with the server
+ * declared on the agent instead of the session — the entry simply matches
+ * nothing and is dropped without a word, and the agent then behaves as though
+ * the tool never existed. `availableTools` is the filter that understands
+ * where a tool came from, so it is the one that can say "and the MCP ones".
  *
  * `grep` is an alias the runtime expands to whichever of grep/rg/search the
  * model is configured for, so it survives a rename.
@@ -37,21 +39,22 @@ export const NAME = "chopin-plan";
  * runtime does not classify as read-only, and any write redirection. Reading
  * the repository is most of what planning is.
  */
-const TOOLS = [
-	"view",
-	"grep",
-	"glob",
-	"bash",
-	"read_bash",
-	"stop_bash",
+export const TOOLS = [
+	"builtin:view",
+	"builtin:grep",
+	"builtin:glob",
+	"builtin:bash",
+	"builtin:read_bash",
+	"builtin:stop_bash",
+	// Announces what it is about to do, and groups the calls underneath.
+	"builtin:report_intent",
+	"builtin:skill",
 	// Issues, pull requests and file contents. The server is configured
-	// read-only and the gate independently demands it, so the wildcard cannot
+	// read-only and the gate independently refuses a write, so this cannot
 	// widen past reading.
-	"github/*",
-	"read_plan",
-	"edit_plan",
-	"anchor_plan",
-	"ask",
+	"mcp:*",
+	// read_plan, edit_plan, anchor_plan and ask.
+	"custom:*",
 ];
 
 /** Components the agent writes itself. The rest are created for it. */
@@ -199,7 +202,8 @@ export const planner: CustomAgentConfig = {
 	displayName: "Plan",
 	description: "Maintains the plan, and asks the team when a decision cannot be made from the "
 		+ "repository alone.",
-	tools: TOOLS,
+	// Deliberately unset: an agent-level list would exclude every MCP tool.
+	// The session's `availableTools` is the boundary instead.
 	prompt: PROMPT,
 	// Hidden: the planner is entered by being the only agent, never by another
 	// agent deciding to delegate to it.
