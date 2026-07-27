@@ -10,11 +10,25 @@
  */
 
 import type { Identity, Socket } from "./wire";
+// Type-only: the plan attaches to a room, but a room knows nothing about how
+// one is built, and a value import here would close a cycle.
+import type { Plan } from "./plan/service";
 
 export type Room = {
 	id: string;
 	/** Keyed by client id, so one person in two tabs is two members. */
 	members: Map<string, Socket>;
+	/**
+	 * The collaborative document, attached on the first `plan:open`.
+	 *
+	 * Absent until somebody asks for it: a room that nobody has opened costs a
+	 * map entry, not a Lexical editor and a Y.Doc.
+	 */
+	plan?: Plan;
+	/** In flight while the first opener is building it, so the second waits. */
+	opening?: Promise<Plan>;
+	/** Pending eviction, cancelled if somebody comes back. */
+	eviction?: ReturnType<typeof setTimeout>;
 };
 
 const rooms = new Map<string, Room>();
@@ -47,23 +61,31 @@ export function get(id: string): Room | undefined {
 
 export function join(ws: Socket): Room {
 	let room = open(ws.data.room);
+	// A reload is a departure followed by an arrival. Cancelling here is what
+	// keeps the document alive across one.
+	if (room.eviction) {
+		clearTimeout(room.eviction);
+		room.eviction = undefined;
+	}
 	room.members.set(ws.data.client, ws);
 	return room;
 }
 
-/**
- * Remove a member, and the room with them if they were the last.
- *
- * Dropping an empty room is safe while membership is all it holds. Once a room
- * owns a document this becomes a snapshot followed by a delayed eviction, so
- * that a reload does not discard the thing being reloaded.
- */
 export function leave(ws: Socket): Room | undefined {
 	let room = rooms.get(ws.data.room);
 	if (!room) return undefined;
 	room.members.delete(ws.data.client);
-	if (room.members.size === 0) rooms.delete(room.id);
 	return room;
+}
+
+/** Rooms currently in memory, for shutdown. */
+export function all(): Room[] {
+	return [...rooms.values()];
+}
+
+export function forget(room: Room): void {
+	if (room.eviction) clearTimeout(room.eviction);
+	rooms.delete(room.id);
 }
 
 export function members(room: Room): Identity[] {

@@ -7,7 +7,11 @@
 	],
 	"compilerOptions": {
 		"target": "esnext",
-		"lib": ["esnext"],
+		// The dialect's nodes describe their own DOM, and the server imports
+		// them for the headless mirror. Lexical only calls createDOM during
+		// reconciliation, which never happens here — but the source is still
+		// type-checked, so the declarations have to be in scope.
+		"lib": ["esnext", "dom", "dom.iterable"],
 		"types": ["bun"],
 
 		"allowSyntheticDefaultImports": true,

@@ -12,8 +12,9 @@ import { join } from "node:path";
 
 import { describe, load } from "./config";
 import { uid } from "./ids";
+import * as Service from "./plan/service";
 import * as Rooms from "./rooms";
-import { broadcast, relay, reply, tell, topic } from "./wire";
+import { broadcast, fail, relay, tell, topic } from "./wire";
 
 import type { Server } from "bun";
 import type { Incoming } from "@chopin/protocol";
@@ -24,12 +25,51 @@ const config = load();
 /** Built client, when there is one. Absent during development. */
 const CLIENT = join(import.meta.dir, "../../web/dist");
 
+/**
+ * How long an empty room is kept before its document is released.
+ *
+ * A reload is a departure followed by an arrival, and discarding the document
+ * in between would cost the epoch and everyone's undo history for a keypress.
+ */
+const EVICT_MS = 30_000;
+
 function presence(server: Server<SocketData>, room: Rooms.Room): void {
 	broadcast(server, room.id, {
 		kind: "session:presence",
 		ts: 0,
 		members: Rooms.members(room),
 	});
+}
+
+/**
+ * Attach the document to a room, once.
+ *
+ * Two clients opening at the same moment must not build two documents, so the
+ * first stores its promise and the second waits on it.
+ */
+function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Service.Plan> {
+	if (room.plan) return Promise.resolve(room.plan);
+	return room.opening ??= Service
+		.open(room.id, join(config.dataDir, room.id), server)
+		.then(opened => {
+			room.plan = opened;
+			room.opening = undefined;
+			return opened;
+		})
+		.catch(err => {
+			room.opening = undefined;
+			throw err;
+		});
+}
+
+function evict(room: Rooms.Room): void {
+	if (room.eviction || room.members.size > 0) return;
+	room.eviction = setTimeout(() => {
+		if (room.members.size > 0) return;
+		let held = room.plan;
+		Rooms.forget(room);
+		if (held) void Service.close(held);
+	}, EVICT_MS);
 }
 
 /**
@@ -53,7 +93,7 @@ function admit(url: URL): { data: SocketData } | { status: number; reason: strin
 	return { data: { room, handle, client: uid() } };
 }
 
-function receive(ws: Socket, raw: string): void {
+async function receive(ws: Socket, raw: string): Promise<void> {
 	let frame: Incoming;
 	try {
 		frame = JSON.parse(raw) as Incoming;
@@ -61,9 +101,33 @@ function receive(ws: Socket, raw: string): void {
 		return;
 	}
 
+	let room = Rooms.get(ws.data.room);
+	if (!room) return;
+
 	switch (frame.kind) {
 		case "session:ping":
-			return reply(ws, frame.rid, { kind: "session:ping", ts: 0 });
+			return tell(ws, { kind: "session:ping", ts: 0, rid: frame.rid });
+
+		case "plan:open": {
+			try {
+				Service.greet(await plan(room, server), ws, frame);
+			} catch (err) {
+				fail(ws, frame.rid, err instanceof Error ? err.message : "cannot open plan");
+			}
+			return;
+		}
+
+		case "plan:update":
+			if (room.plan) Service.submit(room.plan, ws, frame);
+			return;
+
+		case "plan:awareness":
+			if (room.plan) Service.awareness(room.plan, ws, frame);
+			return;
+
+		case "plan:close":
+			if (room.plan) Service.departed(room.plan, ws);
+			return;
 	}
 }
 
@@ -112,15 +176,27 @@ const server = Bun.serve<SocketData>({
 		},
 
 		message(ws: Socket, raw) {
-			if (typeof raw === "string") receive(ws, raw);
+			if (typeof raw === "string") void receive(ws, raw);
 		},
 
 		close(ws: Socket) {
 			let room = Rooms.leave(ws);
 			ws.unsubscribe(topic(ws.data.room));
-			if (room && room.members.size > 0) presence(server, room);
+			if (!room) return;
+			if (room.plan) Service.departed(room.plan, ws);
+			if (room.members.size > 0) presence(server, room);
+			else evict(room);
 		},
 	},
 });
+
+/** Nothing in memory is worth losing to a Ctrl-C. */
+async function drain(): Promise<void> {
+	await Promise.all(Rooms.all().map(room => room.plan && Service.close(room.plan)));
+	process.exit(0);
+}
+
+process.on("SIGINT", () => void drain());
+process.on("SIGTERM", () => void drain());
 
 console.log(describe(config));

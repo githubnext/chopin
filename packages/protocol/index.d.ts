@@ -72,8 +72,10 @@ export declare namespace Session {
 	export type Ping = KIND<"session:ping">;
 }
 
+export type { Plan } from "./plan";
+
 /** Everything a client may send. */
-export type Incoming = Session.Incoming;
+export type Incoming = Session.Incoming | import("./plan").Plan.Incoming;
 
 /** Everything a client may receive. */
-export type Outgoing = Session.Outgoing;
+export type Outgoing = Session.Outgoing | import("./plan").Plan.Outgoing;

@@ -9,7 +9,13 @@
 		"types": "tsgo --noEmit --skipLibCheck"
 	},
 	"dependencies": {
-		"@chopin/protocol": "workspace:*"
+		"@chopin/dialect": "workspace:*",
+		"@chopin/protocol": "workspace:*",
+		"@lexical/headless": "catalog:mdx",
+		"@lexical/yjs": "catalog:mdx",
+		"lexical": "catalog:mdx",
+		"y-protocols": "catalog:mdx",
+		"yjs": "catalog:mdx"
 	},
 	"devDependencies": {
 		"@types/bun": "catalog:bun"
