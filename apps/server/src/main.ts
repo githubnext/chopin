@@ -12,7 +12,7 @@ import { join } from "node:path";
 import * as Agent from "./agent/client";
 import * as Chat from "./chat/service";
 import { proxy, serve } from "./client";
-import { describe, load } from "./config";
+import { describe, load, problem } from "./config";
 import { uid } from "./ids";
 import * as Service from "./plan/service";
 import * as Inject from "./questions/inject";
@@ -247,6 +247,12 @@ process.on("SIGTERM", () => void drain());
  * detectable in a couple of seconds by trying. Discovering them when somebody
  * types their first message is worse for everyone.
  */
+let misconfigured = problem(config);
+if (misconfigured) {
+	console.error(`chopin: ${misconfigured}`);
+	process.exit(1);
+}
+
 if (config.agent) {
 	if (!config.token) {
 		console.error("chopin: GITHUB_TOKEN is not set. Set one, or start with AGENT=off.");

@@ -19,7 +19,7 @@
  * supervisor watching it would never learn that Vite had gone.
  */
 
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import type { Subprocess } from "bun";
 
@@ -87,12 +87,34 @@ async function stop(code: number): Promise<void> {
 	process.exit(code);
 }
 
+/**
+ * Settle relative paths here, where the current directory is still yours.
+ *
+ * Each child is started in its own package directory, so `WORKING_DIR=../thing`
+ * would otherwise be resolved against `apps/server` and point at somewhere that
+ * does not exist. Resolving before handing it on means a relative path means
+ * what it looked like it meant when you typed it.
+ */
+function inherited(): Record<string, string> {
+	let out: Record<string, string> = {};
+	for (let name of ["WORKING_DIR", "DATA_DIR"]) {
+		let value = process.env[name];
+		if (value) out[name] = resolve(value);
+	}
+	return out;
+}
+
+let paths = inherited();
+
 children = [
 	// Vite's own entry, run by Bun. Going through `bun run dev` would add the
 	// wrapper described above, and the shim in `.bin` carries a Node shebang —
 	// which is one more thing that has to be installed for no benefit.
 	start("web", "apps/web", ["bun", "node_modules/vite/bin/vite.js"]),
-	start("server", "apps/server", ["bun", "--watch", "src/main.ts"], { DEV_CLIENT: WEB }),
+	start("server", "apps/server", ["bun", "--watch", "src/main.ts"], {
+		...paths,
+		DEV_CLIENT: WEB,
+	}),
 ];
 
 for (let name of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {

@@ -41,6 +41,12 @@ Anything said without the mention is still carried into the agent's next turn,
 so a room can settle something between themselves and the agent arrives already
 knowing. The composer says which a message will be before you send it.
 
+To plan against another checkout, point it there:
+
+```bash
+WORKING_DIR=../some-project bun run dev
+```
+
 ## What to try
 
 1. Type in the plan with two windows open, and watch the cursors.
@@ -53,16 +59,16 @@ knowing. The composer says which a message will be before you send it.
 
 ## Configuration
 
-| Variable       | Default             | Meaning                                                     |
-| -------------- | ------------------- | ----------------------------------------------------------- |
-| `GITHUB_TOKEN` | —                   | Required. The agent's credential and the GitHub MCP bearer. |
-| `WORKING_DIR`  | repository root     | Everything the agent may read. Printed at startup.          |
-| `SERVER_HOST`  | `127.0.0.1`         | Bind address. `0.0.0.0` for a LAN or a tunnel.              |
-| `ACCESS_KEY`   | unset               | When set, required to connect.                              |
-| `MODEL`        | `claude-sonnet-4.6` | The planner's model.                                        |
-| `AGENT`        | on                  | `AGENT=off` runs the editor with no agent at all.           |
-| `PORT`         | `8787`              |                                                             |
-| `DATA_DIR`     | `data`              | Where rooms are written.                                    |
+| Variable       | Default             | Meaning                                                                                   |
+| -------------- | ------------------- | ----------------------------------------------------------------------------------------- |
+| `GITHUB_TOKEN` | —                   | Required. The agent's credential and the GitHub MCP bearer.                               |
+| `WORKING_DIR`  | repository root     | Everything the agent may read. Relative to where you run the command. Printed at startup. |
+| `SERVER_HOST`  | `127.0.0.1`         | Bind address. `0.0.0.0` for a LAN or a tunnel.                                            |
+| `ACCESS_KEY`   | unset               | When set, required to connect.                                                            |
+| `MODEL`        | `claude-sonnet-4.6` | The planner's model.                                                                      |
+| `AGENT`        | on                  | `AGENT=off` runs the editor with no agent at all.                                         |
+| `PORT`         | `8787`              |                                                                                           |
+| `DATA_DIR`     | `data`              | Where rooms are written.                                                                  |
 
 ## Sharing a room
 

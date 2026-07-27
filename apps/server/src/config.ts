@@ -6,6 +6,7 @@
  * than a puzzling behaviour three screens later.
  */
 
+import { statSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 /**
@@ -28,6 +29,10 @@ export type Config = {
 	 *
 	 * Defaults to the installation root and is printed at boot, because the
 	 * extent of what an agent can read should never have to be guessed at.
+	 *
+	 * A relative value is resolved against the current directory, which is the
+	 * one you typed the command in — the development supervisor resolves it
+	 * before handing it on, since it starts the server somewhere else.
 	 */
 	workingDir: string;
 	/** Where room state is written. */
@@ -88,6 +93,27 @@ export function load(): Config {
 		agent: process.env.AGENT !== "off",
 		devClient: process.env.DEV_CLIENT || undefined,
 	};
+}
+
+/**
+ * What is wrong with this configuration, if anything.
+ *
+ * A working directory that is not there is worth catching here rather than
+ * three layers down. The CLI is spawned with it as its own working directory,
+ * so a bad path kills that process the instant it starts, and what surfaces is
+ * the SDK failing to write to a stream that is already gone — a message with
+ * nothing in it about paths.
+ */
+export function problem(config: Config): string | undefined {
+	let target = statSync(config.workingDir, { throwIfNoEntry: false });
+
+	if (!target) {
+		return `WORKING_DIR does not exist: ${config.workingDir}`;
+	}
+	if (!target.isDirectory()) {
+		return `WORKING_DIR is not a directory: ${config.workingDir}`;
+	}
+	return undefined;
 }
 
 /**
