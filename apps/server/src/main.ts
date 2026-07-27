@@ -7,9 +7,9 @@
  * needs to know which mode it is in.
  */
 
-import { existsSync } from "node:fs";
 import { join } from "node:path";
 
+import { proxy, serve } from "./client";
 import { describe, load } from "./config";
 import { uid } from "./ids";
 import * as Service from "./plan/service";
@@ -22,7 +22,7 @@ import type { Socket, SocketData } from "./wire";
 
 const config = load();
 
-/** Built client, when there is one. Absent during development. */
+/** Where the built client lands. Used only when there is no dev client. */
 const CLIENT = join(import.meta.dir, "../../web/dist");
 
 /**
@@ -147,18 +147,7 @@ const server = Bun.serve<SocketData>({
 			return new Response("upgrade failed", { status: 400 });
 		}
 
-		if (!existsSync(CLIENT)) {
-			return new Response("chopin server is running; start the client with `bun run dev`", {
-				status: 404,
-			});
-		}
-
-		// Everything that is not a real file is the single-page app, so a room
-		// URL survives a reload.
-		let file = Bun.file(join(CLIENT, url.pathname));
-		return file.exists().then(found =>
-			new Response(found ? file : Bun.file(join(CLIENT, "index.html")))
-		);
+		return config.devClient ? proxy(req, url, config.devClient) : serve(url, CLIENT);
 	},
 
 	websocket: {

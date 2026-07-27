@@ -53,7 +53,17 @@ export class Wire {
 	#pending = new Map<string, Pending>();
 	#attempts = 0;
 	#timer: ReturnType<typeof setTimeout> | undefined;
-	#status: Status = "connecting";
+	/**
+	 * Undefined until the first transition, so the first one always announces.
+	 *
+	 * Started at `"connecting"` this would swallow its own opening state, and a
+	 * caller sharing one status across instances — React mounting, discarding
+	 * and remounting is exactly this — would keep displaying the dead
+	 * instance's last word until the new one happened to reach a different
+	 * state. A socket that never opens then reports the previous socket's
+	 * closure forever.
+	 */
+	#status: Status | undefined;
 	#everConnected = false;
 	#disposed = false;
 
@@ -63,7 +73,7 @@ export class Wire {
 	}
 
 	get status(): Status {
-		return this.#status;
+		return this.#status ?? "connecting";
 	}
 
 	#set(status: Status, reason?: string): void {

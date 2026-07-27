@@ -19,6 +19,15 @@ export type Config = {
 	dataDir: string;
 	/** Planner model. */
 	model: string;
+	/**
+	 * Origin of a running Vite, when developing.
+	 *
+	 * Set, and everything that is not the socket is forwarded there; unset, and
+	 * the built client is served from disk. This is deliberately explicit rather
+	 * than sniffed from the presence of a `dist` directory, which lingers after
+	 * a build and would make development quietly serve stale files.
+	 */
+	devClient: string | undefined;
 };
 
 const DEFAULT_PORT = 8787;
@@ -42,6 +51,7 @@ export function load(): Config {
 		workingDir: resolve(process.env.WORKING_DIR || process.cwd()),
 		dataDir: resolve(process.env.DATA_DIR || "data"),
 		model: process.env.MODEL || DEFAULT_MODEL,
+		devClient: process.env.DEV_CLIENT || undefined,
 	};
 }
 
@@ -56,6 +66,7 @@ export function describe(config: Config): string {
 	let parts = [
 		"chopin",
 		`http://${config.host}:${config.port}`,
+		config.devClient ? `client: vite (${config.devClient})` : "client: built",
 		`working dir: ${config.workingDir}`,
 	];
 	if (config.key) parts.push("access key: required");
