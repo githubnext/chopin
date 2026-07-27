@@ -128,6 +128,9 @@ const MARKS: Mark[] = [
 
 type Position = { top: number; left: number };
 
+/** How close to the window edge the bubble may sit. */
+const EDGE = 8;
+
 export function SelectionBubble({ disabled }: { disabled?: boolean }) {
 	let [editor] = useLexicalComposerContext();
 	let [position, setPosition] = useState<Position>();
@@ -248,15 +251,32 @@ export function SelectionBubble({ disabled }: { disabled?: boolean }) {
 		);
 	}, [editor, choosing]);
 
-	// Keep the bubble on screen when the selection sits near an edge. Opening
-	// the menu changes its width, so that has to be measured again too.
+	/**
+	 * Sit the bubble above the selection, and keep it on screen.
+	 *
+	 * This is the only thing that places the bubble. It used to share the job
+	 * with Tailwind's translate utilities, which compile to the `translate`
+	 * property rather than `transform` — a separate property that composes
+	 * with it, so the bubble was offset by a full width and two full heights.
+	 *
+	 * Width comes from `offsetWidth` rather than a measured rect, because a
+	 * rect already includes the transform being calculated: reading one here
+	 * would make the edge correction depend on its own previous output, and
+	 * near an edge it would alternate between two positions every time the
+	 * block menu changed the bubble's width.
+	 */
 	useLayoutEffect(() => {
 		let element = ref.current;
 		if (!element || !position) return;
-		let rect = element.getBoundingClientRect();
-		let overflow = rect.right - window.innerWidth + 8;
-		if (overflow > 0) element.style.transform = `translate(calc(-50% - ${overflow}px), -100%)`;
-		else element.style.transform = "translate(-50%, -100%)";
+
+		let half = element.offsetWidth / 2;
+		let overflow = position.left + half - (window.innerWidth - EDGE);
+		// The plan is a middle column now and can be dragged narrow, so a
+		// selection near its left edge needs the same treatment as its right.
+		let underflow = EDGE - (position.left - half);
+		let shift = overflow > 0 ? -overflow : underflow > 0 ? underflow : 0;
+
+		element.style.transform = `translate(calc(-50% + ${shift}px), -100%)`;
 	}, [position, choosing]);
 
 	if (!position) return null;
@@ -267,8 +287,10 @@ export function SelectionBubble({ disabled }: { disabled?: boolean }) {
 			role="toolbar"
 			aria-label="Text formatting"
 			contentEditable={false}
-			className="fixed z-50 flex -translate-x-1/2 -translate-y-full items-center gap-0.5 rounded-md border border-border bg-popover p-1 shadow-md"
-			style={{ top: position.top - 8, left: position.left }}
+			// No translate utilities here: placement belongs to the layout effect,
+			// and Tailwind's would compose with its transform rather than replace it.
+			className="fixed z-50 flex items-center gap-0.5 rounded-md border border-border bg-popover p-1 shadow-md"
+			style={{ top: position.top - EDGE, left: position.left }}
 			/*
 			 * Nothing in here may take focus: the selection it acts on would go
 			 * with it. That rules out any control whose behaviour is a mousedown
