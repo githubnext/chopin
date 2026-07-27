@@ -3,7 +3,8 @@
 		"../../tsconfig.json"
 	],
 	"include": [
-		"*.d.ts"
+		"*.d.ts",
+		"*.ts"
 	],
 	"compilerOptions": {
 		"target": "esnext",

@@ -3,11 +3,17 @@
  *
  * Drives the agent, and shows what it is doing. The composer stays live while
  * a turn runs — a turn owns the plan, not the conversation — and anything sent
- * meanwhile is queued in order, with its author's name on it, so nobody is
- * silenced because a colleague prompted first.
+ * to the agent meanwhile is queued in order, with its author's name on it, so
+ * nobody is silenced because a colleague prompted first.
+ *
+ * The agent only acts when addressed, so the composer says where a message is
+ * going before it goes. The failure worth designing out is typing into what
+ * looks like a prompt and being met with silence.
  */
 
 import { useEffect, useRef, useState } from "react";
+
+import { addressed, MENTION } from "@chopin/protocol/address";
 
 import { Transcript } from "./transcript";
 
@@ -130,6 +136,8 @@ export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) 
 		setText("");
 	};
 
+	let asking = addressed(text);
+
 	return (
 		<div className="flex h-full min-h-0 flex-col border-r border-border">
 			<header className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
@@ -174,7 +182,7 @@ export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) 
 				waiting={queue}
 			/>
 
-			<div className="shrink-0 border-t border-border p-2">
+			<div className="flex shrink-0 flex-col gap-1 border-t border-border p-2">
 				<textarea
 					className="w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus-visible:border-ring disabled:opacity-50"
 					disabled={!connected}
@@ -185,11 +193,35 @@ export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) 
 						event.preventDefault();
 						submit();
 					}}
-					placeholder={busy ? "Queue a message…" : "Ask the planner…"}
+					placeholder={`Talk to the room, or mention ${MENTION} to ask the planner…`}
 					ref={input}
 					rows={3}
 					value={text}
 				/>
+
+				<div className="flex items-baseline gap-2 px-1 text-[0.625rem]">
+					{asking
+						? (
+							<span className="text-primary">
+								→ planner{busy && ", after the current turn"}
+							</span>
+						)
+						: (
+							<span className="text-muted-foreground">
+								room only — the planner will see it on its next turn
+							</span>
+						)}
+					<button
+						className="ml-auto text-muted-foreground hover:text-foreground"
+						onClick={() => {
+							setText(current => (addressed(current) ? current : `${MENTION} ${current}`.trim()));
+							input.current?.focus();
+						}}
+						type="button"
+					>
+						{asking ? "" : `+ ${MENTION}`}
+					</button>
+				</div>
 			</div>
 		</div>
 	);

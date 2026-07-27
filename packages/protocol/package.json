@@ -9,6 +9,10 @@
 	"exports": {
 		".": {
 			"types": "./index.d.ts"
+		},
+		"./address": {
+			"types": "./address.ts",
+			"default": "./address.ts"
 		}
 	}
 }

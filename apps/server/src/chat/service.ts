@@ -2,10 +2,14 @@
  * The conversation.
  *
  * One transcript per room, shared by everyone in it, and one turn at a time.
- * Messages sent while a turn is running are queued rather than refused: the
- * plan belongs to the agent for the length of a turn, but the conversation
- * does not, and silencing somebody because a colleague prompted first is a
- * poor way to run a room with two people in it.
+ * Messages that address the agent are queued rather than refused while it is
+ * working: the plan belongs to the agent for the length of a turn, but the
+ * conversation does not, and silencing somebody because a colleague prompted
+ * first is a poor way to run a room with two people in it.
+ *
+ * Messages that do not address it are ordinary conversation. They are carried
+ * into the next turn as context rather than starting one, so people can decide
+ * something between themselves and the agent turns up already knowing.
  *
  * Every message reaching the model is prefixed with its author's handle. The
  * agent is planning with a group, and "Alice prefers X, but Bob raised Y" is
@@ -17,6 +21,9 @@ import { ulid } from "@chopin/dialect";
 import * as Agent from "../agent/client";
 import { toolbox } from "../agent/tools";
 import * as Service from "../plan/service";
+import { addressed } from "@chopin/protocol/address";
+
+import { compose, remember } from "./address";
 import { broadcast, tell } from "../wire";
 
 import type { Server } from "bun";
@@ -24,6 +31,7 @@ import type { SessionEvent } from "@github/copilot-sdk";
 import type { Chat as Wire, Request } from "@chopin/protocol";
 import type { Config } from "../config";
 import type { Plan } from "../plan/service";
+import type { Said } from "./address";
 import type { Socket, SocketData } from "../wire";
 
 /** Beyond this the queue is a backlog nobody is going to read. */
@@ -47,10 +55,18 @@ export type Chat = {
 	timings: Map<string, number>;
 	/** Session id, persisted so a restart resumes the conversation. */
 	resume?: string;
+	/**
+	 * What the room has said since the agent last ran.
+	 *
+	 * Deliberately not persisted: a conversation the agent never saw has no
+	 * claim on surviving a restart, and replaying it later would be stranger
+	 * than losing it.
+	 */
+	backscroll: Said[];
 };
 
 export function create(): Chat {
-	return { entries: [], waiting: [], busy: false, timings: new Map() };
+	return { entries: [], waiting: [], busy: false, timings: new Map(), backscroll: [] };
 }
 
 /**
@@ -69,6 +85,7 @@ export function restore(entries: Wire.Entry[], resume?: string): Chat {
 		waiting: [],
 		busy: false,
 		timings: new Map(),
+		backscroll: [],
 		...(resume ? { resume } : {}),
 	};
 }
@@ -123,22 +140,30 @@ export type Room = {
 /**
  * Take a message.
  *
- * Runs it if the agent is free, queues it otherwise. Either way the message
- * appears in the transcript immediately: what somebody said is not contingent
- * on the agent being ready to hear it.
+ * It appears in the transcript either way — what somebody said is not
+ * contingent on the agent being ready to hear it, or on it being for the agent
+ * at all. What differs is whether it starts a turn.
  */
 export function send(context: Room, ws: Socket, msg: Request<Wire.Send>): void {
 	let text = msg.text.trim();
 	if (!text) return;
 
 	let { chat, room, server } = context;
+	let handle = ws.data.handle;
 
 	say(chat, server, room, {
 		id: ulid(),
-		author: { kind: "member", handle: ws.data.handle },
+		author: { kind: "member", handle },
 		text,
 		ts: now(),
 	});
+
+	// Not for the agent: remembered, so the next turn arrives knowing it, but
+	// nothing runs and nothing queues. Nobody asked for anything.
+	if (!addressed(text)) {
+		chat.backscroll = remember(chat.backscroll, { handle, text });
+		return;
+	}
 
 	if (chat.busy) {
 		if (chat.waiting.length >= MAX_QUEUE) {
@@ -149,11 +174,11 @@ export function send(context: Room, ws: Socket, msg: Request<Wire.Send>): void {
 				ts: now(),
 			});
 		}
-		chat.waiting.push({ id: ulid(), handle: ws.data.handle, text });
+		chat.waiting.push({ id: ulid(), handle, text });
 		return queued(chat, server, room);
 	}
 
-	void run(context, ws.data.handle, text);
+	void run(context, handle, text);
 }
 
 /** Withdraw a queued message. Only whoever wrote it may. */
@@ -248,9 +273,14 @@ async function run(context: Room, handle: string, text: string): Promise<void> {
 			}
 		});
 
+		// Drained rather than copied: what the agent has been told once should
+		// not arrive again on the next turn.
+		let prompt = compose(chat.backscroll, handle, text);
+		chat.backscroll = [];
+
 		// The handle travels to the model, because a position belongs to
 		// whoever holds it.
-		await agent.session.send({ prompt: `@${handle}: ${text}` });
+		await agent.session.send({ prompt });
 		await finished.promise;
 	} catch (err) {
 		console.error("[chat] turn failed:", err);
