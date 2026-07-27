@@ -1,0 +1,69 @@
+{
+	"name": "@chopin/dialect",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"types": "tsgo --noEmit --skipLibCheck"
+	},
+	"exports": {
+		".": {
+			"types": "./src/index.ts",
+			"default": "./src/index.ts"
+		},
+		"./dialect": {
+			"types": "./src/dialect.ts",
+			"default": "./src/dialect.ts"
+		},
+		"./limits": {
+			"types": "./src/limits.ts",
+			"default": "./src/limits.ts"
+		},
+		"./parse": {
+			"types": "./src/parse.ts",
+			"default": "./src/parse.ts"
+		},
+		"./serialize": {
+			"types": "./src/serialize.ts",
+			"default": "./src/serialize.ts"
+		},
+		"./validate": {
+			"types": "./src/validate.ts",
+			"default": "./src/validate.ts"
+		}
+	},
+	"dependencies": {
+		"@lexical/headless": "catalog:mdx",
+		"@lexical/link": "catalog:mdx",
+		"@lexical/list": "catalog:mdx",
+		"@lexical/rich-text": "catalog:mdx",
+		"@lexical/table": "catalog:mdx",
+		"@lexical/yjs": "catalog:mdx",
+		"@mdxeditor/editor": "catalog:mdx",
+		"@mdxeditor/gurx": "catalog:mdx",
+		"lexical": "catalog:mdx",
+		"mdast-util-from-markdown": "2.0.2",
+		"mdast-util-gfm-footnote": "2.1.0",
+		"mdast-util-gfm-strikethrough": "2.0.0",
+		"mdast-util-gfm-table": "2.0.0",
+		"mdast-util-gfm-task-list-item": "2.0.0",
+		"mdast-util-math": "3.0.0",
+		"mdast-util-mdx-jsx": "3.2.0",
+		"mdast-util-to-markdown": "2.1.2",
+		"micromark-extension-gfm-footnote": "2.1.0",
+		"micromark-extension-gfm-strikethrough": "2.1.0",
+		"micromark-extension-gfm-table": "2.1.1",
+		"micromark-extension-gfm-task-list-item": "2.1.0",
+		"micromark-extension-math": "3.1.0",
+		"micromark-extension-mdx-jsx": "3.0.2",
+		"micromark-extension-mdx-md": "2.0.0",
+		"yjs": "catalog:mdx"
+	},
+	"devDependencies": {
+		"@lexical/react": "catalog:mdx",
+		"@types/bun": "catalog:bun",
+		"@types/mdast": "4.0.4",
+		"@types/react": "catalog:react",
+		"react": "catalog:react"
+	}
+}
