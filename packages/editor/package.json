@@ -1,0 +1,42 @@
+{
+	"name": "@chopin/editor",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"types": "tsgo --noEmit --skipLibCheck"
+	},
+	"exports": {
+		".": {
+			"types": "./src/index.ts",
+			"default": "./src/index.ts"
+		},
+		"./styles.css": "./src/styles.css"
+	},
+	"dependencies": {
+		"@chopin/dialect": "workspace:*",
+		"@chopin/protocol": "workspace:*",
+		"@lexical/link": "catalog:mdx",
+		"@lexical/list": "catalog:mdx",
+		"@lexical/react": "catalog:mdx",
+		"@lexical/rich-text": "catalog:mdx",
+		"@lexical/selection": "catalog:mdx",
+		"@lexical/yjs": "catalog:mdx",
+		"@mdxeditor/editor": "catalog:mdx",
+		"@mdxeditor/gurx": "catalog:mdx",
+		"katex": "catalog:mdx",
+		"lexical": "catalog:mdx",
+		"mermaid": "catalog:mdx",
+		"y-protocols": "catalog:mdx",
+		"yjs": "catalog:mdx"
+	},
+	"peerDependencies": {
+		"react": "catalog:react",
+		"react-dom": "catalog:react"
+	},
+	"devDependencies": {
+		"@types/bun": "catalog:bun",
+		"@types/react": "catalog:react",
+		"@types/react-dom": "catalog:react"
+	}
+}

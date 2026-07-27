@@ -9,10 +9,11 @@ export default defineConfig({
 	plugins: [react(), tailwindcss(), tsconfigPaths()],
 
 	resolve: {
-		// Two copies of Lexical throw `incompatible editors` and every node
-		// operation fails silently afterwards. The same is true of Yjs, whose
-		// instanceof checks decide whether an update applies at all.
-		dedupe: ["lexical", "yjs", "react", "react-dom"],
+		// Only what this app resolves itself. Lexical and Yjs belong to the
+		// editor package, and listing them here would ask Vite to resolve them
+		// from a root that does not have them. Their single-copy guarantee comes
+		// from the catalog pin instead, which `singleton.test.ts` asserts.
+		dedupe: ["react", "react-dom"],
 	},
 
 	server: {

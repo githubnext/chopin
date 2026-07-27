@@ -3,8 +3,7 @@
 		"../../tsconfig.json"
 	],
 	"include": [
-		"src",
-		"vite.config.ts"
+		"src"
 	],
 	"compilerOptions": {
 		"target": "esnext",

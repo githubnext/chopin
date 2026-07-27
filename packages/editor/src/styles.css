@@ -1,0 +1,692 @@
+/**
+ * Plan editor styling.
+ *
+ * MDXEditor's structural CSS is imported by the app; this retheme layer maps it
+ * onto Ace's tokens so the editor reads as part of the product rather than as a
+ * third-party widget.
+ */
+
+.plan {
+	--plan-gutter: 2rem;
+	container-type: inline-size;
+	/*
+	 * A comfortable measure. The panel is resizable and a plan is read far more
+	 * often than it is written, so the text stops widening well before the pane
+	 * does. At the body size below this is roughly 85 characters a line, near
+	 * the top of the range a reader can track back from without losing the row.
+	 */
+	--plan-measure: 40rem;
+}
+
+/* Plan + sidecar ------------------------------------------------------- */
+
+.plan-workspace {
+	position: relative;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 0;
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.plan-workspace.is-sidecar-open {
+	grid-template-columns: minmax(0, 1fr) var(--plan-sidecar-width);
+}
+
+.plan-workspace.is-resizing {
+	cursor: col-resize;
+	user-select: none;
+}
+
+.plan-document {
+	position: relative;
+	grid-column: 1;
+	min-width: 0;
+	min-height: 0;
+}
+
+.plan-sidecar {
+	grid-column: 2;
+	display: flex;
+	min-width: 0;
+	min-height: 0;
+	flex-direction: column;
+	overflow: hidden;
+	border-inline-start: 1px solid var(--color-border);
+	background: var(--color-background);
+}
+
+.plan-sidecar-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	padding: 0.75rem 1rem;
+	border-block-end: 1px solid var(--color-border);
+}
+
+.plan-sidecar-header h2 {
+	margin: 0;
+	font-size: 0.8125rem;
+	font-weight: 600;
+	color: var(--color-foreground);
+}
+
+.plan-sidecar-header p {
+	margin: 0.125rem 0 0;
+	font-size: 0.6875rem;
+	color: var(--color-muted-foreground);
+}
+
+.plan-sidecar-header button,
+.plan-sidecar-show {
+	flex: none;
+	border-radius: var(--radius-md);
+	padding: 0.25rem 0.5rem;
+	font-size: 0.6875rem;
+	color: var(--color-muted-foreground);
+	transition: color 120ms ease, background-color 120ms ease;
+}
+
+.plan-sidecar-header button:hover,
+.plan-sidecar-show:hover {
+	background: var(--color-muted);
+	color: var(--color-foreground);
+}
+
+.plan-sidecar-content {
+	display: flex;
+	min-height: 0;
+	flex: 1;
+	flex-direction: column;
+	gap: 0.75rem;
+	overflow: auto;
+	padding: 0.75rem;
+}
+
+.plan-sidecar-content [data-plan-sidecar-questionnaire] {
+	border-radius: var(--radius-lg);
+	transition: outline-color 120ms ease, background-color 120ms ease;
+}
+
+.plan-sidecar-content [data-plan-anchor-active] {
+	outline: 1px solid color-mix(in oklch, var(--color-ring) 70%, transparent);
+	outline-offset: 2px;
+	background: color-mix(in oklch, var(--color-accent) 16%, transparent);
+}
+
+.plan-anchor-orphan {
+	margin: 0 0 0.375rem;
+	font-size: 0.6875rem;
+	color: var(--color-warning);
+}
+
+.plan-sidecar-empty {
+	padding: 2rem 1rem;
+	text-align: center;
+	font-size: 0.75rem;
+	color: var(--color-muted-foreground);
+}
+
+.plan-sidecar-grip {
+	position: absolute;
+	z-index: 2;
+	inset-block: 0;
+	inset-inline-end: calc(var(--plan-sidecar-width) - 12px);
+	width: 24px;
+	cursor: col-resize;
+	touch-action: none;
+}
+
+.plan-sidecar-grip::after {
+	content: "";
+	position: absolute;
+	inset-block: 0;
+	inset-inline-start: 11px;
+	width: 1px;
+	background: transparent;
+	transition: background-color 120ms ease;
+}
+
+.plan-sidecar-grip:hover::after,
+.plan-sidecar-grip:focus-visible::after,
+.plan-workspace.is-resizing .plan-sidecar-grip::after {
+	background: var(--color-ring);
+}
+
+.plan-sidecar-grip:focus-visible {
+	outline: none;
+}
+
+.plan-sidecar-show {
+	position: absolute;
+	z-index: 2;
+	inset-block-start: 0.75rem;
+	inset-inline-end: 0.75rem;
+	border: 1px solid var(--color-border);
+	background: var(--color-background);
+}
+
+/* The durable node stays in plan.mdx but its form belongs in the sidecar. */
+.plan .plan-content [data-plan-questionnaire] {
+	display: none;
+}
+
+/* Prose related to the sidecar item under pointer, focus, or being followed. */
+.plan .plan-content [data-plan-related] {
+	border-radius: var(--radius-sm);
+	outline: 1px solid color-mix(in oklch, var(--color-ring) 60%, transparent);
+	outline-offset: 3px;
+	box-shadow: inset 4px 0 var(--color-ring);
+	background: color-mix(in oklch, var(--color-accent) 16%, transparent);
+}
+
+/*
+ * The passage a reader was just taken to. A decision can span several
+ * passages, so the one they landed on has to be separable from its siblings —
+ * otherwise clicking through them looks like nothing happened.
+ */
+.plan .plan-content [data-plan-related="current"] {
+	outline-color: var(--color-ring);
+	background: color-mix(in oklch, var(--color-accent) 26%, transparent);
+	animation: plan-arrive 900ms ease-out;
+}
+
+@keyframes plan-arrive {
+	0% {
+		background: color-mix(in oklch, var(--color-accent) 45%, transparent);
+	}
+	100% {
+		background: color-mix(in oklch, var(--color-accent) 26%, transparent);
+	}
+}
+
+@container (max-width: 46rem) {
+	.plan-workspace.is-sidecar-open {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: minmax(0, 1fr) minmax(12rem, 40vh);
+	}
+
+	.plan-workspace.is-sidecar-open .plan-document {
+		grid-column: 1;
+		grid-row: 1;
+	}
+
+	.plan-sidecar {
+		grid-column: 1;
+		grid-row: 2;
+		border-block-start: 1px solid var(--color-border);
+		border-inline-start: 0;
+	}
+
+	.plan-sidecar-grip {
+		display: none;
+	}
+}
+
+/*
+ * Retheme MDXEditor onto Ace's tokens.
+ *
+ * MDXEditor ships a light Radix palette on its own root and only switches off
+ * it for a `.dark-theme` class it expects the host to add. Ace has its own
+ * theme, so rather than opt into a second one we point its variables at ours —
+ * the editor then follows Ace into light or dark with nothing to keep in sync.
+ *
+ * These have to land on the same element MDXEditor sets them on; an ancestor
+ * would lose to its own declaration.
+ */
+.plan .mdxeditor {
+	background: transparent;
+	font-family: InterVariable, system-ui, sans-serif;
+
+	--basePageBg: transparent;
+	--baseBase: var(--color-background);
+	--baseBgSubtle: var(--color-muted);
+	--baseBg: var(--color-muted);
+	--baseBgHover: var(--color-accent);
+	--baseBgActive: var(--color-accent);
+	--baseLine: var(--color-border);
+	--baseBorder: var(--color-border);
+	--baseBorderHover: var(--color-ring);
+	--baseSolid: var(--color-muted-foreground);
+	--baseSolidHover: var(--color-foreground);
+	--baseText: var(--color-foreground);
+	--baseTextContrast: var(--color-foreground);
+
+	--accentBase: var(--color-background);
+	--accentBgSubtle: var(--color-muted);
+	--accentBg: var(--color-muted);
+	--accentBgHover: var(--color-accent);
+	--accentBgActive: var(--color-accent);
+	--accentLine: var(--color-border);
+	--accentBorder: var(--color-border);
+	--accentBorderHover: var(--color-ring);
+	--accentSolid: var(--color-primary);
+	--accentSolidHover: var(--color-primary-hover);
+	--accentText: var(--color-primary);
+	--accentTextContrast: var(--color-foreground);
+
+	--admonitionTipBg: var(--color-muted);
+	--admonitionTipBorder: var(--color-success);
+	--admonitionInfoBg: var(--color-muted);
+	--admonitionInfoBorder: var(--color-primary);
+	--admonitionCautionBg: var(--color-muted);
+	--admonitionCautionBorder: var(--color-warning);
+	--admonitionDangerBg: var(--color-muted);
+	--admonitionDangerBorder: var(--color-destructive);
+	--admonitionNoteBg: var(--color-muted);
+	--admonitionNoteBorder: var(--color-border);
+
+	--error-color: var(--color-destructive);
+	--font-body: InterVariable, system-ui, sans-serif;
+	--font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/*
+ * Scoped to `.plan` on purpose. MDXEditor sets padding and colour directly
+ * on its own content class, which is exactly as specific as ours, so a bare
+ * `.plan-content` wins only by landing later in the bundle. That is a
+ * property of how the CSS happens to be chunked, not of anything we control.
+ */
+.plan .plan-content {
+	/*
+	 * The trailing space is deliberate and large: the caret should never sit
+	 * against the bottom of the pane, and a plan is usually appended to.
+	 */
+	padding: 1.5rem var(--plan-gutter) 60vh;
+	margin-inline: auto;
+	max-width: calc(var(--plan-measure) + var(--plan-gutter) * 2);
+	font-size: 0.9375rem;
+	line-height: 1.6;
+	color: var(--color-foreground);
+}
+
+.plan .plan-content:focus {
+	outline: none;
+}
+
+/*
+ * Document typography.
+ *
+ * Tailwind's preflight resets headings to inherit their size and weight and
+ * strips list markers, which is right for an app chrome and wrong for prose.
+ * A plan is prose, so the document elements are given their meaning back here.
+ */
+.plan-content :is(h1, h2, h3, h4, h5, h6) {
+	font-weight: 600;
+	line-height: 1.3;
+	margin-block: 1.5em 0.5em;
+	color: var(--color-foreground);
+}
+
+.plan-content :is(h1, h2, h3, h4, h5, h6):first-child {
+	margin-block-start: 0;
+}
+
+.plan-content h1 {
+	font-size: 1.5rem;
+}
+.plan-content h2 {
+	font-size: 1.25rem;
+}
+.plan-content h3 {
+	font-size: 1.0625rem;
+}
+.plan-content :is(h4, h5, h6) {
+	font-size: 1rem;
+}
+
+.plan-content p {
+	margin-block: 0.75em;
+}
+
+.plan-content :is(ul, ol) {
+	margin-block: 0.75em;
+	padding-inline-start: 1.5em;
+}
+
+.plan-content ul {
+	list-style: disc;
+}
+.plan-content ol {
+	list-style: decimal;
+}
+
+.plan-content li {
+	margin-block: 0.25em;
+}
+
+/* Nested lists sit tighter than the block they interrupt. */
+.plan-content li > :is(ul, ol) {
+	margin-block: 0.25em;
+}
+
+.plan-content blockquote {
+	margin-block: 1em;
+	padding-inline-start: 1em;
+	border-inline-start: 3px solid var(--color-border);
+	color: var(--color-muted-foreground);
+}
+
+.plan-content a {
+	color: var(--color-primary);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+
+.plan-content hr {
+	margin-block: 1.5em;
+	border: 0;
+	border-block-start: 1px solid var(--color-border);
+}
+
+.plan-content :is(strong, b) {
+	font-weight: 600;
+	color: var(--color-foreground);
+}
+
+/* Structural components ------------------------------------------------- */
+
+.plan-content [data-plan-type] {
+	border-inline-start: 3px solid var(--color-border);
+	padding: 0.75rem 1rem;
+	margin-block: 1rem;
+	border-radius: var(--radius-md);
+	background: var(--color-muted);
+}
+
+.plan-content [data-plan-type="warning"] {
+	border-color: var(--color-chart-4);
+}
+.plan-content [data-plan-type="danger"] {
+	border-color: var(--color-destructive);
+}
+.plan-content [data-plan-type="tip"] {
+	border-color: var(--color-chart-2);
+}
+.plan-content [data-plan-type="important"] {
+	border-color: var(--color-chart-5);
+}
+
+.plan-content pre {
+	background: var(--color-code);
+	border-radius: var(--radius-md);
+	padding: 0.75rem 1rem;
+	overflow-x: auto;
+	font-family: ui-monospace, SFMono-Regular, monospace;
+	font-size: 0.8125rem;
+}
+
+/*
+ * Inline code. Sized in `em` so it tracks whatever it sits in — a heading's
+ * code should not shrink to body size — and left to `pre` when it is a block.
+ */
+.plan-content :not(pre) > code {
+	background: var(--color-code);
+	color: var(--color-foreground);
+	border-radius: var(--radius-sm);
+	padding: 0.125em 0.3em;
+	font-family: ui-monospace, SFMono-Regular, monospace;
+	font-size: 0.875em;
+}
+
+/* Tables scroll independently so a wide one never widens the document. */
+/*
+ * Tables scroll independently so a wide one never widens the document.
+ *
+ * `display: block` is what allows that, but it also stops the table sizing
+ * itself from its contents — columns get squeezed until neighbouring values
+ * touch and read as one word. `width: max-content` gives that back, and the
+ * `max-width` keeps a narrow table from stretching to fill the measure.
+ */
+.plan-content table {
+	display: block;
+	width: max-content;
+	max-width: 100%;
+	overflow-x: auto;
+	border-collapse: collapse;
+	margin-block: 1em;
+}
+
+.plan-content th,
+.plan-content td {
+	border: 1px solid var(--color-border);
+	padding: 0.375rem 0.625rem;
+	text-align: start;
+	/* Without this a cell collapses onto its neighbour when a column is
+	   narrow, and two values read as one word. */
+	vertical-align: top;
+	min-width: 4rem;
+}
+
+.plan-content th {
+	font-weight: 600;
+	background: var(--color-muted);
+	color: var(--color-foreground);
+}
+
+/* A cell's paragraph is the cell; it should not add document spacing. */
+.plan-content :is(th, td) > p {
+	margin-block: 0;
+}
+
+/* Remote cursors --------------------------------------------------------- */
+
+/*
+ * The frame remote cursors are measured against. It wraps the prose and grows
+ * with it, so carets scroll with the text they belong to.
+ */
+.plan .plan-frame {
+	position: relative;
+}
+
+/*
+ * Lexical owns the caret's geometry — position, height and offsets are written
+ * inline on every paint — and hands us the peer's colour as a custom property.
+ * Only appearance belongs here. The shadow widens a 1px caret that would
+ * otherwise be easy to miss, without fighting the inline width.
+ */
+.plan .plan-cursor {
+	background-color: var(--lexical-cursor-color, currentColor);
+	box-shadow: 0 0 0 0.5px var(--lexical-cursor-color, currentColor);
+	border-radius: 1px;
+}
+
+.plan .plan-cursor-name {
+	position: absolute;
+	inset-block-end: 100%;
+	inset-inline-start: -1px;
+	margin-block-end: 2px;
+	padding: 0 0.25rem;
+	border-radius: 0.25rem;
+	background: var(--lexical-cursor-color, currentColor);
+	color: white;
+	font-size: 0.625rem;
+	line-height: 1rem;
+	font-weight: 500;
+	white-space: nowrap;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 200ms ease;
+}
+
+/* Raised while its peer is moving, then left to fade. */
+.plan .plan-cursor[data-plan-active] .plan-cursor-name {
+	opacity: 1;
+}
+
+/*
+ * Where selections fall back to rect overlays, because the browser has no
+ * Highlight API. The supported path is styled by Lexical from the same colour.
+ */
+.plan .plan-cursor-selection-bg {
+	background-color: color-mix(in srgb, var(--lexical-cursor-color, currentColor) 30%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.plan * {
+		transition: none !important;
+		animation: none !important;
+	}
+
+	/*
+	 * Without the fade, a label would blink in and out on every keystroke a
+	 * peer makes. Leaving it up is the quieter of the two.
+	 */
+	.plan .plan-cursor-name {
+		opacity: 1;
+	}
+}
+
+/* Rendered previews ------------------------------------------------------ */
+
+.plan-content [data-plan-preview]:empty {
+	display: none;
+}
+
+.plan-content [data-plan-preview][data-plan-error] {
+	color: var(--color-destructive);
+	font-size: 0.75rem;
+	padding: 0.5rem 0;
+}
+
+/* Source stays visible and editable beneath its preview. */
+.plan-content [data-plan-source] {
+	white-space: pre-wrap;
+	font-family: ui-monospace, SFMono-Regular, monospace;
+	font-size: 0.8125rem;
+}
+
+/*
+ * A general sibling, not an adjacent one: the block's chrome sits between the
+ * preview and the source, and a block has exactly one source anyway.
+ */
+.plan-content [data-plan-preview]:not(:empty) ~ [data-plan-source] {
+	opacity: 0.6;
+	font-size: 0.75rem;
+}
+
+/*
+ * A block formula is an editable region exactly like a code block, and has to
+ * read as one: the rendered result on the page, its source in a box below.
+ *
+ * A code block gets that box from the generic `pre` rule, and a formula renders
+ * the same structure into plain `div`s — so without this it is a bare line of
+ * monospace with no background, no padding and nothing in it, and inserting one
+ * looks like the command did nothing at all. The box belongs to the source
+ * alone; wrapping the preview too would put the rendered formula in a grey
+ * well, which is not what a diagram does.
+ */
+.plan-content .planMath[data-plan-inline="false"] [data-plan-source] {
+	--ace-formula-inset-block: 0.75rem;
+	--ace-formula-inset-inline: 1rem;
+
+	/*
+	 * No `display` here. A `div` is already block, so declaring it again buys
+	 * nothing — and this selector outranks the rule that hides the source when
+	 * the block is collapsed, which would keep a formula on screen forever.
+	 */
+	position: relative;
+	background: var(--color-code);
+	border-radius: var(--radius-md);
+	padding: var(--ace-formula-inset-block) var(--ace-formula-inset-inline);
+	overflow-x: auto;
+}
+
+/*
+ * Say what belongs in an empty one. Lexical fills an empty block with a managed
+ * line break, so `:empty` never matches and the placeholder keys off that
+ * instead. It sits out of flow so it cannot displace the caret in front of it,
+ * which means it has to repeat the padding the caret is already inside.
+ */
+.plan-content
+	.planMath[data-plan-inline="false"]
+	[data-plan-source]:has(> br[data-lexical-managed-linebreak]:only-child)::before {
+	content: "LaTeX, e.g. E = mc^2";
+	position: absolute;
+	inset-block-start: var(--ace-formula-inset-block);
+	inset-inline-start: var(--ace-formula-inset-inline);
+	color: var(--color-muted-foreground);
+	pointer-events: none;
+}
+
+/*
+ * Showing a result without its source.
+ *
+ * Not the `hidden` attribute: a formula's source sets `display: block`, which
+ * outranks the user agent's rule for `hidden` and would leave it on screen.
+ */
+.plan-content [data-plan-collapsed] [data-plan-source] {
+	display: none;
+}
+
+.plan-content [data-plan-preview] svg {
+	max-width: 100%;
+	height: auto;
+}
+
+/* Tabs ------------------------------------------------------------------- */
+
+.plan-content [data-plan-chrome="tabs"] {
+	margin-block-end: 0.5rem;
+}
+
+.plan-content [data-plan-panels] > [hidden] {
+	display: none;
+}
+
+/* Presence --------------------------------------------------------------- */
+
+/*
+ * Opposite the status chip, and above the prose rather than in it. Pointer
+ * events stay on: the faces carry a tooltip naming who is here.
+ */
+.plan-presence {
+	position: absolute;
+	z-index: 2;
+	inset-block-start: 0.75rem;
+	inset-inline-start: 0.75rem;
+	display: flex;
+	align-items: center;
+}
+
+/* Status ----------------------------------------------------------------- */
+
+/*
+ * Floats over the end of the prose rather than taking a row from it. Never
+ * interactive, so it stays out of the way of selecting the text underneath.
+ */
+.plan-status {
+	position: absolute;
+	z-index: 2;
+	inset-block-end: 0.75rem;
+	inset-inline-end: 0.75rem;
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+	max-width: min(22rem, 60%);
+	pointer-events: none;
+	font-size: 0.6875rem;
+	line-height: 1rem;
+}
+
+/*
+ * A hidden state is not `display: none`: the label stays in the accessibility
+ * tree so the live region keeps reporting durability. With every child
+ * screen-reader-only the box collapses to nothing on screen.
+ */
+.plan-status[data-level="notice"] {
+	padding: 0.25rem 0.625rem;
+	border: 1px solid var(--color-border);
+	border-radius: 9999px;
+	background: var(--color-background);
+	box-shadow: 0 1px 2px color-mix(in oklch, var(--color-foreground) 8%, transparent);
+}
+
+.plan-status-dot {
+	flex: none;
+	width: 0.375rem;
+	height: 0.375rem;
+	border-radius: 9999px;
+	background: currentColor;
+}

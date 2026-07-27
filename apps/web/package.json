@@ -10,17 +10,21 @@
 		"types": "tsgo --noEmit --skipLibCheck"
 	},
 	"dependencies": {
+		"@chopin/dialect": "workspace:*",
+		"@chopin/editor": "workspace:*",
 		"@chopin/protocol": "workspace:*",
 		"react": "catalog:react",
 		"react-dom": "catalog:react"
 	},
 	"devDependencies": {
 		"@tailwindcss/vite": "catalog:ui",
+		"@types/bun": "catalog:bun",
 		"@types/react": "catalog:react",
 		"@types/react-dom": "catalog:react",
 		"@vitejs/plugin-react": "catalog:react",
 		"tailwindcss": "catalog:ui",
 		"vite": "catalog:ui",
-		"vite-tsconfig-paths": "catalog:ui"
+		"vite-tsconfig-paths": "catalog:ui",
+		"yjs": "catalog:mdx"
 	}
 }

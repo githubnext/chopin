@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { cursor, PlanEditor } from "@chopin/editor";
 
 import * as Identity from "./identity";
 import { Wire } from "./wire";
+import { Workspace } from "./workspace";
 
 import type { Session } from "@chopin/protocol";
 import type { Status } from "./wire";
@@ -51,46 +53,49 @@ function SignIn({ onDone }: { onDone: (handle: string) => void }) {
 	);
 }
 
-function Face({ handle }: { handle: string }) {
-	let [failed, setFailed] = useState(false);
-
-	if (failed) {
-		return (
-			<span
-				className="grid size-6 place-items-center rounded-full bg-muted text-[0.625rem] font-semibold text-muted-foreground uppercase"
-				title={handle}
-			>
-				{handle.slice(0, 2)}
-			</span>
-		);
-	}
-
-	return (
-		<img
-			alt={handle}
-			className="size-6 rounded-full bg-muted"
-			onError={() => setFailed(true)}
-			referrerPolicy="no-referrer"
-			src={`https://github.com/${encodeURIComponent(handle)}.png?size=48`}
-			title={handle}
-		/>
-	);
-}
-
 const TONE: Record<Status, string> = {
 	connecting: "text-muted-foreground",
-	connected: "text-success",
+	connected: "text-muted-foreground",
 	reconnecting: "text-warning",
 	denied: "text-destructive",
 	closed: "text-muted-foreground",
 };
 
+function Header(
+	{ handle, members, reason, room, status }: {
+		handle: string;
+		members: Session.Member[];
+		reason?: string;
+		room: string;
+		status: Status;
+	},
+) {
+	// Presence over the prose already shows who is editing; this is the room
+	// roster, which includes people who have it open but are not in the doc.
+	let others = members.filter(member => member.handle !== handle);
+
+	return (
+		<header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2">
+			<span className="text-sm font-semibold">chopin</span>
+			<span className="text-sm text-muted-foreground">/r/{room}</span>
+			<span className={`text-xs ${TONE[status]}`}>
+				{status === "connected" ? reason : reason ?? status}
+			</span>
+			<span className="ml-auto text-xs text-muted-foreground">
+				@{handle}
+				{others.length > 0 && ` · with ${others.map(member => `@${member.handle}`).join(", ")}`}
+			</span>
+		</header>
+	);
+}
+
 function Room({ handle }: { handle: string }) {
-	let wire = useRef<Wire>(null);
+	let [wire, setWire] = useState<Wire>();
 	let [status, setStatus] = useState<Status>("connecting");
 	let [reason, setReason] = useState<string>();
 	let [members, setMembers] = useState<Session.Member[]>([]);
 	let room = Identity.room();
+	let user = useMemo(() => cursor(handle), [handle]);
 
 	useEffect(() => {
 		let socket = new Wire({
@@ -102,7 +107,7 @@ function Room({ handle }: { handle: string }) {
 				setReason(why);
 			},
 		});
-		wire.current = socket;
+		setWire(socket);
 
 		let off = [
 			socket.on<Session.Hello>("session:hello", frame => setMembers(frame.members)),
@@ -112,51 +117,23 @@ function Room({ handle }: { handle: string }) {
 		return () => {
 			for (let unsubscribe of off) unsubscribe();
 			socket.dispose();
-			wire.current = null;
+			setWire(undefined);
 		};
 	}, [room, handle]);
 
-	let others = members.filter(member => member.handle !== handle);
-
 	return (
-		<div className="flex h-full flex-col">
-			<header className="flex items-center gap-3 border-b border-border px-4 py-2">
-				<span className="text-sm font-semibold">chopin</span>
-				<span className="text-sm text-muted-foreground">/r/{room}</span>
-				<span className={`text-xs ${TONE[status]}`}>{reason ?? status}</span>
-				<div className="ml-auto flex items-center gap-1">
-					{members.map(member => <Face handle={member.handle} key={member.client} />)}
-				</div>
-			</header>
-
-			<main className="grid flex-1 place-items-center text-sm text-muted-foreground">
-				<div className="flex flex-col items-center gap-2">
-					<p>
-						You are <span className="text-foreground">@{handle}</span>
-					</p>
-					<p>
-						{others.length === 0
-							? "Nobody else is here."
-							: `Also here: ${others.map(member => `@${member.handle}`).join(", ")}`}
-					</p>
-					<button
-						className="mt-2 rounded-md border border-border px-3 py-1 text-xs hover:bg-muted"
-						onClick={async () => {
-							let started = performance.now();
-							try {
-								await wire.current?.ask("session:ping");
-								setReason(`ping ${Math.round(performance.now() - started)}ms`);
-							} catch (error) {
-								setReason(error instanceof Error ? error.message : "ping failed");
-							}
-						}}
-						type="button"
-					>
-						Ping
-					</button>
-				</div>
-			</main>
-		</div>
+		<Workspace
+			header={
+				<Header
+					handle={handle}
+					members={members}
+					reason={reason}
+					room={room}
+					status={status}
+				/>
+			}
+			plan={<PlanEditor connection={status} user={user} wire={wire} />}
+		/>
 	);
 }
 
