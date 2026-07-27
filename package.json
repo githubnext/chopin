@@ -3,7 +3,7 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "bun run --filter '@chopin/web' dev & DEV_CLIENT=http://localhost:5173 bun run --filter '@chopin/server' dev",
+		"dev": "bun scripts/dev.ts",
 		"build": "bun run --filter '@chopin/web' build",
 		"start": "bun run --filter '@chopin/server' start",
 		"ci": "dprint check && oxlint",

@@ -17,6 +17,17 @@ export default defineConfig({
 	},
 
 	server: {
+		/*
+		 * One address, explicitly.
+		 *
+		 * Left to itself Vite binds `localhost`, which resolves to both ::1 and
+		 * 127.0.0.1 — and `strictPort` then fails to notice a second instance,
+		 * because the two bind different address families and neither sees a
+		 * conflict. The result is two dev servers on "the same port", with the
+		 * server proxying to whichever the OS resolves first and edits landing
+		 * in the one nobody is watching.
+		 */
+		host: "127.0.0.1",
 		port: PORT,
 		strictPort: true,
 
@@ -36,7 +47,7 @@ export default defineConfig({
 		 */
 		hmr: {
 			protocol: "ws",
-			host: "localhost",
+			host: "127.0.0.1",
 			clientPort: PORT,
 		},
 	},
