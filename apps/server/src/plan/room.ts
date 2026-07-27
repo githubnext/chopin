@@ -11,6 +11,8 @@
  * the initial state and everyone else syncs to it.
  */
 
+import { createHash } from "node:crypto";
+
 import { createHeadlessEditor } from "@lexical/headless";
 import { createYjsBinding, syncLexicalUpdateToYjs, syncYjsChangesToLexical } from "@lexical/yjs";
 import * as Y from "yjs";
@@ -26,6 +28,7 @@ import {
 	PlanValidationError,
 	QuestionnaireNode,
 	registry as buildRegistry,
+	serialize,
 	ulid,
 } from "@chopin/dialect";
 import { $getRoot, $isParagraphNode, $nodesOfType } from "lexical";
@@ -34,6 +37,9 @@ import type { Binding, Provider } from "@lexical/yjs";
 import type { LexicalEditor, LexicalNode } from "lexical";
 import type { Root, RootContent } from "mdast";
 import type { Questionnaire, Registry } from "@chopin/dialect";
+import type { Plan } from "@chopin/protocol";
+
+type Anchor = Plan.Anchor;
 
 /** Awareness is relayed, never interpreted here, so a no-op provider suffices. */
 const PROVIDER = {
@@ -469,5 +475,116 @@ export function reconcile(
 			}),
 		);
 		return true;
+	});
+}
+
+// -- anchors ---------------------------------------------------------------
+
+/**
+ * Where a decision sits in the prose.
+ *
+ * A Yjs relative position rather than an index, because an index is wrong the
+ * moment anybody inserts a paragraph above it. The relative position survives
+ * edits around the block it names; the digest is what recovers it when the
+ * position cannot be resolved at all — after the block moves, or after an
+ * epoch rotation throws away the history the position was expressed in.
+ */
+
+/** Blocks an anchor can name: the ones the source addresses. */
+function addressable(): LexicalNode[] {
+	return $getRoot().getChildren().filter(
+		node => !($isParagraphNode(node) && node.getChildrenSize() === 0),
+	);
+}
+
+export function digest(source: string): string {
+	return `sha256:${createHash("sha256").update(source).digest("hex")}`;
+}
+
+/** Canonical hash of each top-level block, in order. */
+export function digests(target: Document): string[] {
+	return parse(project(target)).children.map(node =>
+		digest(serialize({ type: "root", children: [node] }))
+	);
+}
+
+function anchorForKey(target: Document, key: string | undefined, hash: string): Anchor {
+	let collab = key ? target.binding.collabNodeMap.get(key) : undefined;
+	let type = collab?.getSharedType();
+	if (!type) throw new Error("anchored block has no collaborative identity");
+
+	return {
+		epoch: target.epoch,
+		position: Buffer.from(
+			Y.encodeRelativePosition(Y.createRelativePositionFromTypeIndex(type, 0, -1)),
+		).toString("base64"),
+		digest: hash,
+	};
+}
+
+/** Anchor the block currently at `index`. */
+export function anchorAt(target: Document, index: number, hash: string): Anchor {
+	let key: string | undefined;
+	target.editor.getEditorState().read(() => {
+		key = addressable()[index]?.getKey();
+	});
+	return anchorForKey(target, key, hash);
+}
+
+/** The local node an anchor names, if it still names one. */
+export function resolveAnchor(target: Document, anchor: Anchor): string | undefined {
+	if (anchor.epoch !== target.epoch) return undefined;
+	try {
+		let relative = Y.decodeRelativePosition(Buffer.from(anchor.position, "base64"));
+		let absolute = Y.createAbsolutePositionFromRelativePosition(relative, target.doc, false);
+		if (!absolute) return undefined;
+		for (let [key, collab] of target.binding.collabNodeMap) {
+			if (collab.getSharedType() === absolute.type) return key;
+		}
+	} catch {
+		// A position from a history this document no longer has. The digest is
+		// the fallback, and the caller is about to try it.
+	}
+	return undefined;
+}
+
+/**
+ * Bring anchors forward onto the document as it is now.
+ *
+ * Resolvable positions are re-expressed against the block they still name, so
+ * a digest kept up to date with the content. Anything that cannot be resolved
+ * is matched by digest — and only when exactly one block matches, because two
+ * identical paragraphs give no way to tell which was meant. The rest are kept
+ * and marked orphaned rather than guessed at: a relationship pointing at the
+ * wrong passage is worse than one admitting it is lost.
+ */
+export function rebase(target: Document, anchors: Anchor[]): Anchor[] {
+	let hashes = digests(target);
+	let keys: string[] = [];
+	target.editor.getEditorState().read(() => {
+		keys = addressable().map(node => node.getKey());
+	});
+
+	let byDigest = new Map<string, string[]>();
+	hashes.forEach((hash, index) => {
+		let key = keys[index];
+		if (!key) return;
+		byDigest.set(hash, [...byDigest.get(hash) ?? [], key]);
+	});
+
+	return anchors.map(anchor => {
+		if (anchor.orphaned) return { ...anchor, epoch: target.epoch };
+
+		let key = resolveAnchor(target, anchor);
+		if (key) {
+			let index = keys.indexOf(key);
+			let hash = hashes[index];
+			if (hash) return anchorForKey(target, key, hash);
+		}
+
+		let matches = byDigest.get(anchor.digest) ?? [];
+		return matches.length === 1
+			? anchorForKey(target, matches[0], anchor.digest)
+			: { ...anchor, epoch: target.epoch, orphaned: true as const };
 	});
 }

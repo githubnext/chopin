@@ -9,6 +9,12 @@
  * Answering is collaborative. Everyone here is editing one draft, so what you
  * type appears under the other person's cursor, and whoever submits it is
  * recorded as having decided.
+ *
+ * A decision also knows where it lives. Hovering a question lights up the
+ * passage it concerns; hovering its answer lights up the prose that answer
+ * produced. The highlight is written to the DOM rather than the document — it
+ * is one reader's pointer, not a fact about the plan, and putting it in the
+ * document would send it to everybody else and make it undoable.
  */
 
 import { useEffect, useRef } from "react";
@@ -39,6 +45,10 @@ function undecided(entry: QuestionnaireEntry): boolean {
 export function Decisions({ connected, reveal, store, wire }: DecisionsProps) {
 	let entries = useQuestionnaires(store);
 	let content = useRef<HTMLDivElement>(null);
+
+	// Leaving the pane should not leave the prose lit. A highlight belongs to
+	// the pointer that asked for it.
+	useEffect(() => () => store.clear(), [store]);
 
 	useEffect(() => {
 		if (!reveal) return;
@@ -75,6 +85,10 @@ export function Decisions({ connected, reveal, store, wire }: DecisionsProps) {
 								<QuestionnaireCard
 									connected={connected}
 									key={entry.id}
+									onRelationEnter={(question, relation) =>
+										store.highlight(entry.id, question, relation)}
+									onRelationLeave={() => store.clear()}
+									relations={store.counts(entry.id)}
 									value={entry.value}
 									wire={wire}
 								/>

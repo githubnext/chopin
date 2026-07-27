@@ -20,6 +20,7 @@ import { PlanStatus } from "./status";
 import { register } from "./widgets";
 import { widgetsPlugin } from "./widgets-plugin";
 
+import type { Binding } from "@lexical/yjs";
 import type { MDXEditorMethods } from "@mdxeditor/editor";
 import type { Plan } from "@chopin/protocol";
 import type { PlanProvider } from "./provider";
@@ -89,6 +90,16 @@ export function PlanEditor(
 		setGeneration(value => value + 1);
 	}, []);
 
+	// The store resolves anchors itself, because a Lexical key is per-editor:
+	// the server's key for a block means nothing in this browser.
+	let onBinding = useCallback((value: Binding | undefined) => {
+		questions?.bind(value);
+	}, [questions]);
+
+	let onAnchors = useCallback((widgets: Plan.WidgetAnchors[]) => {
+		questions?.anchors(widgets);
+	}, [questions]);
+
 	let onProvider = useCallback((value: PlanProvider | undefined) => {
 		provider.current = value;
 		setPresence(value);
@@ -129,11 +140,11 @@ export function PlanEditor(
 					 * dialect: keep its serialiser able to write every node, and
 					 * it has no reason to throw.
 					 */
-					collaborationPlugin({ wire, user, onReset, onProvider }),
+					collaborationPlugin({ wire, user, onReset, onProvider, onBinding, onAnchors }),
 					widgetsPlugin({ questions }),
 				]
 				: [],
-		[wire, user, onReset, onProvider, questions],
+		[wire, user, onReset, onProvider, onBinding, onAnchors, questions],
 	);
 
 	useEffect(() => {

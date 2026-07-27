@@ -218,6 +218,7 @@ async function session(context: Room): Promise<Agent.Agent> {
 			server,
 			room,
 			publish: mutation => Service.publish(plan, server, room, mutation),
+			anchors: () => Service.anchors(plan, server, room),
 		});
 
 		let { agent, resumed } = await Agent.open(config, { tools }, chat.resume);

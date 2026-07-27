@@ -36,6 +36,8 @@ export type Context = {
 	room: string;
 	/** Relays a server-authored change to everyone in the room. */
 	publish: (mutation: { update: Uint8Array; source: string }) => void;
+	/** Relays the current relationship snapshot to everyone in the room. */
+	anchors: () => void;
 };
 
 export function toolbox(context: Context): Tool[] {
@@ -135,10 +137,19 @@ export function toolbox(context: Context): Tool[] {
 						if (record) context.plan.records.set(id, { ...record, status: "cancelled" });
 					}
 
+					// Prose moved, so every relationship has to be brought forward
+					// and anything answered has to be looked at again: the passage a
+					// decision produced is the most likely thing to have been
+					// rewritten.
+					Questions.rebase(context.plan);
+					Questions.invalidate(context.plan, "plan_changed");
+					context.anchors();
+
 					return {
 						ok: true,
 						revision: context.plan.revision,
 						blocks: outcome.blocks,
+						anchors_pending: Questions.outstanding(context.plan),
 					};
 				}),
 		},
@@ -200,6 +211,91 @@ export function toolbox(context: Context): Tool[] {
 					return ended.status === "answered"
 						? { status: "answered", answered_by: ended.resolver, answers: ended.answers }
 						: { status: "cancelled", cancelled_by: ended.resolver };
+				}),
+		},
+		{
+			name: "anchor_plan",
+			description:
+				"Say which passages of the plan each question concerns and each answer produced. "
+				+ "Call it immediately after every successful `edit_plan`, using that result's "
+				+ "revision and block digests. A question's text maps to `subject`; the prose its "
+				+ "answer caused maps to `result`. Link only blocks that would have to change if "
+				+ "that answer changed. An empty list means reviewed and deliberately unrelated, "
+				+ "which is a real answer and clears the review.",
+			parameters: {
+				type: "object",
+				properties: {
+					revision: { type: "integer", minimum: 0 },
+					anchors: {
+						type: "array",
+						minItems: 1,
+						maxItems: 100,
+						items: {
+							type: "object",
+							properties: {
+								widget: { type: "string", description: "The questionnaire id." },
+								question: { type: "string", description: "The question id." },
+								relation: { type: "string", enum: ["subject", "result"] },
+								blocks: {
+									type: "array",
+									items: {
+										type: "object",
+										properties: {
+											index: { type: "integer", minimum: 0 },
+											digest: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
+										},
+										required: ["index", "digest"],
+										additionalProperties: false,
+									},
+								},
+							},
+							required: ["widget", "question", "relation", "blocks"],
+							additionalProperties: false,
+						},
+					},
+				},
+				required: ["revision", "anchors"],
+				additionalProperties: false,
+			},
+			handler: raw =>
+				answer("anchor_plan", () => {
+					let args = raw as {
+						revision: number;
+						anchors: Array<{
+							widget: string;
+							question: string;
+							relation: "subject" | "result";
+							blocks: Array<{ index: number; digest: string }>;
+						}>;
+					};
+
+					if (args.revision !== context.plan.revision) {
+						return {
+							ok: false,
+							reason: "stale",
+							revision: context.plan.revision,
+							message: "The plan changed. Read it again and re-anchor.",
+						};
+					}
+
+					let failures: string[] = [];
+					for (let update of args.anchors) {
+						let failure = Questions.relate(
+							context.plan,
+							update.widget,
+							update.question,
+							update.relation,
+							update.blocks,
+						);
+						if (failure) failures.push(failure);
+					}
+
+					context.anchors();
+					context.plan.sink.touch();
+
+					return failures.length > 0
+						? { ok: false, reason: "invalid", errors: failures }
+						: { ok: true, anchors_pending: Questions.outstanding(context.plan) };
 				}),
 		},
 	];

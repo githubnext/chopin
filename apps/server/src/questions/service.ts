@@ -15,12 +15,16 @@
 import { ulid } from "@chopin/dialect";
 import * as Question from "@chopin/question";
 
+import * as Anchors from "./anchors";
+
 import * as room from "../plan/room";
 import * as Store from "./store";
 import { broadcast, relay, reply, tell } from "../wire";
 
 import type { Server } from "bun";
-import type { Question as Wire, Request } from "@chopin/protocol";
+// `Plan` is the room's plan here; the protocol namespace of the same name is
+// aliased so the two cannot be confused at a glance.
+import type { Plan as Wired, Question as Wire, Request } from "@chopin/protocol";
 import type { Answer, Definition } from "@chopin/question";
 import * as Service from "../plan/service";
 
@@ -59,6 +63,8 @@ export type Record = {
 	/** Question id to the answer as it reads, for projection into the plan. */
 	answers?: { [question: string]: string };
 	resolver?: string;
+	/** Where in the prose each question and its answer live. */
+	anchors?: Wired.WidgetAnchors;
 };
 
 function decide(
@@ -296,4 +302,88 @@ export async function cancel(
 
 export function shutdown(questions: Questions): void {
 	Store.shutdown(questions);
+}
+
+// -- relationships ---------------------------------------------------------
+
+/** Every questionnaire's relationships, as an authoritative snapshot. */
+export function anchors(plan: Plan): Wired.WidgetAnchors[] {
+	return [...plan.records.values()].map(record => Anchors.read(record));
+}
+
+/**
+ * Bring every relationship forward onto the document as it is now.
+ *
+ * Called after anything that moves prose around, which is most things. An
+ * anchor whose block survived is re-expressed against it; one whose block was
+ * rewritten is orphaned, and the agent is told it owes a review.
+ */
+export function rebase(plan: Plan): void {
+	for (let [id, record] of plan.records) {
+		let value = Anchors.read(record);
+		let questions: { [question: string]: Wired.QuestionAnchors } = {};
+
+		for (let [question, relations] of Object.entries(value.questions)) {
+			questions[question] = {
+				subject: carry(plan, relations.subject),
+				result: carry(plan, relations.result),
+			};
+		}
+
+		plan.records.set(id, { ...record, anchors: { widget: value.widget, questions } });
+	}
+}
+
+function carry(plan: Plan, set: Wired.AnchorSet): Wired.AnchorSet {
+	let anchors = room.rebase(plan.document, set.anchors);
+	let lost = anchors.some(anchor => anchor.orphaned);
+	return {
+		anchors,
+		pending: set.pending || lost,
+		...(lost ? { reason: "orphaned" as const } : set.reason ? { reason: set.reason } : {}),
+	};
+}
+
+/** Mark answered results as needing review, after the plan changed beneath them. */
+export function invalidate(plan: Plan, reason: Wired.AnchorReason): void {
+	for (let [id, record] of plan.records) {
+		plan.records.set(id, { ...record, anchors: Anchors.invalidate(record, reason) });
+	}
+}
+
+/** What the agent still owes a review on. */
+export function outstanding(plan: Plan): Anchors.Pending[] {
+	return [...plan.records.values()].flatMap(record => Anchors.pending(record));
+}
+
+/** Replace one relationship with the blocks the agent reviewed it against. */
+export function relate(
+	plan: Plan,
+	widget: string,
+	question: string,
+	relation: Anchors.Relation,
+	blocks: Array<{ index: number; digest: string }>,
+): string | undefined {
+	let record = plan.records.get(widget);
+	if (!record) return `no questionnaire ${widget}`;
+
+	let current = room.digests(plan.document);
+	let anchors: Wired.Anchor[] = [];
+
+	for (let block of blocks) {
+		let hash = current[block.index];
+		if (!hash) return `no block at index ${block.index}`;
+		// The digest is how the agent says which block it meant. If it does not
+		// match, the plan moved between reading and anchoring, and quietly
+		// anchoring the block that happens to be there now would be worse than
+		// saying so.
+		if (hash !== block.digest) return `block ${block.index} has changed; read the plan again`;
+		anchors.push(room.anchorAt(plan.document, block.index, hash));
+	}
+
+	plan.records.set(widget, {
+		...record,
+		anchors: Anchors.set(Anchors.read(record), question, relation, anchors),
+	});
+	return undefined;
 }

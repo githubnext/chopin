@@ -45,6 +45,8 @@ export type PlanProviderOptions = {
 	doc: Y.Doc;
 	/** Told when the server rotates the epoch and local state must be discarded. */
 	onReset?: (reason: Plan.Reset["reason"]) => void;
+	/** Authoritative snapshot of which prose each decision relates to. */
+	onAnchors?: (widgets: Plan.WidgetAnchors[]) => void;
 };
 
 /**
@@ -143,6 +145,9 @@ export class PlanProvider implements Provider {
 			this.#wire.on<Plan.Ack>("plan:ack", event => this.#settle(event.id)),
 			this.#wire.on<Plan.Awareness>("plan:awareness", event => this.#presence(event)),
 			this.#wire.on<Plan.Reset>("plan:reset", event => this.#reset(event)),
+			this.#wire.on<Plan.Anchors>("plan:anchors", event => {
+				if (event.epoch === this.#epoch) this.#options.onAnchors?.(event.widgets);
+			}),
 		);
 
 		this.#doc.on("update", this.#local);
@@ -190,6 +195,7 @@ export class PlanProvider implements Provider {
 
 		// Server state never originates locally, so it must not be echoed back.
 		Y.applyUpdate(this.#doc, decode(reply.update), this);
+		this.#options.onAnchors?.(reply.anchors);
 
 		if (reply.awareness) {
 			applyAwarenessUpdate(this.awareness, decode(reply.awareness), this);

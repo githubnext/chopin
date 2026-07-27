@@ -175,6 +175,7 @@ export function greet(plan: Plan, ws: Socket, msg: Request<Wire.Open.Ask>): void
 		seq: plan.document.seq,
 		update: encode(room.sync(plan.document, resume)),
 		revision: plan.revision,
+		anchors: Questions.anchors(plan),
 		limits: room.LIMITS,
 		...(hello ? { awareness: encode(hello) } : {}),
 	});
@@ -309,6 +310,20 @@ export function publish(
 	});
 	room.mark(plan.document);
 	plan.sink.touch();
+}
+
+/** Relay the current relationship snapshot to the whole room. */
+export function anchors(
+	plan: Plan,
+	server: Server<SocketData>,
+	roomId: string,
+): void {
+	broadcast(server, roomId, {
+		kind: "plan:anchors",
+		ts: 0,
+		epoch: plan.document.epoch,
+		widgets: Questions.anchors(plan),
+	});
 }
 
 /** Relay presence verbatim, and remember it for whoever joins next. */

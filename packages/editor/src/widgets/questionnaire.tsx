@@ -39,21 +39,40 @@ function definition(value: Questionnaire) {
 	};
 }
 
+export type Relation = "subject" | "result";
+
 export type QuestionnaireCardProps = {
 	value: Questionnaire;
 	wire?: Transport;
 	connected?: boolean;
+	/** How much prose each question and answer resolves to. */
+	relations?: { [question: string]: { subject: number; result: number } };
+	onRelationEnter?: (question: string, relation: Relation) => void;
+	onRelationLeave?: (question: string, relation: Relation) => void;
 };
 
-export function QuestionnaireCard({ connected = false, value, wire }: QuestionnaireCardProps) {
+export function QuestionnaireCard(
+	{ connected = false, onRelationEnter, onRelationLeave, relations, value, wire }:
+		QuestionnaireCardProps,
+) {
 	let resolved = answers(value);
+	let pointing = { relations, onRelationEnter, onRelationLeave };
+
 	return resolved
-		? <Decided resolved={resolved} value={value} />
-		: <Undecided connected={connected} value={value} wire={wire} />;
+		? <Decided resolved={resolved} value={value} {...pointing} />
+		: <Undecided connected={connected} value={value} wire={wire} {...pointing} />;
 }
 
+type Pointing = {
+	relations?: { [question: string]: { subject: number; result: number } };
+	onRelationEnter?: (question: string, relation: Relation) => void;
+	onRelationLeave?: (question: string, relation: Relation) => void;
+};
+
 function Undecided(
-	{ connected, value, wire }: { connected: boolean; value: Questionnaire; wire?: Transport },
+	{ connected, value, wire, ...pointing }:
+		& { connected: boolean; value: Questionnaire; wire?: Transport }
+		& Pointing,
 ) {
 	let state = useQuestionnaire({
 		id: value.id,
@@ -83,12 +102,15 @@ function Undecided(
 				onSubmit={answerable ? state.submit : undefined}
 				status="open"
 				submitting={state.submitting}
+				{...pointing}
 			/>
 		</div>
 	);
 }
 
-function Decided({ resolved, value }: { resolved: Answer[]; value: Questionnaire }) {
+function Decided(
+	{ resolved, value, ...pointing }: { resolved: Answer[]; value: Questionnaire } & Pointing,
+) {
 	return (
 		<div
 			className="overflow-hidden rounded-lg border border-border bg-card"
@@ -101,6 +123,7 @@ function Decided({ resolved, value }: { resolved: Answer[]; value: Questionnaire
 				disabled
 				drafts={{}}
 				status="answered"
+				{...pointing}
 			/>
 		</div>
 	);

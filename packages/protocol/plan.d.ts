@@ -21,8 +21,64 @@ export declare namespace Plan {
 		| Ack
 		| (Update & { sender?: string })
 		| (Awareness & { sender?: string })
+		| Anchors
 		| Reset
 		| Status;
+
+	/**
+	 * A decision's place in the prose.
+	 *
+	 * A questionnaire asks about something and produces something, and both are
+	 * passages of the plan rather than the questionnaire itself. Anchoring them
+	 * is what lets a reader move between a decision and the text it concerns.
+	 *
+	 * The position is a Yjs relative position, so it survives edits above it.
+	 * The digest is the block's full canonical hash, which is how a position
+	 * that can no longer be resolved — after a move, or an epoch rotation — is
+	 * matched back to the block it meant.
+	 */
+	export type Anchor = {
+		/** The Yjs history `position` can be resolved in. */
+		epoch: string;
+		/** base64 `Y.encodeRelativePosition` of the anchored block. */
+		position: string;
+		/** Canonical hash of the block, for rebasing. */
+		digest: string;
+		/** Kept rather than guessed at when neither position nor digest resolves. */
+		orphaned?: true;
+	};
+
+	/** Why a relationship is not currently trustworthy. */
+	export type AnchorReason =
+		/** Never anchored. */
+		| "missing"
+		/** The answer changed, so what it produced may have too. */
+		| "answer_changed"
+		/** The plan changed beneath it. */
+		| "plan_changed"
+		/** The block it named is gone, or is no longer unique. */
+		| "orphaned";
+
+	export type AnchorSet = {
+		anchors: Anchor[];
+		/** True when the agent has yet to review this since the last change. */
+		pending: boolean;
+		reason?: AnchorReason;
+	};
+
+	/** What one question concerns, and what answering it produced. */
+	export type QuestionAnchors = { subject: AnchorSet; result: AnchorSet };
+
+	export type WidgetAnchors = {
+		widget: string;
+		questions: { [question: string]: QuestionAnchors };
+	};
+
+	/** Authoritative replacement snapshot of every relationship in the plan. */
+	export type Anchors = KIND<"plan:anchors"> & {
+		epoch: string;
+		widgets: WidgetAnchors[];
+	};
 
 	/**
 	 * Bounds the server enforces, sent on open.
@@ -61,6 +117,8 @@ export declare namespace Plan {
 			awareness?: string;
 			/** Document revision, for the agent's optimistic concurrency. */
 			revision: number;
+			/** Which prose each decision relates to, as an authoritative snapshot. */
+			anchors: WidgetAnchors[];
 			limits: Limits;
 		};
 	}

@@ -50,6 +50,7 @@ const TOOLS = [
 	"github/*",
 	"read_plan",
 	"edit_plan",
+	"anchor_plan",
 	"ask",
 ];
 
@@ -98,6 +99,14 @@ after anyone else may have changed it; it returns the current revision, the
 source, and the blocks you can address. Write with \`edit_plan\`, quoting the
 revision you read. If the plan moved on, your batch is refused and you are told
 which blocks changed — read again and retry rather than forcing the edit.
+
+Every successful \`edit_plan\` returns \`anchors_pending\`, and you MUST clear it
+with \`anchor_plan\` before you reply or end the turn, quoting that result's
+revision and block digests. A question's own text maps to \`subject\`; the prose
+its answer caused maps to \`result\`. Link only blocks that would have to change
+if that answer changed — not the goal, not the architecture, not everything
+written after it. An empty list is a real answer: it records that you looked
+and there is deliberately nothing related.
 
 Other people are editing the same document while you work, and their edits are
 as real as yours. Rewrite what a decision invalidates; do not rewrite what
