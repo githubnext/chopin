@@ -16,6 +16,7 @@ import { createYjsBinding, syncLexicalUpdateToYjs, syncYjsChangesToLexical } fro
 import * as Y from "yjs";
 
 import {
+	$createPlanNodes,
 	$createQuestionnaireNode,
 	$exportPlan,
 	$importPlan,
@@ -27,10 +28,11 @@ import {
 	registry as buildRegistry,
 	ulid,
 } from "@chopin/dialect";
-import { $getRoot, $nodesOfType } from "lexical";
+import { $getRoot, $isParagraphNode, $nodesOfType } from "lexical";
 
 import type { Binding, Provider } from "@lexical/yjs";
-import type { LexicalEditor } from "lexical";
+import type { LexicalEditor, LexicalNode } from "lexical";
+import type { Root, RootContent } from "mdast";
 import type { Questionnaire, Registry } from "@chopin/dialect";
 
 /** Awareness is relayed, never interpreted here, so a no-op provider suffices. */
@@ -414,5 +416,58 @@ export function removeQuestionnaire(target: Document, id: string): Mutation | un
 			node.remove();
 		}
 		return found;
+	});
+}
+
+/**
+ * Reconcile a validated sequence of top-level blocks into the live document.
+ *
+ * Object identity in `after` is what distinguishes a block that came from the
+ * source the agent read from one it has just written. The former map to the
+ * Lexical nodes already there, so they keep their keys through the edit and
+ * through every move around them — which is why an agent rewriting one
+ * paragraph does not cost everyone else their cursor, their selection or their
+ * undo history. Only genuinely new blocks are constructed, and they have to be
+ * constructed in this editor: Lexical nodes cannot be carried in from another.
+ */
+export function reconcile(
+	target: Document,
+	before: RootContent[],
+	after: RootContent[],
+): Mutation | undefined {
+	return mutate(target, () => {
+		let root = $getRoot();
+		let all = root.getChildren();
+
+		// An empty paragraph is a caret affordance, not a block the agent can
+		// address, so it has no place in the mapping and this edit may remove it.
+		let live = all.filter(node => !($isParagraphNode(node) && node.getChildrenSize() === 0));
+		if (live.length !== before.length) {
+			throw new Error("the plan changed while the edit was being applied");
+		}
+
+		let nodes = new Map<RootContent, LexicalNode>();
+		before.forEach((node, index) => nodes.set(node, live[index]!));
+
+		let fresh = after.filter(node => !nodes.has(node));
+		let created = $createPlanNodes(
+			{ type: "root", children: fresh } as Root,
+			{ registry: schema(), validate: false },
+		);
+		if (created.length !== fresh.length) {
+			throw new Error("a plan block did not import to exactly one node");
+		}
+		fresh.forEach((node, index) => nodes.set(node, created[index]!));
+
+		root.splice(
+			0,
+			all.length,
+			after.map(node => {
+				let found = nodes.get(node);
+				if (!found) throw new Error("a plan block has no live node");
+				return found;
+			}),
+		);
+		return true;
 	});
 }

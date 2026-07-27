@@ -19,6 +19,7 @@
 		"yjs": "catalog:mdx"
 	},
 	"devDependencies": {
-		"@types/bun": "catalog:bun"
+		"@types/bun": "catalog:bun",
+		"@types/mdast": "4.0.4"
 	}
 }

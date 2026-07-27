@@ -27,6 +27,10 @@
 			"types": "./src/serialize.ts",
 			"default": "./src/serialize.ts"
 		},
+		"./ulid": {
+			"types": "./src/ulid.ts",
+			"default": "./src/ulid.ts"
+		},
 		"./validate": {
 			"types": "./src/validate.ts",
 			"default": "./src/validate.ts"

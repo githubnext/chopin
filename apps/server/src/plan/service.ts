@@ -23,6 +23,7 @@ import type { Plan as Wire, Request } from "@chopin/protocol";
 import type { Socket, SocketData } from "../wire";
 import type { Presence } from "./presence";
 import type { Document } from "./room";
+import type { Block } from "./edit";
 import type { Sink } from "./snapshot";
 
 /** Updates are grouped for this long before being applied together. */
@@ -68,6 +69,13 @@ export type Plan = {
 	records: Map<string, Questions.Record>;
 	/** Bumped on every committed change; the agent's concurrency token. */
 	revision: number;
+	/**
+	 * Block outlines by revision.
+	 *
+	 * Kept so a batch aimed at a revision that has moved can be told which
+	 * blocks moved, rather than only that it is too late.
+	 */
+	outlines: Map<number, Block[]>;
 	queue: Queued[];
 	timer: ReturnType<typeof setTimeout> | undefined;
 	/** Serialises commits so two batches cannot interleave. */
@@ -113,6 +121,7 @@ export async function open(id: string, dir: string, server: Server<SocketData>):
 		document,
 		presence: presence.create(),
 		questions: Questions.create(),
+		outlines: new Map(),
 		records: new Map(
 			(stored?.state.questions ?? []).map(record => [record.id, record as Questions.Record]),
 		),
