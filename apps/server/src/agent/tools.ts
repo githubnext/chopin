@@ -1,0 +1,206 @@
+/**
+ * What the planner can do.
+ *
+ * Three tools, and the shape of them is the design: read the plan, edit it by
+ * block against the revision you read, and ask the people in the room when the
+ * repository cannot settle something. Everything else the agent has is a way of
+ * looking at the working directory.
+ *
+ * Tools are built per room, closing over its plan. A session belongs to one
+ * room, so there is no id to pass and no way to address another room's document
+ * by accident.
+ */
+
+import * as edit from "../plan/edit";
+import * as Questions from "../questions/service";
+
+import type { Server } from "bun";
+import type { Tool } from "@github/copilot-sdk";
+import type { Plan } from "../plan/service";
+import type { SocketData } from "../wire";
+
+/** Every tool answers with a string; a failure is a value, not a throw. */
+async function answer(name: string, produce: () => unknown): Promise<string> {
+	try {
+		return JSON.stringify(await produce(), null, 2);
+	} catch (err) {
+		let message = err instanceof Error ? err.message : String(err);
+		console.error(`[agent/${name}]`, err);
+		return `Error: ${message}`;
+	}
+}
+
+export type Context = {
+	plan: Plan;
+	server: Server<SocketData>;
+	room: string;
+	/** Relays a server-authored change to everyone in the room. */
+	publish: (mutation: { update: Uint8Array; source: string }) => void;
+};
+
+export function toolbox(context: Context): Tool[] {
+	return [
+		{
+			name: "read_plan",
+			description: "Read the plan: its revision, canonical source, the top-level blocks you can "
+				+ "address when editing, and the questions it holds. Read before editing — "
+				+ "`edit_plan` refuses a batch aimed at a revision that has moved on.",
+			parameters: { type: "object", properties: {}, additionalProperties: false },
+			// Reading the document the agent is here to write is not a decision
+			// anybody needs to approve.
+			skipPermission: true,
+			handler: () =>
+				answer("read_plan", () => ({
+					revision: context.plan.revision,
+					source: edit.source(context.plan),
+					blocks: edit.outline(context.plan),
+					questions: [...context.plan.records.values()].map(record => ({
+						id: record.id,
+						status: record.status,
+						questions: record.definition.questions.map(question => question.question),
+						...(record.answers ? { answers: record.answers } : {}),
+						...(record.resolver ? { answered_by: record.resolver } : {}),
+					})),
+				})),
+		},
+
+		{
+			name: "edit_plan",
+			description: "Edit the plan as an atomic batch against the revision you last read. Indices "
+				+ "address top-level blocks and are resolved against that revision, so they do "
+				+ "not shift under each other within one batch. If the plan changed since you "
+				+ "read it the whole batch is refused and you are told which blocks moved — read "
+				+ "again and retry. Questionnaires are created by `ask`; you cannot clear the "
+				+ "plan, and other people may be editing it while you work.",
+			parameters: {
+				type: "object",
+				properties: {
+					revision: {
+						type: "integer",
+						minimum: 0,
+						description: "The revision returned by the `read_plan` you are editing from.",
+					},
+					operations: {
+						type: "array",
+						minItems: 1,
+						maxItems: 50,
+						items: {
+							type: "object",
+							properties: {
+								op: {
+									type: "string",
+									enum: [
+										"insert",
+										"insert_root",
+										"replace",
+										"replace_root",
+										"move",
+										"delete",
+										"detach_question",
+									],
+								},
+								index: {
+									type: "integer",
+									minimum: 0,
+									description: "Block to act on. Required except for insert_root and replace_root.",
+								},
+								to: { type: "integer", minimum: 0, description: "Destination, for move." },
+								source: {
+									type: "string",
+									maxLength: 100000,
+									description: "Plan MDX, for insert, insert_root, replace and replace_root.",
+								},
+								id: {
+									type: "string",
+									description: "Questionnaire id, for detach_question.",
+								},
+							},
+							required: ["op"],
+							additionalProperties: false,
+						},
+					},
+				},
+				required: ["revision", "operations"],
+				additionalProperties: false,
+			},
+			handler: raw =>
+				answer("edit_plan", () => {
+					let args = raw as { revision: number; operations: edit.Operation[] };
+					let outcome = edit.apply(context.plan, args.revision, args.operations);
+					if (!outcome.ok) return outcome;
+
+					if (outcome.mutation) context.publish(outcome.mutation);
+					for (let id of outcome.detached) {
+						let record = context.plan.records.get(id);
+						if (record) context.plan.records.set(id, { ...record, status: "cancelled" });
+					}
+
+					return {
+						ok: true,
+						revision: context.plan.revision,
+						blocks: outcome.blocks,
+					};
+				}),
+		},
+
+		{
+			name: "ask",
+			description: "Ask the people in the room one or more multiple-choice questions and wait for "
+				+ "their shared answer. Every question also accepts free text. Batch related "
+				+ "questions into one call. The questionnaire is recorded in the plan and the "
+				+ "answer is attributed to whoever gave it. Ask only what the repository cannot "
+				+ "tell you, and do not ask for permission to proceed.",
+			parameters: {
+				type: "object",
+				properties: {
+					questions: {
+						type: "array",
+						minItems: 1,
+						maxItems: 10,
+						items: {
+							type: "object",
+							properties: {
+								header: { type: "string", minLength: 1, maxLength: 80 },
+								question: { type: "string", minLength: 1, maxLength: 1000 },
+								options: {
+									type: "array",
+									minItems: 1,
+									maxItems: 20,
+									items: {
+										type: "object",
+										properties: {
+											label: { type: "string", minLength: 1, maxLength: 200 },
+											description: { type: "string", maxLength: 1000 },
+										},
+										required: ["label", "description"],
+										additionalProperties: false,
+									},
+								},
+								multiple: { type: "boolean" },
+							},
+							required: ["header", "question", "options", "multiple"],
+							additionalProperties: false,
+						},
+					},
+				},
+				required: ["questions"],
+				additionalProperties: false,
+			},
+			// Asking is not a privilege; waiting for the answer is the cost.
+			skipPermission: true,
+			handler: raw =>
+				answer("ask", async () => {
+					let definition = Questions.identify(raw);
+					let ended = await Questions.ask(
+						context.plan,
+						context.server,
+						context.room,
+						definition,
+					);
+					return ended.status === "answered"
+						? { status: "answered", answered_by: ended.resolver, answers: ended.answers }
+						: { status: "cancelled", cancelled_by: ended.resolver };
+				}),
+		},
+	];
+}

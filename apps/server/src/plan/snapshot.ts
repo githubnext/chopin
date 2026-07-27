@@ -33,6 +33,10 @@ export type State = {
 	 * The copy projected into the prose is for reading.
 	 */
 	questions: QuestionRecord[];
+	/** The conversation, so a restart resumes rather than forgets. */
+	transcript?: unknown[];
+	/** The Copilot session to resume into. */
+	session?: string;
 };
 
 /** Structural, so the snapshot layer does not need the question domain. */

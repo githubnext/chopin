@@ -43,6 +43,16 @@ export type Config = {
 	 */
 	token: string | undefined;
 	/**
+	 * Whether to run the agent at all.
+	 *
+	 * Off is a deliberate choice, not a fallback: the server still refuses to
+	 * start with a broken agent, because the failure worth catching is a
+	 * misconfigured one. Saying `AGENT=off` is saying you know. Used by tests,
+	 * which have no business spawning a language model, and by anyone who
+	 * wants the editor on its own.
+	 */
+	agent: boolean;
+	/**
 	 * Origin of a running Vite, when developing.
 	 *
 	 * Set, and everything that is not the socket is forwarded there; unset, and
@@ -75,6 +85,7 @@ export function load(): Config {
 		dataDir: resolve(process.env.DATA_DIR || join(ROOT, "data")),
 		model: process.env.MODEL || DEFAULT_MODEL,
 		token: process.env.GITHUB_TOKEN || undefined,
+		agent: process.env.AGENT !== "off",
 		devClient: process.env.DEV_CLIENT || undefined,
 	};
 }
@@ -91,6 +102,7 @@ export function describe(config: Config): string {
 		"chopin",
 		`http://${config.host}:${config.port}`,
 		config.devClient ? `client: vite (${config.devClient})` : "client: built",
+		config.agent ? `agent: ${config.model}` : "agent: off",
 		`working dir: ${config.workingDir}`,
 	];
 	if (config.key) parts.push("access key: required");

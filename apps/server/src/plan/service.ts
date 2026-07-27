@@ -15,6 +15,7 @@ import * as Y from "yjs";
 import * as presence from "./presence";
 import * as room from "./room";
 import * as snapshot from "./snapshot";
+import * as Chat from "../chat/service";
 import * as Questions from "../questions/service";
 import { broadcast, relay, reply, tell } from "../wire";
 
@@ -60,6 +61,8 @@ export type Plan = {
 	sink: Sink;
 	/** Open questionnaires and their shared answer drafts. */
 	questions: Questions.Questions;
+	/** The conversation driving the agent. */
+	chat: Chat.Chat;
 	/**
 	 * Every questionnaire this plan has ever held, answered or not.
 	 *
@@ -121,6 +124,10 @@ export async function open(id: string, dir: string, server: Server<SocketData>):
 		document,
 		presence: presence.create(),
 		questions: Questions.create(),
+		chat: Chat.restore(
+			(stored?.state.transcript ?? []) as never[],
+			stored?.state.session,
+		),
 		outlines: new Map(),
 		records: new Map(
 			(stored?.state.questions ?? []).map(record => [record.id, record as Questions.Record]),
@@ -134,7 +141,12 @@ export async function open(id: string, dir: string, server: Server<SocketData>):
 			dir,
 			read: () => ({
 				source: room.project(plan.document),
-				state: { revision: plan.revision, questions: [...plan.records.values()] },
+				state: {
+					revision: plan.revision,
+					questions: [...plan.records.values()],
+					transcript: plan.chat.entries,
+					...(plan.chat.resume ? { session: plan.chat.resume } : {}),
+				},
 			}),
 			onWrite(state, message) {
 				broadcast(server, id, {
@@ -273,6 +285,32 @@ async function commit(plan: Plan): Promise<void> {
 	plan.sink.touch();
 }
 
+/**
+ * Relay a change the server made, as an ordinary update.
+ *
+ * Agent edits and answer projections reach clients the same way a keystroke
+ * does: as a delta against the document they already hold. That is what keeps
+ * an agent rewriting a paragraph from costing everybody else their cursor.
+ */
+export function publish(
+	plan: Plan,
+	server: Server<SocketData>,
+	roomId: string,
+	mutation: { update: Uint8Array; source: string },
+): void {
+	plan.document.seq++;
+	plan.revision++;
+	broadcast(server, roomId, {
+		kind: "plan:update",
+		ts: 0,
+		epoch: plan.document.epoch,
+		update: encode(mutation.update),
+		seq: plan.document.seq,
+	});
+	room.mark(plan.document);
+	plan.sink.touch();
+}
+
 /** Relay presence verbatim, and remember it for whoever joins next. */
 export function awareness(plan: Plan, ws: Socket, msg: Wire.Awareness): void {
 	if (msg.epoch !== plan.document.epoch) return;
@@ -297,6 +335,7 @@ export async function close(plan: Plan): Promise<void> {
 	if (plan.timer) clearTimeout(plan.timer);
 	await plan.flushing;
 	await plan.sink.flush();
+	await Chat.close(plan.chat);
 	Questions.shutdown(plan.questions);
 	presence.destroy(plan.presence);
 	plan.document.doc.destroy();

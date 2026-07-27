@@ -52,7 +52,13 @@ afterEach(async () => {
 
 async function serve(port: number, dataDir: string): Promise<void> {
 	let server = Bun.spawn(["bun", join(import.meta.dir, "main.ts")], {
-		env: { ...process.env, PORT: String(port), DATA_DIR: dataDir, SERVER_HOST: "127.0.0.1" },
+		env: {
+			...process.env,
+			PORT: String(port),
+			DATA_DIR: dataDir,
+			SERVER_HOST: "127.0.0.1",
+			AGENT: "off",
+		},
 		stdout: "ignore",
 		stderr: "inherit",
 	});

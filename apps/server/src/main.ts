@@ -9,6 +9,8 @@
 
 import { join } from "node:path";
 
+import * as Agent from "./agent/client";
+import * as Chat from "./chat/service";
 import { proxy, serve } from "./client";
 import { describe, load } from "./config";
 import { uid } from "./ids";
@@ -65,6 +67,11 @@ function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Service.Pla
 		});
 }
 
+/** A room's conversation, with everything it needs to run a turn. */
+function conversation(room: Rooms.Room): Chat.Room {
+	return { chat: room.plan!.chat, plan: room.plan!, server, room: room.id, config };
+}
+
 function evict(room: Rooms.Room): void {
 	if (room.eviction || room.members.size > 0) return;
 	room.eviction = setTimeout(() => {
@@ -116,8 +123,9 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 				let opened = await plan(room, server);
 				Service.greet(opened, ws, frame);
 				// Anything still unanswered, so a joiner sees the sidecar the
-				// others are already looking at.
+				// others are already looking at, and everything said so far.
 				Questions.greet(opened, ws);
+				Chat.greet(opened.chat, ws);
 			} catch (err) {
 				fail(ws, frame.rid, err instanceof Error ? err.message : "cannot open plan");
 			}
@@ -134,6 +142,18 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 
 		case "plan:close":
 			if (room.plan) Service.departed(room.plan, ws);
+			return;
+
+		case "chat:send":
+			if (room.plan && config.agent) Chat.send(conversation(room), ws, frame);
+			return;
+
+		case "chat:abort":
+			if (room.plan) await Chat.abort(conversation(room), ws);
+			return;
+
+		case "chat:unqueue":
+			if (room.plan) Chat.unqueue(conversation(room), ws, frame);
 			return;
 
 		case "question:open":
@@ -212,10 +232,34 @@ const server = Bun.serve<SocketData>({
 /** Nothing in memory is worth losing to a Ctrl-C. */
 async function drain(): Promise<void> {
 	await Promise.all(Rooms.all().map(room => room.plan && Service.close(room.plan)));
+	await Agent.shutdown();
 	process.exit(0);
 }
 
 process.on("SIGINT", () => void drain());
 process.on("SIGTERM", () => void drain());
+
+/**
+ * Refuse to start rather than start half-working.
+ *
+ * The agent is most of what this is for, and the ways it fails — no token, a
+ * token Copilot will not accept, no binary for this platform — are all
+ * detectable in a couple of seconds by trying. Discovering them when somebody
+ * types their first message is worse for everyone.
+ */
+if (config.agent) {
+	if (!config.token) {
+		console.error("chopin: GITHUB_TOKEN is not set. Set one, or start with AGENT=off.");
+		process.exit(1);
+	}
+
+	try {
+		await Agent.probe(config, { tools: [] });
+	} catch (err) {
+		let reason = err instanceof Error ? err.message : String(err);
+		console.error(`chopin: the agent could not start — ${reason}`);
+		process.exit(1);
+	}
+}
 
 console.log(describe(config));

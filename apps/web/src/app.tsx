@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { cursor, Decisions, PlanEditor, QuestionnaireStore } from "@chopin/editor";
+import {
+	cursor,
+	Decisions,
+	PlanEditor,
+	QuestionnaireStore,
+	useQuestionnaires,
+} from "@chopin/editor";
 
+import { Chat } from "./chat/chat";
 import * as Identity from "./identity";
 import { Wire } from "./wire";
 import { Workspace } from "./workspace";
@@ -98,6 +105,10 @@ function Room({ handle }: { handle: string }) {
 	let user = useMemo(() => cursor(handle), [handle]);
 	// Written from inside the editor, read by the decisions pane beside it.
 	let [questions] = useState(() => new QuestionnaireStore());
+	let [reveal, setReveal] = useState<{ widget: string; token: number }>();
+	let unanswered = useQuestionnaires(questions).filter(entry =>
+		entry.value.questions.some(question => question.answer === undefined)
+	);
 
 	useEffect(() => {
 		let socket = new Wire({
@@ -125,6 +136,16 @@ function Room({ handle }: { handle: string }) {
 
 	return (
 		<Workspace
+			chat={
+				<Chat
+					connected={status === "connected"}
+					handle={handle}
+					onReveal={widget =>
+						setReveal({ widget: widget || unanswered[0]?.id || "", token: Date.now() })}
+					waiting={unanswered.length}
+					wire={wire}
+				/>
+			}
 			header={
 				<Header
 					handle={handle}
@@ -137,6 +158,7 @@ function Room({ handle }: { handle: string }) {
 			decisions={
 				<Decisions
 					connected={status === "connected"}
+					reveal={reveal}
 					store={questions}
 					wire={wire}
 				/>

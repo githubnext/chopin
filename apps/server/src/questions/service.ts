@@ -22,6 +22,8 @@ import { broadcast, relay, reply, tell } from "../wire";
 import type { Server } from "bun";
 import type { Question as Wire, Request } from "@chopin/protocol";
 import type { Answer, Definition } from "@chopin/question";
+import * as Service from "../plan/service";
+
 import type { Plan } from "../plan/service";
 import type { Socket, SocketData } from "../wire";
 import type { Ended, Questions } from "./store";
@@ -114,30 +116,10 @@ export async function ask(
 
 	plan.records.set(id, { id, definition, status: "open" });
 
-	if (mutation) publish(plan, server, roomId, mutation);
+	if (mutation) Service.publish(plan, server, roomId, mutation);
 	broadcast(server, roomId, { kind: "question:asked", ts: 0, id, definition, widget: id });
 
 	return waiting;
-}
-
-/** Relay a server-authored change to the document as an ordinary update. */
-function publish(
-	plan: Plan,
-	server: Server<SocketData>,
-	roomId: string,
-	mutation: room.Mutation,
-): void {
-	plan.document.seq++;
-	plan.revision++;
-	broadcast(server, roomId, {
-		kind: "plan:update",
-		ts: 0,
-		epoch: plan.document.epoch,
-		update: Buffer.from(mutation.update).toString("base64"),
-		seq: plan.document.seq,
-	});
-	room.mark(plan.document);
-	plan.sink.touch();
 }
 
 /** Everything still unanswered, for a client that has just joined. */
@@ -214,7 +196,7 @@ export async function submit(
 
 	try {
 		let mutation = room.projectAnswer(plan.document, msg.id, answers);
-		if (mutation) publish(plan, server, roomId, mutation);
+		if (mutation) Service.publish(plan, server, roomId, mutation);
 	} catch (err) {
 		// The decision is not final if the plan could not be told about it.
 		Store.rollback(plan.questions, claimed.claim);
@@ -273,7 +255,7 @@ export async function cancel(
 
 	try {
 		let mutation = room.removeQuestionnaire(plan.document, msg.id);
-		if (mutation) publish(plan, server, roomId, mutation);
+		if (mutation) Service.publish(plan, server, roomId, mutation);
 	} catch (err) {
 		// The questionnaire stays open and answerable, which is a state every
 		// client already renders. Saying "resolving" is honest: the attempt is

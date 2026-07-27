@@ -52,7 +52,13 @@ function frame(frames: Array<Record<string, unknown>>, kind: string) {
 
 beforeAll(async () => {
 	server = Bun.spawn(["bun", `${import.meta.dir}/main.ts`], {
-		env: { ...process.env, PORT: String(PORT), ACCESS_KEY: KEY, SERVER_HOST: "127.0.0.1" },
+		env: {
+			...process.env,
+			PORT: String(PORT),
+			ACCESS_KEY: KEY,
+			SERVER_HOST: "127.0.0.1",
+			AGENT: "off",
+		},
 		stdout: "ignore",
 		stderr: "inherit",
 	});

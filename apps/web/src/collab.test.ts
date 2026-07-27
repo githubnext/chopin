@@ -39,7 +39,13 @@ async function serve(port: number): Promise<void> {
 	dirs.push(dir);
 
 	running.push(Bun.spawn(["bun", SERVER], {
-		env: { ...process.env, PORT: String(port), DATA_DIR: dir, SERVER_HOST: "127.0.0.1" },
+		env: {
+			...process.env,
+			PORT: String(port),
+			DATA_DIR: dir,
+			SERVER_HOST: "127.0.0.1",
+			AGENT: "off",
+		},
 		stdout: "ignore",
 		stderr: "inherit",
 	}));
