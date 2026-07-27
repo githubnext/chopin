@@ -35,6 +35,14 @@ export type Config = {
 	/** Planner model. */
 	model: string;
 	/**
+	 * The agent's credential, and the bearer for the GitHub MCP server.
+	 *
+	 * Required in practice — the boot probe refuses to start without a working
+	 * one — but held as optional here so the type does not claim a guarantee
+	 * that configuration loading cannot make.
+	 */
+	token: string | undefined;
+	/**
 	 * Origin of a running Vite, when developing.
 	 *
 	 * Set, and everything that is not the socket is forwarded there; unset, and
@@ -66,6 +74,7 @@ export function load(): Config {
 		workingDir: resolve(process.env.WORKING_DIR || ROOT),
 		dataDir: resolve(process.env.DATA_DIR || join(ROOT, "data")),
 		model: process.env.MODEL || DEFAULT_MODEL,
+		token: process.env.GITHUB_TOKEN || undefined,
 		devClient: process.env.DEV_CLIENT || undefined,
 	};
 }
