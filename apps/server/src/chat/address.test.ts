@@ -16,20 +16,20 @@ import type { Said } from "./address";
 
 describe("addressing", () => {
 	it("recognises the mention wherever it appears", () => {
-		expect(addressed("@chopin draft the auth section")).toBe(true);
-		expect(addressed("ok, @chopin go ahead")).toBe(true);
-		expect(addressed("do that @chopin")).toBe(true);
-		expect(addressed("@chopin")).toBe(true);
+		expect(addressed("@ai draft the auth section")).toBe(true);
+		expect(addressed("ok, @ai go ahead")).toBe(true);
+		expect(addressed("do that @ai")).toBe(true);
+		expect(addressed("@ai")).toBe(true);
 	});
 
 	it("does not care about case", () => {
-		expect(addressed("@Chopin please")).toBe(true);
-		expect(addressed("@CHOPIN please")).toBe(true);
+		expect(addressed("@AI please")).toBe(true);
+		expect(addressed("@Ai please")).toBe(true);
 	});
 
 	it("leaves ordinary conversation alone", () => {
 		expect(addressed("should we ask about auth first?")).toBe(false);
-		expect(addressed("chopin is the name of the prototype")).toBe(false);
+		expect(addressed("ai is going to write this bit")).toBe(false);
 		expect(addressed("let me look at the plan")).toBe(false);
 	});
 
@@ -39,21 +39,25 @@ describe("addressing", () => {
 	 * worse than missing one.
 	 */
 	it("is not fooled by a longer token", () => {
-		expect(addressed("mail me at hi@chopin.dev")).toBe(false);
-		expect(addressed("see @chopinist for that")).toBe(false);
-		expect(addressed("the @@chopin thing")).toBe(false);
+		expect(addressed("mail me at hi@ai.dev")).toBe(false);
+		expect(addressed("see @aiden for that")).toBe(false);
+		expect(addressed("the @@ai thing")).toBe(false);
+		// A short mention has more prose to collide with, so the boundaries
+		// matter more than they did for a longer one.
+		expect(addressed("ship it @aidan")).toBe(false);
+		expect(addressed("the @airflow job")).toBe(false);
 	});
 });
 
 describe("the instruction", () => {
 	it("strips the summons, which is addressing rather than content", () => {
-		expect(instruction("@chopin draft the auth section")).toBe("draft the auth section");
-		expect(instruction("ok @chopin go ahead")).toBe("ok go ahead");
+		expect(instruction("@ai draft the auth section")).toBe("draft the auth section");
+		expect(instruction("ok @ai go ahead")).toBe("ok go ahead");
 	});
 
 	it("is empty for a bare mention", () => {
-		expect(instruction("@chopin")).toBe("");
-		expect(instruction("  @chopin  ")).toBe("");
+		expect(instruction("@ai")).toBe("");
+		expect(instruction("  @ai  ")).toBe("");
 	});
 });
 
@@ -95,7 +99,7 @@ describe("backscroll", () => {
 
 describe("composing a turn", () => {
 	it("sends the message alone when nothing was said before it", () => {
-		expect(compose([], "alice", "@chopin draft the auth section"))
+		expect(compose([], "alice", "@ai draft the auth section"))
 			.toBe("@alice: draft the auth section");
 	});
 
@@ -106,7 +110,7 @@ describe("composing a turn", () => {
 				{ handle: "bob", text: "probably, the OAuth bit is unclear" },
 			],
 			"alice",
-			"@chopin draft the auth section",
+			"@ai draft the auth section",
 		);
 
 		expect(prompt).toContain("Said in the room since your last turn:");
@@ -121,7 +125,7 @@ describe("composing a turn", () => {
 	 * argument is settled. It has to mean act on that, not act on nothing.
 	 */
 	it("turns a bare mention into an instruction to act on what was said", () => {
-		let prompt = compose([{ handle: "bob", text: "let us go with OAuth" }], "alice", "@chopin");
+		let prompt = compose([{ handle: "bob", text: "let us go with OAuth" }], "alice", "@ai");
 
 		expect(prompt).toContain("@bob: let us go with OAuth");
 		expect(prompt).toContain("act on the conversation above");

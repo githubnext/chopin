@@ -33,8 +33,8 @@ The agent acts only when addressed:
 ```
 should we cover the export format?     → the room only
 yes, Markdown for now                  → the room only
-@chopin                                → acts on the conversation above
-@chopin draft the export section       → acts on that
+@ai                                    → acts on the conversation above
+@ai draft the export section           → acts on that
 ```
 
 Anything said without the mention is still carried into the agent's next turn,
@@ -44,9 +44,9 @@ knowing. The composer says which a message will be before you send it.
 ## What to try
 
 1. Type in the plan with two windows open, and watch the cursors.
-2. `@chopin write a plan for adding X`, and watch it read the repository and
+2. `@ai write a plan for adding X`, and watch it read the repository and
    write into the document you are looking at.
-3. Ask it something it cannot know: `@chopin ask us whether to support Y`. The
+3. Ask it something it cannot know: `@ai ask us whether to support Y`. The
    question appears in the decisions pane on the right, both windows can edit
    the answer together, and either can submit it.
 4. Hover the answer once it is decided — the prose it produced lights up.
