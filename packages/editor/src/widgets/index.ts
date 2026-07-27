@@ -9,8 +9,9 @@
 import { setRenderer } from "@chopin/dialect";
 
 import { renderImage } from "./image";
+import { renderQuestionnaire } from "./questionnaire";
 
-import type { ImageNode } from "@chopin/dialect";
+import type { ImageNode, QuestionnaireNode } from "@chopin/dialect";
 
 let registered = false;
 
@@ -20,8 +21,11 @@ export function register(): void {
 	registered = true;
 
 	setRenderer<ImageNode>("plan-image", renderImage);
+	setRenderer<QuestionnaireNode>("plan-questionnaire", renderQuestionnaire);
 }
 
 export { CalloutPlugin } from "./callout";
+export { QuestionnaireCard } from "./questionnaire";
+export type { QuestionnaireCardProps } from "./questionnaire";
 export { PreviewPlugin } from "./render-blocks";
 export { TabsPlugin } from "./tabs";

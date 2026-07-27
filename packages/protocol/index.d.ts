@@ -73,9 +73,16 @@ export declare namespace Session {
 }
 
 export type { Plan } from "./plan";
+export type { Question } from "./question";
 
 /** Everything a client may send. */
-export type Incoming = Session.Incoming | import("./plan").Plan.Incoming;
+export type Incoming =
+	| Session.Incoming
+	| import("./plan").Plan.Incoming
+	| import("./question").Question.Incoming;
 
 /** Everything a client may receive. */
-export type Outgoing = Session.Outgoing | import("./plan").Plan.Outgoing;
+export type Outgoing =
+	| Session.Outgoing
+	| import("./plan").Plan.Outgoing
+	| import("./question").Question.Outgoing;

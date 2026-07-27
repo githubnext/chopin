@@ -16,6 +16,7 @@
 	"dependencies": {
 		"@chopin/dialect": "workspace:*",
 		"@chopin/protocol": "workspace:*",
+		"@chopin/question": "workspace:*",
 		"@lexical/link": "catalog:mdx",
 		"@lexical/list": "catalog:mdx",
 		"@lexical/react": "catalog:mdx",

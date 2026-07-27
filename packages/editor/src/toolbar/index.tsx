@@ -11,8 +11,6 @@ import { useCellValue } from "@mdxeditor/gurx";
 import { SelectionBubble } from "./bubble";
 import { SlashMenu } from "./slash";
 
-export type ToolbarProps = Record<string, never>;
-
 /**
  * Reads what it needs from the realm so the surfaces below it stay ordinary
  * prop-driven components. `readOnly$` is the editor's own account of whether

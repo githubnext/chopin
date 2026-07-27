@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { cursor, PlanEditor } from "@chopin/editor";
+import { cursor, Decisions, PlanEditor, QuestionnaireStore } from "@chopin/editor";
 
 import * as Identity from "./identity";
 import { Wire } from "./wire";
@@ -96,6 +96,8 @@ function Room({ handle }: { handle: string }) {
 	let [members, setMembers] = useState<Session.Member[]>([]);
 	let room = Identity.room();
 	let user = useMemo(() => cursor(handle), [handle]);
+	// Written from inside the editor, read by the decisions pane beside it.
+	let [questions] = useState(() => new QuestionnaireStore());
 
 	useEffect(() => {
 		let socket = new Wire({
@@ -132,7 +134,14 @@ function Room({ handle }: { handle: string }) {
 					status={status}
 				/>
 			}
-			plan={<PlanEditor connection={status} user={user} wire={wire} />}
+			decisions={
+				<Decisions
+					connected={status === "connected"}
+					store={questions}
+					wire={wire}
+				/>
+			}
+			plan={<PlanEditor connection={status} questions={questions} user={user} wire={wire} />}
 		/>
 	);
 }

@@ -14,12 +14,16 @@
 import { addComposerChild$, realmPlugin } from "@mdxeditor/editor";
 import { Cell } from "@mdxeditor/gurx";
 
+import { QuestionnaireObserver } from "./questionnaires";
 import { Toolbar } from "./toolbar";
 import { CalloutPlugin, PreviewPlugin, TabsPlugin } from "./widgets";
 
-import type { ToolbarProps } from "./toolbar";
+import type { QuestionnaireStore } from "./questionnaires";
 
-export type WidgetsOptions = ToolbarProps;
+export type WidgetsOptions = {
+	/** Watched from inside the editor; read from outside it. */
+	questions?: QuestionnaireStore;
+};
 
 /** Live host configuration. Read it; do not capture it. */
 export const widgets$ = Cell<WidgetsOptions>({});
@@ -27,6 +31,12 @@ export const widgets$ = Cell<WidgetsOptions>({});
 export const widgetsPlugin = realmPlugin<WidgetsOptions>({
 	init(realm, params) {
 		realm.pub(widgets$, params ?? {});
+		// The store is identity-stable and only ever observed, so unlike the
+		// rest of the options it can be captured once.
+		if (params?.questions) {
+			let store = params.questions;
+			realm.pub(addComposerChild$, () => <QuestionnaireObserver store={store} />);
+		}
 		realm.pub(addComposerChild$, TabsPlugin);
 		realm.pub(addComposerChild$, PreviewPlugin);
 		realm.pub(addComposerChild$, CalloutPlugin);

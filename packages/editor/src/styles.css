@@ -18,156 +18,35 @@
 	--plan-measure: 40rem;
 }
 
-/* Plan + sidecar ------------------------------------------------------- */
+/* Decisions pane -------------------------------------------------------- */
 
 .plan-workspace {
 	position: relative;
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) 0;
+	display: flex;
 	flex: 1;
 	min-height: 0;
 	overflow: hidden;
-}
-
-.plan-workspace.is-sidecar-open {
-	grid-template-columns: minmax(0, 1fr) var(--plan-sidecar-width);
-}
-
-.plan-workspace.is-resizing {
-	cursor: col-resize;
-	user-select: none;
 }
 
 .plan-document {
 	position: relative;
-	grid-column: 1;
+	flex: 1;
 	min-width: 0;
 	min-height: 0;
 }
 
-.plan-sidecar {
-	grid-column: 2;
+.plan-decisions {
 	display: flex;
+	height: 100%;
 	min-width: 0;
 	min-height: 0;
 	flex-direction: column;
 	overflow: hidden;
-	border-inline-start: 1px solid var(--color-border);
 	background: var(--color-background);
 }
 
-.plan-sidecar-header {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 0.75rem;
-	padding: 0.75rem 1rem;
-	border-block-end: 1px solid var(--color-border);
-}
-
-.plan-sidecar-header h2 {
-	margin: 0;
-	font-size: 0.8125rem;
-	font-weight: 600;
-	color: var(--color-foreground);
-}
-
-.plan-sidecar-header p {
-	margin: 0.125rem 0 0;
-	font-size: 0.6875rem;
-	color: var(--color-muted-foreground);
-}
-
-.plan-sidecar-header button,
-.plan-sidecar-show {
-	flex: none;
-	border-radius: var(--radius-md);
-	padding: 0.25rem 0.5rem;
-	font-size: 0.6875rem;
-	color: var(--color-muted-foreground);
-	transition: color 120ms ease, background-color 120ms ease;
-}
-
-.plan-sidecar-header button:hover,
-.plan-sidecar-show:hover {
-	background: var(--color-muted);
-	color: var(--color-foreground);
-}
-
-.plan-sidecar-content {
-	display: flex;
-	min-height: 0;
-	flex: 1;
-	flex-direction: column;
-	gap: 0.75rem;
-	overflow: auto;
-	padding: 0.75rem;
-}
-
-.plan-sidecar-content [data-plan-sidecar-questionnaire] {
-	border-radius: var(--radius-lg);
-	transition: outline-color 120ms ease, background-color 120ms ease;
-}
-
-.plan-sidecar-content [data-plan-anchor-active] {
-	outline: 1px solid color-mix(in oklch, var(--color-ring) 70%, transparent);
-	outline-offset: 2px;
-	background: color-mix(in oklch, var(--color-accent) 16%, transparent);
-}
-
-.plan-anchor-orphan {
-	margin: 0 0 0.375rem;
-	font-size: 0.6875rem;
-	color: var(--color-warning);
-}
-
-.plan-sidecar-empty {
-	padding: 2rem 1rem;
-	text-align: center;
-	font-size: 0.75rem;
-	color: var(--color-muted-foreground);
-}
-
-.plan-sidecar-grip {
-	position: absolute;
-	z-index: 2;
-	inset-block: 0;
-	inset-inline-end: calc(var(--plan-sidecar-width) - 12px);
-	width: 24px;
-	cursor: col-resize;
-	touch-action: none;
-}
-
-.plan-sidecar-grip::after {
-	content: "";
-	position: absolute;
-	inset-block: 0;
-	inset-inline-start: 11px;
-	width: 1px;
-	background: transparent;
-	transition: background-color 120ms ease;
-}
-
-.plan-sidecar-grip:hover::after,
-.plan-sidecar-grip:focus-visible::after,
-.plan-workspace.is-resizing .plan-sidecar-grip::after {
-	background: var(--color-ring);
-}
-
-.plan-sidecar-grip:focus-visible {
-	outline: none;
-}
-
-.plan-sidecar-show {
-	position: absolute;
-	z-index: 2;
-	inset-block-start: 0.75rem;
-	inset-inline-end: 0.75rem;
-	border: 1px solid var(--color-border);
-	background: var(--color-background);
-}
-
-/* The durable node stays in plan.mdx but its form belongs in the sidecar. */
+/* The node stays in the plan for exports and agent reads; its form is in the
+   decisions pane, so inline it renders as nothing. */
 .plan .plan-content [data-plan-questionnaire] {
 	display: none;
 }

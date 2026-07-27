@@ -13,6 +13,8 @@ import { proxy, serve } from "./client";
 import { describe, load } from "./config";
 import { uid } from "./ids";
 import * as Service from "./plan/service";
+import * as Inject from "./questions/inject";
+import * as Questions from "./questions/service";
 import * as Rooms from "./rooms";
 import { broadcast, fail, relay, tell, topic } from "./wire";
 
@@ -54,6 +56,7 @@ function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Service.Pla
 		.then(opened => {
 			room.plan = opened;
 			room.opening = undefined;
+			if (Inject.enabled()) Inject.ask(opened, server, room.id);
 			return opened;
 		})
 		.catch(err => {
@@ -110,7 +113,11 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 
 		case "plan:open": {
 			try {
-				Service.greet(await plan(room, server), ws, frame);
+				let opened = await plan(room, server);
+				Service.greet(opened, ws, frame);
+				// Anything still unanswered, so a joiner sees the sidecar the
+				// others are already looking at.
+				Questions.greet(opened, ws);
 			} catch (err) {
 				fail(ws, frame.rid, err instanceof Error ? err.message : "cannot open plan");
 			}
@@ -127,6 +134,26 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 
 		case "plan:close":
 			if (room.plan) Service.departed(room.plan, ws);
+			return;
+
+		case "question:open":
+			if (room.plan) Questions.open(room.plan, ws, frame);
+			return;
+
+		case "question:edit":
+			if (room.plan) Questions.edit(room.plan, ws, frame);
+			return;
+
+		case "question:presence":
+			if (room.plan) Questions.focus(room.plan, ws, frame);
+			return;
+
+		case "question:submit":
+			if (room.plan) await Questions.submit(room.plan, server, room.id, ws, frame);
+			return;
+
+		case "question:cancel":
+			if (room.plan) await Questions.cancel(room.plan, server, room.id, ws, frame);
 			return;
 	}
 }
@@ -172,7 +199,10 @@ const server = Bun.serve<SocketData>({
 			let room = Rooms.leave(ws);
 			ws.unsubscribe(topic(ws.data.room));
 			if (!room) return;
-			if (room.plan) Service.departed(room.plan, ws);
+			if (room.plan) {
+				Service.departed(room.plan, ws);
+				Questions.away(room.plan, ws);
+			}
 			if (room.members.size > 0) presence(server, room);
 			else evict(room);
 		},

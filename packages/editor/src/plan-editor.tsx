@@ -23,6 +23,7 @@ import { widgetsPlugin } from "./widgets-plugin";
 import type { MDXEditorMethods } from "@mdxeditor/editor";
 import type { Plan } from "@chopin/protocol";
 import type { PlanProvider } from "./provider";
+import type { QuestionnaireStore } from "./questionnaires";
 import type { Connection, Transport } from "./transport";
 
 /**
@@ -51,6 +52,13 @@ export type PlanEditorProps = {
 	user: { name: string; color: string };
 	/** Read-only while an agent turn may be rewriting the plan. */
 	busy?: boolean;
+	/**
+	 * Where the plan's questionnaires are published.
+	 *
+	 * Owned by the host because the pane that answers them renders outside the
+	 * editor, while the observer that finds them has to run inside it.
+	 */
+	questions?: QuestionnaireStore;
 	className?: string;
 };
 
@@ -61,7 +69,9 @@ export type PlanState = {
 	reset?: Plan.Reset["reason"];
 };
 
-export function PlanEditor({ wire, connection, user, busy, className }: PlanEditorProps) {
+export function PlanEditor(
+	{ busy, className, connection, questions, user, wire }: PlanEditorProps,
+) {
 	let ref = useRef<MDXEditorMethods>(null);
 	let scroller = useRef<HTMLDivElement>(null);
 	let [state, setState] = useState<PlanState>({ synced: false });
@@ -120,10 +130,10 @@ export function PlanEditor({ wire, connection, user, busy, className }: PlanEdit
 					 * it has no reason to throw.
 					 */
 					collaborationPlugin({ wire, user, onReset, onProvider }),
-					widgetsPlugin({}),
+					widgetsPlugin({ questions }),
 				]
 				: [],
-		[wire, user, onReset, onProvider],
+		[wire, user, onReset, onProvider, questions],
 	);
 
 	useEffect(() => {

@@ -1,0 +1,19 @@
+{
+	"extends": [
+		"../../tsconfig.json"
+	],
+	"include": [
+		"src"
+	],
+	"compilerOptions": {
+		"target": "esnext",
+		"lib": ["esnext", "dom", "dom.iterable"],
+		"jsx": "react-jsx",
+		"types": ["bun"],
+
+		"allowSyntheticDefaultImports": true,
+
+		"noUnusedLocals": true,
+		"noUnusedParameters": true
+	}
+}

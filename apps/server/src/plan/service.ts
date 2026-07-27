@@ -15,6 +15,7 @@ import * as Y from "yjs";
 import * as presence from "./presence";
 import * as room from "./room";
 import * as snapshot from "./snapshot";
+import * as Questions from "../questions/service";
 import { broadcast, relay, reply, tell } from "../wire";
 
 import type { Server } from "bun";
@@ -56,6 +57,15 @@ export type Plan = {
 	document: Document;
 	presence: Presence;
 	sink: Sink;
+	/** Open questionnaires and their shared answer drafts. */
+	questions: Questions.Questions;
+	/**
+	 * Every questionnaire this plan has ever held, answered or not.
+	 *
+	 * Kept beside the document rather than in it: the plan shows a decision,
+	 * this owns it. An agent rewriting the prose cannot change what was decided.
+	 */
+	records: Map<string, Questions.Record>;
 	/** Bumped on every committed change; the agent's concurrency token. */
 	revision: number;
 	queue: Queued[];
@@ -102,6 +112,10 @@ export async function open(id: string, dir: string, server: Server<SocketData>):
 	let plan: Plan = {
 		document,
 		presence: presence.create(),
+		questions: Questions.create(),
+		records: new Map(
+			(stored?.state.questions ?? []).map(record => [record.id, record as Questions.Record]),
+		),
 		revision: stored?.state.revision ?? 0,
 		queue: [],
 		timer: undefined,
@@ -111,7 +125,7 @@ export async function open(id: string, dir: string, server: Server<SocketData>):
 			dir,
 			read: () => ({
 				source: room.project(plan.document),
-				state: { revision: plan.revision },
+				state: { revision: plan.revision, questions: [...plan.records.values()] },
 			}),
 			onWrite(state, message) {
 				broadcast(server, id, {
@@ -274,6 +288,7 @@ export async function close(plan: Plan): Promise<void> {
 	if (plan.timer) clearTimeout(plan.timer);
 	await plan.flushing;
 	await plan.sink.flush();
+	Questions.shutdown(plan.questions);
 	presence.destroy(plan.presence);
 	plan.document.doc.destroy();
 }

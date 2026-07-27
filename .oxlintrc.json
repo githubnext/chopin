@@ -13,15 +13,22 @@
 		"no-await-in-loop": "off",
 		"no-cond-assign": "off",
 		"no-shadow": "off",
-		"no-unused-expressions": ["error", {
-			"allowShortCircuit": true
-		}],
-		"no-unused-vars": ["warn", {
-			"ignoreRestSiblings": true,
-			"argsIgnorePattern": "^_",
-			"caughtErrorsIgnorePattern": "^_",
-			"varsIgnorePattern": "^_"
-		}],
+		"no-unused-expressions": [
+			"error",
+			{
+				"allowShortCircuit": true
+			}
+		],
+		"no-unused-vars": [
+			"warn",
+			{
+				"ignoreRestSiblings": true,
+				"argsIgnorePattern": "^_",
+				"caughtErrorsIgnorePattern": "^_",
+				"varsIgnorePattern": "^_"
+			}
+		],
+		"oxc/no-map-spread": "off",
 		"triple-slash-reference": "off",
 		"typescript/no-import-type-side-effects": "error",
 		"unicorn/no-array-sort": "off"

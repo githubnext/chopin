@@ -26,6 +26,22 @@ const MAX_MS = 2_000;
 export type State = {
 	/** Bumped on every committed mutation; the agent's concurrency token. */
 	revision: number;
+	/**
+	 * Questionnaires and their decisions.
+	 *
+	 * Beside the plan rather than in it, because this is what owns an answer.
+	 * The copy projected into the prose is for reading.
+	 */
+	questions: QuestionRecord[];
+};
+
+/** Structural, so the snapshot layer does not need the question domain. */
+export type QuestionRecord = {
+	id: string;
+	definition: unknown;
+	status: "open" | "answered" | "cancelled";
+	answers?: { [question: string]: string };
+	resolver?: string;
 };
 
 export type Stored = {
@@ -63,7 +79,7 @@ export async function load(dir: string): Promise<Stored | undefined> {
 		return undefined;
 	}
 
-	let state: State = { revision: 0 };
+	let state: State = { revision: 0, questions: [] };
 	try {
 		state = { ...state, ...JSON.parse(await readFile(file.state, "utf8")) as Partial<State> };
 	} catch {

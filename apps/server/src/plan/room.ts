@@ -16,19 +16,22 @@ import { createYjsBinding, syncLexicalUpdateToYjs, syncYjsChangesToLexical } fro
 import * as Y from "yjs";
 
 import {
+	$createQuestionnaireNode,
 	$exportPlan,
 	$importPlan,
 	exportPlan,
 	limits,
 	parse,
 	PlanValidationError,
+	QuestionnaireNode,
 	registry as buildRegistry,
 	ulid,
 } from "@chopin/dialect";
+import { $getRoot, $nodesOfType } from "lexical";
 
 import type { Binding, Provider } from "@lexical/yjs";
 import type { LexicalEditor } from "lexical";
-import type { Registry } from "@chopin/dialect";
+import type { Questionnaire, Registry } from "@chopin/dialect";
 
 /** Awareness is relayed, never interpreted here, so a no-op provider suffices. */
 const PROVIDER = {
@@ -320,4 +323,96 @@ export async function replace(source: string): Promise<Document> {
 export async function compact(target: Document): Promise<Document | undefined> {
 	if (!needsCompaction(target)) return undefined;
 	return replace(project(target));
+}
+
+// -- server-authored mutations ---------------------------------------------
+
+export type Mutation = {
+	/** Yjs delta covering only what this mutation changed. */
+	update: Uint8Array;
+	/** Canonical source afterwards. */
+	source: string;
+};
+
+/**
+ * Apply a change of our own to the live document.
+ *
+ * Returns the delta since before the change so it can be relayed as an
+ * ordinary update. Peers reconcile it into the document they already have,
+ * which is why an agent edit does not cost anyone their cursor or undo
+ * history the way an epoch rotation would.
+ */
+function mutate(target: Document, change: () => boolean): Mutation | undefined {
+	let vector = Y.encodeStateVector(target.doc);
+	let changed = false;
+	let failure: unknown;
+
+	target.editor.update(
+		() => {
+			try {
+				changed = change();
+			} catch (err) {
+				failure = err;
+			}
+		},
+		{ discrete: true },
+	);
+	if (failure) throw failure;
+	if (!changed) return undefined;
+
+	return { update: Y.encodeStateAsUpdate(target.doc, vector), source: project(target) };
+}
+
+/** Append a questionnaire to the plan. */
+export function insertQuestionnaire(
+	target: Document,
+	value: Questionnaire,
+): Mutation | undefined {
+	return mutate(target, () => {
+		$getRoot().append($createQuestionnaireNode(value));
+		return true;
+	});
+}
+
+/**
+ * Write a resolved answer into the document.
+ *
+ * The sidecar record is authoritative; this only makes the plan read correctly
+ * on its own. A discrepancy means the projection is stale, never that the
+ * document has decided something different.
+ */
+export function projectAnswer(
+	target: Document,
+	id: string,
+	answers: Record<string, string>,
+): Mutation | undefined {
+	return mutate(target, () => {
+		let found = false;
+		for (let node of $nodesOfType(QuestionnaireNode)) {
+			if (node.getId() !== id) continue;
+			found = true;
+			let value = node.getQuestionnaire();
+			node.setQuestionnaire({
+				...value,
+				questions: value.questions.map(question => {
+					let answer = answers[question.id];
+					return answer === undefined ? question : { ...question, answer };
+				}),
+			});
+		}
+		return found;
+	});
+}
+
+/** Take a questionnaire out of the plan, leaving its record as history. */
+export function removeQuestionnaire(target: Document, id: string): Mutation | undefined {
+	return mutate(target, () => {
+		let found = false;
+		for (let node of $nodesOfType(QuestionnaireNode)) {
+			if (node.getId() !== id) continue;
+			found = true;
+			node.remove();
+		}
+		return found;
+	});
 }
