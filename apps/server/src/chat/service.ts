@@ -245,6 +245,22 @@ async function session(context: Room): Promise<Agent.Agent> {
 	});
 }
 
+/**
+ * Finish anything left mid-sentence.
+ *
+ * A message is normally completed by `assistant.message`, which arrives at the
+ * end of a stream. An aborted or failed turn never sends one, so without this
+ * the entry keeps its streaming flag and every client goes on drawing a caret
+ * after a message that will never be added to.
+ */
+function settle(chat: Chat, server: Server<SocketData>, room: string): void {
+	for (let entry of chat.entries) {
+		if (!entry.streaming) continue;
+		delete entry.streaming;
+		broadcast(server, room, { kind: "chat:message", ts: 0, entry });
+	}
+}
+
 /** Run one turn, then drain whatever queued up behind it. */
 async function run(context: Room, handle: string, text: string): Promise<void> {
 	let { chat, room, server } = context;
@@ -294,6 +310,7 @@ async function run(context: Room, handle: string, text: string): Promise<void> {
 		chat.release?.();
 		chat.release = undefined;
 		chat.writing = undefined;
+		settle(chat, server, room);
 		chat.busy = false;
 		chat.turn = undefined;
 		state(chat, server, room);
@@ -311,8 +328,13 @@ async function run(context: Room, handle: string, text: string): Promise<void> {
  *
  * Only the events a reader needs: what the agent said, what it is doing, and
  * when something failed. The rest is diagnostic noise that belongs in a log.
+ *
+ * Exported so it can be driven with synthetic events. Every field it reads
+ * lives under `event.data` and several are near-homonyms of fields on the
+ * envelope, which is the kind of mistake that produces plausible-looking
+ * output rather than an error.
  */
-function translate(context: Room, event: SessionEvent): void {
+export function translate(context: Room, event: SessionEvent): void {
 	let { chat, room, server } = context;
 
 	switch (event.type) {
@@ -338,20 +360,27 @@ function translate(context: Room, event: SessionEvent): void {
 		}
 
 		case "assistant.message": {
-			let text = event.data.content;
-			let entry = chat.entries.find(item => item.id === event.id);
+			// `data.messageId`, not `event.id`. The envelope's id belongs to the
+			// event; the message has its own, and it is the one the deltas were
+			// keyed by. Looking up the wrong one finds nothing, appends a second
+			// copy of the message, and leaves the first one streaming forever.
+			let { content, messageId } = event.data;
+			let entry = chat.entries.find(item => item.id === messageId);
+
 			if (entry) {
-				entry.text = text || entry.text;
+				entry.text = content || entry.text;
 				delete entry.streaming;
 				broadcast(server, room, { kind: "chat:message", ts: 0, entry });
-			} else if (text.trim()) {
+			} else if (content.trim()) {
+				// No deltas arrived — a short reply the model did not stream.
 				say(chat, server, room, {
-					id: event.id,
+					id: messageId,
 					author: { kind: "agent" },
-					text,
+					text: content,
 					ts: now(),
 				});
 			}
+
 			chat.writing = undefined;
 			return;
 		}
