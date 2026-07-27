@@ -1,0 +1,66 @@
+/**
+ * Configuration, read once at boot.
+ *
+ * Everything the process needs to know about its environment resolves here so
+ * that a misconfiguration is a startup failure with a sentence attached rather
+ * than a puzzling behaviour three screens later.
+ */
+
+import { resolve } from "node:path";
+
+export type Config = {
+	host: string;
+	port: number;
+	/** When set, required at the WebSocket upgrade. */
+	key: string | undefined;
+	/** What the agent is allowed to read. Printed at boot; never inferred later. */
+	workingDir: string;
+	/** Where room state is written. */
+	dataDir: string;
+	/** Planner model. */
+	model: string;
+};
+
+const DEFAULT_PORT = 8787;
+const DEFAULT_MODEL = "claude-sonnet-4.6";
+
+function port(): number {
+	let raw = process.env.PORT;
+	if (!raw) return DEFAULT_PORT;
+	let value = Number.parseInt(raw, 10);
+	if (!Number.isInteger(value) || value < 1 || value > 65535) {
+		throw new Error(`PORT must be a number between 1 and 65535, got ${JSON.stringify(raw)}`);
+	}
+	return value;
+}
+
+export function load(): Config {
+	return {
+		host: process.env.SERVER_HOST || "127.0.0.1",
+		port: port(),
+		key: process.env.ACCESS_KEY || undefined,
+		workingDir: resolve(process.env.WORKING_DIR || process.cwd()),
+		dataDir: resolve(process.env.DATA_DIR || "data"),
+		model: process.env.MODEL || DEFAULT_MODEL,
+	};
+}
+
+/**
+ * What the operator needs to see before deciding to trust this process.
+ *
+ * The working directory is printed because it is the extent of what an agent
+ * can read, and defaulting it to the current directory makes it too easy to
+ * start one somewhere you did not intend.
+ */
+export function describe(config: Config): string {
+	let parts = [
+		"chopin",
+		`http://${config.host}:${config.port}`,
+		`working dir: ${config.workingDir}`,
+	];
+	if (config.key) parts.push("access key: required");
+	if (config.host !== "127.0.0.1" && config.host !== "localhost" && !config.key) {
+		parts.push("WARNING: bound beyond localhost with no ACCESS_KEY");
+	}
+	return parts.join("  ·  ");
+}

@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+/*
+ * Sibling packages that build on these utilities.
+ *
+ * They are reached through workspace symlinks, which Tailwind's automatic
+ * content detection skips — without these the classes in the editor and the
+ * questionnaire views resolve to nothing at all, silently.
+ */
+@source "../../../packages/editor/src/**/*.tsx";
+@source "../../../packages/question/src/**/*.tsx";
+
+/*
+ * The palette.
+ *
+ * Light only, and deliberately small: this is the complete set of tokens the
+ * editor and questionnaire styles actually read. The editor's own stylesheet
+ * remaps MDXEditor's Radix variables onto these, so there is one place to
+ * change a colour and no second theme to keep in step.
+ */
+@theme {
+	--color-background: oklch(1 0 0);
+	--color-foreground: oklch(0.21 0.006 285);
+
+	--color-muted: oklch(0.968 0.002 285);
+	--color-muted-foreground: oklch(0.552 0.014 285);
+
+	--color-card: oklch(1 0 0);
+	--color-card-foreground: oklch(0.21 0.006 285);
+
+	--color-popover: oklch(1 0 0);
+	--color-popover-foreground: oklch(0.21 0.006 285);
+
+	--color-primary: oklch(0.55 0.15 258);
+	--color-primary-foreground: oklch(0.985 0 0);
+	--color-primary-hover: oklch(0.48 0.16 258);
+
+	--color-secondary: oklch(0.968 0.002 285);
+	--color-secondary-foreground: oklch(0.21 0.006 285);
+
+	/*
+	 * Used as a wash rather than a fill: highlights mix it down to 16–45%, so
+	 * it needs enough chroma to survive being diluted against white.
+	 */
+	--color-accent: oklch(0.85 0.09 250);
+	--color-accent-foreground: oklch(0.21 0.006 285);
+
+	--color-destructive: oklch(0.58 0.22 27);
+	--color-destructive-foreground: oklch(0.985 0 0);
+
+	--color-success: oklch(0.62 0.13 155);
+	--color-warning: oklch(0.72 0.15 75);
+
+	--color-border: oklch(0.92 0.004 285);
+	--color-input: oklch(0.92 0.004 285);
+	--color-ring: oklch(0.62 0.14 258);
+
+	/* Code and formula surfaces, which want to read as insets rather than cards. */
+	--color-code: oklch(0.972 0.003 285);
+
+	--font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+	--font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+html,
+body,
+#root {
+	height: 100%;
+}
+
+body {
+	margin: 0;
+	background: var(--color-background);
+	color: var(--color-foreground);
+	font-family: var(--font-sans);
+}

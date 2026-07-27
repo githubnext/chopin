@@ -1,0 +1,26 @@
+{
+	"name": "@chopin/web",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"build": "vite build",
+		"preview": "vite preview",
+		"types": "tsgo --noEmit --skipLibCheck"
+	},
+	"dependencies": {
+		"@chopin/protocol": "workspace:*",
+		"react": "catalog:react",
+		"react-dom": "catalog:react"
+	},
+	"devDependencies": {
+		"@tailwindcss/vite": "catalog:ui",
+		"@types/react": "catalog:react",
+		"@types/react-dom": "catalog:react",
+		"@vitejs/plugin-react": "catalog:react",
+		"tailwindcss": "catalog:ui",
+		"vite": "catalog:ui",
+		"vite-tsconfig-paths": "catalog:ui"
+	}
+}

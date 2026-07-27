@@ -1,0 +1,25 @@
+node_modules
+.DS_Store
+
+*.log
+logs
+
+.env*
+!.env.example
+
+# Room state: plans, sidecars and transcripts are local scratch.
+data/
+
+# Editors
+.vscode/*
+!.vscode/extensions.json
+.zed/
+
+# Agents
+.claude/settings.local.json
+.opencode/*
+
+# Generated
+**/dist/**
+*.tsbuildinfo
+vite.config.ts.timestamp-*

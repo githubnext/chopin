@@ -1,0 +1,31 @@
+{
+	"compilerOptions": {
+		"strict": true,
+		"allowJs": false,
+		"alwaysStrict": true,
+		"noImplicitAny": true,
+		"strictBindCallApply": true,
+		"skipDefaultLibCheck": true,
+		"skipLibCheck": false,
+		"target": "esnext",
+
+		// bundler mode
+		"module": "esnext",
+		"resolveJsonModule": true,
+		"verbatimModuleSyntax": true,
+		"moduleResolution": "bundler",
+		"moduleDetection": "force",
+		"noEmit": true,
+
+		// linting / correctness
+		"noImplicitOverride": true,
+		"forceConsistentCasingInFileNames": true,
+		"allowImportingTsExtensions": false,
+		"isolatedModules": true,
+
+		"noUncheckedSideEffectImports": true,
+		"noFallthroughCasesInSwitch": true,
+		"noUncheckedIndexedAccess": false,
+		"noUnusedParameters": false
+	}
+}

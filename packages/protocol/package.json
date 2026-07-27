@@ -1,0 +1,14 @@
+{
+	"name": "@chopin/protocol",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"types": "tsgo --noEmit --skipLibCheck"
+	},
+	"exports": {
+		".": {
+			"types": "./index.d.ts"
+		}
+	}
+}

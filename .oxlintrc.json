@@ -1,0 +1,29 @@
+{
+	"ignorePatterns": [
+		"**/dist/**",
+		"data/**"
+	],
+	"categories": {
+		"correctness": "error",
+		"suspicious": "warn",
+		"perf": "warn"
+	},
+	"rules": {
+		"block-scoped-var": "off",
+		"no-await-in-loop": "off",
+		"no-cond-assign": "off",
+		"no-shadow": "off",
+		"no-unused-expressions": ["error", {
+			"allowShortCircuit": true
+		}],
+		"no-unused-vars": ["warn", {
+			"ignoreRestSiblings": true,
+			"argsIgnorePattern": "^_",
+			"caughtErrorsIgnorePattern": "^_",
+			"varsIgnorePattern": "^_"
+		}],
+		"triple-slash-reference": "off",
+		"typescript/no-import-type-side-effects": "error",
+		"unicorn/no-array-sort": "off"
+	}
+}

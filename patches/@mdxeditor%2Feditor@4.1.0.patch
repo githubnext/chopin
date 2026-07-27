@@ -1,0 +1,49 @@
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index f52cc58f1bf1d8c2a2ab108ac079318d6ced0a0d..fb360300dd92ddd49d9b9478435e4a46bce84fd8 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -734,7 +734,43 @@ export declare const convertSelectionToNode$: NodeRef<() => ElementNode>;
+ 
+ declare type CoordinatesSubscription = (coords: [colIndex: number, rowIndex: number]) => void;
+ 
+-/* Excluded from this release type: corePlugin */
++/**
++ * Registers the base Markdown import/export visitors and Lexical nodes into a realm.
++ *
++ * Exported by the runtime bundle but stripped from the published types by API
++ * Extractor. Ace patches the declaration back in so one schema registry can be
++ * built identically in the browser and headlessly (Bun) — calling only `init()`
++ * registers visitors/nodes without constructing a DOM-bound Lexical editor.
++ *
++ * @group Core
++ */
++export declare const corePlugin: (params?: {
++    initialMarkdown: string;
++    contentEditableClassName: string;
++    spellCheck: boolean;
++    placeholder?: React.ReactNode;
++    autoFocus: boolean | {
++        defaultSelection?: 'rootStart' | 'rootEnd';
++        preventScroll?: boolean | undefined;
++    };
++    onChange: (markdown: string, initialMarkdownNormalize: boolean) => void;
++    onBlur?: (e: FocusEvent) => void;
++    onError?: (payload: {
++        error: string;
++        source: string;
++    }) => void;
++    toMarkdownOptions: NonNullable<LexicalConvertOptions['toMarkdownOptions']>;
++    readOnly: boolean;
++    iconComponentFor: (name: IconKey) => React.ReactElement;
++    suppressHtmlProcessing?: boolean;
++    translation: Translation;
++    trim?: boolean;
++    lexicalTheme?: EditorThemeClasses;
++    editorState?: EditorState | null | undefined;
++    suppressSharedHistory?: boolean;
++    additionalLexicalNodes?: AdditionalLexicalNode[];
++    lexicalEditorNamespace?: string;
++}) => RealmPlugin;
+ 
+ /**
+  * An input signal that lets you register a new {@link EditorSubscription} for the active editor.

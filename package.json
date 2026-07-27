@@ -1,0 +1,68 @@
+{
+	"name": "chopin",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "bun run --filter '@chopin/server' dev & bun run --filter '@chopin/web' dev",
+		"build": "bun run --filter '@chopin/web' build",
+		"start": "bun run --filter '@chopin/server' start",
+		"ci": "dprint check && oxlint",
+		"fix": "dprint fmt && oxlint --fix",
+		"types": "bun --filter '*' types"
+	},
+	"devDependencies": {
+		"@typescript/native-preview": "7.0.0-dev.20260304.1",
+		"dprint": "0.50.2",
+		"oxlint": "1.51.0"
+	},
+	"patchedDependencies": {
+		"@mdxeditor/editor@4.1.0": "patches/@mdxeditor%2Feditor@4.1.0.patch"
+	},
+	"workspaces": {
+		"packages": [
+			"packages/*",
+			"apps/*"
+		],
+		"catalogs": {
+			"bun": {
+				"@types/bun": "1.3.14"
+			},
+			"copilot": {
+				"@github/copilot": "1.0.62",
+				"@github/copilot-sdk": "1.0.1"
+			},
+			"mdx": {
+				"@lexical/headless": "0.48.0",
+				"@lexical/link": "0.48.0",
+				"@lexical/list": "0.48.0",
+				"@lexical/react": "0.48.0",
+				"@lexical/rich-text": "0.48.0",
+				"@lexical/selection": "0.48.0",
+				"@lexical/table": "0.48.0",
+				"@lexical/utils": "0.48.0",
+				"@lexical/yjs": "0.48.0",
+				"@mdxeditor/editor": "4.1.0",
+				"@mdxeditor/gurx": "1.2.4",
+				"json-joy": "17.51.0",
+				"katex": "0.16.22",
+				"lexical": "0.48.0",
+				"mermaid": "11.12.0",
+				"y-protocols": "1.0.7",
+				"yjs": "13.6.31"
+			},
+			"react": {
+				"@types/react": "19.2.14",
+				"@types/react-dom": "19.2.3",
+				"@vitejs/plugin-react": "5.1.4",
+				"react": "19.2.4",
+				"react-dom": "19.2.4"
+			},
+			"ui": {
+				"@tailwindcss/vite": "4.3.0",
+				"tailwindcss": "4.3.0",
+				"vite": "7.3.1",
+				"vite-tsconfig-paths": "5.1.4"
+			}
+		}
+	}
+}
