@@ -74,10 +74,58 @@ export declare namespace Plan {
 		questions: { [question: string]: QuestionAnchors };
 	};
 
+	/**
+	 * A phrase of the plan, as a comment marks it.
+	 *
+	 * An anchor names a whole block, which is the right grain for a decision but
+	 * not for a remark about one sentence in it. So a passage is the block run
+	 * plus a range inside it, and the range is expressed twice for the same
+	 * reason an anchor is: `start` and `end` are Yjs relative positions, so the
+	 * highlight stretches as somebody types inside the phrase, and `quote` is
+	 * what finds it again when they cannot be resolved — after a move, or an
+	 * epoch rotation.
+	 *
+	 * `quote` is a bounded locator rather than the whole phrase. `length` is the
+	 * real extent, so a passage longer than the bound is still recoverable:
+	 * find the prefix, then run on.
+	 */
+	export type Passage = {
+		/** The blocks it covers, first to last. */
+		blocks: Anchor[];
+		/** base64 `Y.encodeRelativePosition` of the range's start, in the first block. */
+		start: string;
+		/** base64 `Y.encodeRelativePosition` of its end, in the last. */
+		end: string;
+		/** Bounded prefix of the marked text. */
+		quote: string;
+		/** Where the quote began, so a phrase repeated in one block is not guessed at. */
+		offset: number;
+		/** Characters the passage covers, across the whole run. */
+		length: number;
+		/** Neither the positions nor the quote resolve. Kept rather than dropped. */
+		drifted?: true;
+	};
+
+	/**
+	 * What an accepted comment thread marks, and what accepting it produced.
+	 *
+	 * The two halves have different authors, which is why they have different
+	 * shapes. `subject` is the passage a person selected, and the server keeps
+	 * it moving with the plan. `result` is the prose the agent's revision
+	 * produced, and only the agent can say what that is — so it is an ordinary
+	 * anchor set, reviewed and pending exactly like a question's.
+	 */
+	export type ThreadAnchors = {
+		thread: string;
+		subject: Passage;
+		result: AnchorSet;
+	};
+
 	/** Authoritative replacement snapshot of every relationship in the plan. */
 	export type Anchors = KIND<"plan:anchors"> & {
 		epoch: string;
 		widgets: WidgetAnchors[];
+		threads: ThreadAnchors[];
 	};
 
 	/**
@@ -119,6 +167,8 @@ export declare namespace Plan {
 			revision: number;
 			/** Which prose each decision relates to, as an authoritative snapshot. */
 			anchors: WidgetAnchors[];
+			/** Which prose each comment thread marks, on the same terms. */
+			threads: ThreadAnchors[];
 			limits: Limits;
 		};
 	}
