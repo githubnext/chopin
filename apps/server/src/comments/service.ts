@@ -178,6 +178,43 @@ export function applied(plan: Plan, id: string): boolean {
 	return !!record?.result && !record.result.pending;
 }
 
+/**
+ * Record what a turn wrote as the decision it was asked to act on.
+ *
+ * The agent is told to say this itself with `anchor_plan`, and when it does
+ * that answer is better than this one: it can pick out the two blocks of five
+ * that actually came from the decision. But a thread whose result is never
+ * anchored points at nothing for good, and the prose it was about is gone by
+ * then — rewriting it is what acceptance asked for. So the blocks a turn
+ * authored stand in until the agent says otherwise.
+ *
+ * Not pending: anchors derived from the change itself are as fresh as anchors
+ * get. Only applied when nothing trustworthy is already there, so a precise
+ * answer from a previous turn is never coarsened by a later guess.
+ */
+export function attribute(plan: Plan, thread: string, blocks: number[]): void {
+	let record = plan.threads.get(thread);
+	if (!record || record.status !== "accepted") return;
+	if (record.result && !record.result.pending) return;
+	if (blocks.length === 0) return;
+
+	try {
+		let current = room.digests(plan.document);
+		let anchors: Wired.Anchor[] = [];
+		for (let index of blocks) {
+			let hash = current[index];
+			if (hash) anchors.push(room.anchorAt(plan.document, index, hash));
+		}
+		if (anchors.length === 0) return;
+
+		plan.threads.set(thread, { ...record, result: { anchors, pending: false } });
+	} catch (err) {
+		// A decision that cannot be pointed at is worse than one pointed at
+		// coarsely, and both are better than a failed edit.
+		console.error(`[comments] could not attribute a revision to ${thread}:`, err);
+	}
+}
+
 /** Record the prose an accepted thread's revision produced. */
 export function relate(
 	plan: Plan,
@@ -406,9 +443,15 @@ async function settle(
 			resolver,
 			compose(next, quote),
 			`@${resolver} accepted a comment on "${excerpt(quote)}".`,
-			// Somebody else's turn may get to it first; running this one then
-			// would only have the agent read the plan and find nothing to do.
-			() => applied(plan, msg.id),
+			{
+				// Somebody else's turn may get to it first; running this one
+				// then would only have the agent read the plan and find
+				// nothing to do.
+				spent: () => applied(plan, msg.id),
+				// So the prose the turn writes can be recorded as what this
+				// decision produced, whether or not the agent says so.
+				thread: msg.id,
+			},
 		);
 	} else if (kind === "dismiss") {
 		Chat.notice(context, `@${resolver} dismissed a comment on "${excerpt(quote)}".`);

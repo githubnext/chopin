@@ -55,8 +55,13 @@ function thread(doc: Document, handle = "ana"): { records: Store.Records; record
 // -- a room, for the parts that need the service rather than the store -------
 
 let rooms: string[] = [];
+let opens: Plan[] = [];
 
 afterEach(async () => {
+	// Sinks are on a timer. Left running they write, and log, after the test
+	// that made them has finished and put `console.error` back.
+	for (let plan of opens) await Service.close(plan);
+	opens = [];
 	for (let dir of rooms) await rm(dir, { recursive: true, force: true });
 	rooms = [];
 });
@@ -88,6 +93,7 @@ async function opened(source = SOURCE, state?: object) {
 	} as unknown as Server<SocketData>;
 
 	let plan = await Service.open("test", dir, server);
+	opens.push(plan);
 	return {
 		broadcasts,
 		dir,
@@ -350,6 +356,10 @@ describe("opening a room whose sidecar is damaged", () => {
 			let ana = member("ana");
 			expect(() => mark(plan, server, ana)).not.toThrow();
 			expect(room.project(plan.document)).toContain(QUOTE);
+
+			// The damaged record would be carried forward again on the way out,
+			// logging after this test has put `console.error` back.
+			plan.sink.cancel();
 		} finally {
 			console.error = complain;
 		}
@@ -601,6 +611,64 @@ describe("what a thread owes the agent", () => {
 		let id = mark(plan, server, ana);
 
 		expect(Comments.relate(plan, id, [])).toContain("was not accepted");
+	});
+
+	/**
+	 * The agent is told to say what its revision produced, and when it does
+	 * that answer is the better one. But a thread whose result is never
+	 * anchored points at nothing for good — and by then the prose it was about
+	 * is gone, because rewriting it is what acceptance asked for.
+	 */
+	it("takes the blocks a turn wrote when the agent does not say", async () => {
+		let { id, plan } = await accepted();
+		expect(Comments.applied(plan, id)).toBe(false);
+
+		Comments.attribute(plan, id, [1, 2]);
+
+		expect(Comments.applied(plan, id)).toBe(true);
+		expect(plan.threads.get(id)?.result?.anchors).toHaveLength(2);
+	});
+
+	it("does not coarsen an answer the agent already gave", async () => {
+		let { id, plan } = await accepted();
+		let digest = room.digests(plan.document)[1]!;
+		Comments.relate(plan, id, [{ index: 1, digest }]);
+
+		// The agent picked one block; a later guess must not widen it to two.
+		Comments.attribute(plan, id, [1, 2]);
+
+		expect(plan.threads.get(id)?.result?.anchors).toHaveLength(1);
+	});
+
+	/** Once an edit has invalidated it, there is nothing left to preserve. */
+	it("takes over again once the plan has moved under the agent's answer", async () => {
+		let { id, plan } = await accepted();
+		let digest = room.digests(plan.document)[1]!;
+		Comments.relate(plan, id, [{ index: 1, digest }]);
+		Comments.invalidate(plan, "plan_changed");
+
+		Comments.attribute(plan, id, [1, 2]);
+
+		expect(Comments.applied(plan, id)).toBe(true);
+		expect(plan.threads.get(id)?.result?.anchors).toHaveLength(2);
+	});
+
+	it("attributes nothing to a thread nobody accepted", async () => {
+		let { plan, server } = await opened();
+		let ana = member("ana");
+		let id = mark(plan, server, ana);
+
+		Comments.attribute(plan, id, [1]);
+
+		expect(plan.threads.get(id)?.result).toBeUndefined();
+	});
+
+	it("attributes nothing when a turn wrote nothing", async () => {
+		let { id, plan } = await accepted();
+
+		Comments.attribute(plan, id, []);
+
+		expect(plan.threads.get(id)?.result).toBeUndefined();
 	});
 
 	/**

@@ -97,6 +97,48 @@ describe("applying a batch", () => {
 	});
 });
 
+describe("reporting what a batch wrote", () => {
+	/**
+	 * Which blocks a turn authored is what lets a decision be pointed at the
+	 * prose it produced, even when the agent forgets to say so. Object identity
+	 * is what tells them apart: a node carried over from the parsed base is the
+	 * same object, a staged one is not.
+	 */
+	it("names the blocks it authored and not the ones it left alone", () => {
+		let outcome = edit.apply(subject, 1, [{ op: "replace", index: 1, source: "Rewritten.\n" }]);
+
+		expect(outcome).toMatchObject({ ok: true, touched: [1] });
+	});
+
+	it("names each of several", () => {
+		let outcome = edit.apply(subject, 1, [
+			{ op: "replace", index: 1, source: "One.\n" },
+			{ op: "replace", index: 2, source: "Two.\n" },
+		]);
+
+		expect(outcome).toMatchObject({ ok: true, touched: [1, 2] });
+	});
+
+	it("names an insertion where it landed", () => {
+		let outcome = edit.apply(subject, 1, [{ op: "insert", index: 0, source: "Added.\n" }]);
+
+		expect(outcome).toMatchObject({ ok: true, touched: [1] });
+	});
+
+	/** Moving a block writes nothing: it is the same prose, further down. */
+	it("names nothing when a batch only moves blocks", () => {
+		let outcome = edit.apply(subject, 1, [{ op: "move", index: 2, to: 0 }]);
+
+		expect(outcome).toMatchObject({ ok: true, touched: [] });
+	});
+
+	it("names nothing when a batch only deletes", () => {
+		let outcome = edit.apply(subject, 1, [{ op: "delete", index: 2 }]);
+
+		expect(outcome).toMatchObject({ ok: true, touched: [] });
+	});
+});
+
 describe("refusing a batch", () => {
 	it("refuses one aimed at a revision that has moved, and says what changed", () => {
 		let outcome = edit.apply(subject, 0, [{ op: "delete", index: 0 }]);

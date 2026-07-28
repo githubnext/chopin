@@ -45,7 +45,17 @@ const MAX_QUEUE = 20;
  * is only knowable at that moment — and `JSON.stringify` drops it, so the wire
  * shape stays exactly `Wire.Waiting`.
  */
-type Waiting = Wire.Waiting & { spent?: () => boolean };
+type Waiting = Wire.Waiting & {
+	spent?: () => boolean;
+	/** The comment thread this turn was started to act on, if one was. */
+	thread?: string;
+};
+
+/** What a turn other than a message needs to say about itself. */
+export type Instruction = {
+	spent?: () => boolean;
+	thread?: string;
+};
 
 export type Chat = {
 	entries: Wire.Entry[];
@@ -57,6 +67,13 @@ export type Chat = {
 	busy: boolean;
 	/** Whose message the running turn is answering. */
 	turn?: string;
+	/**
+	 * The comment thread the running turn is acting on.
+	 *
+	 * Read by `edit_plan`, so the prose a turn writes can be recorded as what
+	 * that decision produced even when the agent forgets to say so itself.
+	 */
+	acting?: string;
 	/** The entry the agent is currently writing into. */
 	writing?: string;
 	/** Detaches the event handler when a turn ends. */
@@ -113,8 +130,19 @@ function state(chat: Chat, server: Server<SocketData>, room: string): void {
 	});
 }
 
+/**
+ * The queue as clients see it.
+ *
+ * `spent` is a function and disappears on its own; `thread` is a string and
+ * would not. Both are how the queue decides what to do, not anything a reader
+ * of the transcript has business knowing.
+ */
+function visible(chat: Chat): Wire.Waiting[] {
+	return chat.waiting.map(({ handle, id, text }) => ({ handle, id, text }));
+}
+
 function queued(chat: Chat, server: Server<SocketData>, room: string): void {
-	broadcast(server, room, { kind: "chat:queue", ts: 0, waiting: chat.waiting });
+	broadcast(server, room, { kind: "chat:queue", ts: 0, waiting: visible(chat) });
 }
 
 function say(
@@ -135,7 +163,7 @@ export function greet(chat: Chat, ws: Socket): void {
 		ts: 0,
 		entries: chat.entries,
 		busy: chat.busy,
-		queued: chat.waiting,
+		queued: visible(chat),
 	});
 }
 
@@ -211,7 +239,7 @@ export function instruct(
 	handle: string,
 	text: string,
 	said: string,
-	spent?: () => boolean,
+	about: Instruction = {},
 ): void {
 	let { chat, config, room, server } = context;
 	notice(context, said);
@@ -237,11 +265,11 @@ export function instruct(
 				ts: now(),
 			});
 		}
-		chat.waiting.push({ id: ulid(), handle, text, ...(spent ? { spent } : {}) });
+		chat.waiting.push({ id: ulid(), handle, text, ...about });
 		return queued(chat, server, room);
 	}
 
-	void run(context, handle, text);
+	void run(context, handle, text, about.thread);
 }
 
 /** Withdraw a queued message. Only whoever wrote it may. */
@@ -326,11 +354,12 @@ function settle(chat: Chat, server: Server<SocketData>, room: string): void {
 }
 
 /** Run one turn, then drain whatever queued up behind it. */
-async function run(context: Room, handle: string, text: string): Promise<void> {
+async function run(context: Room, handle: string, text: string, thread?: string): Promise<void> {
 	let { chat, room, server } = context;
 
 	chat.busy = true;
 	chat.turn = handle;
+	chat.acting = thread;
 	state(chat, server, room);
 
 	try {
@@ -377,13 +406,14 @@ async function run(context: Room, handle: string, text: string): Promise<void> {
 		settle(chat, server, room);
 		chat.busy = false;
 		chat.turn = undefined;
+		chat.acting = undefined;
 		state(chat, server, room);
 	}
 
 	let next = pending(chat);
 	if (next) {
 		queued(chat, server, room);
-		await run(context, next.handle, next.text);
+		await run(context, next.handle, next.text, next.thread);
 	}
 }
 

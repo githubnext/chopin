@@ -115,6 +115,37 @@ function waiting(chat: Chat.Chat, entries: Array<{ text: string; spent?: () => b
 	}
 }
 
+describe("what a turn is acting on", () => {
+	/**
+	 * `edit_plan` reads this to record the prose a turn wrote as what the
+	 * decision that started it produced. A turn nobody started by accepting a
+	 * comment is acting on nothing, and must attribute nothing.
+	 */
+	it("carries the thread through the queue to the turn", () => {
+		let { chat, context } = room({ busy: true });
+		Chat.instruct(context, "ana", "do the thing", "notice", { thread: "t1" });
+
+		expect(chat.waiting[0]).toMatchObject({ thread: "t1" });
+	});
+
+	it("keeps the thread off the wire", () => {
+		let { context, sent } = room({ busy: true });
+		Chat.instruct(context, "ana", "do the thing", "notice", { thread: "t1" });
+
+		let queue = sent.findLast(frame => frame.kind === "chat:queue");
+		expect(queue?.waiting).toEqual([{
+			id: expect.any(String),
+			handle: "ana",
+			text: "do the thing",
+		}]);
+	});
+
+	it("says a room with no turn running is acting on nothing", () => {
+		let { chat } = room();
+		expect(chat.acting).toBeUndefined();
+	});
+});
+
 describe("draining the queue", () => {
 	it("takes them in the order they arrived", () => {
 		let { chat } = room();
@@ -174,7 +205,7 @@ describe("draining the queue", () => {
 
 	it("keeps `spent` off the wire", () => {
 		let { context, sent } = room({ busy: true });
-		Chat.instruct(context, "ana", "do the thing", "notice", () => false);
+		Chat.instruct(context, "ana", "do the thing", "notice", { spent: () => false });
 
 		let queue = sent.findLast(frame => frame.kind === "chat:queue");
 		expect(queue?.waiting).toEqual([{

@@ -54,6 +54,14 @@ export type Result =
 		ok: true;
 		revision: number;
 		blocks: Block[];
+		/**
+		 * Indices of the blocks this batch authored.
+		 *
+		 * Told apart by object identity: a node carried over from the parsed
+		 * base is the same object, a staged one is not. That is the property
+		 * reconciliation already relies on, so it costs nothing to report.
+		 */
+		touched: number[];
 		/** Questionnaires this batch took out of the plan. */
 		detached: string[];
 		/** The change to relay, absent when the batch was a no-op. */
@@ -171,12 +179,15 @@ export function apply(plan: Plan, revision: number, operations: Operation[]): Re
 		return { ok: false, reason: "invalid", message: reason(err) };
 	}
 
+	let carried = new Set(root.children);
+
 	return {
 		ok: true,
 		detached: detach,
 		mutation,
 		revision: plan.revision,
 		blocks: outline(plan),
+		touched: children.flatMap((node, index) => carried.has(node) ? [] : [index]),
 	};
 }
 
