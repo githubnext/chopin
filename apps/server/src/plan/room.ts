@@ -18,6 +18,7 @@ import { createYjsBinding, syncLexicalUpdateToYjs, syncYjsChangesToLexical } fro
 import * as Y from "yjs";
 
 import {
+	$createDecisionNode,
 	$createPlanNodes,
 	$createQuestionnaireNode,
 	$exportPlan,
@@ -31,15 +32,17 @@ import {
 	serialize,
 	ulid,
 } from "@chopin/dialect";
-import { $getRoot, $isParagraphNode, $nodesOfType } from "lexical";
+import { $getAnchorAndFocusForUserState } from "@lexical/yjs";
+import { $getNodeByKey, $getRoot, $isElementNode, $isParagraphNode, $nodesOfType } from "lexical";
 
 import type { Binding, Provider } from "@lexical/yjs";
 import type { LexicalEditor, LexicalNode } from "lexical";
 import type { Root, RootContent } from "mdast";
-import type { Questionnaire, Registry } from "@chopin/dialect";
+import type { Decision, Questionnaire, Registry } from "@chopin/dialect";
 import type { Plan } from "@chopin/protocol";
 
 type Anchor = Plan.Anchor;
+type Passage = Plan.Passage;
 
 /** Awareness is relayed, never interpreted here, so a no-op provider suffices. */
 const PROVIDER = {
@@ -383,6 +386,21 @@ export function insertQuestionnaire(
 }
 
 /**
+ * Append an accepted comment thread to the plan.
+ *
+ * At the end rather than beside the prose it concerns: the node renders as
+ * nothing, so its position only affects how `plan.mdx` reads, and decisions
+ * gathered in one place read as the record they are. Written once and never
+ * revised — what marks the prose is the passage, which keeps moving.
+ */
+export function insertDecision(target: Document, value: Decision): Mutation | undefined {
+	return mutate(target, () => {
+		$getRoot().append($createDecisionNode(value));
+		return true;
+	});
+}
+
+/**
  * Write a resolved answer into the document.
  *
  * The sidecar record is authoritative; this only makes the plan read correctly
@@ -587,4 +605,293 @@ export function rebase(target: Document, anchors: Anchor[]): Anchor[] {
 			? anchorForKey(target, matches[0], anchor.digest)
 			: { ...anchor, epoch: target.epoch, orphaned: true as const };
 	});
+}
+
+// -- passages --------------------------------------------------------------
+
+/**
+ * A phrase of the plan, to the character.
+ *
+ * An anchor names a whole block, which is the right grain for a decision and
+ * the wrong one for a remark about a single sentence. A passage is therefore
+ * the block run plus a range inside it, and the range is expressed twice for
+ * the same reason the block is: relative positions, so it stretches as somebody
+ * types inside the phrase, and the quoted text, which finds it again when they
+ * cannot be resolved.
+ *
+ * The quote is a bounded locator, not the whole phrase, so `length` carries the
+ * real extent — find the prefix, then run on. That is what lets a passage be
+ * longer than the bound instead of being refused for it.
+ */
+
+/** Blocks are one string; this joins them. Only consistency matters. */
+const RUN = "\n";
+
+/** One text node's place in a block run's plain text. */
+type Span = { key: string; start: number; length: number };
+
+/**
+ * A block run as one string, with where each of its text nodes sits in it.
+ *
+ * Call inside a read. Blocks with no text — a decorator, a rule — contribute
+ * nothing but still take their separator, so a run can span across one.
+ */
+function runOf(nodes: LexicalNode[]): { text: string; spans: Span[] } {
+	let spans: Span[] = [];
+	let text = "";
+
+	for (let [i, node] of nodes.entries()) {
+		if (i > 0) text += RUN;
+		if (!$isElementNode(node)) continue;
+		for (let leaf of node.getAllTextNodes()) {
+			let value = leaf.getTextContent();
+			spans.push({ key: leaf.getKey(), start: text.length, length: value.length });
+			text += value;
+		}
+	}
+
+	return { text, spans };
+}
+
+/** Where an index in the run's text sits, as a Lexical text point. */
+function place(spans: Span[], index: number): { key: string; offset: number } | undefined {
+	for (let span of spans) {
+		// An index inside a separator lands at the start of the block after it.
+		if (index <= span.start + span.length) {
+			return { key: span.key, offset: Math.max(0, index - span.start) };
+		}
+	}
+	let last = spans.at(-1);
+	return last ? { key: last.key, offset: last.length } : undefined;
+}
+
+/** The run index of a Lexical text point, if the point is in this run. */
+function indexOfPoint(spans: Span[], key: string | null, offset: number): number | undefined {
+	if (!key) return undefined;
+	for (let span of spans) {
+		if (span.key === key) return span.start + Math.min(offset, span.length);
+	}
+	return undefined;
+}
+
+/**
+ * Where the quote is now, or nothing if that cannot be said.
+ *
+ * The recorded offset breaks ties, because a phrase can legitimately appear
+ * twice in one paragraph. Two occurrences equally near it recover neither —
+ * the rule `rebase` applies to two identical blocks, for the same reason.
+ */
+function seek(text: string, quote: string, offset: number): number | undefined {
+	if (!quote) return undefined;
+
+	let found: number[] = [];
+	for (let at = text.indexOf(quote); at !== -1; at = text.indexOf(quote, at + 1)) found.push(at);
+	if (found.length === 0) return undefined;
+	if (found.length === 1) return found[0];
+
+	let best = found.reduce((a, b) => Math.abs(a - offset) <= Math.abs(b - offset) ? a : b);
+	let near = Math.abs(best - offset);
+	return found.filter(at => Math.abs(at - offset) === near).length === 1 ? best : undefined;
+}
+
+/** The parts of a collab text node this needs, named structurally. */
+type CollabText = { _parent?: { getSharedType(): unknown }; getOffset(): number };
+
+/**
+ * A Yjs position for a point inside a block's text.
+ *
+ * `@lexical/yjs` computes this for every remote cursor and does not export it,
+ * so the arithmetic is repeated here: a text node's characters live in its
+ * parent's `XmlText`, one slot past the node's own entry, which is the `+ 1`.
+ * The inverse *is* exported, so this is the only half that is ours to keep
+ * right — and it is pinned by `passages.test.ts` rather than by inspection.
+ */
+function positionAt(target: Document, key: string, offset: number): string {
+	let collab = target.binding.collabNodeMap.get(key) as CollabText | undefined;
+	let type = collab?._parent?.getSharedType();
+	if (!collab || !(type instanceof Y.XmlText)) {
+		throw new Error("passage names text with no collaborative identity");
+	}
+
+	let base = collab.getOffset();
+	if (base === -1) throw new Error("passage names text that is no longer in the document");
+
+	return Buffer.from(
+		Y.encodeRelativePosition(Y.createRelativePositionFromTypeIndex(type, base + 1 + offset)),
+	).toString("base64");
+}
+
+/** The nodes a passage's blocks name, if every one of them still resolves. */
+function runNodes(target: Document, blocks: Anchor[]): LexicalNode[] | undefined {
+	let keys = blocks.map(block => resolveAnchor(target, block));
+	if (keys.some(key => !key)) return undefined;
+
+	let nodes: LexicalNode[] = [];
+	target.editor.getEditorState().read(() => {
+		for (let key of keys) {
+			let node = $getNodeByKey(key!);
+			if (node) nodes.push(node);
+		}
+	});
+
+	return nodes.length === blocks.length ? nodes : undefined;
+}
+
+/** Build a passage over a resolved run, from a range in its text. */
+function cut(
+	target: Document,
+	blocks: Anchor[],
+	run: { text: string; spans: Span[] },
+	from: number,
+	to: number,
+): Passage {
+	let start = place(run.spans, from);
+	let end = place(run.spans, to);
+	if (!start || !end) throw new Error("passage names a run with no text in it");
+
+	return {
+		blocks,
+		start: positionAt(target, start.key, start.offset),
+		end: positionAt(target, end.key, end.offset),
+		quote: run.text.slice(from, to).slice(0, limits.MAX_QUOTE),
+		offset: from,
+		length: to - from,
+	};
+}
+
+/**
+ * Mark a phrase, from what the client could prove it read.
+ *
+ * Block digests are a precondition, as they are for anchoring a decision: if
+ * one does not match, the plan moved between reading and marking, and placing
+ * the passage against prose that has since changed would be worse than saying
+ * so. The offset is a hint rather than a coordinate — the quote is searched
+ * for near it — so the client's idea of where text begins never has to agree
+ * with this one exactly.
+ */
+export function passageAt(
+	target: Document,
+	blocks: Array<{ index: number; digest: string }>,
+	quote: string,
+	offset: number,
+	length: number,
+): Passage {
+	if (blocks.length === 0) throw new Error("a passage must name at least one block");
+
+	let current = digests(target);
+	let anchors: Anchor[] = [];
+	for (let block of blocks) {
+		let hash = current[block.index];
+		if (!hash) throw new Error(`no block at index ${block.index}`);
+		if (hash !== block.digest) {
+			throw new Error(`block ${block.index} has changed; read the plan again`);
+		}
+		anchors.push(anchorAt(target, block.index, hash));
+	}
+
+	let nodes = runNodes(target, anchors);
+	if (!nodes) throw new Error("a block in the passage has no collaborative identity");
+
+	let run = { text: "", spans: [] as Span[] };
+	target.editor.getEditorState().read(() => {
+		run = runOf(nodes);
+	});
+
+	let from = seek(run.text, quote, offset);
+	if (from === undefined) throw new Error("the quoted text is not in those blocks");
+
+	return cut(target, anchors, run, from, Math.min(from + length, run.text.length));
+}
+
+/** The Lexical points a passage names, if it still names any. */
+export function locate(
+	target: Document,
+	passage: Passage,
+): { anchorKey: string; anchorOffset: number; focusKey: string; focusOffset: number } | undefined {
+	if (passage.drifted) return undefined;
+	if (passage.blocks[0]?.epoch !== target.epoch) return undefined;
+
+	try {
+		let state = {
+			anchorPos: Y.decodeRelativePosition(Buffer.from(passage.start, "base64")),
+			focusPos: Y.decodeRelativePosition(Buffer.from(passage.end, "base64")),
+			color: "",
+			focusing: false,
+			name: "",
+			awarenessData: {},
+		};
+
+		let found: ReturnType<typeof $getAnchorAndFocusForUserState> | undefined;
+		target.editor.getEditorState().read(() => {
+			found = $getAnchorAndFocusForUserState(target.binding, state);
+		});
+		if (!found) return undefined;
+
+		let { anchorKey, anchorOffset, focusKey, focusOffset } = found;
+		if (!anchorKey || !focusKey) return undefined;
+		return { anchorKey, anchorOffset: anchorOffset ?? 0, focusKey, focusOffset: focusOffset ?? 0 };
+	} catch {
+		// A position from a history this document no longer holds. The quote is
+		// the fallback, and `rebasePassage` is about to try it.
+		return undefined;
+	}
+}
+
+/** The current text of the blocks a passage covers, for saying what it now reads. */
+export function passageText(target: Document, passage: Passage): string | undefined {
+	let nodes = runNodes(target, passage.blocks);
+	if (!nodes) return undefined;
+
+	let text = "";
+	target.editor.getEditorState().read(() => {
+		text = runOf(nodes).text;
+	});
+	return text;
+}
+
+/**
+ * Bring a passage forward onto the document as it is now.
+ *
+ * Same ladder as an anchor, one level finer. The blocks are rebased first,
+ * because a range means nothing without them. Positions that still resolve are
+ * kept and the quote refreshed from what they now cover, so the fallback keeps
+ * describing the prose rather than a memory of it. Positions that do not are
+ * re-derived by finding the quote. Anything left over is marked drifted and
+ * kept: a comment pointing at the wrong sentence is worse than one admitting
+ * its sentence is gone, and the thread is still worth reading either way.
+ */
+export function rebasePassage(target: Document, passage: Passage): Passage {
+	let resolvable = !passage.drifted && passage.blocks[0]?.epoch === target.epoch;
+	let blocks = rebase(target, passage.blocks);
+	let nodes = blocks.some(block => block.orphaned) ? undefined : runNodes(target, blocks);
+	if (!nodes) return { ...passage, blocks, drifted: true };
+
+	let run = { text: "", spans: [] as Span[] };
+	target.editor.getEditorState().read(() => {
+		run = runOf(nodes);
+	});
+
+	if (resolvable) {
+		let points = locate(target, { ...passage, blocks: passage.blocks });
+		let from = points && indexOfPoint(run.spans, points.anchorKey, points.anchorOffset);
+		let to = points && indexOfPoint(run.spans, points.focusKey, points.focusOffset);
+
+		if (from !== undefined && to !== undefined) {
+			try {
+				return cut(target, blocks, run, Math.min(from, to), Math.max(from, to));
+			} catch {
+				// The points resolved but no longer sit in text we can address.
+				// Fall through to the quote.
+			}
+		}
+	}
+
+	let found = seek(run.text, passage.quote, passage.offset);
+	if (found === undefined) return { ...passage, blocks, drifted: true };
+
+	try {
+		return cut(target, blocks, run, found, Math.min(found + passage.length, run.text.length));
+	} catch {
+		return { ...passage, blocks, drifted: true };
+	}
 }
