@@ -165,6 +165,14 @@ export function toolbox(context: Context): Tool[] {
 					Questions.invalidate(context.plan, "plan_changed");
 					Comments.rebase(context.plan);
 					Comments.invalidate(context.plan, "plan_changed");
+
+					// After invalidating, so it is not immediately undone. If
+					// this turn was started by accepting a comment, what it
+					// just wrote is what that decision produced — unless the
+					// agent says otherwise with `anchor_plan`, which wins.
+					let acting = context.plan.chat.acting;
+					if (acting) Comments.attribute(context.plan, acting, outcome.touched);
+
 					context.anchors();
 
 					return {

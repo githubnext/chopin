@@ -40,8 +40,14 @@ function available(): boolean {
 	return typeof CSS !== "undefined" && !!CSS.highlights && typeof Highlight === "function";
 }
 
-/** Build the DOM range a passage covers. Call inside a read. */
-function $rangeOf(editor: LexicalEditor, points: Points): Range | null {
+/**
+ * Build the DOM range a passage covers. Call inside a read.
+ *
+ * Exported so hit-testing builds its range the same way painting does. Points
+ * may name a text offset or a child index — a phrase or a whole block — and
+ * `createDOMRange` handles both, which hand-rolling from `firstChild` does not.
+ */
+export function $rangeOf(editor: LexicalEditor, points: Points): Range | null {
 	let anchor = $getNodeByKey(points.anchorKey);
 	let focus = $getNodeByKey(points.focusKey);
 	if (!anchor || !focus) return null;

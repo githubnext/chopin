@@ -14,10 +14,11 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import { $getNodeByKey, $isElementNode } from "lexical";
 import { useEffect } from "react";
 
 import { resolve } from "./anchors";
-import { clear as unpaint, paint } from "./marks";
+import { $rangeOf, clear as unpaint, paint } from "./marks";
 import { $recover, locate } from "./passage";
 
 import type { Binding } from "@lexical/yjs";
@@ -32,9 +33,14 @@ export type Draft = Selected;
 
 export type ThreadView = {
 	thread: Comment.Thread;
-	/** Where it points, once the anchors snapshot has caught up. */
-	points?: Points;
-	/** The passage cannot be found: the prose it marked has changed. */
+	/**
+	 * Where it points, once the anchors snapshot has caught up.
+	 *
+	 * The phrase it marks while it is live; the prose its acceptance produced
+	 * once the agent has said what that was, which may be several blocks.
+	 */
+	places: Points[];
+	/** Nowhere left to point: the prose is gone and nothing replaced it. */
 	drifted: boolean;
 	/**
 	 * The agent has said what an accepted thread produced.
@@ -263,20 +269,25 @@ export class ThreadStore {
 		if (!editor) return undefined;
 
 		let best: { id: string; length: number } | undefined;
-		for (let view of this.#state.threads) {
-			if (!view.points) continue;
-			let range = domRange(editor, view.points);
-			if (!range) continue;
-			try {
-				if (range.comparePoint(node, offset) !== 0) continue;
-			} catch {
-				continue;
+
+		editor.getEditorState().read(() => {
+			for (let view of this.#state.threads) {
+				for (let points of view.places) {
+					let range = $rangeOf(editor, points);
+					if (!range) continue;
+					try {
+						if (range.comparePoint(node, offset) !== 0) continue;
+					} catch {
+						continue;
+					}
+					let length = range.toString().length;
+					// The tighter range is the more specific thing that was
+					// clicked; the list is in document order, so a later tie is
+					// the newer thread.
+					if (!best || length <= best.length) best = { id: view.thread.id, length };
+				}
 			}
-			let length = range.toString().length;
-			// The tighter range is the more specific thing that was clicked;
-			// the list is in document order, so a later tie is the newer thread.
-			if (!best || length <= best.length) best = { id: view.thread.id, length };
-		}
+		});
 
 		return best?.id;
 	}
@@ -332,25 +343,30 @@ export class ThreadStore {
 					let anchors = this.#anchors.get(thread.id);
 					// Nothing resolves before the editor exists; the card still
 					// renders, with the quote and no highlight.
-					let points = editor && binding && anchors
-						? this.#points(binding, anchors)
-						: undefined;
+					let places = editor && binding && anchors ? this.#places(binding, anchors) : [];
+					let first = places[0];
 
 					views.push({
 						thread,
-						...(points ? { points } : {}),
-						drifted: !!anchors?.subject.drifted || (!!editor && !!anchors && !points),
+						places,
+						// Only when there is nowhere left to point. A thread
+						// whose subject was rewritten but whose result resolves
+						// has not lost its place; it has moved to the prose it
+						// produced, which is the whole point of accepting it.
+						drifted: !!editor && !!anchors && places.length === 0,
 						applied: !!anchors && !anchors.result.pending,
 						quote: thread.quote ?? anchors?.subject.quote ?? "",
-						...(points && editor ? { at: order(editor, points.anchorKey) } : {}),
+						...(first && editor ? { at: order(editor, first.anchorKey) } : {}),
 					});
 
-					if (points) marks.push({ tone: this.#tone(thread), points });
+					let tone = this.#tone(thread);
+					for (let points of places) marks.push({ tone, points });
 				} catch (err) {
 					console.error(`[plan] could not place comment ${thread.id}:`, err);
 					// Unplaceable, but still worth reading.
 					views.push({
 						thread,
+						places: [],
 						drifted: true,
 						applied: false,
 						quote: thread.quote ?? "",
@@ -392,45 +408,84 @@ export class ThreadStore {
 	}
 
 	/** Positions first; reading is what covers the gap before the next rebase. */
-	#points(binding: Binding, anchors: Plan.ThreadAnchors): Points | undefined {
-		let found = locate(binding, anchors.subject);
-		if (found) return found;
+	/**
+	 * Where a thread points, now.
+	 *
+	 * The result first, when the agent has said what the decision produced.
+	 * The prose a thread was about is usually the prose it asked to have
+	 * rewritten, so after the turn the subject is gone by design — treating
+	 * that as the thread having lost its place gets it exactly backwards. What
+	 * was discussed is kept as a frozen quote; what it produced is where the
+	 * decision now lives.
+	 *
+	 * Block-wide, because after a rewrite there is no phrase to point at,
+	 * only a passage of new prose.
+	 */
+	#places(binding: Binding, anchors: Plan.ThreadAnchors): Points[] {
+		let { result, subject } = anchors;
 
-		let keys = anchors.subject.blocks
+		// Pending means nobody has checked this since the plan moved, so it is
+		// not somewhere worth sending a reader.
+		if (result.anchors.length > 0 && !result.pending) {
+			let produced = result.anchors
+				.map(anchor => resolve(binding, anchor))
+				.flatMap(key => (key ? [$blockPoints(key)] : []))
+				.filter((points): points is Points => !!points);
+			if (produced.length > 0) return produced;
+		}
+
+		let found = locate(binding, subject) ?? this.#recover(binding, subject);
+		return found ? [found] : [];
+	}
+
+	/** The phrase, read out of the prose, when its positions cannot be resolved. */
+	#recover(binding: Binding, subject: Plan.Passage): Points | undefined {
+		let keys = subject.blocks
 			.map(block => resolve(binding, block))
 			.filter((key): key is string => !!key);
-		if (keys.length !== anchors.subject.blocks.length) return undefined;
+		if (keys.length !== subject.blocks.length) return undefined;
 
-		return $recover(anchors.subject, keys);
+		return $recover(subject, keys);
 	}
 }
 
-/** Where a node sits among the document's blocks, for ordering the pane. */
+/**
+ * Where a node sits among the document's blocks, for ordering the pane.
+ *
+ * Guarded on its own rather than left to the caller's: this reaches for the
+ * DOM, and an editor without one throws rather than returning nothing. Sort
+ * order is cosmetic, and losing it must not cost the thread its place.
+ */
 function order(editor: LexicalEditor, key: string): number | undefined {
-	let element = editor.getElementByKey(key);
-	if (!element) return undefined;
-
-	let root = editor.getRootElement();
-	if (!root) return undefined;
-
-	let block = element.closest(".plan-content > *") ?? element;
-	let index = [...root.children].indexOf(block);
-	return index === -1 ? undefined : index;
-}
-
-function domRange(editor: LexicalEditor, points: Points): Range | undefined {
-	let anchor = editor.getElementByKey(points.anchorKey);
-	let focus = editor.getElementByKey(points.focusKey);
-	if (!anchor || !focus) return undefined;
-
-	let range = document.createRange();
 	try {
-		range.setStart(anchor.firstChild ?? anchor, points.anchorOffset);
-		range.setEnd(focus.firstChild ?? focus, points.focusOffset);
+		let element = editor.getElementByKey(key);
+		if (!element) return undefined;
+
+		let root = editor.getRootElement();
+		if (!root) return undefined;
+
+		let block = element.closest(".plan-content > *") ?? element;
+		let index = [...root.children].indexOf(block);
+		return index === -1 ? undefined : index;
 	} catch {
 		return undefined;
 	}
-	return range;
+}
+
+/**
+ * A whole block, as points. Call inside a read.
+ *
+ * Child indices rather than text offsets: the result of a decision is block
+ * granular, and `createDOMRange` reads an element point as a child index. A
+ * block with nothing in it has no range worth painting.
+ */
+function $blockPoints(key: string): Points | undefined {
+	let node = $getNodeByKey(key);
+	if (!$isElementNode(node)) return undefined;
+
+	let size = node.getChildrenSize();
+	if (size === 0) return undefined;
+	return { anchorKey: key, anchorOffset: 0, focusKey: key, focusOffset: size };
 }
 
 /** Mounted inside the editor, so resolution re-runs as the document changes. */
