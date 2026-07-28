@@ -837,6 +837,17 @@ export function locate(
 	}
 }
 
+/** The plain text of a run of blocks, addressed the way the agent addresses them. */
+export function blockText(target: Document, indices: number[]): string {
+	let text = "";
+	target.editor.getEditorState().read(() => {
+		let all = addressable();
+		let nodes = indices.map(index => all[index]).filter(node => !!node);
+		if (nodes.length === indices.length) text = runOf(nodes).text;
+	});
+	return text;
+}
+
 /** The current text of the blocks a passage covers, for saying what it now reads. */
 export function passageText(target: Document, passage: Passage): string | undefined {
 	let nodes = runNodes(target, passage.blocks);

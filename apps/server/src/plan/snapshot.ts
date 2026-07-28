@@ -33,6 +33,12 @@ export type State = {
 	 * The copy projected into the prose is for reading.
 	 */
 	questions: QuestionRecord[];
+	/**
+	 * Comment threads and the decisions they became.
+	 *
+	 * Optional, so a plan written before this existed still loads.
+	 */
+	threads?: ThreadRecord[];
 	/** The conversation, so a restart resumes rather than forgets. */
 	transcript?: unknown[];
 	/** The Copilot session to resume into. */
@@ -46,6 +52,18 @@ export type QuestionRecord = {
 	status: "open" | "answered" | "cancelled";
 	answers?: { [question: string]: string };
 	resolver?: string;
+};
+
+/** Structural too, for the same reason. */
+export type ThreadRecord = {
+	id: string;
+	status: "open" | "accepted" | "dismissed";
+	passage: unknown;
+	notes: unknown[];
+	result?: unknown;
+	quote?: string;
+	resolver?: string;
+	at?: number;
 };
 
 export type Stored = {
@@ -66,6 +84,15 @@ export type SinkOptions = {
 	dir: string;
 	/** Read the current state at write time, not at schedule time. */
 	read: () => Stored;
+	/**
+	 * Run just before reading, to bring derived state up to date.
+	 *
+	 * Anchors and passages are the case: they have to be carried forward onto
+	 * the document as it is now, and the debounce is the right rhythm for it —
+	 * often enough that a block somebody moved recovers within two seconds,
+	 * rarely enough that it is not in the path of a keystroke.
+	 */
+	onFlush?: () => void;
 	onWrite?: (state: "saving" | "saved" | "error", message?: string) => void;
 };
 
@@ -132,6 +159,14 @@ export function sink(options: SinkOptions): Sink {
 		dirty = false;
 
 		writing = writing.then(async () => {
+			try {
+				options.onFlush?.();
+			} catch (err) {
+				// Derived state failing to refresh must not cost the write; a
+				// stale anchor is recoverable, an unwritten plan is not.
+				console.error("[plan] could not refresh derived state:", err);
+			}
+
 			let stored = options.read();
 
 			// An empty plan is not worth a directory. Room names come from URLs,
