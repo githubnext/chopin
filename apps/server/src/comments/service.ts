@@ -346,15 +346,16 @@ async function settle(
 	if (!claimed.ok) return answer(ws, msg.rid, kind, msg.id, claimed);
 
 	if (kind === "accept") {
+		let mutation: { update: Uint8Array; source: string } | undefined;
+
 		try {
-			let mutation = room.insertDecision(plan.document, {
+			mutation = room.insertDecision(plan.document, {
 				id: msg.id,
 				quote: quote.slice(0, limits.MAX_QUOTE),
 				by: ws.data.handle,
 				at: new Date(claimed.claim.result.at * 1_000).toISOString(),
 				notes: claimed.thread.notes.map(note => ({ by: note.handle, text: note.text })),
 			});
-			if (mutation) Service.publish(plan, server, roomId, mutation);
 		} catch (err) {
 			// The decision is not final if the plan could not be told about it.
 			Store.rollback(plan.comments, claimed.claim);
@@ -364,6 +365,22 @@ async function settle(
 				reason: "invalid",
 				message: err instanceof Error ? err.message : "could not record the decision",
 			});
+		}
+
+		/*
+		 * Past here the document holds the decision, so committing is no longer
+		 * optional. Rolling back on a failed broadcast would leave a
+		 * `<Decision>` in the plan whose record still says the thread is open —
+		 * and the next accept would append a second node carrying the same id.
+		 * A relay nobody received is recoverable; clients resync on the next
+		 * update. A record disagreeing with the document is not.
+		 */
+		if (mutation) {
+			try {
+				Service.publish(plan, server, roomId, mutation);
+			} catch (err) {
+				console.error("[comments] could not relay a decision:", err);
+			}
 		}
 	}
 

@@ -294,37 +294,35 @@ export class ThreadStore {
 		let views: ThreadView[] = [];
 		let marks: Marked[] = [];
 
-		if (editor && binding) {
-			editor.getEditorState().read(() => {
-				for (let thread of this.#threads.values()) {
-					if (thread.status === "dismissed") continue;
+		// Dismissed threads are not shown at all — the transcript is where they
+		// left their trace — so they are dropped once here rather than in each
+		// branch below, where one copy of the rule could outlive the other.
+		let live = [...this.#threads.values()].filter(thread => thread.status !== "dismissed");
 
-					let anchors = this.#anchors.get(thread.id);
-					let points = anchors ? this.#points(binding, anchors) : undefined;
-					views.push({
-						thread,
-						...(points ? { points } : {}),
-						drifted: !!anchors?.subject.drifted || (!!anchors && !points),
-						applied: !!anchors && !anchors.result.pending,
-						quote: thread.quote ?? anchors?.subject.quote ?? "",
-						...(points ? { at: order(editor, points.anchorKey) } : {}),
-					});
-
-					if (points) marks.push({ tone: this.#tone(thread), points });
-				}
-			});
-		} else {
-			for (let thread of this.#threads.values()) {
-				if (thread.status === "dismissed") continue;
+		let build = () => {
+			for (let thread of live) {
 				let anchors = this.#anchors.get(thread.id);
+				// Nothing resolves before the editor exists; the card still
+				// renders, with the quote and no highlight.
+				let points = editor && binding && anchors
+					? this.#points(binding, anchors)
+					: undefined;
+
 				views.push({
 					thread,
-					drifted: false,
+					...(points ? { points } : {}),
+					drifted: !!anchors?.subject.drifted || (!!editor && !!anchors && !points),
 					applied: !!anchors && !anchors.result.pending,
 					quote: thread.quote ?? anchors?.subject.quote ?? "",
+					...(points && editor ? { at: order(editor, points.anchorKey) } : {}),
 				});
+
+				if (points) marks.push({ tone: this.#tone(thread), points });
 			}
-		}
+		};
+
+		if (editor && binding) editor.getEditorState().read(build);
+		else build();
 
 		views.sort((a, b) => (a.at ?? Infinity) - (b.at ?? Infinity));
 		if (editor) paint(editor, marks);
