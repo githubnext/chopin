@@ -40,47 +40,44 @@ afterEach(() => {
 
 describe("sharing the registry", () => {
 	it("keeps what each store asked for", () => {
-		paint(editor, "questions", [{ tone: "related", points: points("q") }]);
-		paint(editor, "comments", [{ tone: "comment", points: points("c") }]);
+		paint(editor, "questions", [points("q")]);
+		paint(editor, "comments", [points("c")]);
 
-		expect(union().get("related")).toEqual([points("q")]);
-		expect(union().get("comment")).toEqual([points("c")]);
+		expect(union()).toEqual([points("q"), points("c")]);
 	});
 
 	/** The bug this exists for: repainting one used to wipe the other. */
 	it("does not drop one store's marks when the other repaints", () => {
-		paint(editor, "comments", [{ tone: "comment", points: points("c") }]);
-		paint(editor, "questions", [{ tone: "related", points: points("q") }]);
-		paint(editor, "questions", [{ tone: "related", points: points("q2") }]);
+		paint(editor, "comments", [points("c")]);
+		paint(editor, "questions", [points("q")]);
+		paint(editor, "questions", [points("q2")]);
 
-		expect(union().get("comment")).toEqual([points("c")]);
-		expect(union().get("related")).toEqual([points("q2")]);
+		expect(union()).toEqual([points("c"), points("q2")]);
 	});
 
 	it("removes only its own when a store asks for nothing", () => {
-		paint(editor, "comments", [{ tone: "comment", points: points("c") }]);
-		paint(editor, "questions", [{ tone: "related", points: points("q") }]);
+		paint(editor, "comments", [points("c")]);
+		paint(editor, "questions", [points("q")]);
 
 		paint(editor, "questions", []);
 
-		expect(union().get("related")).toBeUndefined();
-		expect(union().get("comment")).toEqual([points("c")]);
+		expect(union()).toEqual([points("c")]);
 	});
 
-	it("gathers marks of one tone from both stores", () => {
-		paint(editor, "questions", [{ tone: "related", points: points("q") }]);
-		paint(editor, "comments", [{ tone: "related", points: points("c") }]);
+	it("marks both at once when a reader points at one of each", () => {
+		paint(editor, "questions", [points("q")]);
+		paint(editor, "comments", [points("c1"), points("c2")]);
 
-		expect(union().get("related")).toEqual([points("q"), points("c")]);
+		expect(union()).toEqual([points("q"), points("c1"), points("c2")]);
 	});
 
 	it("takes everything down when the editor goes away", () => {
-		paint(editor, "questions", [{ tone: "related", points: points("q") }]);
-		paint(editor, "comments", [{ tone: "comment", points: points("c") }]);
+		paint(editor, "questions", [points("q")]);
+		paint(editor, "comments", [points("c")]);
 
 		clear();
 
-		expect([...union().keys()]).toEqual([]);
+		expect(union()).toEqual([]);
 	});
 
 	/**
@@ -97,7 +94,7 @@ describe("sharing the registry", () => {
 		let complain = console.error;
 		console.error = () => {};
 		try {
-			expect(() => paint(broken, "comments", [{ tone: "comment", points: points("c") }]))
+			expect(() => paint(broken, "comments", [points("c")]))
 				.not.toThrow();
 		} finally {
 			console.error = complain;

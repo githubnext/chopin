@@ -138,17 +138,4 @@ describe("marking prose", () => {
 			});
 		}
 	});
-
-	it("keeps the pointer stronger than the standing marks it covers", () => {
-		let found = marks();
-		let lightness = (name: string) => {
-			let mark = found.find(each => each.name === name);
-			if (!mark) throw new Error(`no ${name}`);
-			return over(token(mark.token), mark.percent / 100, page).l;
-		};
-
-		// Darker is stronger against a white page.
-		expect(lightness("plan-related")).toBeLessThan(lightness("plan-decision"));
-		expect(lightness("plan-related")).toBeLessThan(lightness("plan-comment"));
-	});
 });

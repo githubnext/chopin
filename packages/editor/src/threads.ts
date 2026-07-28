@@ -17,13 +17,12 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { useEffect } from "react";
 
 import { resolve } from "./anchors";
-import { $rangeOf, clear as unpaint, paint } from "./marks";
+import { clear as unpaint, paint } from "./marks";
 import { $blockPoints, $recover, locate } from "./passage";
 
 import type { Binding } from "@lexical/yjs";
 import type { LexicalEditor } from "lexical";
 import type { Comment, Plan } from "@chopin/protocol";
-import type { Marked, Tone } from "./marks";
 import type { Marked as Selected, Points } from "./passage";
 import type { Transport } from "./transport";
 
@@ -262,35 +261,6 @@ export class ThreadStore {
 		this.refresh();
 	}
 
-	/** The thread whose passage covers a point, innermost first. */
-	at(node: Node, offset: number): string | undefined {
-		let editor = this.#editor;
-		if (!editor) return undefined;
-
-		let best: { id: string; length: number } | undefined;
-
-		editor.getEditorState().read(() => {
-			for (let view of this.#state.threads) {
-				for (let points of view.places) {
-					let range = $rangeOf(editor, points);
-					if (!range) continue;
-					try {
-						if (range.comparePoint(node, offset) !== 0) continue;
-					} catch {
-						continue;
-					}
-					let length = range.toString().length;
-					// The tighter range is the more specific thing that was
-					// clicked; the list is in document order, so a later tie is
-					// the newer thread.
-					if (!best || length <= best.length) best = { id: view.thread.id, length };
-				}
-			}
-		});
-
-		return best?.id;
-	}
-
 	/**
 	 * Re-resolve and repaint.
 	 *
@@ -316,7 +286,7 @@ export class ThreadStore {
 		let binding = this.#binding;
 
 		let views: ThreadView[] = [];
-		let marks: Marked[] = [];
+		let marks: Points[] = [];
 
 		// Dismissed threads are not shown at all — the transcript is where they
 		// left their trace — so they are dropped once here rather than in each
@@ -358,8 +328,10 @@ export class ThreadStore {
 						...(first && editor ? { at: order(editor, first.anchorKey) } : {}),
 					});
 
-					let tone = this.#tone(thread);
-					for (let points of places) marks.push({ tone, points });
+					// Only the card the reader is pointing at. A standing mark on
+					// every comment and every decision ends up painted over most
+					// of a mature plan, which says nothing.
+					if (this.#focused === thread.id) marks.push(...places);
 				} catch (err) {
 					console.error(`[plan] could not place comment ${thread.id}:`, err);
 					// Unplaceable, but still worth reading.
@@ -399,19 +371,6 @@ export class ThreadStore {
 		if (JSON.stringify(next) === JSON.stringify(this.#state)) return;
 		this.#state = next;
 		for (let listener of this.#listeners) listener();
-	}
-
-	/**
-	 * What this thread's mark says.
-	 *
-	 * The pointer is shared with questions, so hovering either kind of card
-	 * lights its prose the same way. What differs is only what is true when
-	 * nobody is pointing: a live comment is waiting on somebody, a decision is
-	 * a record of something settled.
-	 */
-	#tone(thread: Comment.Thread): Tone {
-		if (this.#focused === thread.id) return "related";
-		return thread.status === "accepted" ? "decision" : "comment";
 	}
 
 	/** Positions first; reading is what covers the gap before the next rebase. */

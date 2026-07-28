@@ -25,7 +25,7 @@ import type { Binding } from "@lexical/yjs";
 import type { LexicalEditor } from "lexical";
 import type { Plan } from "@chopin/protocol";
 import type { Related, Relation } from "./anchors";
-import type { Marked } from "./marks";
+import type { Points } from "./passage";
 import type { Questionnaire } from "@chopin/dialect";
 
 export type QuestionnaireEntry = {
@@ -133,15 +133,15 @@ export class QuestionnaireStore {
 		);
 		if (!found || found.pending) return this.clear();
 
-		let marks: Marked[] = [];
+		let places: Points[] = [];
 		editor.getEditorState().read(() => {
 			for (let key of found.keys) {
 				let points = $blockPoints(key);
-				if (points) marks.push({ tone: "related", points });
+				if (points) places.push(points);
 			}
 		});
 
-		paint(editor, "questions", marks);
+		paint(editor, "questions", places);
 	}
 
 	clear(): void {
