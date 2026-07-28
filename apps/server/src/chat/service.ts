@@ -380,16 +380,25 @@ async function run(context: Room, handle: string, text: string): Promise<void> {
 		state(chat, server, room);
 	}
 
-	let next = chat.waiting.shift();
-	// A turn whose work is already done is dropped rather than run. Four
-	// accepted comments should not cost four passes over the plan when the
-	// agent dealt with all of them in the first.
-	while (next?.spent?.()) next = chat.waiting.shift();
-
+	let next = pending(chat);
 	if (next) {
 		queued(chat, server, room);
 		await run(context, next.handle, next.text);
 	}
+}
+
+/**
+ * The next queued turn worth running.
+ *
+ * A turn whose work is already done is dropped rather than run: four accepted
+ * comments should not cost four passes over the plan when the agent dealt with
+ * all of them in the first. Only something that queued behind a turn can be
+ * spent, which is why the question is asked here and not when it was accepted.
+ */
+export function pending(chat: Chat): Waiting | undefined {
+	let next = chat.waiting.shift();
+	while (next?.spent?.()) next = chat.waiting.shift();
+	return next;
 }
 
 /**
