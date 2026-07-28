@@ -33,14 +33,14 @@ export function enabled(): boolean {
 export function mark(plan: Plan): void {
 	let digests = room.digests(plan.document);
 
-	for (let [index, digest] of digests.entries()) {
+	for (let index of digests.keys()) {
 		let text = passageOf(plan, index);
 		if (!text) continue;
 
 		try {
 			let passage = room.passageAt(
 				plan.document,
-				[{ index, digest }],
+				[index],
 				text.quote,
 				text.offset,
 				text.quote.length,

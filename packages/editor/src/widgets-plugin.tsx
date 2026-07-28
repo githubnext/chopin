@@ -15,14 +15,18 @@ import { addComposerChild$, realmPlugin } from "@mdxeditor/editor";
 import { Cell } from "@mdxeditor/gurx";
 
 import { QuestionnaireObserver } from "./questionnaires";
+import { ThreadObserver } from "./threads";
 import { Toolbar } from "./toolbar";
 import { CalloutPlugin, PreviewPlugin, TabsPlugin } from "./widgets";
 
 import type { QuestionnaireStore } from "./questionnaires";
+import type { ThreadStore } from "./threads";
 
 export type WidgetsOptions = {
 	/** Watched from inside the editor; read from outside it. */
 	questions?: QuestionnaireStore;
+	/** The same arrangement for comments: observed here, rendered in the pane. */
+	threads?: ThreadStore;
 };
 
 /** Live host configuration. Read it; do not capture it. */
@@ -36,6 +40,10 @@ export const widgetsPlugin = realmPlugin<WidgetsOptions>({
 		if (params?.questions) {
 			let store = params.questions;
 			realm.pub(addComposerChild$, () => <QuestionnaireObserver store={store} />);
+		}
+		if (params?.threads) {
+			let store = params.threads;
+			realm.pub(addComposerChild$, () => <ThreadObserver store={store} />);
 		}
 		realm.pub(addComposerChild$, TabsPlugin);
 		realm.pub(addComposerChild$, PreviewPlugin);

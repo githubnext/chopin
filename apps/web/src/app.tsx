@@ -4,6 +4,7 @@ import {
 	Decisions,
 	PlanEditor,
 	QuestionnaireStore,
+	ThreadStore,
 	useQuestionnaires,
 } from "@chopin/editor";
 
@@ -105,6 +106,7 @@ function Room({ handle }: { handle: string }) {
 	let user = useMemo(() => cursor(handle), [handle]);
 	// Written from inside the editor, read by the decisions pane beside it.
 	let [questions] = useState(() => new QuestionnaireStore());
+	let [threads] = useState(() => new ThreadStore());
 	let [reveal, setReveal] = useState<{ widget: string; token: number }>();
 	let unanswered = useQuestionnaires(questions).filter(entry =>
 		entry.value.questions.some(question => question.answer === undefined)
@@ -125,6 +127,7 @@ function Room({ handle }: { handle: string }) {
 		let off = [
 			socket.on<Session.Hello>("session:hello", frame => setMembers(frame.members)),
 			socket.on<Session.Presence>("session:presence", frame => setMembers(frame.members)),
+			threads.listen(socket),
 		];
 
 		return () => {
@@ -132,7 +135,7 @@ function Room({ handle }: { handle: string }) {
 			socket.dispose();
 			setWire(undefined);
 		};
-	}, [room, handle]);
+	}, [room, handle, threads]);
 
 	return (
 		<Workspace
@@ -160,10 +163,19 @@ function Room({ handle }: { handle: string }) {
 					connected={status === "connected"}
 					reveal={reveal}
 					store={questions}
+					threads={threads}
 					wire={wire}
 				/>
 			}
-			plan={<PlanEditor connection={status} questions={questions} user={user} wire={wire} />}
+			plan={
+				<PlanEditor
+					connection={status}
+					questions={questions}
+					threads={threads}
+					user={user}
+					wire={wire}
+				/>
+			}
 		/>
 	);
 }

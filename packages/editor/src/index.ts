@@ -12,5 +12,7 @@ export { QuestionnaireObserver, QuestionnaireStore, useQuestionnaires } from "./
 export type { QuestionnaireEntry } from "./questionnaires";
 export { PlanStatus } from "./status";
 export type { PlanStatusProps } from "./status";
+export { ThreadObserver, ThreadStore, useThreads } from "./threads";
+export type { Draft, ThreadState, ThreadView } from "./threads";
 export type { Connection, Transport, Unsubscribe } from "./transport";
 export { QuestionnaireCard, register as registerPlanWidgets } from "./widgets";

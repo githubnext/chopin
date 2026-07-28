@@ -25,6 +25,7 @@ import type { MDXEditorMethods } from "@mdxeditor/editor";
 import type { Plan } from "@chopin/protocol";
 import type { PlanProvider } from "./provider";
 import type { QuestionnaireStore } from "./questionnaires";
+import type { ThreadStore } from "./threads";
 import type { Connection, Transport } from "./transport";
 
 /**
@@ -60,6 +61,8 @@ export type PlanEditorProps = {
 	 * editor, while the observer that finds them has to run inside it.
 	 */
 	questions?: QuestionnaireStore;
+	/** The same arrangement for comment threads. */
+	threads?: ThreadStore;
 	className?: string;
 };
 
@@ -71,7 +74,7 @@ export type PlanState = {
 };
 
 export function PlanEditor(
-	{ busy, className, connection, questions, user, wire }: PlanEditorProps,
+	{ busy, className, connection, questions, threads, user, wire }: PlanEditorProps,
 ) {
 	let ref = useRef<MDXEditorMethods>(null);
 	let scroller = useRef<HTMLDivElement>(null);
@@ -94,11 +97,16 @@ export function PlanEditor(
 	// the server's key for a block means nothing in this browser.
 	let onBinding = useCallback((value: Binding | undefined) => {
 		questions?.bind(value);
-	}, [questions]);
+		threads?.bind(value);
+	}, [questions, threads]);
 
-	let onAnchors = useCallback((widgets: Plan.WidgetAnchors[]) => {
-		questions?.anchors(widgets);
-	}, [questions]);
+	let onAnchors = useCallback(
+		(snapshot: { widgets: Plan.WidgetAnchors[]; threads: Plan.ThreadAnchors[] }) => {
+			questions?.anchors(snapshot.widgets);
+			threads?.anchors(snapshot.threads);
+		},
+		[questions, threads],
+	);
 
 	let onProvider = useCallback((value: PlanProvider | undefined) => {
 		provider.current = value;
@@ -141,10 +149,10 @@ export function PlanEditor(
 					 * it has no reason to throw.
 					 */
 					collaborationPlugin({ wire, user, onReset, onProvider, onBinding, onAnchors }),
-					widgetsPlugin({ questions }),
+					widgetsPlugin({ questions, threads }),
 				]
 				: [],
-		[wire, user, onReset, onProvider, onBinding, onAnchors, questions],
+		[wire, user, onReset, onProvider, onBinding, onAnchors, questions, threads],
 	);
 
 	useEffect(() => {
