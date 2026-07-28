@@ -42,9 +42,7 @@ async function plan(source = SOURCE): Promise<Room> {
  * exactly as much as a client that miscounted would supply.
  */
 function mark(document: Document, indices: number[], quote: string, offset = 0) {
-	let digests = room.digests(document);
-	let blocks = indices.map(index => ({ index, digest: digests[index]! }));
-	return room.passageAt(document, blocks, quote, offset, quote.length);
+	return room.passageAt(document, indices, quote, offset, quote.length);
 }
 
 /**
@@ -105,18 +103,20 @@ describe("marking a passage", () => {
 		expect(reads(subject.document, passage)).toBe(QUOTE);
 	});
 
-	it("refuses a block whose digest has moved on", async () => {
+	it("refuses a block that is not there", async () => {
 		let subject = await plan();
-		expect(() =>
-			room.passageAt(subject.document, [{ index: 1, digest: "sha256:stale" }], QUOTE, 0, 3)
-		)
-			.toThrow(/has changed/);
+		expect(() => room.passageAt(subject.document, [9], QUOTE, 0, 3))
+			.toThrow(/no block at index/);
 	});
 
+	/**
+	 * Finding the quote is the concurrency check. If the plan moved so that the
+	 * blocks named no longer hold the phrase, marking whatever sits there now
+	 * would be worse than refusing and asking for the selection again.
+	 */
 	it("refuses a phrase that is not in the blocks named", async () => {
 		let subject = await plan();
-		let digest = room.digests(subject.document)[1]!;
-		expect(() => room.passageAt(subject.document, [{ index: 1, digest }], "not here", 0, 8))
+		expect(() => room.passageAt(subject.document, [1], "not here", 0, 8))
 			.toThrow(/not in those blocks/);
 	});
 

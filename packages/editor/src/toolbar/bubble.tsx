@@ -131,7 +131,9 @@ type Position = { top: number; left: number };
 /** How close to the window edge the bubble may sit. */
 const EDGE = 8;
 
-export function SelectionBubble({ disabled }: { disabled?: boolean }) {
+export function SelectionBubble(
+	{ disabled, onComment }: { disabled?: boolean; onComment?: () => void },
+) {
 	let [editor] = useLexicalComposerContext();
 	let [position, setPosition] = useState<Position>();
 	let [active, setActive] = useState<Set<TextFormatType>>(new Set());
@@ -366,6 +368,27 @@ export function SelectionBubble({ disabled }: { disabled?: boolean }) {
 						>
 							🔗
 						</button>
+
+						{onComment && (
+							<>
+								<span aria-hidden="true" className="mx-0.5 h-4 w-px bg-border" />
+								<button
+									type="button"
+									aria-label="Comment on this passage"
+									title="Comment on this passage"
+									/*
+									 * The passage is captured now, inside the click, because
+									 * the composer this opens takes focus — and the selection
+									 * goes with it. A draft that forgot what it was about the
+									 * moment you started typing would be no use.
+									 */
+									onClick={onComment}
+									className="size-7 rounded text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+								>
+									💬
+								</button>
+							</>
+						)}
 					</>
 				)}
 		</div>

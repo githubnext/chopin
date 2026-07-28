@@ -1,36 +1,41 @@
 /**
- * The decisions pane.
+ * The sidecar.
  *
- * Every question the plan has asked, open ones first. This is the only place a
- * questionnaire is answered: the plan node itself renders nothing, because a
- * form sitting inline in prose competes with the prose, and because a decision
- * is worth keeping visible after it has been made.
+ * Everything the plan is waiting on, and everything it has settled: questions
+ * the agent asked, and comments the room made on the prose. Both are decisions
+ * in the same sense, so they share one list rather than two tabs — an accepted
+ * comment *is* a decision, and would otherwise have to pick a side.
  *
- * Answering is collaborative. Everyone here is editing one draft, so what you
- * type appears under the other person's cursor, and whoever submits it is
- * recorded as having decided.
+ * Outstanding items come first, in document order, because one of those is
+ * blocking somebody. Everything resolved collapses behind a disclosure: it is
+ * the record, worth keeping and not worth scrolling past. A dismissed thread is
+ * not shown at all; the transcript is where it left its trace.
  *
- * A decision also knows where it lives. Hovering a question lights up the
- * passage it concerns; hovering its answer lights up the prose that answer
- * produced. The highlight is written to the DOM rather than the document — it
- * is one reader's pointer, not a fact about the plan, and putting it in the
- * document would send it to everybody else and make it undoable.
+ * An item also knows where it lives. Hovering a question lights the passage it
+ * concerns; hovering a comment lights the phrase it marks. The highlight is
+ * written to the DOM rather than the document — it is one reader's pointer, not
+ * a fact about the plan, and putting it in the document would send it to
+ * everybody else and make it undoable.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { DraftCard, ThreadCard } from "./comments";
 import { useQuestionnaires } from "./questionnaires";
+import { useThreads } from "./threads";
 import { QuestionnaireCard } from "./widgets/questionnaire";
 
 import type { Transport } from "@chopin/question/react";
 import type { QuestionnaireEntry, QuestionnaireStore } from "./questionnaires";
+import type { ThreadStore } from "./threads";
 
 export type DecisionsProps = {
 	store: QuestionnaireStore;
+	threads: ThreadStore;
 	wire?: Transport;
 	connected?: boolean;
 	/**
-	 * A questionnaire to bring into view.
+	 * An item to bring into view.
 	 *
 	 * Carries a token as well as an id so asking for the same one twice still
 	 * scrolls — naming it again means "show me", not "it is already open".
@@ -42,9 +47,11 @@ function undecided(entry: QuestionnaireEntry): boolean {
 	return entry.value.questions.some(question => question.answer === undefined);
 }
 
-export function Decisions({ connected, reveal, store, wire }: DecisionsProps) {
+export function Decisions({ connected, reveal, store, threads, wire }: DecisionsProps) {
 	let entries = useQuestionnaires(store);
+	let state = useThreads(threads);
 	let content = useRef<HTMLDivElement>(null);
+	let [history, setHistory] = useState(false);
 
 	// Leaving the pane should not leave the prose lit. A highlight belongs to
 	// the pointer that asked for it.
@@ -58,8 +65,44 @@ export function Decisions({ connected, reveal, store, wire }: DecisionsProps) {
 		target?.scrollIntoView({ block: "center", behavior: "smooth" });
 	}, [entries, reveal]);
 
-	// Undecided first: one of those is blocking somebody, the rest are history.
-	let ordered = [...entries].sort((a, b) => Number(undecided(b)) - Number(undecided(a)));
+	let open = state.threads.filter(view => view.thread.status === "open");
+	let accepted = state.threads.filter(view => view.thread.status === "accepted");
+	let waiting = entries.filter(undecided);
+	let settled = entries.filter(entry => !undecided(entry));
+
+	let outstanding = waiting.length + open.length;
+	let resolved = settled.length + accepted.length;
+
+	let card = (view: (typeof state.threads)[number]) => (
+		<ThreadCard
+			applied={view.applied}
+			busy={!connected}
+			focused={state.focused === view.thread.id}
+			key={view.thread.id}
+			onAccept={() => threads.accept(view.thread.id)}
+			onBlur={() => threads.focus(undefined)}
+			onDismiss={() => threads.dismiss(view.thread.id)}
+			onFocus={() => threads.focus(view.thread.id)}
+			onReply={text => threads.reply(view.thread.id, text)}
+			onRetry={() => threads.retry(view.thread.id)}
+			onTyping={writing => threads.announce(view.thread.id, writing)}
+			quote={view.quote}
+			view={view}
+			writing={state.writing[view.thread.id]}
+		/>
+	);
+
+	let question = (entry: QuestionnaireEntry) => (
+		<QuestionnaireCard
+			connected={connected}
+			key={entry.id}
+			onRelationEnter={(q, relation) => store.highlight(entry.id, q, relation)}
+			onRelationLeave={() => store.clear()}
+			relations={store.counts(entry.id)}
+			value={entry.value}
+			wire={wire}
+		/>
+	);
 
 	return (
 		<div className="plan-decisions">
@@ -67,34 +110,58 @@ export function Decisions({ connected, reveal, store, wire }: DecisionsProps) {
 				<span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
 					Decisions
 				</span>
-				{entries.length > 0 && (
-					<span className="text-xs text-muted-foreground">{entries.length}</span>
-				)}
+				{outstanding > 0 && <span className="text-xs text-muted-foreground">{outstanding}</span>}
 			</header>
 
 			<div className="min-h-0 flex-1 overflow-auto p-3" ref={content}>
-				{ordered.length === 0
+				{state.draft && (
+					<div className="mb-3">
+						<DraftCard
+							busy={!connected}
+							onCancel={() => threads.draft(undefined)}
+							onSend={text => threads.start(text)}
+							quote={state.draft.quote}
+						/>
+					</div>
+				)}
+
+				{state.error && (
+					<p className="mb-3 rounded-md border border-destructive px-2 py-1.5 text-xs text-destructive">
+						{state.error} Select the passage again.
+					</p>
+				)}
+
+				{outstanding === 0 && resolved === 0 && !state.draft
 					? (
 						<p className="m-0 text-xs text-muted-foreground">
-							Questions the agent asks appear here, and stay as a record of what was decided.
+							Select any of the plan to comment on it. Questions the agent asks appear here too, and
+							both stay as a record of what was decided.
 						</p>
 					)
 					: (
 						<div className="flex flex-col gap-3">
-							{ordered.map(entry => (
-								<QuestionnaireCard
-									connected={connected}
-									key={entry.id}
-									onRelationEnter={(question, relation) =>
-										store.highlight(entry.id, question, relation)}
-									onRelationLeave={() => store.clear()}
-									relations={store.counts(entry.id)}
-									value={entry.value}
-									wire={wire}
-								/>
-							))}
+							{waiting.map(question)}
+							{open.map(card)}
 						</div>
 					)}
+
+				{resolved > 0 && (
+					<div className={outstanding > 0 || state.draft ? "mt-3" : ""}>
+						<button
+							className="w-full rounded-md px-1 py-1 text-left text-xs text-muted-foreground hover:text-foreground"
+							onClick={() => setHistory(value => !value)}
+							type="button"
+						>
+							{history ? "▾" : "▸"} {resolved} resolved
+						</button>
+						{history && (
+							<div className="mt-2 flex flex-col gap-3">
+								{accepted.map(card)}
+								{settled.map(question)}
+							</div>
+						)}
+					</div>
+				)}
 			</div>
 		</div>
 	);

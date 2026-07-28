@@ -213,8 +213,20 @@ export function instruct(
 	said: string,
 	spent?: () => boolean,
 ): void {
-	let { chat, room, server } = context;
+	let { chat, config, room, server } = context;
 	notice(context, said);
+
+	// `AGENT=off` runs the room without one. The decision that got here is
+	// still a decision and is already recorded; only the turn is impossible,
+	// and saying so beats a session failing to open.
+	if (!config.agent) {
+		return void say(chat, server, room, {
+			id: ulid(),
+			author: { kind: "system" },
+			text: "The agent is not running, so the plan has not been revised.",
+			ts: now(),
+		});
+	}
 
 	if (chat.busy) {
 		if (chat.waiting.length >= MAX_QUEUE) {

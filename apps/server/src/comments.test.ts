@@ -31,8 +31,7 @@ async function document(source = SOURCE): Promise<Document> {
 
 /** A thread on a real passage, the way `comment:start` builds one. */
 function thread(doc: Document, handle = "ana"): { records: Store.Records; record: Record } {
-	let digest = room.digests(doc)[1]!;
-	let passage = room.passageAt(doc, [{ index: 1, digest }], QUOTE, 0, QUOTE.length);
+	let passage = room.passageAt(doc, [1], QUOTE, 0, QUOTE.length);
 
 	let record: Record = {
 		id: "01K0N4TR8K7JGM4R1J7PW4R8YJ",

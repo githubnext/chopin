@@ -72,15 +72,22 @@ export declare namespace Comment {
 	/**
 	 * Mark a passage and say the first thing about it.
 	 *
-	 * The client sends what it can prove rather than what it computed: block
-	 * indices with the digests it read them at, and the text it selected. The
-	 * server verifies the digests against its own copy and mints every Yjs
-	 * position itself, so a client cannot place a passage anywhere the prose
-	 * does not agree it belongs.
+	 * The client sends what it read, not where it thinks that is: block indices
+	 * and the selected text. The server finds the quote in those blocks and
+	 * mints every Yjs position itself, so a client cannot place a passage
+	 * anywhere the prose does not agree it belongs.
+	 *
+	 * The quote is the concurrency check, and a better one than a digest would
+	 * be — it tests whether the sentence somebody selected is still there,
+	 * which is the thing that actually matters, and a client cannot compute a
+	 * canonical block digest without re-serialising the whole document anyway.
+	 * If the plan moved underneath, the quote is not found and the request is
+	 * refused rather than marking whatever is at that index now.
 	 */
 	export namespace Start {
 		export type Ask = KIND<"comment:start"> & {
-			blocks: Array<{ index: number; digest: string }>;
+			/** Blocks the selection covers, first to last. */
+			blocks: number[];
 			/** Bounded prefix of the selected text. */
 			quote: string;
 			/** Where the selection began in the run's text. */

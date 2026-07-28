@@ -45,8 +45,15 @@ export type PlanProviderOptions = {
 	doc: Y.Doc;
 	/** Told when the server rotates the epoch and local state must be discarded. */
 	onReset?: (reason: Plan.Reset["reason"]) => void;
-	/** Authoritative snapshot of which prose each decision relates to. */
-	onAnchors?: (widgets: Plan.WidgetAnchors[]) => void;
+	/**
+	 * Authoritative snapshot of which prose each decision and comment names.
+	 *
+	 * The whole snapshot rather than one half: the two arrive together because
+	 * they describe the same document at the same moment, and splitting them
+	 * into two callbacks would let a consumer act on one while holding a stale
+	 * copy of the other.
+	 */
+	onAnchors?: (snapshot: { widgets: Plan.WidgetAnchors[]; threads: Plan.ThreadAnchors[] }) => void;
 };
 
 /**
@@ -146,7 +153,9 @@ export class PlanProvider implements Provider {
 			this.#wire.on<Plan.Awareness>("plan:awareness", event => this.#presence(event)),
 			this.#wire.on<Plan.Reset>("plan:reset", event => this.#reset(event)),
 			this.#wire.on<Plan.Anchors>("plan:anchors", event => {
-				if (event.epoch === this.#epoch) this.#options.onAnchors?.(event.widgets);
+				if (event.epoch === this.#epoch) {
+					this.#options.onAnchors?.({ widgets: event.widgets, threads: event.threads });
+				}
 			}),
 		);
 
@@ -195,7 +204,7 @@ export class PlanProvider implements Provider {
 
 		// Server state never originates locally, so it must not be echoed back.
 		Y.applyUpdate(this.#doc, decode(reply.update), this);
-		this.#options.onAnchors?.(reply.anchors);
+		this.#options.onAnchors?.({ widgets: reply.anchors, threads: reply.threads });
 
 		if (reply.awareness) {
 			applyAwarenessUpdate(this.awareness, decode(reply.awareness), this);

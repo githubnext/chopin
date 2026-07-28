@@ -760,18 +760,22 @@ function cut(
 }
 
 /**
- * Mark a phrase, from what the client could prove it read.
+ * Mark a phrase, from what the client read.
  *
- * Block digests are a precondition, as they are for anchoring a decision: if
- * one does not match, the plan moved between reading and marking, and placing
- * the passage against prose that has since changed would be worse than saying
- * so. The offset is a hint rather than a coordinate — the quote is searched
- * for near it — so the client's idea of where text begins never has to agree
- * with this one exactly.
+ * Finding the quote is the concurrency check. A digest would only prove the
+ * blocks are byte-identical, which is both stricter than needed and impossible
+ * for a client to compute without re-serialising the document; the quote tests
+ * whether the sentence somebody selected is still there, which is the thing
+ * that matters. If the plan moved underneath, it is not found and this refuses
+ * rather than marking whatever sits at that index now.
+ *
+ * The offset is a hint rather than a coordinate — the quote is searched for
+ * near it — so the client's idea of where text begins never has to agree with
+ * this one exactly.
  */
 export function passageAt(
 	target: Document,
-	blocks: Array<{ index: number; digest: string }>,
+	blocks: number[],
 	quote: string,
 	offset: number,
 	length: number,
@@ -780,13 +784,10 @@ export function passageAt(
 
 	let current = digests(target);
 	let anchors: Anchor[] = [];
-	for (let block of blocks) {
-		let hash = current[block.index];
-		if (!hash) throw new Error(`no block at index ${block.index}`);
-		if (hash !== block.digest) {
-			throw new Error(`block ${block.index} has changed; read the plan again`);
-		}
-		anchors.push(anchorAt(target, block.index, hash));
+	for (let index of blocks) {
+		let hash = current[index];
+		if (!hash) throw new Error(`no block at index ${index}`);
+		anchors.push(anchorAt(target, index, hash));
 	}
 
 	let nodes = runNodes(target, anchors);
