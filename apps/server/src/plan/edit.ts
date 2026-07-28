@@ -213,6 +213,7 @@ function step(
 		case "replace": {
 			let target = addressed(base, operation.index);
 			if (typeof target === "string") return target;
+			if (decision(target)) return protects(operation.index);
 			let index = children.indexOf(target);
 			if (index < 0) return changed(operation.index);
 			let parsed = fragment(operation.source);
@@ -226,6 +227,7 @@ function step(
 		case "delete": {
 			let target = addressed(base, operation.index);
 			if (typeof target === "string") return target;
+			if (decision(target)) return protects(operation.index);
 			let index = children.indexOf(target);
 			if (index < 0) return changed(operation.index);
 			return children.filter((_, position) => position !== index);
@@ -285,8 +287,21 @@ function repeated(children: RootContent[]): string | undefined {
 	return found;
 }
 
-/** Components only the `ask` tool may create. */
-const QUESTION_COMPONENTS = new Set(["Questionnaire", "Question", "Option", "Answer"]);
+/**
+ * Components the agent may not author.
+ *
+ * Each is a projection of something a record owns — a questionnaire's answer, a
+ * thread the room accepted — so writing one by hand would create a second
+ * account of a decision that is already settled somewhere else.
+ */
+const RESERVED_COMPONENTS = new Set([
+	"Questionnaire",
+	"Question",
+	"Option",
+	"Answer",
+	"Decision",
+	"Note",
+]);
 
 /** Parse an operation's source as a run of top-level blocks. */
 function fragment(value: string): RootContent[] | string {
@@ -322,8 +337,10 @@ function identify(root: Root): string | undefined {
 		if (node.type === "mdxJsxFlowElement" || node.type === "mdxJsxTextElement") {
 			let spec = lookup(node.name);
 			if (spec) {
-				if (QUESTION_COMPONENTS.has(spec.name)) {
-					refused = `\`${spec.name}\` is created by asking a question, not by editing the plan.`;
+				if (RESERVED_COMPONENTS.has(spec.name)) {
+					refused = spec.name === "Decision" || spec.name === "Note"
+						? `\`${spec.name}\` is written when the room accepts a comment, not by editing the plan.`
+						: `\`${spec.name}\` is created by asking a question, not by editing the plan.`;
 					return;
 				}
 				stamp(node, spec);
@@ -369,6 +386,10 @@ function changed(index: number): string {
 	return `block ${index} is already changed by another operation in this batch.`;
 }
 
+function protects(index: number): string {
+	return `block ${index} is a decision the room accepted; it cannot be edited or removed.`;
+}
+
 /** The questionnaire id a node carries, when it is one. */
 function questionnaire(node: RootContent): string | undefined {
 	if (node.type !== "mdxJsxFlowElement" || node.name !== "Questionnaire") return undefined;
@@ -377,6 +398,18 @@ function questionnaire(node: RootContent): string | undefined {
 		if (typeof attribute.value === "string") return attribute.value;
 	}
 	return undefined;
+}
+
+/**
+ * Whether a block is an accepted decision.
+ *
+ * `detach_question` exists because taking a questionnaire out of the plan had
+ * to be a deliberate, recorded act rather than a side effect of tidying. A
+ * decision is less removable than a question, not more: it is what the room
+ * settled, and the record it projects has no way to hear that it is gone.
+ */
+function decision(node: RootContent): boolean {
+	return node.type === "mdxJsxFlowElement" && node.name === "Decision";
 }
 
 function describe(node: RootContent, index: number): Block {
