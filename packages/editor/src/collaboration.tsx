@@ -173,7 +173,19 @@ function Collaboration(options: CollaborationOptions) {
 		addEventListener("beforeunload", leave);
 		addEventListener("pagehide", leave);
 
-		void provider.connect();
+		/*
+		 * A failed open used to be invisible.
+		 *
+		 * `connect` resolves once the document has arrived and `sync` has been
+		 * emitted; anything that threw on the way left the editor locked with
+		 * the status chip saying "Loading" forever, and the rejection went
+		 * nowhere. Saying so is not a fix for whatever threw, but it is the
+		 * difference between a bug somebody can report and one they cannot.
+		 */
+		provider.connect().catch((err: unknown) => {
+			console.error("[plan] could not open the document:", err);
+			provider.fail(err instanceof Error ? err.message : "the plan could not be opened");
+		});
 
 		return () => {
 			removeEventListener("beforeunload", leave);

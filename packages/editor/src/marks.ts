@@ -57,21 +57,29 @@ function $rangeOf(editor: LexicalEditor, points: Points): Range | null {
  * is on screen for no gain.
  */
 export function paint(editor: LexicalEditor, marks: Marked[]): void {
-	if (!available()) return fallback(editor, marks);
+	try {
+		if (!available()) return fallback(editor, marks);
 
-	let ranges = new Map<Tone, Range[]>();
-	editor.getEditorState().read(() => {
-		for (let mark of marks) {
-			let range = $rangeOf(editor, mark.points);
-			if (!range) continue;
-			ranges.set(mark.tone, [...ranges.get(mark.tone) ?? [], range]);
+		let ranges = new Map<Tone, Range[]>();
+		editor.getEditorState().read(() => {
+			for (let mark of marks) {
+				let range = $rangeOf(editor, mark.points);
+				if (!range) continue;
+				ranges.set(mark.tone, [...ranges.get(mark.tone) ?? [], range]);
+			}
+		});
+
+		for (let [tone, name] of Object.entries(NAMES) as Array<[Tone, string]>) {
+			let list = ranges.get(tone);
+			if (!list || list.length === 0) CSS.highlights.delete(name);
+			else CSS.highlights.set(name, new Highlight(...list));
 		}
-	});
-
-	for (let [tone, name] of Object.entries(NAMES) as Array<[Tone, string]>) {
-		let list = ranges.get(tone);
-		if (!list || list.length === 0) CSS.highlights.delete(name);
-		else CSS.highlights.set(name, new Highlight(...list));
+	} catch (err) {
+		// This is reached from a Lexical update listener, and Lexical runs
+		// those in one unisolated loop — a throw here would skip the listener
+		// that syncs the document. Losing a highlight is the cheapest possible
+		// outcome and the only acceptable one.
+		console.error("[plan] could not mark commented prose:", err);
 	}
 }
 

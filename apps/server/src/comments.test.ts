@@ -71,10 +71,11 @@ type Sent = { kind: string; [key: string]: unknown };
  * open and the snapshot sink are all part of what the service does, and a
  * stubbed plan would test the parts around them instead of them.
  */
-async function opened(source = SOURCE) {
+async function opened(source = SOURCE, state?: object) {
 	let dir = await mkdtemp(join(tmpdir(), "chopin-comments-"));
 	rooms.push(dir);
 	await writeFile(join(dir, "plan.mdx"), source);
+	if (state) await writeFile(join(dir, "state.json"), JSON.stringify(state));
 
 	let broadcasts: Sent[] = [];
 	let broken: string | undefined;
@@ -313,6 +314,45 @@ describe("projecting a decision", () => {
 
 		// What `plan.mdx` would hold, read back as the server reads it on boot.
 		expect(() => room.validate(room.project(doc))).not.toThrow();
+	});
+});
+
+describe("opening a room whose sidecar is damaged", () => {
+	/**
+	 * `plan.mdx` is a file a person can edit between runs, and `state.json` sits
+	 * beside it. A record that cannot be carried onto the rebuilt document is a
+	 * decision nobody can point at — not a room nobody can open. Letting it
+	 * throw would fail `plan:open`, and a client whose open is refused sits
+	 * there locked with the chrome saying it is still loading.
+	 */
+	it("still opens when a thread record cannot be carried forward", async () => {
+		let damaged = {
+			revision: 1,
+			questions: [],
+			threads: [{
+				id: "01K0N4TR8K7JGM4R1J7PW4R8YJ",
+				status: "accepted",
+				// No blocks, no positions: whatever wrote this, it is not a passage.
+				passage: null,
+				notes: [{ id: "n1", handle: "ana", text: "Too long.", ts: 1 }],
+				quote: QUOTE,
+				resolver: "ana",
+				at: 2,
+			}],
+		};
+
+		let complain = console.error;
+		console.error = () => {};
+		try {
+			let { plan, server } = await opened(SOURCE, damaged);
+
+			// The room is open and usable: a new thread can still be marked.
+			let ana = member("ana");
+			expect(() => mark(plan, server, ana)).not.toThrow();
+			expect(room.project(plan.document)).toContain(QUOTE);
+		} finally {
+			console.error = complain;
+		}
 	});
 });
 

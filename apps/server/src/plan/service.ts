@@ -193,8 +193,16 @@ export async function open(id: string, dir: string, server: Server<SocketData>):
 	// expressed in a history this document does not have. Recovering them now
 	// rather than on the first write is what lets the client that joins one
 	// millisecond later resolve anything at all.
-	Questions.rebase(plan);
-	Comments.rebase(plan);
+	//
+	// Guarded because this is the last thing between a room and being open. A
+	// plan whose highlights are stale is worth having; one that refuses to open
+	// because a decision could not be placed is not.
+	try {
+		Questions.rebase(plan);
+		Comments.rebase(plan);
+	} catch (err) {
+		console.error(`[plan] could not carry anchors into ${id}:`, err);
+	}
 
 	return plan;
 }
@@ -300,8 +308,16 @@ async function commit(plan: Plan): Promise<void> {
 		// So do anchors and passages, and unlike a cursor nobody re-announces
 		// them. Without this every highlight in the room stays dark until the
 		// agent happens to edit.
-		Questions.rebase(plan);
-		Comments.rebase(plan);
+		//
+		// Guarded because the `plan:reset` below is what tells everyone to
+		// re-open. A throw here would strand the whole room on an epoch that no
+		// longer exists, to save some highlights that are already stale.
+		try {
+			Questions.rebase(plan);
+			Comments.rebase(plan);
+		} catch (err) {
+			console.error("[plan] could not carry anchors onto the rebuilt document:", err);
+		}
 
 		for (let item of batch) {
 			tell(item.ws, { kind: "plan:reset", ts: 0, epoch: rebuilt.epoch, reason: "rebuilt" });

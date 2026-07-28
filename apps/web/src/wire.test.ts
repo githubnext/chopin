@@ -108,3 +108,52 @@ describe("status", () => {
 		await expect(pending).rejects.toThrow();
 	});
 });
+
+/**
+ * Frames are fanned out in a loop, and a loop with no isolation means the first
+ * handler to throw silences every handler after it — for the rest of the
+ * session, in silence. The same shape as Lexical's update listeners, and just
+ * as hard to notice: a broken sidecar would stop the transcript arriving.
+ */
+describe("fanning a frame out", () => {
+	/** Sends every frame straight back, so a real one reaches the listeners. */
+	function echo(): number {
+		let server = Bun.serve({
+			port: 0,
+			hostname: "127.0.0.1",
+			fetch(req, self) {
+				return self.upgrade(req) ? undefined : new Response("no", { status: 400 });
+			},
+			websocket: {
+				message(ws, raw) {
+					ws.send(String(raw));
+				},
+			},
+		});
+		servers.push(server);
+		return server.port!;
+	}
+
+	it("keeps delivering after one listener throws", async () => {
+		let seen: Status[] = [];
+		let wire = connect(echo(), seen);
+		await until(() => seen.includes("connected"), "connected");
+
+		let reached: string[] = [];
+		wire.on("session:ping", () => {
+			throw new Error("this listener is broken");
+		});
+		wire.on("session:ping", () => reached.push("second"));
+
+		let complain = console.error;
+		console.error = () => {};
+		try {
+			wire.send("session:ping");
+			await until(() => reached.length > 0, "the listener behind the broken one");
+		} finally {
+			console.error = complain;
+		}
+
+		expect(reached).toEqual(["second"]);
+	});
+});

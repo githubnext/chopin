@@ -276,6 +276,84 @@ describe("drafting", () => {
 	});
 });
 
+/** Silence the log the guards produce, so a pass does not look like a failure. */
+function quietly<T>(run: () => T): T {
+	let complain = console.error;
+	console.error = () => {};
+	try {
+		return run();
+	} finally {
+		console.error = complain;
+	}
+}
+
+describe("when resolution goes wrong", () => {
+	/**
+	 * A passage that cannot be worked out is a highlight nobody gets, not a
+	 * sidecar nobody gets. The card still carries the conversation, which is
+	 * the durable part of a comment; the anchor was only ever a convenience.
+	 *
+	 * `refresh` also runs as a Lexical update listener, and Lexical runs those
+	 * in one unisolated loop — so a throw escaping here would skip the listener
+	 * that syncs the document and cost the room its collaboration.
+	 */
+	/**
+	 * A snapshot entry the client cannot read.
+	 *
+	 * A missing `result` is the realistic shape: the two halves of a
+	 * relationship are written at different times by different actors, so a
+	 * partial one is a protocol skew rather than an impossibility.
+	 */
+	function malformed(id: string): Plan.ThreadAnchors {
+		return { thread: id, subject: anchors(id).subject } as Plan.ThreadAnchors;
+	}
+
+	it("still shows a thread whose relationship it cannot read", () => {
+		let subject = store();
+		let value = thread();
+		subject.sync([value]);
+
+		quietly(() => subject.anchors([malformed(value.id)]));
+
+		let view = subject.snapshot().threads[0];
+		expect(view?.thread.notes).toHaveLength(1);
+		// Unplaceable, so it reads the way a passage whose prose moved does.
+		expect(view?.drifted).toBe(true);
+	});
+
+	it("does not let one unreadable relationship hide the others", () => {
+		let subject = store();
+		subject.sync([thread({ id: "a" }), thread({ id: "b" }), thread({ id: "c" })]);
+
+		quietly(() => subject.anchors([anchors("a"), malformed("b"), anchors("c")]));
+
+		expect(subject.snapshot().threads.map(each => each.thread.id)).toEqual(["a", "b", "c"]);
+		expect(subject.snapshot().threads[0]?.drifted).toBe(false);
+		expect(subject.snapshot().threads[1]?.drifted).toBe(true);
+	});
+
+	/**
+	 * `refresh` runs as a Lexical update listener, and Lexical runs those in
+	 * one loop with no isolation: the first to throw skips every listener after
+	 * it, including the one that syncs the document. Nothing it does may
+	 * escape, whatever the editor is doing.
+	 */
+	it("never throws out of refresh, whatever the editor does", () => {
+		let subject = store();
+		subject.sync([thread()]);
+		subject.attach({
+			getEditorState() {
+				throw new Error("the editor is gone");
+			},
+		} as never);
+		subject.bind({} as never);
+
+		quietly(() => {
+			expect(() => subject.refresh()).not.toThrow();
+		});
+	});
+});
+
 describe("publishing", () => {
 	it("tells nobody when nothing changed", () => {
 		let subject = store();

@@ -21,7 +21,7 @@ type Listener<T> = (value: T) => void;
 
 type Events = {
 	sync: boolean;
-	status: { status: string };
+	status: { status: string; message?: string };
 	update: unknown;
 	reload: Y.Doc;
 };
@@ -154,7 +154,7 @@ export class PlanProvider implements Provider {
 			this.#wire.on<Plan.Reset>("plan:reset", event => this.#reset(event)),
 			this.#wire.on<Plan.Anchors>("plan:anchors", event => {
 				if (event.epoch === this.#epoch) {
-					this.#options.onAnchors?.({ widgets: event.widgets, threads: event.threads });
+					this.#anchors({ widgets: event.widgets, threads: event.threads });
 				}
 			}),
 		);
@@ -163,6 +163,18 @@ export class PlanProvider implements Provider {
 		this.awareness.on("update", this.#announce);
 
 		await this.#open(generation);
+	}
+
+	/**
+	 * Say the document could not be opened.
+	 *
+	 * Called by whoever started the connection, because it is the only place
+	 * the rejection can be seen: `connect` is fired and forgotten, so a throw
+	 * on the way in otherwise leaves the editor locked and the chrome claiming
+	 * it is still loading.
+	 */
+	fail(message: string): void {
+		this.#emit("status", { status: "failed", message });
 	}
 
 	disconnect(): void {
@@ -204,7 +216,6 @@ export class PlanProvider implements Provider {
 
 		// Server state never originates locally, so it must not be echoed back.
 		Y.applyUpdate(this.#doc, decode(reply.update), this);
-		this.#options.onAnchors?.({ widgets: reply.anchors, threads: reply.threads });
 
 		if (reply.awareness) {
 			applyAwarenessUpdate(this.awareness, decode(reply.awareness), this);
@@ -220,6 +231,31 @@ export class PlanProvider implements Provider {
 		this.#synced = true;
 		this.#emit("status", { status: "connected" });
 		this.#emit("sync", true);
+
+		// After the document is open, never before it.
+		//
+		// Anchors decorate the prose; they are not a precondition for having
+		// it. Resolving them here used to sit between applying the update and
+		// declaring the document synced, so anything that threw while working
+		// out where a decision pointed skipped the emit — and the editor stayed
+		// locked for the rest of the session, with the rejection swallowed by
+		// the `void connect()` that started it.
+		this.#anchors({ widgets: reply.anchors, threads: reply.threads });
+	}
+
+	/**
+	 * Hand the relationship snapshot on, whatever it does with it.
+	 *
+	 * Guarded because the alternative is a highlight failing to paint and
+	 * taking the document with it. A reader losing an outline is a nuisance; a
+	 * room that cannot be edited is not.
+	 */
+	#anchors(snapshot: { widgets: Plan.WidgetAnchors[]; threads: Plan.ThreadAnchors[] }): void {
+		try {
+			this.#options.onAnchors?.(snapshot);
+		} catch (err) {
+			console.error("[plan] could not resolve where decisions point:", err);
+		}
 	}
 
 	/**

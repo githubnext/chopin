@@ -25,6 +25,8 @@ export type PlanStatusProps = {
 	connection?: Connection;
 	/** False until the shared document has arrived. */
 	synced: boolean;
+	/** Why it never arrived, when something went wrong opening it. */
+	failed?: string;
 	/** True while an agent turn owns the document. */
 	busy?: boolean;
 };
@@ -57,6 +59,20 @@ function describe(
 			tone: "warn",
 			level: "notice",
 			detail: "Editing resumes once connected.",
+		};
+	}
+
+	/*
+	 * Before "Loading", because a document that failed to open never stops
+	 * loading. Saying so is the difference between a room somebody reports as
+	 * broken and one they assume is slow.
+	 */
+	if (props.failed) {
+		return {
+			label: "Could not open the plan",
+			tone: "error",
+			level: "notice",
+			detail: `${props.failed}. Reloading may help.`,
 		};
 	}
 
