@@ -88,6 +88,8 @@ export class PlanProvider implements Provider {
 	#epoch: string | undefined;
 	#synced = false;
 	#connected = false;
+	/** An open is in flight, so a second `resume` would ask for it twice. */
+	#opening = false;
 	#counter = 0;
 	#generation = 0;
 
@@ -140,10 +142,41 @@ export class PlanProvider implements Provider {
 		}
 	}
 
+	/**
+	 * Open the document, or bring it back up to date.
+	 *
+	 * Safe to call whenever the transport says it can carry a request: on the
+	 * first connection, and again after every reconnect.
+	 *
+	 * The provider used to open exactly once, when the editor mounted, and a
+	 * transport comes up on its own schedule — so if the socket had not
+	 * finished its handshake by then the plan never opened at all, and nothing
+	 * tried again. The same gap swallowed a reconnect: `#open` is the only
+	 * thing that asks for the updates missed while the connection was down and
+	 * the only thing that replays the outbox, so without it the editor came
+	 * back unlocked and quietly short of everybody else's edits.
+	 *
+	 * `#open` handles both cases already. It sends the epoch and state vector,
+	 * so a resume fetches only the difference rather than the whole document.
+	 */
+	async resume(): Promise<void> {
+		// Not attached yet, already opening, or the transport cannot carry it —
+		// in the last case it will say when it can, and this runs again.
+		if (!this.#connected || this.#opening) return;
+		if (this.#wire.connected === false) return;
+
+		this.#opening = true;
+		try {
+			await this.#open(this.#generation);
+		} finally {
+			this.#opening = false;
+		}
+	}
+
 	async connect(): Promise<void> {
 		if (this.#connected) return;
 		this.#connected = true;
-		let generation = ++this.#generation;
+		this.#generation++;
 
 		// Subscribe before opening: an update published between the reply being
 		// built and this handler being attached would otherwise be lost.
@@ -162,7 +195,7 @@ export class PlanProvider implements Provider {
 		this.#doc.on("update", this.#local);
 		this.awareness.on("update", this.#announce);
 
-		await this.#open(generation);
+		await this.resume();
 	}
 
 	/**
