@@ -122,7 +122,7 @@ Three things are worth knowing if you intend to change it:
 ## Development
 
 ```bash
-bun test          # 224 tests
+bun test          # 230 tests
 bun run types     # every package
 bun run ci        # dprint + oxlint
 bun run build     # production client
@@ -130,6 +130,10 @@ bun run start     # serve the built client
 ```
 
 Tests never spawn an agent; they set `AGENT=off`.
+
+If you are going to change the code, `agents.md` is the companion to this
+file: how a room works, which decisions were deliberate, and the several
+ways this stack fails without saying anything.
 
 ## Origins
 
