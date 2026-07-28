@@ -171,6 +171,44 @@ describe("refusing a batch", () => {
 		expect(outcome).toMatchObject({ ok: false, reason: "invalid" });
 	});
 
+	it("refuses to author a decision, which is accepted rather than written", () => {
+		let outcome = edit.apply(subject, 1, [{
+			op: "insert",
+			index: 0,
+			source: '<Decision id="01K0N4TR8K7JGM4R1J7PW4R8YJ" quote="q" by="ana" at="t">\n'
+				+ '<Note by="ana" text="n" />\n</Decision>\n',
+		}]);
+
+		expect(outcome).toMatchObject({ ok: false, reason: "invalid" });
+	});
+
+	/**
+	 * A decision is what the room settled, and the record it projects has no
+	 * way to hear that the plan no longer shows it. `detach_question` exists
+	 * because removing a questionnaire had to be deliberate; a decision is less
+	 * removable than a question, not more.
+	 */
+	it("refuses to delete or rewrite a decision while tidying around it", async () => {
+		let held = await plan();
+		room.insertDecision(held.document, {
+			id: "01K0N4TR8K7JGM4R1J7PW4R8YJ",
+			quote: "First paragraph.",
+			by: "ana",
+			at: "2026-07-28T10:14:00Z",
+			notes: [{ by: "ana", text: "Tighten this." }],
+		});
+		let at = edit.outline(held).findIndex(block => block.type === "Decision");
+		expect(at).toBeGreaterThan(-1);
+
+		expect(edit.apply(held, 1, [{ op: "delete", index: at }]))
+			.toMatchObject({ ok: false, reason: "invalid" });
+		expect(edit.apply(held, 1, [{ op: "replace", index: at, source: "Gone.\n" }]))
+			.toMatchObject({ ok: false, reason: "invalid" });
+
+		// Still there, and still saying what it said.
+		expect(room.project(held.document)).toContain("Tighten this.");
+	});
+
 	it("refuses an index the plan does not have", () => {
 		expect(edit.apply(subject, 1, [{ op: "delete", index: 9 }]))
 			.toMatchObject({ ok: false, reason: "invalid" });

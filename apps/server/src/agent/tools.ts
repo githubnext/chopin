@@ -11,6 +11,7 @@
  * by accident.
  */
 
+import * as Comments from "../comments/service";
 import * as edit from "../plan/edit";
 import * as Questions from "../questions/service";
 
@@ -56,6 +57,25 @@ export function toolbox(context: Context): Tool[] {
 					revision: context.plan.revision,
 					source: edit.source(context.plan),
 					blocks: edit.outline(context.plan),
+					/*
+					 * Accepted threads only.
+					 *
+					 * An open one is a conversation the room is still having, and
+					 * acting on feedback nobody has accepted would make the accept
+					 * button decorative. A dismissed one was decided against and
+					 * never reaches here at all.
+					 */
+					comments: [...context.plan.threads.values()]
+						.filter(thread => thread.status === "accepted")
+						.map(thread => ({
+							id: thread.id,
+							quote: thread.quote,
+							accepted_by: thread.resolver,
+							// False means this one still needs acting on and
+							// anchoring; it is the same list `anchors_pending` gives.
+							actioned: !!thread.result && !thread.result.pending,
+							comments: thread.notes.map(note => `@${note.handle}: ${note.text}`),
+						})),
 					questions: [...context.plan.records.values()].map(record => ({
 						id: record.id,
 						status: record.status,
@@ -143,13 +163,18 @@ export function toolbox(context: Context): Tool[] {
 					// rewritten.
 					Questions.rebase(context.plan);
 					Questions.invalidate(context.plan, "plan_changed");
+					Comments.rebase(context.plan);
+					Comments.invalidate(context.plan, "plan_changed");
 					context.anchors();
 
 					return {
 						ok: true,
 						revision: context.plan.revision,
 						blocks: outcome.blocks,
-						anchors_pending: Questions.outstanding(context.plan),
+						anchors_pending: [
+							...Questions.outstanding(context.plan),
+							...Comments.outstanding(context.plan),
+						],
 					};
 				}),
 		},
@@ -215,13 +240,14 @@ export function toolbox(context: Context): Tool[] {
 		},
 		{
 			name: "anchor_plan",
-			description:
-				"Say which passages of the plan each question concerns and each answer produced. "
-				+ "Call it immediately after every successful `edit_plan`, using that result's "
-				+ "revision and block digests. A question's text maps to `subject`; the prose its "
-				+ "answer caused maps to `result`. Link only blocks that would have to change if "
-				+ "that answer changed. An empty list means reviewed and deliberately unrelated, "
-				+ "which is a real answer and clears the review.",
+			description: "Say which passages of the plan each decision concerns and produced. Call it "
+				+ "immediately after every successful `edit_plan`, using that result's revision and "
+				+ "block digests. For a question, give `widget`, `question` and `relation`: its text "
+				+ "maps to `subject`, and the prose its answer caused maps to `result`. For an "
+				+ "accepted comment, give `thread` instead — the blocks are the prose your revision "
+				+ "produced. Link only blocks that would have to change if that decision changed. An "
+				+ "empty list means reviewed and deliberately unrelated, which is a real answer and "
+				+ "clears the review.",
 			parameters: {
 				type: "object",
 				properties: {
@@ -233,9 +259,18 @@ export function toolbox(context: Context): Tool[] {
 						items: {
 							type: "object",
 							properties: {
-								widget: { type: "string", description: "The questionnaire id." },
+								widget: {
+									type: "string",
+									description: "The questionnaire id. Give with `question` and `relation`.",
+								},
 								question: { type: "string", description: "The question id." },
 								relation: { type: "string", enum: ["subject", "result"] },
+								thread: {
+									type: "string",
+									description:
+										"An accepted comment thread's id, instead of widget/question/relation. "
+										+ "The blocks are the prose your revision produced.",
+								},
 								blocks: {
 									type: "array",
 									items: {
@@ -249,7 +284,10 @@ export function toolbox(context: Context): Tool[] {
 									},
 								},
 							},
-							required: ["widget", "question", "relation", "blocks"],
+							// Only `blocks` is always required: the rest depend on which
+							// kind of decision is being anchored, the way `edit_plan`'s
+							// operations already work. `relate` names what is missing.
+							required: ["blocks"],
 							additionalProperties: false,
 						},
 					},
@@ -262,9 +300,10 @@ export function toolbox(context: Context): Tool[] {
 					let args = raw as {
 						revision: number;
 						anchors: Array<{
-							widget: string;
-							question: string;
-							relation: "subject" | "result";
+							widget?: string;
+							question?: string;
+							relation?: "subject" | "result";
+							thread?: string;
 							blocks: Array<{ index: number; digest: string }>;
 						}>;
 					};
@@ -280,13 +319,17 @@ export function toolbox(context: Context): Tool[] {
 
 					let failures: string[] = [];
 					for (let update of args.anchors) {
-						let failure = Questions.relate(
-							context.plan,
-							update.widget,
-							update.question,
-							update.relation,
-							update.blocks,
-						);
+						let failure = update.thread
+							? Comments.relate(context.plan, update.thread, update.blocks)
+							: update.widget && update.question && update.relation
+							? Questions.relate(
+								context.plan,
+								update.widget,
+								update.question,
+								update.relation,
+								update.blocks,
+							)
+							: "give either `thread`, or all of `widget`, `question` and `relation`.";
 						if (failure) failures.push(failure);
 					}
 
@@ -295,7 +338,13 @@ export function toolbox(context: Context): Tool[] {
 
 					return failures.length > 0
 						? { ok: false, reason: "invalid", errors: failures }
-						: { ok: true, anchors_pending: Questions.outstanding(context.plan) };
+						: {
+							ok: true,
+							anchors_pending: [
+								...Questions.outstanding(context.plan),
+								...Comments.outstanding(context.plan),
+							],
+						};
 				}),
 		},
 	];
