@@ -47,7 +47,8 @@
 
 /* The node stays in the plan for exports and agent reads; its form is in the
    decisions pane, so inline it renders as nothing. */
-.plan .plan-content [data-plan-questionnaire] {
+.plan .plan-content [data-plan-questionnaire],
+.plan .plan-content [data-plan-decision] {
 	display: none;
 }
 

@@ -34,3 +34,15 @@ export const MAX_QUESTION_PROMPT = 1_000;
 export const MAX_OPTION_LABEL = 200;
 export const MAX_OPTION_DESCRIPTION = 1_000;
 export const MAX_CUSTOM_ANSWER = 4_000;
+
+/**
+ * Accepted comment threads, projected into the plan as `<Decision>`.
+ *
+ * `MAX_QUOTE` bounds a locator, not the passage: a thread records the extent it
+ * marked separately, so a long selection is truncated here rather than refused.
+ */
+export const MAX_QUOTE = 500;
+export const MAX_NOTE = 4_000;
+export const MAX_HANDLE = 80;
+/** ISO 8601, with room for an offset. */
+export const MAX_TIMESTAMP = 40;

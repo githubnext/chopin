@@ -173,6 +173,34 @@ describe("components", () => {
 		);
 	});
 
+	it("accepts an accepted comment thread", () => {
+		accepts(
+			`<Decision id="${ID}" quote="Cached for 60 seconds." by="ana" at="2026-07-28T10:14:00Z">\n`
+				+ `<Note by="ana" text="Too long." />\n`
+				+ `</Decision>`,
+		);
+	});
+
+	it("requires a decision to say who accepted it and when", () => {
+		expect(codes(`<Decision id="${ID}" quote="q"><Note by="a" text="t" /></Decision>`))
+			.toContain("missing-attribute");
+	});
+
+	it("keeps a note out of the prose", () => {
+		expect(codes(`<Note by="ana" text="Loose." />`)).toContain("bad-parent");
+	});
+
+	/** A note's text is an attribute, so children are a hand-edit gone wrong. */
+	it("rejects a note written with its text between the tags", () => {
+		expect(
+			codes(
+				`<Decision id="${ID}" quote="q" by="a" at="t">\n`
+					+ `<Note by="ana">\n\nToo long.\n\n</Note>\n`
+					+ `</Decision>`,
+			),
+		).toContain("unexpected-children");
+	});
+
 	it("requires ULID ids", () => {
 		expect(codes(`<Callout id="nope" type="note">x</Callout>`)).toContain("bad-id");
 	});
