@@ -286,8 +286,22 @@ export class ThreadStore {
 	 *
 	 * Called on every editor update as well as on new data, because a passage
 	 * is expressed against the document and any edit can move it.
+	 *
+	 * Guarded as a whole, on top of the per-thread guard inside. This runs as a
+	 * Lexical update listener, and Lexical runs those in one loop with no
+	 * isolation: the first to throw skips every listener after it, including
+	 * the one that syncs the document. A comment failing to paint must not cost
+	 * the room its collaboration.
 	 */
 	refresh = (): void => {
+		try {
+			this.#rebuild();
+		} catch (err) {
+			console.error("[plan] could not refresh the comment sidecar:", err);
+		}
+	};
+
+	#rebuild(): void {
 		let editor = this.#editor;
 		let binding = this.#binding;
 
@@ -301,23 +315,47 @@ export class ThreadStore {
 
 		let build = () => {
 			for (let thread of live) {
-				let anchors = this.#anchors.get(thread.id);
-				// Nothing resolves before the editor exists; the card still
-				// renders, with the quote and no highlight.
-				let points = editor && binding && anchors
-					? this.#points(binding, anchors)
-					: undefined;
+				/*
+				 * One thread at a time, and the whole of it.
+				 *
+				 * A thread whose relationship cannot be read is a highlight
+				 * nobody gets, not a sidecar nobody gets — and certainly not a
+				 * document nobody gets. The card still renders with its quote
+				 * and its notes, which is the durable part of a comment; the
+				 * anchor was only ever a convenience for finding it again.
+				 *
+				 * The guard covers reading the snapshot as well as resolving
+				 * it, because a malformed entry is as likely as an unresolvable
+				 * one and would otherwise cost every other card too.
+				 */
+				try {
+					let anchors = this.#anchors.get(thread.id);
+					// Nothing resolves before the editor exists; the card still
+					// renders, with the quote and no highlight.
+					let points = editor && binding && anchors
+						? this.#points(binding, anchors)
+						: undefined;
 
-				views.push({
-					thread,
-					...(points ? { points } : {}),
-					drifted: !!anchors?.subject.drifted || (!!editor && !!anchors && !points),
-					applied: !!anchors && !anchors.result.pending,
-					quote: thread.quote ?? anchors?.subject.quote ?? "",
-					...(points && editor ? { at: order(editor, points.anchorKey) } : {}),
-				});
+					views.push({
+						thread,
+						...(points ? { points } : {}),
+						drifted: !!anchors?.subject.drifted || (!!editor && !!anchors && !points),
+						applied: !!anchors && !anchors.result.pending,
+						quote: thread.quote ?? anchors?.subject.quote ?? "",
+						...(points && editor ? { at: order(editor, points.anchorKey) } : {}),
+					});
 
-				if (points) marks.push({ tone: this.#tone(thread), points });
+					if (points) marks.push({ tone: this.#tone(thread), points });
+				} catch (err) {
+					console.error(`[plan] could not place comment ${thread.id}:`, err);
+					// Unplaceable, but still worth reading.
+					views.push({
+						thread,
+						drifted: true,
+						applied: false,
+						quote: thread.quote ?? "",
+					});
+				}
 			}
 		};
 
@@ -346,7 +384,7 @@ export class ThreadStore {
 		if (JSON.stringify(next) === JSON.stringify(this.#state)) return;
 		this.#state = next;
 		for (let listener of this.#listeners) listener();
-	};
+	}
 
 	#tone(thread: Comment.Thread): Tone {
 		if (this.#focused === thread.id) return "current";

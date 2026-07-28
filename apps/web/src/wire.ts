@@ -161,7 +161,21 @@ export class Wire {
 			}
 		}
 
-		for (let listener of this.#listeners.get(frame.kind) ?? []) listener(frame as never);
+		/*
+		 * One listener at a time.
+		 *
+		 * Frames are fanned out in a loop, so without this the first handler to
+		 * throw silences every handler registered after it for that kind — the
+		 * same failure Lexical's update listeners have, and just as quiet. A
+		 * broken sidecar must not stop the transcript from arriving.
+		 */
+		for (let listener of this.#listeners.get(frame.kind) ?? []) {
+			try {
+				listener(frame as never);
+			} catch (err) {
+				console.error(`[wire] ${frame.kind} listener failed:`, err);
+			}
+		}
 	}
 
 	/** Reject everything still waiting; a reply cannot survive its connection. */

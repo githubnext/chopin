@@ -92,7 +92,15 @@ export class QuestionnaireStore {
 	 */
 	anchors(widgets: Plan.WidgetAnchors[]): void {
 		if (!this.#binding) return;
-		this.#related = relate(this.#binding, widgets);
+		try {
+			this.#related = relate(this.#binding, widgets);
+		} catch (err) {
+			// Where a decision points is decoration. This is called while the
+			// document is being opened, so letting it throw would cost the room
+			// the plan itself rather than a few outlines.
+			console.error("[plan] could not resolve what decisions relate to:", err);
+			return;
+		}
 		for (let listener of this.#listeners) listener();
 	}
 

@@ -71,6 +71,8 @@ export type PlanState = {
 	synced: boolean;
 	/** Why the document was last replaced, if it was. */
 	reset?: Plan.Reset["reason"];
+	/** Why it could not be opened at all, if it could not. */
+	failed?: string;
 };
 
 export function PlanEditor(
@@ -113,6 +115,15 @@ export function PlanEditor(
 		setPresence(value);
 		if (!value) return;
 		value.on("sync", synced => setState(prev => ({ ...prev, synced })));
+		value.on("status", ({ message, status }) => {
+			// A failure is sticky until something opens the document; anything
+			// else clears it, so a reconnect that works stops saying it failed.
+			setState(prev => ({
+				...prev,
+				...(status === "failed" ? { failed: message ?? "the plan could not be opened" } : {}),
+				...(status === "connected" ? { failed: undefined } : {}),
+			}));
+		});
 	}, []);
 
 	let offline = connection !== undefined && connection !== "connected";
@@ -207,7 +218,13 @@ export function PlanEditor(
 					</div>
 					<PlanPresence provider={presence} />
 					{/* In the document column, so it tracks the prose, not the pane. */}
-					<PlanStatus wire={wire} connection={connection} synced={state.synced} busy={busy} />
+					<PlanStatus
+						wire={wire}
+						connection={connection}
+						synced={state.synced}
+						failed={state.failed}
+						busy={busy}
+					/>
 				</div>
 			</div>
 		</div>
