@@ -79,11 +79,27 @@ function plain(spec: Spec): Component {
 export const CALLOUT_TYPES = ["note", "tip", "important", "warning", "danger"] as const;
 
 export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
+	/**
+	 * A questionnaire, and who settled it.
+	 *
+	 * The provenance sits here rather than on each `Answer` because a
+	 * questionnaire resolves as a unit — every question is answered by the same
+	 * person at the same moment — so repeating it per answer would be one fact
+	 * written several times. `Decision` carries its provenance the same way, on
+	 * the container, with the content on the children.
+	 *
+	 * Both are optional: a questionnaire has neither until it is answered, and
+	 * one settled before this was recorded has neither for good.
+	 */
 	Questionnaire: component({
 		name: "Questionnaire",
 		kind: "flow",
 		content: { type: "components", names: ["Question"] },
 		forbids: ["Questionnaire", "Tabs", "Callout"],
+		attributes: {
+			by: { type: "text", required: false, max: limits.MAX_HANDLE },
+			at: { type: "text", required: false, max: limits.MAX_TIMESTAMP },
+		},
 	}),
 
 	Question: component({

@@ -63,6 +63,8 @@ export type Record = {
 	/** Question id to the answer as it reads, for projection into the plan. */
 	answers?: { [question: string]: string };
 	resolver?: string;
+	/** When it was settled, Unix seconds. Absent on one settled before we recorded it. */
+	at?: number;
 	/** Where in the prose each question and its answer live. */
 	anchors?: Wired.WidgetAnchors;
 };
@@ -200,8 +202,13 @@ export async function submit(
 		? decide({ status: "answered", answers: claimed.answers }, record.definition)
 		: {};
 
+	// Stamped once and used in both places, so the record and the plan cannot
+	// disagree about when the room decided.
+	let at = Math.floor(Date.now() / 1_000);
+	let settled = { by: ws.data.handle, at: new Date(at * 1_000).toISOString() };
+
 	try {
-		let mutation = room.projectAnswer(plan.document, msg.id, answers);
+		let mutation = room.projectAnswer(plan.document, msg.id, answers, settled);
 		if (mutation) Service.publish(plan, server, roomId, mutation);
 	} catch (err) {
 		// The decision is not final if the plan could not be told about it.
@@ -218,7 +225,13 @@ export async function submit(
 
 	Store.commit(plan.questions, claimed.claim);
 	if (record) {
-		plan.records.set(msg.id, { ...record, status: "answered", answers, resolver: ws.data.handle });
+		plan.records.set(msg.id, {
+			...record,
+			status: "answered",
+			answers,
+			resolver: ws.data.handle,
+			at,
+		});
 	}
 	plan.sink.touch();
 

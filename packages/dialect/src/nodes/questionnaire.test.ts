@@ -107,6 +107,40 @@ describe("questionnaire", () => {
 		});
 	});
 
+	/**
+	 * On the questionnaire rather than on each answer: it resolves as a unit,
+	 * so every answer would otherwise repeat the same handle and the same
+	 * moment. `<Decision>` records its provenance the same way.
+	 */
+	it("round-trips who settled it and when", () => {
+		let source = OPEN
+			.replace(
+				`<Questionnaire id="${ID}">`,
+				`<Questionnaire id="${ID}" by="ana" at="2026-07-28T10:14:00Z">`,
+			)
+			.replace("</Question>", `<Answer value="Canary" />\n</Question>`);
+
+		let out = through(source);
+		expect(through(out)).toBe(out);
+		expect(out).toContain('by="ana"');
+		expect(out).toContain('at="2026-07-28T10:14:00Z"');
+
+		let instance = editor();
+		importPlan(instance, source, { registry: REGISTRY });
+		instance.getEditorState().read(() => {
+			let node = $getRoot().getFirstChild();
+			if (!$isQuestionnaireNode(node)) throw new Error("expected questionnaire");
+			expect(node.getQuestionnaire()).toMatchObject({ by: "ana", at: "2026-07-28T10:14:00Z" });
+		});
+	});
+
+	/** One answered before any of this was recorded has neither, for good. */
+	it("carries no provenance when none was recorded", () => {
+		let out = through(OPEN);
+		expect(out).not.toContain("by=");
+		expect(out).not.toContain("at=");
+	});
+
 	it("omits optional option descriptions", () => {
 		let out = through(OPEN);
 		let blue = out.split("\n").find(line => line.includes("Blue-green"));

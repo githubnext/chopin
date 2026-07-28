@@ -309,6 +309,62 @@ describe("the plan document", () => {
 		expect(room.project(document)).toContain("On disk as MDX");
 	});
 
+	/**
+	 * On the questionnaire rather than on each answer: it resolves as a unit,
+	 * so every answer would repeat the same handle and the same moment. The
+	 * plan carrying it is what lets a late joiner see who decided, and what
+	 * lets it survive a restart.
+	 */
+	it("records who settled it, on the questionnaire", async () => {
+		let document = await room.create();
+		let value = definition();
+		let ID = ids(value);
+
+		room.insertQuestionnaire(document, {
+			id: ID.storage,
+			questions: value.questions.map(question => ({
+				id: question.id,
+				header: question.header,
+				prompt: question.question,
+				multiple: question.multiple,
+				options: question.options,
+			})),
+		});
+
+		room.projectAnswer(document, ID.storage, { [ID.storage]: "On disk as MDX" }, {
+			by: "ana",
+			at: "2026-07-28T10:14:00.000Z",
+		});
+
+		let source = room.project(document);
+		expect(source).toContain('by="ana"');
+		expect(source).toContain('at="2026-07-28T10:14:00.000Z"');
+		// Once, on the container — not repeated onto the answer.
+		expect(source.split('by="ana"')).toHaveLength(2);
+		expect(() => room.validate(source)).not.toThrow();
+	});
+
+	it("leaves the plan without provenance when none was given", async () => {
+		let document = await room.create();
+		let value = definition();
+		let ID = ids(value);
+
+		room.insertQuestionnaire(document, {
+			id: ID.storage,
+			questions: value.questions.map(question => ({
+				id: question.id,
+				header: question.header,
+				prompt: question.question,
+				multiple: question.multiple,
+				options: question.options,
+			})),
+		});
+
+		room.projectAnswer(document, ID.storage, { [ID.storage]: "On disk as MDX" });
+
+		expect(room.project(document)).not.toContain("by=");
+	});
+
 	it("takes a cancelled questionnaire out of the plan", async () => {
 		let document = await room.create();
 		let value = definition();
