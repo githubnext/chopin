@@ -36,6 +36,7 @@
 		"react-dom": "catalog:react"
 	},
 	"devDependencies": {
+		"@lexical/headless": "catalog:mdx",
 		"@types/bun": "catalog:bun",
 		"@types/react": "catalog:react",
 		"@types/react-dom": "catalog:react"
