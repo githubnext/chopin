@@ -52,6 +52,28 @@
 	display: none;
 }
 
+/*
+ * Commented prose.
+ *
+ * Registered in `CSS.highlights`, so these paint over the text without putting
+ * anything in the document. Ranges that overlap paint once — two comments on
+ * one sentence look like one mark, and the sidecar is what tells them apart.
+ *
+ * A decided passage is quieter than an open one: it is a record of something
+ * settled, not a thing waiting on anybody.
+ */
+::highlight(plan-comment) {
+	background: color-mix(in oklch, var(--color-warning) 26%, transparent);
+}
+
+::highlight(plan-decision) {
+	background: color-mix(in oklch, var(--color-success) 16%, transparent);
+}
+
+::highlight(plan-comment-current) {
+	background: color-mix(in oklch, var(--color-warning) 46%, transparent);
+}
+
 /* Prose related to the sidecar item under pointer, focus, or being followed. */
 .plan .plan-content [data-plan-related] {
 	border-radius: var(--radius-sm);
