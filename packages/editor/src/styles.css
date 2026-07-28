@@ -53,54 +53,50 @@
 }
 
 /*
- * Commented prose.
+ * Prose the sidecar refers to.
  *
  * Registered in `CSS.highlights`, so these paint over the text without putting
- * anything in the document. Ranges that overlap paint once — two comments on
- * one sentence look like one mark, and the sidecar is what tells them apart.
+ * anything in the document. One vocabulary for both halves of the sidecar:
+ * questions used to outline a block while comments washed a range, so the same
+ * fact read as two different things depending on which card it came from.
  *
- * A decided passage is quieter than an open one: it is a record of something
- * settled, not a thing waiting on anybody.
+ * Only a handful of properties are allowed on `::highlight()` — no outline, no
+ * box-shadow, no border-radius — which is why the wash is what they can both
+ * be. Overlapping ranges paint once, so two comments on a sentence look like
+ * one mark; the sidecar is what tells them apart.
+ *
+ * Colour says what is true of the prose, intensity says whether the reader is
+ * pointing at it.
  */
+
+/* A live comment: the one place the plan says somebody is waiting. */
 ::highlight(plan-comment) {
-	background: color-mix(in oklch, var(--color-warning) 26%, transparent);
+	background: color-mix(in oklch, var(--color-warning) 22%, transparent);
 }
 
+/* Prose a decision produced. Quietest of the three: a record, not a request. */
 ::highlight(plan-decision) {
-	background: color-mix(in oklch, var(--color-success) 16%, transparent);
+	background: color-mix(in oklch, var(--color-accent) 14%, transparent);
 }
 
-::highlight(plan-comment-current) {
-	background: color-mix(in oklch, var(--color-warning) 46%, transparent);
+/* Whatever the reader is pointing at, question or comment alike. */
+::highlight(plan-related) {
+	background: color-mix(in oklch, var(--color-accent) 40%, transparent);
 }
 
-/* Prose related to the sidecar item under pointer, focus, or being followed. */
+/*
+ * The same pointer, for a browser with no Highlight API.
+ *
+ * A block outline rather than a wash, because without the API there is no way
+ * to mark part of one — less precise, and honest about it. Standing marks are
+ * dropped entirely on this path: outlining every decided passage would box up
+ * half the plan.
+ */
 .plan .plan-content [data-plan-related] {
 	border-radius: var(--radius-sm);
 	outline: 1px solid color-mix(in oklch, var(--color-ring) 60%, transparent);
 	outline-offset: 3px;
-	box-shadow: inset 4px 0 var(--color-ring);
-	background: color-mix(in oklch, var(--color-accent) 16%, transparent);
-}
-
-/*
- * The passage a reader was just taken to. A decision can span several
- * passages, so the one they landed on has to be separable from its siblings —
- * otherwise clicking through them looks like nothing happened.
- */
-.plan .plan-content [data-plan-related="current"] {
-	outline-color: var(--color-ring);
-	background: color-mix(in oklch, var(--color-accent) 26%, transparent);
-	animation: plan-arrive 900ms ease-out;
-}
-
-@keyframes plan-arrive {
-	0% {
-		background: color-mix(in oklch, var(--color-accent) 45%, transparent);
-	}
-	100% {
-		background: color-mix(in oklch, var(--color-accent) 26%, transparent);
-	}
+	background: color-mix(in oklch, var(--color-accent) 20%, transparent);
 }
 
 @container (max-width: 46rem) {

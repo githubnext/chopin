@@ -15,7 +15,13 @@
  */
 
 import { $getAnchorAndFocusForUserState } from "@lexical/yjs";
-import { $getRoot, $isElementNode, $isParagraphNode, $isRangeSelection } from "lexical";
+import {
+	$getNodeByKey,
+	$getRoot,
+	$isElementNode,
+	$isParagraphNode,
+	$isRangeSelection,
+} from "lexical";
 import * as Y from "yjs";
 
 import { limits } from "@chopin/dialect";
@@ -53,6 +59,22 @@ export type Marked = {
 };
 
 type Span = { key: string; start: number; length: number };
+
+/**
+ * A whole block, as points. Call inside a read.
+ *
+ * Child indices rather than text offsets: what a decision produced is block
+ * granular, and `createDOMRange` reads an element point as a child index. A
+ * block with nothing in it has no range worth marking.
+ */
+export function $blockPoints(key: string): Points | undefined {
+	let node = $getNodeByKey(key);
+	if (!$isElementNode(node)) return undefined;
+
+	let size = node.getChildrenSize();
+	if (size === 0) return undefined;
+	return { anchorKey: key, anchorOffset: 0, focusKey: key, focusOffset: size };
+}
 
 /** The blocks the source addresses, in order. Call inside a read. */
 function $addressable(): LexicalNode[] {

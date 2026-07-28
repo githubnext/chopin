@@ -18,11 +18,14 @@ import { useEffect } from "react";
 import { QuestionnaireNode } from "@chopin/dialect";
 
 import { counts, relate } from "./anchors";
+import { paint } from "./marks";
+import { $blockPoints } from "./passage";
 
 import type { Binding } from "@lexical/yjs";
 import type { LexicalEditor } from "lexical";
 import type { Plan } from "@chopin/protocol";
 import type { Related, Relation } from "./anchors";
+import type { Marked } from "./marks";
 import type { Questionnaire } from "@chopin/dialect";
 
 export type QuestionnaireEntry = {
@@ -49,7 +52,6 @@ export class QuestionnaireStore {
 	#binding: Binding | undefined;
 	#editor: LexicalEditor | undefined;
 	#related: Related[] = [];
-	#lit: string[] = [];
 
 	subscribe = (listener: () => void): () => void => {
 		this.#listeners.add(listener);
@@ -75,6 +77,7 @@ export class QuestionnaireStore {
 
 	/** The editor, so a node key can be turned into something on screen. */
 	attach(editor: LexicalEditor | undefined): void {
+		if (!editor && this.#editor) this.clear();
 		this.#editor = editor;
 	}
 
@@ -112,30 +115,37 @@ export class QuestionnaireStore {
 	/**
 	 * Mark the prose a relationship names.
 	 *
-	 * Written to the DOM rather than to the document. A highlight is one
+	 * Painted rather than written into the document. A highlight is one
 	 * reader's pointer, not a fact about the plan, and putting it in the
 	 * document would send it to everybody else and make it undoable.
+	 *
+	 * Through the same registry comments use, under the same tone, so pointing
+	 * at a question and pointing at a comment look like the same act. They used
+	 * to be an outlined block and a washed range respectively, which made one
+	 * fact — this is the prose that card refers to — read as two.
 	 */
 	highlight(widget: string, question: string, relation: Relation): void {
-		this.clear();
+		let editor = this.#editor;
+		if (!editor) return;
+
 		let found = this.#related.find(item =>
 			item.widget === widget && item.question === question && item.relation === relation
 		);
-		if (!found || found.pending) return;
+		if (!found || found.pending) return this.clear();
 
-		for (let key of found.keys) {
-			let element = this.#editor?.getElementByKey(key);
-			if (!element) continue;
-			element.setAttribute("data-plan-related", "");
-			this.#lit.push(key);
-		}
+		let marks: Marked[] = [];
+		editor.getEditorState().read(() => {
+			for (let key of found.keys) {
+				let points = $blockPoints(key);
+				if (points) marks.push({ tone: "related", points });
+			}
+		});
+
+		paint(editor, "questions", marks);
 	}
 
 	clear(): void {
-		for (let key of this.#lit) {
-			this.#editor?.getElementByKey(key)?.removeAttribute("data-plan-related");
-		}
-		this.#lit = [];
+		if (this.#editor) paint(this.#editor, "questions", []);
 	}
 }
 
