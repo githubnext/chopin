@@ -176,6 +176,8 @@ export function greet(plan: Plan, ws: Socket, msg: Request<Wire.Open.Ask>): void
 		update: encode(room.sync(plan.document, resume)),
 		revision: plan.revision,
 		anchors: Questions.anchors(plan),
+		// Filled once the room holds comment threads.
+		threads: [],
 		limits: room.LIMITS,
 		...(hello ? { awareness: encode(hello) } : {}),
 	});
@@ -323,6 +325,8 @@ export function anchors(
 		ts: 0,
 		epoch: plan.document.epoch,
 		widgets: Questions.anchors(plan),
+		// Filled once the room holds comment threads.
+		threads: [],
 	});
 }
 
