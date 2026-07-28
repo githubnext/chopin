@@ -53,50 +53,29 @@
 }
 
 /*
- * Prose the sidecar refers to.
+ * The prose a sidecar card refers to, while somebody is pointing at that card.
  *
- * Registered in `CSS.highlights`, so these paint over the text without putting
- * anything in the document. One vocabulary for both halves of the sidecar:
- * questions used to outline a block while comments washed a range, so the same
- * fact read as two different things depending on which card it came from.
+ * Registered in `CSS.highlights`, so it paints over the text without putting
+ * anything in the document. One mark for both halves of the sidecar: questions
+ * used to outline a block while comments washed a range, so the same fact —
+ * this is the prose that card refers to — read as two different things
+ * depending on which card it came from. `::highlight()` cannot draw an outline,
+ * so the wash is what they can both be.
  *
- * Only a handful of properties are allowed on `::highlight()` — no outline, no
- * box-shadow, no border-radius — which is why the wash is what they can both
- * be. Overlapping ranges paint once, so two comments on a sentence look like
- * one mark; the sidecar is what tells them apart.
- *
- * Colour says what is true of the prose, intensity says whether the reader is
- * pointing at it.
+ * Nothing is painted at rest. Standing marks for live comments and for decided
+ * prose were tried and taken out: a plan accumulates decisions, so anything
+ * permanent ends up covering most of the document, and a page that is mostly
+ * highlighted has told you nothing.
  *
  * `background-color`, not `background`: only a handful of longhands are
  * permitted here, and the shorthand works today solely because browsers expand
  * it before filtering. Not worth depending on.
  *
- * Each carries the colour it actually composites to over the page, because a
- * percentage of an already-pale token says nothing about whether anyone will
- * see it — `accent` is `oklch(0.85 0.09 250)`, so 14% of it renders `#f9fbff`,
- * which is white. `ring` is dark enough that a wash of it reads.
- */
-
-/* A live comment: the one place the plan says somebody is waiting. */
-::highlight(plan-comment) {
-	/* #f3d7b3 */
-	background-color: color-mix(in oklch, var(--color-warning) 38%, transparent);
-}
-
-/* Prose a decision produced. Quietest of the three: a record, not a request. */
-::highlight(plan-decision) {
-	/* #e2ecfa */
-	background-color: color-mix(in oklch, var(--color-ring) 16%, transparent);
-}
-
-/*
- * Whatever the reader is pointing at, question or comment alike.
- *
- * About the weight of the browser's own text selection, which is the right
- * strength for something standing in for an outline and a 4px bar. Shares its
- * hue with a decision, so pointing at one deepens the same colour rather than
- * swapping it for another.
+ * The colour it composites to over the page is recorded because a percentage
+ * of an already-pale token says nothing about whether anyone will see it —
+ * `accent` is `oklch(0.85 0.09 250)`, so 14% of it renders `#f9fbff`, which is
+ * white. `ring` is dark enough that a wash of it reads, at about the weight of
+ * the browser's own text selection.
  */
 ::highlight(plan-related) {
 	/* #b7cff2 */

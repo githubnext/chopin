@@ -1,5 +1,5 @@
 /**
- * Marking prose the sidecar refers to.
+ * Marking the prose a sidecar card refers to.
  *
  * Through the CSS Custom Highlight API, which is what Lexical already uses for
  * remote selections. Ranges live in a document-wide registry keyed by name and
@@ -7,21 +7,24 @@
  * the dialect has no mark node, and adding one would put one reader's pointer
  * into everybody's document and make it undoable.
  *
- * One mechanism for both features, deliberately. Questions used to outline a
- * block through a DOM attribute while comments washed a range, so the same
- * fact — this prose is what that decision produced — looked like two different
- * things depending on which half of the sidecar it came from. `::highlight()`
- * cannot draw an outline, so the wash is what they can both be.
+ * One mark, and only while somebody is pointing at the card that owns it.
+ * Standing marks were tried and taken out again: a plan accumulates decisions,
+ * so anything painted permanently ends up painted over most of the prose, and
+ * a document that is mostly highlighted says nothing at all. Which prose a
+ * comment or a decision concerns is the sidecar's to answer, and it answers on
+ * demand.
+ *
+ * One mechanism for both halves of the sidecar, too. Questions used to outline
+ * a block through a DOM attribute while comments washed a range, so the same
+ * fact — this is the prose that card refers to — read as two different things
+ * depending on which card it came from. `::highlight()` cannot draw an outline,
+ * so the wash is what they can both be.
  *
  * The registry is document-wide, so it is owned here rather than by either
  * store. Each declares what it wants marked and the union is painted; neither
  * can erase the other by repainting itself.
  *
- * Names cannot collide with Lexical's, which are `lexical-cursor-<id>`.
- *
- * Overlapping ranges in one highlight paint once, which is what makes two
- * comments on the same sentence look like one mark. Telling them apart is the
- * sidecar's job, and clicking is resolved to the innermost.
+ * The name cannot collide with Lexical's, which are `lexical-cursor-<id>`.
  *
  * Where the API is missing the prose cannot be washed, so the blocks it covers
  * are outlined instead. Less precise, and honest about it, which beats
@@ -35,52 +38,23 @@ import { createDOMRange } from "@lexical/selection";
 import type { LexicalEditor } from "lexical";
 import type { Points } from "./passage";
 
-/**
- * What a mark says.
- *
- * `related` is the reader's pointer and belongs to whichever card they are
- * touching, so it is shared: hovering a question and hovering a comment light
- * their prose the same way. The other two are standing marks, and say what is
- * true of the prose rather than what the reader is doing.
- */
-export type Tone = "comment" | "decision" | "related";
-
 /** Which store a mark came from. */
 export type Owner = "questions" | "comments";
 
-export type Marked = { tone: Tone; points: Points };
-
-const NAMES: Record<Tone, string> = {
-	comment: "plan-comment",
-	decision: "plan-decision",
-	related: "plan-related",
-};
-
-/**
- * Which mark wins where two cover the same words.
- *
- * Set explicitly rather than left to registration order: the pointer has to
- * beat a standing mark, and a rule that depends on the order a `Map` happened
- * to be built in is a rule nobody can see.
- */
-const PRIORITY: Record<Tone, number> = { decision: 0, comment: 1, related: 2 };
+const NAME = "plan-related";
 
 /** What each store wants marked, most recently declared. */
-const wanted = new Map<Owner, Marked[]>();
+const wanted = new Map<Owner, Points[]>();
 
 /**
- * Everything to paint, by tone.
+ * Everything to paint.
  *
  * Pure, and exported for that reason: whether two stores can coexist in one
  * registry is the part of this worth testing, and it is the part that does not
  * need a browser.
  */
-export function union(): Map<Tone, Points[]> {
-	let out = new Map<Tone, Points[]>();
-	for (let marks of wanted.values()) {
-		for (let mark of marks) out.set(mark.tone, [...out.get(mark.tone) ?? [], mark.points]);
-	}
-	return out;
+export function union(): Points[] {
+	return [...wanted.values()].flat();
 }
 
 function available(): boolean {
@@ -103,31 +77,21 @@ export function $rangeOf(editor: LexicalEditor, points: Points): Range | null {
  * invalidated by any edit anywhere, and a diff would be a second model of what
  * is on screen for no gain.
  */
-export function paint(editor: LexicalEditor, owner: Owner, marks: Marked[]): void {
+export function paint(editor: LexicalEditor, owner: Owner, places: Points[]): void {
 	try {
-		wanted.set(owner, marks);
+		wanted.set(owner, places);
 		if (!available()) return fallback(editor);
 
-		let ranges = new Map<Tone, Range[]>();
+		let ranges: Range[] = [];
 		editor.getEditorState().read(() => {
-			for (let [tone, places] of union()) {
-				for (let points of places) {
-					let range = $rangeOf(editor, points);
-					if (range) ranges.set(tone, [...ranges.get(tone) ?? [], range]);
-				}
+			for (let points of union()) {
+				let range = $rangeOf(editor, points);
+				if (range) ranges.push(range);
 			}
 		});
 
-		for (let [tone, name] of Object.entries(NAMES) as Array<[Tone, string]>) {
-			let list = ranges.get(tone);
-			if (!list || list.length === 0) {
-				CSS.highlights.delete(name);
-				continue;
-			}
-			let highlight = new Highlight(...list);
-			highlight.priority = PRIORITY[tone];
-			CSS.highlights.set(name, highlight);
-		}
+		if (ranges.length === 0) CSS.highlights.delete(NAME);
+		else CSS.highlights.set(NAME, new Highlight(...ranges));
 	} catch (err) {
 		// This is reached from a Lexical update listener, and Lexical runs
 		// those in one unisolated loop — a throw here would skip the listener
@@ -140,9 +104,7 @@ export function paint(editor: LexicalEditor, owner: Owner, marks: Marked[]): voi
 /** Take every mark down. Called when the editor goes away. */
 export function clear(editor?: LexicalEditor): void {
 	wanted.clear();
-	if (available()) {
-		for (let name of Object.values(NAMES)) CSS.highlights.delete(name);
-	}
+	if (available()) CSS.highlights.delete(NAME);
 	if (editor) outline(editor, []);
 }
 
@@ -151,14 +113,9 @@ const outlined = new WeakMap<LexicalEditor, string[]>();
 
 function fallback(editor: LexicalEditor): void {
 	let keys: string[] = [];
-	for (let [tone, places] of union()) {
-		// A standing mark on every decided passage would outline half the plan;
-		// without the API the pointer is the only one worth drawing.
-		if (tone !== "related") continue;
-		for (let points of places) {
-			let block = blockOf(editor, points.anchorKey);
-			if (block && !keys.includes(block)) keys.push(block);
-		}
+	for (let points of union()) {
+		let block = blockOf(editor, points.anchorKey);
+		if (block && !keys.includes(block)) keys.push(block);
 	}
 	outline(editor, keys);
 }

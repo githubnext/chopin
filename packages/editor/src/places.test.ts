@@ -26,7 +26,6 @@ import { ThreadStore } from "./threads";
 import type { Binding, Provider } from "@lexical/yjs";
 import type { LexicalEditor, LexicalNode } from "lexical";
 import type { Comment, Plan } from "@chopin/protocol";
-import type { Tone } from "./marks";
 
 const REGISTRY = registry();
 
@@ -172,9 +171,9 @@ function store(editor: LexicalEditor, binding: Binding): ThreadStore {
 	return subject;
 }
 
-/** The tones the sidecar is currently asking for. */
-function marked(): Tone[] {
-	return [...union().keys()];
+/** How many passages the sidecar is currently asking to have marked. */
+function marked(): number {
+	return union().length;
 }
 
 describe("an accepted thread after the agent has acted", () => {
@@ -263,11 +262,12 @@ describe("an accepted thread after the agent has acted", () => {
 	});
 
 	/**
-	 * Pointing at a card is the same act whichever half of the sidecar it is
-	 * in, so it gets the same mark. What differs is only what is true when
-	 * nobody is pointing.
+	 * Nothing is painted at rest. A plan accumulates decisions, so a standing
+	 * mark ends up covering most of the document — which tells a reader
+	 * nothing. Where a thread points is still known; it is only drawn when
+	 * somebody asks by pointing at the card.
 	 */
-	it("takes the shared pointer tone when the reader is on its card", () => {
+	it("marks nothing until the reader points at its card", () => {
 		let { binding, editor } = room();
 		let subject = store(editor, binding);
 		let value = thread();
@@ -279,24 +279,34 @@ describe("an accepted thread after the agent has acted", () => {
 			result: { anchors: [anchor(editor, binding, 2)], pending: false },
 		}]);
 
-		expect(marked()).toEqual(["decision"]);
+		// It knows where it is either way.
+		expect(subject.snapshot().threads[0]?.places).toHaveLength(1);
+		expect(marked()).toBe(0);
+
 		subject.focus(value.id);
-		expect(marked()).toEqual(["related"]);
+		expect(marked()).toBe(1);
+
+		subject.focus(undefined);
+		expect(marked()).toBe(0);
 	});
 
-	it("marks a live comment as waiting on somebody", () => {
+	it("marks every block a decision produced, not just the first", () => {
 		let { binding, editor } = room();
 		let subject = store(editor, binding);
-		let value = thread({ status: "open", quote: undefined });
+		let value = thread();
 
 		subject.sync([value]);
 		subject.anchors([{
 			thread: value.id,
-			subject: { ...rewritten(), blocks: [anchor(editor, binding, 1)], drifted: undefined },
-			result: { anchors: [], pending: false },
+			subject: rewritten(),
+			result: {
+				anchors: [anchor(editor, binding, 1), anchor(editor, binding, 2)],
+				pending: false,
+			},
 		}]);
+		subject.focus(value.id);
 
-		expect(marked()).toEqual(["comment"]);
+		expect(marked()).toBe(2);
 	});
 
 	it("points nowhere when neither end resolves", () => {
