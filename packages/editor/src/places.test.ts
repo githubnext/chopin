@@ -12,7 +12,7 @@
  * returns zero for every measurement.
  */
 
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { createHeadlessEditor } from "@lexical/headless";
 import { createYjsBinding, syncLexicalUpdateToYjs } from "@lexical/yjs";
 import { $getRoot, $isParagraphNode } from "lexical";
@@ -20,11 +20,13 @@ import * as Y from "yjs";
 
 import { importPlan, registry } from "@chopin/dialect";
 
+import { clear, union } from "./marks";
 import { ThreadStore } from "./threads";
 
 import type { Binding, Provider } from "@lexical/yjs";
 import type { LexicalEditor, LexicalNode } from "lexical";
 import type { Comment, Plan } from "@chopin/protocol";
+import type { Tone } from "./marks";
 
 const REGISTRY = registry();
 
@@ -40,6 +42,11 @@ beforeAll(() => {
 });
 afterAll(() => {
 	console.error = complain;
+});
+
+// The highlight registry is document-wide, so it outlives a single store.
+afterEach(() => {
+	clear();
 });
 
 const SOURCE = `# Title
@@ -165,6 +172,11 @@ function store(editor: LexicalEditor, binding: Binding): ThreadStore {
 	return subject;
 }
 
+/** The tones the sidecar is currently asking for. */
+function marked(): Tone[] {
+	return [...union().keys()];
+}
+
 describe("an accepted thread after the agent has acted", () => {
 	it("points at the prose the decision produced", () => {
 		let { binding, editor } = room();
@@ -248,6 +260,43 @@ describe("an accepted thread after the agent has acted", () => {
 		let view = subject.snapshot().threads[0]!;
 		expect(view.places).toHaveLength(1);
 		expect(view.drifted).toBe(false);
+	});
+
+	/**
+	 * Pointing at a card is the same act whichever half of the sidecar it is
+	 * in, so it gets the same mark. What differs is only what is true when
+	 * nobody is pointing.
+	 */
+	it("takes the shared pointer tone when the reader is on its card", () => {
+		let { binding, editor } = room();
+		let subject = store(editor, binding);
+		let value = thread();
+
+		subject.sync([value]);
+		subject.anchors([{
+			thread: value.id,
+			subject: rewritten(),
+			result: { anchors: [anchor(editor, binding, 2)], pending: false },
+		}]);
+
+		expect(marked()).toEqual(["decision"]);
+		subject.focus(value.id);
+		expect(marked()).toEqual(["related"]);
+	});
+
+	it("marks a live comment as waiting on somebody", () => {
+		let { binding, editor } = room();
+		let subject = store(editor, binding);
+		let value = thread({ status: "open", quote: undefined });
+
+		subject.sync([value]);
+		subject.anchors([{
+			thread: value.id,
+			subject: { ...rewritten(), blocks: [anchor(editor, binding, 1)], drifted: undefined },
+			result: { anchors: [], pending: false },
+		}]);
+
+		expect(marked()).toEqual(["comment"]);
 	});
 
 	it("points nowhere when neither end resolves", () => {

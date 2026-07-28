@@ -14,12 +14,11 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { $getNodeByKey, $isElementNode } from "lexical";
 import { useEffect } from "react";
 
 import { resolve } from "./anchors";
 import { $rangeOf, clear as unpaint, paint } from "./marks";
-import { $recover, locate } from "./passage";
+import { $blockPoints, $recover, locate } from "./passage";
 
 import type { Binding } from "@lexical/yjs";
 import type { LexicalEditor } from "lexical";
@@ -379,7 +378,7 @@ export class ThreadStore {
 		else build();
 
 		views.sort((a, b) => (a.at ?? Infinity) - (b.at ?? Infinity));
-		if (editor) paint(editor, marks);
+		if (editor) paint(editor, "comments", marks);
 
 		let writing: { [thread: string]: string[] } = {};
 		for (let [id, entry] of this.#writing) {
@@ -402,9 +401,17 @@ export class ThreadStore {
 		for (let listener of this.#listeners) listener();
 	}
 
+	/**
+	 * What this thread's mark says.
+	 *
+	 * The pointer is shared with questions, so hovering either kind of card
+	 * lights its prose the same way. What differs is only what is true when
+	 * nobody is pointing: a live comment is waiting on somebody, a decision is
+	 * a record of something settled.
+	 */
 	#tone(thread: Comment.Thread): Tone {
-		if (this.#focused === thread.id) return "current";
-		return thread.status === "accepted" ? "decided" : "open";
+		if (this.#focused === thread.id) return "related";
+		return thread.status === "accepted" ? "decision" : "comment";
 	}
 
 	/** Positions first; reading is what covers the gap before the next rebase. */
@@ -470,22 +477,6 @@ function order(editor: LexicalEditor, key: string): number | undefined {
 	} catch {
 		return undefined;
 	}
-}
-
-/**
- * A whole block, as points. Call inside a read.
- *
- * Child indices rather than text offsets: the result of a decision is block
- * granular, and `createDOMRange` reads an element point as a child index. A
- * block with nothing in it has no range worth painting.
- */
-function $blockPoints(key: string): Points | undefined {
-	let node = $getNodeByKey(key);
-	if (!$isElementNode(node)) return undefined;
-
-	let size = node.getChildrenSize();
-	if (size === 0) return undefined;
-	return { anchorKey: key, anchorOffset: 0, focusKey: key, focusOffset: size };
 }
 
 /** Mounted inside the editor, so resolution re-runs as the document changes. */
