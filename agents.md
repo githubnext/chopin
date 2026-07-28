@@ -20,11 +20,11 @@ agent, which is what the tests use.
 ## Shape
 
 ```
-packages/dialect     4.0k   the MDX dialect and its Lexical schema
-packages/editor      4.0k   the browser editor, cursors, decisions pane
+packages/dialect     4.5k   the MDX dialect and its Lexical schema
+packages/editor      5.4k   the browser editor, cursors, the sidecar
 packages/question    1.8k   questionnaires: definition, shared answer, derivation
-packages/protocol    0.6k   the wire, as types, plus the addressing rule
-apps/server          6.9k   rooms, documents, questions, the agent
+packages/protocol    0.9k   the wire, as types, plus the addressing rule
+apps/server          8.8k   rooms, documents, questions, comments, the agent
 apps/web             1.4k   the three panes
 scripts/dev.ts              the development supervisor
 ```
@@ -52,9 +52,9 @@ tree, so blocks the agent did not touch keep their Lexical identity and nobody
 loses a cursor to somebody else's edit.
 
 Canonical MDX goes to `data/<room>/plan.mdx` on a debounce, with questionnaire
-records, anchors and the transcript beside it. Yjs history is deliberately not
-persisted: it would buy undo across a restart at the price of a binary
-checkpoint that could disagree with the source.
+records, comment threads, anchors and the transcript beside it. Yjs history is
+deliberately not persisted: it would buy undo across a restart at the price of
+a binary checkpoint that could disagree with the source.
 
 ## Decisions, and why
 
@@ -89,11 +89,33 @@ conversation, carried into its next turn as context. Without this, two people
 planning together cannot talk — "should we ask about auth first?" would start a
 turn. Not `@plan`: it is the most common noun in the product.
 
+**Accepting a comment is an address.** The `@ai` rule separates conversation
+from instruction, and a button press is already the latter — so accept starts a
+turn, through the same queue a message does. It writes a system line into the
+transcript, because an agent that begins editing for no visible reason is worse
+than a noisy log. Accepting also freezes the thread: it is what the room
+settled, so `edit_plan` cannot author or remove the `<Decision>` it projects.
+
 **Anchors are a relative position plus a digest**, and the two do different
 jobs. The position survives edits around a block; the digest recovers it when
 the position cannot resolve — a move rebuilds a block's collaborative identity,
 and an epoch rotation discards the history the position was expressed in. A
 digest matching two blocks recovers neither.
+
+**A passage is the same idea one level finer.** A comment marks a phrase, not a
+block, so it carries the block anchors plus a pair of relative positions into
+the text and the quoted words. The positions make the highlight stretch as
+somebody types inside the phrase; the quote finds it again when they cannot
+resolve. Two occurrences equally near the recorded offset recover neither.
+
+**A client sends what it read, not where it thinks that is.** `comment:start`
+carries block indices and the selected text; the server finds the quote and
+mints every Yjs position itself. Finding it is the concurrency check, and a
+better one than a digest — it tests whether the sentence is still there, which
+is what matters, and a browser cannot compute a canonical block digest without
+re-serialising the document. The two ends must agree on which blocks the source
+addresses; they need not agree on the offset, so a divergence surfaces as a
+refusal rather than a comment landing on the wrong sentence.
 
 **Hard-fail at boot.** A missing token, an unusable CLI or a `WORKING_DIR` that
 is not there are all detectable in seconds by trying, and discovering them when
@@ -139,6 +161,22 @@ failed tool chips; without that a boundary the agent keeps hitting is invisible.
 `transform`. They compose rather than override, so an element positioned by
 script must not also carry them.
 
+**A gate on a message is not a gate on a button.** `chat:send` checks
+`config.agent`; accepting a comment reached `Chat.instruct` directly and opened
+a session under `AGENT=off`. Anything that can start a turn has to check, and
+the check lives in `instruct` now so the next one cannot miss it.
+
+**Rebasing used to happen only inside `edit_plan`.** So a block a person moved
+kept its anchors broken until the agent next happened to edit, and everything
+restored from disk was expressed in a history the new document did not have.
+It now runs on the snapshot debounce, on an epoch rotation, and before `open`
+returns — and the flush broadcasts only when the snapshot actually moved,
+because a recovery nobody is told about is the same as no recovery.
+
+**`CSS.highlights` is a document-wide registry**, shared with Lexical's remote
+cursors. Ours are named `plan-comment*`, its are `lexical-cursor-*`; a
+collision would silently unpaint somebody's selection.
+
 **`bun run <script>` does not exit when what it started dies.** It sits there
 with no child. `scripts/dev.ts` spawns both processes directly for this reason,
 and gives each its own process group so the whole tree can be taken down.
@@ -176,7 +214,10 @@ That line exists because a dropped tool is otherwise undetectable. If the agent
 starts claiming it cannot do something, read it before anything else.
 
 `DEV_QUESTIONS=1` makes a room ask a sample questionnaire on open, which
-exercises the whole question path without an agent.
+exercises the whole question path without an agent. `DEV_COMMENTS=1` marks a
+real phrase in whatever the room already holds, which does the same for
+passages — anchoring, carrying across edits, freezing into a decision — before
+any of it has a sidecar to be driven from.
 
 ## Origins
 
