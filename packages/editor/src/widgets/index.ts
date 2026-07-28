@@ -8,10 +8,11 @@
 
 import { setRenderer } from "@chopin/dialect";
 
+import { renderDecision } from "./decision";
 import { renderImage } from "./image";
 import { renderQuestionnaire } from "./questionnaire";
 
-import type { ImageNode, QuestionnaireNode } from "@chopin/dialect";
+import type { DecisionNode, ImageNode, QuestionnaireNode } from "@chopin/dialect";
 
 let registered = false;
 
@@ -22,6 +23,7 @@ export function register(): void {
 
 	setRenderer<ImageNode>("plan-image", renderImage);
 	setRenderer<QuestionnaireNode>("plan-questionnaire", renderQuestionnaire);
+	setRenderer<DecisionNode>("plan-decision", renderDecision);
 }
 
 export { CalloutPlugin } from "./callout";

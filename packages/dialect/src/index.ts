@@ -72,6 +72,9 @@ export {
 } from "./nodes/questionnaire";
 export type { Option, Question, Questionnaire } from "./nodes/questionnaire";
 
+export { $createDecisionNode, $isDecisionNode, DecisionNode } from "./nodes/decision";
+export type { Decision, Note } from "./nodes/decision";
+
 export { render, setRenderer } from "./nodes/render";
 export type { Renderer } from "./nodes/render";
 

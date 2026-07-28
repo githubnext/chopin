@@ -38,6 +38,7 @@ import { CONTAINER_EXPORT_VISITORS, CONTAINER_IMPORT_VISITORS } from "./nodes/co
 import { CONTAINER_NODES } from "./nodes/containers";
 import { CONTENT_EXPORT_VISITORS, CONTENT_IMPORT_VISITORS } from "./nodes/content-visitors";
 import { CONTENT_NODES } from "./nodes/content";
+import { DecisionNode, LexicalDecisionVisitor, MdastDecisionVisitor } from "./nodes/decision";
 import {
 	LexicalQuestionnaireVisitor,
 	MdastQuestionnaireVisitor,
@@ -149,6 +150,22 @@ export const questionnairePlugin = realmPlugin({
 	},
 });
 
+/**
+ * Accepted comment threads.
+ *
+ * Atomic for the same reason a questionnaire is, and never revised once
+ * written: the node is the plan's copy of a decision the record owns.
+ */
+export const decisionPlugin = realmPlugin({
+	init(realm) {
+		realm.pubIn({
+			[addLexicalNode$]: [DecisionNode],
+			[addImportVisitor$]: MdastDecisionVisitor,
+			[addExportVisitor$]: LexicalDecisionVisitor,
+		});
+	},
+});
+
 /** Underline, mapped to Lexical's native text format rather than a wrapper node. */
 export const underlinePlugin = realmPlugin({
 	init(realm) {
@@ -232,6 +249,7 @@ export function plugins({ core: withCore = true } = {}): RealmPlugin[] {
 		containersPlugin(),
 		contentPlugin(),
 		questionnairePlugin(),
+		decisionPlugin(),
 		underlinePlugin(),
 		markdownPlugin(),
 	];

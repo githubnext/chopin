@@ -106,6 +106,10 @@ A reference[^01K0N4V4E7Y6P4MJ5WD8XZF3B2] and <Var name="x" /> inline.
 Inside.
 
 </Callout>
+
+<Decision id="01K0N4X2M5R8T3VQ7YB6ZC4DEF" quote="Cached for 60 seconds." by="ana" at="2026-07-28T10:14:00Z">
+  <Note by="ana" text="Too long; the data changes every 10s." />
+</Decision>
 `;
 
 function types(node: Nodes, seen = new Set<string>()): Set<string> {

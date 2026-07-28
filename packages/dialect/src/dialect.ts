@@ -123,6 +123,45 @@ export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
 		},
 	}),
 
+	/**
+	 * An accepted comment thread.
+	 *
+	 * The record beside the plan owns it; this exists so the source carries the
+	 * decision when read alone. Only accepted threads are projected — an open
+	 * one is a conversation, not yet part of the plan — and the projection is
+	 * written once and never revised, which is what makes it history.
+	 */
+	Decision: component({
+		name: "Decision",
+		kind: "flow",
+		content: { type: "components", names: ["Note"] },
+		forbids: ["Questionnaire", "Decision", "Tabs", "Callout"],
+		attributes: {
+			quote: { type: "text", required: true, max: limits.MAX_QUOTE },
+			by: { type: "text", required: true, max: limits.MAX_HANDLE },
+			at: { type: "text", required: true, max: limits.MAX_TIMESTAMP },
+		},
+	}),
+
+	/**
+	 * One comment in an accepted thread.
+	 *
+	 * The text is an attribute rather than children, following `Answer`: a flow
+	 * component's children are parsed as blocks, so prose written between the
+	 * tags comes back wrapped in a paragraph and flattens on the way out. An
+	 * attribute round-trips exactly, which the plan's round-trip check requires.
+	 */
+	Note: plain({
+		name: "Note",
+		kind: "flow",
+		content: { type: "empty" },
+		parent: ["Decision"],
+		attributes: {
+			by: { type: "text", required: true, max: limits.MAX_HANDLE },
+			text: { type: "text", required: true, max: limits.MAX_NOTE },
+		},
+	}),
+
 	Tabs: component({
 		name: "Tabs",
 		kind: "flow",
