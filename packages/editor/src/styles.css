@@ -67,21 +67,40 @@
  *
  * Colour says what is true of the prose, intensity says whether the reader is
  * pointing at it.
+ *
+ * `background-color`, not `background`: only a handful of longhands are
+ * permitted here, and the shorthand works today solely because browsers expand
+ * it before filtering. Not worth depending on.
+ *
+ * Each carries the colour it actually composites to over the page, because a
+ * percentage of an already-pale token says nothing about whether anyone will
+ * see it — `accent` is `oklch(0.85 0.09 250)`, so 14% of it renders `#f9fbff`,
+ * which is white. `ring` is dark enough that a wash of it reads.
  */
 
 /* A live comment: the one place the plan says somebody is waiting. */
 ::highlight(plan-comment) {
-	background: color-mix(in oklch, var(--color-warning) 22%, transparent);
+	/* #f3d7b3 */
+	background-color: color-mix(in oklch, var(--color-warning) 38%, transparent);
 }
 
 /* Prose a decision produced. Quietest of the three: a record, not a request. */
 ::highlight(plan-decision) {
-	background: color-mix(in oklch, var(--color-accent) 14%, transparent);
+	/* #e2ecfa */
+	background-color: color-mix(in oklch, var(--color-ring) 16%, transparent);
 }
 
-/* Whatever the reader is pointing at, question or comment alike. */
+/*
+ * Whatever the reader is pointing at, question or comment alike.
+ *
+ * About the weight of the browser's own text selection, which is the right
+ * strength for something standing in for an outline and a 4px bar. Shares its
+ * hue with a decision, so pointing at one deepens the same colour rather than
+ * swapping it for another.
+ */
 ::highlight(plan-related) {
-	background: color-mix(in oklch, var(--color-accent) 40%, transparent);
+	/* #b7cff2 */
+	background-color: color-mix(in oklch, var(--color-ring) 40%, transparent);
 }
 
 /*
