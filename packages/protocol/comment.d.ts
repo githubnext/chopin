@@ -102,6 +102,19 @@ export declare namespace Comment {
 	/** A new thread, announced to the room. Followed by a `plan:anchors`. */
 	export type Opened = KIND<"comment:opened"> & { thread: Thread };
 
+	/**
+	 * Why a thread cannot be added to or resolved right now.
+	 *
+	 * `resolved` carries the outcome rather than an error message, because the
+	 * thing the caller wanted to know — what happened to this thread — is
+	 * already decided, and being second to ask is not a failure. `resolving`
+	 * is the same race caught a moment earlier, while the durable half of
+	 * somebody else's resolution is still being written.
+	 */
+	type Blocked =
+		| { ok: false; reason: "missing" | "resolving"; message: string }
+		| { ok: false; reason: "resolved"; status: Status; resolver: string };
+
 	export namespace Reply {
 		export type Ask = KIND<"comment:reply"> & { id: string; text: string };
 
@@ -110,25 +123,13 @@ export declare namespace Comment {
 			& { id: string }
 			& (
 				| { ok: true; note: Note }
-				| { ok: false; reason: "missing" | "resolved" | "invalid" | "full"; message: string }
+				| { ok: false; reason: "invalid" | "full"; message: string }
+				| Blocked
 			);
 	}
 
 	/** Something said on an open thread. */
 	export type Said = KIND<"comment:said"> & { id: string; note: Note };
-
-	/**
-	 * A refusal that is not a failure: somebody got there first.
-	 *
-	 * Carries the outcome rather than an error, because the thing the caller
-	 * wanted to know — what happened to this thread — is already decided.
-	 */
-	type Settled = {
-		ok: false;
-		reason: "resolved";
-		status: Status;
-		resolver: string;
-	};
 
 	export namespace Accept {
 		/** Take the thread as the room's decision, and ask the agent to act. */
@@ -139,8 +140,8 @@ export declare namespace Comment {
 			& { id: string }
 			& (
 				| { ok: true; resolver: string; at: number }
-				| { ok: false; reason: "missing" | "resolving" | "invalid"; message: string }
-				| Settled
+				| { ok: false; reason: "invalid"; message: string }
+				| Blocked
 			);
 	}
 
@@ -153,8 +154,8 @@ export declare namespace Comment {
 			& { id: string }
 			& (
 				| { ok: true; resolver: string; at: number }
-				| { ok: false; reason: "missing" | "resolving" | "invalid"; message: string }
-				| Settled
+				| { ok: false; reason: "invalid"; message: string }
+				| Blocked
 			);
 	}
 

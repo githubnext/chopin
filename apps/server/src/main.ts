@@ -11,11 +11,13 @@ import { join } from "node:path";
 
 import * as Agent from "./agent/client";
 import * as Chat from "./chat/service";
+import * as Comments from "./comments/service";
 import { proxy, serve } from "./client";
 import { describe, load, problem } from "./config";
 import { uid } from "./ids";
 import * as Service from "./plan/service";
 import * as Inject from "./questions/inject";
+import * as Marks from "./comments/inject";
 import * as Questions from "./questions/service";
 import * as Rooms from "./rooms";
 import { broadcast, fail, relay, tell, topic } from "./wire";
@@ -59,6 +61,7 @@ function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Service.Pla
 			room.plan = opened;
 			room.opening = undefined;
 			if (Inject.enabled()) Inject.ask(opened, server, room.id);
+			if (Marks.enabled()) Marks.mark(opened);
 			return opened;
 		})
 		.catch(err => {
@@ -125,6 +128,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 				// Anything still unanswered, so a joiner sees the sidecar the
 				// others are already looking at, and everything said so far.
 				Questions.greet(opened, ws);
+				Comments.greet(opened, ws);
 				Chat.greet(opened.chat, ws);
 			} catch (err) {
 				fail(ws, frame.rid, err instanceof Error ? err.message : "cannot open plan");
@@ -175,6 +179,26 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 		case "question:cancel":
 			if (room.plan) await Questions.cancel(room.plan, server, room.id, ws, frame);
 			return;
+
+		case "comment:start":
+			if (room.plan) Comments.start(room.plan, server, room.id, ws, frame);
+			return;
+
+		case "comment:reply":
+			if (room.plan) Comments.respond(room.plan, ws, frame);
+			return;
+
+		case "comment:typing":
+			if (room.plan) Comments.typing(room.plan, ws, frame);
+			return;
+
+		case "comment:accept":
+			if (room.plan) await Comments.accept(conversation(room), ws, frame);
+			return;
+
+		case "comment:dismiss":
+			if (room.plan) await Comments.dismiss(conversation(room), ws, frame);
+			return;
 	}
 }
 
@@ -222,6 +246,7 @@ const server = Bun.serve<SocketData>({
 			if (room.plan) {
 				Service.departed(room.plan, ws);
 				Questions.away(room.plan, ws);
+				Comments.away(room.plan, ws);
 			}
 			if (room.members.size > 0) presence(server, room);
 			else evict(room);

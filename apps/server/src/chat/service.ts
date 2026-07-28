@@ -37,9 +37,19 @@ import type { Socket, SocketData } from "../wire";
 /** Beyond this the queue is a backlog nobody is going to read. */
 const MAX_QUEUE = 20;
 
+/**
+ * A queued message, with what the queue needs and clients do not.
+ *
+ * `spent` is asked, just before the turn would run, whether somebody else has
+ * already done the work. It is a function rather than a flag because the answer
+ * is only knowable at that moment — and `JSON.stringify` drops it, so the wire
+ * shape stays exactly `Wire.Waiting`.
+ */
+type Waiting = Wire.Waiting & { spent?: () => boolean };
+
 export type Chat = {
 	entries: Wire.Entry[];
-	waiting: Wire.Waiting[];
+	waiting: Waiting[];
 	/** The Copilot session, once somebody has prompted. */
 	agent?: Agent.Agent;
 	/** In flight while the session is being opened, so a second prompt waits. */
@@ -175,6 +185,47 @@ export function send(context: Room, ws: Socket, msg: Request<Wire.Send>): void {
 			});
 		}
 		chat.waiting.push({ id: ulid(), handle, text });
+		return queued(chat, server, room);
+	}
+
+	void run(context, handle, text);
+}
+
+/** Say something in the transcript without asking the agent for anything. */
+export function notice(context: Room, text: string): void {
+	let { chat, room, server } = context;
+	say(chat, server, room, { id: ulid(), author: { kind: "system" }, text, ts: now() });
+}
+
+/**
+ * Start a turn from something other than a message.
+ *
+ * Accepting a comment is an instruction in a way prose is not — the `@ai` rule
+ * exists to separate conversation from instruction, and a button press is
+ * already the latter. What it is not is a thing anybody said, so the transcript
+ * gets a system entry explaining why the agent started moving; an agent that
+ * begins editing for no visible reason is worse than a noisy log.
+ */
+export function instruct(
+	context: Room,
+	handle: string,
+	text: string,
+	said: string,
+	spent?: () => boolean,
+): void {
+	let { chat, room, server } = context;
+	notice(context, said);
+
+	if (chat.busy) {
+		if (chat.waiting.length >= MAX_QUEUE) {
+			return void say(chat, server, room, {
+				id: ulid(),
+				author: { kind: "system" },
+				text: "The queue is full. Wait for the current turn to finish.",
+				ts: now(),
+			});
+		}
+		chat.waiting.push({ id: ulid(), handle, text, ...(spent ? { spent } : {}) });
 		return queued(chat, server, room);
 	}
 
@@ -318,6 +369,11 @@ async function run(context: Room, handle: string, text: string): Promise<void> {
 	}
 
 	let next = chat.waiting.shift();
+	// A turn whose work is already done is dropped rather than run. Four
+	// accepted comments should not cost four passes over the plan when the
+	// agent dealt with all of them in the first.
+	while (next?.spent?.()) next = chat.waiting.shift();
+
 	if (next) {
 		queued(chat, server, room);
 		await run(context, next.handle, next.text);

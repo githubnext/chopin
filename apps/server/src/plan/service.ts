@@ -16,6 +16,7 @@ import * as presence from "./presence";
 import * as room from "./room";
 import * as snapshot from "./snapshot";
 import * as Chat from "../chat/service";
+import * as Comments from "../comments/service";
 import * as Questions from "../questions/service";
 import { broadcast, relay, reply, tell } from "../wire";
 
@@ -61,6 +62,8 @@ export type Plan = {
 	sink: Sink;
 	/** Open questionnaires and their shared answer drafts. */
 	questions: Questions.Questions;
+	/** Resolutions in flight and who is typing. Nothing durable. */
+	comments: Comments.Threads;
 	/** The conversation driving the agent. */
 	chat: Chat.Chat;
 	/**
@@ -70,6 +73,14 @@ export type Plan = {
 	 * this owns it. An agent rewriting the prose cannot change what was decided.
 	 */
 	records: Map<string, Questions.Record>;
+	/**
+	 * Every comment thread this plan has ever held.
+	 *
+	 * Beside the document for the same reason a questionnaire record is: a
+	 * comment must not be undoable with the plan, and the agent must not be
+	 * able to rewrite what somebody said about its work.
+	 */
+	threads: Map<string, Comments.Record>;
 	/** Bumped on every committed change; the agent's concurrency token. */
 	revision: number;
 	/**
@@ -124,6 +135,7 @@ export async function open(id: string, dir: string, server: Server<SocketData>):
 		document,
 		presence: presence.create(),
 		questions: Questions.create(),
+		comments: Comments.create(),
 		chat: Chat.restore(
 			(stored?.state.transcript ?? []) as never[],
 			stored?.state.session,
@@ -132,6 +144,9 @@ export async function open(id: string, dir: string, server: Server<SocketData>):
 		records: new Map(
 			(stored?.state.questions ?? []).map(record => [record.id, record as Questions.Record]),
 		),
+		threads: new Map(
+			(stored?.state.threads ?? []).map(record => [record.id, record as Comments.Record]),
+		),
 		revision: stored?.state.revision ?? 0,
 		queue: [],
 		timer: undefined,
@@ -139,11 +154,25 @@ export async function open(id: string, dir: string, server: Server<SocketData>):
 		meters: new WeakMap(),
 		sink: snapshot.sink({
 			dir,
+			// Anchors and passages are expressed against the document, so they
+			// are brought forward before being written rather than left to the
+			// agent's next edit — which is what used to recover a moved block.
+			//
+			// A recovery nobody is told about is invisible: the highlight stays
+			// dark until something else happens to broadcast. So the snapshot
+			// is compared, and the room hears only when it actually moved.
+			onFlush: () => {
+				let before = signature(plan);
+				Questions.rebase(plan);
+				Comments.rebase(plan);
+				if (signature(plan) !== before) anchors(plan, server, id);
+			},
 			read: () => ({
 				source: room.project(plan.document),
 				state: {
 					revision: plan.revision,
 					questions: [...plan.records.values()],
+					threads: [...plan.threads.values()],
 					transcript: plan.chat.entries,
 					...(plan.chat.resume ? { session: plan.chat.resume } : {}),
 				},
@@ -160,7 +189,19 @@ export async function open(id: string, dir: string, server: Server<SocketData>):
 		}),
 	};
 
+	// A restart is an epoch rotation: every position restored from disk was
+	// expressed in a history this document does not have. Recovering them now
+	// rather than on the first write is what lets the client that joins one
+	// millisecond later resolve anything at all.
+	Questions.rebase(plan);
+	Comments.rebase(plan);
+
 	return plan;
+}
+
+/** Cheap identity of the whole relationship snapshot, for spotting a change. */
+function signature(plan: Plan): string {
+	return JSON.stringify([Questions.anchors(plan), Comments.anchors(plan)]);
 }
 
 /** Everything a joining client needs to start from. */
@@ -176,8 +217,7 @@ export function greet(plan: Plan, ws: Socket, msg: Request<Wire.Open.Ask>): void
 		update: encode(room.sync(plan.document, resume)),
 		revision: plan.revision,
 		anchors: Questions.anchors(plan),
-		// Filled once the room holds comment threads.
-		threads: [],
+		threads: Comments.anchors(plan),
 		limits: room.LIMITS,
 		...(hello ? { awareness: encode(hello) } : {}),
 	});
@@ -257,6 +297,11 @@ async function commit(plan: Plan): Promise<void> {
 		// Cursors describe positions in a history that no longer exists.
 		presence.destroy(plan.presence);
 		plan.presence = presence.create();
+		// So do anchors and passages, and unlike a cursor nobody re-announces
+		// them. Without this every highlight in the room stays dark until the
+		// agent happens to edit.
+		Questions.rebase(plan);
+		Comments.rebase(plan);
 
 		for (let item of batch) {
 			tell(item.ws, { kind: "plan:reset", ts: 0, epoch: rebuilt.epoch, reason: "rebuilt" });
@@ -325,8 +370,7 @@ export function anchors(
 		ts: 0,
 		epoch: plan.document.epoch,
 		widgets: Questions.anchors(plan),
-		// Filled once the room holds comment threads.
-		threads: [],
+		threads: Comments.anchors(plan),
 	});
 }
 
