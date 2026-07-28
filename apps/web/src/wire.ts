@@ -76,6 +76,17 @@ export class Wire {
 		return this.#status ?? "connecting";
 	}
 
+	/**
+	 * Whether a request can be carried right now.
+	 *
+	 * Not the same as the reported status: `connected` is published from the
+	 * socket's open event, and a caller may be asking before that has run.
+	 * This reads the socket itself, which is what `ask` will do a moment later.
+	 */
+	get connected(): boolean {
+		return this.#socket?.readyState === WebSocket.OPEN;
+	}
+
 	#set(status: Status, reason?: string): void {
 		if (this.#status === status) return;
 		this.#status = status;

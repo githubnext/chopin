@@ -161,6 +161,15 @@ failed tool chips; without that a boundary the agent keeps hitting is invisible.
 `transform`. They compose rather than override, so an element positioned by
 script must not also carry them.
 
+**A transport comes up on its own schedule; whatever mounted against it does
+not.** The provider opened the document once, when the editor mounted, so a
+socket still mid-handshake cost the plan entirely — `ask` refused, nothing
+tried again, and the editor sat locked for the session under a status chip
+still saying "Loading". The same gap swallowed reconnects: `#open` is the only
+thing that asks for what was missed and the only thing that replays the outbox,
+so a client came back unlocked over a document quietly short of everyone else's
+edits. Opening is driven by the connection now, not by the mount.
+
 **A gate on a message is not a gate on a button.** `chat:send` checks
 `config.agent`; accepting a comment reached `Chat.instruct` directly and opened
 a session under `AGENT=off`. Anything that can start a turn has to check, and

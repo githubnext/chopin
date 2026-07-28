@@ -126,6 +126,23 @@ export function PlanEditor(
 		});
 	}, []);
 
+	/*
+	 * Open the document whenever the connection says it can carry the request.
+	 *
+	 * The provider is created when the editor mounts, and a socket comes up on
+	 * its own schedule; nothing makes the two coincide. Opening only on mount
+	 * meant a handshake that had not finished yet cost the plan entirely, and a
+	 * reconnect went unnoticed — leaving the editor unlocked over a document
+	 * quietly missing whatever arrived while it was away.
+	 *
+	 * Keyed on both, so it does not matter which turns up first, and so every
+	 * later reconnection re-syncs.
+	 */
+	useEffect(() => {
+		if (connection !== undefined && connection !== "connected") return;
+		void presence?.resume();
+	}, [presence, connection]);
+
 	let offline = connection !== undefined && connection !== "connected";
 	let locked = offline || !!busy || !state.synced;
 
