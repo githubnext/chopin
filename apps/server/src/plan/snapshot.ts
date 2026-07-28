@@ -52,6 +52,7 @@ export type QuestionRecord = {
 	status: "open" | "answered" | "cancelled";
 	answers?: { [question: string]: string };
 	resolver?: string;
+	at?: number;
 };
 
 /** Structural too, for the same reason. */

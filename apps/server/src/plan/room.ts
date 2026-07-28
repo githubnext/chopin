@@ -411,6 +411,7 @@ export function projectAnswer(
 	target: Document,
 	id: string,
 	answers: Record<string, string>,
+	settled?: { by: string; at: string },
 ): Mutation | undefined {
 	return mutate(target, () => {
 		let found = false;
@@ -420,6 +421,9 @@ export function projectAnswer(
 			let value = node.getQuestionnaire();
 			node.setQuestionnaire({
 				...value,
+				// Who settled it, on the questionnaire rather than on each
+				// answer: it resolves as a unit, so this is one fact.
+				...(settled ? { by: settled.by, at: settled.at } : {}),
 				questions: value.questions.map(question => {
 					let answer = answers[question.id];
 					return answer === undefined ? question : { ...question, answer };

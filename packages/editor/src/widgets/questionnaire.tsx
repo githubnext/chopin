@@ -9,6 +9,8 @@
 
 import { QuestionView, useQuestionnaire } from "@chopin/question/react";
 
+import { Provenance, SidecarCard } from "../card";
+
 import type { Transport } from "@chopin/question/react";
 import type { Answer } from "@chopin/question";
 import type { Questionnaire, QuestionnaireNode } from "@chopin/dialect";
@@ -84,12 +86,8 @@ function Undecided(
 	let answerable = connected && !!state.definition;
 
 	return (
-		<div
-			className="overflow-hidden rounded-lg border border-border bg-card"
-			data-plan-sidecar-questionnaire={value.id}
-		>
+		<SidecarCard data-plan-sidecar-questionnaire={value.id} label="Question" padded={false}>
 			<QuestionView
-				aside={<Heading count={value.questions.length} label="Open question" />}
 				collaborators={state.collaborators}
 				definition={state.definition ?? definition(value)}
 				// A draft that has not synced cannot be edited without discarding
@@ -104,7 +102,7 @@ function Undecided(
 				submitting={state.submitting}
 				{...pointing}
 			/>
-		</div>
+		</SidecarCard>
 	);
 }
 
@@ -112,31 +110,23 @@ function Decided(
 	{ resolved, value, ...pointing }: { resolved: Answer[]; value: Questionnaire } & Pointing,
 ) {
 	return (
-		<div
-			className="overflow-hidden rounded-lg border border-border bg-card"
+		<SidecarCard
 			data-plan-sidecar-questionnaire={value.id}
+			// Read off the node, so a late joiner sees it too and it survives a
+			// restart. Absent on one settled before the plan recorded any.
+			footer={<Provenance at={value.at} by={value.by} verb="Answered" />}
+			label="Question"
+			padded={false}
 		>
 			<QuestionView
 				answers={resolved}
-				aside={<Heading count={value.questions.length} label="Decision" />}
 				definition={definition(value)}
 				disabled
 				drafts={{}}
 				status="answered"
 				{...pointing}
 			/>
-		</div>
-	);
-}
-
-function Heading({ count, label }: { count: number; label: string }) {
-	return (
-		<header className="flex items-center gap-2 border-b border-border bg-muted px-3 py-2">
-			<span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-				{label}
-			</span>
-			{count > 1 && <span className="text-xs text-muted-foreground">{count} questions</span>}
-		</header>
+		</SidecarCard>
 	);
 }
 

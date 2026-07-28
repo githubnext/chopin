@@ -16,20 +16,12 @@ import { useEffect, useRef, useState } from "react";
 
 import { limits } from "@chopin/dialect";
 
+import { Provenance, SidecarCard, when } from "./card";
 import { cursor } from "./cursor";
 
 import type { KeyboardEvent } from "react";
 import type { Comment } from "@chopin/protocol";
 import type { ThreadView } from "./threads";
-
-function when(ts: number): string {
-	return new Date(ts * 1_000).toLocaleString(undefined, {
-		month: "short",
-		day: "numeric",
-		hour: "2-digit",
-		minute: "2-digit",
-	});
-}
 
 function Who({ handle }: { handle: string }) {
 	return (
@@ -233,11 +225,28 @@ export function ThreadCard({
 	let open = thread.status === "open";
 
 	return (
-		<article
-			className={`flex flex-col gap-2 overflow-hidden rounded-lg border bg-card p-3 ${
-				focused ? "border-ring" : "border-border"
-			}`}
+		<SidecarCard
 			data-plan-sidecar-thread={thread.id}
+			focused={focused}
+			footer={open ? undefined : (
+				<>
+					<Provenance at={thread.at} by={thread.resolver} verb="Accepted" />
+					{!applied && (
+						<>
+							<span className="ml-auto text-[10px] text-warning">Not yet applied</span>
+							<button
+								className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+								disabled={busy}
+								onClick={onRetry}
+								type="button"
+							>
+								Ask again
+							</button>
+						</>
+					)}
+				</>
+			)}
+			label="Comment"
 			onBlur={onBlur}
 			onFocus={onFocus}
 			onMouseEnter={onFocus}
@@ -255,47 +264,25 @@ export function ThreadCard({
 				</p>
 			)}
 
-			{open
-				? (
-					<>
-						<Composer
-							busy={busy}
-							label="Reply"
-							onSend={onReply}
-							onTyping={onTyping}
-							placeholder="Reply…"
-						/>
-						<div className="flex items-center gap-2 border-t border-border pt-2">
-							<Confirm busy={busy} label="Accept" onConfirm={onAccept} tone="primary" />
-							<Confirm busy={busy} label="Dismiss" onConfirm={onDismiss} tone="quiet" />
-							<span className="ml-auto text-[10px] text-muted-foreground">
-								Accepting asks the agent to revise the plan
-							</span>
-						</div>
-					</>
-				)
-				: (
-					<footer className="flex items-center gap-2 border-t border-border pt-2">
-						<span className="text-[10px] text-muted-foreground">
-							Accepted by @{thread.resolver}
-							{thread.at !== undefined && ` · ${when(thread.at)}`}
+			{open && (
+				<>
+					<Composer
+						busy={busy}
+						label="Reply"
+						onSend={onReply}
+						onTyping={onTyping}
+						placeholder="Reply…"
+					/>
+					<div className="flex items-center gap-2 border-t border-border pt-2">
+						<Confirm busy={busy} label="Accept" onConfirm={onAccept} tone="primary" />
+						<Confirm busy={busy} label="Dismiss" onConfirm={onDismiss} tone="quiet" />
+						<span className="ml-auto text-[10px] text-muted-foreground">
+							Accepting asks the agent to revise the plan
 						</span>
-						{!applied && (
-							<>
-								<span className="ml-auto text-[10px] text-warning">Not yet applied</span>
-								<button
-									className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-									disabled={busy}
-									onClick={onRetry}
-									type="button"
-								>
-									Ask again
-								</button>
-							</>
-						)}
-					</footer>
-				)}
-		</article>
+					</div>
+				</>
+			)}
+		</SidecarCard>
 	);
 }
 
@@ -308,7 +295,7 @@ export type DraftCardProps = {
 
 export function DraftCard({ busy, onCancel, onSend, quote }: DraftCardProps) {
 	return (
-		<article className="flex flex-col gap-2 overflow-hidden rounded-lg border border-ring bg-card p-3">
+		<SidecarCard focused label="Comment">
 			<Quote text={quote} />
 			<Composer
 				autoFocus
@@ -318,6 +305,6 @@ export function DraftCard({ busy, onCancel, onSend, quote }: DraftCardProps) {
 				onSend={onSend}
 				placeholder="Comment on this passage…"
 			/>
-		</article>
+		</SidecarCard>
 	);
 }

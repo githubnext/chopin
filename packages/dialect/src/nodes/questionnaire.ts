@@ -47,6 +47,16 @@ export type Question = {
 export type Questionnaire = {
 	id: string;
 	questions: Question[];
+	/**
+	 * Who settled it, and when.
+	 *
+	 * On the questionnaire rather than on each answer: it resolves as a unit,
+	 * so this is one fact about one moment. Absent until it is answered, and
+	 * absent for good on one answered before this was written down.
+	 */
+	by?: string;
+	/** ISO 8601. */
+	at?: string;
 };
 
 const EMPTY: Questionnaire = { id: "", questions: [] };
@@ -57,6 +67,8 @@ function parse(value: unknown): Questionnaire {
 	return {
 		id: typeof raw.id === "string" ? raw.id : "",
 		questions: Array.isArray(raw.questions) ? raw.questions : [],
+		...(typeof raw.by === "string" ? { by: raw.by } : {}),
+		...(typeof raw.at === "string" ? { at: raw.at } : {}),
 	};
 }
 
@@ -178,7 +190,15 @@ export function fromElement(node: Jsx): Questionnaire {
 		questions.push(question);
 	}
 
-	return { id: attribute(node, "id") ?? "", questions };
+	let by = attribute(node, "by");
+	let at = attribute(node, "at");
+
+	return {
+		id: attribute(node, "id") ?? "",
+		questions,
+		...(by ? { by } : {}),
+		...(at ? { at } : {}),
+	};
 }
 
 /** Write plain data back out as a `<Questionnaire>` element. */
@@ -186,7 +206,7 @@ export function toElement(value: Questionnaire): MdxJsxFlowElement {
 	return {
 		type: "mdxJsxFlowElement",
 		name: "Questionnaire",
-		attributes: identity(value.id),
+		attributes: identity(value.id, { by: value.by, at: value.at }),
 		children: value.questions.map(question => ({
 			type: "mdxJsxFlowElement",
 			name: "Question",
