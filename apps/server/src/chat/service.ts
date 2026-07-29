@@ -38,7 +38,7 @@ import type { Socket, SocketData } from "../wire";
 const MAX_QUEUE = 20;
 
 /** How long the agent's cursor stays where it finished, after a turn ends. */
-const LINGER_MS = 10_000;
+const LINGER_MS = 5_000;
 
 /**
  * A queued message, with what the queue needs and clients do not.

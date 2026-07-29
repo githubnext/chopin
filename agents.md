@@ -124,7 +124,7 @@ to run without one.
 
 **A mark for an agent edit waits to be seen.** The agent writes wherever it
 likes, including several screens away from whoever is reading, so a mark that
-spent its ten seconds off screen would have told nobody anything. Nothing
+spent its few seconds off screen would have told nobody anything. Nothing
 starts counting down until it has been in the viewport, which makes it an
 unread marker rather than a flash — and unread markers do not expire on a
 clock, so an unseen one waits indefinitely and the set is bounded by a cap
@@ -134,7 +134,7 @@ scroll, which would read as a second edit that never happened.
 
 **Those marks take no space and add no element.** An agent editing below the
 fold must not shift the sentence somebody is in the middle of typing, and a
-mark expiring ten seconds later must not shift it back. What the agent removed
+mark expiring a few seconds later must not shift it back. What the agent removed
 has no element at all, which is why a hole is drawn in `box-shadow` on the edge
 of the block still beside it and why the side is part of its address — and why
 what was removed can only be read in the list behind the chips.
