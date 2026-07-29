@@ -49,6 +49,29 @@ export type Operation =
 	| { op: "delete"; index: number }
 	| { op: "detach_question"; id: string };
 
+/** Enough of a block to recognise it in a list, without hashing it. */
+export type Excerpt = { type: string; preview: string };
+
+/**
+ * Where a gap sits, in post-edit indices.
+ *
+ * A block that has gone cannot be addressed, so the space it left is named by
+ * a block still beside it and the side the content was on.
+ */
+export type Spot = { index: number; side: "before" | "after" };
+
+/**
+ * One thing a batch did, as somewhere a reader can be pointed.
+ *
+ * A rewrite is `added` alone. Something is still there to look at, and a batch
+ * that also reported a gap would put a tombstone on the most common edit the
+ * agent makes.
+ */
+export type Change =
+	| ({ kind: "added"; index: number } & Excerpt)
+	| ({ kind: "moved"; index: number; from: Spot } & Excerpt)
+	| { kind: "removed"; at: Spot; blocks: Excerpt[] };
+
 export type Result =
 	| {
 		ok: true;
@@ -64,6 +87,21 @@ export type Result =
 		touched: number[];
 		/** Questionnaires this batch took out of the plan. */
 		detached: string[];
+		/**
+		 * What this batch did, in document order, for marking in the browser.
+		 *
+		 * Wider than `touched`, and not a superset of it: that answers which
+		 * blocks now hold the agent's prose, which is what attributing a
+		 * decision needs, and it is silent about a block that only moved or
+		 * one that has gone. This answers where a reader should be sent, so a
+		 * deletion is a place too and a rewrite is one change rather than a
+		 * disappearance and an arrival.
+		 *
+		 * Indices rather than anchors: turning one into the other needs the
+		 * live document, which is the service's to reach into, not this
+		 * module's. Empty when there is nothing worth pointing at.
+		 */
+		changes: Change[];
 		/** The change to relay, absent when the batch was a no-op. */
 		mutation: room.Mutation | undefined;
 	}
@@ -188,7 +226,131 @@ export function apply(plan: Plan, revision: number, operations: Operation[]): Re
 		revision: plan.revision,
 		blocks: outline(plan),
 		touched: children.flatMap((node, index) => carried.has(node) ? [] : [index]),
+		changes: describeChanges(root.children, children, operations),
 	};
+}
+
+/**
+ * What a batch did, as places a reader can be sent.
+ *
+ * Two derivations, deliberately different. What was *written* comes from
+ * object identity: a node reconciliation carried through is the same object,
+ * and the agent cannot misreport that. What *moved or went* comes from the
+ * operations, because identity cannot tell those apart — a node missing from
+ * the result may have been deleted or replaced, and a node at a new index may
+ * have moved or merely been pushed down by an insert above it.
+ *
+ * Both are exact here: a batch aborts on the first operation that fails, so
+ * reaching this point means every one of them applied.
+ */
+function describeChanges(
+	base: RootContent[],
+	after: RootContent[],
+	operations: Operation[],
+): Change[] {
+	// A batch that replaced the whole plan changed every block in it, and a
+	// document marked from end to end says nothing at all. `replace_root` has
+	// to stand alone, so this is the whole condition.
+	if (operations.some(operation => operation.op === "replace_root")) return [];
+
+	let carried = new Set(base);
+	let place = new Map(after.map((node, index) => [node, index]));
+
+	let left: { node: RootContent; index: number; moved: boolean }[] = [];
+	for (let operation of operations) {
+		switch (operation.op) {
+			case "delete": {
+				let node = base[operation.index];
+				if (node) left.push({ node, index: operation.index, moved: false });
+				break;
+			}
+			case "detach_question": {
+				let index = base.findIndex(node => questionnaire(node) === operation.id);
+				let node = base[index];
+				if (node) left.push({ node, index, moved: false });
+				break;
+			}
+			case "move": {
+				// `step` treats this as a no-op, so neither end is worth marking.
+				if (operation.to === operation.index) break;
+				let node = base[operation.index];
+				if (node) left.push({ node, index: operation.index, moved: true });
+				break;
+			}
+		}
+	}
+
+	let vacating = new Set(left.map(item => item.node));
+	let changes: Change[] = [];
+
+	for (let [node, index] of place) {
+		if (!carried.has(node)) changes.push({ kind: "added", index, ...excerpt(node) });
+	}
+
+	// Removals that left the same space collapse into one mark: three blocks
+	// deleted in a row is one hole in the prose, not three.
+	let holes = new Map<string, { at: Spot; blocks: Excerpt[] }>();
+
+	for (let item of left) {
+		let gap = gapAt(base, place, vacating, item.index);
+		if (!gap) continue;
+
+		if (item.moved) {
+			let index = place.get(item.node);
+			if (index === undefined) continue;
+			changes.push({ kind: "moved", index, from: gap, ...excerpt(item.node) });
+			continue;
+		}
+
+		let key = `${gap.index}:${gap.side}`;
+		let hole = holes.get(key) ?? { at: gap, blocks: [] };
+		hole.blocks.push(excerpt(item.node));
+		holes.set(key, hole);
+	}
+
+	for (let hole of holes.values()) changes.push({ kind: "removed", ...hole });
+
+	// Document order, so the list of changes reads the way the plan does.
+	return changes.sort((a, b) => at(a) - at(b));
+}
+
+function at(change: Change): number {
+	return change.kind === "removed" ? change.at.index : change.index;
+}
+
+/**
+ * The gap a departed block left, named by a block still beside it.
+ *
+ * Scanned outwards from where it was, forward first, so a hole reads as
+ * sitting above the block that followed it. Only blocks the batch inherited
+ * are candidates — a block the batch wrote is not somewhere content used to
+ * be — and a candidate must not itself have vacated: without that, deleting
+ * one block and moving the next in the same batch would anchor the hole to a
+ * block that has gone elsewhere, and point at the wrong prose.
+ *
+ * Nothing is returned when a batch vacated every block it inherited. The plan
+ * cannot be emptied, so this only happens when everything moved, and a mark
+ * omitted is cheaper than one that lies.
+ */
+function gapAt(
+	base: RootContent[],
+	place: Map<RootContent, number>,
+	vacating: Set<RootContent>,
+	index: number,
+): Spot | undefined {
+	for (let step = index + 1; step < base.length; step++) {
+		let node = base[step]!;
+		if (vacating.has(node)) continue;
+		let found = place.get(node);
+		if (found !== undefined) return { index: found, side: "before" };
+	}
+	for (let step = index - 1; step >= 0; step--) {
+		let node = base[step]!;
+		if (vacating.has(node)) continue;
+		let found = place.get(node);
+		if (found !== undefined) return { index: found, side: "after" };
+	}
+	return undefined;
 }
 
 /** Apply one operation, or describe why it cannot be applied. */
@@ -424,12 +586,21 @@ function decision(node: RootContent): boolean {
 }
 
 function describe(node: RootContent, index: number): Block {
+	return { index, ...excerpt(node), digest: fingerprint(node) };
+}
+
+/**
+ * Enough of a block to recognise it, without hashing it.
+ *
+ * Split from `describe` because what the agent removed has to be shown in a
+ * list after the block itself is gone, and a fingerprint of something that no
+ * longer exists is nothing anyone can use.
+ */
+function excerpt(node: RootContent): Excerpt {
 	let text = content(node);
 	return {
-		index,
 		type: node.type === "mdxJsxFlowElement" ? node.name || "component" : node.type,
 		preview: text.length > PREVIEW ? text.slice(0, PREVIEW) + "…" : text,
-		digest: fingerprint(node),
 	};
 }
 

@@ -25,6 +25,7 @@ import type { Plan as Wire, Request } from "@chopin/protocol";
 import type { Socket, SocketData } from "../wire";
 import type { Presence } from "./presence";
 import type { Document } from "./room";
+import type * as edit from "./edit";
 import type { Block } from "./edit";
 import type { Sink } from "./snapshot";
 
@@ -373,6 +374,73 @@ export function publish(
 	});
 	room.mark(plan.document);
 	plan.sink.touch();
+}
+
+/**
+ * Relay what the agent just did, so a reader can be shown where.
+ *
+ * Indices become anchors here rather than in the edit engine: only the live
+ * document can say where a block is in the collaborative history, and only
+ * these survive somebody else editing between this frame being sent and the
+ * browser painting it.
+ *
+ * Sent after the update that created the blocks it names, which is what makes
+ * it resolvable at the other end. Guarded whole, and silent on failure: this
+ * is decoration, and a room that dropped an edit over a mark nobody would
+ * have noticed would be a poor trade.
+ */
+export function changes(
+	plan: Plan,
+	server: Server<SocketData>,
+	roomId: string,
+	found: edit.Change[],
+): void {
+	if (found.length === 0) return;
+
+	try {
+		let digests = room.digests(plan.document);
+		let anchor = (index: number): Wire.Anchor | undefined => {
+			let digest = digests[index];
+			return digest === undefined ? undefined : room.anchorAt(plan.document, index, digest);
+		};
+		let gap = (spot: edit.Spot): Wire.Gap | undefined => {
+			let at = anchor(spot.index);
+			return at && { at, side: spot.side };
+		};
+
+		let wired: Wire.Change[] = [];
+		for (let change of found) {
+			if (change.kind === "removed") {
+				let at = gap(change.at);
+				if (at) wired.push({ kind: "removed", at, blocks: change.blocks });
+				continue;
+			}
+
+			let at = anchor(change.index);
+			if (!at) continue;
+			if (change.kind === "added") {
+				wired.push({ kind: "added", at, type: change.type, preview: change.preview });
+				continue;
+			}
+
+			// Both ends or neither: a move shown only where it landed reads as
+			// new prose, and shown only where it left reads as a deletion.
+			let from = gap(change.from);
+			if (from) {
+				wired.push({ kind: "moved", at, from, type: change.type, preview: change.preview });
+			}
+		}
+
+		if (wired.length === 0) return;
+		broadcast(server, roomId, {
+			kind: "plan:changes",
+			ts: 0,
+			epoch: plan.document.epoch,
+			changes: wired,
+		});
+	} catch (err) {
+		console.error("[plan] could not say what the agent changed:", err);
+	}
 }
 
 /** Relay the current relationship snapshot to the whole room. */
