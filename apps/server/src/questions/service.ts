@@ -65,7 +65,7 @@ export type Record = {
 	resolver?: string;
 	/** When it was settled, Unix seconds. Absent on one settled before we recorded it. */
 	at?: number;
-	/** Where in the prose each question and its answer live. */
+	/** Where in the prose each of its decisions lives. */
 	anchors?: Wired.WidgetAnchors;
 };
 
@@ -334,13 +334,10 @@ export function anchors(plan: Plan): Wired.WidgetAnchors[] {
 export function rebase(plan: Plan): void {
 	for (let [id, record] of plan.records) {
 		let value = Anchors.read(record);
-		let questions: { [question: string]: Wired.QuestionAnchors } = {};
+		let questions: { [question: string]: Wired.AnchorSet } = {};
 
-		for (let [question, relations] of Object.entries(value.questions)) {
-			questions[question] = {
-				subject: carry(plan, relations.subject),
-				result: carry(plan, relations.result),
-			};
+		for (let [question, set] of Object.entries(value.questions)) {
+			questions[question] = carry(plan, set);
 		}
 
 		plan.records.set(id, { ...record, anchors: { widget: value.widget, questions } });
@@ -369,12 +366,11 @@ export function outstanding(plan: Plan): Anchors.Pending[] {
 	return [...plan.records.values()].flatMap(record => Anchors.pending(record));
 }
 
-/** Replace one relationship with the blocks the agent reviewed it against. */
+/** Replace where a decision lives with the blocks the agent reviewed it against. */
 export function relate(
 	plan: Plan,
 	widget: string,
 	question: string,
-	relation: Anchors.Relation,
 	blocks: Array<{ index: number; digest: string }>,
 ): string | undefined {
 	let record = plan.records.get(widget);
@@ -396,7 +392,7 @@ export function relate(
 
 	plan.records.set(widget, {
 		...record,
-		anchors: Anchors.set(Anchors.read(record), question, relation, anchors),
+		anchors: Anchors.set(Anchors.read(record), question, anchors),
 	});
 	return undefined;
 }

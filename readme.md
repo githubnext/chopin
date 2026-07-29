@@ -55,11 +55,11 @@ WORKING_DIR=../some-project bun run dev
 3. Ask it something it cannot know: `@ai ask us whether to support Y`. The
    question appears in the decisions pane on the right, both windows can edit
    the answer together, and either can submit it.
-4. Hover the answer once it is decided — the prose it produced lights up.
+4. Hover the decision once it is settled — the prose it produced lights up.
    Click it and the plan goes there, and stays marked for a few seconds after
-   the pointer has gone. Comment on a passage and the accepted thread works the
-   same way: its quote is the way back to what it produced, which is the only
-   way to find it.
+   the pointer has gone; click again to walk through the rest of what it wrote.
+   Comment on a passage and the accepted thread works the same way: its quote is
+   the way back to what it produced, which is the only way to find it.
 
 ## Configuration
 

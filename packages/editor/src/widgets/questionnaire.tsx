@@ -41,33 +41,31 @@ function definition(value: Questionnaire) {
 	};
 }
 
-export type Relation = "subject" | "result";
-
 export type QuestionnaireCardProps = {
 	value: Questionnaire;
 	wire?: Transport;
 	connected?: boolean;
-	/** How much prose each question and answer resolves to. */
-	relations?: { [question: string]: { subject: number; result: number } };
-	onRelationEnter?: (question: string, relation: Relation) => void;
-	onRelationLeave?: (question: string, relation: Relation) => void;
+	/** How much prose each decision lives in. */
+	places?: { [question: string]: number };
+	onQuestionEnter?: (question: string) => void;
+	onQuestionLeave?: (question: string) => void;
 	/** Take the reader to that prose. Without it the shared view's jump is inert. */
-	onRelationSelect?: (question: string, relation: Relation) => void;
+	onQuestionSelect?: (question: string) => void;
 };
 
 export function QuestionnaireCard(
 	{
 		connected = false,
-		onRelationEnter,
-		onRelationLeave,
-		onRelationSelect,
-		relations,
+		onQuestionEnter,
+		onQuestionLeave,
+		onQuestionSelect,
+		places,
 		value,
 		wire,
 	}: QuestionnaireCardProps,
 ) {
 	let resolved = answers(value);
-	let pointing = { relations, onRelationEnter, onRelationLeave, onRelationSelect };
+	let pointing = { places, onQuestionEnter, onQuestionLeave, onQuestionSelect };
 
 	return resolved
 		? <Decided resolved={resolved} value={value} {...pointing} />
@@ -75,10 +73,10 @@ export function QuestionnaireCard(
 }
 
 type Pointing = {
-	relations?: { [question: string]: { subject: number; result: number } };
-	onRelationEnter?: (question: string, relation: Relation) => void;
-	onRelationLeave?: (question: string, relation: Relation) => void;
-	onRelationSelect?: (question: string, relation: Relation) => void;
+	places?: { [question: string]: number };
+	onQuestionEnter?: (question: string) => void;
+	onQuestionLeave?: (question: string) => void;
+	onQuestionSelect?: (question: string) => void;
 };
 
 function Undecided(
