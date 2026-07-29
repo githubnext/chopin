@@ -56,6 +56,10 @@ WORKING_DIR=../some-project bun run dev
    question appears in the decisions pane on the right, both windows can edit
    the answer together, and either can submit it.
 4. Hover the answer once it is decided — the prose it produced lights up.
+   Click it and the plan goes there, and stays marked for a few seconds after
+   the pointer has gone. Comment on a passage and the accepted thread works the
+   same way: its quote is the way back to what it produced, which is the only
+   way to find it.
 
 ## Configuration
 

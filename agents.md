@@ -117,6 +117,31 @@ re-serialising the document. The two ends must agree on which blocks the source
 addresses; they need not agree on the offset, so a divergence surfaces as a
 refusal rather than a comment landing on the wrong sentence.
 
+**The quote is the way back, not the card.** A sidecar card holds a reply box,
+an Accept and a Dismiss, so making the whole of it a link would mean deciding on
+every click whether the reader meant the link or the control they actually hit.
+The quotation becomes a button when the thread has somewhere to send one and
+stays a blockquote when it does not, which is the rule a question's answer
+already followed. It matters most for an accepted comment: a `<Decision>` draws
+nothing in the prose, so the pane is the whole of where the decision can be seen
+and the quote is the only route to what it produced.
+
+**A hover asks; a click sends.** Both leave the same wash, because they are the
+same fact — this is the prose that card refers to — and the difference is how
+long it is owed. A hover is over when the pointer moves; a click has put the
+reader somewhere they were not looking, so the mark is pinned for five seconds
+after the pointer has gone, or they arrive at a block with nothing to say which
+one it was. Pointing at another card in the meantime borrows the wash and gives
+it back, which is what makes a detour a detour.
+
+**There is one pin, in `marks.ts`, not one per store.** A reader has one
+pointer, so going to a comment has to put out the question they went to before
+it — the same argument that already put the registry there. Whether a walk
+through several places continues is asked of the pin rather than announced by
+it: nothing needs redrawing when it lapses, since the lapse redraws itself, and
+a callback fired on the way to replacing a pin would reach a store in the middle
+of walking and wipe the step it had just taken.
+
 **Hard-fail at boot.** A missing token, an unusable CLI or a `WORKING_DIR` that
 is not there are all detectable in seconds by trying, and discovering them when
 somebody types their first message is worse. `AGENT=off` is the deliberate way
@@ -217,6 +242,16 @@ edits. Opening is driven by the connection now, not by the mount.
 `config.agent`; accepting a comment reached `Chat.instruct` directly and opened
 a session under `AGENT=off`. Anything that can start a turn has to check, and
 the check lives in `instruct` now so the next one cannot miss it.
+
+**An optional callback nobody passes is a button that does nothing.**
+`QuestionView` rendered a real `<button>` labelled "Show in plan", with a
+pointer cursor and a count of how many places it would go to, calling an
+`onRelationSelect` that no caller ever supplied — `QuestionnaireCard` forwarded
+the two hover props beside it and dropped this one. It typechecks, it renders,
+it takes a tab stop, and it is inert. The same wiring in reverse is worth
+watching for: the tabs called `onRelationSelect` too, which read as harmless
+for as long as it was undefined and became the plan scrolling out from under
+somebody the moment it was not.
 
 **Rebasing used to happen only inside `edit_plan`.** So a block a person moved
 kept its anchors broken until the agent next happened to edit, and everything

@@ -46,13 +46,56 @@ function Note({ note }: { note: Comment.Note }) {
 	);
 }
 
-/** The prose the thread marks, as a quotation the card can be read without. */
-function Quote({ drifted, text }: { drifted?: boolean; text: string }) {
+const QUOTED =
+	"m-0 w-full border-l-2 border-border pl-2 text-left text-xs text-muted-foreground italic";
+
+/**
+ * The prose the thread marks, as a quotation the card can be read without.
+ *
+ * A button when there is somewhere to go, a blockquote when there is not —
+ * which is the rule `QuestionView` already applies to an answer, so both halves
+ * of the sidecar offer the same thing in the same way. A real element carries
+ * the affordance and the keyboard handling rather than a quotation pretending
+ * to be one, and a drifted thread offers no jump it could not honour: the card
+ * still reads, which is the durable part of a comment.
+ *
+ * The quote rather than the card. A card holds a reply box, an Accept and a
+ * Dismiss; making the whole of it a link would mean deciding, on every click,
+ * whether the reader meant the link or the control they actually hit.
+ */
+function Quote(
+	{ count = 0, drifted, onSelect, text }: {
+		count?: number;
+		drifted?: boolean;
+		onSelect?: () => void;
+		text: string;
+	},
+) {
 	return (
 		<div className="flex flex-col gap-1">
-			<blockquote className="m-0 border-l-2 border-border pl-2 text-xs text-muted-foreground italic">
-				{text}
-			</blockquote>
+			{count > 0 && onSelect
+				? (
+					<button
+						// The quote is part of the name, not replaced by it: it is the
+						// only place the marked phrase appears on the card, so a label
+						// saying only where the button goes would take it away from
+						// anybody who cannot see it.
+						aria-label={count > 1
+							? `${text} — show in plan, ${count} places`
+							: `${text} — show in plan`}
+						className={`${QUOTED} cursor-pointer rounded-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40`}
+						onClick={onSelect}
+						type="button"
+					>
+						{text}
+						{count > 1 && (
+							<span aria-hidden="true" className="ml-1.5 text-[10px] not-italic">
+								{count}
+							</span>
+						)}
+					</button>
+				)
+				: <blockquote className={QUOTED}>{text}</blockquote>}
 			{drifted && (
 				<p className="m-0 text-[10px] text-warning">
 					The text this refers to has changed.
@@ -204,6 +247,8 @@ export type ThreadCardProps = {
 	onTyping: (writing: boolean) => void;
 	onFocus: () => void;
 	onBlur: () => void;
+	/** Take the reader to the prose this points at. */
+	onReveal: () => void;
 };
 
 export function ThreadCard({
@@ -216,6 +261,7 @@ export function ThreadCard({
 	onFocus,
 	onReply,
 	onRetry,
+	onReveal,
 	onTyping,
 	quote,
 	view,
@@ -252,7 +298,7 @@ export function ThreadCard({
 			onMouseEnter={onFocus}
 			onMouseLeave={onBlur}
 		>
-			<Quote drifted={view.drifted} text={quote} />
+			<Quote count={view.places.length} drifted={view.drifted} onSelect={onReveal} text={quote} />
 
 			<ul className="m-0 flex list-none flex-col gap-2 p-0">
 				{thread.notes.map(note => <Note key={note.id} note={note} />)}
