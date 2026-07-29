@@ -27,16 +27,23 @@ function names(people: string[]): string {
 }
 
 /**
- * Peers, excluding this client.
+ * Peers, excluding this client and the agent.
  *
  * Deduplicated by handle: someone with the plan open in two windows is one
  * person, and showing them twice reads as two colleagues.
+ *
+ * The agent has a cursor in here too, and it is not a member. Every face is
+ * built into a github.com avatar URL, and `github.com/ai` is somebody — so
+ * without this the room would show a stranger's photograph, and the usual
+ * fallback to initials would never fire because the image loads perfectly
+ * well. That the agent is working is already said beside the plan.
  */
 function peers(provider: PlanProvider | undefined): string[] {
 	if (!provider) return [];
 	let found = new Set<string>();
 	for (let [client, state] of provider.awareness.getStates()) {
 		if (client === provider.awareness.clientID) continue;
+		if (state?.agent) continue;
 		let name = state?.name;
 		if (typeof name === "string" && name) found.add(name);
 	}

@@ -12,6 +12,8 @@
 
 import * as Y from "yjs";
 
+import { MENTION } from "@chopin/protocol/address";
+
 import * as presence from "./presence";
 import * as room from "./room";
 import * as snapshot from "./snapshot";
@@ -93,6 +95,8 @@ export type Plan = {
 	outlines: Map<number, Block[]>;
 	queue: Queued[];
 	timer: ReturnType<typeof setTimeout> | undefined;
+	/** Repeats the agent's cursor while it has one, so peers do not drop it. */
+	attention: ReturnType<typeof setInterval> | undefined;
 	/** Serialises commits so two batches cannot interleave. */
 	flushing: Promise<void>;
 	meters: WeakMap<Socket, Meter>;
@@ -151,6 +155,7 @@ export async function open(id: string, dir: string, server: Server<SocketData>):
 		revision: stored?.state.revision ?? 0,
 		queue: [],
 		timer: undefined,
+		attention: undefined,
 		flushing: Promise.resolve(),
 		meters: new WeakMap(),
 		sink: snapshot.sink({
@@ -303,7 +308,11 @@ async function commit(plan: Plan): Promise<void> {
 
 		let rebuilt = await room.rebuild(plan.document);
 		plan.document = rebuilt;
-		// Cursors describe positions in a history that no longer exists.
+		// Cursors describe positions in a history that no longer exists. The
+		// agent's is in there too, and the interval repeating it would outlive
+		// the presence it repeats.
+		clearInterval(plan.attention);
+		plan.attention = undefined;
 		presence.destroy(plan.presence);
 		plan.presence = presence.create();
 		// So do anchors and passages, and unlike a cursor nobody re-announces
@@ -438,6 +447,12 @@ export function changes(
 			epoch: plan.document.epoch,
 			changes: wired,
 		});
+
+		// From the same anchoring pass, deliberately. Two passes could disagree
+		// about where the edit was, and then the cursor would be pointing at
+		// one block while the marks described another.
+		let last = wired.at(-1)!;
+		attend(plan, server, roomId, last.kind === "removed" ? last.at.at : last.at);
 	} catch (err) {
 		console.error("[plan] could not say what the agent changed:", err);
 	}
@@ -455,6 +470,98 @@ export function anchors(
 		epoch: plan.document.epoch,
 		widgets: Questions.anchors(plan),
 		threads: Comments.anchors(plan),
+	});
+}
+
+/**
+ * How often to repeat the agent's cursor.
+ *
+ * Comfortably inside the thirty seconds after which a peer drops a state it
+ * has not heard about. Ours rather than the awareness library's, because a
+ * cursor that quietly disappears partway through a long turn is not a failure
+ * anybody would think to attribute to a renewal cadence changing underneath.
+ */
+const RENEW_MS = 10_000;
+
+/**
+ * The colour of the agent's cursor.
+ *
+ * A graphite, deliberately outside the palette `packages/editor/src/cursor.ts`
+ * hands to people: the agent is not one of them, and a cursor that looked like
+ * a colleague's would be read as one. Literal rather than a theme token
+ * because Lexical validates it with `CSS.supports` and writes it inline, so a
+ * `var()` would resolve against the wrong scope or not at all.
+ *
+ * Duplicated across the package boundary rather than shared for one string. If
+ * the palette there ever grows a slate, this is what it must not collide with.
+ */
+const AGENT_COLOR = "#475569";
+
+/**
+ * Put the agent's cursor where it just edited.
+ *
+ * Presence rather than a record: it says the agent is working here now, which
+ * is why it is broadcast rather than held, and why it does not wait to be
+ * seen the way the marks do. Somebody scrolled elsewhere is not shown it at
+ * all — that is what the marks and the chips are for.
+ */
+function attend(
+	plan: Plan,
+	server: Server<SocketData>,
+	roomId: string,
+	at: Wire.Anchor,
+): void {
+	// The last turn may still be counting down to taking the cursor away. It is
+	// about to be somewhere new, so that removal is no longer the truth.
+	clearTimeout(plan.chat.lingering);
+	plan.chat.lingering = undefined;
+
+	let position = Y.decodeRelativePosition(decode(at.position));
+	let update = presence.attend(plan.presence, {
+		name: MENTION.slice(1),
+		color: AGENT_COLOR,
+		focusing: true,
+		agent: true,
+		anchorPos: position,
+		focusPos: position,
+		awarenessData: {},
+	});
+
+	broadcast(server, roomId, {
+		kind: "plan:awareness",
+		ts: 0,
+		epoch: plan.document.epoch,
+		update: encode(update),
+	});
+
+	// Restarted, not stacked: an agent that edits twice in a turn should not
+	// end up with two intervals repeating its cursor.
+	clearInterval(plan.attention);
+	plan.attention = setInterval(() => {
+		let renewed = presence.renew(plan.presence);
+		if (!renewed) return;
+		broadcast(server, roomId, {
+			kind: "plan:awareness",
+			ts: 0,
+			epoch: plan.document.epoch,
+			update: encode(renewed),
+		});
+	}, RENEW_MS);
+}
+
+/** Take the agent's cursor down, and stop repeating it. */
+export function release(plan: Plan, server: Server<SocketData>, roomId: string): void {
+	clearInterval(plan.attention);
+	plan.attention = undefined;
+
+	let update = presence.release(plan.presence);
+	if (!update) return;
+
+	broadcast(server, roomId, {
+		kind: "plan:awareness",
+		ts: 0,
+		epoch: plan.document.epoch,
+		update: encode(update),
 	});
 }
 
@@ -480,6 +587,7 @@ export function departed(plan: Plan, ws: Socket): void {
 /** Write anything outstanding and let go. */
 export async function close(plan: Plan): Promise<void> {
 	if (plan.timer) clearTimeout(plan.timer);
+	clearInterval(plan.attention);
 	await plan.flushing;
 	await plan.sink.flush();
 	await Chat.close(plan.chat);

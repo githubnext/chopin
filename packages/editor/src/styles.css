@@ -590,57 +590,63 @@
 /* What the agent changed ------------------------------------------------- */
 
 /*
- * Marks drawn entirely in `box-shadow`, which is what keeps them free of the
- * layout.
+ * Marks that take no space and add no element.
  *
  * An agent editing below the fold must not shift the sentence somebody is in
  * the middle of typing, and a mark that expires ten seconds later must not
- * shift it back — so nothing here may take space, and nothing here may add an
- * element. A `::before` bar was the obvious way to draw the gutter and is the
- * wrong one: it needs the block to become a containing block, which re-anchors
- * any absolutely positioned widget chrome inside it for as long as the mark is
- * up.
+ * shift it back. So a block is washed, and a hole is drawn in `box-shadow` on
+ * the edge of the block still beside it. A `::before` rule was the obvious way
+ * to draw a hole and is the wrong one: it needs the block to become a
+ * containing block, which re-anchors any absolutely positioned widget chrome
+ * inside it for as long as the mark is up.
  *
- * An outset shadow offset into the gutter with a negative spread leaves a
- * sliver beside the block, outside it, costing no space and no stacking.
+ * Two colours, and they mean different things. `ring` is prose that was
+ * written; `muted-foreground` is structure that moved or went, where no words
+ * are new. Where the agent is working *now* is not said here at all — that is
+ * its cursor, which comes and goes with the turn rather than waiting to be
+ * read.
  */
 .plan .plan-content [data-plan-change] {
-	transition: box-shadow 600ms ease-out, background 600ms ease-out;
+	transition: background 600ms ease-out;
 }
 
-/* Written just now: a solid rule beside it, and a wash over it. */
+/* Written just now. */
 .plan .plan-content [data-plan-change="added"] {
-	box-shadow: -0.5rem 0 0 -0.375rem var(--color-ring);
 	background: color-mix(in oklch, var(--color-ring) 10%, transparent);
 }
 
 /*
- * Moved, not written. Deliberately quieter than the wash above: the words are
- * ones the reader may already have read, and marking them as loudly as new
- * prose would say something untrue about them.
+ * Moved, not written. In the structural colour rather than a fainter version
+ * of the one above: the words are ones the reader may already have read, and
+ * saying "new, but less so" about them would not be true.
  */
 .plan .plan-content [data-plan-change="moved"] {
-	box-shadow: -0.5rem 0 0 -0.4375rem color-mix(in oklch, var(--color-ring) 70%, transparent);
+	background: color-mix(in oklch, var(--color-muted-foreground) 9%, transparent);
 }
 
 /*
  * A hole where something was.
  *
- * Drawn on the edge of the block still beside it, because what went has no
- * element to carry a mark. The two sides are separate properties so one block
- * can hold a removal above it and a vacancy below it at once.
+ * One block can hold a hole above it and another below — delete the second and
+ * fourth of four blocks and the third carries both — so the two sides cannot
+ * each set `box-shadow`, or the cascade would keep only whichever rule came
+ * last and one hairline would silently never draw. Custom properties do
+ * cascade independently, so each side sets one and they compose here.
  */
 .plan .plan-content [data-plan-gap-before],
 .plan .plan-content [data-plan-gap-after] {
+	box-shadow:
+		var(--plan-gap-above, 0 0 transparent),
+		var(--plan-gap-below, 0 0 transparent);
 	transition: box-shadow 600ms ease-out;
 }
 
 .plan .plan-content [data-plan-gap-before="removed"] {
-	box-shadow: 0 -0.375rem 0 -0.3125rem var(--color-muted-foreground);
+	--plan-gap-above: 0 -0.375rem 0 -0.3125rem var(--color-muted-foreground);
 }
 
 .plan .plan-content [data-plan-gap-after="removed"] {
-	box-shadow: 0 0.375rem 0 -0.3125rem var(--color-muted-foreground);
+	--plan-gap-below: 0 0.375rem 0 -0.3125rem var(--color-muted-foreground);
 }
 
 /*
@@ -648,30 +654,19 @@
  * nothing was lost — the content is still in the plan, further up or down.
  */
 .plan .plan-content [data-plan-gap-before="vacated"] {
-	box-shadow: 0 -0.375rem 0 -0.34375rem
-		color-mix(in oklch, var(--color-muted-foreground) 55%, transparent);
+	--plan-gap-above: 0 -0.375rem 0 -0.34375rem color-mix(
+		in oklch,
+		var(--color-muted-foreground) 55%,
+		transparent
+	);
 }
 
 .plan .plan-content [data-plan-gap-after="vacated"] {
-	box-shadow: 0 0.375rem 0 -0.34375rem
-		color-mix(in oklch, var(--color-muted-foreground) 55%, transparent);
-}
-
-/*
- * A block can be both: written where something else was taken out. The
- * shadows compose in one property, so the combinations have to be spelled out
- * rather than left to the cascade, which would keep only the last.
- */
-.plan .plan-content [data-plan-change="added"][data-plan-gap-before="removed"] {
-	box-shadow:
-		-0.5rem 0 0 -0.375rem var(--color-ring),
-		0 -0.375rem 0 -0.3125rem var(--color-muted-foreground);
-}
-
-.plan .plan-content [data-plan-change="added"][data-plan-gap-after="removed"] {
-	box-shadow:
-		-0.5rem 0 0 -0.375rem var(--color-ring),
-		0 0.375rem 0 -0.3125rem var(--color-muted-foreground);
+	--plan-gap-below: 0 0.375rem 0 -0.34375rem color-mix(
+		in oklch,
+		var(--color-muted-foreground) 55%,
+		transparent
+	);
 }
 
 /*

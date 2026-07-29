@@ -37,6 +37,9 @@ import type { Socket, SocketData } from "../wire";
 /** Beyond this the queue is a backlog nobody is going to read. */
 const MAX_QUEUE = 20;
 
+/** How long the agent's cursor stays where it finished, after a turn ends. */
+const LINGER_MS = 10_000;
+
 /**
  * A queued message, with what the queue needs and clients do not.
  *
@@ -78,6 +81,8 @@ export type Chat = {
 	writing?: string;
 	/** Detaches the event handler when a turn ends. */
 	release?: () => void;
+	/** Pending removal of the agent's cursor, cancelled if it edits again. */
+	lingering?: ReturnType<typeof setTimeout>;
 	/** When each running tool call started, for its duration. */
 	timings: Map<string, number>;
 	/** Session id, persisted so a restart resumes the conversation. */
@@ -356,7 +361,7 @@ function settle(chat: Chat, server: Server<SocketData>, room: string): void {
 
 /** Run one turn, then drain whatever queued up behind it. */
 async function run(context: Room, handle: string, text: string, thread?: string): Promise<void> {
-	let { chat, room, server } = context;
+	let { chat, plan, room, server } = context;
 
 	chat.busy = true;
 	chat.turn = handle;
@@ -409,6 +414,21 @@ async function run(context: Room, handle: string, text: string, thread?: string)
 		chat.turn = undefined;
 		chat.acting = undefined;
 		state(chat, server, room);
+
+		/*
+		 * The agent's cursor outlives the turn by a moment.
+		 *
+		 * Somebody who looks over just as it finishes should still see where it
+		 * got to, and a caret that vanished on the same tick as the last token
+		 * would deny them that. Restarted rather than stacked: a queued turn
+		 * starting inside the linger must cancel this, or it would take down a
+		 * cursor the next turn had just placed.
+		 */
+		clearTimeout(chat.lingering);
+		chat.lingering = setTimeout(() => {
+			chat.lingering = undefined;
+			Service.release(plan, server, room);
+		}, LINGER_MS);
 	}
 
 	let next = pending(chat);
@@ -615,6 +635,10 @@ function attach(chat: Chat, activity: Wire.Activity): string {
 /** Let go of the session. The conversation is resumable by id. */
 export async function close(chat: Chat): Promise<void> {
 	chat.release?.();
+	// A cursor waiting to be taken down has nowhere to be taken down from, and
+	// a live timer would hold the loop open for its whole linger.
+	clearTimeout(chat.lingering);
+	chat.lingering = undefined;
 	await chat.agent?.session.disconnect().catch(() => {});
 	chat.agent = undefined;
 }
