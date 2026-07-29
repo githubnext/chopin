@@ -20,7 +20,7 @@ import * as Y from "yjs";
 
 import { importPlan, registry } from "@chopin/dialect";
 
-import { clear, union } from "./marks";
+import { clear, union, unpin } from "./marks";
 import { ThreadStore } from "./threads";
 
 import type { Binding, Provider } from "@lexical/yjs";
@@ -176,6 +176,11 @@ function marked(): number {
 	return union().length;
 }
 
+/** Which one, when it matters which. */
+function at(): string | undefined {
+	return union()[0]?.anchorKey;
+}
+
 describe("an accepted thread after the agent has acted", () => {
 	it("points at the prose the decision produced", () => {
 		let { binding, editor } = room();
@@ -326,5 +331,134 @@ describe("an accepted thread after the agent has acted", () => {
 		expect(view.drifted).toBe(true);
 		// Still readable: the conversation is the durable part of a comment.
 		expect(view.thread.notes).toHaveLength(1);
+	});
+});
+
+/**
+ * Asking to be taken to a thread's prose.
+ *
+ * The scroll itself is not here — that needs a viewport, and `scroll.ts` is the
+ * whole of the part that has one. What is testable is everything that decides
+ * where to send somebody, and the mark they find when they arrive.
+ */
+describe("going to what a thread points at", () => {
+	/** Two blocks, which is what a revision that rewrote a section leaves. */
+	function revised(subject: ThreadStore, editor: LexicalEditor, binding: Binding, id: string) {
+		subject.anchors([{
+			thread: id,
+			subject: rewritten(),
+			result: {
+				anchors: [anchor(editor, binding, 1), anchor(editor, binding, 2)],
+				pending: false,
+			},
+		}]);
+	}
+
+	it("marks where it sent the reader, and keeps it there", () => {
+		let { binding, editor } = room();
+		let subject = store(editor, binding);
+		let value = thread();
+
+		subject.sync([value]);
+		revised(subject, editor, binding, value.id);
+
+		subject.reveal(value.id);
+
+		// One place, not both: arriving somewhere has to say which somewhere.
+		expect(marked()).toBe(1);
+		expect(at()).toBe(subject.snapshot().threads[0]!.places[0]!.anchorKey);
+	});
+
+	it("walks to the next place each time it is asked", () => {
+		let { binding, editor } = room();
+		let subject = store(editor, binding);
+		let value = thread();
+
+		subject.sync([value]);
+		revised(subject, editor, binding, value.id);
+		let places = subject.snapshot().threads[0]!.places;
+
+		subject.reveal(value.id);
+		expect(at()).toBe(places[0]!.anchorKey);
+
+		subject.reveal(value.id);
+		expect(at()).toBe(places[1]!.anchorKey);
+
+		// Round, rather than stopping at the end with nothing to say why.
+		subject.reveal(value.id);
+		expect(at()).toBe(places[0]!.anchorKey);
+	});
+
+	/**
+	 * The step belongs to the pin. A reader whose mark has gone has moved on,
+	 * and starting them at the third block a minute later would be a jump with
+	 * nothing on screen to explain it.
+	 */
+	it("starts again once the mark it left has gone", () => {
+		let { binding, editor } = room();
+		let subject = store(editor, binding);
+		let value = thread();
+
+		subject.sync([value]);
+		revised(subject, editor, binding, value.id);
+		let places = subject.snapshot().threads[0]!.places;
+
+		subject.reveal(value.id);
+		subject.reveal(value.id);
+		expect(at()).toBe(places[1]!.anchorKey);
+
+		unpin();
+
+		subject.reveal(value.id);
+		expect(at()).toBe(places[0]!.anchorKey);
+	});
+
+	it("lends the mark to whatever the reader points at next, then takes it back", () => {
+		let { binding, editor } = room();
+		let subject = store(editor, binding);
+		let value = thread();
+
+		subject.sync([value]);
+		revised(subject, editor, binding, value.id);
+		subject.reveal(value.id);
+
+		// Pointing at the card asks about the whole thread, both blocks of it.
+		subject.focus(value.id);
+		expect(marked()).toBe(2);
+
+		// And leaving it goes back to the one block they were sent to.
+		subject.focus(undefined);
+		expect(marked()).toBe(1);
+	});
+
+	it("sends nobody anywhere when the thread has lost its place", () => {
+		let { binding, editor } = room();
+		let subject = store(editor, binding);
+		let value = thread();
+
+		subject.sync([value]);
+		subject.anchors([{
+			thread: value.id,
+			subject: rewritten(),
+			result: { anchors: [], pending: false },
+		}]);
+
+		subject.reveal(value.id);
+
+		expect(marked()).toBe(0);
+	});
+
+	it("leaves nothing marked once the pane is gone", () => {
+		let { binding, editor } = room();
+		let subject = store(editor, binding);
+		let value = thread();
+
+		subject.sync([value]);
+		revised(subject, editor, binding, value.id);
+		subject.reveal(value.id);
+
+		subject.release();
+
+		expect(marked()).toBe(0);
 	});
 });

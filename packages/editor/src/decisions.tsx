@@ -16,10 +16,13 @@
  * the transcript is where it left its trace.
  *
  * An item also knows where it lives. Hovering a question lights the passage it
- * concerns; hovering a comment lights the phrase it marks. The highlight is
- * written to the DOM rather than the document — it is one reader's pointer, not
- * a fact about the plan, and putting it in the document would send it to
- * everybody else and make it undoable.
+ * concerns; hovering a comment lights the phrase it marks. Clicking either goes
+ * there — which is the only way to reach the prose an accepted comment
+ * produced, since a `<Decision>` draws nothing in the document and the pane is
+ * the whole of where it can be seen. The highlight is written to the DOM rather
+ * than the document — it is one reader's pointer, not a fact about the plan,
+ * and putting it in the document would send it to everybody else and make it
+ * undoable.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -77,16 +80,22 @@ export function Decisions({ connected, reveal, store, threads, wire }: Decisions
 	let [history, setHistory] = useHistory();
 
 	// Leaving the pane should not leave the prose lit. A highlight belongs to
-	// the pointer that asked for it.
-	useEffect(() => () => store.clear(), [store]);
+	// the pointer that asked for it, and a pin to the pane that set it.
+	useEffect(() => () => {
+		store.release();
+		threads.release();
+	}, [store, threads]);
 
 	useEffect(() => {
 		if (!reveal) return;
+		let id = CSS.escape(reveal.widget);
+		// Either kind of card. An id addressed at a pane that only knows how to
+		// find one of them fails by scrolling nowhere, which says nothing.
 		let target = content.current?.querySelector<HTMLElement>(
-			`[data-plan-sidecar-questionnaire="${CSS.escape(reveal.widget)}"]`,
+			`[data-plan-sidecar-questionnaire="${id}"], [data-plan-sidecar-thread="${id}"]`,
 		);
 		target?.scrollIntoView({ block: "center", behavior: "smooth" });
-	}, [entries, reveal]);
+	}, [entries, reveal, state.threads]);
 
 	let open = state.threads.filter(view => view.thread.status === "open");
 	let accepted = state.threads.filter(view => view.thread.status === "accepted");
@@ -108,6 +117,7 @@ export function Decisions({ connected, reveal, store, threads, wire }: Decisions
 			onFocus={() => threads.focus(view.thread.id)}
 			onReply={text => threads.reply(view.thread.id, text)}
 			onRetry={() => threads.retry(view.thread.id)}
+			onReveal={() => threads.reveal(view.thread.id)}
 			onTyping={writing => threads.announce(view.thread.id, writing)}
 			quote={view.quote}
 			view={view}
@@ -121,6 +131,7 @@ export function Decisions({ connected, reveal, store, threads, wire }: Decisions
 			key={entry.id}
 			onRelationEnter={(q, relation) => store.highlight(entry.id, q, relation)}
 			onRelationLeave={() => store.clear()}
+			onRelationSelect={(q, relation) => store.reveal(entry.id, q, relation)}
 			relations={store.counts(entry.id)}
 			value={entry.value}
 			wire={wire}

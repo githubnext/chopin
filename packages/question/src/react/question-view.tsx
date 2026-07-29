@@ -402,12 +402,14 @@ export function QuestionView(props: QuestionViewProps) {
 								aria-controls={`${base}-panel`}
 								aria-label={done ? `${question.header}, answered` : question.header}
 								tabIndex={question.id === active ? 0 : -1}
-								onClick={() => {
-									setActive(question.id);
-									// Switching question also shows what it is about; clicking
-									// the tab you are already on walks that question's passages.
-									onRelationSelect?.(question.id, "subject");
-								}}
+								// Switching question, and only that. A tab used to ask to be
+								// taken to the question's prose as well, which read as
+								// intentional for as long as nothing was listening — wired
+								// up, it scrolls the plan out from under a reader who was
+								// stepping through the tabs to read them. Hovering a tab
+								// already lights what its question is about, and the panel
+								// below carries the control that says "show in plan".
+								onClick={() => setActive(question.id)}
 								onMouseEnter={() => onRelationEnter?.(question.id, "subject")}
 								onMouseLeave={event =>
 									event.currentTarget !== document.activeElement

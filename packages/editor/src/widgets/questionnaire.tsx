@@ -51,14 +51,23 @@ export type QuestionnaireCardProps = {
 	relations?: { [question: string]: { subject: number; result: number } };
 	onRelationEnter?: (question: string, relation: Relation) => void;
 	onRelationLeave?: (question: string, relation: Relation) => void;
+	/** Take the reader to that prose. Without it the shared view's jump is inert. */
+	onRelationSelect?: (question: string, relation: Relation) => void;
 };
 
 export function QuestionnaireCard(
-	{ connected = false, onRelationEnter, onRelationLeave, relations, value, wire }:
-		QuestionnaireCardProps,
+	{
+		connected = false,
+		onRelationEnter,
+		onRelationLeave,
+		onRelationSelect,
+		relations,
+		value,
+		wire,
+	}: QuestionnaireCardProps,
 ) {
 	let resolved = answers(value);
-	let pointing = { relations, onRelationEnter, onRelationLeave };
+	let pointing = { relations, onRelationEnter, onRelationLeave, onRelationSelect };
 
 	return resolved
 		? <Decided resolved={resolved} value={value} {...pointing} />
@@ -69,6 +78,7 @@ type Pointing = {
 	relations?: { [question: string]: { subject: number; result: number } };
 	onRelationEnter?: (question: string, relation: Relation) => void;
 	onRelationLeave?: (question: string, relation: Relation) => void;
+	onRelationSelect?: (question: string, relation: Relation) => void;
 };
 
 function Undecided(

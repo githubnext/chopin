@@ -18,8 +18,9 @@ import { useEffect } from "react";
 import { QuestionnaireNode } from "@chopin/dialect";
 
 import { counts, relate } from "./anchors";
-import { paint } from "./marks";
+import { holds, paint, pin, unpin } from "./marks";
 import { $blockPoints } from "./passage";
+import { scrollToKey } from "./scroll";
 
 import type { Binding } from "@lexical/yjs";
 import type { LexicalEditor } from "lexical";
@@ -52,6 +53,11 @@ export class QuestionnaireStore {
 	#binding: Binding | undefined;
 	#editor: LexicalEditor | undefined;
 	#related: Related[] = [];
+	/**
+	 * Which relationship the reader last asked to be taken to, and how far
+	 * along it. Never cleared: whether it is still live is the pin's answer.
+	 */
+	#walk: { widget: string; question: string; relation: Relation; index: number } | undefined;
 
 	subscribe = (listener: () => void): () => void => {
 		this.#listeners.add(listener);
@@ -77,7 +83,9 @@ export class QuestionnaireStore {
 
 	/** The editor, so a node key can be turned into something on screen. */
 	attach(editor: LexicalEditor | undefined): void {
-		if (!editor && this.#editor) this.clear();
+		// Everything, not just the preview: a pin outlives the pointer but it
+		// cannot outlive the document it names.
+		if (!editor && this.#editor) this.release();
 		this.#editor = editor;
 	}
 
@@ -128,10 +136,66 @@ export class QuestionnaireStore {
 		let editor = this.#editor;
 		if (!editor) return;
 
+		let places = this.#places(widget, question, relation);
+		if (!places) return this.clear();
+
+		paint(editor, "questions", places);
+	}
+
+	/**
+	 * Take the reader to the prose a relationship names.
+	 *
+	 * The click behind `Show in plan`, which a question has offered for as long
+	 * as there has been anywhere to send one and which used to do nothing at
+	 * all. A relationship can name several blocks — the button says how many —
+	 * so clicking again walks to the next and round.
+	 */
+	reveal(widget: string, question: string, relation: Relation): void {
+		let editor = this.#editor;
+		if (!editor) return;
+
+		let places = this.#places(widget, question, relation);
+		if (!places || places.length === 0) return;
+
+		let walk = this.#walk;
+		let index = holds("questions")
+				&& walk !== undefined
+				&& walk.widget === widget
+				&& walk.question === question
+				&& walk.relation === relation
+			? (walk.index + 1) % places.length
+			: 0;
+
+		let place = places[index];
+		if (!place) return;
+
+		this.#walk = { widget, question, relation, index };
+		pin(editor, "questions", [place]);
+		scrollToKey(editor, place.anchorKey);
+	}
+
+	/** Stop previewing. Whatever was pinned stays, which is what a pin is for. */
+	clear(): void {
+		if (this.#editor) paint(this.#editor, "questions", []);
+	}
+
+	/** Stop pointing at anything at all. The pane is going away. */
+	release(): void {
+		unpin(this.#editor, "questions");
+		this.clear();
+	}
+
+	/** The blocks a relationship resolves to, or nothing if it names none. */
+	#places(widget: string, question: string, relation: Relation): Points[] | undefined {
+		let editor = this.#editor;
+		if (!editor) return undefined;
+
 		let found = this.#related.find(item =>
 			item.widget === widget && item.question === question && item.relation === relation
 		);
-		if (!found || found.pending) return this.clear();
+		// Pending means nobody has checked this since the plan moved, so it is
+		// not somewhere worth sending a reader.
+		if (!found || found.pending) return undefined;
 
 		let places: Points[] = [];
 		editor.getEditorState().read(() => {
@@ -141,11 +205,7 @@ export class QuestionnaireStore {
 			}
 		});
 
-		paint(editor, "questions", places);
-	}
-
-	clear(): void {
-		if (this.#editor) paint(this.#editor, "questions", []);
+		return places;
 	}
 }
 

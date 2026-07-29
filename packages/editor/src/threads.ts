@@ -17,8 +17,9 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { useEffect } from "react";
 
 import { resolve } from "./anchors";
-import { clear as unpaint, paint } from "./marks";
+import { clear as unpaint, holds, paint, pin, unpin } from "./marks";
 import { $blockPoints, $recover, locate } from "./passage";
+import { blockElement, scrollToKey } from "./scroll";
 
 import type { Binding } from "@lexical/yjs";
 import type { LexicalEditor } from "lexical";
@@ -76,6 +77,13 @@ export class ThreadStore {
 	#draft: Draft | undefined;
 	#focused: string | undefined;
 	#error: string | undefined;
+	/**
+	 * Which card the reader last asked to be taken to, and how far along it.
+	 *
+	 * Never cleared. Whether it is still live is the pin's answer, not this
+	 * one's, and a second copy of that rule is a second thing to get wrong.
+	 */
+	#walk: { thread: string; index: number } | undefined;
 
 	#binding: Binding | undefined;
 	#editor: LexicalEditor | undefined;
@@ -262,6 +270,43 @@ export class ThreadStore {
 	}
 
 	/**
+	 * Take the reader to the prose a thread points at.
+	 *
+	 * A decision can have produced several blocks, so clicking again walks to
+	 * the next one and round. The step is part of the pin rather than a fact
+	 * about the card: a pin that has lapsed means the reader has moved on, and
+	 * starting a minute later at the third place would be a jump with nothing
+	 * on screen to explain it.
+	 *
+	 * Marked as well as scrolled. Arriving is not the same as being shown
+	 * which block was meant, and the hover that lit it is over by the time the
+	 * click has landed.
+	 */
+	reveal(id: string): void {
+		let editor = this.#editor;
+		let places = this.#state.threads.find(view => view.thread.id === id)?.places ?? [];
+		if (!editor || places.length === 0) return;
+
+		let walk = this.#walk;
+		let index = holds("comments") && walk !== undefined && walk.thread === id
+			? (walk.index + 1) % places.length
+			: 0;
+
+		let place = places[index];
+		if (!place) return;
+
+		this.#walk = { thread: id, index };
+		pin(editor, "comments", [place]);
+		scrollToKey(editor, place.anchorKey);
+	}
+
+	/** Stop pointing at anything. The pane is going away. */
+	release(): void {
+		unpin(this.#editor, "comments");
+		this.focus(undefined);
+	}
+
+	/**
 	 * Re-resolve and repaint.
 	 *
 	 * Called on every editor update as well as on new data, because a passage
@@ -424,13 +469,12 @@ export class ThreadStore {
  */
 function order(editor: LexicalEditor, key: string): number | undefined {
 	try {
-		let element = editor.getElementByKey(key);
-		if (!element) return undefined;
+		let block = blockElement(editor, key);
+		if (!block) return undefined;
 
 		let root = editor.getRootElement();
 		if (!root) return undefined;
 
-		let block = element.closest(".plan-content > *") ?? element;
 		let index = [...root.children].indexOf(block);
 		return index === -1 ? undefined : index;
 	} catch {
