@@ -586,3 +586,220 @@
 	border-radius: 9999px;
 	background: currentColor;
 }
+
+/* What the agent changed ------------------------------------------------- */
+
+/*
+ * Marks drawn entirely in `box-shadow`, which is what keeps them free of the
+ * layout.
+ *
+ * An agent editing below the fold must not shift the sentence somebody is in
+ * the middle of typing, and a mark that expires ten seconds later must not
+ * shift it back — so nothing here may take space, and nothing here may add an
+ * element. A `::before` bar was the obvious way to draw the gutter and is the
+ * wrong one: it needs the block to become a containing block, which re-anchors
+ * any absolutely positioned widget chrome inside it for as long as the mark is
+ * up.
+ *
+ * An outset shadow offset into the gutter with a negative spread leaves a
+ * sliver beside the block, outside it, costing no space and no stacking.
+ */
+.plan .plan-content [data-plan-change] {
+	transition: box-shadow 600ms ease-out, background 600ms ease-out;
+}
+
+/* Written just now: a solid rule beside it, and a wash over it. */
+.plan .plan-content [data-plan-change="added"] {
+	box-shadow: -0.5rem 0 0 -0.375rem var(--color-ring);
+	background: color-mix(in oklch, var(--color-ring) 10%, transparent);
+}
+
+/*
+ * Moved, not written. Deliberately quieter than the wash above: the words are
+ * ones the reader may already have read, and marking them as loudly as new
+ * prose would say something untrue about them.
+ */
+.plan .plan-content [data-plan-change="moved"] {
+	box-shadow: -0.5rem 0 0 -0.4375rem color-mix(in oklch, var(--color-ring) 70%, transparent);
+}
+
+/*
+ * A hole where something was.
+ *
+ * Drawn on the edge of the block still beside it, because what went has no
+ * element to carry a mark. The two sides are separate properties so one block
+ * can hold a removal above it and a vacancy below it at once.
+ */
+.plan .plan-content [data-plan-gap-before],
+.plan .plan-content [data-plan-gap-after] {
+	transition: box-shadow 600ms ease-out;
+}
+
+.plan .plan-content [data-plan-gap-before="removed"] {
+	box-shadow: 0 -0.375rem 0 -0.3125rem var(--color-muted-foreground);
+}
+
+.plan .plan-content [data-plan-gap-after="removed"] {
+	box-shadow: 0 0.375rem 0 -0.3125rem var(--color-muted-foreground);
+}
+
+/*
+ * Where a block left from, as opposed to where one was deleted. Fainter, since
+ * nothing was lost — the content is still in the plan, further up or down.
+ */
+.plan .plan-content [data-plan-gap-before="vacated"] {
+	box-shadow: 0 -0.375rem 0 -0.34375rem
+		color-mix(in oklch, var(--color-muted-foreground) 55%, transparent);
+}
+
+.plan .plan-content [data-plan-gap-after="vacated"] {
+	box-shadow: 0 0.375rem 0 -0.34375rem
+		color-mix(in oklch, var(--color-muted-foreground) 55%, transparent);
+}
+
+/*
+ * A block can be both: written where something else was taken out. The
+ * shadows compose in one property, so the combinations have to be spelled out
+ * rather than left to the cascade, which would keep only the last.
+ */
+.plan .plan-content [data-plan-change="added"][data-plan-gap-before="removed"] {
+	box-shadow:
+		-0.5rem 0 0 -0.375rem var(--color-ring),
+		0 -0.375rem 0 -0.3125rem var(--color-muted-foreground);
+}
+
+.plan .plan-content [data-plan-change="added"][data-plan-gap-after="removed"] {
+	box-shadow:
+		-0.5rem 0 0 -0.375rem var(--color-ring),
+		0 0.375rem 0 -0.3125rem var(--color-muted-foreground);
+}
+
+/*
+ * The agent wrote this block and the reader is pointing at a card that refers
+ * to it.
+ *
+ * Only reachable where there is no Highlight API, since that is the only path
+ * on which a sidecar mark touches the element's own background. The two rules
+ * have equal specificity, so without saying so the later one — this file's —
+ * would simply replace the earlier and the pointer would lose its wash.
+ * Pointing is something the reader just did and the agent's mark is ambient,
+ * so the pointer wins; the gutter bar is in `box-shadow` and survives either
+ * way.
+ */
+.plan .plan-content [data-plan-related][data-plan-change] {
+	background: color-mix(in oklch, var(--color-accent) 20%, transparent);
+}
+
+/* Reaching the ones off screen ------------------------------------------- */
+
+/*
+ * One chip per edge, over the prose rather than in it, and only while
+ * something in that direction is still unread. Opposite the status chip at the
+ * bottom, which is why the lower one sits inline-start of it.
+ */
+.plan-changes {
+	position: absolute;
+	z-index: 3;
+	inset-inline-start: 50%;
+	translate: -50% 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.375rem;
+	max-width: min(24rem, 80%);
+}
+
+.plan-changes[data-side="above"] {
+	inset-block-start: 0.75rem;
+}
+
+.plan-changes[data-side="below"] {
+	inset-block-end: 0.75rem;
+	flex-direction: column-reverse;
+}
+
+.plan-changes-bar {
+	display: flex;
+	align-self: center;
+	align-items: stretch;
+	border: 1px solid var(--color-border);
+	border-radius: 9999px;
+	background: var(--color-background);
+	box-shadow: 0 1px 3px color-mix(in oklch, var(--color-foreground) 12%, transparent);
+	font-size: 0.6875rem;
+	line-height: 1rem;
+	overflow: hidden;
+}
+
+.plan-changes-go,
+.plan-changes-more {
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+	padding: 0.25rem 0.625rem;
+	color: var(--color-foreground);
+	cursor: pointer;
+}
+
+.plan-changes-more {
+	padding-inline: 0.375rem;
+	border-inline-start: 1px solid var(--color-border);
+}
+
+.plan-changes-go:hover,
+.plan-changes-more:hover {
+	background: var(--color-accent);
+}
+
+.plan-changes-list,
+.plan-changes-empty {
+	margin: 0;
+	padding: 0.375rem;
+	max-height: 12rem;
+	overflow-y: auto;
+	list-style: none;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-md);
+	background: var(--color-background);
+	box-shadow: 0 2px 8px color-mix(in oklch, var(--color-foreground) 12%, transparent);
+	font-size: 0.6875rem;
+	line-height: 1rem;
+}
+
+.plan-changes-empty {
+	padding: 0.5rem 0.625rem;
+	color: var(--color-muted-foreground);
+}
+
+.plan-changes-item {
+	display: flex;
+	gap: 0.5rem;
+	padding: 0.25rem 0.5rem;
+	border-radius: var(--radius-sm);
+}
+
+.plan-changes-kind {
+	flex: none;
+	font-weight: 600;
+	color: var(--color-muted-foreground);
+}
+
+/* Still waiting to be reached, as opposed to already shown and counted down. */
+.plan-changes-item[data-unread] {
+	background: color-mix(in oklch, var(--color-ring) 8%, transparent);
+}
+
+.plan-changes-item[data-unread] .plan-changes-kind {
+	color: var(--color-foreground);
+}
+
+.plan-changes-item[data-kind="removed"] .plan-changes-text {
+	color: var(--color-muted-foreground);
+	text-decoration: line-through;
+}
+
+/* One line each: this is an index, not a diff. */
+.plan-changes-text {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}

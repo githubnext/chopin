@@ -14,6 +14,8 @@ import "@mdxeditor/editor/style.css";
 import "./styles.css";
 import { plugins as dialectPlugins } from "@chopin/dialect";
 
+import { ChangeStore } from "./changes";
+import { PlanChanges } from "./changes-chip";
 import { collaborationPlugin } from "./collaboration";
 import { PlanPresence } from "./presence";
 import { PlanStatus } from "./status";
@@ -87,20 +89,26 @@ export function PlanEditor(
 	// synchronously during an event, so they keep reading the ref.
 	let [presence, setPresence] = useState<PlanProvider>();
 	let previousWire = useRef(wire);
+	// Nothing outside the editor reads this one, unlike the questionnaires,
+	// so it is owned here rather than being handed down from the room.
+	let [changes] = useState(() => new ChangeStore());
 
 	// A rotated epoch invalidates the whole local document, so the editor is
-	// rebuilt rather than reconciled — that is what "reset" means.
+	// rebuilt rather than reconciled — that is what "reset" means. The marks
+	// describe a history that no longer exists, so they go with it.
 	let onReset = useCallback((reason: Plan.Reset["reason"]) => {
+		changes.clear();
 		setState(prev => ({ ...prev, synced: false, reset: reason }));
 		setGeneration(value => value + 1);
-	}, []);
+	}, [changes]);
 
 	// The store resolves anchors itself, because a Lexical key is per-editor:
 	// the server's key for a block means nothing in this browser.
 	let onBinding = useCallback((value: Binding | undefined) => {
 		questions?.bind(value);
 		threads?.bind(value);
-	}, [questions, threads]);
+		changes.bind(value);
+	}, [questions, threads, changes]);
 
 	let onAnchors = useCallback(
 		(snapshot: { widgets: Plan.WidgetAnchors[]; threads: Plan.ThreadAnchors[] }) => {
@@ -109,6 +117,22 @@ export function PlanEditor(
 		},
 		[questions, threads],
 	);
+
+	let onChanges = useCallback((found: Plan.Change[]) => {
+		changes.mark(found);
+	}, [changes]);
+
+	// The scroll container is what "in view" is measured against, and it only
+	// exists once the editor has rendered.
+	useEffect(() => {
+		changes.viewport(scroller.current ?? undefined);
+		let element = scroller.current;
+		if (!element) return;
+		element.addEventListener("scroll", changes.onScroll, { passive: true });
+		return () => element.removeEventListener("scroll", changes.onScroll);
+	}, [changes, generation, wire]);
+
+	useEffect(() => () => changes.dispose(), [changes]);
 
 	let onProvider = useCallback((value: PlanProvider | undefined) => {
 		provider.current = value;
@@ -176,11 +200,30 @@ export function PlanEditor(
 					 * dialect: keep its serialiser able to write every node, and
 					 * it has no reason to throw.
 					 */
-					collaborationPlugin({ wire, user, onReset, onProvider, onBinding, onAnchors }),
-					widgetsPlugin({ questions, threads }),
+					collaborationPlugin({
+						wire,
+						user,
+						onReset,
+						onProvider,
+						onBinding,
+						onAnchors,
+						onChanges,
+					}),
+					widgetsPlugin({ questions, threads, changes }),
 				]
 				: [],
-		[wire, user, onReset, onProvider, onBinding, onAnchors, questions, threads],
+		[
+			wire,
+			user,
+			onReset,
+			onProvider,
+			onBinding,
+			onAnchors,
+			onChanges,
+			questions,
+			threads,
+			changes,
+		],
 	);
 
 	useEffect(() => {
@@ -234,7 +277,8 @@ export function PlanEditor(
 						/>
 					</div>
 					<PlanPresence provider={presence} />
-					{/* In the document column, so it tracks the prose, not the pane. */}
+					{/* In the document column, so they track the prose, not the pane. */}
+					<PlanChanges store={changes} />
 					<PlanStatus
 						wire={wire}
 						connection={connection}

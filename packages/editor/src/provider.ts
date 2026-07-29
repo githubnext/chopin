@@ -54,6 +54,14 @@ export type PlanProviderOptions = {
 	 * copy of the other.
 	 */
 	onAnchors?: (snapshot: { widgets: Plan.WidgetAnchors[]; threads: Plan.ThreadAnchors[] }) => void;
+	/**
+	 * What the agent just did, to be marked in the prose.
+	 *
+	 * Unlike the anchors, this is not part of opening a document: it says what
+	 * changed a moment ago, which is only true for a moment. Somebody arriving
+	 * afterwards is reading the plan, not watching it being written.
+	 */
+	onChanges?: (changes: Plan.Change[]) => void;
 };
 
 /**
@@ -185,6 +193,9 @@ export class PlanProvider implements Provider {
 			this.#wire.on<Plan.Ack>("plan:ack", event => this.#settle(event.id)),
 			this.#wire.on<Plan.Awareness>("plan:awareness", event => this.#presence(event)),
 			this.#wire.on<Plan.Reset>("plan:reset", event => this.#reset(event)),
+			this.#wire.on<Plan.Changes>("plan:changes", event => {
+				if (event.epoch === this.#epoch) this.#options.onChanges?.(event.changes);
+			}),
 			this.#wire.on<Plan.Anchors>("plan:anchors", event => {
 				if (event.epoch === this.#epoch) {
 					this.#anchors({ widgets: event.widgets, threads: event.threads });
