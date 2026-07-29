@@ -21,10 +21,10 @@ agent, which is what the tests use.
 
 ```
 packages/dialect     4.5k   the MDX dialect and its Lexical schema
-packages/editor      5.4k   the browser editor, cursors, the sidecar
+packages/editor      6.6k   the browser editor, cursors, the sidecar, agent marks
 packages/question    1.8k   questionnaires: definition, shared answer, derivation
 packages/protocol    0.9k   the wire, as types, plus the addressing rule
-apps/server          8.8k   rooms, documents, questions, comments, the agent
+apps/server          9.3k   rooms, documents, questions, comments, the agent
 apps/web             1.4k   the three panes
 scripts/dev.ts              the development supervisor
 ```
@@ -122,6 +122,24 @@ is not there are all detectable in seconds by trying, and discovering them when
 somebody types their first message is worse. `AGENT=off` is the deliberate way
 to run without one.
 
+**A mark for an agent edit waits to be seen.** The agent writes wherever it
+likes, including several screens away from whoever is reading, so a mark that
+spent its ten seconds off screen would have told nobody anything. Nothing
+starts counting down until it has been in the viewport, which makes it an
+unread marker rather than a flash — and unread markers do not expire on a
+clock, so an unseen one waits indefinitely and the set is bounded by a cap
+instead. Once seen the clock runs whether or not the mark is still in view: two
+states and one timer, so nothing can go dark and light up again on a later
+scroll, which would read as a second edit that never happened.
+
+**Those marks are drawn only in `box-shadow`**, on blocks that already exist.
+An agent editing below the fold must not shift the sentence somebody is in the
+middle of typing, and a mark expiring ten seconds later must not shift it back,
+so nothing may take space and nothing may add an element. What the agent
+removed has no element at all, which is why a hole is drawn on the edge of the
+block still beside it and why the side is part of its address — and why what
+was removed can only be read in the list behind the chips.
+
 ## Things that fail silently
 
 Every bug found in this project so far was invisible. These are the mechanisms.
@@ -183,8 +201,26 @@ returns — and the flush broadcasts only when the snapshot actually moved,
 because a recovery nobody is told about is the same as no recovery.
 
 **`CSS.highlights` is a document-wide registry**, shared with Lexical's remote
-cursors. Ours are named `plan-comment*`, its are `lexical-cursor-*`; a
-collision would silently unpaint somebody's selection.
+cursors. Ours is named `plan-related`, its are `lexical-cursor-*`; a collision
+would silently unpaint somebody's selection.
+
+**An `IntersectionObserver` threshold is a fraction of the element**, not of
+the viewport. A block taller than the window can never reach `0.2`, so gating
+anything on a ratio silently excludes exactly the blocks most worth noticing. A
+negative `rootMargin` is the way to say "meaningfully on screen" for a block of
+any size.
+
+**An element that crosses the viewport in one frame produces no entry.** Its
+ratio is zero on both sides of a `scrollIntoView` or a scrollbar drag, so an
+observer watching for a crossing sees nothing and whatever was derived from the
+last one it did see is stale. `changes.ts` re-reads rectangles after any scroll
+longer than the viewport for this reason.
+
+**A block's index moves when anything above it is inserted.** Comparing indices
+before and after an edit therefore reports most of the document as having moved
+whenever one paragraph is added at the top. What genuinely moved is knowable
+only from the operations that were asked for, which is why `edit.ts` derives
+what was written from object identity and what moved or went from the batch.
 
 **`bun run <script>` does not exit when what it started dies.** It sits there
 with no child. `scripts/dev.ts` spawns both processes directly for this reason,
@@ -206,9 +242,14 @@ because something above surprised somebody.
 
 Tests describe behaviour rather than implementation, and their names read as
 sentences about what the system does. Prefer a test that fails when the
-behaviour regresses over one that fails when the code is rearranged. A few
-places have no test on purpose — anything requiring layout, since happy-dom
-returns zero for every measurement and a test there would assert a fiction.
+behaviour regresses over one that fails when the code is rearranged.
+
+A few places have no test on purpose. **There is no DOM in the test runtime** —
+no happy-dom, no preload, `document` is undefined — so anything that reaches
+for an element, a rectangle or an observer cannot be covered at all. The answer
+is not to add one but to keep the part worth testing separable from the part
+that needs a browser: `trail.ts` is the whole of the mark lifecycle with no
+document in it, and `changes.ts` is the adapter that has one and is not tested.
 
 ## Diagnostics
 
