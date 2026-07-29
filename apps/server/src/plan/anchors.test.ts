@@ -199,3 +199,81 @@ describe("digests", () => {
 		expect(new Set(first).size).toBe(4);
 	});
 });
+
+/**
+ * Turning what a batch did into places a browser can find.
+ *
+ * The edit engine reports indices, because only it knows what the operations
+ * meant; the anchors are minted afterwards, because only the live document
+ * knows where a block sits in the collaborative history. These pin the join
+ * between the two — an off-by-one here would mark the wrong prose, and mark it
+ * plausibly enough that nobody would question it.
+ */
+describe("pointing at what an edit did", () => {
+	/**
+	 * The block an anchor names, as the text in it.
+	 *
+	 * Both halves of the anchor have to agree for this to answer: the position
+	 * has to still resolve in this history, and the digest has to still match a
+	 * block. An anchor minted against the wrong index fails the second even
+	 * though it passes the first, which is the off-by-one worth catching.
+	 */
+	function block(subject: Room, value: Plan.Anchor): string | undefined {
+		if (!room.resolveAnchor(subject.document, value)) return undefined;
+		let index = room.digests(subject.document).indexOf(value.digest);
+		return index < 0 ? undefined : edit.outline(subject)[index]?.preview;
+	}
+
+	it("anchors a written block to the block that was written", async () => {
+		let subject = await plan();
+		let outcome = edit.apply(subject, 1, [{ op: "insert", index: 1, source: "Inserted.\n" }]);
+
+		expect(outcome.ok).toBe(true);
+		if (!outcome.ok) return;
+
+		let added = outcome.changes.find(change => change.kind === "added");
+		expect(added).toBeDefined();
+		if (added?.kind !== "added") return;
+
+		expect(block(subject, anchor(subject.document, added.index))).toBe("Inserted.");
+	});
+
+	it("anchors a hole to the block still beside it", async () => {
+		let subject = await plan();
+		let outcome = edit.apply(subject, 1, [{ op: "delete", index: 2 }]);
+
+		expect(outcome.ok).toBe(true);
+		if (!outcome.ok) return;
+
+		let hole = outcome.changes.find(change => change.kind === "removed");
+		if (hole?.kind !== "removed") throw new Error("expected a hole");
+
+		// The paragraph that followed what went, which is now in its place.
+		expect(hole.at.side).toBe("before");
+		expect(block(subject, anchor(subject.document, hole.at.index)))
+			.toBe("The third paragraph.");
+		expect(hole.blocks).toEqual([{ type: "paragraph", preview: "The second paragraph." }]);
+	});
+
+	/**
+	 * The reason these are anchors rather than the indices the engine reported.
+	 * Somebody typing a new block above them between the edit and the browser
+	 * painting it would leave every index off by one.
+	 */
+	it("still names the same blocks after somebody edits above them", async () => {
+		let subject = await plan();
+		let outcome = edit.apply(subject, 1, [{ op: "insert", index: 1, source: "Inserted.\n" }]);
+
+		expect(outcome.ok).toBe(true);
+		if (!outcome.ok) return;
+		let added = outcome.changes.find(change => change.kind === "added");
+		if (added?.kind !== "added") return;
+
+		let value = anchor(subject.document, added.index);
+		subject.revision = 2;
+		expect(edit.apply(subject, 2, [{ op: "insert", index: 0, source: "Above.\n" }]).ok).toBe(true);
+
+		expect(room.resolveAnchor(subject.document, value)).toBeDefined();
+		expect(block(subject, value)).toBe("Inserted.");
+	});
+});

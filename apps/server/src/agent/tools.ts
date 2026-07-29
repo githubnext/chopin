@@ -39,6 +39,8 @@ export type Context = {
 	publish: (mutation: { update: Uint8Array; source: string }) => void;
 	/** Relays the current relationship snapshot to everyone in the room. */
 	anchors: () => void;
+	/** Tells the room where this batch wrote, moved and removed. */
+	changes: (found: edit.Change[]) => void;
 };
 
 export function toolbox(context: Context): Tool[] {
@@ -152,6 +154,12 @@ export function toolbox(context: Context): Tool[] {
 					if (!outcome.ok) return outcome;
 
 					if (outcome.mutation) context.publish(outcome.mutation);
+
+					// After the update that created them, never before it. Both
+					// go to the same topic in order, so by the time this arrives
+					// the browser already holds the blocks it names.
+					context.changes(outcome.changes);
+
 					for (let id of outcome.detached) {
 						let record = context.plan.records.get(id);
 						if (record) context.plan.records.set(id, { ...record, status: "cancelled" });

@@ -22,6 +22,7 @@ export declare namespace Plan {
 		| (Update & { sender?: string })
 		| (Awareness & { sender?: string })
 		| Anchors
+		| Changes
 		| Reset
 		| Status;
 
@@ -126,6 +127,52 @@ export declare namespace Plan {
 		epoch: string;
 		widgets: WidgetAnchors[];
 		threads: ThreadAnchors[];
+	};
+
+	/**
+	 * A place between blocks, named by the block still beside it.
+	 *
+	 * What the agent took out has no anchor of its own: a relative position
+	 * needs a live collaborative type and the departed block's is gone. So a
+	 * gap is described by a survivor and the side the content was on. That the
+	 * plan can never be emptied is what guarantees a survivor exists.
+	 */
+	export type Gap = {
+		at: Anchor;
+		side: "before" | "after";
+	};
+
+	/** Enough of a block to recognise it in a list. */
+	export type Excerpt = {
+		/** The MDAST node type, or the component name for a dialect block. */
+		type: string;
+		/** Bounded flattened text. */
+		preview: string;
+	};
+
+	/**
+	 * One thing the agent did to the plan, as a reader can find it.
+	 *
+	 * A move is one change rather than a disappearance and an arrival, because
+	 * a reader who is shown those separately has to work out for themselves
+	 * that they are the same block. A rewrite is `added` alone: something is
+	 * still there to look at, and marking a gap as well would put a tombstone
+	 * on the most common edit the agent makes.
+	 */
+	export type Change =
+		| ({ kind: "added"; at: Anchor } & Excerpt)
+		| ({ kind: "moved"; at: Anchor; from: Gap } & Excerpt)
+		| { kind: "removed"; at: Gap; blocks: Excerpt[] };
+
+	/**
+	 * What the agent just did to the plan.
+	 *
+	 * Ephemeral, and deliberately not replayed on open: somebody arriving
+	 * afterwards is reading the plan, not watching it being written.
+	 */
+	export type Changes = KIND<"plan:changes"> & {
+		epoch: string;
+		changes: Change[];
 	};
 
 	/**

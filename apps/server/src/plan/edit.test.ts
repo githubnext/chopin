@@ -293,3 +293,150 @@ describe("reconciliation", () => {
 		expect(outcome.mutation!.source).toContain("Added.");
 	});
 });
+
+/**
+ * What a batch did, so a reader can be shown where.
+ *
+ * The two halves are derived differently on purpose, and the difference is
+ * what these pin: identity answers what was written, and cannot be fooled;
+ * the operations answer what moved or went, which identity cannot tell apart
+ * from a block merely pushed down by an insert above it.
+ */
+describe("reporting what a batch did", () => {
+	/** Every change, in the order the reader will meet them. */
+	function changes(outcome: edit.Result): edit.Change[] {
+		expect(outcome.ok).toBe(true);
+		return outcome.ok ? outcome.changes : [];
+	}
+
+	it("reports a block it wrote, with enough of it to recognise", () => {
+		let found = changes(
+			edit.apply(subject, 1, [{ op: "insert", index: 0, source: "Inserted.\n" }]),
+		);
+
+		expect(found).toEqual([
+			{ kind: "added", index: 1, type: "paragraph", preview: "Inserted." },
+		]);
+	});
+
+	/**
+	 * The case index comparison gets wrong. Everything below an insert shifts
+	 * down by one, and a diff that read position as movement would light up
+	 * the whole document for an edit that touched one block.
+	 */
+	it("does not report blocks an insert pushed down as having moved", () => {
+		let found = changes(
+			edit.apply(subject, 1, [{ op: "insert", index: 0, source: "Inserted.\n" }]),
+		);
+
+		expect(found.filter(change => change.kind === "moved")).toEqual([]);
+	});
+
+	it("reports a rewrite as what it wrote, and leaves no hole", () => {
+		let found = changes(
+			edit.apply(subject, 1, [{ op: "replace", index: 1, source: "Rewritten.\n" }]),
+		);
+
+		expect(found).toEqual([
+			{ kind: "added", index: 1, type: "paragraph", preview: "Rewritten." },
+		]);
+	});
+
+	it("names the hole a deletion left by the block that followed it", () => {
+		let found = changes(edit.apply(subject, 1, [{ op: "delete", index: 1 }]));
+
+		expect(found).toEqual([
+			{
+				kind: "removed",
+				at: { index: 1, side: "before" },
+				blocks: [{ type: "paragraph", preview: "First paragraph." }],
+			},
+		]);
+	});
+
+	it("names a hole at the end by the block before it", () => {
+		let found = changes(edit.apply(subject, 1, [{ op: "delete", index: 2 }]));
+
+		expect(found).toEqual([
+			{
+				kind: "removed",
+				at: { index: 1, side: "after" },
+				blocks: [{ type: "paragraph", preview: "Second paragraph." }],
+			},
+		]);
+	});
+
+	/** Three blocks deleted in a row is one hole in the prose, not three. */
+	it("collapses deletions that left the same space into one hole", () => {
+		let found = changes(
+			edit.apply(subject, 1, [{ op: "delete", index: 1 }, { op: "delete", index: 2 }]),
+		);
+
+		expect(found).toEqual([
+			{
+				kind: "removed",
+				at: { index: 0, side: "after" },
+				blocks: [
+					{ type: "paragraph", preview: "First paragraph." },
+					{ type: "paragraph", preview: "Second paragraph." },
+				],
+			},
+		]);
+	});
+
+	it("reports a move as one change, at both ends", () => {
+		let found = changes(edit.apply(subject, 1, [{ op: "move", index: 0, to: 2 }]));
+
+		expect(found).toEqual([
+			{
+				kind: "moved",
+				index: 2,
+				from: { index: 0, side: "before" },
+				type: "heading",
+				preview: "Title",
+			},
+		]);
+	});
+
+	it("reports nothing for a move that goes nowhere", () => {
+		expect(changes(edit.apply(subject, 1, [{ op: "move", index: 1, to: 1 }]))).toEqual([]);
+	});
+
+	/**
+	 * The exclusion that stops a hole pointing at the wrong prose.
+	 *
+	 * The deleted paragraph sat between the heading and the block after it,
+	 * and that block is the one this batch sends to the top. Naming the hole
+	 * by it would put the mark above the whole document, nowhere near where
+	 * the content was, so the search has to pass over anything that vacated
+	 * and settle on the heading instead.
+	 */
+	it("does not name a hole by a block that has itself gone elsewhere", () => {
+		let found = changes(
+			edit.apply(subject, 1, [{ op: "delete", index: 1 }, { op: "move", index: 2, to: 0 }]),
+		);
+
+		expect(room.project(subject.document)).toBe("Second paragraph.\n\n# Title\n");
+		// The heading, which ended up last — not the paragraph now at the top.
+		expect(found.find(change => change.kind === "removed"))
+			.toMatchObject({ at: { index: 1, side: "after" } });
+	});
+
+	/** A document marked from end to end says nothing at all. */
+	it("reports nothing when the whole plan was replaced", () => {
+		expect(changes(edit.apply(subject, 1, [{ op: "replace_root", source: "# New\n" }])))
+			.toEqual([]);
+	});
+
+	it("reads in document order", () => {
+		let found = changes(
+			edit.apply(subject, 1, [
+				{ op: "insert", index: 2, source: "Last.\n" },
+				{ op: "insert", index: 0, source: "Early.\n" },
+			]),
+		);
+
+		expect(found.map(change => change.kind === "removed" ? change.at.index : change.index))
+			.toEqual([1, 4]);
+	});
+});
