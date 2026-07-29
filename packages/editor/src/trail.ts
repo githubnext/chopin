@@ -2,7 +2,7 @@
  * How long the reader has left to notice each thing the agent changed.
  *
  * A mark waits until it has been looked at. The agent can write below the fold
- * while somebody is reading the top of the plan, and a mark that spent its ten
+ * while somebody is reading the top of the plan, and a mark that spent its few
  * seconds off screen would have told nobody anything — so nothing starts
  * counting down until it has been in the viewport, and until then it is an
  * unread marker rather than a flash. Unread markers do not expire on a clock;
@@ -19,7 +19,7 @@
  */
 
 /** How long a mark stays up once it has been seen. */
-const LINGER = 10_000;
+const LINGER = 5_000;
 
 /**
  * How many unseen marks to keep.
@@ -89,7 +89,7 @@ export function trail(changed: () => void, linger = LINGER): Trail {
 		saw(ids) {
 			for (let id of ids) {
 				// Only the first sighting counts. Scrolling back to something
-				// already showing must not buy it another ten seconds, or a
+				// already showing must not buy it another five seconds, or a
 				// mark could be kept alive indefinitely by being looked at.
 				if (phases.get(id) !== "pending") continue;
 				phases.set(id, "showing");

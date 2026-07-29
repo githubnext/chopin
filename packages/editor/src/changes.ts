@@ -6,7 +6,7 @@
  * reached it. Everything is drawn by attribute on a block that already exists,
  * so the marks add no element and take no space — an agent editing below the
  * fold must not shift the sentence somebody is in the middle of typing, and a
- * mark that expires ten seconds later must not shift it back.
+ * mark that expires a few seconds later must not shift it back.
  *
  * A block that has gone cannot carry a mark, so a hole is drawn on the edge of
  * the block still beside it and the side is part of the address. That is also

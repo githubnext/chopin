@@ -593,7 +593,7 @@
  * Marks that take no space and add no element.
  *
  * An agent editing below the fold must not shift the sentence somebody is in
- * the middle of typing, and a mark that expires ten seconds later must not
+ * the middle of typing, and a mark that expires a few seconds later must not
  * shift it back. So a block is washed, and a hole is drawn in `box-shadow` on
  * the edge of the block still beside it. A `::before` rule was the obvious way
  * to draw a hole and is the wrong one: it needs the block to become a

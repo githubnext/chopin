@@ -11,7 +11,7 @@
  * moved; the painted position is the only thing that changes exactly when a
  * peer does.
  *
- * The agent's label stays up ten times as long. A person's caret is one of
+ * The agent's label stays up five times as long. A person's caret is one of
  * several and its owner is watching it, so a second is enough to say who moved
  * where; the agent's arrives unannounced in a document somebody else is
  * reading, and the whole reason it is drawn at all is to say what put it
@@ -25,7 +25,7 @@ import type { Binding, Provider } from "@lexical/yjs";
 const LINGER = 1000;
 
 /** How long the agent's stays, for the same reason it is louder at all. */
-const AGENT_LINGER = 10_000;
+const AGENT_LINGER = 5_000;
 
 export type Labels = {
 	/** Flashes whoever moved. Call after cursors are painted. */
