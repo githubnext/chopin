@@ -7,9 +7,13 @@
  * comment *is* a decision, and would otherwise have to pick a side.
  *
  * Outstanding items come first, in document order, because one of those is
- * blocking somebody. Everything resolved collapses behind a disclosure: it is
- * the record, worth keeping and not worth scrolling past. A dismissed thread is
- * not shown at all; the transcript is where it left its trace.
+ * blocking somebody. Everything resolved follows, showing: it is the record of
+ * what the room settled, and a decision nobody can see is one that gets made a
+ * second time. The disclosure stays because resolved items are kept forever and
+ * a long-lived plan will out-scroll the pane — and which way it is left is
+ * remembered, since collapsing it and finding it open again on the next load
+ * reads as a toggle that does not work. A dismissed thread is not shown at all;
+ * the transcript is where it left its trace.
  *
  * An item also knows where it lives. Hovering a question lights the passage it
  * concerns; hovering a comment lights the phrase it marks. The highlight is
@@ -47,11 +51,30 @@ function undecided(entry: QuestionnaireEntry): boolean {
 	return entry.value.questions.some(question => question.answer === undefined);
 }
 
+/** Where the disclosure is remembered, alongside the pane widths. */
+let HISTORY = "chopin:decisions:resolved";
+
+/**
+ * Whether the resolved list is showing, remembered across reloads.
+ *
+ * Anything other than the one stored string reads as open, so an absent key and
+ * a corrupt one both mean nobody has collapsed this — which is the default.
+ */
+function useHistory() {
+	let [history, setHistory] = useState(() => localStorage.getItem(HISTORY) !== "false");
+
+	useEffect(() => {
+		localStorage.setItem(HISTORY, String(history));
+	}, [history]);
+
+	return [history, setHistory] as const;
+}
+
 export function Decisions({ connected, reveal, store, threads, wire }: DecisionsProps) {
 	let entries = useQuestionnaires(store);
 	let state = useThreads(threads);
 	let content = useRef<HTMLDivElement>(null);
-	let [history, setHistory] = useState(false);
+	let [history, setHistory] = useHistory();
 
 	// Leaving the pane should not leave the prose lit. A highlight belongs to
 	// the pointer that asked for it.
@@ -148,6 +171,7 @@ export function Decisions({ connected, reveal, store, threads, wire }: Decisions
 				{resolved > 0 && (
 					<div className={outstanding > 0 || state.draft ? "mt-3" : ""}>
 						<button
+							aria-expanded={history}
 							className="w-full rounded-md px-1 py-1 text-left text-xs text-muted-foreground hover:text-foreground"
 							onClick={() => setHistory(value => !value)}
 							type="button"
