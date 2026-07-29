@@ -24,7 +24,7 @@ packages/dialect     4.5k   the MDX dialect and its Lexical schema
 packages/editor      6.6k   the browser editor, cursors, the sidecar, agent marks
 packages/question    1.8k   questionnaires: definition, shared answer, derivation
 packages/protocol    0.9k   the wire, as types, plus the addressing rule
-apps/server          9.3k   rooms, documents, questions, comments, the agent
+apps/server          9.5k   rooms, documents, questions, comments, the agent
 apps/web             1.4k   the three panes
 scripts/dev.ts              the development supervisor
 ```
@@ -132,13 +132,28 @@ instead. Once seen the clock runs whether or not the mark is still in view: two
 states and one timer, so nothing can go dark and light up again on a later
 scroll, which would read as a second edit that never happened.
 
-**Those marks are drawn only in `box-shadow`**, on blocks that already exist.
-An agent editing below the fold must not shift the sentence somebody is in the
-middle of typing, and a mark expiring ten seconds later must not shift it back,
-so nothing may take space and nothing may add an element. What the agent
-removed has no element at all, which is why a hole is drawn on the edge of the
-block still beside it and why the side is part of its address — and why what
-was removed can only be read in the list behind the chips.
+**Those marks take no space and add no element.** An agent editing below the
+fold must not shift the sentence somebody is in the middle of typing, and a
+mark expiring ten seconds later must not shift it back. What the agent removed
+has no element at all, which is why a hole is drawn in `box-shadow` on the edge
+of the block still beside it and why the side is part of its address — and why
+what was removed can only be read in the list behind the chips.
+
+**The agent's cursor and the agent's marks disagree about time, on purpose.**
+The cursor is presence: it says the agent is working _here, now_, so it is
+broadcast the moment an edit lands, it is not held back for anyone, and it goes
+shortly after the turn ends. A mark is a record: it waits until it has been
+read and may sit unseen indefinitely. So somebody who comes back after a long
+turn sees marks and no cursor, and somebody watching sees both — which looks
+like an inconsistency until you notice they answer different questions. The
+cursor cannot replace the marks, because a cursor off screen is simply not
+there, and that is the case the marks exist for.
+
+**The agent rides in the presence mirror's own local slot.** Everything else
+in `plan/presence.ts` is a reflection of some socket, which is what lets a
+disconnect clear it; the agent has no socket, so it goes where nothing can
+attribute it to one. That slot is also in the join snapshot, so somebody
+arriving mid-turn sees where the agent is.
 
 ## Things that fail silently
 
@@ -203,6 +218,13 @@ because a recovery nobody is told about is the same as no recovery.
 **`CSS.highlights` is a document-wide registry**, shared with Lexical's remote
 cursors. Ours is named `plan-related`, its are `lexical-cursor-*`; a collision
 would silently unpaint somebody's selection.
+
+**Awareness ignores an update whose clock has not advanced**, and ignoring it
+means not refreshing the timer either. A peer drops a state it has not heard
+about for thirty seconds, so a cursor that outlives that has to be repeated —
+and repeating it by re-encoding the same state does nothing at all. The state
+has to be set again. Get this wrong and the agent's cursor vanishes partway
+through a long turn with nothing anywhere to say why.
 
 **An `IntersectionObserver` threshold is a fraction of the element**, not of
 the viewport. A block taller than the window can never reach `0.2`, so gating

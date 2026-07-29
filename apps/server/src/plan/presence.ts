@@ -7,9 +7,15 @@
  * arriving client watches an apparently empty document while two other cursors
  * move through it.
  *
- * This only ever mirrors what it relays. It never originates state, it is not
- * consulted for anything but the join snapshot, and it is discarded with the
- * epoch it describes.
+ * It mirrors what it relays, and originates exactly one state of its own: the
+ * agent's. Everything else here is a reflection of somebody's socket, which is
+ * why a disconnect can clear it; the agent has no socket to disconnect, so its
+ * cursor is put in the mirror's own local slot and taken down deliberately
+ * when the turn ends. Riding in that slot is also what puts it in the join
+ * snapshot, so somebody arriving mid-turn sees where the agent is working.
+ *
+ * Otherwise it is not consulted for anything but that snapshot, and it is
+ * discarded with the epoch it describes.
  */
 
 import {
@@ -38,13 +44,31 @@ export type Presence = {
 	owners: WeakMap<object, Set<number>>;
 };
 
+/**
+ * The agent, as a peer.
+ *
+ * Lexical refuses to draw a cursor without all four of these: a state that is
+ * not `focusing` has its caret destroyed, and a colour it cannot parse paints
+ * nothing. The extra field is what keeps the agent out of the row of faces —
+ * it is not somebody with a GitHub avatar.
+ */
+export type Attention = {
+	name: string;
+	color: string;
+	focusing: true;
+	agent: true;
+	anchorPos: Y.RelativePosition;
+	focusPos: Y.RelativePosition;
+	awarenessData: object;
+};
+
 export function create(): Presence {
 	let doc = new Y.Doc();
 	let awareness = new Awareness(doc);
 	let owners = new WeakMap<object, Set<number>>();
 
-	// The mirror is a bystander. Announcing a state of its own would put a
-	// phantom cursor belonging to the server in everyone's editor.
+	// Empty until the agent edits something. The mirror originates nothing on
+	// anyone else's behalf: every other state here belongs to a socket.
 	awareness.setLocalState(null);
 
 	awareness.on("update", (
@@ -95,6 +119,49 @@ export function drop(presence: Presence, ws: object): Uint8Array | undefined {
 	// Encoded after removal, so each client carries a null state and a bumped
 	// clock — which is what a peer reads as "they left".
 	return encodeAwarenessUpdate(presence.awareness, clients);
+}
+
+/**
+ * Put the agent's cursor somewhere, and say so.
+ *
+ * Returns the update to broadcast. Moving it is the same call again: awareness
+ * has no notion of a cursor moving, only of a state being replaced.
+ */
+export function attend(presence: Presence, at: Attention): Uint8Array {
+	presence.awareness.setLocalState(at);
+	return encodeAwarenessUpdate(presence.awareness, [presence.awareness.clientID]);
+}
+
+/**
+ * Say the agent is still there.
+ *
+ * Peers drop a state they have not heard about for thirty seconds, so a cursor
+ * that outlives that has to be repeated. Repeating is not enough on its own:
+ * `applyAwarenessUpdate` ignores an update whose clock has not moved, and
+ * ignoring it means not refreshing the timer either — so a re-encode of an
+ * unchanged state would be discarded in silence and the cursor would vanish
+ * mid-turn. Setting the state again is what advances the clock.
+ *
+ * Nothing to say when the agent is not anywhere.
+ */
+export function renew(presence: Presence): Uint8Array | undefined {
+	let held = presence.awareness.getLocalState();
+	if (!held) return undefined;
+	return attend(presence, held as Attention);
+}
+
+/**
+ * Take the agent's cursor down.
+ *
+ * A null state with a bumped clock, which is what a peer reads as "they left"
+ * — the same shape `drop` sends for a member who disconnected. Waiting for the
+ * timeout instead would leave the agent apparently mid-edit for half a minute
+ * after it had finished.
+ */
+export function release(presence: Presence): Uint8Array | undefined {
+	if (!presence.awareness.getLocalState()) return undefined;
+	presence.awareness.setLocalState(null);
+	return encodeAwarenessUpdate(presence.awareness, [presence.awareness.clientID]);
 }
 
 /** Discard everything. Presence describes an epoch and does not outlive it. */
