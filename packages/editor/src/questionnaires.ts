@@ -25,7 +25,7 @@ import { scrollToKey } from "./scroll";
 import type { Binding } from "@lexical/yjs";
 import type { LexicalEditor } from "lexical";
 import type { Plan } from "@chopin/protocol";
-import type { Related, Relation } from "./anchors";
+import type { Related } from "./anchors";
 import type { Points } from "./passage";
 import type { Questionnaire } from "@chopin/dialect";
 
@@ -42,9 +42,6 @@ export function collectQuestionnaires(): QuestionnaireEntry[] {
 	}));
 }
 
-/** What is currently lit up, and why. */
-export type Highlight = { widget: string; question: string; relation: Relation };
-
 export class QuestionnaireStore {
 	#entries: QuestionnaireEntry[] = [];
 	#listeners = new Set<() => void>();
@@ -54,10 +51,10 @@ export class QuestionnaireStore {
 	#editor: LexicalEditor | undefined;
 	#related: Related[] = [];
 	/**
-	 * Which relationship the reader last asked to be taken to, and how far
-	 * along it. Never cleared: whether it is still live is the pin's answer.
+	 * Which decision the reader last asked to be taken to, and how far along
+	 * it. Never cleared: whether it is still live is the pin's answer.
 	 */
-	#walk: { widget: string; question: string; relation: Relation; index: number } | undefined;
+	#walk: { widget: string; question: string; index: number } | undefined;
 
 	subscribe = (listener: () => void): () => void => {
 		this.#listeners.add(listener);
@@ -115,13 +112,13 @@ export class QuestionnaireStore {
 		for (let listener of this.#listeners) listener();
 	}
 
-	/** How much prose each of a questionnaire's questions resolves to. */
-	counts(widget: string): { [question: string]: { subject: number; result: number } } {
+	/** How much prose each of a questionnaire's decisions resolves to. */
+	counts(widget: string): { [question: string]: number } {
 		return counts(this.#related, widget);
 	}
 
 	/**
-	 * Mark the prose a relationship names.
+	 * Mark the prose a decision lives in.
 	 *
 	 * Painted rather than written into the document. A highlight is one
 	 * reader's pointer, not a fact about the plan, and putting it in the
@@ -132,29 +129,29 @@ export class QuestionnaireStore {
 	 * to be an outlined block and a washed range respectively, which made one
 	 * fact — this is the prose that card refers to — read as two.
 	 */
-	highlight(widget: string, question: string, relation: Relation): void {
+	highlight(widget: string, question: string): void {
 		let editor = this.#editor;
 		if (!editor) return;
 
-		let places = this.#places(widget, question, relation);
+		let places = this.#places(widget, question);
 		if (!places) return this.clear();
 
 		paint(editor, "questions", places);
 	}
 
 	/**
-	 * Take the reader to the prose a relationship names.
+	 * Take the reader to the prose a decision lives in.
 	 *
 	 * The click behind `Show in plan`, which a question has offered for as long
 	 * as there has been anywhere to send one and which used to do nothing at
-	 * all. A relationship can name several blocks — the button says how many —
-	 * so clicking again walks to the next and round.
+	 * all. A decision can have produced several blocks — the button says how
+	 * many — so clicking again walks to the next and round.
 	 */
-	reveal(widget: string, question: string, relation: Relation): void {
+	reveal(widget: string, question: string): void {
 		let editor = this.#editor;
 		if (!editor) return;
 
-		let places = this.#places(widget, question, relation);
+		let places = this.#places(widget, question);
 		if (!places || places.length === 0) return;
 
 		let walk = this.#walk;
@@ -162,14 +159,13 @@ export class QuestionnaireStore {
 				&& walk !== undefined
 				&& walk.widget === widget
 				&& walk.question === question
-				&& walk.relation === relation
 			? (walk.index + 1) % places.length
 			: 0;
 
 		let place = places[index];
 		if (!place) return;
 
-		this.#walk = { widget, question, relation, index };
+		this.#walk = { widget, question, index };
 		pin(editor, "questions", [place]);
 		scrollToKey(editor, place.anchorKey);
 	}
@@ -185,14 +181,12 @@ export class QuestionnaireStore {
 		this.clear();
 	}
 
-	/** The blocks a relationship resolves to, or nothing if it names none. */
-	#places(widget: string, question: string, relation: Relation): Points[] | undefined {
+	/** The blocks a decision resolves to, or nothing if it names none. */
+	#places(widget: string, question: string): Points[] | undefined {
 		let editor = this.#editor;
 		if (!editor) return undefined;
 
-		let found = this.#related.find(item =>
-			item.widget === widget && item.question === question && item.relation === relation
-		);
+		let found = this.#related.find(item => item.widget === widget && item.question === question);
 		// Pending means nobody has checked this since the plan moved, so it is
 		// not somewhere worth sending a reader.
 		if (!found || found.pending) return undefined;

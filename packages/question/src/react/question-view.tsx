@@ -37,18 +37,18 @@ export type QuestionViewProps = {
 	/** Shown instead of controls once the questionnaire has resolved. */
 	answers?: Answer[];
 	resolver?: string;
-	onRelationEnter?: (question: string, relation: "subject" | "result") => void;
-	onRelationLeave?: (question: string, relation: "subject" | "result") => void;
-	/** Follows a relation to the prose it refers to. */
-	onRelationSelect?: (question: string, relation: "subject" | "result") => void;
+	onQuestionEnter?: (question: string) => void;
+	onQuestionLeave?: (question: string) => void;
+	/** Goes to the prose the decision lives in. */
+	onQuestionSelect?: (question: string) => void;
 	/**
-	 * How many passages each relation points at, by question.
+	 * How many passages each decision lives in, by question.
 	 *
-	 * Absent where nothing links the two — the chat card, or a plan relation
-	 * still waiting to be anchored. Without a destination the text stays inert
-	 * prose rather than advertising a jump that would do nothing.
+	 * Absent where nothing links the two — the chat card, or a decision still
+	 * waiting to be anchored. Without a destination the text stays inert prose
+	 * rather than advertising a jump that would do nothing.
 	 */
-	relations?: Record<string, { subject: number; result: number }>;
+	places?: Record<string, number>;
 	collaborators?: Collaborator[];
 	/** Validation or synchronisation problem, announced to assistive tech. */
 	error?: string;
@@ -172,47 +172,58 @@ function Custom(
 }
 
 const LINK =
-	"block w-full cursor-pointer rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/40";
+	"flex w-full cursor-pointer items-start justify-between gap-2 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/40";
 
 /**
- * Text that may refer to somewhere else.
+ * Something that may refer to somewhere else.
  *
  * Rendered as a button only when there is somewhere to go, so a real element
- * carries the affordance and the keyboard handling rather than a paragraph
- * pretending to be one. Unlinked text stays a paragraph, takes no tab stop,
- * and offers no focus ring it could never show.
+ * carries the affordance and the keyboard handling rather than text pretending
+ * to be one. Unlinked, it takes no tab stop and offers no focus ring it could
+ * never show.
+ *
+ * Wraps whatever it is given rather than being a paragraph itself, because on a
+ * resolved card what points into the plan is the question *and* its answer
+ * together. Those used to be two adjacent, identically-labelled buttons — one
+ * for what the question was about, one for what the answer produced — which the
+ * agent anchored to overlapping prose, so the two led to the same block.
+ *
+ * `label` is the plain-text reading of the children. It is composed into the
+ * accessible name rather than replacing it: the decision is what the button is
+ * for, and a name saying only where it goes would take it away from anybody who
+ * cannot see it.
  */
 function Related(
-	{ id, relation, count, className, children, onEnter, onLeave, onSelect }: {
+	{ id, count, label, className, children, onEnter, onLeave, onSelect }: {
 		id: string | undefined;
-		relation: "subject" | "result";
 		count: number;
+		label: string;
 		className: string;
 		children: ReactNode;
-		onEnter?: QuestionViewProps["onRelationEnter"];
-		onLeave?: QuestionViewProps["onRelationLeave"];
-		onSelect?: QuestionViewProps["onRelationSelect"];
+		onEnter?: QuestionViewProps["onQuestionEnter"];
+		onLeave?: QuestionViewProps["onQuestionLeave"];
+		onSelect?: QuestionViewProps["onQuestionSelect"];
 	},
 ) {
-	if (!id || count === 0) return <p className={`m-0 text-sm ${className}`}>{children}</p>;
+	if (!id || count === 0) return <div className={className}>{children}</div>;
 
 	return (
 		<button
 			type="button"
 			data-ace-question-id={id}
-			data-ace-relation={relation}
-			aria-label={count > 1 ? `Show in plan, ${count} places` : "Show in plan"}
-			onClick={() => onSelect?.(id, relation)}
-			onMouseEnter={() => onEnter?.(id, relation)}
-			onMouseLeave={event =>
-				event.currentTarget !== document.activeElement && onLeave?.(id, relation)}
-			onFocus={() => onEnter?.(id, relation)}
-			onBlur={event => !event.currentTarget.matches(":hover") && onLeave?.(id, relation)}
-			className={`m-0 text-sm ${className} ${LINK}`}
+			aria-label={count > 1
+				? `${label} — show in plan, ${count} places`
+				: `${label} — show in plan`}
+			onClick={() => onSelect?.(id)}
+			onMouseEnter={() => onEnter?.(id)}
+			onMouseLeave={event => event.currentTarget !== document.activeElement && onLeave?.(id)}
+			onFocus={() => onEnter?.(id)}
+			onBlur={event => !event.currentTarget.matches(":hover") && onLeave?.(id)}
+			className={`${className} ${LINK}`}
 		>
-			{children}
+			<span className="min-w-0 flex-1">{children}</span>
 			{count > 1 && (
-				<span aria-hidden="true" className="ml-1.5 text-xs text-muted-foreground">
+				<span aria-hidden="true" className="shrink-0 text-xs text-muted-foreground">
 					{count}
 				</span>
 			)}
@@ -225,50 +236,43 @@ function Resolved(
 		answers,
 		definition,
 		resolver,
-		relations,
-		onRelationEnter,
-		onRelationLeave,
-		onRelationSelect,
+		places,
+		onQuestionEnter,
+		onQuestionLeave,
+		onQuestionSelect,
 	}: {
 		answers: Answer[];
 		definition: Definition;
 		resolver?: string;
-		relations?: QuestionViewProps["relations"];
-		onRelationEnter?: QuestionViewProps["onRelationEnter"];
-		onRelationLeave?: QuestionViewProps["onRelationLeave"];
-		onRelationSelect?: QuestionViewProps["onRelationSelect"];
+		places?: QuestionViewProps["places"];
+		onQuestionEnter?: QuestionViewProps["onQuestionEnter"];
+		onQuestionLeave?: QuestionViewProps["onQuestionLeave"];
+		onQuestionSelect?: QuestionViewProps["onQuestionSelect"];
 	},
 ) {
 	return (
 		<div className="space-y-2 px-3 py-2.5">
 			{answers.map((answer, index) => {
 				let id = definition.questions[index]?.id;
-				let linked = id ? relations?.[id] : undefined;
+				let chosen = answer.custom ?? (answer.choices ?? []).join(", ");
 				return (
-					<div key={id ?? index} data-ace-question-id={id}>
-						<Related
-							id={id}
-							relation="subject"
-							count={linked?.subject ?? 0}
-							className="text-muted-foreground"
-							onEnter={onRelationEnter}
-							onLeave={onRelationLeave}
-							onSelect={onRelationSelect}
-						>
-							{answer.question}
-						</Related>
-						<Related
-							id={id}
-							relation="result"
-							count={linked?.result ?? 0}
-							className="font-medium text-foreground"
-							onEnter={onRelationEnter}
-							onLeave={onRelationLeave}
-							onSelect={onRelationSelect}
-						>
-							{answer.custom ?? (answer.choices ?? []).join(", ")}
-						</Related>
-					</div>
+					<Related
+						key={id ?? index}
+						id={id}
+						count={(id ? places?.[id] : undefined) ?? 0}
+						label={`${answer.question} — ${chosen}`}
+						className=""
+						onEnter={onQuestionEnter}
+						onLeave={onQuestionLeave}
+						onSelect={onQuestionSelect}
+					>
+						{
+							/* The question and what was chosen are one decision, so they are
+						    one target: two stacked buttons led to the same prose. */
+						}
+						<p className="m-0 text-sm text-muted-foreground">{answer.question}</p>
+						<p className="m-0 text-sm font-medium text-foreground">{chosen}</p>
+					</Related>
 				);
 			})}
 			{resolver && <p className="m-0 text-xs text-muted-foreground">Answered by @{resolver}</p>}
@@ -304,10 +308,10 @@ export function QuestionView(props: QuestionViewProps) {
 		collaborators = [],
 		error,
 		aside,
-		relations,
-		onRelationEnter,
-		onRelationLeave,
-		onRelationSelect,
+		places,
+		onQuestionEnter,
+		onQuestionLeave,
+		onQuestionSelect,
 	} = props;
 
 	let base = useId();
@@ -364,10 +368,10 @@ export function QuestionView(props: QuestionViewProps) {
 					answers={answers}
 					definition={definition}
 					resolver={resolver}
-					relations={relations}
-					onRelationEnter={onRelationEnter}
-					onRelationLeave={onRelationLeave}
-					onRelationSelect={onRelationSelect}
+					places={places}
+					onQuestionEnter={onQuestionEnter}
+					onQuestionLeave={onQuestionLeave}
+					onQuestionSelect={onQuestionSelect}
 				/>
 			</div>
 		);
@@ -394,7 +398,6 @@ export function QuestionView(props: QuestionViewProps) {
 							<button
 								key={question.id}
 								data-ace-question-id={question.id}
-								data-ace-relation="subject"
 								id={`${base}-tab-${question.id}`}
 								type="button"
 								role="tab"
@@ -407,17 +410,16 @@ export function QuestionView(props: QuestionViewProps) {
 								// intentional for as long as nothing was listening — wired
 								// up, it scrolls the plan out from under a reader who was
 								// stepping through the tabs to read them. Hovering a tab
-								// already lights what its question is about, and the panel
+								// already lights where its decision lives, and the panel
 								// below carries the control that says "show in plan".
 								onClick={() => setActive(question.id)}
-								onMouseEnter={() => onRelationEnter?.(question.id, "subject")}
+								onMouseEnter={() => onQuestionEnter?.(question.id)}
 								onMouseLeave={event =>
 									event.currentTarget !== document.activeElement
-									&& onRelationLeave?.(question.id, "subject")}
-								onFocus={() => onRelationEnter?.(question.id, "subject")}
+									&& onQuestionLeave?.(question.id)}
+								onFocus={() => onQuestionEnter?.(question.id)}
 								onBlur={event =>
-									!event.currentTarget.matches(":hover")
-									&& onRelationLeave?.(question.id, "subject")}
+									!event.currentTarget.matches(":hover") && onQuestionLeave?.(question.id)}
 								onKeyDown={event => move(event, index)}
 								className={`shrink-0 rounded-t-md px-2.5 py-1 text-xs font-medium transition-colors ${
 									question.id === active
@@ -442,19 +444,18 @@ export function QuestionView(props: QuestionViewProps) {
 			{current && (
 				<section
 					data-ace-question-id={current.id}
-					data-ace-relation="subject"
 					id={`${base}-panel`}
 					role={multiple ? "tabpanel" : undefined}
 					className="px-3 py-2.5"
-					onMouseEnter={() => onRelationEnter?.(current.id, "subject")}
+					onMouseEnter={() => onQuestionEnter?.(current.id)}
 					onMouseLeave={event =>
 						!event.currentTarget.contains(document.activeElement)
-						&& onRelationLeave?.(current.id, "subject")}
-					onFocusCapture={() => onRelationEnter?.(current.id, "subject")}
+						&& onQuestionLeave?.(current.id)}
+					onFocusCapture={() => onQuestionEnter?.(current.id)}
 					onBlurCapture={event =>
 						!event.currentTarget.contains(event.relatedTarget)
 						&& !event.currentTarget.matches(":hover")
-						&& onRelationLeave?.(current.id, "subject")}
+						&& onQuestionLeave?.(current.id)}
 				>
 					<header className="flex items-baseline justify-between gap-2">
 						<h4 className="m-0 text-sm font-semibold text-foreground">{current.header}</h4>
@@ -464,12 +465,12 @@ export function QuestionView(props: QuestionViewProps) {
 					{/* Never the whole panel: below this is a form. */}
 					<Related
 						id={current.id}
-						relation="subject"
-						count={relations?.[current.id]?.subject ?? 0}
-						className="mt-1 mb-2 text-muted-foreground"
-						onSelect={onRelationSelect}
+						count={places?.[current.id] ?? 0}
+						label={current.question}
+						className="mt-1 mb-2"
+						onSelect={onQuestionSelect}
 					>
-						{current.question}
+						<p className="m-0 text-sm text-muted-foreground">{current.question}</p>
 					</Related>
 
 					<Choices

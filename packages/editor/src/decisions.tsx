@@ -129,10 +129,10 @@ export function Decisions({ connected, reveal, store, threads, wire }: Decisions
 		<QuestionnaireCard
 			connected={connected}
 			key={entry.id}
-			onRelationEnter={(q, relation) => store.highlight(entry.id, q, relation)}
-			onRelationLeave={() => store.clear()}
-			onRelationSelect={(q, relation) => store.reveal(entry.id, q, relation)}
-			relations={store.counts(entry.id)}
+			onQuestionEnter={question => store.highlight(entry.id, question)}
+			onQuestionLeave={() => store.clear()}
+			onQuestionSelect={question => store.reveal(entry.id, question)}
+			places={store.counts(entry.id)}
 			value={entry.value}
 			wire={wire}
 		/>

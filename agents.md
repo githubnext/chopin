@@ -117,6 +117,18 @@ re-serialising the document. The two ends must agree on which blocks the source
 addresses; they need not agree on the offset, so a divergence surfaces as a
 refusal rather than a comment landing on the wrong sentence.
 
+**A decision has one place in the plan, not two.** A question used to carry
+what it was about and what its answer produced as separate anchor sets, on the
+theory that they move independently. Asked to tell them apart, the agent
+anchored the first block of the result and called it the subject — in every
+record it ever wrote — so a resolved card offered two adjacent, identically
+labelled buttons that led to the same block. The subject was also never derived
+when a question was asked and never invalidated when the plan moved, so it sat
+permanently unreviewed: an inert link, and an entry in `anchors_pending` that no
+amount of anchoring could clear. A comment thread still keeps two, because there
+the halves have different authors and different shapes and neither can stand for
+the other.
+
 **The quote is the way back, not the card.** A sidecar card holds a reply box,
 an Accept and a Dismiss, so making the whole of it a link would mean deciding on
 every click whether the reader meant the link or the control they actually hit.
@@ -242,6 +254,15 @@ edits. Opening is driven by the connection now, not by the mount.
 `config.agent`; accepting a comment reached `Chat.instruct` directly and opened
 a session under `AGENT=off`. Anything that can start a turn has to check, and
 the check lives in `instruct` now so the next one cannot miss it.
+
+**A record read back from disk is not checked by anything.** `Anchors.read`
+hands back what `JSON.parse` produced, cast to the current type, so changing the
+shape of anything under `data/<room>/state.json` is somebody's existing room
+breaking rather than a type error here. It does not even break loudly: the carry
+on open is guarded, so a set the new code cannot read is caught, logged once,
+and every decision in the plan quietly loses its place — and because that guard
+is shared, one stale questionnaire takes the comment threads' anchors with it.
+`folded` is where the last such change is absorbed, and where the next one goes.
 
 **An optional callback nobody passes is a button that does nothing.**
 `QuestionView` rendered a real `<button>` labelled "Show in plan", with a

@@ -256,14 +256,12 @@ export function toolbox(context: Context): Tool[] {
 		},
 		{
 			name: "anchor_plan",
-			description: "Say which passages of the plan each decision concerns and produced. Call it "
-				+ "immediately after every successful `edit_plan`, using that result's revision and "
-				+ "block digests. For a question, give `widget`, `question` and `relation`: its text "
-				+ "maps to `subject`, and the prose its answer caused maps to `result`. For an "
-				+ "accepted comment, give `thread` instead — the blocks are the prose your revision "
-				+ "produced. Link only blocks that would have to change if that decision changed. An "
-				+ "empty list means reviewed and deliberately unrelated, which is a real answer and "
-				+ "clears the review.",
+			description: "Say where in the plan each decision lives. Call it immediately after every "
+				+ "successful `edit_plan`, using that result's revision and block digests. For a "
+				+ "question, give `widget` and `question`; for an accepted comment, give `thread`. "
+				+ "Either way the blocks are the prose that decision produced. Link only blocks that "
+				+ "would have to change if the decision changed. An empty list means reviewed and "
+				+ "deliberately unrelated, which is a real answer and clears the review.",
 			parameters: {
 				type: "object",
 				properties: {
@@ -277,15 +275,12 @@ export function toolbox(context: Context): Tool[] {
 							properties: {
 								widget: {
 									type: "string",
-									description: "The questionnaire id. Give with `question` and `relation`.",
+									description: "The questionnaire id. Give with `question`.",
 								},
 								question: { type: "string", description: "The question id." },
-								relation: { type: "string", enum: ["subject", "result"] },
 								thread: {
 									type: "string",
-									description:
-										"An accepted comment thread's id, instead of widget/question/relation. "
-										+ "The blocks are the prose your revision produced.",
+									description: "An accepted comment thread's id, instead of widget/question.",
 								},
 								blocks: {
 									type: "array",
@@ -318,7 +313,6 @@ export function toolbox(context: Context): Tool[] {
 						anchors: Array<{
 							widget?: string;
 							question?: string;
-							relation?: "subject" | "result";
 							thread?: string;
 							blocks: Array<{ index: number; digest: string }>;
 						}>;
@@ -337,15 +331,9 @@ export function toolbox(context: Context): Tool[] {
 					for (let update of args.anchors) {
 						let failure = update.thread
 							? Comments.relate(context.plan, update.thread, update.blocks)
-							: update.widget && update.question && update.relation
-							? Questions.relate(
-								context.plan,
-								update.widget,
-								update.question,
-								update.relation,
-								update.blocks,
-							)
-							: "give either `thread`, or all of `widget`, `question` and `relation`.";
+							: update.widget && update.question
+							? Questions.relate(context.plan, update.widget, update.question, update.blocks)
+							: "give either `thread`, or both `widget` and `question`.";
 						if (failure) failures.push(failure);
 					}
 

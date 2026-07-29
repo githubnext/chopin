@@ -29,9 +29,8 @@ export declare namespace Plan {
 	/**
 	 * A decision's place in the prose.
 	 *
-	 * A questionnaire asks about something and produces something, and both are
-	 * passages of the plan rather than the questionnaire itself. Anchoring them
-	 * is what lets a reader move between a decision and the text it concerns.
+	 * A decision is settled in the sidecar and lives in the plan, and those are
+	 * two different places. Anchoring is what lets a reader move between them.
 	 *
 	 * The position is a Yjs relative position, so it survives edits above it.
 	 * The digest is the block's full canonical hash, which is how a position
@@ -53,8 +52,6 @@ export declare namespace Plan {
 	export type AnchorReason =
 		/** Never anchored. */
 		| "missing"
-		/** The answer changed, so what it produced may have too. */
-		| "answer_changed"
 		/** The plan changed beneath it. */
 		| "plan_changed"
 		/** The block it named is gone, or is no longer unique. */
@@ -67,12 +64,19 @@ export declare namespace Plan {
 		reason?: AnchorReason;
 	};
 
-	/** What one question concerns, and what answering it produced. */
-	export type QuestionAnchors = { subject: AnchorSet; result: AnchorSet };
-
+	/**
+	 * Where each of a questionnaire's decisions lives in the plan.
+	 *
+	 * One set per question, not two. A question used to carry what it was about
+	 * and what its answer produced separately, on the theory that the two move
+	 * independently — and the agent, asked to tell them apart, anchored the
+	 * first block of the second and called it the first. What a reader wants is
+	 * the prose the decision lives in, which is what an accepted comment has
+	 * always carried.
+	 */
 	export type WidgetAnchors = {
 		widget: string;
-		questions: { [question: string]: QuestionAnchors };
+		questions: { [question: string]: AnchorSet };
 	};
 
 	/**
@@ -110,11 +114,13 @@ export declare namespace Plan {
 	/**
 	 * What an accepted comment thread marks, and what accepting it produced.
 	 *
-	 * The two halves have different authors, which is why they have different
-	 * shapes. `subject` is the passage a person selected, and the server keeps
-	 * it moving with the plan. `result` is the prose the agent's revision
-	 * produced, and only the agent can say what that is — so it is an ordinary
-	 * anchor set, reviewed and pending exactly like a question's.
+	 * A thread keeps two, where a question keeps one, because these two have
+	 * different authors and so different shapes. `subject` is the passage a
+	 * person selected, and the server keeps it moving with the plan. `result`
+	 * is the prose the agent's revision produced, and only the agent can say
+	 * what that is — so it is an ordinary anchor set, reviewed and pending
+	 * exactly like a question's. Neither can stand for the other: a thread's
+	 * subject is usually the prose it asked to have rewritten.
 	 */
 	export type ThreadAnchors = {
 		thread: string;
