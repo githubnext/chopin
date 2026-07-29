@@ -223,7 +223,7 @@ function Collaboration(options: CollaborationOptions) {
 		frame.append(container);
 		binding.cursorsContainer = container;
 
-		let flash = labels(binding);
+		let flash = labels(binding, provider);
 		let paint = () => {
 			cursors(binding, provider);
 			flash.sync();

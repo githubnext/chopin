@@ -9,6 +9,9 @@
  */
 
 import { describe, expect, it } from "bun:test";
+import { $getAnchorAndFocusForUserState } from "@lexical/yjs";
+import { $getNodeByKey } from "lexical";
+import type * as Y from "yjs";
 
 import * as edit from "./edit";
 import * as room from "./room";
@@ -275,5 +278,86 @@ describe("pointing at what an edit did", () => {
 
 		expect(room.resolveAnchor(subject.document, value)).toBeDefined();
 		expect(block(subject, value)).toBe("Inserted.");
+	});
+});
+
+/**
+ * Where the agent leaves its cursor.
+ *
+ * At the end of what it wrote, not the start. A caret at the top of a new
+ * block points at the first thing the reader already knows about and reads as
+ * though the agent is about to type there — the opposite of what happened.
+ *
+ * Resolved through Lexical rather than inspected as a Yjs position, because
+ * the only question that matters is where a browser would draw it.
+ */
+describe("the agent's cursor", () => {
+	/** What `syncCursorPositions` would resolve the position to. */
+	function caret(subject: Room, position: Y.RelativePosition) {
+		let state = {
+			anchorPos: position,
+			focusPos: position,
+			color: "",
+			focusing: true,
+			name: "",
+			awarenessData: {},
+		};
+
+		let found: { key: string | null; offset: number } | undefined;
+		subject.document.editor.getEditorState().read(() => {
+			let { anchorKey, anchorOffset } = $getAnchorAndFocusForUserState(
+				subject.document.binding,
+				state,
+			);
+			found = { key: anchorKey, offset: anchorOffset };
+		});
+		return found!;
+	}
+
+	/** The text of the node a caret landed in, and how far into it it sits. */
+	function landed(subject: Room, position: Y.RelativePosition) {
+		let { key, offset } = caret(subject, position);
+		let text: string | undefined;
+		subject.document.editor.getEditorState().read(() => {
+			text = key ? $getNodeByKey(key)?.getTextContent() : undefined;
+		});
+		return { text, offset };
+	}
+
+	it("sits after the last character of the block, not before the first", async () => {
+		let subject = await plan();
+
+		expect(landed(subject, room.endOf(subject.document, 1)))
+			.toEqual({ text: "The first paragraph.", offset: "The first paragraph.".length });
+	});
+
+	it("is somewhere else entirely for a different block", async () => {
+		let subject = await plan();
+
+		expect(landed(subject, room.endOf(subject.document, 3)))
+			.toEqual({ text: "The third paragraph.", offset: "The third paragraph.".length });
+	});
+
+	it("lands at the end of what a batch just wrote", async () => {
+		let subject = await plan();
+		let outcome = edit.apply(subject, 1, [
+			{ op: "insert", index: 3, source: "Appended by the agent.\n" },
+		]);
+
+		expect(outcome.ok).toBe(true);
+		if (!outcome.ok) return;
+		let added = outcome.changes.find(change => change.kind === "added");
+		if (added?.kind !== "added") throw new Error("expected a written block");
+
+		expect(landed(subject, room.endOf(subject.document, added.index))).toEqual({
+			text: "Appended by the agent.",
+			offset: "Appended by the agent.".length,
+		});
+	});
+
+	/** A questionnaire is a map, not a sequence; there is no inside to end at. */
+	it("does not fall over on a block with no text in it", async () => {
+		let subject = await plan("---\n");
+		expect(() => room.endOf(subject.document, 0)).not.toThrow();
 	});
 });

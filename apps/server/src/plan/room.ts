@@ -553,6 +553,37 @@ export function anchorAt(target: Document, index: number, hash: string): Anchor 
 	return anchorForKey(target, key, hash);
 }
 
+/**
+ * A position at the end of the block at `index`.
+ *
+ * Where an edit finished rather than where it started, which is the difference
+ * between a caret that says the agent has written this and one that looks like
+ * it is about to. An anchor is deliberately the other way round — it names a
+ * block, and the start is the stable end of one — so this is its own function
+ * rather than a parameter.
+ *
+ * Raw, because a cursor carries positions as they are: only an anchor needs
+ * the base64 and the digest that go with travelling as a durable reference.
+ */
+export function endOf(target: Document, index: number): Y.RelativePosition {
+	let key: string | undefined;
+	target.editor.getEditorState().read(() => {
+		key = addressable()[index]?.getKey();
+	});
+
+	let collab = key ? target.binding.collabNodeMap.get(key) : undefined;
+	let type = collab?.getSharedType();
+	if (!type) throw new Error("block has no collaborative identity");
+
+	// A decorator block — a questionnaire, a decision — is a map rather than a
+	// sequence, so it has no inside for a caret to be at the end of. Nought is
+	// the only position it has. Asked by shape rather than with `instanceof`,
+	// which is the check that breaks when two copies of Yjs are loaded.
+	let end = "length" in type ? type.length : 0;
+
+	return Y.createRelativePositionFromTypeIndex(type, end, -1);
+}
+
 /** The local node an anchor names, if it still names one. */
 export function resolveAnchor(target: Document, anchor: Anchor): string | undefined {
 	if (anchor.epoch !== target.epoch) return undefined;
