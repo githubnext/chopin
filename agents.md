@@ -149,6 +149,16 @@ like an inconsistency until you notice they answer different questions. The
 cursor cannot replace the marks, because a cursor off screen is simply not
 there, and that is the case the marks exist for.
 
+**It sits at the end of what the agent wrote, and says its name for longer.**
+An anchor names a block from its start, which is the stable end of one; a
+cursor is where an edit _finished_, so `room.endOf` is its own function rather
+than a flag on `anchorAt`. A caret at the top of a new block points at the
+first thing the reader already knows and looks like something about to be
+typed. The label keeps the same distinction: a person's caret is one of several
+and its owner is watching it, so a second names them and that is enough, while
+the agent's turns up unannounced in a document somebody else is reading and the
+naming is the entire point of drawing it.
+
 **The agent rides in the presence mirror's own local slot.** Everything else
 in `plan/presence.ts` is a reflection of some socket, which is what lets a
 disconnect clear it; the agent has no socket, so it goes where nothing can

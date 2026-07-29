@@ -418,10 +418,17 @@ export function changes(
 		};
 
 		let wired: Wire.Change[] = [];
+		// The furthest down the plan this batch reached, of what could be
+		// anchored — where the agent leaves its cursor.
+		let last: number | undefined;
+
 		for (let change of found) {
 			if (change.kind === "removed") {
 				let at = gap(change.at);
-				if (at) wired.push({ kind: "removed", at, blocks: change.blocks });
+				if (at) {
+					wired.push({ kind: "removed", at, blocks: change.blocks });
+					last = change.at.index;
+				}
 				continue;
 			}
 
@@ -429,6 +436,7 @@ export function changes(
 			if (!at) continue;
 			if (change.kind === "added") {
 				wired.push({ kind: "added", at, type: change.type, preview: change.preview });
+				last = change.index;
 				continue;
 			}
 
@@ -437,6 +445,7 @@ export function changes(
 			let from = gap(change.from);
 			if (from) {
 				wired.push({ kind: "moved", at, from, type: change.type, preview: change.preview });
+				last = change.index;
 			}
 		}
 
@@ -448,11 +457,10 @@ export function changes(
 			changes: wired,
 		});
 
-		// From the same anchoring pass, deliberately. Two passes could disagree
-		// about where the edit was, and then the cursor would be pointing at
-		// one block while the marks described another.
-		let last = wired.at(-1)!;
-		attend(plan, server, roomId, last.kind === "removed" ? last.at.at : last.at);
+		// Read off the same pass, deliberately. Working it out separately could
+		// disagree, and then the cursor would point at one block while the
+		// marks described another.
+		if (last !== undefined) attend(plan, server, roomId, last);
 	} catch (err) {
 		console.error("[plan] could not say what the agent changed:", err);
 	}
@@ -509,14 +517,14 @@ function attend(
 	plan: Plan,
 	server: Server<SocketData>,
 	roomId: string,
-	at: Wire.Anchor,
+	block: number,
 ): void {
 	// The last turn may still be counting down to taking the cursor away. It is
 	// about to be somewhere new, so that removal is no longer the truth.
 	clearTimeout(plan.chat.lingering);
 	plan.chat.lingering = undefined;
 
-	let position = Y.decodeRelativePosition(decode(at.position));
+	let position = room.endOf(plan.document, block);
 	let update = presence.attend(plan.presence, {
 		name: MENTION.slice(1),
 		color: AGENT_COLOR,

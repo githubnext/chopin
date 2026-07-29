@@ -10,12 +10,22 @@
  * from awareness. Awareness churns on a renewal timer whether or not anyone
  * moved; the painted position is the only thing that changes exactly when a
  * peer does.
+ *
+ * The agent's label stays up ten times as long. A person's caret is one of
+ * several and its owner is watching it, so a second is enough to say who moved
+ * where; the agent's arrives unannounced in a document somebody else is
+ * reading, and the whole reason it is drawn at all is to say what put it
+ * there. Naming it for one second and going quiet answers a question nobody
+ * had time to ask.
  */
 
-import type { Binding } from "@lexical/yjs";
+import type { Binding, Provider } from "@lexical/yjs";
 
 /** How long a label stays up after its peer stops moving. */
 const LINGER = 1000;
+
+/** How long the agent's stays, for the same reason it is louder at all. */
+const AGENT_LINGER = 10_000;
 
 export type Labels = {
 	/** Flashes whoever moved. Call after cursors are painted. */
@@ -23,7 +33,21 @@ export type Labels = {
 	dispose: () => void;
 };
 
-export function labels(binding: Binding, linger = LINGER): Labels {
+export function labels(
+	binding: Binding,
+	provider: Provider,
+	linger = LINGER,
+	agentLinger = AGENT_LINGER,
+): Labels {
+	/*
+	 * Read from awareness rather than from the cursor, which only carries a
+	 * name and a colour. Matching on the name would be the obvious shortcut
+	 * and is wrong: handles are GitHub logins, `github.com/ai` is a real
+	 * account, and somebody signing in as that would get the agent's chrome.
+	 */
+	let agent = (client: number): boolean =>
+		provider.awareness.getStates().get(client)?.agent === true;
+
 	let seen = new Map<number, string>();
 	let timers = new Map<number, ReturnType<typeof setTimeout>>();
 
@@ -62,7 +86,7 @@ export function labels(binding: Binding, linger = LINGER): Labels {
 					setTimeout(() => {
 						caret.removeAttribute("data-plan-active");
 						timers.delete(client);
-					}, linger),
+					}, agent(client) ? agentLinger : linger),
 				);
 			}
 
