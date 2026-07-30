@@ -22,6 +22,7 @@
 		"@lexical/react": "catalog:mdx",
 		"@lexical/rich-text": "catalog:mdx",
 		"@lexical/selection": "catalog:mdx",
+		"@lexical/table": "catalog:mdx",
 		"@lexical/yjs": "catalog:mdx",
 		"@mdxeditor/editor": "catalog:mdx",
 		"@mdxeditor/gurx": "catalog:mdx",
