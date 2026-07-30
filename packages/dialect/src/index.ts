@@ -75,6 +75,15 @@ export type { Option, Question, Questionnaire } from "./nodes/questionnaire";
 export { $createDecisionNode, $isDecisionNode, DecisionNode } from "./nodes/decision";
 export type { Decision, Note } from "./nodes/decision";
 
+/*
+ * A `createState` handle is an identity, not a description: state written under
+ * one is invisible to another built from the same arguments. The UI that edits
+ * column alignment has to use this exact one, so it is exported rather than
+ * redeclared.
+ */
+export { alignState } from "./nodes/table";
+export type { Align } from "./nodes/table";
+
 export { render, setRenderer } from "./nodes/render";
 export type { Renderer } from "./nodes/render";
 

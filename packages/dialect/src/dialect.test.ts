@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
+import * as limits from "./limits";
 import { parse } from "./parse";
 import { serialize } from "./serialize";
 import { validate } from "./validate";
@@ -269,6 +270,14 @@ describe("limits", () => {
 		let header = `| ${Array.from({ length: 25 }, (_, i) => `c${i}`).join(" | ")} |`;
 		let divider = `| ${Array.from({ length: 25 }, () => "-").join(" | ")} |`;
 		expect(codes(`${header}\n${divider}`)).toContain("table-too-wide");
+	});
+
+	it("rejects tables beyond the row limit", () => {
+		// The counterpart to the width limit, and the one the editor's rails
+		// hold themselves to: a plan that reaches either is refused by the
+		// server, which cannot undo the update and so rotates the room's epoch.
+		let rows = Array.from({ length: limits.MAX_TABLE_ROWS + 1 }, () => "| x |").join("\n");
+		expect(codes(`| c |\n| - |\n${rows}`)).toContain("table-too-tall");
 	});
 
 	it("rejects excessive nesting", () => {
