@@ -31,6 +31,7 @@ import {
 	ulid,
 } from "@chopin/dialect";
 
+import { $createTableNodeWithDimensions } from "@lexical/table";
 import { $createParagraphNode, $createTextNode, $insertNodes } from "lexical";
 
 import { askForUrl } from "./url";
@@ -110,6 +111,24 @@ const COMMANDS: SlashCommand[] = [
 				let callout = $createCalloutNode();
 				callout.setId(ulid());
 				return callout;
+			}),
+	},
+	{
+		id: "table",
+		label: "Table",
+		group: "Layout",
+		keywords: ["table", "grid", "row", "column", "spreadsheet"],
+		run: editor =>
+			editor.update(() => {
+				/*
+				 * Row headers only.
+				 *
+				 * `includeHeaders: true` would mark the first cell of every row
+				 * as a header too, which renders as a bold shaded column — and
+				 * GFM has no way to write one, so the table would claim
+				 * something on screen that the saved source does not say.
+				 */
+				$insertNodes([$createTableNodeWithDimensions(3, 3, { rows: true, columns: false })]);
 			}),
 	},
 	{
