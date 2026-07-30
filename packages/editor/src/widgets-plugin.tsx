@@ -16,6 +16,7 @@ import { Cell } from "@mdxeditor/gurx";
 
 import { ChangeObserver } from "./changes-observer";
 import { QuestionnaireObserver } from "./questionnaires";
+import { TableRails } from "./table/rails";
 import { ThreadObserver } from "./threads";
 import { Toolbar } from "./toolbar";
 import { CalloutPlugin, PreviewPlugin, TabsPlugin } from "./widgets";
@@ -56,6 +57,9 @@ export const widgetsPlugin = realmPlugin<WidgetsOptions>({
 		realm.pub(addComposerChild$, TabsPlugin);
 		realm.pub(addComposerChild$, PreviewPlugin);
 		realm.pub(addComposerChild$, CalloutPlugin);
+		// Also where `@lexical/table`'s own plugins are registered, which the
+		// editor otherwise runs without.
+		realm.pub(addComposerChild$, TableRails);
 		realm.pub(addComposerChild$, Toolbar);
 	},
 	update(realm, params) {

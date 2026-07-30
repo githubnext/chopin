@@ -366,6 +366,230 @@
 	margin-block: 0;
 }
 
+/*
+ * A selected range of cells.
+ *
+ * `@lexical/table` marks one by adding the class the theme names under
+ * `tableCellSelected` and does nothing else at all — no inline style, no
+ * fallback. MDXEditor's theme names no table class of any kind, so before
+ * `plan-editor.tsx` added these the selection was live and completely
+ * invisible: dragging across cells appeared to do nothing while a
+ * `TableSelection` was very much in effect, and the next keystroke replaced
+ * everything it covered.
+ */
+.plan .plan-content .plan-cell-selected {
+	background: color-mix(in oklch, var(--color-ring) 22%, transparent);
+}
+
+/* Set on the table while a cell range is being dragged out, so the browser's
+   own text selection does not paint underneath ours. */
+.plan .plan-content .plan-table-selecting,
+.plan .plan-content .disable-selection {
+	user-select: none;
+}
+
+/* Table rails ------------------------------------------------------------ */
+
+/*
+ * The grips a table is reshaped from.
+ *
+ * Positioned by script from measured cell rectangles, because a `<table>`
+ * cannot contain a `<div>` and there is nowhere inside the node to put them.
+ * So: `position: fixed`, and no Tailwind translate utility anywhere near them
+ * — v4 emits the `translate` property, which composes with a transform rather
+ * than replacing it.
+ */
+/*
+ * The rail takes pointer events across the whole of itself, holes included.
+ *
+ * It is tempting to pass the gaps through so the prose behind stays clickable,
+ * and that is what this did first. But `pointerleave` fires the instant the
+ * pointer crosses anything untargetable, so every hole was somewhere the rails
+ * blinked out from under a hand on its way across them. A rail exists only
+ * while its table is being pointed at, and it is 28 pixels of a 32-pixel
+ * gutter; the prose it covers for that moment is not worth the flicker.
+ */
+.plan-rail {
+	position: fixed;
+	z-index: 40;
+	overflow: hidden;
+}
+
+.plan-rail > * {
+	position: absolute;
+	padding: 0;
+	border: 0;
+	background: transparent;
+}
+
+.plan-grip {
+	border-radius: var(--radius-sm);
+	background: var(--color-muted);
+	transition: background-color 120ms ease;
+}
+
+.plan-grip:hover,
+.plan-grip:focus-visible {
+	background: color-mix(in oklch, var(--color-ring) 45%, transparent);
+}
+
+.plan-grip:focus-visible {
+	outline: 2px solid var(--color-ring);
+	outline-offset: 1px;
+}
+
+[data-plan-rail="column"] .plan-grip {
+	cursor: grab;
+}
+
+[data-plan-rail="row"] .plan-grip {
+	cursor: grab;
+}
+
+.plan-grip.is-held {
+	cursor: grabbing;
+	background: var(--color-ring);
+}
+
+/* The header row's bar. Drawn so the rail has no gap where the row plainly is,
+   but not a control: the header cannot move and cannot be removed. */
+.plan-grip.is-fixed {
+	background: color-mix(in oklch, var(--color-border) 60%, transparent);
+	cursor: default;
+}
+
+/*
+ * Remove and insert, in the lane beyond the grips.
+ *
+ * Nothing here overlaps a grip, so a drag can begin anywhere along one. Hiding
+ * is `opacity` rather than `display`, so a button keeps its size and its place
+ * in the tab order while it is out of sight — and `pointer-events` with it, so
+ * an invisible cross cannot be clicked by accident.
+ */
+.plan-grip-remove,
+.plan-insert,
+.plan-align {
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 120ms ease;
+	border-radius: var(--radius-sm);
+	background: var(--color-popover);
+	box-shadow: 0 0 0 1px var(--color-border);
+	color: var(--color-muted-foreground);
+}
+
+.plan-grip-remove[data-plan-shown],
+.plan-align[data-plan-shown],
+.plan-grip-remove:focus-visible,
+.plan-align:focus-visible,
+.plan-rail:hover .plan-insert,
+.plan-insert:focus-visible {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.plan-grip-remove:hover,
+.plan-insert:hover,
+.plan-align:hover {
+	color: var(--color-foreground);
+	box-shadow: 0 0 0 1px var(--color-ring);
+}
+
+.plan-grip-remove:focus-visible,
+.plan-insert:focus-visible,
+.plan-align:focus-visible {
+	outline: 2px solid var(--color-ring);
+	outline-offset: 1px;
+}
+
+/* Drawn rather than lettered: at fifteen pixels a glyph is a smudge, and these
+   have to read at a glance in the margin of a paragraph. */
+.plan-grip-remove::before,
+.plan-grip-remove::after,
+.plan-insert::before,
+.plan-insert::after {
+	content: "";
+	position: absolute;
+	inset: 50% 25%;
+	border-top: 1.5px solid currentcolor;
+	translate: 0 -50%;
+}
+
+.plan-grip-remove::before {
+	rotate: 45deg;
+}
+
+.plan-grip-remove::after {
+	rotate: -45deg;
+}
+
+.plan-insert::after {
+	rotate: 90deg;
+}
+
+/*
+ * The alignment button reads as what it does: two lines, the lower one short
+ * and sitting where the text will. A column with no alignment of its own shows
+ * the same figure at half strength rather than a fourth icon, because "no
+ * alignment" and "left" render identically in the table and a control claiming
+ * otherwise would be lying about the source.
+ */
+.plan-align::before,
+.plan-align::after {
+	content: "";
+	position: absolute;
+	left: 3px;
+	right: 3px;
+	border-top: 1.5px solid currentcolor;
+}
+
+.plan-align::before {
+	top: 5px;
+}
+
+.plan-align::after {
+	top: 9px;
+}
+
+.plan-align[data-plan-align="default"] {
+	opacity: 0;
+}
+
+.plan-align[data-plan-align="default"][data-plan-shown],
+.plan-align[data-plan-align="default"]:focus-visible {
+	opacity: 0.55;
+}
+
+.plan-align[data-plan-align="default"]::after,
+.plan-align[data-plan-align="left"]::after {
+	right: 7px;
+}
+
+.plan-align[data-plan-align="center"]::after {
+	left: 5px;
+	right: 5px;
+}
+
+.plan-align[data-plan-align="right"]::after {
+	left: 7px;
+}
+
+/* Where the drag will land. A hairline, because it is a position rather than a
+   region: anything wider reads as the width of what is being moved. */
+.plan-drop {
+	background: var(--color-ring);
+	border-radius: 1px;
+	pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.plan-grip,
+	.plan-grip-remove,
+	.plan-insert {
+		transition: none;
+	}
+}
+
 /* Remote cursors --------------------------------------------------------- */
 
 /*

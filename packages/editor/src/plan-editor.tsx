@@ -34,6 +34,12 @@ import type { Connection, Transport } from "./transport";
  * Lexical paints remote cursors with inline styles unless the theme names a
  * class for them, and inline styles cannot be restyled from a stylesheet. The
  * classes are how the cursors become ours rather than the library's.
+ *
+ * The table entries are the same arrangement one step worse: `@lexical/table`
+ * paints a selected cell by adding `theme.tableCellSelected` and nothing else,
+ * so a theme that does not name one — MDXEditor's does not name any table class
+ * at all — draws a cell selection that is completely invisible. Dragging across
+ * cells then appears to do nothing while a `TableSelection` is very much live.
  */
 const THEME = {
 	...lexicalTheme,
@@ -43,6 +49,8 @@ const THEME = {
 		selection: "plan-cursor-selection",
 		selectionBg: "plan-cursor-selection-bg",
 	},
+	tableCellSelected: "plan-cell-selected",
+	tableSelection: "plan-table-selecting",
 };
 
 // Decorator nodes render through whatever the UI registered, so this has to

@@ -7,7 +7,7 @@ people running it; this is for people editing it.
 
 ```bash
 bun run dev        # supervisor: Vite + server on one origin, Ctrl-C stops both
-bun test           # 230 tests, no agent spawned
+bun test           # 500 tests, no agent spawned
 bun run types      # every package
 bun run ci         # dprint check && oxlint
 bun run build      # production client
@@ -21,11 +21,11 @@ agent, which is what the tests use.
 
 ```
 packages/dialect     4.5k   the MDX dialect and its Lexical schema
-packages/editor      6.6k   the browser editor, cursors, the sidecar, agent marks
+packages/editor      9.5k   the browser editor, cursors, the sidecar, agent marks
 packages/question    1.8k   questionnaires: definition, shared answer, derivation
 packages/protocol    0.9k   the wire, as types, plus the addressing rule
-apps/server          9.5k   rooms, documents, questions, comments, the agent
-apps/web             1.4k   the three panes
+apps/server         11.4k   rooms, documents, questions, comments, the agent
+apps/web             1.5k   the three panes
 scripts/dev.ts              the development supervisor
 ```
 
@@ -138,6 +138,37 @@ already followed. It matters most for an accepted comment: a `<Decision>` draws
 nothing in the prose, so the pane is the whole of where the decision can be seen
 and the quote is the only route to what it produced.
 
+**A table's header row is furniture, not a row.** GFM has exactly one header
+and it is always the first, so nothing in the document marks it as one — being
+first is the whole of what makes it the header, and the column alignment hangs
+off its cells. A drag that moved it would therefore not reorder the table so
+much as change what it claims: two rows would swap meaning at the next save and
+the alignment would follow whichever stopped being the header. So the header
+cannot be dragged, cannot be dropped onto, cannot be removed, and nothing can
+be inserted above it. Its bar is still drawn, because a rail with a gap where
+a row plainly is reads as a bug. The last _body_ row can go, though —
+`| a |\n| - |\n` is well formed and round-trips, and refusing it would mean the
+only way to empty a table is to delete it.
+
+**The rails are measured, because a `<table>` cannot contain a `<div>`.** Every
+other widget in the editor puts its chrome in a `data-plan-chrome` slot the
+node reserves and Lexical is told to leave alone. A table has nowhere to put
+one: the browser hoists a stray div straight back out. So the choice was
+between subclassing `TableNode` and measuring cell rectangles, and measuring is
+what the selection bubble already does. The grips are one lane and the buttons
+another, with nothing overlapping — a cross in the middle of a grip is exactly
+where a drag is most naturally begun, and it swallowed the gesture it was drawn
+beside. Intermittently, too, since whether it had become live yet depended on a
+re-render landing between the pointer arriving and the button going down.
+
+**A limit is enforced where the button is, not where the document is.** A table
+past `MAX_TABLE_ROWS` or `MAX_TABLE_COLUMNS` applies locally, syncs cleanly and
+is then refused by the server — which cannot undo a Yjs transaction, so it
+rebuilds the room under a fresh epoch and everyone in it loses their undo and
+their cursors. `table/shape.ts` is asked before anything is created, so the
+cost of reaching a hundred rows is a grey button rather than everybody's
+session. The same argument as `toolbar/url.ts`, one order of magnitude worse.
+
 **A hover asks; a click sends.** Both leave the same wash, because they are the
 same fact — this is the prose that card refers to — and the difference is how
 long it is owed. A hover is over when the pointer moves; a click has put the
@@ -240,6 +271,36 @@ failed tool chips; without that a boundary the agent keeps hitting is invisible.
 **Tailwind v4 translate utilities emit the `translate` property**, not
 `transform`. They compose rather than override, so an element positioned by
 script must not also carry them.
+
+**A library that paints through the theme paints nothing when the theme is
+silent.** `@lexical/table` marks a selected cell by adding
+`theme.tableCellSelected` and does nothing else — no inline style, no fallback
+— and MDXEditor's `lexicalTheme` names no table class of any kind. So dragging
+across cells produced a live `TableSelection` that was completely invisible,
+and the next keystroke replaced everything it covered. The entries are in
+`plan-editor.tsx` beside the `collaboration` block, which is there for the
+identical reason.
+
+**`$moveTableRow` and `$moveTableColumn` return silently on a table with merged
+cells**, which is why `shape.ts` carries `simple` and the grips go inert rather
+than becoming drags that do nothing. A plan cannot contain a merged cell — GFM
+cannot write one, and the export visitor ignores spans — but a paste can still
+introduce one, so `registerTableCellUnmergeTransform` is registered to take
+them back out.
+
+**A rail that lets pointer events through has a hole wherever it has no
+control.** `pointerleave` fires the moment the pointer crosses one, so the
+first version blinked the rails out from under a hand moving along them,
+whenever it passed the header's bar. The rail takes events across the whole of
+itself now and accepts that it covers 28px of gutter for as long as its table
+is the one being pointed at.
+
+**A seam is on the edge, so what is drawn on one straddles it.** The rail
+clips, to hide a grip belonging to a column scrolled out of the table's own
+scroller — and that clip cut the first and last insert buttons in half, which
+are the two most likely to be wanted. The rail carries half a seam of slack at
+each end for this, and measures its origin from its own edge rather than the
+table's so the two cannot disagree.
 
 **A transport comes up on its own schedule; whatever mounted against it does
 not.** The provider opened the document once, when the editor mounted, so a
