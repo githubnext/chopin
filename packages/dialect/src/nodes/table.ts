@@ -27,7 +27,8 @@ import type { LexicalExportVisitor, MdastImportVisitor } from "@mdxeditor/editor
 import type { ElementNode } from "lexical";
 import type * as Mdast from "mdast";
 
-type Align = Mdast.AlignType;
+/** How a column's text is aligned; `null` is the default the source omits. */
+export type Align = Mdast.AlignType;
 
 const ALIGNMENTS = new Set(["left", "center", "right"]);
 
