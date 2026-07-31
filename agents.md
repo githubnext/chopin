@@ -15,6 +15,12 @@ bun run build      # production client
 bun run start      # serve the built client
 ```
 
+`.github/workflows/ci.yml` runs all four checks on every push and pull request,
+in two jobs: `bun run ci`, `bun run types` and `bun test` together, and the
+browser suite on its own because it has to build the client first and should
+not make a formatting mistake wait behind Vite. A failed browser run uploads
+its report and traces.
+
 `bun run dev` needs `GITHUB_TOKEN`. `AGENT=off` runs everything except the
 agent, which is what both suites use.
 
