@@ -6,13 +6,24 @@
  * rather than replacing it: a preview is attached beside the source, never in
  * place of the nodes Yjs is synchronising.
  *
- * KaTeX and Mermaid are loaded on demand — most plans contain neither, and both
- * are large enough that paying for them up front is not justified.
+ * KaTeX, Mermaid and the code renderer are loaded on demand — most plans
+ * contain none of them, and each is large enough that paying for it up front is
+ * not justified.
+ *
+ * Everything in the preview slot is put there by React, including the markup
+ * KaTeX and Mermaid produce as strings. Two writers in one element is the
+ * trap: a block whose language changes keeps its element, and an effect that
+ * cleared the slot on the way out would run *after* React had already
+ * committed the next renderer's nodes into it, taking them with it. One owner
+ * means switching from a diagram to a fence is a reconciliation rather than a
+ * race.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import { readOnly$ } from "@mdxeditor/editor";
+import { useCellValue } from "@mdxeditor/gurx";
 import {
 	$getNodeByKey,
 	$getRoot,
@@ -22,18 +33,31 @@ import {
 	COLLABORATION_TAG,
 	HISTORIC_TAG,
 } from "lexical";
-import { $isCodeBlockNode, $isMathNode, MERMAID_LANGUAGE } from "@chopin/dialect";
+import { $isCodeBlockNode, $isMathNode } from "@chopin/dialect";
 
 import { enclosing, remember } from "../collapse";
+import { kindOf, LANGUAGES } from "./code";
+import { CodeView } from "./code-view";
 
 import type { ElementNode, LexicalEditor } from "lexical";
+import type { Kind } from "./code";
 
 type Block = {
 	key: string;
-	kind: "math" | "mermaid";
+	kind: Kind | "math";
 	inline: boolean;
 	source: string;
+	/** Empty for math, and for a fence nobody has named. */
+	language: string;
+	meta: string;
 };
+
+/** Whether a block has a second reading of itself to show. */
+function renders(block: Block, html: string | undefined): boolean {
+	if (!block.source.trim()) return false;
+	if (block.kind === "math" || block.kind === "mermaid") return !!html;
+	return block.kind === "code" || block.kind === "diff";
+}
 
 function collect(editor: LexicalEditor): Block[] {
 	let blocks: Block[] = [];
@@ -47,13 +71,18 @@ function collect(editor: LexicalEditor): Block[] {
 						kind: "math",
 						inline: child.isInlineMath(),
 						source: child.getTextContent(),
+						language: "",
+						meta: child.getMeta(),
 					});
-				} else if ($isCodeBlockNode(child) && child.getLanguage() === MERMAID_LANGUAGE) {
+				} else if ($isCodeBlockNode(child)) {
+					let language = child.getLanguage();
 					blocks.push({
 						key: child.getKey(),
-						kind: "mermaid",
+						kind: kindOf(language),
 						inline: false,
 						source: child.getTextContent(),
+						language,
+						meta: child.getMeta(),
 					});
 				}
 				if ($isElementNode(child)) walk(child);
@@ -95,44 +124,92 @@ async function renderMermaid(key: string, source: string): Promise<string> {
 	return svg;
 }
 
+/**
+ * What a fence is, changed from the block itself.
+ *
+ * The language is an attribute rather than content, so it is edited through a
+ * control rather than by typing — the same arrangement a callout's type has,
+ * and for the same reason: the fence markers are not in the document, so there
+ * is nowhere to type it. A language the list does not offer is kept and shown,
+ * because the agent may well have written one and losing it on the first
+ * glance at the menu would be an edit nobody asked for.
+ */
+function Language(
+	{ block, editor, disabled }: { block: Block; editor: LexicalEditor; disabled?: boolean },
+) {
+	let set = useCallback((language: string) => {
+		editor.update(() => {
+			let node = $getNodeByKey(block.key);
+			if (!$isCodeBlockNode(node)) return;
+			node.setLanguage(language);
+			// Markdown writes an info string after a language, so meta cannot
+			// outlive one. The node enforces this on creation; changing the
+			// language later reaches the same rule from the other side.
+			if (!language) node.setMeta("");
+		});
+	}, [editor, block.key]);
+
+	let listed = LANGUAGES.some(([id]) => id === block.language);
+
+	return (
+		<select
+			aria-label="Code language"
+			value={block.language}
+			disabled={disabled}
+			onChange={event => set(event.currentTarget.value)}
+			className="cursor-pointer rounded border border-transparent bg-transparent text-xs text-muted-foreground hover:border-border focus-visible:border-ring"
+		>
+			<option value="">Plain text</option>
+			{!listed && block.language && <option value={block.language}>{block.language}</option>}
+			{LANGUAGES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+		</select>
+	);
+}
+
 function Toggle({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
 	return (
-		<div
-			// Chrome, not content: keep it out of the editable tree.
-			contentEditable={false}
-			className="flex justify-end"
+		<button
+			type="button"
+			aria-expanded={!collapsed}
+			onClick={onToggle}
+			// Clicking a non-editable island inside a contenteditable makes
+			// the browser place the caret at the nearest editable position,
+			// which is the source this is about to hide. The selection
+			// change arrives asynchronously, after the collapse, and reads
+			// as the reader arrowing in — reopening what they just closed.
+			onMouseDown={event => event.preventDefault()}
+			className="cursor-pointer rounded px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 		>
-			<button
-				type="button"
-				aria-expanded={!collapsed}
-				onClick={onToggle}
-				// Clicking a non-editable island inside a contenteditable makes
-				// the browser place the caret at the nearest editable position,
-				// which is the source this is about to hide. The selection
-				// change arrives asynchronously, after the collapse, and reads
-				// as the reader arrowing in — reopening what they just closed.
-				onMouseDown={event => event.preventDefault()}
-				className="cursor-pointer rounded px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-			>
-				{collapsed ? "Show source" : "Hide source"}
-			</button>
-		</div>
+			{collapsed ? "Show source" : "Hide source"}
+		</button>
 	);
 }
 
 /** Attaches a preview element beside a block's source, keyed to its content. */
 function Preview(
-	{ block, editor, collapsed, onToggle }: {
+	{ block, editor, collapsed, disabled, onToggle }: {
 		block: Block;
 		editor: LexicalEditor;
 		collapsed: boolean;
+		disabled?: boolean;
 		onToggle: () => void;
 	},
 ) {
 	let [html, setHtml] = useState<string>();
 	let [error, setError] = useState<string>();
 
+	let drawn = block.kind === "math" || block.kind === "mermaid";
+
 	useEffect(() => {
+		// A block that stopped being a diagram must stop showing one. Its
+		// element survives the change of language, and so would the last
+		// drawing made from it — beside, or instead of, whatever the new
+		// language renders.
+		if (!drawn) {
+			setHtml(undefined);
+			setError(undefined);
+			return;
+		}
 		let cancelled = false;
 
 		let run = async () => {
@@ -158,24 +235,7 @@ function Preview(
 		return () => {
 			cancelled = true;
 		};
-	}, [block.key, block.kind, block.inline, block.source]);
-
-	useEffect(() => {
-		let element = editor.getElementByKey(block.key);
-		let host = element?.querySelector<HTMLElement>("[data-plan-preview]");
-		if (!host) return;
-
-		if (error) {
-			host.textContent = error;
-			host.dataset.planError = "";
-			return;
-		}
-
-		delete host.dataset.planError;
-		// The rendered output is produced by KaTeX/Mermaid from validated
-		// source under their strict modes, not by anything the author wrote.
-		host.innerHTML = html ?? "";
-	}, [editor, block.key, html, error]);
+	}, [drawn, block.key, block.kind, block.inline, block.source]);
 
 	/*
 	 * Hiding is applied to the DOM, never to the document: the source is still
@@ -186,7 +246,7 @@ function Preview(
 	 * changing language, math flipping inline — which would drop the attribute
 	 * while this still believed it had been set.
 	 */
-	let hide = collapsed && !!html;
+	let hide = collapsed && renders(block, html);
 	useEffect(() => {
 		let element = editor.getElementByKey(block.key);
 		if (!element) return;
@@ -194,18 +254,66 @@ function Preview(
 		else delete element.dataset.planCollapsed;
 	});
 
-	// A block with nothing rendered has nothing to fall back to, so there is
-	// nothing to offer: hiding a plain fence would leave an empty box.
-	let host = html
-		? editor.getElementByKey(block.key)?.querySelector<HTMLElement>("[data-plan-chrome='block']")
-		: undefined;
-	if (!host) return null;
+	let element = editor.getElementByKey(block.key);
+	let host = element?.querySelector<HTMLElement>("[data-plan-preview]");
+	let chrome = element?.querySelector<HTMLElement>("[data-plan-chrome='block']");
 
-	return createPortal(<Toggle collapsed={collapsed} onToggle={onToggle} />, host, block.key);
+	// A block with nothing rendered has nothing to fall back to, so there is
+	// nothing to offer: hiding a plain fence would leave an empty box. A
+	// formula has no language either, so its row can be empty of both.
+	let hidable = renders(block, html);
+	let named = block.kind !== "math";
+
+	return (
+		<>
+			{host && createPortal(<Rendered block={block} html={html} error={error} />, host, block.key)}
+			{chrome && (hidable || named) && createPortal(
+				<div
+					// Chrome, not content: keep it out of the editable tree.
+					contentEditable={false}
+					className="flex items-center justify-between gap-2"
+				>
+					{named ? <Language block={block} editor={editor} disabled={disabled} /> : <span />}
+					{hidable && <Toggle collapsed={collapsed} onToggle={onToggle} />}
+				</div>,
+				chrome,
+				block.key,
+			)}
+		</>
+	);
+}
+
+function Rendered(
+	{ block, html, error }: { block: Block; html: string | undefined; error: string | undefined },
+) {
+	if (error) return <div data-plan-error="">{error}</div>;
+	if (!block.source.trim()) return null;
+
+	if (block.kind === "code" || block.kind === "diff") {
+		return (
+			<CodeView
+				kind={block.kind}
+				source={block.source}
+				language={block.language}
+				meta={block.meta}
+			/>
+		);
+	}
+
+	// Produced by KaTeX or Mermaid from validated source under their strict
+	// modes, not by anything the author wrote.
+	//
+	// Inline math is a span inside a sentence, so what wraps it has to be one
+	// too: a block element here would put a formula somebody wrote mid-clause
+	// on a line of its own, and the rest of the sentence after it.
+	if (!html) return null;
+	if (block.inline) return <span dangerouslySetInnerHTML={{ __html: html }} />;
+	return <div dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 export function PreviewPlugin() {
 	let [editor] = useLexicalComposerContext();
+	let disabled = useCellValue(readOnly$);
 	let [blocks, setBlocks] = useState<Block[]>([]);
 	/** Blocks showing only their result. Local to this viewer, and to this session. */
 	let [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -273,6 +381,7 @@ export function PreviewPlugin() {
 					block={block}
 					editor={editor}
 					collapsed={!!collapsed[block.key]}
+					disabled={disabled}
 					onToggle={() => toggle(block.key)}
 				/>
 			))}

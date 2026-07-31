@@ -7,8 +7,8 @@ people running it; this is for people editing it.
 
 ```bash
 bun run dev        # supervisor: Vite + server on one origin, Ctrl-C stops both
-bun test           # 500 tests, no browser, no agent spawned
-bun run e2e        # 40 tests, Chromium, builds the client first
+bun test           # 525 tests, no browser, no agent spawned
+bun run e2e        # 46 tests, Chromium, builds the client first
 bun run types      # every package, and e2e
 bun run ci         # dprint check && oxlint
 bun run build      # production client
@@ -45,13 +45,13 @@ URL. Point it elsewhere and they seed a directory the server never reads.
 ## Shape
 
 ```
-packages/dialect     4.5k   the MDX dialect and its Lexical schema
-packages/editor      9.5k   the browser editor, cursors, the sidecar, agent marks
+packages/dialect     4.6k   the MDX dialect and its Lexical schema
+packages/editor     10.5k   the browser editor, cursors, the sidecar, agent marks
 packages/question    1.8k   questionnaires: definition, shared answer, derivation
 packages/protocol    0.9k   the wire, as types, plus the addressing rule
 apps/server         11.4k   rooms, documents, questions, comments, the agent
 apps/web             1.5k   the three panes
-e2e                  1.0k   the browser suite, and the servers it runs against
+e2e                  1.3k   the browser suite, and the servers it runs against
 scripts/dev.ts              the development supervisor
 ```
 
@@ -195,6 +195,45 @@ their cursors. `table/shape.ts` is asked before anything is created, so the
 cost of reaching a hundred rows is a grey button rather than everybody's
 session. The same argument as `toolbar/url.ts`, one order of magnitude worse.
 
+**A rendered fence is a second reading, never the document.** `@pierre/diffs`
+colours code and draws patches, and it is asked for nothing else: it has an
+edit mode, and turning it on would put a character model of its own beside the
+one the room is collaborating in, so that two people typing would each be
+correcting a copy. The source stays where it was, as Lexical text children
+under Yjs, directly editable underneath what was drawn from it. It arrives on
+demand, because Shiki's grammars outweigh everything else the editor loads and
+a plan with no code in it should pay none of that.
+
+**A fence with no language draws nothing**, and that is the whole of what makes
+the control worth having. Uncoloured text above the same uncoloured text is two
+of the same thing with a caret in only one of them; naming the language is what
+turns the upper one into something the lower one is not. So `/code` opens a
+fence with a selector and no preview, and choosing from it is an edit to the
+fence like any other — it syncs, it saves, and everybody else's copy is
+coloured too.
+
+**A patch is repaired on the way to the renderer, and nowhere else.** Nobody
+writes a hunk header correctly, least of all a model quoting a change it is
+proposing, and the counts in one are how a parser knows where the hunk ends —
+so a count that is too low truncates the change silently, which is the one
+outcome worth any amount of trouble to avoid. `widgets/code.ts` recounts them
+from the lines that are actually there, reads a stripped blank line as the
+unchanged line it was, and takes off the `a/` and `b/` that the renderer only
+removes for git's own form. What comes out is handed over and thrown away; the
+fence keeps every byte the author wrote. Anything still malformed is refused by
+the parser and drawn as coloured text, which is the honest rendering of a
+fragment that was never a patch.
+
+**Enter is a newline in a fence, and twice over is the way out.** Lexical asks
+a block to make its own successor and a code block returns null, which is why
+Enter inside one did nothing whatsoever — no newline, and no way past a fence
+sitting at the end of a plan. `widgets/enter.tsx` answers
+`INSERT_PARAGRAPH_COMMAND` rather than the keystroke, because that is what rich
+text turns an unshifted Enter into and what everything else meaning "start a
+new block" dispatches. The blank line that asked to leave goes with the
+request, or every fence anybody escaped would keep a trailing empty line
+nobody typed.
+
 **A hover asks; a click sends.** Both leave the same wash, because they are the
 same fact — this is the prose that card refers to — and the difference is how
 long it is owed. A hover is over when the pointer moves; a click has put the
@@ -297,6 +336,27 @@ failed tool chips; without that a boundary the agent keeps hitting is invisible.
 **Tailwind v4 translate utilities emit the `translate` property**, not
 `transform`. They compose rather than override, so an element positioned by
 script must not also carry them.
+
+**A grammar the highlighter does not have rejects a promise nobody is
+watching.** `@pierre/diffs` starts its first highlight from a render and never
+attaches a handler to it, so a fence saying `foobar` — or `pseudocode`, which a
+model will write — resolves nothing, renders nothing, and leaves a block that
+is simply blank. `code-view.tsx` asks `resolveLanguage` first and falls back to
+plain text, which is also why the answer is cached: the question is asked again
+on every keystroke in the block.
+
+**One preview slot, two writers, and the loser is whoever committed first.**
+The rendered output used to be assigned as `innerHTML` and the code renderer is
+React, so a fence that changed language from `mermaid` had to clear the slot on
+the way out — and a passive effect's cleanup runs _after_ React has already
+inserted the next renderer's nodes into it. Everything in `data-plan-preview`
+is React's now, including the markup KaTeX and Mermaid produce as strings.
+
+**A `<select>` in the document answers to `getByRole("option")`.** The slash
+menu is a listbox of options and so, to a browser, is the language control
+beside every fence — so an unscoped option locator in the browser suite matches
+both and resolves to thirty elements. Every existing one is scoped to the menu;
+keep them that way.
 
 **A library that paints through the theme paints nothing when the theme is
 silent.** `@lexical/table` marks a selected cell by adding

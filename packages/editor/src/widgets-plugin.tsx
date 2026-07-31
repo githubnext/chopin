@@ -19,7 +19,7 @@ import { QuestionnaireObserver } from "./questionnaires";
 import { TableRails } from "./table/rails";
 import { ThreadObserver } from "./threads";
 import { Toolbar } from "./toolbar";
-import { CalloutPlugin, PreviewPlugin, TabsPlugin } from "./widgets";
+import { CalloutPlugin, EnterPlugin, PreviewPlugin, TabsPlugin } from "./widgets";
 
 import type { ChangeStore } from "./changes";
 import type { QuestionnaireStore } from "./questionnaires";
@@ -57,6 +57,7 @@ export const widgetsPlugin = realmPlugin<WidgetsOptions>({
 		realm.pub(addComposerChild$, TabsPlugin);
 		realm.pub(addComposerChild$, PreviewPlugin);
 		realm.pub(addComposerChild$, CalloutPlugin);
+		realm.pub(addComposerChild$, EnterPlugin);
 		// Also where `@lexical/table`'s own plugins are registered, which the
 		// editor otherwise runs without.
 		realm.pub(addComposerChild$, TableRails);

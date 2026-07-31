@@ -26,6 +26,7 @@ import {
 	$createMathNode,
 	$createTabNode,
 	$createTabsNode,
+	DIFF_LANGUAGE,
 	IMAGE_PROTOCOLS,
 	MERMAID_LANGUAGE,
 	ulid,
@@ -73,6 +74,13 @@ const COMMANDS: SlashCommand[] = [
 		group: "Technical",
 		keywords: ["code", "snippet", "fence"],
 		run: editor => replace(editor, () => $createCodeBlockNode("")),
+	},
+	{
+		id: "diff",
+		label: "Diff",
+		group: "Technical",
+		keywords: ["diff", "patch", "change"],
+		run: editor => replace(editor, () => $createCodeBlockNode(DIFF_LANGUAGE)),
 	},
 	{
 		id: "mermaid",

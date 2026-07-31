@@ -277,3 +277,12 @@ export const IMAGE_PROTOCOLS: readonly string[] = Object.freeze(["https:"]);
 
 /** Fenced code language that renders as a diagram. */
 export const MERMAID_LANGUAGE = "mermaid";
+
+/**
+ * Fenced code language that renders as a diff.
+ *
+ * A unified patch and nothing else — no `patch`, no `udiff`. A renderer that
+ * accepts three spellings has to be told about all three in three places, and
+ * the plan is written by an agent that will copy whichever one it last read.
+ */
+export const DIFF_LANGUAGE = "diff";
