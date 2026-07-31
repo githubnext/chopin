@@ -25,6 +25,9 @@ e2e/blob-report/
 .claude/settings.local.json
 .opencode/*
 
+# Page snapshots the Playwright MCP writes where it is started.
+.playwright-mcp/
+
 # Generated
 **/dist/**
 *.tsbuildinfo
