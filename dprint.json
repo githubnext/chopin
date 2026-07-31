@@ -18,7 +18,10 @@
 		"**/node_modules",
 		"**/*-lock.json",
 		"**/*.lock",
-		"data/**"
+		"data/**",
+		"e2e/.scratch/**",
+		"e2e/test-results/**",
+		"e2e/playwright-report/**"
 	],
 
 	"plugins": [

@@ -1,7 +1,10 @@
 {
 	"ignorePatterns": [
 		"**/dist/**",
-		"data/**"
+		"data/**",
+		"e2e/.scratch/**",
+		"e2e/test-results/**",
+		"e2e/playwright-report/**"
 	],
 	"categories": {
 		"correctness": "error",

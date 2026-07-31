@@ -7,15 +7,34 @@ people running it; this is for people editing it.
 
 ```bash
 bun run dev        # supervisor: Vite + server on one origin, Ctrl-C stops both
-bun test           # 500 tests, no agent spawned
-bun run types      # every package
+bun test           # 500 tests, no browser, no agent spawned
+bun run e2e        # 40 tests, Chromium, builds the client first
+bun run types      # every package, and e2e
 bun run ci         # dprint check && oxlint
 bun run build      # production client
 bun run start      # serve the built client
 ```
 
 `bun run dev` needs `GITHUB_TOKEN`. `AGENT=off` runs everything except the
-agent, which is what the tests use.
+agent, which is what both suites use.
+
+`bun run e2e` needs a browser once: `bun run e2e:browsers`. It builds the
+client, then starts two servers of its own — 8788, and 8789 with the injection
+flags on — so having `bun run dev` open at the same time costs nothing.
+
+To iterate against a server you are already running, skipping the build and the
+supervision, give it the three things the suite assumes and name it:
+
+```bash
+PORT=8790 AGENT=off DATA_DIR="$PWD/e2e/.scratch/8790" \
+  DEV_QUESTIONS=1 DEV_COMMENTS=1 bun apps/server/src/main.ts
+E2E_BASE_URL=http://127.0.0.1:8790 bun node_modules/@playwright/test/cli.js \
+  test --config e2e/playwright.config.ts
+```
+
+The `DATA_DIR` is not decoration: tests that need prose before anybody opens
+the room write it themselves, and they derive where from the port in the base
+URL. Point it elsewhere and they seed a directory the server never reads.
 
 ## Shape
 
@@ -26,6 +45,7 @@ packages/question    1.8k   questionnaires: definition, shared answer, derivatio
 packages/protocol    0.9k   the wire, as types, plus the addressing rule
 apps/server         11.4k   rooms, documents, questions, comments, the agent
 apps/web             1.5k   the three panes
+e2e                  1.0k   the browser suite, and the servers it runs against
 scripts/dev.ts              the development supervisor
 ```
 
@@ -379,6 +399,48 @@ and gives each its own process group so the whole tree can be taken down.
 different address families, which is why the dev server binds `127.0.0.1`
 explicitly rather than `localhost`.
 
+**Bun's runner claims `.spec.` as well as `.test.`.** A Playwright file under
+either name is collected by `bun test`, which then fails on an import it cannot
+satisfy — so the browser suite is `*.e2e.ts` and the Playwright config matches
+that instead of its own default. Naming one `.spec.ts` breaks the unit run, in
+a file the unit run has no business reading.
+
+**Playwright's web servers start before its `globalSetup`.** So a setup that
+checks for the built client is unreachable when there isn't one: the server
+answers 404 for the `dist` it cannot find, Playwright polls for a minute and
+reports a timeout against a URL, and the check that would have explained it
+never runs. The guard is at the top of `playwright.config.ts` instead, which is
+evaluated before anything is started.
+
+**The client is built by `bun run e2e`, not from inside the config.** A build
+racing servers that are already answering would leave the suite testing the
+_previous_ bundle — green, about code nobody changed. `dist` lingers, so
+`playwright test` invoked directly serves whatever was last built; the guard
+only refuses when there is nothing there at all.
+
+**A `globalTeardown` runs while the web servers are still up.** So the obvious
+place to remove the suite's rooms is one where the snapshot debounce writes
+some of them back: the last test's room is saved 500ms after the wipe, and the
+tree ends up mostly empty and never quite. `setup.ts` clears it on the way in
+instead, which is exact — a server writes nothing until a room is opened — and
+leaves a failed run's plan beside the trace that failed on it.
+
+**`context.setOffline` leaves an established socket alone.** It governs what
+may be opened, and by the time there is a connection worth dropping the opening
+has happened — so the editor stays unlocked and a test written the obvious way
+asserts nothing. `page.routeWebSocket` proxies it, and can therefore close it.
+
+**An accessible name matches as a substring.** "Remove row 4" contains "Move
+row 4", so `getByRole("button", { name: "Move row 4" })` resolves to the grip
+_and_ the button that deletes the row, and refuses to act on either. It reads
+as a flaky selector and is a strict-mode violation every time.
+
+**A mark on the prose is not in the DOM.** The related-passage wash is painted
+through `CSS.highlights`, which takes no space and adds no element — that is
+the whole point of it — so it can only be read with `CSS.highlights.get`.
+`data-plan-related` is the fallback for a browser without the registry, and
+asserting on it in Chromium is asserting on the path that never runs.
+
 ## Conventions
 
 Tabs, `let` over `const`, double quotes, no semicolon-free style — `dprint fmt`
@@ -393,12 +455,20 @@ Tests describe behaviour rather than implementation, and their names read as
 sentences about what the system does. Prefer a test that fails when the
 behaviour regresses over one that fails when the code is rearranged.
 
-A few places have no test on purpose. **There is no DOM in the test runtime** —
-no happy-dom, no preload, `document` is undefined — so anything that reaches
-for an element, a rectangle or an observer cannot be covered at all. The answer
-is not to add one but to keep the part worth testing separable from the part
-that needs a browser: `trail.ts` is the whole of the mark lifecycle with no
-document in it, and `changes.ts` is the adapter that has one and is not tested.
+**There is no DOM in the `bun test` runtime** — no happy-dom, no preload,
+`document` is undefined — so anything that reaches for an element, a rectangle
+or an observer cannot be covered there at all. The answer is not to add one but
+to keep the part worth testing separable from the part that needs a browser:
+`trail.ts` is the whole of the mark lifecycle with no document in it, and
+`changes.ts` is the adapter that has one.
+
+The adapters are what `e2e` is for, and only those. A behaviour that can be
+asserted without a browser belongs in `bun test`, which runs in eighteen
+seconds and does not depend on a rectangle being where it was last week —
+measured rails, a pointer drag, a caret painted for somebody else, a wash in
+`CSS.highlights`. Selectors come from roles, labels and the `data-plan-*`
+attributes the product already carries; nothing here has added a `data-testid`,
+and a test that wants one is usually a test asking for the wrong thing.
 
 ## Diagnostics
 
