@@ -10,6 +10,12 @@ logs
 # Room state: plans, sidecars and transcripts are local scratch.
 data/
 
+# The same, for rooms the e2e suite makes up, plus what it reports on them.
+e2e/.scratch/
+e2e/test-results/
+e2e/playwright-report/
+e2e/blob-report/
+
 # Editors
 .vscode/*
 !.vscode/extensions.json

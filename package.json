@@ -8,9 +8,14 @@
 		"start": "bun run --filter '@chopin/server' start",
 		"ci": "dprint check && oxlint",
 		"fix": "dprint fmt && oxlint --fix",
-		"types": "bun --filter '*' types"
+		"types": "bun --filter '*' types && tsgo --noEmit --skipLibCheck -p e2e",
+		"e2e": "bun run build && bun node_modules/@playwright/test/cli.js test --config e2e/playwright.config.ts",
+		"e2e:ui": "bun run build && bun node_modules/@playwright/test/cli.js test --config e2e/playwright.config.ts --ui",
+		"e2e:browsers": "bun node_modules/@playwright/test/cli.js install chromium"
 	},
 	"devDependencies": {
+		"@playwright/test": "1.62.1",
+		"@types/bun": "catalog:bun",
 		"@typescript/native-preview": "7.0.0-dev.20260304.1",
 		"dprint": "0.50.2",
 		"oxlint": "1.51.0"

@@ -126,14 +126,20 @@ Three things are worth knowing if you intend to change it:
 ## Development
 
 ```bash
-bun test          # 230 tests
-bun run types     # every package
+bun test          # 500 tests, no browser
+bun run e2e       # 40 tests in Chromium, against the built client
+bun run types     # every package, and e2e
 bun run ci        # dprint + oxlint
 bun run build     # production client
 bun run start     # serve the built client
 ```
 
-Tests never spawn an agent; they set `AGENT=off`.
+Neither suite spawns an agent; both set `AGENT=off`.
+
+The browser suite needs Chromium once — `bun run e2e:browsers` — and builds the
+client each run, so it is the slower of the two by some distance. It starts its
+own servers on 8788 and 8789 and gives every test a room of its own, so it does
+not mind you having `bun run dev` open at the same time.
 
 If you are going to change the code, `agents.md` is the companion to this
 file: how a room works, which decisions were deliberate, and the several

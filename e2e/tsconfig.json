@@ -1,0 +1,16 @@
+{
+	"extends": [
+		"../tsconfig.json"
+	],
+	"include": [
+		"."
+	],
+	"compilerOptions": {
+		"target": "esnext",
+		"lib": ["esnext", "dom", "dom.iterable"],
+		"types": ["bun"],
+
+		"noUnusedLocals": true,
+		"noUnusedParameters": true
+	}
+}
