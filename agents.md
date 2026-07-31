@@ -8,7 +8,7 @@ people running it; this is for people editing it.
 ```bash
 bun run dev        # supervisor: Vite + server on one origin, Ctrl-C stops both
 bun test           # 525 tests, no browser, no agent spawned
-bun run e2e        # 46 tests, Chromium, builds the client first
+bun run e2e        # 49 tests, Chromium, builds the client first
 bun run types      # every package, and e2e
 bun run ci         # dprint check && oxlint
 bun run build      # production client
@@ -506,6 +506,13 @@ through `CSS.highlights`, which takes no space and adds no element — that is
 the whole point of it — so it can only be read with `CSS.highlights.get`.
 `data-plan-related` is the fallback for a browser without the registry, and
 asserting on it in Chromium is asserting on the path that never runs.
+
+**`ControlOrMeta+Home` is not the start of the document on a Mac**, and a
+keystroke a platform does not recognise is not an error — it is nothing at all,
+followed by typing that lands wherever the caret already was. Two people aiming
+at opposite ends of one fence both wrote at the end of it, which reads exactly
+like a merge that lost an edit. Select everything and collapse the selection
+with an arrow instead: it says which end without naming a key.
 
 ## Conventions
 

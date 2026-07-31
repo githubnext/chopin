@@ -138,3 +138,90 @@ test("hiding the source leaves what was drawn from it", async ({ join, seed }) =
 	await expect(content(page).locator("[data-file]")).toBeVisible();
 	await expect(content(page).getByRole("button", { name: "Show source" })).toBeVisible();
 });
+
+/*
+ * Two people in one fence.
+ *
+ * What is drawn is a projection of the shared source, so the thing worth
+ * asserting is which of these facts travels: the text does, the language does,
+ * and hiding the source does not. Everything drawn follows from the first two
+ * and belongs to nobody.
+ *
+ * Playwright drives one page at a time, so these are edits that interleave
+ * rather than collide — the same as everything in `collab.e2e.ts`, and enough
+ * to tell a shared text apart from a copy each renderer owns. A merge of two
+ * genuinely simultaneous keystrokes is `apps/web/src/collab.test.ts`, which
+ * runs two providers against a real server and can hold one of them back.
+ */
+
+test("two people typing in one fence both end up in it", async ({ join, room, seed }) => {
+	await seed("```ts\nlet a = 1;\nlet b = 2;\n```\n");
+	let ana = await join("ana");
+	let bo = await join("bo");
+
+	/*
+	 * Select everything and collapse the selection to the end you want.
+	 * Clicking a line means clicking a coordinate inside a `<pre>`, and
+	 * Home and End are a different key on each platform; this is neither.
+	 * The fence is the whole document here, so its ends are the document's.
+	 */
+	await content(ana).locator("[data-plan-source]").click();
+	await ana.keyboard.press("ControlOrMeta+a");
+	await ana.keyboard.press("ArrowLeft");
+	await ana.keyboard.type("// ana ");
+
+	await content(bo).locator("[data-plan-source]").click();
+	await bo.keyboard.press("ControlOrMeta+a");
+	await bo.keyboard.press("ArrowRight");
+	await bo.keyboard.type(" // bo");
+
+	for (let page of [ana, bo]) {
+		// The source is one shared text, so neither edit replaces the other.
+		// A renderer holding a copy of the fence would have overwritten
+		// whichever arrived first.
+		await expect(content(page).locator("[data-plan-source]")).toContainText("// ana let a = 1;");
+		await expect(content(page).locator("[data-plan-source]")).toContainText("let b = 2; // bo");
+
+		// And what is drawn is drawn from that, on each page separately.
+		await expect(content(page).locator("[data-file]")).toContainText("// ana let a = 1;");
+		await expect(content(page).locator("[data-file]")).toContainText("let b = 2; // bo");
+	}
+
+	await written(ana, room, /^\/\/ ana let a = 1;\nlet b = 2; \/\/ bo$/m);
+});
+
+test("a language chosen by one is a change for everyone", async ({ join, room, seed }) => {
+	await seed("```\nlet total = 1;\n```\n");
+	let ana = await join("ana");
+	let bo = await join("bo");
+
+	await expect(content(bo).locator("[data-file]")).toHaveCount(0);
+
+	await content(ana).getByRole("combobox", { name: "Code language" }).selectOption("typescript");
+
+	// The language is a property of the fence rather than a way of looking at
+	// it, so it travels: the other reader's copy is coloured too, and their
+	// control says what it now is.
+	await expect(content(bo).getByRole("combobox", { name: "Code language" }))
+		.toHaveValue("typescript");
+	await expect(content(bo).locator("[data-file]")).toBeVisible();
+	await expect.poll(() => colours(bo)).toBeGreaterThan(1);
+
+	await written(ana, room, /^```typescript$/m);
+});
+
+test("hiding the source hides nobody else's", async ({ join, seed }) => {
+	await seed("```ts\nlet a = 1;\n```\n");
+	let ana = await join("ana");
+	let bo = await join("bo");
+
+	await expect(content(bo).locator("[data-file]")).toBeVisible();
+	await content(ana).getByRole("button", { name: "Hide source" }).click();
+	await expect(content(ana).locator("[data-plan-source]")).toBeHidden();
+
+	// Collapsing is a way of looking at a block, not a fact about it. A reader
+	// who hid a fence for themselves has not hidden it for the person editing
+	// it, who would otherwise watch their own caret leave the page.
+	await expect(content(bo).locator("[data-plan-source]")).toBeVisible();
+	await expect(content(bo).getByRole("button", { name: "Hide source" })).toBeVisible();
+});
