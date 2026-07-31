@@ -1,0 +1,103 @@
+# Two jobs rather than one, because they fail for unrelated reasons and one of
+# them is slow. `checks` answers in about a minute; `browser` has to build the
+# client before it can serve it, and a formatting mistake should not wait
+# behind a Vite build to be reported.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push supersedes the first. Nothing here is worth finishing for a
+# commit that is no longer the head of the branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Matches the version this is developed against. Bun's lockfile format and
+  # its workspace catalogs are both young enough that "latest" is a variable.
+  BUN_VERSION: 1.3.2
+
+jobs:
+  checks:
+    name: format, lint, types, tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      # Refuses rather than resolving: a lockfile that does not describe
+      # package.json is a difference between what was reviewed and what ran.
+      - run: bun install --frozen-lockfile
+
+      # dprint fetches its plugins as wasm from GitHub releases on first use.
+      # Cached on the config that names them, since that is exactly what
+      # decides which ones are wanted.
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/dprint
+          key: dprint-${{ runner.os }}-${{ hashFiles('dprint.json') }}
+
+      - run: bun run ci
+
+      - run: bun run types
+
+      # 500 tests, no browser, no agent. `AGENT=off` is set by the tests that
+      # spawn a server; nothing here needs a token.
+      - run: bun test
+
+  browser:
+    name: e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - run: bun install --frozen-lockfile
+
+      # Keyed on the Playwright version and nothing else. Keying on the
+      # lockfile would discard a 180MB browser every time an unrelated
+      # dependency moved.
+      - name: Resolve the Playwright version
+        id: playwright
+        run: |
+          version=$(bun --print 'require("./package.json").devDependencies["@playwright/test"]')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      # Run unconditionally, cache hit or not: the browser is cached but the
+      # shared libraries it links against are installed by apt and are not.
+      # With the binary already present this only does the second half.
+      - run: bun node_modules/@playwright/test/cli.js install --with-deps chromium
+
+      # Builds the client, then runs it. The build is deliberately here rather
+      # than inside the Playwright config: web servers start before any global
+      # setup, so a build racing them would leave the suite on the previous
+      # bundle — green, about code nobody changed.
+      - run: bun run e2e
+
+      # Only on failure, and only the parts worth reading. `test-results`
+      # carries the traces; the report is the thing that indexes them.
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7
