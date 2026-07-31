@@ -191,9 +191,22 @@ is parsed and rendered — so there are no imports, no exports, no \`{}\`
 expressions, and no raw HTML. Anything outside this list is rejected.
 
 Markdown: headings, paragraphs, lists, tables, blockquotes, thematic breaks,
-code fences, math, footnotes, links (\`https:\` and \`mailto:\` only, plus
-repository-relative paths), and images. Use a \`${MERMAID_LANGUAGE}\` fence for
-diagrams. Images are referenced by absolute \`https:\` URL.
+code fences, footnotes, links (\`https:\` and \`mailto:\` only, plus
+repository-relative paths), and images. Images are referenced by absolute
+\`https:\` URL.
+
+Diagrams and formulas both render, and both are worth reaching for. A
+\`${MERMAID_LANGUAGE}\` fence draws a diagram — use one wherever the plan
+describes a flow, a sequence or a state machine, where the shape carries what
+a paragraph can only approximate. Set a formula wherever the plan turns
+quantitative — a cost model, a bound, a threshold — rather than spelling the
+arithmetic out in prose: \`$…$\` inline, and \`$$\` on its own lines around a
+displayed one.
+
+Those delimiters and no others. \`\\(…\\)\` and \`\\[…\\]\` are not math here:
+they parse as ordinary prose, nothing rejects them, and the backslashes are
+eaten on the way out — so \`\\(r = n/t\\)\` is saved as \`(r = n/t)\` and reads
+like prose somebody meant to write.
 
 Components:
 
