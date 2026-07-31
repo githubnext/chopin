@@ -36,6 +36,19 @@ describe("content nodes", () => {
 		expect(through(source)).toBe(source);
 	});
 
+	/**
+	 * A patch is mostly `-` and `+` at the start of lines, which is a list
+	 * everywhere else in the dialect. Inside a fence it has to survive as the
+	 * bytes it was, and the fence has to stay one block rather than becoming
+	 * one per hunk.
+	 */
+	it("round-trips a unified patch as a diff fence", () => {
+		let source =
+			"```diff\n--- a/main.ts\n+++ b/main.ts\n@@ -1,2 +1,2 @@\n-let a = 1;\n+let a = 2;\n"
+			+ " let b = 3;\n```\n";
+		expect(through(source)).toBe(source);
+	});
+
 	it("round-trips code with no language", () => {
 		expect(through("```\nplain\n```\n")).toBe("```\nplain\n```\n");
 	});

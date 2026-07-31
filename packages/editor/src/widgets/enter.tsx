@@ -1,0 +1,115 @@
+/**
+ * Enter, in a block whose content is lines.
+ *
+ * Lexical asks a block to make its own successor, and one that cannot returns
+ * null — which is what a code block does, and why Enter inside one did nothing
+ * whatsoever. Nothing is the wrong answer twice over: a newline is the most
+ * common keystroke there is when writing code, and a block at the end of the
+ * document with no way past it is a corner a reader can be typed into.
+ *
+ * So Enter is a line break here, and Enter on a line that is already empty
+ * leaves instead. Pressing it twice is how every editor lets go of a fence,
+ * and it is the only exit that has to be discovered rather than explained.
+ *
+ * Registered on `INSERT_PARAGRAPH_COMMAND` rather than on the keystroke: that
+ * is what rich text turns an unshifted Enter into, and it is also what
+ * everything else that means "start a new block" dispatches, so anything else
+ * arriving here is answered the same way. Shift-Enter is already a line break
+ * and never reaches this at all.
+ */
+
+import { useEffect } from "react";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import {
+	$createParagraphNode,
+	$getSelection,
+	$isLineBreakNode,
+	$isRangeSelection,
+	$isTextNode,
+	COMMAND_PRIORITY_LOW,
+	INSERT_PARAGRAPH_COMMAND,
+} from "lexical";
+import { $isCodeBlockNode, $isMathNode } from "@chopin/dialect";
+
+import type { ElementNode, LexicalNode } from "lexical";
+
+/**
+ * The nearest block that holds lines of text.
+ *
+ * Inline math is not one: it sits in a sentence, and `$…$` has nowhere to put
+ * a newline — so Enter inside one goes on doing what it did before, which is
+ * nothing.
+ */
+function lines(node: LexicalNode | null): ElementNode | undefined {
+	let cursor = node;
+	while (cursor) {
+		if ($isCodeBlockNode(cursor)) return cursor;
+		if ($isMathNode(cursor)) return cursor.isInlineMath() ? undefined : cursor;
+		cursor = cursor.getParent();
+	}
+	return undefined;
+}
+
+/**
+ * Whether the caret is at the end of a block that already ends in a newline.
+ *
+ * Both kinds of point have to be read, because the caret arrives at the end of
+ * a block by two routes that do not agree on how to say so. Typing leaves it
+ * inside a text node, at an offset; a line break is not text, so inserting one
+ * leaves it between children, as an offset into the block itself. The second
+ * is exactly the case this exists to catch — it is where the previous Enter
+ * put it.
+ */
+function done(block: ElementNode): boolean {
+	let selection = $getSelection();
+	if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
+
+	// An empty block is not a blank line: there is nothing to leave behind yet.
+	if (!block.getTextContent().endsWith("\n")) return false;
+
+	let anchor = selection.anchor;
+	if (anchor.type === "element") {
+		return anchor.key === block.getKey() && anchor.offset === block.getChildrenSize();
+	}
+
+	let last = block.getLastDescendant();
+	if (!last || anchor.key !== last.getKey()) return false;
+	return $isTextNode(last) ? anchor.offset === last.getTextContentSize() : true;
+}
+
+export function EnterPlugin() {
+	let [editor] = useLexicalComposerContext();
+
+	useEffect(() => {
+		return editor.registerCommand(
+			INSERT_PARAGRAPH_COMMAND,
+			() => {
+				let selection = $getSelection();
+				if (!$isRangeSelection(selection)) return false;
+
+				let block = lines(selection.anchor.getNode());
+				if (!block) return false;
+
+				if (done(block)) {
+					// The blank line was the request to leave, not content, so
+					// it goes with it — otherwise every fence anybody escaped
+					// from would keep a trailing empty line nobody typed.
+					let last = block.getLastDescendant();
+					if ($isLineBreakNode(last)) last.remove();
+					else if ($isTextNode(last)) last.setTextContent(last.getTextContent().slice(0, -1));
+
+					let paragraph = $createParagraphNode();
+					block.insertAfter(paragraph);
+					paragraph.select();
+					return true;
+				}
+
+				selection.insertLineBreak();
+				return true;
+			},
+			COMMAND_PRIORITY_LOW,
+		);
+	}, [editor]);
+
+	return null;
+}

@@ -14,7 +14,7 @@
 
 // The dialect only. The barrel reaches the Lexical registry, which would drag a
 // browser rich-text editor into a module that builds a prompt string.
-import { COMPONENTS, MERMAID_LANGUAGE } from "@chopin/dialect/dialect";
+import { COMPONENTS, DIFF_LANGUAGE, MERMAID_LANGUAGE } from "@chopin/dialect/dialect";
 
 import type { Component } from "@chopin/dialect/dialect";
 import type { CustomAgentConfig } from "@github/copilot-sdk";
@@ -207,6 +207,19 @@ Those delimiters and no others. \`\\(…\\)\` and \`\\[…\\]\` are not math her
 they parse as ordinary prose, nothing rejects them, and the backslashes are
 eaten on the way out — so \`\\(r = n/t\\)\` is saved as \`(r = n/t)\` and reads
 like prose somebody meant to write.
+
+Always name a fence's language — \`ts\`, \`python\`, \`sh\` — because the
+language is what colours it, and an unnamed fence is rendered as the grey text
+it claims to be. Add \`title="path/to/file.ts"\` after the language when the
+snippet comes from a file the reader can go and open.
+
+A \`${DIFF_LANGUAGE}\` fence renders as a diff, which is how to show a change
+rather than describe one. Write a complete unified patch: the \`---\` and
+\`+++\` header lines and at least one \`@@\` hunk, or the \`diff --git\` form.
+Those headers are what carry the filename and the line numbers, and a loose
+handful of \`+\` and \`-\` lines is not a patch — it renders as plain text.
+Propose rather than apply: a patch in a plan is a change being suggested, and
+you cannot make it yourself.
 
 Components:
 

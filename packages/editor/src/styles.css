@@ -664,10 +664,47 @@
 	display: none;
 }
 
-.plan-content [data-plan-preview][data-plan-error] {
+/*
+ * On the message rather than on the slot: everything in the slot is React's
+ * now, including this, so the attribute goes on the element that says so
+ * rather than on the element that holds it.
+ */
+.plan-content [data-plan-preview] [data-plan-error] {
 	color: var(--color-destructive);
 	font-size: 0.75rem;
 	padding: 0.5rem 0;
+}
+
+/*
+ * Coloured code, and diffs.
+ *
+ * The renderer paints inside a shadow root, so none of the rules above reach
+ * it and none of its reach out. What crosses is inherited: the custom
+ * properties it reads for type, which are set here so a fence and its source
+ * are the same size in the same face, and nothing else.
+ */
+.plan-content .plan-code-view {
+	--diffs-font-family: ui-monospace, SFMono-Regular, monospace;
+	--diffs-font-size: 0.8125rem;
+	--diffs-line-height: 1.5;
+	--diffs-tab-size: 2;
+	--diffs-header-font-family: var(--font-sans);
+
+	/*
+	 * A border rather than a fill. The renderer paints its own background from
+	 * the syntax theme, and a second one behind it would show at the edges as
+	 * a rim of the wrong grey — but with neither, a snippet on a white page
+	 * has nothing to say where it starts.
+	 */
+	overflow: hidden;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-md);
+}
+
+/* Each file in a patch is its own box, and they stack. */
+.plan-content .plan-code-view diffs-container + diffs-container {
+	display: block;
+	margin-block-start: 0.5rem;
 }
 
 /* Source stays visible and editable beneath its preview. */
