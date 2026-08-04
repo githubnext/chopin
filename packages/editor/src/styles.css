@@ -439,7 +439,7 @@
 .plan-grip {
 	border-radius: var(--radius-sm);
 	background: var(--color-muted);
-	transition: background-color 120ms ease;
+	transition: background-color var(--duration-fast) var(--ease-out);
 }
 
 .plan-grip:hover,
@@ -485,7 +485,7 @@
 .plan-align {
 	opacity: 0;
 	pointer-events: none;
-	transition: opacity 120ms ease;
+	transition: opacity var(--duration-fast) var(--ease-out);
 	border-radius: var(--radius-sm);
 	background: var(--color-popover);
 	box-shadow: 0 0 0 1px var(--color-border);
@@ -641,7 +641,7 @@
 	white-space: nowrap;
 	pointer-events: none;
 	opacity: 0;
-	transition: opacity 200ms ease;
+	transition: opacity var(--duration-base) var(--ease-out);
 }
 
 /* Raised while its peer is moving, then left to fade. */
@@ -882,7 +882,7 @@
  * read.
  */
 .plan .plan-content [data-plan-change] {
-	transition: background 600ms ease-out;
+	transition: background var(--duration-linger) var(--ease-out);
 }
 
 /* Written just now. */
@@ -913,7 +913,7 @@
 	box-shadow:
 		var(--plan-gap-above, 0 0 transparent),
 		var(--plan-gap-below, 0 0 transparent);
-	transition: box-shadow 600ms ease-out;
+	transition: box-shadow var(--duration-linger) var(--ease-out);
 }
 
 .plan .plan-content [data-plan-gap-before="removed"] {
