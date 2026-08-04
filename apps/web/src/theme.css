@@ -119,6 +119,22 @@
 		0 4px 8px -4px color-mix(in oklch, var(--color-foreground) 10%, transparent),
 		0 16px 28px -6px color-mix(in oklch, var(--color-foreground) 8%, transparent);
 
+	/*
+	 * Leaves immediately and settles slowly, so a change reads as a response to
+	 * whatever caused it. Durations are named for the job: `fast` is feedback
+	 * under the pointer, `linger` is the agent's change marks fading unwatched.
+	 */
+	--ease-*: initial;
+	--ease-out: cubic-bezier(0.2, 0, 0, 1);
+
+	--duration-fast: 120ms;
+	--duration-base: 200ms;
+	--duration-linger: 600ms;
+
+	/* Retunes all fifteen `transition-*` utilities, none of which names a curve. */
+	--default-transition-duration: var(--duration-fast);
+	--default-transition-timing-function: var(--ease-out);
+
 	/* Inter is loaded in `main.tsx`; the editor reads this token rather than repeating the stack. */
 	--font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 	--font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
