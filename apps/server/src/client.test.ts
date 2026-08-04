@@ -68,7 +68,11 @@ function stub(): string {
 		fetch(req) {
 			let url = new URL(req.url);
 			return new Response(`stub:${url.pathname}${url.search}`, {
-				headers: { "content-type": "text/plain", "x-stub": "yes" },
+				headers: {
+					"content-type": "text/plain",
+					"x-received-host": req.headers.get("host") ?? "",
+					"x-stub": "yes",
+				},
 			});
 		},
 	});
@@ -96,11 +100,15 @@ async function upgrades(port: number): Promise<boolean> {
 describe("development", () => {
 	it("forwards pages and assets to the dev client", async () => {
 		let port = 8940;
-		await start(port, { DEV_CLIENT: stub() });
+		let devClient = stub();
+		await start(port, { DEV_CLIENT: devClient });
 
-		let page = await fetch(`http://127.0.0.1:${port}/r/main?as=octocat`);
+		let page = await fetch(`http://127.0.0.1:${port}/r/main?as=octocat`, {
+			headers: { host: "sandbox--8787.adcproxy.io" },
+		});
 		expect(await page.text()).toBe("stub:/r/main?as=octocat");
 		expect(page.headers.get("x-stub")).toBe("yes");
+		expect(page.headers.get("x-received-host")).toBe(new URL(devClient).host);
 
 		let asset = await fetch(`http://127.0.0.1:${port}/@fs/some/module.tsx`);
 		expect(await asset.text()).toBe("stub:/@fs/some/module.tsx");

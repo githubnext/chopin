@@ -45,11 +45,14 @@ function forwardable(headers: Headers): Headers {
  */
 export async function proxy(req: Request, url: URL, origin: string): Promise<Response> {
 	let target = new URL(url.pathname + url.search, origin);
+	let headers = forwardable(req.headers);
+	// Vite is an internal upstream and must validate its own host, not the tunnel's.
+	headers.set("host", target.host);
 
 	try {
 		return await fetch(target, {
 			method: req.method,
-			headers: forwardable(req.headers),
+			headers,
 			body: req.body,
 			redirect: "manual",
 		});
