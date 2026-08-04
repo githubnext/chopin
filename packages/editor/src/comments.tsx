@@ -39,7 +39,7 @@ function Note({ note }: { note: Comment.Note }) {
 		<li className="flex flex-col gap-0.5">
 			<div className="flex items-baseline gap-2">
 				<Who handle={note.handle} />
-				<span className="text-[10px] text-muted-foreground">{when(note.ts)}</span>
+				<span className="text-2xs text-muted-foreground">{when(note.ts)}</span>
 			</div>
 			<p className="m-0 text-sm whitespace-pre-wrap text-foreground">{note.text}</p>
 		</li>
@@ -89,7 +89,7 @@ function Quote(
 					>
 						{text}
 						{count > 1 && (
-							<span aria-hidden="true" className="ml-1.5 text-[10px] not-italic">
+							<span aria-hidden="true" className="ml-1.5 text-2xs not-italic">
 								{count}
 							</span>
 						)}
@@ -97,7 +97,7 @@ function Quote(
 				)
 				: <blockquote className={QUOTED}>{text}</blockquote>}
 			{drifted && (
-				<p className="m-0 text-[10px] text-warning">
+				<p className="m-0 text-2xs text-warning">
 					The text this refers to has changed.
 				</p>
 			)}
@@ -279,7 +279,7 @@ export function ThreadCard({
 					<Provenance at={thread.at} by={thread.resolver} verb="Accepted" />
 					{!applied && (
 						<>
-							<span className="ml-auto text-[10px] text-warning">Not yet applied</span>
+							<span className="ml-auto text-2xs text-warning">Not yet applied</span>
 							<button
 								className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
 								disabled={busy}
@@ -305,7 +305,7 @@ export function ThreadCard({
 			</ul>
 
 			{writing && writing.length > 0 && (
-				<p className="m-0 text-[10px] text-muted-foreground">
+				<p className="m-0 text-2xs text-muted-foreground">
 					{writing.join(", ")} {writing.length === 1 ? "is" : "are"} writing…
 				</p>
 			)}
@@ -322,7 +322,7 @@ export function ThreadCard({
 					<div className="flex items-center gap-2 border-t border-border pt-2">
 						<Confirm busy={busy} label="Accept" onConfirm={onAccept} tone="primary" />
 						<Confirm busy={busy} label="Dismiss" onConfirm={onDismiss} tone="quiet" />
-						<span className="ml-auto text-[10px] text-muted-foreground">
+						<span className="ml-auto text-2xs text-muted-foreground">
 							Accepting asks the agent to revise the plan
 						</span>
 					</div>

@@ -52,12 +52,12 @@ function Activity({ activity }: { activity: Chat.Activity }) {
 			{open && detail && (
 				<div className="border-t border-border px-2 py-1.5">
 					{activity.args && (
-						<pre className="m-0 overflow-x-auto font-mono text-[0.6875rem] whitespace-pre-wrap text-muted-foreground">
+						<pre className="m-0 overflow-x-auto font-mono text-2xs whitespace-pre-wrap text-muted-foreground">
 {activity.args}
 						</pre>
 					)}
 					{activity.result && (
-						<pre className="m-0 mt-1 overflow-x-auto font-mono text-[0.6875rem] whitespace-pre-wrap text-muted-foreground">
+						<pre className="m-0 mt-1 overflow-x-auto font-mono text-2xs whitespace-pre-wrap text-muted-foreground">
 {activity.result}
 						</pre>
 					)}
@@ -81,7 +81,7 @@ function Entry({ entry }: { entry: Chat.Entry }) {
 			<div className="mt-0.5 shrink-0">
 				{agent
 					? (
-						<span className="grid size-5 place-items-center rounded-full bg-primary text-[0.5rem] font-semibold text-primary-foreground">
+						<span className="grid size-5 place-items-center rounded-full bg-primary text-2xs font-semibold text-primary-foreground">
 							AI
 						</span>
 					)
@@ -93,7 +93,7 @@ function Entry({ entry }: { entry: Chat.Entry }) {
 					<span className="text-xs font-semibold">
 						{author.kind === "member" ? `@${author.handle}` : "Planner"}
 					</span>
-					<span className="text-[0.625rem] text-muted-foreground">{when(entry.ts)}</span>
+					<span className="text-2xs text-muted-foreground">{when(entry.ts)}</span>
 				</div>
 
 				{entry.text && (

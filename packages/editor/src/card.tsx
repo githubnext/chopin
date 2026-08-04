@@ -98,7 +98,7 @@ export function Provenance({ at, by, verb }: ProvenanceProps) {
 	let stamp = at === undefined ? "" : when(at);
 
 	return (
-		<span className="text-[10px] text-muted-foreground">
+		<span className="text-2xs text-muted-foreground">
 			{verb} by @{by}
 			{stamp && ` · ${stamp}`}
 		</span>
