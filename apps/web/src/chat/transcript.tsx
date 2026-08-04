@@ -138,11 +138,6 @@ export function Transcript({ entries }: { entries: Chat.Entry[] }) {
 			}}
 			ref={scroller}
 		>
-			{entries.length === 0 && (
-				<p className="m-0 text-xs text-muted-foreground">
-					Ask the planner to draft something, or to read the repository first.
-				</p>
-			)}
 			{entries.map(entry => <Entry entry={entry} key={entry.id} />)}
 			<div ref={bottom} />
 		</div>

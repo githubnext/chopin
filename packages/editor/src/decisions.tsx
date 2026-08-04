@@ -170,8 +170,7 @@ export function Decisions({ connected, reveal, store, threads, wire }: Decisions
 				{outstanding === 0 && resolved === 0 && !state.draft
 					? (
 						<p className="m-0 text-xs text-muted-foreground">
-							Select any of the plan to comment on it. Questions the agent asks appear here too, and
-							both stay as a record of what was decided.
+							Select a passage to comment on it.
 						</p>
 					)
 					: (

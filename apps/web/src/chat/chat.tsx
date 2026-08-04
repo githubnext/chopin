@@ -194,7 +194,7 @@ export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) 
 						event.preventDefault();
 						submit();
 					}}
-					placeholder={`Talk to the room, or mention ${MENTION} to ask the planner…`}
+					placeholder={`Talk to the room, or mention ${MENTION} to ask the planner to read the repo or draft a plan…`}
 					ref={input}
 					rows={3}
 					value={text}
@@ -204,12 +204,12 @@ export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) 
 					{asking
 						? (
 							<span className="text-primary">
-								→ planner{busy && ", after the current turn"}
+								→ planner{busy && ", after this turn"}
 							</span>
 						)
 						: (
 							<span className="text-muted-foreground">
-								room only — the planner will see it on its next turn
+								room only — the planner reads it next turn
 							</span>
 						)}
 					<button
