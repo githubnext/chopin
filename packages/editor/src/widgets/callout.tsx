@@ -90,7 +90,7 @@ function Heading(
 				maxLength={100}
 				disabled={disabled}
 				onChange={event => setTitle(event.currentTarget.value)}
-				className="min-w-0 flex-1 rounded-sm border border-transparent bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/60 hover:border-border focus-visible:border-ring"
+				className="min-w-0 flex-1 rounded-sm border border-transparent bg-transparent text-sm font-medium text-foreground placeholder:text-muted-foreground/60 hover:border-border focus-visible:border-ring"
 			/>
 		</div>
 	);
