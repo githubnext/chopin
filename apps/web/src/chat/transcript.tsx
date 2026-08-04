@@ -47,7 +47,10 @@ function Activity({ activity }: { activity: Chat.Activity }) {
 					{activity.status === "failed" ? "×" : activity.status === "running" ? "•" : "✓"}
 				</span>
 				<span className="font-mono">{activity.name}</span>
-				{activity.took !== undefined && <span className="ml-auto">{activity.took}ms</span>}
+				{/* Tabular: this counts up as the tool runs, and the column is read down. */}
+				{activity.took !== undefined && (
+					<span className="ml-auto tabular-nums">{activity.took}ms</span>
+				)}
 			</button>
 
 			{open && detail && (
@@ -94,7 +97,7 @@ function Entry({ entry }: { entry: Chat.Entry }) {
 					<span className="text-xs font-semibold">
 						{author.kind === "member" ? `@${author.handle}` : "Planner"}
 					</span>
-					<span className="text-2xs text-muted-foreground">{when(entry.ts)}</span>
+					<span className="text-2xs text-muted-foreground tabular-nums">{when(entry.ts)}</span>
 				</div>
 
 				{entry.text && (

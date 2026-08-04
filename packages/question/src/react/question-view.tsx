@@ -223,7 +223,7 @@ function Related(
 		>
 			<span className="min-w-0 flex-1">{children}</span>
 			{count > 1 && (
-				<span aria-hidden="true" className="shrink-0 text-xs text-muted-foreground">
+				<span aria-hidden="true" className="shrink-0 text-xs text-muted-foreground tabular-nums">
 					{count}
 				</span>
 			)}
@@ -429,7 +429,7 @@ export function QuestionView(props: QuestionViewProps) {
 							>
 								<span aria-hidden="true">{done ? "✓" : index + 1}</span> {question.header}
 								{people.length > 0 && (
-									<span className="ml-1 text-2xs text-muted-foreground">
+									<span className="ml-1 text-2xs text-muted-foreground tabular-nums">
 										{people.length}
 									</span>
 								)}

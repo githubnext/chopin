@@ -108,7 +108,7 @@ export function PlanPresence({ provider }: { provider: PlanProvider | undefined 
 		<div aria-label={`Also here: ${label}`} className="plan-presence" title={label}>
 			{people.slice(0, CAP).map(handle => <Face handle={handle} key={handle} />)}
 			{people.length > CAP && (
-				<span className="grid size-5 place-items-center rounded-full bg-muted text-2xs font-semibold text-muted-foreground ring-2 ring-background">
+				<span className="grid size-5 place-items-center rounded-full bg-muted text-2xs font-semibold text-muted-foreground tabular-nums ring-2 ring-background">
 					+{people.length - CAP}
 				</span>
 			)}
