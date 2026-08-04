@@ -83,7 +83,7 @@ function Quote(
 						aria-label={count > 1
 							? `${text} — show in plan, ${count} places`
 							: `${text} — show in plan`}
-						className={`${QUOTED} cursor-pointer rounded-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40`}
+						className={`${QUOTED} cursor-pointer rounded-sm hover:text-foreground`}
 						onClick={onSelect}
 						type="button"
 					>
@@ -158,7 +158,7 @@ function Composer({
 		<div className="flex flex-col gap-1.5">
 			<textarea
 				ref={ref}
-				className="min-h-16 w-full resize-y rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus-visible:border-ring"
+				className="min-h-16 w-full resize-y rounded-md border border-input bg-background px-2 py-1.5 text-sm focus-visible:border-ring"
 				disabled={busy}
 				maxLength={limits.MAX_NOTE}
 				onChange={event => {

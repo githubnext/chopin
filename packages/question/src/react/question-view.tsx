@@ -165,14 +165,13 @@ function Custom(
 				placeholder="Type another answer"
 				onFocus={() => onChange?.({ mode: "custom" })}
 				onChange={event => onChange?.({ mode: "custom", custom: event.currentTarget.value })}
-				className="mt-1.5 min-h-16 w-full resize-y rounded-md border border-input bg-input/20 px-2.5 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60"
+				className="mt-1.5 min-h-16 w-full resize-y rounded-md border border-input bg-input/20 px-2.5 py-2 text-sm text-foreground transition-colors placeholder:text-muted-foreground/60 focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-60"
 			/>
 		</div>
 	);
 }
 
-const LINK =
-	"flex w-full cursor-pointer items-start justify-between gap-2 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/40";
+const LINK = "flex w-full cursor-pointer items-start justify-between gap-2 rounded-sm text-left";
 
 /**
  * Something that may refer to somewhere else.

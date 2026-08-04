@@ -156,3 +156,14 @@ body {
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 }
+
+/*
+ * What focus looks like, once, for everything that can take it. An outline
+ * rather than a ring: it follows `border-radius` and takes no space in the
+ * layout. `:where()` gives it zero specificity, so a component needing
+ * something else overrides it with one class and no fight.
+ */
+:where(a, button, input, select, summary, textarea, [role="button"], [tabindex]):focus-visible {
+	outline: 2px solid var(--color-ring);
+	outline-offset: 1px;
+}
