@@ -42,7 +42,8 @@
 	min-height: 0;
 	flex-direction: column;
 	overflow: hidden;
-	background: var(--color-background);
+	/* The rail owns the surface; painting it again here would undo the tint. */
+	background: transparent;
 }
 
 /* The node stays in the plan for exports and agent reads; its form is in the
@@ -133,7 +134,7 @@
  */
 .plan .mdxeditor {
 	background: transparent;
-	font-family: InterVariable, system-ui, sans-serif;
+	font-family: var(--font-sans);
 
 	--basePageBg: transparent;
 	--baseBase: var(--color-background);
@@ -174,7 +175,7 @@
 	--admonitionNoteBorder: var(--color-border);
 
 	--error-color: var(--color-destructive);
-	--font-body: InterVariable, system-ui, sans-serif;
+	--font-body: var(--font-sans);
 	--font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
@@ -291,17 +292,18 @@
 	background: var(--color-muted);
 }
 
+/* `note` is deliberately absent: it keeps the structural grey from the rule above. */
+.plan-content [data-plan-type="tip"] {
+	border-color: var(--color-success);
+}
+.plan-content [data-plan-type="important"] {
+	border-color: var(--color-primary);
+}
 .plan-content [data-plan-type="warning"] {
-	border-color: var(--color-chart-4);
+	border-color: var(--color-warning);
 }
 .plan-content [data-plan-type="danger"] {
 	border-color: var(--color-destructive);
-}
-.plan-content [data-plan-type="tip"] {
-	border-color: var(--color-chart-2);
-}
-.plan-content [data-plan-type="important"] {
-	border-color: var(--color-chart-5);
 }
 
 .plan-content pre {

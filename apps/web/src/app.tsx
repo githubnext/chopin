@@ -83,7 +83,7 @@ function Header(
 	let others = members.filter(member => member.handle !== handle);
 
 	return (
-		<header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2">
+		<header className="flex shrink-0 items-center gap-3 border-b border-border bg-surface px-4 py-2">
 			<span className="text-sm font-semibold">chopin</span>
 			<span className="text-sm text-muted-foreground">/r/{room}</span>
 			<span className={`text-xs ${TONE[status]}`}>

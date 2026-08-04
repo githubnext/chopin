@@ -17,10 +17,17 @@
  * editor and questionnaire styles actually read. The editor's own stylesheet
  * remaps MDXEditor's Radix variables onto these, so there is one place to
  * change a colour and no second theme to keep in step.
+ *
+ * `static` emits the palette whole. Without it Tailwind keeps only the tokens
+ * it can see a utility class using, and it looks for those in the content
+ * files — so a token read solely through `var()` in a stylesheet is pruned.
  */
-@theme {
+@theme static {
 	--color-background: oklch(1 0 0);
 	--color-foreground: oklch(0.21 0.006 285);
+
+	/* The chrome around the document: a tint, so the plan is the only white surface. */
+	--color-surface: oklch(0.985 0.001 285);
 
 	--color-muted: oklch(0.968 0.002 285);
 	--color-muted-foreground: oklch(0.552 0.014 285);
@@ -58,7 +65,8 @@
 	/* Code and formula surfaces, which want to read as insets rather than cards. */
 	--color-code: oklch(0.972 0.003 285);
 
-	--font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+	/* Inter is loaded in `main.tsx`; the editor reads this token rather than repeating the stack. */
+	--font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 	--font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
@@ -73,4 +81,8 @@ body {
 	background: var(--color-background);
 	color: var(--color-foreground);
 	font-family: var(--font-sans);
+
+	/* macOS subpixel smoothing thickens Inter past the weight asked for. */
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
 }
