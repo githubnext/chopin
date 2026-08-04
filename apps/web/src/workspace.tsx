@@ -82,7 +82,10 @@ export function Workspace({ chat, decisions, header, plan }: WorkspaceProps) {
 			<div className="flex min-h-0 flex-1">
 				{chat && (
 					<>
-						<aside className="min-w-0 shrink-0 overflow-hidden" style={{ width: chatWidth }}>
+						<aside
+							className="min-w-0 shrink-0 overflow-hidden bg-surface"
+							style={{ width: chatWidth }}
+						>
 							{chat}
 						</aside>
 						<Handle onResize={resizeChat} side="left" />
@@ -95,7 +98,7 @@ export function Workspace({ chat, decisions, header, plan }: WorkspaceProps) {
 					<>
 						<Handle onResize={resizeDecisions} side="right" />
 						<aside
-							className="min-w-0 shrink-0 overflow-hidden"
+							className="min-w-0 shrink-0 overflow-hidden bg-surface"
 							style={{ width: decisionsWidth }}
 						>
 							{decisions}
