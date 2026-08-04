@@ -64,7 +64,7 @@ function Badges({ people }: { people: Collaborator[] }) {
 				<span
 					key={person.client}
 					title={`@${person.handle} is editing`}
-					className="max-w-28 truncate rounded-full bg-muted px-1.5 py-0.5 text-[0.625rem] font-medium text-muted-foreground"
+					className="max-w-28 truncate rounded-full bg-muted px-1.5 py-0.5 text-2xs font-medium text-muted-foreground"
 				>
 					@{person.handle}
 				</span>
@@ -429,7 +429,7 @@ export function QuestionView(props: QuestionViewProps) {
 							>
 								<span aria-hidden="true">{done ? "✓" : index + 1}</span> {question.header}
 								{people.length > 0 && (
-									<span className="ml-1 text-[0.625rem] text-muted-foreground">
+									<span className="ml-1 text-2xs text-muted-foreground">
 										{people.length}
 									</span>
 								)}

@@ -66,6 +66,28 @@
 	--color-code: oklch(0.972 0.003 285);
 
 	/*
+	 * Wide steps from `base` up, where a heading needs to outrank its body by
+	 * more than weight; narrow below, where the sizes are already near the floor
+	 * of legibility. Line heights are declared beside each size because
+	 * Tailwind's defaults are computed against Tailwind's sizes.
+	 */
+	--text-*: initial;
+	--text-2xs: 0.6875rem; /* 11px — timestamps, counts, gutter chips */
+	--text-2xs--line-height: 1rem;
+	--text-xs: 0.75rem; /* 12px — secondary chrome */
+	--text-xs--line-height: 1rem;
+	--text-sm: 0.8125rem; /* 13px — rail body */
+	--text-sm--line-height: 1.25rem;
+	--text-base: 0.9375rem; /* 15px — the document */
+	--text-base--line-height: 1.5rem;
+	--text-lg: 1.125rem; /* 18px — h3 */
+	--text-lg--line-height: 1.5rem;
+	--text-xl: 1.375rem; /* 22px — h2 */
+	--text-xl--line-height: 1.75rem;
+	--text-2xl: 1.75rem; /* 28px — h1 */
+	--text-2xl--line-height: 2.125rem;
+
+	/*
 	 * Tailwind's own values, declared here so the scale has one owner: a change
 	 * lands in one place, and a misspelt rung is caught rather than waved through.
 	 */

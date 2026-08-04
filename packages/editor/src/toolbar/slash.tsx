@@ -394,7 +394,7 @@ export function SlashMenu({ disabled }: SlashMenuProps) {
 		>
 			{grouped.map(([group, commands]) => (
 				<div key={group}>
-					<div className="px-2 py-1 text-[0.625rem] font-semibold tracking-wide text-muted-foreground uppercase">
+					<div className="px-2 py-1 text-2xs font-semibold tracking-wide text-muted-foreground uppercase">
 						{group}
 					</div>
 					{commands.map(command => {

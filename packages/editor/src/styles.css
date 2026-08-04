@@ -16,6 +16,14 @@
 	 * the top of the range a reader can track back from without losing the row.
 	 */
 	--plan-measure: 40rem;
+	/*
+	 * Resolved out here because MDXEditor declares `--text-base`, `--text-sm`
+	 * and `--text-xs` on its own root, which sits between `:root` and the
+	 * document — so reading the theme token inside the editor gets its 1rem
+	 * rather than ours. `.plan` is outside that root, so this catches the
+	 * theme's value on the way past.
+	 */
+	--plan-body: var(--text-base);
 }
 
 /* Decisions pane -------------------------------------------------------- */
@@ -193,7 +201,8 @@
 	padding: 1.5rem var(--plan-gutter) 60vh;
 	margin-inline: auto;
 	max-width: calc(var(--plan-measure) + var(--plan-gutter) * 2);
-	font-size: 0.9375rem;
+	font-size: var(--plan-body);
+	/* Prose wants looser leading than the UI rhythm the token pairs with. */
 	line-height: 1.6;
 	color: var(--color-foreground);
 }
@@ -221,16 +230,19 @@
 }
 
 .plan-content h1 {
-	font-size: 1.5rem;
+	font-size: var(--text-2xl);
+	line-height: var(--text-2xl--line-height);
 }
 .plan-content h2 {
-	font-size: 1.25rem;
+	font-size: var(--text-xl);
+	line-height: var(--text-xl--line-height);
 }
 .plan-content h3 {
-	font-size: 1.0625rem;
+	font-size: var(--text-lg);
+	line-height: var(--text-lg--line-height);
 }
 .plan-content :is(h4, h5, h6) {
-	font-size: 1rem;
+	font-size: var(--plan-body);
 }
 
 .plan-content p {
@@ -825,8 +837,8 @@
 	gap: 0.375rem;
 	max-width: min(22rem, 60%);
 	pointer-events: none;
-	font-size: 0.6875rem;
-	line-height: 1rem;
+	font-size: var(--text-2xs);
+	line-height: var(--text-2xs--line-height);
 }
 
 /*
@@ -983,8 +995,8 @@
 	border-radius: 9999px;
 	background: var(--color-background);
 	box-shadow: var(--shadow-sm);
-	font-size: 0.6875rem;
-	line-height: 1rem;
+	font-size: var(--text-2xs);
+	line-height: var(--text-2xs--line-height);
 	overflow: hidden;
 }
 
@@ -1019,8 +1031,8 @@
 	border-radius: var(--radius-md);
 	background: var(--color-background);
 	box-shadow: var(--shadow-md);
-	font-size: 0.6875rem;
-	line-height: 1rem;
+	font-size: var(--text-2xs);
+	line-height: var(--text-2xs--line-height);
 }
 
 .plan-changes-empty {

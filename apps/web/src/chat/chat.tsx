@@ -41,7 +41,7 @@ function Queued(
 
 	return (
 		<div className="flex shrink-0 flex-col gap-1 border-t border-border px-3 py-2">
-			<span className="text-[0.625rem] font-semibold tracking-wide text-muted-foreground uppercase">
+			<span className="text-2xs font-semibold tracking-wide text-muted-foreground uppercase">
 				Queued
 			</span>
 			{waiting.map(item => (
@@ -199,7 +199,7 @@ export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) 
 					value={text}
 				/>
 
-				<div className="flex items-baseline gap-2 px-1 text-[0.625rem]">
+				<div className="flex items-baseline gap-2 px-1 text-2xs">
 					{asking
 						? (
 							<span className="text-primary">
