@@ -28,7 +28,7 @@
 		"https://github.com/dprint/dprint-plugin-typescript/releases/download/0.95.13/plugin.wasm",
 		"https://github.com/dprint/dprint-plugin-json/releases/download/0.21.0/plugin.wasm",
 		"https://github.com/dprint/dprint-plugin-markdown/releases/download/0.20.0/plugin.wasm",
-		"https://github.com/g-plane/malva/releases/download/v0.15.1/plugin.wasm",
+		"https://github.com/g-plane/malva/releases/download/v0.16.0/plugin.wasm",
 		"https://github.com/g-plane/markup_fmt/releases/download/v0.23.4/plugin.wasm"
 	]
 }

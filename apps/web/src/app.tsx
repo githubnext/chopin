@@ -40,7 +40,7 @@ function SignIn({ onDone }: { onDone: (handle: string) => void }) {
 				<label className="text-sm font-medium" htmlFor="handle">GitHub handle</label>
 				<input
 					autoFocus
-					className="rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring"
+					className="rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:border-ring"
 					id="handle"
 					onChange={event => setValue(event.target.value.trim())}
 					placeholder="octocat"
