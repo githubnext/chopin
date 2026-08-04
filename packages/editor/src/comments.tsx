@@ -39,7 +39,7 @@ function Note({ note }: { note: Comment.Note }) {
 		<li className="flex flex-col gap-0.5">
 			<div className="flex items-baseline gap-2">
 				<Who handle={note.handle} />
-				<span className="text-2xs text-muted-foreground">{when(note.ts)}</span>
+				<span className="text-2xs text-muted-foreground tabular-nums">{when(note.ts)}</span>
 			</div>
 			<p className="m-0 text-sm whitespace-pre-wrap text-foreground">{note.text}</p>
 		</li>
@@ -90,7 +90,7 @@ function Quote(
 					>
 						{text}
 						{count > 1 && (
-							<span aria-hidden="true" className="ml-1.5 text-2xs not-italic">
+							<span aria-hidden="true" className="ml-1.5 text-2xs not-italic tabular-nums">
 								{count}
 							</span>
 						)}

@@ -144,7 +144,9 @@ export function Decisions({ connected, reveal, store, threads, wire }: Decisions
 				<span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
 					Decisions
 				</span>
-				{outstanding > 0 && <span className="text-xs text-muted-foreground">{outstanding}</span>}
+				{outstanding > 0 && (
+					<span className="text-xs text-muted-foreground tabular-nums">{outstanding}</span>
+				)}
 			</header>
 
 			<div className="min-h-0 flex-1 overflow-auto p-3" ref={content}>
@@ -188,7 +190,7 @@ export function Decisions({ connected, reveal, store, threads, wire }: Decisions
 							onClick={() => setHistory(value => !value)}
 							type="button"
 						>
-							{history ? "▾" : "▸"} {resolved} resolved
+							{history ? "▾" : "▸"} <span className="tabular-nums">{resolved}</span> resolved
 						</button>
 						{history && (
 							<div className="mt-2 flex flex-col gap-3">
