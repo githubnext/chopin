@@ -14,8 +14,8 @@ import { dirname, join, relative } from "node:path";
 const ROOT = dirname(import.meta.dir);
 const ROOTS = ["apps", "packages"];
 
-/** Tailwind's own theme and bookkeeping, so absent from our stylesheets by design. */
-const EXTERNAL = ["--radius-", "--tw-"];
+/** Tailwind's internal bookkeeping, so absent from our stylesheets by design. */
+const EXTERNAL = ["--tw-"];
 
 /** Sources only: a built `dist` carries third-party CSS we neither wrote nor can fix. */
 function stylesheets(dir: string, found: string[] = []): string[] {

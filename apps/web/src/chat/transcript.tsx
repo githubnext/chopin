@@ -30,7 +30,7 @@ function Activity({ activity }: { activity: Chat.Activity }) {
 	let detail = activity.args || activity.result;
 
 	return (
-		<div className="rounded border border-border bg-muted/40">
+		<div className="rounded-sm border border-border bg-muted/40">
 			<button
 				className={`flex w-full items-center gap-2 px-2 py-1 text-left text-xs ${
 					TOOL_TONE[activity.status]

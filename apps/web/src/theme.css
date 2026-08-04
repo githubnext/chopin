@@ -66,6 +66,15 @@
 	--color-code: oklch(0.972 0.003 285);
 
 	/*
+	 * Tailwind's own values, declared here so the scale has one owner: a change
+	 * lands in one place, and a misspelt rung is caught rather than waved through.
+	 */
+	--radius-*: initial;
+	--radius-sm: 0.25rem; /* 4px — buttons, grips, toolbar cells */
+	--radius-md: 0.375rem; /* 6px — cards, inputs, callouts, code blocks */
+	--radius-lg: 0.5rem; /* 8px — popovers and panels */
+
+	/*
 	 * Two stops from `sm` up: a tight contact shadow where the surface meets the
 	 * page, a wide ambient fall-off around it. One stop has to choose, and either
 	 * choice reads as a blurred border. Mixed from `foreground` rather than black,

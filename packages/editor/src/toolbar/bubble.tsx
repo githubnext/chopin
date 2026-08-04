@@ -310,7 +310,7 @@ export function SelectionBubble(
 						aria-current={item.id === block}
 						title={item.label}
 						onClick={() => convert(item.id)}
-						className={`size-7 rounded text-xs font-semibold transition-colors ${
+						className={`size-7 rounded-sm text-xs font-semibold transition-colors ${
 							item.id === block
 								? "bg-muted text-foreground"
 								: "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -327,7 +327,7 @@ export function SelectionBubble(
 							aria-expanded={false}
 							title={`${describe(block).label} — change block type`}
 							onClick={() => setChoosing(true)}
-							className="size-7 rounded text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+							className="size-7 rounded-sm text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 						>
 							{describe(block).glyph}
 						</button>
@@ -342,7 +342,7 @@ export function SelectionBubble(
 								aria-pressed={active.has(mark.format)}
 								title={`${mark.label} (${mark.shortcut})`}
 								onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, mark.format)}
-								className={`size-7 rounded text-xs font-semibold transition-colors ${
+								className={`size-7 rounded-sm text-xs font-semibold transition-colors ${
 									active.has(mark.format)
 										? "bg-muted text-foreground"
 										: "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -364,7 +364,7 @@ export function SelectionBubble(
 								if (url === undefined) return;
 								editor.dispatchCommand(TOGGLE_LINK_COMMAND, url);
 							}}
-							className="size-7 rounded text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+							className="size-7 rounded-sm text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 						>
 							🔗
 						</button>
@@ -383,7 +383,7 @@ export function SelectionBubble(
 									 * moment you started typing would be no use.
 									 */
 									onClick={onComment}
-									className="size-7 rounded text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+									className="size-7 rounded-sm text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 								>
 									💬
 								</button>

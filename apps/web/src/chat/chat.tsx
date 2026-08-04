@@ -151,7 +151,7 @@ export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) 
 				)}
 				{busy && (
 					<button
-						className="ml-auto rounded border border-border px-2 py-0.5 text-xs hover:bg-muted"
+						className="ml-auto rounded-sm border border-border px-2 py-0.5 text-xs hover:bg-muted"
 						onClick={() => wire?.send("chat:abort")}
 						type="button"
 					>
