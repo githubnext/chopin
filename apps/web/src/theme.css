@@ -65,6 +65,29 @@
 	/* Code and formula surfaces, which want to read as insets rather than cards. */
 	--color-code: oklch(0.972 0.003 285);
 
+	/*
+	 * Two stops from `sm` up: a tight contact shadow where the surface meets the
+	 * page, a wide ambient fall-off around it. One stop has to choose, and either
+	 * choice reads as a blurred border. Mixed from `foreground` rather than black,
+	 * which would grey toward a different hue than the rest of the page.
+	 *
+	 * `initial` first, here and in the scales below: `@theme` merges with
+	 * Tailwind's rather than replacing it, so a rung we do not declare keeps
+	 * resolving to a value from a different design system. Reaching for one
+	 * should draw nothing, not something plausible.
+	 */
+	--shadow-*: initial;
+	--shadow-xs: 0 1px 2px -1px color-mix(in oklch, var(--color-foreground) 8%, transparent);
+	--shadow-sm:
+		0 1px 2px -1px color-mix(in oklch, var(--color-foreground) 8%, transparent),
+		0 2px 4px -1px color-mix(in oklch, var(--color-foreground) 5%, transparent);
+	--shadow-md:
+		0 2px 4px -2px color-mix(in oklch, var(--color-foreground) 8%, transparent),
+		0 6px 12px -2px color-mix(in oklch, var(--color-foreground) 7%, transparent);
+	--shadow-lg:
+		0 4px 8px -4px color-mix(in oklch, var(--color-foreground) 10%, transparent),
+		0 16px 28px -6px color-mix(in oklch, var(--color-foreground) 8%, transparent);
+
 	/* Inter is loaded in `main.tsx`; the editor reads this token rather than repeating the stack. */
 	--font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 	--font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
