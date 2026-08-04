@@ -35,7 +35,7 @@ function Handle({ onResize, side }: { onResize: (delta: number) => void; side: S
 	return (
 		<div
 			aria-hidden="true"
-			className="relative z-10 w-px shrink-0 cursor-col-resize bg-border transition-colors before:absolute before:inset-y-0 before:-inset-x-1 before:content-[''] hover:bg-ring"
+			className="relative z-10 w-px shrink-0 cursor-col-resize bg-border transition before:absolute before:inset-y-0 before:-inset-x-1 before:content-[''] hover:bg-ring"
 			onPointerDown={event => {
 				origin.current = event.clientX;
 				event.currentTarget.setPointerCapture(event.pointerId);

@@ -84,6 +84,7 @@ function Quote(
 							? `${text} — show in plan, ${count} places`
 							: `${text} — show in plan`}
 						className={`${QUOTED} cursor-pointer rounded-sm hover:text-foreground`}
+						data-press="wide"
 						onClick={onSelect}
 						type="button"
 					>
