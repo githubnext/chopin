@@ -405,9 +405,10 @@ export function SlashMenu({ disabled }: SlashMenuProps) {
 								type="button"
 								role="option"
 								aria-selected={position === index}
+								data-press="wide"
 								onMouseEnter={() => setIndex(position)}
 								onClick={() => choose(command)}
-								className={`flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm transition-colors ${
+								className={`flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm transition ${
 									position === index
 										? "bg-muted text-foreground"
 										: "text-muted-foreground hover:bg-muted"

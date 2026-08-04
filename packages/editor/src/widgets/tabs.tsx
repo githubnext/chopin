@@ -83,7 +83,7 @@ function Strip(
 						else return;
 						event.preventDefault();
 					}}
-					className={`shrink-0 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+					className={`shrink-0 rounded-md px-2.5 py-1 text-xs font-medium transition ${
 						tab.key === active
 							? "bg-muted text-foreground"
 							: "text-muted-foreground hover:text-foreground"

@@ -184,6 +184,7 @@ export function Decisions({ connected, reveal, store, threads, wire }: Decisions
 						<button
 							aria-expanded={history}
 							className="w-full rounded-md px-1 py-1 text-left text-xs text-muted-foreground hover:text-foreground"
+							data-press="wide"
 							onClick={() => setHistory(value => !value)}
 							type="button"
 						>

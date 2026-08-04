@@ -35,6 +35,7 @@ function Activity({ activity }: { activity: Chat.Activity }) {
 				className={`flex w-full items-center gap-2 px-2 py-1 text-left text-xs ${
 					TOOL_TONE[activity.status]
 				}`}
+				data-press="wide"
 				disabled={!detail}
 				onClick={() => setOpen(value => !value)}
 				type="button"

@@ -167,3 +167,28 @@ body {
 	outline: 2px solid var(--color-ring);
 	outline-offset: 1px;
 }
+
+/*
+ * What a press feels like. Zero specificity so a `transition` utility on the
+ * element wins instead — Tailwind's covers `scale` along with the colours.
+ * Disabled controls are excluded: a press that animates and then does nothing
+ * says the opposite of what disabled is trying to say.
+ */
+:where(button, [role="button"]) {
+	transition: scale var(--duration-fast) var(--ease-out);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	:where(button, [role="button"]):not(:disabled):active {
+		scale: 0.96;
+	}
+
+	/*
+	 * A proportion, so a row needs a smaller one: 4% of a full-width row is
+	 * several pixels at each edge and reads as jumping, where 4% of a 28px
+	 * toolbar cell is the one pixel that is wanted.
+	 */
+	:where(button, [role="button"])[data-press="wide"]:not(:disabled):active {
+		scale: 0.99;
+	}
+}

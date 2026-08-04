@@ -165,7 +165,7 @@ function Custom(
 				placeholder="Type another answer"
 				onFocus={() => onChange?.({ mode: "custom" })}
 				onChange={event => onChange?.({ mode: "custom", custom: event.currentTarget.value })}
-				className="mt-1.5 min-h-16 w-full resize-y rounded-md border border-input bg-input/20 px-2.5 py-2 text-sm text-foreground transition-colors placeholder:text-muted-foreground/60 focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-60"
+				className="mt-1.5 min-h-16 w-full resize-y rounded-md border border-input bg-input/20 px-2.5 py-2 text-sm text-foreground transition placeholder:text-muted-foreground/60 focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-60"
 			/>
 		</div>
 	);
@@ -210,6 +210,7 @@ function Related(
 		<button
 			type="button"
 			data-ace-question-id={id}
+			data-press="wide"
 			aria-label={count > 1
 				? `${label} — show in plan, ${count} places`
 				: `${label} — show in plan`}
@@ -420,7 +421,7 @@ export function QuestionView(props: QuestionViewProps) {
 								onBlur={event =>
 									!event.currentTarget.matches(":hover") && onQuestionLeave?.(question.id)}
 								onKeyDown={event => move(event, index)}
-								className={`shrink-0 rounded-t-md px-2.5 py-1 text-xs font-medium transition-colors ${
+								className={`shrink-0 rounded-t-md px-2.5 py-1 text-xs font-medium transition ${
 									question.id === active
 										? "bg-muted text-foreground"
 										: "text-muted-foreground hover:text-foreground"
@@ -507,7 +508,7 @@ export function QuestionView(props: QuestionViewProps) {
 								type="button"
 								onClick={() => setConfirming(false)}
 								disabled={submitting}
-								className="rounded-md px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+								className="rounded-md px-2.5 py-1 text-xs text-muted-foreground transition hover:text-foreground disabled:opacity-50"
 							>
 								Keep it
 							</button>
@@ -515,7 +516,7 @@ export function QuestionView(props: QuestionViewProps) {
 								type="button"
 								onClick={onCancel}
 								disabled={disabled || submitting}
-								className="rounded-md px-2.5 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
+								className="rounded-md px-2.5 py-1 text-xs font-medium text-destructive transition hover:bg-destructive/10 disabled:opacity-50"
 							>
 								{submitting ? "Cancelling…" : "Yes, cancel"}
 							</button>
@@ -526,7 +527,7 @@ export function QuestionView(props: QuestionViewProps) {
 							type="button"
 							onClick={() => setConfirming(true)}
 							disabled={disabled || submitting}
-							className="rounded-md px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+							className="rounded-md px-2.5 py-1 text-xs text-muted-foreground transition hover:text-foreground disabled:opacity-50"
 						>
 							Cancel
 						</button>
