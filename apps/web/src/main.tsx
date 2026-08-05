@@ -4,9 +4,6 @@ import { createRoot } from "react-dom/client";
 import { App } from "./app";
 import { adopt } from "./identity";
 
-// The optical-sizing cut: Inter's `opsz` axis retunes letterforms by rendered
-// size, which one static outline scaled up and down cannot. Italic is a
-// separate face, not a slant, and plans lean on emphasis.
 import "@fontsource-variable/inter/opsz.css";
 import "@fontsource-variable/inter/opsz-italic.css";
 
