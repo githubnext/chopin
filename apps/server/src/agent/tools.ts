@@ -11,6 +11,7 @@
  * by accident.
  */
 
+import * as Arguments from "./arguments";
 import * as Comments from "../comments/service";
 import * as edit from "../plan/edit";
 import * as Questions from "../questions/service";
@@ -149,7 +150,7 @@ export function toolbox(context: Context): Tool[] {
 			},
 			handler: raw =>
 				answer("edit_plan", () => {
-					let args = raw as { revision: number; operations: edit.Operation[] };
+					let args = Arguments.editPlan(raw);
 					let outcome = edit.apply(context.plan, args.revision, args.operations);
 					if (!outcome.ok) return outcome;
 
@@ -308,15 +309,7 @@ export function toolbox(context: Context): Tool[] {
 			},
 			handler: raw =>
 				answer("anchor_plan", () => {
-					let args = raw as {
-						revision: number;
-						anchors: Array<{
-							widget?: string;
-							question?: string;
-							thread?: string;
-							blocks: Array<{ index: number; digest: string }>;
-						}>;
-					};
+					let args = Arguments.anchorPlan(raw);
 
 					if (args.revision !== context.plan.revision) {
 						return {
