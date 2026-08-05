@@ -108,6 +108,10 @@ bytes it cannot read. Canonical MDX is written to `data/<room>/plan.mdx` on a
 debounce; Yjs history is not kept, so a restart resumes the content under a
 fresh epoch.
 
+See [Document architecture](docs/architecture.md) for the runtime representation,
+CRDT and agent edit flows, persistence model, and the reason agent edits use a
+block-operation DSL.
+
 Three things are worth knowing if you intend to change it:
 
 - **The dialect is an allowlist.** Anything not described in
