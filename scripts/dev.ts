@@ -30,6 +30,11 @@ const GRACE_MS = 2_000;
 
 const WEB = "http://127.0.0.1:5173";
 
+/** Defaults kept in step with `apps/server/src/config.ts`. */
+const APP = `http://${process.env.SERVER_HOST || "127.0.0.1"}:${process.env.PORT || 8787}`;
+
+const READY_MS = 30_000;
+
 type Child = { name: string; proc: Subprocess };
 
 let children: Child[] = [];
@@ -88,6 +93,32 @@ async function stop(code: number): Promise<void> {
 }
 
 /**
+ * Print where the app is, once it answers.
+ *
+ * Vite prints its own address, which does not work — the server is the only
+ * origin. Waiting for a reply puts this line below Vite's banner, and the
+ * server 502s until Vite is up, so a reply means both halves are ready.
+ */
+async function announce(): Promise<void> {
+	let deadline = Date.now() + READY_MS;
+
+	while (Date.now() < deadline) {
+		if (stopping) return;
+
+		try {
+			let response = await fetch(APP, { redirect: "manual" });
+			await response.body?.cancel();
+			if (response.ok) {
+				console.log(`\n[dev] chopin is at ${APP}\n`);
+				return;
+			}
+		} catch {}
+
+		await Bun.sleep(250);
+	}
+}
+
+/**
  * Settle relative paths here, where the current directory is still yours.
  *
  * Each child is started in its own package directory, so `WORKING_DIR=../thing`
@@ -120,6 +151,8 @@ children = [
 for (let name of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
 	process.on(name, () => void stop(0));
 }
+
+void announce();
 
 // A supervisor that outlived its children would leave the terminal looking
 // busy with nothing behind it.
