@@ -1,12 +1,6 @@
 /**
- * Validating `edit_plan` and `anchor_plan` arguments.
- *
- * The bug this guards: a model that sends `operations` as a JSON-encoded
- * string reaches `edit.apply` as a value that is not an array at all, and
- * `operations.some`/`operations.length` either throw or measure characters
- * instead of operations. These tests pin the rejection and its message, not
- * just that something throws — the message is what lets the model correct
- * itself.
+ * These pin the rejection message, not just that something throws — the
+ * message is what lets the model correct itself.
  */
 
 import { describe, expect, it } from "bun:test";
@@ -36,11 +30,7 @@ describe("editPlan", () => {
 		expect(() => editPlan(batch({ operations: source }))).toThrow(/`operations` must be an array/);
 	});
 
-	/**
-	 * A single-operation batch, JSON-encoded, is the case that used to sail
-	 * past `operations.length === 0` and `operations.length > 1` in `edit.ts`
-	 * because those measured characters in the string, not operations.
-	 */
+	/** The case that used to pass `edit.ts`'s length checks by measuring characters. */
 	it("rejects a single-operation batch sent as a JSON string", () => {
 		let source = JSON.stringify([{ op: "insert", index: 0, source: "Hi.\n" }]);
 		expect(() => editPlan(batch({ operations: source }))).toThrow(/`operations` must be an array/);
@@ -153,7 +143,6 @@ describe("anchorPlan", () => {
 		expect(() => anchorPlan({ anchors: anchors().anchors })).toThrow(/missing field: revision/);
 	});
 
-	/** An empty `blocks` list is a real answer — reviewed and unrelated — not malformed input. */
 	it("accepts an anchor with no blocks", () => {
 		let args = anchorPlan(anchors({ anchors: [{ thread: "t1", blocks: [] }] }));
 		expect(args.anchors[0]!.blocks).toEqual([]);

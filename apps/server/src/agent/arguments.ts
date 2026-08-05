@@ -1,28 +1,12 @@
 /**
  * Validating an agent's tool call arguments before they reach the plan.
  *
- * `edit_plan` and `anchor_plan` receive `raw: unknown` from the SDK. The
- * handlers used to cast it straight to the shape their JSON schema
- * advertises, and `as` is erased at runtime: a model that sent `operations`
- * as a JSON-encoded string sailed past every guard and only surfaced as
- * `operations.some is not a function`, a message with nothing in it a model
- * could act on. This module is the boundary that check belongs at — reject a
- * malformed call with a message naming the field and the shape it needed, so
- * the model can retry, exactly as `@chopin/question`'s `normalize` already
- * does for `ask`.
- *
- * `@chopin/question`'s `fail`/`record`/`exact`/`text` are not reused here even
- * though the shapes rhyme: that package is about questionnaires, not a home
- * for a generic argument validator, and duplicating four small functions
- * costs less than growing that package a public surface it was never designed
- * for.
- *
- * Every check here mirrors a line of the JSON schema in `tools.ts` — the
- * required fields, the `op` enum, `minItems`/`maxItems`, the digest pattern —
- * so the two cannot quietly disagree. What the schema cannot express is
- * enforced by hand: which fields an operation needs depends on its `op`, and
- * the schema states that only in a description string, because one object
- * shape covers every operation kind.
+ * `edit_plan` and `anchor_plan` receive `raw: unknown`, and the `as` casts
+ * that used to stand in for checking it are erased at runtime: `operations`
+ * sent as a JSON-encoded string surfaced only as `operations.some is not a
+ * function`. Every check here mirrors a line of the JSON schema in `tools.ts`
+ * so the two cannot quietly disagree, and each failure names the field and
+ * the shape it needed so the model can retry.
  */
 
 import type { Operation } from "../plan/edit";
@@ -43,14 +27,7 @@ function record(value: unknown, name: string): Record<string, unknown> {
 	return value as Record<string, unknown>;
 }
 
-/**
- * No unknown fields, and every field in `required` present.
- *
- * `required` is not always all of `allowed`: an operation's shared object
- * shape lists every field any op might use, but only `op` is universally
- * required — the rest depend on which op it is, and that is checked
- * separately by `operation`.
- */
+/** No unknown fields, and every field in `required` present. */
 function fields(
 	value: Record<string, unknown>,
 	allowed: string[],
@@ -69,12 +46,7 @@ function fields(
 	}
 }
 
-/**
- * Reject anything that is not a real array, on purpose without trying to be
- * helpful: a JSON-encoded string and an array-like object such as
- * `{0: …, length: 1}` both fail `Array.isArray`, and coercing either back into
- * an array would hide the mistake instead of telling the model to fix it.
- */
+/** A JSON string and an array-like object both fail here, uncoerced on purpose. */
 function array(value: unknown, name: string, of: string, min?: number, max?: number): unknown[] {
 	if (!Array.isArray(value)) fail(`\`${name}\` must be an array of ${of} objects.`);
 	if (min !== undefined && value.length < min) {
@@ -99,13 +71,9 @@ function text(value: unknown, name: string, max?: number): string {
 	return value;
 }
 
-/** How much of an operation's `source` a batch may carry, matching `tools.ts`. */
+/** The limits `tools.ts` advertises in its schemas. */
 const MAX_SOURCE = 100_000;
-
-/** `tools.ts`'s `operations` limits. */
 const MAX_OPERATIONS = 50;
-
-/** `tools.ts`'s `anchors` limit. */
 const MAX_ANCHORS = 100;
 
 const OPS = [
@@ -130,13 +98,8 @@ function kind(value: unknown, name: string): Op {
 }
 
 /**
- * One operation, validated against exactly the fields its `op` needs.
- *
- * `tools.ts`'s schema cannot say "index is required unless the op is
- * insert_root or replace_root" — it is one object shape shared by every op,
- * with only `op` itself in `required` — so that conditional lives here,
- * spelled out per op the same way the tool description spells it out for the
- * model.
+ * One operation. Which fields it needs depends on its `op`, which one shared
+ * object shape cannot express in the schema, so the conditional lives here.
  */
 function operation(raw: unknown, position: number): Operation {
 	let name = `operations[${position}]`;
@@ -217,11 +180,7 @@ type Anchor = {
 	blocks: Array<{ index: number; digest: string }>;
 };
 
-/**
- * One anchor. Which of `widget`+`question` or `thread` is expected is a
- * choice the handler makes, not the schema — `tools.ts` only requires
- * `blocks`, so that is the only thing enforced here too.
- */
+/** One anchor. Only `blocks` is required; the handler decides the rest. */
 function anchor(raw: unknown, position: number): Anchor {
 	let name = `anchors[${position}]`;
 	let value = record(raw, name);
