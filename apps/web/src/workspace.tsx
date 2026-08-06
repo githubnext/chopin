@@ -136,8 +136,8 @@ export type WorkspaceProps = {
 };
 
 export function Workspace({ chat, decisions, header, plan }: WorkspaceProps) {
-	let [chatWidth, resizeChat] = usePaneWidth("chopin:pane:chat", 320);
-	let [decisionsWidth, resizeDecisions] = usePaneWidth("chopin:pane:decisions", 280);
+	let [chatWidth, resizeChat] = usePaneWidth("chopin:pane:chat", 340);
+	let [decisionsWidth, resizeDecisions] = usePaneWidth("chopin:pane:decisions", 320);
 
 	return (
 		// Clipped, because the page is deliberately taller than the room it is in.
@@ -171,8 +171,25 @@ export function Workspace({ chat, decisions, header, plan }: WorkspaceProps) {
 						aria-hidden="true"
 						className="pointer-events-none absolute inset-x-1 top-0 -bottom-3 rounded-t-xl bg-page shadow-raised ring-hairline"
 					/>
-					<div className="relative h-full overflow-hidden rounded-t-xl">{plan}</div>
 
+					{
+						/*
+						 * Both handles, ahead of the plan and not after it.
+						 *
+						 * They are positioned, so where they sit in the markup decides
+						 * nothing about where they are drawn — it decides only what order
+						 * they are tabbed to, and that is the whole reason they are here.
+						 * The plan is a Lexical surface, and `listsPlugin` mounts
+						 * `TabIndentationPlugin`, which calls `preventDefault` on Tab
+						 * before it has looked at `shiftKey`: Tab indents and Shift-Tab
+						 * outdents, so focus that reaches the editor does not leave it in
+						 * either direction. Anything behind it in the tab order is
+						 * unreachable. Handles that draw nothing at rest have only the tab
+						 * order to be found by, so behind the editor is nowhere at all.
+						 *
+						 * Left before right, so the order runs along the screen.
+						 */
+					}
 					{chat && (
 						<Handle
 							label="Resize the conversation"
@@ -189,6 +206,8 @@ export function Workspace({ chat, decisions, header, plan }: WorkspaceProps) {
 							width={decisionsWidth}
 						/>
 					)}
+
+					<div className="relative h-full overflow-hidden rounded-t-xl">{plan}</div>
 				</main>
 
 				{decisions && (
