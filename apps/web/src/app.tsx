@@ -82,8 +82,10 @@ function Header(
 	// roster, which includes people who have it open but are not in the doc.
 	let others = members.filter(member => member.handle !== handle);
 
+	// On the ground rather than on a surface of its own, so the only edge it
+	// draws is the one under it.
 	return (
-		<header className="flex shrink-0 items-center gap-3 bg-ground px-4 py-2 hairline-b">
+		<header className="hairline-b flex h-12 shrink-0 items-center gap-3 px-4">
 			<span className="text-sm font-semibold">chopin</span>
 			<span className="text-sm text-text-tertiary">/r/{room}</span>
 			<span className={`text-sm ${TONE[status]}`}>

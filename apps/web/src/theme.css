@@ -96,6 +96,7 @@
 	--radius-sm: 0.25rem; /* 4px — buttons, grips, toolbar cells */
 	--radius-md: 0.375rem; /* 6px — cards, inputs, callouts, code blocks */
 	--radius-lg: 0.5rem; /* 8px — popovers and panels */
+	--radius-xl: 0.625rem; /* 10px — the document page */
 
 	/* Warm-tinted depth, copied from the settled Figma shadow table. */
 	--shadow-color: 14 13 10;
@@ -221,7 +222,6 @@
 		--edge-width: 0.5px;
 	}
 }
-
 html,
 body,
 #root {

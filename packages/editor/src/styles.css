@@ -52,7 +52,8 @@
 	min-height: 0;
 	flex-direction: column;
 	overflow: hidden;
-	/* The rail owns the surface; painting it again here would undo the tint. */
+	/* The rail is not a surface: a fill here would put back the panel the shell
+	   took out, and the ground has to run behind it. */
 	background: transparent;
 }
 
