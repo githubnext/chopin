@@ -264,9 +264,22 @@ function Preview(
 	let hidable = renders(block, html);
 	let named = block.kind !== "math";
 
+	/*
+	 * Both portals are keyed, so that a block keeps the output it already has
+	 * across a commit rather than remounting and losing the scroll position
+	 * inside a long fence. They are siblings of one fragment, though, so the
+	 * node key alone is the same key twice — which React reads as two children
+	 * competing for one identity, free to duplicate or drop either. The role
+	 * distinguishes them.
+	 */
 	return (
 		<>
-			{host && createPortal(<Rendered block={block} html={html} error={error} />, host, block.key)}
+			{host
+				&& createPortal(
+					<Rendered block={block} html={html} error={error} />,
+					host,
+					`${block.key}:preview`,
+				)}
 			{chrome && (hidable || named) && createPortal(
 				<div
 					// Chrome, not content: keep it out of the editable tree.
@@ -277,7 +290,7 @@ function Preview(
 					{hidable && <Toggle collapsed={collapsed} onToggle={onToggle} />}
 				</div>,
 				chrome,
-				block.key,
+				`${block.key}:chrome`,
 			)}
 		</>
 	);
