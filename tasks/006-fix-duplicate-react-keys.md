@@ -1,9 +1,9 @@
 ---
 id: "006"
 title: Fix duplicate React keys on block preview portals
-status: draft
-branch:
-pr:
+status: pr-opened
+branch: tq/006-fix-duplicate-react-keys
+pr: "https://github.com/githubnext/chopin/pull/24"
 stacked_on:
 blocked_reason:
 ---
