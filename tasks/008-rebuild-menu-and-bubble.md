@@ -1,10 +1,10 @@
 ---
 id: "008"
 title: Rebuild the slash menu and selection bubble
-status: draft
-branch:
-pr:
-stacked_on:
+status: pr-opened
+branch: tq/008-rebuild-menu-and-bubble
+pr: "https://github.com/githubnext/chopin/pull/26"
+stacked_on: "006"
 blocked_reason:
 ---
 
