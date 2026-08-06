@@ -1,10 +1,10 @@
 ---
 id: "005"
 title: Rebuild the app shell as two layers
-status: draft
-branch:
-pr:
-stacked_on:
+status: pr-opened
+branch: tq/005-rebuild-app-shell
+pr: "https://github.com/githubnext/chopin/pull/25"
+stacked_on: "006"
 blocked_reason:
 ---
 
