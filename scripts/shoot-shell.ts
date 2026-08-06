@@ -10,10 +10,6 @@
  *
  * It is not part of `bun run ci` because it needs a browser. Run it with
  * `bun run shot:shell`, after `bun run e2e:browsers` once.
- *
- * The stack is `scripts/check-dev-console.ts`'s, for its reasons: ports from
- * the OS so this can run beside a dev server, and `hmr.clientPort` overridden
- * because the client is told at build time where to reach HMR.
  */
 
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -21,13 +17,11 @@ import { dirname, join } from "node:path";
 
 import { chromium } from "@playwright/test";
 
+import { start } from "./stack";
+
 import type { Page } from "@playwright/test";
-import type { Subprocess } from "bun";
-import type { ViteDevServer } from "vite";
 
 const ROOT = dirname(import.meta.dir);
-const WEB = join(ROOT, "apps/web");
-const HOST = "127.0.0.1";
 
 /** Beside the task they answer, which is where the images for 003 to 009 live. */
 const SHOTS = join(ROOT, "tasks/images");
@@ -88,30 +82,6 @@ const TRANSCRIPT = [
 	},
 ];
 
-let vite: ViteDevServer | undefined;
-let server: Subprocess | undefined;
-
-/** A port the OS has just confirmed is free. */
-function free(): number {
-	let socket = Bun.listen({ hostname: HOST, port: 0, socket: { data() {} } });
-	let port = socket.port;
-	socket.stop(true);
-	return port;
-}
-
-async function reachable(url: string): Promise<void> {
-	let deadline = Date.now() + READY_MS;
-	while (Date.now() < deadline) {
-		try {
-			let response = await fetch(url, { redirect: "manual" });
-			await response.body?.cancel();
-			if (response.ok) return;
-		} catch {}
-		await Bun.sleep(250);
-	}
-	throw new Error(`chopin: ${url} never answered`);
-}
-
 /** Open on a room that is finished loading, at the size asked for. */
 async function ready(page: Page, base: string, width: number): Promise<void> {
 	await page.setViewportSize({ width, height: Math.round((width * 10) / 16) });
@@ -139,65 +109,22 @@ async function ready(page: Page, base: string, width: number): Promise<void> {
 	await page.waitForTimeout(400);
 }
 
-async function stop(): Promise<void> {
-	// Its own process group, killed as a group, for the reason `scripts/dev.ts`
-	// gives at length: the leader alone leaves esbuild behind holding a port.
-	if (server) {
-		try {
-			process.kill(-server.pid, "SIGTERM");
-		} catch {}
-	}
-	await vite?.close();
-}
+rmSync(join(DATA, ROOM), { recursive: true, force: true });
+mkdirSync(join(DATA, ROOM), { recursive: true });
+writeFileSync(join(DATA, ROOM, "plan.mdx"), PLAN);
+writeFileSync(join(DATA, ROOM, "state.json"), JSON.stringify({ transcript: TRANSCRIPT }));
+mkdirSync(SHOTS, { recursive: true });
+
+// The right rail is one of the three things being photographed, and an empty
+// one would say nothing about whether it is a panel.
+let stack = await start({ data: DATA, env: { DEV_QUESTIONS: "1" } });
 
 try {
-	rmSync(join(DATA, ROOM), { recursive: true, force: true });
-	mkdirSync(join(DATA, ROOM), { recursive: true });
-	writeFileSync(join(DATA, ROOM, "plan.mdx"), PLAN);
-	writeFileSync(join(DATA, ROOM, "state.json"), JSON.stringify({ transcript: TRANSCRIPT }));
-	mkdirSync(SHOTS, { recursive: true });
-
-	let webPort = free();
-	let appPort = free();
-
-	// Resolved from `apps/web`, which is the only place it is installed —
-	// nothing hoists it to the root, and this script lives above both.
-	let { createServer } = await import(Bun.resolveSync("vite", WEB)) as typeof import("vite");
-
-	vite = await createServer({
-		root: WEB,
-		configFile: join(WEB, "vite.config.ts"),
-		server: { host: HOST, port: webPort, strictPort: true, hmr: { clientPort: webPort } },
-	});
-	await vite.listen();
-
-	server = Bun.spawn(["bun", "src/main.ts"], {
-		cwd: join(ROOT, "apps/server"),
-		env: {
-			...process.env,
-			PORT: String(appPort),
-			SERVER_HOST: HOST,
-			AGENT: "off",
-			DATA_DIR: DATA,
-			// The right rail is one of the three things being photographed, and an
-			// empty one would say nothing about whether it is a panel.
-			DEV_QUESTIONS: "1",
-			DEV_COMMENTS: "",
-			DEV_CLIENT: `http://${HOST}:${webPort}`,
-		},
-		stdio: ["inherit", "ignore", "inherit"],
-		detached: true,
-	});
-
-	let base = `http://${HOST}:${appPort}`;
-	// The server 502s until Vite is up, so a reply means both halves are ready.
-	await reachable(base);
-
 	let browser = await chromium.launch();
 
 	for (let width of WIDTHS) {
 		let page = await browser.newPage();
-		await ready(page, base, width);
+		await ready(page, stack.base, width);
 
 		let path = join(SHOTS, `005-shell-${width}.png`);
 		await page.screenshot({ path });
@@ -207,5 +134,5 @@ try {
 
 	await browser.close();
 } finally {
-	await stop();
+	await stack.stop();
 }
