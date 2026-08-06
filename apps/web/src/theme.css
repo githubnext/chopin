@@ -6,9 +6,10 @@
  * They are reached through workspace symlinks, which Tailwind's automatic
  * content detection skips — without these the classes in the editor and the
  * questionnaire views resolve to nothing at all, silently.
+ * `.ts` is included because shared class lists can live outside components.
  */
-@source "../../../packages/editor/src/**/*.tsx";
-@source "../../../packages/question/src/**/*.tsx";
+@source "../../../packages/editor/src/**/*.{ts,tsx}";
+@source "../../../packages/question/src/**/*.{ts,tsx}";
 
 /* The complete light-only system. `static` keeps tokens read from plain CSS. */
 @theme static {

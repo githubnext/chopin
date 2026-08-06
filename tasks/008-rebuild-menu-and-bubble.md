@@ -66,3 +66,9 @@ Depends on 003 and 007.
 - [ ] Every button in the selection bubble is a 28px square
 - [ ] Screenshots of the slash menu open over a plan and the bubble over a
       selected sentence attached to the PR
+
+## Evidence
+
+![the slash menu over a plan: an 8px shell on the raised shadow, 32px rows, and a hairline where the headings were](images/008-menu.png)
+
+![the bubble over a selected sentence: the same shell laid horizontally, holding 28px squares](images/008-bubble.png)

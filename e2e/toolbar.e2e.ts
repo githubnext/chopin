@@ -30,6 +30,23 @@ test("a slash at the start of a word offers blocks to insert", async ({ join }) 
 	await expect(menu.getByRole("option")).toHaveText("Callout");
 });
 
+test("filtering resets the option Enter will choose", async ({ join }) => {
+	let page = await join("ana");
+
+	await content(page).click();
+	await page.keyboard.type("/");
+
+	let menu = page.getByRole("listbox", MENU);
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.type("call");
+
+	await expect(menu.getByRole("option", { selected: true })).toHaveText("Callout");
+	await page.keyboard.press("Enter");
+	await expect(page.getByLabel("Callout type")).toBeVisible();
+});
+
 test("a slash inside a word is just a slash", async ({ join }) => {
 	let page = await join("ana");
 

@@ -7,7 +7,7 @@
  * the block appear later than the keystroke that asked for it.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $setBlocksType } from "@lexical/selection";
 import {
@@ -36,6 +36,7 @@ import { $createTableNodeWithDimensions } from "@lexical/table";
 import { $createParagraphNode, $createTextNode, $insertNodes } from "lexical";
 
 import { askForUrl } from "./url";
+import { DIVIDER, ROW, SHELL } from "./surface";
 
 import type { ElementNode, LexicalEditor } from "lexical";
 
@@ -240,6 +241,7 @@ export function SlashMenu({ disabled }: SlashMenuProps) {
 	let open = query !== undefined && !disabled;
 
 	let matches = useMemo(() => COMMANDS.filter(item => match(item, query ?? "")), [query]);
+	// Groups now place dividers while options remain direct listbox children.
 	let grouped = useMemo(() => {
 		let out = new Map<string, SlashCommand[]>();
 		for (let command of matches) {
@@ -255,6 +257,7 @@ export function SlashMenu({ disabled }: SlashMenuProps) {
 	 * keystroke, which is committed long before a re-render would land.
 	 */
 	let armed = useRef(false);
+	let currentQuery = useRef<string | undefined>(undefined);
 
 	/** Read inside the update listener, which must not re-register per keystroke. */
 	let showing = useRef(false);
@@ -264,6 +267,7 @@ export function SlashMenu({ disabled }: SlashMenuProps) {
 		// Dismissing has to disarm, or the next update would re-derive the same
 		// trigger and reopen what the user just closed.
 		armed.current = false;
+		currentQuery.current = undefined;
 		setQuery(undefined);
 		setIndex(0);
 	}, []);
@@ -345,6 +349,8 @@ export function SlashMenu({ disabled }: SlashMenuProps) {
 				if (!native || native.rangeCount === 0) return close();
 				let rect = native.getRangeAt(0).getBoundingClientRect();
 
+				if (typed !== currentQuery.current) setIndex(0);
+				currentQuery.current = typed;
 				setQuery(typed);
 				setPosition({ top: rect.bottom + 4, left: rect.left });
 			});
@@ -388,15 +394,13 @@ export function SlashMenu({ disabled }: SlashMenuProps) {
 			role="listbox"
 			aria-label="Insert block"
 			contentEditable={false}
-			className="fixed z-50 max-h-72 w-56 overflow-y-auto rounded-md bg-page p-1 ring-hairline shadow-overlay"
+			className={`${SHELL} max-h-72 w-56 overflow-y-auto`}
 			style={{ top: position.top, left: position.left }}
 			onMouseDown={event => event.preventDefault()}
 		>
-			{grouped.map(([group, commands]) => (
-				<div key={group}>
-					<div className="px-2 py-1 text-sm font-semibold tracking-wide text-text-quaternary uppercase">
-						{group}
-					</div>
+			{grouped.map(([group, commands], place) => (
+				<Fragment key={group}>
+					{place > 0 && <div aria-hidden="true" className={DIVIDER} />}
 					{commands.map(command => {
 						let position = flat.indexOf(command);
 						return (
@@ -408,17 +412,17 @@ export function SlashMenu({ disabled }: SlashMenuProps) {
 								data-press="wide"
 								onMouseEnter={() => setIndex(position)}
 								onClick={() => choose(command)}
-								className={`flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm transition ${
+								className={`${ROW} ${
 									position === index
 										? "bg-selected text-text-primary"
-										: "text-text-tertiary hover:bg-hover"
+										: "text-text-tertiary"
 								}`}
 							>
-								<span>{command.label}</span>
+								{command.label}
 							</button>
 						);
 					})}
-				</div>
+				</Fragment>
 			))}
 		</div>
 	);
