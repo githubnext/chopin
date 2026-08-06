@@ -55,3 +55,20 @@ that the behaviour may change between versions.
       collapsed
 - [ ] A console screenshot showing zero warnings while editing a plan with a
       code block, attached to the PR
+
+## Evidence
+
+`bun run check:console` is where the acceptance above is read. It starts the
+dev client — the warning exists only in a development build, so the e2e suite,
+which serves `apps/web/dist`, cannot see it — opens a plan holding a fence, a
+patch and a formula, types beside one, collapses it, edits elsewhere, and fails
+on any duplicate key reported along the way.
+
+The picture is of the plan and of every message its page emitted, drawn back
+onto the page it came from: no browser lets a screenshot be taken of its own
+devtools.
+
+![a plan holding a fence, a patch and a formula, and the four messages its page emitted — none of them React, and no duplicate keys](images/006-console.png)
+
+Run against the two keys as they were, it reports 167 duplicate keys and fails
+four of its eight checks. Against the fix: none, and none.

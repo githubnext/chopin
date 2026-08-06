@@ -243,8 +243,14 @@ try {
 	// 2 — typing inside a paragraph next to a code block. One commit per
 	// character, and the warning came in bursts of one per commit.
 	let mark = messages.length;
+	// Clicked into, then sent to the end of the line. The caret lands where the
+	// click does, and this run is photographed — a sentence with a word split
+	// down the middle of it reads as something having gone wrong. `End` is not
+	// the key that does this on macOS, where it scrolls the page instead and
+	// leaves the caret in the middle of the word that was clicked.
 	await content.getByText("A paragraph between the blocks.").click();
-	await page.keyboard.type("Typing beside a fence. ", { delay: 10 });
+	await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowRight" : "End");
+	await page.keyboard.type(" Typing beside a fence.", { delay: 10 });
 	await page.waitForTimeout(500);
 
 	let landed = (await content.innerText()).includes("Typing beside a fence.");
