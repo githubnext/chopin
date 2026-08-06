@@ -12,6 +12,7 @@ import { TOGGLE_LINK_COMMAND } from "@lexical/link";
 import { LINK_PROTOCOLS } from "@chopin/dialect";
 
 import { askForUrl } from "./url";
+import { CELL, CELL_OFF, CELL_ON, SEAM, SHELL } from "./surface";
 import {
 	$isListItemNode,
 	$isListNode,
@@ -291,7 +292,7 @@ export function SelectionBubble(
 			contentEditable={false}
 			// No translate utilities here: placement belongs to the layout effect,
 			// and Tailwind's would compose with its transform rather than replace it.
-			className="fixed z-50 flex items-center gap-0.5 rounded-md bg-page p-1 ring-hairline shadow-overlay"
+			className={`${SHELL} flex items-center gap-0.5`}
 			style={{ top: position.top - EDGE, left: position.left }}
 			/*
 			 * Nothing in here may take focus: the selection it acts on would go
@@ -310,11 +311,7 @@ export function SelectionBubble(
 						aria-current={item.id === block}
 						title={item.label}
 						onClick={() => convert(item.id)}
-						className={`size-7 rounded-sm text-sm font-semibold transition ${
-							item.id === block
-								? "bg-selected text-text-primary"
-								: "text-text-tertiary hover:bg-hover hover:text-text-primary"
-						}`}
+						className={`${CELL} ${item.id === block ? CELL_ON : CELL_OFF}`}
 					>
 						{item.glyph}
 					</button>
@@ -327,12 +324,12 @@ export function SelectionBubble(
 							aria-expanded={false}
 							title={`${describe(block).label} — change block type`}
 							onClick={() => setChoosing(true)}
-							className="size-7 rounded-sm text-sm font-semibold text-text-tertiary transition hover:bg-hover hover:text-text-primary"
+							className={`${CELL} ${CELL_OFF}`}
 						>
 							{describe(block).glyph}
 						</button>
 
-						<span aria-hidden="true" className="mx-0.5 h-4 w-px bg-edge" />
+						<span aria-hidden="true" className={SEAM} />
 
 						{MARKS.map(mark => (
 							<button
@@ -342,17 +339,13 @@ export function SelectionBubble(
 								aria-pressed={active.has(mark.format)}
 								title={`${mark.label} (${mark.shortcut})`}
 								onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, mark.format)}
-								className={`size-7 rounded-sm text-sm font-semibold transition ${
-									active.has(mark.format)
-										? "bg-selected text-text-primary"
-										: "text-text-tertiary hover:bg-hover hover:text-text-primary"
-								}`}
+								className={`${CELL} ${active.has(mark.format) ? CELL_ON : CELL_OFF}`}
 							>
 								{mark.glyph}
 							</button>
 						))}
 
-						<span aria-hidden="true" className="mx-0.5 h-4 w-px bg-edge" />
+						<span aria-hidden="true" className={SEAM} />
 
 						<button
 							type="button"
@@ -364,14 +357,14 @@ export function SelectionBubble(
 								if (url === undefined) return;
 								editor.dispatchCommand(TOGGLE_LINK_COMMAND, url);
 							}}
-							className="size-7 rounded-sm text-sm text-text-tertiary transition hover:bg-hover hover:text-text-primary"
+							className={`${CELL} ${CELL_OFF}`}
 						>
 							🔗
 						</button>
 
 						{onComment && (
 							<>
-								<span aria-hidden="true" className="mx-0.5 h-4 w-px bg-edge" />
+								<span aria-hidden="true" className={SEAM} />
 								<button
 									type="button"
 									aria-label="Comment on this passage"
@@ -383,7 +376,7 @@ export function SelectionBubble(
 									 * moment you started typing would be no use.
 									 */
 									onClick={onComment}
-									className="size-7 rounded-sm text-sm text-text-tertiary transition hover:bg-hover hover:text-text-primary"
+									className={`${CELL} ${CELL_OFF}`}
 								>
 									💬
 								</button>
