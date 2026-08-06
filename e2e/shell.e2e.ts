@@ -242,6 +242,44 @@ test("a drag the browser takes away still puts the bar down", async ({ join, pag
 	await expect.poll(() => drawn(handle)).toBe("0");
 });
 
+/**
+ * Tab forward from the top of the document until `target` has focus.
+ *
+ * Arriving at a handle is half of what "resized using only the keyboard" claims,
+ * and it is the half that `focus()` cannot check: `focus()` reaches anything in
+ * the document whether or not a person could. These handles draw nothing at
+ * rest, so the tab order is the only way to find one — and the plan is a Lexical
+ * surface that swallows Tab in both directions, `listsPlugin` having mounted
+ * `TabIndentationPlugin` to indent on Tab and outdent on Shift-Tab. Focus that
+ * lands in it stays in it, so a handle behind it in the tab order is a handle no
+ * keyboard reaches. That is the shell this walk exists to fail on, and the shell
+ * `focus()` passed.
+ *
+ * Bounded, therefore, rather than looping until it arrives: on that shell it
+ * never does, and the presses would go on typing into the plan. What it walked
+ * past is reported, because "never got there" is only useful alongside where it
+ * got to instead.
+ */
+async function tabTo(page: Page, target: Locator, presses = 24): Promise<void> {
+	await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+
+	let stops: string[] = [];
+	for (let press = 0; press < presses; press++) {
+		await page.keyboard.press("Tab");
+		if (await target.evaluate(element => element === document.activeElement)) return;
+
+		stops.push(
+			await page.evaluate(() => {
+				let active = document.activeElement as HTMLElement | null;
+				if (!active || active === document.body) return "nothing";
+				return active.getAttribute("aria-label") ?? active.localName;
+			}),
+		);
+	}
+
+	throw new Error(`never reached by tabbing forward; stopped at ${stops.join(" → ")}`);
+}
+
 test("both rails can be resized with the keyboard alone", async ({ join, page }) => {
 	await join("ana");
 
@@ -256,7 +294,7 @@ test("both rails can be resized with the keyboard alone", async ({ join, page })
 		let handle = page.getByRole("separator", { name });
 		let before = (await box(rail)).width;
 
-		await handle.focus();
+		await tabTo(page, handle);
 		await handle.press("ArrowRight");
 		await handle.press("ArrowRight");
 

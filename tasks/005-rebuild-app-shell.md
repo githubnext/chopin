@@ -103,6 +103,24 @@ appear, none of which the shell puts there and none of which this task touches:
 - a table's grips and insert buttons, whose 1px ring is drawn in `box-shadow`
   because a `<table>` cannot contain a `<div>` to put a border on
 
+"Both rails can be resized using only the keyboard" is read as reached and then
+resized, rather than as resized alone. The test tabs forward from the top of the
+document until the handle takes focus, because `focus()` arrives at anything in
+the document whether or not a person could — and here a person could not. The
+plan is a Lexical surface, and `listsPlugin` mounts `TabIndentationPlugin`,
+which calls `preventDefault` on Tab before it has looked at `shiftKey`: Tab
+indents, Shift-Tab outdents, and focus that lands in the editor does not leave
+it in either direction. Lexical says as much in that plugin's own doc comment.
+Both handles sat behind the editor in the markup, so neither was reachable at
+all; they are ahead of it now. They are positioned, so the move changes only
+what order they are tabbed to and nothing about where they are drawn. Put back
+the old way, the walk reports precisely what it is there for:
+
+```
+never reached by tabbing forward; stopped at
+textarea → button → editable markdown → editable markdown → … (×22)
+```
+
 `bun run shot:shell` takes the two pictures. It seeds one room — the same plan,
 the same questionnaire, the same three lines of conversation — and opens it
 twice, so the pair differ only in the width they were taken at. The transcript
@@ -121,6 +139,15 @@ specifies. Two sources in that task disagree about the ring — the notes say 7%
 and the shadow frame says 6% — and 7% is what is written, since that is the
 number stated as the passive-edge token rather than as an aside in a shadow
 table.
+
+The ring those tokens draw is `hairline-ring`, and not `ring-hairline` as it
+reads more naturally. `--color-hairline` is a theme token, so Tailwind already
+mints a class from it in every colour namespace — `ring-hairline` among them,
+setting `--tw-ring-color`. A utility declared under a name Tailwind has already
+generated does not replace it, it merges into it, and the class quietly does two
+things: the built rule carried `--tw-ring-color` alongside the outline that was
+the entire point. Anything shaped `<namespace>-hairline` is spoken for, so this
+one is named from `hairline` like `hairline-b` beside it.
 
 `scripts/stack.ts` is the dev stack both of the browser scripts here start —
 Vite and the server in one process, on ports the OS chose. `check:console`
