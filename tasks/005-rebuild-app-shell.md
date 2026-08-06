@@ -85,6 +85,24 @@ rectangle, a painted colour or a pseudo-element that exists only under a
 pointer, so none of it can be asserted without a browser — and a fill put back
 on a rail is invisible in a diff and obvious on a screen.
 
+"The document page is the only element with a shadow" is read as written rather
+than as three assertions on the shell's own layers, which would pass on a shell
+that had grown a fourth: every element in the document is asked, and the answer
+has to be a list of one. It is read against a resting room, and that is the
+whole of its scope — five surfaces in the product carry a shadow when they
+appear, none of which the shell puts there and none of which this task touches:
+
+- the slash menu and the selection bubble, on `--shadow-md`, which 008 moves
+  onto the raised shadow along with the rest of their shell
+- the status notice pill, on `--shadow-xs`, which 009 moves onto the resting
+  shadow
+- the agent's change bar and its list, on `--shadow-sm` and `--shadow-md`.
+  These are the ones with no task of their own — they are floating chrome over
+  the page in the same family as the two above, and whoever takes 009 should
+  decide whether they belong to it
+- a table's grips and insert buttons, whose 1px ring is drawn in `box-shadow`
+  because a `<table>` cannot contain a `<div>` to put a border on
+
 `bun run shot:shell` takes the two pictures. It seeds one room — the same plan,
 the same questionnaire, the same three lines of conversation — and opens it
 twice, so the pair differ only in the width they were taken at. The transcript
@@ -103,3 +121,8 @@ specifies. Two sources in that task disagree about the ring — the notes say 7%
 and the shadow frame says 6% — and 7% is what is written, since that is the
 number stated as the passive-edge token rather than as an aside in a shadow
 table.
+
+`scripts/stack.ts` is the dev stack both of the browser scripts here start —
+Vite and the server in one process, on ports the OS chose. `check:console`
+needs it because a production bundle has no React invariants left to read, and
+`shot:shell` because rebuilding `dist` is a long way round for a screenshot.

@@ -102,10 +102,12 @@ function Handle(
 				origin.current = event.clientX;
 				onResize(side === "left" ? delta : -delta);
 			}}
-			onPointerUp={event => {
-				setDragging(false);
-				event.currentTarget.releasePointerCapture(event.pointerId);
-			}}
+			// The one place a drag ends. `pointerup` is not: Escape, a pen leaving
+			// the tablet, a touch the browser takes back all end a drag through
+			// `pointercancel` instead, and capture is released implicitly by every
+			// one of them — including by an ordinary release. Clearing the state
+			// anywhere else leaves the bar painted with no pointer near it.
+			onLostPointerCapture={() => setDragging(false)}
 			role="separator"
 			tabIndex={0}
 		/>

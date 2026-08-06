@@ -111,6 +111,34 @@ test("the page is the only thing in the shell that is lifted", async ({ join, pa
 	}
 });
 
+/**
+ * "The document page is the only element with a shadow", read as written.
+ *
+ * Asserting `none` on the three layers would pass on a shell that had grown a
+ * fourth, so every element is asked instead and the answer has to be a list of
+ * one. It is a resting room: nothing floating is open, no table is drawing its
+ * rails, and the plan is healthy, so nothing that earns a shadow by appearing
+ * has appeared. Those — the slash menu and the bubble, the notice pill, the
+ * change chips, a table's grips — are the exceptions this cannot see and 008,
+ * 009 and 010 own; an offender is named rather than counted so that a shadow
+ * put back on a rail says which rail.
+ */
+test("no element in a resting room has a shadow except the page", async ({ join, page }) => {
+	await join("ana");
+
+	let shadowed = await page.evaluate(() =>
+		[...document.querySelectorAll("body *")]
+			.filter(element => getComputedStyle(element).boxShadow !== "none")
+			.map(element =>
+				element.matches("main > [aria-hidden='true']")
+					? "the page"
+					: `${element.localName}.${element.getAttribute("class") ?? ""}`
+			)
+	);
+
+	expect(shadowed).toEqual(["the page"]);
+});
+
 test("the nav is 48px tall and the page starts 16px below it", async ({ join, page }) => {
 	await join("ana");
 
@@ -167,7 +195,51 @@ test("neither resize handle is drawn until the pointer is over it", async ({ joi
 		// Away again, so the second handle is not measured under a pointer that
 		// happens to still be resting on the first.
 		await page.mouse.move(0, 0);
+		await expect.poll(() => drawn(handle)).toBe("0");
 	}
+});
+
+/**
+ * A drag that is taken away rather than finished.
+ *
+ * The bar is held up for the length of a drag, because pointer capture does not
+ * reliably keep `:hover` and it would otherwise blink out from under the hand
+ * moving it. Anything that ends a drag without a `pointerup` — Escape, a pen
+ * leaving the tablet, the browser taking the pointer back — therefore has to
+ * put it down again, or the handle stays painted with nothing near it.
+ *
+ * Capture is revoked from script here because that is what those all do and
+ * none of them can be typed: a synthetic `pointercancel` releases nothing, so
+ * it would test the dispatcher rather than the handle.
+ *
+ * The order of the last three lines is the test. A handle follows the pointer
+ * for as long as the drag is working, so it is under the pointer the whole way
+ * and a `pointerup` at the end of one lands on it however far it went —
+ * clearing the state there looks right until the pointer is somewhere else
+ * when the button comes up, which is precisely what an interruption leaves.
+ * Written the other way round this passed against the bug it is here for.
+ */
+test("a drag the browser takes away still puts the bar down", async ({ join, page }) => {
+	await join("ana");
+
+	let handle = page.getByRole("separator", { name: "Resize the conversation" });
+	let start = await box(handle);
+
+	await handle.hover();
+	await page.mouse.down();
+	await page.mouse.move(start.x + 40, start.y + start.height / 2);
+	await expect.poll(() => drawn(handle)).toBe("1");
+
+	await handle.evaluate(element => {
+		// Chromium's mouse is pointer 1, and `releasePointerCapture` throws on a
+		// pointer it does not hold — so a wrong id fails the test rather than
+		// passing it for the wrong reason.
+		(element as HTMLElement).releasePointerCapture(1);
+	});
+	await page.mouse.move(0, 0);
+	await page.mouse.up();
+
+	await expect.poll(() => drawn(handle)).toBe("0");
 });
 
 test("both rails can be resized with the keyboard alone", async ({ join, page }) => {
