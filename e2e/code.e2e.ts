@@ -167,18 +167,28 @@ test("code, a patch and a formula each keep their own preview and chrome", async
 });
 
 test("a collapsed fence stays collapsed while the plan is edited around it", async ({ join, seed }) => {
-	await seed("```ts\nlet a = 1;\n```\n\nA paragraph after the fence.\n");
+	// Typed into above the fence, so that "where the caret went" and "the end
+	// of the document" are not the same place and cannot stand in for one
+	// another.
+	await seed("A paragraph before the fence.\n\n```ts\nlet a = 1;\n```\n\nAnd one after it.\n");
 	let page = await join("ana");
 
 	await content(page).getByRole("button", { name: "Hide source" }).click();
 	await expect(content(page).locator("[data-plan-source]")).toBeHidden();
 
+	// Clicking the paragraph is all the aim this needs: anywhere inside it is
+	// beside the fence, and the caret lands where it is clicked without asking
+	// which key ends a line on this platform.
+	await content(page).getByText("A paragraph before the fence.").click();
+	await page.keyboard.type("Still typing. ");
+
+	// Asserted first, because everything below it is only worth reading if the
+	// keystrokes reached the document. Typing into nothing also leaves a fence
+	// exactly as collapsed as it was.
+	await expect(content(page)).toContainText("Still typing.");
+
 	// Every keystroke elsewhere is a commit, and every commit re-renders this.
 	// Typing near a fence must not be a way of reopening one.
-	await content(page).getByText("A paragraph after the fence.").click();
-	await page.keyboard.press("End");
-	await page.keyboard.type(" Still typing.");
-
 	await expect(content(page).locator("[data-plan-source]")).toBeHidden();
 	await expect(content(page).getByRole("button", { name: "Show source" })).toBeVisible();
 	await expect(content(page).locator("[data-file]")).toBeVisible();
