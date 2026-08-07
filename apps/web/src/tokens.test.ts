@@ -369,9 +369,15 @@ function controlBlock(source: string, control: StandardControl): string {
 function controlOffenders(source: string, control: StandardControl): string[] {
 	let block = controlBlock(source, control);
 	let classes = /className\s*=\s*"([^"]*)"/.exec(block)?.[1]?.split(/\s+/) ?? [];
-	return classes.includes(control.utility)
+	let offenders = classes.includes(control.utility)
 		? []
 		: [`${control.name}: missing ${control.utility} in ${block}`];
+	for (let name of classes) {
+		if (/^(?:disabled|aria-disabled):opacity-.+$/.test(name)) {
+			offenders.push(`${control.name}: ${name}`);
+		}
+	}
+	return offenders;
 }
 
 describe("migration", () => {
@@ -450,21 +456,23 @@ describe("migration", () => {
 		expect(offenders).toEqual([]);
 	});
 
-	it("leaves no disabled opacity utility in migrated control files", () => {
-		let files = [
-			"apps/web/src/app.tsx",
-			"apps/web/src/chat/chat.tsx",
-			"packages/editor/src/comments.tsx",
-			"packages/editor/src/widgets/callout.tsx",
-			"packages/editor/src/widgets/render-blocks.tsx",
-			"packages/question/src/react/question-view.tsx",
-		];
-		let offenders = files.filter(file =>
-			/disabled:opacity-\d+/.test(
-				withoutComments(readFileSync(join(ROOT, file), "utf8")),
-			)
-		);
-		expect(offenders).toEqual([]);
+	it("rejects disabled opacity only inside a listed migrated control block", () => {
+		let control: StandardControl = {
+			file: "fixture.tsx",
+			marker: "data-migrated",
+			name: "fixture field",
+			tag: "textarea",
+			utility: "field",
+		};
+		let source = `
+			<textarea data-migrated className="field disabled:opacity-[.6] aria-disabled:opacity-[.4]" />
+			<button className="btn disabled:opacity-50">Specialised</button>
+		`;
+
+		expect(controlOffenders(source, control)).toEqual([
+			"fixture field: disabled:opacity-[.6]",
+			"fixture field: aria-disabled:opacity-[.4]",
+		]);
 	});
 
 	it("leaves no consumer on the replaced vocabulary", () => {
