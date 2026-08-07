@@ -274,6 +274,71 @@ describe("consumer roles", () => {
 	});
 });
 
+type StandardAction = {
+	action: string;
+	marker: string;
+	size: "btn-sm" | "btn-md" | "btn-icon";
+	tiers: readonly ("btn-primary" | "btn-secondary" | "btn-ghost" | "btn-destructive")[];
+};
+
+function classLists(button: string): string[][] {
+	let attribute = button.slice(button.indexOf("className="));
+	let staticClass = /^className="([^"]+)"/.exec(attribute)?.[1];
+	if (staticClass) return [staticClass.split(/\s+/)];
+
+	let templateClass = /^className=\{`([^`]*)`\}/.exec(attribute)?.[1];
+	if (templateClass) return [templateClass.split(/\s+/)];
+
+	let expression = /^className=\{([^}]*)\}/.exec(attribute)?.[1];
+	return expression
+		? [...expression.matchAll(/"([^"]+)"/g)]
+			.map(match => match[1]!.split(/\s+/))
+			.filter(classes => classes.some(name => name === "btn" || name.startsWith("btn-")))
+		: [];
+}
+
+function standardButtonOffenders(source: string, file: string, action: StandardAction): string[] {
+	let buttons = [...source.matchAll(/<button\b[\s\S]*?<\/button>/g)]
+		.filter(button => button[0].includes(action.marker));
+	if (buttons.length !== 1) {
+		return [`${file}:1 ${action.action}: expected one button, found ${buttons.length}`];
+	}
+
+	let button = buttons[0]!;
+	let line = source.slice(0, button.index).split("\n").length;
+	let classes = classLists(button[0]);
+	if (classes.length === 0) return [`${file}:${line} ${action.action}: no static class list`];
+
+	let offenders: string[] = [];
+	let tiers: string[] = [];
+	for (let list of classes) {
+		let sizes = list.filter(name => /^(btn-sm|btn-md|btn-icon)$/.test(name));
+		let currentTiers = list.filter(name =>
+			/^(btn-primary|btn-secondary|btn-ghost|btn-destructive)$/.test(name)
+		);
+		let legacy = list.filter(name => /^(bg|px|py)-/.test(name));
+		tiers.push(...currentTiers);
+
+		if (!list.includes("btn") || sizes.length !== 1 || sizes[0] !== action.size) {
+			offenders.push(
+				`${file}:${line} ${action.action}: ${list.join(" ") || "no static class list"}`,
+			);
+		}
+		if (currentTiers.length !== 1 || legacy.length > 0) {
+			offenders.push(
+				`${file}:${line} ${action.action}: ${
+					legacy.length > 0 ? `conflicting rest utilities ${legacy.join(" ")}` : list.join(" ")
+				}`,
+			);
+		}
+	}
+
+	if (tiers.sort().join(" ") !== [...action.tiers].sort().join(" ")) {
+		offenders.push(`${file}:${line} ${action.action}: expected ${action.tiers.join(" or ")}`);
+	}
+	return offenders;
+}
+
 describe("migration", () => {
 	it("leaves no consumer on the replaced vocabulary", () => {
 		let removed =
@@ -291,77 +356,129 @@ describe("migration", () => {
 		expect(offenders).toEqual([]);
 	});
 
+	it("rejects legacy rest utilities alongside a standard button", () => {
+		let classes = "btn btn-sm btn-primary bg-brand px-2 py-1".split(" ");
+		let previousGuardWouldAccept = classes.includes("btn")
+			&& classes.filter(name => /^(btn-sm|btn-md|btn-icon)$/.test(name)).length === 1
+			&& classes.filter(name =>
+					/^(btn-primary|btn-secondary|btn-ghost|btn-destructive)$/.test(name)
+				).length === 1;
+
+		expect(previousGuardWouldAccept).toBe(true);
+		expect(standardButtonOffenders(
+			'<button className="btn btn-sm btn-primary bg-brand px-2 py-1">Fixture</button>',
+			"fixture.tsx",
+			{ action: "fixture", marker: "Fixture", size: "btn-sm", tiers: ["btn-primary"] },
+		)).toEqual(["fixture.tsx:1 fixture: conflicting rest utilities bg-brand px-2 py-1"]);
+	});
+
 	it("puts each standard action on one button size and tier", () => {
 		let actions = [
-			["apps/web/src/app.tsx", "Join", "Join"],
-			["apps/web/src/app.tsx", "aria-controls={paneId(pane)}", "pane toggle"],
-			["apps/web/src/chat/chat.tsx", 'title="Withdraw"', "Withdraw"],
-			["apps/web/src/chat/chat.tsx", "Stop", "Stop"],
-			["apps/web/src/chat/chat.tsx", 'onReveal?.("")', "waiting disclosure"],
-			["apps/web/src/chat/chat.tsx", "setText(current =>", "planner mention"],
+			["apps/web/src/app.tsx", {
+				action: "Join",
+				marker: "Join",
+				size: "btn-md",
+				tiers: ["btn-primary"],
+			}],
 			[
-				"apps/web/src/chat/transcript.tsx",
-				"onClick={() => setOpen(value => !value)}",
-				"tool disclosure",
+				"apps/web/src/app.tsx",
+				{
+					action: "pane toggle",
+					marker: "aria-controls={paneId(pane)}",
+					size: "btn-icon",
+					tiers: ["btn-ghost"],
+				},
 			],
-			["packages/editor/src/comments.tsx", "disabled={!text.trim() || busy}", "comment submit"],
-			["packages/editor/src/comments.tsx", "onClick={onCancel}", "comment cancel"],
-			["packages/editor/src/comments.tsx", "onClick={onRetry}", "Ask again"],
-			["packages/editor/src/decisions.tsx", "aria-expanded={history}", "resolved disclosure"],
-			["packages/question/src/react/question-view.tsx", "Keep it", "Keep it"],
-			["packages/question/src/react/question-view.tsx", "Yes, cancel", "cancel confirmation"],
-			[
-				"packages/question/src/react/question-view.tsx",
-				"onClick={() => setConfirming(true)}",
-				"Cancel",
-			],
-			["packages/question/src/react/question-view.tsx", "Submitting…", "Submit"],
+			["apps/web/src/chat/chat.tsx", {
+				action: "Withdraw",
+				marker: 'title="Withdraw"',
+				size: "btn-icon",
+				tiers: ["btn-ghost"],
+			}],
+			["apps/web/src/chat/chat.tsx", {
+				action: "Stop",
+				marker: 'wire?.send("chat:abort")',
+				size: "btn-sm",
+				tiers: ["btn-secondary"],
+			}],
+			["apps/web/src/chat/chat.tsx", {
+				action: "waiting disclosure",
+				marker: 'onReveal?.("")',
+				size: "btn-sm",
+				tiers: ["btn-ghost"],
+			}],
+			["apps/web/src/chat/chat.tsx", {
+				action: "planner mention",
+				marker: "setText(current =>",
+				size: "btn-sm",
+				tiers: ["btn-ghost"],
+			}],
+			["apps/web/src/chat/transcript.tsx", {
+				action: "tool disclosure",
+				marker: "onClick={() => setOpen(value => !value)}",
+				size: "btn-sm",
+				tiers: ["btn-ghost"],
+			}],
+			["packages/editor/src/comments.tsx", {
+				action: "comment submit",
+				marker: "disabled={!text.trim() || busy}",
+				size: "btn-sm",
+				tiers: ["btn-primary"],
+			}],
+			["packages/editor/src/comments.tsx", {
+				action: "comment cancel",
+				marker: "onClick={onCancel}",
+				size: "btn-sm",
+				tiers: ["btn-secondary"],
+			}],
+			["packages/editor/src/comments.tsx", {
+				action: "Ask again",
+				marker: "onClick={onRetry}",
+				size: "btn-sm",
+				tiers: ["btn-ghost"],
+			}],
+			["packages/editor/src/comments.tsx", {
+				action: "comment confirmation",
+				marker: 'asked ? "Sure?" : label',
+				size: "btn-sm",
+				tiers: ["btn-primary", "btn-ghost"],
+			}],
+			["packages/editor/src/decisions.tsx", {
+				action: "resolved disclosure",
+				marker: "aria-expanded={history}",
+				size: "btn-sm",
+				tiers: ["btn-ghost"],
+			}],
+			["packages/question/src/react/question-view.tsx", {
+				action: "Keep it",
+				marker: "setConfirming(false)",
+				size: "btn-sm",
+				tiers: ["btn-secondary"],
+			}],
+			["packages/question/src/react/question-view.tsx", {
+				action: "cancel confirmation",
+				marker: "onClick={onCancel}",
+				size: "btn-sm",
+				tiers: ["btn-destructive"],
+			}],
+			["packages/question/src/react/question-view.tsx", {
+				action: "Cancel",
+				marker: "setConfirming(true)",
+				size: "btn-sm",
+				tiers: ["btn-secondary"],
+			}],
+			["packages/question/src/react/question-view.tsx", {
+				action: "Submit",
+				marker: "onClick={onSubmit}",
+				size: "btn-sm",
+				tiers: ["btn-primary"],
+			}],
 		] as const;
 		let offenders: string[] = [];
 
-		for (let [file, anchor, action] of actions) {
+		for (let [file, action] of actions) {
 			let source = readFileSync(join(ROOT, file), "utf8");
-			let at = source.indexOf(anchor);
-			if (at === -1) {
-				offenders.push(`${file}:1 ${action}: standard action missing`);
-				continue;
-			}
-			let start = source.lastIndexOf("<button", at);
-			let end = source.indexOf("</button>", start);
-			let button = source.slice(start, end);
-			let classes = /className=(?:"([^"]+)"|\{`([^`]*)`\})/.exec(button)
-				?.slice(1).find(Boolean)?.split(/\s+/) ?? [];
-			let size = classes.filter(name => /^(btn-sm|btn-md|btn-icon)$/.test(name));
-			let tier = classes.filter(name =>
-				/^(btn-primary|btn-secondary|btn-ghost|btn-destructive)$/.test(name)
-			);
-			if (!classes.includes("btn") || size.length !== 1 || tier.length !== 1) {
-				offenders.push(
-					`${file}:${source.slice(0, start).split("\n").length} ${action}: ${
-						classes.join(" ") || "no static class list"
-					}`,
-				);
-			}
-		}
-
-		let comments = readFileSync(join(ROOT, "packages/editor/src/comments.tsx"), "utf8");
-		let confirm = comments.slice(
-			comments.indexOf("function Confirm"),
-			comments.indexOf("export type ThreadCardProps"),
-		);
-		for (
-			let [label, classes] of [
-				["Accept confirmation", "btn btn-sm btn-primary"],
-				["Dismiss confirmation", "btn btn-sm btn-ghost"],
-			] as const
-		) {
-			if (!confirm.includes(`\"${classes}\"`)) {
-				offenders.push(
-					`packages/editor/src/comments.tsx:${
-						comments.slice(0, comments.indexOf("function Confirm")).split("\n").length
-					} ${label}: missing ${classes}`,
-				);
-			}
+			offenders.push(...standardButtonOffenders(source, file, action));
 		}
 
 		expect(offenders).toEqual([]);
