@@ -3,6 +3,21 @@
 Notes for whoever changes this next, human or otherwise. The readme is for
 people running it; this is for people editing it.
 
+## Before pushing
+
+Run the complete repository checks:
+
+```bash
+bun run ci
+bun run types
+bun test
+bun run e2e
+```
+
+A non-zero result is blocking, even when the failing file predates the current
+work. Fix it or ask before pushing. Scoped checks are useful while iterating,
+but never replace these full commands.
+
 ## Commands
 
 ```bash
