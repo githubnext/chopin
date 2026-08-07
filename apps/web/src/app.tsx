@@ -11,10 +11,11 @@ import {
 import { Chat } from "./chat/chat";
 import * as Identity from "./identity";
 import { Wire } from "./wire";
-import { Workspace } from "./workspace";
+import { paneId, usePaneOpen, Workspace } from "./workspace";
 
 import type { Session } from "@chopin/protocol";
 import type { Status } from "./wire";
+import type { Pane } from "./workspace";
 
 /**
  * Claim a handle.
@@ -69,10 +70,47 @@ const TONE: Record<Status, string> = {
 	closed: "text-text-tertiary",
 };
 
+function PaneToggle(
+	{ onToggle, open, pane }: { onToggle: () => void; open: boolean; pane: Pane },
+) {
+	let label = pane === "chat" ? "conversation" : "decisions";
+	let divider = pane === "chat" ? "M8 3.5v13" : "M12 3.5v13";
+
+	return (
+		<button
+			aria-controls={paneId(pane)}
+			aria-expanded={open}
+			aria-label={`${open ? "Hide" : "Show"} ${label} pane`}
+			className="inline-flex size-7 shrink-0 items-center justify-center rounded-sm text-text-tertiary hover:bg-hover hover:text-text-primary"
+			onClick={onToggle}
+			type="button"
+		>
+			<svg aria-hidden="true" fill="none" height="18" viewBox="0 0 20 20" width="18">
+				<rect height="13" rx="2" stroke="currentColor" width="15" x="2.5" y="3.5" />
+				<path d={divider} stroke="currentColor" />
+			</svg>
+		</button>
+	);
+}
+
 function Header(
-	{ handle, members, reason, room, status }: {
+	{
+		chatOpen,
+		decisionsOpen,
+		handle,
+		members,
+		onToggleChat,
+		onToggleDecisions,
+		reason,
+		room,
+		status,
+	}: {
+		chatOpen: boolean;
+		decisionsOpen: boolean;
 		handle: string;
 		members: Session.Member[];
+		onToggleChat: () => void;
+		onToggleDecisions: () => void;
 		reason?: string;
 		room: string;
 		status: Status;
@@ -84,6 +122,7 @@ function Header(
 
 	return (
 		<header className="hairline-b flex h-12 shrink-0 items-center gap-3 px-4">
+			<PaneToggle onToggle={onToggleChat} open={chatOpen} pane="chat" />
 			<span className="text-sm font-semibold">chopin</span>
 			<span className="text-sm text-text-tertiary">/r/{room}</span>
 			<span className={`text-sm ${TONE[status]}`}>
@@ -93,6 +132,7 @@ function Header(
 				@{handle}
 				{others.length > 0 && ` · with ${others.map(member => `@${member.handle}`).join(", ")}`}
 			</span>
+			<PaneToggle onToggle={onToggleDecisions} open={decisionsOpen} pane="decisions" />
 		</header>
 	);
 }
@@ -104,6 +144,8 @@ function Room({ handle }: { handle: string }) {
 	let [members, setMembers] = useState<Session.Member[]>([]);
 	let room = Identity.room();
 	let user = useMemo(() => cursor(handle), [handle]);
+	let [chatOpen, setChatOpen] = usePaneOpen("chat");
+	let [decisionsOpen, setDecisionsOpen] = usePaneOpen("decisions");
 	// Written from inside the editor, read by the decisions pane beside it.
 	let [questions] = useState(() => new QuestionnaireStore());
 	let [threads] = useState(() => new ThreadStore());
@@ -149,15 +191,21 @@ function Room({ handle }: { handle: string }) {
 					wire={wire}
 				/>
 			}
+			chatOpen={chatOpen}
 			header={
 				<Header
+					chatOpen={chatOpen}
+					decisionsOpen={decisionsOpen}
 					handle={handle}
 					members={members}
+					onToggleChat={() => setChatOpen(value => !value)}
+					onToggleDecisions={() => setDecisionsOpen(value => !value)}
 					reason={reason}
 					room={room}
 					status={status}
 				/>
 			}
+			decisionsOpen={decisionsOpen}
 			decisions={
 				<Decisions
 					connected={status === "connected"}
