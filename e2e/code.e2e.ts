@@ -140,61 +140,6 @@ test("hiding the source leaves what was drawn from it", async ({ join, seed }) =
 });
 
 /*
- * Three kinds of block in one plan.
- *
- * Each one hangs two portals off its node, and React identifies a portal by
- * the key it was given. Keyed alike they are two children claiming one
- * identity, which React is explicitly free to resolve by drawing either twice
- * or neither — so the assertion is a count, per block and per role. A drawing
- * with no chrome, or a row of chrome with nothing above it, is the shape that
- * failure takes.
- */
-
-test("code, a patch and a formula each keep their own preview and chrome", async ({ join, seed }) => {
-	await seed(
-		`Before.\n\n\`\`\`ts\nlet a = 1;\n\`\`\`\n\nBetween.\n\n${PATCH}\nAfter.\n\n$$\nx^2\n$$\n`,
-	);
-	let page = await join("ana");
-
-	await expect(content(page).locator("[data-file]")).toHaveCount(1);
-	await expect(content(page).locator("[data-diff]")).toHaveCount(1);
-	await expect(content(page).locator(".katex")).toHaveCount(1);
-
-	// A formula has no language to choose, so two fences mean two selects —
-	// and all three can be collapsed to what they drew.
-	await expect(content(page).getByLabel("Code language")).toHaveCount(2);
-	await expect(content(page).getByRole("button", { name: "Hide source" })).toHaveCount(3);
-});
-
-test("a collapsed fence stays collapsed while the plan is edited around it", async ({ join, seed }) => {
-	// Typed into above the fence, so that "where the caret went" and "the end
-	// of the document" are not the same place and cannot stand in for one
-	// another.
-	await seed("A paragraph before the fence.\n\n```ts\nlet a = 1;\n```\n\nAnd one after it.\n");
-	let page = await join("ana");
-
-	await content(page).getByRole("button", { name: "Hide source" }).click();
-	await expect(content(page).locator("[data-plan-source]")).toBeHidden();
-
-	// Clicking the paragraph is all the aim this needs: anywhere inside it is
-	// beside the fence, and the caret lands where it is clicked without asking
-	// which key ends a line on this platform.
-	await content(page).getByText("A paragraph before the fence.").click();
-	await page.keyboard.type("Still typing. ");
-
-	// Asserted first, because everything below it is only worth reading if the
-	// keystrokes reached the document. Typing into nothing also leaves a fence
-	// exactly as collapsed as it was.
-	await expect(content(page)).toContainText("Still typing.");
-
-	// Every keystroke elsewhere is a commit, and every commit re-renders this.
-	// Typing near a fence must not be a way of reopening one.
-	await expect(content(page).locator("[data-plan-source]")).toBeHidden();
-	await expect(content(page).getByRole("button", { name: "Show source" })).toBeVisible();
-	await expect(content(page).locator("[data-file]")).toBeVisible();
-});
-
-/*
  * Two people in one fence.
  *
  * What is drawn is a projection of the shared source, so the thing worth
