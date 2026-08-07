@@ -7,14 +7,14 @@
  */
 
 const PALETTE = [
-	"#e06c75", // red
-	"#c678dd", // purple
-	"#56b6c2", // teal
-	"#d19a66", // orange
-	"#7c3aed", // violet
-	"#98c379", // green
-	"#e5c07b", // yellow
-	"#f472b6", // pink
+	"#BF5257", // coral
+	"#B25D25", // amber
+	"#977103", // gold
+	"#54803A", // fern
+	"#358264", // jade
+	"#4375C9", // cobalt
+	"#7E65BB", // violet
+	"#A45B9F", // fuchsia
 ] as const;
 
 /** FNV-1a: small, stable, and good enough to spread logins across a palette. */
