@@ -1,10 +1,10 @@
 ---
 id: "008"
-title: Rebuild the slash menu and selection bubble
-status: pr-opened
+title: Share one surface style between the slash menu and selection toolbar
+status: done
 branch: tq/008-rebuild-menu-and-bubble
 pr: "https://github.com/githubnext/chopin/pull/26"
-stacked_on: "006"
+stacked_on:
 blocked_reason:
 ---
 
@@ -55,16 +55,16 @@ Depends on 003 and 007.
 
 ## Acceptance
 
-- [ ] The slash menu and the selection bubble render the same shell: white,
+- [x] The slash menu and the selection bubble render the same shell: white,
       the 7% hairline, the raised shadow, an 8px radius and 4px of padding
-- [ ] Neither surface uses the overlay shadow
-- [ ] The slash menu contains no group heading text, and its two groups are
+- [x] Neither surface uses the overlay shadow
+- [x] The slash menu contains no group heading text, and its two groups are
       separated by a 7% hairline
-- [ ] A menu row is 32px tall on a 4px radius
-- [ ] The highlighted row is gray-200, and arrowing to a row looks identical
+- [x] A menu row is 32px tall on a 4px radius
+- [x] The highlighted row is gray-200, and arrowing to a row looks identical
       to hovering it
-- [ ] Every button in the selection bubble is a 28px square
-- [ ] Screenshots of the slash menu open over a plan and the bubble over a
+- [x] Every button in the selection bubble is a 28px square
+- [x] Screenshots of the slash menu open over a plan and the bubble over a
       selected sentence attached to the PR
 
 ## Evidence
@@ -72,3 +72,10 @@ Depends on 003 and 007.
 ![the slash menu over a plan: an 8px shell on the raised shadow, 32px rows, and a hairline where the headings were](images/008-menu.png)
 
 ![the bubble over a selected sentence: the same shell laid horizontally, holding 28px squares](images/008-bubble.png)
+
+## Outcome
+
+Merged in [PR #26](https://github.com/githubnext/chopin/pull/26). The slash menu
+and selection toolbar now share one surface definition, while keeping their own
+layout and roles. Filtering also resets the active menu option so Enter cannot
+select an item that is no longer visible.

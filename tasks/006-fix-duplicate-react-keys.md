@@ -1,7 +1,7 @@
 ---
 id: "006"
-title: Fix duplicate React keys on block preview portals
-status: pr-opened
+title: Give block preview portals distinct React keys
+status: done
 branch: tq/006-fix-duplicate-react-keys
 pr: "https://github.com/githubnext/chopin/pull/24"
 stacked_on:
@@ -46,12 +46,18 @@ that the behaviour may change between versions.
 
 ## Acceptance
 
-- [ ] Opening a plan containing a code block produces no "same key" warning in
+- [x] Opening a plan containing a code block produces no "same key" warning in
       the console
-- [ ] Typing inside a paragraph next to a code block produces no such warning
-- [ ] A plan containing a code block, a diff block and a formula renders all
+- [x] Typing inside a paragraph next to a code block produces no such warning
+- [x] A plan containing a code block, a diff block and a formula renders all
       three previews, with the language select and collapse toggle on each
-- [ ] Collapsing a code block, editing elsewhere, and returning leaves it
+- [x] Collapsing a code block, editing elsewhere, and returning leaves it
       collapsed
-- [ ] A console screenshot showing zero warnings while editing a plan with a
-      code block, attached to the PR
+
+## Outcome
+
+Merged in [PR #24](https://github.com/githubnext/chopin/pull/24). Preview and
+chrome portals now have stable, role-specific keys, removing the sibling-key
+collision without remounting either portal. The temporary screenshot and test
+harness were not retained because they restated this implementation rather
+than guarding a durable behavior boundary.
