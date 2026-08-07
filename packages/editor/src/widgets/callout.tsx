@@ -90,7 +90,7 @@ function Heading(
 				maxLength={100}
 				disabled={disabled}
 				onChange={event => setTitle(event.currentTarget.value)}
-				className="min-w-0 flex-1 rounded-sm control-edge bg-page px-1 text-sm font-medium text-text-primary placeholder:text-text-quaternary/60 focus-visible:border-brand"
+				className="min-w-0 flex-1 rounded-sm control-edge bg-page px-1 text-sm font-medium text-text-primary placeholder:text-text-tertiary focus-visible:border-brand"
 			/>
 		</div>
 	);

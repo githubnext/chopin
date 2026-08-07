@@ -411,7 +411,7 @@ export function SlashMenu({ disabled }: SlashMenuProps) {
 								className={`flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm transition ${
 									position === index
 										? "bg-selected text-text-primary"
-										: "text-text-quaternary hover:bg-hover"
+										: "text-text-tertiary hover:bg-hover"
 								}`}
 							>
 								<span>{command.label}</span>

@@ -50,7 +50,7 @@ function Queued(
 					<span className="min-w-0 flex-1 truncate">{item.text}</span>
 					{item.handle === handle && (
 						<button
-							className="shrink-0 text-text-quaternary hover:text-destructive-ink"
+							className="shrink-0 text-text-tertiary hover:text-destructive-ink"
 							onClick={() => onWithdraw(item.id)}
 							title="Withdraw"
 							type="button"

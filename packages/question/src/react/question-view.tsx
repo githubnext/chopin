@@ -165,7 +165,7 @@ function Custom(
 				placeholder="Type another answer"
 				onFocus={() => onChange?.({ mode: "custom" })}
 				onChange={event => onChange?.({ mode: "custom", custom: event.currentTarget.value })}
-				className="mt-1.5 min-h-16 w-full resize-y rounded-md control-edge bg-inset px-2.5 py-2 text-sm text-text-primary transition placeholder:text-text-quaternary/60 focus-visible:border-brand disabled:cursor-not-allowed disabled:opacity-60"
+				className="mt-1.5 min-h-16 w-full resize-y rounded-md control-edge bg-inset px-2.5 py-2 text-sm text-text-primary transition placeholder:text-text-tertiary focus-visible:border-brand disabled:cursor-not-allowed disabled:opacity-60"
 			/>
 		</div>
 	);
@@ -223,7 +223,7 @@ function Related(
 		>
 			<span className="min-w-0 flex-1">{children}</span>
 			{count > 1 && (
-				<span aria-hidden="true" className="shrink-0 text-sm text-text-quaternary tabular-nums">
+				<span aria-hidden="true" className="shrink-0 text-sm text-text-tertiary tabular-nums">
 					{count}
 				</span>
 			)}
@@ -424,7 +424,7 @@ export function QuestionView(props: QuestionViewProps) {
 								className={`shrink-0 rounded-t-md px-2.5 py-1 text-sm font-medium transition ${
 									question.id === active
 										? "bg-selected text-text-primary"
-										: "text-text-quaternary hover:text-text-primary"
+										: "text-text-tertiary hover:text-text-primary"
 								}`}
 							>
 								<span aria-hidden="true">{done ? "✓" : index + 1}</span> {question.header}
@@ -508,7 +508,7 @@ export function QuestionView(props: QuestionViewProps) {
 								type="button"
 								onClick={() => setConfirming(false)}
 								disabled={submitting}
-								className="rounded-md px-2.5 py-1 text-sm text-text-quaternary transition hover:text-text-primary disabled:opacity-50"
+								className="rounded-md px-2.5 py-1 text-sm text-text-tertiary transition hover:text-text-primary disabled:opacity-50"
 							>
 								Keep it
 							</button>
@@ -527,7 +527,7 @@ export function QuestionView(props: QuestionViewProps) {
 							type="button"
 							onClick={() => setConfirming(true)}
 							disabled={disabled || submitting}
-							className="rounded-md px-2.5 py-1 text-sm text-text-quaternary transition hover:text-text-primary disabled:opacity-50"
+							className="rounded-md px-2.5 py-1 text-sm text-text-tertiary transition hover:text-text-primary disabled:opacity-50"
 						>
 							Cancel
 						</button>

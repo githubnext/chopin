@@ -178,7 +178,7 @@ function Toggle({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => v
 			// change arrives asynchronously, after the collapse, and reads
 			// as the reader arrowing in — reopening what they just closed.
 			onMouseDown={event => event.preventDefault()}
-			className="cursor-pointer rounded-sm px-1.5 py-0.5 text-sm text-text-quaternary transition hover:bg-hover hover:text-text-primary"
+			className="cursor-pointer rounded-sm px-1.5 py-0.5 text-sm text-text-tertiary transition hover:bg-hover hover:text-text-primary"
 		>
 			{collapsed ? "Show source" : "Hide source"}
 		</button>

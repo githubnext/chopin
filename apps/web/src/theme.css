@@ -66,6 +66,7 @@
 	/* Passive structure and controls are the only two edge weights. */
 	--color-edge: rgb(0 0 0 / 7%);
 	--color-control-edge: rgb(0 0 0 / 20%);
+	--color-control-boundary: var(--color-gray-500);
 	--edge-width: 1px;
 
 	/*
@@ -142,9 +143,12 @@
 
 @utility control-edge {
 	border: var(--edge-width) solid var(--color-control-edge);
+	outline: var(--edge-width) solid var(--color-control-boundary);
+	outline-offset: calc(-1 * var(--edge-width));
 
 	&:disabled {
 		border-color: var(--color-edge);
+		outline-color: var(--color-edge);
 	}
 }
 
@@ -152,6 +156,8 @@
 	appearance: none;
 	border: var(--edge-width) solid var(--color-control-edge);
 	background-color: var(--color-page);
+	outline: var(--edge-width) solid var(--color-control-boundary);
+	outline-offset: calc(-1 * var(--edge-width));
 
 	&[type="radio"] {
 		border-radius: 9999px;
@@ -164,6 +170,7 @@
 	&:checked {
 		border-color: var(--color-brand);
 		background-color: var(--color-brand);
+		outline-color: var(--color-brand);
 	}
 
 	&[type="radio"]:checked {
@@ -176,6 +183,20 @@
 
 	&:disabled {
 		border-color: var(--color-edge);
+		background-color: var(--color-gray-100);
+		outline-color: var(--color-edge);
+	}
+
+	&:disabled:checked {
+		background-color: var(--color-gray-300);
+	}
+
+	&[type="radio"]:disabled:checked {
+		box-shadow: inset 0 0 0 3px var(--color-gray-100);
+	}
+
+	&[type="checkbox"]:disabled:checked {
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath fill='none' stroke='%23605e56' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m3 7 2.5 2.5L11 4'/%3E%3C/svg%3E");
 	}
 }
 

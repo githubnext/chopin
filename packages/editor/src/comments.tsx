@@ -181,7 +181,7 @@ function Composer({
 				</button>
 				{onCancel && (
 					<button
-						className="rounded-md px-2 py-1 text-sm text-text-quaternary hover:text-text-primary"
+						className="rounded-md px-2 py-1 text-sm text-text-tertiary hover:text-text-primary"
 						onClick={onCancel}
 						type="button"
 					>
@@ -215,7 +215,7 @@ function Confirm({
 
 	let style = tone === "primary"
 		? "bg-brand text-white hover:bg-brand-hover"
-		: "text-text-quaternary hover:text-text-primary";
+		: "text-text-tertiary hover:text-text-primary";
 
 	return (
 		<button
@@ -282,7 +282,7 @@ export function ThreadCard({
 						<>
 							<span className="ml-auto text-sm text-warning-ink">Not yet applied</span>
 							<button
-								className="rounded-md px-2 py-1 text-sm text-text-quaternary hover:text-text-primary"
+								className="rounded-md px-2 py-1 text-sm text-text-tertiary hover:text-text-primary"
 								disabled={busy}
 								onClick={onRetry}
 								type="button"

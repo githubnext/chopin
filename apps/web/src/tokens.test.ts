@@ -107,6 +107,13 @@ describe("palette", () => {
 		}
 	});
 
+	it("keeps text used on tinted surfaces at AA contrast", () => {
+		for (let surface of ["ground", "hover", "selected", "control"]) {
+			let ratio = contrast("--color-text-tertiary", `--color-${surface}`);
+			expect({ surface, passes: ratio >= 4.5 }).toEqual({ surface, passes: true });
+		}
+	});
+
 	it("keeps petrol as the only blue family", () => {
 		let blue = [...THEME.matchAll(/\n\s*(--color-[\w-]+):\s*oklch\([\d.]+\s+[\d.]+\s+([\d.]+)/g)]
 			.filter(match => Number(match[2]) >= 180 && Number(match[2]) <= 270)
@@ -147,6 +154,23 @@ describe("edges and depth", () => {
 		expect(declared("--color-control-edge")).toBe("rgb(0 0 0 / 20%)");
 	});
 
+	it("gives empty controls a visible boundary on every surface", () => {
+		for (let surface of ["page", "ground", "hover", "selected", "control"]) {
+			let ratio = contrast("--color-control-boundary", `--color-${surface}`);
+			expect({ surface, passes: ratio >= 3 }).toEqual({ surface, passes: true });
+		}
+		expect(THEME).toMatch(
+			/@utility control-edge[\s\S]+outline:\s*var\(--edge-width\) solid var\(--color-control-boundary\)/,
+		);
+	});
+
+	it("recedes checked choices when they are disabled", () => {
+		expect(THEME).toMatch(
+			/&:disabled:checked\s*{[\s\S]*?background-color:\s*var\(--color-gray-300\)/,
+		);
+		expect(THEME).toMatch(/\[type="checkbox"\]:disabled:checked\s*{[\s\S]*?stroke='%23605e56'/);
+	});
+
 	it("halves the hairline on retina displays", () => {
 		expect(declared("--edge-width")).toBe("1px");
 		expect(THEME).toMatch(/@media \(min-resolution: 2dppx\)[\s\S]+--edge-width:\s*0\.5px/);
@@ -165,6 +189,24 @@ describe("consumer roles", () => {
 			expect(withoutComments(readFileSync(file, "utf8"))).not.toMatch(
 				/(?:color:\s*var\(--color-gray-400\)|text-gray-400)/,
 			);
+		}
+	});
+
+	it("keeps focused sidecar cards on text that clears their selected surface", () => {
+		for (
+			let file of [
+				join(ROOT, "packages/editor/src/comments.tsx"),
+				join(ROOT, "packages/question/src/react/question-view.tsx"),
+			]
+		) {
+			expect(readFileSync(file, "utf8")).not.toContain("text-text-quaternary");
+		}
+	});
+
+	it("keeps placeholders on an opaque AA text role", () => {
+		for (let file of [...sources(join(ROOT, "apps")), ...sources(join(ROOT, "packages"))]) {
+			let content = withoutComments(readFileSync(file, "utf8"));
+			expect(content).not.toMatch(/placeholder:text-text-quaternary(?:\/\d+)?/);
 		}
 	});
 });
