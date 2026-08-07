@@ -172,7 +172,7 @@ function Composer({
 		<div className="flex flex-col gap-1.5">
 			<textarea
 				ref={ref}
-				className="min-h-16 w-full resize-y rounded-md control-edge bg-page px-2 py-1.5 text-sm focus-visible:border-brand"
+				className="field min-h-16 w-full resize-y px-2 py-1.5 text-sm"
 				disabled={busy}
 				maxLength={limits.MAX_NOTE}
 				onChange={event => {

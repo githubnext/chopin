@@ -196,7 +196,7 @@ export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) 
 
 			<div className="flex shrink-0 flex-col gap-1 p-2 hairline-t">
 				<textarea
-					className="w-full resize-none rounded-md control-edge bg-page px-2 py-1.5 text-sm focus-visible:border-brand disabled:opacity-50"
+					className="field w-full resize-none px-2 py-1.5 text-sm"
 					disabled={!connected}
 					onChange={event => setText(event.target.value)}
 					onKeyDown={event => {

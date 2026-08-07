@@ -342,7 +342,131 @@ function standardButtonOffenders(source: string, file: string, action: StandardA
 	return offenders;
 }
 
+type StandardControl = {
+	file: string;
+	marker: string;
+	name: string;
+	tag: "input" | "select" | "textarea";
+	utility: "choice-control" | "field" | "field-ghost";
+};
+
+function controlBlock(source: string, control: StandardControl): string {
+	let first = source.indexOf(control.marker);
+	let second = source.indexOf(control.marker, first + control.marker.length);
+	if (first === -1 || second !== -1) {
+		throw new Error(`${control.name}: expected one marker, found ${first === -1 ? 0 : 2}`);
+	}
+
+	let start = source.lastIndexOf(`<${control.tag}`, first);
+	let closing = control.tag === "select" ? "</select>" : "/>";
+	let end = source.indexOf(closing, first);
+	if (start === -1 || end === -1) {
+		throw new Error(`${control.name}: expected a complete ${control.tag}`);
+	}
+	return source.slice(start, end + closing.length);
+}
+
+function controlOffenders(source: string, control: StandardControl): string[] {
+	let block = controlBlock(source, control);
+	let classes = /className\s*=\s*"([^"]*)"/.exec(block)?.[1]?.split(/\s+/) ?? [];
+	return classes.includes(control.utility)
+		? []
+		: [`${control.name}: missing ${control.utility} in ${block}`];
+}
+
 describe("migration", () => {
+	it("puts each listed standard control on its shared utility", () => {
+		let controls: StandardControl[] = [
+			{
+				file: "apps/web/src/app.tsx",
+				marker: 'id="handle"',
+				name: "sign-in handle",
+				tag: "input",
+				utility: "field",
+			},
+			{
+				file: "apps/web/src/chat/chat.tsx",
+				marker: "Talk to the room, or mention",
+				name: "chat composer",
+				tag: "textarea",
+				utility: "field",
+			},
+			{
+				file: "packages/editor/src/comments.tsx",
+				marker: "maxLength={limits.MAX_NOTE}",
+				name: "comment composer",
+				tag: "textarea",
+				utility: "field",
+			},
+			{
+				file: "packages/editor/src/widgets/callout.tsx",
+				marker: 'aria-label="Callout title"',
+				name: "callout title",
+				tag: "input",
+				utility: "field",
+			},
+			{
+				file: "packages/question/src/react/question-view.tsx",
+				marker: "Type another answer",
+				name: "custom questionnaire answer",
+				tag: "textarea",
+				utility: "field",
+			},
+			{
+				file: "packages/question/src/react/question-view.tsx",
+				marker: "checked={!custom && selected}",
+				name: "questionnaire option choice",
+				tag: "input",
+				utility: "choice-control",
+			},
+			{
+				file: "packages/question/src/react/question-view.tsx",
+				marker: "checked={active}",
+				name: "custom questionnaire choice",
+				tag: "input",
+				utility: "choice-control",
+			},
+			{
+				file: "packages/editor/src/widgets/callout.tsx",
+				marker: 'aria-label="Callout type"',
+				name: "callout kind",
+				tag: "select",
+				utility: "field-ghost",
+			},
+			{
+				file: "packages/editor/src/widgets/render-blocks.tsx",
+				marker: 'aria-label="Code language"',
+				name: "code language",
+				tag: "select",
+				utility: "field-ghost",
+			},
+		];
+		let offenders = controls.flatMap(control =>
+			controlOffenders(
+				readFileSync(join(ROOT, control.file), "utf8"),
+				control,
+			)
+		);
+		expect(offenders).toEqual([]);
+	});
+
+	it("leaves no disabled opacity utility in migrated control files", () => {
+		let files = [
+			"apps/web/src/app.tsx",
+			"apps/web/src/chat/chat.tsx",
+			"packages/editor/src/comments.tsx",
+			"packages/editor/src/widgets/callout.tsx",
+			"packages/editor/src/widgets/render-blocks.tsx",
+			"packages/question/src/react/question-view.tsx",
+		];
+		let offenders = files.filter(file =>
+			/disabled:opacity-\d+/.test(
+				withoutComments(readFileSync(join(ROOT, file), "utf8")),
+			)
+		);
+		expect(offenders).toEqual([]);
+	});
+
 	it("leaves no consumer on the replaced vocabulary", () => {
 		let removed =
 			/(?<![\w-])(?:text-(?:2xs|xs)|shadow-(?:xs|sm|md|lg)|(?:bg|text|border|ring)-(?:background|foreground|surface|muted(?:-foreground)?|card|popover|primary(?:-foreground|-hover)?|secondary(?:-foreground)?|accent(?:-foreground)?|border|input|ring|code))(?![\w-])|var\(--color-(?:background|foreground|surface|muted(?:-foreground)?|card(?:-foreground)?|popover(?:-foreground)?|primary(?:-foreground|-hover)?|secondary(?:-foreground)?|accent(?:-foreground)?|border|input|ring|code)\)/g;
