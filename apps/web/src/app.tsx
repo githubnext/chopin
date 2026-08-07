@@ -52,7 +52,7 @@ function SignIn({ onDone }: { onDone: (handle: string) => void }) {
 					Unverified. Used for your cursor, your face, and your name against decisions.
 				</p>
 				<button
-					className="rounded-md bg-brand px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
+					className="btn btn-md btn-primary"
 					disabled={!valid}
 					type="submit"
 				>
@@ -82,7 +82,7 @@ function PaneToggle(
 			aria-controls={paneId(pane)}
 			aria-expanded={open}
 			aria-label={`${open ? "Hide" : "Show"} ${label} pane`}
-			className="inline-flex size-7 shrink-0 items-center justify-center rounded-sm text-text-tertiary hover:bg-hover hover:text-text-primary"
+			className="btn btn-icon btn-ghost shrink-0"
 			onClick={onToggle}
 			type="button"
 		>

@@ -32,7 +32,7 @@ function Activity({ activity }: { activity: Chat.Activity }) {
 	return (
 		<div className="rounded-sm bg-inset ring-hairline shadow-resting">
 			<button
-				className={`flex w-full items-center gap-2 px-2 py-1 text-left text-sm ${
+				className={`btn btn-sm btn-ghost flex w-full justify-start gap-2 text-left ${
 					TOOL_TONE[activity.status]
 				}`}
 				data-press="wide"
