@@ -45,7 +45,7 @@ function Queued(
 				Queued
 			</span>
 			{waiting.map(item => (
-				<div className="flex items-baseline gap-2 text-sm" key={item.id}>
+				<div className="animate-enter flex items-baseline gap-2 text-sm" key={item.id}>
 					<span className="text-text-tertiary">@{item.handle}</span>
 					<span className="min-w-0 flex-1 truncate">{item.text}</span>
 					{item.handle === handle && (
@@ -66,6 +66,7 @@ function Queued(
 
 export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) {
 	let [entries, setEntries] = useState<Wire.Entry[]>([]);
+	let [arrived, setArrived] = useState<ReadonlySet<string>>(new Set());
 	let [queue, setQueue] = useState<Wire.Waiting[]>([]);
 	let [busy, setBusy] = useState(false);
 	let [turn, setTurn] = useState<string>();
@@ -74,16 +75,26 @@ export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) 
 
 	useEffect(() => {
 		if (!wire) return;
+		// History seeds `seen`; only later message frames are arrivals.
+		let loaded = false;
+		let seen = new Set<string>();
 
 		// Streaming arrives as deltas against an entry already in the list, so
 		// the reducer here has to be additive rather than replacing.
 		let off = [
 			wire.on<Wire.History>("chat:history", frame => {
+				loaded = true;
+				seen = new Set(frame.entries.map(entry => entry.id));
 				setEntries(frame.entries);
+				setArrived(new Set());
 				setQueue(frame.queued);
 				setBusy(frame.busy);
 			}),
 			wire.on<Wire.Message>("chat:message", frame => {
+				if (loaded && !seen.has(frame.entry.id)) {
+					setArrived(current => new Set(current).add(frame.entry.id));
+				}
+				seen.add(frame.entry.id);
 				setEntries(current => {
 					let index = current.findIndex(entry => entry.id === frame.entry.id);
 					if (index < 0) return [...current, frame.entry];
@@ -162,7 +173,7 @@ export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) 
 
 			{!!waiting && waiting > 0 && (
 				<button
-					className="flex shrink-0 items-center gap-2 bg-warning-wash px-3 py-2 text-left text-sm hover:bg-selected hairline-b"
+					className="animate-enter flex shrink-0 items-center gap-2 bg-warning-wash px-3 py-2 text-left text-sm hover:bg-selected hairline-b"
 					data-press="wide"
 					onClick={() => onReveal?.("")}
 					type="button"
@@ -175,7 +186,7 @@ export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) 
 				</button>
 			)}
 
-			<Transcript entries={entries} />
+			<Transcript arrived={arrived} entries={entries} />
 
 			<Queued
 				handle={handle}

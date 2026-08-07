@@ -71,9 +71,15 @@ function Activity({ activity }: { activity: Chat.Activity }) {
 	);
 }
 
-function Entry({ entry }: { entry: Chat.Entry }) {
+function Entry({ arrived, entry }: { arrived: boolean; entry: Chat.Entry }) {
 	if (entry.author.kind === "system") {
-		return <p className="m-0 px-1 text-sm text-text-secondary italic">{entry.text}</p>;
+		return (
+			<p
+				className={`m-0 px-1 text-sm text-text-secondary italic ${arrived ? "animate-enter" : ""}`}
+			>
+				{entry.text}
+			</p>
+		);
 	}
 
 	// Narrowed once, so the union does not have to be re-tested at each use.
@@ -81,7 +87,7 @@ function Entry({ entry }: { entry: Chat.Entry }) {
 	let agent = author.kind === "agent";
 
 	return (
-		<div className="flex gap-2">
+		<div className={`flex gap-2 ${arrived ? "animate-enter" : ""}`}>
 			<div className="mt-0.5 shrink-0">
 				{agent
 					? (
@@ -117,7 +123,9 @@ function Entry({ entry }: { entry: Chat.Entry }) {
 	);
 }
 
-export function Transcript({ entries }: { entries: Chat.Entry[] }) {
+export function Transcript(
+	{ arrived, entries }: { arrived: ReadonlySet<string>; entries: Chat.Entry[] },
+) {
 	let bottom = useRef<HTMLDivElement>(null);
 	let scroller = useRef<HTMLDivElement>(null);
 	let pinned = useRef(true);
@@ -143,7 +151,7 @@ export function Transcript({ entries }: { entries: Chat.Entry[] }) {
 					Ask the planner to draft something, or to read the repository first.
 				</p>
 			)}
-			{entries.map(entry => <Entry entry={entry} key={entry.id} />)}
+			{entries.map(entry => <Entry arrived={arrived.has(entry.id)} entry={entry} key={entry.id} />)}
 			<div ref={bottom} />
 		</div>
 	);

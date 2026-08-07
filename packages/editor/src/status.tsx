@@ -127,7 +127,7 @@ export function PlanStatus(props: PlanStatusProps) {
 
 	return (
 		<div
-			className="plan-status"
+			className={`plan-status ${level === "notice" ? "animate-enter" : ""}`}
 			data-level={level}
 			// Durability changes are informational; announcing them politely
 			// keeps them out of the way of what the user is typing. The text is

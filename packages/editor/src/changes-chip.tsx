@@ -53,7 +53,7 @@ function List({ entries }: { entries: Entry[] }) {
 	}
 
 	return (
-		<ul className="plan-changes-list">
+		<ul className="plan-changes-list animate-enter">
 			{entries.map(entry => (
 				<li
 					key={entry.id}
@@ -102,7 +102,7 @@ function Chip(
 	return (
 		<div ref={box} className="plan-changes" data-side={side}>
 			{open && <List entries={entries} />}
-			<div className="plan-changes-bar">
+			<div className="plan-changes-bar animate-enter">
 				<button
 					type="button"
 					className="plan-changes-go"
