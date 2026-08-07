@@ -165,7 +165,7 @@ function Custom(
 				placeholder="Type another answer"
 				onFocus={() => onChange?.({ mode: "custom" })}
 				onChange={event => onChange?.({ mode: "custom", custom: event.currentTarget.value })}
-				className="mt-1.5 min-h-16 w-full resize-y rounded-md control-edge bg-inset px-2.5 py-2 text-sm text-text-primary transition placeholder:text-text-tertiary focus-visible:border-brand disabled:cursor-not-allowed disabled:opacity-60"
+				className="field mt-1.5 min-h-16 w-full resize-y px-2.5 py-2 text-sm transition placeholder:text-text-tertiary disabled:cursor-not-allowed"
 			/>
 		</div>
 	);

@@ -157,7 +157,7 @@ function Language(
 			value={block.language}
 			disabled={disabled}
 			onChange={event => set(event.currentTarget.value)}
-			className="cursor-pointer rounded-sm control-edge bg-page px-1 text-sm text-text-quaternary focus-visible:border-brand"
+			className="field-ghost cursor-pointer px-1 text-sm text-text-quaternary"
 		>
 			<option value="">Plain text</option>
 			{!listed && block.language && <option value={block.language}>{block.language}</option>}
