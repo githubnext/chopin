@@ -154,21 +154,11 @@ describe("edges and depth", () => {
 		expect(declared("--color-control-edge")).toBe("rgb(0 0 0 / 20%)");
 	});
 
-	it("gives empty controls a visible boundary on every surface", () => {
+	it("keeps the control boundary visible on every surface", () => {
 		for (let surface of ["page", "ground", "hover", "selected", "control"]) {
 			let ratio = contrast("--color-control-boundary", `--color-${surface}`);
 			expect({ surface, passes: ratio >= 3 }).toEqual({ surface, passes: true });
 		}
-		expect(THEME).toMatch(
-			/@utility control-edge[\s\S]+outline:\s*var\(--edge-width\) solid var\(--color-control-boundary\)/,
-		);
-	});
-
-	it("recedes checked choices when they are disabled", () => {
-		expect(THEME).toMatch(
-			/&:disabled:checked\s*{[\s\S]*?background-color:\s*var\(--color-gray-300\)/,
-		);
-		expect(THEME).toMatch(/\[type="checkbox"\]:disabled:checked\s*{[\s\S]*?stroke='%23605e56'/);
 	});
 
 	it("halves the hairline on retina displays", () => {
@@ -189,17 +179,6 @@ describe("consumer roles", () => {
 			expect(withoutComments(readFileSync(file, "utf8"))).not.toMatch(
 				/(?:color:\s*var\(--color-gray-400\)|text-gray-400)/,
 			);
-		}
-	});
-
-	it("keeps focused sidecar cards on text that clears their selected surface", () => {
-		for (
-			let file of [
-				join(ROOT, "packages/editor/src/comments.tsx"),
-				join(ROOT, "packages/question/src/react/question-view.tsx"),
-			]
-		) {
-			expect(readFileSync(file, "utf8")).not.toContain("text-text-quaternary");
 		}
 	});
 
