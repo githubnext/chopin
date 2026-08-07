@@ -2,8 +2,8 @@
 id: "007"
 title: Rebuild buttons, fields and selects
 status: verifying
-branch:
-pr:
+branch: task/007-rebuild-controls
+pr: https://github.com/githubnext/chopin/pull/30
 stacked_on:
 blocked_reason:
 ---
@@ -96,5 +96,5 @@ defined there.
       message beneath it in `#B51421`
 - [x] Neither select renders a border at rest, and both show the 20% edge on
       hover
-- [ ] Screenshots of the chat composer, a comment card's buttons and a
+- [x] Screenshots of the chat composer, a comment card's buttons and a
       focused text field attached to the PR
