@@ -291,7 +291,7 @@ export function SelectionBubble(
 			contentEditable={false}
 			// No translate utilities here: placement belongs to the layout effect,
 			// and Tailwind's would compose with its transform rather than replace it.
-			className="fixed z-50 flex items-center gap-0.5 rounded-md border border-border bg-popover p-1 shadow-md"
+			className="fixed z-50 flex items-center gap-0.5 rounded-md bg-page p-1 ring-hairline shadow-overlay"
 			style={{ top: position.top - EDGE, left: position.left }}
 			/*
 			 * Nothing in here may take focus: the selection it acts on would go
@@ -310,10 +310,10 @@ export function SelectionBubble(
 						aria-current={item.id === block}
 						title={item.label}
 						onClick={() => convert(item.id)}
-						className={`size-7 rounded-sm text-xs font-semibold transition ${
+						className={`size-7 rounded-sm text-sm font-semibold transition ${
 							item.id === block
-								? "bg-muted text-foreground"
-								: "text-muted-foreground hover:bg-muted hover:text-foreground"
+								? "bg-selected text-text-primary"
+								: "text-text-quaternary hover:bg-hover hover:text-text-primary"
 						}`}
 					>
 						{item.glyph}
@@ -327,12 +327,12 @@ export function SelectionBubble(
 							aria-expanded={false}
 							title={`${describe(block).label} — change block type`}
 							onClick={() => setChoosing(true)}
-							className="size-7 rounded-sm text-xs font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground"
+							className="size-7 rounded-sm text-sm font-semibold text-text-quaternary transition hover:bg-hover hover:text-text-primary"
 						>
 							{describe(block).glyph}
 						</button>
 
-						<span aria-hidden="true" className="mx-0.5 h-4 w-px bg-border" />
+						<span aria-hidden="true" className="mx-0.5 h-4 w-px bg-edge" />
 
 						{MARKS.map(mark => (
 							<button
@@ -342,17 +342,17 @@ export function SelectionBubble(
 								aria-pressed={active.has(mark.format)}
 								title={`${mark.label} (${mark.shortcut})`}
 								onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, mark.format)}
-								className={`size-7 rounded-sm text-xs font-semibold transition ${
+								className={`size-7 rounded-sm text-sm font-semibold transition ${
 									active.has(mark.format)
-										? "bg-muted text-foreground"
-										: "text-muted-foreground hover:bg-muted hover:text-foreground"
+										? "bg-selected text-text-primary"
+										: "text-text-quaternary hover:bg-hover hover:text-text-primary"
 								}`}
 							>
 								{mark.glyph}
 							</button>
 						))}
 
-						<span aria-hidden="true" className="mx-0.5 h-4 w-px bg-border" />
+						<span aria-hidden="true" className="mx-0.5 h-4 w-px bg-edge" />
 
 						<button
 							type="button"
@@ -364,14 +364,14 @@ export function SelectionBubble(
 								if (url === undefined) return;
 								editor.dispatchCommand(TOGGLE_LINK_COMMAND, url);
 							}}
-							className="size-7 rounded-sm text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
+							className="size-7 rounded-sm text-sm text-text-quaternary transition hover:bg-hover hover:text-text-primary"
 						>
 							🔗
 						</button>
 
 						{onComment && (
 							<>
-								<span aria-hidden="true" className="mx-0.5 h-4 w-px bg-border" />
+								<span aria-hidden="true" className="mx-0.5 h-4 w-px bg-edge" />
 								<button
 									type="button"
 									aria-label="Comment on this passage"
@@ -383,7 +383,7 @@ export function SelectionBubble(
 									 * moment you started typing would be no use.
 									 */
 									onClick={onComment}
-									className="size-7 rounded-sm text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
+									className="size-7 rounded-sm text-sm text-text-quaternary transition hover:bg-hover hover:text-text-primary"
 								>
 									💬
 								</button>

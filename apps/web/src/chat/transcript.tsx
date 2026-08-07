@@ -20,9 +20,9 @@ function when(ts: number): string {
 }
 
 const TOOL_TONE: Record<Chat.ToolStatus, string> = {
-	running: "text-muted-foreground",
-	done: "text-muted-foreground",
-	failed: "text-destructive",
+	running: "text-text-tertiary",
+	done: "text-text-tertiary",
+	failed: "text-destructive-ink",
 };
 
 function Activity({ activity }: { activity: Chat.Activity }) {
@@ -30,9 +30,9 @@ function Activity({ activity }: { activity: Chat.Activity }) {
 	let detail = activity.args || activity.result;
 
 	return (
-		<div className="rounded-sm border border-border bg-muted/40">
+		<div className="rounded-sm bg-inset ring-hairline shadow-resting">
 			<button
-				className={`flex w-full items-center gap-2 px-2 py-1 text-left text-xs ${
+				className={`flex w-full items-center gap-2 px-2 py-1 text-left text-sm ${
 					TOOL_TONE[activity.status]
 				}`}
 				data-press="wide"
@@ -54,14 +54,14 @@ function Activity({ activity }: { activity: Chat.Activity }) {
 			</button>
 
 			{open && detail && (
-				<div className="border-t border-border px-2 py-1.5">
+				<div className="px-2 py-1.5 hairline-t">
 					{activity.args && (
-						<pre className="m-0 overflow-x-auto font-mono text-2xs whitespace-pre-wrap text-muted-foreground">
+						<pre className="m-0 overflow-x-auto font-mono text-sm whitespace-pre-wrap text-text-quaternary">
 {activity.args}
 						</pre>
 					)}
 					{activity.result && (
-						<pre className="m-0 mt-1 overflow-x-auto font-mono text-2xs whitespace-pre-wrap text-muted-foreground">
+						<pre className="m-0 mt-1 overflow-x-auto font-mono text-sm whitespace-pre-wrap text-text-quaternary">
 {activity.result}
 						</pre>
 					)}
@@ -73,7 +73,7 @@ function Activity({ activity }: { activity: Chat.Activity }) {
 
 function Entry({ entry }: { entry: Chat.Entry }) {
 	if (entry.author.kind === "system") {
-		return <p className="m-0 px-1 text-xs text-muted-foreground italic">{entry.text}</p>;
+		return <p className="m-0 px-1 text-sm text-text-secondary italic">{entry.text}</p>;
 	}
 
 	// Narrowed once, so the union does not have to be re-tested at each use.
@@ -85,7 +85,7 @@ function Entry({ entry }: { entry: Chat.Entry }) {
 			<div className="mt-0.5 shrink-0">
 				{agent
 					? (
-						<span className="grid size-5 place-items-center rounded-full bg-primary text-2xs font-semibold text-primary-foreground">
+						<span className="grid size-5 place-items-center rounded-full bg-brand text-sm font-semibold text-white">
 							AI
 						</span>
 					)
@@ -94,14 +94,14 @@ function Entry({ entry }: { entry: Chat.Entry }) {
 
 			<div className="flex min-w-0 flex-1 flex-col gap-1">
 				<div className="flex items-baseline gap-2">
-					<span className="text-xs font-semibold">
+					<span className="text-sm font-semibold">
 						{author.kind === "member" ? `@${author.handle}` : "Planner"}
 					</span>
-					<span className="text-2xs text-muted-foreground tabular-nums">{when(entry.ts)}</span>
+					<span className="text-sm text-text-tertiary tabular-nums">{when(entry.ts)}</span>
 				</div>
 
 				{entry.text && (
-					<p className="m-0 text-sm whitespace-pre-wrap">
+					<p className="m-0 text-base whitespace-pre-wrap">
 						{entry.text}
 						{entry.streaming && <span className="ml-0.5 animate-pulse">▍</span>}
 					</p>
@@ -139,7 +139,7 @@ export function Transcript({ entries }: { entries: Chat.Entry[] }) {
 			ref={scroller}
 		>
 			{entries.length === 0 && (
-				<p className="m-0 text-xs text-muted-foreground">
+				<p className="m-0 text-sm text-text-quaternary">
 					Ask the planner to draft something, or to read the repository first.
 				</p>
 			)}

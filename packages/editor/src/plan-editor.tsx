@@ -246,12 +246,12 @@ export function PlanEditor(
 	if (!wire) {
 		return (
 			<div
-				className={`flex h-full flex-col items-center justify-center gap-2 text-muted-foreground ${
+				className={`flex h-full flex-col items-center justify-center gap-2 text-text-quaternary ${
 					className ?? ""
 				}`}
 			>
 				<p className="m-0 text-sm">Not connected</p>
-				<p className="m-0 text-xs">The plan appears once the room is reachable</p>
+				<p className="m-0 text-sm">The plan appears once the room is reachable</p>
 			</div>
 		);
 	}

@@ -16,7 +16,7 @@ function Image({ alt, src }: { alt: string; src: string }) {
 
 	if (failed) {
 		return (
-			<span className="inline-flex items-center rounded-md border border-border px-2 py-1 text-xs text-muted-foreground">
+			<span className="inline-flex items-center rounded-md px-2 py-1 text-sm text-text-secondary ring-hairline">
 				Image unavailable
 			</span>
 		);

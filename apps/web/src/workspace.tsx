@@ -35,7 +35,7 @@ function Handle({ onResize, side }: { onResize: (delta: number) => void; side: S
 	return (
 		<div
 			aria-hidden="true"
-			className="relative z-10 w-px shrink-0 cursor-col-resize bg-border transition before:absolute before:inset-y-0 before:-inset-x-1 before:content-[''] hover:bg-ring"
+			className="relative z-10 w-[var(--edge-width)] shrink-0 cursor-col-resize bg-edge transition before:absolute before:inset-y-0 before:-inset-x-1 before:content-[''] hover:bg-brand"
 			onPointerDown={event => {
 				origin.current = event.clientX;
 				event.currentTarget.setPointerCapture(event.pointerId);
@@ -83,7 +83,7 @@ export function Workspace({ chat, decisions, header, plan }: WorkspaceProps) {
 				{chat && (
 					<>
 						<aside
-							className="min-w-0 shrink-0 overflow-hidden bg-surface"
+							className="min-w-0 shrink-0 overflow-hidden bg-ground"
 							style={{ width: chatWidth }}
 						>
 							{chat}
@@ -98,7 +98,7 @@ export function Workspace({ chat, decisions, header, plan }: WorkspaceProps) {
 					<>
 						<Handle onResize={resizeDecisions} side="right" />
 						<aside
-							className="min-w-0 shrink-0 overflow-hidden bg-surface"
+							className="min-w-0 shrink-0 overflow-hidden bg-ground"
 							style={{ width: decisionsWidth }}
 						>
 							{decisions}

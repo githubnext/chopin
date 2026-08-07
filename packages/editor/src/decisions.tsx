@@ -140,12 +140,12 @@ export function Decisions({ connected, reveal, store, threads, wire }: Decisions
 
 	return (
 		<div className="plan-decisions">
-			<header className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-				<span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+			<header className="flex shrink-0 items-center gap-2 px-3 py-2 hairline-b">
+				<span className="text-sm font-semibold tracking-wide text-text-tertiary uppercase">
 					Decisions
 				</span>
 				{outstanding > 0 && (
-					<span className="text-xs text-muted-foreground tabular-nums">{outstanding}</span>
+					<span className="text-sm text-text-tertiary tabular-nums">{outstanding}</span>
 				)}
 			</header>
 
@@ -162,14 +162,14 @@ export function Decisions({ connected, reveal, store, threads, wire }: Decisions
 				)}
 
 				{state.error && (
-					<p className="mb-3 rounded-md border border-destructive px-2 py-1.5 text-xs text-destructive">
+					<p className="mb-3 rounded-md bg-destructive-wash px-2 py-1.5 text-sm text-destructive-ink ring-hairline">
 						{state.error} Select the passage again.
 					</p>
 				)}
 
 				{outstanding === 0 && resolved === 0 && !state.draft
 					? (
-						<p className="m-0 text-xs text-muted-foreground">
+						<p className="m-0 text-sm text-text-secondary">
 							Select any of the plan to comment on it. Questions the agent asks appear here too, and
 							both stay as a record of what was decided.
 						</p>
@@ -185,7 +185,7 @@ export function Decisions({ connected, reveal, store, threads, wire }: Decisions
 					<div className={outstanding > 0 || state.draft ? "mt-3" : ""}>
 						<button
 							aria-expanded={history}
-							className="w-full rounded-md px-1 py-1 text-left text-xs text-muted-foreground hover:text-foreground"
+							className="w-full rounded-md px-1 py-1 text-left text-sm text-text-quaternary hover:text-text-primary"
 							data-press="wide"
 							onClick={() => setHistory(value => !value)}
 							type="button"

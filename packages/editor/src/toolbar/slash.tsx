@@ -388,13 +388,13 @@ export function SlashMenu({ disabled }: SlashMenuProps) {
 			role="listbox"
 			aria-label="Insert block"
 			contentEditable={false}
-			className="fixed z-50 max-h-72 w-56 overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-md"
+			className="fixed z-50 max-h-72 w-56 overflow-y-auto rounded-md bg-page p-1 ring-hairline shadow-overlay"
 			style={{ top: position.top, left: position.left }}
 			onMouseDown={event => event.preventDefault()}
 		>
 			{grouped.map(([group, commands]) => (
 				<div key={group}>
-					<div className="px-2 py-1 text-2xs font-semibold tracking-wide text-muted-foreground uppercase">
+					<div className="px-2 py-1 text-sm font-semibold tracking-wide text-text-quaternary uppercase">
 						{group}
 					</div>
 					{commands.map(command => {
@@ -410,8 +410,8 @@ export function SlashMenu({ disabled }: SlashMenuProps) {
 								onClick={() => choose(command)}
 								className={`flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm transition ${
 									position === index
-										? "bg-muted text-foreground"
-										: "text-muted-foreground hover:bg-muted"
+										? "bg-selected text-text-primary"
+										: "text-text-quaternary hover:bg-hover"
 								}`}
 							>
 								<span>{command.label}</span>

@@ -40,17 +40,17 @@ function SignIn({ onDone }: { onDone: (handle: string) => void }) {
 				<label className="text-sm font-medium" htmlFor="handle">GitHub handle</label>
 				<input
 					autoFocus
-					className="rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:border-ring"
+					className="rounded-md control-edge bg-page px-3 py-2 text-sm focus-visible:border-brand"
 					id="handle"
 					onChange={event => setValue(event.target.value.trim())}
 					placeholder="octocat"
 					value={value}
 				/>
-				<p className="text-xs text-muted-foreground">
+				<p className="text-sm text-text-secondary">
 					Unverified. Used for your cursor, your face, and your name against decisions.
 				</p>
 				<button
-					className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-40"
+					className="rounded-md bg-brand px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
 					disabled={!valid}
 					type="submit"
 				>
@@ -62,11 +62,11 @@ function SignIn({ onDone }: { onDone: (handle: string) => void }) {
 }
 
 const TONE: Record<Status, string> = {
-	connecting: "text-muted-foreground",
-	connected: "text-muted-foreground",
-	reconnecting: "text-warning",
-	denied: "text-destructive",
-	closed: "text-muted-foreground",
+	connecting: "text-text-tertiary",
+	connected: "text-text-tertiary",
+	reconnecting: "text-warning-ink",
+	denied: "text-destructive-ink",
+	closed: "text-text-tertiary",
 };
 
 function Header(
@@ -83,13 +83,13 @@ function Header(
 	let others = members.filter(member => member.handle !== handle);
 
 	return (
-		<header className="flex shrink-0 items-center gap-3 border-b border-border bg-surface px-4 py-2">
+		<header className="flex shrink-0 items-center gap-3 bg-ground px-4 py-2 hairline-b">
 			<span className="text-sm font-semibold">chopin</span>
-			<span className="text-sm text-muted-foreground">/r/{room}</span>
-			<span className={`text-xs ${TONE[status]}`}>
+			<span className="text-sm text-text-tertiary">/r/{room}</span>
+			<span className={`text-sm ${TONE[status]}`}>
 				{status === "connected" ? reason : reason ?? status}
 			</span>
-			<span className="ml-auto text-xs text-muted-foreground">
+			<span className="ml-auto text-sm text-text-tertiary">
 				@{handle}
 				{others.length > 0 && ` · with ${others.map(member => `@${member.handle}`).join(", ")}`}
 			</span>

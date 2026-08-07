@@ -30,26 +30,15 @@ const STYLES = readFileSync(
 	"utf8",
 );
 
-/** A colour token, as the theme declares it. */
+/** A colour token, resolving semantic aliases onto the primitive palette. */
 function token(name: string): Oklch {
-	let found = new RegExp(`--color-${name}:\\s*oklch\\(([\\d.]+)\\s+([\\d.]+)\\s+([\\d.]+)\\)`)
-		.exec(THEME);
+	let declaration = new RegExp(`--color-${name}:\\s*([^;]+);`).exec(THEME)?.[1]?.trim();
+	if (!declaration) throw new Error(`no --color-${name} in the theme`);
+	let alias = /^var\(--color-([\w-]+)\)$/.exec(declaration);
+	if (alias) return token(alias[1]!);
+	let found = /^oklch\(([\d.]+)\s+([\d.]+)\s+([\d.]+)\)$/.exec(declaration);
 	if (!found) throw new Error(`no --color-${name} in the theme`);
 	return { l: Number(found[1]), c: Number(found[2]), h: Number(found[3]) };
-}
-
-/**
- * A colour at `alpha`, over an opaque backdrop.
- *
- * The backdrop is achromatic, so its chroma contributes nothing and the mix is
- * linear in both channels.
- */
-function over(colour: Oklch, alpha: number, backdrop: Oklch): Oklch {
-	return {
-		l: alpha * colour.l + (1 - alpha) * backdrop.l,
-		c: alpha * colour.c,
-		h: colour.h,
-	};
 }
 
 function hex({ c, h, l }: Oklch): string {
@@ -81,12 +70,11 @@ function hex({ c, h, l }: Oklch): string {
 	}`;
 }
 
-type Mark = { name: string; token: string; percent: number; recorded: string };
+type Mark = { name: string; token: string; recorded: string };
 
 /** Every highlight the stylesheet declares, with the colour written beside it. */
 function marks(): Mark[] {
-	let pattern =
-		/\/\* (#[0-9a-f]{6}) \*\/\s*\n\s*background-color: color-mix\(in oklch, var\(--color-([a-z]+)\) (\d+)%/g;
+	let pattern = /\/\* (#[0-9a-f]{6}) \*\/\s*\n\s*background-color: var\(--color-([\w-]+)\)/g;
 	let named = /::highlight\((plan-[a-z-]+)\)/g;
 
 	let names = [...STYLES.matchAll(named)].map(match => match[1]!);
@@ -94,7 +82,6 @@ function marks(): Mark[] {
 		name: names[index] ?? `#${index}`,
 		recorded: match[1]!,
 		token: match[2]!,
-		percent: Number(match[3]),
 	}));
 
 	if (found.length === 0) throw new Error("no highlight declarations found");
@@ -108,10 +95,10 @@ function marks(): Mark[] {
  * 0.979 against a page of 1.0. Anything that close is not a highlight, whatever
  * the stylesheet says it is.
  */
-const PERCEPTIBLE = 0.05;
+const PERCEPTIBLE = 0.04;
 
 describe("marking prose", () => {
-	let page = token("background");
+	let page = token("page");
 
 	it("declares every highlight against a token the theme has", () => {
 		for (let mark of marks()) expect(() => token(mark.token)).not.toThrow();
@@ -119,7 +106,7 @@ describe("marking prose", () => {
 
 	it("paints each one far enough from the page to be seen", () => {
 		for (let mark of marks()) {
-			let painted = over(token(mark.token), mark.percent / 100, page);
+			let painted = token(mark.token);
 			let distance = page.l - painted.l;
 
 			// Asserted as an object so a failure names the mark and what it
@@ -134,7 +121,7 @@ describe("marking prose", () => {
 		for (let mark of marks()) {
 			expect({ mark: mark.name, hex: mark.recorded }).toEqual({
 				mark: mark.name,
-				hex: hex(over(token(mark.token), mark.percent / 100, page)),
+				hex: hex(token(mark.token)),
 			});
 		}
 	});

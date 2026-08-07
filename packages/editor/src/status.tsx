@@ -95,9 +95,9 @@ function describe(
 }
 
 const TONES: Record<Tone, string> = {
-	muted: "text-muted-foreground",
-	warn: "text-warning",
-	error: "text-destructive",
+	muted: "text-text-tertiary",
+	warn: "text-warning-ink",
+	error: "text-destructive-ink",
 };
 
 export function PlanStatus(props: PlanStatusProps) {
@@ -143,7 +143,7 @@ export function PlanStatus(props: PlanStatusProps) {
 			)}
 			<span className={level === "notice" ? TONES[tone] : "sr-only"}>{label}</span>
 			{detail && (
-				<span className={level === "notice" ? "min-w-0 truncate text-muted-foreground" : "sr-only"}>
+				<span className={level === "notice" ? "min-w-0 truncate text-text-secondary" : "sr-only"}>
 					{detail}
 				</span>
 			)}

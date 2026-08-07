@@ -36,12 +36,12 @@ three shadows, and a hairline ring in place of every border.
 
 Values, all authored in OKLCH:
 
-- Neutral ramp, hue 95 — 50 `#FCFCFA`, 100 `#F9F9F8`, 150 `#F5F4F2`,
+- Neutral ramp, hue 95 — 50 `#FCFCFA`, 100 `#F8F8F6`, 150 `#F4F4F1`,
   200 `#ECECE9`, 300 `#DCDBD7`, 400 `#ACABA5`, 500 `#78766E`, 600 `#605E56`,
   700 `#47453F`, 750 `#34332E`, 800 `#252420`, 850 `#171613`, 900 `#0E0D0A`,
   950 `#040302`
 - Brand `#06707E`, hover `#045A66`, wash `#DCF6FA`, ink `#045D69`
-- Success `#3B793F`, warning `#AB7302`, destructive `#C22826`
+- Success `#3B793F`, warning `#AB7302`, destructive `#D54D4C`
 - Surfaces — page white, ground gray-150, hover and inset gray-100,
   selected gray-200, control fill gray-200 with gray-300 on hover
 - Text — primary gray-900, secondary gray-700, tertiary gray-600,
@@ -57,6 +57,10 @@ Values, all authored in OKLCH:
   textareas, radios, checkboxes. Both are 1px, dropping to 0.5px on retina.
   A disabled control drops back to the 7% hairline, so it recedes on its edge
   as well as its fill.
+
+These values are settled where the canvas specimens disagree: use `#F8F8F6`
+for gray-100, `#F4F4F1` for gray-150, `#D54D4C` for destructive, and 7% black
+for the hairline.
 
 Rejected, and why:
 

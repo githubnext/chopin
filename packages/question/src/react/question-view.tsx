@@ -64,7 +64,7 @@ function Badges({ people }: { people: Collaborator[] }) {
 				<span
 					key={person.client}
 					title={`@${person.handle} is editing`}
-					className="max-w-28 truncate rounded-full bg-muted px-1.5 py-0.5 text-2xs font-medium text-muted-foreground"
+					className="max-w-28 truncate rounded-full bg-control px-1.5 py-0.5 text-sm font-medium text-text-tertiary"
 				>
 					@{person.handle}
 				</span>
@@ -96,7 +96,7 @@ function Choices(
 				return (
 					<label
 						key={option.id}
-						className="flex items-start gap-2 rounded-md px-1 py-1.5 text-sm hover:bg-muted/60"
+						className="flex items-start gap-2 rounded-md px-1 py-1.5 text-sm hover:bg-hover"
 					>
 						<input
 							type={question.multiple ? "checkbox" : "radio"}
@@ -115,12 +115,12 @@ function Choices(
 										: { mode: "choices", choice: option.id },
 								);
 							}}
-							className="mt-1 size-3.5 shrink-0 accent-primary"
+							className="mt-1 size-3.5 shrink-0 choice-control"
 						/>
 						<span className="min-w-0">
-							<span className="font-medium text-foreground">{option.label}</span>
+							<span className="font-medium text-text-primary">{option.label}</span>
 							{option.description && (
-								<span className="block text-xs text-muted-foreground">{option.description}</span>
+								<span className="block text-sm text-text-secondary">{option.description}</span>
 							)}
 						</span>
 					</label>
@@ -151,7 +151,7 @@ function Custom(
 					disabled={disabled}
 					onChange={event =>
 						onChange?.({ mode: event.currentTarget.checked ? "custom" : "choices" })}
-					className="mt-1 size-3.5 shrink-0 accent-primary"
+					className="mt-1 size-3.5 shrink-0 choice-control"
 				/>
 				<span className="font-medium">Write a custom answer</span>
 			</label>
@@ -165,7 +165,7 @@ function Custom(
 				placeholder="Type another answer"
 				onFocus={() => onChange?.({ mode: "custom" })}
 				onChange={event => onChange?.({ mode: "custom", custom: event.currentTarget.value })}
-				className="mt-1.5 min-h-16 w-full resize-y rounded-md border border-input bg-input/20 px-2.5 py-2 text-sm text-foreground transition placeholder:text-muted-foreground/60 focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-60"
+				className="mt-1.5 min-h-16 w-full resize-y rounded-md control-edge bg-inset px-2.5 py-2 text-sm text-text-primary transition placeholder:text-text-quaternary/60 focus-visible:border-brand disabled:cursor-not-allowed disabled:opacity-60"
 			/>
 		</div>
 	);
@@ -223,7 +223,7 @@ function Related(
 		>
 			<span className="min-w-0 flex-1">{children}</span>
 			{count > 1 && (
-				<span aria-hidden="true" className="shrink-0 text-xs text-muted-foreground tabular-nums">
+				<span aria-hidden="true" className="shrink-0 text-sm text-text-quaternary tabular-nums">
 					{count}
 				</span>
 			)}
@@ -270,12 +270,12 @@ function Resolved(
 							/* The question and what was chosen are one decision, so they are
 						    one target: two stacked buttons led to the same prose. */
 						}
-						<p className="m-0 text-sm text-muted-foreground">{answer.question}</p>
-						<p className="m-0 text-sm font-medium text-foreground">{chosen}</p>
+						<p className="m-0 text-sm text-text-secondary">{answer.question}</p>
+						<p className="m-0 text-sm font-medium text-text-primary">{chosen}</p>
 					</Related>
 				);
 			})}
-			{resolver && <p className="m-0 text-xs text-muted-foreground">Answered by @{resolver}</p>}
+			{resolver && <p className="m-0 text-sm text-text-tertiary">Answered by @{resolver}</p>}
 		</div>
 	);
 }
@@ -284,7 +284,7 @@ function Resolved(
 function Cancelled({ resolver }: { resolver?: string }) {
 	return (
 		<div className="px-3 py-2.5">
-			<p className="m-0 text-sm text-muted-foreground">
+			<p className="m-0 text-sm text-text-secondary">
 				{resolver && resolver !== "system"
 					? `Cancelled by @${resolver}`
 					: "Cancelled — the question was never answered."}
@@ -388,7 +388,7 @@ export function QuestionView(props: QuestionViewProps) {
 					ref={tabs}
 					role="tablist"
 					aria-label="Questions"
-					className="flex gap-1 overflow-x-auto border-b border-border px-2 pt-2"
+					className="flex gap-1 overflow-x-auto px-2 pt-2 hairline-b"
 				>
 					{definition.questions.map((question, index) => {
 						let done = answered(question, drafts[question.id]);
@@ -421,15 +421,15 @@ export function QuestionView(props: QuestionViewProps) {
 								onBlur={event =>
 									!event.currentTarget.matches(":hover") && onQuestionLeave?.(question.id)}
 								onKeyDown={event => move(event, index)}
-								className={`shrink-0 rounded-t-md px-2.5 py-1 text-xs font-medium transition ${
+								className={`shrink-0 rounded-t-md px-2.5 py-1 text-sm font-medium transition ${
 									question.id === active
-										? "bg-muted text-foreground"
-										: "text-muted-foreground hover:text-foreground"
+										? "bg-selected text-text-primary"
+										: "text-text-quaternary hover:text-text-primary"
 								}`}
 							>
 								<span aria-hidden="true">{done ? "✓" : index + 1}</span> {question.header}
 								{people.length > 0 && (
-									<span className="ml-1 text-2xs text-muted-foreground tabular-nums">
+									<span className="ml-1 text-sm text-text-tertiary tabular-nums">
 										{people.length}
 									</span>
 								)}
@@ -458,7 +458,7 @@ export function QuestionView(props: QuestionViewProps) {
 						&& onQuestionLeave?.(current.id)}
 				>
 					<header className="flex items-baseline justify-between gap-2">
-						<h4 className="m-0 text-sm font-semibold text-foreground">{current.header}</h4>
+						<h4 className="m-0 text-sm font-semibold text-text-primary">{current.header}</h4>
 						<Badges people={collaborators.filter(person => person.question === current.id)} />
 					</header>
 
@@ -470,7 +470,7 @@ export function QuestionView(props: QuestionViewProps) {
 						className="mt-1 mb-2"
 						onSelect={onQuestionSelect}
 					>
-						<p className="m-0 text-sm text-muted-foreground">{current.question}</p>
+						<p className="m-0 text-sm text-text-secondary">{current.question}</p>
 					</Related>
 
 					<Choices
@@ -492,23 +492,23 @@ export function QuestionView(props: QuestionViewProps) {
 			)}
 
 			{error && (
-				<p role="alert" className="px-3 pb-2 text-xs text-destructive">
+				<p role="alert" className="px-3 pb-2 text-sm text-destructive-ink">
 					{error}
 				</p>
 			)}
 
 			{(onSubmit || onCancel) && (!multiple || last) && (
-				<footer className="flex items-center justify-end gap-2 border-t border-border px-3 py-2">
+				<footer className="flex items-center justify-end gap-2 px-3 py-2 hairline-t">
 					{onCancel && confirming && (
 						<>
-							<p className="m-0 mr-auto text-xs text-muted-foreground">
+							<p className="m-0 mr-auto text-sm text-text-secondary">
 								Cancel without answering?
 							</p>
 							<button
 								type="button"
 								onClick={() => setConfirming(false)}
 								disabled={submitting}
-								className="rounded-md px-2.5 py-1 text-xs text-muted-foreground transition hover:text-foreground disabled:opacity-50"
+								className="rounded-md px-2.5 py-1 text-sm text-text-quaternary transition hover:text-text-primary disabled:opacity-50"
 							>
 								Keep it
 							</button>
@@ -516,7 +516,7 @@ export function QuestionView(props: QuestionViewProps) {
 								type="button"
 								onClick={onCancel}
 								disabled={disabled || submitting}
-								className="rounded-md px-2.5 py-1 text-xs font-medium text-destructive transition hover:bg-destructive/10 disabled:opacity-50"
+								className="rounded-md px-2.5 py-1 text-sm font-medium text-destructive-ink transition hover:bg-destructive-wash disabled:opacity-50"
 							>
 								{submitting ? "Cancelling…" : "Yes, cancel"}
 							</button>
@@ -527,7 +527,7 @@ export function QuestionView(props: QuestionViewProps) {
 							type="button"
 							onClick={() => setConfirming(true)}
 							disabled={disabled || submitting}
-							className="rounded-md px-2.5 py-1 text-xs text-muted-foreground transition hover:text-foreground disabled:opacity-50"
+							className="rounded-md px-2.5 py-1 text-sm text-text-quaternary transition hover:text-text-primary disabled:opacity-50"
 						>
 							Cancel
 						</button>
@@ -537,7 +537,7 @@ export function QuestionView(props: QuestionViewProps) {
 							type="button"
 							onClick={onSubmit}
 							disabled={disabled || submitting}
-							className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground transition-opacity disabled:opacity-50"
+							className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-white transition-opacity disabled:opacity-50"
 						>
 							{submitting ? "Submitting…" : "Submit"}
 						</button>
