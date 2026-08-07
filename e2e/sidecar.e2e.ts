@@ -145,16 +145,21 @@ function washed(page: import("@playwright/test").Page): Promise<number> {
 	return page.evaluate(() => CSS.highlights.get("plan-related")?.size ?? 0);
 }
 
-test("a reply joins the thread", async ({ join, seed }) => {
+test("a reply joins the thread, and the quote counts it", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
 	let card = thread(page);
+
+	// The opening comment is not a reply, so a thread nobody has answered has
+	// no number to report and shows none.
+	await expect(card.getByText(/repl(y|ies)$/)).toHaveCount(0);
 
 	await card.getByPlaceholder("Reply…").fill("Still right, but say why.");
 	await card.getByRole("button", { name: "Reply" }).click();
 
 	await expect(card).toContainText("Still right, but say why.");
 	await expect(card).toContainText("@ana");
+	await expect(card.getByText("1 reply")).toBeVisible();
 });
 
 test("accepting asks twice, and says so in the transcript", async ({ join, seed }) => {

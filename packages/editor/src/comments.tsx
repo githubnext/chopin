@@ -62,42 +62,54 @@ const QUOTED = "m-0 w-full text-left text-sm text-text-secondary italic";
  * The quote rather than the card. A card holds a reply box, an Accept and a
  * Dismiss; making the whole of it a link would mean deciding, on every click,
  * whether the reader meant the link or the control they actually hit.
+ *
+ * Two numbers meet here and only one of them is drawn. How many places the
+ * thread is anchored in belongs to the jump — it says what the button will do,
+ * so it is said in the label and nowhere else. How many replies the thread has
+ * collected is the count worth acting on, so that is what takes the pill. The
+ * pill sits outside the button and carries its own word, so a drifted thread
+ * with no jump left to offer still counts its replies out loud.
  */
 function Quote(
-	{ count = 0, drifted, onSelect, text }: {
-		count?: number;
+	{ drifted, onSelect, places = 0, replies = 0, text }: {
 		drifted?: boolean;
 		onSelect?: () => void;
+		/** How many spans of prose the thread is anchored in. */
+		places?: number;
+		/** Answers to the opening comment, which is not itself a reply. */
+		replies?: number;
 		text: string;
 	},
 ) {
 	return (
 		<div className="flex flex-col gap-1">
-			{count > 0 && onSelect
-				? (
-					<button
-						// The quote is part of the name, not replaced by it: it is the
-						// only place the marked phrase appears on the card, so a label
-						// saying only where the button goes would take it away from
-						// anybody who cannot see it.
-						aria-label={count > 1
-							? `${text} — show in plan, ${count} places`
-							: `${text} — show in plan`}
-						className={`${QUOTED} cursor-pointer rounded-sm hover:text-text-primary`}
-						data-press="wide"
-						onClick={onSelect}
-						type="button"
-					>
-						{text}
-						{/* The label above already says how many places, so the pill is decoration. */}
-						{count > 1 && (
-							<span aria-hidden="true" className="ml-1.5 align-middle not-italic">
-								<Count>{count}</Count>
-							</span>
-						)}
-					</button>
-				)
-				: <blockquote className={QUOTED}>{text}</blockquote>}
+			<div className="flex items-center gap-2">
+				{places > 0 && onSelect
+					? (
+						<button
+							// The quote is part of the name, not replaced by it: it is the
+							// only place the marked phrase appears on the card, so a label
+							// saying only where the button goes would take it away from
+							// anybody who cannot see it.
+							aria-label={places > 1
+								? `${text} — show in plan, ${places} places`
+								: `${text} — show in plan`}
+							className={`${QUOTED} min-w-0 flex-1 cursor-pointer rounded-sm hover:text-text-primary`}
+							data-press="wide"
+							onClick={onSelect}
+							type="button"
+						>
+							{text}
+						</button>
+					)
+					: <blockquote className={`${QUOTED} min-w-0 flex-1`}>{text}</blockquote>}
+				{replies > 0 && (
+					<Count>
+						{replies}
+						<span className="sr-only">{replies === 1 ? " reply" : " replies"}</span>
+					</Count>
+				)}
+			</div>
 			{drifted && (
 				<p className="m-0 text-sm text-warning-ink">
 					The text this refers to has changed.
@@ -307,7 +319,13 @@ export function ThreadCard({
 			settled={!open}
 			status={!open && <Provenance at={thread.at} by={thread.resolver} verb="Accepted" />}
 		>
-			<Quote count={view.places.length} drifted={view.drifted} onSelect={onReveal} text={quote} />
+			<Quote
+				drifted={view.drifted}
+				onSelect={onReveal}
+				places={view.places.length}
+				replies={Math.max(0, thread.notes.length - 1)}
+				text={quote}
+			/>
 
 			<ul className="m-0 flex list-none flex-col gap-2 p-0">
 				{thread.notes.map(note => <Note key={note.id} note={note} />)}
