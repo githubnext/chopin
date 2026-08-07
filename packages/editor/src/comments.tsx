@@ -46,8 +46,7 @@ function Note({ note }: { note: Comment.Note }) {
 	);
 }
 
-const QUOTED =
-	"m-0 w-full border-l-2 border-edge pl-2 text-left text-sm text-text-secondary italic";
+const QUOTED = "m-0 w-full text-left text-sm text-text-secondary italic";
 
 /**
  * The prose the thread marks, as a quotation the card can be read without.
@@ -196,11 +195,13 @@ function Composer({
 /** A button that asks again before doing something that cannot be undone. */
 function Confirm({
 	busy,
+	consequence,
 	label,
 	onConfirm,
 	tone,
 }: {
 	busy?: boolean;
+	consequence?: string;
 	label: string;
 	onConfirm: () => void;
 	tone: "primary" | "quiet";
@@ -218,18 +219,26 @@ function Confirm({
 		: "text-text-tertiary hover:text-text-primary";
 
 	return (
-		<button
-			className={`rounded-md px-2 py-1 text-sm font-medium disabled:opacity-50 ${style}`}
-			disabled={busy}
-			onClick={() => {
-				if (!asked) return setAsked(true);
-				setAsked(false);
-				onConfirm();
-			}}
-			type="button"
-		>
-			{asked ? "Sure?" : label}
-		</button>
+		<>
+			<button
+				className={`rounded-md px-2 py-1 text-sm font-medium disabled:opacity-50 ${style}`}
+				disabled={busy}
+				onClick={() => {
+					if (!asked) return setAsked(true);
+					setAsked(false);
+					onConfirm();
+				}}
+				type="button"
+			>
+				{asked ? "Sure?" : label}
+			</button>
+			{consequence && (
+				// Keep the live region mounted so later text changes are announced.
+				<span aria-live="polite" className="order-last ml-auto text-sm text-text-secondary">
+					{asked && consequence}
+				</span>
+			)}
+		</>
 	);
 }
 
@@ -275,22 +284,17 @@ export function ThreadCard({
 		<SidecarCard
 			data-plan-sidecar-thread={thread.id}
 			focused={focused}
-			footer={open ? undefined : (
+			footer={!open && !applied && (
 				<>
-					<Provenance at={thread.at} by={thread.resolver} verb="Accepted" />
-					{!applied && (
-						<>
-							<span className="ml-auto text-sm text-warning-ink">Not yet applied</span>
-							<button
-								className="rounded-md px-2 py-1 text-sm text-text-tertiary hover:text-text-primary"
-								disabled={busy}
-								onClick={onRetry}
-								type="button"
-							>
-								Ask again
-							</button>
-						</>
-					)}
+					<span className="text-sm text-warning-ink">Not yet applied</span>
+					<button
+						className="rounded-md px-2 py-1 text-sm text-text-tertiary hover:text-text-primary"
+						disabled={busy}
+						onClick={onRetry}
+						type="button"
+					>
+						Ask again
+					</button>
 				</>
 			)}
 			label="Comment"
@@ -298,6 +302,8 @@ export function ThreadCard({
 			onFocus={onFocus}
 			onMouseEnter={onFocus}
 			onMouseLeave={onBlur}
+			settled={!open}
+			status={!open && <Provenance at={thread.at} by={thread.resolver} verb="Accepted" />}
 		>
 			<Quote count={view.places.length} drifted={view.drifted} onSelect={onReveal} text={quote} />
 
@@ -320,12 +326,15 @@ export function ThreadCard({
 						onTyping={onTyping}
 						placeholder="Reply…"
 					/>
-					<div className="flex items-center gap-2 pt-2 hairline-t">
-						<Confirm busy={busy} label="Accept" onConfirm={onAccept} tone="primary" />
+					<div className="flex items-center gap-2 pt-2">
+						<Confirm
+							busy={busy}
+							consequence="Accepting asks the agent to revise the plan"
+							label="Accept"
+							onConfirm={onAccept}
+							tone="primary"
+						/>
 						<Confirm busy={busy} label="Dismiss" onConfirm={onDismiss} tone="quiet" />
-						<span className="ml-auto text-sm text-text-secondary">
-							Accepting asks the agent to revise the plan
-						</span>
 					</div>
 				</>
 			)}
