@@ -42,15 +42,20 @@ a number without saying it mattered. One treatment means a reply count now
 carries the same weight as an outstanding decision — if that proves too loud
 in use, the quote is the one to demote, not the rail.
 
-Avatars lose their lettering entirely. A failed photograph becomes a filled
-circle in the person's account colour; the agent becomes a filled circle in
-petrol. Both were 8px text inside a 20px circle, and the scale now stops at
-13px. Exempting monograms from the scale was rejected as a rule everyone
-would have to remember; growing the circle to 28px was rejected for taking
-8px of width from every message in the rail.
+Avatars lose their lettering entirely. Both were 8px text inside a 20px
+circle, and the scale now stops at 13px. Exempting monograms from the scale
+was rejected as a rule everyone would have to remember; growing the mark to
+28px was rejected for taking 8px of width from every message in the rail.
 
-Identity now rests on colour and the tooltip. In chat that is safe — the
-handle is always on the next line. In the presence stack there is no name at
+Shape then carries kind, which is 010's decision applied everywhere rather
+than only in the chat rail. A person is a filled rounded square in their
+account colour; the agent is a filled circle in petrol. Confining the square
+to chat was rejected outright — the presence stack and the header would have
+shown the same person as a circle, so one person would have had two shapes on
+one screen.
+
+Identity now rests on shape, colour and the tooltip. In chat that is safe —
+the name is always beside the mark. In the presence stack there is no name at
 all, so two people on neighbouring account colours are only told apart by
 hovering. Watch for that in use.
 
@@ -70,8 +75,10 @@ Depends on 003 and 004.
 - [ ] The decisions rail header, a quote's reply count and the presence
       overflow all render a petrol pill 20px tall with white figures
 - [ ] No avatar anywhere contains lettering
-- [ ] A failed photograph renders a filled circle in the account colour, and
-      the agent renders a filled circle in petrol
+- [ ] A failed photograph renders a filled rounded square in the account
+      colour, and the agent renders a filled circle in petrol
+- [ ] The square and the circle are used on every surface that draws an
+      avatar: the chat entry, the presence stack and the header
 - [ ] Avatars are 20px in a chat entry and the presence stack and 24px in the
       header, and overlapping faces keep a 2px white ring
 - [ ] Screenshots of the decisions rail header, a reconnecting notice and an

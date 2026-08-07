@@ -28,6 +28,9 @@ e2e/blob-report/
 # Page snapshots the Playwright MCP writes where it is started.
 .playwright-mcp/
 
+# Generated screenshots and notes from local design audits.
+.design-audit/
+
 # Generated
 **/dist/**
 *.tsbuildinfo
