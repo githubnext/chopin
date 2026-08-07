@@ -7,18 +7,14 @@
  * the wire for the cursors.
  */
 
-import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
 
-import { color } from "./cursor";
+import { Count } from "./count";
+import { Face } from "./face";
 
 import type { PlanProvider } from "./provider";
 
 const CAP = 3;
-
-/** Retina-sharp at the rendered size. */
-function face(handle: string): string {
-	return `https://github.com/${encodeURIComponent(handle)}.png?size=48`;
-}
 
 function names(people: string[]): string {
 	let shown = people.slice(0, CAP);
@@ -64,40 +60,6 @@ function usePeers(provider: PlanProvider | undefined): string[] {
 	return useMemo(() => (key ? key.split("\u0000") : []), [key]);
 }
 
-/**
- * One face.
- *
- * The handle is unverified, so the avatar may not exist. Initials in the
- * person's cursor colour are a better answer than a broken image, and they
- * keep the identity legible either way.
- */
-function Face({ handle }: { handle: string }) {
-	let [failed, setFailed] = useState(false);
-
-	if (failed) {
-		return (
-			<span
-				className="grid size-5 place-items-center rounded-full text-sm font-semibold text-white uppercase"
-				style={{ background: color(handle) }}
-				title={handle}
-			>
-				{handle.slice(0, 2)}
-			</span>
-		);
-	}
-
-	return (
-		<img
-			alt={handle}
-			className="size-5 rounded-full bg-control ring-2 ring-page"
-			onError={() => setFailed(true)}
-			referrerPolicy="no-referrer"
-			src={face(handle)}
-			title={handle}
-		/>
-	);
-}
-
 export function PlanPresence({ provider }: { provider: PlanProvider | undefined }) {
 	let people = usePeers(provider);
 	if (people.length === 0) return null;
@@ -106,12 +68,8 @@ export function PlanPresence({ provider }: { provider: PlanProvider | undefined 
 
 	return (
 		<div aria-label={`Also here: ${label}`} className="plan-presence" title={label}>
-			{people.slice(0, CAP).map(handle => <Face handle={handle} key={handle} />)}
-			{people.length > CAP && (
-				<span className="grid size-5 place-items-center rounded-full bg-control text-sm font-semibold text-text-tertiary tabular-nums ring-2 ring-page">
-					+{people.length - CAP}
-				</span>
-			)}
+			{people.slice(0, CAP).map(handle => <Face handle={handle} key={handle} ring />)}
+			{people.length > CAP && <Count ring>+{people.length - CAP}</Count>}
 		</div>
 	);
 }

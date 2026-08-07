@@ -11,7 +11,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { Face } from "../face";
+import { AgentFace, Face } from "@chopin/editor";
 
 import type { Chat } from "@chopin/protocol";
 
@@ -90,11 +90,7 @@ function Entry({ arrived, entry }: { arrived: boolean; entry: Chat.Entry }) {
 		<div className={`flex gap-2 ${arrived ? "animate-enter" : ""}`}>
 			<div className="mt-0.5 shrink-0">
 				{agent
-					? (
-						<span className="grid size-5 place-items-center rounded-full bg-brand text-sm font-semibold text-white">
-							AI
-						</span>
-					)
+					? <AgentFace size={20} />
 					: <Face handle={author.kind === "member" ? author.handle : "?"} size={20} />}
 			</div>
 

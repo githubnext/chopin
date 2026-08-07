@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from "react";
 import { limits } from "@chopin/dialect";
 
 import { Provenance, SidecarCard, when } from "./card";
+import { Count } from "./count";
 import { cursor } from "./cursor";
 
 import type { KeyboardEvent } from "react";
@@ -88,9 +89,10 @@ function Quote(
 						type="button"
 					>
 						{text}
+						{/* The label above already says how many places, so the pill is decoration. */}
 						{count > 1 && (
-							<span aria-hidden="true" className="ml-1.5 text-sm not-italic tabular-nums">
-								{count}
+							<span aria-hidden="true" className="ml-1.5 align-middle not-italic">
+								<Count>{count}</Count>
 							</span>
 						)}
 					</button>

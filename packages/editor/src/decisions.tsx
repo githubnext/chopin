@@ -28,6 +28,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { DraftCard, ThreadCard } from "./comments";
+import { Count } from "./count";
 import { useQuestionnaires } from "./questionnaires";
 import { useThreads } from "./threads";
 import { QuestionnaireCard } from "./widgets/questionnaire";
@@ -144,9 +145,7 @@ export function Decisions({ connected, reveal, store, threads, wire }: Decisions
 				<span className="text-sm font-semibold tracking-wide text-text-tertiary uppercase">
 					Decisions
 				</span>
-				{outstanding > 0 && (
-					<span className="text-sm text-text-tertiary tabular-nums">{outstanding}</span>
-				)}
+				{outstanding > 0 && <Count>{outstanding}</Count>}
 			</header>
 
 			<div className="min-h-0 flex-1 overflow-auto p-3" ref={content}>

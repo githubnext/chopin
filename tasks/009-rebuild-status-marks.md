@@ -67,19 +67,66 @@ Depends on 003 and 004.
 
 ## Acceptance
 
-- [ ] The status dot is 6px and takes the colour of the text beside it
-- [ ] A healthy plan renders no status element on screen, and the label is
+- [x] The status dot is 6px and takes the colour of the text beside it
+- [x] A healthy plan renders no status element on screen, and the label is
       still present for a screen reader
-- [ ] The notice pill is white with the 7% hairline and the resting shadow,
+- [x] The notice pill is white with the 7% hairline and the resting shadow,
       fully rounded, at 13px
-- [ ] The decisions rail header, a quote's reply count and the presence
+- [x] The decisions rail header, a quote's reply count and the presence
       overflow all render a petrol pill 20px tall with white figures
-- [ ] No avatar anywhere contains lettering
-- [ ] A failed photograph renders a filled rounded square in the account
+- [x] No avatar anywhere contains lettering
+- [x] A failed photograph renders a filled rounded square in the account
       colour, and the agent renders a filled circle in petrol
-- [ ] The square and the circle are used on every surface that draws an
+- [x] The square and the circle are used on every surface that draws an
       avatar: the chat entry, the presence stack and the header
-- [ ] Avatars are 20px in a chat entry and the presence stack and 24px in the
+- [x] Avatars are 20px in a chat entry and the presence stack and 24px in the
       header, and overlapping faces keep a 2px white ring
 - [ ] Screenshots of the decisions rail header, a reconnecting notice and an
       agent chat entry attached to the PR
+
+## Evidence
+
+The dot and the pill were already 6px and 13px on the right tokens when 003
+landed, so `status.tsx` and its rules are untouched. Everything else moved.
+
+`packages/editor/src/face.tsx` is the one place either mark is drawn.
+`apps/web/src/face.tsx` and the private copy inside `presence.tsx` are gone:
+they were two components rendering the same person, which is how one screen
+could have shown one person as a circle and a square at once. The photograph
+takes the same rounded square as the fallback, because a shape that changed
+with whether github.com answered would report the wrong fact.
+
+`packages/editor/src/count.tsx` is the petrol pill, in all three named places.
+The fourth bare number — the "show in plan" count inside a question card, in
+`packages/question` — is deliberately left grey. The task names three counts
+and that is not one of them, so promoting it is a decision for whoever owns
+that card.
+
+The header drew no avatar at all before this. Acceptance names it as a face
+surface, so the signed-in user's face is now there at 24px; the roster text
+beside it is unchanged.
+
+The rounded square takes `--radius-md`, 6px. The canvas gives no radius for it
+— frame 73-2 still draws people as circles, which the Notes supersede — so the
+value is read off the chat rail in `images/010-1.png` and rounded to the
+nearest rung on the scale.
+
+![the agent's petrol circle and two loaded photographs, all without lettering](images/009-chat-entries.png)
+![the same rail with every photograph refused, falling back to account colours](images/009-fallback-entries.png)
+![the decisions rail header, with the petrol count](images/009-decisions-header.png)
+![the reconnecting notice](images/009-reconnecting.png)
+![three overlapping faces and the petrol overflow](images/009-presence-stack.png)
+![the same stack on its fallback](images/009-fallback-stack.png)
+![the header, with the signed-in face at 24px](images/009-app-header.png)
+
+Captured against a seeded transcript on a server with `AGENT=off`, since an
+agent entry is otherwise only reachable through a real turn. Photographs were
+refused at the network layer for the two fallback pictures, which is how 004
+exercised the same path.
+
+Not shown: the pill on a quote. A thread's count only passes one once an
+accepted comment has produced prose in more than one block, which needs an
+agent turn to stage. It is the same `Count` as the two above.
+
+The last box stays open: this branch is committed but not pushed, so there is
+no PR to attach anything to yet.
