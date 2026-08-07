@@ -1,9 +1,12 @@
 export { collaborationPlugin } from "./collaboration";
 export type { CollaborationOptions } from "./collaboration";
+export { Count } from "./count";
 export { color, cursor } from "./cursor";
 export type { Cursor } from "./cursor";
 export { Decisions } from "./decisions";
 export type { DecisionsProps } from "./decisions";
+export { AgentFace, Face } from "./face";
+export type { FaceProps } from "./face";
 export { PlanEditor } from "./plan-editor";
 export type { PlanEditorProps, PlanState } from "./plan-editor";
 export { PlanProvider } from "./provider";

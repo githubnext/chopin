@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
 	cursor,
 	Decisions,
+	Face,
 	PlanEditor,
 	QuestionnaireStore,
 	ThreadStore,
@@ -128,10 +129,14 @@ function Header(
 			<span className={`text-sm ${TONE[status]}`}>
 				{status === "connected" ? reason : reason ?? status}
 			</span>
-			<span className="ml-auto text-sm text-text-tertiary">
-				@{handle}
-				{others.length > 0 && ` · with ${others.map(member => `@${member.handle}`).join(", ")}`}
-			</span>
+			<div className="ml-auto flex min-w-0 items-center gap-2">
+				{/* The tallest row a face sits in, so the only one drawn at 24px. */}
+				<Face handle={handle} size={24} />
+				<span className="truncate text-sm text-text-tertiary">
+					@{handle}
+					{others.length > 0 && ` · with ${others.map(member => `@${member.handle}`).join(", ")}`}
+				</span>
+			</div>
 			<PaneToggle onToggle={onToggleDecisions} open={decisionsOpen} pane="decisions" />
 		</header>
 	);

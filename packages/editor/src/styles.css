@@ -824,6 +824,14 @@
 	align-items: center;
 }
 
+/*
+ * The only place faces overlap, which is what the 2px ring on each of them is
+ * for: without the overlap the ring is a white halo around nothing.
+ */
+.plan-presence > * + * {
+	margin-inline-start: -0.375rem;
+}
+
 /* Status ----------------------------------------------------------------- */
 
 /*
