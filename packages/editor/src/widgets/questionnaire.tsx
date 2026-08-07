@@ -120,11 +120,11 @@ function Decided(
 	return (
 		<SidecarCard
 			data-plan-sidecar-questionnaire={value.id}
-			// Read off the node, so a late joiner sees it too and it survives a
-			// restart. Absent on one settled before the plan recorded any.
-			footer={<Provenance at={value.at} by={value.by} verb="Answered" />}
 			label="Question"
 			padded={false}
+			settled
+			// Read provenance from the durable node so late joiners see it.
+			status={<Provenance at={value.at} by={value.by} verb="Answered" />}
 		>
 			<QuestionView
 				answers={resolved}

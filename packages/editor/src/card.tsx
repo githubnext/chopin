@@ -8,9 +8,9 @@
  * convention is how that happens, so the chrome lives here instead and neither
  * card draws its own.
  *
- * The header names the kind, always, so a mixed list can be scanned by what
- * things are. The footer's verb carries the status, because "accepted by" and
- * "answered by" already say it and a separate label would say it twice.
+ * The body distinguishes comments from questions visually; the card keeps its
+ * kind as an accessible name. Settled provenance sits above the body, leaving
+ * the footer for actions that still apply.
  *
  * Controls stay in each body rather than being hoisted into the footer:
  * `QuestionView` owns its submit and cancel and cannot give them up, so moving
@@ -21,13 +21,17 @@
 import type { ComponentProps, ReactNode } from "react";
 
 export type SidecarCardProps = {
-	/** What this is: a comment, a question. Not what has happened to it. */
+	/** The card kind, retained as its programmatic name. */
 	label: string;
-	/** Provenance once it is settled; nothing while it is still open. */
+	/** An action and the reason it remains available. */
 	footer?: ReactNode;
 	children: ReactNode;
 	/** True while the reader is pointing at it, which also marks its prose. */
 	focused?: boolean;
+	/** True once the comment or question can no longer be acted on. */
+	settled?: boolean;
+	/** Who settled the card and when. */
+	status?: ReactNode;
 	/**
 	 * False when the body already insets itself.
 	 *
@@ -39,27 +43,26 @@ export type SidecarCardProps = {
 };
 
 export function SidecarCard(
-	{ children, focused, footer, label, padded = true, ...rest }:
+	{ children, focused, footer, label, padded = true, settled, status, ...rest }:
 		& SidecarCardProps
 		& Omit<ComponentProps<"article">, "children">,
 ) {
+	let surface = settled ? "bg-inset" : "bg-page shadow-resting";
+
 	return (
 		<article
-			className={`flex flex-col overflow-hidden rounded-lg bg-page ring-hairline shadow-resting ${
+			aria-label={label}
+			className={`flex flex-col overflow-hidden rounded-lg ring-hairline ${surface} ${
 				focused ? "bg-selected" : ""
 			}`}
 			{...rest}
 		>
-			<header className="flex items-center gap-2 bg-inset px-3 py-2 hairline-b">
-				<span className="text-sm font-semibold tracking-wide text-text-tertiary uppercase">
-					{label}
-				</span>
-			</header>
+			{status && <div className="flex justify-end px-3 pt-2.5 empty:hidden">{status}</div>}
 
 			<div className={`flex flex-col gap-2 ${padded ? "px-3 py-2.5" : ""}`}>{children}</div>
 
 			{footer && (
-				<footer className="flex items-center gap-2 px-3 py-2 hairline-t">
+				<footer className="flex items-center gap-2 px-3 py-2">
 					{footer}
 				</footer>
 			)}
