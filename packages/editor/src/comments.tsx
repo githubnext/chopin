@@ -171,7 +171,7 @@ function Composer({
 			/>
 			<div className="flex items-center gap-2">
 				<button
-					className="rounded-md bg-brand px-2 py-1 text-sm font-medium text-white hover:bg-brand-hover disabled:opacity-50"
+					className="btn btn-sm btn-primary"
 					disabled={!text.trim() || busy}
 					onClick={send}
 					type="button"
@@ -180,7 +180,7 @@ function Composer({
 				</button>
 				{onCancel && (
 					<button
-						className="rounded-md px-2 py-1 text-sm text-text-tertiary hover:text-text-primary"
+						className="btn btn-sm btn-secondary"
 						onClick={onCancel}
 						type="button"
 					>
@@ -214,14 +214,10 @@ function Confirm({
 		return () => clearTimeout(timer);
 	}, [asked]);
 
-	let style = tone === "primary"
-		? "bg-brand text-white hover:bg-brand-hover"
-		: "text-text-tertiary hover:text-text-primary";
-
 	return (
 		<>
 			<button
-				className={`rounded-md px-2 py-1 text-sm font-medium disabled:opacity-50 ${style}`}
+				className={tone === "primary" ? "btn btn-sm btn-primary" : "btn btn-sm btn-ghost"}
 				disabled={busy}
 				onClick={() => {
 					if (!asked) return setAsked(true);
@@ -288,7 +284,7 @@ export function ThreadCard({
 				<>
 					<span className="text-sm text-warning-ink">Not yet applied</span>
 					<button
-						className="rounded-md px-2 py-1 text-sm text-text-tertiary hover:text-text-primary"
+						className="btn btn-sm btn-ghost"
 						disabled={busy}
 						onClick={onRetry}
 						type="button"

@@ -50,7 +50,7 @@ function Queued(
 					<span className="min-w-0 flex-1 truncate">{item.text}</span>
 					{item.handle === handle && (
 						<button
-							className="shrink-0 text-text-tertiary hover:text-destructive-ink"
+							className="btn btn-icon btn-ghost shrink-0"
 							onClick={() => onWithdraw(item.id)}
 							title="Withdraw"
 							type="button"
@@ -162,7 +162,7 @@ export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) 
 				)}
 				{busy && (
 					<button
-						className="ml-auto rounded-sm bg-control px-2 py-0.5 text-sm hover:bg-control-hover"
+						className="btn btn-sm btn-secondary ml-auto"
 						onClick={() => wire?.send("chat:abort")}
 						type="button"
 					>
@@ -173,7 +173,7 @@ export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) 
 
 			{!!waiting && waiting > 0 && (
 				<button
-					className="animate-enter flex shrink-0 items-center gap-2 bg-warning-wash px-3 py-2 text-left text-sm hover:bg-selected hairline-b"
+					className="btn btn-sm btn-ghost animate-enter flex w-full shrink-0 justify-start gap-2 text-left hairline-b"
 					data-press="wide"
 					onClick={() => onReveal?.("")}
 					type="button"
@@ -224,7 +224,7 @@ export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) 
 							</span>
 						)}
 					<button
-						className="ml-auto text-text-tertiary hover:text-text-primary"
+						className="btn btn-sm btn-ghost ml-auto"
 						onClick={() => {
 							setText(current => (addressed(current) ? current : `${MENTION} ${current}`.trim()));
 							input.current?.focus();

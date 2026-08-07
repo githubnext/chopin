@@ -290,4 +290,80 @@ describe("migration", () => {
 		}
 		expect(offenders).toEqual([]);
 	});
+
+	it("puts each standard action on one button size and tier", () => {
+		let actions = [
+			["apps/web/src/app.tsx", "Join", "Join"],
+			["apps/web/src/app.tsx", "aria-controls={paneId(pane)}", "pane toggle"],
+			["apps/web/src/chat/chat.tsx", 'title="Withdraw"', "Withdraw"],
+			["apps/web/src/chat/chat.tsx", "Stop", "Stop"],
+			["apps/web/src/chat/chat.tsx", 'onReveal?.("")', "waiting disclosure"],
+			["apps/web/src/chat/chat.tsx", "setText(current =>", "planner mention"],
+			[
+				"apps/web/src/chat/transcript.tsx",
+				"onClick={() => setOpen(value => !value)}",
+				"tool disclosure",
+			],
+			["packages/editor/src/comments.tsx", "disabled={!text.trim() || busy}", "comment submit"],
+			["packages/editor/src/comments.tsx", "onClick={onCancel}", "comment cancel"],
+			["packages/editor/src/comments.tsx", "onClick={onRetry}", "Ask again"],
+			["packages/editor/src/decisions.tsx", "aria-expanded={history}", "resolved disclosure"],
+			["packages/question/src/react/question-view.tsx", "Keep it", "Keep it"],
+			["packages/question/src/react/question-view.tsx", "Yes, cancel", "cancel confirmation"],
+			[
+				"packages/question/src/react/question-view.tsx",
+				"onClick={() => setConfirming(true)}",
+				"Cancel",
+			],
+			["packages/question/src/react/question-view.tsx", "Submitting…", "Submit"],
+		] as const;
+		let offenders: string[] = [];
+
+		for (let [file, anchor, action] of actions) {
+			let source = readFileSync(join(ROOT, file), "utf8");
+			let at = source.indexOf(anchor);
+			if (at === -1) {
+				offenders.push(`${file}:1 ${action}: standard action missing`);
+				continue;
+			}
+			let start = source.lastIndexOf("<button", at);
+			let end = source.indexOf("</button>", start);
+			let button = source.slice(start, end);
+			let classes = /className=(?:"([^"]+)"|\{`([^`]*)`\})/.exec(button)
+				?.slice(1).find(Boolean)?.split(/\s+/) ?? [];
+			let size = classes.filter(name => /^(btn-sm|btn-md|btn-icon)$/.test(name));
+			let tier = classes.filter(name =>
+				/^(btn-primary|btn-secondary|btn-ghost|btn-destructive)$/.test(name)
+			);
+			if (!classes.includes("btn") || size.length !== 1 || tier.length !== 1) {
+				offenders.push(
+					`${file}:${source.slice(0, start).split("\n").length} ${action}: ${
+						classes.join(" ") || "no static class list"
+					}`,
+				);
+			}
+		}
+
+		let comments = readFileSync(join(ROOT, "packages/editor/src/comments.tsx"), "utf8");
+		let confirm = comments.slice(
+			comments.indexOf("function Confirm"),
+			comments.indexOf("export type ThreadCardProps"),
+		);
+		for (
+			let [label, classes] of [
+				["Accept confirmation", "btn btn-sm btn-primary"],
+				["Dismiss confirmation", "btn btn-sm btn-ghost"],
+			] as const
+		) {
+			if (!confirm.includes(`\"${classes}\"`)) {
+				offenders.push(
+					`packages/editor/src/comments.tsx:${
+						comments.slice(0, comments.indexOf("function Confirm")).split("\n").length
+					} ${label}: missing ${classes}`,
+				);
+			}
+		}
+
+		expect(offenders).toEqual([]);
+	});
 });

@@ -508,7 +508,7 @@ export function QuestionView(props: QuestionViewProps) {
 								type="button"
 								onClick={() => setConfirming(false)}
 								disabled={submitting}
-								className="rounded-md px-2.5 py-1 text-sm text-text-tertiary transition hover:text-text-primary disabled:opacity-50"
+								className="btn btn-sm btn-secondary"
 							>
 								Keep it
 							</button>
@@ -516,7 +516,7 @@ export function QuestionView(props: QuestionViewProps) {
 								type="button"
 								onClick={onCancel}
 								disabled={disabled || submitting}
-								className="rounded-md px-2.5 py-1 text-sm font-medium text-destructive-ink transition hover:bg-destructive-wash disabled:opacity-50"
+								className="btn btn-sm btn-destructive"
 							>
 								{submitting ? "Cancelling…" : "Yes, cancel"}
 							</button>
@@ -527,7 +527,7 @@ export function QuestionView(props: QuestionViewProps) {
 							type="button"
 							onClick={() => setConfirming(true)}
 							disabled={disabled || submitting}
-							className="rounded-md px-2.5 py-1 text-sm text-text-tertiary transition hover:text-text-primary disabled:opacity-50"
+							className="btn btn-sm btn-secondary"
 						>
 							Cancel
 						</button>
@@ -537,7 +537,7 @@ export function QuestionView(props: QuestionViewProps) {
 							type="button"
 							onClick={onSubmit}
 							disabled={disabled || submitting}
-							className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-white transition-opacity disabled:opacity-50"
+							className="btn btn-sm btn-primary"
 						>
 							{submitting ? "Submitting…" : "Submit"}
 						</button>
