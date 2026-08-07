@@ -248,6 +248,17 @@ describe("controls", () => {
 		expect(utility("choice-control")).toContain("d='m3 7 2.5 2.5L11 4'");
 	});
 
+	it("keeps a disabled checked checkbox's fill distinct from its glyph", () => {
+		let rule = utility("choice-control");
+		let checked = rule.indexOf("&:disabled:checked");
+		let checkbox = rule.indexOf('&[type="checkbox"]:disabled:checked');
+
+		expect(checkbox).toBeGreaterThan(checked);
+		expect(rule.slice(checkbox)).toMatch(
+			/background-color:\s*var\(--color-gray-200\);[\s\S]*stroke='%23605e56'/,
+		);
+	});
+
 	it("keeps ghost fields transparent until hovered", () => {
 		let rule = utility("field-ghost");
 		expect(rule).toMatch(/background-color:\s*transparent/);
