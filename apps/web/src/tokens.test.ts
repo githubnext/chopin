@@ -86,6 +86,29 @@ function withoutComments(source: string): string {
 	return source.replace(/\/\*[\s\S]*?\*\//g, "");
 }
 
+function utility(name: string): string {
+	let start = THEME.indexOf(`@utility ${name} {`);
+	if (start === -1) throw new Error(`no ${name} utility in the theme`);
+
+	let depth = 0;
+	for (let index = THEME.indexOf("{", start); index < THEME.length; index++) {
+		if (THEME[index] === "{") depth++;
+		if (THEME[index] === "}") depth--;
+		if (depth === 0) return THEME.slice(start, index + 1);
+	}
+
+	throw new Error(`unterminated ${name} utility in the theme`);
+}
+
+function sizes(name: string): { height: number; width?: number } {
+	let result: { height: number; width?: number } = { height: 0 };
+	for (let property of ["height", "width"] as const) {
+		let found = new RegExp(`\\n\\s*${property}:\\s*([\\d.]+)rem;`).exec(utility(name));
+		if (found) result[property] = Number(found[1]) * 16;
+	}
+	return result;
+}
+
 describe("palette", () => {
 	let steps = [50, 100, 150, 200, 300, 400, 500, 600, 700, 750, 800, 850, 900, 950];
 
@@ -121,6 +144,7 @@ describe("palette", () => {
 		expect(blue).toEqual([
 			"--color-brand",
 			"--color-brand-hover",
+			"--color-brand-active",
 			"--color-brand-wash",
 			"--color-brand-ink",
 		]);
@@ -173,11 +197,71 @@ describe("edges and depth", () => {
 	});
 });
 
+describe("controls", () => {
+	it("exposes the settled button sizes and destructive states", () => {
+		expect(sizes("btn-md")).toEqual({ height: 32 });
+		expect(sizes("btn-sm")).toEqual({ height: 24 });
+		expect(sizes("btn-icon")).toEqual({ height: 28, width: 28 });
+		expect(hex("--color-destructive-hover")).toBe("#c44746");
+		expect(hex("--color-destructive-active")).toBe("#b34140");
+	});
+
+	it("gives every button tier guarded states without a rest border", () => {
+		for (let tier of ["primary", "secondary", "ghost", "destructive"]) {
+			let rule = utility(`btn-${tier}`);
+			expect(rule).toMatch(/&:hover:not\(:disabled\)/);
+			expect(rule).toMatch(/&:active:not\(:disabled\)/);
+			expect(rule.slice(0, rule.indexOf("&:"))).not.toMatch(/\bborder(?:-\w+)?:/);
+		}
+	});
+
+	it("uses the common disabled button fill and ink", () => {
+		let rule = utility("btn");
+		expect(rule).toMatch(/&:disabled\s*\{[\s\S]*background-color:\s*var\(--color-gray-200\)/);
+		expect(rule).toMatch(/&:disabled\s*\{[\s\S]*color:\s*var\(--color-gray-600\)/);
+	});
+
+	it("keeps focus and invalid outlines visible above their surface", () => {
+		expect(THEME).toMatch(
+			/:focus-visible\s*\{[\s\S]*outline:\s*2px solid var\(--color-brand\);[\s\S]*outline-offset:\s*2px/,
+		);
+		expect(utility("field")).toMatch(
+			/&\[aria-invalid="true"\]\s*\{[\s\S]*outline:\s*2px solid var\(--color-destructive\);[\s\S]*outline-offset:\s*2px/,
+		);
+	});
+
+	it("uses the two designed control edges across fields and choices", () => {
+		for (let name of ["field", "choice-control"]) {
+			let rule = utility(name);
+			expect(rule).toMatch(/border:\s*var\(--edge-width\) solid var\(--color-control-edge\)/);
+			expect(rule).toMatch(/&:disabled\s*\{[\s\S]*border-color:\s*var\(--color-edge\)/);
+		}
+		expect(utility("field")).toMatch(
+			/&:disabled\s*\{[\s\S]*background-color:\s*var\(--color-gray-200\)/,
+		);
+		expect(utility("choice-control")).toMatch(
+			/&:disabled\s*\{[\s\S]*color:\s*var\(--color-gray-600\)/,
+		);
+	});
+
+	it("keeps the checked checkbox glyph", () => {
+		expect(utility("choice-control")).toContain("d='m3 7 2.5 2.5L11 4'");
+	});
+
+	it("keeps ghost fields transparent until hovered", () => {
+		let rule = utility("field-ghost");
+		expect(rule).toMatch(/background-color:\s*transparent/);
+		expect(rule).toMatch(
+			/&:hover:not\(:disabled\)\s*\{[\s\S]*border-color:\s*var\(--color-control-edge\)/,
+		);
+	});
+});
+
 describe("consumer roles", () => {
 	it("keeps gray-400 out of text", () => {
 		for (let file of [...sources(join(ROOT, "apps")), ...sources(join(ROOT, "packages"))]) {
 			expect(withoutComments(readFileSync(file, "utf8"))).not.toMatch(
-				/(?:color:\s*var\(--color-gray-400\)|text-gray-400)/,
+				/(?:^|\n)\s*color:\s*var\(--color-gray-400\)|text-gray-400/,
 			);
 		}
 	});

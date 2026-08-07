@@ -51,6 +51,7 @@
 	/* Petrol is the only accent: action, focus, presence and links all agree. */
 	--color-brand: oklch(0.50006 0.08514 210.06); /* #06707e */
 	--color-brand-hover: oklch(0.42914 0.07315 210.634); /* #045a66 */
+	--color-brand-active: oklch(0.37546 0.06382 210.435); /* #034a54 */
 	--color-brand-wash: oklch(0.95547 0.0277 207.843); /* #dcf6fa */
 	--color-brand-ink: oklch(0.43882 0.07476 210.193); /* #045d69 */
 
@@ -61,6 +62,8 @@
 	--color-warning-wash: oklch(0.95386 0.03439 74.416); /* #feedd7 */
 	--color-warning-ink: oklch(0.4409 0.0921 74.93); /* #704a02 */
 	--color-destructive: oklch(0.60513 0.17178 24.175); /* #d54d4c */
+	--color-destructive-hover: oklch(0.56972 0.16045 24.136); /* #c44746 */
+	--color-destructive-active: oklch(0.53376 0.1489 24.091); /* #b34140 */
 	--color-destructive-wash: oklch(0.94841 0.02583 29.416); /* #ffe8e4 */
 	--color-destructive-ink: oklch(0.4941 0.19046 25.161); /* #b51421 */
 
@@ -156,12 +159,129 @@
 
 @utility control-edge {
 	border: var(--edge-width) solid var(--color-control-edge);
-	outline: var(--edge-width) solid var(--color-control-boundary);
-	outline-offset: calc(-1 * var(--edge-width));
 
 	&:disabled {
 		border-color: var(--color-edge);
-		outline-color: var(--color-edge);
+	}
+}
+
+@utility btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: 0;
+	border-radius: var(--radius-md);
+	font-size: var(--text-sm);
+	font-weight: 500;
+
+	&:disabled {
+		background-color: var(--color-gray-200);
+		color: var(--color-gray-600);
+		cursor: default;
+	}
+}
+
+@utility btn-md {
+	height: 2rem;
+	padding-inline: calc(var(--spacing) * 2);
+}
+
+@utility btn-sm {
+	height: 1.5rem;
+	padding-inline: var(--spacing);
+}
+
+@utility btn-icon {
+	width: 1.75rem;
+	height: 1.75rem;
+	padding: 0;
+}
+
+@utility btn-primary {
+	background-color: var(--color-brand);
+	color: var(--color-page);
+
+	&:hover:not(:disabled) {
+		background-color: var(--color-brand-hover);
+	}
+
+	&:active:not(:disabled) {
+		background-color: var(--color-brand-active);
+	}
+}
+
+@utility btn-secondary {
+	background-color: var(--color-gray-200);
+	color: var(--color-text-primary);
+
+	&:hover:not(:disabled) {
+		background-color: var(--color-gray-300);
+	}
+
+	&:active:not(:disabled) {
+		background-color: var(--color-gray-400);
+	}
+}
+
+@utility btn-ghost {
+	background-color: transparent;
+	color: var(--color-text-secondary);
+
+	&:hover:not(:disabled) {
+		background-color: var(--color-gray-200);
+	}
+
+	&:active:not(:disabled) {
+		background-color: var(--color-gray-300);
+	}
+}
+
+@utility btn-destructive {
+	background-color: var(--color-destructive);
+	color: var(--color-page);
+
+	&:hover:not(:disabled) {
+		background-color: var(--color-destructive-hover);
+	}
+
+	&:active:not(:disabled) {
+		background-color: var(--color-destructive-active);
+	}
+}
+
+@utility field {
+	border: var(--edge-width) solid var(--color-control-edge);
+	border-radius: var(--radius-md);
+	background-color: var(--color-page);
+	color: var(--color-text-primary);
+
+	&:disabled {
+		border-color: var(--color-edge);
+		background-color: var(--color-gray-200);
+		color: var(--color-gray-600);
+	}
+
+	&[aria-invalid="true"] {
+		border-color: var(--color-destructive);
+		outline: 2px solid var(--color-destructive);
+		outline-offset: 2px;
+	}
+}
+
+@utility field-ghost {
+	border: var(--edge-width) solid transparent;
+	border-radius: var(--radius-md);
+	background-color: transparent;
+	color: var(--color-text-primary);
+
+	&:hover:not(:disabled) {
+		border-color: var(--color-control-edge);
+	}
+
+	&:disabled {
+		border-color: var(--color-edge);
+		background-color: var(--color-gray-200);
+		color: var(--color-gray-600);
 	}
 }
 
@@ -169,8 +289,7 @@
 	appearance: none;
 	border: var(--edge-width) solid var(--color-control-edge);
 	background-color: var(--color-page);
-	outline: var(--edge-width) solid var(--color-control-boundary);
-	outline-offset: calc(-1 * var(--edge-width));
+	color: var(--color-text-primary);
 
 	&[type="radio"] {
 		border-radius: 9999px;
@@ -183,7 +302,6 @@
 	&:checked {
 		border-color: var(--color-brand);
 		background-color: var(--color-brand);
-		outline-color: var(--color-brand);
 	}
 
 	&[type="radio"]:checked {
@@ -196,20 +314,32 @@
 
 	&:disabled {
 		border-color: var(--color-edge);
-		background-color: var(--color-gray-100);
-		outline-color: var(--color-edge);
+		background-color: var(--color-gray-200);
+		color: var(--color-gray-600);
 	}
 
 	&:disabled:checked {
-		background-color: var(--color-gray-300);
+		background-color: var(--color-gray-600);
 	}
 
 	&[type="radio"]:disabled:checked {
-		box-shadow: inset 0 0 0 3px var(--color-gray-100);
+		box-shadow: inset 0 0 0 3px var(--color-gray-200);
 	}
 
 	&[type="checkbox"]:disabled:checked {
 		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath fill='none' stroke='%23605e56' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m3 7 2.5 2.5L11 4'/%3E%3C/svg%3E");
+	}
+}
+
+/* Extra contrast is an opt-in accommodation, not the normal control edge. */
+@media (prefers-contrast: more) {
+	:where(.control-edge, .field, .choice-control):not([aria-invalid="true"]) {
+		outline: var(--edge-width) solid var(--color-control-boundary);
+		outline-offset: calc(-1 * var(--edge-width));
+	}
+
+	:where(.control-edge, .field, .choice-control):disabled {
+		outline-color: var(--color-edge);
 	}
 }
 
@@ -259,7 +389,7 @@ body {
  */
 :where(a, button, input, select, summary, textarea, [role="button"], [tabindex]):focus-visible {
 	outline: 2px solid var(--color-brand);
-	outline-offset: 1px;
+	outline-offset: 2px;
 }
 
 @keyframes item-enter {
