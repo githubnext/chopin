@@ -1,7 +1,7 @@
 ---
 id: "003"
 title: Rebuild the design tokens
-status: pr-opened
+status: done
 branch: task/003-rebuild-design-tokens
 pr: "https://github.com/githubnext/chopin/pull/28"
 stacked_on:

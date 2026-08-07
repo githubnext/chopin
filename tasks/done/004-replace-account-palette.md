@@ -1,7 +1,7 @@
 ---
 id: "004"
 title: Replace the account colour palette
-status: draft
+status: done
 branch:
 pr:
 stacked_on:

@@ -1,7 +1,7 @@
 ---
 id: "009"
 title: Rebuild the status marks and avatars
-status: draft
+status: ready
 branch:
 pr:
 stacked_on:

@@ -1,7 +1,7 @@
 ---
 id: "010"
 title: Rebuild the chat rail
-status: draft
+status: ready
 branch:
 pr:
 stacked_on:
