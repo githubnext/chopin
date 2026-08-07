@@ -290,11 +290,14 @@ function classLists(button: string): string[][] {
 	if (templateClass) return [templateClass.split(/\s+/)];
 
 	let expression = /^className=\{([^}]*)\}/.exec(attribute)?.[1];
-	return expression
-		? [...expression.matchAll(/"([^"]+)"/g)]
-			.map(match => match[1]!.split(/\s+/))
-			.filter(classes => classes.some(name => name === "btn" || name.startsWith("btn-")))
-		: [];
+	if (!expression) return [];
+
+	if (expression.startsWith("cn(")) {
+		return [[...expression.matchAll(/"([^"]+)"/g)].flatMap(match => match[1]!.split(/\s+/))];
+	}
+
+	let conditional = /\?\s*"([^"]+)"\s*:\s*"([^"]+)"/.exec(expression);
+	return conditional ? [conditional[1]!.split(/\s+/), conditional[2]!.split(/\s+/)] : [];
 }
 
 function standardButtonOffenders(source: string, file: string, action: StandardAction): string[] {
@@ -367,6 +370,14 @@ describe("migration", () => {
 		expect(previousGuardWouldAccept).toBe(true);
 		expect(standardButtonOffenders(
 			'<button className="btn btn-sm btn-primary bg-brand px-2 py-1">Fixture</button>',
+			"fixture.tsx",
+			{ action: "fixture", marker: "Fixture", size: "btn-sm", tiers: ["btn-primary"] },
+		)).toEqual(["fixture.tsx:1 fixture: conflicting rest utilities bg-brand px-2 py-1"]);
+	});
+
+	it("rejects legacy rest utilities in a separate cn class fragment", () => {
+		expect(standardButtonOffenders(
+			'<button className={cn("btn btn-sm btn-primary", "bg-brand px-2 py-1")}>Fixture</button>',
 			"fixture.tsx",
 			{ action: "fixture", marker: "Fixture", size: "btn-sm", tiers: ["btn-primary"] },
 		)).toEqual(["fixture.tsx:1 fixture: conflicting rest utilities bg-brand px-2 py-1"]);
