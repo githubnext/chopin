@@ -23,7 +23,7 @@
 	 * rather than ours. `.plan` is outside that root, so this catches the
 	 * theme's value on the way past.
 	 */
-	--plan-body: var(--text-base);
+	--plan-body: var(--text-lg);
 }
 
 /* Decisions pane -------------------------------------------------------- */
@@ -41,6 +41,8 @@
 	flex: 1;
 	min-width: 0;
 	min-height: 0;
+	background: var(--color-page);
+	box-shadow: var(--shadow-raised);
 }
 
 .plan-decisions {
@@ -80,15 +82,12 @@
  * permitted here, and the shorthand works today solely because browsers expand
  * it before filtering. Not worth depending on.
  *
- * The colour it composites to over the page is recorded because a percentage
- * of an already-pale token says nothing about whether anyone will see it —
- * `accent` is `oklch(0.85 0.09 250)`, so 14% of it renders `#f9fbff`, which is
- * white. `ring` is dark enough that a wash of it reads, at about the weight of
- * the browser's own text selection.
+ * The colour is recorded beside the declaration because it is calibrated as
+ * a rendered wash, not as an abstract percentage of a darker accent.
  */
 ::highlight(plan-related) {
-	/* #b7cff2 */
-	background-color: color-mix(in oklch, var(--color-ring) 40%, transparent);
+	/* #dcf6fa */
+	background-color: var(--color-brand-wash);
 }
 
 /*
@@ -101,9 +100,9 @@
  */
 .plan .plan-content [data-plan-related] {
 	border-radius: var(--radius-sm);
-	outline: 1px solid color-mix(in oklch, var(--color-ring) 60%, transparent);
+	outline: 1px solid color-mix(in oklch, var(--color-brand) 60%, transparent);
 	outline-offset: 3px;
-	background: color-mix(in oklch, var(--color-accent) 20%, transparent);
+	background: var(--color-brand-wash);
 }
 
 @container (max-width: 46rem) {
@@ -120,7 +119,7 @@
 	.plan-sidecar {
 		grid-column: 1;
 		grid-row: 2;
-		border-block-start: 1px solid var(--color-border);
+		border-block-start: var(--edge-width) solid var(--color-edge);
 		border-inline-start: 0;
 	}
 
@@ -145,42 +144,42 @@
 	font-family: var(--font-sans);
 
 	--basePageBg: transparent;
-	--baseBase: var(--color-background);
-	--baseBgSubtle: var(--color-muted);
-	--baseBg: var(--color-muted);
-	--baseBgHover: var(--color-accent);
-	--baseBgActive: var(--color-accent);
-	--baseLine: var(--color-border);
-	--baseBorder: var(--color-border);
-	--baseBorderHover: var(--color-ring);
-	--baseSolid: var(--color-muted-foreground);
-	--baseSolidHover: var(--color-foreground);
-	--baseText: var(--color-foreground);
-	--baseTextContrast: var(--color-foreground);
+	--baseBase: var(--color-page);
+	--baseBgSubtle: var(--color-inset);
+	--baseBg: var(--color-hover);
+	--baseBgHover: var(--color-hover);
+	--baseBgActive: var(--color-selected);
+	--baseLine: var(--color-edge);
+	--baseBorder: var(--color-edge);
+	--baseBorderHover: var(--color-brand);
+	--baseSolid: var(--color-text-tertiary);
+	--baseSolidHover: var(--color-text-primary);
+	--baseText: var(--color-text-primary);
+	--baseTextContrast: var(--color-text-primary);
 
-	--accentBase: var(--color-background);
-	--accentBgSubtle: var(--color-muted);
-	--accentBg: var(--color-muted);
-	--accentBgHover: var(--color-accent);
-	--accentBgActive: var(--color-accent);
-	--accentLine: var(--color-border);
-	--accentBorder: var(--color-border);
-	--accentBorderHover: var(--color-ring);
-	--accentSolid: var(--color-primary);
-	--accentSolidHover: var(--color-primary-hover);
-	--accentText: var(--color-primary);
-	--accentTextContrast: var(--color-foreground);
+	--accentBase: var(--color-page);
+	--accentBgSubtle: var(--color-brand-wash);
+	--accentBg: var(--color-brand-wash);
+	--accentBgHover: var(--color-brand-wash);
+	--accentBgActive: var(--color-brand-wash);
+	--accentLine: var(--color-edge);
+	--accentBorder: var(--color-edge);
+	--accentBorderHover: var(--color-brand);
+	--accentSolid: var(--color-brand);
+	--accentSolidHover: var(--color-brand-hover);
+	--accentText: var(--color-brand);
+	--accentTextContrast: var(--color-text-primary);
 
-	--admonitionTipBg: var(--color-muted);
+	--admonitionTipBg: var(--color-success-wash);
 	--admonitionTipBorder: var(--color-success);
-	--admonitionInfoBg: var(--color-muted);
-	--admonitionInfoBorder: var(--color-primary);
-	--admonitionCautionBg: var(--color-muted);
+	--admonitionInfoBg: var(--color-brand-wash);
+	--admonitionInfoBorder: var(--color-brand);
+	--admonitionCautionBg: var(--color-warning-wash);
 	--admonitionCautionBorder: var(--color-warning);
-	--admonitionDangerBg: var(--color-muted);
+	--admonitionDangerBg: var(--color-destructive-wash);
 	--admonitionDangerBorder: var(--color-destructive);
-	--admonitionNoteBg: var(--color-muted);
-	--admonitionNoteBorder: var(--color-border);
+	--admonitionNoteBg: var(--color-hover);
+	--admonitionNoteBorder: var(--color-edge);
 
 	--error-color: var(--color-destructive);
 	--font-body: var(--font-sans);
@@ -204,7 +203,7 @@
 	font-size: var(--plan-body);
 	/* Prose wants looser leading than the UI rhythm the token pairs with. */
 	line-height: 1.6;
-	color: var(--color-foreground);
+	color: var(--color-text-primary);
 }
 
 .plan .plan-content:focus {
@@ -222,7 +221,7 @@
 	font-weight: 600;
 	line-height: 1.3;
 	margin-block: 1.5em 0.5em;
-	color: var(--color-foreground);
+	color: var(--color-text-primary);
 	/* Short enough to weigh every break at once, and an 8/1 split reads as a mistake. */
 	text-wrap: balance;
 }
@@ -275,12 +274,12 @@
 .plan-content blockquote {
 	margin-block: 1em;
 	padding-inline-start: 1em;
-	border-inline-start: 3px solid var(--color-border);
-	color: var(--color-muted-foreground);
+	border-inline-start: 3px solid var(--color-edge);
+	color: var(--color-text-secondary);
 }
 
 .plan-content a {
-	color: var(--color-primary);
+	color: var(--color-brand);
 	text-decoration: underline;
 	text-underline-offset: 2px;
 }
@@ -288,22 +287,22 @@
 .plan-content hr {
 	margin-block: 1.5em;
 	border: 0;
-	border-block-start: 1px solid var(--color-border);
+	border-block-start: var(--edge-width) solid var(--color-edge);
 }
 
 .plan-content :is(strong, b) {
 	font-weight: 600;
-	color: var(--color-foreground);
+	color: var(--color-text-primary);
 }
 
 /* Structural components ------------------------------------------------- */
 
 .plan-content [data-plan-type] {
-	border-inline-start: 3px solid var(--color-border);
+	border-inline-start: 3px solid var(--color-edge);
 	padding: 0.75rem 1rem;
 	margin-block: 1rem;
 	border-radius: var(--radius-md);
-	background: var(--color-muted);
+	background: var(--color-hover);
 }
 
 /* `note` is deliberately absent: it keeps the structural grey from the rule above. */
@@ -311,7 +310,7 @@
 	border-color: var(--color-success);
 }
 .plan-content [data-plan-type="important"] {
-	border-color: var(--color-primary);
+	border-color: var(--color-brand);
 }
 .plan-content [data-plan-type="warning"] {
 	border-color: var(--color-warning);
@@ -321,12 +320,12 @@
 }
 
 .plan-content pre {
-	background: var(--color-code);
+	background: var(--color-inset);
 	border-radius: var(--radius-md);
 	padding: 0.75rem 1rem;
 	overflow-x: auto;
 	font-family: ui-monospace, SFMono-Regular, monospace;
-	font-size: 0.8125rem;
+	font-size: var(--text-sm);
 }
 
 /*
@@ -334,8 +333,8 @@
  * code should not shrink to body size — and left to `pre` when it is a block.
  */
 .plan-content :not(pre) > code {
-	background: var(--color-code);
-	color: var(--color-foreground);
+	background: var(--color-inset);
+	color: var(--color-text-primary);
 	border-radius: var(--radius-sm);
 	padding: 0.125em 0.3em;
 	font-family: ui-monospace, SFMono-Regular, monospace;
@@ -362,7 +361,7 @@
 
 .plan-content th,
 .plan-content td {
-	border: 1px solid var(--color-border);
+	border: var(--edge-width) solid var(--color-edge);
 	padding: 0.375rem 0.625rem;
 	text-align: start;
 	/* Without this a cell collapses onto its neighbour when a column is
@@ -373,8 +372,8 @@
 
 .plan-content th {
 	font-weight: 600;
-	background: var(--color-muted);
-	color: var(--color-foreground);
+	background: var(--color-hover);
+	color: var(--color-text-primary);
 }
 
 /* A cell's paragraph is the cell; it should not add document spacing. */
@@ -394,7 +393,7 @@
  * everything it covered.
  */
 .plan .plan-content .plan-cell-selected {
-	background: color-mix(in oklch, var(--color-ring) 22%, transparent);
+	background: var(--color-selected);
 }
 
 /* Set on the table while a cell range is being dragged out, so the browser's
@@ -440,17 +439,17 @@
 
 .plan-grip {
 	border-radius: var(--radius-sm);
-	background: var(--color-muted);
+	background: var(--color-control);
 	transition: background-color var(--duration-fast) var(--ease-out);
 }
 
 .plan-grip:hover,
 .plan-grip:focus-visible {
-	background: color-mix(in oklch, var(--color-ring) 45%, transparent);
+	background: color-mix(in oklch, var(--color-brand) 45%, transparent);
 }
 
 .plan-grip:focus-visible {
-	outline: 2px solid var(--color-ring);
+	outline: 2px solid var(--color-brand);
 	outline-offset: 1px;
 }
 
@@ -464,13 +463,13 @@
 
 .plan-grip.is-held {
 	cursor: grabbing;
-	background: var(--color-ring);
+	background: var(--color-brand);
 }
 
 /* The header row's bar. Drawn so the rail has no gap where the row plainly is,
    but not a control: the header cannot move and cannot be removed. */
 .plan-grip.is-fixed {
-	background: color-mix(in oklch, var(--color-border) 60%, transparent);
+	background: color-mix(in oklch, var(--color-edge) 60%, transparent);
 	cursor: default;
 }
 
@@ -489,9 +488,10 @@
 	pointer-events: none;
 	transition: opacity var(--duration-fast) var(--ease-out);
 	border-radius: var(--radius-sm);
-	background: var(--color-popover);
-	box-shadow: 0 0 0 1px var(--color-border);
-	color: var(--color-muted-foreground);
+	background: var(--color-page);
+	outline: var(--edge-width) solid var(--color-control-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+	color: var(--color-text-quaternary);
 }
 
 .plan-grip-remove[data-plan-shown],
@@ -507,14 +507,14 @@
 .plan-grip-remove:hover,
 .plan-insert:hover,
 .plan-align:hover {
-	color: var(--color-foreground);
-	box-shadow: 0 0 0 1px var(--color-ring);
+	color: var(--color-text-primary);
+	outline-color: var(--color-brand);
 }
 
 .plan-grip-remove:focus-visible,
 .plan-insert:focus-visible,
 .plan-align:focus-visible {
-	outline: 2px solid var(--color-ring);
+	outline: 2px solid var(--color-brand);
 	outline-offset: 1px;
 }
 
@@ -593,7 +593,7 @@
 /* Where the drag will land. A hairline, because it is a position rather than a
    region: anything wider reads as the width of what is being moved. */
 .plan-drop {
-	background: var(--color-ring);
+	background: var(--color-brand);
 	border-radius: 1px;
 	pointer-events: none;
 }
@@ -637,7 +637,7 @@
 	border-radius: 0.25rem;
 	background: var(--lexical-cursor-color, currentColor);
 	color: white;
-	font-size: 0.625rem;
+	font-size: var(--text-sm);
 	line-height: 1rem;
 	font-weight: 500;
 	white-space: nowrap;
@@ -687,7 +687,7 @@
  */
 .plan-content [data-plan-preview] [data-plan-error] {
 	color: var(--color-destructive);
-	font-size: 0.75rem;
+	font-size: var(--text-sm);
 	padding: 0.5rem 0;
 }
 
@@ -701,20 +701,21 @@
  */
 .plan-content .plan-code-view {
 	--diffs-font-family: ui-monospace, SFMono-Regular, monospace;
-	--diffs-font-size: 0.8125rem;
+	--diffs-font-size: var(--text-sm);
 	--diffs-line-height: 1.5;
 	--diffs-tab-size: 2;
 	--diffs-header-font-family: var(--font-sans);
 
 	/*
-	 * A border rather than a fill. The renderer paints its own background from
+	 * A hairline rather than a fill. The renderer paints its own background from
 	 * the syntax theme, and a second one behind it would show at the edges as
 	 * a rim of the wrong grey — but with neither, a snippet on a white page
 	 * has nothing to say where it starts.
 	 */
 	overflow: hidden;
-	border: 1px solid var(--color-border);
 	border-radius: var(--radius-md);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
 }
 
 /* Each file in a patch is its own box, and they stack. */
@@ -727,7 +728,7 @@
 .plan-content [data-plan-source] {
 	white-space: pre-wrap;
 	font-family: ui-monospace, SFMono-Regular, monospace;
-	font-size: 0.8125rem;
+	font-size: var(--text-sm);
 }
 
 /*
@@ -736,7 +737,7 @@
  */
 .plan-content [data-plan-preview]:not(:empty) ~ [data-plan-source] {
 	opacity: 0.6;
-	font-size: 0.75rem;
+	font-size: var(--text-sm);
 }
 
 /*
@@ -760,7 +761,7 @@
 	 * the block is collapsed, which would keep a formula on screen forever.
 	 */
 	position: relative;
-	background: var(--color-code);
+	background: var(--color-inset);
 	border-radius: var(--radius-md);
 	padding: var(--ace-formula-inset-block) var(--ace-formula-inset-inline);
 	overflow-x: auto;
@@ -779,7 +780,7 @@
 	position: absolute;
 	inset-block-start: var(--ace-formula-inset-block);
 	inset-inline-start: var(--ace-formula-inset-inline);
-	color: var(--color-muted-foreground);
+	color: var(--color-text-quaternary);
 	pointer-events: none;
 }
 
@@ -839,8 +840,8 @@
 	gap: 0.375rem;
 	max-width: min(22rem, 60%);
 	pointer-events: none;
-	font-size: var(--text-2xs);
-	line-height: var(--text-2xs--line-height);
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
 }
 
 /*
@@ -850,10 +851,11 @@
  */
 .plan-status[data-level="notice"] {
 	padding: 0.25rem 0.625rem;
-	border: 1px solid var(--color-border);
 	border-radius: 9999px;
-	background: var(--color-background);
-	box-shadow: var(--shadow-xs);
+	background: var(--color-page);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+	box-shadow: var(--shadow-resting);
 }
 
 .plan-status-dot {
@@ -889,7 +891,7 @@
 
 /* Written just now. */
 .plan .plan-content [data-plan-change="added"] {
-	background: color-mix(in oklch, var(--color-ring) 10%, transparent);
+	background: var(--color-brand-wash);
 }
 
 /*
@@ -898,7 +900,7 @@
  * saying "new, but less so" about them would not be true.
  */
 .plan .plan-content [data-plan-change="moved"] {
-	background: color-mix(in oklch, var(--color-muted-foreground) 9%, transparent);
+	background: color-mix(in oklch, var(--color-text-quaternary) 9%, transparent);
 }
 
 /*
@@ -919,11 +921,11 @@
 }
 
 .plan .plan-content [data-plan-gap-before="removed"] {
-	--plan-gap-above: 0 -0.375rem 0 -0.3125rem var(--color-muted-foreground);
+	--plan-gap-above: 0 -0.375rem 0 -0.3125rem var(--color-text-quaternary);
 }
 
 .plan .plan-content [data-plan-gap-after="removed"] {
-	--plan-gap-below: 0 0.375rem 0 -0.3125rem var(--color-muted-foreground);
+	--plan-gap-below: 0 0.375rem 0 -0.3125rem var(--color-text-quaternary);
 }
 
 /*
@@ -933,7 +935,7 @@
 .plan .plan-content [data-plan-gap-before="vacated"] {
 	--plan-gap-above: 0 -0.375rem 0 -0.34375rem color-mix(
 		in oklch,
-		var(--color-muted-foreground) 55%,
+		var(--color-text-quaternary) 55%,
 		transparent
 	);
 }
@@ -941,7 +943,7 @@
 .plan .plan-content [data-plan-gap-after="vacated"] {
 	--plan-gap-below: 0 0.375rem 0 -0.34375rem color-mix(
 		in oklch,
-		var(--color-muted-foreground) 55%,
+		var(--color-text-quaternary) 55%,
 		transparent
 	);
 }
@@ -959,7 +961,7 @@
  * way.
  */
 .plan .plan-content [data-plan-related][data-plan-change] {
-	background: color-mix(in oklch, var(--color-accent) 20%, transparent);
+	background: var(--color-brand-wash);
 }
 
 /* Reaching the ones off screen ------------------------------------------- */
@@ -993,12 +995,13 @@
 	display: flex;
 	align-self: center;
 	align-items: stretch;
-	border: 1px solid var(--color-border);
 	border-radius: 9999px;
-	background: var(--color-background);
-	box-shadow: var(--shadow-sm);
-	font-size: var(--text-2xs);
-	line-height: var(--text-2xs--line-height);
+	background: var(--color-page);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+	box-shadow: var(--shadow-resting);
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
 	overflow: hidden;
 }
 
@@ -1008,18 +1011,18 @@
 	align-items: center;
 	gap: 0.375rem;
 	padding: 0.25rem 0.625rem;
-	color: var(--color-foreground);
+	color: var(--color-text-primary);
 	cursor: pointer;
 }
 
 .plan-changes-more {
 	padding-inline: 0.375rem;
-	border-inline-start: 1px solid var(--color-border);
+	border-inline-start: var(--edge-width) solid var(--color-edge);
 }
 
 .plan-changes-go:hover,
 .plan-changes-more:hover {
-	background: var(--color-accent);
+	background: var(--color-brand-wash);
 }
 
 .plan-changes-list,
@@ -1029,17 +1032,18 @@
 	max-height: 12rem;
 	overflow-y: auto;
 	list-style: none;
-	border: 1px solid var(--color-border);
 	border-radius: var(--radius-md);
-	background: var(--color-background);
-	box-shadow: var(--shadow-md);
-	font-size: var(--text-2xs);
-	line-height: var(--text-2xs--line-height);
+	background: var(--color-page);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+	box-shadow: var(--shadow-overlay);
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
 }
 
 .plan-changes-empty {
 	padding: 0.5rem 0.625rem;
-	color: var(--color-muted-foreground);
+	color: var(--color-text-quaternary);
 }
 
 .plan-changes-item {
@@ -1052,20 +1056,30 @@
 .plan-changes-kind {
 	flex: none;
 	font-weight: 600;
-	color: var(--color-muted-foreground);
+	color: var(--color-text-tertiary);
 }
 
 /* Still waiting to be reached, as opposed to already shown and counted down. */
 .plan-changes-item[data-unread] {
-	background: color-mix(in oklch, var(--color-ring) 8%, transparent);
+	background: var(--color-brand-wash);
+}
+
+.plan-changes-item[data-unread]::before {
+	content: "";
+	flex: none;
+	width: 0.375rem;
+	height: 0.375rem;
+	margin-block-start: 0.4375rem;
+	border-radius: 9999px;
+	background: var(--color-brand);
 }
 
 .plan-changes-item[data-unread] .plan-changes-kind {
-	color: var(--color-foreground);
+	color: var(--color-text-primary);
 }
 
 .plan-changes-item[data-kind="removed"] .plan-changes-text {
-	color: var(--color-muted-foreground);
+	color: var(--color-text-secondary);
 	text-decoration: line-through;
 }
 

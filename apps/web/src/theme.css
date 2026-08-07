@@ -10,82 +10,82 @@
 @source "../../../packages/editor/src/**/*.tsx";
 @source "../../../packages/question/src/**/*.tsx";
 
-/*
- * The palette.
- *
- * Light only, and deliberately small: this is the complete set of tokens the
- * editor and questionnaire styles actually read. The editor's own stylesheet
- * remaps MDXEditor's Radix variables onto these, so there is one place to
- * change a colour and no second theme to keep in step.
- *
- * `static` emits the palette whole. Without it Tailwind keeps only the tokens
- * it can see a utility class using, and it looks for those in the content
- * files — so a token read solely through `var()` in a stylesheet is pruned.
- */
+/* The complete light-only system. `static` keeps tokens read from plain CSS. */
 @theme static {
-	--color-background: oklch(1 0 0);
-	--color-foreground: oklch(0.21 0.006 285);
+	--color-*: initial;
+	--color-transparent: transparent;
+	--color-current: currentColor;
+	--color-white: oklch(1 0 0);
 
-	/* The chrome around the document: a tint, so the plan is the only white surface. */
-	--color-surface: oklch(0.985 0.001 285);
+	/* Warm olive neutrals. The lightest steps are deliberately close, not aliases. */
+	--color-gray-50: oklch(0.99051 0.00263 95); /* #fcfcfa */
+	--color-gray-100: oklch(0.97857 0.00264 95); /* #f8f8f6 */
+	--color-gray-150: oklch(0.96623 0.0039 95); /* #f4f4f1 */
+	--color-gray-200: oklch(0.94216 0.00393 95); /* #ecece9 */
+	--color-gray-300: oklch(0.89108 0.00552 95); /* #dcdbd7 */
+	--color-gray-400: oklch(0.74029 0.00856 95); /* #acaba5 */
+	--color-gray-500: oklch(0.56514 0.0123 95); /* #78766e */
+	--color-gray-600: oklch(0.48124 0.01278 95); /* #605e56 */
+	--color-gray-700: oklch(0.39036 0.01026 95); /* #47453f */
+	--color-gray-750: oklch(0.32036 0.00877 95); /* #34332e */
+	--color-gray-800: oklch(0.25993 0.00745 95); /* #252420 */
+	--color-gray-850: oklch(0.20017 0.00605 95); /* #171613 */
+	--color-gray-900: oklch(0.15908 0.00637 95); /* #0e0d0a */
+	--color-gray-950: oklch(0.09862 0.00629 95); /* #040302 */
 
-	--color-muted: oklch(0.968 0.002 285);
-	--color-muted-foreground: oklch(0.552 0.014 285);
+	/* Surfaces: white is reserved for the document and things lifted above it. */
+	--color-page: oklch(1 0 0);
+	--color-ground: var(--color-gray-150);
+	--color-hover: var(--color-gray-100);
+	--color-inset: var(--color-gray-100);
+	--color-selected: var(--color-gray-200);
+	--color-control: var(--color-gray-200);
+	--color-control-hover: var(--color-gray-300);
 
-	--color-card: oklch(1 0 0);
-	--color-card-foreground: oklch(0.21 0.006 285);
+	--color-text-primary: var(--color-gray-900);
+	--color-text-secondary: var(--color-gray-700);
+	--color-text-tertiary: var(--color-gray-600);
+	--color-text-quaternary: var(--color-gray-500);
 
-	--color-popover: oklch(1 0 0);
-	--color-popover-foreground: oklch(0.21 0.006 285);
+	/* Petrol is the only accent: action, focus, presence and links all agree. */
+	--color-brand: oklch(0.50006 0.08514 210.06); /* #06707e */
+	--color-brand-hover: oklch(0.42914 0.07315 210.634); /* #045a66 */
+	--color-brand-wash: oklch(0.95547 0.0277 207.843); /* #dcf6fa */
+	--color-brand-ink: oklch(0.43882 0.07476 210.193); /* #045d69 */
 
-	--color-primary: oklch(0.55 0.15 258);
-	--color-primary-foreground: oklch(0.985 0 0);
-	--color-primary-hover: oklch(0.48 0.16 258);
+	--color-success: oklch(0.51958 0.10966 145.072); /* #3b793f */
+	--color-success-wash: oklch(0.95503 0.03552 145.29); /* #e2f7e2 */
+	--color-success-ink: oklch(0.44098 0.11068 144.754); /* #236228 */
+	--color-warning: oklch(0.59898 0.12586 74.986); /* #ab7302 */
+	--color-warning-wash: oklch(0.95386 0.03439 74.416); /* #feedd7 */
+	--color-warning-ink: oklch(0.4409 0.0921 74.93); /* #704a02 */
+	--color-destructive: oklch(0.60513 0.17178 24.175); /* #d54d4c */
+	--color-destructive-wash: oklch(0.94841 0.02583 29.416); /* #ffe8e4 */
+	--color-destructive-ink: oklch(0.4941 0.19046 25.161); /* #b51421 */
 
-	--color-secondary: oklch(0.968 0.002 285);
-	--color-secondary-foreground: oklch(0.21 0.006 285);
+	/* Passive structure and controls are the only two edge weights. */
+	--color-edge: rgb(0 0 0 / 7%);
+	--color-control-edge: rgb(0 0 0 / 20%);
+	--edge-width: 1px;
 
 	/*
-	 * Used as a wash rather than a fill: highlights mix it down to 16–45%, so
-	 * it needs enough chroma to survive being diluted against white.
-	 */
-	--color-accent: oklch(0.85 0.09 250);
-	--color-accent-foreground: oklch(0.21 0.006 285);
-
-	--color-destructive: oklch(0.58 0.22 27);
-	--color-destructive-foreground: oklch(0.985 0 0);
-
-	--color-success: oklch(0.62 0.13 155);
-	--color-warning: oklch(0.72 0.15 75);
-
-	--color-border: oklch(0.92 0.004 285);
-	--color-input: oklch(0.92 0.004 285);
-	--color-ring: oklch(0.62 0.14 258);
-
-	/* Code and formula surfaces, which want to read as insets rather than cards. */
-	--color-code: oklch(0.972 0.003 285);
-
-	/*
-	 * Wide steps from `base` up, where a heading needs to outrank its body by
-	 * more than weight; narrow below, where the sizes are already near the floor
-	 * of legibility. Line heights are declared beside each size because
-	 * Tailwind's defaults are computed against Tailwind's sizes.
+	 * Chrome, conversation, prose, section and title. Colour carries hierarchy
+	 * inside the chrome rather than two more sizes below the legibility floor.
 	 */
 	--text-*: initial;
-	--text-2xs: 0.6875rem; /* 11px — timestamps, counts, gutter chips */
-	--text-2xs--line-height: 1rem;
-	--text-xs: 0.75rem; /* 12px — secondary chrome */
-	--text-xs--line-height: 1rem;
-	--text-sm: 0.8125rem; /* 13px — rail body */
+	--text-sm: 0.8125rem; /* 13px — all chrome */
 	--text-sm--line-height: 1.25rem;
-	--text-base: 0.9375rem; /* 15px — the document */
-	--text-base--line-height: 1.5rem;
-	--text-lg: 1.125rem; /* 18px — h3 */
-	--text-lg--line-height: 1.5rem;
-	--text-xl: 1.375rem; /* 22px — h2 */
-	--text-xl--line-height: 1.75rem;
-	--text-2xl: 1.75rem; /* 28px — h1 */
-	--text-2xl--line-height: 2.125rem;
+	--text-base: 0.9375rem; /* 15px — chat and comment bodies */
+	--text-base--line-height: 1.375rem;
+	--text-lg: 1.0625rem; /* 17px — document prose */
+	--text-lg--line-height: 1.6875rem;
+	--text-xl: 1.5rem; /* 24px — section headings and dialogs */
+	--text-xl--line-height: 1.875rem;
+	--text-2xl: 2rem; /* 32px — plan title */
+	--text-2xl--line-height: 2.375rem;
+
+	/* Tailwind's multiplier keeps 4px steps and admits 2, 6, 10 and 22px. */
+	--spacing: 0.25rem;
 
 	/*
 	 * Tailwind's own values, declared here so the scale has one owner: a change
@@ -96,28 +96,23 @@
 	--radius-md: 0.375rem; /* 6px — cards, inputs, callouts, code blocks */
 	--radius-lg: 0.5rem; /* 8px — popovers and panels */
 
-	/*
-	 * Two stops from `sm` up: a tight contact shadow where the surface meets the
-	 * page, a wide ambient fall-off around it. One stop has to choose, and either
-	 * choice reads as a blurred border. Mixed from `foreground` rather than black,
-	 * which would grey toward a different hue than the rest of the page.
-	 *
-	 * `initial` first, here and in the scales below: `@theme` merges with
-	 * Tailwind's rather than replacing it, so a rung we do not declare keeps
-	 * resolving to a value from a different design system. Reaching for one
-	 * should draw nothing, not something plausible.
-	 */
+	/* Warm-tinted depth, copied from the settled Figma shadow table. */
+	--shadow-color: 14 13 10;
 	--shadow-*: initial;
-	--shadow-xs: 0 1px 2px -1px color-mix(in oklch, var(--color-foreground) 8%, transparent);
-	--shadow-sm:
-		0 1px 2px -1px color-mix(in oklch, var(--color-foreground) 8%, transparent),
-		0 2px 4px -1px color-mix(in oklch, var(--color-foreground) 5%, transparent);
-	--shadow-md:
-		0 2px 4px -2px color-mix(in oklch, var(--color-foreground) 8%, transparent),
-		0 6px 12px -2px color-mix(in oklch, var(--color-foreground) 7%, transparent);
-	--shadow-lg:
-		0 4px 8px -4px color-mix(in oklch, var(--color-foreground) 10%, transparent),
-		0 16px 28px -6px color-mix(in oklch, var(--color-foreground) 8%, transparent);
+	--shadow-resting:
+		0 0 1px rgb(var(--shadow-color) / 3%),
+		0 1px 1px rgb(var(--shadow-color) / 3%),
+		0 3px 2px rgb(var(--shadow-color) / 2%);
+	--shadow-raised:
+		0 1px 2px rgb(var(--shadow-color) / 6%),
+		0 3px 3px rgb(var(--shadow-color) / 5%),
+		0 8px 5px rgb(var(--shadow-color) / 3%),
+		0 14px 5px rgb(var(--shadow-color) / 1%);
+	--shadow-overlay:
+		0 2px 3px rgb(var(--shadow-color) / 10%),
+		0 7px 6px rgb(var(--shadow-color) / 9%),
+		0 15px 8px rgb(var(--shadow-color) / 5%),
+		0 26px 10px rgb(var(--shadow-color) / 1%);
 
 	/*
 	 * Leaves immediately and settles slowly, so a change reads as a response to
@@ -140,6 +135,72 @@
 	--font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
+@utility ring-hairline {
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+}
+
+@utility control-edge {
+	border: var(--edge-width) solid var(--color-control-edge);
+
+	&:disabled {
+		border-color: var(--color-edge);
+	}
+}
+
+@utility choice-control {
+	appearance: none;
+	border: var(--edge-width) solid var(--color-control-edge);
+	background-color: var(--color-page);
+
+	&[type="radio"] {
+		border-radius: 9999px;
+	}
+
+	&[type="checkbox"] {
+		border-radius: var(--radius-sm);
+	}
+
+	&:checked {
+		border-color: var(--color-brand);
+		background-color: var(--color-brand);
+	}
+
+	&[type="radio"]:checked {
+		box-shadow: inset 0 0 0 3px var(--color-page);
+	}
+
+	&[type="checkbox"]:checked {
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath fill='none' stroke='white' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m3 7 2.5 2.5L11 4'/%3E%3C/svg%3E");
+	}
+
+	&:disabled {
+		border-color: var(--color-edge);
+	}
+}
+
+@utility hairline-t {
+	border-top: var(--edge-width) solid var(--color-edge);
+}
+
+@utility hairline-r {
+	border-right: var(--edge-width) solid var(--color-edge);
+}
+
+@utility hairline-b {
+	border-bottom: var(--edge-width) solid var(--color-edge);
+}
+
+@utility hairline-l {
+	border-left: var(--edge-width) solid var(--color-edge);
+}
+
+@media (min-resolution: 2dppx) {
+	:root {
+		--edge-width: 0.5px;
+	}
+}
+
 html,
 body,
 #root {
@@ -148,8 +209,8 @@ body,
 
 body {
 	margin: 0;
-	background: var(--color-background);
-	color: var(--color-foreground);
+	background: var(--color-ground);
+	color: var(--color-text-primary);
 	font-family: var(--font-sans);
 
 	/* macOS subpixel smoothing thickens Inter past the weight asked for. */
@@ -164,7 +225,7 @@ body {
  * something else overrides it with one class and no fight.
  */
 :where(a, button, input, select, summary, textarea, [role="button"], [tabindex]):focus-visible {
-	outline: 2px solid var(--color-ring);
+	outline: 2px solid var(--color-brand);
 	outline-offset: 1px;
 }
 

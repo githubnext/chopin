@@ -28,7 +28,7 @@ export function Face({ handle, size = 24 }: { handle: string; size?: number }) {
 	return (
 		<img
 			alt={handle}
-			className="rounded-full bg-muted"
+			className="rounded-full bg-control"
 			onError={() => setFailed(true)}
 			referrerPolicy="no-referrer"
 			src={`https://github.com/${encodeURIComponent(handle)}.png?size=${size * 2}`}

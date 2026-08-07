@@ -157,7 +157,7 @@ function Language(
 			value={block.language}
 			disabled={disabled}
 			onChange={event => set(event.currentTarget.value)}
-			className="cursor-pointer rounded-sm border border-transparent bg-transparent text-xs text-muted-foreground hover:border-border focus-visible:border-ring"
+			className="cursor-pointer rounded-sm control-edge bg-page px-1 text-sm text-text-quaternary focus-visible:border-brand"
 		>
 			<option value="">Plain text</option>
 			{!listed && block.language && <option value={block.language}>{block.language}</option>}
@@ -178,7 +178,7 @@ function Toggle({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => v
 			// change arrives asynchronously, after the collapse, and reads
 			// as the reader arrowing in — reopening what they just closed.
 			onMouseDown={event => event.preventDefault()}
-			className="cursor-pointer rounded-sm px-1.5 py-0.5 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
+			className="cursor-pointer rounded-sm px-1.5 py-0.5 text-sm text-text-quaternary transition hover:bg-hover hover:text-text-primary"
 		>
 			{collapsed ? "Show source" : "Hide source"}
 		</button>

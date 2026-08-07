@@ -26,7 +26,7 @@ import type { ThreadView } from "./threads";
 function Who({ handle }: { handle: string }) {
 	return (
 		<span
-			className="text-xs font-semibold"
+			className="text-sm font-semibold"
 			style={{ color: cursor(handle).color }}
 		>
 			@{handle}
@@ -39,15 +39,15 @@ function Note({ note }: { note: Comment.Note }) {
 		<li className="flex flex-col gap-0.5">
 			<div className="flex items-baseline gap-2">
 				<Who handle={note.handle} />
-				<span className="text-2xs text-muted-foreground tabular-nums">{when(note.ts)}</span>
+				<span className="text-sm text-text-tertiary tabular-nums">{when(note.ts)}</span>
 			</div>
-			<p className="m-0 text-sm whitespace-pre-wrap text-foreground">{note.text}</p>
+			<p className="m-0 text-base whitespace-pre-wrap text-text-primary">{note.text}</p>
 		</li>
 	);
 }
 
 const QUOTED =
-	"m-0 w-full border-l-2 border-border pl-2 text-left text-xs text-muted-foreground italic";
+	"m-0 w-full border-l-2 border-edge pl-2 text-left text-sm text-text-secondary italic";
 
 /**
  * The prose the thread marks, as a quotation the card can be read without.
@@ -83,14 +83,14 @@ function Quote(
 						aria-label={count > 1
 							? `${text} — show in plan, ${count} places`
 							: `${text} — show in plan`}
-						className={`${QUOTED} cursor-pointer rounded-sm hover:text-foreground`}
+						className={`${QUOTED} cursor-pointer rounded-sm hover:text-text-primary`}
 						data-press="wide"
 						onClick={onSelect}
 						type="button"
 					>
 						{text}
 						{count > 1 && (
-							<span aria-hidden="true" className="ml-1.5 text-2xs not-italic tabular-nums">
+							<span aria-hidden="true" className="ml-1.5 text-sm not-italic tabular-nums">
 								{count}
 							</span>
 						)}
@@ -98,7 +98,7 @@ function Quote(
 				)
 				: <blockquote className={QUOTED}>{text}</blockquote>}
 			{drifted && (
-				<p className="m-0 text-2xs text-warning">
+				<p className="m-0 text-sm text-warning-ink">
 					The text this refers to has changed.
 				</p>
 			)}
@@ -159,7 +159,7 @@ function Composer({
 		<div className="flex flex-col gap-1.5">
 			<textarea
 				ref={ref}
-				className="min-h-16 w-full resize-y rounded-md border border-input bg-background px-2 py-1.5 text-sm focus-visible:border-ring"
+				className="min-h-16 w-full resize-y rounded-md control-edge bg-page px-2 py-1.5 text-sm focus-visible:border-brand"
 				disabled={busy}
 				maxLength={limits.MAX_NOTE}
 				onChange={event => {
@@ -172,7 +172,7 @@ function Composer({
 			/>
 			<div className="flex items-center gap-2">
 				<button
-					className="rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-50"
+					className="rounded-md bg-brand px-2 py-1 text-sm font-medium text-white hover:bg-brand-hover disabled:opacity-50"
 					disabled={!text.trim() || busy}
 					onClick={send}
 					type="button"
@@ -181,7 +181,7 @@ function Composer({
 				</button>
 				{onCancel && (
 					<button
-						className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+						className="rounded-md px-2 py-1 text-sm text-text-quaternary hover:text-text-primary"
 						onClick={onCancel}
 						type="button"
 					>
@@ -214,12 +214,12 @@ function Confirm({
 	}, [asked]);
 
 	let style = tone === "primary"
-		? "bg-primary text-primary-foreground hover:bg-primary-hover"
-		: "text-muted-foreground hover:text-foreground";
+		? "bg-brand text-white hover:bg-brand-hover"
+		: "text-text-quaternary hover:text-text-primary";
 
 	return (
 		<button
-			className={`rounded-md px-2 py-1 text-xs font-medium disabled:opacity-50 ${style}`}
+			className={`rounded-md px-2 py-1 text-sm font-medium disabled:opacity-50 ${style}`}
 			disabled={busy}
 			onClick={() => {
 				if (!asked) return setAsked(true);
@@ -280,9 +280,9 @@ export function ThreadCard({
 					<Provenance at={thread.at} by={thread.resolver} verb="Accepted" />
 					{!applied && (
 						<>
-							<span className="ml-auto text-2xs text-warning">Not yet applied</span>
+							<span className="ml-auto text-sm text-warning-ink">Not yet applied</span>
 							<button
-								className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+								className="rounded-md px-2 py-1 text-sm text-text-quaternary hover:text-text-primary"
 								disabled={busy}
 								onClick={onRetry}
 								type="button"
@@ -306,7 +306,7 @@ export function ThreadCard({
 			</ul>
 
 			{writing && writing.length > 0 && (
-				<p className="m-0 text-2xs text-muted-foreground">
+				<p className="m-0 text-sm text-text-secondary">
 					{writing.join(", ")} {writing.length === 1 ? "is" : "are"} writing…
 				</p>
 			)}
@@ -320,10 +320,10 @@ export function ThreadCard({
 						onTyping={onTyping}
 						placeholder="Reply…"
 					/>
-					<div className="flex items-center gap-2 border-t border-border pt-2">
+					<div className="flex items-center gap-2 pt-2 hairline-t">
 						<Confirm busy={busy} label="Accept" onConfirm={onAccept} tone="primary" />
 						<Confirm busy={busy} label="Dismiss" onConfirm={onDismiss} tone="quiet" />
-						<span className="ml-auto text-2xs text-muted-foreground">
+						<span className="ml-auto text-sm text-text-secondary">
 							Accepting asks the agent to revise the plan
 						</span>
 					</div>

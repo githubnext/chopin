@@ -62,7 +62,7 @@ function Strip(
 			role="tablist"
 			// The strip is chrome, not content: keep it out of the editable tree.
 			contentEditable={false}
-			className="flex gap-1 overflow-x-auto border-b border-border pb-1"
+			className="flex gap-1 overflow-x-auto pb-1 hairline-b"
 		>
 			{group.tabs.map((tab, position) => (
 				<button
@@ -83,10 +83,10 @@ function Strip(
 						else return;
 						event.preventDefault();
 					}}
-					className={`shrink-0 rounded-md px-2.5 py-1 text-xs font-medium transition ${
+					className={`shrink-0 rounded-md px-2.5 py-1 text-sm font-medium transition ${
 						tab.key === active
-							? "bg-muted text-foreground"
-							: "text-muted-foreground hover:text-foreground"
+							? "bg-selected text-text-primary"
+							: "text-text-quaternary hover:text-text-primary"
 					}`}
 				>
 					{tab.label || `Tab ${position + 1}`}

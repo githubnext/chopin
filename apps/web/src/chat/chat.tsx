@@ -40,17 +40,17 @@ function Queued(
 	if (waiting.length === 0) return null;
 
 	return (
-		<div className="flex shrink-0 flex-col gap-1 border-t border-border px-3 py-2">
-			<span className="text-2xs font-semibold tracking-wide text-muted-foreground uppercase">
+		<div className="flex shrink-0 flex-col gap-1 px-3 py-2 hairline-t">
+			<span className="text-sm font-semibold tracking-wide text-text-tertiary uppercase">
 				Queued
 			</span>
 			{waiting.map(item => (
-				<div className="flex items-baseline gap-2 text-xs" key={item.id}>
-					<span className="text-muted-foreground">@{item.handle}</span>
+				<div className="flex items-baseline gap-2 text-sm" key={item.id}>
+					<span className="text-text-tertiary">@{item.handle}</span>
 					<span className="min-w-0 flex-1 truncate">{item.text}</span>
 					{item.handle === handle && (
 						<button
-							className="shrink-0 text-muted-foreground hover:text-destructive"
+							className="shrink-0 text-text-quaternary hover:text-destructive-ink"
 							onClick={() => onWithdraw(item.id)}
 							title="Withdraw"
 							type="button"
@@ -139,19 +139,19 @@ export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) 
 	let asking = addressed(text);
 
 	return (
-		<div className="flex h-full min-h-0 flex-col border-r border-border">
-			<header className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-				<span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+		<div className="flex h-full min-h-0 flex-col">
+			<header className="flex shrink-0 items-center gap-2 px-3 py-2 hairline-b">
+				<span className="text-sm font-semibold tracking-wide text-text-tertiary uppercase">
 					Planner
 				</span>
 				{busy && (
-					<span className="text-xs text-muted-foreground">
+					<span className="text-sm text-text-tertiary">
 						working{turn && ` on @${turn}'s message`}
 					</span>
 				)}
 				{busy && (
 					<button
-						className="ml-auto rounded-sm border border-border px-2 py-0.5 text-xs hover:bg-muted"
+						className="ml-auto rounded-sm bg-control px-2 py-0.5 text-sm hover:bg-control-hover"
 						onClick={() => wire?.send("chat:abort")}
 						type="button"
 					>
@@ -162,16 +162,16 @@ export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) 
 
 			{!!waiting && waiting > 0 && (
 				<button
-					className="flex shrink-0 items-center gap-2 border-b border-border bg-muted/60 px-3 py-2 text-left text-xs hover:bg-muted"
+					className="flex shrink-0 items-center gap-2 bg-warning-wash px-3 py-2 text-left text-sm hover:bg-selected hairline-b"
 					data-press="wide"
 					onClick={() => onReveal?.("")}
 					type="button"
 				>
-					<span className="text-warning">●</span>
+					<span className="text-warning-ink">●</span>
 					<span>
 						{waiting === 1 ? "A question is waiting" : `${waiting} questions are waiting`}
 					</span>
-					<span className="ml-auto text-muted-foreground">Answer →</span>
+					<span className="ml-auto text-text-secondary">Answer →</span>
 				</button>
 			)}
 
@@ -183,9 +183,9 @@ export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) 
 				waiting={queue}
 			/>
 
-			<div className="flex shrink-0 flex-col gap-1 border-t border-border p-2">
+			<div className="flex shrink-0 flex-col gap-1 p-2 hairline-t">
 				<textarea
-					className="w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm focus-visible:border-ring disabled:opacity-50"
+					className="w-full resize-none rounded-md control-edge bg-page px-2 py-1.5 text-sm focus-visible:border-brand disabled:opacity-50"
 					disabled={!connected}
 					onChange={event => setText(event.target.value)}
 					onKeyDown={event => {
@@ -200,20 +200,20 @@ export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) 
 					value={text}
 				/>
 
-				<div className="flex items-baseline gap-2 px-1 text-2xs">
+				<div className="flex items-baseline gap-2 px-1 text-sm">
 					{asking
 						? (
-							<span className="text-primary">
+							<span className="text-brand">
 								→ planner{busy && ", after the current turn"}
 							</span>
 						)
 						: (
-							<span className="text-muted-foreground">
+							<span className="text-text-secondary">
 								room only — the planner will see it on its next turn
 							</span>
 						)}
 					<button
-						className="ml-auto text-muted-foreground hover:text-foreground"
+						className="ml-auto text-text-tertiary hover:text-text-primary"
 						onClick={() => {
 							setText(current => (addressed(current) ? current : `${MENTION} ${current}`.trim()));
 							input.current?.focus();

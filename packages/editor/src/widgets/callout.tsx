@@ -78,7 +78,7 @@ function Heading(
 				value={callout.type}
 				disabled={disabled}
 				onChange={event => setType(event.currentTarget.value as CalloutType)}
-				className="rounded-sm border border-transparent bg-transparent text-xs font-semibold tracking-wide text-muted-foreground uppercase hover:border-border focus-visible:border-ring"
+				className="rounded-sm control-edge bg-page px-1 text-sm font-semibold tracking-wide text-text-quaternary uppercase focus-visible:border-brand"
 			>
 				{CALLOUT_TYPES.map(type => <option key={type} value={type}>{LABELS[type]}</option>)}
 			</select>
@@ -90,7 +90,7 @@ function Heading(
 				maxLength={100}
 				disabled={disabled}
 				onChange={event => setTitle(event.currentTarget.value)}
-				className="min-w-0 flex-1 rounded-sm border border-transparent bg-transparent text-sm font-medium text-foreground placeholder:text-muted-foreground/60 hover:border-border focus-visible:border-ring"
+				className="min-w-0 flex-1 rounded-sm control-edge bg-page px-1 text-sm font-medium text-text-primary placeholder:text-text-quaternary/60 focus-visible:border-brand"
 			/>
 		</div>
 	);

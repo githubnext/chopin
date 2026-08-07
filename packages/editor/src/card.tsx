@@ -45,13 +45,13 @@ export function SidecarCard(
 ) {
 	return (
 		<article
-			className={`flex flex-col overflow-hidden rounded-lg border bg-card ${
-				focused ? "border-ring" : "border-border"
+			className={`flex flex-col overflow-hidden rounded-lg bg-page ring-hairline shadow-resting ${
+				focused ? "bg-selected" : ""
 			}`}
 			{...rest}
 		>
-			<header className="flex items-center gap-2 border-b border-border bg-muted px-3 py-2">
-				<span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+			<header className="flex items-center gap-2 bg-inset px-3 py-2 hairline-b">
+				<span className="text-sm font-semibold tracking-wide text-text-tertiary uppercase">
 					{label}
 				</span>
 			</header>
@@ -59,7 +59,7 @@ export function SidecarCard(
 			<div className={`flex flex-col gap-2 ${padded ? "px-3 py-2.5" : ""}`}>{children}</div>
 
 			{footer && (
-				<footer className="flex items-center gap-2 border-t border-border px-3 py-2">
+				<footer className="flex items-center gap-2 px-3 py-2 hairline-t">
 					{footer}
 				</footer>
 			)}
@@ -98,7 +98,7 @@ export function Provenance({ at, by, verb }: ProvenanceProps) {
 	let stamp = at === undefined ? "" : when(at);
 
 	return (
-		<span className="text-2xs text-muted-foreground tabular-nums">
+		<span className="text-sm text-text-tertiary tabular-nums">
 			{verb} by @{by}
 			{stamp && ` · ${stamp}`}
 		</span>

@@ -1,0 +1,188 @@
+/**
+ * The design-system contract.
+ *
+ * `theme.test.ts` checks the visibility of document marks. These tests check
+ * the system those marks sit inside: resolved colours, scale membership and
+ * whether every consumer has left the vocabulary this system replaces.
+ */
+
+import { describe, expect, it } from "bun:test";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
+
+type Oklch = { l: number; c: number; h: number };
+
+const ROOT = join(import.meta.dir, "../../..");
+const THEME = readFileSync(join(import.meta.dir, "theme.css"), "utf8");
+
+function declared(name: string): string {
+	let found = new RegExp(`\\n\\s*${name}:\\s*([^;]+);`).exec(THEME);
+	if (!found) throw new Error(`no ${name} in the theme`);
+	return found[1]!.trim().replace(/\\s+/g, " ");
+}
+
+function resolved(name: string): string {
+	let value = declared(name);
+	let alias = /^var\((--[\w-]+)\)$/.exec(value);
+	return alias ? resolved(alias[1]!) : value;
+}
+
+function colour(name: string): Oklch {
+	let found = /^oklch\(([\d.]+)\s+([\d.]+)\s+([\d.]+)\)$/.exec(resolved(name));
+	if (!found) throw new Error(`${name} is not an opaque oklch colour`);
+	return { l: Number(found[1]), c: Number(found[2]), h: Number(found[3]) };
+}
+
+function linearChannels(value: Oklch): number[] {
+	let radians = (value.h * Math.PI) / 180;
+	let a = value.c * Math.cos(radians);
+	let b = value.c * Math.sin(radians);
+	let long = (value.l + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+	let medium = (value.l - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+	let short = (value.l - 0.0894841775 * a - 1.291485548 * b) ** 3;
+	return [
+		4.0767416621 * long - 3.3077115913 * medium + 0.2309699292 * short,
+		-1.2684380046 * long + 2.6097574011 * medium - 0.3413193965 * short,
+		-0.0041960863 * long - 0.7034186147 * medium + 1.707614701 * short,
+	];
+}
+
+function hex(name: string): string {
+	let channels = linearChannels(colour(name));
+	return `#${
+		channels.map(channel => {
+			let encoded = channel <= 0.0031308
+				? 12.92 * channel
+				: 1.055 * Math.pow(Math.max(channel, 0), 1 / 2.4) - 0.055;
+			return Math.round(Math.min(1, Math.max(0, encoded)) * 255)
+				.toString(16)
+				.padStart(2, "0");
+		}).join("")
+	}`;
+}
+
+function luminance(name: string): number {
+	let [red, green, blue] = linearChannels(colour(name));
+	return 0.2126 * red! + 0.7152 * green! + 0.0722 * blue!;
+}
+
+function contrast(foreground: string, background: string): number {
+	let lighter = Math.max(luminance(foreground), luminance(background));
+	let darker = Math.min(luminance(foreground), luminance(background));
+	return (lighter + 0.05) / (darker + 0.05);
+}
+
+function sources(dir: string, found: string[] = []): string[] {
+	for (let entry of readdirSync(dir)) {
+		if (entry === "node_modules" || entry === "dist" || entry.startsWith(".")) continue;
+		let path = join(dir, entry);
+		if (statSync(path).isDirectory()) sources(path, found);
+		else if (entry.endsWith(".tsx") || entry.endsWith(".css")) found.push(path);
+	}
+	return found;
+}
+
+function withoutComments(source: string): string {
+	return source.replace(/\/\*[\s\S]*?\*\//g, "");
+}
+
+describe("palette", () => {
+	let steps = [50, 100, 150, 200, 300, 400, 500, 600, 700, 750, 800, 850, 900, 950];
+
+	it("keeps all fourteen neutral steps on the warm olive axis", () => {
+		for (let step of steps) expect(colour(`--color-gray-${step}`).h).toBe(95);
+	});
+
+	it("resolves the settled specimens exactly", () => {
+		expect(hex("--color-gray-100")).toBe("#f8f8f6");
+		expect(hex("--color-gray-150")).toBe("#f4f4f1");
+		expect(hex("--color-brand")).toBe("#06707e");
+		expect(hex("--color-destructive")).toBe("#d54d4c");
+	});
+
+	it("gives every text level at least AA contrast on the page", () => {
+		for (let level of ["primary", "secondary", "tertiary", "quaternary"]) {
+			let ratio = contrast(`--color-text-${level}`, "--color-page");
+			expect({ level, passes: ratio >= 4.5 }).toEqual({ level, passes: true });
+		}
+	});
+
+	it("keeps petrol as the only blue family", () => {
+		let blue = [...THEME.matchAll(/\n\s*(--color-[\w-]+):\s*oklch\([\d.]+\s+[\d.]+\s+([\d.]+)/g)]
+			.filter(match => Number(match[2]) >= 180 && Number(match[2]) <= 270)
+			.map(match => match[1]);
+		expect(blue).toEqual([
+			"--color-brand",
+			"--color-brand-hover",
+			"--color-brand-wash",
+			"--color-brand-ink",
+		]);
+	});
+});
+
+describe("type", () => {
+	it("has exactly the five designed rungs", () => {
+		let found = [...THEME.matchAll(/\n\s*(--text-(?![\w-]*--line-height)[\w-]+):\s*([\d.]+rem);/g)]
+			.map(match => [match[1], Number.parseFloat(match[2]!) * 16]);
+		expect(found).toEqual([
+			["--text-sm", 13],
+			["--text-base", 15],
+			["--text-lg", 17],
+			["--text-xl", 24],
+			["--text-2xl", 32],
+		]);
+	});
+
+	it("pairs every rung with its designed line height", () => {
+		expect(["sm", "base", "lg", "xl", "2xl"].map(name => declared(`--text-${name}--line-height`)))
+			.toEqual(["1.25rem", "1.375rem", "1.6875rem", "1.875rem", "2.375rem"]);
+	});
+});
+
+describe("edges and depth", () => {
+	it("has only a passive edge and a control edge", () => {
+		let edges = [...THEME.matchAll(/\n\s*(--color-[\w-]*edge):/g)].map(match => match[1]);
+		expect(edges).toEqual(["--color-edge", "--color-control-edge"]);
+		expect(declared("--color-edge")).toBe("rgb(0 0 0 / 7%)");
+		expect(declared("--color-control-edge")).toBe("rgb(0 0 0 / 20%)");
+	});
+
+	it("halves the hairline on retina displays", () => {
+		expect(declared("--edge-width")).toBe("1px");
+		expect(THEME).toMatch(/@media \(min-resolution: 2dppx\)[\s\S]+--edge-width:\s*0\.5px/);
+	});
+
+	it("provides exactly the three designed shadows", () => {
+		let found = [...THEME.matchAll(/\n\s*(--shadow-(?!color)[\w-]+):/g)].map(match => match[1]);
+		expect(found).toEqual(["--shadow-resting", "--shadow-raised", "--shadow-overlay"]);
+		expect(declared("--shadow-color")).toBe("14 13 10");
+	});
+});
+
+describe("consumer roles", () => {
+	it("keeps gray-400 out of text", () => {
+		for (let file of [...sources(join(ROOT, "apps")), ...sources(join(ROOT, "packages"))]) {
+			expect(withoutComments(readFileSync(file, "utf8"))).not.toMatch(
+				/(?:color:\s*var\(--color-gray-400\)|text-gray-400)/,
+			);
+		}
+	});
+});
+
+describe("migration", () => {
+	it("leaves no consumer on the replaced vocabulary", () => {
+		let removed =
+			/(?<![\w-])(?:text-(?:2xs|xs)|shadow-(?:xs|sm|md|lg)|(?:bg|text|border|ring)-(?:background|foreground|surface|muted(?:-foreground)?|card|popover|primary(?:-foreground|-hover)?|secondary(?:-foreground)?|accent(?:-foreground)?|border|input|ring|code))(?![\w-])|var\(--color-(?:background|foreground|surface|muted(?:-foreground)?|card(?:-foreground)?|popover(?:-foreground)?|primary(?:-foreground|-hover)?|secondary(?:-foreground)?|accent(?:-foreground)?|border|input|ring|code)\)/g;
+		let offenders: string[] = [];
+		for (let file of [...sources(join(ROOT, "apps")), ...sources(join(ROOT, "packages"))]) {
+			if (file === join(import.meta.dir, "theme.css") || file === import.meta.path) continue;
+			let content = withoutComments(readFileSync(file, "utf8"));
+			for (let match of content.matchAll(removed)) {
+				offenders.push(
+					`${relative(ROOT, file)}:${content.slice(0, match.index).split("\n").length} ${match[0]}`,
+				);
+			}
+		}
+		expect(offenders).toEqual([]);
+	});
+});
