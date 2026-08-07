@@ -61,6 +61,33 @@ for (let file of files) {
 	}
 }
 
+/*
+ * A namespace reset erases what was declared above it.
+ *
+ * `--shadow-*: initial` clears every `--shadow-…`, including the tint the three
+ * shadow tokens are mixed from — so declaring `--shadow-color` above the reset
+ * left it out of the built CSS, made all three `rgb(var(--shadow-color) / n%)`
+ * declarations invalid, and computed every shadow in the app to `none`. Nothing
+ * throws and nothing is undefined in the source, which is why the loop below
+ * cannot see it: it reads the declaration that is textually there.
+ */
+for (let file of files) {
+	let text = source(file);
+	for (let [reset, prefix] of text.matchAll(/(--[\w-]*?)\*\s*:\s*initial/g)) {
+		let cutoff = text.indexOf(reset);
+		for (let declaration of text.matchAll(/(--[\w-]+)\s*:/g)) {
+			if (declaration.index! >= cutoff) break;
+			if (!declaration[1]!.startsWith(prefix!)) continue;
+			console.error(
+				`${relative(ROOT, file)}:${text.slice(0, declaration.index).split("\n").length}`
+					+ `  ${declaration[1]} is declared above \`${prefix}*: initial\`, which wipes it.`
+					+ ` Move it below the reset.`,
+			);
+			process.exit(1);
+		}
+	}
+}
+
 for (let file of files) {
 	let lines = source(file).split("\n");
 	lines.forEach((text, index) => {
