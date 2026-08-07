@@ -1,7 +1,7 @@
 ---
 id: "007"
 title: Rebuild buttons, fields and selects
-status: implementing
+status: verifying
 branch:
 pr:
 stacked_on:
@@ -80,21 +80,21 @@ defined there.
 
 ## Acceptance
 
-- [ ] Exactly two button sizes exist, 24px and 32px, both at 13px, and an
+- [x] Exactly two button sizes exist, 24px and 32px, both at 13px, and an
       icon-only button is a 28px square
-- [ ] No button of any tier renders a border at rest
-- [ ] A disabled control renders gray-200 with gray-600 ink, and no opacity
+- [x] No button of any tier renders a border at rest
+- [x] A disabled control renders gray-200 with gray-600 ink, and no opacity
       value is used to disable anything
-- [ ] A focused control shows a 2px brand ring with a 2px gap, and that gap
+- [x] A focused control shows a 2px brand ring with a 2px gap, and that gap
       matches the surface on both the white page and the gray-150 ground
-- [ ] Destructive rests at `#D54D4C`, hovers to `#C44746` and presses to
+- [x] Destructive rests at `#D54D4C`, hovers to `#C44746` and presses to
       `#B34140`
-- [ ] Text inputs, textareas, checkboxes and radios carry the 20% edge, and a
+- [x] Text inputs, textareas, checkboxes and radios carry the 20% edge, and a
       disabled one carries 7%
-- [ ] A checked checkbox shows a check glyph, not a dash or a filled square
-- [ ] An invalid field shows the focus ring's shape in `#D54D4C` with its
+- [x] A checked checkbox shows a check glyph, not a dash or a filled square
+- [x] An invalid field shows the focus ring's shape in `#D54D4C` with its
       message beneath it in `#B51421`
-- [ ] Neither select renders a border at rest, and both show the 20% edge on
+- [x] Neither select renders a border at rest, and both show the 20% edge on
       hover
-- [ ] Screenshots of the chat composer, a comment card's buttons and a
+- [x] Screenshots of the chat composer, a comment card's buttons and a
       focused text field attached to the PR
