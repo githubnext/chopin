@@ -1,19 +1,4 @@
-/**
- * The shell, as two layers.
- *
- * One ground carries the nav and both rails; the document page is the only
- * surface standing on it. The rails are not panels — no fill, no border, no
- * shadow — so the ground runs unbroken behind the nav, behind both of them and
- * through the gutters either side of the page. That is what makes the page the
- * subject: it is the only thing lifted off anything.
- *
- * It also makes a collapsed rail a width, rather than a surface appearing and
- * disappearing. Neither rail collapses yet; the ground is already behind them
- * for when one does.
- *
- * A pane that has nothing to show is not rendered, so the row collapses to
- * whatever exists rather than reserving space for a placeholder.
- */
+/** Three panes on one ground, with the document as the only raised surface. */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -32,27 +17,7 @@ function clamp(value: number): number {
 	return Math.min(MAX, Math.max(MIN, value));
 }
 
-/**
- * A draggable edge, drawn only when it is being aimed at.
- *
- * There is no seam between a rail and the page for a pointer to find, so the
- * affordance has to arrive with the pointer: nothing at rest, a bar under the
- * hand. It is laid over the four pixels of ground beside the page rather than
- * taking a column in the row, because those four pixels are measured and a
- * handle in the row would be a fifth. Four pixels is a small thing to aim at,
- * so `::before` spreads the hit area either side of them.
- *
- * Reachable without a pointer, too, which is the other half of drawing nothing:
- * a splitter that only exists on hover is a splitter a keyboard cannot find
- * unless it is in the tab order and says what it is worth. Focus keeps the
- * outline the theme gives everything else, so it does not read as a hover.
- *
- * Pointer capture rather than window listeners: the pointer leaves the handle
- * immediately on any real drag, and capture is what keeps the events coming
- * without a document-level subscription to tear down. Capture does not reliably
- * keep `:hover`, so the bar is held by a state of its own for the length of a
- * drag rather than blinking out from under the hand moving it.
- */
+/** Accessible resize handle; pointer capture keeps drags active off the boundary. */
 function Handle(
 	{ label, onResize, side, width }: {
 		label: string;
@@ -102,11 +67,7 @@ function Handle(
 				origin.current = event.clientX;
 				onResize(side === "left" ? delta : -delta);
 			}}
-			// The one place a drag ends. `pointerup` is not: Escape, a pen leaving
-			// the tablet, a touch the browser takes back all end a drag through
-			// `pointercancel` instead, and capture is released implicitly by every
-			// one of them — including by an ordinary release. Clearing the state
-			// anywhere else leaves the bar painted with no pointer near it.
+			// Lost capture covers ordinary release and every form of pointer cancellation.
 			onLostPointerCapture={() => setDragging(false)}
 			role="separator"
 			tabIndex={0}
@@ -140,11 +101,9 @@ export function Workspace({ chat, decisions, header, plan }: WorkspaceProps) {
 	let [decisionsWidth, resizeDecisions] = usePaneWidth("chopin:pane:decisions", 320);
 
 	return (
-		// Clipped, because the page is deliberately taller than the room it is in.
 		<div className="flex h-full flex-col overflow-hidden bg-ground">
 			{header}
 
-			{/* The 16px the page needs below the nav; the rails begin level with it. */}
 			<div className="flex min-h-0 flex-1 pt-4">
 				{chat && (
 					<aside className="min-w-0 shrink-0 overflow-hidden" style={{ width: chatWidth }}>
@@ -152,44 +111,14 @@ export function Workspace({ chat, decisions, header, plan }: WorkspaceProps) {
 					</aside>
 				)}
 
-				{/* Both gutters belong to the page, so both handles live in it. */}
 				<main className="relative min-w-0 flex-1 px-1">
-					{
-						/*
-						 * The page itself, behind its contents rather than around them.
-						 *
-						 * It runs past the bottom of the window, so the ring, the shadow and
-						 * the two square corners that would say where it ends are all below
-						 * the fold — the page reads as continuing rather than as stopping
-						 * short. Its contents cannot go with it or the last line of the plan
-						 * would be off screen, which is why this is a sibling and not a
-						 * wrapper. The inset either side is the same four pixels `main` pads
-						 * by, measured from the padding box the two of them share.
-						 */
-					}
+					{/* Decoration extends below the viewport without moving the editor contents. */}
 					<div
 						aria-hidden="true"
 						className="pointer-events-none absolute inset-x-1 top-0 -bottom-3 rounded-t-xl bg-page shadow-raised ring-hairline"
 					/>
 
-					{
-						/*
-						 * Both handles, ahead of the plan and not after it.
-						 *
-						 * They are positioned, so where they sit in the markup decides
-						 * nothing about where they are drawn — it decides only what order
-						 * they are tabbed to, and that is the whole reason they are here.
-						 * The plan is a Lexical surface, and `listsPlugin` mounts
-						 * `TabIndentationPlugin`, which calls `preventDefault` on Tab
-						 * before it has looked at `shiftKey`: Tab indents and Shift-Tab
-						 * outdents, so focus that reaches the editor does not leave it in
-						 * either direction. Anything behind it in the tab order is
-						 * unreachable. Handles that draw nothing at rest have only the tab
-						 * order to be found by, so behind the editor is nowhere at all.
-						 *
-						 * Left before right, so the order runs along the screen.
-						 */
-					}
+					{/* Lexical consumes Tab, so both handles must precede the editor. */}
 					{chat && (
 						<Handle
 							label="Resize the conversation"

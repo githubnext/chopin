@@ -7,7 +7,6 @@
 		"build": "bun run --filter '@chopin/web' build",
 		"start": "bun run --filter '@chopin/server' start",
 		"ci": "dprint check && oxlint && bun scripts/check-tokens.ts",
-		"shot:shell": "bun scripts/shoot-shell.ts",
 		"fix": "dprint fmt && oxlint --fix",
 		"types": "bun --filter '*' types && tsgo --noEmit --skipLibCheck -p e2e",
 		"e2e": "bun run build && bun node_modules/@playwright/test/cli.js test --config e2e/playwright.config.ts",
