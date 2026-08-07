@@ -1,9 +1,9 @@
 ---
 id: "003"
 title: Rebuild the design tokens
-status: draft
-branch:
-pr:
+status: pr-opened
+branch: task/003-rebuild-design-tokens
+pr: "https://github.com/githubnext/chopin/pull/28"
 stacked_on:
 blocked_reason:
 ---
@@ -88,33 +88,33 @@ dark ink, which is how it is used. Do not build a filled warning button on it.
 
 Palette
 
-- [ ] The neutral ramp has 14 steps at OKLCH hue 95
-- [ ] Brand is `#06707E` and is the only accent in the theme
-- [ ] Focus rings, unread dots and primary buttons all resolve to brand
-- [ ] No token in the theme is a blue other than brand
+- [x] The neutral ramp has 14 steps at OKLCH hue 95
+- [x] Brand is `#06707E` and is the only accent in the theme
+- [x] Focus rings, unread dots and primary buttons all resolve to brand
+- [x] No token in the theme is a blue other than brand
 
 Text
 
-- [ ] Four text tokens exist: primary, secondary, tertiary, quaternary
-- [ ] Each of the four measures at least 4.5:1 against white
-- [ ] No text anywhere resolves to `gray-400`
+- [x] Four text tokens exist: primary, secondary, tertiary, quaternary
+- [x] Each of the four measures at least 4.5:1 against white
+- [x] No text anywhere resolves to `gray-400`
 
 Type
 
-- [ ] Exactly five type rungs exist: 13, 15, 17, 24 and 32px
-- [ ] No `text-2xs` or `text-xs` class remains in the codebase
-- [ ] Chat message bodies render at 15px, document prose at 17px
+- [x] Exactly five type rungs exist: 13, 15, 17, 24 and 32px
+- [x] No `text-2xs` or `text-xs` class remains in the codebase
+- [x] Chat message bodies render at 15px, document prose at 17px
 
 Edges and depth
 
-- [ ] Three shadow tokens exist: resting, raised and overlay
-- [ ] `--shadow-color` is `14 13 10`
-- [ ] A hairline ring utility renders 1px, dropping to 0.5px on retina
-- [ ] Exactly two edge tokens exist: black at 7% and black at 20%
-- [ ] Pane seams, card rings and list dividers all resolve to the 7% token
-- [ ] Text inputs, textareas, radios and checkboxes all resolve to the 20%
+- [x] Three shadow tokens exist: resting, raised and overlay
+- [x] `--shadow-color` is `14 13 10`
+- [x] A hairline ring utility renders 1px, dropping to 0.5px on retina
+- [x] Exactly two edge tokens exist: black at 7% and black at 20%
+- [x] Pane seams, card rings and list dividers all resolve to the 7% token
+- [x] Text inputs, textareas, radios and checkboxes all resolve to the 20%
       token, and a disabled one falls back to 7%
-- [ ] No element renders a solid grey border
+- [x] No element renders a solid grey border
 
 Evidence
 
