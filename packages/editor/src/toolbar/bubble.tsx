@@ -313,7 +313,7 @@ export function SelectionBubble(
 						className={`size-7 rounded-sm text-sm font-semibold transition ${
 							item.id === block
 								? "bg-selected text-text-primary"
-								: "text-text-quaternary hover:bg-hover hover:text-text-primary"
+								: "text-text-tertiary hover:bg-hover hover:text-text-primary"
 						}`}
 					>
 						{item.glyph}
@@ -327,7 +327,7 @@ export function SelectionBubble(
 							aria-expanded={false}
 							title={`${describe(block).label} — change block type`}
 							onClick={() => setChoosing(true)}
-							className="size-7 rounded-sm text-sm font-semibold text-text-quaternary transition hover:bg-hover hover:text-text-primary"
+							className="size-7 rounded-sm text-sm font-semibold text-text-tertiary transition hover:bg-hover hover:text-text-primary"
 						>
 							{describe(block).glyph}
 						</button>
@@ -345,7 +345,7 @@ export function SelectionBubble(
 								className={`size-7 rounded-sm text-sm font-semibold transition ${
 									active.has(mark.format)
 										? "bg-selected text-text-primary"
-										: "text-text-quaternary hover:bg-hover hover:text-text-primary"
+										: "text-text-tertiary hover:bg-hover hover:text-text-primary"
 								}`}
 							>
 								{mark.glyph}
@@ -364,7 +364,7 @@ export function SelectionBubble(
 								if (url === undefined) return;
 								editor.dispatchCommand(TOGGLE_LINK_COMMAND, url);
 							}}
-							className="size-7 rounded-sm text-sm text-text-quaternary transition hover:bg-hover hover:text-text-primary"
+							className="size-7 rounded-sm text-sm text-text-tertiary transition hover:bg-hover hover:text-text-primary"
 						>
 							🔗
 						</button>
@@ -383,7 +383,7 @@ export function SelectionBubble(
 									 * moment you started typing would be no use.
 									 */
 									onClick={onComment}
-									className="size-7 rounded-sm text-sm text-text-quaternary transition hover:bg-hover hover:text-text-primary"
+									className="size-7 rounded-sm text-sm text-text-tertiary transition hover:bg-hover hover:text-text-primary"
 								>
 									💬
 								</button>

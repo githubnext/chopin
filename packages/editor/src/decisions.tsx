@@ -185,7 +185,7 @@ export function Decisions({ connected, reveal, store, threads, wire }: Decisions
 					<div className={outstanding > 0 || state.draft ? "mt-3" : ""}>
 						<button
 							aria-expanded={history}
-							className="w-full rounded-md px-1 py-1 text-left text-sm text-text-quaternary hover:text-text-primary"
+							className="w-full rounded-md px-1 py-1 text-left text-sm text-text-tertiary hover:text-text-primary"
 							data-press="wide"
 							onClick={() => setHistory(value => !value)}
 							type="button"
