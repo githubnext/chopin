@@ -89,14 +89,35 @@ function usePaneWidth(key: string, initial: number) {
 	return [width, resize] as const;
 }
 
+export type Pane = "chat" | "decisions";
+
+export function paneId(pane: Pane): string {
+	return `pane-${pane}`;
+}
+
+export function usePaneOpen(pane: Pane) {
+	let key = `chopin:pane:${pane}:open`;
+	let [open, setOpen] = useState(() => localStorage.getItem(key) !== "false");
+
+	useEffect(() => {
+		localStorage.setItem(key, String(open));
+	}, [key, open]);
+
+	return [open, setOpen] as const;
+}
+
 export type WorkspaceProps = {
 	header: ReactNode;
 	chat?: ReactNode;
+	chatOpen?: boolean;
 	plan: ReactNode;
 	decisions?: ReactNode;
+	decisionsOpen?: boolean;
 };
 
-export function Workspace({ chat, decisions, header, plan }: WorkspaceProps) {
+export function Workspace(
+	{ chat, chatOpen = true, decisions, decisionsOpen = true, header, plan }: WorkspaceProps,
+) {
 	let [chatWidth, resizeChat] = usePaneWidth("chopin:pane:chat", 340);
 	let [decisionsWidth, resizeDecisions] = usePaneWidth("chopin:pane:decisions", 320);
 
@@ -105,13 +126,19 @@ export function Workspace({ chat, decisions, header, plan }: WorkspaceProps) {
 			{header}
 
 			<div className="flex min-h-0 flex-1 pt-4">
+				{/* `hidden` preserves pane state and subscriptions while removing it from layout. */}
 				{chat && (
-					<aside className="min-w-0 shrink-0 overflow-hidden" style={{ width: chatWidth }}>
+					<aside
+						className="min-w-0 overflow-hidden"
+						hidden={!chatOpen}
+						id={paneId("chat")}
+						style={{ width: chatWidth }}
+					>
 						{chat}
 					</aside>
 				)}
 
-				<main className="relative min-w-0 flex-1 px-1">
+				<main className="relative min-w-[400px] flex-1 px-1">
 					{/* Decoration extends below the viewport without moving the editor contents. */}
 					<div
 						aria-hidden="true"
@@ -119,7 +146,7 @@ export function Workspace({ chat, decisions, header, plan }: WorkspaceProps) {
 					/>
 
 					{/* Lexical consumes Tab, so both handles must precede the editor. */}
-					{chat && (
+					{chat && chatOpen && (
 						<Handle
 							label="Resize the conversation"
 							onResize={resizeChat}
@@ -127,7 +154,7 @@ export function Workspace({ chat, decisions, header, plan }: WorkspaceProps) {
 							width={chatWidth}
 						/>
 					)}
-					{decisions && (
+					{decisions && decisionsOpen && (
 						<Handle
 							label="Resize the decisions"
 							onResize={resizeDecisions}
@@ -140,7 +167,12 @@ export function Workspace({ chat, decisions, header, plan }: WorkspaceProps) {
 				</main>
 
 				{decisions && (
-					<aside className="min-w-0 shrink-0 overflow-hidden" style={{ width: decisionsWidth }}>
+					<aside
+						className="min-w-0 overflow-hidden"
+						hidden={!decisionsOpen}
+						id={paneId("decisions")}
+						style={{ width: decisionsWidth }}
+					>
 						{decisions}
 					</aside>
 				)}
