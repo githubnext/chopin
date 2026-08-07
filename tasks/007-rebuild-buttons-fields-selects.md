@@ -96,5 +96,5 @@ defined there.
       message beneath it in `#B51421`
 - [x] Neither select renders a border at rest, and both show the 20% edge on
       hover
-- [x] Screenshots of the chat composer, a comment card's buttons and a
+- [ ] Screenshots of the chat composer, a comment card's buttons and a
       focused text field attached to the PR
