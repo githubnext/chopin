@@ -264,14 +264,7 @@ function Preview(
 	let hidable = renders(block, html);
 	let named = block.kind !== "math";
 
-	/*
-	 * Both portals are keyed, so that a block keeps the output it already has
-	 * across a commit rather than remounting and losing the scroll position
-	 * inside a long fence. They are siblings of one fragment, though, so the
-	 * node key alone is the same key twice — which React reads as two children
-	 * competing for one identity, free to duplicate or drop either. The role
-	 * distinguishes them.
-	 */
+	// These portals are siblings, so their stable keys also need distinct roles.
 	return (
 		<>
 			{host
