@@ -1,10 +1,10 @@
 /**
  * A number that is worth acting on.
  *
- * Three places show one: the decisions header, a quoted span with more than one
- * place in the plan, and the overflow on a stack of faces. All three take the
- * same petrol pill. A bare number stopped the header reading as anything to act
- * on, and a grey pill said there was a number without saying it mattered.
+ * Three places show one: the decisions header, a quoted span with replies on
+ * it, and the overflow on a stack of faces. All three take the same petrol
+ * pill. A bare number stopped the header reading as anything to act on, and a
+ * grey pill said there was a number without saying it mattered.
  *
  * One treatment has a cost, and it is taken knowingly: a reply count now
  * carries the same weight as an outstanding decision. If that proves too loud
