@@ -99,9 +99,20 @@
 	--radius-lg: 0.5rem; /* 8px — popovers and panels */
 	--radius-xl: 0.625rem; /* 10px — the document page */
 
-	/* Warm-tinted depth, copied from the settled Figma shadow table. */
-	--shadow-color: 14 13 10;
+	/*
+	 * Warm-tinted depth, copied from the settled Figma shadow table.
+	 *
+	 * The tint is declared *after* the reset, and the order is load-bearing:
+	 * `--shadow-*: initial` clears the whole namespace, and `--shadow-color` is
+	 * in it. Declared above the reset it is wiped before it is ever emitted, so
+	 * every `rgb(var(--shadow-color) / n%)` below becomes an invalid
+	 * declaration and all three shadows compute to `none`. Nothing errors and
+	 * nothing is undefined at the source — the file still reads correctly, and
+	 * `check-tokens.ts` now refuses this rather than reading the declaration
+	 * that is textually there.
+	 */
 	--shadow-*: initial;
+	--shadow-color: 14 13 10;
 	--shadow-resting:
 		0 0 1px rgb(var(--shadow-color) / 3%),
 		0 1px 1px rgb(var(--shadow-color) / 3%),

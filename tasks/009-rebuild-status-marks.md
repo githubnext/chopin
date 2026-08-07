@@ -89,6 +89,30 @@ Depends on 003 and 004.
 The dot and the pill were already 6px and 13px on the right tokens when 003
 landed, so `status.tsx` and its rules are untouched. Everything else moved.
 
+The pill's resting shadow was not painting, and neither was any other shadow in
+the app. `--shadow-color` was declared one line _above_ `--shadow-*: initial`,
+and the reset clears its own namespace — so the tint never reached the built
+CSS, every `rgb(var(--shadow-color) / n%)` became an invalid declaration, and
+all three shadows computed to `none`. The source read correctly throughout,
+`--shadow-color` was textually defined, and `check-tokens.ts` was satisfied by
+the declaration being there. Moving it below the reset is the whole fix.
+
+`check-tokens.ts` now refuses the pattern rather than being fooled by it: a
+token declared above a namespace reset that would wipe it fails `bun run ci`.
+Confirmed by putting the two lines back in their original order and watching it
+fail, then restoring them.
+
+Measured on the live pill after the fix, rather than read off classnames:
+
+```
+box-shadow    rgba(14,13,10,.03) 0 0 1px, rgba(14,13,10,.03) 0 1px 1px,
+              rgba(14,13,10,.02) 0 3px 2px
+outline       1px rgba(0,0,0,0.07)
+border-radius 9999px
+font-size     13px
+background    oklch(1 0 0)
+```
+
 `packages/editor/src/face.tsx` is the one place either mark is drawn.
 `apps/web/src/face.tsx` and the private copy inside `presence.tsx` are gone:
 they were two components rendering the same person, which is how one screen
@@ -114,7 +138,7 @@ nearest rung on the scale.
 ![the agent's petrol circle and two loaded photographs, all without lettering](images/009-chat-entries.png)
 ![the same rail with every photograph refused, falling back to account colours](images/009-fallback-entries.png)
 ![the decisions rail header, with the petrol count](images/009-decisions-header.png)
-![the reconnecting notice](images/009-reconnecting.png)
+![the reconnecting notice, with the resting shadow under it](images/009-reconnecting.png)
 ![three overlapping faces and the petrol overflow](images/009-presence-stack.png)
 ![the same stack on its fallback](images/009-fallback-stack.png)
 ![the header, with the signed-in face at 24px](images/009-app-header.png)
@@ -122,11 +146,16 @@ nearest rung on the scale.
 Captured against a seeded transcript on a server with `AGENT=off`, since an
 agent entry is otherwise only reachable through a real turn. Photographs were
 refused at the network layer for the two fallback pictures, which is how 004
-exercised the same path.
+exercised the same path. The notice is a clipped page region rather than an
+element screenshot: the resting shadow is 3% at 3px, so a shot cropped to the
+pill's own box would cut off the thing the box is about.
 
 Not shown: the pill on a quote. A thread's count only passes one once an
 accepted comment has produced prose in more than one block, which needs an
 agent turn to stage. It is the same `Count` as the two above.
 
-The last box stays open: this branch is committed but not pushed, so there is
-no PR to attach anything to yet.
+The last box stays open, and cannot be closed from here. Attaching screenshots
+to a PR needs a PR, a PR needs a push, and this branch is under instruction not
+to be pushed. The three images the box names are committed and ready:
+`images/009-decisions-header.png`, `images/009-reconnecting.png` and
+`images/009-chat-entries.png`.
