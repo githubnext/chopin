@@ -17,13 +17,15 @@
 	 */
 	--plan-measure: 40rem;
 	/*
-	 * Resolved out here because MDXEditor declares `--text-base`, `--text-sm`
+	 * Document body text, one step down from the old 17px so prose sits
+	 * closer to chrome and chat sizes. Resolved out here because MDXEditor
+	 * declares `--text-base`, `--text-sm`
 	 * and `--text-xs` on its own root, which sits between `:root` and the
 	 * document — so reading the theme token inside the editor gets its 1rem
 	 * rather than ours. `.plan` is outside that root, so this catches the
 	 * theme's value on the way past.
 	 */
-	--plan-body: var(--text-lg);
+	--plan-body: var(--text-base);
 }
 
 /* Decisions pane -------------------------------------------------------- */
