@@ -42,7 +42,7 @@ function Note({ note }: { note: Comment.Note }) {
 				<Who handle={note.handle} />
 				<span className="text-sm text-text-tertiary tabular-nums">{when(note.ts)}</span>
 			</div>
-			<p className="m-0 text-base whitespace-pre-wrap text-text-primary">{note.text}</p>
+			<p className="m-0 text-sm whitespace-pre-wrap text-text-primary">{note.text}</p>
 		</li>
 	);
 }

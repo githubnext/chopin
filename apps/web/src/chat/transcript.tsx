@@ -123,7 +123,7 @@ function SystemEntry(
 			<div className="shrink-0">
 				<SystemIcon />
 			</div>
-			<p className="m-0 text-base">{displayText(item.text)}</p>
+			<p className="m-0 text-sm">{displayText(item.text)}</p>
 		</div>
 	);
 }

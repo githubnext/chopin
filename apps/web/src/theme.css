@@ -78,11 +78,11 @@
 	 * inside the chrome rather than two more sizes below the legibility floor.
 	 */
 	--text-*: initial;
-	--text-sm: 0.8125rem; /* 13px — all chrome */
+	--text-sm: 0.8125rem; /* 13px — all chrome, chat and comment bodies */
 	--text-sm--line-height: 1.25rem;
-	--text-base: 0.9375rem; /* 15px — chat and comment bodies */
+	--text-base: 0.9375rem; /* 15px — document prose */
 	--text-base--line-height: 1.375rem;
-	--text-lg: 1.0625rem; /* 17px — document prose */
+	--text-lg: 1.0625rem; /* 17px — document h3 subheadings */
 	--text-lg--line-height: 1.6875rem;
 	--text-xl: 1.5rem; /* 24px — section headings and dialogs */
 	--text-xl--line-height: 1.875rem;
