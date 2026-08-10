@@ -43,7 +43,7 @@ test("a handle in the URL joins without the form", async ({ join, room }) => {
 	await expect(page.getByRole("heading", { name: "GitHub handle" })).toHaveCount(0);
 	await expect(page.getByLabel("GitHub handle")).toHaveCount(0);
 	await expect(page.locator("header").first()).toContainText(`/r/${room}`);
-	await expect(page.locator("header").first()).toContainText("@ana");
+	await expect(page.locator("header").first().getByRole("img", { name: "ana" })).toHaveCount(1);
 });
 
 test("the address bar keeps the handle and loses the key", async ({ page, room }) => {

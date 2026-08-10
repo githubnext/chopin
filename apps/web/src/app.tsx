@@ -98,7 +98,6 @@ function Header(
 	{
 		chatOpen,
 		decisionsOpen,
-		handle,
 		members,
 		onToggleChat,
 		onToggleDecisions,
@@ -108,7 +107,6 @@ function Header(
 	}: {
 		chatOpen: boolean;
 		decisionsOpen: boolean;
-		handle: string;
 		members: Session.Member[];
 		onToggleChat: () => void;
 		onToggleDecisions: () => void;
@@ -117,10 +115,6 @@ function Header(
 		status: Status;
 	},
 ) {
-	// Presence over the prose already shows who is editing; this is the room
-	// roster, which includes people who have it open but are not in the doc.
-	let others = members.filter(member => member.handle !== handle);
-
 	return (
 		<header className="hairline-b flex h-12 shrink-0 items-center gap-3 px-4">
 			<PaneToggle onToggle={onToggleChat} open={chatOpen} pane="chat" />
@@ -129,13 +123,11 @@ function Header(
 			<span className={`text-sm ${TONE[status]}`}>
 				{status === "connected" ? reason : reason ?? status}
 			</span>
-			<div className="ml-auto flex min-w-0 items-center gap-2">
-				{/* The tallest row a face sits in, so the only one drawn at 24px. */}
-				<Face handle={handle} size={24} />
-				<span className="truncate text-sm text-text-tertiary">
-					@{handle}
-					{others.length > 0 && ` · with ${others.map(member => `@${member.handle}`).join(", ")}`}
-				</span>
+			<div
+				aria-label={`People here: ${members.map(member => member.handle).join(", ")}`}
+				className="ml-auto flex items-center [&>*+*]:-ml-1.5"
+			>
+				{members.map(member => <Face handle={member.handle} key={member.client} ring size={24} />)}
 			</div>
 			<PaneToggle onToggle={onToggleDecisions} open={decisionsOpen} pane="decisions" />
 		</header>
@@ -203,7 +195,6 @@ function Room({ handle }: { handle: string }) {
 				<Header
 					chatOpen={chatOpen}
 					decisionsOpen={decisionsOpen}
-					handle={handle}
 					members={members}
 					onToggleChat={() => setChatOpen(value => !value)}
 					onToggleDecisions={() => setDecisionsOpen(value => !value)}
