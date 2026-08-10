@@ -403,7 +403,7 @@ describe("migration", () => {
 			},
 			{
 				file: "apps/web/src/chat/chat.tsx",
-				marker: "Talk to the room, or mention",
+				marker: "Say something…",
 				name: "chat composer",
 				tag: "textarea",
 				utility: "field",
@@ -543,7 +543,7 @@ describe("migration", () => {
 					tiers: ["btn-ghost"],
 				},
 			],
-			["apps/web/src/chat/chat.tsx", {
+			["apps/web/src/chat/transcript.tsx", {
 				action: "Withdraw",
 				marker: 'title="Withdraw"',
 				size: "btn-icon",
@@ -552,7 +552,7 @@ describe("migration", () => {
 			["apps/web/src/chat/chat.tsx", {
 				action: "Stop",
 				marker: 'wire?.send("chat:abort")',
-				size: "btn-sm",
+				size: "btn-md",
 				tiers: ["btn-secondary"],
 			}],
 			["apps/web/src/chat/chat.tsx", {
@@ -562,16 +562,16 @@ describe("migration", () => {
 				tiers: ["btn-ghost"],
 			}],
 			["apps/web/src/chat/chat.tsx", {
-				action: "planner mention",
-				marker: "setText(current =>",
-				size: "btn-sm",
-				tiers: ["btn-ghost"],
+				action: "send to room",
+				marker: 'submit("room")',
+				size: "btn-md",
+				tiers: ["btn-secondary"],
 			}],
-			["apps/web/src/chat/transcript.tsx", {
-				action: "tool disclosure",
-				marker: "onClick={() => setOpen(value => !value)}",
-				size: "btn-sm",
-				tiers: ["btn-ghost"],
+			["apps/web/src/chat/chat.tsx", {
+				action: "ask Planner",
+				marker: 'submit("planner")',
+				size: "btn-md",
+				tiers: ["btn-primary"],
 			}],
 			["packages/editor/src/comments.tsx", {
 				action: "comment submit",

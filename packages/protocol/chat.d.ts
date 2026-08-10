@@ -80,6 +80,7 @@ export declare namespace Chat {
 	};
 
 	export type Queue = KIND<"chat:queue"> & { waiting: Waiting[] };
+	export type Destination = "room" | "planner";
 
 	/**
 	 * Say something.
@@ -88,7 +89,7 @@ export declare namespace Chat {
 	 * queue and runs in order when the turn ends — nobody is made to wait in
 	 * silence because somebody else prompted first.
 	 */
-	export type Send = KIND<"chat:send"> & { text: string };
+	export type Send = KIND<"chat:send"> & { text: string; to: Destination };
 
 	/** Stop the running turn. Anyone may; the transcript records who did. */
 	export type Abort = KIND<"chat:abort">;

@@ -11,9 +11,9 @@
  * looks like a prompt and being met with silence.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
-import { addressed, MENTION } from "@chopin/protocol/address";
+import { addressed } from "@chopin/protocol/address";
 
 import { Transcript } from "./transcript";
 
@@ -30,48 +30,12 @@ export type ChatProps = {
 	waiting?: number;
 };
 
-function Queued(
-	{ handle, onWithdraw, waiting }: {
-		handle: string;
-		waiting: Wire.Waiting[];
-		onWithdraw: (id: string) => void;
-	},
-) {
-	if (waiting.length === 0) return null;
-
-	return (
-		<div className="flex shrink-0 flex-col gap-1 px-3 py-2 hairline-t">
-			<span className="text-sm font-semibold tracking-wide text-text-tertiary uppercase">
-				Queued
-			</span>
-			{waiting.map(item => (
-				<div className="animate-enter flex items-baseline gap-2 text-sm" key={item.id}>
-					<span className="text-text-tertiary">@{item.handle}</span>
-					<span className="min-w-0 flex-1 truncate">{item.text}</span>
-					{item.handle === handle && (
-						<button
-							className="btn btn-icon btn-ghost shrink-0"
-							onClick={() => onWithdraw(item.id)}
-							title="Withdraw"
-							type="button"
-						>
-							×
-						</button>
-					)}
-				</div>
-			))}
-		</div>
-	);
-}
-
 export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) {
 	let [entries, setEntries] = useState<Wire.Entry[]>([]);
 	let [arrived, setArrived] = useState<ReadonlySet<string>>(new Set());
 	let [queue, setQueue] = useState<Wire.Waiting[]>([]);
 	let [busy, setBusy] = useState(false);
-	let [turn, setTurn] = useState<string>();
 	let [text, setText] = useState("");
-	let input = useRef<HTMLTextAreaElement>(null);
 
 	useEffect(() => {
 		if (!wire) return;
@@ -113,13 +77,12 @@ export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) 
 			wire.on<Wire.Tool>("chat:tool", frame => {
 				setEntries(current => {
 					let index = current.findIndex(entry => entry.id === frame.entry);
-					let target = index < 0 ? current.length - 1 : index;
-					if (target < 0) return current;
+					if (index < 0) return current;
 					let next = [...current];
-					let entry = next[target]!;
+					let entry = next[index]!;
 					let tools = entry.tools ?? [];
 					let existing = tools.findIndex(item => item.id === frame.activity.id);
-					next[target] = {
+					next[index] = {
 						...entry,
 						tools: existing < 0
 							? [...tools, frame.activity]
@@ -130,7 +93,6 @@ export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) 
 			}),
 			wire.on<Wire.State>("chat:state", frame => {
 				setBusy(frame.busy);
-				setTurn(frame.turn);
 			}),
 			wire.on<Wire.Queue>("chat:queue", frame => setQueue(frame.waiting)),
 		];
@@ -140,99 +102,83 @@ export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) 
 		};
 	}, [wire]);
 
-	let submit = () => {
+	let submit = (to: Wire.Destination) => {
 		let value = text.trim();
 		if (!value || !wire || !connected) return;
-		wire.send("chat:send", { text: value });
+		wire.send("chat:send", { text: value, to });
 		setText("");
 	};
 
-	let asking = addressed(text);
-
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<header className="flex shrink-0 items-center gap-2 px-3 py-2 hairline-b">
-				<span className="text-sm font-semibold tracking-wide text-text-tertiary uppercase">
-					Planner
-				</span>
-				{busy && (
-					<span className="text-sm text-text-tertiary">
-						working{turn && ` on @${turn}'s message`}
-					</span>
-				)}
-				{busy && (
-					<button
-						className="btn btn-sm btn-secondary ml-auto"
-						onClick={() => wire?.send("chat:abort")}
-						type="button"
-					>
-						Stop
-					</button>
-				)}
-			</header>
+			<Transcript
+				arrived={arrived}
+				entries={entries}
+				handle={handle}
+				onWithdraw={id => wire?.send("chat:unqueue", { id })}
+				queued={queue}
+			/>
 
 			{!!waiting && waiting > 0 && (
-				<button
-					className="btn btn-sm btn-ghost animate-enter flex w-full shrink-0 justify-start gap-2 text-left hairline-b"
-					data-press="wide"
-					onClick={() => onReveal?.("")}
-					type="button"
-				>
-					<span className="text-warning-ink">●</span>
+				<div className="animate-enter flex shrink-0 items-center gap-2 px-4 pb-2 text-sm text-text-secondary">
+					<span aria-hidden="true" className="text-warning-ink">●</span>
 					<span>
 						{waiting === 1 ? "A question is waiting" : `${waiting} questions are waiting`}
 					</span>
-					<span className="ml-auto text-text-secondary">Answer →</span>
-				</button>
+					<button
+						className="btn btn-sm btn-ghost ml-auto text-brand-ink"
+						onClick={() => onReveal?.("")}
+						type="button"
+					>
+						Answer
+					</button>
+				</div>
 			)}
 
-			<Transcript arrived={arrived} entries={entries} />
-
-			<Queued
-				handle={handle}
-				onWithdraw={id => wire?.send("chat:unqueue", { id })}
-				waiting={queue}
-			/>
-
-			<div className="flex shrink-0 flex-col gap-1 p-2 hairline-t">
+			<div className="flex shrink-0 flex-col gap-2 px-4 pb-4">
 				<textarea
-					className="field w-full resize-none px-2 py-1.5 text-sm"
+					className="field h-18 w-full resize-none px-2.5 py-1.5 text-base"
 					disabled={!connected}
 					onChange={event => setText(event.target.value)}
 					onKeyDown={event => {
 						// Enter sends; a newline needs a modifier, as everywhere else.
 						if (event.key !== "Enter" || event.shiftKey) return;
 						event.preventDefault();
-						submit();
+						submit(addressed(text) ? "planner" : "room");
 					}}
-					placeholder={`Talk to the room, or mention ${MENTION} to ask the planner…`}
-					ref={input}
+					placeholder="Say something…"
 					rows={3}
 					value={text}
 				/>
 
-				<div className="flex items-baseline gap-2 px-1 text-sm">
-					{asking
-						? (
-							<span className="text-brand">
-								→ planner{busy && ", after the current turn"}
-							</span>
-						)
-						: (
-							<span className="text-text-secondary">
-								room only — the planner will see it on its next turn
-							</span>
-						)}
-					<button
-						className="btn btn-sm btn-ghost ml-auto"
-						onClick={() => {
-							setText(current => (addressed(current) ? current : `${MENTION} ${current}`.trim()));
-							input.current?.focus();
-						}}
-						type="button"
-					>
-						{asking ? "" : `+ ${MENTION}`}
-					</button>
+				<div className="flex items-center gap-2">
+					{busy && (
+						<button
+							className="btn btn-md btn-secondary"
+							onClick={() => wire?.send("chat:abort")}
+							type="button"
+						>
+							Stop
+						</button>
+					)}
+					<div className="ml-auto flex items-center gap-2">
+						<button
+							className="btn btn-md btn-secondary"
+							disabled={!connected || !text.trim()}
+							onClick={() => submit("room")}
+							type="button"
+						>
+							Send to room
+						</button>
+						<button
+							className="btn btn-md btn-primary"
+							disabled={!connected || !text.trim()}
+							onClick={() => submit("planner")}
+							type="button"
+						>
+							Ask Planner
+						</button>
+					</div>
 				</div>
 			</div>
 		</div>

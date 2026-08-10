@@ -13,8 +13,10 @@ import { describe, expect, it } from "bun:test";
 import * as Chat from "./service";
 
 import type { Server } from "bun";
+import type { Chat as Wire, Request } from "@chopin/protocol";
 import type { Config } from "../config";
 import type { Plan } from "../plan/service";
+import type { Socket } from "../wire";
 import type { SocketData } from "../wire";
 
 type Sent = { kind: string; [key: string]: unknown };
@@ -47,6 +49,88 @@ function said(sent: Sent[]): string[] {
 		.filter(frame => frame.kind === "chat:message")
 		.map(frame => (frame.entry as { text: string }).text);
 }
+
+function sender(handle = "ana"): Socket {
+	return { data: { handle } } as unknown as Socket;
+}
+
+function message(text: string, to: Wire.Destination): Request<Wire.Send> {
+	return { kind: "chat:send", rid: "request", text, to, ts: 0 };
+}
+
+describe("sending to a named destination", () => {
+	it("keeps a planner message in the queue until its turn begins", () => {
+		let { chat, context } = room({ busy: true });
+
+		Chat.send(context, sender(), message("draft the migration", "planner"));
+
+		expect(chat.entries).toHaveLength(0);
+		expect(chat.waiting).toMatchObject([{
+			handle: "ana",
+			text: "draft the migration",
+		}]);
+	});
+
+	it("sends to the room even when the prose contains the typing shortcut", () => {
+		let { chat, context } = room({ busy: true });
+
+		Chat.send(context, sender(), message("ask @ai about this later", "room"));
+
+		expect(chat.waiting).toHaveLength(0);
+		expect(chat.entries[0]).toMatchObject({
+			author: { kind: "member", handle: "ana" },
+			text: "ask @ai about this later",
+		});
+	});
+
+	it("removes the typing shortcut from a queued planner message", () => {
+		let { chat, context } = room({ busy: true });
+
+		Chat.send(context, sender(), message("@ai draft the migration", "planner"));
+
+		expect(chat.waiting[0]?.text).toBe("draft the migration");
+	});
+
+	it("moves a queued message into the transcript when it becomes pending", () => {
+		let { chat } = room();
+		chat.waiting.push({
+			id: "w1",
+			handle: "ana",
+			text: "draft the migration",
+			message: true,
+		});
+
+		Chat.pending(chat);
+
+		expect(chat.entries).toMatchObject([{
+			id: "w1",
+			author: { kind: "member", handle: "ana" },
+			text: "draft the migration",
+		}]);
+	});
+
+	it("ignores a destination the protocol does not name", () => {
+		let { chat, context } = room({ busy: true });
+
+		Chat.send(context, sender(), message("draft the migration", "later" as Wire.Destination));
+
+		expect(chat.entries).toHaveLength(0);
+		expect(chat.waiting).toHaveLength(0);
+	});
+
+	it("keeps planner requests out of a queue when the agent is off", () => {
+		let { chat, context, sent } = room({ agent: false });
+
+		Chat.send(context, sender(), message("draft the migration", "planner"));
+
+		expect(chat.busy).toBe(false);
+		expect(chat.waiting).toHaveLength(0);
+		expect(said(sent)).toEqual([
+			"draft the migration",
+			"The agent is not running, so the plan has not been revised.",
+		]);
+	});
+});
 
 describe("instructing the agent without a message", () => {
 	/**

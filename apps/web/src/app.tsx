@@ -190,8 +190,10 @@ function Room({ handle }: { handle: string }) {
 				<Chat
 					connected={status === "connected"}
 					handle={handle}
-					onReveal={widget =>
-						setReveal({ widget: widget || unanswered[0]?.id || "", token: Date.now() })}
+					onReveal={widget => {
+						setDecisionsOpen(true);
+						setReveal({ widget: widget || unanswered[0]?.id || "", token: Date.now() });
+					}}
 					waiting={unanswered.length}
 					wire={wire}
 				/>

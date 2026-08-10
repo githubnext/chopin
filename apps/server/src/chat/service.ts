@@ -21,7 +21,7 @@ import { ulid } from "@chopin/dialect";
 import * as Agent from "../agent/client";
 import { toolbox } from "../agent/tools";
 import * as Service from "../plan/service";
-import { addressed } from "@chopin/protocol/address";
+import { addressed, instruction } from "@chopin/protocol/address";
 
 import { compose, remember } from "./address";
 import { broadcast, tell } from "../wire";
@@ -50,6 +50,8 @@ const LINGER_MS = 5_000;
  */
 type Waiting = Wire.Waiting & {
 	spent?: () => boolean;
+	/** True when this came from the composer rather than another instruction. */
+	message?: boolean;
 	/** The comment thread this turn was started to act on, if one was. */
 	thread?: string;
 };
@@ -79,6 +81,8 @@ export type Chat = {
 	acting?: string;
 	/** The entry the agent is currently writing into. */
 	writing?: string;
+	/** The dedicated entry collecting tool calls for this turn. */
+	tooling?: string;
 	/** Detaches the event handler when a turn ends. */
 	release?: () => void;
 	/** Pending removal of the agent's cursor, cancelled if it edits again. */
@@ -157,8 +161,12 @@ function say(
 	entry: Wire.Entry,
 ): Wire.Entry {
 	chat.entries.push(entry);
-	broadcast(server, room, { kind: "chat:message", ts: 0, entry });
+	announce(server, room, entry);
 	return entry;
+}
+
+function announce(server: Server<SocketData>, room: string, entry: Wire.Entry): void {
+	broadcast(server, room, { kind: "chat:message", ts: 0, entry });
 }
 
 /** Everything said so far, for somebody who has just arrived. */
@@ -183,9 +191,10 @@ export type Room = {
 /**
  * Take a message.
  *
- * It appears in the transcript either way — what somebody said is not
- * contingent on the agent being ready to hear it, or on it being for the agent
- * at all. What differs is whether it starts a turn.
+ * A room message appears immediately. A planner message queued behind another
+ * turn stays visibly queued until that turn actually begins, then moves into
+ * the transcript exactly once. The destination, rather than its prose, decides
+ * which lifecycle it takes.
  */
 export function send(context: Room, ws: Socket, msg: Request<Wire.Send>): void {
 	let text = msg.text.trim();
@@ -193,19 +202,36 @@ export function send(context: Room, ws: Socket, msg: Request<Wire.Send>): void {
 
 	let { chat, room, server } = context;
 	let handle = ws.data.handle;
+	// The explicit destination is authoritative. Falling back to the typing
+	// shortcut keeps an older client predictable while rooms reconnect.
+	let destination = msg.to;
+	if (destination === undefined) destination = addressed(text) ? "planner" : "room";
+	else if (destination !== "room" && destination !== "planner") return;
+	let visible = destination === "planner" ? instruction(text) : text;
 
-	say(chat, server, room, {
-		id: ulid(),
-		author: { kind: "member", handle },
-		text,
-		ts: now(),
-	});
-
-	// Not for the agent: remembered, so the next turn arrives knowing it, but
-	// nothing runs and nothing queues. Nobody asked for anything.
-	if (!addressed(text)) {
-		chat.backscroll = remember(chat.backscroll, { handle, text });
+	if (destination === "room") {
+		say(chat, server, room, {
+			id: ulid(),
+			author: { kind: "member", handle },
+			text: visible,
+			ts: now(),
+		});
+		chat.backscroll = remember(chat.backscroll, { handle, text: visible });
 		return;
+	}
+	if (!context.config.agent) {
+		say(chat, server, room, {
+			id: ulid(),
+			author: { kind: "member", handle },
+			text: visible,
+			ts: now(),
+		});
+		return void say(chat, server, room, {
+			id: ulid(),
+			author: { kind: "system" },
+			text: "The agent is not running, so the plan has not been revised.",
+			ts: now(),
+		});
 	}
 
 	if (chat.busy) {
@@ -217,11 +243,17 @@ export function send(context: Room, ws: Socket, msg: Request<Wire.Send>): void {
 				ts: now(),
 			});
 		}
-		chat.waiting.push({ id: ulid(), handle, text });
+		chat.waiting.push({ id: ulid(), handle, text: visible, message: true });
 		return queued(chat, server, room);
 	}
 
-	void run(context, handle, text);
+	say(chat, server, room, {
+		id: ulid(),
+		author: { kind: "member", handle },
+		text: visible,
+		ts: now(),
+	});
+	void run(context, handle, visible);
 }
 
 /** Say something in the transcript without asking the agent for anything. */
@@ -409,6 +441,7 @@ async function run(context: Room, handle: string, text: string, thread?: string)
 		chat.release?.();
 		chat.release = undefined;
 		chat.writing = undefined;
+		chat.tooling = undefined;
 		settle(chat, server, room);
 		chat.busy = false;
 		chat.turn = undefined;
@@ -434,6 +467,8 @@ async function run(context: Room, handle: string, text: string, thread?: string)
 	let next = pending(chat);
 	if (next) {
 		queued(chat, server, room);
+		let entry = next.message ? chat.entries.find(item => item.id === next.id) : undefined;
+		if (entry) announce(server, room, entry);
 		await run(context, next.handle, next.text, next.thread);
 	}
 }
@@ -449,6 +484,14 @@ async function run(context: Room, handle: string, text: string, thread?: string)
 export function pending(chat: Chat): Waiting | undefined {
 	let next = chat.waiting.shift();
 	while (next?.spent?.()) next = chat.waiting.shift();
+	if (next?.message) {
+		chat.entries.push({
+			id: next.id,
+			author: { kind: "member", handle: next.handle },
+			text: next.text,
+			ts: now(),
+		});
+	}
 	return next;
 }
 
@@ -467,6 +510,10 @@ export function translate(context: Room, event: SessionEvent): void {
 	let { chat, room, server } = context;
 
 	switch (event.type) {
+		case "session.idle":
+			chat.tooling = undefined;
+			return;
+
 		// One entry per assistant message, identified by the id the deltas
 		// carry, so two messages in a turn do not run together.
 		case "assistant.message_delta": {
@@ -526,7 +573,7 @@ export function translate(context: Room, event: SessionEvent): void {
 			broadcast(server, room, {
 				kind: "chat:tool",
 				ts: 0,
-				entry: attach(chat, activity),
+				entry: attach(context, activity),
 				activity,
 			});
 			return;
@@ -552,7 +599,7 @@ export function translate(context: Room, event: SessionEvent): void {
 			broadcast(server, room, {
 				kind: "chat:tool",
 				ts: 0,
-				entry: attach(chat, activity),
+				entry: attach(context, activity),
 				activity,
 			});
 			return;
@@ -581,13 +628,14 @@ export function translate(context: Room, event: SessionEvent): void {
 			broadcast(server, room, {
 				kind: "chat:tool",
 				ts: 0,
-				entry: attach(chat, activity),
+				entry: attach(context, activity),
 				activity,
 			});
 			return;
 		}
 
 		case "session.error": {
+			chat.tooling = undefined;
 			say(chat, server, room, {
 				id: ulid(),
 				author: { kind: "system" },
@@ -616,13 +664,16 @@ function named(chat: Chat, id: string): string {
  * It gets an entry of its own so the work is visible while it happens rather
  * than appearing retrospectively once the agent finishes talking.
  */
-function attach(chat: Chat, activity: Wire.Activity): string {
-	let entry = chat.entries.find(item => item.id === chat.writing)
-		?? chat.entries.findLast(item => item.author.kind === "agent");
+function attach(context: Room, activity: Wire.Activity): string {
+	let { chat, room, server } = context;
+	let entry = chat.entries.find(item => item.id === chat.tooling)
+		?? chat.entries.find(item => item.id === chat.writing);
+	if (entry) chat.tooling = entry.id;
 
 	if (!entry) {
 		entry = { id: ulid(), author: { kind: "agent" }, text: "", ts: now(), tools: [] };
-		chat.entries.push(entry);
+		chat.tooling = entry.id;
+		say(chat, server, room, entry);
 	}
 
 	entry.tools ??= [];
