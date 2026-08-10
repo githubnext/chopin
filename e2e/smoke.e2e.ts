@@ -240,7 +240,7 @@ test(
 		await expect(system).toContainText("Sam joined");
 		expect(await system.evaluate(element => getComputedStyle(element).fontStyle)).toBe("normal");
 		expect(await system.locator("p").evaluate(element => getComputedStyle(element).fontSize)).toBe(
-			"15px",
+			"13px",
 		);
 
 		await testInfo.attach("finished-turn-with-failure-open", {
