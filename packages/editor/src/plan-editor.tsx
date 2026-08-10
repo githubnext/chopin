@@ -17,7 +17,6 @@ import { plugins as dialectPlugins } from "@chopin/dialect";
 import { ChangeStore } from "./changes";
 import { PlanChanges } from "./changes-chip";
 import { collaborationPlugin } from "./collaboration";
-import { PlanPresence } from "./presence";
 import { PlanStatus } from "./status";
 import { register } from "./widgets";
 import { widgetsPlugin } from "./widgets-plugin";
@@ -284,7 +283,6 @@ export function PlanEditor(
 							suppressHtmlProcessing
 						/>
 					</div>
-					<PlanPresence provider={presence} />
 					{/* In the document column, so they track the prose, not the pane. */}
 					<PlanChanges store={changes} />
 					<PlanStatus

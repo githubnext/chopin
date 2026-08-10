@@ -31,18 +31,28 @@ test("an edit by one appears for the other", async ({ join }) => {
 	await expect(content(ana)).toContainText("Readable and diffable.");
 });
 
-test("the header names who else is here", async ({ join }) => {
+test("the header represents everyone here as faces", async ({ join }) => {
 	let ana = await join("ana");
 	let bo = await join("bo");
+	let header = ana.locator("header").first();
 
-	await expect(ana.locator("header").first()).toContainText("with @bo");
-	await expect(bo.locator("header").first()).toContainText("with @ana");
+	await expect(header.getByRole("img", { name: "ana" })).toHaveCount(1);
+	await expect(header.getByRole("img", { name: "bo" })).toHaveCount(1);
+	await expect(header).not.toContainText("@ana");
+	await expect(header).not.toContainText("@bo");
 
 	await bo.close();
 
 	// A roster that keeps naming somebody who closed the tab is worse than no
 	// roster, because it is what you check before assuming you are alone.
-	await expect(ana.locator("header").first()).not.toContainText("with @bo");
+	await expect(header.getByRole("img", { name: "bo" })).toHaveCount(0);
+});
+
+test("the document does not duplicate the room roster", async ({ join }) => {
+	let ana = await join("ana");
+	await join("bo");
+
+	await expect(ana.locator(".plan-presence")).toHaveCount(0);
 });
 
 test("a peer's caret is drawn, and named", async ({ join }) => {
