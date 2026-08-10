@@ -26,7 +26,7 @@
 
 - [ ] **Step 1: Add a failing browser test after the existing chat transcript tests**
 
-```ts
+````ts
 test("chat renders participant Markdown without admitting document features", async ({ join, page }) => {
 	await injectChatHistory(page, frame => ({
 		...frame,
@@ -85,7 +85,7 @@ test("chat renders participant Markdown without admitting document features", as
 	await expect(member.locator('img[src*="example.invalid"]')).toHaveCount(0);
 	await expect(planner.locator("strong")).toHaveText("strongly");
 });
-```
+````
 
 - [ ] **Step 2: Run the focused test and verify it fails**
 
@@ -275,7 +275,7 @@ Replace the plain message paragraph inside `MessageBody` with:
 <div className="min-w-0 flex-1">
 	<MessageMarkdown source={text} />
 	{message.streaming && <span className="ml-0.5 animate-pulse">▍</span>}
-</div>
+</div>;
 ```
 
 Keep the queued-message withdraw button as the adjacent flex item. Leave `SystemEntry` unchanged so system lines remain plain application text.

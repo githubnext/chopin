@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { AgentFace, Face } from "@chopin/editor";
 
+import { MessageMarkdown } from "./markdown";
 import { capitalize, displayText, duration, group, summarize } from "./model";
 
 import type { Chat } from "@chopin/protocol";
@@ -141,10 +142,10 @@ function MessageBody(
 		<div>
 			{text && (
 				<div className="flex items-start gap-1">
-					<p className="m-0 min-w-0 flex-1 text-base whitespace-pre-wrap">
-						{text}
+					<div className="min-w-0 flex-1">
+						<MessageMarkdown source={text} />
 						{message.streaming && <span className="ml-0.5 animate-pulse">▍</span>}
-					</p>
+					</div>
 					{message.queued && message.author.kind === "member" && message.author.handle === handle
 						&& (
 							<button

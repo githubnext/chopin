@@ -1,0 +1,71 @@
+.chat-markdown {
+	min-width: 0;
+	overflow-wrap: anywhere;
+	font-size: var(--text-base);
+	line-height: 1.5;
+}
+
+.chat-markdown > :first-child {
+	margin-block-start: 0;
+}
+
+.chat-markdown > :last-child {
+	margin-block-end: 0;
+}
+
+.chat-markdown p,
+.chat-markdown ul,
+.chat-markdown ol,
+.chat-markdown blockquote,
+.chat-markdown pre {
+	margin-block: 0.5rem;
+}
+
+.chat-markdown ul,
+.chat-markdown ol {
+	padding-inline-start: 1.25rem;
+}
+
+.chat-markdown ul {
+	list-style: disc;
+}
+
+.chat-markdown ol {
+	list-style: decimal;
+}
+
+.chat-markdown li + li {
+	margin-block-start: 0.125rem;
+}
+
+.chat-markdown blockquote {
+	border-inline-start: 2px solid var(--color-edge);
+	padding-inline-start: 0.75rem;
+	color: var(--color-text-secondary);
+}
+
+.chat-markdown a {
+	color: var(--color-brand-ink);
+	text-decoration: underline;
+	text-underline-offset: 0.125rem;
+}
+
+.chat-markdown :not(pre) > code {
+	border-radius: var(--radius-sm);
+	background: var(--color-inset);
+	padding: 0.125rem 0.25rem;
+	font-family: var(--font-mono);
+	font-size: var(--text-sm);
+}
+
+.chat-markdown pre {
+	overflow-x: auto;
+	border-radius: var(--radius-md);
+	background: var(--color-inset);
+	padding: 0.75rem;
+}
+
+.chat-markdown pre code {
+	font-family: var(--font-mono);
+	font-size: var(--text-sm);
+}
