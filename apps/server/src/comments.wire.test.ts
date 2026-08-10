@@ -108,7 +108,7 @@ async function mark(who: Member, text = "Too long.") {
 beforeAll(async () => {
 	data = await mkdtemp(join(tmpdir(), "chopin-wire-"));
 	// Every room this file uses, seeded so there is prose worth marking.
-	for (let room of ["marking", "replies", "accepting", "joining"]) {
+	for (let room of ["marking", "replies", "accepting", "joining", "chatting"]) {
 		await mkdir(join(data, room), { recursive: true });
 		await writeFile(join(data, room, "plan.mdx"), SOURCE);
 	}
@@ -134,6 +134,28 @@ beforeAll(async () => {
 		}
 	}
 	throw new Error("server did not start");
+});
+
+describe("room messages", () => {
+	it("reach both members when the agent is off", async () => {
+		let ana = await member("chatting", "ana");
+		let kris = await member("chatting", "kris");
+		await ana.ask("plan:open", {});
+		await kris.ask("plan:open", {});
+
+		ana.send("chat:send", { text: "The room should see this.", to: "room" });
+
+		for (let each of [ana, kris]) {
+			let delivered = await until(seen(each.frames, "chat:message"), "room message");
+			expect(delivered.entry).toMatchObject({
+				author: { kind: "member", handle: "ana" },
+				text: "The room should see this.",
+			});
+		}
+
+		ana.socket.close();
+		kris.socket.close();
+	});
 });
 
 afterAll(async () => {

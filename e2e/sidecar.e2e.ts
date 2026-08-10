@@ -42,6 +42,19 @@ test("a question the room was asked is waiting in the sidecar", async ({ join, s
 	await expect(card.getByRole("radio", { name: /In SQLite/ })).toBeVisible();
 });
 
+test("the waiting-question line reopens the decisions rail", async ({ join, seed }) => {
+	await seed(PROSE);
+	let page = await join("ana");
+
+	await page.getByRole("button", { name: "Hide decisions pane" }).click();
+	await expect(page.locator("#pane-decisions")).toBeHidden();
+
+	await page.locator("#pane-chat").getByRole("button", { name: "Answer" }).click();
+
+	await expect(page.locator("#pane-decisions")).toBeVisible();
+	await expect(questionnaire(page)).toBeInViewport();
+});
+
 test("answering both questions resolves the card and writes the decision", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");

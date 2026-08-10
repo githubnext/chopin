@@ -67,6 +67,16 @@ function tool(
 	} as unknown as SessionEvent;
 }
 
+function idle(): SessionEvent {
+	return {
+		type: "session.idle",
+		id: `event-${Math.random().toString(36).slice(2, 8)}`,
+		parentId: null,
+		timestamp: new Date().toISOString(),
+		data: {},
+	} as unknown as SessionEvent;
+}
+
 describe("a streamed message", () => {
 	it("becomes one entry, not one per event", () => {
 		let chat = create();
@@ -146,6 +156,28 @@ describe("a streamed message", () => {
 });
 
 describe("tool calls", () => {
+	it("announces a tool-only entry before updating it", () => {
+		let chat = create();
+		let { context, sent } = room(chat);
+
+		translate(context, tool("tool.execution_start", { toolCallId: "t1", toolName: "grep" }));
+
+		expect(sent.map(frame => frame.kind)).toEqual(["chat:message", "chat:tool"]);
+		expect(sent[1]?.entry).toBe((sent[0]!.entry as { id: string }).id);
+	});
+
+	it("starts a fresh tool run after a turn goes idle", () => {
+		let chat = create();
+		let { context } = room(chat);
+
+		translate(context, tool("tool.execution_start", { toolCallId: "t1", toolName: "grep" }));
+		translate(context, idle());
+		translate(context, tool("tool.execution_start", { toolCallId: "t2", toolName: "edit_plan" }));
+
+		expect(chat.entries).toHaveLength(2);
+		expect(chat.entries.map(entry => entry.tools?.[0]?.name)).toEqual(["grep", "edit_plan"]);
+	});
+
 	it("files them under the message that made them, with a duration", () => {
 		let chat = create();
 		let { context } = room(chat);

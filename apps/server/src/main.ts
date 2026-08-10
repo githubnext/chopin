@@ -149,7 +149,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			return;
 
 		case "chat:send":
-			if (room.plan && config.agent) Chat.send(conversation(room), ws, frame);
+			if (room.plan) Chat.send(conversation(room), ws, frame);
 			return;
 
 		case "chat:abort":

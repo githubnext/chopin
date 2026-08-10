@@ -183,6 +183,7 @@ export class ThreadStore {
 		if (!view || !this.#wire) return;
 		this.#wire.send("chat:send", {
 			text: `@ai apply the accepted comment on "${view.quote}" — it has not been actioned yet.`,
+			to: "planner",
 		});
 	}
 
