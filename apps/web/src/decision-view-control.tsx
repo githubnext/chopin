@@ -25,6 +25,7 @@ export function DecisionViewControl(
 				Plan
 			</button>
 			<button
+				aria-label={unanswered > 0 ? `Decisions, ${unanswered} unanswered` : "Decisions"}
 				aria-pressed={view === "decisions"}
 				className={`btn btn-sm btn-ghost ${attention ? "animate-enter" : ""}`}
 				data-attention={attention || undefined}

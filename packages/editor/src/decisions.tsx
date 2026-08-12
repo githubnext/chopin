@@ -1,26 +1,9 @@
 /**
- * The sidecar.
+ * The focused questionnaire view.
  *
- * Everything the plan is waiting on, and everything it has settled: questions
- * the agent asked. Comments stay where they were made, as document chrome.
- *
- * Outstanding items come first, in document order, because one of those is
- * blocking somebody. Everything resolved follows, showing: it is the record of
- * what the room settled, and a decision nobody can see is one that gets made a
- * second time. The disclosure stays because resolved items are kept forever and
- * a long-lived plan will out-scroll the pane — and which way it is left is
- * remembered, since collapsing it and finding it open again on the next load
- * reads as a toggle that does not work. A dismissed thread is not shown at all;
- * the transcript is where it left its trace.
- *
- * An item also knows where it lives. Hovering a question lights the passage it
- * concerns; hovering a comment lights the phrase it marks. Clicking either goes
- * there — which is the only way to reach the prose an accepted comment
- * produced, since a `<Decision>` draws nothing in the document and the pane is
- * the whole of where it can be seen. The highlight is written to the DOM rather
- * than the document — it is one reader's pointer, not a fact about the plan,
- * and putting it in the document would send it to everybody else and make it
- * undoable.
+ * Unanswered cards stay in document order, because the first is where a room
+ * resumes its work. Resolved history starts closed: it remains available without
+ * making a long-lived room open below the questions that still need an answer.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -51,17 +34,17 @@ function undecided(entry: QuestionnaireEntry): boolean {
 	return entry.value.questions.some(question => question.answer === undefined);
 }
 
-/** Where the disclosure is remembered, alongside the pane widths. */
+/** Where the disclosure is remembered, with the other personal layout choices. */
 let HISTORY = "chopin:decisions:resolved";
 
 /**
  * Whether the resolved list is showing, remembered across reloads.
  *
- * Anything other than the one stored string reads as open, so an absent key and
- * a corrupt one both mean nobody has collapsed this — which is the default.
+ * Only an explicit open preference expands history. An absent or malformed
+ * value means a room starts with its unanswered cards in view.
  */
 function useHistory() {
-	let [history, setHistory] = useState(() => localStorage.getItem(HISTORY) !== "false");
+	let [history, setHistory] = useState(() => localStorage.getItem(HISTORY) === "true");
 
 	useEffect(() => {
 		localStorage.setItem(HISTORY, String(history));
@@ -73,6 +56,7 @@ function useHistory() {
 export function Decisions({ connected, onShowPlan, reveal, store, wire }: DecisionsProps) {
 	let entries = useQuestionnaires(store);
 	let content = useRef<HTMLDivElement>(null);
+	let heading = useRef<HTMLHeadingElement>(null);
 	let [history, setHistory] = useHistory();
 
 	// Leaving the pane should not leave the prose lit. A highlight belongs to
@@ -87,7 +71,11 @@ export function Decisions({ connected, onShowPlan, reveal, store, wire }: Decisi
 		let target = content.current?.querySelector<HTMLElement>(
 			`[data-plan-sidecar-questionnaire="${id}"]`,
 		);
-		target?.scrollIntoView({ block: "center", behavior: "smooth" });
+		if (target) {
+			target.scrollIntoView({ block: "center", behavior: "smooth" });
+			target.tabIndex = -1;
+			target.focus({ preventScroll: true });
+		} else heading.current?.focus();
 	}, [entries, reveal]);
 
 	let waiting = entries.filter(undecided);
@@ -115,9 +103,13 @@ export function Decisions({ connected, onShowPlan, reveal, store, wire }: Decisi
 	return (
 		<div className="plan-decisions">
 			<header className="flex shrink-0 items-center gap-2 px-3 py-2 hairline-b">
-				<span className="text-sm font-semibold tracking-wide text-text-tertiary uppercase">
+				<h2
+					className="text-sm font-semibold tracking-wide text-text-tertiary uppercase"
+					ref={heading}
+					tabIndex={-1}
+				>
 					Decisions
-				</span>
+				</h2>
 				{outstanding > 0 && <Count>{outstanding}</Count>}
 			</header>
 

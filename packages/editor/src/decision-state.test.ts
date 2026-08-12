@@ -32,4 +32,14 @@ describe("decision attention", () => {
 		expect(visibleDecisionView("plan", true, 2)).toBe("plan");
 		expect(visibleDecisionView("decisions", true, 0)).toBe("decisions");
 	});
+
+	it.each(["plan", "decisions"] as const)(
+		"keeps a saved %s preference out of an opening transition until prose exists",
+		preference => {
+			expect(visibleDecisionView(preference, false, 2)).toBe("decisions");
+			expect(visibleDecisionView(preference, false, 0, true)).toBe("decisions");
+			expect(visibleDecisionView(preference, true, 0, true)).toBe("plan");
+			expect(visibleDecisionView(preference, true, 0)).toBe(preference);
+		},
+	);
 });

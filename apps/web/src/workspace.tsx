@@ -145,7 +145,7 @@ export function Workspace(
 						className="pointer-events-none absolute inset-x-1 top-0 -bottom-3 rounded-t-xl bg-page shadow-raised ring-hairline"
 					/>
 
-					{/* Lexical consumes Tab, so both handles must precede the editor. */}
+					{/* Lexical consumes Tab, so the resize handle precedes the editor. */}
 					{chat && chatOpen && (
 						<Handle
 							label="Resize the conversation"
