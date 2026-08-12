@@ -50,9 +50,7 @@ export function ask(plan: Plan, server: Server<SocketData>, roomId: string): voi
 	void Questions.ask(plan, server, roomId, Questions.identify(SAMPLE))
 		.then(ended => {
 			console.log(
-				ended.status === "answered"
-					? `[dev] answered by @${ended.resolver}: ${JSON.stringify(ended.answers)}`
-					: `[dev] cancelled by @${ended.resolver}`,
+				`[dev] decisions settled: ${JSON.stringify(ended)}`,
 			);
 		})
 		.catch(err => console.error("[dev] question failed:", err));

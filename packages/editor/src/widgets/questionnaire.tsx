@@ -96,7 +96,11 @@ function Undecided(
 	let answerable = connected && !!state.definition;
 
 	return (
-		<SidecarCard data-plan-sidecar-questionnaire={value.id} label="Question" padded={false}>
+		<SidecarCard
+			data-plan-sidecar-questionnaire={value.id}
+			label={value.questions.length === 1 ? "Decision" : "Question"}
+			padded={false}
+		>
 			<QuestionView
 				collaborators={state.collaborators}
 				definition={state.definition ?? definition(value)}
@@ -122,7 +126,7 @@ function Decided(
 	return (
 		<SidecarCard
 			data-plan-sidecar-questionnaire={value.id}
-			label="Question"
+			label={value.questions.length === 1 ? "Decision" : "Question"}
 			padded={false}
 			settled
 			// Read provenance from the durable node so late joiners see it.

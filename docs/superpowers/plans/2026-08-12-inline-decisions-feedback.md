@@ -132,4 +132,3 @@
 - [ ] Merge Task 3 into `feature/decision-first-inline` after review.
 - [ ] Start and merge Task 4 from the resulting feature-branch head.
 - [ ] Run the full verification suite on the integrated feature branch.
-
