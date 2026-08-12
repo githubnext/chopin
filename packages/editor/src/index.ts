@@ -11,8 +11,13 @@ export { PlanEditor } from "./plan-editor";
 export type { PlanEditorProps, PlanState } from "./plan-editor";
 export { PlanProvider } from "./provider";
 export type { PlanProviderOptions } from "./provider";
-export { QuestionnaireObserver, QuestionnaireStore, useQuestionnaires } from "./questionnaires";
-export type { QuestionnaireEntry } from "./questionnaires";
+export {
+	QuestionnaireObserver,
+	QuestionnaireStore,
+	useHasPlanContent,
+	useQuestionnaires,
+} from "./questionnaires";
+export type { PlanQuestionnaireState, QuestionnaireEntry } from "./questionnaires";
 export { PlanStatus } from "./status";
 export type { PlanStatusProps } from "./status";
 export { ThreadObserver, ThreadStore, useThreads } from "./threads";
