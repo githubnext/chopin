@@ -543,7 +543,7 @@ git commit -m "Add focused and inline decision views"
 - Modify: `e2e/sidecar.e2e.ts`
 - Modify: `docs/superpowers/plans/2026-08-12-inline-decisions.md`
 
-- [ ] **Step 1: Write a failing planner-order test**
+- [x] **Step 1: Write a failing planner-order test**
 
 Export the prompt for testing and assert it contains this rule before the general plan-writing instructions:
 
@@ -557,21 +557,21 @@ expect(PROMPT.indexOf("settle genuinely blocking choices"))
 
 The test must also assert the prompt says not to invent a question when repository evidence already settles the choice.
 
-- [ ] **Step 2: Run the prompt test and capture RED**
+- [x] **Step 2: Run the prompt test and capture RED**
 
 Run: `bun test apps/server/src/agent/planner.test.ts`
 
 Expected: FAIL because the opening instruction/export is absent.
 
-- [ ] **Step 3: Add the opening-flow instruction**
+- [x] **Step 3: Add the opening-flow instruction**
 
 Place a concise paragraph near the beginning of `PROMPT`: on a room with no plan prose, inspect the request and repository, batch genuinely blocking decisions into `ask`, wait for their shared answer, then write the first draft. If nothing genuinely needs the room's judgement, write the plan directly. On an existing plan, ask later questions in place and never treat them as a reason to replace or hide the plan.
 
-- [ ] **Step 4: Add opening-view browser coverage**
+- [x] **Step 4: Add opening-view browser coverage**
 
 Against the fixture server, open an unseeded room and assert it begins in Decisions with the two injected unanswered questions. In a separate room whose prose is seeded before its first connection, assert it opens in Plan while the same injected questions only update the Decisions count. Record the plan scroller and selection, wait for the questionnaire snapshot, and assert neither moves. Keep this deterministic under `AGENT=off`; the pure state test covers the transition when prose first appears, and the planner prompt test covers agent behaviour.
 
-- [ ] **Step 5: Run complete verification**
+- [x] **Step 5: Run complete verification**
 
 Run:
 
@@ -586,7 +586,7 @@ git diff --check
 
 Expected: formatting/lint, types, all unit tests, production build, all browser tests and whitespace check pass.
 
-- [ ] **Step 6: Mark plan checkboxes and commit Task 6**
+- [x] **Step 6: Mark plan checkboxes and commit Task 6**
 
 Mark completed task steps in this file, then:
 

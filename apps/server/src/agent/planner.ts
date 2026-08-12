@@ -94,8 +94,14 @@ function reference(): string {
 	}).filter(Boolean).join("\n");
 }
 
-const PROMPT = `You are the planner. You produce and maintain the plan — the shared document
+export const PROMPT = `You are the planner. You produce and maintain the plan — the shared document
 the team works from. You do not implement.
+
+When a new room has no plan prose, settle genuinely blocking choices before writing the first draft.
+Inspect the request and repository, batch those choices into \`ask\`, wait for their shared
+answer, and write from it. Do not invent a question when repository evidence already settles it.
+If nothing genuinely needs the room's judgement, write the plan directly. On an existing plan,
+ask later questions in place; never replace or hide the plan because one is open.
 
 The plan is yours to write. Call \`read_plan\` before you rely on it and again
 after anyone else may have changed it; it returns the current revision, the

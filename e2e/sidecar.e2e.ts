@@ -57,29 +57,52 @@ async function thread(page: import("@playwright/test").Page) {
 	return page.getByRole("dialog", { name: "Comment thread" });
 }
 
-test("prose keeps Plan selected while questions arrive in Decisions", async ({ join, seed }) => {
-	await seed(PROSE);
-	let page = await join("ana");
+test(
+	"prose opens Plan while injected questions preserve its position and selection",
+	async ({ join, seed }) => {
+		await seed(LONG_PLAN);
+		let page = await join("ana");
 
-	let plan = page.getByRole("button", { name: "Plan", exact: true });
-	let decisions = page.getByRole("button", { name: "Decisions", exact: true });
-	await expect(plan).toHaveAttribute("aria-pressed", "true");
-	await expect(decisions).toHaveAttribute("aria-pressed", "false");
-	await expect(decisions).toContainText("2");
+		let plan = page.getByRole("button", { name: "Plan", exact: true });
+		let decisions = page.getByRole("button", { name: "Decisions", exact: true });
+		let scroller = page.locator(".plan-document > div.h-full.min-h-0.overflow-auto");
+		let selected = content(page).locator("p").nth(8);
+		await selected.selectText();
+		await scroller.evaluate(element => {
+			element.scrollTop = 160;
+			element.dispatchEvent(new Event("scroll"));
+		});
+		let selection = await page.evaluate(() => getSelection()?.toString());
+		let scrollTop = await scroller.evaluate(element => element.scrollTop);
 
-	await decisions.click();
-	await expect(questionnaire(page)).toHaveCount(1);
-	await expect(questionnaire(page).getByRole("heading", { name: "Storage" })).toBeVisible();
-	await expect(page.locator('[data-document-view="decisions"] [data-plan-sidecar-thread]'))
-		.toHaveCount(0);
-});
+		await expect(questionnaire(page)).toHaveCount(1);
+		await expect(plan).toHaveAttribute("aria-pressed", "true");
+		await expect(decisions).toHaveAttribute("aria-pressed", "false");
+		await expect(decisions).toContainText("2");
+		await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBe(scrollTop);
+		expect(await page.evaluate(() => getSelection()?.toString())).toBe(selection);
 
-test("a question-only document opens Decisions", async ({ page, room }) => {
-	await page.goto(`/r/${room}?as=ana`);
+		await decisions.click();
+		await expect(questionnaire(page)).toHaveCount(1);
+		await expect(questionnaire(page).getByRole("heading", { name: "Storage" })).toBeVisible();
+		await expect(page.locator('[data-document-view="decisions"] [data-plan-sidecar-thread]'))
+			.toHaveCount(0);
+	},
+);
 
-	await expect(page.getByRole("button", { name: "Decisions", exact: true }))
-		.toHaveAttribute("aria-pressed", "true");
-});
+test(
+	"an unseeded room opens Decisions with the injected unanswered questions",
+	async ({ page, room }) => {
+		await page.goto(`/r/${room}?as=ana`);
+
+		await expect(page.getByRole("button", { name: "Decisions", exact: true }))
+			.toHaveAttribute("aria-pressed", "true");
+		let card = questionnaire(page);
+		await expect(card).toHaveCount(1);
+		await expect(card.getByRole("heading", { name: "Storage" })).toBeVisible();
+		await expect(card.getByRole("tab", { name: "Scope" })).toBeVisible();
+	},
+);
 
 test("the waiting-question line selects Decisions", async ({ join, seed }) => {
 	await seed(PROSE);
