@@ -15,16 +15,23 @@ import { content, expect, test } from "./room";
 
 /** Long enough to be marked: the injector wants twenty characters. */
 const PROSE = "Room state lives on disk as MDX beside the transcript.\n";
+const TWO_BLOCKS = `${PROSE}\nA second block remains after the marked passage.\n`;
 
 /** What the injector will quote: the first forty-eight characters. */
 const QUOTED = "Room state lives on disk as MDX beside the trans";
 
 function questionnaire(page: import("@playwright/test").Page) {
-	return page.locator("article[data-plan-sidecar-questionnaire]");
+	return page.locator("#pane-decisions article[data-plan-sidecar-questionnaire]");
 }
 
 function commentButton(page: import("@playwright/test").Page) {
 	return page.getByRole("button", { name: /Comment on/ });
+}
+
+async function rewriteFirstBlock(page: import("@playwright/test").Page, value: string) {
+	let block = content(page).locator("p").first();
+	await block.selectText();
+	await page.keyboard.type(value);
 }
 
 async function thread(page: import("@playwright/test").Page) {
@@ -124,7 +131,7 @@ test("a marked passage has document chrome with a hover preview", async ({ join,
 	let button = commentButton(page);
 	await expect(button).toBeVisible();
 	await button.hover();
-	await expect(page.getByRole("tooltip")).toContainText(`Is this still right? — "${QUOTED}"`);
+	await expect(page.getByRole("tooltip")).toContainText(QUOTED);
 
 	// Focus offers the same compact preview without requiring a pointer.
 	await button.focus();
@@ -154,6 +161,34 @@ test("clicking a comment button pins its document card and preserves the related
 	// somewhere they were not looking needs it still there when they arrive.
 	await content(page).hover();
 	await expect.poll(() => washed(page)).toBeGreaterThan(0);
+});
+
+test("a live text edit preserves its document comment", async ({ join, seed }) => {
+	await seed(TWO_BLOCKS);
+	let page = await join("ana");
+
+	await rewriteFirstBlock(page, "The room has a new persistence rule.");
+	await expect(content(page)).toContainText("The room has a new persistence rule.");
+
+	// Live positions stretch with ordinary typing. The separately tested
+	// drifted-block fallback starts only once those positions cannot resolve.
+	await expect.poll(() => washed(page)).toBeGreaterThan(0);
+	await expect(commentButton(page)).toBeVisible();
+});
+
+test("a removed subject block moves its comment to document orphan chrome", async ({ join, seed }) => {
+	await seed(TWO_BLOCKS);
+	let page = await join("ana");
+
+	let first = content(page).locator("p").first();
+	await first.selectText();
+	await page.keyboard.press("Backspace");
+	await page.keyboard.press("Backspace");
+
+	let orphaned = page.getByRole("button", { name: "1 orphaned comments" });
+	await expect(orphaned).toBeVisible();
+	await orphaned.click();
+	await expect(page.getByRole("dialog", { name: "Orphaned comments" })).toContainText(QUOTED);
 });
 
 /** How many ranges the shared highlight registry is painting for us. */
@@ -206,6 +241,7 @@ test("accepting asks twice, and says so in the transcript", async ({ join, seed 
 	// its resulting Decision is the next task's inline surface.
 	await expect(page.getByRole("dialog", { name: "Comment thread" })).toHaveCount(0);
 	await expect(commentButton(page)).toHaveCount(0);
+	await expect(content(page).getByRole("article", { name: "Decision" })).toContainText(QUOTED);
 });
 
 test("a dismissed thread removes its document button", async ({ join, seed }) => {

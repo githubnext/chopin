@@ -18,10 +18,16 @@ export function gutterPoint(target: Rect, host: Rect, size = 24, gap = 8): Point
 }
 
 /** A pinned comment card beside its button, in the document host's coordinates. */
-export function popoverPoint(button: Rect, host: Rect, width: number, gap = 8): Point {
+export function popoverPoint(
+	button: Rect,
+	host: Rect,
+	width: number,
+	height: number,
+	gap = 8,
+): Point {
 	let right = button.right + gap + width <= host.right;
 	return {
-		top: clamp(button.top - host.top, 0, host.height - button.height),
+		top: clamp(button.top - host.top, 0, host.height - height),
 		left: clamp(
 			right ? button.right - host.left + gap : button.left - host.left - width - gap,
 			0,

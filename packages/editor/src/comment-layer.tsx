@@ -34,10 +34,26 @@ function rect(value: DOMRect): Rect {
 }
 
 /** A small thread summary while a reader is deciding whether to open it. */
-function Preview({ style, view }: { style: CSSProperties; view: ThreadView }) {
+function Preview({
+	onEnter,
+	onLeave,
+	style,
+	view,
+}: {
+	onEnter: () => void;
+	onLeave: () => void;
+	style: CSSProperties;
+	view: ThreadView;
+}) {
 	let replies = Math.max(0, view.thread.notes.length - 1);
 	return (
-		<div className="plan-comment-preview" role="tooltip" style={style}>
+		<div
+			className="plan-comment-preview"
+			onMouseEnter={onEnter}
+			onMouseLeave={onLeave}
+			role="tooltip"
+			style={style}
+		>
 			<p>{view.quote}</p>
 			{replies > 0 && <span>{replies} {replies === 1 ? "reply" : "replies"}</span>}
 		</div>
@@ -51,6 +67,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let [placed, setPlaced] = useState<PlacedThread[]>([]);
 	let [preview, setPreview] = useState<string>();
 	let [pinned, setPinned] = useState<string>();
+	let [cardHeights, setCardHeights] = useState<{ [id: string]: number }>({});
 	let root = useRef<HTMLDivElement>(null);
 	let close = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 	let failures = useRef(new Set<string>());
@@ -159,23 +176,30 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			writing={state.writing[view.thread.id]}
 		/>
 	);
+	let rememberHeight = (id: string, element: HTMLDivElement | null) => {
+		let height = element?.offsetHeight;
+		if (!height) return;
+		setCardHeights(current => current[id] === height ? current : { ...current, [id]: height });
+	};
+	let page = host.getBoundingClientRect();
+	let cardWidth = Math.min(384, host.clientWidth * 0.8);
 
 	return createPortal(
 		<div className="plan-comment-layer" ref={root}>
 			{placed.map(({ button, view }) => {
 				let shown = pinned === view.thread.id;
-				let cardWidth = Math.min(384, host.clientWidth * 0.8);
 				let cardPoint = popoverPoint(
 					{
-						top: host.getBoundingClientRect().top + button.top,
-						left: host.getBoundingClientRect().left + button.left,
-						right: host.getBoundingClientRect().left + button.left + 24,
-						bottom: host.getBoundingClientRect().top + button.top + 24,
+						top: page.top + button.top,
+						left: page.left + button.left,
+						right: page.left + button.left + 24,
+						bottom: page.top + button.top + 24,
 						width: 24,
 						height: 24,
 					},
-					host.getBoundingClientRect(),
+					page,
 					cardWidth,
+					cardHeights[view.thread.id] ?? 0,
 				);
 				return (
 					<div key={view.thread.id}>
@@ -194,12 +218,18 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 							💬
 						</button>
 						{preview === view.thread.id && !shown && (
-							<Preview style={{ top: button.top, left: button.left + 32 }} view={view} />
+							<Preview
+								onEnter={() => enter(view.thread.id)}
+								onLeave={() => leave(view.thread.id)}
+								style={{ top: button.top, left: button.left + 32 }}
+								view={view}
+							/>
 						)}
 						{shown && (
 							<div
 								aria-label="Comment thread"
 								className="plan-comment-card"
+								ref={element => rememberHeight(view.thread.id, element)}
 								onMouseEnter={() => enter(view.thread.id)}
 								onMouseLeave={() => leave(view.thread.id)}
 								role="dialog"
@@ -217,7 +247,13 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 					aria-label="New comment"
 					className="plan-comment-card"
 					role="dialog"
-					style={gutterPoint(state.draft.placement, host.getBoundingClientRect())}
+					ref={element => rememberHeight("draft", element)}
+					style={popoverPoint(
+						state.draft.placement,
+						page,
+						cardWidth,
+						cardHeights.draft ?? 0,
+					)}
 				>
 					<DraftCard
 						busy={false}
