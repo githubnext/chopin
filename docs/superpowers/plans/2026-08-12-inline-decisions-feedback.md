@@ -24,16 +24,19 @@
 **Status:** In progress in BB thread `thr_dktimuj86m`.
 
 **Files:**
+
 - Modify: `apps/web/src/chat/model.ts`
 - Modify: `apps/web/src/chat/transcript.tsx`
 - Modify: `apps/web/package.json` or the owning workspace manifest if Phosphor is not already available
 - Test: the existing chat model/render tests and a focused browser test when DOM behavior is required
 
 **Interfaces:**
+
 - Consumes: transcript tool activity events.
 - Produces: a finite activity summary with human-readable copy and a static Phosphor icon.
 
 **Acceptance:**
+
 - [ ] Reproduce why an `ask` activity remains in the running state after its completed children are shown.
 - [ ] Add a failing regression test for that lifecycle.
 - [ ] Fix the lifecycle rather than merely hiding the spinner.
@@ -47,15 +50,18 @@
 **Status:** In progress in BB thread `thr_b9r4x7g64j`.
 
 **Files:**
+
 - Modify: `apps/web/src/chat/chat.tsx`
 - Modify: callers/types if the `waiting` or `onReveal` props become unused
 - Modify: `e2e/sidecar.e2e.ts`
 
 **Interfaces:**
+
 - Consumes: current Chat props.
 - Produces: chat with no “X questions are waiting” row; decision discovery remains in document navigation.
 
 **Acceptance:**
+
 - [ ] Add or adjust a test that proves the waiting row is absent when questions exist.
 - [ ] Remove the row, its dot, its Answer action, and any props used only by that row.
 - [ ] Keep the document-level Decisions count and navigation intact.
@@ -66,6 +72,7 @@
 **Status:** In progress in BB thread `thr_us3g9h8vft`; merge before Task 4 begins.
 
 **Files:**
+
 - Modify: `apps/server/src/questions/service.ts`
 - Modify: `apps/server/src/questions/store.ts` only where individual ownership requires it
 - Modify: `apps/server/src/agent/tools.ts`
@@ -75,10 +82,12 @@
 - Test: corresponding question, editor, server, and Playwright suites
 
 **Interfaces:**
+
 - Consumes: one planner `ask` call containing one to ten questions.
 - Produces: one canonical questionnaire record/node per question and an aggregate tool result after all individual decisions settle.
 
 **Acceptance:**
+
 - [ ] Add failing service tests proving a multi-question `ask` creates individually addressed records/nodes.
 - [ ] Add failing UI tests proving questions render as separate cards without a tablist.
 - [ ] Add a browser test proving one card can be saved while another remains unanswered.
@@ -93,6 +102,7 @@
 **Status:** Blocked on Task 3 merge; start a fresh Terra worktree from the updated feature branch.
 
 **Files:**
+
 - Modify: `apps/server/src/questions/service.ts`
 - Modify: `apps/server/src/questions/anchors.ts`
 - Modify: `apps/server/src/agent/tools.ts`
@@ -101,10 +111,12 @@
 - Test: server plan/question tests and `e2e/sidecar.e2e.ts`
 
 **Interfaces:**
+
 - Consumes: independently owned decision nodes from Task 3 and their existing question-to-prose anchors.
 - Produces: canonical nodes positioned next to related prose, with the focused Decisions view continuing to aggregate those same nodes.
 
 **Acceptance:**
+
 - [ ] Add a failing test proving a decision can be inserted or relocated beside a validated related block.
 - [ ] Extend the planner contract so placement uses a block index plus digest, rejecting stale placement rather than landing on unrelated prose.
 - [ ] Keep decisions-first behavior: a decision without prose may remain in the isolated Decisions view until related plan content exists.
