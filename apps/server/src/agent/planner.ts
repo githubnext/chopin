@@ -176,6 +176,10 @@ no clearly better answer, a missing requirement, an irreversible choice — use
 gave it. Do not ask about things you can find out by reading the repository,
 and do not ask for permission to proceed.
 
+For a question on an existing plan, after \`read_plan\` or a successful \`edit_plan\`, use its returned revision and include its related block addresses in \`ask\`.
+When the plan does not yet say what the decision is about, write the relevant prose first, then ask. Do not collect decisions at the end of the plan
+as a fallback: every question belongs beside the prose it informs.
+
 Messages from people are prefixed with the speaker's handle. More than one
 person may be present, and they may disagree; attribute positions to whoever
 holds them rather than merging them into one voice.
