@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { FloppyDiskIcon, ShuffleSimpleIcon, XIcon } from "@phosphor-icons/react";
 
 import { answered } from "../draft";
 
@@ -70,6 +71,16 @@ function Badges({ people }: { people: Collaborator[] }) {
 				</span>
 			))}
 		</span>
+	);
+}
+
+/** The Figma treatment for a decision that owns exactly one answer. */
+function DecisionHeading() {
+	return (
+		<header className="flex items-center gap-2 px-3 py-2.5 hairline-b">
+			<ShuffleSimpleIcon aria-hidden="true" size={16} weight="regular" />
+			<span className="text-sm font-medium text-text-primary">Decision</span>
+		</header>
 	);
 }
 
@@ -315,6 +326,7 @@ export function QuestionView(props: QuestionViewProps) {
 	} = props;
 
 	let base = useId();
+	let single = definition.questions.length === 1;
 	let [active, setActive] = useState(() => definition.questions[0]?.id);
 	// Cancelling cannot be undone and the agent is waiting, so it takes a
 	// second, deliberate click rather than a modal nobody reads.
@@ -354,6 +366,7 @@ export function QuestionView(props: QuestionViewProps) {
 	if (status === "cancelled") {
 		return (
 			<div>
+				{single && <DecisionHeading />}
 				{aside}
 				<Cancelled resolver={resolver} />
 			</div>
@@ -363,6 +376,7 @@ export function QuestionView(props: QuestionViewProps) {
 	if (status !== "open" && answers) {
 		return (
 			<div>
+				{single && <DecisionHeading />}
 				{aside}
 				<Resolved
 					answers={answers}
@@ -377,12 +391,13 @@ export function QuestionView(props: QuestionViewProps) {
 		);
 	}
 
-	let multiple = definition.questions.length > 1;
+	let multiple = !single;
 	let current = definition.questions.find(question => question.id === active);
 	let last = definition.questions.at(-1)?.id === active;
 
 	return (
 		<div>
+			{single && <DecisionHeading />}
 			{multiple && (
 				<div
 					ref={tabs}
@@ -518,6 +533,7 @@ export function QuestionView(props: QuestionViewProps) {
 								disabled={disabled || submitting}
 								className="btn btn-sm btn-destructive"
 							>
+								<XIcon aria-hidden="true" size={16} weight="bold" />
 								{submitting ? "Cancelling…" : "Yes, cancel"}
 							</button>
 						</>
@@ -529,6 +545,7 @@ export function QuestionView(props: QuestionViewProps) {
 							disabled={disabled || submitting}
 							className="btn btn-sm btn-secondary"
 						>
+							<XIcon aria-hidden="true" size={16} weight="bold" />
 							Cancel
 						</button>
 					)}
@@ -539,7 +556,8 @@ export function QuestionView(props: QuestionViewProps) {
 							disabled={disabled || submitting}
 							className="btn btn-sm btn-primary"
 						>
-							{submitting ? "Submitting…" : "Submit"}
+							<FloppyDiskIcon aria-hidden="true" size={16} weight="bold" />
+							{submitting ? (single ? "Saving…" : "Submitting…") : (single ? "Save" : "Submit")}
 						</button>
 					)}
 				</footer>

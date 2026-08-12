@@ -250,9 +250,17 @@ export function toolbox(context: Context): Tool[] {
 						context.room,
 						definition,
 					);
-					return ended.status === "answered"
-						? { status: "answered", answered_by: ended.resolver, answers: ended.answers }
-						: { status: "cancelled", cancelled_by: ended.resolver };
+					return {
+						outcomes: ended.map(outcome =>
+							outcome.status === "answered"
+								? {
+									status: "answered",
+									answered_by: outcome.resolver,
+									answers: outcome.answers,
+								}
+								: { status: "cancelled", cancelled_by: outcome.resolver }
+						),
+					};
 				}),
 		},
 		{
