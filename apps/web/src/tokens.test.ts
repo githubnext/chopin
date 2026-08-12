@@ -556,12 +556,6 @@ describe("migration", () => {
 				tiers: ["btn-secondary"],
 			}],
 			["apps/web/src/chat/chat.tsx", {
-				action: "waiting disclosure",
-				marker: 'onReveal?.("")',
-				size: "btn-sm",
-				tiers: ["btn-ghost"],
-			}],
-			["apps/web/src/chat/chat.tsx", {
 				action: "send to room",
 				marker: 'submit("room")',
 				size: "btn-md",
