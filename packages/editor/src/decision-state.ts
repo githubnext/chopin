@@ -1,6 +1,12 @@
 import type { QuestionnaireEntry } from "./questionnaires";
 
 export type DecisionView = "plan" | "decisions";
+export type OpeningPhase = "initial" | "forced" | "complete";
+
+export type DecisionViewState = {
+	phase: OpeningPhase;
+	preferred: DecisionView;
+};
 
 export function countUnanswered(entries: QuestionnaireEntry[]): number {
 	return entries.reduce(
@@ -10,12 +16,32 @@ export function countUnanswered(entries: QuestionnaireEntry[]): number {
 	);
 }
 
-export function visibleDecisionView(
-	preferred: DecisionView,
+/**
+ * Advance a room's local opening lifecycle from document shape.
+ *
+ * A forced opening survives answer resolution until prose arrives. That first
+ * prose block completes the lifecycle and chooses Plan once; completing never
+ * reverses when someone later removes every prose block.
+ */
+export function advanceDecisionView(
+	state: DecisionViewState,
 	hasPlanContent: boolean,
 	unanswered: number,
-	enteredForcedOpening = false,
+): DecisionViewState {
+	if (state.phase === "complete") return state;
+	if (state.phase === "forced") {
+		return hasPlanContent ? { phase: "complete", preferred: "plan" } : state;
+	}
+	if (hasPlanContent) return { ...state, phase: "complete" };
+	return unanswered > 0 ? { ...state, phase: "forced" } : state;
+}
+
+export function visibleDecisionView(
+	state: DecisionViewState,
+	hasPlanContent: boolean,
+	unanswered: number,
 ): DecisionView {
-	if (enteredForcedOpening) return hasPlanContent ? "plan" : "decisions";
-	return !hasPlanContent && unanswered > 0 ? "decisions" : preferred;
+	if (state.phase === "forced") return hasPlanContent ? "plan" : "decisions";
+	if (state.phase === "initial" && !hasPlanContent && unanswered > 0) return "decisions";
+	return state.preferred;
 }

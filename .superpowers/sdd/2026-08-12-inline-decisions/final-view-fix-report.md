@@ -52,3 +52,42 @@ questionnaire card remained inactive after returning to Decisions.
 The opening transition is client-local UI state by design; no room phase,
 protocol field, or migration was introduced. Comment-layer interaction was not
 changed.
+
+## Follow-up: one-shot opening phase
+
+### Summary
+
+- Replaced the remembered boolean with an explicit `initial` / `forced` /
+  `complete` local lifecycle. A forced opening remains Decisions through answer
+  resolution, selects Plan when its first prose arrives, and cannot become
+  forced again if prose is later removed.
+- Focused view navigation now uses immediate `scrollIntoView`, which does not
+  impose motion on reduced-motion users.
+
+### RED
+
+`bun test packages/editor/src/decision-state.test.ts` failed as intended:
+after an opening room completed, removing prose with a saved Plan preference
+returned Decisions instead of Plan.
+
+### GREEN and verification
+
+- `bun test packages/editor/src/decision-state.test.ts apps/web/src/decision-view.test.ts packages/editor/src/decisions.test.tsx` — 11 pass, 0 fail.
+- Focused Playwright navigation and Show-in-plan coverage — 2 pass.
+- `TMPDIR=/private/tmp bun test` — 620 pass, 0 fail.
+- `bun run types` — pass.
+- `DPRINT_CACHE_DIR=/private/tmp/dprint-cache bun run ci` — pass.
+- `bun run build` — pass.
+- `TMPDIR=/private/tmp bun run e2e` — 69 pass, 0 fail.
+- `git diff --check` — pass.
+
+### Show-in-plan investigation
+
+The supplied trace showed no product navigation race. The target questionnaire
+was resolved and correctly hidden under the new `1 resolved` disclosure, while
+the injected development questionnaire was the only visible card. The browser
+test now explicitly opens resolved history before finding the target.
+
+### Commit
+
+`Complete the one-shot opening phase`

@@ -200,6 +200,7 @@ test("Show in plan focuses the addressed inline questionnaire", async ({ baseURL
 	let page = await join("ana");
 
 	await page.getByRole("button", { name: /^Decisions/ }).click();
+	await page.getByRole("button", { name: "1 resolved" }).click();
 	let card = questionnaire(page).filter({ hasText: "How should we deploy?" });
 	await card.getByRole("button", { name: /How should we deploy.*show in plan/ }).click();
 
