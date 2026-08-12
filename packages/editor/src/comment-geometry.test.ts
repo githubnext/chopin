@@ -85,3 +85,30 @@ test("keeps a tall popover inside the document bottom edge", () => {
 
 	expect(point).toEqual({ top: 400, left: 468 });
 });
+
+test("fits a full preview beside a gutter button in a 400px document", () => {
+	let point = popoverPoint(
+		{
+			top: 300,
+			right: 492,
+			bottom: 324,
+			left: 468,
+			width: 24,
+			height: 24,
+		},
+		{
+			top: 100,
+			right: 500,
+			bottom: 700,
+			left: 100,
+			width: 400,
+			height: 600,
+		},
+		288,
+		96,
+	);
+
+	// 400px can hold either a 288px preview or its gutter button, but not both
+	// on the right. Keeping the preview inside the page means using the left.
+	expect(point).toEqual({ top: 200, left: 72 });
+});
