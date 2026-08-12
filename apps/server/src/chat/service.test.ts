@@ -78,6 +78,26 @@ function idle(): SessionEvent {
 }
 
 describe("a streamed message", () => {
+	it("counts only non-empty Planner prose as the turn response", () => {
+		let chat = create();
+		chat.turn = {
+			id: "turn-1",
+			handle: "ana",
+			started: 1_700_000_000,
+			responded: false,
+		};
+		let { context } = room(chat);
+
+		translate(context, tool("tool.execution_start", { toolCallId: "t1", toolName: "grep" }));
+		expect(chat.turn?.responded).toBe(false);
+
+		translate(context, delta("m1", "   "));
+		expect(chat.turn?.responded).toBe(false);
+
+		translate(context, delta("m1", "I found it."));
+		expect(chat.turn?.responded).toBe(true);
+	});
+
 	it("becomes one entry, not one per event", () => {
 		let chat = create();
 		let { context } = room(chat);

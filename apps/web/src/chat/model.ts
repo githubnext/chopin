@@ -45,14 +45,19 @@ export function displayText(value: string): string {
 	);
 }
 
-export function group(entries: Chat.Entry[], queued: Chat.Waiting[], working = false): Group[] {
+export function group(
+	entries: Chat.Entry[],
+	queued: Chat.Waiting[],
+	working?: Pick<Chat.Turn, "id" | "started">,
+): Group[] {
 	let rows: Array<Chat.Entry | Message> = [
 		...entries,
 		...(working
 			? [{
-				id: "working",
+				id: working.id,
 				author: { kind: "agent" as const },
 				text: "Working on it",
+				ts: working.started,
 				queued: false,
 				working: true,
 			}]

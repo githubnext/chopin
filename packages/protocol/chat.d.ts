@@ -49,10 +49,22 @@ export declare namespace Chat {
 		tools?: Activity[];
 	};
 
+	/** The transient lifecycle of the active Planner turn. */
+	export type Turn = {
+		/** Identifies this run without inventing a transcript entry. */
+		id: string;
+		handle: string;
+		/** Seconds since epoch, for the projected row's real timestamp. */
+		started: number;
+		/** True only after the Planner has sent non-empty prose. */
+		responded: boolean;
+	};
+
 	/** Everything said so far, sent on join. */
 	export type History = KIND<"chat:history"> & {
 		entries: Entry[];
 		busy: boolean;
+		turn?: Turn;
 		queued: Waiting[];
 	};
 
@@ -68,8 +80,7 @@ export declare namespace Chat {
 	/** Whether a turn is running, and for whom. */
 	export type State = KIND<"chat:state"> & {
 		busy: boolean;
-		/** The handle whose message the current turn is answering. */
-		turn?: string;
+		turn?: Turn;
 	};
 
 	/** A message waiting for the current turn to end. */
