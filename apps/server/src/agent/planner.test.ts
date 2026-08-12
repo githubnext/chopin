@@ -11,8 +11,16 @@ test("settles blocking opening choices before writing a first plan", () => {
 	expect(PROMPT).toContain("Do not invent a question when repository evidence already settles it");
 });
 
-test("asks later decisions beside their related prose", () => {
+test("gives genuinely blocking new-room questions an explicit empty placement", () => {
+	expect(PROMPT).toContain(
+		"For genuinely blocking choices in a new empty room, call `read_plan` and pass its returned revision plus `blocks: []` for every question to `ask`.",
+	);
+});
+
+test("asks existing and drafted non-blocking decisions beside their related prose", () => {
 	expect(PROMPT).toContain("include its related block addresses in `ask`");
-	expect(PROMPT).toContain("write the relevant prose first");
+	expect(PROMPT).toContain(
+		"For existing or drafted non-blocking questions, write the relevant prose first, then ask.",
+	);
 	expect(PROMPT).toContain("Do not collect decisions at the end of the plan");
 });
