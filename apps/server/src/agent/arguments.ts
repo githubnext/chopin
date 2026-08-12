@@ -9,6 +9,8 @@
  * the shape it needed so the model can retry.
  */
 
+import * as Question from "@chopin/question";
+
 import type { Operation } from "../plan/edit";
 
 /** Thrown for any malformed tool call; the message reaches the model. */
@@ -75,6 +77,7 @@ function text(value: unknown, name: string, max?: number): string {
 const MAX_SOURCE = 100_000;
 const MAX_OPERATIONS = 50;
 const MAX_ANCHORS = 100;
+const MAX_QUESTIONS = 10;
 
 const OPS = [
 	"insert",
@@ -207,4 +210,63 @@ export function anchorPlan(raw: unknown): { revision: number; anchors: Anchor[] 
 		.map((item, index) => anchor(item, index));
 
 	return { revision, anchors };
+}
+
+export type BlockAddress = { index: number; digest: string };
+
+export type PositionedQuestion = {
+	header: string;
+	question: string;
+	options: Array<{ label: string; description: string }>;
+	multiple: boolean;
+	blocks: BlockAddress[];
+};
+
+/**
+ * Validate `ask`'s question definitions and the prose each one relates to.
+ *
+ * The question package owns the detailed normalisation rules; keeping
+ * placement here means its extra field cannot leak into that strict contract.
+ */
+export function askPlan(raw: unknown): { revision: number; questions: PositionedQuestion[] } {
+	let args = record(raw, "ask arguments");
+	fields(args, ["revision", "questions"], ["revision", "questions"], "ask arguments");
+
+	let revision = integer(args.revision, "revision");
+	let questions = array(args.questions, "questions", "question", 1, MAX_QUESTIONS)
+		.map((raw, index) => {
+			let name = `questions[${index}]`;
+			let question = record(raw, name);
+			fields(question, ["header", "question", "options", "multiple", "blocks"], [
+				"header",
+				"question",
+				"options",
+				"multiple",
+				"blocks",
+			], name);
+
+			let blocks = array(question.blocks, `${name}.blocks`, "block")
+				.map((item, blockIndex) => block(item, `${name}.blocks[${blockIndex}]`));
+			let normalized = Question.normalize({
+				questions: [{
+					header: question.header,
+					question: question.question,
+					options: question.options,
+					multiple: question.multiple,
+				}],
+			}).questions[0]!;
+
+			return {
+				header: normalized.header,
+				question: normalized.question,
+				options: normalized.options.map(option => ({
+					label: option.label,
+					description: option.description,
+				})),
+				multiple: normalized.multiple,
+				blocks,
+			};
+		});
+
+	return { revision, questions };
 }

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { toolbox } from "./tools";
 import * as room from "../plan/room";
 import * as Service from "../plan/service";
+import * as Store from "../questions/store";
 
 import type { Server } from "bun";
 import type { SocketData } from "../wire";
@@ -198,4 +199,62 @@ test("anchor_plan keeps same-block decisions in original ask order", async () =>
 	expect(prose).toBeLessThan(first);
 	expect(first).toBeLessThan(second);
 	expect(second).toBeLessThan(source.indexOf("The second paragraph."));
+});
+
+test("ask publishes a pending questionnaire beside its validated prose", async () => {
+	let directory = await mkdtemp(join(tmpdir(), "chopin-agent-tools-"));
+	directories.push(directory);
+	await writeFile(join(directory, "plan.mdx"), "Related prose.\n");
+	let published: unknown[] = [];
+	let server = {
+		publish(...frames: unknown[]) {
+			published.push(frames);
+		},
+	} as unknown as Server<SocketData>;
+	let plan = await Service.open("test", directory, server);
+	plans.push(plan);
+	let ask = toolbox({
+		plan,
+		server,
+		room: "test",
+		publish: mutation => published.push(mutation),
+		anchors() {},
+		changes() {},
+	}).find(tool => tool.name === "ask");
+	if (!ask?.handler) throw new Error("ask has no handler");
+	let digest = room.digests(plan.document)[0]!;
+	let args = {
+		revision: plan.revision,
+		questions: [{
+			header: "Rollout",
+			question: "How should we deploy?",
+			multiple: false,
+			options: [{ label: "Canary", description: "Limit exposure." }],
+			blocks: [{ index: 0, digest }],
+		}],
+	};
+	let response = ask.handler(args, {
+		sessionId: "session",
+		toolCallId: "call",
+		toolName: "ask",
+		arguments: args,
+	});
+
+	let source = room.project(plan.document);
+	expect(source.indexOf("Related prose.")).toBeLessThan(source.indexOf("<Questionnaire"));
+	expect(published.some(frame =>
+		Array.isArray(frame)
+		&& typeof frame[1] === "string"
+		&& JSON.parse(frame[1]).kind === "plan:update"
+	)).toBe(true);
+
+	let record = [...plan.records.values()][0]!;
+	let claimed = Store.claimCancel(plan.questions, record.id, "test");
+	if (!claimed.ok) throw new Error("could not resolve question");
+	Store.commit(plan.questions, claimed.claim);
+	let result = await response;
+	expect(typeof result).toBe("string");
+	expect(JSON.parse(result as string).outcomes).toEqual([
+		{ status: "cancelled", cancelled_by: "test" },
+	]);
 });
