@@ -12,10 +12,10 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { $nodesOfType } from "lexical";
+import { $getRoot, $isParagraphNode, $nodesOfType } from "lexical";
 import { useEffect } from "react";
 
-import { QuestionnaireNode } from "@chopin/dialect";
+import { $isDecisionNode, $isQuestionnaireNode, QuestionnaireNode } from "@chopin/dialect";
 
 import { counts, relate } from "./anchors";
 import { holds, paint, pin, unpin } from "./marks";
@@ -34,6 +34,11 @@ export type QuestionnaireEntry = {
 	value: Questionnaire;
 };
 
+export type PlanQuestionnaireState = {
+	entries: QuestionnaireEntry[];
+	hasPlanContent: boolean;
+};
+
 /** Read the document's questionnaires, in the order they appear in the prose. */
 export function collectQuestionnaires(): QuestionnaireEntry[] {
 	return $nodesOfType(QuestionnaireNode).map(node => ({
@@ -42,8 +47,19 @@ export function collectQuestionnaires(): QuestionnaireEntry[] {
 	}));
 }
 
+/** Read the document's questionnaires and whether it contains ordinary prose. */
+export function collectPlanState(): PlanQuestionnaireState {
+	let entries = collectQuestionnaires();
+	let hasPlanContent = $getRoot().getChildren().some(node => {
+		if ($isQuestionnaireNode(node) || $isDecisionNode(node)) return false;
+		if ($isParagraphNode(node) && node.getChildrenSize() === 0) return false;
+		return true;
+	});
+	return { entries, hasPlanContent };
+}
+
 export class QuestionnaireStore {
-	#entries: QuestionnaireEntry[] = [];
+	#state: PlanQuestionnaireState = { entries: [], hasPlanContent: false };
 	#listeners = new Set<() => void>();
 
 	/** Needed to turn an anchor into a node key, and a key into an element. */
@@ -61,7 +77,8 @@ export class QuestionnaireStore {
 		return () => this.#listeners.delete(listener);
 	};
 
-	snapshot = (): QuestionnaireEntry[] => this.#entries;
+	snapshot = (): QuestionnaireEntry[] => this.#state.entries;
+	contentSnapshot = (): boolean => this.#state.hasPlanContent;
 
 	/**
 	 * Publish a new list, if it is actually new.
@@ -70,9 +87,9 @@ export class QuestionnaireStore {
 	 * change a questionnaire. Comparing before publishing is what keeps the
 	 * decisions pane from re-rendering on every character typed in the prose.
 	 */
-	set(entries: QuestionnaireEntry[]): void {
-		if (JSON.stringify(entries) === JSON.stringify(this.#entries)) return;
-		this.#entries = entries;
+	set(state: PlanQuestionnaireState): void {
+		if (JSON.stringify(state) === JSON.stringify(this.#state)) return;
+		this.#state = state;
 		for (let listener of this.#listeners) listener();
 	}
 
@@ -209,7 +226,7 @@ export function QuestionnaireObserver({ store }: { store: QuestionnaireStore }) 
 
 	useEffect(() => {
 		store.attach(editor);
-		let read = () => editor.getEditorState().read(() => store.set(collectQuestionnaires()));
+		let read = () => editor.getEditorState().read(() => store.set(collectPlanState()));
 		read();
 		let off = editor.registerUpdateListener(read);
 		return () => {
@@ -224,4 +241,9 @@ export function QuestionnaireObserver({ store }: { store: QuestionnaireStore }) 
 export function useQuestionnaires(store: QuestionnaireStore): QuestionnaireEntry[] {
 	let subscribe = useCallback((listener: () => void) => store.subscribe(listener), [store]);
 	return useSyncExternalStore(subscribe, store.snapshot, store.snapshot);
+}
+
+export function useHasPlanContent(store: QuestionnaireStore): boolean {
+	let subscribe = useCallback((listener: () => void) => store.subscribe(listener), [store]);
+	return useSyncExternalStore(subscribe, store.contentSnapshot, store.contentSnapshot);
 }
