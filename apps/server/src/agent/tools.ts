@@ -202,10 +202,16 @@ export function toolbox(context: Context): Tool[] {
 				+ "their shared answer. Every question also accepts free text. Batch related "
 				+ "questions into one call. The questionnaire is recorded in the plan and the "
 				+ "answer is attributed to whoever gave it. Ask only what the repository cannot "
-				+ "tell you, and do not ask for permission to proceed.",
+				+ "tell you, and do not ask for permission to proceed. Use the revision from "
+				+ "`read_plan` and relate every question to its returned blocks.",
 			parameters: {
 				type: "object",
 				properties: {
+					revision: {
+						type: "integer",
+						minimum: 0,
+						description: "The revision returned by the `read_plan` this ask relates to.",
+					},
 					questions: {
 						type: "array",
 						minItems: 1,
@@ -230,25 +236,41 @@ export function toolbox(context: Context): Tool[] {
 									},
 								},
 								multiple: { type: "boolean" },
+								blocks: {
+									type: "array",
+									items: {
+										type: "object",
+										properties: {
+											index: { type: "integer", minimum: 0 },
+											digest: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
+										},
+										required: ["index", "digest"],
+										additionalProperties: false,
+									},
+								},
 							},
-							required: ["header", "question", "options", "multiple"],
+							required: ["header", "question", "options", "multiple", "blocks"],
 							additionalProperties: false,
 						},
 					},
 				},
-				required: ["questions"],
+				required: ["revision", "questions"],
 				additionalProperties: false,
 			},
 			// Asking is not a privilege; waiting for the answer is the cost.
 			skipPermission: true,
 			handler: raw =>
 				answer("ask", async () => {
-					let definition = Questions.identify(raw);
+					let args = Arguments.askPlan(raw);
+					let definition = Questions.identify({
+						questions: args.questions.map(({ blocks, ...question }) => question),
+					});
 					let ended = await Questions.ask(
 						context.plan,
 						context.server,
 						context.room,
 						definition,
+						{ revision: args.revision, blocks: args.questions.map(question => question.blocks) },
 					);
 					return {
 						outcomes: ended.map(outcome =>

@@ -388,15 +388,61 @@ function mutate(target: Document, change: () => boolean): Mutation | undefined {
 	return { update: Y.encodeStateAsUpdate(target.doc, vector), source: project(target) };
 }
 
-/** Append a questionnaire to the plan. */
+export type QuestionnaireInsertion = {
+	value: Questionnaire;
+	at?: { index: number; digest: string };
+};
+
+/**
+ * Add a complete ask batch directly after its validated prose.
+ *
+ * Destinations are checked before Lexical starts changing anything. Within one
+ * shared destination, the last inserted card becomes the next card's sibling,
+ * preserving the planner's ask order without making later indices shift.
+ */
+export function insertQuestionnaires(
+	target: Document,
+	insertions: QuestionnaireInsertion[],
+): Mutation | undefined {
+	let hashes = digests(target);
+	for (let insertion of insertions) {
+		if (!insertion.at) continue;
+		let current = hashes[insertion.at.index];
+		if (!current) throw new Error(`no block at index ${insertion.at.index}`);
+		if (current !== insertion.at.digest) {
+			throw new Error(`block ${insertion.at.index} has changed; read the plan again`);
+		}
+	}
+
+	return mutate(target, () => {
+		let root = $getRoot();
+		let blocks = addressable();
+		let last = new Map<number, LexicalNode>();
+
+		for (let insertion of insertions) {
+			let questionnaire = $createQuestionnaireNode(insertion.value);
+			if (!insertion.at) {
+				root.append(questionnaire);
+				continue;
+			}
+
+			let prose = blocks[insertion.at.index];
+			if (!prose) throw new Error(`no block at index ${insertion.at.index}`);
+			let previous = last.get(insertion.at.index) ?? prose;
+			previous.insertAfter(questionnaire);
+			last.set(insertion.at.index, questionnaire);
+		}
+
+		return insertions.length > 0;
+	});
+}
+
+/** Append one questionnaire to the plan. */
 export function insertQuestionnaire(
 	target: Document,
 	value: Questionnaire,
 ): Mutation | undefined {
-	return mutate(target, () => {
-		$getRoot().append($createQuestionnaireNode(value));
-		return true;
-	});
+	return insertQuestionnaires(target, [{ value }]);
 }
 
 export type QuestionnairePlacement = {
@@ -600,6 +646,14 @@ export function digest(source: string): string {
 export function digests(target: Document): string[] {
 	return parse(project(target)).children.map(node =>
 		digest(serialize({ type: "root", children: [node] }))
+	);
+}
+
+/** Whether the source contains plan content rather than only decision widgets. */
+export function hasProse(target: Document): boolean {
+	return parse(project(target)).children.some(node =>
+		node.type !== "mdxJsxFlowElement"
+		|| (node.name !== "Questionnaire" && node.name !== "Decision")
 	);
 }
 
