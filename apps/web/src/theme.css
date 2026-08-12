@@ -404,6 +404,34 @@ body {
 	animation: item-enter var(--duration-base) var(--ease-out) both;
 }
 
+@keyframes chat-working-shimmer {
+	from {
+		background-position: 125% 0;
+	}
+	to {
+		background-position: -25% 0;
+	}
+}
+
+.chat-working {
+	color: var(--color-text-secondary);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.chat-working {
+		background: linear-gradient(
+			90deg,
+			var(--color-text-secondary) 35%,
+			var(--color-text-tertiary) 50%,
+			var(--color-text-secondary) 65%
+		);
+		background-clip: text;
+		background-size: 200% 100%;
+		color: transparent;
+		animation: chat-working-shimmer 1.8s ease-in-out infinite;
+	}
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.animate-enter {
 		animation: none;

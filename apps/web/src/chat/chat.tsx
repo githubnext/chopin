@@ -31,6 +31,7 @@ export function Chat({ connected, handle, wire }: ChatProps) {
 	let [arrived, setArrived] = useState<ReadonlySet<string>>(new Set());
 	let [queue, setQueue] = useState<Wire.Waiting[]>([]);
 	let [busy, setBusy] = useState(false);
+	let [responded, setResponded] = useState(false);
 	let [text, setText] = useState("");
 
 	useEffect(() => {
@@ -49,6 +50,7 @@ export function Chat({ connected, handle, wire }: ChatProps) {
 				setArrived(new Set());
 				setQueue(frame.queued);
 				setBusy(frame.busy);
+				setResponded(frame.entries.at(-1)?.author.kind === "agent");
 			}),
 			wire.on<Wire.Message>("chat:message", frame => {
 				if (loaded && !seen.has(frame.entry.id)) {
@@ -62,6 +64,7 @@ export function Chat({ connected, handle, wire }: ChatProps) {
 					next[index] = frame.entry;
 					return next;
 				});
+				if (frame.entry.author.kind === "agent") setResponded(true);
 			}),
 			wire.on<Wire.Delta>("chat:delta", frame => {
 				setEntries(current =>
@@ -89,6 +92,7 @@ export function Chat({ connected, handle, wire }: ChatProps) {
 			}),
 			wire.on<Wire.State>("chat:state", frame => {
 				setBusy(frame.busy);
+				if (!frame.busy) setResponded(false);
 			}),
 			wire.on<Wire.Queue>("chat:queue", frame => setQueue(frame.waiting)),
 		];
@@ -113,6 +117,7 @@ export function Chat({ connected, handle, wire }: ChatProps) {
 				handle={handle}
 				onWithdraw={id => wire?.send("chat:unqueue", { id })}
 				queued={queue}
+				working={connected && busy && !responded}
 			/>
 
 			<div className="flex shrink-0 flex-col gap-2 px-4 pb-4">
