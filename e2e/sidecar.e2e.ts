@@ -120,7 +120,7 @@ test("questions leave the chat pane free of a waiting row", async ({ join, seed 
 	await seed(PROSE);
 	let page = await join("ana");
 
-	await expect(questionnaire(page)).toHaveCount(1);
+	await expect(questionnaire(page)).toHaveCount(2);
 	await expect(page.locator("#pane-chat")).not.toContainText("questions are waiting");
 	await expect(page.locator("#pane-chat").getByRole("button", { name: "Answer" })).toHaveCount(0);
 
