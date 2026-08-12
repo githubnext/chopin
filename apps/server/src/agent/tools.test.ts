@@ -213,12 +213,13 @@ test("ask publishes a pending questionnaire beside its validated prose", async (
 	} as unknown as Server<SocketData>;
 	let plan = await Service.open("test", directory, server);
 	plans.push(plan);
+	let anchors = 0;
 	let ask = toolbox({
 		plan,
 		server,
 		room: "test",
 		publish: mutation => published.push(mutation),
-		anchors() {},
+		anchors: () => anchors++,
 		changes() {},
 	}).find(tool => tool.name === "ask");
 	if (!ask?.handler) throw new Error("ask has no handler");
@@ -247,6 +248,7 @@ test("ask publishes a pending questionnaire beside its validated prose", async (
 		&& typeof frame[1] === "string"
 		&& JSON.parse(frame[1]).kind === "plan:update"
 	)).toBe(true);
+	expect(anchors).toBe(1);
 
 	let record = [...plan.records.values()][0]!;
 	let claimed = Store.claimCancel(plan.questions, record.id, "test");
@@ -257,4 +259,44 @@ test("ask publishes a pending questionnaire beside its validated prose", async (
 	expect(JSON.parse(result as string).outcomes).toEqual([
 		{ status: "cancelled", cancelled_by: "test" },
 	]);
+});
+
+test("a stale ask does not announce an anchor snapshot", async () => {
+	let directory = await mkdtemp(join(tmpdir(), "chopin-agent-tools-"));
+	directories.push(directory);
+	await writeFile(join(directory, "plan.mdx"), "Related prose.\n");
+	let server = { publish() {} } as unknown as Server<SocketData>;
+	let plan = await Service.open("test", directory, server);
+	plans.push(plan);
+	let anchors = 0;
+	let ask = toolbox({
+		plan,
+		server,
+		room: "test",
+		publish() {},
+		anchors: () => anchors++,
+		changes() {},
+	}).find(tool => tool.name === "ask");
+	if (!ask?.handler) throw new Error("ask has no handler");
+	let digest = room.digests(plan.document)[0]!;
+	let args = {
+		revision: plan.revision + 1,
+		questions: [{
+			header: "Rollout",
+			question: "How should we deploy?",
+			multiple: false,
+			options: [{ label: "Canary", description: "Limit exposure." }],
+			blocks: [{ index: 0, digest }],
+		}],
+	};
+
+	await ask.handler(args, {
+		sessionId: "session",
+		toolCallId: "call",
+		toolName: "ask",
+		arguments: args,
+	});
+
+	expect(plan.records.size).toBe(0);
+	expect(anchors).toBe(0);
 });
