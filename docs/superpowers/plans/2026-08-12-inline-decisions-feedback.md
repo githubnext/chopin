@@ -99,7 +99,7 @@
 
 ### Task 4: Place canonical decision cards beside related plan content
 
-**Status:** Ready for a fresh Terra worktree from the updated feature branch.
+**Status:** In progress in BB thread `thr_dq7att69az`.
 
 **Files:**
 
