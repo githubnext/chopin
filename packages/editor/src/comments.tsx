@@ -269,6 +269,8 @@ export type ThreadCardProps = {
 	onBlur: () => void;
 	/** Take the reader to the prose this points at. */
 	onReveal: () => void;
+	/** The overlay is document chrome rather than an item in the decisions rail. */
+	inDocument?: boolean;
 };
 
 export function ThreadCard({
@@ -284,6 +286,7 @@ export function ThreadCard({
 	onReveal,
 	onTyping,
 	quote,
+	inDocument,
 	view,
 	writing,
 }: ThreadCardProps) {
@@ -292,7 +295,9 @@ export function ThreadCard({
 
 	return (
 		<SidecarCard
-			data-plan-sidecar-thread={thread.id}
+			{...(inDocument
+				? { "data-plan-comment-thread": thread.id }
+				: { "data-plan-sidecar-thread": thread.id })}
 			focused={focused}
 			footer={!open && !applied && (
 				<>

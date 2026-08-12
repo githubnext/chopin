@@ -28,7 +28,22 @@ import type { Marked as Selected, Points } from "./passage";
 import type { Transport } from "./transport";
 
 /** A thread being written but not yet sent. It has no id until the server gives it one. */
-export type Draft = Selected;
+export type Draft = Selected & {
+	/**
+	 * Where the selection was before the composer took focus.
+	 *
+	 * This is local presentation state, never part of `comment:start`: the
+	 * server verifies prose, not pixels from one reader's window.
+	 */
+	placement?: {
+		top: number;
+		right: number;
+		bottom: number;
+		left: number;
+		width: number;
+		height: number;
+	};
+};
 
 export type ThreadView = {
 	thread: Comment.Thread;
@@ -145,8 +160,9 @@ export class ThreadStore {
 		let draft = this.#draft;
 		if (!draft || !this.#wire) return;
 
+		let { blocks, length, offset, quote } = draft;
 		void this.#wire
-			.ask<Comment.Start.Reply>("comment:start", { ...draft, text })
+			.ask<Comment.Start.Reply>("comment:start", { blocks, quote, offset, length, text })
 			.then(frame => {
 				if (frame.ok) return this.opened(frame.thread);
 				// The plan moved under the selection, or there are too many
