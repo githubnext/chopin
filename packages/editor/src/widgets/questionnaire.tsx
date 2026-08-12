@@ -8,8 +8,10 @@
  */
 
 import { QuestionView, useQuestionnaire } from "@chopin/question/react";
+import { useCellValue } from "@mdxeditor/gurx";
 
 import { Provenance, SidecarCard } from "../card";
+import { widgets$ } from "../widget-options";
 
 import type { Transport } from "@chopin/question/react";
 import type { Answer } from "@chopin/question";
@@ -138,8 +140,23 @@ function Decided(
 	);
 }
 
-export function renderQuestionnaire(_node: QuestionnaireNode) {
-	// The node stays in the plan for exports and agent reads, but its full form
-	// belongs in the decisions pane. What remains here is a zero-size anchor.
-	return null;
+function InlineQuestionnaire({ node }: { node: QuestionnaireNode }) {
+	let options = useCellValue(widgets$);
+	let value = node.getQuestionnaire();
+
+	return (
+		<QuestionnaireCard
+			connected={options.connected}
+			onQuestionEnter={question => options.questions?.highlight(value.id, question)}
+			onQuestionLeave={() => options.questions?.clear()}
+			onQuestionSelect={question => options.questions?.reveal(value.id, question)}
+			places={options.questions?.counts(value.id)}
+			value={value}
+			wire={options.wire}
+		/>
+	);
+}
+
+export function renderQuestionnaire(node: QuestionnaireNode) {
+	return <InlineQuestionnaire node={node} />;
 }
