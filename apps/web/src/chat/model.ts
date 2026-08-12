@@ -12,6 +12,7 @@ export type Message = {
 	streaming?: boolean;
 	tools?: Chat.Activity[];
 	queued: boolean;
+	working?: boolean;
 };
 
 export type Group =
@@ -44,9 +45,37 @@ export function displayText(value: string): string {
 	);
 }
 
-export function group(entries: Chat.Entry[], queued: Chat.Waiting[]): Group[] {
+/** The wire can briefly carry an older server's handle-only turn during deploy. */
+export function activeTurn(value: unknown): Chat.Turn | undefined {
+	if (!value || typeof value !== "object") return;
+	let { handle, id, responded, started } = value as Partial<Chat.Turn>;
+	if (
+		typeof id !== "string"
+		|| typeof handle !== "string"
+		|| typeof started !== "number"
+		|| !Number.isFinite(started)
+		|| typeof responded !== "boolean"
+	) return;
+	return { id, handle, started, responded };
+}
+
+export function group(
+	entries: Chat.Entry[],
+	queued: Chat.Waiting[],
+	working?: Pick<Chat.Turn, "id" | "started">,
+): Group[] {
 	let rows: Array<Chat.Entry | Message> = [
 		...entries,
+		...(working
+			? [{
+				id: working.id,
+				author: { kind: "agent" as const },
+				text: "Working on it",
+				ts: working.started,
+				queued: false,
+				working: true,
+			}]
+			: []),
 		...queued.map(item => ({
 			id: item.id,
 			author: { kind: "member" as const, handle: item.handle },
@@ -67,7 +96,6 @@ export function group(entries: Chat.Entry[], queued: Chat.Waiting[]): Group[] {
 		}
 		append(result, { ...row, author: row.author, queued: false });
 	}
-
 	return result;
 }
 

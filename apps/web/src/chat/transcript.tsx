@@ -107,7 +107,10 @@ function MessageBody(
 			{text && (
 				<div className="flex items-start gap-1">
 					<div className="min-w-0 flex-1">
-						<MessageMarkdown source={text} />
+						<MessageMarkdown
+							className={message.working ? "chat-working" : undefined}
+							source={text}
+						/>
 						{message.streaming && <span className="ml-0.5 animate-pulse">▍</span>}
 					</div>
 					{message.queued && message.author.kind === "member" && message.author.handle === handle
@@ -174,17 +177,19 @@ export function Transcript(
 		handle,
 		onWithdraw,
 		queued,
+		working,
 	}: {
 		arrived: ReadonlySet<string>;
 		entries: Chat.Entry[];
 		handle: string;
 		onWithdraw: (id: string) => void;
 		queued: Chat.Waiting[];
+		working?: Pick<Chat.Turn, "id" | "started">;
 	},
 ) {
 	let bottom = useRef<HTMLDivElement>(null);
 	let pinned = useRef(true);
-	let groups = group(entries, queued);
+	let groups = group(entries, queued, working);
 
 	useEffect(() => {
 		if (pinned.current) bottom.current?.scrollIntoView({ block: "end" });

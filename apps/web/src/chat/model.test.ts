@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { displayText, duration, group, summarize } from "./model";
+import { activeTurn, displayText, duration, group, summarize } from "./model";
 
 import type { Chat } from "@chopin/protocol";
 
@@ -8,7 +8,54 @@ function entry(id: string, author: Chat.Author, text = id): Chat.Entry {
 	return { id, author, text, ts: 1_700_000_000 };
 }
 
+function working() {
+	return { id: "turn-1", started: 1_700_000_001 };
+}
+
 describe("transcript groups", () => {
+	it("adds one temporary Planner message while a turn has no response", () => {
+		expect(group([], [], working())).toEqual([{
+			kind: "messages",
+			author: { kind: "agent" },
+			messages: [{
+				id: "turn-1",
+				author: { kind: "agent" },
+				text: "Working on it",
+				ts: 1_700_000_001,
+				queued: false,
+				working: true,
+			}],
+			queued: false,
+		}]);
+	});
+
+	it("replaces the temporary Planner message when a response arrives", () => {
+		let result = group([entry("a1", { kind: "agent" }, "I found it.")], []);
+
+		expect(result).toMatchObject([{
+			kind: "messages",
+			messages: [{ id: "a1", text: "I found it." }],
+		}]);
+		expect(JSON.stringify(result)).not.toContain("Working on it");
+	});
+
+	it("does not keep a temporary Planner message after a turn stops", () => {
+		expect(group([], [])).toEqual([]);
+	});
+
+	it("places the temporary Planner message before queued requests", () => {
+		let result = group(
+			[entry("m1", { kind: "member", handle: "ana" })],
+			[{ id: "q1", handle: "ana", text: "Then compare options." }],
+			working(),
+		);
+
+		expect(result.map(item => {
+			if (item.kind === "system") return item.kind;
+			return item.messages[0]!.id;
+		})).toEqual(["m1", "turn-1", "q1"]);
+	});
+
 	it("puts consecutive messages from one author in one group", () => {
 		let result = group([
 			entry("m1", { kind: "member", handle: "ana" }),
@@ -44,6 +91,19 @@ describe("transcript groups", () => {
 
 		expect(result).toHaveLength(2);
 		expect(result[1]).toMatchObject({ queued: true, messages: [{ id: "q1" }, { id: "q2" }] });
+	});
+});
+
+describe("active Planner turns", () => {
+	it("ignores the legacy handle-only wire shape", () => {
+		expect(activeTurn("ana")).toBeUndefined();
+		expect(activeTurn(undefined)).toBeUndefined();
+		expect(activeTurn({ id: "turn-1", handle: "ana", started: 1, responded: false })).toEqual({
+			id: "turn-1",
+			handle: "ana",
+			started: 1,
+			responded: false,
+		});
 	});
 });
 

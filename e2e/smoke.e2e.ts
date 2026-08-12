@@ -14,14 +14,16 @@ import { content, expect, ready, test } from "./room";
 import { scratch } from "./servers";
 
 import type { Chat } from "../packages/protocol/index";
-import type { Page } from "@playwright/test";
+import type { Page, WebSocketRoute } from "@playwright/test";
 
 async function injectChatHistory(
 	page: Page,
 	change: (frame: Chat.History) => Chat.History,
-): Promise<void> {
+) {
+	let send: ((frame: Record<string, unknown>) => void) | undefined;
 	await page.routeWebSocket("**/ws?**", route => {
 		let server = route.connectToServer();
+		send = frame => route.send(JSON.stringify(frame));
 		route.onMessage(message => server.send(message));
 		server.onMessage(message => {
 			if (typeof message !== "string") return route.send(message);
@@ -35,6 +37,115 @@ async function injectChatHistory(
 			}
 		});
 	});
+
+	return { send: (frame: Record<string, unknown>) => send?.(frame) };
+}
+
+async function scriptPlanner(page: Page) {
+	let started = Promise.withResolvers<void>();
+	let send: ((frame: Record<string, unknown>) => void) | undefined;
+	let turn = 0;
+	let active = () => ({
+		id: `turn-${++turn}`,
+		handle: "ana",
+		started: 1_700_000_001,
+		responded: false,
+	});
+
+	await page.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		send = frame => route.send(JSON.stringify(frame));
+		route.onMessage(message => {
+			if (typeof message !== "string") return server.send(message);
+			try {
+				let frame = JSON.parse(message) as { kind?: string; text?: string };
+				if (frame.kind === "chat:send") {
+					send?.({
+						kind: "chat:message",
+						ts: 0,
+						entry: {
+							id: "prompt",
+							author: { kind: "member", handle: "ana" },
+							text: frame.text ?? "",
+							ts: 1_700_000_000,
+						},
+					});
+					send?.({ kind: "chat:state", ts: 0, busy: true, turn: active() });
+					started.resolve();
+					return;
+				}
+				if (frame.kind === "chat:abort") {
+					send?.({ kind: "chat:state", ts: 0, busy: false });
+					return;
+				}
+			} catch {
+				// Frames the test does not script still belong to the server.
+			}
+			server.send(message);
+		});
+		server.onMessage(message => route.send(message));
+	});
+
+	return {
+		started: started.promise,
+		answer() {
+			send?.({
+				kind: "chat:message",
+				ts: 0,
+				entry: {
+					id: "answer",
+					author: { kind: "agent" },
+					text: "The migration is ready.",
+					ts: 1_700_000_001,
+				},
+			});
+			send?.({ kind: "chat:state", ts: 0, busy: false });
+		},
+		tool() {
+			send?.({
+				kind: "chat:message",
+				ts: 0,
+				entry: {
+					id: "tools",
+					author: { kind: "agent" },
+					text: "",
+					ts: 1_700_000_001,
+				},
+			});
+			send?.({
+				kind: "chat:tool",
+				ts: 0,
+				entry: "tools",
+				activity: { id: "tool-1", name: "read_plan", status: "running" },
+			});
+		},
+		stream() {
+			send?.({
+				kind: "chat:message",
+				ts: 0,
+				entry: {
+					id: "answer",
+					author: { kind: "agent" },
+					text: "I found it.",
+					ts: 1_700_000_002,
+					streaming: true,
+				},
+			});
+		},
+		fail() {
+			send?.({
+				kind: "chat:message",
+				ts: 0,
+				entry: {
+					id: "failure",
+					author: { kind: "system" },
+					text: "Planner unavailable.",
+					ts: 1_700_000_001,
+				},
+			});
+			send?.({ kind: "chat:state", ts: 0, busy: false });
+		},
+	};
 }
 
 test("a handle in the URL joins without the form", async ({ join, room }) => {
@@ -136,6 +247,165 @@ test("chat names both destinations at the moment of sending", async ({ join }) =
 	await expect(chat.getByRole("button", { name: "Send to room" })).toBeVisible();
 	await expect(chat.getByRole("button", { name: "Ask Planner" })).toBeVisible();
 	await expect(chat.getByRole("button", { name: "Stop" })).toHaveCount(0);
+});
+
+test("chat replaces the Planner working row with its response", async ({ join, page }) => {
+	await page.emulateMedia({ reducedMotion: "no-preference" });
+	let planner = await scriptPlanner(page);
+	let chat = (await join("ana")).locator("#pane-chat");
+
+	await chat.getByPlaceholder("Say something…").fill("Draft the migration.");
+	await chat.getByRole("button", { name: "Ask Planner" }).click();
+	await planner.started;
+
+	let working = chat.locator(".chat-working");
+	await expect(working).toHaveText("Working on it");
+	let timestamp = await page.evaluate(() =>
+		new Date(1_700_000_001 * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+	);
+	await expect(
+		working.locator("xpath=ancestor::*[@data-chat-entry][1]").getByText(timestamp, { exact: true }),
+	).toBeVisible();
+	await expect(chat.getByText("Invalid Date")).toHaveCount(0);
+	await expect(working).toHaveCSS("animation-name", "chat-working-shimmer");
+	let avatar = chat.getByRole("img", { name: "Planner" });
+	expect(await avatar.evaluate(element => getComputedStyle(element).animationName)).toBe("none");
+
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	await expect(working).toHaveCSS("animation-name", "none");
+
+	planner.answer();
+	await expect(working).toHaveCount(0);
+	await expect(chat.getByText("The migration is ready.")).toBeVisible();
+	await expect(chat.locator("[data-chat-entry]")).toHaveCount(2);
+});
+
+test("chat clears the Planner working row when a turn stops or fails", async ({ join, page }) => {
+	let planner = await scriptPlanner(page);
+	let chat = (await join("ana")).locator("#pane-chat");
+
+	await chat.getByPlaceholder("Say something…").fill("Draft the migration.");
+	await chat.getByRole("button", { name: "Ask Planner" }).click();
+	await planner.started;
+	await expect(chat.locator(".chat-working")).toBeVisible();
+
+	await chat.getByRole("button", { name: "Stop" }).click();
+	await expect(chat.locator(".chat-working")).toHaveCount(0);
+
+	await chat.getByPlaceholder("Say something…").fill("Try again.");
+	await chat.getByRole("button", { name: "Ask Planner" }).click();
+	await expect(chat.locator(".chat-working")).toBeVisible();
+	planner.fail();
+	await expect(chat.locator(".chat-working")).toHaveCount(0);
+	await expect(chat.getByText("Planner unavailable.")).toBeVisible();
+
+	await page.reload();
+	await ready(page);
+	await expect(page.locator("#pane-chat .chat-working")).toHaveCount(0);
+});
+
+test("chat keeps Working on it through tool activity and replaces it with streamed prose", async ({ join, page }) => {
+	let planner = await scriptPlanner(page);
+	let chat = (await join("ana")).locator("#pane-chat");
+
+	await chat.getByPlaceholder("Say something…").fill("Check the current plan.");
+	await chat.getByRole("button", { name: "Ask Planner" }).click();
+	await planner.started;
+	await expect(chat.locator(".chat-working")).toBeVisible();
+
+	planner.tool();
+	await expect(chat.getByText("Read plan", { exact: true })).toBeVisible();
+	await expect(chat.locator(".chat-working")).toBeVisible();
+
+	planner.stream();
+	await expect(chat.locator(".chat-working")).toHaveCount(0);
+	await expect(chat.getByText("I found it.")).toBeVisible();
+});
+
+test("chat history does not revive Working on it after Planner prose and a later room message", async ({ join, page }) => {
+	await injectChatHistory(page, frame => ({
+		...frame,
+		busy: true,
+		turn: { id: "turn-1", handle: "ana", started: 1_700_000_000, responded: true },
+		entries: [
+			{
+				id: "prompt",
+				author: { kind: "member", handle: "ana" },
+				text: "@ai Check the current plan.",
+				ts: 1_700_000_000,
+			},
+			{
+				id: "answer",
+				author: { kind: "agent" },
+				text: "I found the issue.",
+				ts: 1_700_000_001,
+			},
+			{
+				id: "room",
+				author: { kind: "member", handle: "sam" },
+				text: "Please include the examples.",
+				ts: 1_700_000_002,
+			},
+		],
+	}));
+
+	let chat = (await join("ana")).locator("#pane-chat");
+	await expect(chat.getByText("I found the issue.")).toBeVisible();
+	await expect(chat.getByText("Please include the examples.")).toBeVisible();
+	await expect(chat.locator(".chat-working")).toHaveCount(0);
+});
+
+test("chat ignores legacy active-turn frames during a rolling deploy", async ({ join, page }) => {
+	let legacy = await injectChatHistory(page, frame => {
+		let { turn: _turn, ...old } = frame;
+		return { ...old, busy: true };
+	});
+	let chat = (await join("ana")).locator("#pane-chat");
+
+	await expect(chat.locator(".chat-working")).toHaveCount(0);
+	await expect(chat.getByText("Invalid Date")).toHaveCount(0);
+
+	legacy.send({ kind: "chat:state", ts: 0, busy: true, turn: "ana" });
+	await expect(chat.locator(".chat-working")).toHaveCount(0);
+	await expect(chat.getByText("Invalid Date")).toHaveCount(0);
+});
+
+test("chat waits for fresh history after reconnect before projecting a stale turn", async ({ join, page }) => {
+	let sockets: WebSocketRoute[] = [];
+	let historyHeld = Promise.withResolvers<void>();
+	let releaseHistory: (() => void) | undefined;
+
+	await page.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		sockets.push(route);
+		route.onMessage(message => server.send(message));
+		server.onMessage(message => {
+			if (typeof message !== "string") return route.send(message);
+			let frame = JSON.parse(message) as { kind?: string };
+			if (sockets.length === 2 && frame.kind === "chat:history") {
+				route.send(JSON.stringify({
+					kind: "chat:state",
+					ts: 0,
+					busy: true,
+					turn: { id: "stale", handle: "ana", started: 1_700_000_000, responded: false },
+				}));
+				releaseHistory = () => route.send(message);
+				historyHeld.resolve();
+				return;
+			}
+			route.send(message);
+		});
+	});
+
+	let chat = (await join("ana")).locator("#pane-chat");
+	await expect(chat.locator(".chat-working")).toHaveCount(0);
+	await sockets[0]!.close();
+	await historyHeld.promise;
+	await expect(chat.locator(".chat-working")).toHaveCount(0);
+
+	releaseHistory?.();
+	await ready(page);
+	await expect(chat.locator(".chat-working")).toHaveCount(0);
 });
 
 test(
