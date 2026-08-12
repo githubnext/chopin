@@ -9,7 +9,7 @@
 import { describe, expect, it } from "bun:test";
 import { createHeadlessEditor } from "@lexical/headless";
 import { createYjsBinding, syncLexicalUpdateToYjs, syncYjsChangesToLexical } from "@lexical/yjs";
-import { $getRoot, $isElementNode } from "lexical";
+import { $getRoot, $isElementNode, $isParagraphNode } from "lexical";
 import * as Y from "yjs";
 
 import { $importPlan, registry } from "@chopin/dialect";
@@ -73,6 +73,11 @@ function peer(): { editor: LexicalEditor; doc: Y.Doc; binding: Binding } {
 describe("document", () => {
 	it("starts empty and projects to nothing", async () => {
 		let document = await room.create();
+		document.editor.getEditorState().read(() => {
+			let first = $getRoot().getFirstChild();
+			expect($isParagraphNode(first)).toBe(true);
+			expect($getRoot().getChildrenSize()).toBe(1);
+		});
 		expect(room.project(document)).toBe("");
 	});
 

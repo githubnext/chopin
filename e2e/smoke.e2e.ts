@@ -87,6 +87,46 @@ test("Plan keeps Decisions mounted but hidden", async ({ join }) => {
 	await expect(page.locator(".plan-decisions")).toBeAttached();
 });
 
+test("clicking an empty plan puts the caret at its first writing position", async ({ join }) => {
+	let page = await join("ana");
+	let editor = content(page);
+	let paragraph = editor.locator(":scope > p");
+
+	// The prompt is a sibling overlay. The editable tree needs its own empty
+	// block so a click has one stable first writing position.
+	await expect(paragraph).toHaveCount(1);
+	let paragraphBox = await paragraph.boundingBox();
+
+	expect(paragraphBox).not.toBeNull();
+	await page.mouse.click(paragraphBox!.x + 120, paragraphBox!.y + paragraphBox!.height / 2);
+
+	let selection = await editor.evaluate(element => {
+		let value = window.getSelection();
+		let paragraph = element.querySelector("p")!;
+
+		return {
+			anchorIsParagraph: value!.anchorNode === paragraph,
+			anchorOffset: value!.anchorOffset,
+		};
+	});
+
+	expect(selection.anchorIsParagraph).toBe(true);
+	expect(selection.anchorOffset).toBe(0);
+	await page.keyboard.type("x");
+	let text = await editor.evaluate(element => {
+		let paragraph = element.querySelector("p")!;
+		let range = document.createRange();
+		range.selectNodeContents(paragraph);
+
+		return {
+			left: range.getBoundingClientRect().left,
+			paragraphLeft: paragraph.getBoundingClientRect().left,
+		};
+	});
+
+	expect(text.left).toBeCloseTo(text.paragraphLeft, 1);
+});
+
 test("chat names both destinations at the moment of sending", async ({ join }) => {
 	let page = await join("ana");
 	let chat = page.locator("#pane-chat");
