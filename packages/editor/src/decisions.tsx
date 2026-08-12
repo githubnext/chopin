@@ -72,7 +72,7 @@ export function Decisions({ connected, onShowPlan, reveal, store, wire }: Decisi
 			`[data-plan-sidecar-questionnaire="${id}"]`,
 		);
 		if (target) {
-			target.scrollIntoView({ block: "center", behavior: "smooth" });
+			target.scrollIntoView({ block: "center" });
 			target.tabIndex = -1;
 			target.focus({ preventScroll: true });
 		} else heading.current?.focus();

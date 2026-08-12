@@ -7,8 +7,8 @@ import { visibleDecisionView } from "@chopin/editor";
 import { decisionAttention, DecisionViewControl } from "./decision-view-control";
 
 test("a questionnaire-only document opens Decisions while prose keeps Plan visible", () => {
-	expect(visibleDecisionView("plan", false, 2)).toBe("decisions");
-	expect(visibleDecisionView("plan", true, 1)).toBe("plan");
+	expect(visibleDecisionView({ phase: "initial", preferred: "plan" }, false, 2)).toBe("decisions");
+	expect(visibleDecisionView({ phase: "initial", preferred: "plan" }, true, 1)).toBe("plan");
 });
 
 test("attention only starts when unanswered decisions grow", () => {

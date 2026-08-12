@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+	advanceDecisionView,
 	countUnanswered,
 	cursor,
 	Decisions,
@@ -19,7 +20,7 @@ import { Wire } from "./wire";
 import { paneId, usePaneOpen, Workspace } from "./workspace";
 
 import type { Session } from "@chopin/protocol";
-import type { DecisionView } from "@chopin/editor";
+import type { DecisionView, DecisionViewState } from "@chopin/editor";
 import type { Status } from "./wire";
 
 /**
@@ -144,27 +145,20 @@ function Room({ handle }: { handle: string }) {
 	let entries = useQuestionnaires(questions);
 	let unanswered = countUnanswered(entries);
 	let hasPlanContent = useHasPlanContent(questions);
-	let [preferredView, setPreferredView] = useState<DecisionView>(() => {
+	let [decisionView, setDecisionView] = useState<DecisionViewState>(() => {
 		let stored = localStorage.getItem("chopin:view:document");
-		return stored === "decisions" ? "decisions" : "plan";
+		return {
+			phase: "initial",
+			preferred: stored === "decisions" ? "decisions" : "plan",
+		};
 	});
-	let [enteredForcedOpening, setEnteredForcedOpening] = useState(false);
-	let view = visibleDecisionView(
-		preferredView,
-		hasPlanContent,
-		unanswered,
-		enteredForcedOpening,
-	);
+	let view = visibleDecisionView(decisionView, hasPlanContent, unanswered);
 	let previousUnanswered = useRef(unanswered);
 	let [attention, setAttention] = useState(false);
 
 	useEffect(() => {
-		if (!hasPlanContent && unanswered > 0) setEnteredForcedOpening(true);
+		setDecisionView(state => advanceDecisionView(state, hasPlanContent, unanswered));
 	}, [hasPlanContent, unanswered]);
-
-	useEffect(() => {
-		if (hasPlanContent) localStorage.setItem("chopin:view:document", preferredView);
-	}, [hasPlanContent, preferredView]);
 
 	useEffect(() => {
 		let previous = previousUnanswered.current;
@@ -176,10 +170,7 @@ function Room({ handle }: { handle: string }) {
 	}, [unanswered]);
 
 	let selectView = (next: DecisionView) => {
-		// A new room stays in its opening questions until prose proves the first
-		// draft exists. Once there is prose, a person takes control of the view.
-		if (hasPlanContent) setEnteredForcedOpening(false);
-		setPreferredView(next);
+		setDecisionView(state => ({ ...state, preferred: next }));
 		if (hasPlanContent) localStorage.setItem("chopin:view:document", next);
 		if (next === "decisions") {
 			let first = entries.find(entry =>
