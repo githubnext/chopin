@@ -39,6 +39,10 @@ export type ThreadView = {
 	 * once the agent has said what that was, which may be several blocks.
 	 */
 	places: Points[];
+	/** Block used for a gutter button when the exact phrase no longer resolves. */
+	targetKey?: string;
+	/** An open thread with no surviving subject block. */
+	orphaned: boolean;
 	/** Nowhere left to point: the prose is gone and nothing replaced it. */
 	drifted: boolean;
 	/**
@@ -358,7 +362,11 @@ export class ThreadStore {
 					let anchors = this.#anchors.get(thread.id);
 					// Nothing resolves before the editor exists; the card still
 					// renders, with the quote and no highlight.
-					let places = editor && binding && anchors ? this.#places(binding, anchors) : [];
+					let placement = editor && binding && anchors
+						? this.#places(binding, anchors)
+						: { places: [] };
+					let { places } = placement;
+					let targetKey = thread.status === "open" ? placement.targetKey : undefined;
 					let first = places[0];
 
 					views.push({
@@ -369,15 +377,18 @@ export class ThreadStore {
 						// has not lost its place; it has moved to the prose it
 						// produced, which is the whole point of accepting it.
 						drifted: !!editor && !!anchors && places.length === 0,
+						...(targetKey ? { targetKey } : {}),
+						orphaned: thread.status === "open" && !!editor && !!anchors
+							&& places.length === 0 && !targetKey,
 						applied: !!anchors && !anchors.result.pending,
 						quote: thread.quote ?? anchors?.subject.quote ?? "",
 						...(first && editor ? { at: order(editor, first.anchorKey) } : {}),
 					});
 
-					// Only the card the reader is pointing at. A standing mark on
-					// every comment and every decision ends up painted over most
-					// of a mature plan, which says nothing.
-					if (this.#focused === thread.id) marks.push(...places);
+					// Open comments remain visible in the prose. Accepted comments
+					// have their inline Decision instead, so their anchors must not
+					// leave behind comment chrome after resolution.
+					if (thread.status === "open") marks.push(...places);
 				} catch (err) {
 					console.error(`[plan] could not place comment ${thread.id}:`, err);
 					// Unplaceable, but still worth reading.
@@ -385,6 +396,7 @@ export class ThreadStore {
 						thread,
 						places: [],
 						drifted: true,
+						orphaned: false,
 						applied: false,
 						quote: thread.quote ?? "",
 					});
@@ -433,7 +445,10 @@ export class ThreadStore {
 	 * Block-wide, because after a rewrite there is no phrase to point at,
 	 * only a passage of new prose.
 	 */
-	#places(binding: Binding, anchors: Plan.ThreadAnchors): Points[] {
+	#places(
+		binding: Binding,
+		anchors: Plan.ThreadAnchors,
+	): { places: Points[]; targetKey?: string } {
 		let { result, subject } = anchors;
 
 		// Pending means nobody has checked this since the plan moved, so it is
@@ -443,11 +458,17 @@ export class ThreadStore {
 				.map(anchor => resolve(binding, anchor))
 				.flatMap(key => (key ? [$blockPoints(key)] : []))
 				.filter((points): points is Points => !!points);
-			if (produced.length > 0) return produced;
+			if (produced.length > 0) return { places: produced };
 		}
 
+		let targetKey = subject.blocks
+			.map(block => resolve(binding, block))
+			.find((key): key is string => !!key);
 		let found = locate(binding, subject) ?? this.#recover(binding, subject);
-		return found ? [found] : [];
+		return {
+			places: found ? [found] : [],
+			...(targetKey ? { targetKey } : {}),
+		};
 	}
 
 	/** The phrase, read out of the prose, when its positions cannot be resolved. */

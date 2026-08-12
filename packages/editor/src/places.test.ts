@@ -15,7 +15,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { createHeadlessEditor } from "@lexical/headless";
 import { createYjsBinding, syncLexicalUpdateToYjs } from "@lexical/yjs";
-import { $getRoot, $isParagraphNode } from "lexical";
+import { $getRoot, $isElementNode, $isParagraphNode, $isTextNode } from "lexical";
 import * as Y from "yjs";
 
 import { importPlan, registry } from "@chopin/dialect";
@@ -272,7 +272,7 @@ describe("an accepted thread after the agent has acted", () => {
 	 * nothing. Where a thread points is still known; it is only drawn when
 	 * somebody asks by pointing at the card.
 	 */
-	it("marks nothing until the reader points at its card", () => {
+	it("leaves an accepted thread to its inline Decision surface", () => {
 		let { binding, editor } = room();
 		let subject = store(editor, binding);
 		let value = thread();
@@ -284,18 +284,18 @@ describe("an accepted thread after the agent has acted", () => {
 			result: { anchors: [anchor(editor, binding, 2)], pending: false },
 		}]);
 
-		// It knows where it is either way.
+		// The inline Decision owns the accepted thread's mark, not comment chrome.
 		expect(subject.snapshot().threads[0]?.places).toHaveLength(1);
 		expect(marked()).toBe(0);
 
 		subject.focus(value.id);
-		expect(marked()).toBe(1);
+		expect(marked()).toBe(0);
 
 		subject.focus(undefined);
 		expect(marked()).toBe(0);
 	});
 
-	it("marks every block a decision produced, not just the first", () => {
+	it("leaves every block a decision produced out of comment chrome", () => {
 		let { binding, editor } = room();
 		let subject = store(editor, binding);
 		let value = thread();
@@ -311,7 +311,7 @@ describe("an accepted thread after the agent has acted", () => {
 		}]);
 		subject.focus(value.id);
 
-		expect(marked()).toBe(2);
+		expect(marked()).toBe(0);
 	});
 
 	it("points nowhere when neither end resolves", () => {
@@ -329,8 +329,78 @@ describe("an accepted thread after the agent has acted", () => {
 		let view = subject.snapshot().threads[0]!;
 		expect(view.places).toHaveLength(0);
 		expect(view.drifted).toBe(true);
+		// Accepted threads have their inline Decision, not an orphan affordance
+		// in the comment chrome.
+		expect(view.orphaned).toBe(false);
 		// Still readable: the conversation is the durable part of a comment.
 		expect(view.thread.notes).toHaveLength(1);
+	});
+});
+
+describe("an open thread whose phrase has drifted", () => {
+	function open(editor: LexicalEditor, binding: Binding) {
+		let subject = store(editor, binding);
+		let value = thread({ status: "open", quote: undefined });
+		subject.sync([value]);
+		subject.anchors([{
+			thread: value.id,
+			subject: { ...rewritten(), blocks: [anchor(editor, binding, 1)], drifted: undefined },
+			result: { anchors: [], pending: false },
+		}]);
+		return subject;
+	}
+
+	it("keeps a gutter target when the phrase changed but its block survived", () => {
+		let { binding, editor } = room();
+		let subject = open(editor, binding);
+		let key = blocks(editor)[1]!.getKey();
+
+		editor.update(() => {
+			let block = $getRoot().getChildren()[1]!;
+			if (!$isElementNode(block)) throw new Error("subject block is not an element");
+			let text = block.getFirstChild();
+			if (!$isTextNode(text)) throw new Error("subject block has no text");
+			text.setTextContent(
+				"The renderer caches tiles for 10 seconds.",
+			);
+		}, { discrete: true });
+		// The server has rebased the changed phrase and declined to guess a new
+		// one. The block anchor remains valid enough to place its gutter target.
+		subject.anchors([{
+			thread: "01K0N4TR8K7JGM4R1J7PW4R8YJ",
+			subject: { ...rewritten(), blocks: [anchor(editor, binding, 1)], drifted: true },
+			result: { anchors: [], pending: false },
+		}]);
+		subject.refresh();
+
+		let view = subject.snapshot().threads[0]!;
+		expect(view.places).toEqual([]);
+		expect(view.targetKey).toBe(key);
+		expect(view.drifted).toBe(true);
+		expect(view.orphaned).toBe(false);
+	});
+
+	it("calls a thread orphaned only when every subject block is gone", () => {
+		let { binding, editor } = room();
+		let subject = open(editor, binding);
+		let key = blocks(editor)[1]!.getKey();
+
+		editor.update(() => {
+			$getRoot().getChildren()[1]!.remove();
+		}, { discrete: true });
+		subject.refresh();
+
+		let view = subject.snapshot().threads[0]!;
+		expect(blocks(editor).map(block => block.getKey())).not.toContain(key);
+		expect(view.targetKey).toBeUndefined();
+		expect(view.orphaned).toBe(true);
+	});
+
+	it("keeps exact open comment passages marked", () => {
+		let { binding, editor } = room();
+		open(editor, binding);
+
+		expect(marked()).toBe(1);
 	});
 });
 
@@ -422,9 +492,9 @@ describe("going to what a thread points at", () => {
 		revised(subject, editor, binding, value.id);
 		subject.reveal(value.id);
 
-		// Pointing at the card asks about the whole thread, both blocks of it.
+		// The comment hover cannot replace the inline Decision's mark.
 		subject.focus(value.id);
-		expect(marked()).toBe(2);
+		expect(marked()).toBe(1);
 
 		// And leaving it goes back to the one block they were sent to.
 		subject.focus(undefined);
