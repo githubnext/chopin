@@ -62,6 +62,9 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 							<span className="min-w-0 flex-1 truncate font-mono text-text-secondary">
 								{toolCopy(tool.name)}
 							</span>
+							{tool.status === "failed" && (
+								<span className="shrink-0 text-destructive-ink">Failed</span>
+							)}
 							<span className="shrink-0 tabular-nums">
 								{tool.took === undefined ? "—" : duration(tool.took)}
 							</span>

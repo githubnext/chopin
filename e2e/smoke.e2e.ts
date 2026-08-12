@@ -232,6 +232,9 @@ test(
 		await run.click();
 		await expect(chat.getByText("Read file", { exact: true })).toBeVisible();
 		await expect(chat.getByText("Run tests", { exact: true })).toBeVisible();
+		let failed = chat.getByRole("listitem").filter({ hasText: "Run tests" });
+		await expect(failed).toContainText("Failed");
+		await expect(failed.getByText("Failed", { exact: true })).toHaveClass(/text-destructive-ink/);
 		let firstTool = chat.getByRole("list", { name: "Tool calls" }).getByRole("listitem").first();
 		expect((await firstTool.getByText("Read file").boundingBox())!.x).toBeLessThan(
 			(await firstTool.getByText("38ms").boundingBox())!.x,
