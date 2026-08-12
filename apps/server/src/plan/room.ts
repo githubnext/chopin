@@ -385,6 +385,65 @@ export function insertQuestionnaire(
 	});
 }
 
+export type QuestionnairePlacement = {
+	id: string;
+	at: { index: number; digest: string };
+	/** A previously asked decision sharing this prose block. */
+	after?: string;
+};
+
+/**
+ * Put existing questionnaires immediately after the prose their decisions
+ * belong to.
+ *
+ * The placement is checked before any node moves. A batch can therefore use
+ * the indices from one `read_plan` result: putting one card beside early prose
+ * cannot make a later card's index silently name something else.
+ */
+export function placeQuestionnaires(
+	target: Document,
+	placements: QuestionnairePlacement[],
+): Mutation | undefined {
+	let hashes = digests(target);
+	for (let placement of placements) {
+		let current = hashes[placement.at.index];
+		if (!current) throw new Error(`no block at index ${placement.at.index}`);
+		if (current !== placement.at.digest) {
+			throw new Error(`block ${placement.at.index} has changed; read the plan again`);
+		}
+	}
+
+	return mutate(target, () => {
+		let blocks = addressable();
+		let questionnaires = new Map(
+			$nodesOfType(QuestionnaireNode).map(node => [node.getId(), node]),
+		);
+		let changed = false;
+
+		for (let placement of placements) {
+			let questionnaire = questionnaires.get(placement.id);
+			// A record restored from an older room may outlive its document node.
+			// It remains readable in Decisions, but there is nothing canonical to
+			// relocate until the planner asks it again.
+			if (!questionnaire) continue;
+
+			let prose = blocks[placement.at.index];
+			if (!prose) throw new Error(`no block at index ${placement.at.index}`);
+			// Older sidecar records can point at a decision node that disappeared
+			// before this placement existed. It cannot establish an order, so the
+			// next live card starts the run after its prose instead.
+			let previous = placement.after ? questionnaires.get(placement.after) ?? prose : prose;
+			if (questionnaire === previous || questionnaire.getPreviousSibling() === previous) continue;
+
+			questionnaire.remove();
+			previous.insertAfter(questionnaire);
+			changed = true;
+		}
+
+		return changed;
+	});
+}
+
 /**
  * Append an accepted comment thread to the plan.
  *
@@ -599,6 +658,17 @@ export function resolveAnchor(target: Document, anchor: Anchor): string | undefi
 		// the fallback, and the caller is about to try it.
 	}
 	return undefined;
+}
+
+/** Whether an anchor resolves to the addressable block at this current index. */
+export function matchesAnchor(target: Document, anchor: Anchor, index: number): boolean {
+	let key = resolveAnchor(target, anchor);
+	if (!key) return false;
+	let found: string | undefined;
+	target.editor.getEditorState().read(() => {
+		found = addressable()[index]?.getKey();
+	});
+	return key === found;
 }
 
 /**

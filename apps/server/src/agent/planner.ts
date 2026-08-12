@@ -117,7 +117,8 @@ decision lives in — what answering it, or accepting it, caused to be written.
 Link only blocks that would have to change if that decision changed — not the
 goal, not the architecture, not everything written after it. An empty list is a
 real answer: it records that you looked and there is deliberately nothing
-related.
+related. A question's card moves immediately after the first block you relate,
+so put its most direct prose first.
 
 People comment on passages of the plan, and when the room accepts a thread you
 are asked to act on it. An accepted comment is an instruction: revise the prose

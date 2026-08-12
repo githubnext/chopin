@@ -269,7 +269,8 @@ export function toolbox(context: Context): Tool[] {
 				+ "successful `edit_plan`, using that result's revision and block digests. For a "
 				+ "question, give `widget` and `question`; for an accepted comment, give `thread`. "
 				+ "Either way the blocks are the prose that decision produced. Link only blocks that "
-				+ "would have to change if the decision changed. An empty list means reviewed and "
+				+ "would have to change if the decision changed. A question's card moves after its "
+				+ "first related block. An empty list means reviewed and "
 				+ "deliberately unrelated, which is a real answer and clears the review.",
 			parameters: {
 				type: "object",
@@ -329,14 +330,25 @@ export function toolbox(context: Context): Tool[] {
 					}
 
 					let failures: string[] = [];
+					let placements: Questions.Placement[] = [];
 					for (let update of args.anchors) {
 						let failure = update.thread
 							? Comments.relate(context.plan, update.thread, update.blocks)
 							: update.widget && update.question
 							? Questions.relate(context.plan, update.widget, update.question, update.blocks)
 							: "give either `thread`, or both `widget` and `question`.";
-						if (failure) failures.push(failure);
+						if (failure) {
+							failures.push(failure);
+						} else if (update.widget !== undefined && update.question !== undefined) {
+							placements.push({
+								widget: update.widget,
+								question: update.question,
+								blocks: update.blocks,
+							});
+						}
 					}
+					let mutation = Questions.place(context.plan, placements);
+					if (mutation) context.publish(mutation);
 
 					context.anchors();
 					context.plan.sink.touch();

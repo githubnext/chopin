@@ -169,7 +169,7 @@ test("selecting Decisions returns to the first unanswered card after its hidden 
 	await expect.poll(() => stack.evaluate(element => element.scrollTop)).toBeLessThan(scrolled);
 });
 
-test("Show in plan focuses the addressed inline questionnaire", async ({ baseURL, join, room, seed }) => {
+test("an inline decision is also shown in Decisions and can be focused in Plan", async ({ baseURL, join, room, seed }) => {
 	await seed(ANCHORED);
 	await writeFile(
 		Path.join(scratch(Number(new URL(baseURL!).port)), room, "state.json"),
@@ -202,10 +202,17 @@ test("Show in plan focuses the addressed inline questionnaire", async ({ baseURL
 		}),
 	);
 	let page = await join("ana");
+	let inline = page.locator(
+		`[data-document-view="plan"] article[data-plan-sidecar-questionnaire="${WIDGET}"]`,
+	);
+
+	await expect(inline).toBeVisible();
+	await expect(inline).toContainText("How should we deploy?");
 
 	await page.getByRole("button", { name: /^Decisions/ }).click();
 	await page.getByRole("button", { name: "1 resolved" }).click();
 	let card = questionnaire(page).filter({ hasText: "How should we deploy?" });
+	await expect(card).toHaveCount(1);
 	await card.getByRole("button", { name: /How should we deploy.*show in plan/ }).click();
 
 	await expect(page.getByRole("button", { name: "Plan", exact: true }))

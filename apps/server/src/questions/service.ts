@@ -409,3 +409,40 @@ export function relate(
 	});
 	return undefined;
 }
+
+export type Placement = {
+	widget: string;
+	question: string;
+	blocks: Array<{ index: number; digest: string }>;
+};
+
+/**
+ * Move the canonical cards that the planner just related.
+ *
+ * The first related block is the card's home in the plan; the full anchor set
+ * still drives the count, wash, and Show in plan walk. Records are inserted in
+ * ask order, so cards sharing a home stay in the planner's original sequence.
+ */
+export function place(plan: Plan, updates: Placement[]): room.Mutation | undefined {
+	let records = [...plan.records.values()];
+	let placements: room.QuestionnairePlacement[] = [];
+	let byWidget = new Map(updates.map(update => [update.widget, update]));
+
+	for (let record of records) {
+		let update = byWidget.get(record.id);
+		if (!update || record.definition.questions.length !== 1 || update.blocks.length === 0) continue;
+
+		let home = update.blocks[0]!;
+		let before = records.slice(0, records.indexOf(record)).findLast(candidate => {
+			if (candidate.definition.questions.length !== 1) return false;
+			let question = candidate.definition.questions[0];
+			if (!question) return false;
+			let anchor = Anchors.read(candidate).questions[question.id]?.anchors[0];
+			return anchor !== undefined && room.matchesAnchor(plan.document, anchor, home.index);
+		});
+
+		placements.push({ id: update.widget, at: home, ...(before ? { after: before.id } : {}) });
+	}
+
+	return room.placeQuestionnaires(plan.document, placements);
+}
