@@ -19,9 +19,11 @@ import type { Page, WebSocketRoute } from "@playwright/test";
 async function injectChatHistory(
 	page: Page,
 	change: (frame: Chat.History) => Chat.History,
-): Promise<void> {
+) {
+	let send: ((frame: Record<string, unknown>) => void) | undefined;
 	await page.routeWebSocket("**/ws?**", route => {
 		let server = route.connectToServer();
+		send = frame => route.send(JSON.stringify(frame));
 		route.onMessage(message => server.send(message));
 		server.onMessage(message => {
 			if (typeof message !== "string") return route.send(message);
@@ -35,6 +37,8 @@ async function injectChatHistory(
 			}
 		});
 	});
+
+	return { send: (frame: Record<string, unknown>) => send?.(frame) };
 }
 
 async function scriptPlanner(page: Page) {
@@ -349,6 +353,21 @@ test("chat history does not revive Working on it after Planner prose and a later
 	await expect(chat.getByText("I found the issue.")).toBeVisible();
 	await expect(chat.getByText("Please include the examples.")).toBeVisible();
 	await expect(chat.locator(".chat-working")).toHaveCount(0);
+});
+
+test("chat ignores legacy active-turn frames during a rolling deploy", async ({ join, page }) => {
+	let legacy = await injectChatHistory(page, frame => {
+		let { turn: _turn, ...old } = frame;
+		return { ...old, busy: true };
+	});
+	let chat = (await join("ana")).locator("#pane-chat");
+
+	await expect(chat.locator(".chat-working")).toHaveCount(0);
+	await expect(chat.getByText("Invalid Date")).toHaveCount(0);
+
+	legacy.send({ kind: "chat:state", ts: 0, busy: true, turn: "ana" });
+	await expect(chat.locator(".chat-working")).toHaveCount(0);
+	await expect(chat.getByText("Invalid Date")).toHaveCount(0);
 });
 
 test("chat waits for fresh history after reconnect before projecting a stale turn", async ({ join, page }) => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { displayText, duration, group, summarize } from "./model";
+import { activeTurn, displayText, duration, group, summarize } from "./model";
 
 import type { Chat } from "@chopin/protocol";
 
@@ -91,6 +91,19 @@ describe("transcript groups", () => {
 
 		expect(result).toHaveLength(2);
 		expect(result[1]).toMatchObject({ queued: true, messages: [{ id: "q1" }, { id: "q2" }] });
+	});
+});
+
+describe("active Planner turns", () => {
+	it("ignores the legacy handle-only wire shape", () => {
+		expect(activeTurn("ana")).toBeUndefined();
+		expect(activeTurn(undefined)).toBeUndefined();
+		expect(activeTurn({ id: "turn-1", handle: "ana", started: 1, responded: false })).toEqual({
+			id: "turn-1",
+			handle: "ana",
+			started: 1,
+			responded: false,
+		});
 	});
 });
 
