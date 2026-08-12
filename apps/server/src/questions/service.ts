@@ -426,10 +426,11 @@ export type Placement = {
 export function place(plan: Plan, updates: Placement[]): room.Mutation | undefined {
 	let records = [...plan.records.values()];
 	let placements: room.QuestionnairePlacement[] = [];
+	let byWidget = new Map(updates.map(update => [update.widget, update]));
 
-	for (let update of updates) {
-		let record = plan.records.get(update.widget);
-		if (!record || record.definition.questions.length !== 1 || update.blocks.length === 0) continue;
+	for (let record of records) {
+		let update = byWidget.get(record.id);
+		if (!update || record.definition.questions.length !== 1 || update.blocks.length === 0) continue;
 
 		let home = update.blocks[0]!;
 		let before = records.slice(0, records.indexOf(record)).findLast(candidate => {
