@@ -216,7 +216,13 @@ export function PlanEditor(
 						onAnchors,
 						onChanges,
 					}),
-					widgetsPlugin({ questions, threads, changes }),
+					widgetsPlugin({
+						questions,
+						threads,
+						changes,
+						wire,
+						connected: !offline,
+					}),
 				]
 				: [],
 		[
@@ -230,6 +236,7 @@ export function PlanEditor(
 			questions,
 			threads,
 			changes,
+			offline,
 		],
 	);
 

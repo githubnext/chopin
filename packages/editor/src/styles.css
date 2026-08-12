@@ -58,11 +58,14 @@
 	background: transparent;
 }
 
-/* The node stays in the plan for exports and agent reads; its form is in the
-   decisions pane, so inline it renders as nothing. */
+/* Decorator hosts are block-level plan content, not zero-size anchors. */
 .plan .plan-content [data-plan-questionnaire],
 .plan .plan-content [data-plan-decision] {
-	display: none;
+	margin-block: 1rem;
+}
+
+.plan .plan-content :is([data-plan-questionnaire], [data-plan-decision]) article {
+	width: 100%;
 }
 
 /*

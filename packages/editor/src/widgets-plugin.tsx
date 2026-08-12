@@ -12,7 +12,6 @@
  */
 
 import { addComposerChild$, realmPlugin } from "@mdxeditor/editor";
-import { Cell } from "@mdxeditor/gurx";
 
 import { ChangeObserver } from "./changes-observer";
 import { QuestionnaireObserver } from "./questionnaires";
@@ -20,24 +19,14 @@ import { TableRails } from "./table/rails";
 import { ThreadObserver } from "./threads";
 import { Toolbar } from "./toolbar";
 import { CalloutPlugin, EnterPlugin, PreviewPlugin, TabsPlugin } from "./widgets";
+import { widgets$ } from "./widget-options";
 
-import type { ChangeStore } from "./changes";
-import type { QuestionnaireStore } from "./questionnaires";
-import type { ThreadStore } from "./threads";
+import type { WidgetOptions } from "./widget-options";
 
-export type WidgetsOptions = {
-	/** Watched from inside the editor; read from outside it. */
-	questions?: QuestionnaireStore;
-	/** The same arrangement for comments: observed here, rendered in the pane. */
-	threads?: ThreadStore;
-	/** Marks what the agent changed, which needs the document to place them. */
-	changes?: ChangeStore;
-};
+export { widgets$ } from "./widget-options";
+export type { WidgetOptions } from "./widget-options";
 
-/** Live host configuration. Read it; do not capture it. */
-export const widgets$ = Cell<WidgetsOptions>({});
-
-export const widgetsPlugin = realmPlugin<WidgetsOptions>({
+export const widgetsPlugin = realmPlugin<WidgetOptions>({
 	init(realm, params) {
 		realm.pub(widgets$, params ?? {});
 		// The store is identity-stable and only ever observed, so unlike the
