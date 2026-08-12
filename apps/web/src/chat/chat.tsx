@@ -24,13 +24,9 @@ export type ChatProps = {
 	wire: Socket | undefined;
 	handle: string;
 	connected: boolean;
-	/** Selects and brings a questionnaire into the Decisions view. */
-	onReveal?: (widget: string) => void;
-	/** Open questions, so the pane can point at the one that is blocking. */
-	waiting?: number;
 };
 
-export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) {
+export function Chat({ connected, handle, wire }: ChatProps) {
 	let [entries, setEntries] = useState<Wire.Entry[]>([]);
 	let [arrived, setArrived] = useState<ReadonlySet<string>>(new Set());
 	let [queue, setQueue] = useState<Wire.Waiting[]>([]);
@@ -118,22 +114,6 @@ export function Chat({ connected, handle, onReveal, waiting, wire }: ChatProps) 
 				onWithdraw={id => wire?.send("chat:unqueue", { id })}
 				queued={queue}
 			/>
-
-			{!!waiting && waiting > 0 && (
-				<div className="animate-enter flex shrink-0 items-center gap-2 px-4 pb-2 text-sm text-text-secondary">
-					<span aria-hidden="true" className="text-warning-ink">●</span>
-					<span>
-						{waiting === 1 ? "A question is waiting" : `${waiting} questions are waiting`}
-					</span>
-					<button
-						className="btn btn-sm btn-ghost ml-auto text-brand-ink"
-						onClick={() => onReveal?.("")}
-						type="button"
-					>
-						Answer
-					</button>
-				</div>
-			)}
 
 			<div className="flex shrink-0 flex-col gap-2 px-4 pb-4">
 				<textarea

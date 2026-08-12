@@ -226,11 +226,6 @@ function Room({ handle }: { handle: string }) {
 				<Chat
 					connected={status === "connected"}
 					handle={handle}
-					onReveal={widget => {
-						selectView("decisions");
-						setReveal({ widget: widget || entries[0]?.id || "", token: Date.now() });
-					}}
-					waiting={unanswered}
 					wire={wire}
 				/>
 			}
