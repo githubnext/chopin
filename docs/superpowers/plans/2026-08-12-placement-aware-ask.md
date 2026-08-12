@@ -41,7 +41,7 @@
 - Produces: `room.insertQuestionnaires`, which inserts a validated batch directly at its destinations in one Yjs mutation.
 - Preserves: `Questions.ask(...): Promise<Ended[]>` and independent answer lifecycles.
 
-- [ ] **Step 1: Add argument-parser RED tests**
+- [x] **Step 1: Add argument-parser RED tests**
 
 Add tests that define the intended shape:
 
@@ -62,13 +62,13 @@ expect(parsed.questions[0]!.blocks).toEqual([{ index: 2, digest: digest() }]);
 
 Also assert rejection of a missing revision, missing blocks, malformed digest, unknown fields, and more than ten questions.
 
-- [ ] **Step 2: Run the parser test and verify RED**
+- [x] **Step 2: Run the parser test and verify RED**
 
 Run: `bun test apps/server/src/agent/arguments.test.ts`
 
 Expected: FAIL because `askPlan` does not exist.
 
-- [ ] **Step 3: Add service-level RED tests**
+- [x] **Step 3: Add service-level RED tests**
 
 Extend the question service test fixture with real prose and assert:
 
@@ -85,13 +85,13 @@ expect(room.project(plan.document).indexOf("Related prose."))
 
 Before resolving `waiting`, prove the card is already inline and its stored anchor is not pending. Add separate tests proving same-block ask order, stale revision atomicity, mismatched digest atomicity, and rejection of empty blocks when prose exists. For each rejected batch, assert both `plan.records.size === 0` and no `<Questionnaire` in the projected source.
 
-- [ ] **Step 4: Run the service tests and verify RED**
+- [x] **Step 4: Run the service tests and verify RED**
 
 Run: `bun test apps/server/src/questions.service.test.ts`
 
 Expected: FAIL because `Questions.ask` does not yet accept or enforce placement.
 
-- [ ] **Step 5: Implement the parser and tool schema**
+- [x] **Step 5: Implement the parser and tool schema**
 
 Add a runtime parser mirroring the JSON schema. Its result must retain normalized question fields separately from placement fields so `Questions.identify` receives no unknown `blocks` property:
 
@@ -112,7 +112,7 @@ export function askPlan(raw: unknown): {
 
 Update the SDK schema and handler to require top-level `revision` and per-question `blocks`. Strip `blocks` before `Questions.identify`, then align the identified questions with the parsed block arrays.
 
-- [ ] **Step 6: Implement validate-before-mutate placement**
+- [x] **Step 6: Implement validate-before-mutate placement**
 
 Extend `Questions.ask` with an optional placement input used by both the tool and existing injectors/tests:
 
@@ -139,11 +139,11 @@ export function insertQuestionnaires(
 ): Mutation | undefined;
 ```
 
-- [ ] **Step 7: Add a tool-level contract test**
+- [x] **Step 7: Add a tool-level contract test**
 
 Invoke the real `ask` handler with prose, revision, and blocks. Observe the plan while its returned promise is pending; assert the questionnaire is inline and the placement update was published. Resolve the question through the existing store helpers so the handler completes.
 
-- [ ] **Step 8: Run focused GREEN verification**
+- [x] **Step 8: Run focused GREEN verification**
 
 Run:
 
@@ -157,7 +157,7 @@ bun run ci
 
 Expected: all pass.
 
-- [ ] **Step 9: Commit Task 1**
+- [x] **Step 9: Commit Task 1**
 
 ```bash
 git add apps/server/src/agent/arguments.ts apps/server/src/agent/arguments.test.ts \
@@ -182,7 +182,7 @@ git commit -m "Place asked decisions beside related prose"
 - Consumes: Task 1's required `ask({ revision, questions[].blocks })` contract.
 - Verifies: an unanswered canonical node appears inline in Plan and once in Decisions.
 
-- [ ] **Step 1: Add planner-prompt RED assertions**
+- [x] **Step 1: Add planner-prompt RED assertions**
 
 Assert the prompt explicitly requires these behaviors:
 
@@ -192,21 +192,21 @@ expect(PROMPT).toContain("write the relevant prose first");
 expect(PROMPT).toContain("Do not collect decisions at the end of the plan");
 ```
 
-- [ ] **Step 2: Run the prompt test and verify RED**
+- [x] **Step 2: Run the prompt test and verify RED**
 
 Run: `bun test apps/server/src/agent/planner.test.ts`
 
 Expected: FAIL because the prompt describes anchoring after edits but not placement-aware asks.
 
-- [ ] **Step 3: Update the planner instructions**
+- [x] **Step 3: Update the planner instructions**
 
 Preserve the decisions-first rule for a prose-free room. Add the complementary existing-plan rule: after `read_plan` or a successful `edit_plan`, pass the returned revision and exact related block addresses into `ask`; write missing context before asking; never use a trailing decision collection as a placement fallback.
 
-- [ ] **Step 4: Make the canonical-node browser coverage exercise an unanswered card**
+- [x] **Step 4: Make the canonical-node browser coverage exercise an unanswered card**
 
 Change the existing inline-decision fixture to an open questionnaire without `<Answer>`, resolver, or timestamp. Assert the card is visible beside its anchored paragraph in Plan, appears exactly once in Decisions, and “Show in plan” returns focus to the same canonical inline node.
 
-- [ ] **Step 5: Run focused GREEN verification**
+- [x] **Step 5: Run focused GREEN verification**
 
 Run:
 
@@ -220,7 +220,7 @@ bun run e2e -- e2e/sidecar.e2e.ts
 
 Expected: all pass.
 
-- [ ] **Step 6: Commit Task 2**
+- [x] **Step 6: Commit Task 2**
 
 ```bash
 git add apps/server/src/agent/planner.ts apps/server/src/agent/planner.test.ts e2e/sidecar.e2e.ts
@@ -231,10 +231,10 @@ git commit -m "Teach the planner to ask decisions in place"
 
 ## Final Verification
 
-- [ ] Run `bun test`.
-- [ ] Run `bun run types`.
-- [ ] Run `bun run ci`.
-- [ ] Run `bun run build`.
-- [ ] Run `bun run e2e`.
-- [ ] Run `git diff --check` and confirm the feature worktree is clean.
-- [ ] Update this plan's task and verification checkboxes, then commit the tracking change.
+- [x] Run `bun test`.
+- [x] Run `bun run types`.
+- [x] Run `bun run ci`.
+- [x] Run `bun run build`.
+- [x] Run `bun run e2e`.
+- [x] Run `git diff --check` and confirm the feature worktree is clean.
+- [x] Update this plan's task and verification checkboxes, then commit the tracking change.
