@@ -75,6 +75,13 @@
 	font-size: 0.75rem;
 }
 
+/* The hit boxes track every wrapped range line, but listen from the document
+ * host so nothing ever sits between a pointer and the editable prose. */
+.plan-comment-hit {
+	pointer-events: none;
+	position: absolute;
+}
+
 .plan-comment-button:hover,
 .plan-comment-button:focus-visible,
 .plan-comment-orphan-button:hover,
@@ -92,6 +99,10 @@
 }
 
 .plan-comment-preview {
+	/* A preview can sit back over its phrase in a narrow document. It explains
+	 * the passage but cannot become a glass pane between that passage and its
+	 * click or native text selection. */
+	pointer-events: none;
 	max-width: 18rem;
 	padding: 0.5rem 0.625rem;
 	border-radius: var(--radius-md);

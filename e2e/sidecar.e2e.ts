@@ -259,10 +259,50 @@ test("a marked passage has document chrome with a hover preview", async ({ join,
 	let button = commentButton(page);
 	await expect(button).toBeVisible();
 	await button.hover();
-	await expect(page.getByRole("tooltip")).toContainText(QUOTED);
+	let preview = page.getByRole("tooltip");
+	await expect(preview).toContainText(QUOTED);
+	let previewId = await preview.getAttribute("id");
+	expect(previewId).not.toBeNull();
+	await expect(button).toHaveAttribute("aria-describedby", previewId!);
 
 	await button.focus();
 	await expect(page.getByRole("tooltip")).toBeVisible();
+});
+
+test("a wrapped passage opens its comment without intercepting text selection", async ({ join, page: browser, seed }) => {
+	// The workspace leaves the document at its 400px minimum beside the
+	// conversation rail, which forces the injected quote across two lines.
+	await browser.setViewportSize({ width: 680, height: 600 });
+	await seed(PROSE);
+	let page = await join("ana");
+	let hits = page.locator("[data-plan-comment-hit]");
+
+	await expect.poll(() => hits.count()).toBeGreaterThan(1);
+	let hit = await hits.first().boundingBox();
+	expect(hit).not.toBeNull();
+	let point = { x: hit!.x + hit!.width / 2, y: hit!.y + hit!.height / 2 };
+
+	await page.mouse.move(point.x, point.y);
+	let preview = page.getByRole("tooltip");
+	await expect(preview).toContainText(QUOTED);
+	let pageBox = await page.locator(".plan-document").boundingBox();
+	let previewBox = await preview.boundingBox();
+	expect(pageBox).not.toBeNull();
+	expect(previewBox).not.toBeNull();
+	expect(previewBox!.x).toBeGreaterThanOrEqual(pageBox!.x);
+	expect(previewBox!.x + previewBox!.width).toBeLessThanOrEqual(pageBox!.x + pageBox!.width);
+
+	await page.mouse.click(point.x, point.y);
+	await expect(page.getByRole("dialog", { name: "Comment thread" })).toBeVisible();
+	await page.keyboard.press("Escape");
+
+	// The hit region observes clicks at the document host; it cannot become a
+	// glass pane that eats the native drag Lexical uses to select prose.
+	await page.mouse.move(hit!.x + 3, point.y);
+	await page.mouse.down();
+	await page.mouse.move(hit!.x + hit!.width - 3, point.y);
+	await page.mouse.up();
+	expect(await page.evaluate(() => getSelection()?.toString().length ?? 0)).toBeGreaterThan(0);
 });
 
 test("clicking a comment button pins its document card and preserves the related wash", async ({ join, seed }) => {
@@ -320,6 +360,7 @@ test("a reply joins the thread, and the quote counts it", async ({ join, seed })
 	await expect(card).toContainText("Still right, but say why.");
 	await expect(card).toContainText("@ana");
 	await expect(card.getByText("1 reply")).toBeVisible();
+	await expect(commentButton(page)).toHaveAccessibleDescription("1 reply waiting.");
 });
 
 test("accepting asks twice, and says so in the transcript", async ({ join, seed }) => {

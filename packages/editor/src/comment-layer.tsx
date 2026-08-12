@@ -6,21 +6,23 @@
  * React controls into the document page.
  */
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 
 import { DraftCard, ThreadCard } from "./comments";
 import { gutterPoint, popoverPoint } from "./comment-geometry";
+import { containsHit, passageHits } from "./comment-hits";
 import { $rangeOf } from "./marks";
 import { blockElement } from "./scroll";
 import { useThreads } from "./threads";
 
 import type { CSSProperties } from "react";
 import type { Point, Rect } from "./comment-geometry";
+import type { PassageHit } from "./comment-hits";
 import type { ThreadStore, ThreadView } from "./threads";
 
-type PlacedThread = { view: ThreadView; button: Point };
+type PlacedThread = { view: ThreadView; button: Point; hits: PassageHit[] };
 
 function rect(value: DOMRect): Rect {
 	return {
@@ -35,13 +37,13 @@ function rect(value: DOMRect): Rect {
 
 /** A small thread summary while a reader is deciding whether to open it. */
 function Preview({
-	onEnter,
-	onLeave,
+	id,
+	onMeasure,
 	style,
 	view,
 }: {
-	onEnter: () => void;
-	onLeave: () => void;
+	id: string;
+	onMeasure: (element: HTMLDivElement | null) => void;
 	style: CSSProperties;
 	view: ThreadView;
 }) {
@@ -49,8 +51,8 @@ function Preview({
 	return (
 		<div
 			className="plan-comment-preview"
-			onMouseEnter={onEnter}
-			onMouseLeave={onLeave}
+			id={id}
+			ref={onMeasure}
 			role="tooltip"
 			style={style}
 		>
@@ -58,6 +60,13 @@ function Preview({
 			{replies > 0 && <span>{replies} {replies === 1 ? "reply" : "replies"}</span>}
 		</div>
 	);
+}
+
+function replyState(view: ThreadView): string {
+	let replies = Math.max(0, view.thread.notes.length - 1);
+	return replies === 0
+		? "No replies waiting."
+		: `${replies} ${replies === 1 ? "reply" : "replies"} waiting.`;
 }
 
 export function CommentLayer({ store }: { store: ThreadStore }) {
@@ -69,12 +78,27 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let [pinned, setPinned] = useState<string>();
 	let [cardHeights, setCardHeights] = useState<{ [id: string]: number }>({});
 	let root = useRef<HTMLDivElement>(null);
+	let placedRef = useRef<PlacedThread[]>([]);
+	let hoveredHit = useRef<string | undefined>(undefined);
 	let close = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 	let failures = useRef(new Set<string>());
 
 	useEffect(() => {
 		setHost(document.querySelector<HTMLElement>(".plan-document") ?? undefined);
 	}, []);
+
+	let enter = useCallback((id: string) => {
+		clearTimeout(close.current);
+		setPreview(id);
+		store.focus(id);
+	}, [store]);
+	let leave = useCallback((id: string) => {
+		clearTimeout(close.current);
+		close.current = setTimeout(() => {
+			if (pinned !== id) setPreview(current => current === id ? undefined : current);
+			store.focus(undefined);
+		}, 100);
+	}, [pinned, store]);
 
 	let measure = () => {
 		if (!host) return;
@@ -86,13 +110,24 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			try {
 				let target = editor.getEditorState().read(() => {
 					let exact = view.places[0] && $rangeOf(editor, view.places[0]);
-					return exact?.getBoundingClientRect() ?? (view.targetKey
+					if (exact) {
+						return {
+							bounds: exact.getBoundingClientRect(),
+							hits: Array.from(exact.getClientRects(), rect),
+						};
+					}
+					let fallback = view.targetKey
 						? blockElement(editor, view.targetKey)?.getBoundingClientRect()
-						: undefined);
+						: undefined;
+					return fallback ? { bounds: fallback, hits: [] } : undefined;
 				});
-				if (!target || (target.width === 0 && target.height === 0)) continue;
-				let targetRect = rect(target);
-				next.push({ view, button: gutterPoint(targetRect, page) });
+				if (!target || (target.bounds.width === 0 && target.bounds.height === 0)) continue;
+				let targetRect = rect(target.bounds);
+				next.push({
+					view,
+					button: gutterPoint(targetRect, page),
+					hits: passageHits(page, target.hits),
+				});
 			} catch (error) {
 				// This may run from a Lexical update listener. A broken anchor is
 				// one lost button, never a broken update chain.
@@ -102,6 +137,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			}
 		}
 
+		placedRef.current = next;
 		setPlaced(next);
 	};
 
@@ -126,6 +162,45 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	useEffect(() => () => clearTimeout(close.current), []);
 
 	useEffect(() => {
+		if (!host) return;
+		let over = (event: MouseEvent | PointerEvent): PlacedThread | undefined => {
+			let page = host.getBoundingClientRect();
+			let point = { top: event.clientY - page.top, left: event.clientX - page.left };
+			return placedRef.current.find(entry => containsHit(entry.hits, point));
+		};
+		let move = (event: PointerEvent) => {
+			// Buttons and cards own their ordinary pointer handlers. The empty
+			// overlay remains transparent so the prose itself keeps native selection.
+			if (root.current?.contains(event.target as Node)) return;
+			let next = over(event)?.view.thread.id;
+			if (next === hoveredHit.current) return;
+			if (hoveredHit.current) leave(hoveredHit.current);
+			hoveredHit.current = next;
+			if (next) enter(next);
+		};
+		let click = (event: MouseEvent) => {
+			if (root.current?.contains(event.target as Node)) return;
+			let id = over(event)?.view.thread.id;
+			if (!id) return;
+			enter(id);
+			setPinned(current => current === id ? undefined : id);
+		};
+		let out = () => {
+			if (!hoveredHit.current) return;
+			leave(hoveredHit.current);
+			hoveredHit.current = undefined;
+		};
+		host.addEventListener("pointermove", move);
+		host.addEventListener("click", click);
+		host.addEventListener("pointerleave", out);
+		return () => {
+			host.removeEventListener("pointermove", move);
+			host.removeEventListener("click", click);
+			host.removeEventListener("pointerleave", out);
+		};
+	}, [enter, host, leave]);
+
+	useEffect(() => {
 		if (!pinned) return;
 		let outside = (event: PointerEvent) => {
 			if (root.current?.contains(event.target as Node)) return;
@@ -145,18 +220,6 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	if (!host) return null;
 
 	let orphaned = state.threads.filter(view => view.thread.status === "open" && view.orphaned);
-	let enter = (id: string) => {
-		clearTimeout(close.current);
-		setPreview(id);
-		store.focus(id);
-	};
-	let leave = (id: string) => {
-		clearTimeout(close.current);
-		close.current = setTimeout(() => {
-			if (pinned !== id) setPreview(current => current === id ? undefined : current);
-			store.focus(undefined);
-		}, 100);
-	};
 	let card = (view: ThreadView) => (
 		<ThreadCard
 			busy={false}
@@ -183,11 +246,13 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	};
 	let page = host.getBoundingClientRect();
 	let cardWidth = Math.min(384, host.clientWidth * 0.8);
+	let previewWidth = Math.min(288, host.clientWidth * 0.8);
 
 	return createPortal(
 		<div className="plan-comment-layer" ref={root}>
-			{placed.map(({ button, view }) => {
+			{placed.map(({ button, hits, view }) => {
 				let shown = pinned === view.thread.id;
+				let previewId = `plan-comment-preview-${view.thread.id}`;
 				let cardPoint = popoverPoint(
 					{
 						top: page.top + button.top,
@@ -203,8 +268,21 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 				);
 				return (
 					<div key={view.thread.id}>
+						{hits.map((hit, index) => (
+							<div
+								aria-hidden="true"
+								className="plan-comment-hit"
+								data-plan-comment-hit={view.thread.id}
+								key={index}
+								style={hit}
+							/>
+						))}
 						<button
-							aria-label={`Comment on “${view.quote}”`}
+							aria-label={`Comment on “${view.quote}”. ${replyState(view)}`}
+							aria-controls={shown ? `plan-comment-thread-${view.thread.id}` : undefined}
+							aria-describedby={preview === view.thread.id && !shown ? previewId : undefined}
+							aria-description={replyState(view)}
+							aria-expanded={shown}
 							className="plan-comment-button"
 							onBlur={() => leave(view.thread.id)}
 							onClick={() =>
@@ -219,9 +297,24 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 						</button>
 						{preview === view.thread.id && !shown && (
 							<Preview
-								onEnter={() => enter(view.thread.id)}
-								onLeave={() => leave(view.thread.id)}
-								style={{ top: button.top, left: button.left + 32 }}
+								id={previewId}
+								onMeasure={element => rememberHeight(`preview:${view.thread.id}`, element)}
+								style={{
+									...popoverPoint(
+										{
+											top: page.top + button.top,
+											left: page.left + button.left,
+											right: page.left + button.left + 24,
+											bottom: page.top + button.top + 24,
+											width: 24,
+											height: 24,
+										},
+										page,
+										previewWidth,
+										cardHeights[`preview:${view.thread.id}`] ?? 96,
+									),
+									width: previewWidth,
+								}}
 								view={view}
 							/>
 						)}
@@ -229,6 +322,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 							<div
 								aria-label="Comment thread"
 								className="plan-comment-card"
+								id={`plan-comment-thread-${view.thread.id}`}
 								ref={element => rememberHeight(view.thread.id, element)}
 								onMouseEnter={() => enter(view.thread.id)}
 								onMouseLeave={() => leave(view.thread.id)}
