@@ -78,12 +78,13 @@ test("a path with no room becomes the default room", async ({ page }) => {
 	await expect(page).toHaveURL(/\/r\/main(\?|$)/);
 });
 
-test("the three panes are all present", async ({ join }) => {
+test("Plan keeps Decisions mounted but hidden", async ({ join }) => {
 	let page = await join("ana");
 
 	await expect(page.locator("#pane-chat")).toBeVisible();
 	await expect(content(page)).toBeVisible();
-	await expect(page.locator(".plan-decisions")).toBeVisible();
+	await expect(page.locator('[data-document-view="decisions"]')).toBeHidden();
+	await expect(page.locator(".plan-decisions")).toBeAttached();
 });
 
 test("chat names both destinations at the moment of sending", async ({ join }) => {
