@@ -3,6 +3,8 @@ export type { CollaborationOptions } from "./collaboration";
 export { Count } from "./count";
 export { color, cursor } from "./cursor";
 export type { Cursor } from "./cursor";
+export { countUnanswered, visibleDecisionView } from "./decision-state";
+export type { DecisionView } from "./decision-state";
 export { Decisions } from "./decisions";
 export type { DecisionsProps } from "./decisions";
 export { AgentFace, Face } from "./face";

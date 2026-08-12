@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { countUnanswered, visibleDecisionView } from "./decision-state";
+import { countUnanswered, visibleDecisionView } from ".";
 
 import type { QuestionnaireEntry } from "./questionnaires";
 
