@@ -2,9 +2,7 @@
  * The sidecar.
  *
  * Everything the plan is waiting on, and everything it has settled: questions
- * the agent asked, and comments the room made on the prose. Both are decisions
- * in the same sense, so they share one list rather than two tabs — an accepted
- * comment *is* a decision, and would otherwise have to pick a side.
+ * the agent asked. Comments stay where they were made, as document chrome.
  *
  * Outstanding items come first, in document order, because one of those is
  * blocking somebody. Everything resolved follows, showing: it is the record of
@@ -27,21 +25,19 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { DraftCard, ThreadCard } from "./comments";
 import { Count } from "./count";
 import { useQuestionnaires } from "./questionnaires";
-import { useThreads } from "./threads";
 import { QuestionnaireCard } from "./widgets/questionnaire";
 
 import type { Transport } from "@chopin/question/react";
 import type { QuestionnaireEntry, QuestionnaireStore } from "./questionnaires";
-import type { ThreadStore } from "./threads";
 
 export type DecisionsProps = {
 	store: QuestionnaireStore;
-	threads: ThreadStore;
 	wire?: Transport;
 	connected?: boolean;
+	/** Reveal the plan before taking the reader to a questionnaire's result. */
+	onShowPlan?: (widget: string, question: string) => void;
 	/**
 	 * An item to bring into view.
 	 *
@@ -74,9 +70,8 @@ function useHistory() {
 	return [history, setHistory] as const;
 }
 
-export function Decisions({ connected, reveal, store, threads, wire }: DecisionsProps) {
+export function Decisions({ connected, onShowPlan, reveal, store, wire }: DecisionsProps) {
 	let entries = useQuestionnaires(store);
-	let state = useThreads(threads);
 	let content = useRef<HTMLDivElement>(null);
 	let [history, setHistory] = useHistory();
 
@@ -84,47 +79,22 @@ export function Decisions({ connected, reveal, store, threads, wire }: Decisions
 	// the pointer that asked for it, and a pin to the pane that set it.
 	useEffect(() => () => {
 		store.release();
-		threads.release();
-	}, [store, threads]);
+	}, [store]);
 
 	useEffect(() => {
 		if (!reveal) return;
 		let id = CSS.escape(reveal.widget);
-		// Either kind of card. An id addressed at a pane that only knows how to
-		// find one of them fails by scrolling nowhere, which says nothing.
 		let target = content.current?.querySelector<HTMLElement>(
-			`[data-plan-sidecar-questionnaire="${id}"], [data-plan-sidecar-thread="${id}"]`,
+			`[data-plan-sidecar-questionnaire="${id}"]`,
 		);
 		target?.scrollIntoView({ block: "center", behavior: "smooth" });
-	}, [entries, reveal, state.threads]);
+	}, [entries, reveal]);
 
-	let open = state.threads.filter(view => view.thread.status === "open");
-	let accepted = state.threads.filter(view => view.thread.status === "accepted");
 	let waiting = entries.filter(undecided);
 	let settled = entries.filter(entry => !undecided(entry));
 
-	let outstanding = waiting.length + open.length;
-	let resolved = settled.length + accepted.length;
-
-	let card = (view: (typeof state.threads)[number]) => (
-		<ThreadCard
-			applied={view.applied}
-			busy={!connected}
-			focused={state.focused === view.thread.id}
-			key={view.thread.id}
-			onAccept={() => threads.accept(view.thread.id)}
-			onBlur={() => threads.focus(undefined)}
-			onDismiss={() => threads.dismiss(view.thread.id)}
-			onFocus={() => threads.focus(view.thread.id)}
-			onReply={text => threads.reply(view.thread.id, text)}
-			onRetry={() => threads.retry(view.thread.id)}
-			onReveal={() => threads.reveal(view.thread.id)}
-			onTyping={writing => threads.announce(view.thread.id, writing)}
-			quote={view.quote}
-			view={view}
-			writing={state.writing[view.thread.id]}
-		/>
-	);
+	let outstanding = waiting.length;
+	let resolved = settled.length;
 
 	let question = (entry: QuestionnaireEntry) => (
 		<QuestionnaireCard
@@ -132,7 +102,10 @@ export function Decisions({ connected, reveal, store, threads, wire }: Decisions
 			key={entry.id}
 			onQuestionEnter={question => store.highlight(entry.id, question)}
 			onQuestionLeave={() => store.clear()}
-			onQuestionSelect={question => store.reveal(entry.id, question)}
+			onQuestionSelect={question => {
+				if (onShowPlan) onShowPlan(entry.id, question);
+				else store.reveal(entry.id, question);
+			}}
 			places={store.counts(entry.id)}
 			value={entry.value}
 			wire={wire}
@@ -149,39 +122,20 @@ export function Decisions({ connected, reveal, store, threads, wire }: Decisions
 			</header>
 
 			<div className="min-h-0 flex-1 overflow-auto p-3" ref={content}>
-				{state.draft && (
-					<div className="mb-3">
-						<DraftCard
-							busy={!connected}
-							onCancel={() => threads.draft(undefined)}
-							onSend={text => threads.start(text)}
-							quote={state.draft.quote}
-						/>
-					</div>
-				)}
-
-				{state.error && (
-					<p className="mb-3 rounded-md bg-destructive-wash px-2 py-1.5 text-sm text-destructive-ink ring-hairline">
-						{state.error} Select the passage again.
-					</p>
-				)}
-
-				{outstanding === 0 && resolved === 0 && !state.draft
+				{outstanding === 0 && resolved === 0
 					? (
 						<p className="m-0 text-sm text-text-secondary">
-							Select any of the plan to comment on it. Questions the agent asks appear here too, and
-							both stay as a record of what was decided.
+							Questions the agent asks appear here and remain as a record of what was decided.
 						</p>
 					)
 					: (
 						<div className="flex flex-col gap-3">
 							{waiting.map(question)}
-							{open.map(card)}
 						</div>
 					)}
 
 				{resolved > 0 && (
-					<div className={outstanding > 0 || state.draft ? "mt-3" : ""}>
+					<div className={outstanding > 0 ? "mt-3" : ""}>
 						<button
 							aria-expanded={history}
 							className="btn btn-sm btn-ghost w-full justify-start text-left"
@@ -193,7 +147,6 @@ export function Decisions({ connected, reveal, store, threads, wire }: Decisions
 						</button>
 						{history && (
 							<div className="mt-2 flex flex-col gap-3">
-								{accepted.map(card)}
 								{settled.map(question)}
 							</div>
 						)}

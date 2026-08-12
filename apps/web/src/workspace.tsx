@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 const MIN = 240;
-const MAX = 520;
+const MAX = 400;
 
 /** How far one arrow key moves an edge, and how far one with Shift held moves it. */
 const STEP = 16;
@@ -89,7 +89,7 @@ function usePaneWidth(key: string, initial: number) {
 	return [width, resize] as const;
 }
 
-export type Pane = "chat" | "decisions";
+export type Pane = "chat";
 
 export function paneId(pane: Pane): string {
 	return `pane-${pane}`;
@@ -111,15 +111,15 @@ export type WorkspaceProps = {
 	chat?: ReactNode;
 	chatOpen?: boolean;
 	plan: ReactNode;
-	decisions?: ReactNode;
-	decisionsOpen?: boolean;
+	decisions: ReactNode;
+	controls: ReactNode;
+	view: "plan" | "decisions";
 };
 
 export function Workspace(
-	{ chat, chatOpen = true, decisions, decisionsOpen = true, header, plan }: WorkspaceProps,
+	{ chat, chatOpen = true, controls, decisions, header, plan, view }: WorkspaceProps,
 ) {
-	let [chatWidth, resizeChat] = usePaneWidth("chopin:pane:chat", 340);
-	let [decisionsWidth, resizeDecisions] = usePaneWidth("chopin:pane:decisions", 320);
+	let [chatWidth, resizeChat] = usePaneWidth("chopin:pane:chat", 280);
 
 	return (
 		<div className="flex h-full flex-col overflow-hidden bg-ground">
@@ -154,28 +154,26 @@ export function Workspace(
 							width={chatWidth}
 						/>
 					)}
-					{decisions && decisionsOpen && (
-						<Handle
-							label="Resize the decisions"
-							onResize={resizeDecisions}
-							side="right"
-							width={decisionsWidth}
-						/>
-					)}
-
-					<div className="relative h-full overflow-hidden rounded-t-xl">{plan}</div>
+					<div className="relative flex h-full flex-col overflow-hidden rounded-t-xl">
+						<div className="flex h-10 shrink-0 items-center px-3 hairline-b">{controls}</div>
+						<section
+							aria-label="Plan"
+							className="min-h-0 flex-1"
+							data-document-view="plan"
+							hidden={view !== "plan"}
+						>
+							{plan}
+						</section>
+						<section
+							aria-label="Decisions"
+							className="min-h-0 flex-1"
+							data-document-view="decisions"
+							hidden={view !== "decisions"}
+						>
+							{decisions}
+						</section>
+					</div>
 				</main>
-
-				{decisions && (
-					<aside
-						className="min-w-0 overflow-hidden"
-						hidden={!decisionsOpen}
-						id={paneId("decisions")}
-						style={{ width: decisionsWidth }}
-					>
-						{decisions}
-					</aside>
-				)}
 			</div>
 		</div>
 	);

@@ -72,6 +72,10 @@ export type PlanEditorProps = {
 	questions?: QuestionnaireStore;
 	/** The same arrangement for comment threads. */
 	threads?: ThreadStore;
+	/** Remembered by the document host while this surface is hidden. */
+	scrollTop?: number;
+	/** The document host owns persisted view position, not the editor. */
+	onScrollTop?: (top: number) => void;
 	className?: string;
 };
 
@@ -85,7 +89,8 @@ export type PlanState = {
 };
 
 export function PlanEditor(
-	{ busy, className, connection, questions, threads, user, wire }: PlanEditorProps,
+	{ busy, className, connection, onScrollTop, questions, scrollTop, threads, user, wire }:
+		PlanEditorProps,
 ) {
 	let ref = useRef<MDXEditorMethods>(null);
 	let scroller = useRef<HTMLDivElement>(null);
@@ -135,9 +140,18 @@ export function PlanEditor(
 		changes.viewport(scroller.current ?? undefined);
 		let element = scroller.current;
 		if (!element) return;
-		element.addEventListener("scroll", changes.onScroll, { passive: true });
-		return () => element.removeEventListener("scroll", changes.onScroll);
-	}, [changes, generation, wire]);
+		let onScroll = () => {
+			changes.onScroll();
+			onScrollTop?.(element.scrollTop);
+		};
+		element.addEventListener("scroll", onScroll, { passive: true });
+		return () => element.removeEventListener("scroll", onScroll);
+	}, [changes, generation, onScrollTop, wire]);
+
+	useEffect(() => {
+		let element = scroller.current;
+		if (element && scrollTop !== undefined) element.scrollTop = scrollTop;
+	}, [generation, scrollTop]);
 
 	useEffect(() => () => changes.dispose(), [changes]);
 

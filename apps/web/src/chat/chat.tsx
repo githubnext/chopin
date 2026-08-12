@@ -24,7 +24,7 @@ export type ChatProps = {
 	wire: Socket | undefined;
 	handle: string;
 	connected: boolean;
-	/** Brings a questionnaire into view in the decisions pane. */
+	/** Selects and brings a questionnaire into the Decisions view. */
 	onReveal?: (widget: string) => void;
 	/** Open questions, so the pane can point at the one that is blocking. */
 	waiting?: number;
