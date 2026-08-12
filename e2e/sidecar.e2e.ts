@@ -43,7 +43,7 @@ function questionnaire(page: import("@playwright/test").Page) {
 }
 
 function commentButton(page: import("@playwright/test").Page) {
-	return page.getByRole("button", { name: /Comment on/ });
+	return page.getByRole("button", { name: /Comment on “/ });
 }
 
 async function rewriteFirstBlock(page: import("@playwright/test").Page, value: string) {
@@ -55,6 +55,17 @@ async function rewriteFirstBlock(page: import("@playwright/test").Page, value: s
 async function thread(page: import("@playwright/test").Page) {
 	await commentButton(page).click();
 	return page.getByRole("dialog", { name: "Comment thread" });
+}
+
+async function secondThread(page: import("@playwright/test").Page) {
+	await content(page).locator("p").nth(1).selectText();
+	await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
+	let draft = page.getByRole("dialog", { name: "New comment" });
+	await draft.getByPlaceholder("Comment on this passage…").fill("Keep this block as well.");
+	await draft.getByRole("button", { name: "Comment" }).click();
+	await expect.poll(() => commentButton(page).count()).toBe(2);
+	await page.keyboard.press("Escape");
+	await expect(page.getByRole("dialog", { name: "Comment thread" })).toHaveCount(0);
 }
 
 test(
@@ -300,9 +311,28 @@ test("a wrapped passage opens its comment without intercepting text selection", 
 	// glass pane that eats the native drag Lexical uses to select prose.
 	await page.mouse.move(hit!.x + 3, point.y);
 	await page.mouse.down();
-	await page.mouse.move(hit!.x + hit!.width - 3, point.y);
+	await page.mouse.move(hit!.x + hit!.width - 3, point.y, { steps: 8 });
 	await page.mouse.up();
 	expect(await page.evaluate(() => getSelection()?.toString().length ?? 0)).toBeGreaterThan(0);
+	await expect(page.getByRole("dialog", { name: "Comment thread" })).toHaveCount(0);
+});
+
+test("leaving a second comment gutter clears its preview", async ({ join, seed }) => {
+	await seed(TWO_BLOCKS);
+	let page = await join("ana");
+	await secondThread(page);
+
+	let hit = await page.locator("[data-plan-comment-hit]").first().boundingBox();
+	expect(hit).not.toBeNull();
+	await page.mouse.move(hit!.x + hit!.width / 2, hit!.y + hit!.height / 2);
+	await expect(page.getByRole("tooltip")).toBeVisible();
+
+	await commentButton(page).nth(1).hover();
+	await expect(page.getByRole("tooltip")).toBeVisible();
+	let blank = await content(page).locator("p").nth(1).boundingBox();
+	expect(blank).not.toBeNull();
+	await page.mouse.move(blank!.x + blank!.width - 4, blank!.y + blank!.height / 2);
+	await expect(page.getByRole("tooltip")).toHaveCount(0);
 });
 
 test("clicking a comment button pins its document card and preserves the related wash", async ({ join, seed }) => {

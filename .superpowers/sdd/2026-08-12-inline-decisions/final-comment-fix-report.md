@@ -61,3 +61,51 @@ GREEN:
 - Exact painted prose remains keyboard-accessible through its named gutter
   button, because a CSS highlight cannot supply a real focus target without
   changing the editor tree.
+
+## Follow-up review fix — 2026-08-12
+
+### Summary
+
+- Passage clicks now require a primary press that began on the exact prose hit,
+  stayed within a three-pixel movement threshold, and left a collapsed native
+  selection. Native drag selection therefore cannot pin a thread card.
+- One hover owner now coordinates passage hits, gutter buttons, and cards, so
+  leaving a second thread's gutter always closes that thread's preview.
+
+### Files
+
+- `packages/editor/src/comment-layer.tsx`
+- `e2e/sidecar.e2e.ts`
+
+### RED / GREEN
+
+RED:
+
+- A wrapped-passage drag selected prose and then opened a `Comment thread`
+  dialog.
+- Moving from passage A to gutter B, then to blank prose, left B's tooltip
+  visible.
+
+GREEN:
+
+- The same focused Chromium coverage preserves the selection without opening
+  a thread and clears the second gutter preview.
+
+### Verification
+
+- Relevant editor units: 191 passed.
+- Focused Chromium regressions: 2 passed.
+- Full sidecar browser suite: 18 passed.
+- Full unit suite: 618 passed.
+- Full e2e suite: 69 passed.
+- `bun run types`, `bun run ci`, `bun run build`, and `git diff --check` passed.
+
+### Commit
+
+`Fix comment drag and hover ownership` — hash recorded in the task handoff.
+
+### Risks
+
+- The passage activation guard intentionally ignores a press that starts
+  outside editable prose, including selection-toolbar controls; real passage
+  clicks still follow the same pin path as before.

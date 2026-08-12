@@ -23,6 +23,7 @@ import type { PassageHit } from "./comment-hits";
 import type { ThreadStore, ThreadView } from "./threads";
 
 type PlacedThread = { view: ThreadView; button: Point; hits: PassageHit[] };
+type PassagePress = { id: string; left: number; pointer: number; top: number; moved: boolean };
 
 function rect(value: DOMRect): Rect {
 	return {
@@ -79,7 +80,8 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let [cardHeights, setCardHeights] = useState<{ [id: string]: number }>({});
 	let root = useRef<HTMLDivElement>(null);
 	let placedRef = useRef<PlacedThread[]>([]);
-	let hoveredHit = useRef<string | undefined>(undefined);
+	let hoverOwner = useRef<string | undefined>(undefined);
+	let press = useRef<PassagePress | undefined>(undefined);
 	let close = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 	let failures = useRef(new Set<string>());
 
@@ -99,6 +101,17 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			store.focus(undefined);
 		}, 100);
 	}, [pinned, store]);
+	let hover = useCallback((id: string) => {
+		if (hoverOwner.current === id) return;
+		if (hoverOwner.current) leave(hoverOwner.current);
+		hoverOwner.current = id;
+		enter(id);
+	}, [enter, leave]);
+	let unhover = useCallback((id: string) => {
+		if (hoverOwner.current !== id) return;
+		hoverOwner.current = undefined;
+		leave(id);
+	}, [leave]);
 
 	let measure = () => {
 		if (!host) return;
@@ -168,37 +181,70 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			let point = { top: event.clientY - page.top, left: event.clientX - page.left };
 			return placedRef.current.find(entry => containsHit(entry.hits, point));
 		};
+		let inProse = (target: EventTarget | null) =>
+			!!target && editor.getRootElement()?.contains(target as Node);
+		let down = (event: PointerEvent) => {
+			press.current = undefined;
+			if (
+				event.button !== 0 || root.current?.contains(event.target as Node) || !inProse(event.target)
+			) return;
+			let entry = over(event);
+			if (!entry) return;
+			press.current = {
+				id: entry.view.thread.id,
+				left: event.clientX,
+				pointer: event.pointerId,
+				top: event.clientY,
+				moved: false,
+			};
+		};
 		let move = (event: PointerEvent) => {
+			let pending = press.current;
+			if (
+				pending?.pointer === event.pointerId
+				&& Math.hypot(event.clientX - pending.left, event.clientY - pending.top) > 3
+			) pending.moved = true;
 			// Buttons and cards own their ordinary pointer handlers. The empty
 			// overlay remains transparent so the prose itself keeps native selection.
 			if (root.current?.contains(event.target as Node)) return;
 			let next = over(event)?.view.thread.id;
-			if (next === hoveredHit.current) return;
-			if (hoveredHit.current) leave(hoveredHit.current);
-			hoveredHit.current = next;
-			if (next) enter(next);
+			if (next) hover(next);
+			else if (hoverOwner.current) unhover(hoverOwner.current);
 		};
 		let click = (event: MouseEvent) => {
-			if (root.current?.contains(event.target as Node)) return;
-			let id = over(event)?.view.thread.id;
-			if (!id) return;
-			enter(id);
-			setPinned(current => current === id ? undefined : id);
+			let pending = press.current;
+			press.current = undefined;
+			if (
+				!pending
+				|| pending.moved
+				|| root.current?.contains(event.target as Node)
+				|| !inProse(event.target)
+			) return;
+			let entry = over(event);
+			let selection = getSelection();
+			if (entry?.view.thread.id !== pending.id || (selection && !selection.isCollapsed)) return;
+			enter(pending.id);
+			setPinned(current => current === pending.id ? undefined : pending.id);
 		};
 		let out = () => {
-			if (!hoveredHit.current) return;
-			leave(hoveredHit.current);
-			hoveredHit.current = undefined;
+			if (hoverOwner.current) unhover(hoverOwner.current);
 		};
+		let cancel = () => {
+			press.current = undefined;
+		};
+		host.addEventListener("pointerdown", down);
 		host.addEventListener("pointermove", move);
 		host.addEventListener("click", click);
 		host.addEventListener("pointerleave", out);
+		host.addEventListener("pointercancel", cancel);
 		return () => {
+			host.removeEventListener("pointerdown", down);
 			host.removeEventListener("pointermove", move);
 			host.removeEventListener("click", click);
 			host.removeEventListener("pointerleave", out);
+			host.removeEventListener("pointercancel", cancel);
 		};
-	}, [enter, host, leave]);
+	}, [editor, enter, host, hover, unhover]);
 
 	useEffect(() => {
 		if (!pinned) return;
@@ -227,9 +273,9 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			inDocument
 			key={view.thread.id}
 			onAccept={() => store.accept(view.thread.id)}
-			onBlur={() => leave(view.thread.id)}
+			onBlur={() => unhover(view.thread.id)}
 			onDismiss={() => store.dismiss(view.thread.id)}
-			onFocus={() => enter(view.thread.id)}
+			onFocus={() => hover(view.thread.id)}
 			onReply={text => store.reply(view.thread.id, text)}
 			onRetry={() => store.retry(view.thread.id)}
 			onReveal={() => store.reveal(view.thread.id)}
@@ -284,12 +330,12 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 							aria-description={replyState(view)}
 							aria-expanded={shown}
 							className="plan-comment-button"
-							onBlur={() => leave(view.thread.id)}
+							onBlur={() => unhover(view.thread.id)}
 							onClick={() =>
 								setPinned(current => current === view.thread.id ? undefined : view.thread.id)}
-							onFocus={() => enter(view.thread.id)}
-							onMouseEnter={() => enter(view.thread.id)}
-							onMouseLeave={() => leave(view.thread.id)}
+							onFocus={() => hover(view.thread.id)}
+							onMouseEnter={() => hover(view.thread.id)}
+							onMouseLeave={() => unhover(view.thread.id)}
 							style={button}
 							type="button"
 						>
@@ -324,8 +370,8 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 								className="plan-comment-card"
 								id={`plan-comment-thread-${view.thread.id}`}
 								ref={element => rememberHeight(view.thread.id, element)}
-								onMouseEnter={() => enter(view.thread.id)}
-								onMouseLeave={() => leave(view.thread.id)}
+								onMouseEnter={() => hover(view.thread.id)}
+								onMouseLeave={() => unhover(view.thread.id)}
 								role="dialog"
 								style={cardPoint}
 							>
