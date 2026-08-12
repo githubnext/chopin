@@ -30,6 +30,12 @@ export function capitalize(value: string): string {
 	return value ? value[0]!.toUpperCase() + value.slice(1) : value;
 }
 
+/** Tool names are protocol identifiers; the transcript is for people. */
+export function toolCopy(name: string): string {
+	if (name === "ask") return "Questions";
+	return capitalize(name.replaceAll(/[_/]/g, " "));
+}
+
 /** Mentions remain useful input syntax, but are not part of rail typography. */
 export function displayText(value: string): string {
 	return instruction(value).replace(
@@ -88,7 +94,7 @@ export function summarize(tools: Chat.Activity[]): ToolSummary {
 	if (running) {
 		return {
 			state: "running",
-			name: running.name,
+			name: toolCopy(running.name),
 			completed: tools.filter(tool => tool.status !== "running").length,
 		};
 	}

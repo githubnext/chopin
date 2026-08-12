@@ -58,11 +58,11 @@ describe("rail copy", () => {
 });
 
 describe("tool-run summaries", () => {
-	it("names only the live tool while a run is active", () => {
+	it("names the live tool in reader-facing language", () => {
 		expect(summarize([
 			{ id: "t1", name: "read_file", status: "done", took: 38 },
-			{ id: "t2", name: "edit_plan", status: "running" },
-		])).toEqual({ state: "running", name: "edit_plan", completed: 1 });
+			{ id: "t2", name: "ask", status: "running" },
+		])).toEqual({ state: "running", name: "Questions", completed: 1 });
 	});
 
 	it("reports counts, failures and elapsed time after the run", () => {

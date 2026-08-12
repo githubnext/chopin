@@ -1,11 +1,12 @@
 /** The shared conversation, grouped for reading rather than event delivery. */
 
 import { useEffect, useRef, useState } from "react";
+import { CaretRightIcon, ClockIcon, SignInIcon } from "@phosphor-icons/react";
 
 import { AgentFace, Face } from "@chopin/editor";
 
 import { MessageMarkdown } from "./markdown";
-import { capitalize, displayText, duration, group, summarize } from "./model";
+import { capitalize, displayText, duration, group, summarize, toolCopy } from "./model";
 
 import type { Chat } from "@chopin/protocol";
 import type { Group, Message } from "./model";
@@ -14,44 +15,13 @@ function when(ts: number): string {
 	return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function Spinner() {
-	return (
-		<svg
-			aria-hidden="true"
-			className="animate-spin"
-			fill="none"
-			height="16"
-			viewBox="0 0 16 16"
-			width="16"
-		>
-			<path d="M13 8a5 5 0 1 1-1.46-3.54" stroke="currentColor" strokeLinecap="round" />
-			<path d="M11.5 2.5v2h2" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
-		</svg>
-	);
-}
-
-function Caret({ open }: { open: boolean }) {
-	return (
-		<svg
-			aria-hidden="true"
-			className={`transition-transform ${open ? "rotate-90" : ""}`}
-			fill="none"
-			height="16"
-			viewBox="0 0 16 16"
-			width="16"
-		>
-			<path d="m6 4 4 4-4 4" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
-		</svg>
-	);
-}
-
 function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 	let [open, setOpen] = useState(false);
 	let summary = summarize(tools);
 	if (summary.state === "running") {
 		return (
 			<div className="flex h-7 items-center gap-2 py-1 text-sm text-text-quaternary">
-				<Spinner />
+				<ClockIcon aria-hidden="true" size={16} />
 				<span className="font-mono text-text-secondary">{summary.name}</span>
 				<span className="tabular-nums">{summary.completed} done</span>
 			</div>
@@ -66,7 +36,11 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 				onClick={() => setOpen(value => !value)}
 				type="button"
 			>
-				<Caret open={open} />
+				<CaretRightIcon
+					aria-hidden="true"
+					className={`transition-transform ${open ? "rotate-90" : ""}`}
+					size={16}
+				/>
 				<span className="tabular-nums">
 					{summary.count} {summary.count === 1 ? "tool" : "tools"}
 				</span>
@@ -86,7 +60,7 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 					{tools.map(tool => (
 						<li className="flex h-6 items-center gap-3" key={tool.id}>
 							<span className="min-w-0 flex-1 truncate font-mono text-text-secondary">
-								{tool.name}
+								{toolCopy(tool.name)}
 							</span>
 							<span className="shrink-0 tabular-nums">
 								{tool.took === undefined ? "—" : duration(tool.took)}
@@ -99,19 +73,6 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 	);
 }
 
-function SystemIcon() {
-	return (
-		<svg aria-hidden="true" fill="none" height="20" viewBox="0 0 20 20" width="20">
-			<path
-				d="M3 10h9m-3-3 3 3-3 3M13 5h3v10h-3"
-				stroke="currentColor"
-				strokeLinecap="round"
-				strokeLinejoin="round"
-			/>
-		</svg>
-	);
-}
-
 function SystemEntry(
 	{ arrived, item }: { arrived: boolean; item: Extract<Group, { kind: "system" }> },
 ) {
@@ -121,7 +82,7 @@ function SystemEntry(
 			data-chat-system
 		>
 			<div className="shrink-0">
-				<SystemIcon />
+				<SignInIcon aria-hidden="true" size={20} />
 			</div>
 			<p className="m-0 text-sm">{displayText(item.text)}</p>
 		</div>
