@@ -21,7 +21,7 @@
 
 ### Task 1: Make planner activity legible and finite
 
-**Status:** In progress in BB thread `thr_dktimuj86m`.
+**Status:** Complete in `9325d7d`; merged by `332101e`.
 
 **Files:**
 
@@ -37,17 +37,17 @@
 
 **Acceptance:**
 
-- [ ] Reproduce why an `ask` activity remains in the running state after its completed children are shown.
-- [ ] Add a failing regression test for that lifecycle.
-- [ ] Fix the lifecycle rather than merely hiding the spinner.
-- [ ] Replace `Spinner`, `Caret`, and other touched handwritten transcript SVGs with suitable Phosphor components.
-- [ ] Replace raw tool names such as `ask` with reader-facing copy such as “Questions”.
-- [ ] Show a quiet static state; no rotating or looping icon remains.
-- [ ] Run focused tests, `bun run types`, and `bun run ci`.
+- [x] Reproduce why an `ask` activity remains in the running state after its completed children are shown.
+- [x] Add a failing regression test for that lifecycle.
+- [x] Fix the lifecycle rather than merely hiding the spinner.
+- [x] Replace `Spinner`, `Caret`, and other touched handwritten transcript SVGs with suitable Phosphor components.
+- [x] Replace raw tool names such as `ask` with reader-facing copy such as “Questions”.
+- [x] Show a quiet static state; no rotating or looping icon remains.
+- [x] Run focused tests, `bun run types`, and `bun run ci`.
 
 ### Task 2: Remove the waiting-question row
 
-**Status:** In progress in BB thread `thr_b9r4x7g64j`.
+**Status:** Complete in `94555bf`; merged by `22d2993`.
 
 **Files:**
 
@@ -62,14 +62,14 @@
 
 **Acceptance:**
 
-- [ ] Add or adjust a test that proves the waiting row is absent when questions exist.
-- [ ] Remove the row, its dot, its Answer action, and any props used only by that row.
-- [ ] Keep the document-level Decisions count and navigation intact.
-- [ ] Run focused tests, `bun run types`, and `bun run ci`.
+- [x] Add or adjust a test that proves the waiting row is absent when questions exist.
+- [x] Remove the row, its dot, its Answer action, and any props used only by that row.
+- [x] Keep the document-level Decisions count and navigation intact.
+- [x] Run focused tests, `bun run types`, and `bun run ci`.
 
 ### Task 3: Give every decision its own independently saveable card
 
-**Status:** In progress in BB thread `thr_us3g9h8vft`; merge before Task 4 begins.
+**Status:** Complete in `761ee93`; merged by `649630e`.
 
 **Files:**
 
@@ -88,18 +88,18 @@
 
 **Acceptance:**
 
-- [ ] Add failing service tests proving a multi-question `ask` creates individually addressed records/nodes.
-- [ ] Add failing UI tests proving questions render as separate cards without a tablist.
-- [ ] Add a browser test proving one card can be saved while another remains unanswered.
-- [ ] Keep one planner tool call waiting for all individual outcomes, returning answers in original order.
-- [ ] Render each one-question node as the Figma `161:425` card in both Plan and Decisions views.
-- [ ] Keep old multi-question stored nodes readable through a compatibility renderer; do not silently corrupt or discard their answers.
-- [ ] Use Phosphor icons for card actions.
-- [ ] Run focused tests, `bun test`, `bun run types`, `bun run ci`, and relevant Playwright tests.
+- [x] Add failing service tests proving a multi-question `ask` creates individually addressed records/nodes.
+- [x] Add failing UI tests proving questions render as separate cards without a tablist.
+- [x] Add a browser test proving one card can be saved while another remains unanswered.
+- [x] Keep one planner tool call waiting for all individual outcomes, returning answers in original order.
+- [x] Render each one-question node as the Figma `161:425` card in both Plan and Decisions views.
+- [x] Keep old multi-question stored nodes readable through a compatibility renderer; do not silently corrupt or discard their answers.
+- [x] Use Phosphor icons for card actions.
+- [x] Run focused tests, `bun test`, `bun run types`, `bun run ci`, and relevant Playwright tests.
 
 ### Task 4: Place canonical decision cards beside related plan content
 
-**Status:** Blocked on Task 3 merge; start a fresh Terra worktree from the updated feature branch.
+**Status:** Ready for a fresh Terra worktree from the updated feature branch.
 
 **Files:**
 
@@ -127,8 +127,8 @@
 
 ## Integration Order
 
-- [ ] Merge Task 1 into `feature/decision-first-inline` after review.
-- [ ] Merge Task 2 into `feature/decision-first-inline` after review.
-- [ ] Merge Task 3 into `feature/decision-first-inline` after review.
+- [x] Merge Task 1 into `feature/decision-first-inline` after review.
+- [x] Merge Task 2 into `feature/decision-first-inline` after review.
+- [x] Merge Task 3 into `feature/decision-first-inline` after review.
 - [ ] Start and merge Task 4 from the resulting feature-branch head.
 - [ ] Run the full verification suite on the integrated feature branch.
