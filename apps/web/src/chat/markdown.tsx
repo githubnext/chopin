@@ -41,9 +41,9 @@ let COMPONENTS: Components = {
 };
 
 /** The deliberately small Markdown dialect understood by conversation. */
-export function MessageMarkdown({ source }: { source: string }) {
+export function MessageMarkdown({ className, source }: { className?: string; source: string }) {
 	return (
-		<div className="chat-markdown" data-chat-markdown>
+		<div className={`chat-markdown ${className ?? ""}`} data-chat-markdown>
 			<ReactMarkdown
 				allowedElements={ELEMENTS}
 				components={COMPONENTS}

@@ -12,6 +12,7 @@ export type Message = {
 	streaming?: boolean;
 	tools?: Chat.Activity[];
 	queued: boolean;
+	working?: boolean;
 };
 
 export type Group =
@@ -44,9 +45,18 @@ export function displayText(value: string): string {
 	);
 }
 
-export function group(entries: Chat.Entry[], queued: Chat.Waiting[]): Group[] {
+export function group(entries: Chat.Entry[], queued: Chat.Waiting[], working = false): Group[] {
 	let rows: Array<Chat.Entry | Message> = [
 		...entries,
+		...(working
+			? [{
+				id: "working",
+				author: { kind: "agent" as const },
+				text: "Working on it",
+				queued: false,
+				working: true,
+			}]
+			: []),
 		...queued.map(item => ({
 			id: item.id,
 			author: { kind: "member" as const, handle: item.handle },
@@ -67,7 +77,6 @@ export function group(entries: Chat.Entry[], queued: Chat.Waiting[]): Group[] {
 		}
 		append(result, { ...row, author: row.author, queued: false });
 	}
-
 	return result;
 }
 
