@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { createHeadlessEditor } from "@lexical/headless";
+import { $createParagraphNode, $getRoot } from "lexical";
 
 import { importPlan, registry } from "@chopin/dialect";
 
@@ -29,6 +30,10 @@ function open(source: string): LexicalEditor {
 
 function state(source: string) {
 	let editor = open(source);
+	return read(editor);
+}
+
+function read(editor: LexicalEditor): PlanQuestionnaireState {
 	let value: PlanQuestionnaireState | undefined;
 	editor.getEditorState().read(() => {
 		value = collectPlanState();
@@ -40,6 +45,13 @@ function state(source: string) {
 describe("plan questionnaire state", () => {
 	it("keeps a questionnaire-only document out of plan content", () => {
 		expect(state("")).toEqual({ entries: [], hasPlanContent: false });
+
+		let emptyParagraph = open("");
+		emptyParagraph.update(() => {
+			$getRoot().append($createParagraphNode());
+		}, { discrete: true });
+		expect(read(emptyParagraph)).toEqual({ entries: [], hasPlanContent: false });
+
 		expect(state(QUESTIONNAIRE)).toMatchObject({
 			entries: [{ id: "01K0N4TR8K7JGM4R1J7PW4R8YJ" }],
 			hasPlanContent: false,
