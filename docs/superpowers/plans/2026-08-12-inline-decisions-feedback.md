@@ -21,7 +21,7 @@
 
 ### Task 1: Make planner activity legible and finite
 
-**Status:** Ready for a Terra worker.
+**Status:** In progress in BB thread `thr_dktimuj86m`.
 
 **Files:**
 - Modify: `apps/web/src/chat/model.ts`
@@ -44,7 +44,7 @@
 
 ### Task 2: Remove the waiting-question row
 
-**Status:** Ready for a Terra worker.
+**Status:** In progress in BB thread `thr_b9r4x7g64j`.
 
 **Files:**
 - Modify: `apps/web/src/chat/chat.tsx`
@@ -63,7 +63,7 @@
 
 ### Task 3: Give every decision its own independently saveable card
 
-**Status:** Ready for a Terra worker; merge before Task 4 begins.
+**Status:** In progress in BB thread `thr_us3g9h8vft`; merge before Task 4 begins.
 
 **Files:**
 - Modify: `apps/server/src/questions/service.ts`
@@ -120,4 +120,3 @@
 - [ ] Merge Task 3 into `feature/decision-first-inline` after review.
 - [ ] Start and merge Task 4 from the resulting feature-branch head.
 - [ ] Run the full verification suite on the integrated feature branch.
-
