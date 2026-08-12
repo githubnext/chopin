@@ -14,6 +14,7 @@
 		"@chopin/editor": "workspace:*",
 		"@chopin/protocol": "workspace:*",
 		"@fontsource-variable/inter": "^5.3.0",
+		"@phosphor-icons/react": "^2.1.10",
 		"react": "catalog:react",
 		"react-dom": "catalog:react",
 		"react-markdown": "^10.1.0"

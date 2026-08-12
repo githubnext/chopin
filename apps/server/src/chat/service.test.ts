@@ -178,6 +178,27 @@ describe("tool calls", () => {
 		expect(chat.entries.map(entry => entry.tools?.[0]?.name)).toEqual(["grep", "edit_plan"]);
 	});
 
+	it("settles an ask after the turn goes idle", () => {
+		let chat = create();
+		let { context } = room(chat);
+
+		translate(context, tool("tool.execution_start", { toolCallId: "t1", toolName: "ask" }));
+		translate(context, idle());
+		translate(
+			context,
+			tool("tool.execution_complete", {
+				toolCallId: "t1",
+				success: true,
+				result: { content: "answered" },
+			}),
+		);
+
+		expect(chat.entries).toHaveLength(1);
+		expect(chat.entries[0]?.tools).toEqual([
+			expect.objectContaining({ id: "t1", name: "ask", status: "done" }),
+		]);
+	});
+
 	it("files them under the message that made them, with a duration", () => {
 		let chat = create();
 		let { context } = room(chat);
