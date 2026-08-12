@@ -24,3 +24,11 @@ test("zero unanswered decisions suppresses the badge", () => {
 
 	expect(markup).not.toContain("data-plan-decision-count");
 });
+
+test("the Decisions control names its unanswered count", () => {
+	let markup = renderToStaticMarkup(
+		createElement(DecisionViewControl, { onView: () => {}, unanswered: 2, view: "plan" }),
+	);
+
+	expect(markup).toContain('aria-label="Decisions, 2 unanswered"');
+});

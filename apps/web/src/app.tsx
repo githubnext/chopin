@@ -148,9 +148,19 @@ function Room({ handle }: { handle: string }) {
 		let stored = localStorage.getItem("chopin:view:document");
 		return stored === "decisions" ? "decisions" : "plan";
 	});
-	let view = visibleDecisionView(preferredView, hasPlanContent, unanswered);
+	let [enteredForcedOpening, setEnteredForcedOpening] = useState(false);
+	let view = visibleDecisionView(
+		preferredView,
+		hasPlanContent,
+		unanswered,
+		enteredForcedOpening,
+	);
 	let previousUnanswered = useRef(unanswered);
 	let [attention, setAttention] = useState(false);
+
+	useEffect(() => {
+		if (!hasPlanContent && unanswered > 0) setEnteredForcedOpening(true);
+	}, [hasPlanContent, unanswered]);
 
 	useEffect(() => {
 		if (hasPlanContent) localStorage.setItem("chopin:view:document", preferredView);
@@ -166,8 +176,17 @@ function Room({ handle }: { handle: string }) {
 	}, [unanswered]);
 
 	let selectView = (next: DecisionView) => {
+		// A new room stays in its opening questions until prose proves the first
+		// draft exists. Once there is prose, a person takes control of the view.
+		if (hasPlanContent) setEnteredForcedOpening(false);
 		setPreferredView(next);
 		if (hasPlanContent) localStorage.setItem("chopin:view:document", next);
+		if (next === "decisions") {
+			let first = entries.find(entry =>
+				entry.value.questions.some(question => question.answer === undefined)
+			);
+			setReveal({ widget: first?.id ?? "", token: Date.now() });
+		}
 	};
 
 	let showPlan = (widget: string, question: string) => {

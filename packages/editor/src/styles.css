@@ -28,7 +28,7 @@
 	--plan-body: var(--text-base);
 }
 
-/* Decisions pane -------------------------------------------------------- */
+/* Document views -------------------------------------------------------- */
 
 .plan-workspace {
 	position: relative;
@@ -198,29 +198,6 @@
 	outline: 1px solid color-mix(in oklch, var(--color-brand) 60%, transparent);
 	outline-offset: 3px;
 	background: var(--color-brand-wash);
-}
-
-@container (max-width: 46rem) {
-	.plan-workspace.is-sidecar-open {
-		grid-template-columns: minmax(0, 1fr);
-		grid-template-rows: minmax(0, 1fr) minmax(12rem, 40vh);
-	}
-
-	.plan-workspace.is-sidecar-open .plan-document {
-		grid-column: 1;
-		grid-row: 1;
-	}
-
-	.plan-sidecar {
-		grid-column: 1;
-		grid-row: 2;
-		border-block-start: var(--edge-width) solid var(--color-edge);
-		border-inline-start: 0;
-	}
-
-	.plan-sidecar-grip {
-		display: none;
-	}
 }
 
 /*

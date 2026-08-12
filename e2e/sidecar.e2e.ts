@@ -64,7 +64,7 @@ test(
 		let page = await join("ana");
 
 		let plan = page.getByRole("button", { name: "Plan", exact: true });
-		let decisions = page.getByRole("button", { name: "Decisions", exact: true });
+		let decisions = page.getByRole("button", { name: /^Decisions/ });
 		let scroller = page.locator(".plan-document > div.h-full.min-h-0.overflow-auto");
 		let selected = content(page).locator("p").nth(8);
 		await selected.selectText();
@@ -95,7 +95,7 @@ test(
 	async ({ page, room }) => {
 		await page.goto(`/r/${room}?as=ana`);
 
-		await expect(page.getByRole("button", { name: "Decisions", exact: true }))
+		await expect(page.getByRole("button", { name: /^Decisions/ }))
 			.toHaveAttribute("aria-pressed", "true");
 		let card = questionnaire(page);
 		await expect(card).toHaveCount(1);
@@ -110,7 +110,7 @@ test("the waiting-question line selects Decisions", async ({ join, seed }) => {
 
 	await page.locator("#pane-chat").getByRole("button", { name: "Answer" }).click();
 
-	await expect(page.getByRole("button", { name: "Decisions", exact: true }))
+	await expect(page.getByRole("button", { name: /^Decisions/ }))
 		.toHaveAttribute("aria-pressed", "true");
 	await expect(questionnaire(page)).toBeInViewport();
 });
@@ -124,9 +124,34 @@ test("switching views restores the plan scroll position", async ({ join, seed })
 		element.scrollTop = 160;
 		element.dispatchEvent(new Event("scroll"));
 	});
-	await page.getByRole("button", { name: "Decisions", exact: true }).click();
+	await page.getByRole("button", { name: /^Decisions/ }).click();
 	await page.getByRole("button", { name: "Plan", exact: true }).click();
 	await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBe(160);
+});
+
+test("selecting Decisions returns to the first unanswered card after its hidden stack was scrolled", async ({ join, page: browser, seed }) => {
+	await browser.setViewportSize({ width: 1280, height: 360 });
+	await seed(LONG_PLAN);
+	let page = await join("ana");
+	let decisions = page.getByRole("button", { name: /^Decisions/ });
+	let plan = page.getByRole("button", { name: "Plan", exact: true });
+	let stack = page.locator('[data-document-view="decisions"] .plan-decisions > .overflow-auto');
+	let first = questionnaire(page);
+
+	await decisions.click();
+	await expect(first).toBeFocused();
+
+	await stack.evaluate(element => {
+		element.scrollTop = element.scrollHeight;
+		element.dispatchEvent(new Event("scroll"));
+	});
+	let scrolled = await stack.evaluate(element => element.scrollTop);
+	expect(scrolled).toBeGreaterThan(0);
+
+	await plan.click();
+	await decisions.click();
+	await expect(first).toBeFocused();
+	await expect.poll(() => stack.evaluate(element => element.scrollTop)).toBeLessThan(scrolled);
 });
 
 test("Show in plan focuses the addressed inline questionnaire", async ({ baseURL, join, room, seed }) => {
@@ -163,7 +188,7 @@ test("Show in plan focuses the addressed inline questionnaire", async ({ baseURL
 	);
 	let page = await join("ana");
 
-	await page.getByRole("button", { name: "Decisions", exact: true }).click();
+	await page.getByRole("button", { name: /^Decisions/ }).click();
 	let card = questionnaire(page).filter({ hasText: "How should we deploy?" });
 	await card.getByRole("button", { name: /How should we deploy.*show in plan/ }).click();
 
@@ -179,7 +204,7 @@ test("Show in plan focuses the addressed inline questionnaire", async ({ baseURL
 test("answering both questions resolves the card and writes the decision", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
-	await page.getByRole("button", { name: "Decisions", exact: true }).click();
+	await page.getByRole("button", { name: /^Decisions/ }).click();
 	let card = questionnaire(page);
 
 	await card.getByRole("radio", { name: /On disk as MDX/ }).check();
@@ -190,6 +215,7 @@ test("answering both questions resolves the card and writes the decision", async
 	await card.getByRole("checkbox", { name: /Export/ }).check();
 	await card.getByRole("button", { name: "Submit" }).click();
 
+	await page.getByRole("button", { name: "1 resolved" }).click();
 	await expect(card).toContainText("On disk as MDX");
 	await expect(card).toContainText("Anchors, Export");
 	await expect(card).toContainText("Answered by @ana");
@@ -199,7 +225,7 @@ test("answering both questions resolves the card and writes the decision", async
 test("an unanswered question refuses to submit and says which", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
-	await page.getByRole("button", { name: "Decisions", exact: true }).click();
+	await page.getByRole("button", { name: /^Decisions/ }).click();
 	let card = questionnaire(page);
 
 	await card.getByRole("tab", { name: "Scope" }).click();
@@ -215,7 +241,7 @@ test("an unanswered question refuses to submit and says which", async ({ join, s
 test("cancelling asks first", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
-	await page.getByRole("button", { name: "Decisions", exact: true }).click();
+	await page.getByRole("button", { name: /^Decisions/ }).click();
 	let card = questionnaire(page);
 
 	await card.getByRole("tab", { name: "Scope" }).click();

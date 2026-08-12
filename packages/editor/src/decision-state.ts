@@ -14,6 +14,8 @@ export function visibleDecisionView(
 	preferred: DecisionView,
 	hasPlanContent: boolean,
 	unanswered: number,
+	enteredForcedOpening = false,
 ): DecisionView {
+	if (enteredForcedOpening) return hasPlanContent ? "plan" : "decisions";
 	return !hasPlanContent && unanswered > 0 ? "decisions" : preferred;
 }

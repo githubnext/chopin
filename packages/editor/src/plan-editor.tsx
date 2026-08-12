@@ -278,10 +278,6 @@ export function PlanEditor(
 
 	return (
 		<div className={`plan flex h-full w-full flex-col ${className ?? ""}`}>
-			{
-				/* The grid's second column is the decisions sidecar, which is empty
-			    until a questionnaire exists to put in it. */
-			}
 			<div className="plan-workspace">
 				<div className="plan-document">
 					<div ref={scroller} className="h-full min-h-0 overflow-auto">
