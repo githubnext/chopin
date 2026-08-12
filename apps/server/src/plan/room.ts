@@ -429,8 +429,10 @@ export function placeQuestionnaires(
 
 			let prose = blocks[placement.at.index];
 			if (!prose) throw new Error(`no block at index ${placement.at.index}`);
-			let previous = placement.after ? questionnaires.get(placement.after) : prose;
-			if (!previous) throw new Error(`no questionnaire ${placement.after}`);
+			// Older sidecar records can point at a decision node that disappeared
+			// before this placement existed. It cannot establish an order, so the
+			// next live card starts the run after its prose instead.
+			let previous = placement.after ? questionnaires.get(placement.after) ?? prose : prose;
 			if (questionnaire === previous || questionnaire.getPreviousSibling() === previous) continue;
 
 			questionnaire.remove();
