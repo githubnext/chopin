@@ -86,7 +86,7 @@ test(
 		let selection = await page.evaluate(() => getSelection()?.toString());
 		let scrollTop = await scroller.evaluate(element => element.scrollTop);
 
-		await expect(questionnaire(page)).toHaveCount(1);
+		await expect(questionnaire(page)).toHaveCount(2);
 		await expect(plan).toHaveAttribute("aria-pressed", "true");
 		await expect(decisions).toHaveAttribute("aria-pressed", "false");
 		await expect(decisions).toContainText("2");
@@ -94,7 +94,7 @@ test(
 		expect(await page.evaluate(() => getSelection()?.toString())).toBe(selection);
 
 		await decisions.click();
-		await expect(questionnaire(page)).toHaveCount(1);
+		await expect(questionnaire(page)).toHaveCount(2);
 		await expect(questionnaire(page).getByRole("heading", { name: "Storage" })).toBeVisible();
 		await expect(page.locator('[data-document-view="decisions"] [data-plan-sidecar-thread]'))
 			.toHaveCount(0);
@@ -109,9 +109,10 @@ test(
 		await expect(page.getByRole("button", { name: /^Decisions/ }))
 			.toHaveAttribute("aria-pressed", "true");
 		let card = questionnaire(page);
-		await expect(card).toHaveCount(1);
+		await expect(card).toHaveCount(2);
 		await expect(card.getByRole("heading", { name: "Storage" })).toBeVisible();
-		await expect(card.getByRole("tab", { name: "Scope" })).toBeVisible();
+		await expect(card.getByRole("heading", { name: "Scope" })).toBeVisible();
+		await expect(card.getByRole("tablist")).toHaveCount(0);
 	},
 );
 
@@ -126,7 +127,7 @@ test("questions leave the chat pane free of a waiting row", async ({ join, seed 
 	await page.getByRole("button", { name: /^Decisions/ }).click();
 	await expect(page.getByRole("button", { name: /^Decisions/ }))
 		.toHaveAttribute("aria-pressed", "true");
-	await expect(questionnaire(page)).toBeInViewport();
+	await expect(questionnaire(page).first()).toBeInViewport();
 });
 
 test("switching views restores the plan scroll position", async ({ join, seed }) => {
@@ -150,7 +151,7 @@ test("selecting Decisions returns to the first unanswered card after its hidden 
 	let decisions = page.getByRole("button", { name: /^Decisions/ });
 	let plan = page.getByRole("button", { name: "Plan", exact: true });
 	let stack = page.locator('[data-document-view="decisions"] .plan-decisions > .overflow-auto');
-	let first = questionnaire(page);
+	let first = questionnaire(page).first();
 
 	await decisions.click();
 	await expect(first).toBeFocused();
@@ -216,36 +217,33 @@ test("Show in plan focuses the addressed inline questionnaire", async ({ baseURL
 	).toBeFocused();
 });
 
-test("answering both questions resolves the card and writes the decision", async ({ join, seed }) => {
+test("saving one decision leaves another unanswered", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
 	await page.getByRole("button", { name: /^Decisions/ }).click();
-	let card = questionnaire(page);
+	let storage = questionnaire(page).filter({ has: page.getByRole("heading", { name: "Storage" }) });
+	let scope = questionnaire(page).filter({ has: page.getByRole("heading", { name: "Scope" }) });
 
-	await card.getByRole("radio", { name: /On disk as MDX/ }).check();
-	await expect(card.getByRole("button", { name: "Submit" })).toHaveCount(0);
-
-	await card.getByRole("tab", { name: "Scope" }).click();
-	await card.getByRole("checkbox", { name: /Anchors/ }).check();
-	await card.getByRole("checkbox", { name: /Export/ }).check();
-	await card.getByRole("button", { name: "Submit" }).click();
+	await storage.getByRole("radio", { name: /On disk as MDX/ }).check();
+	await storage.getByRole("button", { name: "Save" }).click();
+	await expect(scope).toBeVisible();
+	await expect(scope.getByRole("button", { name: "Save" })).toBeVisible();
+	await expect(scope).not.toContainText("Answered by");
 
 	await page.getByRole("button", { name: "1 resolved" }).click();
-	await expect(card).toContainText("On disk as MDX");
-	await expect(card).toContainText("Anchors, Export");
-	await expect(card).toContainText("Answered by @ana");
-	await expect(card.getByRole("button", { name: "Submit" })).toHaveCount(0);
+	let resolved = questionnaire(page).filter({ hasText: "Where should room state live?" });
+	await expect(resolved).toContainText("On disk as MDX");
+	await expect(resolved).toContainText("Answered by @ana");
+	await expect(resolved.getByRole("button", { name: "Save" })).toHaveCount(0);
 });
 
 test("an unanswered question refuses to submit and says which", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
 	await page.getByRole("button", { name: /^Decisions/ }).click();
-	let card = questionnaire(page);
+	let card = questionnaire(page).filter({ has: page.getByRole("heading", { name: "Scope" }) });
 
-	await card.getByRole("tab", { name: "Scope" }).click();
-	await card.getByRole("checkbox", { name: /Anchors/ }).check();
-	await card.getByRole("button", { name: "Submit" }).click();
+	await card.getByRole("button", { name: "Save" }).click();
 
 	await expect(card.getByRole("alert")).toHaveText(
 		"Every question needs an answer before submitting.",
@@ -257,14 +255,13 @@ test("cancelling asks first", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
 	await page.getByRole("button", { name: /^Decisions/ }).click();
-	let card = questionnaire(page);
+	let card = questionnaire(page).filter({ has: page.getByRole("heading", { name: "Scope" }) });
 
-	await card.getByRole("tab", { name: "Scope" }).click();
 	await card.getByRole("button", { name: "Cancel" }).click();
 
 	await expect(card).toContainText("Cancel without answering?");
 	await card.getByRole("button", { name: "Keep it" }).click();
-	await expect(card.getByRole("button", { name: "Submit" })).toBeVisible();
+	await expect(card.getByRole("button", { name: "Save" })).toBeVisible();
 });
 
 test("a marked passage has document chrome with a hover preview", async ({ join, seed }) => {
@@ -411,7 +408,7 @@ test("accepting asks twice, and says so in the transcript", async ({ join, seed 
 	).toBeVisible();
 	await expect(page.getByRole("dialog", { name: "Comment thread" })).toHaveCount(0);
 	await expect(commentButton(page)).toHaveCount(0);
-	await expect(content(page).getByRole("article", { name: "Decision" })).toContainText(QUOTED);
+	await expect(content(page).locator("article").filter({ hasText: QUOTED })).toContainText(QUOTED);
 });
 
 test("a dismissed thread removes its document button", async ({ join, seed }) => {

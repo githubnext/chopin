@@ -83,51 +83,64 @@ function decide(
 }
 
 /**
- * Ask a questionnaire, and put it in the plan.
+ * Ask one or more decisions, and put each in the plan.
  *
- * The record is registered before the node exists, because a client receiving
- * the plan update will immediately try to open a questionnaire by id and must
- * not be told there is no such thing.
+ * One planning turn may need several answers, but every answer has its own
+ * lifecycle: people can save or cancel one without making the others final.
+ * Each record is registered before its node exists, because a client receiving
+ * the plan update will immediately try to open it and must not be told there
+ * is no such thing.
  */
 export async function ask(
 	plan: Plan,
 	server: Server<SocketData>,
 	roomId: string,
 	definition: Definition,
-): Promise<Ended> {
+): Promise<Ended[]> {
 	if (definition.questions.length === 0) {
 		Question.reject("A questionnaire needs at least one question");
 	}
 
-	// Its own identity, not borrowed from its first question. They are
-	// different things, and a lookup that matched either would be a bug
-	// waiting for a questionnaire with two questions.
-	let id = ulid();
-	let waiting = Store.ask(plan.questions, id, definition, id);
+	let waiting = definition.questions.map(question => {
+		let single = { questions: [question] };
+		// Its own identity, not borrowed from the question. They are different
+		// things, and a lookup that matched either would be a bug waiting for a
+		// question whose id happened to resemble its widget's.
+		let id = ulid();
+		let settled = Store.ask(plan.questions, id, single, id);
 
-	// The dialect calls the question text `prompt`; the domain calls it
-	// `question`. Translating here keeps the document's vocabulary its own.
-	let mutation = room.insertQuestionnaire(plan.document, {
-		id,
-		questions: definition.questions.map(question => ({
-			id: question.id,
-			header: question.header,
-			prompt: question.question,
-			multiple: question.multiple,
-			options: question.options.map(option => ({
-				id: option.id,
-				label: option.label,
-				...(option.description ? { description: option.description } : {}),
-			})),
-		})),
+		// The dialect calls the question text `prompt`; the domain calls it
+		// `question`. Translating here keeps the document's vocabulary its own.
+		let mutation = room.insertQuestionnaire(plan.document, {
+			id,
+			questions: [{
+				id: question.id,
+				header: question.header,
+				prompt: question.question,
+				multiple: question.multiple,
+				options: question.options.map(option => ({
+					id: option.id,
+					label: option.label,
+					...(option.description ? { description: option.description } : {}),
+				})),
+			}],
+		});
+
+		plan.records.set(id, { id, definition: single, status: "open" });
+		if (mutation) Service.publish(plan, server, roomId, mutation);
+		broadcast(server, roomId, {
+			kind: "question:asked",
+			ts: 0,
+			id,
+			definition: single,
+			widget: id,
+		});
+		return settled;
 	});
 
-	plan.records.set(id, { id, definition, status: "open" });
-
-	if (mutation) Service.publish(plan, server, roomId, mutation);
-	broadcast(server, roomId, { kind: "question:asked", ts: 0, id, definition, widget: id });
-
-	return waiting;
+	// Promise.all retains the planner's order even when people settle cards in
+	// another order, so each returned outcome still names the ask that made it.
+	return Promise.all(waiting);
 }
 
 /** Everything still unanswered, for a client that has just joined. */
