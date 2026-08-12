@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { CaretDownIcon, CaretRightIcon } from "@phosphor-icons/react";
 
 import { Count } from "./count";
 import { useQuestionnaires } from "./questionnaires";
@@ -130,12 +131,16 @@ export function Decisions({ connected, onShowPlan, reveal, store, wire }: Decisi
 					<div className={outstanding > 0 ? "mt-3" : ""}>
 						<button
 							aria-expanded={history}
-							className="btn btn-sm btn-ghost w-full justify-start text-left"
+							className="btn btn-sm btn-ghost w-full justify-start gap-2 text-left"
 							data-press="wide"
 							onClick={() => setHistory(value => !value)}
 							type="button"
 						>
-							{history ? "▾" : "▸"} <span className="tabular-nums">{resolved}</span> resolved
+							{history
+								? <CaretDownIcon aria-hidden="true" size={16} weight="bold" />
+								: <CaretRightIcon aria-hidden="true" size={16} weight="bold" />}
+							<span className="tabular-nums">{resolved}</span>
+							<span>resolved</span>
 						</button>
 						{history && (
 							<div className="mt-2 flex flex-col gap-3">
