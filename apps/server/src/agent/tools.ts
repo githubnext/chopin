@@ -271,6 +271,7 @@ export function toolbox(context: Context): Tool[] {
 						context.room,
 						definition,
 						{ revision: args.revision, blocks: args.questions.map(question => question.blocks) },
+						context.anchors,
 					);
 					return {
 						outcomes: ended.map(outcome =>
