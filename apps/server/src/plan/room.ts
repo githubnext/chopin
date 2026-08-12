@@ -33,7 +33,14 @@ import {
 	ulid,
 } from "@chopin/dialect";
 import { $getAnchorAndFocusForUserState } from "@lexical/yjs";
-import { $getNodeByKey, $getRoot, $isElementNode, $isParagraphNode, $nodesOfType } from "lexical";
+import {
+	$createParagraphNode,
+	$getNodeByKey,
+	$getRoot,
+	$isElementNode,
+	$isParagraphNode,
+	$nodesOfType,
+} from "lexical";
 
 import type { Binding, Provider } from "@lexical/yjs";
 import type { LexicalEditor, LexicalNode } from "lexical";
@@ -154,7 +161,14 @@ function build(epoch: string): Document {
  * says so.
  */
 function seed(target: Document, source: string, validated = false): void {
-	if (!source.trim()) return;
+	if (!source.trim()) {
+		// The empty paragraph is a writing position, not plan content: it
+		// projects to nothing, while giving every joining client the same caret.
+		target.editor.update(() => {
+			$getRoot().append($createParagraphNode());
+		}, { discrete: true });
+		return;
+	}
 
 	// Lexical routes anything thrown inside an update to the editor's onError,
 	// which logs. Left alone, a plan that fails to import would produce an
