@@ -184,7 +184,7 @@ export function Transcript(
 		handle: string;
 		onWithdraw: (id: string) => void;
 		queued: Chat.Waiting[];
-		working: boolean;
+		working?: Pick<Chat.Turn, "id" | "started">;
 	},
 ) {
 	let bottom = useRef<HTMLDivElement>(null);

@@ -70,8 +70,8 @@ export type Chat = {
 	/** In flight while the session is being opened, so a second prompt waits. */
 	opening?: Promise<Agent.Agent>;
 	busy: boolean;
-	/** Whose message the running turn is answering. */
-	turn?: string;
+	/** The transient lifecycle of the running Planner turn. */
+	turn?: Wire.Turn;
 	/**
 	 * The comment thread the running turn is acting on.
 	 *
@@ -139,6 +139,13 @@ function state(chat: Chat, server: Server<SocketData>, room: string): void {
 	});
 }
 
+/** Tool activity is useful context, but only visible Planner prose ends the projection. */
+function responded(chat: Chat, server: Server<SocketData>, room: string, text: string): void {
+	if (!chat.turn || chat.turn.responded || !text.trim()) return;
+	chat.turn.responded = true;
+	state(chat, server, room);
+}
+
 /**
  * The queue as clients see it.
  *
@@ -176,6 +183,7 @@ export function greet(chat: Chat, ws: Socket): void {
 		ts: 0,
 		entries: chat.entries,
 		busy: chat.busy,
+		...(chat.turn ? { turn: chat.turn } : {}),
 		queued: visible(chat),
 	});
 }
@@ -396,7 +404,7 @@ async function run(context: Room, handle: string, text: string, thread?: string)
 	let { chat, plan, room, server } = context;
 
 	chat.busy = true;
-	chat.turn = handle;
+	chat.turn = { id: ulid(), handle, started: now(), responded: false };
 	chat.acting = thread;
 	state(chat, server, room);
 
@@ -528,10 +536,12 @@ export function translate(context: Room, event: SessionEvent): void {
 					ts: now(),
 					streaming: true,
 				});
+				responded(chat, server, room, deltaContent);
 				return;
 			}
 			entry.text += deltaContent;
 			broadcast(server, room, { kind: "chat:delta", ts: 0, id: messageId, text: deltaContent });
+			responded(chat, server, room, deltaContent);
 			return;
 		}
 
@@ -547,6 +557,7 @@ export function translate(context: Room, event: SessionEvent): void {
 				entry.text = content || entry.text;
 				delete entry.streaming;
 				broadcast(server, room, { kind: "chat:message", ts: 0, entry });
+				responded(chat, server, room, content);
 			} else if (content.trim()) {
 				// No deltas arrived — a short reply the model did not stream.
 				say(chat, server, room, {
@@ -555,6 +566,7 @@ export function translate(context: Room, event: SessionEvent): void {
 					text: content,
 					ts: now(),
 				});
+				responded(chat, server, room, content);
 			}
 
 			chat.writing = undefined;

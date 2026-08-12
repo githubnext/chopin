@@ -11,7 +11,7 @@
  * looks like a prompt and being met with silence.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { addressed } from "@chopin/protocol/address";
 
@@ -31,26 +31,36 @@ export function Chat({ connected, handle, wire }: ChatProps) {
 	let [arrived, setArrived] = useState<ReadonlySet<string>>(new Set());
 	let [queue, setQueue] = useState<Wire.Waiting[]>([]);
 	let [busy, setBusy] = useState(false);
-	let [responded, setResponded] = useState(false);
+	let [turn, setTurn] = useState<Wire.Turn>();
 	let [text, setText] = useState("");
+	let synchronized = useRef<Socket | undefined>(undefined);
+
+	// A socket is connected before its fresh history arrives. Do not let a
+	// previous socket's transient turn project into that gap.
+	if (!connected) synchronized.current = undefined;
 
 	useEffect(() => {
 		if (!wire) return;
 		// History seeds `seen`; only later message frames are arrivals.
 		let loaded = false;
 		let seen = new Set<string>();
+		let response = (agent: boolean, value: string) => {
+			if (!agent || !value.trim()) return;
+			setTurn(current => current && !current.responded ? { ...current, responded: true } : current);
+		};
 
 		// Streaming arrives as deltas against an entry already in the list, so
 		// the reducer here has to be additive rather than replacing.
 		let off = [
 			wire.on<Wire.History>("chat:history", frame => {
 				loaded = true;
+				synchronized.current = wire;
 				seen = new Set(frame.entries.map(entry => entry.id));
 				setEntries(frame.entries);
 				setArrived(new Set());
 				setQueue(frame.queued);
 				setBusy(frame.busy);
-				setResponded(frame.entries.at(-1)?.author.kind === "agent");
+				setTurn(frame.turn);
 			}),
 			wire.on<Wire.Message>("chat:message", frame => {
 				if (loaded && !seen.has(frame.entry.id)) {
@@ -64,7 +74,7 @@ export function Chat({ connected, handle, wire }: ChatProps) {
 					next[index] = frame.entry;
 					return next;
 				});
-				if (frame.entry.author.kind === "agent") setResponded(true);
+				response(frame.entry.author.kind === "agent", frame.entry.text);
 			}),
 			wire.on<Wire.Delta>("chat:delta", frame => {
 				setEntries(current =>
@@ -72,6 +82,7 @@ export function Chat({ connected, handle, wire }: ChatProps) {
 						entry.id === frame.id ? { ...entry, text: entry.text + frame.text } : entry
 					)
 				);
+				response(true, frame.text);
 			}),
 			wire.on<Wire.Tool>("chat:tool", frame => {
 				setEntries(current => {
@@ -92,7 +103,7 @@ export function Chat({ connected, handle, wire }: ChatProps) {
 			}),
 			wire.on<Wire.State>("chat:state", frame => {
 				setBusy(frame.busy);
-				if (!frame.busy) setResponded(false);
+				setTurn(frame.turn);
 			}),
 			wire.on<Wire.Queue>("chat:queue", frame => setQueue(frame.waiting)),
 		];
@@ -117,7 +128,9 @@ export function Chat({ connected, handle, wire }: ChatProps) {
 				handle={handle}
 				onWithdraw={id => wire?.send("chat:unqueue", { id })}
 				queued={queue}
-				working={connected && busy && !responded}
+				working={connected && synchronized.current === wire && turn && !turn.responded
+					? turn
+					: undefined}
 			/>
 
 			<div className="flex shrink-0 flex-col gap-2 px-4 pb-4">

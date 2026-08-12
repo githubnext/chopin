@@ -8,15 +8,20 @@ function entry(id: string, author: Chat.Author, text = id): Chat.Entry {
 	return { id, author, text, ts: 1_700_000_000 };
 }
 
+function working() {
+	return { id: "turn-1", started: 1_700_000_001 };
+}
+
 describe("transcript groups", () => {
 	it("adds one temporary Planner message while a turn has no response", () => {
-		expect(group([], [], true)).toEqual([{
+		expect(group([], [], working())).toEqual([{
 			kind: "messages",
 			author: { kind: "agent" },
 			messages: [{
-				id: "working",
+				id: "turn-1",
 				author: { kind: "agent" },
 				text: "Working on it",
+				ts: 1_700_000_001,
 				queued: false,
 				working: true,
 			}],
@@ -25,7 +30,7 @@ describe("transcript groups", () => {
 	});
 
 	it("replaces the temporary Planner message when a response arrives", () => {
-		let result = group([entry("a1", { kind: "agent" }, "I found it.")], [], false);
+		let result = group([entry("a1", { kind: "agent" }, "I found it.")], []);
 
 		expect(result).toMatchObject([{
 			kind: "messages",
@@ -35,20 +40,20 @@ describe("transcript groups", () => {
 	});
 
 	it("does not keep a temporary Planner message after a turn stops", () => {
-		expect(group([], [], false)).toEqual([]);
+		expect(group([], [])).toEqual([]);
 	});
 
 	it("places the temporary Planner message before queued requests", () => {
 		let result = group(
 			[entry("m1", { kind: "member", handle: "ana" })],
 			[{ id: "q1", handle: "ana", text: "Then compare options." }],
-			true,
+			working(),
 		);
 
 		expect(result.map(item => {
 			if (item.kind === "system") return item.kind;
 			return item.messages[0]!.id;
-		})).toEqual(["m1", "working", "q1"]);
+		})).toEqual(["m1", "turn-1", "q1"]);
 	});
 
 	it("puts consecutive messages from one author in one group", () => {
