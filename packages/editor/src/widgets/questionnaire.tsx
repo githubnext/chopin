@@ -140,9 +140,8 @@ function Decided(
 	);
 }
 
-function InlineQuestionnaire({ node }: { node: QuestionnaireNode }) {
+function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 	let options = useCellValue(widgets$);
-	let value = node.getQuestionnaire();
 
 	return (
 		<QuestionnaireCard
@@ -158,5 +157,8 @@ function InlineQuestionnaire({ node }: { node: QuestionnaireNode }) {
 }
 
 export function renderQuestionnaire(node: QuestionnaireNode) {
-	return <InlineQuestionnaire node={node} />;
+	// Decorator output is rendered by React after Lexical has left its read
+	// transaction. Capture the record now, as the Decision renderer does, or
+	// `getQuestionnaire` reaches for an inactive editor and disconnects the room.
+	return <InlineQuestionnaire value={node.getQuestionnaire()} />;
 }
