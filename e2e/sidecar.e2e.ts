@@ -16,12 +16,13 @@ import { content, expect, test } from "./room";
 /** Long enough to be marked: the injector wants twenty characters. */
 const PROSE = "Room state lives on disk as MDX beside the transcript.\n";
 const TWO_BLOCKS = `${PROSE}\nA second block remains after the marked passage.\n`;
+const LONG_PLAN = Array.from({ length: 80 }, (_, index) => `Paragraph ${index + 1}.`).join("\n\n");
 
 /** What the injector will quote: the first forty-eight characters. */
 const QUOTED = "Room state lives on disk as MDX beside the trans";
 
 function questionnaire(page: import("@playwright/test").Page) {
-	return page.locator("#pane-decisions article[data-plan-sidecar-questionnaire]");
+	return page.locator('[data-document-view="decisions"] article[data-plan-sidecar-questionnaire]');
 }
 
 function commentButton(page: import("@playwright/test").Page) {
@@ -39,54 +40,69 @@ async function thread(page: import("@playwright/test").Page) {
 	return page.getByRole("dialog", { name: "Comment thread" });
 }
 
-test("a question the room was asked is waiting in the sidecar", async ({ join, seed }) => {
+test("prose keeps Plan selected while questions arrive in Decisions", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
 
-	let card = questionnaire(page);
-	await expect(card).toHaveCount(1);
-	await expect(card.getByRole("heading", { name: "Storage" })).toBeVisible();
-	await expect(card).toContainText("Where should room state live?");
+	let plan = page.getByRole("button", { name: "Plan", exact: true });
+	let decisions = page.getByRole("button", { name: "Decisions", exact: true });
+	await expect(plan).toHaveAttribute("aria-pressed", "true");
+	await expect(decisions).toHaveAttribute("aria-pressed", "false");
+	await expect(decisions).toContainText("2");
 
-	// Single choice is a radio and multiple choice a checkbox, because the
-	// control is the only thing that says which it is before you try.
-	await expect(card.getByRole("radio", { name: /On disk as MDX/ })).toBeVisible();
-	await expect(card.getByRole("radio", { name: /In SQLite/ })).toBeVisible();
+	await decisions.click();
+	await expect(questionnaire(page)).toHaveCount(1);
+	await expect(questionnaire(page).getByRole("heading", { name: "Storage" })).toBeVisible();
+	await expect(page.locator('[data-document-view="decisions"] [data-plan-sidecar-thread]'))
+		.toHaveCount(0);
 });
 
-test("the waiting-question line reopens the decisions rail", async ({ join, seed }) => {
+test("a question-only document opens Decisions", async ({ page, room }) => {
+	await page.goto(`/r/${room}?as=ana`);
+
+	await expect(page.getByRole("button", { name: "Decisions", exact: true }))
+		.toHaveAttribute("aria-pressed", "true");
+});
+
+test("the waiting-question line selects Decisions", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
-
-	await page.getByRole("button", { name: "Hide decisions pane" }).click();
-	await expect(page.locator("#pane-decisions")).toBeHidden();
 
 	await page.locator("#pane-chat").getByRole("button", { name: "Answer" }).click();
 
-	await expect(page.locator("#pane-decisions")).toBeVisible();
+	await expect(page.getByRole("button", { name: "Decisions", exact: true }))
+		.toHaveAttribute("aria-pressed", "true");
 	await expect(questionnaire(page)).toBeInViewport();
+});
+
+test("switching views restores the plan scroll position", async ({ join, seed }) => {
+	await seed(LONG_PLAN);
+	let page = await join("ana");
+	let scroller = page.locator(".plan-document > div.h-full.min-h-0.overflow-auto");
+
+	await scroller.evaluate(element => {
+		element.scrollTop = 160;
+		element.dispatchEvent(new Event("scroll"));
+	});
+	await page.getByRole("button", { name: "Decisions", exact: true }).click();
+	await page.getByRole("button", { name: "Plan", exact: true }).click();
+	await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBe(160);
 });
 
 test("answering both questions resolves the card and writes the decision", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
+	await page.getByRole("button", { name: "Decisions", exact: true }).click();
 	let card = questionnaire(page);
 
 	await card.getByRole("radio", { name: /On disk as MDX/ }).check();
-
-	// The footer belongs to the questionnaire, not to a question, so it only
-	// appears on the last tab — there is no submitting half of one.
 	await expect(card.getByRole("button", { name: "Submit" })).toHaveCount(0);
 
 	await card.getByRole("tab", { name: "Scope" }).click();
 	await card.getByRole("checkbox", { name: /Anchors/ }).check();
 	await card.getByRole("checkbox", { name: /Export/ }).check();
-
 	await card.getByRole("button", { name: "Submit" }).click();
 
-	// The record owns the answer and the plan shows it. Both have to happen
-	// before anyone is told it is final, so a resolved card is also a promise
-	// about the document.
 	await expect(card).toContainText("On disk as MDX");
 	await expect(card).toContainText("Anchors, Export");
 	await expect(card).toContainText("Answered by @ana");
@@ -96,14 +112,13 @@ test("answering both questions resolves the card and writes the decision", async
 test("an unanswered question refuses to submit and says which", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
+	await page.getByRole("button", { name: "Decisions", exact: true }).click();
 	let card = questionnaire(page);
 
 	await card.getByRole("tab", { name: "Scope" }).click();
 	await card.getByRole("checkbox", { name: /Anchors/ }).check();
 	await card.getByRole("button", { name: "Submit" }).click();
 
-	// Not a disabled button: a control that is grey for a reason it will not
-	// give is worse than one that answers when pressed.
 	await expect(card.getByRole("alert")).toHaveText(
 		"Every question needs an answer before submitting.",
 	);
@@ -113,6 +128,7 @@ test("an unanswered question refuses to submit and says which", async ({ join, s
 test("cancelling asks first", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
+	await page.getByRole("button", { name: "Decisions", exact: true }).click();
 	let card = questionnaire(page);
 
 	await card.getByRole("tab", { name: "Scope" }).click();
@@ -120,7 +136,6 @@ test("cancelling asks first", async ({ join, seed }) => {
 
 	await expect(card).toContainText("Cancel without answering?");
 	await card.getByRole("button", { name: "Keep it" }).click();
-
 	await expect(card.getByRole("button", { name: "Submit" })).toBeVisible();
 });
 
@@ -133,7 +148,6 @@ test("a marked passage has document chrome with a hover preview", async ({ join,
 	await button.hover();
 	await expect(page.getByRole("tooltip")).toContainText(QUOTED);
 
-	// Focus offers the same compact preview without requiring a pointer.
 	await button.focus();
 	await expect(page.getByRole("tooltip")).toBeVisible();
 });
@@ -148,17 +162,7 @@ test("clicking a comment button pins its document card and preserves the related
 	await expect(page.getByRole("dialog", { name: "Comment thread" })).toHaveCount(0);
 	card = await thread(page);
 
-	/*
-	 * Read out of the highlight registry, not off an element. The wash takes no
-	 * space and adds nothing to the tree — an agent editing below the fold must
-	 * not shift the sentence somebody is typing in, and neither must a mark
-	 * appearing beside it. `data-plan-related` is only the fallback for a
-	 * browser without `CSS.highlights`, which Chromium is not.
-	 */
 	await expect.poll(() => washed(page)).toBeGreaterThan(0);
-
-	// Clicking pins it, so it survives the pointer leaving; a reader sent
-	// somewhere they were not looking needs it still there when they arrive.
 	await content(page).hover();
 	await expect.poll(() => washed(page)).toBeGreaterThan(0);
 });
@@ -169,9 +173,6 @@ test("a live text edit preserves its document comment", async ({ join, seed }) =
 
 	await rewriteFirstBlock(page, "The room has a new persistence rule.");
 	await expect(content(page)).toContainText("The room has a new persistence rule.");
-
-	// Live positions stretch with ordinary typing. The separately tested
-	// drifted-block fallback starts only once those positions cannot resolve.
 	await expect.poll(() => washed(page)).toBeGreaterThan(0);
 	await expect(commentButton(page)).toBeVisible();
 });
@@ -191,10 +192,7 @@ test("a removed subject block moves its comment to document orphan chrome", asyn
 	await expect(page.getByRole("dialog", { name: "Orphaned comments" })).toContainText(QUOTED);
 });
 
-/** How many ranges the shared highlight registry is painting for us. */
 function washed(page: import("@playwright/test").Page): Promise<number> {
-	// Document-wide and shared with Lexical's remote cursors, which are named
-	// `lexical-cursor-*`. A collision would silently unpaint somebody else's.
 	return page.evaluate(() => CSS.highlights.get("plan-related")?.size ?? 0);
 }
 
@@ -203,13 +201,9 @@ test("a reply joins the thread, and the quote counts it", async ({ join, seed })
 	let page = await join("ana");
 	let card = await thread(page);
 
-	// The opening comment is not a reply, so a thread nobody has answered has
-	// no number to report and shows none.
 	await expect(card.getByText(/repl(y|ies)$/)).toHaveCount(0);
-
 	await card.getByPlaceholder("Reply…").fill("Still right, but say why.");
 	await card.getByRole("button", { name: "Reply" }).click();
-
 	await expect(card).toContainText("Still right, but say why.");
 	await expect(card).toContainText("@ana");
 	await expect(card.getByText("1 reply")).toBeVisible();
@@ -220,25 +214,13 @@ test("accepting asks twice, and says so in the transcript", async ({ join, seed 
 	let page = await join("ana");
 	let card = await thread(page);
 
-	// One click relabels, the second commits. Accepting starts an agent turn
-	// and freezes the thread, which is not something to do on a mis-click.
 	await card.getByRole("button", { name: "Accept" }).click();
 	await expect(card.getByRole("button", { name: "Sure?" })).toBeVisible();
 	await card.getByRole("button", { name: "Sure?" }).click();
-
-	// An agent that begins editing for no visible reason is worse than a noisy
-	// log, so the accept writes itself into the transcript first.
 	await expect(page.getByText(/accepted a comment on/)).toBeVisible();
-
-	// A gate on a message is not a gate on a button: accepting reaches
-	// `Chat.instruct` directly, and under AGENT=off it has to say so rather
-	// than open a session.
 	await expect(
 		page.getByText("The agent is not running, so the plan has not been revised."),
 	).toBeVisible();
-
-	// Open-thread chrome leaves the document as soon as the comment is settled;
-	// its resulting Decision is the next task's inline surface.
 	await expect(page.getByRole("dialog", { name: "Comment thread" })).toHaveCount(0);
 	await expect(commentButton(page)).toHaveCount(0);
 	await expect(content(page).getByRole("article", { name: "Decision" })).toContainText(QUOTED);
@@ -251,6 +233,5 @@ test("a dismissed thread removes its document button", async ({ join, seed }) =>
 
 	await card.getByRole("button", { name: "Dismiss" }).click();
 	await card.getByRole("button", { name: "Sure?" }).click();
-
 	await expect(commentButton(page)).toHaveCount(0);
 });

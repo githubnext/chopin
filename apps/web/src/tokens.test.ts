@@ -538,7 +538,7 @@ describe("migration", () => {
 				"apps/web/src/app.tsx",
 				{
 					action: "pane toggle",
-					marker: "aria-controls={paneId(pane)}",
+					marker: 'aria-controls={paneId("chat")}',
 					size: "btn-icon",
 					tiers: ["btn-ghost"],
 				},

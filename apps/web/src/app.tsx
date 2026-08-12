@@ -1,22 +1,26 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+	countUnanswered,
 	cursor,
 	Decisions,
 	Face,
 	PlanEditor,
 	QuestionnaireStore,
 	ThreadStore,
+	useHasPlanContent,
 	useQuestionnaires,
+	visibleDecisionView,
 } from "@chopin/editor";
 
 import { Chat } from "./chat/chat";
+import { decisionAttention, DecisionViewControl } from "./decision-view-control";
 import * as Identity from "./identity";
 import { Wire } from "./wire";
 import { paneId, usePaneOpen, Workspace } from "./workspace";
 
 import type { Session } from "@chopin/protocol";
+import type { DecisionView } from "@chopin/editor";
 import type { Status } from "./wire";
-import type { Pane } from "./workspace";
 
 /**
  * Claim a handle.
@@ -71,24 +75,19 @@ const TONE: Record<Status, string> = {
 	closed: "text-text-tertiary",
 };
 
-function PaneToggle(
-	{ onToggle, open, pane }: { onToggle: () => void; open: boolean; pane: Pane },
-) {
-	let label = pane === "chat" ? "conversation" : "decisions";
-	let divider = pane === "chat" ? "M8 3.5v13" : "M12 3.5v13";
-
+function PaneToggle({ onToggle, open }: { onToggle: () => void; open: boolean }) {
 	return (
 		<button
-			aria-controls={paneId(pane)}
+			aria-controls={paneId("chat")}
 			aria-expanded={open}
-			aria-label={`${open ? "Hide" : "Show"} ${label} pane`}
+			aria-label={`${open ? "Hide" : "Show"} conversation pane`}
 			className="btn btn-icon btn-ghost shrink-0"
 			onClick={onToggle}
 			type="button"
 		>
 			<svg aria-hidden="true" fill="none" height="18" viewBox="0 0 20 20" width="18">
 				<rect height="13" rx="2" stroke="currentColor" width="15" x="2.5" y="3.5" />
-				<path d={divider} stroke="currentColor" />
+				<path d="M8 3.5v13" stroke="currentColor" />
 			</svg>
 		</button>
 	);
@@ -97,19 +96,15 @@ function PaneToggle(
 function Header(
 	{
 		chatOpen,
-		decisionsOpen,
 		members,
 		onToggleChat,
-		onToggleDecisions,
 		reason,
 		room,
 		status,
 	}: {
 		chatOpen: boolean;
-		decisionsOpen: boolean;
 		members: Session.Member[];
 		onToggleChat: () => void;
-		onToggleDecisions: () => void;
 		reason?: string;
 		room: string;
 		status: Status;
@@ -117,7 +112,7 @@ function Header(
 ) {
 	return (
 		<header className="hairline-b flex h-12 shrink-0 items-center gap-3 px-4">
-			<PaneToggle onToggle={onToggleChat} open={chatOpen} pane="chat" />
+			<PaneToggle onToggle={onToggleChat} open={chatOpen} />
 			<span className="text-sm font-semibold">chopin</span>
 			<span className="text-sm text-text-tertiary">/r/{room}</span>
 			<span className={`text-sm ${TONE[status]}`}>
@@ -129,7 +124,6 @@ function Header(
 			>
 				{members.map(member => <Face handle={member.handle} key={member.client} ring size={24} />)}
 			</div>
-			<PaneToggle onToggle={onToggleDecisions} open={decisionsOpen} pane="decisions" />
 		</header>
 	);
 }
@@ -142,14 +136,54 @@ function Room({ handle }: { handle: string }) {
 	let room = Identity.room();
 	let user = useMemo(() => cursor(handle), [handle]);
 	let [chatOpen, setChatOpen] = usePaneOpen("chat");
-	let [decisionsOpen, setDecisionsOpen] = usePaneOpen("decisions");
-	// Written from inside the editor, read by the decisions pane beside it.
+	// Written from inside the editor, read by the Decisions document view.
 	let [questions] = useState(() => new QuestionnaireStore());
 	let [threads] = useState(() => new ThreadStore());
 	let [reveal, setReveal] = useState<{ widget: string; token: number }>();
-	let unanswered = useQuestionnaires(questions).filter(entry =>
-		entry.value.questions.some(question => question.answer === undefined)
-	);
+	let [planScrollTop, setPlanScrollTop] = useState(0);
+	let entries = useQuestionnaires(questions);
+	let unanswered = countUnanswered(entries);
+	let hasPlanContent = useHasPlanContent(questions);
+	let [preferredView, setPreferredView] = useState<DecisionView>(() => {
+		let stored = localStorage.getItem("chopin:view:document");
+		return stored === "decisions" ? "decisions" : "plan";
+	});
+	let view = visibleDecisionView(preferredView, hasPlanContent, unanswered);
+	let previousUnanswered = useRef(unanswered);
+	let [attention, setAttention] = useState(false);
+
+	useEffect(() => {
+		if (hasPlanContent) localStorage.setItem("chopin:view:document", preferredView);
+	}, [hasPlanContent, preferredView]);
+
+	useEffect(() => {
+		let previous = previousUnanswered.current;
+		previousUnanswered.current = unanswered;
+		if (!decisionAttention(previous, unanswered)) return;
+		setAttention(true);
+		let timer = window.setTimeout(() => setAttention(false), 200);
+		return () => window.clearTimeout(timer);
+	}, [unanswered]);
+
+	let selectView = (next: DecisionView) => {
+		setPreferredView(next);
+		if (hasPlanContent) localStorage.setItem("chopin:view:document", next);
+	};
+
+	let showPlan = (widget: string, question: string) => {
+		selectView("plan");
+		requestAnimationFrame(() => {
+			questions.reveal(widget, question);
+			let card = document.querySelector<HTMLElement>(
+				`[data-document-view="plan"] article[data-plan-sidecar-questionnaire="${
+					CSS.escape(widget)
+				}"]`,
+			);
+			if (!card) return;
+			card.tabIndex = -1;
+			card.focus();
+		});
+	};
 
 	useEffect(() => {
 		let socket = new Wire({
@@ -183,10 +217,10 @@ function Room({ handle }: { handle: string }) {
 					connected={status === "connected"}
 					handle={handle}
 					onReveal={widget => {
-						setDecisionsOpen(true);
-						setReveal({ widget: widget || unanswered[0]?.id || "", token: Date.now() });
+						selectView("decisions");
+						setReveal({ widget: widget || entries[0]?.id || "", token: Date.now() });
 					}}
-					waiting={unanswered.length}
+					waiting={unanswered}
 					wire={wire}
 				/>
 			}
@@ -194,34 +228,42 @@ function Room({ handle }: { handle: string }) {
 			header={
 				<Header
 					chatOpen={chatOpen}
-					decisionsOpen={decisionsOpen}
 					members={members}
 					onToggleChat={() => setChatOpen(value => !value)}
-					onToggleDecisions={() => setDecisionsOpen(value => !value)}
 					reason={reason}
 					room={room}
 					status={status}
 				/>
 			}
-			decisionsOpen={decisionsOpen}
+			controls={
+				<DecisionViewControl
+					attention={attention}
+					onView={selectView}
+					unanswered={unanswered}
+					view={view}
+				/>
+			}
 			decisions={
 				<Decisions
 					connected={status === "connected"}
+					onShowPlan={showPlan}
 					reveal={reveal}
 					store={questions}
-					threads={threads}
 					wire={wire}
 				/>
 			}
 			plan={
 				<PlanEditor
 					connection={status}
+					onScrollTop={setPlanScrollTop}
 					questions={questions}
+					scrollTop={planScrollTop}
 					threads={threads}
 					user={user}
 					wire={wire}
 				/>
 			}
+			view={view}
 		/>
 	);
 }
