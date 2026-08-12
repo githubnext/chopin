@@ -99,7 +99,7 @@
 
 ### Task 4: Place canonical decision cards beside related plan content
 
-**Status:** In progress in BB thread `thr_dq7att69az`.
+**Status:** Complete in `cae4da2` and `9c4563a`; merged by `de83e3b`.
 
 **Files:**
 
@@ -117,18 +117,18 @@
 
 **Acceptance:**
 
-- [ ] Add a failing test proving a decision can be inserted or relocated beside a validated related block.
-- [ ] Extend the planner contract so placement uses a block index plus digest, rejecting stale placement rather than landing on unrelated prose.
-- [ ] Keep decisions-first behavior: a decision without prose may remain in the isolated Decisions view until related plan content exists.
-- [ ] When prose is created and anchored, place the decision node adjacent to its related content without duplicating it.
-- [ ] Add a browser test proving Plan shows the card inline and Decisions shows the same decision in isolation.
-- [ ] Preserve the unanswered count and new-decision attention treatment.
-- [ ] Run `bun test`, `bun run types`, `bun run ci`, `bun run build`, and relevant Playwright tests.
+- [x] Add a failing test proving a decision can be inserted or relocated beside a validated related block.
+- [x] Extend the planner contract so placement uses a block index plus digest, rejecting stale placement rather than landing on unrelated prose.
+- [x] Keep decisions-first behavior: a decision without prose may remain in the isolated Decisions view until related plan content exists.
+- [x] When prose is created and anchored, place the decision node adjacent to its related content without duplicating it.
+- [x] Add a browser test proving Plan shows the card inline and Decisions shows the same decision in isolation.
+- [x] Preserve the unanswered count and new-decision attention treatment.
+- [x] Run `bun test`, `bun run types`, `bun run ci`, `bun run build`, and relevant Playwright tests.
 
 ## Integration Order
 
 - [x] Merge Task 1 into `feature/decision-first-inline` after review.
 - [x] Merge Task 2 into `feature/decision-first-inline` after review.
 - [x] Merge Task 3 into `feature/decision-first-inline` after review.
-- [ ] Start and merge Task 4 from the resulting feature-branch head.
-- [ ] Run the full verification suite on the integrated feature branch.
+- [x] Start and merge Task 4 from the resulting feature-branch head.
+- [x] Run the full verification suite on the integrated feature branch.
