@@ -26,6 +26,7 @@
 		"@lexical/yjs": "catalog:mdx",
 		"@mdxeditor/editor": "catalog:mdx",
 		"@mdxeditor/gurx": "catalog:mdx",
+		"@phosphor-icons/react": "^2.1.10",
 		"@pierre/diffs": "catalog:diffs",
 		"katex": "catalog:mdx",
 		"lexical": "catalog:mdx",
