@@ -26,10 +26,9 @@ const QUESTION = "01K0N4V4E7Y6P4MJ5WD8XZF3B2";
 const OPTION = "01K0N4W3B7P27CBAEC7A8C8WEA";
 const ANCHORED = `Anchored paragraph.
 
-<Questionnaire id="${WIDGET}" by="ana" at="2026-07-28T10:14:00.000Z">
+<Questionnaire id="${WIDGET}" by="ana">
 <Question id="${QUESTION}" header="Rollout" prompt="How should we deploy?" multiple="false">
 <Option id="${OPTION}" label="Canary" />
-<Answer value="Canary" />
 </Question>
 </Questionnaire>
 `;
@@ -169,7 +168,7 @@ test("selecting Decisions returns to the first unanswered card after its hidden 
 	await expect.poll(() => stack.evaluate(element => element.scrollTop)).toBeLessThan(scrolled);
 });
 
-test("an inline decision is also shown in Decisions and can be focused in Plan", async ({ baseURL, join, room, seed }) => {
+test("an unanswered inline decision is also shown in Decisions and can be focused in Plan", async ({ baseURL, join, room, seed }) => {
 	await seed(ANCHORED);
 	await writeFile(
 		Path.join(scratch(Number(new URL(baseURL!).port)), room, "state.json"),
@@ -177,8 +176,7 @@ test("an inline decision is also shown in Decisions and can be focused in Plan",
 			revision: 1,
 			questions: [{
 				id: WIDGET,
-				status: "answered",
-				resolver: "ana",
+				status: "open",
 				definition: {
 					questions: [{
 						id: QUESTION,
@@ -188,7 +186,6 @@ test("an inline decision is also shown in Decisions and can be focused in Plan",
 						options: [{ id: OPTION, label: "Canary", description: "" }],
 					}],
 				},
-				answers: { [QUESTION]: "Canary" },
 				anchors: {
 					widget: WIDGET,
 					questions: {
@@ -206,11 +203,12 @@ test("an inline decision is also shown in Decisions and can be focused in Plan",
 		`[data-document-view="plan"] article[data-plan-sidecar-questionnaire="${WIDGET}"]`,
 	);
 
+	await expect(content(page).getByText("Anchored paragraph.", { exact: true })).toBeVisible();
+	await expect(inline).toHaveCount(1);
 	await expect(inline).toBeVisible();
 	await expect(inline).toContainText("How should we deploy?");
 
 	await page.getByRole("button", { name: /^Decisions/ }).click();
-	await page.getByRole("button", { name: "1 resolved" }).click();
 	let card = questionnaire(page).filter({ hasText: "How should we deploy?" });
 	await expect(card).toHaveCount(1);
 	await card.getByRole("button", { name: /How should we deploy.*show in plan/ }).click();
