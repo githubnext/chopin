@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { anchorPlan, ArgumentError, editPlan } from "./arguments";
+import { anchorPlan, ArgumentError, askPlan, editPlan } from "./arguments";
 
 function batch(overrides: Record<string, unknown> = {}) {
 	return {
@@ -150,5 +150,59 @@ describe("anchorPlan", () => {
 
 	it("rejects an anchor missing blocks entirely", () => {
 		expect(() => anchorPlan(anchors({ anchors: [{ thread: "t1" }] }))).toThrow(/missing field/);
+	});
+});
+
+describe("askPlan", () => {
+	function questions(overrides: Record<string, unknown> = {}) {
+		return {
+			revision: 3,
+			questions: [{
+				header: "Rollout",
+				question: "How should we deploy?",
+				multiple: false,
+				options: [{ label: "Canary", description: "Limit exposure." }],
+				blocks: [{ index: 2, digest: digest() }],
+			}],
+			...overrides,
+		};
+	}
+
+	it("accepts placement alongside each normalized question", () => {
+		let parsed = askPlan(questions());
+
+		expect(parsed.revision).toBe(3);
+		expect(parsed.questions[0]!.blocks).toEqual([{ index: 2, digest: digest() }]);
+	});
+
+	it("rejects a missing revision", () => {
+		expect(() => askPlan({ questions: questions().questions })).toThrow(/missing field: revision/);
+	});
+
+	it("rejects a question missing its related blocks", () => {
+		let question = { ...questions().questions[0] as Record<string, unknown> };
+		delete question.blocks;
+		expect(() => askPlan(questions({ questions: [question] }))).toThrow(/missing field: blocks/);
+	});
+
+	it("rejects a malformed block digest", () => {
+		expect(() =>
+			askPlan(questions({
+				questions: [{
+					...questions().questions[0] as Record<string, unknown>,
+					blocks: [{ index: 2, digest: "bad" }],
+				}],
+			}))
+		).toThrow(/sha256/);
+	});
+
+	it("rejects unknown fields", () => {
+		expect(() => askPlan(questions({ extra: true }))).toThrow(/unexpected field/);
+	});
+
+	it("rejects batches over ten questions", () => {
+		let question = questions().questions[0]!;
+		expect(() => askPlan(questions({ questions: Array.from({ length: 11 }, () => question) })))
+			.toThrow(/at most 10 questions/);
 	});
 });

@@ -70,6 +70,19 @@ function peer(): { editor: LexicalEditor; doc: Y.Doc; binding: Binding } {
 	return { editor, doc, binding };
 }
 
+function questionnaire(id: string, question: string, option: string, header: string) {
+	return {
+		id,
+		questions: [{
+			id: question,
+			header,
+			prompt: `What should ${header} be?`,
+			multiple: false,
+			options: [{ id: option, label: "Choose this" }],
+		}],
+	};
+}
+
 describe("document", () => {
 	it("starts empty and projects to nothing", async () => {
 		let document = await room.create();
@@ -98,6 +111,68 @@ describe("document", () => {
 
 		expect(whole.byteLength).toBeGreaterThan(0);
 		expect(caughtUp.byteLength).toBeLessThan(whole.byteLength);
+	});
+});
+
+describe("questionnaire insertion", () => {
+	it("inserts a batch directly after validated prose in input order", async () => {
+		let document = await room.create("Related prose.\n\nLater prose.\n");
+		let digest = room.digests(document)[0]!;
+		let mutation = room.insertQuestionnaires(document, [
+			{
+				value: questionnaire(
+					"01K0N4TR8K7JGM4R1J7PW4R8YJ",
+					"01K0N4V4E7Y6P4MJ5WD8XZF3B2",
+					"01K0N4W3B7P27CBAEC7A8C8WEA",
+					"First",
+				),
+				at: { index: 0, digest },
+			},
+			{
+				value: questionnaire(
+					"01K0N4X2M5R8T3VQ7YB6ZC4DEF",
+					"01K0N4Y2M5R8T3VQ7YB6ZC4DEF",
+					"01K0N4Z2M5R8T3VQ7YB6ZC4DEF",
+					"Second",
+				),
+				at: { index: 0, digest },
+			},
+		]);
+
+		expect(mutation).toBeDefined();
+		let source = room.project(document);
+		expect(source.indexOf("Related prose.")).toBeLessThan(source.indexOf('header="First"'));
+		expect(source.indexOf('header="First"')).toBeLessThan(source.indexOf('header="Second"'));
+		expect(source.indexOf('header="Second"')).toBeLessThan(source.indexOf("Later prose."));
+	});
+
+	it("refuses every insertion when one destination has changed", async () => {
+		let document = await room.create("Related prose.\n");
+		let digest = room.digests(document)[0]!;
+
+		expect(() =>
+			room.insertQuestionnaires(document, [
+				{
+					value: questionnaire(
+						"01K0N4TR8K7JGM4R1J7PW4R8YJ",
+						"01K0N4V4E7Y6P4MJ5WD8XZF3B2",
+						"01K0N4W3B7P27CBAEC7A8C8WEA",
+						"First",
+					),
+					at: { index: 0, digest },
+				},
+				{
+					value: questionnaire(
+						"01K0N4X2M5R8T3VQ7YB6ZC4DEF",
+						"01K0N4Y2M5R8T3VQ7YB6ZC4DEF",
+						"01K0N4Z2M5R8T3VQ7YB6ZC4DEF",
+						"Second",
+					),
+					at: { index: 0, digest: room.digest("changed") },
+				},
+			])
+		).toThrow(/changed.*read/i);
+		expect(room.project(document)).not.toContain("<Questionnaire");
 	});
 });
 

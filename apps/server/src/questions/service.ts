@@ -34,6 +34,11 @@ import type { Ended, Questions } from "./store";
 
 export type { Questions } from "./store";
 
+export type AskPlacement = {
+	revision: number;
+	blocks: Array<Array<{ index: number; digest: string }>>;
+};
+
 export const create = Store.create;
 
 /**
@@ -96,22 +101,21 @@ export async function ask(
 	server: Server<SocketData>,
 	roomId: string,
 	definition: Definition,
+	placement?: AskPlacement,
 ): Promise<Ended[]> {
 	if (definition.questions.length === 0) {
 		Question.reject("A questionnaire needs at least one question");
 	}
 
-	let waiting = definition.questions.map(question => {
+	let anchors = placement ? validatePlacement(plan, definition, placement) : undefined;
+	let asked = definition.questions.map((question, index) => {
 		let single = { questions: [question] };
 		// Its own identity, not borrowed from the question. They are different
 		// things, and a lookup that matched either would be a bug waiting for a
 		// question whose id happened to resemble its widget's.
 		let id = ulid();
-		let settled = Store.ask(plan.questions, id, single, id);
-
-		// The dialect calls the question text `prompt`; the domain calls it
-		// `question`. Translating here keeps the document's vocabulary its own.
-		let mutation = room.insertQuestionnaire(plan.document, {
+		let waiting = Store.ask(plan.questions, id, single, id);
+		let value = {
 			id,
 			questions: [{
 				id: question.id,
@@ -124,23 +128,69 @@ export async function ask(
 					...(option.description ? { description: option.description } : {}),
 				})),
 			}],
-		});
+		};
+		let record: Record = { id, definition: single, status: "open" };
+		if (anchors) {
+			record.anchors = Anchors.set(Anchors.read(record), question.id, anchors[index]!);
+		}
+		plan.records.set(id, record);
+		return { id, single, value, waiting, at: placement?.blocks[index]?.[0] };
+	});
 
-		plan.records.set(id, { id, definition: single, status: "open" });
-		if (mutation) Service.publish(plan, server, roomId, mutation);
+	let mutation = room.insertQuestionnaires(
+		plan.document,
+		asked.map(item => ({
+			value: item.value,
+			...(item.at ? { at: item.at } : {}),
+		})),
+	);
+	if (mutation) Service.publish(plan, server, roomId, mutation);
+	for (let item of asked) {
 		broadcast(server, roomId, {
 			kind: "question:asked",
 			ts: 0,
-			id,
-			definition: single,
-			widget: id,
+			id: item.id,
+			definition: item.single,
+			widget: item.id,
 		});
-		return settled;
-	});
+	}
 
 	// Promise.all retains the planner's order even when people settle cards in
 	// another order, so each returned outcome still names the ask that made it.
-	return Promise.all(waiting);
+	return Promise.all(asked.map(item => item.waiting));
+}
+
+/** Validate and mint all relationships before records or document nodes exist. */
+function validatePlacement(
+	plan: Plan,
+	definition: Definition,
+	placement: AskPlacement,
+): Wired.Anchor[][] {
+	if (placement.revision !== plan.revision) {
+		throw new Error("The plan changed; read it again before asking.");
+	}
+	if (placement.blocks.length !== definition.questions.length) {
+		throw new Error("Give one placement for every question.");
+	}
+
+	let digests = room.digests(plan.document);
+	return placement.blocks.map(blocks => {
+		if (blocks.length === 0) {
+			if (room.hasProse(plan.document)) {
+				throw new Error("Relate each question to prose, or write its context first.");
+			}
+			return [];
+		}
+
+		return blocks.map(block => {
+			let current = digests[block.index];
+			if (!current) throw new Error(`no block at index ${block.index}`);
+			if (current !== block.digest) {
+				throw new Error(`block ${block.index} has changed; read the plan again`);
+			}
+			return room.anchorAt(plan.document, block.index, current);
+		});
+	});
 }
 
 /** Everything still unanswered, for a client that has just joined. */
