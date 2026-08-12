@@ -102,6 +102,7 @@ export async function ask(
 	roomId: string,
 	definition: Definition,
 	placement?: AskPlacement,
+	created?: () => void,
 ): Promise<Ended[]> {
 	if (definition.questions.length === 0) {
 		Question.reject("A questionnaire needs at least one question");
@@ -154,6 +155,7 @@ export async function ask(
 			widget: item.id,
 		});
 	}
+	created?.();
 
 	// Promise.all retains the planner's order even when people settle cards in
 	// another order, so each returned outcome still names the ask that made it.
