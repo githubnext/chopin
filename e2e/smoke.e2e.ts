@@ -136,11 +136,11 @@ test(
 
 		await join("ana");
 		let chat = page.locator("#pane-chat");
-		let live = chat.getByText("edit_plan", { exact: true }).locator("..");
+		let live = chat.getByText("Edit plan", { exact: true }).locator("..");
 
 		await expect(live).toContainText("7 done");
 		expect((await live.boundingBox())?.height).toBe(28);
-		await expect(chat.getByRole("button", { name: /edit_plan/ })).toHaveCount(0);
+		await expect(chat.getByRole("button", { name: /Edit plan/ })).toHaveCount(0);
 		await expect(chat.getByRole("button", { name: "Stop" })).toBeVisible();
 		let person = chat.getByRole("img", { name: "maggie" });
 		let planner = chat.getByRole("img", { name: "Planner" });
@@ -217,7 +217,7 @@ test(
 		await expect(chat.getByText("Maggie", { exact: true })).toHaveCount(1);
 		await expect(chat).toContainText("Can you draft the migration?");
 		await expect(chat).not.toContainText("@");
-		await expect(chat.getByText("read_file", { exact: true })).toHaveCount(0);
+		await expect(chat.getByText("Read file", { exact: true })).toHaveCount(0);
 
 		let run = chat.getByRole("button", { name: /4 tools.*1 failed.*1\.3s/ });
 		await expect(run).toBeVisible();
@@ -230,10 +230,10 @@ test(
 		).toEqual({ background: "rgba(0, 0, 0, 0)", border: "0px", height: "28px" });
 		await expect(run.getByText("1 failed")).toHaveClass(/text-destructive-ink/);
 		await run.click();
-		await expect(chat.getByText("read_file", { exact: true })).toBeVisible();
-		await expect(chat.getByText("run_tests", { exact: true })).toBeVisible();
+		await expect(chat.getByText("Read file", { exact: true })).toBeVisible();
+		await expect(chat.getByText("Run tests", { exact: true })).toBeVisible();
 		let firstTool = chat.getByRole("list", { name: "Tool calls" }).getByRole("listitem").first();
-		expect((await firstTool.getByText("read_file").boundingBox())!.x).toBeLessThan(
+		expect((await firstTool.getByText("Read file").boundingBox())!.x).toBeLessThan(
 			(await firstTool.getByText("38ms").boundingBox())!.x,
 		);
 
