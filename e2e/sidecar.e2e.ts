@@ -23,8 +23,13 @@ function questionnaire(page: import("@playwright/test").Page) {
 	return page.locator("article[data-plan-sidecar-questionnaire]");
 }
 
-function thread(page: import("@playwright/test").Page) {
-	return page.locator("article[data-plan-sidecar-thread]");
+function commentButton(page: import("@playwright/test").Page) {
+	return page.getByRole("button", { name: /Comment on/ });
+}
+
+async function thread(page: import("@playwright/test").Page) {
+	await commentButton(page).click();
+	return page.getByRole("dialog", { name: "Comment thread" });
 }
 
 test("a question the room was asked is waiting in the sidecar", async ({ join, seed }) => {
@@ -112,29 +117,29 @@ test("cancelling asks first", async ({ join, seed }) => {
 	await expect(card.getByRole("button", { name: "Submit" })).toBeVisible();
 });
 
-test("a marked passage arrives as a thread quoting the prose", async ({ join, seed }) => {
+test("a marked passage has document chrome with a hover preview", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
 
-	let card = thread(page);
-	await expect(card).toHaveCount(1);
-	await expect(card).toContainText("@dev");
-	await expect(card).toContainText(`Is this still right? — "${QUOTED}"`);
-	await expect(card.getByPlaceholder("Reply…")).toBeVisible();
+	let button = commentButton(page);
+	await expect(button).toBeVisible();
+	await button.hover();
+	await expect(page.getByRole("tooltip")).toContainText(`Is this still right? — "${QUOTED}"`);
+
+	// Focus offers the same compact preview without requiring a pointer.
+	await button.focus();
+	await expect(page.getByRole("tooltip")).toBeVisible();
 });
 
-test("the quote becomes a way back into the prose once it is anchored", async ({ join, seed }) => {
+test("clicking a comment button pins its document card and preserves the related wash", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
-	let card = thread(page);
-
-	// A blockquote until there is somewhere to send a click, a button after —
-	// the same rule an answer already followed, and the reason the whole card
-	// is not the link.
-	let quote = card.getByRole("button", { name: /— show in plan/ });
-	await expect(quote).toBeVisible();
-
-	await quote.click();
+	let card = await thread(page);
+	await expect(card).toContainText("@dev");
+	await expect(card.getByPlaceholder("Reply…")).toBeVisible();
+	await page.keyboard.press("Escape");
+	await expect(page.getByRole("dialog", { name: "Comment thread" })).toHaveCount(0);
+	card = await thread(page);
 
 	/*
 	 * Read out of the highlight registry, not off an element. The wash takes no
@@ -161,7 +166,7 @@ function washed(page: import("@playwright/test").Page): Promise<number> {
 test("a reply joins the thread, and the quote counts it", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
-	let card = thread(page);
+	let card = await thread(page);
 
 	// The opening comment is not a reply, so a thread nobody has answered has
 	// no number to report and shows none.
@@ -178,7 +183,7 @@ test("a reply joins the thread, and the quote counts it", async ({ join, seed })
 test("accepting asks twice, and says so in the transcript", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
-	let card = thread(page);
+	let card = await thread(page);
 
 	// One click relabels, the second commits. Accepting starts an agent turn
 	// and freezes the thread, which is not something to do on a mis-click.
@@ -197,20 +202,19 @@ test("accepting asks twice, and says so in the transcript", async ({ join, seed 
 		page.getByText("The agent is not running, so the plan has not been revised."),
 	).toBeVisible();
 
-	// Frozen: the thread is what the room settled, so there is nothing left to
-	// accept or reply to.
-	await expect(card.getByRole("button", { name: "Accept" })).toHaveCount(0);
-	await expect(card.getByPlaceholder("Reply…")).toHaveCount(0);
-	await expect(card).toContainText("Accepted by @ana");
+	// Open-thread chrome leaves the document as soon as the comment is settled;
+	// its resulting Decision is the next task's inline surface.
+	await expect(page.getByRole("dialog", { name: "Comment thread" })).toHaveCount(0);
+	await expect(commentButton(page)).toHaveCount(0);
 });
 
-test("a dismissed thread leaves the sidecar", async ({ join, seed }) => {
+test("a dismissed thread removes its document button", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
-	let card = thread(page);
+	let card = await thread(page);
 
 	await card.getByRole("button", { name: "Dismiss" }).click();
 	await card.getByRole("button", { name: "Sure?" }).click();
 
-	await expect(thread(page)).toHaveCount(0);
+	await expect(commentButton(page)).toHaveCount(0);
 });

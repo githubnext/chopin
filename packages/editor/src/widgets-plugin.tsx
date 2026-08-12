@@ -14,6 +14,7 @@
 import { addComposerChild$, realmPlugin } from "@mdxeditor/editor";
 
 import { ChangeObserver } from "./changes-observer";
+import { CommentLayer } from "./comment-layer";
 import { QuestionnaireObserver } from "./questionnaires";
 import { TableRails } from "./table/rails";
 import { ThreadObserver } from "./threads";
@@ -38,6 +39,7 @@ export const widgetsPlugin = realmPlugin<WidgetOptions>({
 		if (params?.threads) {
 			let store = params.threads;
 			realm.pub(addComposerChild$, () => <ThreadObserver store={store} />);
+			realm.pub(addComposerChild$, () => <CommentLayer store={store} />);
 		}
 		if (params?.changes) {
 			let store = params.changes;
