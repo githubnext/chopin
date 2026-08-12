@@ -35,6 +35,17 @@ The renderer caches tiles for 60 seconds.
 The second paragraph.
 `;
 
+const WIDGET = "01K0N4TR8K7JGM4R1J7PW4R8YJ";
+const QUESTION = "01K0N4V4E7Y6P4MJ5WD8XZF3B2";
+const OPTION = "01K0N4W3B7P27CBAEC7A8C8WEA";
+const QUESTIONNAIRE = `<Questionnaire id="${WIDGET}" by="ana" at="2026-07-28T10:14:00.000Z">
+<Question id="${QUESTION}" header="Cache" prompt="How long do we cache?" multiple="false">
+<Option id="${OPTION}" label="60 seconds" />
+<Answer value="60 seconds" />
+</Question>
+</Questionnaire>
+`;
+
 let rooms: string[] = [];
 let opens: Plan[] = [];
 
@@ -93,6 +104,33 @@ describe("saying where a decision lives", () => {
 
 		expect(Questions.outstanding(plan)).toEqual([]);
 		expect(Questions.anchors(plan)[0]?.questions.q1?.anchors).toHaveLength(1);
+	});
+
+	it("moves the canonical questionnaire after the validated prose block", async () => {
+		let dir = await mkdtemp(join(tmpdir(), "chopin-questions-"));
+		rooms.push(dir);
+		await writeFile(join(dir, "plan.mdx"), `${SOURCE}\n${QUESTIONNAIRE}`);
+		let state = stored();
+		let record = state.questions[0]!;
+		record.id = WIDGET;
+		record.definition.questions[0]!.id = QUESTION;
+		Object.assign(record.answers, { [QUESTION]: "60 seconds" });
+		await writeFile(join(dir, "state.json"), JSON.stringify(state));
+
+		let server = { publish() {} } as unknown as Server<SocketData>;
+		let plan = await Service.open("test", dir, server);
+		opens.push(plan);
+		let digest = room.digests(plan.document)[1]!;
+
+		let blocks = [{ index: 1, digest }];
+		expect(Questions.relate(plan, WIDGET, QUESTION, blocks)).toBeUndefined();
+		expect(Questions.place(plan, [{ widget: WIDGET, question: QUESTION, blocks }])).toBeDefined();
+
+		let source = room.project(plan.document);
+		expect(source.indexOf("The renderer caches tiles for 60 seconds."))
+			.toBeLessThan(source.indexOf(`<Questionnaire id="${WIDGET}"`));
+		expect(source.indexOf(`<Questionnaire id="${WIDGET}"`))
+			.toBeLessThan(source.indexOf("The second paragraph."));
 	});
 
 	/** An empty list is a real answer: reviewed, deliberately related to nothing. */
