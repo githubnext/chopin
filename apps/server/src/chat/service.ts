@@ -666,9 +666,13 @@ function named(chat: Chat, id: string): string {
  */
 function attach(context: Room, activity: Wire.Activity): string {
 	let { chat, room, server } = context;
-	let entry = chat.entries.find(item => item.id === chat.tooling)
+	// Completion may follow `session.idle`, which has already let go of the
+	// current entry. Its call id is still the authoritative way back to the
+	// activity that started it; otherwise the original stays running forever.
+	let entry = chat.entries.find(item => item.tools?.some(tool => tool.id === activity.id))
+		?? chat.entries.find(item => item.id === chat.tooling)
 		?? chat.entries.find(item => item.id === chat.writing);
-	if (entry) chat.tooling = entry.id;
+	if (entry && !entry.tools?.some(tool => tool.id === activity.id)) chat.tooling = entry.id;
 
 	if (!entry) {
 		entry = { id: ulid(), author: { kind: "agent" }, text: "", ts: now(), tools: [] };
