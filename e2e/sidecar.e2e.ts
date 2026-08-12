@@ -12,11 +12,28 @@
  */
 
 import { content, expect, test } from "./room";
+import { writeFile } from "node:fs/promises";
+import * as Path from "node:path";
+
+import { scratch } from "./servers";
 
 /** Long enough to be marked: the injector wants twenty characters. */
 const PROSE = "Room state lives on disk as MDX beside the transcript.\n";
 const TWO_BLOCKS = `${PROSE}\nA second block remains after the marked passage.\n`;
 const LONG_PLAN = Array.from({ length: 80 }, (_, index) => `Paragraph ${index + 1}.`).join("\n\n");
+const WIDGET = "01K0N4TR8K7JGM4R1J7PW4R8YJ";
+const QUESTION = "01K0N4V4E7Y6P4MJ5WD8XZF3B2";
+const OPTION = "01K0N4W3B7P27CBAEC7A8C8WEA";
+const ANCHORED = `Anchored paragraph.
+
+<Questionnaire id="${WIDGET}" by="ana" at="2026-07-28T10:14:00.000Z">
+<Question id="${QUESTION}" header="Rollout" prompt="How should we deploy?" multiple="false">
+<Option id="${OPTION}" label="Canary" />
+<Answer value="Canary" />
+</Question>
+</Questionnaire>
+`;
+const ANCHORED_DIGEST = "sha256:3ccc3e648811df8180799f8b012c6934bcf44a306f5eb8b8c9d2676b0493ccf4";
 
 /** What the injector will quote: the first forty-eight characters. */
 const QUOTED = "Room state lives on disk as MDX beside the trans";
@@ -87,6 +104,53 @@ test("switching views restores the plan scroll position", async ({ join, seed })
 	await page.getByRole("button", { name: "Decisions", exact: true }).click();
 	await page.getByRole("button", { name: "Plan", exact: true }).click();
 	await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBe(160);
+});
+
+test("Show in plan focuses the addressed inline questionnaire", async ({ baseURL, join, room, seed }) => {
+	await seed(ANCHORED);
+	await writeFile(
+		Path.join(scratch(Number(new URL(baseURL!).port)), room, "state.json"),
+		JSON.stringify({
+			revision: 1,
+			questions: [{
+				id: WIDGET,
+				status: "answered",
+				resolver: "ana",
+				definition: {
+					questions: [{
+						id: QUESTION,
+						header: "Rollout",
+						question: "How should we deploy?",
+						multiple: false,
+						options: [{ id: OPTION, label: "Canary", description: "" }],
+					}],
+				},
+				answers: { [QUESTION]: "Canary" },
+				anchors: {
+					widget: WIDGET,
+					questions: {
+						[QUESTION]: {
+							anchors: [{ epoch: "stale", position: "", digest: ANCHORED_DIGEST }],
+							pending: false,
+						},
+					},
+				},
+			}],
+		}),
+	);
+	let page = await join("ana");
+
+	await page.getByRole("button", { name: "Decisions", exact: true }).click();
+	let card = questionnaire(page).filter({ hasText: "How should we deploy?" });
+	await card.getByRole("button", { name: /How should we deploy.*show in plan/ }).click();
+
+	await expect(page.getByRole("button", { name: "Plan", exact: true }))
+		.toHaveAttribute("aria-pressed", "true");
+	await expect(
+		page.locator(
+			`[data-document-view="plan"] article[data-plan-sidecar-questionnaire="${WIDGET}"]`,
+		),
+	).toBeFocused();
 });
 
 test("answering both questions resolves the card and writes the decision", async ({ join, seed }) => {
