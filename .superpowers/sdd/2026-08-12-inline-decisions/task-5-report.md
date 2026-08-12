@@ -55,3 +55,30 @@ the scroll-container locator. No product defect remained.
 brief's file list; this is necessary to keep scroll ownership in the document
 host while preserving the mounted editor. Task 6 planner-prompt work was not
 changed.
+
+## Review follow-up — Show in plan focus routing
+
+Added a sidecar browser regression that begins in Decisions with a
+digest-rebased answered questionnaire, activates its actual Show in plan
+control, confirms Plan is selected, and asserts focus reaches that inline
+questionnaire. The separate no-selection scroll-restoration test remains.
+
+### RED / GREEN
+
+RED was the coverage gap: no browser test previously activated Show in plan or
+asserted the target focus. This is not a product failure; the new test's first
+execution was GREEN because the Task 5 implementation already routes, reveals,
+and focuses the inline card.
+
+### Results
+
+- Focused new route: `TMPDIR=/private/tmp bun run e2e -- e2e/sidecar.e2e.ts` — 15 pass, 0 fail.
+- Focused shell + sidecar: `TMPDIR=/private/tmp bun run e2e -- e2e/shell.e2e.ts e2e/sidecar.e2e.ts` — 20 pass, 0 fail.
+- Relevant units — 32 pass, 0 fail.
+- `bun run types` — pass.
+- `DPRINT_CACHE_DIR=/private/tmp/dprint-cache bun run ci` — pass after one formatter-only line wrap.
+- `git diff --check` — pass.
+
+### Commit
+
+`32403519d7058f4c44b69f062a9dcda945000441` — `Cover show in plan focus routing`.
