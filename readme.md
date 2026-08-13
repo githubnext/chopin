@@ -35,6 +35,25 @@ the multiplayer half. Ctrl-C stops the web and server processes;
 
 Set `AGENT=off` to run the editor without Copilot.
 
+### Docker
+
+The production image builds the browser client and serves it from the same Bun
+process that owns the API and WebSocket. To run the complete stack locally,
+fill in the OAuth and session variables in `.env`, then run:
+
+```bash
+bun run docker:up
+```
+
+This builds the image, starts PostgreSQL, applies migrations, and listens on
+`http://127.0.0.1:8787`. `bun run docker:down` stops the stack. The ordinary
+`bun run db:up` remains database-only for development with Vite HMR.
+
+For a deployment using a managed database, build `Dockerfile`, provide
+`DATABASE_URL`, `APP_ORIGIN`, the GitHub OAuth credentials, and
+`SESSION_ENCRYPTION_KEY` at runtime, and expose container port `8787`. Do not
+bake `.env` or any credential into the image.
+
 ## Talking to the agent
 
 The agent acts only when addressed:

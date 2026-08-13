@@ -1,7 +1,6 @@
-# Two jobs rather than one, because they fail for unrelated reasons and one of
-# them is slow. `checks` answers in about a minute; `browser` has to build the
-# client before it can serve it, and a formatting mistake should not wait
-# behind a Vite build to be reported.
+# Separate jobs because they fail for unrelated reasons. `checks` answers in
+# about a minute; the browser and container builds run beside it so a formatting
+# mistake does not wait behind either build to be reported.
 name: ci
 
 on:
@@ -119,3 +118,19 @@ jobs:
             e2e/playwright-report
             e2e/test-results
           retention-days: 7
+
+  container:
+    name: container
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: chopin:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

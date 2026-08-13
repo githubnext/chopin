@@ -13,17 +13,23 @@ bun run types      # every package, and e2e
 bun run ci         # dprint check && oxlint && token checks
 bun run build      # production client
 bun run start      # serve the built client
+bun run docker:up  # production image + PostgreSQL through the app Compose profile
 ```
 
-`.github/workflows/ci.yml` runs all four checks on every push and pull request,
-in two jobs: `bun run ci`, `bun run types` and `bun test` together, and the
-browser suite on its own because it has to build the client first and should
-not make a formatting mistake wait behind Vite. A failed browser run uploads
-its report and traces.
+`.github/workflows/ci.yml` runs the static/unit checks, browser suite, and
+production image build in three parallel jobs. The browser and container jobs
+build independently so a formatting mistake does not wait behind either one. A
+failed browser run uploads its report and traces.
 
 `bun run dev` needs a migrated PostgreSQL database, GitHub OAuth configuration,
 and a session encryption key. `AGENT=off` runs everything except the agent,
 which is what both suites use.
+
+`Dockerfile` is one application image, not a web tier and an API tier: the build
+stage produces `apps/web/dist`, and the Bun server serves it on the same origin
+as `/api` and `/ws`. Its default command migrates before serving and runs as the
+image's unprivileged `bun` user. Compose keeps that service behind the `app`
+profile so `bun run db:up` continues to start only PostgreSQL for development.
 
 `bun run e2e` needs a browser once: `bun run e2e:browsers`. It builds the
 client, starts two temporary PostgreSQL services and two servers of its own —
