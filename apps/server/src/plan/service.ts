@@ -11,6 +11,7 @@
  */
 
 import * as Y from "yjs";
+import { createHash } from "node:crypto";
 
 import { MENTION } from "@chopin/protocol/address";
 
@@ -30,6 +31,8 @@ import type { Document } from "./room";
 import type * as edit from "./edit";
 import type { Block } from "./edit";
 import type { Sink } from "./snapshot";
+import type { JsonValue, Lease } from "../storage/model";
+import type { StorageAdapter } from "../storage/port";
 
 /** Updates are grouped for this long before being applied together. */
 const GROUP_MS = 5;
@@ -59,7 +62,37 @@ type Meter = {
 	invalid: number[];
 };
 
+export type HostedBackend = {
+	kind: "hosted";
+	storage: StorageAdapter;
+	lease: () => Lease;
+	fatal: (error: unknown) => void;
+};
+
+type Durable = HostedBackend & {
+	channelId: string;
+	revision: number;
+	sequence: number;
+	lastSidecar: string;
+	checkpointTimer: ReturnType<typeof setTimeout> | undefined;
+	committedEpoch: string;
+	committedSource: string;
+	committedDocument: Uint8Array;
+	committedSidecar: JsonValue;
+	closing: boolean;
+};
+
+type Captured = {
+	epoch: string;
+	source: string;
+	document: Uint8Array;
+	sidecar: JsonValue;
+	sidecarText: string;
+};
+
 export type Plan = {
+	id: string;
+	server: Server<SocketData>;
 	document: Document;
 	presence: Presence;
 	sink: Sink;
@@ -100,6 +133,8 @@ export type Plan = {
 	/** Serialises commits so two batches cannot interleave. */
 	flushing: Promise<void>;
 	meters: WeakMap<Socket, Meter>;
+	/** Present only for authenticated channels; legacy rooms keep their files. */
+	durable?: Durable;
 };
 
 function decode(value: string): Uint8Array {
@@ -115,6 +150,340 @@ function recent(stamps: number[], window: number): number[] {
 	return stamps.filter(at => at > cutoff);
 }
 
+function state(plan: Plan): snapshot.State {
+	return {
+		version: 1,
+		revision: plan.revision,
+		documentSeq: plan.document.seq,
+		questions: [...plan.records.values()],
+		openQuestions: Questions.dump(plan.questions),
+		threads: [...plan.threads.values()],
+		transcript: plan.chat.entries,
+		...(plan.chat.resume ? { session: plan.chat.resume } : {}),
+	};
+}
+
+function jsonState(plan: Plan): { value: JsonValue; text: string } {
+	let text = JSON.stringify(state(plan));
+	return { value: JSON.parse(text) as JsonValue, text };
+}
+
+function capture(plan: Plan): Captured {
+	let sidecar = jsonState(plan);
+	return {
+		epoch: plan.document.epoch,
+		source: room.project(plan.document),
+		document: Y.encodeStateAsUpdate(plan.document.doc),
+		sidecar: sidecar.value,
+		sidecarText: sidecar.text,
+	};
+}
+
+function objects(value: JsonValue[], label: string): Array<Record<string, JsonValue>> {
+	let seen = new Set<string>();
+	return value.map(entry => {
+		if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+			throw new Error(`hosted channel has an invalid ${label}`);
+		}
+		let item = entry as Record<string, JsonValue>;
+		if (typeof item.id !== "string" || !item.id || seen.has(item.id)) {
+			throw new Error(`hosted channel has an invalid or duplicate ${label} id`);
+		}
+		seen.add(item.id);
+		return item;
+	});
+}
+
+function restoredState(value: JsonValue, pristine: boolean): snapshot.State {
+	if (value === null && pristine) {
+		return {
+			version: 1,
+			revision: 0,
+			documentSeq: 0,
+			questions: [],
+			openQuestions: [],
+			threads: [],
+			transcript: [],
+		};
+	}
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		throw new Error("hosted channel has an invalid sidecar");
+	}
+	let item = value as Record<string, JsonValue>;
+	if (
+		item.version !== 1
+		|| typeof item.revision !== "number"
+		|| !Number.isSafeInteger(item.revision)
+		|| item.revision < 0
+		|| typeof item.documentSeq !== "number"
+		|| !Number.isSafeInteger(item.documentSeq)
+		|| item.documentSeq < 0
+		|| !Array.isArray(item.questions)
+		|| !Array.isArray(item.openQuestions)
+		|| !Array.isArray(item.threads)
+		|| !Array.isArray(item.transcript)
+	) throw new Error("hosted channel has an invalid sidecar");
+	let questions = objects(item.questions, "question record");
+	for (let question of questions) {
+		if (
+			(question.status !== "open" && question.status !== "answered"
+				&& question.status !== "cancelled")
+			|| !question.definition
+			|| typeof question.definition !== "object"
+			|| Array.isArray(question.definition)
+		) throw new Error("hosted channel has an invalid question record");
+	}
+	let openQuestions = objects(item.openQuestions, "open questionnaire");
+	let openIds = new Set(openQuestions.map(entry => entry.id as string));
+	if (questions.some(record => (record.status === "open") !== openIds.has(record.id as string))) {
+		throw new Error("hosted channel question records disagree with their drafts");
+	}
+	let threads = objects(item.threads, "comment thread");
+	for (let thread of threads) {
+		if (
+			(thread.status !== "open" && thread.status !== "accepted" && thread.status !== "dismissed")
+			|| !thread.passage
+			|| typeof thread.passage !== "object"
+			|| Array.isArray(thread.passage)
+			|| !Array.isArray(thread.notes)
+		) throw new Error("hosted channel has an invalid comment thread");
+	}
+	let transcript = objects(item.transcript, "transcript entry");
+	for (let entry of transcript) {
+		if (
+			typeof entry.text !== "string"
+			|| typeof entry.ts !== "number"
+			|| !entry.author
+			|| typeof entry.author !== "object"
+			|| Array.isArray(entry.author)
+		) throw new Error("hosted channel has an invalid transcript entry");
+	}
+	return {
+		version: 1,
+		revision: item.revision,
+		documentSeq: item.documentSeq,
+		questions: questions as never[],
+		openQuestions,
+		threads: threads as never[],
+		transcript,
+		...(typeof item.session === "string" ? { session: item.session } : {}),
+	};
+}
+
+function digest(source: string): string {
+	return `sha256:${createHash("sha256").update(source).digest("hex")}`;
+}
+
+function legacySink(plan: Plan, server: Server<SocketData>, id: string, dir: string): Sink {
+	return snapshot.sink({
+		dir,
+		onFlush: () => {
+			let before = signature(plan);
+			Questions.rebase(plan);
+			Comments.rebase(plan);
+			if (signature(plan) !== before) anchors(plan, server, id);
+		},
+		read: () => ({ source: room.project(plan.document), state: state(plan) }),
+		onWrite(status, message) {
+			broadcast(server, id, {
+				kind: "plan:status",
+				ts: 0,
+				state: status,
+				revision: plan.revision,
+				...(message ? { message } : {}),
+			});
+		},
+	});
+}
+
+function hostedSink(plan: Plan): Sink {
+	return {
+		touch() {
+			if (plan.durable?.closing) return;
+			let captured = capture(plan);
+			let commit = () => commitHosted(plan, undefined, `state:${crypto.randomUUID()}`, captured);
+			plan.flushing = plan.flushing.then(commit, commit);
+		},
+		async flush() {
+			let durable = plan.durable;
+			if (!durable) return;
+			durable.closing = true;
+			if (durable.checkpointTimer) clearTimeout(durable.checkpointTimer);
+			durable.checkpointTimer = undefined;
+			await plan.flushing;
+			await commitHosted(plan, undefined, `state:${crypto.randomUUID()}`, capture(plan));
+			await checkpointHosted(plan);
+		},
+		cancel() {
+			let durable = plan.durable;
+			if (durable?.checkpointTimer) clearTimeout(durable.checkpointTimer);
+			if (durable) {
+				durable.checkpointTimer = undefined;
+				durable.closing = true;
+			}
+		},
+	};
+}
+
+function scheduleCheckpoint(plan: Plan): void {
+	let durable = plan.durable;
+	if (!durable || durable.closing || durable.checkpointTimer) return;
+	durable.checkpointTimer = setTimeout(() => {
+		durable.checkpointTimer = undefined;
+		let checkpoint = () => checkpointHosted(plan);
+		plan.flushing = plan.flushing.then(checkpoint, checkpoint);
+	}, 500);
+}
+
+async function commitHosted(
+	plan: Plan,
+	update: Uint8Array | undefined,
+	operationId: string,
+	captured: Captured,
+): Promise<void> {
+	let durable = plan.durable;
+	if (!durable) {
+		plan.sink.touch();
+		return;
+	}
+	if (!update && captured.sidecarText === durable.lastSidecar) {
+		scheduleCheckpoint(plan);
+		return;
+	}
+	try {
+		let result = await durable.storage.collaboration.commit({
+			channelId: durable.channelId,
+			lease: durable.lease(),
+			expectedRevision: durable.revision,
+			operationId,
+			epoch: captured.epoch,
+			...(update ? { update } : {}),
+			sidecar: captured.sidecar,
+			events: [],
+			now: new Date(),
+		});
+		if (!result.repeated) {
+			durable.revision = result.revision;
+			durable.sequence = result.sequence;
+		}
+		if (result.repeated && captured.sidecarText !== durable.lastSidecar) {
+			let stateResult = await durable.storage.collaboration.commit({
+				channelId: durable.channelId,
+				lease: durable.lease(),
+				expectedRevision: durable.revision,
+				operationId: `state:${crypto.randomUUID()}`,
+				epoch: captured.epoch,
+				sidecar: captured.sidecar,
+				events: [],
+				now: new Date(),
+			});
+			durable.revision = stateResult.revision;
+			durable.sequence = stateResult.sequence;
+		}
+		durable.lastSidecar = captured.sidecarText;
+		durable.committedEpoch = captured.epoch;
+		durable.committedSource = captured.source;
+		durable.committedDocument = captured.document;
+		durable.committedSidecar = captured.sidecar;
+		if (plan.document.epoch === captured.epoch) {
+			plan.document.checkpoint = new Uint8Array(captured.document);
+		}
+		scheduleCheckpoint(plan);
+	} catch (err) {
+		durable.fatal(err);
+		throw err;
+	}
+}
+
+async function checkpointHosted(plan: Plan): Promise<void> {
+	let durable = plan.durable;
+	if (!durable) return;
+	try {
+		await durable.storage.collaboration.checkpoint({
+			channelId: durable.channelId,
+			lease: durable.lease(),
+			expectedRevision: durable.revision,
+			generation: crypto.randomUUID(),
+			revision: durable.revision,
+			throughSequence: durable.sequence,
+			epoch: durable.committedEpoch,
+			source: durable.committedSource,
+			sourceHash: digest(durable.committedSource),
+			document: durable.committedDocument,
+			sidecar: durable.committedSidecar,
+			createdAt: new Date(),
+		});
+		plan.document.checkpoint = new Uint8Array(durable.committedDocument);
+	} catch (err) {
+		durable.fatal(err);
+		throw err;
+	}
+}
+
+async function replaceHosted(plan: Plan, operationId: string, captured: Captured): Promise<void> {
+	let durable = plan.durable;
+	if (!durable) return;
+	try {
+		let result = await durable.storage.collaboration.replace({
+			channelId: durable.channelId,
+			lease: durable.lease(),
+			expectedRevision: durable.revision,
+			operationId,
+			generation: crypto.randomUUID(),
+			epoch: captured.epoch,
+			source: captured.source,
+			sourceHash: digest(captured.source),
+			document: captured.document,
+			sidecar: captured.sidecar,
+			now: new Date(),
+		});
+		if (!result.repeated) {
+			durable.revision = result.revision;
+			durable.sequence = result.sequence;
+		}
+		durable.lastSidecar = captured.sidecarText;
+		durable.committedEpoch = captured.epoch;
+		durable.committedSource = captured.source;
+		durable.committedDocument = captured.document;
+		durable.committedSidecar = captured.sidecar;
+		plan.document.checkpoint = new Uint8Array(captured.document);
+		if (durable.checkpointTimer) clearTimeout(durable.checkpointTimer);
+		durable.checkpointTimer = undefined;
+	} catch (err) {
+		durable.fatal(err);
+		throw err;
+	}
+}
+
+/** Persist sidecar-only state, immediately in hosted mode and debounced on disk in legacy. */
+export function persist(plan: Plan): Promise<void> {
+	if (!plan.durable) {
+		plan.sink.touch();
+		return Promise.resolve();
+	}
+	let captured = capture(plan);
+	let commit = () => commitHosted(plan, undefined, `state:${crypto.randomUUID()}`, captured);
+	let pending = plan.flushing.then(commit, commit);
+	plan.flushing = pending;
+	return pending;
+}
+
+/** Reserve the same queue used by client batches for one complete server operation. */
+export function exclusive<T>(plan: Plan, action: () => Promise<T>): Promise<T> {
+	let operation = plan.flushing.then(action, action);
+	plan.flushing = operation.then(() => {}, () => {});
+	return operation;
+}
+
+/** Sidecar-only commit for a caller already holding `exclusive`. */
+export function persistExclusive(plan: Plan): Promise<void> {
+	if (!plan.durable) {
+		plan.sink.touch();
+		return Promise.resolve();
+	}
+	return commitHosted(plan, undefined, `state:${crypto.randomUUID()}`, capture(plan));
+}
+
 /**
  * Bring a room's plan into being.
  *
@@ -122,24 +491,89 @@ function recent(stamps: number[], window: number): number[] {
  * the way in: unlike a database record, this file is one a person can open and
  * edit between runs, so it is not trusted just because we wrote it.
  */
-export async function open(id: string, dir: string, server: Server<SocketData>): Promise<Plan> {
-	let stored = await snapshot.load(dir);
+export async function open(
+	id: string,
+	backend: string | HostedBackend,
+	server: Server<SocketData>,
+): Promise<Plan> {
+	let dir = typeof backend === "string" ? backend : undefined;
+	let stored: snapshot.Stored | undefined;
+	let document: Document;
+	let durability: { backend: HostedBackend; revision: number; sequence: number } | undefined;
+	let needsInitialCheckpoint = false;
+
+	if (typeof backend === "string") {
+		stored = await snapshot.load(backend);
+		document = await room.create(stored?.source ?? "", true);
+	} else {
+		let loaded = await backend.storage.collaboration.load(id, new Date());
+		if (!loaded) throw new Error(`hosted channel ${id} does not exist`);
+		let pristine = loaded.channel.revision === 0
+			&& loaded.latestSequence === 0
+			&& !loaded.snapshot;
+		let sidecar = restoredState(
+			loaded.sidecar === null && loaded.snapshot && loaded.channel.revision === 0
+				? loaded.snapshot.sidecar
+				: loaded.sidecar,
+			pristine,
+		);
+		if (loaded.snapshot) {
+			if (
+				loaded.snapshot.revision > loaded.channel.revision
+				|| loaded.snapshot.throughSequence > loaded.latestSequence
+			) throw new Error(`hosted channel ${id} has an invalid checkpoint position`);
+			let previous = loaded.snapshot.throughSequence;
+			for (let update of loaded.updates) {
+				if (
+					update.sequence <= previous
+					|| update.sequence > loaded.latestSequence
+					|| update.revision > loaded.channel.revision
+					|| update.epoch !== loaded.snapshot.epoch
+				) throw new Error(`hosted channel ${id} has an invalid update journal`);
+				previous = update.sequence;
+			}
+			if (digest(loaded.snapshot.source) !== loaded.snapshot.sourceHash) {
+				throw new Error(`hosted channel ${id} has a corrupt source hash`);
+			}
+			document = await room.restore(
+				loaded.snapshot.epoch,
+				loaded.snapshot.document,
+				loaded.snapshot.source,
+				loaded.updates.map(update => ({ epoch: update.epoch, update: update.update })),
+			);
+		} else {
+			if (loaded.updates.length > 0) {
+				throw new Error(`hosted channel ${id} has updates without a checkpoint`);
+			}
+			document = await room.create();
+			needsInitialCheckpoint = true;
+		}
+		document.seq = sidecar.documentSeq ?? 0;
+		stored = { source: room.project(document), state: sidecar };
+		durability = {
+			backend,
+			revision: loaded.channel.revision,
+			sequence: loaded.latestSequence,
+		};
+	}
 
 	if (stored?.source) {
 		try {
 			room.validate(stored.source);
 		} catch (err) {
 			let message = err instanceof Error ? err.message : String(err);
-			throw new Error(`${dir}/plan.mdx is not a valid plan: ${message}`, { cause: err });
+			throw new Error(`${dir ?? `channel ${id}`} is not a valid plan: ${message}`, { cause: err });
 		}
 	}
 
-	let document = await room.create(stored?.source ?? "", true);
-
 	let plan: Plan = {
+		id,
+		server,
 		document,
 		presence: presence.create(),
-		questions: Questions.create(),
+		questions: stored?.state.openQuestions
+			? Questions.restore(stored.state.openQuestions as Questions.StoredOpen[])
+			: Questions.create(),
 		comments: Comments.create(),
 		chat: Chat.restore(
 			(stored?.state.transcript ?? []) as never[],
@@ -158,42 +592,28 @@ export async function open(id: string, dir: string, server: Server<SocketData>):
 		attention: undefined,
 		flushing: Promise.resolve(),
 		meters: new WeakMap(),
-		sink: snapshot.sink({
-			dir,
-			// Anchors and passages are expressed against the document, so they
-			// are brought forward before being written rather than left to the
-			// agent's next edit — which is what used to recover a moved block.
-			//
-			// A recovery nobody is told about is invisible: the highlight stays
-			// dark until something else happens to broadcast. So the snapshot
-			// is compared, and the room hears only when it actually moved.
-			onFlush: () => {
-				let before = signature(plan);
-				Questions.rebase(plan);
-				Comments.rebase(plan);
-				if (signature(plan) !== before) anchors(plan, server, id);
-			},
-			read: () => ({
-				source: room.project(plan.document),
-				state: {
-					revision: plan.revision,
-					questions: [...plan.records.values()],
-					threads: [...plan.threads.values()],
-					transcript: plan.chat.entries,
-					...(plan.chat.resume ? { session: plan.chat.resume } : {}),
-				},
-			}),
-			onWrite(state, message) {
-				broadcast(server, id, {
-					kind: "plan:status",
-					ts: 0,
-					state,
-					revision: plan.revision,
-					...(message ? { message } : {}),
-				});
-			},
-		}),
+		sink: undefined as unknown as Sink,
 	};
+
+	if (dir) plan.sink = legacySink(plan, server, id, dir);
+	else if (durability) {
+		let committed = capture(plan);
+		plan.durable = {
+			...durability.backend,
+			channelId: id,
+			revision: durability.revision,
+			sequence: durability.sequence,
+			lastSidecar: committed.sidecarText,
+			checkpointTimer: undefined,
+			committedEpoch: committed.epoch,
+			committedSource: committed.source,
+			committedDocument: committed.document,
+			committedSidecar: committed.sidecar,
+			closing: false,
+		};
+		plan.sink = hostedSink(plan);
+		if (needsInitialCheckpoint) await checkpointHosted(plan);
+	}
 
 	// A restart is an epoch rotation: every position restored from disk was
 	// expressed in a history this document does not have. Recovering them now
@@ -328,14 +748,38 @@ async function commit(plan: Plan): Promise<void> {
 		} catch (err) {
 			console.error("[plan] could not carry anchors onto the rebuilt document:", err);
 		}
-
-		for (let item of batch) {
-			tell(item.ws, { kind: "plan:reset", ts: 0, epoch: rebuilt.epoch, reason: "rebuilt" });
+		if (plan.durable) {
+			await replaceHosted(plan, `epoch:${rebuilt.epoch}`, capture(plan));
 		}
+
+		broadcast(plan.server, plan.id, {
+			kind: "plan:reset",
+			ts: 0,
+			epoch: rebuilt.epoch,
+			reason: "rebuilt",
+		});
 		return;
 	}
 
+	let relationshipsChanged = false;
+	if (plan.durable) {
+		let before = signature(plan);
+		try {
+			Questions.rebase(plan);
+			Comments.rebase(plan);
+			relationshipsChanged = signature(plan) !== before;
+		} catch (err) {
+			console.error("[plan] could not carry hosted anchors forward:", err);
+		}
+	}
 	plan.revision++;
+	if (plan.durable) {
+		let merged = Y.mergeUpdates(batch.map(item => item.update));
+		let operationId = `plan:${plan.document.epoch}:${
+			createHash("sha256").update(merged).digest("hex")
+		}`;
+		await commitHosted(plan, merged, operationId, capture(plan));
+	}
 
 	for (let item of batch) {
 		reply(item.ws, item.rid, {
@@ -355,8 +799,9 @@ async function commit(plan: Plan): Promise<void> {
 		});
 	}
 
-	room.mark(plan.document);
-	plan.sink.touch();
+	if (!plan.durable) room.mark(plan.document);
+	if (relationshipsChanged) anchors(plan, plan.server, plan.id);
+	if (!plan.durable) plan.sink.touch();
 }
 
 /**
@@ -366,23 +811,33 @@ async function commit(plan: Plan): Promise<void> {
  * does: as a delta against the document they already hold. That is what keeps
  * an agent rewriting a paragraph from costing everybody else their cursor.
  */
-export function publish(
+export async function publish(
 	plan: Plan,
 	server: Server<SocketData>,
 	roomId: string,
 	mutation: { update: Uint8Array; source: string },
-): void {
+): Promise<void> {
 	plan.document.seq++;
 	plan.revision++;
-	broadcast(server, roomId, {
-		kind: "plan:update",
-		ts: 0,
-		epoch: plan.document.epoch,
-		update: encode(mutation.update),
-		seq: plan.document.seq,
-	});
-	room.mark(plan.document);
-	plan.sink.touch();
+	if (plan.durable) {
+		let operationId = `server:${plan.document.epoch}:${
+			createHash("sha256").update(mutation.update).digest("hex")
+		}`;
+		await commitHosted(plan, mutation.update, operationId, capture(plan));
+	}
+	try {
+		broadcast(server, roomId, {
+			kind: "plan:update",
+			ts: 0,
+			epoch: plan.document.epoch,
+			update: encode(mutation.update),
+			seq: plan.document.seq,
+		});
+	} catch (err) {
+		console.error("[plan] could not broadcast a persisted update:", err);
+	}
+	if (!plan.durable) room.mark(plan.document);
+	if (!plan.durable) plan.sink.touch();
 }
 
 /**

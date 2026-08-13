@@ -62,6 +62,20 @@ export function create(definition: Definition): Model {
 	return model;
 }
 
+/** Restore a complete shared draft, proving it still matches its definition. */
+export function restore(binary: number[], definition: Definition): Model {
+	if (binary.length > limits.MAX_MODEL_BYTES) {
+		reject(
+			`Questionnaire collaboration state exceeds the ${limits.MAX_MODEL_BYTES / 1024} KiB limit`,
+		);
+	}
+	let model = crdt.Model.fromBinary<crdt.ObjNode<Record<string, crdt.JsonNode<unknown>>>>(
+		new Uint8Array(binary),
+	);
+	read(model, definition);
+	return model;
+}
+
 function keys(node: crdt.ObjNode, expected: string[], name: string): void {
 	let actual = [...node.keys.keys()].sort();
 	let sorted = expected.toSorted();

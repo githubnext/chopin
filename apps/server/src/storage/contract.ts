@@ -313,6 +313,7 @@ export function storageContract(name: string, factory: Factory): void {
 					new Date("2026-01-04T03:05:05.000Z"),
 				);
 				expect(stored!.updates).toEqual([]);
+				expect(stored!.latestSequence).toBe(1);
 				expect([...stored!.snapshot!.document]).toEqual([2, 3]);
 				expect(stored!.snapshot!.source).toBe("# Plan\n");
 
@@ -327,6 +328,40 @@ export function storageContract(name: string, factory: Factory): void {
 					now: new Date("2026-01-04T03:06:05.000Z"),
 				});
 				expect(next.sequence).toBe(2);
+				expect((await storage.collaboration.load(channelId, new Date()))!.latestSequence).toBe(2);
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("replaces an epoch and its sidecar atomically", async () => {
+			let storage = await opened(factory);
+			try {
+				let { channelId, lease } = await userAndChannel(storage);
+				let input = {
+					channelId,
+					lease,
+					expectedRevision: 0,
+					operationId: id("replacement"),
+					generation: id("generation"),
+					epoch: "epoch-2",
+					source: "# Replacement\n",
+					sourceHash: "sha256:replacement",
+					document: new Uint8Array([7, 8, 9]),
+					sidecar: { version: 1, revision: 4 },
+					now: new Date("2026-01-05T03:04:05.000Z"),
+				};
+				expect(await storage.collaboration.replace(input)).toEqual({
+					revision: 1,
+					sequence: 1,
+					repeated: false,
+				});
+				let stored = await storage.collaboration.load(channelId, input.now);
+				expect(stored!.snapshot).toMatchObject({ epoch: "epoch-2", throughSequence: 1 });
+				expect([...stored!.snapshot!.document]).toEqual([7, 8, 9]);
+				expect(stored!.sidecar).toEqual(input.sidecar);
+				expect(stored!.updates).toEqual([]);
+				expect(await storage.collaboration.replace(input)).toMatchObject({ repeated: true });
 			} finally {
 				await storage.close();
 			}

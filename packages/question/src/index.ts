@@ -15,7 +15,7 @@ export * as limits from "./limits";
 export { assertCallId, normalize, QuestionError, reject } from "./schema";
 export type { Answer, Definition, Item, Option } from "./schema";
 
-export { answered, apply, assertPatch, create, read } from "./draft";
+export { answered, apply, assertPatch, create, read, restore } from "./draft";
 export type { Applied, Draft, Drafts, Mode, Model } from "./draft";
 
 export { derive, incomplete, summarize } from "./answer";

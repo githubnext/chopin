@@ -75,8 +75,22 @@ function presence(server: Server<SocketData>, room: Rooms.Room): void {
  */
 function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Service.Plan> {
 	if (room.plan) return Promise.resolve(room.plan);
+	let backend: string | Service.HostedBackend = hostedAuth && storage
+		? {
+			kind: "hosted",
+			storage,
+			lease: () => {
+				if (!heldLease) throw new Error("storage writer lease is unavailable");
+				return heldLease;
+			},
+			fatal: err => {
+				console.error("chopin: hosted plan persistence failed -", err);
+				signal();
+			},
+		}
+		: join(config.dataDir, room.id);
 	return room.opening ??= Service
-		.open(room.id, join(config.dataDir, room.id), server)
+		.open(room.id, backend, server)
 		.then(opened => {
 			room.plan = opened;
 			room.opening = undefined;
@@ -163,7 +177,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			return;
 
 		case "chat:send":
-			if (room.plan) Chat.send(conversation(room), ws, frame);
+			if (room.plan) await Chat.send(conversation(room), ws, frame);
 			return;
 
 		case "chat:abort":
@@ -179,7 +193,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			return;
 
 		case "question:edit":
-			if (room.plan) Questions.edit(room.plan, ws, frame);
+			if (room.plan) await Questions.edit(room.plan, ws, frame);
 			return;
 
 		case "question:presence":
@@ -195,11 +209,11 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			return;
 
 		case "comment:start":
-			if (room.plan) Comments.start(room.plan, server, room.id, ws, frame);
+			if (room.plan) await Comments.start(room.plan, server, room.id, ws, frame);
 			return;
 
 		case "comment:reply":
-			if (room.plan) Comments.respond(room.plan, ws, frame);
+			if (room.plan) await Comments.respond(room.plan, ws, frame);
 			return;
 
 		case "comment:typing":
@@ -381,10 +395,12 @@ function renewLease(): void {
 			armLeaseWatchdog();
 		} else {
 			console.error("chopin: lost the storage writer lease");
+			heldLease = undefined;
 			signal();
 		}
 	}, err => {
 		console.error("chopin: could not renew the storage writer lease -", err);
+		heldLease = undefined;
 		signal();
 	}).finally(() => {
 		renewingLease = undefined;
@@ -395,6 +411,7 @@ function armLeaseWatchdog(): void {
 	if (leaseWatchdog) clearTimeout(leaseWatchdog);
 	leaseWatchdog = setTimeout(() => {
 		console.error("chopin: storage writer lease was not renewed before its safety deadline");
+		heldLease = undefined;
 		signal();
 	}, LEASE_TTL_MS - LEASE_SAFETY_MS);
 }

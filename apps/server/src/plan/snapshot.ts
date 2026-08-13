@@ -24,8 +24,12 @@ const IDLE_MS = 500;
 const MAX_MS = 2_000;
 
 export type State = {
+	/** Hosted sidecars are versioned; absent means a legacy filesystem snapshot. */
+	version?: 1;
 	/** Bumped on every committed mutation; the agent's concurrency token. */
 	revision: number;
+	/** Wire sequence within the current Yjs epoch. */
+	documentSeq?: number;
 	/**
 	 * Questionnaires and their decisions.
 	 *
@@ -33,6 +37,8 @@ export type State = {
 	 * The copy projected into the prose is for reading.
 	 */
 	questions: QuestionRecord[];
+	/** Live collaborative drafts, required by hosted version 1 sidecars. */
+	openQuestions?: unknown[];
 	/**
 	 * Comment threads and the decisions they became.
 	 *

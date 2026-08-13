@@ -146,10 +146,9 @@ STORAGE_DRIVER=postgres \
   bun run migrate
 ```
 
-`bun run db:down` stops it without removing its named volume. The current `/r/*`
-prototype remains on `DATA_DIR` while its room sink is moved onto the storage
-adapter; selecting PostgreSQL now proves the schema, health check and singleton
-writer lease before the server accepts traffic.
+`bun run db:down` stops it without removing its named volume. Hosted repository
+channels keep their plan and sidecar in the storage adapter. The `/r/*`
+prototype remains on `DATA_DIR` under `AUTH_DRIVER=off`.
 
 Hosted sign-in also needs a GitHub OAuth App whose callback is
 `<APP_ORIGIN>/auth/github/callback`. Generate its session key with

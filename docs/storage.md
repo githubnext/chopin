@@ -50,6 +50,6 @@ time for leases, and checksums for migration history. Start the development
 database with `bun run db:up`, migrate it with `bun run migrate`, and run its
 contract plus process-lifecycle test with `bun run test:postgres`.
 
-The current `/r/*` room path still uses `DATA_DIR` while its snapshot sink is
-moved to this port. `STORAGE_DRIVER=legacy` names that transition explicitly;
-it is not intended to remain as a hosted storage option.
+Hosted repository channels use this port for their document, sidecar and
+transcript. The `/r/*` prototype continues to use `DATA_DIR` only under
+`AUTH_DRIVER=off`; `STORAGE_DRIVER=legacy` is not a hosted storage option.
