@@ -47,8 +47,7 @@
 	box-shadow: var(--shadow-raised);
 }
 
-/* Comments are reader-local chrome: overlaying them keeps them out of Yjs and
- * leaves the line boxes beneath a collaborator's caret exactly where they are. */
+/* Reader-local comment chrome must not move collaborative line boxes. */
 .plan-comment-layer {
 	pointer-events: none;
 	position: absolute;
@@ -75,8 +74,7 @@
 	font-size: 0.75rem;
 }
 
-/* The hit boxes track every wrapped range line, but listen from the document
- * host so nothing ever sits between a pointer and the editable prose. */
+/* The host receives hits so prose keeps native selection. */
 .plan-comment-hit {
 	pointer-events: none;
 	position: absolute;
@@ -99,9 +97,7 @@
 }
 
 .plan-comment-preview {
-	/* A preview can sit back over its phrase in a narrow document. It explains
-	 * the passage but cannot become a glass pane between that passage and its
-	 * click or native text selection. */
+	/* A narrow preview can overlap prose, but never intercept it. */
 	pointer-events: none;
 	max-width: 18rem;
 	padding: 0.5rem 0.625rem;

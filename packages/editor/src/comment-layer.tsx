@@ -1,10 +1,4 @@
-/**
- * Comment controls painted over the document, never into it.
- *
- * The collaborative tree is prose alone. Thread chrome belongs to one reader,
- * so this adapter resolves its anchors into DOM rectangles and portals ordinary
- * React controls into the document page.
- */
+/** Reader-local comment chrome overlays rather than mutates collaborative prose. */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -37,7 +31,6 @@ function rect(value: DOMRect): Rect {
 	};
 }
 
-/** A small thread summary while a reader is deciding whether to open it. */
 function Preview({
 	id,
 	onMeasure,
@@ -143,8 +136,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 					hits: passageHits(page, target.hits),
 				});
 			} catch (error) {
-				// This may run from a Lexical update listener. A broken anchor is
-				// one lost button, never a broken update chain.
+				// A bad anchor must not break Lexical's update listener.
 				if (failures.current.has(view.thread.id)) continue;
 				failures.current.add(view.thread.id);
 				console.error(`[plan] could not measure comment ${view.thread.id}:`, error);
@@ -205,8 +197,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 				pending?.pointer === event.pointerId
 				&& Math.hypot(event.clientX - pending.left, event.clientY - pending.top) > 3
 			) pending.moved = true;
-			// Buttons and cards own their ordinary pointer handlers. The empty
-			// overlay remains transparent so the prose itself keeps native selection.
+			// Keep native prose selection outside the controls.
 			if (root.current?.contains(event.target as Node)) return;
 			let next = over(event)?.view.thread.id;
 			if (next) hover(next);

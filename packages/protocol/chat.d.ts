@@ -49,14 +49,12 @@ export declare namespace Chat {
 		tools?: Activity[];
 	};
 
-	/** The transient lifecycle of the active Planner turn. */
+	/** Transient Planner turn state. */
 	export type Turn = {
-		/** Identifies this run without inventing a transcript entry. */
 		id: string;
 		handle: string;
-		/** Seconds since epoch, for the projected row's real timestamp. */
 		started: number;
-		/** True only after the Planner has sent non-empty prose. */
+		/** True after the Planner has sent non-empty prose. */
 		responded: boolean;
 	};
 

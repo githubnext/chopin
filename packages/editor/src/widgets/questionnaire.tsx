@@ -161,8 +161,6 @@ function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 }
 
 export function renderQuestionnaire(node: QuestionnaireNode) {
-	// Decorator output is rendered by React after Lexical has left its read
-	// transaction. Capture the record now, as the Decision renderer does, or
-	// `getQuestionnaire` reaches for an inactive editor and disconnects the room.
+	// React renders decorators after Lexical's read transaction has ended.
 	return <InlineQuestionnaire value={node.getQuestionnaire()} />;
 }

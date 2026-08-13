@@ -365,7 +365,6 @@ export function toolbox(context: Context): Tool[] {
 						} else if (update.widget !== undefined && update.question !== undefined) {
 							placements.push({
 								widget: update.widget,
-								question: update.question,
 								blocks: update.blocks,
 							});
 						}

@@ -9,7 +9,6 @@ export type Rect = {
 
 export type Point = { top: number; left: number };
 
-/** A comment button beside a passage, in the document host's coordinates. */
 export function gutterPoint(target: Rect, host: Rect, size = 24, gap = 8): Point {
 	return {
 		top: clamp(target.top - host.top, 0, host.height - size),
@@ -17,7 +16,6 @@ export function gutterPoint(target: Rect, host: Rect, size = 24, gap = 8): Point
 	};
 }
 
-/** A pinned comment card beside its button, in the document host's coordinates. */
 export function popoverPoint(
 	button: Rect,
 	host: Rect,

@@ -16,13 +16,7 @@ export function countUnanswered(entries: QuestionnaireEntry[]): number {
 	);
 }
 
-/**
- * Advance a room's local opening lifecycle from document shape.
- *
- * A forced opening survives answer resolution until prose arrives. That first
- * prose block completes the lifecycle and chooses Plan once; completing never
- * reverses when someone later removes every prose block.
- */
+/** A forced opening yields to Plan only when prose first arrives. */
 export function advanceDecisionView(
 	state: DecisionViewState,
 	hasPlanContent: boolean,

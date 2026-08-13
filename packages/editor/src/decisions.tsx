@@ -35,15 +35,9 @@ function undecided(entry: QuestionnaireEntry): boolean {
 	return entry.value.questions.some(question => question.answer === undefined);
 }
 
-/** Where the disclosure is remembered, with the other personal layout choices. */
 let HISTORY = "chopin:decisions:resolved";
 
-/**
- * Whether the resolved list is showing, remembered across reloads.
- *
- * Only an explicit open preference expands history. An absent or malformed
- * value means a room starts with its unanswered cards in view.
- */
+/** Resolved history stays closed unless the reader explicitly opened it. */
 function useHistory() {
 	let [history, setHistory] = useState(() => localStorage.getItem(HISTORY) === "true");
 
