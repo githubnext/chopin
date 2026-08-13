@@ -17,7 +17,7 @@
 - Modify: `apps/web/src/chat/model.ts`
 - Test: `apps/web/src/chat/model.test.ts`
 
-- [ ] **Step 1: Write failing unit tests**
+- [x] **Step 1: Write failing unit tests**
 
 ```ts
 expect(group([], [], true)).toMatchObject([{
@@ -31,13 +31,13 @@ expect(group([entry("a1", { kind: "agent" }, "Answer")], [], false)[0]).not.toMa
 expect(group([], [], false)).toEqual([]);
 ```
 
-- [ ] **Step 2: Verify the tests fail**
+- [x] **Step 2: Verify the tests fail**
 
 Run: `bun test apps/web/src/chat/model.test.ts`
 
 Expected: failure because `group` does not yet accept active-turn state or project a working row.
 
-- [ ] **Step 3: Add the smallest projection**
+- [x] **Step 3: Add the smallest projection**
 
 ```ts
 let rows = [
@@ -57,7 +57,7 @@ let rows = [
 
 Pass `connected && busy && !responded` from `Chat` through `Transcript`; keep `Chat.Entry` and the protocol unchanged.
 
-- [ ] **Step 4: Verify the focused unit tests pass**
+- [x] **Step 4: Verify the focused unit tests pass**
 
 Run: `bun test apps/web/src/chat/model.test.ts`
 
@@ -72,17 +72,17 @@ Expected: exit code 0.
 - Modify: `apps/web/src/theme.css`
 - Test: `e2e/smoke.e2e.ts`
 
-- [ ] **Step 1: Write focused browser behavior coverage**
+- [x] **Step 1: Write focused browser behavior coverage**
 
 Assert a running prompt displays one Planner row with “Working on it”, then the streamed Planner answer replaces it, and clearing active state removes it before a response.
 
-- [ ] **Step 2: Verify the browser assertion fails**
+- [x] **Step 2: Verify the browser assertion fails**
 
 Run: `bun run e2e --grep "Planner working"`
 
 Expected: the row is absent before implementation.
 
-- [ ] **Step 3: Render through the existing Planner group**
+- [x] **Step 3: Render through the existing Planner group**
 
 ```tsx
 let groups = group(entries, queued, busy);
@@ -92,7 +92,7 @@ let groups = group(entries, queued, busy);
 
 Use the current `MessageGroup` and `AgentFace`; add `chat-working` with a restrained background-position shimmer only inside `@media (prefers-reduced-motion: no-preference)`.
 
-- [ ] **Step 4: Verify targeted browser coverage passes**
+- [x] **Step 4: Verify targeted browser coverage passes**
 
 Run: `bun run e2e --grep "Planner working"`
 
@@ -107,7 +107,7 @@ Expected: exit code 0.
 - Verify: `apps/web/src/chat/chat.tsx`
 - Verify: `apps/web/src/theme.css`
 
-- [ ] **Step 1: Run format/lint, type checks, unit suite, and browser suite**
+- [x] **Step 1: Run format/lint, type checks, unit suite, and browser suite**
 
 ```bash
 bun run ci
@@ -116,11 +116,11 @@ bun test
 bun run e2e
 ```
 
-- [ ] **Step 2: Self-review lifecycle boundaries**
+- [x] **Step 2: Self-review lifecycle boundaries**
 
 Confirm no temporary entry crosses the wire or is stored in history; history replacement, `busy: false` after abort/failure, reconnect, and reload all remove it; the first real Planner entry suppresses it; only the text carries animation and reduced motion leaves the text static.
 
-- [ ] **Step 3: Commit the scoped implementation**
+- [x] **Step 3: Commit the scoped implementation**
 
 ```bash
 git add apps/web/src/chat/model.ts apps/web/src/chat/model.test.ts apps/web/src/chat/transcript.tsx apps/web/src/chat/chat.tsx apps/web/src/theme.css e2e/smoke.e2e.ts docs/superpowers/plans/2026-08-12-planner-working-state.md

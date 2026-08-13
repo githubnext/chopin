@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import { ChatCircleIcon } from "@phosphor-icons/react";
 
 import { DraftCard, ThreadCard } from "./comments";
 import { gutterPoint, popoverPoint } from "./comment-geometry";
@@ -339,7 +340,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 							style={button}
 							type="button"
 						>
-							💬
+							<ChatCircleIcon aria-hidden="true" size={14} />
 						</button>
 						{preview === view.thread.id && !shown && (
 							<Preview

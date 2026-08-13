@@ -48,7 +48,7 @@
 - Modify: `packages/editor/src/questionnaires.ts`
 - Modify: `packages/editor/src/index.ts`
 
-- [ ] **Step 1: Write failing tests for the pure view rules**
+- [x] **Step 1: Write failing tests for the pure view rules**
 
 Create `decision-state.test.ts` with these behaviours:
 
@@ -90,13 +90,13 @@ describe("decision attention", () => {
 });
 ```
 
-- [ ] **Step 2: Run the pure test and capture RED**
+- [x] **Step 2: Run the pure test and capture RED**
 
 Run: `bun test packages/editor/src/decision-state.test.ts`
 
 Expected: FAIL because `decision-state.ts` does not exist.
 
-- [ ] **Step 3: Implement the pure state module**
+- [x] **Step 3: Implement the pure state module**
 
 Create `decision-state.ts`:
 
@@ -122,17 +122,17 @@ export function visibleDecisionView(
 }
 ```
 
-- [ ] **Step 4: Write a failing document-shape test**
+- [x] **Step 4: Write a failing document-shape test**
 
 In `questionnaires.test.ts`, build headless Lexical editors containing an empty paragraph, questionnaire-only source, and ordinary Markdown source. Assert `collectPlanState()` returns `{ entries, hasPlanContent }`, where an empty paragraph and `<Questionnaire>` do not count as plan content, but a paragraph, table, image or code block does.
 
-- [ ] **Step 5: Run the document-shape test and capture RED**
+- [x] **Step 5: Run the document-shape test and capture RED**
 
 Run: `bun test packages/editor/src/questionnaires.test.ts`
 
 Expected: FAIL because `collectPlanState` and `hasPlanContent` do not exist.
 
-- [ ] **Step 6: Publish document shape through `QuestionnaireStore`**
+- [x] **Step 6: Publish document shape through `QuestionnaireStore`**
 
 In `questionnaires.ts`:
 
@@ -164,7 +164,7 @@ export function useHasPlanContent(store: QuestionnaireStore): boolean {
 
 Update the barrel exports.
 
-- [ ] **Step 7: Run focused GREEN tests and types**
+- [x] **Step 7: Run focused GREEN tests and types**
 
 Run:
 
@@ -175,7 +175,7 @@ bun run types
 
 Expected: all focused tests pass and types exit 0.
 
-- [ ] **Step 8: Commit Task 1**
+- [x] **Step 8: Commit Task 1**
 
 ```bash
 git add packages/editor/src/decision-state.ts packages/editor/src/decision-state.test.ts packages/editor/src/questionnaires.ts packages/editor/src/questionnaires.test.ts packages/editor/src/index.ts
@@ -194,17 +194,17 @@ git commit -m "Derive the decision view from plan content"
 - Modify: `packages/editor/src/widgets/decision.tsx`
 - Modify: `packages/editor/src/styles.css`
 
-- [ ] **Step 1: Write a failing accepted-decision rendering test**
+- [x] **Step 1: Write a failing accepted-decision rendering test**
 
 Export `DecisionCard` and use `renderToStaticMarkup` in `decision.test.tsx` to assert that a decision containing a quote, two notes, accepter and timestamp renders an article named `Decision`, the frozen quote, both attributed notes and `Accepted by @ana`.
 
-- [ ] **Step 2: Run the rendering test and capture RED**
+- [x] **Step 2: Run the rendering test and capture RED**
 
 Run: `bun test packages/editor/src/widgets/decision.test.tsx`
 
 Expected: FAIL because `DecisionCard` does not exist.
 
-- [ ] **Step 3: Move live widget options into a cycle-free module**
+- [x] **Step 3: Move live widget options into a cycle-free module**
 
 Create `widget-options.ts`:
 
@@ -229,7 +229,7 @@ export const widgets$ = Cell<WidgetOptions>({});
 
 Have `widgets-plugin.tsx` import and re-export these names. Pass `wire` and `connected: !offline` from `PlanEditor` to `widgetsPlugin`.
 
-- [ ] **Step 4: Render questionnaires from live options**
+- [x] **Step 4: Render questionnaires from live options**
 
 Replace the null renderer with a small component that reads `widgets$` using `useCellValue`, gets the node's current value and id, and renders `QuestionnaireCard`. Wire related-passage callbacks only when `options.questions` exists:
 
@@ -253,15 +253,15 @@ function InlineQuestionnaire({ node }: { node: QuestionnaireNode }) {
 
 Keep the shared `QuestionnaireCard` unchanged so inline and focused surfaces join the same existing controller.
 
-- [ ] **Step 5: Implement the compact accepted decision card**
+- [x] **Step 5: Implement the compact accepted decision card**
 
 Render a settled `SidecarCard` labelled `Decision`, with `Provenance verb="Accepted"`, the decision quote in a blockquote, and each note in order with `@handle`. `renderDecision(node)` returns `<DecisionCard value={node.getDecision()} />`.
 
-- [ ] **Step 6: Expose the blocks in editor CSS**
+- [x] **Step 6: Expose the blocks in editor CSS**
 
 Remove the `display: none` rule. Give both decorator hosts vertical margin and make their articles fill the prose measure. Keep the existing page, edge, radius, shadow and typography tokens; add no new palette values.
 
-- [ ] **Step 7: Run focused GREEN tests, registry coverage and types**
+- [x] **Step 7: Run focused GREEN tests, registry coverage and types**
 
 Run:
 
@@ -272,7 +272,7 @@ bun run types
 
 Expected: all commands exit 0.
 
-- [ ] **Step 8: Commit Task 2**
+- [x] **Step 8: Commit Task 2**
 
 ```bash
 git add packages/editor/src/widget-options.ts packages/editor/src/widgets-plugin.tsx packages/editor/src/plan-editor.tsx packages/editor/src/widgets/questionnaire.tsx packages/editor/src/widgets/decision.tsx packages/editor/src/widgets/decision.test.tsx packages/editor/src/styles.css
@@ -287,7 +287,7 @@ git commit -m "Render decisions inside the plan"
 - Modify: `packages/editor/src/threads.test.ts`
 - Modify: `packages/editor/src/places.test.ts`
 
-- [ ] **Step 1: Write failing fallback and orphan tests**
+- [x] **Step 1: Write failing fallback and orphan tests**
 
 Extend the headless placement fixtures to cover:
 
@@ -311,13 +311,13 @@ it("calls a thread orphaned only when every subject block is gone", () => {
 
 Also assert accepted threads do not become orphan toolbar entries: their inline `<Decision>` is their durable surface.
 
-- [ ] **Step 2: Run the placement tests and capture RED**
+- [x] **Step 2: Run the placement tests and capture RED**
 
 Run: `bun test packages/editor/src/threads.test.ts packages/editor/src/places.test.ts`
 
 Expected: FAIL because `targetKey` and `orphaned` are absent.
 
-- [ ] **Step 3: Extend `ThreadView` with UI-independent placement state**
+- [x] **Step 3: Extend `ThreadView` with UI-independent placement state**
 
 Add:
 
@@ -343,11 +343,11 @@ return {
 
 Set `orphaned` only for open threads with no exact place and no target key. Malformed anchors remain visible and guarded as today.
 
-- [ ] **Step 4: Keep open comment washes present without exposing accepted comments**
+- [x] **Step 4: Keep open comment washes present without exposing accepted comments**
 
 During `#rebuild`, collect exact places for every open thread into the comment mark list. Accepted threads are no longer part of comment chrome and are marked only through their inline decision record.
 
-- [ ] **Step 5: Run focused GREEN tests and types**
+- [x] **Step 5: Run focused GREEN tests and types**
 
 Run:
 
@@ -358,7 +358,7 @@ bun run types
 
 Expected: all commands exit 0 with no console noise.
 
-- [ ] **Step 6: Commit Task 3**
+- [x] **Step 6: Commit Task 3**
 
 ```bash
 git add packages/editor/src/threads.ts packages/editor/src/threads.test.ts packages/editor/src/places.test.ts
@@ -379,7 +379,7 @@ git commit -m "Keep drifted comments reachable"
 - Modify: `packages/editor/src/styles.css`
 - Modify: `e2e/sidecar.e2e.ts`
 
-- [ ] **Step 1: Write failing pure geometry tests**
+- [x] **Step 1: Write failing pure geometry tests**
 
 Use plain rectangle records to assert that a gutter button aligns with the first line of an exact passage, falls back to the surviving block top, clamps inside the document, and places a popover to the left when the right side lacks room.
 
@@ -400,21 +400,21 @@ export function gutterPoint(target: Rect, host: Rect, size = 24, gap = 8): Point
 export function popoverPoint(button: Rect, host: Rect, width: number, gap = 8): Point;
 ```
 
-- [ ] **Step 2: Run geometry tests and capture RED**
+- [x] **Step 2: Run geometry tests and capture RED**
 
 Run: `bun test packages/editor/src/comment-geometry.test.ts`
 
 Expected: FAIL because the module does not exist.
 
-- [ ] **Step 3: Implement geometry with explicit clamping**
+- [x] **Step 3: Implement geometry with explicit clamping**
 
 Use `Math.min`/`Math.max`; return coordinates relative to the overlay host, not viewport coordinates. A 24px button sits eight pixels beyond the prose edge when room permits. A popover uses `min(24rem, 80%)` through CSS and geometry chooses its side only.
 
-- [ ] **Step 4: Capture draft placement before selection focus is lost**
+- [x] **Step 4: Capture draft placement before selection focus is lost**
 
 Extend local `Draft` with an optional serialisable placement `{ top, right, bottom, left, width, height }`. In the selection toolbar, read `window.getSelection()` and copy the active range's `getBoundingClientRect()` before `threads.draft(...)` moves focus. Never send this placement over `comment:start`; destructure only `blocks`, `quote`, `offset` and `length` in `ThreadStore.start`.
 
-- [ ] **Step 5: Implement `CommentLayer` as an editor adapter**
+- [x] **Step 5: Implement `CommentLayer` as an editor adapter**
 
 Mount it as a composer child when `threads` exists. It must:
 
@@ -431,15 +431,15 @@ Mount it as a composer child when `threads` exists. It must:
 
 Errors in measurement must log once and drop only the affected button; they must never escape a Lexical update listener.
 
-- [ ] **Step 6: Add document-overlay styles**
+- [x] **Step 6: Add document-overlay styles**
 
 Use absolute positioning and the existing `page`, `edge`, `raised`, `overlay`, `brand-wash`, radius and focus utilities. The layer is pointer-transparent except for buttons/cards, occupies no document layout space, and uses `z-index` only within `.plan-document`.
 
-- [ ] **Step 7: Rewrite comment browser tests around document chrome**
+- [x] **Step 7: Rewrite comment browser tests around document chrome**
 
 Replace sidecar-thread locators with accessible comment buttons/popovers. Cover hover preview, keyboard focus, click pinning, reply, accept-to-inline-decision, dismiss, drifted block fallback and fully orphaned toolbar fallback. Keep the existing assertion that comment marks live in `CSS.highlights`, not DOM attributes.
 
-- [ ] **Step 8: Run focused GREEN tests and types**
+- [x] **Step 8: Run focused GREEN tests and types**
 
 Run:
 
@@ -451,7 +451,7 @@ bun run types
 
 Expected: all commands exit 0 and Playwright produces no trace on success.
 
-- [ ] **Step 9: Commit Task 4**
+- [x] **Step 9: Commit Task 4**
 
 ```bash
 git add packages/editor/src/comment-geometry.ts packages/editor/src/comment-geometry.test.ts packages/editor/src/comment-layer.tsx packages/editor/src/comments.tsx packages/editor/src/threads.ts packages/editor/src/toolbar/index.tsx packages/editor/src/widgets-plugin.tsx packages/editor/src/styles.css e2e/sidecar.e2e.ts
@@ -473,7 +473,7 @@ git commit -m "Move comments onto the document"
 - Modify: `e2e/shell.e2e.ts`
 - Modify: `e2e/sidecar.e2e.ts`
 
-- [ ] **Step 1: Write failing attention-state tests**
+- [x] **Step 1: Write failing attention-state tests**
 
 Import `visibleDecisionView` from the editor package and test a small `decisionAttention(previous, current)` helper owned by the control:
 
@@ -487,35 +487,35 @@ expect(decisionAttention(2, 1)).toBe(false);
 
 Also assert zero suppresses the badge label in static markup. Keep view derivation in `packages/editor/src/decision-state.ts`; the web shell must not duplicate it.
 
-- [ ] **Step 2: Run host-state tests and capture RED**
+- [x] **Step 2: Run host-state tests and capture RED**
 
 Run: `bun test apps/web/src/decision-view.test.ts`
 
 Expected: FAIL because the helper/control is absent.
 
-- [ ] **Step 3: Make `Decisions` questionnaire-only**
+- [x] **Step 3: Make `Decisions` questionnaire-only**
 
 Remove `ThreadStore`, `DraftCard` and `ThreadCard` from `decisions.tsx`. Keep unanswered cards first and resolved questionnaires under remembered disclosure. Add `onShowPlan(widget, question)` and invoke it from `onQuestionSelect`; this lets the host reveal the hidden editor before calling `QuestionnaireStore.reveal`.
 
-- [ ] **Step 4: Implement the two-option view control**
+- [x] **Step 4: Implement the two-option view control**
 
 Render `Plan` and `Decisions` as two real buttons with `aria-pressed`. The Decisions button includes `<Count>{unanswered}</Count>` only above zero. When the count grows, set `data-attention` for one base-duration animation; disable that animation under `prefers-reduced-motion`.
 
-- [ ] **Step 5: Simplify `Workspace` to one side rail and two mounted centre surfaces**
+- [x] **Step 5: Simplify `Workspace` to one side rail and two mounted centre surfaces**
 
 Keep `chat`, `chatOpen`, `header` and the conversation resize handle. Remove decisions pane props, right handle and right aside. Clamp chat at `MIN = 240`, `MAX = 400`, default `280`. Add `controls`, `plan`, `decisions` and `view` props. Render both centre surfaces and use `hidden` so `PlanEditor` remains mounted. Capture and restore the plan scroller's `scrollTop` through callbacks owned by the host.
 
-- [ ] **Step 6: Route view state in `Room`**
+- [x] **Step 6: Route view state in `Room`**
 
 Use `useQuestionnaires`, `useHasPlanContent`, `countUnanswered` and `visibleDecisionView`. Persist preferred view under `chopin:view:document` only when plan content exists. Chat's Answer action selects Decisions and reveals the addressed questionnaire. “Show in plan” selects Plan, waits one animation frame for visibility, then calls `questions.reveal(widget, question)` and focuses the inline card.
 
 Remove the decisions pane toggle from `Header`. Keep the top bar above both conversation and document.
 
-- [ ] **Step 7: Update shell and decision browser coverage**
+- [x] **Step 7: Update shell and decision browser coverage**
 
 Assert one aside, one resize separator, 280px default, 400px maximum, hidden-chat draft preservation and 400px minimum document width. In the fixture room with existing prose, assert `Plan` remains selected when questions arrive, Decisions shows the individual unanswered count, clicking it shows questionnaire cards only, and Show in plan returns to the inline card while preserving the previous plan scroll when no card is selected.
 
-- [ ] **Step 8: Run focused GREEN tests, E2E and types**
+- [x] **Step 8: Run focused GREEN tests, E2E and types**
 
 Run:
 
@@ -527,7 +527,7 @@ bun run types
 
 Expected: all commands exit 0.
 
-- [ ] **Step 9: Commit Task 5**
+- [x] **Step 9: Commit Task 5**
 
 ```bash
 git add apps/web/src/decision-view-control.tsx apps/web/src/decision-view.test.ts packages/editor/src/decisions.tsx packages/editor/src/index.ts apps/web/src/workspace.tsx apps/web/src/app.tsx apps/web/src/chat/chat.tsx apps/web/src/tokens.test.ts e2e/shell.e2e.ts e2e/sidecar.e2e.ts
