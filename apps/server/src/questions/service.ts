@@ -99,6 +99,7 @@ export async function ask(
 	placement?: AskPlacement,
 	created?: () => void,
 ): Promise<Ended[]> {
+	if (plan.execution) throw new Error("implementation is active");
 	if (definition.questions.length === 0) {
 		Question.reject("A questionnaire needs at least one question");
 	}
