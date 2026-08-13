@@ -101,6 +101,39 @@ describe("the GitHub client", () => {
 			.toBe("owner,collaborator,organization_member");
 	});
 
+	it("looks up one repository with encoded path segments", async () => {
+		let requested: URL | undefined;
+		let client = new GitHubClient({
+			fetch: async input => {
+				requested = new URL(String(input));
+				return Response.json(repository("R_score"));
+			},
+			endpoints: { api: "https://api.test" },
+		});
+		let found = await client.repository("gho_user", "octo org", "score+card");
+		expect(found.id).toBe("R_score");
+		expect(requested!.pathname).toBe("/repos/octo%20org/score%2Bcard");
+	});
+
+	it("grants channel access only through the affiliated repository listing", async () => {
+		let client = new GitHubClient({
+			fetch: async input => {
+				let url = new URL(String(input));
+				if (url.searchParams.get("page") === "1") {
+					return Response.json([], {
+						headers: { link: '<https://api.test/user/repos?page=2>; rel="next"' },
+					});
+				}
+				return Response.json([repository("R_score")]);
+			},
+			endpoints: { api: "https://api.test" },
+		});
+		expect((await client.repositoryAccess("gho_user", "octo-org", "score"))?.id)
+			.toBe("R_score");
+		expect(await client.repositoryAccess("gho_user", "octo-org", "public-but-unaffiliated"))
+			.toBeUndefined();
+	});
+
 	it("rejects malformed or unsuccessful provider responses", async () => {
 		let client = new GitHubClient({
 			fetch: async () => Response.json({ login: "missing id" }),

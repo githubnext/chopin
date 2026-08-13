@@ -12,16 +12,17 @@ import { join } from "node:path";
 import * as Agent from "./agent/client";
 import { registerAuthRoutes } from "./auth/routes";
 import * as Chat from "./chat/service";
+import { registerChannelRoutes } from "./channels/routes";
 import * as Comments from "./comments/service";
 import { proxy, serve } from "./client";
 import { describe, load, problem } from "./config";
-import { uid } from "./ids";
 import { Router } from "./http/router";
 import * as Service from "./plan/service";
 import * as Inject from "./questions/inject";
 import * as Marks from "./comments/inject";
 import * as Questions from "./questions/service";
 import * as Rooms from "./rooms";
+import { admit } from "./socket/admission";
 import { createStorage } from "./storage/registry";
 import { broadcast, fail, relay, tell, topic } from "./wire";
 
@@ -48,6 +49,7 @@ const LEASE_TTL_MS = 30_000;
 const LEASE_RENEW_MS = 10_000;
 const LEASE_SAFETY_MS = 5_000;
 const SESSION_CLEANUP_MS = 5 * 60_000;
+const ACCESS_RECHECK_MS = 60_000;
 
 let server: Server<SocketData>;
 let heldLease: Lease | undefined;
@@ -90,7 +92,13 @@ function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Service.Pla
 
 /** A room's conversation, with everything it needs to run a turn. */
 function conversation(room: Rooms.Room): Chat.Room {
-	return { chat: room.plan!.chat, plan: room.plan!, server, room: room.id, config };
+	return {
+		chat: room.plan!.chat,
+		plan: room.plan!,
+		server,
+		room: room.id,
+		config: hostedAuth ? { ...config, agent: false } : config,
+	};
 }
 
 function evict(room: Rooms.Room): void {
@@ -103,27 +111,6 @@ function evict(room: Rooms.Room): void {
 	}, EVICT_MS);
 }
 
-/**
- * Decide whether a connection may be established.
- *
- * The key gates the socket rather than the page, because the page on its own
- * is inert: without a connection it holds no document, no transcript and no
- * way to reach the agent.
- */
-function admit(url: URL): { data: SocketData } | { status: number; reason: string } {
-	if (config.key && url.searchParams.get("key") !== config.key) {
-		return { status: 403, reason: "access key required" };
-	}
-
-	let room = (url.searchParams.get("room") || "").toLowerCase();
-	if (!Rooms.validRoom(room)) return { status: 400, reason: "bad room" };
-
-	let handle = url.searchParams.get("as") || "";
-	if (!Rooms.validHandle(handle)) return { status: 400, reason: "bad handle" };
-
-	return { data: { room, handle, client: uid() } };
-}
-
 async function receive(ws: Socket, raw: string): Promise<void> {
 	let frame: Incoming;
 	try {
@@ -134,6 +121,15 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 
 	let room = Rooms.get(ws.data.room);
 	if (!room) return;
+	if (!VIEWER_ALLOWED.has(frame.kind) && !(await refreshAccess(ws))) {
+		if (frame.rid) fail(ws, frame.rid, "authorization expired");
+		ws.close(4403, "authorization expired");
+		return;
+	}
+	if (!ws.data.canEdit && !VIEWER_ALLOWED.has(frame.kind)) {
+		if (frame.rid) fail(ws, frame.rid, "repository write access is required");
+		return;
+	}
 
 	switch (frame.kind) {
 		case "session:ping":
@@ -220,6 +216,75 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 	}
 }
 
+const VIEWER_ALLOWED = new Set(["session:ping", "plan:open", "plan:close"]);
+
+async function refreshAccess(ws: Socket, forceGitHub = false): Promise<boolean> {
+	if (!hostedAuth) return true;
+	let data = ws.data;
+	if (data.closed) return false;
+	if (data.authorizationRefresh) {
+		let valid = await data.authorizationRefresh;
+		if (!valid || !forceGitHub || Date.now() - (data.accessCheckedAt ?? 0) < ACCESS_RECHECK_MS) {
+			return valid;
+		}
+	}
+	let refresh = checkAccess(ws, forceGitHub);
+	data.authorizationRefresh = refresh;
+	try {
+		return await refresh;
+	} finally {
+		if (data.authorizationRefresh === refresh) data.authorizationRefresh = undefined;
+	}
+}
+
+async function checkAccess(ws: Socket, forceGitHub: boolean): Promise<boolean> {
+	if (!hostedAuth || ws.data.closed) return false;
+	let data = ws.data;
+	if (
+		!data.credential
+		|| !data.principalId
+		|| !data.repositoryId
+		|| !data.repositoryOwner
+		|| !data.repositoryName
+		|| (data.authorizedUntil ?? 0) <= Date.now()
+	) return false;
+	try {
+		let request = new Request(hostedAuth.config.origin, { headers: { cookie: data.credential } });
+		let session = await hostedAuth.sessions.authenticate(request);
+		if (!session || session.user.id !== data.principalId) return false;
+		if (!forceGitHub && Date.now() - (data.accessCheckedAt ?? 0) < ACCESS_RECHECK_MS) return true;
+		let repository = await hostedAuth.github.repositoryAccess(
+			session.oauthToken,
+			data.repositoryOwner,
+			data.repositoryName,
+		);
+		if (!repository || repository.id !== data.repositoryId || !repository.permissions.pull) {
+			return false;
+		}
+		let canEdit = repository.permissions.push || repository.permissions.admin;
+		if (canEdit !== data.canEdit && !data.closed) {
+			tell(ws, { kind: "session:access", ts: 0, canEdit });
+		}
+		data.canEdit = canEdit;
+		data.accessCheckedAt = Date.now();
+		data.authorizedUntil = session.session.expiresAt.getTime();
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function scheduleAuthorization(ws: Socket): void {
+	if (!hostedAuth || ws.data.closed) return;
+	ws.data.authorizationTimer = setTimeout(() => {
+		void refreshAccess(ws, true).then(valid => {
+			if (ws.data.closed) return;
+			if (!valid) ws.close(4403, "authorization expired");
+			else scheduleAuthorization(ws);
+		});
+	}, ACCESS_RECHECK_MS);
+}
+
 function listen(): Server<SocketData> {
 	return Bun.serve<SocketData>({
 		hostname: config.host,
@@ -229,7 +294,7 @@ function listen(): Server<SocketData> {
 			let url = new URL(req.url);
 
 			if (url.pathname === "/ws") {
-				let outcome = admit(url);
+				let outcome = await admit(req, url, { key: config.key, auth: hostedAuth });
 				if ("status" in outcome) {
 					return new Response(outcome.reason, { status: outcome.status });
 				}
@@ -252,8 +317,10 @@ function listen(): Server<SocketData> {
 					room: room.id,
 					you: { handle: ws.data.handle, client: ws.data.client },
 					members: Rooms.members(room),
+					canEdit: ws.data.canEdit,
 				});
 				relay(ws, { kind: "session:presence", ts: 0, members: Rooms.members(room) });
+				scheduleAuthorization(ws);
 			},
 
 			message(ws: Socket, raw) {
@@ -261,6 +328,8 @@ function listen(): Server<SocketData> {
 			},
 
 			close(ws: Socket) {
+				ws.data.closed = true;
+				if (ws.data.authorizationTimer) clearTimeout(ws.data.authorizationTimer);
 				let room = Rooms.leave(ws);
 				ws.unsubscribe(topic(ws.data.room));
 				if (!room) return;
@@ -353,7 +422,8 @@ if (misconfigured) {
 	process.exit(1);
 }
 
-registerAuthRoutes(router, { config: config.auth, storage });
+let hostedAuth = registerAuthRoutes(router, { config: config.auth, storage });
+registerChannelRoutes(router, hostedAuth);
 
 if (storage) {
 	try {
@@ -366,7 +436,7 @@ if (storage) {
 	}
 }
 
-if (config.agent) {
+if (config.agent && !hostedAuth) {
 	if (!config.token) {
 		await storage?.close().catch(() => {});
 		console.error("chopin: GITHUB_TOKEN is not set. Set one, or start with AGENT=off.");

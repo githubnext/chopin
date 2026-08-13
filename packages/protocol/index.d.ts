@@ -41,7 +41,7 @@ export type Request<T> = T & { rid: string };
 export declare namespace Session {
 	export type Incoming = Request<Ping>;
 
-	export type Outgoing = Hello | Presence | Failure | Ping;
+	export type Outgoing = Hello | Presence | Access | Failure | Ping;
 
 	/** A member, as everyone else sees them. */
 	export type Member = {
@@ -56,6 +56,13 @@ export declare namespace Session {
 		room: string;
 		you: Member;
 		members: Member[];
+		/** Effective repository capability, always true in legacy rooms. */
+		canEdit: boolean;
+	};
+
+	/** A hosted repository permission changed while the socket was open. */
+	export type Access = KIND<"session:access"> & {
+		canEdit: boolean;
 	};
 
 	/** Broadcast whenever the membership of the room changes. */

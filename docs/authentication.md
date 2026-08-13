@@ -51,6 +51,9 @@ GET  /auth/github
 GET  /auth/github/callback
 GET  /api/session
 GET  /api/repositories?page=1
+GET  /api/repositories/:owner/:repository/channels
+POST /api/repositories/:owner/:repository/channels
+GET  /api/channels/:channelId
 POST /auth/logout
 ```
 
