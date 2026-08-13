@@ -63,18 +63,23 @@ WORKING_DIR=../some-project bun run dev
 
 ## Configuration
 
-| Variable         | Default             | Meaning                                                                                   |
-| ---------------- | ------------------- | ----------------------------------------------------------------------------------------- |
-| `GITHUB_TOKEN`   | —                   | Required. The agent's credential and the GitHub MCP bearer.                               |
-| `WORKING_DIR`    | repository root     | Everything the agent may read. Relative to where you run the command. Printed at startup. |
-| `SERVER_HOST`    | `127.0.0.1`         | Bind address. `0.0.0.0` for a LAN or a tunnel.                                            |
-| `ACCESS_KEY`     | unset               | When set, required to connect.                                                            |
-| `MODEL`          | `claude-sonnet-4.6` | The planner's model.                                                                      |
-| `AGENT`          | on                  | `AGENT=off` runs the editor with no agent at all.                                         |
-| `PORT`           | `8787`              |                                                                                           |
-| `DATA_DIR`       | `data`              | Where rooms are written.                                                                  |
-| `STORAGE_DRIVER` | `legacy`            | Durable service adapter. `postgres` selects the hosted storage foundation.                |
-| `DATABASE_URL`   | unset               | Required by `STORAGE_DRIVER=postgres`; never printed by the server.                       |
+| Variable                     | Default             | Meaning                                                                                   |
+| ---------------------------- | ------------------- | ----------------------------------------------------------------------------------------- |
+| `GITHUB_TOKEN`               | —                   | Required. The agent's credential and the GitHub MCP bearer.                               |
+| `WORKING_DIR`                | repository root     | Everything the agent may read. Relative to where you run the command. Printed at startup. |
+| `SERVER_HOST`                | `127.0.0.1`         | Bind address. `0.0.0.0` for a LAN or a tunnel.                                            |
+| `ACCESS_KEY`                 | unset               | When set, required to connect.                                                            |
+| `MODEL`                      | `claude-sonnet-4.6` | The planner's model.                                                                      |
+| `AGENT`                      | on                  | `AGENT=off` runs the editor with no agent at all.                                         |
+| `PORT`                       | `8787`              |                                                                                           |
+| `DATA_DIR`                   | `data`              | Where rooms are written.                                                                  |
+| `STORAGE_DRIVER`             | `legacy`            | Durable service adapter. `postgres` selects the hosted storage foundation.                |
+| `DATABASE_URL`               | unset               | Required by `STORAGE_DRIVER=postgres`; never printed by the server.                       |
+| `AUTH_DRIVER`                | `off`               | `github` enables hosted GitHub OAuth and repository discovery.                            |
+| `APP_ORIGIN`                 | unset               | Exact public HTTP(S) origin used to construct the OAuth callback.                         |
+| `GITHUB_OAUTH_CLIENT_ID`     | unset               | GitHub OAuth App client id.                                                               |
+| `GITHUB_OAUTH_CLIENT_SECRET` | unset               | GitHub OAuth App client secret.                                                           |
+| `SESSION_ENCRYPTION_KEY`     | unset               | 32 random bytes as 64 hex characters; encrypts stored OAuth tokens.                       |
 
 ## Sharing a room
 
@@ -145,6 +150,11 @@ STORAGE_DRIVER=postgres \
 prototype remains on `DATA_DIR` while its room sink is moved onto the storage
 adapter; selecting PostgreSQL now proves the schema, health check and singleton
 writer lease before the server accepts traffic.
+
+Hosted sign-in also needs a GitHub OAuth App whose callback is
+`<APP_ORIGIN>/auth/github/callback`. Generate its session key with
+`openssl rand -hex 32`; the complete flow and credential boundary are described
+in [Hosted authentication](docs/authentication.md).
 
 ```bash
 bun test          # 500 tests, no browser

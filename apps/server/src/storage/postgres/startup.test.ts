@@ -25,16 +25,22 @@ async function directory(): Promise<string> {
 	return path;
 }
 
-function spawn(port: number, stderr: "ignore" | "pipe" = "ignore"): Subprocess {
+function spawn(
+	port: number,
+	stderr: "ignore" | "pipe" = "ignore",
+	extra: Record<string, string> = {},
+): Subprocess {
 	let child = Bun.spawn(["bun", join(import.meta.dir, "../../main.ts")], {
 		env: {
 			...process.env,
 			AGENT: "off",
+			AUTH_DRIVER: "off",
 			DATABASE_URL: database!,
 			DATA_DIR: scratch.at(-1)!,
 			PORT: String(port),
 			SERVER_HOST: "127.0.0.1",
 			STORAGE_DRIVER: "postgres",
+			...extra,
 		},
 		stdout: "ignore",
 		stderr,
@@ -76,6 +82,22 @@ if (database) {
 			await ready(9072);
 			replacement.kill("SIGTERM");
 			expect(await replacement.exited).toBe(0);
+
+			let hosted = spawn(9073, "ignore", {
+				APP_ORIGIN: "http://127.0.0.1:9073",
+				AUTH_DRIVER: "github",
+				GITHUB_OAUTH_CLIENT_ID: "client-id",
+				GITHUB_OAUTH_CLIENT_SECRET: "client-secret",
+				SESSION_ENCRYPTION_KEY: "22".repeat(32),
+			});
+			await ready(9073);
+			let session = await fetch("http://127.0.0.1:9073/api/session");
+			expect(await session.json()).toEqual({ user: null });
+			let login = await fetch("http://127.0.0.1:9073/auth/github", { redirect: "manual" });
+			expect(login.status).toBe(302);
+			expect(login.headers.get("location")).toStartWith("https://github.com/login/oauth/authorize");
+			hosted.kill("SIGTERM");
+			expect(await hosted.exited).toBe(0);
 		});
 	});
 } else {

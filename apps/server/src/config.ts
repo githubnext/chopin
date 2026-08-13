@@ -9,6 +9,9 @@
 import { statSync } from "node:fs";
 import { join, resolve } from "node:path";
 
+import { loadAuth } from "./auth/config";
+
+import type { AuthConfig } from "./auth/config";
 import type { StorageConfig } from "./storage/registry";
 
 /**
@@ -70,6 +73,8 @@ export type Config = {
 	devClient: string | undefined;
 	/** Durable service storage; legacy keeps the prototype room files during cutover. */
 	storage: StorageConfig;
+	/** Hosted identity; off leaves the current claimed-handle prototype intact. */
+	auth: AuthConfig;
 };
 
 const DEFAULT_PORT = 8787;
@@ -115,6 +120,7 @@ export function load(): Config {
 		agent: process.env.AGENT !== "off",
 		devClient: process.env.DEV_CLIENT || undefined,
 		storage: storage(),
+		auth: loadAuth(),
 	};
 }
 
@@ -128,6 +134,9 @@ export function load(): Config {
  * nothing in it about paths.
  */
 export function problem(config: Config): string | undefined {
+	if (config.auth.driver !== "off" && config.storage.driver === "legacy") {
+		return "AUTH_DRIVER=github requires durable storage; select STORAGE_DRIVER=postgres";
+	}
 	let target = statSync(config.workingDir, { throwIfNoEntry: false });
 
 	if (!target) {
@@ -152,6 +161,7 @@ export function describe(config: Config): string {
 		`http://${config.host}:${config.port}`,
 		config.devClient ? `client: vite (${config.devClient})` : "client: built",
 		config.agent ? `agent: ${config.model}` : "agent: off",
+		`auth: ${config.auth.driver}`,
 		`storage: ${config.storage.driver}`,
 		`working dir: ${config.workingDir}`,
 	];

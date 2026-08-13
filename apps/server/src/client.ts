@@ -27,10 +27,14 @@ const HOP_BY_HOP = new Set([
 	"upgrade",
 ]);
 
+/** Credentials belong to the application server, never its development UI upstream. */
+const PRIVATE = new Set(["authorization", "cookie"]);
+
 function forwardable(headers: Headers): Headers {
 	let out = new Headers();
 	for (let [name, value] of headers) {
-		if (!HOP_BY_HOP.has(name.toLowerCase())) out.set(name, value);
+		let lower = name.toLowerCase();
+		if (!HOP_BY_HOP.has(lower) && !PRIVATE.has(lower)) out.set(name, value);
 	}
 	return out;
 }

@@ -10,11 +10,13 @@
 import { join } from "node:path";
 
 import * as Agent from "./agent/client";
+import { registerAuthRoutes } from "./auth/routes";
 import * as Chat from "./chat/service";
 import * as Comments from "./comments/service";
 import { proxy, serve } from "./client";
 import { describe, load, problem } from "./config";
 import { uid } from "./ids";
+import { Router } from "./http/router";
 import * as Service from "./plan/service";
 import * as Inject from "./questions/inject";
 import * as Marks from "./comments/inject";
@@ -30,6 +32,7 @@ import type { Socket, SocketData } from "./wire";
 
 const config = load();
 const storage = createStorage(config.storage);
+const router = new Router();
 
 /** Where the built client lands. Used only when there is no dev client. */
 const CLIENT = join(import.meta.dir, "../../web/dist");
@@ -222,7 +225,7 @@ function listen(): Server<SocketData> {
 		hostname: config.host,
 		port: config.port,
 
-		fetch(req, self) {
+		async fetch(req, self) {
 			let url = new URL(req.url);
 
 			if (url.pathname === "/ws") {
@@ -233,6 +236,8 @@ function listen(): Server<SocketData> {
 				if (self.upgrade(req, { data: outcome.data })) return undefined;
 				return new Response("upgrade failed", { status: 400 });
 			}
+			let routed = await router.handle(req, url);
+			if (routed) return routed;
 
 			return config.devClient ? proxy(req, url, config.devClient) : serve(url, CLIENT);
 		},
@@ -347,6 +352,8 @@ if (misconfigured) {
 	console.error(`chopin: ${misconfigured}`);
 	process.exit(1);
 }
+
+registerAuthRoutes(router, { config: config.auth, storage });
 
 if (storage) {
 	try {

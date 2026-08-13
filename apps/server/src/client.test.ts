@@ -42,6 +42,7 @@ async function start(port: number, env: Record<string, string>): Promise<void> {
 			PORT: String(port),
 			SERVER_HOST: "127.0.0.1",
 			AGENT: "off",
+			AUTH_DRIVER: "off",
 			STORAGE_DRIVER: "legacy",
 			DATA_DIR: scratch(),
 			...env,
@@ -71,6 +72,8 @@ function stub(): string {
 			return new Response(`stub:${url.pathname}${url.search}`, {
 				headers: {
 					"content-type": "text/plain",
+					"x-received-authorization": req.headers.get("authorization") ?? "",
+					"x-received-cookie": req.headers.get("cookie") ?? "",
 					"x-received-host": req.headers.get("host") ?? "",
 					"x-stub": "yes",
 				},
@@ -105,14 +108,26 @@ describe("development", () => {
 		await start(port, { DEV_CLIENT: devClient });
 
 		let page = await fetch(`http://127.0.0.1:${port}/r/main?as=octocat`, {
-			headers: { host: "sandbox--8787.adcproxy.io" },
+			headers: {
+				authorization: "Bearer private",
+				cookie: "chopin_session=private",
+				host: "sandbox--8787.adcproxy.io",
+			},
 		});
 		expect(await page.text()).toBe("stub:/r/main?as=octocat");
 		expect(page.headers.get("x-stub")).toBe("yes");
 		expect(page.headers.get("x-received-host")).toBe(new URL(devClient).host);
+		expect(page.headers.get("x-received-authorization")).toBeNull();
+		expect(page.headers.get("x-received-cookie")).toBeNull();
 
 		let asset = await fetch(`http://127.0.0.1:${port}/@fs/some/module.tsx`);
 		expect(await asset.text()).toBe("stub:/@fs/some/module.tsx");
+
+		let api = await fetch(`http://127.0.0.1:${port}/api/missing`);
+		expect(api.status).toBe(404);
+		expect(await api.text()).toBe("API route not found");
+		let session = await fetch(`http://127.0.0.1:${port}/api/session`);
+		expect(await session.json()).toEqual({ user: null });
 	});
 
 	it("keeps the socket for itself", async () => {
