@@ -6,6 +6,8 @@
 		"dev": "bun scripts/dev.ts",
 		"db:up": "docker compose up -d --wait db",
 		"db:down": "docker compose down",
+		"docker:up": "docker compose --profile app up -d --build --wait app",
+		"docker:down": "docker compose --profile app down",
 		"test:postgres": "TEST_DATABASE_URL=postgresql://chopin:chopin@127.0.0.1:5432/chopin?sslmode=disable bun test apps/server/src/storage/postgres",
 		"migrate": "bun run --filter '@chopin/server' migrate",
 		"build": "bun run --filter '@chopin/web' build",
