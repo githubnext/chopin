@@ -129,7 +129,7 @@ export function Chat({ connected, handle, wire }: ChatProps) {
 				handle={handle}
 				onWithdraw={id => wire?.send("chat:unqueue", { id })}
 				queued={queue}
-				working={connected && synchronized.current === wire && turn && !turn.responded
+				working={connected && synchronized.current === wire && turn
 					? turn
 					: undefined}
 			/>

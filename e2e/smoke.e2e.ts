@@ -304,7 +304,7 @@ test("chat clears the Planner working row when a turn stops or fails", async ({ 
 	await expect(page.locator("#pane-chat .chat-working")).toHaveCount(0);
 });
 
-test("chat keeps Working on it through tool activity and replaces it with streamed prose", async ({ join, page }) => {
+test("chat keeps Working on it through tool activity and streamed prose", async ({ join, page }) => {
 	let planner = await scriptPlanner(page);
 	let chat = (await join("ana")).locator("#pane-chat");
 
@@ -318,11 +318,14 @@ test("chat keeps Working on it through tool activity and replaces it with stream
 	await expect(chat.locator(".chat-working")).toBeVisible();
 
 	planner.stream();
-	await expect(chat.locator(".chat-working")).toHaveCount(0);
+	await expect(chat.locator(".chat-working")).toBeVisible();
 	await expect(chat.getByText("I found it.")).toBeVisible();
+
+	await chat.getByRole("button", { name: "Stop" }).click();
+	await expect(chat.locator(".chat-working")).toHaveCount(0);
 });
 
-test("chat history does not revive Working on it after Planner prose and a later room message", async ({ join, page }) => {
+test("chat history keeps Working on it after Planner prose and a later room message", async ({ join, page }) => {
 	await injectChatHistory(page, frame => ({
 		...frame,
 		busy: true,
@@ -352,7 +355,7 @@ test("chat history does not revive Working on it after Planner prose and a later
 	let chat = (await join("ana")).locator("#pane-chat");
 	await expect(chat.getByText("I found the issue.")).toBeVisible();
 	await expect(chat.getByText("Please include the examples.")).toBeVisible();
-	await expect(chat.locator(".chat-working")).toHaveCount(0);
+	await expect(chat.locator(".chat-working")).toBeVisible();
 });
 
 test("chat ignores legacy active-turn frames during a rolling deploy", async ({ join, page }) => {
