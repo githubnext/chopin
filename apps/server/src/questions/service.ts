@@ -107,7 +107,7 @@ export async function ask(
 		single: Definition;
 		value: room.QuestionnaireInsertion["value"];
 		waiting: Promise<Ended>;
-		at: number | undefined;
+		at: room.QuestionnaireInsertion["at"];
 	}> = [];
 	await Service.exclusive(plan, async () => {
 		let anchors = placement ? validatePlacement(plan, definition, placement) : undefined;

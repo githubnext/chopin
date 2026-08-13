@@ -45,20 +45,6 @@ export function displayText(value: string): string {
 	);
 }
 
-/** The wire can briefly carry an older server's handle-only turn during deploy. */
-export function activeTurn(value: unknown): Chat.Turn | undefined {
-	if (!value || typeof value !== "object") return;
-	let { handle, id, responded, started } = value as Partial<Chat.Turn>;
-	if (
-		typeof id !== "string"
-		|| typeof handle !== "string"
-		|| typeof started !== "number"
-		|| !Number.isFinite(started)
-		|| typeof responded !== "boolean"
-	) return;
-	return { id, handle, started, responded };
-}
-
 export function group(
 	entries: Chat.Entry[],
 	queued: Chat.Waiting[],

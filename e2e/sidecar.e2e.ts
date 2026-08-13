@@ -11,11 +11,8 @@
  * test here writes the plan before anybody opens it.
  */
 
-import { content, expect, test } from "./room";
-import { writeFile } from "node:fs/promises";
-import * as Path from "node:path";
-
-import { scratch } from "./servers";
+import { authenticate, content, expect, test } from "./room";
+import { storedQuestion } from "../apps/server/src/testing/plan";
 
 /** Long enough to be marked: the injector wants twenty characters. */
 const PROSE = "Room state lives on disk as MDX beside the transcript.\n";
@@ -24,6 +21,15 @@ const LONG_PLAN = Array.from({ length: 80 }, (_, index) => `Paragraph ${index + 
 const WIDGET = "01K0N4TR8K7JGM4R1J7PW4R8YJ";
 const QUESTION = "01K0N4V4E7Y6P4MJ5WD8XZF3B2";
 const OPTION = "01K0N4W3B7P27CBAEC7A8C8WEA";
+const ANCHORED_DEFINITION = {
+	questions: [{
+		id: QUESTION,
+		header: "Rollout",
+		question: "How should we deploy?",
+		multiple: false,
+		options: [{ id: OPTION, label: "Canary", description: "" }],
+	}],
+};
 const ANCHORED = `Anchored paragraph.
 
 <Questionnaire id="${WIDGET}" by="ana">
@@ -102,8 +108,9 @@ test(
 
 test(
 	"an unseeded room opens Decisions with the injected unanswered questions",
-	async ({ page, room }) => {
-		await page.goto(`/r/${room}?as=ana`);
+	async ({ baseURL, page, room }) => {
+		await authenticate(page, "ana", baseURL!);
+		await page.goto(`/channels/${room}`);
 
 		await expect(page.getByRole("button", { name: /^Decisions/ }))
 			.toHaveAttribute("aria-pressed", "true");
@@ -168,36 +175,31 @@ test("selecting Decisions returns to the first unanswered card after its hidden 
 	await expect.poll(() => stack.evaluate(element => element.scrollTop)).toBeLessThan(scrolled);
 });
 
-test("an unanswered inline decision is also shown in Decisions and can be focused in Plan", async ({ baseURL, join, room, seed }) => {
-	await seed(ANCHORED);
-	await writeFile(
-		Path.join(scratch(Number(new URL(baseURL!).port)), room, "state.json"),
-		JSON.stringify({
-			revision: 1,
-			questions: [{
-				id: WIDGET,
-				status: "open",
-				definition: {
-					questions: [{
-						id: QUESTION,
-						header: "Rollout",
-						question: "How should we deploy?",
-						multiple: false,
-						options: [{ id: OPTION, label: "Canary", description: "" }],
-					}],
-				},
-				anchors: {
-					widget: WIDGET,
-					questions: {
-						[QUESTION]: {
-							anchors: [{ epoch: "stale", position: "", digest: ANCHORED_DIGEST }],
-							pending: false,
-						},
+test("an unanswered inline decision is also shown in Decisions and can be focused in Plan", async ({ join, seed }) => {
+	await seed(ANCHORED, {
+		revision: 1,
+		questions: [{
+			id: WIDGET,
+			status: "open",
+			definition: ANCHORED_DEFINITION,
+			anchors: {
+				widget: WIDGET,
+				questions: {
+					[QUESTION]: {
+						anchors: [{ epoch: "stale", position: "", digest: ANCHORED_DIGEST }],
+						pending: false,
 					},
 				},
-			}],
-		}),
-	);
+			},
+		}],
+		openQuestions: [{
+			id: WIDGET,
+			definition: ANCHORED_DEFINITION,
+			widget: WIDGET,
+			model: storedQuestion(ANCHORED_DEFINITION),
+			revision: 0,
+		}],
+	});
 	let page = await join("ana");
 	let inline = page.locator(
 		`[data-document-view="plan"] article[data-plan-sidecar-questionnaire="${WIDGET}"]`,

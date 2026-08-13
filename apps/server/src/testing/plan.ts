@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
 import * as Y from "yjs";
+import * as Question from "@chopin/question";
 
 import * as Room from "../plan/room";
 import * as Service from "../plan/service";
 import { MemoryStorage } from "../storage/memory/adapter";
 
 import type { Server } from "bun";
+import type { Definition } from "@chopin/question";
 import type { JsonValue } from "../storage/model";
 import type { SocketData } from "../wire";
 
@@ -16,6 +18,10 @@ export type SeedState = {
 	threads?: unknown[];
 	transcript?: unknown[];
 };
+
+export function storedQuestion(definition: Definition): number[] {
+	return [...Question.create(definition).toBinary()];
+}
 
 export async function storedDocument(source: string) {
 	let document = await Room.create(source);

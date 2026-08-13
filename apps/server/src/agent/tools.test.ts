@@ -1,15 +1,12 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 import { toolbox } from "./tools";
 import * as room from "../plan/room";
 import * as Service from "../plan/service";
 import * as Store from "../questions/store";
+import { openPlan } from "../testing/plan";
 
-import type { Server } from "bun";
-import type { SocketData } from "../wire";
+import type { SeedState } from "../testing/plan";
 
 const WIDGET = "01K0N4TR8K7JGM4R1J7PW4R8YJ";
 const QUESTION = "01K0N4V4E7Y6P4MJ5WD8XZF3B2";
@@ -39,52 +36,49 @@ const SECOND_QUESTIONNAIRE =
 </Questionnaire>
 `;
 
-let directories: string[] = [];
 let plans: Awaited<ReturnType<typeof Service.open>>[] = [];
 
 afterEach(async () => {
 	for (let plan of plans) await Service.close(plan);
 	plans = [];
-	for (let directory of directories) await rm(directory, { recursive: true, force: true });
-	directories = [];
 });
 
-test("anchor_plan publishes moving a decision beside the validated prose", async () => {
-	let directory = await mkdtemp(join(tmpdir(), "chopin-agent-tools-"));
-	directories.push(directory);
-	await writeFile(join(directory, "plan.mdx"), SOURCE);
-	await writeFile(
-		join(directory, "state.json"),
-		JSON.stringify({
-			revision: 1,
-			questions: [{
-				id: WIDGET,
-				status: "answered",
-				resolver: "ana",
-				definition: {
-					questions: [{
-						id: QUESTION,
-						header: "Cache",
-						question: "How long do we cache?",
-						multiple: false,
-						options: [{ id: OPTION, label: "60 seconds", description: "" }],
-					}],
-				},
-				answers: { [QUESTION]: "60 seconds" },
-			}],
-		}),
-	);
+async function opened(source: string, state: SeedState = {}) {
+	let context = await openPlan(source, state);
+	plans.push(context.plan);
+	return context;
+}
 
-	let server = { publish() {} } as unknown as Server<SocketData>;
-	let plan = await Service.open("test", directory, server);
-	plans.push(plan);
+test("anchor_plan publishes moving a decision beside the validated prose", async () => {
+	let { plan, server } = await opened(SOURCE, {
+		revision: 1,
+		questions: [{
+			id: WIDGET,
+			status: "answered",
+			resolver: "ana",
+			definition: {
+				questions: [{
+					id: QUESTION,
+					header: "Cache",
+					question: "How long do we cache?",
+					multiple: false,
+					options: [{ id: OPTION, label: "60 seconds", description: "" }],
+				}],
+			},
+			answers: { [QUESTION]: "60 seconds" },
+		}],
+	});
 	let published: unknown[] = [];
 	let anchors = 0;
 	let anchorPlan = toolbox({
 		plan,
 		server,
 		room: "test",
-		publish: mutation => published.push(mutation),
+		persist: () => Service.persist(plan),
+		exclusive: action => Service.exclusive(plan, action),
+		publish: async mutation => {
+			published.push(mutation);
+		},
 		anchors: () => anchors++,
 		changes() {},
 	}).find(tool => tool.name === "anchor_plan");
@@ -116,18 +110,12 @@ test("anchor_plan publishes moving a decision beside the validated prose", async
 });
 
 test("anchor_plan keeps same-block decisions in original ask order", async () => {
-	let directory = await mkdtemp(join(tmpdir(), "chopin-agent-tools-"));
-	directories.push(directory);
-	await writeFile(
-		join(directory, "plan.mdx"),
+	let { plan, server } = await opened(
 		SOURCE.replace(
 			`<Questionnaire id="${WIDGET}"`,
 			`${SECOND_QUESTIONNAIRE}\n<Questionnaire id="${WIDGET}"`,
 		),
-	);
-	await writeFile(
-		join(directory, "state.json"),
-		JSON.stringify({
+		{
 			revision: 1,
 			questions: [
 				{
@@ -161,17 +149,15 @@ test("anchor_plan keeps same-block decisions in original ask order", async () =>
 					answers: { [SECOND_QUESTION]: "Anchors" },
 				},
 			],
-		}),
+		},
 	);
-
-	let server = { publish() {} } as unknown as Server<SocketData>;
-	let plan = await Service.open("test", directory, server);
-	plans.push(plan);
 	let anchorPlan = toolbox({
 		plan,
 		server,
 		room: "test",
-		publish() {},
+		persist: () => Service.persist(plan),
+		exclusive: action => Service.exclusive(plan, action),
+		async publish() {},
 		anchors() {},
 		changes() {},
 	}).find(tool => tool.name === "anchor_plan");
@@ -202,24 +188,23 @@ test("anchor_plan keeps same-block decisions in original ask order", async () =>
 });
 
 test("ask publishes a pending questionnaire beside its validated prose", async () => {
-	let directory = await mkdtemp(join(tmpdir(), "chopin-agent-tools-"));
-	directories.push(directory);
-	await writeFile(join(directory, "plan.mdx"), "Related prose.\n");
 	let published: unknown[] = [];
-	let server = {
-		publish(...frames: unknown[]) {
-			published.push(frames);
-		},
-	} as unknown as Server<SocketData>;
-	let plan = await Service.open("test", directory, server);
-	plans.push(plan);
+	let { broadcasts, plan, server } = await opened("Related prose.\n");
 	let anchors = 0;
+	let created = Promise.withResolvers<void>();
 	let ask = toolbox({
 		plan,
 		server,
 		room: "test",
-		publish: mutation => published.push(mutation),
-		anchors: () => anchors++,
+		persist: () => Service.persist(plan),
+		exclusive: action => Service.exclusive(plan, action),
+		publish: async mutation => {
+			published.push(mutation);
+		},
+		anchors: () => {
+			anchors++;
+			created.resolve();
+		},
 		changes() {},
 	}).find(tool => tool.name === "ask");
 	if (!ask?.handler) throw new Error("ask has no handler");
@@ -240,14 +225,11 @@ test("ask publishes a pending questionnaire beside its validated prose", async (
 		toolName: "ask",
 		arguments: args,
 	});
+	await created.promise;
 
 	let source = room.project(plan.document);
 	expect(source.indexOf("Related prose.")).toBeLessThan(source.indexOf("<Questionnaire"));
-	expect(published.some(frame =>
-		Array.isArray(frame)
-		&& typeof frame[1] === "string"
-		&& JSON.parse(frame[1]).kind === "plan:update"
-	)).toBe(true);
+	expect(broadcasts.some(frame => frame.kind === "plan:update")).toBe(true);
 	expect(anchors).toBe(1);
 
 	let record = [...plan.records.values()][0]!;
@@ -262,18 +244,15 @@ test("ask publishes a pending questionnaire beside its validated prose", async (
 });
 
 test("a stale ask does not announce an anchor snapshot", async () => {
-	let directory = await mkdtemp(join(tmpdir(), "chopin-agent-tools-"));
-	directories.push(directory);
-	await writeFile(join(directory, "plan.mdx"), "Related prose.\n");
-	let server = { publish() {} } as unknown as Server<SocketData>;
-	let plan = await Service.open("test", directory, server);
-	plans.push(plan);
+	let { plan, server } = await opened("Related prose.\n");
 	let anchors = 0;
 	let ask = toolbox({
 		plan,
 		server,
 		room: "test",
-		publish() {},
+		persist: () => Service.persist(plan),
+		exclusive: action => Service.exclusive(plan, action),
+		async publish() {},
 		anchors: () => anchors++,
 		changes() {},
 	}).find(tool => tool.name === "ask");

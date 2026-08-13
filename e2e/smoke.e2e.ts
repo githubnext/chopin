@@ -7,7 +7,7 @@
  * is worth one file that fails in one.
  */
 
-import { content, expect, test } from "./room";
+import { content, expect, ready, test } from "./room";
 
 import type { Chat } from "../packages/protocol/index";
 import type { Page, WebSocketRoute } from "@playwright/test";
@@ -46,6 +46,11 @@ async function scriptPlanner(page: Page) {
 		handle: "ana",
 		started: 1_700_000_001,
 		responded: false,
+	});
+	await page.route("**/api/session", async route => {
+		let response = await route.fetch();
+		let session = await response.json() as Record<string, unknown>;
+		await route.fulfill({ response, json: { ...session, agent: true } });
 	});
 
 	await page.routeWebSocket("**/ws?**", route => {
@@ -326,21 +331,6 @@ test("chat history keeps Working on it after Planner prose and a later room mess
 	await expect(chat.getByText("I found the issue.")).toBeVisible();
 	await expect(chat.getByText("Please include the examples.")).toBeVisible();
 	await expect(chat.locator(".chat-working")).toBeVisible();
-});
-
-test("chat ignores legacy active-turn frames during a rolling deploy", async ({ join, page }) => {
-	let legacy = await injectChatHistory(page, frame => {
-		let { turn: _turn, ...old } = frame;
-		return { ...old, busy: true };
-	});
-	let chat = (await join("ana")).locator("#pane-chat");
-
-	await expect(chat.locator(".chat-working")).toHaveCount(0);
-	await expect(chat.getByText("Invalid Date")).toHaveCount(0);
-
-	legacy.send({ kind: "chat:state", ts: 0, busy: true, turn: "ana" });
-	await expect(chat.locator(".chat-working")).toHaveCount(0);
-	await expect(chat.getByText("Invalid Date")).toHaveCount(0);
 });
 
 test("chat waits for fresh history after reconnect before projecting a stale turn", async ({ join, page }) => {
