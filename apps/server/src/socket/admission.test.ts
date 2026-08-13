@@ -50,17 +50,7 @@ function pair(cookie: string): string {
 }
 
 describe("socket admission", () => {
-	it("preserves claimed identity for the legacy prototype", async () => {
-		let url = new URL("https://chopin.test/ws?room=main&as=octocat&key=secret");
-		let result = await admit(new Request(url), url, { key: "secret", auth: undefined });
-		expect("data" in result && result.data).toMatchObject({
-			room: "main",
-			handle: "octocat",
-			canEdit: true,
-		});
-	});
-
-	it("derives hosted identity and edit rights from the authenticated repository", async () => {
+	it("derives identity and edit rights from the authenticated repository", async () => {
 		let now = new Date("2026-08-13T12:00:00.000Z");
 		let storage = new MemoryStorage();
 		await storage.users.put({ id: "U_octocat", login: "octocat", avatarUrl: "avatar", now });
@@ -78,7 +68,6 @@ describe("socket admission", () => {
 		let github = new FakeGitHub();
 		let auth: HostedAuth = {
 			config: {
-				driver: "github",
 				origin: "https://chopin.test",
 				clientId: "client",
 				clientSecret: "secret",
@@ -89,17 +78,17 @@ describe("socket admission", () => {
 			sessions,
 			clock: () => now,
 		};
-		let url = new URL(`https://chopin.test/ws?room=${channel.id}&as=impersonated`);
+		let url = new URL(`https://chopin.test/ws?channel=${channel.id}`);
 		let wrongOrigin = await admit(
 			new Request(url, { headers: { cookie: pair(issued.cookie), origin: "https://evil.test" } }),
 			url,
-			{ key: undefined, auth },
+			auth,
 		);
 		expect(wrongOrigin).toEqual({ status: 403, reason: "origin is not allowed" });
 		let request = new Request(url, {
 			headers: { cookie: pair(issued.cookie), origin: "https://chopin.test" },
 		});
-		let viewer = await admit(request, url, { key: undefined, auth });
+		let viewer = await admit(request, url, auth);
 		expect("data" in viewer && viewer.data).toMatchObject({
 			room: channel.id,
 			handle: "octocat",
@@ -108,10 +97,10 @@ describe("socket admission", () => {
 		});
 
 		github.push = true;
-		let editor = await admit(request, url, { key: undefined, auth });
+		let editor = await admit(request, url, auth);
 		expect("data" in editor && editor.data.canEdit).toBe(true);
 		github.repositoryId = "R_other";
-		let denied = await admit(request, url, { key: undefined, auth });
+		let denied = await admit(request, url, auth);
 		expect(denied).toEqual({ status: 404, reason: "channel not found" });
 	});
 });

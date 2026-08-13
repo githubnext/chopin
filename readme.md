@@ -1,186 +1,146 @@
 # chopin
 
-A collaborative plan, written by a room and an agent together.
+A collaborative plan, written by a team and an agent together.
 
 Several people edit one MDX document at once, with cursors and presence. A
-planning agent reads the repository, writes into the same document, and asks
-the room when something cannot be settled from the code alone. Answers are
-decided collaboratively, recorded against whoever made them, and linked to the
+planning agent reads the selected GitHub repository, writes into the same
+document, and asks the channel when something cannot be settled from the code
+alone. Answers are attributed to the GitHub user who made them and linked to the
 prose they produced.
-
-It is a prototype. Rooms live in memory, identity is a claimed GitHub handle,
-and the agent runs as you on your own filesystem.
 
 ## Running it
 
-```bash
-bun install
-GITHUB_TOKEN=$(gh auth token) bun run dev
+Chopin requires PostgreSQL and a GitHub OAuth App. Register this callback on the
+OAuth App:
+
+```text
+http://127.0.0.1:8787/auth/github/callback
 ```
 
-Then open **http://localhost:8787/r/main?as=your-github-handle**
+Then configure and start the service:
 
-Open the same URL in a second browser profile with a different `?as=` to see
-the multiplayer half. Two tabs in one profile also works — identity is stored
-per tab.
+```bash
+bun install
+cp .env.example .env
+# Fill in GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET in .env.
+bun run db:up
+bun run migrate
+bun run dev
+```
 
-Ctrl-C stops everything it started.
+Open **http://127.0.0.1:8787**, sign in with GitHub, choose a repository, and
+create a planning channel. Open that channel in another browser profile to see
+the multiplayer half. Ctrl-C stops the web and server processes;
+`bun run db:down` stops PostgreSQL.
+
+Set `AGENT=off` to run the editor without Copilot.
 
 ## Talking to the agent
 
 The agent acts only when addressed:
 
-```
-should we cover the export format?     → the room only
-yes, Markdown for now                  → the room only
-@ai                                    → acts on the conversation above
-@ai draft the export section           → acts on that
+```text
+should we cover the export format?     -> the channel only
+yes, Markdown for now                  -> the channel only
+@ai                                    -> acts on the conversation above
+@ai draft the export section           -> acts on that
 ```
 
 Anything said without the mention is still carried into the agent's next turn,
-so a room can settle something between themselves and the agent arrives already
-knowing. The composer says which a message will be before you send it.
+so a team can settle something between themselves and the agent arrives already
+knowing. The composer says which destination a message has before you send it.
 
-To plan against another checkout, point it there:
-
-```bash
-WORKING_DIR=../some-project bun run dev
-```
-
-## What to try
-
-1. Type in the plan with two windows open, and watch the cursors.
-2. `@ai write a plan for adding X`, and watch it read the repository and
-   write into the document you are looking at.
-3. Ask it something it cannot know: `@ai ask us whether to support Y`. The
-   question appears in the decisions pane on the right, both windows can edit
-   the answer together, and either can submit it.
-4. Hover the decision once it is settled — the prose it produced lights up.
-   Click it and the plan goes there, and stays marked for a few seconds after
-   the pointer has gone; click again to walk through the rest of what it wrote.
-   Comment on a passage and the accepted thread works the same way: its quote is
-   the way back to what it produced, which is the only way to find it.
+The first editor to invoke the planner lends their OAuth session to that
+channel's Copilot usage. The agent receives repository-scoped read tools and no
+host filesystem or shell. **New planner session** releases ownership so another
+editor can take it.
 
 ## Configuration
 
-| Variable                     | Default             | Meaning                                                                           |
-| ---------------------------- | ------------------- | --------------------------------------------------------------------------------- |
-| `GITHUB_TOKEN`               | —                   | Required only by the legacy agent; hosted sessions use their owner's OAuth token. |
-| `WORKING_DIR`                | repository root     | Legacy agent read boundary. Hosted sessions cannot access the host filesystem.    |
-| `SERVER_HOST`                | `127.0.0.1`         | Bind address. `0.0.0.0` for a LAN or a tunnel.                                    |
-| `ACCESS_KEY`                 | unset               | When set, required to connect.                                                    |
-| `MODEL`                      | `claude-sonnet-4.6` | The planner's model.                                                              |
-| `AGENT`                      | on                  | `AGENT=off` runs the editor with no agent at all.                                 |
-| `PORT`                       | `8787`              |                                                                                   |
-| `DATA_DIR`                   | `data`              | Where rooms are written.                                                          |
-| `STORAGE_DRIVER`             | `legacy`            | Durable service adapter. `postgres` selects the hosted storage foundation.        |
-| `DATABASE_URL`               | unset               | Required by `STORAGE_DRIVER=postgres`; never printed by the server.               |
-| `AUTH_DRIVER`                | `off`               | `github` enables hosted GitHub OAuth and repository discovery.                    |
-| `APP_ORIGIN`                 | unset               | Exact public HTTP(S) origin used to construct the OAuth callback.                 |
-| `GITHUB_OAUTH_CLIENT_ID`     | unset               | GitHub OAuth App client id.                                                       |
-| `GITHUB_OAUTH_CLIENT_SECRET` | unset               | GitHub OAuth App client secret.                                                   |
-| `SESSION_ENCRYPTION_KEY`     | unset               | 32 random bytes as 64 hex characters; encrypts stored OAuth tokens.               |
+| Variable                     | Default             | Meaning                                                             |
+| ---------------------------- | ------------------- | ------------------------------------------------------------------- |
+| `DATABASE_URL`               | required            | PostgreSQL connection URL; never printed by the server.             |
+| `STORAGE_DRIVER`             | `postgres`          | Built-in storage adapter.                                           |
+| `APP_ORIGIN`                 | required            | Exact public HTTP(S) origin used for OAuth and Origin checks.       |
+| `GITHUB_OAUTH_CLIENT_ID`     | required            | GitHub OAuth App client id.                                         |
+| `GITHUB_OAUTH_CLIENT_SECRET` | required            | GitHub OAuth App client secret.                                     |
+| `SESSION_ENCRYPTION_KEY`     | required            | 32 random bytes as 64 hex characters; encrypts stored OAuth tokens. |
+| `SERVER_HOST`                | `127.0.0.1`         | Bind address.                                                       |
+| `PORT`                       | `8787`              | HTTP and WebSocket port.                                            |
+| `MODEL`                      | `claude-sonnet-4.6` | Planner model.                                                      |
+| `AGENT`                      | on                  | `AGENT=off` hides and disables the planner.                         |
 
-## Sharing a room
+Generate the session key with `openssl rand -hex 32`. `APP_ORIGIN` has no
+trailing slash and must match the OAuth callback's origin exactly.
 
-The client derives its socket from the page's own origin, so a tunnel works
-without configuration:
+## Sharing
+
+The client derives its socket from the page origin, so a tunnel needs no
+separate WebSocket setting:
 
 ```bash
-ACCESS_KEY=$(openssl rand -hex 8) SERVER_HOST=0.0.0.0 bun run dev
-cloudflared tunnel --url http://localhost:8787
+SERVER_HOST=0.0.0.0 APP_ORIGIN=https://chopin.example bun run dev
+cloudflared tunnel --url http://127.0.0.1:8787
 ```
 
-Send `https://<tunnel>/r/demo?as=their-handle&key=<key>`. The key is taken out
-of the address bar once the page has it, so it does not sit in a screen share.
+Update the GitHub OAuth App callback to
+`https://chopin.example/auth/github/callback`. Every participant signs in with
+GitHub, and repository access is checked before a channel is listed, opened, or
+edited.
 
-**The agent is the exposure, not the plan.** Anyone who can reach the room can
-prompt it, and it can read everything under `WORKING_DIR`. Point that at a
-throwaway checkout before sharing a link.
+## Architecture
 
-## How it is put together
-
-```
-packages/dialect     the plan's MDX dialect and its Lexical schema
+```text
+packages/dialect     the plan's MDX dialect and Lexical schema
 packages/question    questionnaires: definition, shared answer, derivation
 packages/editor      the browser editor, cursors, decisions pane
-packages/protocol    the wire, as types
-apps/server          rooms, documents, questions, the agent
-apps/web             the three panes
+packages/protocol    wire types and addressing rules
+apps/server          auth, channels, documents, persistence, the agent
+apps/web             repositories, channels, and the three-pane workspace
 ```
 
-The server holds each room's document as a Yjs document with a headless Lexical
-editor bound to it, which is what lets it validate an edit rather than relay
-bytes it cannot read. Canonical MDX is written to `data/<room>/plan.mdx` on a
-debounce; Yjs history is not kept, so a restart resumes the content under a
-fresh epoch.
+The server holds every open channel as a Yjs document with a headless Lexical
+editor bound to it. That mirror lets it validate an edit rather than relay bytes
+it cannot read. Accepted updates and sidecar state are committed to PostgreSQL
+before acknowledgement; complete checkpoints retain canonical MDX and the Yjs
+epoch for recovery.
 
-See [Document architecture](docs/architecture.md) for the runtime representation,
-CRDT and agent edit flows, persistence model, and the reason agent edits use a
-block-operation DSL.
+See [Document architecture](docs/architecture.md),
+[Authentication](docs/authentication.md), [Repository channels](docs/channels.md),
+[Storage adapters](docs/storage.md), and [Copilot agent](docs/hosted-agent.md).
 
-Three things are worth knowing if you intend to change it:
+Three things are worth knowing before changing it:
 
-- **The dialect is an allowlist.** Anything not described in
-  `packages/dialect/src/dialect.ts` is rejected before it reaches a renderer.
-  Plan content is parsed and rendered, never evaluated.
-- **The permission gate is the only boundary.** There is no sandbox. Writes are
-  refused outright, reads are confined to `WORKING_DIR`, and shell commands must
-  be ones the runtime classifies as read-only. It is worth reading
-  `apps/server/src/agent/permissions.ts` before pointing this at a real
-  checkout.
-- **An unhandled node type kills collaboration silently.** MDXEditor
-  re-serialises the document on every update, and a type its serialiser cannot
-  write throws inside the first update listener — which stops every listener
-  after it, including the one that syncs. `registry.test.ts` is the guard.
+- **The dialect is an allowlist.** Plan content is parsed and rendered, never
+  evaluated.
+- **Repository authorization is the boundary.** HTTP routes, WebSocket upgrades,
+  and agent tools recheck the owning GitHub session and repository permission.
+- **An unhandled node type kills collaboration silently.** `registry.test.ts`
+  asserts that every dialect node can be serialized and synchronized.
 
 ## Development
 
-The hosted service uses ordinary PostgreSQL. Start the development database and
-apply its migrations with:
-
 ```bash
-bun run db:up
-STORAGE_DRIVER=postgres \
-  DATABASE_URL=postgresql://chopin:chopin@127.0.0.1:5432/chopin?sslmode=disable \
-  bun run migrate
+bun test              # unit and in-memory adapter tests, no browser or agent
+bun run test:postgres # storage contract against PostgreSQL
+bun run e2e           # fake GitHub, real auth/session/channel path, Chromium
+bun run types         # every package and e2e
+bun run ci            # formatting, lint, and token checks
+bun run build         # production client
+bun run start         # serve the built client
 ```
 
-`bun run db:down` stops it without removing its named volume. Hosted repository
-channels keep their plan and sidecar in the storage adapter. The `/r/*`
-prototype remains on `DATA_DIR` under `AUTH_DRIVER=off`.
+The browser suite needs Chromium once with `bun run e2e:browsers`. It starts two
+temporary PostgreSQL services, migrates them, builds the client, and runs with
+`AGENT=off`. Its fake GitHub implementation replaces only GitHub's network
+responses; OAuth state, encrypted sessions, repository authorization, channel
+routes, WebSockets, and persistence are the production implementations.
 
-Hosted sign-in also needs a GitHub OAuth App whose callback is
-`<APP_ORIGIN>/auth/github/callback`. Generate its session key with
-`openssl rand -hex 32`; the complete flow and credential boundary are described
-in [Hosted authentication](docs/authentication.md). Repository authorization,
-viewer/editor roles and the channel shell are described in
-[Repository channels](docs/channels.md). Hosted Copilot ownership and tool
-isolation are described in [Hosted Copilot agent](docs/hosted-agent.md).
-
-```bash
-bun test          # 500 tests, no browser
-bun run test:postgres # storage contract against the Docker database
-bun run e2e       # 40 tests in Chromium, against the built client
-bun run types     # every package, and e2e
-bun run ci        # dprint + oxlint
-bun run build     # production client
-bun run start     # serve the built client
-```
-
-Neither suite spawns an agent; both set `AGENT=off`.
-
-The browser suite needs Chromium once — `bun run e2e:browsers` — and builds the
-client each run, so it is the slower of the two by some distance. It starts its
-own servers on 8788 and 8789 and gives every test a room of its own, so it does
-not mind you having `bun run dev` open at the same time.
-
-If you are going to change the code, `agents.md` is the companion to this
-file: how a room works, which decisions were deliberate, and the several
-ways this stack fails without saying anything.
+`AGENTS.md` is the companion for maintainers: invariants, deliberate decisions,
+and failure modes that are otherwise easy to miss.
 
 ## Origins
 
-The dialect, the editor and the questionnaire model began as a port of Ace's
-plan feature, restructured to stand alone: no sandbox, no VM, one server, rooms
-in memory. What changed, and why, is in the commit history.
+The dialect, editor, and questionnaire model began as a port of Ace's plan
+feature and were restructured around authenticated repository channels, durable
+storage, and a repository-scoped agent. Work happens here now.

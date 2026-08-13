@@ -1,6 +1,4 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { PostgresStorage } from "./adapter";
@@ -9,21 +7,12 @@ import type { Subprocess } from "bun";
 
 let database = process.env.TEST_DATABASE_URL;
 let running: Subprocess[] = [];
-let scratch: string[] = [];
 
 afterEach(async () => {
 	for (let child of running) child.kill();
 	await Promise.all(running.map(child => child.exited));
 	running = [];
-	await Promise.all(scratch.map(path => rm(path, { recursive: true, force: true })));
-	scratch = [];
 });
-
-async function directory(): Promise<string> {
-	let path = await mkdtemp(join(tmpdir(), "chopin-postgres-startup-"));
-	scratch.push(path);
-	return path;
-}
 
 function spawn(
 	port: number,
@@ -34,10 +23,12 @@ function spawn(
 		env: {
 			...process.env,
 			AGENT: "off",
-			AUTH_DRIVER: "off",
+			APP_ORIGIN: `http://127.0.0.1:${port}`,
 			DATABASE_URL: database!,
-			DATA_DIR: scratch.at(-1)!,
+			GITHUB_OAUTH_CLIENT_ID: "client-id",
+			GITHUB_OAUTH_CLIENT_SECRET: "client-secret",
 			PORT: String(port),
+			SESSION_ENCRYPTION_KEY: "22".repeat(32),
 			SERVER_HOST: "127.0.0.1",
 			STORAGE_DRIVER: "postgres",
 			...extra,
@@ -67,9 +58,10 @@ if (database) {
 			let setup = new PostgresStorage(database);
 			await setup.migrate();
 			await setup.close();
-			await directory();
 			let first = spawn(9071);
 			await ready(9071);
+			let session = await fetch("http://127.0.0.1:9071/api/session");
+			expect(await session.json()).toEqual({ user: null, agent: false });
 
 			let refused = spawn(9072, "pipe");
 			expect(await refused.exited).toBe(1);
@@ -82,22 +74,6 @@ if (database) {
 			await ready(9072);
 			replacement.kill("SIGTERM");
 			expect(await replacement.exited).toBe(0);
-
-			let hosted = spawn(9073, "ignore", {
-				APP_ORIGIN: "http://127.0.0.1:9073",
-				AUTH_DRIVER: "github",
-				GITHUB_OAUTH_CLIENT_ID: "client-id",
-				GITHUB_OAUTH_CLIENT_SECRET: "client-secret",
-				SESSION_ENCRYPTION_KEY: "22".repeat(32),
-			});
-			await ready(9073);
-			let session = await fetch("http://127.0.0.1:9073/api/session");
-			expect(await session.json()).toEqual({ mode: "github", user: null, agent: false });
-			let login = await fetch("http://127.0.0.1:9073/auth/github", { redirect: "manual" });
-			expect(login.status).toBe(302);
-			expect(login.headers.get("location")).toStartWith("https://github.com/login/oauth/authorize");
-			hosted.kill("SIGTERM");
-			expect(await hosted.exited).toBe(0);
 		});
 	});
 } else {

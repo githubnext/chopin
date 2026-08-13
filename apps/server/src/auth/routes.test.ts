@@ -72,7 +72,6 @@ class FakeGitHub implements GitHub {
 }
 
 const CONFIG: AuthConfig = {
-	driver: "github",
 	origin: "https://chopin.test",
 	clientId: "client-id",
 	clientSecret: "client-secret",
@@ -129,7 +128,6 @@ describe("hosted authentication routes", () => {
 			}),
 		);
 		expect(await session!.json()).toEqual({
-			mode: "github",
 			agent: true,
 			user: { id: "U_octocat", login: "octocat", avatarUrl: "https://avatars.test/octocat" },
 			expiresAt: "2026-09-12T12:00:00.000Z",
@@ -168,7 +166,7 @@ describe("hosted authentication routes", () => {
 				headers: { cookie: sessionCookie },
 			}),
 		);
-		expect(await gone!.json()).toEqual({ mode: "github", user: null, agent: true });
+		expect(await gone!.json()).toEqual({ user: null, agent: true });
 	});
 
 	it("rejects missing or mismatched OAuth state", async () => {
@@ -220,14 +218,5 @@ describe("hosted authentication routes", () => {
 		expect(denied!.status).toBe(401);
 		expect(cookies(denied!)[0]).toContain("Max-Age=0");
 		expect(await storage.sessions.get(sessionId, now)).toBeUndefined();
-	});
-
-	it("keeps the API explicit when hosted auth is off", async () => {
-		let router = new Router();
-		registerAuthRoutes(router, { config: { driver: "off" }, storage: undefined });
-		expect(await (await router.handle(new Request("https://chopin.test/api/session")))!.json())
-			.toEqual({ mode: "legacy", user: null });
-		expect((await router.handle(new Request("https://chopin.test/api/repositories")))!.status)
-			.toBe(401);
 	});
 });

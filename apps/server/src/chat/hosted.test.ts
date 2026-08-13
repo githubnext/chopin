@@ -2,11 +2,10 @@ import { describe, expect, it } from "bun:test";
 
 import { Sessions } from "../auth/session";
 import { MemoryStorage } from "../storage/memory/adapter";
-import { resolveHostedOwner } from "./service";
+import { resolveOwner } from "./service";
 
 import type { HostedAuth } from "../auth/routes";
 import type { GitHub, GitHubUser, Repository, RepositoryPage } from "../github/client";
-import type { Room } from "./service";
 
 class GitHubAccess implements GitHub {
 	authorize(): string {
@@ -63,7 +62,6 @@ describe("hosted Copilot ownership", () => {
 		});
 		let auth: HostedAuth = {
 			config: {
-				driver: "github",
 				origin: "https://test",
 				clientId: "id",
 				clientSecret: "secret",
@@ -74,16 +72,12 @@ describe("hosted Copilot ownership", () => {
 			sessions,
 			clock: () => now,
 		};
-		let hosted: NonNullable<Room["hosted"]> = {
-			auth,
-			claimantSessionId: ana.id,
-			repository: { id: "R_score", owner: "octo-org", name: "score", defaultBranch: "main" },
-		};
+		let repository = { id: "R_score", owner: "octo-org", name: "score", defaultBranch: "main" };
 
-		let first = await resolveHostedOwner(hosted, channel.id, ana.id);
+		let first = await resolveOwner(auth, repository, channel.id, ana.id);
 		expect(first.ownership.ownerSessionId).toBe(ana.id);
 		expect(first.owner.oauthToken).toBe("gho_ana");
-		let second = await resolveHostedOwner(hosted, channel.id, bob.id);
+		let second = await resolveOwner(auth, repository, channel.id, bob.id);
 		expect(second.ownership.ownerSessionId).toBe(ana.id);
 		expect(second.owner.oauthToken).toBe("gho_ana");
 
@@ -93,7 +87,7 @@ describe("hosted Copilot ownership", () => {
 			first.ownership.generation,
 			now,
 		);
-		let replacement = await resolveHostedOwner(hosted, channel.id, bob.id);
+		let replacement = await resolveOwner(auth, repository, channel.id, bob.id);
 		expect(replacement.ownership.ownerSessionId).toBe(bob.id);
 		expect(replacement.ownership.generation).toBeGreaterThan(first.ownership.generation);
 		expect(replacement.owner.oauthToken).toBe("gho_bob");

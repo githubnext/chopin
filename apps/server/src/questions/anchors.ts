@@ -46,7 +46,7 @@ function ids(definition: Definition): string[] {
  * somebody has made one, and owing a review for it would be owing one forever.
  */
 export function read(record: Question): Plan.WidgetAnchors {
-	if (record.anchors) return folded(structuredClone(record.anchors));
+	if (record.anchors) return structuredClone(record.anchors);
 
 	let answered = record.status === "answered";
 	let questions: { [id: string]: Plan.AnchorSet } = {};
@@ -54,54 +54,6 @@ export function read(record: Question): Plan.WidgetAnchors {
 		questions[id] = empty(answered, answered ? "missing" : undefined);
 	}
 	return { widget: record.id, questions };
-}
-
-/** A question as it was persisted before the two halves were folded into one. */
-type Split = { subject?: Plan.AnchorSet; result?: Plan.AnchorSet };
-
-/**
- * Bring a record written before the fold forward.
- *
- * `read` hands back what was persisted verbatim, and nothing between
- * `JSON.parse` and here checks it, so a shape change reaches the rebase as a
- * set with no `anchors` array. That does not crash the room — the carry on open
- * is guarded — which is worse: it is caught, logged, and every decision in the
- * plan quietly loses its place. The guard is shared with the comment threads,
- * so one stale question record takes their anchors down too.
- *
- * Both halves are kept. In practice the subject was a subset of the result, so
- * the union is the result; where it was not, the agent anchored the subject and
- * never got round to the other, and dropping it would lose the only placement
- * that question ever had. Review state comes from the result, which is the half
- * that was actually maintained.
- */
-function folded(value: Plan.WidgetAnchors): Plan.WidgetAnchors {
-	let questions: { [id: string]: Plan.AnchorSet } = {};
-
-	for (let [id, set] of Object.entries(value.questions)) {
-		let split = set as Plan.AnchorSet & Split;
-		if (Array.isArray(split.anchors)) {
-			questions[id] = set;
-			continue;
-		}
-
-		let result = split.result ?? empty(true, "missing");
-		let seen = new Set<string>();
-		let anchors: Plan.Anchor[] = [];
-		for (let anchor of [...result.anchors, ...(split.subject?.anchors ?? [])]) {
-			if (seen.has(anchor.digest)) continue;
-			seen.add(anchor.digest);
-			anchors.push(anchor);
-		}
-
-		questions[id] = {
-			anchors,
-			pending: result.pending,
-			...(result.reason ? { reason: result.reason } : {}),
-		};
-	}
-
-	return { widget: value.widget, questions };
 }
 
 /**

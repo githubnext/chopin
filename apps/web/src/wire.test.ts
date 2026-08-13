@@ -44,8 +44,7 @@ function connect(port: number, seen: Status[]): Wire {
 	// a test runtime.
 	globalThis.location = { href: `http://127.0.0.1:${port}/`, protocol: "http:" } as Location;
 	let wire = new Wire({
-		room: "main",
-		handle: "octocat",
+		channelId: "019c1234-1234-4123-8123-123456789abc",
 		onStatus: status => seen.push(status),
 	});
 	wires.push(wire);

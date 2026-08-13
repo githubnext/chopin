@@ -23,8 +23,7 @@ export declare namespace Plan {
 		| (Awareness & { sender?: string })
 		| Anchors
 		| Changes
-		| Reset
-		| Status;
+		| Reset;
 
 	/**
 	 * A decision's place in the prose.
@@ -286,18 +285,5 @@ export declare namespace Plan {
 			| "compacted"
 			/** An update did not validate and the room was rebuilt. */
 			| "rebuilt";
-	};
-
-	/** Durability, surfaced in the editor chrome. */
-	export type Status = KIND<"plan:status"> & {
-		state:
-			/** Accepted in memory, not yet written to disk. */
-			| "saving"
-			/** The latest source is on disk. */
-			| "saved"
-			/** Writing is failing; editing continues. */
-			| "error";
-		revision: number;
-		message?: string;
 	};
 }

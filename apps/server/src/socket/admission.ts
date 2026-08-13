@@ -1,34 +1,28 @@
 import { GitHubError } from "../github/client";
 import { uid } from "../ids";
-import * as Rooms from "../rooms";
 import { StorageError } from "../storage/errors";
 
 import type { HostedAuth } from "../auth/routes";
 import type { SocketData } from "../wire";
 
-type Dependencies = {
-	key: string | undefined;
-	auth: HostedAuth | undefined;
-};
+const CHANNEL = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 export type Admission = { data: SocketData } | { status: number; reason: string };
 
 export async function admit(
 	request: Request,
 	url: URL,
-	dependencies: Dependencies,
+	auth: HostedAuth,
 ): Promise<Admission> {
-	if (!dependencies.auth) return legacy(url, dependencies.key);
-	let auth = dependencies.auth;
 	try {
 		if (request.headers.get("origin") !== auth.config.origin) {
 			return { status: 403, reason: "origin is not allowed" };
 		}
 		let session = await auth.sessions.authenticate(request);
 		if (!session) return { status: 401, reason: "authentication required" };
-		let room = (url.searchParams.get("room") || "").toLowerCase();
-		if (!Rooms.validRoom(room)) return { status: 400, reason: "bad channel" };
-		let channel = await auth.storage.channels.get(room);
+		let id = (url.searchParams.get("channel") || "").toLowerCase();
+		if (!CHANNEL.test(id)) return { status: 400, reason: "bad channel" };
+		let channel = await auth.storage.channels.get(id);
 		if (!channel) return { status: 404, reason: "channel not found" };
 		let repository = await auth.github.repositoryAccess(
 			session.oauthToken,
@@ -38,6 +32,8 @@ export async function admit(
 		if (!repository || repository.id !== channel.repositoryId || !repository.permissions.pull) {
 			return { status: 404, reason: "channel not found" };
 		}
+		let credential = auth.sessions.credential(request);
+		if (!credential) return { status: 401, reason: "authentication required" };
 		return {
 			data: {
 				room: channel.id,
@@ -47,7 +43,7 @@ export async function admit(
 				principalId: session.user.id,
 				sessionId: session.session.id,
 				authorizedUntil: session.session.expiresAt.getTime(),
-				credential: auth.sessions.credential(request),
+				credential,
 				repositoryId: repository.id,
 				repositoryOwner: repository.owner,
 				repositoryName: repository.name,
@@ -71,17 +67,4 @@ export async function admit(
 		}
 		return { status: 500, reason: "admission failed" };
 	}
-}
-
-function legacy(url: URL, key: string | undefined): Admission {
-	if (key && url.searchParams.get("key") !== key) {
-		return { status: 403, reason: "access key required" };
-	}
-	let room = (url.searchParams.get("room") || "").toLowerCase();
-	if (!Rooms.validRoom(room)) return { status: 400, reason: "bad room" };
-	let handle = url.searchParams.get("as") || "";
-	if (!Rooms.validHandle(handle)) return { status: 400, reason: "bad handle" };
-	return {
-		data: { room, handle, client: uid(), canEdit: true },
-	};
 }

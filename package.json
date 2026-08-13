@@ -13,8 +13,8 @@
 		"ci": "dprint check && oxlint && bun scripts/check-tokens.ts",
 		"fix": "dprint fmt && oxlint --fix",
 		"types": "bun --filter '*' types && tsgo --noEmit --skipLibCheck -p e2e",
-		"e2e": "bun run build && bun node_modules/@playwright/test/cli.js test --config e2e/playwright.config.ts",
-		"e2e:ui": "bun run build && bun node_modules/@playwright/test/cli.js test --config e2e/playwright.config.ts --ui",
+		"e2e": "bun scripts/e2e.ts",
+		"e2e:ui": "bun scripts/e2e.ts --ui",
 		"e2e:browsers": "bun node_modules/@playwright/test/cli.js install chromium"
 	},
 	"devDependencies": {

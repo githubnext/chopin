@@ -74,6 +74,7 @@ export class QuestionnaireController {
 	#model: Model | undefined;
 	#revision = 0;
 	#outbox: number[][] = [];
+	#pending = Promise.resolve();
 	#generation = 0;
 	#refs = 0;
 	#connected: boolean;
@@ -179,7 +180,15 @@ export class QuestionnaireController {
 
 		this.#terminal = true;
 		this.#set({ submitting: true, error: undefined });
-		void this.bridge.ask("question:submit", { id: this.id, revision: this.#revision })
+		let submit = async () => {
+			// The CRDT batches its change callback into a microtask. Let the final
+			// input event enter the outbox before choosing the revision to submit.
+			await Promise.resolve();
+			await this.#pending;
+			if (this.#outbox.length > 0) throw new Error("questionnaire edits are not synchronized");
+			return this.bridge!.ask("question:submit", { id: this.id, revision: this.#revision });
+		};
+		void submit()
 			.then((raw: never) => {
 				let reply = raw as unknown as { ok?: boolean; reason?: string; message?: string };
 				if (reply.ok) return;
@@ -343,29 +352,31 @@ export class QuestionnaireController {
 		for (let patch of this.#outbox) apply(patch);
 
 		let send = (patch: number[]) => {
-			void channel.ask("question:edit", { id: this.id, patch })
-				.then((raw: never) => {
-					let ack = raw as unknown as {
-						open?: boolean;
-						accepted?: boolean;
-						revision?: number;
-						message?: string;
-					};
-					let index = this.#outbox.indexOf(patch);
-					if (index !== -1) this.#outbox.splice(index, 1);
-					if (!ack.open) return this.#close();
-					if (!ack.accepted) {
-						this.#set({
-							error: `${ack.message ?? "An edit was rejected"}. Syncing latest answers.`,
-						});
-						this.#restart();
-						return;
-					}
-					this.#revision = Math.max(this.#revision, ack.revision ?? 0);
-				})
-				.catch(() => {
-					// Left in the outbox for the next successful open.
-				});
+			this.#pending = this.#pending.then(() =>
+				channel.ask("question:edit", { id: this.id, patch })
+					.then((raw: never) => {
+						let ack = raw as unknown as {
+							open?: boolean;
+							accepted?: boolean;
+							revision?: number;
+							message?: string;
+						};
+						let index = this.#outbox.indexOf(patch);
+						if (index !== -1) this.#outbox.splice(index, 1);
+						if (!ack.open) return this.#close();
+						if (!ack.accepted) {
+							this.#set({
+								error: `${ack.message ?? "An edit was rejected"}. Syncing latest answers.`,
+							});
+							this.#restart();
+							return;
+						}
+						this.#revision = Math.max(this.#revision, ack.revision ?? 0);
+					})
+					.catch(() => {
+						// Left in the outbox for the next successful open.
+					})
+			);
 		};
 
 		let offChanges = doc.api.onChanges.listen(() => {

@@ -1,9 +1,9 @@
 /**
  * Rooms, and who is in them.
  *
- * A room comes into existence because somebody opened its URL. There is no
- * creation step and no registry to keep in sync — a name is enough, which is
- * what makes a link shareable with no setup at the other end.
+ * A runtime room comes into existence when an authenticated member opens a
+ * durable channel. The channel catalog owns creation and authorization; this
+ * module owns only active membership and eviction.
  *
  * Only membership lives here. The collaborative document, its questionnaires
  * and the agent session attach to the same record as they arrive.
@@ -32,20 +32,6 @@ export type Room = {
 };
 
 const rooms = new Map<string, Room>();
-
-/** GitHub handles, which is what an avatar URL will be built from. */
-const HANDLE = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
-
-/** Room names appear in a path and a directory name, so keep them boring. */
-const ROOM = /^[a-z0-9][a-z0-9-]{0,63}$/;
-
-export function validHandle(value: string): boolean {
-	return HANDLE.test(value);
-}
-
-export function validRoom(value: string): boolean {
-	return ROOM.test(value);
-}
 
 function open(id: string): Room {
 	let existing = rooms.get(id);

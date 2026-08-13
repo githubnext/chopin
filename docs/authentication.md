@@ -1,8 +1,9 @@
-# Hosted authentication
+# Authentication
 
-Hosted authentication is an HTTP boundary in front of the channel product. It
-does not yet replace the claimed handle on the prototype `/r/*` WebSocket; that
-happens when channels become authenticated resources.
+Authentication covers both the HTTP channel product and its WebSocket.
+The upgrade requires the session cookie, exact application origin, a stored
+channel, and current repository access. The verified GitHub login supplies the
+presence and attribution handle.
 
 ## GitHub OAuth
 
@@ -15,19 +16,27 @@ Create a GitHub OAuth App with this callback:
 Configure Chopin with:
 
 ```text
-AUTH_DRIVER=github
+STORAGE_DRIVER=postgres
+DATABASE_URL=postgresql://chopin:chopin@database:5432/chopin
 APP_ORIGIN=https://chopin.example
 GITHUB_OAUTH_CLIENT_ID=...
 GITHUB_OAUTH_CLIENT_SECRET=...
 SESSION_ENCRYPTION_KEY=<64 hex characters>
 ```
 
-Generate the encryption key with `openssl rand -hex 32`. Authentication requires
-a durable storage adapter; it cannot run with `STORAGE_DRIVER=legacy`.
+Generate the encryption key with `openssl rand -hex 32`.
+
+`APP_ORIGIN` must be exactly one HTTP(S) origin: no credentials, path, query,
+fragment, or trailing slash. HTTPS is required except for loopback development,
+such as `http://127.0.0.1:8787`. OAuth callbacks are built only from this value,
+never from incoming Host or forwarded headers.
 
 The OAuth App currently requests `read:user repo`. The `repo` scope is broad,
 but it is required to discover private repositories with an OAuth App. Chopin
-does not use it to write repository content.
+does not write repository content. The token lists and authorizes repositories,
+authenticates the owning user's Copilot session, supplies its read-only
+pull-request MCP bearer, and backs repository-bound file, tree, search, and
+history tools.
 
 ## Session boundary
 
@@ -44,6 +53,11 @@ OAuth state and the PKCE verifier are held in a separate encrypted, ten-minute
 HttpOnly cookie. Callback URLs are derived only from `APP_ORIGIN`, never from an
 incoming Host header.
 
+State-changing HTTP routes and WebSocket upgrades require an Origin
+header exactly equal to `APP_ORIGIN`. Open sockets periodically recheck
+the stored session and repository permission; logout aborts an active agent
+owned by that session.
+
 ## API
 
 ```text
@@ -59,4 +73,4 @@ POST /auth/logout
 ```
 
 API and authentication paths are owned by the server in development and
-production. Unknown paths return 404 and never fall through to Vite or the SPA.
+production.

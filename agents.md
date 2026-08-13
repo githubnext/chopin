@@ -7,10 +7,10 @@ people running it; this is for people editing it.
 
 ```bash
 bun run dev        # supervisor: Vite + server on one origin, Ctrl-C stops both
-bun test           # 525 tests, no browser, no agent spawned
-bun run e2e        # 49 tests, Chromium, builds the client first
+bun test           # no browser, no agent spawned
+bun run e2e        # Chromium, PostgreSQL, builds the client first
 bun run types      # every package, and e2e
-bun run ci         # dprint check && oxlint
+bun run ci         # dprint check && oxlint && token checks
 bun run build      # production client
 bun run start      # serve the built client
 ```
@@ -21,26 +21,24 @@ browser suite on its own because it has to build the client first and should
 not make a formatting mistake wait behind Vite. A failed browser run uploads
 its report and traces.
 
-`bun run dev` needs `GITHUB_TOKEN`. `AGENT=off` runs everything except the
-agent, which is what both suites use.
+`bun run dev` needs a migrated PostgreSQL database, GitHub OAuth configuration,
+and a session encryption key. `AGENT=off` runs everything except the agent,
+which is what both suites use.
 
 `bun run e2e` needs a browser once: `bun run e2e:browsers`. It builds the
-client, then starts two servers of its own — 8788, and 8789 with the injection
-flags on — so having `bun run dev` open at the same time costs nothing.
+client, starts two temporary PostgreSQL services and two servers of its own —
+8788, and 8789 with the injection flags on — then removes the databases. Having
+`bun run dev` open at the same time costs nothing.
 
-To iterate against a server you are already running, skipping the build and the
-supervision, give it the three things the suite assumes and name it:
+To iterate on one browser test without rebuilding the unchanged client:
 
 ```bash
-PORT=8790 AGENT=off DATA_DIR="$PWD/e2e/.scratch/8790" \
-  DEV_QUESTIONS=1 DEV_COMMENTS=1 bun apps/server/src/main.ts
-E2E_BASE_URL=http://127.0.0.1:8790 bun node_modules/@playwright/test/cli.js \
-  test --config e2e/playwright.config.ts
+E2E_SKIP_BUILD=1 bun scripts/e2e.ts e2e/table.e2e.ts --grep "row limit"
 ```
 
-The `DATA_DIR` is not decoration: tests that need prose before anybody opens
-the room write it themselves, and they derive where from the port in the base
-URL. Point it elsewhere and they seed a directory the server never reads.
+The regular suite fakes only GitHub's network responses. OAuth state, encrypted
+sessions, repository authorization, channel routes, sockets and PostgreSQL
+persistence are the production implementations.
 
 ## Shape
 
@@ -77,10 +75,10 @@ serialised, re-parsed, validated, and only then _reconciled_ into the live
 tree, so blocks the agent did not touch keep their Lexical identity and nobody
 loses a cursor to somebody else's edit.
 
-Canonical MDX goes to `data/<room>/plan.mdx` on a debounce, with questionnaire
-records, comment threads, anchors and the transcript beside it. Yjs history is
-deliberately not persisted: it would buy undo across a restart at the price of
-a binary checkpoint that could disagree with the source.
+Accepted updates and sidecar state are committed through `StorageAdapter`
+before acknowledgement. A complete checkpoint retains canonical MDX, the Yjs
+epoch and document bytes; the ordered update journal after it is folded into a
+later checkpoint.
 
 ## Decisions, and why
 
@@ -88,12 +86,10 @@ a binary checkpoint that could disagree with the source.
 `packages/dialect/src/dialect.ts` is rejected before it reaches a renderer.
 Plan content is parsed and rendered, never evaluated.
 
-**The permission gate is the only boundary.** There is no sandbox — this runs
-as you, on your filesystem. So `apps/server/src/agent/permissions.ts` is an
-allowlist: writes refused outright rather than confined, reads limited to
-`WORKING_DIR` with credential patterns excluded, shell limited to commands the
-runtime classifies read-only, unrecognised kinds denied. Read it before
-pointing the agent at anything you care about.
+**Repository authorization is the boundary.** The first invoking editor's
+encrypted OAuth session owns the planner until reset. The SDK runs in empty mode
+with repository-scoped read tools, no host filesystem or shell, and permission
+callbacks that recheck the session, ownership generation and repository access.
 
 **Ids are minted wherever a component is created**, client or server. A ULID
 has enough entropy that two editors cannot collide, so buying uniqueness with a
@@ -102,8 +98,8 @@ for it. The agent's ids are minted server-side in `plan/edit.ts` because a
 model that copies a block it read copies the id with it.
 
 **The record owns an answer; the plan shows it.** A questionnaire's answer
-lives in `data/<room>/state.json`, and what appears in the MDX is a projection
-kept so the source reads correctly alone. An agent rewriting the prose around a
+lives in the durable sidecar, and what appears in the MDX is a projection kept
+so the source reads correctly alone. An agent rewriting the prose around a
 decision cannot change the decision.
 
 **Resolution is two-phase.** Answering has to reach both the record and the
@@ -250,10 +246,9 @@ it: nothing needs redrawing when it lapses, since the lapse redraws itself, and
 a callback fired on the way to replacing a pin would reach a store in the middle
 of walking and wipe the step it had just taken.
 
-**Hard-fail at boot.** A missing token, an unusable CLI or a `WORKING_DIR` that
-is not there are all detectable in seconds by trying, and discovering them when
-somebody types their first message is worse. `AGENT=off` is the deliberate way
-to run without one.
+**Hard-fail at boot.** Missing OAuth configuration, an unusable database, or a
+second writer lease are all detectable before serving traffic. `AGENT=off` is
+the deliberate way to run without the planner.
 
 **A mark for an agent edit waits to be seen.** The agent writes wherever it
 likes, including several screens away from whoever is reading, so a mark that
@@ -397,19 +392,16 @@ thing that asks for what was missed and the only thing that replays the outbox,
 so a client came back unlocked over a document quietly short of everyone else's
 edits. Opening is driven by the connection now, not by the mount.
 
+**A durable draft acknowledgement can arrive after the next click.** Two
+questionnaire checkboxes can produce revisions 2 and 3 while Submit still sees
+revision 2. The controller serializes its outbox and waits for it before
+submitting; removing that queue turns ordinary fast input into a stale answer
+that asks the user to try again.
+
 **A gate on a message is not a gate on a button.** `chat:send` checks
 `config.agent`; accepting a comment reached `Chat.instruct` directly and opened
 a session under `AGENT=off`. Anything that can start a turn has to check, and
 the check lives in `instruct` now so the next one cannot miss it.
-
-**A record read back from disk is not checked by anything.** `Anchors.read`
-hands back what `JSON.parse` produced, cast to the current type, so changing the
-shape of anything under `data/<room>/state.json` is somebody's existing room
-breaking rather than a type error here. It does not even break loudly: the carry
-on open is guarded, so a set the new code cannot read is caught, logged once,
-and every decision in the plan quietly loses its place — and because that guard
-is shared, one stale questionnaire takes the comment threads' anchors with it.
-`folded` is where the last such change is absorbed, and where the next one goes.
 
 **An optional callback nobody passes is a button that does nothing.**
 `QuestionView` rendered a real `<button>` labelled "Show in plan", with a
@@ -422,11 +414,10 @@ for as long as it was undefined and became the plan scrolling out from under
 somebody the moment it was not.
 
 **Rebasing used to happen only inside `edit_plan`.** So a block a person moved
-kept its anchors broken until the agent next happened to edit, and everything
-restored from disk was expressed in a history the new document did not have.
-It now runs on the snapshot debounce, on an epoch rotation, and before `open`
-returns — and the flush broadcasts only when the snapshot actually moved,
-because a recovery nobody is told about is the same as no recovery.
+kept its anchors broken until the agent next happened to edit. It now runs when
+durable state is captured, on an epoch rotation, and before `open` returns — and
+the flush broadcasts only when recovery actually moved an anchor, because a
+recovery nobody is told about is the same as no recovery.
 
 **`CSS.highlights` is a document-wide registry**, shared with Lexical's remote
 cursors. Ours is named `plan-related`, its are `lexical-cursor-*`; a collision
@@ -484,12 +475,10 @@ _previous_ bundle — green, about code nobody changed. `dist` lingers, so
 `playwright test` invoked directly serves whatever was last built; the guard
 only refuses when there is nothing there at all.
 
-**A `globalTeardown` runs while the web servers are still up.** So the obvious
-place to remove the suite's rooms is one where the snapshot debounce writes
-some of them back: the last test's room is saved 500ms after the wipe, and the
-tree ends up mostly empty and never quite. `setup.ts` clears it on the way in
-instead, which is exact — a server writes nothing until a room is opened — and
-leaves a failed run's plan beside the trace that failed on it.
+**The browser databases are disposable services.** `scripts/e2e.ts` starts two
+tmpfs-backed PostgreSQL services, migrates both before Playwright starts, and
+removes them after the servers stop. Test fixtures seed canonical checkpoints
+through the same schema and never add an unauthenticated production route.
 
 **`context.setOffline` leaves an established socket alone.** It governs what
 may be opened, and by the time there is a connection worth dropping the opening
@@ -564,8 +553,8 @@ any of it has a sidecar to be driven from.
 ## Origins
 
 The dialect, the editor and the questionnaire model began as a port of Ace's
-plan feature, restructured to stand alone: no sandbox, no VM, one server, rooms
-in memory. It is a one-time port — work happens here now, and there is no
+plan feature, restructured to stand alone: no VM, one server, durable channels.
+It is a one-time port — work happens here now, and there is no
 attempt to track upstream.
 
 Several defects were ported along with the code and fixed here: a link prompt

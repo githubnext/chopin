@@ -1,27 +1,8 @@
-/**
- * Durability and connection state, surfaced beside the plan.
- *
- * "Saved" means the canonical source reached disk, not merely that the server
- * accepted the edit — the document lives in memory, so an acknowledgement
- * alone would not survive a restart and claiming saved at that point would
- * overstate the guarantee.
- *
- * A healthy plan says nothing. The indicator exists to explain why you cannot
- * type, or that something failed; a permanent bar spending its life reading
- * "Saved" is chrome charging rent on every plan for a word nobody reads.
- * Connection and agent state are reported elsewhere too, so here they only
- * earn space because both make the editor read-only.
- */
+/** Connection and document state, surfaced beside the plan. */
 
-import { useEffect, useState } from "react";
-
-import type { Plan } from "@chopin/protocol";
-import type { Connection, Transport } from "./transport";
-
-type Durability = Plan.Status["state"];
+import type { Connection } from "./transport";
 
 export type PlanStatusProps = {
-	wire: Transport | undefined;
 	connection?: Connection;
 	/** False until the shared document has arrived. */
 	synced: boolean;
@@ -31,27 +12,11 @@ export type PlanStatusProps = {
 	busy?: boolean;
 };
 
-/**
- * How loudly a state is worth saying.
- *
- * `quiet` is a dot: something is happening and it will pass. `notice` earns
- * words: either the plan is not safe or you cannot edit it until you act.
- */
 type Level = "hidden" | "quiet" | "notice";
-
 type Tone = "muted" | "warn" | "error";
-
-/**
- * Saves settle on a 500ms idle timer, so an immediate dot would blink on every
- * pause in typing. Only a save that is taking a noticeable while is worth
- * showing at all.
- */
-const PATIENCE = 400;
 
 function describe(
 	props: PlanStatusProps,
-	durability: Durability | undefined,
-	message: string | undefined,
 ): { label: string; tone: Tone; level: Level; detail?: string } {
 	if (props.connection && props.connection !== "connected") {
 		return {
@@ -61,12 +26,6 @@ function describe(
 			detail: "Editing resumes once connected.",
 		};
 	}
-
-	/*
-	 * Before "Loading", because a document that failed to open never stops
-	 * loading. Saying so is the difference between a room somebody reports as
-	 * broken and one they assume is slow.
-	 */
 	if (props.failed) {
 		return {
 			label: "Could not open the plan",
@@ -75,23 +34,9 @@ function describe(
 			detail: `${props.failed}. Reloading may help.`,
 		};
 	}
-
 	if (!props.synced) return { label: "Loading", tone: "muted", level: "quiet" };
 	if (props.busy) return { label: "Agent is working", tone: "muted", level: "quiet" };
-
-	switch (durability) {
-		case "error":
-			return {
-				label: "Not saved",
-				tone: "error",
-				level: "notice",
-				detail: message ?? "Retrying; keep this session open.",
-			};
-		case "saving":
-			return { label: "Saving", tone: "muted", level: "quiet" };
-		default:
-			return { label: "Saved", tone: "muted", level: "hidden" };
-	}
+	return { label: "Ready", tone: "muted", level: "hidden" };
 }
 
 const TONES: Record<Tone, string> = {
@@ -101,38 +46,12 @@ const TONES: Record<Tone, string> = {
 };
 
 export function PlanStatus(props: PlanStatusProps) {
-	let [durability, setDurability] = useState<Durability>();
-	let [message, setMessage] = useState<string>();
-	let [lingering, setLingering] = useState(false);
-
-	useEffect(() => {
-		if (!props.wire) return;
-		return props.wire.on<Plan.Status>("plan:status", event => {
-			setDurability(event.state);
-			setMessage(event.message);
-		});
-	}, [props.wire]);
-
-	useEffect(() => {
-		if (durability !== "saving") {
-			setLingering(false);
-			return;
-		}
-		let timer = setTimeout(() => setLingering(true), PATIENCE);
-		return () => clearTimeout(timer);
-	}, [durability]);
-
-	let { label, tone, level, detail } = describe(props, durability, message);
-	if (level === "quiet" && durability === "saving" && !lingering) level = "hidden";
-
+	let { label, tone, level, detail } = describe(props);
 	return (
 		<div
+			aria-live="polite"
 			className={`plan-status ${level === "notice" ? "animate-enter" : ""}`}
 			data-level={level}
-			// Durability changes are informational; announcing them politely
-			// keeps them out of the way of what the user is typing. The text is
-			// read even where it is not drawn, so "Saved" is never lost.
-			aria-live="polite"
 		>
 			{level !== "hidden" && (
 				<span

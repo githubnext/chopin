@@ -3,15 +3,7 @@ import { join } from "node:path";
 
 import { defineConfig, devices } from "@playwright/test";
 
-import { FIXTURES, HOST, PLAIN, ROOT, scratch } from "./servers";
-
-/**
- * An already-running server to use instead of starting one, e.g. `bun run dev`
- * on 8787. Skips the build and the supervision, which is what makes iterating
- * on a single test bearable; the sidecar suite needs `DEV_QUESTIONS` and
- * `DEV_COMMENTS` set on whatever is listening there.
- */
-let external = process.env.E2E_BASE_URL;
+import { FIXTURES, HOST, PLAIN, ROOT } from "./servers";
 
 /*
  * Refuse a client that is not there, here rather than in a global setup.
@@ -25,31 +17,33 @@ let external = process.env.E2E_BASE_URL;
  * would put the suite on the previous bundle — green, about code nobody
  * changed — so `bun run e2e` builds first and this only insists on the result.
  */
-if (!external && !existsSync(join(ROOT, "apps/web/dist/index.html"))) {
+if (!existsSync(join(ROOT, "apps/web/dist/index.html"))) {
 	throw new Error(
 		"chopin: no built client to test. Run `bun run e2e`, which builds first,"
 			+ " or `bun run build` before invoking Playwright directly.",
 	);
 }
 
-function server(port: number, extra: Record<string, string>) {
+function server(port: number, database: string, extra: Record<string, string>) {
 	return {
 		/*
 		 * Spawned directly rather than through `bun run start`, for the reason
 		 * `scripts/dev.ts` gives: the wrapper does not exit when the thing it
 		 * started dies, so Playwright would end up supervising nothing.
 		 */
-		command: "bun apps/server/src/main.ts",
+		command: "bun --preload ./e2e/github.ts apps/server/src/main.ts",
 		cwd: ROOT,
 		url: `http://${HOST}:${port}/`,
 		env: {
 			PORT: String(port),
 			SERVER_HOST: HOST,
-			// No token, no CLI probe, no turns.
 			AGENT: "off",
-			AUTH_DRIVER: "off",
-			STORAGE_DRIVER: "legacy",
-			DATA_DIR: scratch(port),
+			STORAGE_DRIVER: "postgres",
+			DATABASE_URL: database,
+			APP_ORIGIN: `http://${HOST}:${port}`,
+			GITHUB_OAUTH_CLIENT_ID: "e2e",
+			GITHUB_OAUTH_CLIENT_SECRET: "e2e",
+			SESSION_ENCRYPTION_KEY: process.env.SESSION_ENCRYPTION_KEY!,
 			// Named even when off, so an exported flag in somebody's shell
 			// cannot quietly put a questionnaire in every room.
 			DEV_QUESTIONS: "",
@@ -89,24 +83,24 @@ export default defineConfig({
 		trace: process.env.CI ? "on-first-retry" : "retain-on-failure",
 	},
 
-	// Clears the previous run's rooms. On the way in, because a teardown runs
-	// while the servers are still up and their debounced saves land after it.
-	globalSetup: "./setup.ts",
-
 	projects: [
 		{
 			name: "chromium",
 			testIgnore: "**/sidecar.e2e.ts",
-			use: { ...devices["Desktop Chrome"], baseURL: external ?? `http://${HOST}:${PLAIN}` },
+			use: { ...devices["Desktop Chrome"], baseURL: `http://${HOST}:${PLAIN}` },
 		},
 		{
 			name: "fixtures",
 			testMatch: "**/sidecar.e2e.ts",
-			use: { ...devices["Desktop Chrome"], baseURL: external ?? `http://${HOST}:${FIXTURES}` },
+			use: { ...devices["Desktop Chrome"], baseURL: `http://${HOST}:${FIXTURES}` },
 		},
 	],
 
-	webServer: external
-		? undefined
-		: [server(PLAIN, {}), server(FIXTURES, { DEV_QUESTIONS: "1", DEV_COMMENTS: "1" })],
+	webServer: [
+		server(PLAIN, process.env.E2E_DATABASE_URL_0!, {}),
+		server(FIXTURES, process.env.E2E_DATABASE_URL_1!, {
+			DEV_QUESTIONS: "1",
+			DEV_COMMENTS: "1",
+		}),
+	],
 });

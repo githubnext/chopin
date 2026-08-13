@@ -315,7 +315,6 @@ export function PlanEditor(
 					{/* In the document column, so they track the prose, not the pane. */}
 					<PlanChanges store={changes} />
 					<PlanStatus
-						wire={wire}
 						connection={connection}
 						synced={state.synced}
 						failed={state.failed}

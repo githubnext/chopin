@@ -1,15 +1,12 @@
-export type AuthConfig =
-	| { driver: "off" }
-	| {
-		driver: "github";
-		origin: string;
-		clientId: string;
-		clientSecret: string;
-		encryptionKey: Uint8Array;
-	};
+export type AuthConfig = {
+	origin: string;
+	clientId: string;
+	clientSecret: string;
+	encryptionKey: Uint8Array;
+};
 
 function origin(raw: string | undefined): string {
-	if (!raw) throw new Error("APP_ORIGIN is required when AUTH_DRIVER=github");
+	if (!raw) throw new Error("APP_ORIGIN is required");
 	let parsed: URL;
 	try {
 		parsed = new URL(raw);
@@ -43,20 +40,13 @@ function encryptionKey(raw: string | undefined): Uint8Array {
 }
 
 export function loadAuth(): AuthConfig {
-	let driver = process.env.AUTH_DRIVER || "off";
-	if (driver === "off") return { driver };
-	if (driver !== "github") {
-		throw new Error(`AUTH_DRIVER must be "off" or "github", got ${JSON.stringify(driver)}`);
-	}
-
 	let clientId = process.env.GITHUB_OAUTH_CLIENT_ID;
 	let clientSecret = process.env.GITHUB_OAUTH_CLIENT_SECRET;
-	if (!clientId) throw new Error("GITHUB_OAUTH_CLIENT_ID is required when AUTH_DRIVER=github");
+	if (!clientId) throw new Error("GITHUB_OAUTH_CLIENT_ID is required");
 	if (!clientSecret) {
-		throw new Error("GITHUB_OAUTH_CLIENT_SECRET is required when AUTH_DRIVER=github");
+		throw new Error("GITHUB_OAUTH_CLIENT_SECRET is required");
 	}
 	return {
-		driver,
 		origin: origin(process.env.APP_ORIGIN),
 		clientId,
 		clientSecret,

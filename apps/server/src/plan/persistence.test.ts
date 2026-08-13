@@ -32,8 +32,7 @@ async function hosted() {
 			frames.push(JSON.parse(value) as Record<string, unknown>);
 		},
 	} as unknown as Server<SocketData>;
-	let backend: Service.HostedBackend = {
-		kind: "hosted",
+	let backend: Service.Backend = {
 		storage,
 		lease: () => lease,
 		fatal: err => {

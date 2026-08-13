@@ -140,11 +140,9 @@ async function authorizedRepository(
 /** Authenticated metadata routes; live collaboration is still the following stage. */
 export function registerChannelRoutes(
 	router: Router,
-	auth: HostedAuth | undefined,
+	auth: HostedAuth,
 	options: { onAgentReset?: (channelId: string) => Promise<void> } = {},
 ): void {
-	if (!auth) return;
-
 	router.on(
 		"GET",
 		"/api/repositories/:owner/:repository/channels",

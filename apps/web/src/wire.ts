@@ -24,9 +24,7 @@ type Pending = {
 };
 
 export type WireOptions = {
-	room: string;
-	handle: string;
-	key?: string;
+	channelId: string;
 	onStatus?: (status: Status, reason?: string) => void;
 };
 
@@ -36,9 +34,7 @@ const MAX_DELAY = 15_000;
 function endpoint(options: WireOptions): string {
 	let url = new URL("/ws", location.href);
 	url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
-	url.searchParams.set("room", options.room);
-	url.searchParams.set("as", options.handle);
-	if (options.key) url.searchParams.set("key", options.key);
+	url.searchParams.set("channel", options.channelId);
 	return url.href;
 }
 

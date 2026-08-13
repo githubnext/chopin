@@ -406,13 +406,6 @@ describe("migration", () => {
 	it("puts each listed standard control on its shared utility", () => {
 		let controls: StandardControl[] = [
 			{
-				file: "apps/web/src/app.tsx",
-				marker: 'id="handle"',
-				name: "sign-in handle",
-				tag: "input",
-				utility: "field",
-			},
-			{
 				file: "apps/web/src/chat/chat.tsx",
 				marker: "Say something…",
 				name: "chat composer",
@@ -539,12 +532,6 @@ describe("migration", () => {
 
 	it("puts each standard action on one button size and tier", () => {
 		let actions = [
-			["apps/web/src/app.tsx", {
-				action: "Join",
-				marker: "Join",
-				size: "btn-md",
-				tiers: ["btn-primary"],
-			}],
 			[
 				"apps/web/src/app.tsx",
 				{

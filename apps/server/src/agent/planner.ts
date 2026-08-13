@@ -39,26 +39,8 @@ export const NAME = "chopin-plan";
  * runtime does not classify as read-only, and any write redirection. Reading
  * the repository is most of what planning is.
  */
-export const TOOLS = [
-	"builtin:view",
-	"builtin:grep",
-	"builtin:glob",
-	"builtin:bash",
-	"builtin:read_bash",
-	"builtin:stop_bash",
-	// Announces what it is about to do, and groups the calls underneath.
-	"builtin:report_intent",
-	"builtin:skill",
-	// Issues, pull requests and file contents. The server is configured
-	// read-only and the gate independently refuses a write, so this cannot
-	// widen past reading.
-	"mcp:*",
-	// read_plan, edit_plan, anchor_plan and ask.
-	"custom:*",
-];
-
-/** Empty-mode hosted sessions expose no ambient host tools. */
-export const HOSTED_TOOLS = ["mcp:*", "custom:*"];
+/** Empty-mode sessions expose no ambient host tools. */
+export const TOOLS = ["mcp:*", "custom:*"];
 
 /** Components the agent writes itself. The rest are created for it. */
 const AUTHORABLE = ["Callout", "Tabs", "Tab", "Underline"];
@@ -187,17 +169,6 @@ Messages from people are prefixed with the speaker's handle. More than one
 person may be present, and they may disagree; attribute positions to whoever
 holds them rather than merging them into one voice.
 
-Read before you propose. You have \`view\`, \`grep\` and \`glob\` over the working
-directory, GitHub through its MCP tools for issues, pull requests and file
-contents, and a shell for commands that only inspect — \`git log\`, \`ls\`, \`wc\`
-and the like. Ground the plan in what is actually there rather than in what the
-request implies is there.
-
-You cannot change any of it. Writes to the working directory, commands that
-modify, and every GitHub write are refused, so do not plan around attempting
-them. If something can only be settled by running code that changes state, say
-so in the plan and leave it for implementation.
-
 ## The plan dialect
 
 The plan is Markdown plus a fixed set of components. It is never executed — it
@@ -261,19 +232,7 @@ export const planner: CustomAgentConfig = {
 	infer: false,
 };
 
-const LEGACY_ACCESS =
-	`Read before you propose. You have \`view\`, \`grep\` and \`glob\` over the working
-directory, GitHub through its MCP tools for issues, pull requests and file
-contents, and a shell for commands that only inspect — \`git log\`, \`ls\`, \`wc\`
-and the like. Ground the plan in what is actually there rather than in what the
-request implies is there.
-
-You cannot change any of it. Writes to the working directory, commands that
-modify, and every GitHub write are refused, so do not plan around attempting
-them. If something can only be settled by running code that changes state, say
-so in the plan and leave it for implementation.`;
-
-export function hostedPlanner(repository: string): CustomAgentConfig {
+export function plannerFor(repository: string): CustomAgentConfig {
 	let access = `Read before you propose. The selected repository is ${repository}. Use
 \`read_repository_file\`, \`list_repository_tree\`, \`search_repository\` and
 \`repository_history\` for its code, and the read-only GitHub MCP tools for its
@@ -281,5 +240,5 @@ pull requests. Every repository tool is fixed to this repository.
 
 You have no shell, checkout, host filesystem, skills or repository instructions,
 and cannot change GitHub. Ground the plan in what those reading tools return.`;
-	return { ...planner, prompt: PROMPT.replace(LEGACY_ACCESS, access) };
+	return { ...planner, prompt: `${PROMPT}\n\n${access}` };
 }

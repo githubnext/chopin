@@ -1,9 +1,9 @@
 # Document architecture
 
 Chopin represents one plan in three forms: Lexical for rich editing, Yjs for
-live collaboration, and canonical MDX for persistence. These are not competing
-sources of truth. While a room is open, the server's Yjs document and its
-headless Lexical mirror are authoritative.
+live collaboration, and canonical MDX for a readable durable projection. These
+are not competing sources of truth. While a channel is open, the
+server's Yjs document and its headless Lexical mirror are authoritative.
 
 ## Hard requirements
 
@@ -44,9 +44,11 @@ editor is bound to it so the server can interpret CRDT updates, validate the
 resulting tree, and project canonical MDX without relying on a connected
 browser.
 
-The room also holds state that is not document content: revision and sequence
-counters, presence, question records, comment threads, transcript, agent
-session, pending client batches, and the snapshot writer.
+The channel room also holds state that is not document content: revision and sequence
+counters, presence, question records and drafts, comment threads, transcript,
+agent state, pending client batches, and its persistence coordinator. Channels
+persist agent ownership and reconstruct a disposable SDK session from durable
+context.
 
 ## Human CRDT flow
 
@@ -55,9 +57,11 @@ session, pending client batches, and the snapshot writer.
    unacknowledged updates after a reconnect.
 3. The server groups client updates for 5 ms and applies the batch to its Y.Doc.
 4. The headless Lexical mirror catches up and is projected to canonical MDX.
-5. A valid batch is acknowledged to its authors, relayed to peers, recorded as
-   the latest known-good state, and scheduled for persistence.
-6. A batch that leaves the document invalid cannot be undone in Yjs. The room
+5. The merged Yjs update and current sidecar are committed under the writer
+   fence before acknowledgement or relay.
+6. The accepted state becomes the latest known-good rebuild point and a
+   checkpoint is scheduled.
+7. A batch that leaves the document invalid cannot be undone in Yjs. The room
    is rebuilt from its last known-good state under a fresh epoch and clients
    reopen it.
 
@@ -71,7 +75,7 @@ sequenceDiagram
 	participant S as Plan service
 	participant D as Server Y.Doc/Lexical
 	participant P as Peers
-	participant F as Snapshot
+	participant ST as Persistence
 
 	U->>B: Edit rich document
 	B->>S: plan:update(epoch, id, Yjs update)
@@ -80,9 +84,11 @@ sequenceDiagram
 	D->>D: Project and validate canonical MDX
 	alt valid document
 		D-->>S: Accepted sequence
+		S->>ST: Fenced update + sidecar commit
+		ST-->>S: Durable revision and sequence
 		S-->>B: plan:ack
 		S-->>P: plan:update
-		S->>F: Schedule debounced write
+		S->>ST: Schedule complete checkpoint
 	else invalid document
 		D-->>S: Validation issues
 		S->>D: Rebuild known-good state under fresh epoch
@@ -104,9 +110,11 @@ operations are resolved against that revision.
    proven to survive a Lexical import/export round trip.
 4. Existing MDAST objects identify untouched or moved blocks. Their live
    Lexical nodes are reused; only genuinely new blocks are constructed.
-5. Lexical produces a Yjs delta, which is broadcast like any other edit.
-6. The server derives change marks, places the agent cursor at the end of the
-   final changed block, rebases relationships, and schedules a snapshot.
+5. Lexical produces a Yjs delta. The server finalizes detached records,
+   rebases and reviews relationships, and attributes accepted-comment results.
+6. The channel commits that delta and finalized sidecar before broadcasting it.
+   The server then derives change marks and places the agent cursor at the end
+   of the final changed block.
 
 The Yjs update is broadcast before the change description, so every browser has
 the nodes an agent mark names before it tries to draw that mark.
@@ -121,11 +129,13 @@ flowchart TD
 	V -- invalid --> RE[Reject without changing the room]
 	V -- valid --> RC[Reconcile into live Lexical tree]
 	RC --> ID["Reuse inherited nodes; create authored nodes"]
-	ID --> Y[Produce and broadcast Yjs delta]
-	Y --> CH[Broadcast added, moved, and removed marks]
+	ID --> Y[Produce Yjs delta]
+	Y --> AN[Finalize records and relationships]
+	AN --> DC[Fenced delta and sidecar commit]
+	DC --> BR[Broadcast persisted delta]
+	BR --> CH[Broadcast added, moved, and removed marks]
 	CH --> CU[Place agent cursor after final change]
-	Y --> AN[Rebase and review anchors]
-	Y --> SN[Schedule MDX and sidecar snapshot]
+	BR --> SN[Schedule complete checkpoint]
 ```
 
 ## Anchors and decisions
@@ -160,16 +170,21 @@ ordinary plan edits may not author or rewrite them.
 
 ## Persistence
 
-Successful changes schedule a debounced snapshot:
+Channels persist through `StorageAdapter.collaboration`:
 
-- `data/<room>/plan.mdx` contains canonical plan content.
-- `data/<room>/state.json` contains the revision, question records, comment
-  threads, transcript, relationships, and resumable agent session.
+- a complete Yjs checkpoint with its epoch, canonical MDX and source hash;
+- a post-checkpoint journal of accepted Yjs updates;
+- a versioned sidecar containing plan counters, question records and live draft
+  CRDTs, comment threads, transcript, and relationships; and
+- first-invoker agent ownership in the separate `agent_state` record.
 
-Each file is written through a temporary file and rename, with state written
-before source. Yjs history and Awareness are deliberately not persisted. A
-restart creates a fresh Yjs epoch from MDX, restores sidecar records, and
-rebases their anchors using digests and quotes where necessary.
+The fenced collaboration commit completes before a client update is
+acknowledged or a server-authored update is broadcast. Checkpointing later folds
+the journal into a complete Yjs state and removes journal entries through that
+sequence. Recovery validates that checkpoint bytes project to the stored MDX,
+replays the ordered journal, and preserves the epoch. Awareness remains
+ephemeral. Copilot SDK session IDs are deliberately not persisted; a new
+session receives durable transcript context and reads the current plan.
 
 ## Why block operations
 
@@ -200,4 +215,6 @@ requirements, the explicit block-operation DSL is the more reliable boundary.
 - CRDT service: `apps/server/src/plan/service.ts`
 - Agent tools and operations: `apps/server/src/agent/tools.ts` and
   `apps/server/src/plan/edit.ts`
-- Persistence: `apps/server/src/plan/snapshot.ts`
+- Persistence coordinator: `apps/server/src/plan/service.ts`
+- Storage contract: `apps/server/src/storage/port.ts`
+- PostgreSQL adapter: `apps/server/src/storage/postgres/adapter.ts`

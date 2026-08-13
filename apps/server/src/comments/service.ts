@@ -298,9 +298,7 @@ export function start(
 		// what the room sees until it arrives — so it goes now, not on the next edit.
 		Service.anchors(plan, server, roomId);
 	};
-	if (plan.durable) return Service.persist(plan).then(finish);
-	plan.sink.touch();
-	finish();
+	return Service.persist(plan).then(finish);
 }
 
 /** Add to an open thread. */
@@ -331,9 +329,7 @@ export function respond(
 		reply(ws, msg.rid, { kind: "comment:reply", ts: 0, id: msg.id, ok: true, note: outcome.note });
 		relay(ws, { kind: "comment:said", ts: 0, id: msg.id, note: outcome.note });
 	};
-	if (plan.durable) return Service.persist(plan).then(finish);
-	plan.sink.touch();
-	finish();
+	return Service.persist(plan).then(finish);
 }
 
 /** Somebody is, or has stopped, writing a reply. */

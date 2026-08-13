@@ -38,6 +38,10 @@ function room(options: { agent?: boolean; busy?: boolean } = {}) {
 		plan: { chat } as Plan,
 		room: "test",
 		server,
+		auth: {} as Chat.Room["auth"],
+		claimantSessionId: "session",
+		repository: { id: "repo", owner: "owner", name: "repo", defaultBranch: "main" },
+		persist: async () => {},
 	};
 
 	return { chat, context, sent };
@@ -109,19 +113,19 @@ describe("sending to a named destination", () => {
 		}]);
 	});
 
-	it("ignores a destination the protocol does not name", () => {
+	it("ignores a destination the protocol does not name", async () => {
 		let { chat, context } = room({ busy: true });
 
-		Chat.send(context, sender(), message("draft the migration", "later" as Wire.Destination));
+		await Chat.send(context, sender(), message("draft the migration", "later" as Wire.Destination));
 
 		expect(chat.entries).toHaveLength(0);
 		expect(chat.waiting).toHaveLength(0);
 	});
 
-	it("keeps planner requests out of a queue when the agent is off", () => {
+	it("keeps planner requests out of a queue when the agent is off", async () => {
 		let { chat, context, sent } = room({ agent: false });
 
-		Chat.send(context, sender(), message("draft the migration", "planner"));
+		await Chat.send(context, sender(), message("draft the migration", "planner"));
 
 		expect(chat.busy).toBe(false);
 		expect(chat.waiting).toHaveLength(0);
@@ -137,26 +141,26 @@ describe("instructing the agent without a message", () => {
 	 * An agent that starts editing for no visible reason is worse than a noisy
 	 * log, so the reason goes in the one place the room reads chronologically.
 	 */
-	it("says why the turn started", () => {
+	it("says why the turn started", async () => {
 		let { context, sent } = room({ busy: true });
-		Chat.instruct(context, "ana", "do the thing", '@ana accepted a comment on "x".');
+		await Chat.instruct(context, "ana", "do the thing", '@ana accepted a comment on "x".');
 
 		expect(said(sent)[0]).toBe('@ana accepted a comment on "x".');
 	});
 
-	it("queues behind a running turn rather than interrupting it", () => {
+	it("queues behind a running turn rather than interrupting it", async () => {
 		let { chat, context, sent } = room({ busy: true });
-		Chat.instruct(context, "ana", "do the thing", "@ana accepted a comment.");
+		await Chat.instruct(context, "ana", "do the thing", "@ana accepted a comment.");
 
 		expect(chat.waiting).toHaveLength(1);
 		expect(chat.waiting[0]).toMatchObject({ handle: "ana", text: "do the thing" });
 		expect(sent.some(frame => frame.kind === "chat:queue")).toBe(true);
 	});
 
-	it("refuses to grow a queue nobody is going to read", () => {
+	it("refuses to grow a queue nobody is going to read", async () => {
 		let { chat, context, sent } = room({ busy: true });
 		for (let i = 0; i < 25; i++) {
-			Chat.instruct(context, "ana", `turn ${i}`, `notice ${i}`);
+			await Chat.instruct(context, "ana", `turn ${i}`, `notice ${i}`);
 		}
 
 		expect(chat.waiting.length).toBeLessThanOrEqual(20);
@@ -169,9 +173,9 @@ describe("instructing the agent without a message", () => {
 	 * failing to open — which is what happened before this check existed,
 	 * because `chat:send` was gated and a button press was not.
 	 */
-	it("records the decision but does not reach for an agent that is off", () => {
+	it("records the decision but does not reach for an agent that is off", async () => {
 		let { chat, context, sent } = room({ agent: false, busy: false });
-		Chat.instruct(context, "ana", "do the thing", "@ana accepted a comment.");
+		await Chat.instruct(context, "ana", "do the thing", "@ana accepted a comment.");
 
 		expect(chat.busy).toBe(false);
 		expect(chat.waiting).toHaveLength(0);
@@ -181,9 +185,9 @@ describe("instructing the agent without a message", () => {
 		]);
 	});
 
-	it("still says nothing was revised when the agent is off and busy", () => {
+	it("still says nothing was revised when the agent is off and busy", async () => {
 		let { chat, context, sent } = room({ agent: false, busy: true });
-		Chat.instruct(context, "ana", "do the thing", "@ana accepted a comment.");
+		await Chat.instruct(context, "ana", "do the thing", "@ana accepted a comment.");
 
 		// The gate comes before the queue: queueing a turn that can never run
 		// would leave it there until someone withdrew it.
@@ -205,16 +209,16 @@ describe("what a turn is acting on", () => {
 	 * decision that started it produced. A turn nobody started by accepting a
 	 * comment is acting on nothing, and must attribute nothing.
 	 */
-	it("carries the thread through the queue to the turn", () => {
+	it("carries the thread through the queue to the turn", async () => {
 		let { chat, context } = room({ busy: true });
-		Chat.instruct(context, "ana", "do the thing", "notice", { thread: "t1" });
+		await Chat.instruct(context, "ana", "do the thing", "notice", { thread: "t1" });
 
 		expect(chat.waiting[0]).toMatchObject({ thread: "t1" });
 	});
 
-	it("keeps the thread off the wire", () => {
+	it("keeps the thread off the wire", async () => {
 		let { context, sent } = room({ busy: true });
-		Chat.instruct(context, "ana", "do the thing", "notice", { thread: "t1" });
+		await Chat.instruct(context, "ana", "do the thing", "notice", { thread: "t1" });
 
 		let queue = sent.findLast(frame => frame.kind === "chat:queue");
 		expect(queue?.waiting).toEqual([{
@@ -287,9 +291,9 @@ describe("draining the queue", () => {
 		expect(Chat.pending(chat)).toBeUndefined();
 	});
 
-	it("keeps `spent` off the wire", () => {
+	it("keeps `spent` off the wire", async () => {
 		let { context, sent } = room({ busy: true });
-		Chat.instruct(context, "ana", "do the thing", "notice", { spent: () => false });
+		await Chat.instruct(context, "ana", "do the thing", "notice", { spent: () => false });
 
 		let queue = sent.findLast(frame => frame.kind === "chat:queue");
 		expect(queue?.waiting).toEqual([{

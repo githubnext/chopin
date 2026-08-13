@@ -14,6 +14,7 @@
 import { ulid } from "@chopin/dialect";
 
 import * as room from "../plan/room";
+import * as Service from "../plan/service";
 import * as Store from "./store";
 
 import type { Plan } from "../plan/service";
@@ -30,7 +31,7 @@ export function enabled(): boolean {
  * index: a sample that only works against one document proves less than one
  * that has to find its own footing.
  */
-export function mark(plan: Plan): void {
+export async function mark(plan: Plan): Promise<void> {
 	let digests = room.digests(plan.document);
 
 	for (let index of digests.keys()) {
@@ -53,7 +54,7 @@ export function mark(plan: Plan): void {
 				notes: [Store.note("dev", `Is this still right? — "${text.quote}"`)],
 			};
 			plan.threads.set(record.id, record);
-			plan.sink.touch();
+			await Service.persist(plan);
 
 			console.log(`[dev] marked block ${index}: ${JSON.stringify(text.quote)}`);
 			return;
