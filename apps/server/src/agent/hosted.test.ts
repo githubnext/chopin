@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
-import { hostedConfiguration } from "./client";
-import { hostedGate } from "./permissions";
+import { configuration } from "./client";
+import { gate } from "./permissions";
 import { repositoryTools } from "./repository";
 
 import type { PermissionRequest, Tool } from "@github/copilot-sdk";
@@ -14,7 +14,7 @@ describe("hosted Copilot configuration", () => {
 			parameters: {},
 			handler: () => "ok",
 		} as Tool;
-		let config = hostedConfiguration(
+		let config = configuration(
 			{ model: "model" },
 			{ tools: [tool] },
 			{
@@ -41,13 +41,13 @@ describe("hosted Copilot configuration", () => {
 	});
 
 	it("confines MCP and denies every host capability", async () => {
-		let gate = hostedGate({
+		let decide = gate({
 			owner: "octo-org",
 			repository: "score",
 			tools: new Set(["read_plan"]),
 		});
 		expect(
-			await gate({
+			await decide({
 				kind: "mcp",
 				serverName: "github",
 				readOnly: true,
@@ -57,7 +57,7 @@ describe("hosted Copilot configuration", () => {
 			} as PermissionRequest, { sessionId: "s" }),
 		).toEqual({ kind: "approve-once" });
 		expect(
-			await gate({
+			await decide({
 				kind: "mcp",
 				serverName: "github",
 				readOnly: true,
@@ -67,7 +67,7 @@ describe("hosted Copilot configuration", () => {
 			} as PermissionRequest, { sessionId: "s" }),
 		).toMatchObject({ kind: "reject" });
 		expect(
-			await gate({
+			await decide({
 				kind: "mcp",
 				serverName: "github",
 				readOnly: true,
@@ -77,7 +77,7 @@ describe("hosted Copilot configuration", () => {
 			} as PermissionRequest, { sessionId: "s" }),
 		).toMatchObject({ kind: "reject" });
 		expect(
-			await gate({
+			await decide({
 				kind: "mcp",
 				serverName: "github",
 				readOnly: true,
@@ -87,7 +87,7 @@ describe("hosted Copilot configuration", () => {
 			} as PermissionRequest, { sessionId: "s" }),
 		).toMatchObject({ kind: "reject" });
 		expect(
-			await gate({ kind: "read", path: "/etc/passwd", intention: "read" } as PermissionRequest, {
+			await decide({ kind: "read", path: "/etc/passwd", intention: "read" } as PermissionRequest, {
 				sessionId: "s",
 			}),
 		).toMatchObject({ kind: "reject" });

@@ -226,12 +226,9 @@ export function edit(plan: Plan, ws: Socket, msg: Request<Wire.Edit.Ask>): void 
 		});
 	};
 	if (outcome.open && outcome.accepted && outcome.applied) {
-		if (plan.durable) {
-			return Service.persist(plan).then(finish, () => {
-				fail(ws, msg.rid, "could not save questionnaire draft");
-			});
-		}
-		plan.sink.touch();
+		return Service.persist(plan).then(finish, () => {
+			fail(ws, msg.rid, "could not save questionnaire draft");
+		});
 	}
 	finish();
 }

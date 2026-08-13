@@ -1,97 +1,89 @@
-/**
- * A room of one's own, per test.
- *
- * A room exists because somebody opened its URL, so isolation costs a name
- * rather than a fixture that has to create and destroy anything. That is what
- * makes the suite safe to run fully parallel against one server: two tests can
- * only collide if they choose the same name, and they do not.
- *
- * Signing in is a query parameter. `adopt()` writes `?as=` into sessionStorage
- * before React renders, so a handle in the URL means the form never appears —
- * there is no login to script, and two pages in one context are two people
- * because sessionStorage is per tab.
- */
-
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import * as Path from "node:path";
+/** A database-backed channel of one's own, per test. */
 
 import { expect, test as base } from "@playwright/test";
 
-import { scratch } from "./servers";
+import { createChannel, readSource, seedChannel } from "./database";
 
-import type { Page } from "@playwright/test";
-
-/** Server-side rule: `/^[a-z0-9][a-z0-9-]{0,63}$/`. */
-function name(): string {
-	return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-}
+import type { SeedState } from "../apps/server/src/testing/plan";
+import type { BrowserContext, Page } from "@playwright/test";
 
 function port(url: string): number {
 	return Number(new URL(url).port);
 }
 
+export async function authenticate(page: Page, handle: string, baseURL: string): Promise<void> {
+	let started = await fetch(`${baseURL}/auth/github`, { redirect: "manual" });
+	expect(started.status).toBe(302);
+	let authorization = new URL(started.headers.get("location")!);
+	let state = authorization.searchParams.get("state");
+	expect(state).toBeTruthy();
+	let stateCookie = (started.headers as Headers & { getSetCookie(): string[] })
+		.getSetCookie()[0]!.split(";", 1)[0]!;
+	let callback = await fetch(
+		`${baseURL}/auth/github/callback?code=e2e-${encodeURIComponent(handle)}&state=${
+			encodeURIComponent(state!)
+		}`,
+		{ headers: { cookie: stateCookie }, redirect: "manual" },
+	);
+	expect(callback.status).toBe(303);
+	let session = (callback.headers as Headers & { getSetCookie(): string[] })
+		.getSetCookie().find(value => value.startsWith("chopin_session="));
+	expect(session).toBeTruthy();
+	let [name, value] = session!.split(";", 1)[0]!.split("=", 2);
+	await page.context().addCookies([{ name: name!, value: value!, url: baseURL }]);
+}
+
 type Fixtures = {
-	/** The room this test has to itself. */
+	/** The channel this test has to itself. */
 	room: string;
-	/** Open the room as somebody. The first call uses the default page. */
+	/** Open the channel as somebody. The first call uses the default page. */
 	join: (handle: string) => Promise<Page>;
-	/** Write the room's plan before anyone opens it. */
-	seed: (source: string) => Promise<void>;
+	/** Set the channel's source and optional sidecar before anyone opens it. */
+	seed: (source: string, state?: SeedState) => Promise<void>;
 };
 
 export const test = base.extend<Fixtures>({
-	// Playwright reads a fixture's dependencies out of its destructuring
-	// pattern, and refuses a first argument that is not one. A fixture that
-	// depends on nothing therefore has to destructure nothing, which is the
-	// empty pattern the linter is otherwise right about.
-	// eslint-disable-next-line no-empty-pattern
-	room: async ({}, use) => {
-		await use(name());
+	room: async ({ baseURL }, use) => {
+		let id = crypto.randomUUID();
+		await createChannel(port(baseURL!), id);
+		await use(id);
 	},
 
-	join: async ({ context, page, room }, use) => {
+	join: async ({ baseURL, browser, context, page, room }, use) => {
 		let first = true;
+		let opened: BrowserContext[] = [];
 		await use(async handle => {
-			let target = first ? page : await context.newPage();
-			first = false;
-			await target.goto(`/r/${room}?as=${handle}`);
+			let target: Page;
+			if (first) {
+				first = false;
+				target = page;
+			} else {
+				let isolated = await browser.newContext({ baseURL });
+				opened.push(isolated);
+				target = await isolated.newPage();
+			}
+			await authenticate(target, handle, baseURL!);
+			await target.goto(`/channels/${room}`);
 			await ready(target);
 			return target;
 		});
+		await Promise.all(opened.map(item => item.close()));
+		await context.clearCookies();
 	},
 
 	seed: async ({ baseURL, room }, use) => {
-		await use(async source => {
-			let dir = Path.join(scratch(port(baseURL!)), room);
-			await mkdir(dir, { recursive: true });
-			await writeFile(Path.join(dir, "plan.mdx"), source);
-		});
+		await use((source, state) => seedChannel(port(baseURL!), room, source, state));
 	},
 });
 
 export { expect };
 
-/**
- * The editable surface.
- *
- * Not `.plan-content`: MDXEditor gives the placeholder the same class as the
- * surface it sits behind, so that selector matches two elements and only one
- * of them can be typed into. The role and the label are on the real one in
- * both states, read-only included, which is what makes them the address for a
- * thing whose whole point is that it is sometimes locked.
- */
+/** The editable surface. */
 export function content(page: Page) {
 	return page.getByRole("textbox", { name: "editable markdown" });
 }
 
-/**
- * Wait until the plan can be typed into.
- *
- * `readOnly` is `offline || busy || !synced`, so an editable surface is the one
- * honest answer to "is this room open yet" — it covers the socket, the
- * document arriving, and no agent holding the turn, and it is the same fact
- * the person in front of it is waiting for.
- */
+/** Wait until the channel has synchronized and can be typed into. */
 export async function ready(page: Page): Promise<void> {
 	await expect(content(page)).toHaveAttribute("contenteditable", "true", { timeout: 20_000 });
 }
@@ -101,23 +93,9 @@ export function status(page: Page) {
 	return page.locator(".plan-status");
 }
 
-/** Where the server writes this room. */
-export function source(page: Page, room: string): string {
-	return Path.join(scratch(port(page.url())), room, "plan.mdx");
-}
-
-/**
- * Wait for canonical MDX on disk.
- *
- * The status pane says "Saved" whenever nothing is pending, including before
- * anything has been typed, so watching it cannot distinguish "written" from
- * "not yet started". The file can. This is also the assertion worth making:
- * saved is supposed to mean the source reached disk, not that the server
- * acknowledged an edit.
- */
+/** Wait for canonical MDX to reach the durable checkpoint. */
 export async function written(page: Page, room: string, text: string | RegExp): Promise<void> {
-	let file = source(page, room);
 	await expect
-		.poll(async () => await readFile(file, "utf8").catch(() => ""), { timeout: 15_000 })
+		.poll(() => readSource(port(page.url()), room), { timeout: 15_000 })
 		.toMatch(text);
 }

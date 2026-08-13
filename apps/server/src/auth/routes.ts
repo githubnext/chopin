@@ -11,7 +11,7 @@ type Clock = () => Date;
 
 type Dependencies = {
 	config: AuthConfig;
-	storage: StorageAdapter | undefined;
+	storage: StorageAdapter;
 	github?: GitHub;
 	clock?: Clock;
 	agent?: boolean;
@@ -19,7 +19,7 @@ type Dependencies = {
 };
 
 export type HostedAuth = {
-	config: Extract<AuthConfig, { driver: "github" }>;
+	config: AuthConfig;
 	storage: StorageAdapter;
 	github: GitHub;
 	sessions: Sessions;
@@ -86,22 +86,14 @@ function parameter(url: URL, name: string): string | undefined {
 	return values.length === 1 && values[0] ? values[0] : undefined;
 }
 
-/** Register the hosted auth surface while leaving prototype room admission untouched. */
+/** Register the GitHub OAuth and authenticated session surface. */
 export function registerAuthRoutes(
 	router: Router,
 	dependencies: Dependencies,
-): HostedAuth | undefined {
+): HostedAuth {
 	let clock = dependencies.clock ?? (() => new Date());
-	if (dependencies.config.driver === "off") {
-		router.on("GET", "/api/session", () => json({ mode: "legacy", user: null }));
-		router.on("GET", "/api/repositories", () => json({ error: "authentication required" }, 401));
-		router.on("POST", "/auth/logout", () => empty(204));
-		return undefined;
-	}
-
 	let config = dependencies.config;
 	let storage = dependencies.storage;
-	if (!storage) throw new Error("GitHub authentication requires durable storage");
 	let github = dependencies.github ?? new GitHubClient();
 	let secure = new URL(config.origin).protocol === "https:";
 	let sessions = new Sessions(storage, config.encryptionKey, secure, clock);
@@ -155,10 +147,9 @@ export function registerAuthRoutes(
 		try {
 			let authenticated = await sessions.authenticate(request);
 			if (!authenticated) {
-				return json({ mode: "github", user: null, agent: dependencies.agent ?? true });
+				return json({ user: null, agent: dependencies.agent ?? true });
 			}
 			return json({
-				mode: "github",
 				agent: dependencies.agent ?? true,
 				user: {
 					id: authenticated.user.id,

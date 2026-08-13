@@ -21,12 +21,13 @@ function transport() {
 	let opens = 0;
 	let edits = 0;
 	let submits = 0;
+	let submitRevisions: number[] = [];
 	let presence = 0;
 	let handlers = new Map<string, Set<(event: never) => void>>();
 	let model = create(DEFINITION);
 
 	let value = {
-		async ask(kind: string) {
+		async ask(kind: string, payload: Record<string, unknown>) {
 			if (kind === "question:open") {
 				opens++;
 				return {
@@ -43,6 +44,7 @@ function transport() {
 			}
 			if (kind === "question:submit") {
 				submits++;
+				submitRevisions.push(payload.revision as number);
 				return { ok: true };
 			}
 			throw new Error(`Unexpected ${kind}`);
@@ -63,6 +65,7 @@ function transport() {
 		opens: () => opens,
 		edits: () => edits,
 		submits: () => submits,
+		submitRevisions: () => submitRevisions,
 		presence: () => presence,
 	};
 }
@@ -100,10 +103,27 @@ describe("QuestionnaireController", () => {
 		controller.change("q0", { choice: "o0" });
 		controller.submit();
 		controller.submit();
-		await new Promise(resolve => setTimeout(resolve, 0));
+		await new Promise(resolve => setTimeout(resolve, 10));
 
 		expect(bridge.submits()).toBe(1);
 		expect(controller.getSnapshot().submitting).toBe(true);
+		off();
+	});
+
+	it("submits after every local edit has advanced the shared revision", async () => {
+		let bridge = transport();
+		let controller = new QuestionnaireController(bridge.value, "question-1", DEFINITION, true);
+		let off = controller.subscribe(() => {});
+		await new Promise(resolve => setTimeout(resolve, 0));
+
+		controller.change("q0", { choice: "o0" });
+		await new Promise(resolve => queueMicrotask(resolve));
+		controller.change("q0", { custom: "because" });
+		controller.submit();
+		await new Promise(resolve => setTimeout(resolve, 10));
+
+		expect(bridge.edits()).toBe(2);
+		expect(bridge.submitRevisions()).toEqual([2]);
 		off();
 	});
 

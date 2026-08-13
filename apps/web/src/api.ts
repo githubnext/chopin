@@ -4,9 +4,7 @@ export type User = {
 	avatarUrl: string;
 };
 
-export type Session =
-	| { mode: "legacy"; user: null }
-	| { mode: "github"; user: User | null; agent: boolean; expiresAt?: string };
+export type Session = { user: User | null; agent: boolean; expiresAt?: string };
 
 export type Repository = {
 	id: string;

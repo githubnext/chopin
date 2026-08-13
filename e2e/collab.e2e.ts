@@ -7,9 +7,8 @@
  * prose, and presence and carets are not asserted at all. What only exists
  * once there is a browser is what this file is for.
  *
- * Two pages in one context are two people because identity is per tab —
- * sessionStorage, deliberately, so that two windows on one machine can be two
- * participants.
+ * Each person has an isolated browser context because identity is an encrypted
+ * login session cookie. They still meet in one repository-authorized channel.
  */
 
 import { content, expect, test } from "./room";

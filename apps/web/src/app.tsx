@@ -18,58 +18,12 @@ import { Chat } from "./chat/chat";
 import { decisionAttention, DecisionViewControl } from "./decision-view-control";
 import * as Api from "./api";
 import { HostedApp, HostedFailure, HostedLoading, HostedLogin } from "./hosted";
-import * as Identity from "./identity";
 import { Wire } from "./wire";
 import { paneId, usePaneOpen, Workspace } from "./workspace";
 
 import type { Session } from "@chopin/protocol";
 import type { DecisionView, DecisionViewState } from "@chopin/editor";
 import type { Status } from "./wire";
-
-/**
- * Claim a handle.
- *
- * Deliberately not a login. The field exists so that two windows are two
- * people, which is the whole of what identity has to achieve here.
- */
-function SignIn({ onDone }: { onDone: (handle: string) => void }) {
-	let [value, setValue] = useState("");
-	let valid = Identity.validHandle(value);
-
-	return (
-		<div className="flex h-full items-center justify-center">
-			<form
-				className="flex w-80 flex-col gap-3"
-				onSubmit={event => {
-					event.preventDefault();
-					if (!valid) return;
-					Identity.remember(value);
-					onDone(value);
-				}}
-			>
-				<label className="text-sm font-medium" htmlFor="handle">GitHub handle</label>
-				<input
-					autoFocus
-					className="field px-3 py-2 text-sm"
-					id="handle"
-					onChange={event => setValue(event.target.value.trim())}
-					placeholder="octocat"
-					value={value}
-				/>
-				<p className="text-sm text-text-secondary">
-					Unverified. Used for your cursor, your face, and your name against decisions.
-				</p>
-				<button
-					className="btn btn-md btn-primary"
-					disabled={!valid}
-					type="submit"
-				>
-					Join
-				</button>
-			</form>
-		</div>
-	);
-}
 
 const TONE: Record<Status, string> = {
 	connecting: "text-text-tertiary",
@@ -159,7 +113,6 @@ function Header(
 
 export function RoomWorkspace(
 	{
-		accessKey,
 		agent = true,
 		canEdit = true,
 		handle,
@@ -167,7 +120,6 @@ export function RoomWorkspace(
 		onResetAgent,
 		room,
 	}: {
-		accessKey?: string;
 		agent?: boolean;
 		canEdit?: boolean;
 		handle: string;
@@ -246,9 +198,7 @@ export function RoomWorkspace(
 
 	useEffect(() => {
 		let socket = new Wire({
-			room,
-			handle,
-			key: accessKey,
+			channelId: room,
 			onStatus: (next, why) => {
 				setStatus(next);
 				setReason(why);
@@ -271,7 +221,7 @@ export function RoomWorkspace(
 			socket.dispose();
 			setWire(undefined);
 		};
-	}, [room, handle, accessKey, threads]);
+	}, [room, handle, threads]);
 
 	return (
 		<Workspace
@@ -329,20 +279,6 @@ export function RoomWorkspace(
 	);
 }
 
-function LegacyApp() {
-	let [handle, setHandle] = useState(Identity.handle);
-	if (!handle) return <SignIn onDone={setHandle} />;
-	let room = Identity.room();
-	return (
-		<RoomWorkspace
-			accessKey={Identity.key()}
-			handle={handle}
-			label={`/r/${room}`}
-			room={room}
-		/>
-	);
-}
-
 export function App() {
 	let [session, setSession] = useState<Api.Session>();
 	let [error, setError] = useState<unknown>();
@@ -361,7 +297,6 @@ export function App() {
 
 	if (error) return <HostedFailure error={error} />;
 	if (!session) return <HostedLoading />;
-	if (session.mode === "legacy") return <LegacyApp />;
 	if (!session.user) return <HostedLogin />;
 	return <HostedApp Workspace={RoomWorkspace} agent={session.agent} user={session.user} />;
 }

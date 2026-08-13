@@ -7,10 +7,10 @@ logs
 .env*
 !.env.example
 
-# Room state: plans, sidecars and transcripts are local scratch.
+# Local scratch; service state lives in the configured storage adapter.
 data/
 
-# The same, for rooms the e2e suite makes up, plus what it reports on them.
+# Local browser fixtures, reports and traces.
 e2e/.scratch/
 e2e/test-results/
 e2e/playwright-report/

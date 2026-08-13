@@ -6,52 +6,16 @@
  * than a puzzling behaviour three screens later.
  */
 
-import { statSync } from "node:fs";
-import { join, resolve } from "node:path";
-
 import { loadAuth } from "./auth/config";
 
 import type { AuthConfig } from "./auth/config";
 import type { StorageConfig } from "./storage/registry";
 
-/**
- * The installation root.
- *
- * Derived from this file rather than the working directory, because the server
- * is usually started through a workspace filter and so runs with its own
- * package as the current directory — which is nobody's idea of where a room's
- * data belongs, or of what an agent should be reading.
- */
-const ROOT = resolve(import.meta.dir, "../../..");
-
 export type Config = {
 	host: string;
 	port: number;
-	/** When set, required at the WebSocket upgrade. */
-	key: string | undefined;
-	/**
-	 * What the agent is allowed to read.
-	 *
-	 * Defaults to the installation root and is printed at boot, because the
-	 * extent of what an agent can read should never have to be guessed at.
-	 *
-	 * A relative value is resolved against the current directory, which is the
-	 * one you typed the command in — the development supervisor resolves it
-	 * before handing it on, since it starts the server somewhere else.
-	 */
-	workingDir: string;
-	/** Where room state is written. */
-	dataDir: string;
 	/** Planner model. */
 	model: string;
-	/**
-	 * The agent's credential, and the bearer for the GitHub MCP server.
-	 *
-	 * Required in practice — the boot probe refuses to start without a working
-	 * one — but held as optional here so the type does not claim a guarantee
-	 * that configuration loading cannot make.
-	 */
-	token: string | undefined;
 	/**
 	 * Whether to run the agent at all.
 	 *
@@ -71,9 +35,9 @@ export type Config = {
 	 * a build and would make development quietly serve stale files.
 	 */
 	devClient: string | undefined;
-	/** Durable service storage; legacy keeps the prototype room files during cutover. */
+	/** Durable service storage. */
 	storage: StorageConfig;
-	/** Hosted identity; off leaves the current claimed-handle prototype intact. */
+	/** GitHub identity and session encryption. */
 	auth: AuthConfig;
 };
 
@@ -91,10 +55,9 @@ function port(): number {
 }
 
 function storage(): StorageConfig {
-	let driver = process.env.STORAGE_DRIVER || "legacy";
-	if (driver === "legacy") return { driver };
+	let driver = process.env.STORAGE_DRIVER || "postgres";
 	if (driver !== "postgres") {
-		throw new Error(`STORAGE_DRIVER must be "legacy" or "postgres", got ${JSON.stringify(driver)}`);
+		throw new Error(`STORAGE_DRIVER must be "postgres", got ${JSON.stringify(driver)}`);
 	}
 
 	let raw = process.env.DATABASE_URL;
@@ -112,40 +75,12 @@ export function load(): Config {
 	return {
 		host: process.env.SERVER_HOST || "127.0.0.1",
 		port: port(),
-		key: process.env.ACCESS_KEY || undefined,
-		workingDir: resolve(process.env.WORKING_DIR || ROOT),
-		dataDir: resolve(process.env.DATA_DIR || join(ROOT, "data")),
 		model: process.env.MODEL || DEFAULT_MODEL,
-		token: process.env.GITHUB_TOKEN || undefined,
 		agent: process.env.AGENT !== "off",
 		devClient: process.env.DEV_CLIENT || undefined,
 		storage: storage(),
 		auth: loadAuth(),
 	};
-}
-
-/**
- * What is wrong with this configuration, if anything.
- *
- * A working directory that is not there is worth catching here rather than
- * three layers down. The CLI is spawned with it as its own working directory,
- * so a bad path kills that process the instant it starts, and what surfaces is
- * the SDK failing to write to a stream that is already gone — a message with
- * nothing in it about paths.
- */
-export function problem(config: Config): string | undefined {
-	if (config.auth.driver !== "off" && config.storage.driver === "legacy") {
-		return "AUTH_DRIVER=github requires durable storage; select STORAGE_DRIVER=postgres";
-	}
-	let target = statSync(config.workingDir, { throwIfNoEntry: false });
-
-	if (!target) {
-		return `WORKING_DIR does not exist: ${config.workingDir}`;
-	}
-	if (!target.isDirectory()) {
-		return `WORKING_DIR is not a directory: ${config.workingDir}`;
-	}
-	return undefined;
 }
 
 /**
@@ -160,18 +95,9 @@ export function describe(config: Config): string {
 		"chopin",
 		`http://${config.host}:${config.port}`,
 		config.devClient ? `client: vite (${config.devClient})` : "client: built",
-		config.agent && config.auth.driver === "off"
-			? `agent: ${config.model}`
-			: config.agent
-			? `agent: ${config.model} (hosted on demand)`
-			: "agent: off",
-		`auth: ${config.auth.driver}`,
+		config.agent ? `agent: ${config.model} (on demand)` : "agent: off",
+		"auth: github",
 		`storage: ${config.storage.driver}`,
-		`working dir: ${config.workingDir}`,
 	];
-	if (config.key) parts.push("access key: required");
-	if (config.host !== "127.0.0.1" && config.host !== "localhost" && !config.key) {
-		parts.push("WARNING: bound beyond localhost with no ACCESS_KEY");
-	}
 	return parts.join("  ·  ");
 }

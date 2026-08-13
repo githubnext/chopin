@@ -63,7 +63,6 @@ async function setup() {
 	let github = new FakeGitHub();
 	let auth: HostedAuth = {
 		config: {
-			driver: "github",
 			origin: "https://chopin.test",
 			clientId: "client-id",
 			clientSecret: "client-secret",

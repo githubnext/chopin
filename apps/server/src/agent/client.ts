@@ -1,15 +1,9 @@
 /**
  * Starting the agent.
  *
- * One session per room, created on the first prompt and resumed by id after an
- * idle teardown or a restart. Rooms do not share a session: a conversation is
- * about one plan, and mixing two would leak the contents of one room into
- * another's context.
- *
- * Everything that can fail at boot is made to fail at boot. A missing binary,
- * an absent token and a token Copilot will not accept are all discovered by
- * starting a session and throwing it away, rather than by the first person to
- * type something being told the agent is broken.
+ * One disposable session per active channel, authenticated by its first
+ * invoking editor. A restarted process reconstructs context from durable
+ * Chopin state rather than resuming Copilot's filesystem state.
  */
 
 import { CopilotClient, RuntimeConnection } from "@github/copilot-sdk";
@@ -18,8 +12,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { locate } from "./cli";
-import { gate, hostedGate } from "./permissions";
-import { HOSTED_TOOLS, hostedPlanner, NAME, planner, TOOLS } from "./planner";
+import { gate } from "./permissions";
+import { NAME, plannerFor, TOOLS } from "./planner";
 
 import type { CopilotSession, SessionConfig, Tool } from "@github/copilot-sdk";
 import type { Config } from "../config";
@@ -27,68 +21,24 @@ import type { HostedRepository } from "./repository";
 
 export type Agent = {
 	session: CopilotSession;
-	/** Persisted so the conversation survives an idle teardown or a restart. */
+	/** Runtime identity used only to delete the disposable SDK session. */
 	id: string;
 };
 
 /** The tools a planner may call, over and above the runtime's own. */
 export type Toolbox = { tools: Tool[] };
 
-function configure(config: Config, toolbox: Toolbox): SessionConfig {
-	return {
-		model: config.model,
-		streaming: true,
-		// Discovery would let the working directory reconfigure the session that
-		// is planning for it.
-		enableConfigDiscovery: false,
-		customAgents: [planner],
-		enableSkills: true,
-		skillDirectories: [`${config.workingDir}/.agents/skills`],
-		tools: toolbox.tools,
-		// The real allowlist. See `TOOLS` for why it cannot live on the agent.
-		availableTools: TOOLS,
-		mcpServers: config.token
-			? {
-				github: {
-					type: "http",
-					url: "https://api.githubcopilot.com/mcp/",
-					tools: ["*"],
-					headers: {
-						Authorization: `Bearer ${config.token}`,
-						// Belt and braces: the gate refuses a write anyway, but the
-						// server should not offer one in the first place.
-						"X-MCP-Readonly": "true",
-					},
-				},
-			}
-			: {},
-		infiniteSessions: { enabled: true },
-		systemMessage: {
-			mode: "append",
-			content: [
-				`The working directory is ${config.workingDir}. It is the only thing you can read.`,
-				"More than one person may be in this conversation; their messages are prefixed",
-				"with the speaker's handle.",
-			].join(" "),
-		},
-		onPermissionRequest: gate({
-			root: config.workingDir,
-			tools: new Set(toolbox.tools.map(tool => tool.name)),
-		}),
-	} as SessionConfig;
-}
-
-export type HostedSession = {
+export type RepositorySession = {
 	token: string;
 	repository: HostedRepository;
 	bootstrap?: string;
 	authorize?: () => Promise<boolean>;
 };
 
-export function hostedConfiguration(
+export function configuration(
 	config: Pick<Config, "model">,
 	toolbox: Toolbox,
-	options: HostedSession,
+	options: RepositorySession,
 ): SessionConfig {
 	let repository = `${options.repository.owner}/${options.repository.name}`;
 	let tools = toolbox.tools.map(tool => ({ ...tool, skipPermission: false }));
@@ -97,9 +47,9 @@ export function hostedConfiguration(
 		streaming: true,
 		largeOutput: { enabled: false },
 		gitHubToken: options.token,
-		availableTools: HOSTED_TOOLS,
+		availableTools: TOOLS,
 		tools,
-		customAgents: [hostedPlanner(repository)],
+		customAgents: [plannerFor(repository)],
 		agent: NAME,
 		enableConfigDiscovery: false,
 		skipCustomInstructions: true,
@@ -136,7 +86,7 @@ export function hostedConfiguration(
 				options.bootstrap ?? "",
 			].filter(Boolean).join(" "),
 		},
-		onPermissionRequest: hostedGate({
+		onPermissionRequest: gate({
 			owner: options.repository.owner,
 			repository: options.repository.name,
 			tools: new Set(tools.map(tool => tool.name)),
@@ -145,65 +95,23 @@ export function hostedConfiguration(
 	} as SessionConfig;
 }
 
-let legacyClient: CopilotClient | undefined;
-let hostedClient: CopilotClient | undefined;
-let hostedHome: string | undefined;
+let client: CopilotClient | undefined;
+let home: string | undefined;
 
-function connect(config: Config): CopilotClient {
-	if (legacyClient) return legacyClient;
-
+function connect(): CopilotClient {
+	if (client) return client;
 	let cli = locate();
 	if (!cli.ok) throw new Error(cli.reason);
-
-	return legacyClient = new CopilotClient({
-		workingDirectory: config.workingDir,
-		// Pointed at the pinned native binary. Left to itself the SDK resolves
-		// the bundled JavaScript and spawns `node`, which under Bun is a literal
-		// string that may not resolve to anything.
-		connection: RuntimeConnection.forStdio({ path: cli.path }),
-		// The CLI's own warnings reach our stderr as `[CLI subprocess]` lines, and
-		// a server that fails to connect says so there and nowhere else.
-		logLevel: "info",
-		gitHubToken: config.token,
-	});
-}
-
-function connectHosted(): CopilotClient {
-	if (hostedClient) return hostedClient;
-	let cli = locate();
-	if (!cli.ok) throw new Error(cli.reason);
-	hostedHome = mkdtempSync(join(tmpdir(), "chopin-copilot-"));
-	return hostedClient = new CopilotClient({
+	home = mkdtempSync(join(tmpdir(), "chopin-copilot-"));
+	return client = new CopilotClient({
 		mode: "empty",
-		workingDirectory: hostedHome,
-		baseDirectory: hostedHome,
+		workingDirectory: home,
+		baseDirectory: home,
 		connection: RuntimeConnection.forStdio({ path: cli.path }),
 		useLoggedInUser: false,
 		env: {},
 		logLevel: "info",
 	});
-}
-
-/**
- * Prove the agent can run, then throw the proof away.
- *
- * Costs a couple of seconds and one process at startup, and buys the
- * difference between a server that refuses to start with a reason and one that
- * looks healthy until somebody tries to use it. A stale token is by far the
- * most likely failure and is only detectable by asking.
- */
-export async function probe(config: Config, toolbox: Toolbox): Promise<void> {
-	let started = connect(config);
-	await started.start();
-
-	let session = await started.createSession(configure(config, toolbox));
-	try {
-		// Selecting the agent is the cheapest thing that proves the whole chain:
-		// the binary ran, the token was accepted, and the runtime answered.
-		await session.rpc.agent.select({ name: NAME });
-	} finally {
-		await session.disconnect().catch(() => {});
-	}
 }
 
 /**
@@ -221,7 +129,7 @@ export async function probe(config: Config, toolbox: Toolbox): Promise<void> {
  * set nobody ever gets. Costs one line per session, and is never fatal — a
  * diagnostic that can stop a turn is worse than no diagnostic.
  */
-async function audit(session: CopilotSession, mcp: boolean): Promise<void> {
+async function audit(session: CopilotSession): Promise<void> {
 	try {
 		await session.rpc.tools.initializeAndValidate();
 		let { tools } = await session.rpc.tools.getCurrentMetadata();
@@ -236,8 +144,6 @@ async function audit(session: CopilotSession, mcp: boolean): Promise<void> {
 		console.warn("[agent] could not read the tool list:", err);
 	}
 
-	if (!mcp) return;
-
 	try {
 		// Throws when the server never connected, which is the distinction
 		// worth having: no tools because none were offered, or no tools
@@ -250,63 +156,29 @@ async function audit(session: CopilotSession, mcp: boolean): Promise<void> {
 	}
 }
 
-/** Open a room's session, resuming the conversation when there is one. */
+/** Create a disposable session authenticated and scoped to one owner and repository. */
 export async function open(
-	config: Config,
-	toolbox: Toolbox,
-	previous?: string,
-): Promise<{ agent: Agent; resumed: boolean }> {
-	let started = connect(config);
-	await started.start();
-
-	let settings = configure(config, toolbox);
-
-	if (previous) {
-		try {
-			let session = await started.resumeSession(previous, settings);
-			await session.rpc.agent.select({ name: NAME });
-			await audit(session, !!config.token);
-			return { agent: { session, id: previous }, resumed: true };
-		} catch {
-			// The session is gone — a cleared ~/.copilot, a CLI upgrade, an
-			// expired store. The caller says so rather than letting the
-			// transcript imply a memory the agent no longer has.
-		}
-	}
-
-	let session = await started.createSession(settings);
-	await session.rpc.agent.select({ name: NAME });
-	await audit(session, !!config.token);
-	return { agent: { session, id: session.sessionId }, resumed: false };
-}
-
-/** Create a disposable hosted session authenticated and scoped to one owner and repository. */
-export async function openHosted(
 	config: Pick<Config, "model">,
 	toolbox: Toolbox,
-	options: HostedSession,
+	options: RepositorySession,
 ): Promise<Agent> {
-	let started = connectHosted();
+	let started = connect();
 	await started.start();
-	let session = await started.createSession(hostedConfiguration(config, toolbox, options));
+	let session = await started.createSession(configuration(config, toolbox, options));
 	await session.rpc.agent.select({ name: NAME });
-	await audit(session, true);
+	await audit(session);
 	return { session, id: session.sessionId };
 }
 
-export async function discardHosted(agent: Agent): Promise<void> {
+export async function discard(agent: Agent): Promise<void> {
 	await agent.session.disconnect().catch(() => {});
-	await hostedClient?.deleteSession(agent.id).catch(() => {});
+	await client?.deleteSession(agent.id).catch(() => {});
 }
 
 /** Let go of the CLI process. Sessions are the caller's to close first. */
 export async function shutdown(): Promise<void> {
-	await Promise.all([
-		legacyClient?.stop().catch(() => {}),
-		hostedClient?.stop().catch(() => {}),
-	]);
-	legacyClient = undefined;
-	hostedClient = undefined;
-	if (hostedHome) rmSync(hostedHome, { recursive: true, force: true });
-	hostedHome = undefined;
+	await client?.stop().catch(() => {});
+	client = undefined;
+	if (home) rmSync(home, { recursive: true, force: true });
+	home = undefined;
 }

@@ -1,7 +1,7 @@
 /**
  * The wire.
  *
- * One WebSocket carries every conversation a room has: the collaborative
+ * One WebSocket carries every conversation a channel has: the collaborative
  * document, its questionnaires, and the chat driving the agent. Frames are
  * JSON; binary payloads travel base64 because there is no second channel and
  * a text frame is legible in a network inspector.
@@ -45,7 +45,7 @@ export declare namespace Session {
 
 	/** A member, as everyone else sees them. */
 	export type Member = {
-		/** Unverified GitHub handle, used for the avatar and cursor colour. */
+		/** Verified GitHub login, used for attribution, avatar and cursor colour. */
 		handle: string;
 		/** Distinguishes two tabs belonging to the same handle. */
 		client: string;
@@ -53,14 +53,14 @@ export declare namespace Session {
 
 	/** Sent once, immediately, to the socket that just joined. */
 	export type Hello = KIND<"session:hello"> & {
-		room: string;
+		channelId: string;
 		you: Member;
 		members: Member[];
-		/** Effective repository capability, always true in legacy rooms. */
+		/** Effective repository capability for this connection. */
 		canEdit: boolean;
 	};
 
-	/** A hosted repository permission changed while the socket was open. */
+	/** Repository permission changed while the socket was open. */
 	export type Access = KIND<"session:access"> & {
 		canEdit: boolean;
 	};

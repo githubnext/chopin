@@ -32,7 +32,7 @@ describe("HTTP routing", () => {
 		expect((await router.handle(new Request("https://chopin.test/auth/unknown")))!.status).toBe(
 			404,
 		);
-		expect(await router.handle(new Request("https://chopin.test/r/main"))).toBeUndefined();
+		expect(await router.handle(new Request("https://chopin.test/missing"))).toBeUndefined();
 	});
 
 	it("matches and decodes complete path segments", async () => {

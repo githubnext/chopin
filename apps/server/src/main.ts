@@ -15,7 +15,7 @@ import * as Chat from "./chat/service";
 import { registerChannelRoutes } from "./channels/routes";
 import * as Comments from "./comments/service";
 import { proxy, serve } from "./client";
-import { describe, load, problem } from "./config";
+import { describe, load } from "./config";
 import { Router } from "./http/router";
 import * as Service from "./plan/service";
 import * as Inject from "./questions/inject";
@@ -75,27 +75,24 @@ function presence(server: Server<SocketData>, room: Rooms.Room): void {
  */
 function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Service.Plan> {
 	if (room.plan) return Promise.resolve(room.plan);
-	let backend: string | Service.HostedBackend = hostedAuth && storage
-		? {
-			kind: "hosted",
-			storage,
-			lease: () => {
-				if (!heldLease) throw new Error("storage writer lease is unavailable");
-				return heldLease;
-			},
-			fatal: err => {
-				console.error("chopin: hosted plan persistence failed -", err);
-				signal();
-			},
-		}
-		: join(config.dataDir, room.id);
+	let backend: Service.Backend = {
+		storage,
+		lease: () => {
+			if (!heldLease) throw new Error("storage writer lease is unavailable");
+			return heldLease;
+		},
+		fatal: err => {
+			console.error("chopin: plan persistence failed -", err);
+			signal();
+		},
+	};
 	return room.opening ??= Service
 		.open(room.id, backend, server)
-		.then(opened => {
+		.then(async opened => {
 			room.plan = opened;
 			room.opening = undefined;
 			if (Inject.enabled()) Inject.ask(opened, server, room.id);
-			if (Marks.enabled()) Marks.mark(opened);
+			if (Marks.enabled()) await Marks.mark(opened);
 			return opened;
 		})
 		.catch(err => {
@@ -106,30 +103,21 @@ function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Service.Pla
 
 /** A room's conversation, with everything it needs to run a turn. */
 function conversation(room: Rooms.Room, ws: Socket): Chat.Room {
-	let hosted = hostedAuth
-			&& ws.data.sessionId
-			&& ws.data.repositoryId
-			&& ws.data.repositoryOwner
-			&& ws.data.repositoryName
-			&& ws.data.repositoryDefaultBranch
-		? {
-			auth: hostedAuth,
-			claimantSessionId: ws.data.sessionId,
-			repository: {
-				id: ws.data.repositoryId,
-				owner: ws.data.repositoryOwner,
-				name: ws.data.repositoryName,
-				defaultBranch: ws.data.repositoryDefaultBranch,
-			},
-		}
-		: undefined;
 	return {
 		chat: room.plan!.chat,
 		plan: room.plan!,
 		server,
 		room: room.id,
 		config,
-		...(hosted ? { hosted } : {}),
+		auth: hostedAuth,
+		claimantSessionId: ws.data.sessionId,
+		repository: {
+			id: ws.data.repositoryId,
+			owner: ws.data.repositoryOwner,
+			name: ws.data.repositoryName,
+			defaultBranch: ws.data.repositoryDefaultBranch,
+		},
+		persist: () => Service.persist(room.plan!),
 	};
 }
 
@@ -251,7 +239,6 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 const VIEWER_ALLOWED = new Set(["session:ping", "plan:open", "plan:close"]);
 
 async function refreshAccess(ws: Socket, forceGitHub = false): Promise<boolean> {
-	if (!hostedAuth) return true;
 	let data = ws.data;
 	if (data.closed) return false;
 	if (data.authorizationRefresh) {
@@ -270,7 +257,7 @@ async function refreshAccess(ws: Socket, forceGitHub = false): Promise<boolean> 
 }
 
 async function checkAccess(ws: Socket, forceGitHub: boolean): Promise<boolean> {
-	if (!hostedAuth || ws.data.closed) return false;
+	if (ws.data.closed) return false;
 	let data = ws.data;
 	if (
 		!data.credential
@@ -308,7 +295,7 @@ async function checkAccess(ws: Socket, forceGitHub: boolean): Promise<boolean> {
 }
 
 function scheduleAuthorization(ws: Socket): void {
-	if (!hostedAuth || ws.data.closed) return;
+	if (ws.data.closed) return;
 	ws.data.authorizationTimer = setTimeout(() => {
 		void refreshAccess(ws, true).then(valid => {
 			if (ws.data.closed) return;
@@ -327,7 +314,7 @@ function listen(): Server<SocketData> {
 			let url = new URL(req.url);
 
 			if (url.pathname === "/ws") {
-				let outcome = await admit(req, url, { key: config.key, auth: hostedAuth });
+				let outcome = await admit(req, url, hostedAuth);
 				if ("status" in outcome) {
 					return new Response(outcome.reason, { status: outcome.status });
 				}
@@ -347,7 +334,7 @@ function listen(): Server<SocketData> {
 				tell(ws, {
 					kind: "session:hello",
 					ts: 0,
-					room: room.id,
+					channelId: room.id,
 					you: { handle: ws.data.handle, client: ws.data.client },
 					members: Rooms.members(room),
 					canEdit: ws.data.canEdit,
@@ -391,8 +378,8 @@ function drain(): Promise<void> {
 		if (leaseRenewal) clearInterval(leaseRenewal);
 		if (leaseWatchdog) clearTimeout(leaseWatchdog);
 		await renewingLease;
-		if (storage && heldLease) await storage.leases.release(heldLease);
-		await storage?.close();
+		if (heldLease) await storage.leases.release(heldLease);
+		await storage.close();
 	})();
 }
 
@@ -407,7 +394,7 @@ function signal(): void {
 }
 
 function renewLease(): void {
-	if (!storage || !heldLease || renewingLease) return;
+	if (!heldLease || renewingLease) return;
 	renewingLease = storage.leases.renew(heldLease, LEASE_TTL_MS).then(renewed => {
 		if (renewed) {
 			heldLease = renewed;
@@ -436,7 +423,7 @@ function armLeaseWatchdog(): void {
 }
 
 function cleanSessions(): void {
-	if (!storage || cleaningSessions) return;
+	if (cleaningSessions) return;
 	cleaningSessions = storage.sessions.deleteExpired(new Date()).then(() => {}, err => {
 		console.error("chopin: could not delete expired login sessions -", err);
 	}).finally(() => {
@@ -450,23 +437,9 @@ async function resetOpenAgents(
 ): Promise<void> {
 	await Promise.all(
 		Rooms.all().filter(filter).map(room =>
-			room.plan ? Chat.resetHosted(room.plan.chat, sessionId) : Promise.resolve()
+			room.plan ? Chat.resetAgent(room.plan.chat, sessionId) : Promise.resolve()
 		),
 	);
-}
-
-/**
- * Refuse to start rather than start half-working.
- *
- * The agent is most of what this is for, and the ways it fails — no token, a
- * token Copilot will not accept, no binary for this platform — are all
- * detectable in a couple of seconds by trying. Discovering them when somebody
- * types their first message is worse for everyone.
- */
-let misconfigured = problem(config);
-if (misconfigured) {
-	console.error(`chopin: ${misconfigured}`);
-	process.exit(1);
 }
 
 let hostedAuth = registerAuthRoutes(router, {
@@ -479,54 +452,33 @@ registerChannelRoutes(router, hostedAuth, {
 	onAgentReset: channelId => resetOpenAgents(room => room.id === channelId),
 });
 
-if (storage) {
-	try {
-		await storage.health();
-	} catch (err) {
-		await storage.close().catch(() => {});
-		let reason = err instanceof Error ? err.message : String(err);
-		console.error(`chopin: storage could not start - ${reason}`);
-		process.exit(1);
-	}
+try {
+	await storage.health();
+} catch (err) {
+	await storage.close().catch(() => {});
+	let reason = err instanceof Error ? err.message : String(err);
+	console.error(`chopin: storage could not start - ${reason}`);
+	process.exit(1);
 }
 
-if (config.agent && !hostedAuth) {
-	if (!config.token) {
-		await storage?.close().catch(() => {});
-		console.error("chopin: GITHUB_TOKEN is not set. Set one, or start with AGENT=off.");
-		process.exit(1);
-	}
-
-	try {
-		await Agent.probe(config, { tools: [] });
-	} catch (err) {
-		await storage?.close().catch(() => {});
-		let reason = err instanceof Error ? err.message : String(err);
-		console.error(`chopin: the agent could not start - ${reason}`);
-		process.exit(1);
-	}
+try {
+	heldLease = await storage.leases.acquire(
+		"chopin:writer",
+		crypto.randomUUID(),
+		LEASE_TTL_MS,
+	);
+	if (!heldLease) throw new Error("another Chopin instance owns the database");
+} catch (err) {
+	await Agent.shutdown();
+	await storage.close().catch(() => {});
+	let reason = err instanceof Error ? err.message : String(err);
+	console.error(`chopin: storage writer lease could not start - ${reason}`);
+	process.exit(1);
 }
-
-if (storage) {
-	try {
-		heldLease = await storage.leases.acquire(
-			"chopin:writer",
-			crypto.randomUUID(),
-			LEASE_TTL_MS,
-		);
-		if (!heldLease) throw new Error("another Chopin instance owns the database");
-	} catch (err) {
-		await Agent.shutdown();
-		await storage.close().catch(() => {});
-		let reason = err instanceof Error ? err.message : String(err);
-		console.error(`chopin: storage writer lease could not start - ${reason}`);
-		process.exit(1);
-	}
-	armLeaseWatchdog();
-	leaseRenewal = setInterval(renewLease, LEASE_RENEW_MS);
-	cleanSessions();
-	sessionCleanup = setInterval(cleanSessions, SESSION_CLEANUP_MS);
-}
+armLeaseWatchdog();
+leaseRenewal = setInterval(renewLease, LEASE_RENEW_MS);
+cleanSessions();
+sessionCleanup = setInterval(cleanSessions, SESSION_CLEANUP_MS);
 
 try {
 	server = listen();
@@ -537,8 +489,8 @@ try {
 	await cleaningSessions;
 	await renewingLease;
 	await Agent.shutdown();
-	if (storage && heldLease) await storage.leases.release(heldLease).catch(() => {});
-	await storage?.close().catch(() => {});
+	if (heldLease) await storage.leases.release(heldLease).catch(() => {});
+	await storage.close().catch(() => {});
 	throw err;
 }
 process.on("SIGINT", signal);

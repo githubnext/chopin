@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { hostedRoute } from "./hosted";
 
 describe("hosted routes", () => {
-	it("recognizes repositories and channels without rewriting legacy paths", () => {
+	it("recognizes repository and channel routes", () => {
 		expect(hostedRoute("/")).toEqual({ page: "repositories" });
 		expect(hostedRoute("/repositories/octo-org/score")).toEqual({
 			page: "repository",
@@ -19,6 +19,6 @@ describe("hosted routes", () => {
 			page: "channel",
 			id: "019c1234-1234-4123-8123-123456789abc",
 		});
-		expect(hostedRoute("/r/main")).toEqual({ page: "missing" });
+		expect(hostedRoute("/plans/main")).toEqual({ page: "missing" });
 	});
 });

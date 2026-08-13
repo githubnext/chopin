@@ -8,21 +8,20 @@
  */
 
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 import * as Comments from "./comments/service";
 import * as room from "./plan/room";
 import * as Service from "./plan/service";
 import * as Store from "./comments/store";
 import { compose } from "./comments/prompt";
+import { openPlan } from "./testing/plan";
 
 import type { Server } from "bun";
 import type * as Chat from "./chat/service";
 import type { Document } from "./plan/room";
 import type { Record } from "./comments/service";
 import type { Plan } from "./plan/service";
+import type { SeedState } from "./testing/plan";
 import type { Socket, SocketData } from "./wire";
 
 const SOURCE = `# Title
@@ -54,49 +53,22 @@ function thread(doc: Document, handle = "ana"): { records: Store.Records; record
 
 // -- a room, for the parts that need the service rather than the store -------
 
-let rooms: string[] = [];
 let opens: Plan[] = [];
 
 afterEach(async () => {
-	// Sinks are on a timer. Left running they write, and log, after the test
-	// that made them has finished and put `console.error` back.
 	for (let plan of opens) await Service.close(plan);
 	opens = [];
-	for (let dir of rooms) await rm(dir, { recursive: true, force: true });
-	rooms = [];
 });
 
 /** Frames the room sent, and to whom. */
 type Sent = { kind: string; [key: string]: unknown };
 
-/**
- * A room with a plan on disk.
- *
- * Built through `Service.open` rather than by hand: restoring, rebasing on
- * open and the snapshot sink are all part of what the service does, and a
- * stubbed plan would test the parts around them instead of them.
- */
-async function opened(source = SOURCE, state?: object) {
-	let dir = await mkdtemp(join(tmpdir(), "chopin-comments-"));
-	rooms.push(dir);
-	await writeFile(join(dir, "plan.mdx"), source);
-	if (state) await writeFile(join(dir, "state.json"), JSON.stringify(state));
-
-	let broadcasts: Sent[] = [];
-	let broken: string | undefined;
-	let server = {
-		publish(_topic: string, data: string) {
-			let frame = JSON.parse(data) as Sent;
-			if (frame.kind === broken) throw new Error("nobody is listening");
-			broadcasts.push(frame);
-		},
-	} as unknown as Server<SocketData>;
-
-	let plan = await Service.open("test", dir, server);
+async function opened(source = SOURCE, state?: SeedState) {
+	let fixture = await openPlan(source, state ?? {});
+	let { broadcasts, plan, server } = fixture;
 	opens.push(plan);
 	return {
 		broadcasts,
-		dir,
 		plan,
 		server,
 		/**
@@ -108,7 +80,7 @@ async function opened(source = SOURCE, state?: object) {
 		 * can be reasoned about is what happens if a particular relay is lost.
 		 */
 		breakRelay: (kind: string) => {
-			broken = kind;
+			fixture.breakRelay(kind);
 		},
 	};
 }
@@ -138,17 +110,27 @@ function ask<T extends object>(payload: T) {
 
 /** Enough of a room for the handlers that start a turn. `AGENT=off` throughout. */
 function context(plan: Plan, server: Server<SocketData>): Chat.Room {
-	return { chat: plan.chat, config: { agent: false }, plan, room: "test", server } as Chat.Room;
+	return {
+		chat: plan.chat,
+		config: { agent: false } as Chat.Room["config"],
+		plan,
+		room: plan.id,
+		server,
+		auth: {} as Chat.Room["auth"],
+		claimantSessionId: "session",
+		repository: { id: "repo", owner: "owner", name: "repo", defaultBranch: "main" },
+		persist: () => Service.persist(plan),
+	};
 }
 
 /** Mark the sentence, the way a client's `comment:start` does. */
-function mark(
+async function mark(
 	plan: Plan,
 	server: Server<SocketData>,
 	who: ReturnType<typeof member>,
 	text = "Too long.",
-): string {
-	Comments.start(
+): Promise<string> {
+	await Comments.start(
 		plan,
 		server,
 		"test",
@@ -323,49 +305,6 @@ describe("projecting a decision", () => {
 	});
 });
 
-describe("opening a room whose sidecar is damaged", () => {
-	/**
-	 * `plan.mdx` is a file a person can edit between runs, and `state.json` sits
-	 * beside it. A record that cannot be carried onto the rebuilt document is a
-	 * decision nobody can point at — not a room nobody can open. Letting it
-	 * throw would fail `plan:open`, and a client whose open is refused sits
-	 * there locked with the chrome saying it is still loading.
-	 */
-	it("still opens when a thread record cannot be carried forward", async () => {
-		let damaged = {
-			revision: 1,
-			questions: [],
-			threads: [{
-				id: "01K0N4TR8K7JGM4R1J7PW4R8YJ",
-				status: "accepted",
-				// No blocks, no positions: whatever wrote this, it is not a passage.
-				passage: null,
-				notes: [{ id: "n1", handle: "ana", text: "Too long.", ts: 1 }],
-				quote: QUOTE,
-				resolver: "ana",
-				at: 2,
-			}],
-		};
-
-		let complain = console.error;
-		console.error = () => {};
-		try {
-			let { plan, server } = await opened(SOURCE, damaged);
-
-			// The room is open and usable: a new thread can still be marked.
-			let ana = member("ana");
-			expect(() => mark(plan, server, ana)).not.toThrow();
-			expect(room.project(plan.document)).toContain(QUOTE);
-
-			// The damaged record would be carried forward again on the way out,
-			// logging after this test has put `console.error` back.
-			plan.sink.cancel();
-		} finally {
-			console.error = complain;
-		}
-	});
-});
-
 describe("a thread across a restart", () => {
 	/**
 	 * A restart is an epoch rotation: every stored position was expressed in a
@@ -392,7 +331,7 @@ describe("marking a passage over the wire", () => {
 	it("mints the thread and tells the rest of the room where it points", async () => {
 		let { broadcasts, plan, server } = await opened();
 		let ana = member("ana");
-		let id = mark(plan, server, ana);
+		let id = await mark(plan, server, ana);
 
 		expect(ana.replies[0]).toMatchObject({ kind: "comment:start", ok: true });
 		expect(ana.relayed[0]).toMatchObject({ kind: "comment:opened" });
@@ -459,7 +398,7 @@ describe("marking a passage over the wire", () => {
 	it("keeps a dismissed thread off the wire for whoever joins next", async () => {
 		let { plan, server } = await opened();
 		let ana = member("ana");
-		let id = mark(plan, server, ana);
+		let id = await mark(plan, server, ana);
 		await Comments.dismiss(
 			context(plan, server),
 			ana.socket,
@@ -480,7 +419,7 @@ describe("accepting, as the service orders it", () => {
 	async function accepted(options: { failPublish?: boolean } = {}) {
 		let { breakRelay, broadcasts, plan, server } = await opened();
 		let ana = member("ana");
-		let id = mark(plan, server, ana);
+		let id = await mark(plan, server, ana);
 		ana.replies.length = 0;
 
 		// The document delta, which is what carries the new node to clients.
@@ -542,7 +481,7 @@ describe("accepting, as the service orders it", () => {
 	it("leaves the plan alone when the thread is dismissed instead", async () => {
 		let { plan, server } = await opened();
 		let ana = member("ana");
-		let id = mark(plan, server, ana);
+		let id = await mark(plan, server, ana);
 		await Comments.dismiss(
 			context(plan, server),
 			ana.socket,
@@ -558,7 +497,7 @@ describe("what a thread owes the agent", () => {
 	async function accepted() {
 		let { plan, server } = await opened();
 		let ana = member("ana");
-		let id = mark(plan, server, ana);
+		let id = await mark(plan, server, ana);
 		await Comments.accept(
 			context(plan, server),
 			ana.socket,
@@ -571,7 +510,7 @@ describe("what a thread owes the agent", () => {
 	it("owes nothing while it is still being discussed", async () => {
 		let { plan, server } = await opened();
 		let ana = member("ana");
-		mark(plan, server, ana);
+		await mark(plan, server, ana);
 
 		expect(Comments.outstanding(plan)).toEqual([]);
 		expect(Comments.anchors(plan)[0]?.result.pending).toBe(false);
@@ -608,7 +547,7 @@ describe("what a thread owes the agent", () => {
 	it("refuses to anchor a thread nobody accepted", async () => {
 		let { plan, server } = await opened();
 		let ana = member("ana");
-		let id = mark(plan, server, ana);
+		let id = await mark(plan, server, ana);
 
 		expect(Comments.relate(plan, id, [])).toContain("was not accepted");
 	});
@@ -656,7 +595,7 @@ describe("what a thread owes the agent", () => {
 	it("attributes nothing to a thread nobody accepted", async () => {
 		let { plan, server } = await opened();
 		let ana = member("ana");
-		let id = mark(plan, server, ana);
+		let id = await mark(plan, server, ana);
 
 		Comments.attribute(plan, id, [1]);
 

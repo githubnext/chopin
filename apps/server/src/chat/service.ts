@@ -22,7 +22,7 @@ import * as Agent from "../agent/client";
 import { repositoryTools } from "../agent/repository";
 import { toolbox } from "../agent/tools";
 import * as Service from "../plan/service";
-import { addressed, instruction } from "@chopin/protocol/address";
+import { instruction } from "@chopin/protocol/address";
 
 import { compose, remember } from "./address";
 import { broadcast, fail, tell } from "../wire";
@@ -96,10 +96,8 @@ export type Chat = {
 	lingering?: ReturnType<typeof setTimeout>;
 	/** When each running tool call started, for its duration. */
 	timings: Map<string, number>;
-	/** Session id, persisted so a restart resumes the conversation. */
-	resume?: string;
-	/** Hosted first-invoker ownership, fenced by storage generation. */
-	hostedOwner?: { sessionId: string; generation: number };
+	/** First-invoker ownership, fenced by storage generation. */
+	owner?: { sessionId: string; generation: number };
 	/** Durable context prepended once after recreating a hosted SDK session. */
 	bootstrap?: string;
 	/**
@@ -123,7 +121,7 @@ export function create(): Chat {
  * so the flag is cleared: it is as complete as it is ever going to be, and
  * leaving it set would show a spinner nothing will ever stop.
  */
-export function restore(entries: Wire.Entry[], resume?: string): Chat {
+export function restore(entries: Wire.Entry[]): Chat {
 	return {
 		entries: entries.map(entry => {
 			let { streaming: _streaming, ...rest } = entry;
@@ -133,7 +131,6 @@ export function restore(entries: Wire.Entry[], resume?: string): Chat {
 		busy: false,
 		timings: new Map(),
 		backscroll: [],
-		...(resume ? { resume } : {}),
 	};
 }
 
@@ -205,11 +202,10 @@ export type Room = {
 	server: Server<SocketData>;
 	room: string;
 	config: Config;
-	hosted?: {
-		auth: HostedAuth;
-		claimantSessionId: string;
-		repository: HostedRepository;
-	};
+	auth: HostedAuth;
+	claimantSessionId: string;
+	repository: HostedRepository;
+	persist: () => Promise<void>;
 };
 
 /**
@@ -226,11 +222,8 @@ export async function send(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 
 	let { chat, room, server } = context;
 	let handle = ws.data.handle;
-	// The explicit destination is authoritative. Falling back to the typing
-	// shortcut keeps an older client predictable while rooms reconnect.
 	let destination = msg.to;
-	if (destination === undefined) destination = addressed(text) ? "planner" : "room";
-	else if (destination !== "room" && destination !== "planner") return;
+	if (destination !== "room" && destination !== "planner") return;
 	let visible = destination === "planner" ? instruction(text) : text;
 
 	if (destination === "room") {
@@ -240,16 +233,14 @@ export async function send(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 			text: visible,
 			ts: now(),
 		};
-		if (context.plan.durable) {
-			chat.entries.push(entry);
-			try {
-				await Service.persist(context.plan);
-			} catch {
-				chat.entries = chat.entries.filter(value => value.id !== entry.id);
-				return fail(ws, msg.rid, "could not save message");
-			}
-			announce(server, room, entry);
-		} else say(chat, server, room, entry);
+		chat.entries.push(entry);
+		try {
+			await context.persist();
+		} catch {
+			chat.entries = chat.entries.filter(value => value.id !== entry.id);
+			return fail(ws, msg.rid, "could not save message");
+		}
+		announce(server, room, entry);
 		chat.backscroll = remember(chat.backscroll, { handle, text: visible });
 		return;
 	}
@@ -265,17 +256,15 @@ export async function send(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 			text: "The agent is not running, so the plan has not been revised.",
 			ts: now(),
 		}];
-		if (context.plan.durable) {
-			chat.entries.push(...entries);
-			try {
-				await Service.persist(context.plan);
-			} catch {
-				let ids = new Set(entries.map(entry => entry.id));
-				chat.entries = chat.entries.filter(entry => !ids.has(entry.id));
-				return fail(ws, msg.rid, "could not save message");
-			}
-			for (let entry of entries) announce(server, room, entry);
-		} else for (let entry of entries) say(chat, server, room, entry);
+		chat.entries.push(...entries);
+		try {
+			await context.persist();
+		} catch {
+			let ids = new Set(entries.map(entry => entry.id));
+			chat.entries = chat.entries.filter(entry => !ids.has(entry.id));
+			return fail(ws, msg.rid, "could not save message");
+		}
+		for (let entry of entries) announce(server, room, entry);
 		return;
 	}
 
@@ -293,7 +282,7 @@ export async function send(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 			handle,
 			text: visible,
 			message: true,
-			...(context.hosted ? { sessionId: context.hosted.claimantSessionId } : {}),
+			sessionId: context.claimantSessionId,
 		});
 		return queued(chat, server, room);
 	}
@@ -304,42 +293,36 @@ export async function send(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		text: visible,
 		ts: now(),
 	};
-	if (context.hosted) {
-		chat.busy = true;
-		chat.turn = { id: ulid(), handle, started: now(), responded: false };
+	chat.busy = true;
+	chat.turn = { id: ulid(), handle, started: now(), responded: false };
+	state(chat, server, room);
+	chat.entries.push(entry);
+	try {
+		await context.persist();
+	} catch {
+		chat.entries = chat.entries.filter(value => value.id !== entry.id);
+		chat.busy = false;
+		chat.turn = undefined;
 		state(chat, server, room);
-		chat.entries.push(entry);
-		try {
-			await Service.persist(context.plan);
-		} catch {
-			chat.entries = chat.entries.filter(value => value.id !== entry.id);
-			chat.busy = false;
-			chat.turn = undefined;
-			state(chat, server, room);
-			return fail(ws, msg.rid, "could not save message");
-		}
-		announce(server, room, entry);
-	} else say(chat, server, room, entry);
+		return fail(ws, msg.rid, "could not save message");
+	}
+	announce(server, room, entry);
 	void run(
 		context,
 		handle,
 		visible,
 		undefined,
-		context.hosted?.claimantSessionId,
-		!!context.hosted,
+		context.claimantSessionId,
+		true,
 	);
 }
 
 /** Say something in the transcript without asking the agent for anything. */
 export function notice(context: Room, text: string): void | Promise<void> {
-	let { chat, plan, room, server } = context;
+	let { chat, room, server } = context;
 	let entry: Wire.Entry = { id: ulid(), author: { kind: "system" }, text, ts: now() };
-	if (!plan.durable) {
-		say(chat, server, room, entry);
-		return;
-	}
 	chat.entries.push(entry);
-	return Service.persist(plan).then(() => announce(server, room, entry));
+	return context.persist().then(() => announce(server, room, entry));
 }
 
 /**
@@ -370,12 +353,8 @@ export function instruct(
 				text: "The agent is not running, so the plan has not been revised.",
 				ts: now(),
 			};
-			if (context.plan.durable) {
-				chat.entries.push(entry);
-				return Service.persist(context.plan).then(() => announce(server, room, entry));
-			}
-			say(chat, server, room, entry);
-			return;
+			chat.entries.push(entry);
+			return context.persist().then(() => announce(server, room, entry));
 		}
 
 		if (chat.busy) {
@@ -392,12 +371,12 @@ export function instruct(
 				handle,
 				text,
 				...about,
-				...(context.hosted ? { sessionId: context.hosted.claimantSessionId } : {}),
+				sessionId: context.claimantSessionId,
 			});
 			return queued(chat, server, room);
 		}
 
-		void run(context, handle, text, about.thread, context.hosted?.claimantSessionId);
+		void run(context, handle, text, about.thread, context.claimantSessionId);
 	};
 	let announced = notice(context, said);
 	return announced instanceof Promise ? announced.then(proceed) : proceed();
@@ -433,7 +412,7 @@ function planTools(context: Room) {
 		server,
 		room,
 		publish: mutation => Service.publish(plan, server, room, mutation),
-		persist: () => Service.persist(plan),
+		persist: context.persist,
 		exclusive: action => Service.exclusive(plan, action),
 		anchors: () => Service.anchors(plan, server, room),
 		changes: found => Service.changes(plan, server, room, found),
@@ -469,28 +448,25 @@ function bootstrap(
 	].filter(Boolean).join("\n\n");
 }
 
-async function hostedSession(
+async function repositorySession(
 	context: Room,
-	claimantSessionId: string | undefined,
+	claimantSessionId: string,
 	currentText: string,
 ): Promise<Agent.Agent> {
-	let hosted = context.hosted;
-	if (!hosted || !claimantSessionId) {
-		throw new Error("A hosted editor session is required to use Copilot.");
-	}
-	let { ownership, owner, repository } = await resolveHostedOwner(
-		hosted,
+	let { ownership, owner, repository } = await resolveOwner(
+		context.auth,
+		context.repository,
 		context.room,
 		claimantSessionId,
 	);
-	let { auth } = hosted;
+	let { auth } = context;
 	let ownerSessionId = ownership.ownerSessionId!;
 
 	let { chat } = context;
 	if (
 		chat.agent
-		&& chat.hostedOwner?.sessionId === ownerSessionId
-		&& chat.hostedOwner.generation === ownership.generation
+		&& chat.owner?.sessionId === ownerSessionId
+		&& chat.owner.generation === ownership.generation
 	) {
 		await auth.storage.channels.updateAgentContext({
 			channelId: context.room,
@@ -504,14 +480,14 @@ async function hostedSession(
 		return chat.agent;
 	}
 
-	if (chat.agent) await Agent.discardHosted(chat.agent);
+	if (chat.agent) await Agent.discard(chat.agent);
 	chat.agent = undefined;
 	let tools = [
 		...planTools(context),
 		...repositoryTools({ token: owner.oauthToken, repository }),
 	];
 	try {
-		let agent = await Agent.openHosted(context.config, { tools }, {
+		let agent = await Agent.open(context.config, { tools }, {
 			token: owner.oauthToken,
 			repository,
 			bootstrap: bootstrap(chat, ownership.transcriptCursor, ownership.summary, currentText),
@@ -533,7 +509,7 @@ async function hostedSession(
 			},
 		});
 		chat.agent = agent;
-		chat.hostedOwner = { sessionId: ownerSessionId, generation: ownership.generation };
+		chat.owner = { sessionId: ownerSessionId, generation: ownership.generation };
 		await auth.storage.channels.updateAgentContext({
 			channelId: context.room,
 			ownerSessionId,
@@ -558,12 +534,12 @@ async function hostedSession(
 	}
 }
 
-export async function resolveHostedOwner(
-	hosted: NonNullable<Room["hosted"]>,
+export async function resolveOwner(
+	auth: HostedAuth,
+	repository: HostedRepository,
 	channelId: string,
 	claimantSessionId: string,
 ) {
-	let { auth, repository } = hosted;
 	let ownership = await auth.storage.channels.claimAgentOwner(
 		channelId,
 		claimantSessionId,
@@ -590,43 +566,10 @@ export async function resolveHostedOwner(
 
 async function session(
 	context: Room,
-	claimantSessionId: string | undefined,
+	claimantSessionId: string,
 	currentText: string,
 ): Promise<Agent.Agent> {
-	let { chat, config, plan, room, server } = context;
-	if (context.hosted) return hostedSession(context, claimantSessionId, currentText);
-	if (chat.agent) return chat.agent;
-
-	// Captured before it is overwritten: the question is whether there *was* a
-	// conversation to resume, not whether there is one now.
-	let previous = chat.resume;
-
-	return chat.opening ??= (async () => {
-		let tools = planTools(context);
-
-		let { agent, resumed } = await Agent.open(config, { tools }, chat.resume);
-		chat.agent = agent;
-		chat.resume = agent.id;
-		chat.opening = undefined;
-		plan.sink.touch();
-
-		// A transcript that survived while the conversation did not would
-		// silently overstate what the agent remembers.
-		if (previous && !resumed) {
-			say(chat, server, room, {
-				id: ulid(),
-				author: { kind: "system" },
-				text: "The previous conversation could not be resumed; the agent does not "
-					+ "remember what is above this line.",
-				ts: now(),
-			});
-		}
-
-		return agent;
-	})().catch(err => {
-		chat.opening = undefined;
-		throw err;
-	});
+	return repositorySession(context, claimantSessionId, currentText);
 }
 
 /**
@@ -650,8 +593,8 @@ async function run(
 	context: Room,
 	handle: string,
 	text: string,
-	thread?: string,
-	claimantSessionId?: string,
+	thread: string | undefined,
+	claimantSessionId: string,
 	reserved = false,
 ): Promise<void> {
 	let { chat, plan, room, server } = context;
@@ -708,7 +651,7 @@ async function run(
 		chat.writing = undefined;
 		chat.tooling = undefined;
 		settle(chat, server, room);
-		if (context.hosted) await Service.persist(plan);
+		await context.persist();
 
 		/*
 		 * The agent's cursor outlives the turn by a moment.
@@ -728,11 +671,17 @@ async function run(
 
 	let next = pending(chat);
 	if (next) {
-		if (context.hosted) await Service.persist(plan);
+		await context.persist();
 		queued(chat, server, room);
 		let entry = next.message ? chat.entries.find(item => item.id === next.id) : undefined;
 		if (entry) announce(server, room, entry);
-		await run(context, next.handle, next.text, next.thread, next.sessionId);
+		await run(
+			context,
+			next.handle,
+			next.text,
+			next.thread,
+			next.sessionId ?? context.claimantSessionId,
+		);
 	} else {
 		chat.busy = false;
 		chat.turn = undefined;
@@ -957,16 +906,16 @@ function attach(context: Room, activity: Wire.Activity): string {
 	return entry.id;
 }
 
-export async function resetHosted(chat: Chat, sessionId?: string): Promise<void> {
-	if (!chat.hostedOwner || (sessionId && chat.hostedOwner.sessionId !== sessionId)) return;
+export async function resetAgent(chat: Chat, sessionId?: string): Promise<void> {
+	if (!chat.owner || (sessionId && chat.owner.sessionId !== sessionId)) return;
 	await chat.agent?.session.abort().catch(() => {});
 	chat.finishTurn?.();
 	chat.release?.();
 	chat.release = undefined;
 	chat.finishTurn = undefined;
-	if (chat.agent) await Agent.discardHosted(chat.agent);
+	if (chat.agent) await Agent.discard(chat.agent);
 	chat.agent = undefined;
-	chat.hostedOwner = undefined;
+	chat.owner = undefined;
 }
 
 /** Let go of the session. The conversation is resumable by id. */
@@ -976,7 +925,6 @@ export async function close(chat: Chat): Promise<void> {
 	// a live timer would hold the loop open for its whole linger.
 	clearTimeout(chat.lingering);
 	chat.lingering = undefined;
-	if (chat.agent && chat.hostedOwner) await Agent.discardHosted(chat.agent);
-	else await chat.agent?.session.disconnect().catch(() => {});
+	if (chat.agent) await Agent.discard(chat.agent);
 	chat.agent = undefined;
 }
