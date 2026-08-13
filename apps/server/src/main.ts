@@ -487,7 +487,12 @@ let hostedAuth = registerAuthRoutes(router, {
 			"GitHub credentials refreshed, so the Planner session was restarted. Ask it to continue.",
 		),
 });
-registerMcpRoutes(router, hostedAuth);
+registerMcpRoutes(router, hostedAuth, {
+	lease() {
+		if (!heldLease) throw new Error("storage writer lease is unavailable");
+		return heldLease;
+	},
+});
 registerChannelRoutes(router, hostedAuth, {
 	onAgentReset: channelId => resetOpenAgents(room => room.id === channelId),
 });

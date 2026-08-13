@@ -3,6 +3,7 @@ import { hosted } from "./hosted";
 
 import type { HostedAuth } from "../auth/routes";
 import type { Router } from "../http/router";
+import type { ImplementationPersistence } from "./hosted";
 
 function failure(): Response {
 	return new Response("MCP request failed", { status: 500 });
@@ -20,8 +21,12 @@ function protectedResponse(response: Response): Response {
 }
 
 /** Register the hosted, read-only MCP endpoint. */
-export function registerMcpRoutes(router: Router, auth: HostedAuth): void {
-	let endpoint = handler(hosted(auth));
+export function registerMcpRoutes(
+	router: Router,
+	auth: HostedAuth,
+	persistence?: ImplementationPersistence,
+): void {
+	let endpoint = handler(hosted(auth, persistence));
 	let route = async (request: Request): Promise<Response> => {
 		if (request.headers.has("origin") && request.headers.get("origin") !== auth.config.origin) {
 			return protectedResponse(new Response("origin is not allowed", { status: 403 }));

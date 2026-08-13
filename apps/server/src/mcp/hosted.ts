@@ -6,12 +6,16 @@ import { StorageError } from "../storage/errors";
 
 import type { HostedAuth } from "../auth/routes";
 import type { GitHubUser } from "../github/client";
-import type { McpOptions } from "../mcp";
+import type { Implementation, ImplementationInput, McpOptions } from "../mcp";
+import type { ChannelRecord, Lease } from "../storage/model";
+import type { ClaimResult, Run } from "../tasks/graphs";
 
 export type HostedCaller = {
 	oauthToken: string;
 	user: GitHubUser;
 };
+
+export type ImplementationPersistence = { lease(): Lease };
 
 const BEARER = new RegExp("^Bearer ([A-Za-z0-9._~+/-]+=*)$", "i");
 
@@ -57,7 +61,59 @@ function document(value: Document): PublicDocument & { url?: string } {
 }
 
 /** Bind the backend-neutral MCP surface to hosted GitHub authentication. */
-export function hosted(auth: HostedAuth): McpOptions<HostedCaller> {
+export function hosted(
+	auth: HostedAuth,
+	persistence?: ImplementationPersistence,
+): McpOptions<HostedCaller> {
+	function exposed(
+		channel: ChannelRecord,
+		state: Awaited<ReturnType<typeof Plan.readStored>>,
+	): Implementation | undefined {
+		let version = state.graph?.versions.at(-1);
+		if (!state.origin || !version || (version.state !== "approved" && version.state !== "locked")) {
+			return undefined;
+		}
+		return {
+			document: {
+				id: channel.id,
+				title: channel.title,
+				...(state.brief ? { brief: state.brief } : {}),
+				source: state.source,
+				revision: state.revision,
+			},
+			repository: {
+				name: state.origin.repository,
+				baseBranch: state.origin.baseBranch,
+				baseCommit: state.origin.baseCommit,
+			},
+			graph: version,
+			execution: state.execution
+				? { state: "active", run: state.execution }
+				: { state: "idle" },
+		};
+	}
+
+	function run(caller: HostedCaller, input: ImplementationInput): Run {
+		return {
+			id: crypto.randomUUID(),
+			user: caller.user.login,
+			client: { name: input.client.name, version: input.client.version },
+			session: input.client.session,
+			planRevision: input.planRevision,
+			graphRevision: input.graphRevision,
+			repository: input.repository,
+			branch: input.branch,
+			commit: input.commit,
+			startedAt: auth.clock().toISOString(),
+		};
+	}
+
+	function result(value: ClaimResult) {
+		return value.kind === "started"
+			? { kind: "started" as const, run: value.run }
+			: value;
+	}
+
 	return {
 		async caller(request) {
 			let match = request.headers.get("authorization")?.match(BEARER);
@@ -213,5 +269,94 @@ export function hosted(auth: HostedAuth): McpOptions<HostedCaller> {
 				};
 			},
 		},
+		...(persistence
+			? {
+				implementations: {
+					async readImplementation(caller: HostedCaller, id: string) {
+						let channel = await auth.storage.channels.get(id);
+						if (!channel) return undefined;
+						let repository = await auth.github.repositoryAccess(
+							caller.oauthToken,
+							channel.repositoryOwner,
+							channel.repositoryName,
+						);
+						if (!repository?.permissions.pull || repository.id !== channel.repositoryId) {
+							return "forbidden" as const;
+						}
+						let live = Rooms.get(id)?.plan;
+						if (live) {
+							return exposed(channel, {
+								source: Plan.source(live),
+								revision: live.revision,
+								...(live.brief ? { brief: live.brief } : {}),
+								...(live.origin ? { origin: live.origin } : {}),
+								...(live.graph ? { graph: live.graph } : {}),
+								...(live.execution ? { execution: live.execution } : {}),
+							});
+						}
+						let stored = await auth.storage.collaboration.load(id, auth.clock());
+						return stored ? exposed(channel, await Plan.readStored(stored)) : undefined;
+					},
+					async startImplementation(caller: HostedCaller, input: ImplementationInput) {
+						let channel = await auth.storage.channels.get(input.id);
+						if (
+							!channel
+							|| `${channel.repositoryOwner}/${channel.repositoryName}` !== input.repository
+						) {
+							return { kind: "forbidden" as const };
+						}
+						let repository = await auth.github.repositoryAccess(
+							caller.oauthToken,
+							channel.repositoryOwner,
+							channel.repositoryName,
+						);
+						if (
+							!repository
+							|| repository.id !== channel.repositoryId
+							|| (!repository.permissions.push && !repository.permissions.admin)
+						) return { kind: "forbidden" as const };
+						let claimRun = run(caller, input);
+						let live = Rooms.get(input.id)?.plan;
+						if (live) {
+							return result(
+								await Plan.claimImplementation(live, {
+									planRevision: input.planRevision,
+									graphRevision: input.graphRevision,
+									run: claimRun,
+								}),
+							);
+						}
+						for (let attempt = 0; attempt < 2; attempt++) {
+							let stored = await auth.storage.collaboration.load(input.id, auth.clock());
+							if (!stored?.snapshot) return { kind: "refused" as const, reason: "missing" };
+							let prepared = Plan.claimStored(stored, {
+								planRevision: input.planRevision,
+								graphRevision: input.graphRevision,
+								run: claimRun,
+							});
+							if (prepared.result.kind !== "started" || !prepared.sidecar) {
+								return result(prepared.result);
+							}
+							try {
+								await auth.storage.collaboration.commit({
+									channelId: input.id,
+									lease: persistence.lease(),
+									expectedRevision: stored.channel.revision,
+									operationId: `implementation:${claimRun.id}`,
+									epoch: stored.snapshot.epoch,
+									sidecar: prepared.sidecar,
+									events: [],
+									now: auth.clock(),
+								});
+								return result(prepared.result);
+							} catch (err) {
+								if (!(err instanceof StorageError) || err.failure !== "conflict") throw err;
+							}
+						}
+						return { kind: "refused" as const, reason: "conflict" };
+					},
+				},
+			}
+			: {}),
 	};
 }
