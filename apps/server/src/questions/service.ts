@@ -19,7 +19,7 @@ import * as Anchors from "./anchors";
 
 import * as room from "../plan/room";
 import * as Store from "./store";
-import { broadcast, relay, reply, tell } from "../wire";
+import { broadcast, fail, relay, reply, tell } from "../wire";
 
 import type { Server } from "bun";
 // `Plan` is the room's plan here; the protocol namespace of the same name is
@@ -40,6 +40,9 @@ export type AskPlacement = {
 };
 
 export const create = Store.create;
+export const dump = Store.dump;
+export const restore = Store.restore;
+export type { StoredOpen } from "./store";
 
 /**
  * Validate a questionnaire and give it durable identity.
@@ -99,53 +102,62 @@ export async function ask(
 	if (definition.questions.length === 0) {
 		Question.reject("A questionnaire needs at least one question");
 	}
-
-	let anchors = placement ? validatePlacement(plan, definition, placement) : undefined;
-	let asked = definition.questions.map((question, index) => {
-		let single = { questions: [question] };
-		// Widget and question identities are deliberately distinct.
-		let id = ulid();
-		let waiting = Store.ask(plan.questions, id, single, id);
-		let value = {
-			id,
-			questions: [{
-				id: question.id,
-				header: question.header,
-				prompt: question.question,
-				multiple: question.multiple,
-				options: question.options.map(option => ({
-					id: option.id,
-					label: option.label,
-					...(option.description ? { description: option.description } : {}),
-				})),
-			}],
-		};
-		let record: Record = { id, definition: single, status: "open" };
-		if (anchors) {
-			record.anchors = Anchors.set(Anchors.read(record), question.id, anchors[index]!);
-		}
-		plan.records.set(id, record);
-		return { id, single, value, waiting, at: placement?.blocks[index]?.[0] };
-	});
-
-	let mutation = room.insertQuestionnaires(
-		plan.document,
-		asked.map(item => ({
-			value: item.value,
-			...(item.at ? { at: item.at } : {}),
-		})),
-	);
-	if (mutation) Service.publish(plan, server, roomId, mutation);
-	for (let item of asked) {
-		broadcast(server, roomId, {
-			kind: "question:asked",
-			ts: 0,
-			id: item.id,
-			definition: item.single,
-			widget: item.id,
+	let asked: Array<{
+		id: string;
+		single: Definition;
+		value: room.QuestionnaireInsertion["value"];
+		waiting: Promise<Ended>;
+		at: number | undefined;
+	}> = [];
+	await Service.exclusive(plan, async () => {
+		let anchors = placement ? validatePlacement(plan, definition, placement) : undefined;
+		asked = definition.questions.map((question, index) => {
+			let single = { questions: [question] };
+			// Widget and question identities are deliberately distinct.
+			let id = ulid();
+			let waiting = Store.ask(plan.questions, id, single, id);
+			let value = {
+				id,
+				questions: [{
+					id: question.id,
+					header: question.header,
+					prompt: question.question,
+					multiple: question.multiple,
+					options: question.options.map(option => ({
+						id: option.id,
+						label: option.label,
+						...(option.description ? { description: option.description } : {}),
+					})),
+				}],
+			};
+			let record: Record = { id, definition: single, status: "open" };
+			if (anchors) {
+				record.anchors = Anchors.set(Anchors.read(record), question.id, anchors[index]!);
+			}
+			plan.records.set(id, record);
+			return { id, single, value, waiting, at: placement?.blocks[index]?.[0] };
 		});
-	}
-	created?.();
+
+		let mutation = room.insertQuestionnaires(
+			plan.document,
+			asked.map(item => ({
+				value: item.value,
+				...(item.at ? { at: item.at } : {}),
+			})),
+		);
+		if (mutation) await Service.publish(plan, server, roomId, mutation);
+		else await Service.persistExclusive(plan);
+		for (let item of asked) {
+			broadcast(server, roomId, {
+				kind: "question:asked",
+				ts: 0,
+				id: item.id,
+				definition: item.single,
+				widget: item.id,
+			});
+		}
+		created?.();
+	});
 
 	return Promise.all(asked.map(item => item.waiting));
 }
@@ -194,25 +206,34 @@ export function open(plan: Plan, ws: Socket, msg: Request<Wire.Open.Ask>): void 
 	reply(ws, msg.rid, { kind: "question:open", ts: 0, ...Store.snapshot(plan.questions, msg.id) });
 }
 
-export function edit(plan: Plan, ws: Socket, msg: Request<Wire.Edit.Ask>): void {
+export function edit(plan: Plan, ws: Socket, msg: Request<Wire.Edit.Ask>): void | Promise<void> {
 	let outcome = Store.edit(plan.questions, msg.id, msg.patch);
-	reply(ws, msg.rid, { kind: "question:edit", ts: 0, id: msg.id, ...outcome });
-
-	// A no-op patch is acknowledged but not relayed: peers have nothing to do
-	// with it and it did not move the revision.
-	if (!outcome.open || !outcome.accepted || !outcome.applied) return;
-
-	relay(ws, {
-		kind: "question:edit",
-		ts: 0,
-		id: msg.id,
-		open: true,
-		accepted: true,
-		applied: true,
-		revision: outcome.revision,
-		patch: msg.patch,
-		editor: ws.data.handle,
-	});
+	let finish = () => {
+		reply(ws, msg.rid, { kind: "question:edit", ts: 0, id: msg.id, ...outcome });
+		// A no-op patch is acknowledged but not relayed: peers have nothing to do
+		// with it and it did not move the revision.
+		if (!outcome.open || !outcome.accepted || !outcome.applied) return;
+		relay(ws, {
+			kind: "question:edit",
+			ts: 0,
+			id: msg.id,
+			open: true,
+			accepted: true,
+			applied: true,
+			revision: outcome.revision,
+			patch: msg.patch,
+			editor: ws.data.handle,
+		});
+	};
+	if (outcome.open && outcome.accepted && outcome.applied) {
+		if (plan.durable) {
+			return Service.persist(plan).then(finish, () => {
+				fail(ws, msg.rid, "could not save questionnaire draft");
+			});
+		}
+		plan.sink.touch();
+	}
+	finish();
 }
 
 export function focus(plan: Plan, ws: Socket, msg: Wire.Presence.Input): void {
@@ -259,11 +280,30 @@ export async function submit(
 	// disagree about when the room decided.
 	let at = Math.floor(Date.now() / 1_000);
 	let settled = { by: ws.data.handle, at: new Date(at * 1_000).toISOString() };
-
-	try {
-		let mutation = room.projectAnswer(plan.document, msg.id, answers, settled);
-		if (mutation) Service.publish(plan, server, roomId, mutation);
-	} catch (err) {
+	let mutationError: unknown;
+	let finish: (() => Store.Ended) | undefined;
+	await Service.exclusive(plan, async () => {
+		let mutation: room.Mutation | undefined;
+		try {
+			mutation = room.projectAnswer(plan.document, msg.id, answers, settled);
+		} catch (err) {
+			mutationError = err;
+			return;
+		}
+		if (record) {
+			plan.records.set(msg.id, {
+				...record,
+				status: "answered",
+				answers,
+				resolver: ws.data.handle,
+				at,
+			});
+		}
+		finish = Store.stage(plan.questions, claimed.claim);
+		if (mutation) await Service.publish(plan, server, roomId, mutation);
+		else await Service.persistExclusive(plan);
+	});
+	if (mutationError) {
 		// The decision is not final if the plan could not be told about it.
 		Store.rollback(plan.questions, claimed.claim);
 		return reply(ws, msg.rid, {
@@ -272,21 +312,12 @@ export async function submit(
 			id: msg.id,
 			ok: false,
 			reason: "invalid",
-			message: err instanceof Error ? err.message : "could not record the answer",
+			message: mutationError instanceof Error
+				? mutationError.message
+				: "could not record the answer",
 		});
 	}
-
-	Store.commit(plan.questions, claimed.claim);
-	if (record) {
-		plan.records.set(msg.id, {
-			...record,
-			status: "answered",
-			answers,
-			resolver: ws.data.handle,
-			at,
-		});
-	}
-	plan.sink.touch();
+	finish!();
 
 	reply(ws, msg.rid, {
 		kind: "question:submit",
@@ -324,15 +355,29 @@ export async function cancel(
 	if (!claimed.ok) {
 		return reply(ws, msg.rid, { kind: "question:cancel", ts: 0, id: msg.id, ...claimed });
 	}
-
-	try {
-		let mutation = room.removeQuestionnaire(plan.document, msg.id);
-		if (mutation) Service.publish(plan, server, roomId, mutation);
-	} catch (err) {
+	let mutationError: unknown;
+	let finish: (() => Store.Ended) | undefined;
+	await Service.exclusive(plan, async () => {
+		let mutation: room.Mutation | undefined;
+		try {
+			mutation = room.removeQuestionnaire(plan.document, msg.id);
+		} catch (err) {
+			mutationError = err;
+			return;
+		}
+		let record = plan.records.get(msg.id);
+		if (record) {
+			plan.records.set(msg.id, { ...record, status: "cancelled", resolver: ws.data.handle });
+		}
+		finish = Store.stage(plan.questions, claimed.claim);
+		if (mutation) await Service.publish(plan, server, roomId, mutation);
+		else await Service.persistExclusive(plan);
+	});
+	if (mutationError) {
 		// The questionnaire stays open and answerable, which is a state every
 		// client already renders. Saying "resolving" is honest: the attempt is
 		// over, and trying again is the right move.
-		console.error("[questions] could not remove the node:", err);
+		console.error("[questions] could not remove the node:", mutationError);
 		Store.rollback(plan.questions, claimed.claim);
 		return reply(ws, msg.rid, {
 			kind: "question:cancel",
@@ -342,13 +387,7 @@ export async function cancel(
 			reason: "resolving",
 		});
 	}
-
-	Store.commit(plan.questions, claimed.claim);
-	let record = plan.records.get(msg.id);
-	if (record) {
-		plan.records.set(msg.id, { ...record, status: "cancelled", resolver: ws.data.handle });
-	}
-	plan.sink.touch();
+	finish!();
 
 	reply(ws, msg.rid, {
 		kind: "question:cancel",

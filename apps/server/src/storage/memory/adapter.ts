@@ -12,6 +12,7 @@ import type {
 	CreateChannel,
 	JsonValue,
 	Lease,
+	ReplaceChannel,
 	SaveCheckpoint,
 	StoredChannel,
 	StoredEvent,
@@ -148,6 +149,7 @@ export class MemoryStorage implements StorageAdapter {
 	readonly collaboration: CollaborationStore = {
 		load: (channelId, now) => this.#load(channelId, now),
 		commit: input => this.#commit(input),
+		replace: input => this.#replace(input),
 		checkpoint: input => this.#checkpoint(input),
 	};
 
@@ -296,6 +298,7 @@ export class MemoryStorage implements StorageAdapter {
 		}
 		return Promise.resolve({
 			channel: channel(found),
+			latestSequence: (this.#sequences.get(channelId) ?? 1) - 1,
 			snapshot: this.#snapshots.get(channelId)
 				? snapshot(this.#snapshots.get(channelId)!)
 				: undefined,
@@ -390,6 +393,42 @@ export class MemoryStorage implements StorageAdapter {
 			),
 		);
 		return Promise.resolve();
+	}
+
+	#replace(input: ReplaceChannel): Promise<CommitResult> {
+		this.#assertLease(input.lease);
+		let found = this.#channels.get(input.channelId);
+		if (!found) throw missing(`channel ${input.channelId} does not exist`);
+		let operations = this.#operations.get(input.channelId) ?? new Map<string, Operation>();
+		this.#operations.set(input.channelId, operations);
+		let repeated = operations.get(input.operationId);
+		if (repeated) return Promise.resolve({ ...repeated, repeated: true });
+		if (found.revision !== input.expectedRevision) {
+			throw conflict(
+				`channel ${input.channelId} is at revision ${found.revision}, expected ${input.expectedRevision}`,
+			);
+		}
+		let sequence = this.#sequences.get(input.channelId) ?? 1;
+		let revision = found.revision + 1;
+		this.#sidecars.set(input.channelId, json(input.sidecar));
+		this.#snapshots.set(input.channelId, {
+			channelId: input.channelId,
+			generation: input.generation,
+			revision,
+			throughSequence: sequence,
+			epoch: input.epoch,
+			source: input.source,
+			sourceHash: input.sourceHash,
+			document: bytes(input.document),
+			sidecar: json(input.sidecar),
+			createdAt: input.now,
+		});
+		this.#updates.set(input.channelId, []);
+		this.#channels.set(input.channelId, { ...found, revision, updatedAt: input.now });
+		this.#sequences.set(input.channelId, sequence + 1);
+		let result = { revision, sequence, repeated: false };
+		operations.set(input.operationId, result);
+		return Promise.resolve(result);
 	}
 
 	#acquire(name: string, owner: string, ttlMs: number): Promise<Lease | undefined> {

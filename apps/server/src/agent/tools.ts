@@ -37,7 +37,11 @@ export type Context = {
 	server: Server<SocketData>;
 	room: string;
 	/** Relays a server-authored change to everyone in the room. */
-	publish: (mutation: { update: Uint8Array; source: string }) => void;
+	publish: (mutation: { update: Uint8Array; source: string }) => Promise<void>;
+	/** Persists sidecar-only relationship changes before exposing them. */
+	persist: () => Promise<void>;
+	/** Runs a complete server mutation in the same queue as client batches. */
+	exclusive: <T>(action: () => Promise<T>) => Promise<T>;
 	/** Relays the current relationship snapshot to everyone in the room. */
 	anchors: () => void;
 	/** Tells the room where this batch wrote, moved and removed. */
@@ -149,51 +153,52 @@ export function toolbox(context: Context): Tool[] {
 				additionalProperties: false,
 			},
 			handler: raw =>
-				answer("edit_plan", () => {
-					let args = Arguments.editPlan(raw);
-					let outcome = edit.apply(context.plan, args.revision, args.operations);
-					if (!outcome.ok) return outcome;
+				answer("edit_plan", () =>
+					context.exclusive(async () => {
+						let args = Arguments.editPlan(raw);
+						let outcome = edit.apply(context.plan, args.revision, args.operations);
+						if (!outcome.ok) return outcome;
 
-					if (outcome.mutation) context.publish(outcome.mutation);
+						for (let id of outcome.detached) {
+							let record = context.plan.records.get(id);
+							if (record) context.plan.records.set(id, { ...record, status: "cancelled" });
+						}
 
-					// After the update that created them, never before it. Both
-					// go to the same topic in order, so by the time this arrives
-					// the browser already holds the blocks it names.
-					context.changes(outcome.changes);
+						// Prose moved, so every relationship has to be brought forward
+						// and anything answered has to be looked at again: the passage a
+						// decision produced is the most likely thing to have been
+						// rewritten.
+						Questions.rebase(context.plan);
+						Questions.invalidate(context.plan, "plan_changed");
+						Comments.rebase(context.plan);
+						Comments.invalidate(context.plan, "plan_changed");
 
-					for (let id of outcome.detached) {
-						let record = context.plan.records.get(id);
-						if (record) context.plan.records.set(id, { ...record, status: "cancelled" });
-					}
+						// After invalidating, so it is not immediately undone. If
+						// this turn was started by accepting a comment, what it
+						// just wrote is what that decision produced — unless the
+						// agent says otherwise with `anchor_plan`, which wins.
+						let acting = context.plan.chat.acting;
+						if (acting) Comments.attribute(context.plan, acting, outcome.touched);
 
-					// Prose moved, so every relationship has to be brought forward
-					// and anything answered has to be looked at again: the passage a
-					// decision produced is the most likely thing to have been
-					// rewritten.
-					Questions.rebase(context.plan);
-					Questions.invalidate(context.plan, "plan_changed");
-					Comments.rebase(context.plan);
-					Comments.invalidate(context.plan, "plan_changed");
+						if (outcome.mutation) await context.publish(outcome.mutation);
 
-					// After invalidating, so it is not immediately undone. If
-					// this turn was started by accepting a comment, what it
-					// just wrote is what that decision produced — unless the
-					// agent says otherwise with `anchor_plan`, which wins.
-					let acting = context.plan.chat.acting;
-					if (acting) Comments.attribute(context.plan, acting, outcome.touched);
+						// After the update that created them, never before it. Both
+						// go to the same topic in order, so by the time this arrives
+						// the browser already holds the blocks it names.
+						context.changes(outcome.changes);
 
-					context.anchors();
+						context.anchors();
 
-					return {
-						ok: true,
-						revision: context.plan.revision,
-						blocks: outcome.blocks,
-						anchors_pending: [
-							...Questions.outstanding(context.plan),
-							...Comments.outstanding(context.plan),
-						],
-					};
-				}),
+						return {
+							ok: true,
+							revision: context.plan.revision,
+							blocks: outcome.blocks,
+							anchors_pending: [
+								...Questions.outstanding(context.plan),
+								...Comments.outstanding(context.plan),
+							],
+						};
+					})),
 		},
 
 		{
@@ -340,7 +345,7 @@ export function toolbox(context: Context): Tool[] {
 				additionalProperties: false,
 			},
 			handler: raw =>
-				answer("anchor_plan", () => {
+				answer("anchor_plan", async () => {
 					let args = Arguments.anchorPlan(raw);
 
 					if (args.revision !== context.plan.revision) {
@@ -372,8 +377,8 @@ export function toolbox(context: Context): Tool[] {
 					let mutation = Questions.place(context.plan, placements);
 					if (mutation) context.publish(mutation);
 
+					await context.persist();
 					context.anchors();
-					context.plan.sink.touch();
 
 					return failures.length > 0
 						? { ok: false, reason: "invalid", errors: failures }

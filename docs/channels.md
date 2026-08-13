@@ -28,9 +28,11 @@ The web client uses ordinary document navigation:
 /channels/:channelId                   chat, plan and decisions workspace
 ```
 
-This stage still projects a channel's live plan through the existing
-`DATA_DIR/<channel-id>` sink. Moving that document, transcript and sidecar onto
-`StorageAdapter.collaboration` is the next persistence stage.
+Hosted channels persist their canonical MDX, complete Yjs checkpoint, accepted
+update journal, transcript, questionnaire drafts and comment records through
+`StorageAdapter.collaboration`. A client update is acknowledged only after its
+fenced durable commit. `DATA_DIR` remains solely for `AUTH_DRIVER=off` legacy
+rooms.
 
 The prototype agent is deliberately disabled in hosted mode. It has one global
 working directory and credential, which cannot safely serve repository-scoped

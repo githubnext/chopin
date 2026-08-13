@@ -66,8 +66,49 @@ export type Questions = {
 	closed: Map<string, Closed>;
 };
 
+export type StoredOpen = {
+	id: string;
+	definition: Definition;
+	widget?: string;
+	model: number[];
+	revision: number;
+};
+
 export function create(): Questions {
 	return { open: new Map(), closed: new Map() };
+}
+
+export function dump(questions: Questions): StoredOpen[] {
+	return [...questions.open.values()].map(entry => ({
+		id: entry.id,
+		definition: entry.definition,
+		...(entry.widget ? { widget: entry.widget } : {}),
+		model: [...entry.model.toBinary()],
+		revision: entry.revision,
+	}));
+}
+
+export function restore(entries: StoredOpen[]): Questions {
+	let questions = create();
+	for (let entry of entries) {
+		if (questions.open.has(entry.id)) Question.reject("Questionnaire is duplicated in storage");
+		if (!Number.isSafeInteger(entry.revision) || entry.revision < 0) {
+			Question.reject("Questionnaire revision is invalid");
+		}
+		if (
+			!Array.isArray(entry.model)
+			|| entry.model.some(value => !Number.isInteger(value) || value < 0 || value > 255)
+		) Question.reject("Questionnaire model is invalid");
+		questions.open.set(entry.id, {
+			id: entry.id,
+			definition: entry.definition,
+			...(entry.widget ? { widget: entry.widget } : {}),
+			model: Question.restore(entry.model, entry.definition),
+			revision: entry.revision,
+			presence: new Map(),
+		});
+	}
+	return questions;
 }
 
 function sweep(questions: Questions): void {
@@ -318,11 +359,17 @@ export function claimCancel(
 }
 
 /** Make a claimed resolution final, and release whoever was waiting on it. */
-export function commit(questions: Questions, claim: Claim): Ended {
+export function stage(questions: Questions, claim: Claim): () => Ended {
 	questions.open.delete(claim.id);
 	remember(questions, claim.id, claim.result, claim.entry.revision);
-	claim.entry.settle?.(claim.result);
-	return claim.result;
+	return () => {
+		claim.entry.settle?.(claim.result);
+		return claim.result;
+	};
+}
+
+export function commit(questions: Questions, claim: Claim): Ended {
+	return stage(questions, claim)();
 }
 
 /** Undo a claim whose durable half failed. The questionnaire stays open. */

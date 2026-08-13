@@ -16,6 +16,7 @@ import type {
 	CreateChannel,
 	JsonValue,
 	Lease,
+	ReplaceChannel,
 	SaveCheckpoint,
 	StoredChannel,
 	StoredEvent,
@@ -60,6 +61,7 @@ type ChannelRow = {
 	title: string;
 	createdBy: string;
 	revision: Integer;
+	nextSequence?: Integer;
 	createdAt: Timestamp;
 	updatedAt: Timestamp;
 };
@@ -429,6 +431,7 @@ export class PostgresStorage implements StorageAdapter {
 	readonly collaboration: CollaborationStore = {
 		load: (channelId, now) => this.#load(channelId, now),
 		commit: input => this.#commit(input),
+		replace: input => this.#replace(input),
 		checkpoint: input => this.#checkpoint(input),
 	};
 
@@ -608,7 +611,8 @@ export class PostgresStorage implements StorageAdapter {
 			() =>
 				this.#sql.begin("isolation level repeatable read read only", async transaction => {
 					let [channelRow] = await transaction<ChannelRow[]>`
-				SELECT ${transaction.unsafe(CHANNEL_COLUMNS)} FROM channels WHERE id = ${channelId}
+				SELECT ${transaction.unsafe(CHANNEL_COLUMNS)}, next_sequence AS "nextSequence"
+				FROM channels WHERE id = ${channelId}
 			`;
 					if (!channelRow) return undefined;
 					let [snapshotRow] = await transaction<SnapshotRow[]>`
@@ -652,8 +656,11 @@ export class PostgresStorage implements StorageAdapter {
 							};
 						}
 					}
+					let nextSequence = integer(channelRow.nextSequence ?? 1, "channel sequence");
+					if (nextSequence < 1) throw corrupt("storage returned an invalid channel sequence");
 					return {
 						channel: channel(channelRow),
+						latestSequence: nextSequence - 1,
 						snapshot: snapshotRow ? snapshot(snapshotRow) : undefined,
 						updates: updateRows.map(update),
 						events: eventRows.map(event),
@@ -786,6 +793,78 @@ export class PostgresStorage implements StorageAdapter {
 				DELETE FROM channel_updates
 				WHERE channel_id = ${input.channelId} AND sequence <= ${input.throughSequence}
 			`;
+			}));
+	}
+
+	#replace(input: ReplaceChannel): Promise<CommitResult> {
+		return this.#run("replace channel", () =>
+			this.#sql.begin(async transaction => {
+				await this.#assertLease(transaction, input.lease);
+				let [locked] = await transaction<ChannelLockRow[]>`
+					SELECT revision, next_sequence AS "nextSequence"
+					FROM channels
+					WHERE id = ${input.channelId}
+					FOR UPDATE
+				`;
+				if (!locked) throw missing(`channel ${input.channelId} does not exist`);
+				let [previous] = await transaction<OperationRow[]>`
+					SELECT revision, sequence
+					FROM channel_operations
+					WHERE channel_id = ${input.channelId} AND operation_id = ${input.operationId}
+				`;
+				if (previous) {
+					return {
+						revision: integer(previous.revision, "operation revision"),
+						sequence: integer(previous.sequence, "operation sequence"),
+						repeated: true,
+					};
+				}
+				let current = integer(locked.revision, "channel revision");
+				if (current !== input.expectedRevision) {
+					throw conflict(
+						`channel ${input.channelId} is at revision ${current}, expected ${input.expectedRevision}`,
+					);
+				}
+				let sequence = integer(locked.nextSequence, "channel sequence");
+				let revision = current + 1;
+				await transaction`
+					INSERT INTO channel_operations (channel_id, operation_id, sequence, revision)
+					VALUES (${input.channelId}, ${input.operationId}, ${sequence}, ${revision})
+				`;
+				await transaction`
+					UPDATE channel_state
+					SET sidecar = ${JSON.stringify(input.sidecar)}::jsonb
+					WHERE channel_id = ${input.channelId}
+				`;
+				await transaction`
+					INSERT INTO channel_snapshots (
+						channel_id, generation, revision, through_sequence, epoch, source,
+						source_hash, document, sidecar, created_at
+					) VALUES (
+						${input.channelId}, ${input.generation}, ${revision}, ${sequence},
+						${input.epoch}, ${input.source}, ${input.sourceHash}, ${input.document},
+						${JSON.stringify(input.sidecar)}::jsonb, ${input.now}
+					)
+					ON CONFLICT (channel_id) DO UPDATE SET
+						generation = EXCLUDED.generation,
+						revision = EXCLUDED.revision,
+						through_sequence = EXCLUDED.through_sequence,
+						epoch = EXCLUDED.epoch,
+						source = EXCLUDED.source,
+						source_hash = EXCLUDED.source_hash,
+						document = EXCLUDED.document,
+						sidecar = EXCLUDED.sidecar,
+						created_at = EXCLUDED.created_at
+				`;
+				await transaction`
+					DELETE FROM channel_updates WHERE channel_id = ${input.channelId}
+				`;
+				await transaction`
+					UPDATE channels
+					SET revision = ${revision}, next_sequence = ${sequence + 1}, updated_at = ${input.now}
+					WHERE id = ${input.channelId}
+				`;
+				return { revision, sequence, repeated: false };
 			}));
 	}
 

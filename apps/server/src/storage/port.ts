@@ -8,6 +8,7 @@ import type {
 	CreateWebSession,
 	Lease,
 	PutUser,
+	ReplaceChannel,
 	SaveCheckpoint,
 	StoredChannel,
 	UpdateAgentContext,
@@ -47,6 +48,7 @@ export interface ChannelStore {
 export interface CollaborationStore {
 	load(channelId: string, now: Date): Promise<StoredChannel | undefined>;
 	commit(input: CommitChannel): Promise<CommitResult>;
+	replace(input: ReplaceChannel): Promise<CommitResult>;
 	checkpoint(input: SaveCheckpoint): Promise<void>;
 }
 

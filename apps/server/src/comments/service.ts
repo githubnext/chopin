@@ -267,7 +267,7 @@ export function start(
 	roomId: string,
 	ws: Socket,
 	msg: Request<Wire.Start.Ask>,
-): void {
+): void | Promise<void> {
 	let refuse = (reason: "invalid" | "full", message: string) =>
 		reply(ws, msg.rid, { kind: "comment:start", ts: 0, ok: false, reason, message });
 
@@ -291,17 +291,24 @@ export function start(
 		notes: [Store.note(ws.data.handle, text)],
 	};
 	plan.threads.set(record.id, record);
+	let finish = () => {
+		reply(ws, msg.rid, { kind: "comment:start", ts: 0, ok: true, thread: wire(record) });
+		relay(ws, { kind: "comment:opened", ts: 0, thread: wire(record) });
+		// The passage travels separately, and a card with nothing to highlight is
+		// what the room sees until it arrives — so it goes now, not on the next edit.
+		Service.anchors(plan, server, roomId);
+	};
+	if (plan.durable) return Service.persist(plan).then(finish);
 	plan.sink.touch();
-
-	reply(ws, msg.rid, { kind: "comment:start", ts: 0, ok: true, thread: wire(record) });
-	relay(ws, { kind: "comment:opened", ts: 0, thread: wire(record) });
-	// The passage travels separately, and a card with nothing to highlight is
-	// what the room sees until it arrives — so it goes now, not on the next edit.
-	Service.anchors(plan, server, roomId);
+	finish();
 }
 
 /** Add to an open thread. */
-export function respond(plan: Plan, ws: Socket, msg: Request<Wire.Reply.Ask>): void {
+export function respond(
+	plan: Plan,
+	ws: Socket,
+	msg: Request<Wire.Reply.Ask>,
+): void | Promise<void> {
 	let text = said(msg.text);
 	if (!text) {
 		return reply(ws, msg.rid, {
@@ -320,10 +327,13 @@ export function respond(plan: Plan, ws: Socket, msg: Request<Wire.Reply.Ask>): v
 	}
 
 	Store.typing(plan.comments, msg.id, ws.data.client, ws.data.handle, false);
+	let finish = () => {
+		reply(ws, msg.rid, { kind: "comment:reply", ts: 0, id: msg.id, ok: true, note: outcome.note });
+		relay(ws, { kind: "comment:said", ts: 0, id: msg.id, note: outcome.note });
+	};
+	if (plan.durable) return Service.persist(plan).then(finish);
 	plan.sink.touch();
-
-	reply(ws, msg.rid, { kind: "comment:reply", ts: 0, id: msg.id, ok: true, note: outcome.note });
-	relay(ws, { kind: "comment:said", ts: 0, id: msg.id, note: outcome.note });
+	finish();
 }
 
 /** Somebody is, or has stopped, writing a reply. */
@@ -381,48 +391,39 @@ async function settle(
 
 	let claimed = Store.claim(plan.comments, plan.threads, msg.id, kind, ws.data.handle, quote);
 	if (!claimed.ok) return answer(ws, msg.rid, kind, msg.id, claimed);
-
-	if (kind === "accept") {
+	let mutationError: unknown;
+	let next: ReturnType<typeof Store.commit>;
+	await Service.exclusive(plan, async () => {
 		let mutation: { update: Uint8Array; source: string } | undefined;
-
-		try {
-			mutation = room.insertDecision(plan.document, {
-				id: msg.id,
-				quote: quote.slice(0, limits.MAX_QUOTE),
-				by: ws.data.handle,
-				at: new Date(claimed.claim.result.at * 1_000).toISOString(),
-				notes: claimed.thread.notes.map(note => ({ by: note.handle, text: note.text })),
-			});
-		} catch (err) {
-			// The decision is not final if the plan could not be told about it.
-			Store.rollback(plan.comments, claimed.claim);
-			console.error("[comments] could not project a decision:", err);
-			return answer(ws, msg.rid, kind, msg.id, {
-				ok: false,
-				reason: "invalid",
-				message: err instanceof Error ? err.message : "could not record the decision",
-			});
-		}
-
-		/*
-		 * Past here the document holds the decision, so committing is no longer
-		 * optional. Rolling back on a failed broadcast would leave a
-		 * `<Decision>` in the plan whose record still says the thread is open —
-		 * and the next accept would append a second node carrying the same id.
-		 * A relay nobody received is recoverable; clients resync on the next
-		 * update. A record disagreeing with the document is not.
-		 */
-		if (mutation) {
+		if (kind === "accept") {
 			try {
-				Service.publish(plan, server, roomId, mutation);
+				mutation = room.insertDecision(plan.document, {
+					id: msg.id,
+					quote: quote.slice(0, limits.MAX_QUOTE),
+					by: ws.data.handle,
+					at: new Date(claimed.claim.result.at * 1_000).toISOString(),
+					notes: claimed.thread.notes.map(note => ({ by: note.handle, text: note.text })),
+				});
 			} catch (err) {
-				console.error("[comments] could not relay a decision:", err);
+				mutationError = err;
+				return;
 			}
 		}
+		next = Store.commit(plan.comments, plan.threads, claimed.claim);
+		if (mutation) await Service.publish(plan, server, roomId, mutation);
+		else await Service.persistExclusive(plan);
+	});
+	if (mutationError) {
+		Store.rollback(plan.comments, claimed.claim);
+		console.error("[comments] could not project a decision:", mutationError);
+		return answer(ws, msg.rid, kind, msg.id, {
+			ok: false,
+			reason: "invalid",
+			message: mutationError instanceof Error
+				? mutationError.message
+				: "could not record the decision",
+		});
 	}
-
-	let next = Store.commit(plan.comments, plan.threads, claimed.claim);
-	plan.sink.touch();
 
 	let { at, resolver } = claimed.claim.result;
 	answer(ws, msg.rid, kind, msg.id, { ok: true, resolver, at });
@@ -438,7 +439,7 @@ async function settle(
 	Service.anchors(plan, server, roomId);
 
 	if (kind === "accept" && next) {
-		Chat.instruct(
+		await Chat.instruct(
 			context,
 			resolver,
 			compose(next, quote),
@@ -454,7 +455,7 @@ async function settle(
 			},
 		);
 	} else if (kind === "dismiss") {
-		Chat.notice(context, `@${resolver} dismissed a comment on "${excerpt(quote)}".`);
+		await Chat.notice(context, `@${resolver} dismissed a comment on "${excerpt(quote)}".`);
 	}
 }
 

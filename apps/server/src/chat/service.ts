@@ -24,7 +24,7 @@ import * as Service from "../plan/service";
 import { addressed, instruction } from "@chopin/protocol/address";
 
 import { compose, remember } from "./address";
-import { broadcast, tell } from "../wire";
+import { broadcast, fail, tell } from "../wire";
 
 import type { Server } from "bun";
 import type { SessionEvent } from "@github/copilot-sdk";
@@ -204,7 +204,7 @@ export type Room = {
  * the transcript exactly once. The destination, rather than its prose, decides
  * which lifecycle it takes.
  */
-export function send(context: Room, ws: Socket, msg: Request<Wire.Send>): void {
+export async function send(context: Room, ws: Socket, msg: Request<Wire.Send>): Promise<void> {
 	let text = msg.text.trim();
 	if (!text) return;
 
@@ -218,28 +218,49 @@ export function send(context: Room, ws: Socket, msg: Request<Wire.Send>): void {
 	let visible = destination === "planner" ? instruction(text) : text;
 
 	if (destination === "room") {
-		say(chat, server, room, {
+		let entry: Wire.Entry = {
 			id: ulid(),
 			author: { kind: "member", handle },
 			text: visible,
 			ts: now(),
-		});
+		};
+		if (context.plan.durable) {
+			chat.entries.push(entry);
+			try {
+				await Service.persist(context.plan);
+			} catch {
+				chat.entries = chat.entries.filter(value => value.id !== entry.id);
+				return fail(ws, msg.rid, "could not save message");
+			}
+			announce(server, room, entry);
+		} else say(chat, server, room, entry);
 		chat.backscroll = remember(chat.backscroll, { handle, text: visible });
 		return;
 	}
 	if (!context.config.agent) {
-		say(chat, server, room, {
+		let entries: Wire.Entry[] = [{
 			id: ulid(),
 			author: { kind: "member", handle },
 			text: visible,
 			ts: now(),
-		});
-		return void say(chat, server, room, {
+		}, {
 			id: ulid(),
 			author: { kind: "system" },
 			text: "The agent is not running, so the plan has not been revised.",
 			ts: now(),
-		});
+		}];
+		if (context.plan.durable) {
+			chat.entries.push(...entries);
+			try {
+				await Service.persist(context.plan);
+			} catch {
+				let ids = new Set(entries.map(entry => entry.id));
+				chat.entries = chat.entries.filter(entry => !ids.has(entry.id));
+				return fail(ws, msg.rid, "could not save message");
+			}
+			for (let entry of entries) announce(server, room, entry);
+		} else for (let entry of entries) say(chat, server, room, entry);
+		return;
 	}
 
 	if (chat.busy) {
@@ -265,9 +286,15 @@ export function send(context: Room, ws: Socket, msg: Request<Wire.Send>): void {
 }
 
 /** Say something in the transcript without asking the agent for anything. */
-export function notice(context: Room, text: string): void {
-	let { chat, room, server } = context;
-	say(chat, server, room, { id: ulid(), author: { kind: "system" }, text, ts: now() });
+export function notice(context: Room, text: string): void | Promise<void> {
+	let { chat, plan, room, server } = context;
+	let entry: Wire.Entry = { id: ulid(), author: { kind: "system" }, text, ts: now() };
+	if (!plan.durable) {
+		say(chat, server, room, entry);
+		return;
+	}
+	chat.entries.push(entry);
+	return Service.persist(plan).then(() => announce(server, room, entry));
 }
 
 /**
@@ -285,36 +312,44 @@ export function instruct(
 	text: string,
 	said: string,
 	about: Instruction = {},
-): void {
+): void | Promise<void> {
 	let { chat, config, room, server } = context;
-	notice(context, said);
-
-	// `AGENT=off` runs the room without one. The decision that got here is
-	// still a decision and is already recorded; only the turn is impossible,
-	// and saying so beats a session failing to open.
-	if (!config.agent) {
-		return void say(chat, server, room, {
-			id: ulid(),
-			author: { kind: "system" },
-			text: "The agent is not running, so the plan has not been revised.",
-			ts: now(),
-		});
-	}
-
-	if (chat.busy) {
-		if (chat.waiting.length >= MAX_QUEUE) {
-			return void say(chat, server, room, {
+	let proceed = (): void | Promise<void> => {
+		// `AGENT=off` runs the room without one. The decision that got here is
+		// still a decision and is already recorded; only the turn is impossible,
+		// and saying so beats a session failing to open.
+		if (!config.agent) {
+			let entry: Wire.Entry = {
 				id: ulid(),
 				author: { kind: "system" },
-				text: "The queue is full. Wait for the current turn to finish.",
+				text: "The agent is not running, so the plan has not been revised.",
 				ts: now(),
-			});
+			};
+			if (context.plan.durable) {
+				chat.entries.push(entry);
+				return Service.persist(context.plan).then(() => announce(server, room, entry));
+			}
+			say(chat, server, room, entry);
+			return;
 		}
-		chat.waiting.push({ id: ulid(), handle, text, ...about });
-		return queued(chat, server, room);
-	}
 
-	void run(context, handle, text, about.thread);
+		if (chat.busy) {
+			if (chat.waiting.length >= MAX_QUEUE) {
+				return void say(chat, server, room, {
+					id: ulid(),
+					author: { kind: "system" },
+					text: "The queue is full. Wait for the current turn to finish.",
+					ts: now(),
+				});
+			}
+			chat.waiting.push({ id: ulid(), handle, text, ...about });
+			return queued(chat, server, room);
+		}
+
+		void run(context, handle, text, about.thread);
+	};
+	let announced = notice(context, said);
+	return announced instanceof Promise ? announced.then(proceed) : proceed();
 }
 
 /** Withdraw a queued message. Only whoever wrote it may. */
@@ -354,6 +389,8 @@ async function session(context: Room): Promise<Agent.Agent> {
 			server,
 			room,
 			publish: mutation => Service.publish(plan, server, room, mutation),
+			persist: () => Service.persist(plan),
+			exclusive: action => Service.exclusive(plan, action),
 			anchors: () => Service.anchors(plan, server, room),
 			changes: found => Service.changes(plan, server, room, found),
 		});

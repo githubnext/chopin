@@ -72,6 +72,27 @@ function change(fork: Question.Model, edit: (draft: Question.Model) => void): nu
 }
 
 describe("shared drafts", () => {
+	it("restores the complete edited draft and its revision", () => {
+		let value = definition();
+		let ID = ids(value);
+		void Store.ask(questions, ID.storage, value, "widget-1");
+		let opened = Store.snapshot(questions, ID.storage);
+		if (!opened.open) throw new Error("not open");
+		let fork = client(opened.model);
+		let patch = change(fork, draft => {
+			draft.api.val([ID.storage, "mode"]).set("choices");
+			draft.api.val([ID.storage, "choice"]).set(ID.mdx);
+		});
+		Store.edit(questions, ID.storage, patch);
+
+		let restored = Store.restore(Store.dump(questions));
+		let snapshot = Store.snapshot(restored, ID.storage);
+		expect(snapshot).toMatchObject({ open: true, revision: 1 });
+		if (!snapshot.open) throw new Error("not restored");
+		expect(Question.read(client(snapshot.model), value)[ID.storage]?.choice).toBe(ID.mdx);
+		expect(Store.outstanding(restored)[0]?.widget).toBe("widget-1");
+	});
+
 	it("carries one person's edit to the other", () => {
 		let value = definition();
 		let ID = ids(value);

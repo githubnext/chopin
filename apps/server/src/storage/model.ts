@@ -104,6 +104,7 @@ export type AgentState = {
 
 export type StoredChannel = {
 	channel: ChannelRecord;
+	latestSequence: number;
 	snapshot: ChannelSnapshot | undefined;
 	updates: ChannelUpdate[];
 	events: StoredEvent[];
@@ -133,6 +134,21 @@ export type SaveCheckpoint = Omit<ChannelSnapshot, "channelId"> & {
 	channelId: string;
 	lease: Lease;
 	expectedRevision: number;
+};
+
+/** Atomically rotate a channel to a complete new Yjs epoch. */
+export type ReplaceChannel = {
+	channelId: string;
+	lease: Lease;
+	expectedRevision: number;
+	operationId: string;
+	generation: string;
+	epoch: string;
+	source: string;
+	sourceHash: string;
+	document: Uint8Array;
+	sidecar: JsonValue;
+	now: Date;
 };
 
 export type UpdateAgentContext = {

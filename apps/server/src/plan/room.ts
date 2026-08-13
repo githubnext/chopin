@@ -265,6 +265,37 @@ export async function create(source = "", validated = false): Promise<Document> 
 	return created;
 }
 
+export type RestoredUpdate = { epoch: string; update: Uint8Array };
+
+/** Restore a durable Yjs checkpoint and every accepted update after it. */
+export async function restore(
+	epoch: string,
+	checkpoint: Uint8Array,
+	source: string,
+	journal: RestoredUpdate[],
+): Promise<Document> {
+	let restored = build(epoch);
+	Y.applyUpdate(restored.doc, checkpoint, REMOTE);
+	await settle();
+	if (project(restored) !== source) {
+		restored.doc.destroy();
+		throw new Error("stored plan source does not match its Yjs checkpoint");
+	}
+
+	for (let item of journal) {
+		if (item.epoch !== restored.epoch) {
+			restored.doc.destroy();
+			throw new Error("stored plan journal changes epoch without a checkpoint");
+		}
+		Y.applyUpdate(restored.doc, item.update, REMOTE);
+		await settle();
+		project(restored);
+	}
+	await settle();
+	restored.checkpoint = Y.encodeStateAsUpdate(restored.doc);
+	return restored;
+}
+
 /** State the given client is missing, or the whole document when it has none. */
 export function sync(target: Document, vector?: Uint8Array): Uint8Array {
 	return Y.encodeStateAsUpdate(target.doc, vector);
