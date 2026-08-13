@@ -4,7 +4,14 @@ import { limits } from "@chopin/dialect";
 
 import { handler, TOOLS } from "./mcp";
 
-import type { CreateDocument, CreateDocumentInput, Document, DocumentReader } from "./mcp";
+import type {
+	CreateDocument,
+	CreateDocumentInput,
+	Document,
+	DocumentReader,
+	Implementations,
+} from "./mcp";
+import type { Run } from "./tasks/graphs";
 
 const document: Document = {
 	id: "f401c8d6-3717-4f1d-8473-cfdd0af894e4",
@@ -134,6 +141,111 @@ describe("the MCP read protocol", () => {
 			})),
 		);
 		expect((read.result as { structuredContent: unknown }).structuredContent).toEqual(document);
+	});
+
+	it("reads and claims an implementation through its initialized client session", async () => {
+		let active: Run | undefined;
+		let implementations: Implementations<string> = {
+			async readImplementation(_caller, id) {
+				if (id !== document.id) return undefined;
+				return {
+					document,
+					repository: {
+						name: "githubnext/chopin",
+						baseBranch: "main",
+						baseCommit: "abc123",
+					},
+					graph: {
+						number: 1,
+						revision: 4,
+						planRevision: 4,
+						state: "approved",
+						definition: { tasks: [] },
+					},
+					execution: active ? { state: "active", run: active } : { state: "idle" },
+				};
+			},
+			async startImplementation(_caller, input) {
+				if (active) return { kind: "active", run: active };
+				active = {
+					id: "run-1",
+					user: "octocat",
+					client: { name: input.client.name, version: input.client.version },
+					session: input.client.session,
+					planRevision: input.planRevision,
+					graphRevision: input.graphRevision,
+					repository: input.repository,
+					branch: input.branch,
+					commit: input.commit,
+					startedAt: "2026-08-17T12:00:00.000Z",
+				};
+				return { kind: "started", run: active };
+			},
+		};
+		let mcp = handler({
+			caller: () => "octocat",
+			documents: reader(),
+			create: unavailable(),
+			implementations,
+		});
+		let initialized = await mcp(request({
+			jsonrpc: "2.0",
+			id: 1,
+			method: "initialize",
+			params: { clientInfo: { name: "Codex", version: "1.2.3" } },
+		}));
+		let session = initialized.headers.get("mcp-session-id");
+		expect(session).toBeTruthy();
+
+		let read = await json(
+			await mcp(request({
+				jsonrpc: "2.0",
+				id: 2,
+				method: "tools/call",
+				params: { name: "read_implementation", arguments: { id: document.id } },
+			})),
+		);
+		expect((read.result as { structuredContent: unknown }).structuredContent).toMatchObject({
+			graph: { state: "approved", revision: 4 },
+			execution: { state: "idle" },
+		});
+
+		let arguments_ = {
+			id: document.id,
+			planRevision: 4,
+			graphRevision: 4,
+			repository: "githubnext/chopin",
+			branch: "tq/017",
+			commit: "deadbeef",
+		};
+		let withoutSession = await json(
+			await mcp(request({
+				jsonrpc: "2.0",
+				id: 3,
+				method: "tools/call",
+				params: { name: "start_implementation", arguments: arguments_ },
+			})),
+		);
+		expect((withoutSession.result as { structuredContent: unknown }).structuredContent).toEqual({
+			code: "session-required",
+		});
+
+		let claimed = await json(
+			await mcp(request({
+				jsonrpc: "2.0",
+				id: 4,
+				method: "tools/call",
+				params: { name: "start_implementation", arguments: arguments_ },
+			}, { headers: { "mcp-session-id": session! } })),
+		);
+		expect((claimed.result as { structuredContent: unknown }).structuredContent).toMatchObject({
+			state: "started",
+			run: {
+				id: "run-1",
+				client: { name: "Codex", version: "1.2.3" },
+				session,
+			},
+		});
 	});
 
 	it("keeps the repository-scoped tool schemas static", async () => {

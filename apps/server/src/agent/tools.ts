@@ -156,6 +156,7 @@ export function toolbox(context: Context): Tool[] {
 			handler: raw =>
 				answer("edit_plan", () =>
 					context.exclusive(async () => {
+						if (context.plan.execution) return { ok: false, reason: "locked" };
 						let args = Arguments.editPlan(raw);
 						let outcome = edit.apply(context.plan, args.revision, args.operations);
 						if (!outcome.ok) return outcome;

@@ -263,6 +263,7 @@ export async function submit(
 	ws: Socket,
 	msg: Request<Wire.Submit.Ask>,
 ): Promise<void> {
+	if (plan.execution) return fail(ws, msg.rid, "implementation is active");
 	let claimed = Store.claimSubmit(plan.questions, msg.id, msg.revision, ws.data.handle);
 	if (!claimed.ok) {
 		return reply(ws, msg.rid, { kind: "question:submit", ts: 0, id: msg.id, ...claimed });
