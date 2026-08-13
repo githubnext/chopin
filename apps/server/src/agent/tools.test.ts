@@ -315,6 +315,48 @@ test("a stale ask does not announce an anchor snapshot", async () => {
 	expect(anchors).toBe(0);
 });
 
+test("ask refuses to create a questionnaire while implementation is active", async () => {
+	let directory = await mkdtemp(join(tmpdir(), "chopin-agent-tools-"));
+	directories.push(directory);
+	await writeFile(join(directory, "plan.mdx"), "Related prose.\n");
+	let server = { publish() {} } as unknown as Server<SocketData>;
+	let plan = await Service.open("test", directory, server);
+	plans.push(plan);
+	let anchors = 0;
+	let ask = toolbox({
+		plan,
+		server,
+		room: "test",
+		publish() {},
+		anchors: () => anchors++,
+		changes() {},
+	}).find(tool => tool.name === "ask");
+	if (!ask?.handler) throw new Error("ask is missing");
+	let digest = room.digests(plan.document)[0]!;
+	let args = {
+		revision: plan.revision,
+		questions: [{
+			header: "Rollout",
+			question: "How should we deploy?",
+			multiple: false,
+			options: [{ label: "Canary", description: "Limit exposure." }],
+			blocks: [{ index: 0, digest }],
+		}],
+	};
+	plan.execution = { id: "run-1" } as never;
+
+	let response = await ask.handler(args, {
+		sessionId: "session",
+		toolCallId: "call",
+		toolName: "ask",
+		arguments: args,
+	});
+
+	expect(JSON.parse(response as string)).toEqual({ ok: false, reason: "locked" });
+	expect(plan.records.size).toBe(0);
+	expect(anchors).toBe(0);
+});
+
 test("planner graph edits draft a revision without changing plan prose", async () => {
 	let { plan, server } = await opened("Prepare the implementation.\n");
 	// The graph tool is called from inside the planner turn that `chat:send`

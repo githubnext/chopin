@@ -272,3 +272,17 @@ test("an active implementation leaves an open questionnaire in the plan when can
 	});
 	await asked.waiting;
 });
+
+test("an active implementation refuses to create a questionnaire", async () => {
+	let plan = await opened();
+	let server = { publish() {} } as unknown as Server<SocketData>;
+	let revision = plan.revision;
+	plan.execution = { id: "run-1" } as never;
+
+	await expect(Questions.ask(plan, server, "test", definition()))
+		.rejects.toThrow("implementation is active");
+
+	expect(plan.revision).toBe(revision);
+	expect(plan.records.size).toBe(0);
+	expect(room.project(plan.document)).not.toContain("<Questionnaire");
+});

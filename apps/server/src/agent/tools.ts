@@ -268,6 +268,7 @@ export function toolbox(context: Context): Tool[] {
 			skipPermission: true,
 			handler: raw =>
 				answer("ask", async () => {
+					if (context.plan.execution) return { ok: false, reason: "locked" };
 					let args = Arguments.askPlan(raw);
 					let definition = Questions.identify({
 						questions: args.questions.map(({ blocks, ...question }) => question),
