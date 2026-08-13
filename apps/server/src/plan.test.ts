@@ -58,6 +58,7 @@ async function serve(port: number, dataDir: string): Promise<void> {
 			DATA_DIR: dataDir,
 			SERVER_HOST: "127.0.0.1",
 			AGENT: "off",
+			AUTH_DRIVER: "off",
 			STORAGE_DRIVER: "legacy",
 		},
 		stdout: "ignore",

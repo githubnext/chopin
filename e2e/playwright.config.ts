@@ -47,6 +47,7 @@ function server(port: number, extra: Record<string, string>) {
 			SERVER_HOST: HOST,
 			// No token, no CLI probe, no turns.
 			AGENT: "off",
+			AUTH_DRIVER: "off",
 			STORAGE_DRIVER: "legacy",
 			DATA_DIR: scratch(port),
 			// Named even when off, so an exported flag in somebody's shell

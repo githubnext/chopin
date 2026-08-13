@@ -119,6 +119,7 @@ beforeAll(async () => {
 			PORT: String(PORT),
 			SERVER_HOST: "127.0.0.1",
 			AGENT: "off",
+			AUTH_DRIVER: "off",
 			STORAGE_DRIVER: "legacy",
 			DATA_DIR: data,
 		},

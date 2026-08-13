@@ -115,6 +115,60 @@ describe("storage", () => {
 	});
 });
 
+describe("hosted authentication", () => {
+	let key = "11".repeat(32);
+
+	it("is deliberately off by default", () => {
+		expect(configured({ AUTH_DRIVER: undefined }).auth).toEqual({ driver: "off" });
+	});
+
+	it("loads GitHub OAuth without exposing its secrets", () => {
+		let config = configured({
+			AUTH_DRIVER: "github",
+			APP_ORIGIN: "https://chopin.example",
+			GITHUB_OAUTH_CLIENT_ID: "client-id",
+			GITHUB_OAUTH_CLIENT_SECRET: "client-secret",
+			SESSION_ENCRYPTION_KEY: key,
+		});
+		expect(config.auth.driver).toBe("github");
+		expect(config.auth.driver === "github" && config.auth.origin).toBe("https://chopin.example");
+		expect(description(config)).toContain("auth: github");
+		expect(description(config)).not.toContain("client-secret");
+		expect(description(config)).not.toContain(key);
+	});
+
+	it("requires complete secrets and an exact safe origin", () => {
+		expect(() => configured({ AUTH_DRIVER: "github" })).toThrow("GITHUB_OAUTH_CLIENT_ID");
+		let base = {
+			AUTH_DRIVER: "github",
+			GITHUB_OAUTH_CLIENT_ID: "client-id",
+			GITHUB_OAUTH_CLIENT_SECRET: "client-secret",
+			SESSION_ENCRYPTION_KEY: key,
+		};
+		expect(() => configured({ ...base, APP_ORIGIN: "http://chopin.example" })).toThrow("HTTPS");
+		expect(() => configured({ ...base, APP_ORIGIN: "https://chopin.example/path" })).toThrow(
+			"only an HTTP or HTTPS origin",
+		);
+		expect(() => configured({ ...base, APP_ORIGIN: "http://127.0.0.1:8787" })).not.toThrow();
+		expect(() =>
+			configured({ ...base, APP_ORIGIN: "https://chopin.example", SESSION_ENCRYPTION_KEY: "short" })
+		)
+			.toThrow("32 bytes");
+	});
+
+	it("requires a durable adapter", () => {
+		let config = configured({
+			AUTH_DRIVER: "github",
+			APP_ORIGIN: "https://chopin.example",
+			GITHUB_OAUTH_CLIENT_ID: "client-id",
+			GITHUB_OAUTH_CLIENT_SECRET: "client-secret",
+			SESSION_ENCRYPTION_KEY: key,
+			STORAGE_DRIVER: "legacy",
+		});
+		expect(problem(config)).toContain("requires durable storage");
+	});
+});
+
 describe("starting", () => {
 	/**
 	 * The failure this exists for, end to end: the server must refuse, say
@@ -130,6 +184,7 @@ describe("starting", () => {
 				PORT: "8971",
 				WORKING_DIR: missing,
 				AGENT: "off",
+				AUTH_DRIVER: "off",
 				STORAGE_DRIVER: "legacy",
 			},
 			stdout: "pipe",
