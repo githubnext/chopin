@@ -176,11 +176,13 @@ test("two people typing in one fence both end up in it", async ({ join, room, se
 	 * Home and End are a different key on each platform; this is neither.
 	 * The fence is the whole document here, so its ends are the document's.
 	 */
+	await content(ana).getByRole("button", { name: "Show source" }).click();
 	await content(ana).locator("[data-plan-source]").click();
 	await ana.keyboard.press("ControlOrMeta+a");
 	await ana.keyboard.press("ArrowLeft");
 	await ana.keyboard.type("// ana ");
 
+	await content(bo).getByRole("button", { name: "Show source" }).click();
 	await content(bo).locator("[data-plan-source]").click();
 	await bo.keyboard.press("ControlOrMeta+a");
 	await bo.keyboard.press("ArrowRight");
