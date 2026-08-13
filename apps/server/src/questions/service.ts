@@ -87,15 +87,7 @@ function decide(
 	return out;
 }
 
-/**
- * Ask one or more decisions, and put each in the plan.
- *
- * One planning turn may need several answers, but every answer has its own
- * lifecycle: people can save or cancel one without making the others final.
- * Each record is registered before its node exists, because a client receiving
- * the plan update will immediately try to open it and must not be told there
- * is no such thing.
- */
+/** Ask each decision independently; register its record before publishing its node. */
 export async function ask(
 	plan: Plan,
 	server: Server<SocketData>,
@@ -111,9 +103,7 @@ export async function ask(
 	let anchors = placement ? validatePlacement(plan, definition, placement) : undefined;
 	let asked = definition.questions.map((question, index) => {
 		let single = { questions: [question] };
-		// Its own identity, not borrowed from the question. They are different
-		// things, and a lookup that matched either would be a bug waiting for a
-		// question whose id happened to resemble its widget's.
+		// Widget and question identities are deliberately distinct.
 		let id = ulid();
 		let waiting = Store.ask(plan.questions, id, single, id);
 		let value = {
@@ -157,12 +147,10 @@ export async function ask(
 	}
 	created?.();
 
-	// Promise.all retains the planner's order even when people settle cards in
-	// another order, so each returned outcome still names the ask that made it.
 	return Promise.all(asked.map(item => item.waiting));
 }
 
-/** Validate and mint all relationships before records or document nodes exist. */
+/** Validate every placement before registering records or document nodes. */
 function validatePlacement(
 	plan: Plan,
 	definition: Definition,
@@ -464,17 +452,10 @@ export function relate(
 
 export type Placement = {
 	widget: string;
-	question: string;
 	blocks: Array<{ index: number; digest: string }>;
 };
 
-/**
- * Move the canonical cards that the planner just related.
- *
- * The first related block is the card's home in the plan; the full anchor set
- * still drives the count, wash, and Show in plan walk. Records are inserted in
- * ask order, so cards sharing a home stay in the planner's original sequence.
- */
+/** Move cards after their first related block, preserving ask order per block. */
 export function place(plan: Plan, updates: Placement[]): room.Mutation | undefined {
 	let records = [...plan.records.values()];
 	let placements: room.QuestionnairePlacement[] = [];

@@ -222,12 +222,7 @@ export type PositionedQuestion = {
 	blocks: BlockAddress[];
 };
 
-/**
- * Validate `ask`'s question definitions and the prose each one relates to.
- *
- * The question package owns the detailed normalisation rules; keeping
- * placement here means its extra field cannot leak into that strict contract.
- */
+/** Keep placement outside the question normalizer's strict input contract. */
 export function askPlan(raw: unknown): { revision: number; questions: PositionedQuestion[] } {
 	let args = record(raw, "ask arguments");
 	fields(args, ["revision", "questions"], ["revision", "questions"], "ask arguments");

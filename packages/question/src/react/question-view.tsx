@@ -74,7 +74,6 @@ function Badges({ people }: { people: Collaborator[] }) {
 	);
 }
 
-/** The Figma treatment for a decision that owns exactly one answer. */
 function DecisionHeading() {
 	return (
 		<header className="flex items-center gap-2 px-3 py-2.5 hairline-b">

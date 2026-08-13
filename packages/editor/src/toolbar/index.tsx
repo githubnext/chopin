@@ -31,9 +31,7 @@ export function Toolbar() {
 	// go, so the button cannot appear on a surface with no sidecar.
 	let comment = threads
 		? () => {
-			// Clicking the bubble moves focus into the draft card. Read the native
-			// range before that happens: Lexical can still describe the passage
-			// afterwards, but the browser no longer knows where it was drawn.
+			// Capture native geometry before the draft takes focus.
 			let selection = window.getSelection();
 			let range = selection?.rangeCount
 				? selection.getRangeAt(0).getBoundingClientRect()

@@ -20,7 +20,6 @@ import * as Y from "yjs";
 import {
 	$createDecisionNode,
 	$createPlanNodes,
-	$createQuestionnaireNode,
 	$exportPlan,
 	$importPlan,
 	exportPlan,
@@ -33,6 +32,7 @@ import {
 	ulid,
 } from "@chopin/dialect";
 import { $getAnchorAndFocusForUserState } from "@lexical/yjs";
+import * as Questionnaires from "./questionnaires";
 import {
 	$createParagraphNode,
 	$getNodeByKey,
@@ -162,8 +162,7 @@ function build(epoch: string): Document {
  */
 function seed(target: Document, source: string, validated = false): void {
 	if (!source.trim()) {
-		// The empty paragraph is a writing position, not plan content: it
-		// projects to nothing, while giving every joining client the same caret.
+		// A shared empty paragraph gives every joining client the same caret.
 		target.editor.update(() => {
 			$getRoot().append($createParagraphNode());
 		}, { discrete: true });
@@ -388,120 +387,33 @@ function mutate(target: Document, change: () => boolean): Mutation | undefined {
 	return { update: Y.encodeStateAsUpdate(target.doc, vector), source: project(target) };
 }
 
-export type QuestionnaireInsertion = {
-	value: Questionnaire;
-	at?: { index: number; digest: string };
-};
+export type QuestionnaireInsertion = Questionnaires.QuestionnaireInsertion;
 
-/**
- * Add a complete ask batch directly after its validated prose.
- *
- * Destinations are checked before Lexical starts changing anything. Within one
- * shared destination, the last inserted card becomes the next card's sibling,
- * preserving the planner's ask order without making later indices shift.
- */
 export function insertQuestionnaires(
 	target: Document,
 	insertions: QuestionnaireInsertion[],
 ): Mutation | undefined {
-	let hashes = digests(target);
-	for (let insertion of insertions) {
-		if (!insertion.at) continue;
-		let current = hashes[insertion.at.index];
-		if (!current) throw new Error(`no block at index ${insertion.at.index}`);
-		if (current !== insertion.at.digest) {
-			throw new Error(`block ${insertion.at.index} has changed; read the plan again`);
-		}
-	}
-
-	return mutate(target, () => {
-		let root = $getRoot();
-		let blocks = addressable();
-		let last = new Map<number, LexicalNode>();
-
-		for (let insertion of insertions) {
-			let questionnaire = $createQuestionnaireNode(insertion.value);
-			if (!insertion.at) {
-				root.append(questionnaire);
-				continue;
-			}
-
-			let prose = blocks[insertion.at.index];
-			if (!prose) throw new Error(`no block at index ${insertion.at.index}`);
-			let previous = last.get(insertion.at.index) ?? prose;
-			previous.insertAfter(questionnaire);
-			last.set(insertion.at.index, questionnaire);
-		}
-
-		return insertions.length > 0;
-	});
+	return Questionnaires.insert({
+		digests: () => digests(target),
+		mutate: change => mutate(target, change),
+	}, insertions);
 }
 
 /** Append one questionnaire to the plan. */
-export function insertQuestionnaire(
-	target: Document,
-	value: Questionnaire,
-): Mutation | undefined {
+export function insertQuestionnaire(target: Document, value: Questionnaire): Mutation | undefined {
 	return insertQuestionnaires(target, [{ value }]);
 }
 
-export type QuestionnairePlacement = {
-	id: string;
-	at: { index: number; digest: string };
-	/** A previously asked decision sharing this prose block. */
-	after?: string;
-};
+export type QuestionnairePlacement = Questionnaires.QuestionnairePlacement;
 
-/**
- * Put existing questionnaires immediately after the prose their decisions
- * belong to.
- *
- * The placement is checked before any node moves. A batch can therefore use
- * the indices from one `read_plan` result: putting one card beside early prose
- * cannot make a later card's index silently name something else.
- */
 export function placeQuestionnaires(
 	target: Document,
 	placements: QuestionnairePlacement[],
 ): Mutation | undefined {
-	let hashes = digests(target);
-	for (let placement of placements) {
-		let current = hashes[placement.at.index];
-		if (!current) throw new Error(`no block at index ${placement.at.index}`);
-		if (current !== placement.at.digest) {
-			throw new Error(`block ${placement.at.index} has changed; read the plan again`);
-		}
-	}
-
-	return mutate(target, () => {
-		let blocks = addressable();
-		let questionnaires = new Map(
-			$nodesOfType(QuestionnaireNode).map(node => [node.getId(), node]),
-		);
-		let changed = false;
-
-		for (let placement of placements) {
-			let questionnaire = questionnaires.get(placement.id);
-			// A record restored from an older room may outlive its document node.
-			// It remains readable in Decisions, but there is nothing canonical to
-			// relocate until the planner asks it again.
-			if (!questionnaire) continue;
-
-			let prose = blocks[placement.at.index];
-			if (!prose) throw new Error(`no block at index ${placement.at.index}`);
-			// Older sidecar records can point at a decision node that disappeared
-			// before this placement existed. It cannot establish an order, so the
-			// next live card starts the run after its prose instead.
-			let previous = placement.after ? questionnaires.get(placement.after) ?? prose : prose;
-			if (questionnaire === previous || questionnaire.getPreviousSibling() === previous) continue;
-
-			questionnaire.remove();
-			previous.insertAfter(questionnaire);
-			changed = true;
-		}
-
-		return changed;
-	});
+	return Questionnaires.place({
+		digests: () => digests(target),
+		mutate: change => mutate(target, change),
+	}, placements);
 }
 
 /**
@@ -540,8 +452,7 @@ export function projectAnswer(
 			let value = node.getQuestionnaire();
 			node.setQuestionnaire({
 				...value,
-				// Who settled it, on the questionnaire rather than on each
-				// answer: it resolves as a unit, so this is one fact.
+				// Resolution belongs to the questionnaire, not each answer.
 				...(settled ? { by: settled.by, at: settled.at } : {}),
 				questions: value.questions.map(question => {
 					let answer = answers[question.id];

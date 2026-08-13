@@ -124,7 +124,7 @@ describe("saying where a decision lives", () => {
 
 		let blocks = [{ index: 1, digest }];
 		expect(Questions.relate(plan, WIDGET, QUESTION, blocks)).toBeUndefined();
-		expect(Questions.place(plan, [{ widget: WIDGET, question: QUESTION, blocks }])).toBeDefined();
+		expect(Questions.place(plan, [{ widget: WIDGET, blocks }])).toBeDefined();
 
 		let source = room.project(plan.document);
 		expect(source.indexOf("The renderer caches tiles for 60 seconds."))

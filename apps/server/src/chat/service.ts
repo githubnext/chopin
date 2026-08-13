@@ -139,7 +139,7 @@ function state(chat: Chat, server: Server<SocketData>, room: string): void {
 	});
 }
 
-/** Tool activity is useful context, but only visible Planner prose ends the projection. */
+/** Only visible Planner prose ends the working projection. */
 function responded(chat: Chat, server: Server<SocketData>, room: string, text: string): void {
 	if (!chat.turn || chat.turn.responded || !text.trim()) return;
 	chat.turn.responded = true;
@@ -678,9 +678,7 @@ function named(chat: Chat, id: string): string {
  */
 function attach(context: Room, activity: Wire.Activity): string {
 	let { chat, room, server } = context;
-	// Completion may follow `session.idle`, which has already let go of the
-	// current entry. Its call id is still the authoritative way back to the
-	// activity that started it; otherwise the original stays running forever.
+	// Completion can arrive after idle; find its original activity by call id.
 	let entry = chat.entries.find(item => item.tools?.some(tool => tool.id === activity.id))
 		?? chat.entries.find(item => item.id === chat.tooling)
 		?? chat.entries.find(item => item.id === chat.writing);

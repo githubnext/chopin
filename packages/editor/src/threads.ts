@@ -29,12 +29,7 @@ import type { Transport } from "./transport";
 
 /** A thread being written but not yet sent. It has no id until the server gives it one. */
 export type Draft = Selected & {
-	/**
-	 * Where the selection was before the composer took focus.
-	 *
-	 * This is local presentation state, never part of `comment:start`: the
-	 * server verifies prose, not pixels from one reader's window.
-	 */
+	/** Local card position; the server verifies prose, not client pixels. */
 	placement?: {
 		top: number;
 		right: number;
@@ -54,9 +49,8 @@ export type ThreadView = {
 	 * once the agent has said what that was, which may be several blocks.
 	 */
 	places: Points[];
-	/** Block used for a gutter button when the exact phrase no longer resolves. */
+	/** Fallback block for an open thread whose exact phrase no longer resolves. */
 	targetKey?: string;
-	/** An open thread with no surviving subject block. */
 	orphaned: boolean;
 	/** Nowhere left to point: the prose is gone and nothing replaced it. */
 	drifted: boolean;
@@ -401,9 +395,7 @@ export class ThreadStore {
 						...(first && editor ? { at: order(editor, first.anchorKey) } : {}),
 					});
 
-					// Open comments remain visible in the prose. Accepted comments
-					// have their inline Decision instead, so their anchors must not
-					// leave behind comment chrome after resolution.
+					// Accepted threads render through their inline Decision instead.
 					if (thread.status === "open") marks.push(...places);
 				} catch (err) {
 					console.error(`[plan] could not place comment ${thread.id}:`, err);

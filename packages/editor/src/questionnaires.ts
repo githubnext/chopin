@@ -2,9 +2,8 @@
  * Which questionnaires the plan currently holds.
  *
  * The document is the source of truth for what exists — a questionnaire is a
- * node in it — but the card that answers one is rendered outside the editor,
- * in the decisions pane. This is the bridge: it watches the document and
- * publishes a plain list, so the pane never has to reach into Lexical.
+ * node in it. This bridge publishes a plain list for document views without
+ * making them reach into Lexical.
  *
  * An external store rather than React state because the update arrives from a
  * Lexical listener, which knows nothing about rendering and should not have to.

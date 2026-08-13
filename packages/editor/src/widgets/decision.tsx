@@ -1,8 +1,7 @@
 /**
  * Accepted comment threads, in the prose.
  *
- * Accepted threads are durable plan content, so the frozen record appears in
- * the same place as the prose it settled.
+ * Accepted threads are durable plan content, rendered from their frozen record.
  */
 
 import { Provenance, SidecarCard } from "../card";

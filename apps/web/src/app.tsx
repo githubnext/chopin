@@ -135,7 +135,6 @@ function Room({ handle }: { handle: string }) {
 	let room = Identity.room();
 	let user = useMemo(() => cursor(handle), [handle]);
 	let [chatOpen, setChatOpen] = usePaneOpen("chat");
-	// Written from inside the editor, read by the Decisions document view.
 	let [questions] = useState(() => new QuestionnaireStore());
 	let [threads] = useState(() => new ThreadStore());
 	let [reveal, setReveal] = useState<{ widget: string; token: number }>();

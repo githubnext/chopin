@@ -1,14 +1,8 @@
 import type { Point, Rect } from "./comment-geometry";
 
-/** A client range rectangle expressed inside the document overlay. */
 export type PassageHit = Point & { width: number; height: number };
 
-/**
- * Keep every line a passage occupies interactive without putting a span into
- * the collaborative document. A range returns one rectangle per wrapped line;
- * clipping them to the document keeps the overlay honest during scroll and
- * resize races.
- */
+/** Range lines stay interactive without adding spans to collaborative prose. */
 export function passageHits(host: Rect, clientRects: Iterable<Rect>): PassageHit[] {
 	let hits: PassageHit[] = [];
 	for (let client of clientRects) {
@@ -27,7 +21,6 @@ export function passageHits(host: Rect, clientRects: Iterable<Rect>): PassageHit
 	return hits;
 }
 
-/** Whether a host-relative pointer sits over one exact passage line. */
 export function containsHit(hits: PassageHit[], point: Point): boolean {
 	return hits.some(hit =>
 		point.top >= hit.top
