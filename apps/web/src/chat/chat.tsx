@@ -16,7 +16,6 @@ import { useEffect, useRef, useState } from "react";
 import { addressed } from "@chopin/protocol/address";
 
 import { Transcript } from "./transcript";
-import { activeTurn } from "./model";
 
 import type { Chat as Wire } from "@chopin/protocol";
 import type { Wire as Socket } from "../wire";
@@ -63,7 +62,7 @@ export function Chat({ agent = true, connected, handle, wire }: ChatProps) {
 				setArrived(new Set());
 				setQueue(frame.queued);
 				setBusy(frame.busy);
-				setTurn(activeTurn(frame.turn));
+				setTurn(frame.turn);
 			}),
 			wire.on<Wire.Message>("chat:message", frame => {
 				if (loaded && !seen.has(frame.entry.id)) {
@@ -106,7 +105,7 @@ export function Chat({ agent = true, connected, handle, wire }: ChatProps) {
 			}),
 			wire.on<Wire.State>("chat:state", frame => {
 				setBusy(frame.busy);
-				setTurn(activeTurn(frame.turn));
+				setTurn(frame.turn);
 			}),
 			wire.on<Wire.Queue>("chat:queue", frame => setQueue(frame.waiting)),
 		];

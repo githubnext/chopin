@@ -1,7 +1,4 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 import * as Question from "@chopin/question";
 
@@ -9,27 +6,21 @@ import * as Questions from "./questions/service";
 import * as Store from "./questions/store";
 import * as room from "./plan/room";
 import * as Service from "./plan/service";
+import { openPlan } from "./testing/plan";
 
 import type { Server } from "bun";
 import type { Plan } from "./plan/service";
 import type { SocketData } from "./wire";
 
-let directories: string[] = [];
 let plans: Plan[] = [];
 
 afterEach(async () => {
 	for (let plan of plans) await Service.close(plan);
 	plans = [];
-	for (let directory of directories) await rm(directory, { recursive: true, force: true });
-	directories = [];
 });
 
 async function opened(source = ""): Promise<Plan> {
-	let directory = await mkdtemp(join(tmpdir(), "chopin-question-service-"));
-	directories.push(directory);
-	if (source) await writeFile(join(directory, "plan.mdx"), source);
-	let server = { publish() {} } as unknown as Server<SocketData>;
-	let plan = await Service.open("test", directory, server);
+	let { plan } = await openPlan(source);
 	plans.push(plan);
 	return plan;
 }
@@ -43,6 +34,17 @@ function definition(count = 1) {
 			options: [{ label: "Choose this", description: "The selected option." }],
 		})),
 	});
+}
+
+function asking(
+	plan: Plan,
+	server: Server<SocketData>,
+	value: ReturnType<typeof definition>,
+	placement?: Parameters<typeof Questions.ask>[4],
+) {
+	let created = Promise.withResolvers<void>();
+	let waiting = Questions.ask(plan, server, "test", value, placement, created.resolve);
+	return { created: created.promise, waiting };
 }
 
 async function answer(plan: Plan): Promise<void> {
@@ -84,7 +86,8 @@ test("a batched ask creates independently addressed decision records and nodes",
 	});
 
 	let server = { publish() {} } as unknown as Server<SocketData>;
-	let waiting = Questions.ask(plan, server, "test", definition);
+	let asked = asking(plan, server, definition);
+	await asked.created;
 	let records = [...plan.records.values()];
 
 	expect(records).toHaveLength(2);
@@ -112,7 +115,7 @@ test("a batched ask creates independently addressed decision records and nodes",
 		Store.commit(plan.questions, claimed.claim);
 	}
 
-	expect(await waiting).toEqual([
+	expect(await asked.waiting).toEqual([
 		{
 			status: "answered",
 			resolver: "Storage",
@@ -131,10 +134,11 @@ test("a pending question is inserted beside its validated prose before it is ans
 	let questions = definition();
 	let digest = room.digests(plan.document)[0]!;
 	let server = { publish() {} } as unknown as Server<SocketData>;
-	let waiting = Questions.ask(plan, server, "test", questions, {
+	let asked = asking(plan, server, questions, {
 		revision: plan.revision,
 		blocks: [[{ index: 0, digest }]],
 	});
+	await asked.created;
 
 	let anchors = Questions.anchors(plan)[0]!.questions[questions.questions[0]!.id]!;
 	let source = room.project(plan.document);
@@ -143,7 +147,7 @@ test("a pending question is inserted beside its validated prose before it is ans
 	expect(anchors.pending).toBe(false);
 
 	await answer(plan);
-	await waiting;
+	await asked.waiting;
 });
 
 test("questions placed after one block retain their ask order", async () => {
@@ -151,17 +155,18 @@ test("questions placed after one block retain their ask order", async () => {
 	let questions = definition(2);
 	let digest = room.digests(plan.document)[0]!;
 	let server = { publish() {} } as unknown as Server<SocketData>;
-	let waiting = Questions.ask(plan, server, "test", questions, {
+	let asked = asking(plan, server, questions, {
 		revision: plan.revision,
 		blocks: [[{ index: 0, digest }], [{ index: 0, digest }]],
 	});
+	await asked.created;
 
 	let source = room.project(plan.document);
 	expect(source.indexOf("Related prose.")).toBeLessThan(source.indexOf("Decision 1"));
 	expect(source.indexOf("Decision 1")).toBeLessThan(source.indexOf("Decision 2"));
 
 	await answer(plan);
-	await waiting;
+	await asked.waiting;
 });
 
 test("a stale placement does not create records or questionnaire nodes", async () => {
@@ -174,9 +179,9 @@ test("a stale placement does not create records or questionnaire nodes", async (
 		blocks: [[{ index: 0, digest }]],
 	});
 
+	await expect(waiting).rejects.toThrow(/changed.*read/i);
 	expect(plan.records.size).toBe(0);
 	expect(room.project(plan.document)).not.toContain("<Questionnaire");
-	await expect(waiting).rejects.toThrow(/changed.*read/i);
 });
 
 test("a mismatched placement digest does not create records or questionnaire nodes", async () => {
@@ -188,9 +193,9 @@ test("a mismatched placement digest does not create records or questionnaire nod
 		blocks: [[{ index: 0, digest: room.digest("different") }]],
 	});
 
+	await expect(waiting).rejects.toThrow(/changed.*read/i);
 	expect(plan.records.size).toBe(0);
 	expect(room.project(plan.document)).not.toContain("<Questionnaire");
-	await expect(waiting).rejects.toThrow(/changed.*read/i);
 });
 
 test("an unplaced question is rejected when prose exists without creating state", async () => {
@@ -202,27 +207,28 @@ test("an unplaced question is rejected when prose exists without creating state"
 		blocks: [[]],
 	});
 
+	await expect(waiting).rejects.toThrow(/relate.*write/i);
 	expect(plan.records.size).toBe(0);
 	expect(room.project(plan.document)).not.toContain("<Questionnaire");
-	await expect(waiting).rejects.toThrow(/relate.*write/i);
 });
 
 test("unplaced questions remain valid before any prose exists", async () => {
 	let plan = await opened();
 	let server = { publish() {} } as unknown as Server<SocketData>;
-	let first = Questions.ask(plan, server, "test", definition(), {
+	let first = asking(plan, server, definition(), {
 		revision: plan.revision,
 		blocks: [[]],
 	});
-	let second = Questions.ask(plan, server, "test", definition(), {
+	await first.created;
+	let second = asking(plan, server, definition(), {
 		revision: plan.revision,
 		blocks: [[]],
 	});
-	void second.catch(() => undefined);
+	await second.created;
 
 	expect(plan.records.size).toBe(2);
 	expect(room.project(plan.document).match(/<Questionnaire/g)).toHaveLength(2);
 
 	await answer(plan);
-	await Promise.all([first, second]);
+	await Promise.all([first.waiting, second.waiting]);
 });

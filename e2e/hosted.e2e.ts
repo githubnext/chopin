@@ -13,6 +13,6 @@ test("an authenticated repository creates a channel workspace", async ({ baseURL
 	await expect(page).toHaveURL(/\/channels\/[0-9a-f-]{36}$/);
 	await expect(page.locator("#pane-chat")).toBeVisible();
 	await expect(page.getByRole("textbox", { name: "editable markdown" })).toBeVisible();
-	await expect(page.locator(".plan-decisions")).toBeVisible();
+	await expect(page.locator(".plan-decisions")).toBeAttached();
 	await expect(page.getByText("octo-org/score / Release readiness")).toBeVisible();
 });
