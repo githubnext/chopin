@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { SidebarSimpleIcon } from "@phosphor-icons/react";
 import {
 	advanceDecisionView,
 	countUnanswered,
@@ -86,10 +87,7 @@ function PaneToggle({ onToggle, open }: { onToggle: () => void; open: boolean })
 			onClick={onToggle}
 			type="button"
 		>
-			<svg aria-hidden="true" fill="none" height="18" viewBox="0 0 20 20" width="18">
-				<rect height="13" rx="2" stroke="currentColor" width="15" x="2.5" y="3.5" />
-				<path d="M8 3.5v13" stroke="currentColor" />
-			</svg>
+			<SidebarSimpleIcon aria-hidden="true" size={18} />
 		</button>
 	);
 }

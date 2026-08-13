@@ -269,6 +269,17 @@ describe("controls", () => {
 });
 
 describe("consumer roles", () => {
+	it("uses the shared icon library instead of literal interface artwork", () => {
+		let offenders: string[] = [];
+		for (let file of [...sources(join(ROOT, "apps")), ...sources(join(ROOT, "packages"))]) {
+			let content = withoutComments(readFileSync(file, "utf8"));
+			if (/<svg\b/.test(content) || /[\u{1F300}-\u{1FAFF}]/u.test(content)) {
+				offenders.push(relative(ROOT, file));
+			}
+		}
+		expect(offenders).toEqual([]);
+	});
+
 	it("keeps gray-400 out of text", () => {
 		for (let file of [...sources(join(ROOT, "apps")), ...sources(join(ROOT, "packages"))]) {
 			expect(withoutComments(readFileSync(file, "utf8"))).not.toMatch(

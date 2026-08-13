@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ChatCircleIcon, LinkIcon } from "@phosphor-icons/react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { TOGGLE_LINK_COMMAND } from "@lexical/link";
 import { LINK_PROTOCOLS } from "@chopin/dialect";
@@ -359,7 +360,7 @@ export function SelectionBubble(
 							}}
 							className={`${CELL} ${CELL_OFF}`}
 						>
-							🔗
+							<LinkIcon aria-hidden="true" size={16} />
 						</button>
 
 						{onComment && (
@@ -378,7 +379,7 @@ export function SelectionBubble(
 									onClick={onComment}
 									className={`${CELL} ${CELL_OFF}`}
 								>
-									💬
+									<ChatCircleIcon aria-hidden="true" size={16} />
 								</button>
 							</>
 						)}
