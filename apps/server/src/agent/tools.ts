@@ -411,6 +411,7 @@ export function toolbox(context: Context): Tool[] {
 			},
 			handler: raw =>
 				answer("anchor_plan", async () => {
+					if (context.plan.execution) return { ok: false, reason: "locked" };
 					let args = Arguments.anchorPlan(raw);
 
 					if (args.revision !== context.plan.revision) {
