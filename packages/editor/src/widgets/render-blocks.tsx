@@ -187,12 +187,13 @@ function Toggle({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => v
 
 /** Attaches a preview element beside a block's source, keyed to its content. */
 function Preview(
-	{ block, editor, collapsed, disabled, onToggle }: {
+	{ block, editor, collapsed, disabled, onToggle, onHidable }: {
 		block: Block;
 		editor: LexicalEditor;
 		collapsed: boolean;
 		disabled?: boolean;
 		onToggle: () => void;
+		onHidable: (key: string, hidable: boolean) => void;
 	},
 ) {
 	let [html, setHtml] = useState<string>();
@@ -264,6 +265,11 @@ function Preview(
 	let hidable = renders(block, html);
 	let named = block.kind !== "math";
 
+	useEffect(() => {
+		onHidable(block.key, hidable);
+		return () => onHidable(block.key, false);
+	}, [block.key, hidable, onHidable]);
+
 	// These portals are siblings, so their stable keys also need distinct roles.
 	return (
 		<>
@@ -321,12 +327,24 @@ export function PreviewPlugin() {
 	let [editor] = useLexicalComposerContext();
 	let disabled = useCellValue(readOnly$);
 	let [blocks, setBlocks] = useState<Block[]>([]);
-	/** Blocks showing only their result. Local to this viewer, and to this session. */
-	let [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+	/** Blocks this viewer explicitly chose to reveal. */
+	let [shown, setShown] = useState<Record<string, boolean>>({});
+	/** Blocks that currently have a rendered preview. */
+	let [hidable, setHidable] = useState<ReadonlySet<string>>(() => new Set());
 
 	/** Read by listeners that must not re-register whenever one is toggled. */
-	let current = useRef(collapsed);
-	current.current = collapsed;
+	let current = useRef(shown);
+	current.current = shown;
+
+	let reportHidable = useCallback((key: string, value: boolean) => {
+		setHidable(previous => {
+			if (previous.has(key) === value) return previous;
+			let next = new Set(previous);
+			if (value) next.add(key);
+			else next.delete(key);
+			return next;
+		});
+	}, []);
 
 	useEffect(() => {
 		let update = () => setBlocks(collect(editor));
@@ -338,9 +356,9 @@ export function PreviewPlugin() {
 	useEffect(() => {
 		remember(
 			editor,
-			new Set(Object.keys(collapsed).filter(key => collapsed[key])),
+			new Set([...hidable].filter(key => !shown[key])),
 		);
-	}, [editor, collapsed]);
+	}, [editor, hidable, shown]);
 
 	/*
 	 * Arrowing into a hidden block opens it.
@@ -359,8 +377,8 @@ export function PreviewPlugin() {
 				let selection = $getSelection();
 				if (!$isRangeSelection(selection)) return;
 				let key = enclosing(selection.anchor.getNode());
-				if (!key || !current.current[key]) return;
-				setCollapsed(prev => ({ ...prev, [key]: false }));
+				if (!key || current.current[key]) return;
+				setShown(prev => ({ ...prev, [key]: true }));
 			});
 		});
 	}, [editor]);
@@ -368,7 +386,8 @@ export function PreviewPlugin() {
 	let toggle = useCallback((key: string) => {
 		// Collapsing with the caret inside would strand it in a hidden box, so
 		// it is moved past the block first.
-		if (!current.current[key]) {
+		let collapsed = !current.current[key];
+		if (!collapsed) {
 			editor.update(() => {
 				let selection = $getSelection();
 				if (!$isRangeSelection(selection)) return;
@@ -376,7 +395,7 @@ export function PreviewPlugin() {
 				$getNodeByKey(key)?.selectNext(0, 0);
 			});
 		}
-		setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
+		setShown(prev => ({ ...prev, [key]: collapsed }));
 	}, [editor]);
 
 	return (
@@ -386,9 +405,10 @@ export function PreviewPlugin() {
 					key={block.key}
 					block={block}
 					editor={editor}
-					collapsed={!!collapsed[block.key]}
+					collapsed={!shown[block.key]}
 					disabled={disabled}
 					onToggle={() => toggle(block.key)}
+					onHidable={reportHidable}
 				/>
 			))}
 		</>
