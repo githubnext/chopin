@@ -54,6 +54,7 @@ GET  /api/repositories?page=1
 GET  /api/repositories/:owner/:repository/channels
 POST /api/repositories/:owner/:repository/channels
 GET  /api/channels/:channelId
+POST /api/channels/:channelId/agent/reset
 POST /auth/logout
 ```
 

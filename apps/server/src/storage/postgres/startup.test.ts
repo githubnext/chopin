@@ -92,7 +92,7 @@ if (database) {
 			});
 			await ready(9073);
 			let session = await fetch("http://127.0.0.1:9073/api/session");
-			expect(await session.json()).toEqual({ mode: "github", user: null });
+			expect(await session.json()).toEqual({ mode: "github", user: null, agent: false });
 			let login = await fetch("http://127.0.0.1:9073/auth/github", { redirect: "manual" });
 			expect(login.status).toBe(302);
 			expect(login.headers.get("location")).toStartWith("https://github.com/login/oauth/authorize");

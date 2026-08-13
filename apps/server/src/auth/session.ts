@@ -224,6 +224,16 @@ export class Sessions {
 		if (!parsed) return undefined;
 		let stored = await this.#storage.sessions.get(parsed.id, this.#clock());
 		if (!stored || !equal(hash(parsed.secret), stored.secretHash)) return undefined;
+		return this.#resolve(stored);
+	}
+
+	/** Resolve an already-authorized internal owner without exposing ciphertext handling. */
+	async resolve(id: string): Promise<AuthenticatedSession | undefined> {
+		let stored = await this.#storage.sessions.get(id, this.#clock());
+		return stored ? this.#resolve(stored) : undefined;
+	}
+
+	async #resolve(stored: WebSession): Promise<AuthenticatedSession | undefined> {
 		let user = await this.#storage.users.get(stored.userId);
 		if (!user) return undefined;
 		try {
@@ -241,13 +251,15 @@ export class Sessions {
 		}
 	}
 
-	async revoke(request: Request): Promise<void> {
+	async revoke(request: Request): Promise<string | undefined> {
 		let parsed = this.#parse(request);
-		if (!parsed) return;
+		if (!parsed) return undefined;
 		let stored = await this.#storage.sessions.get(parsed.id, this.#clock());
 		if (stored && equal(hash(parsed.secret), stored.secretHash)) {
 			await this.#storage.sessions.delete(stored.id);
+			return stored.id;
 		}
+		return undefined;
 	}
 
 	clearCookie(): string {

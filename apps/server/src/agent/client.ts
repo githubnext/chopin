@@ -13,13 +13,17 @@
  */
 
 import { CopilotClient, RuntimeConnection } from "@github/copilot-sdk";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { locate } from "./cli";
-import { gate } from "./permissions";
-import { NAME, planner, TOOLS } from "./planner";
+import { gate, hostedGate } from "./permissions";
+import { HOSTED_TOOLS, hostedPlanner, NAME, planner, TOOLS } from "./planner";
 
 import type { CopilotSession, SessionConfig, Tool } from "@github/copilot-sdk";
 import type { Config } from "../config";
+import type { HostedRepository } from "./repository";
 
 export type Agent = {
 	session: CopilotSession;
@@ -74,15 +78,84 @@ function configure(config: Config, toolbox: Toolbox): SessionConfig {
 	} as SessionConfig;
 }
 
-let client: CopilotClient | undefined;
+export type HostedSession = {
+	token: string;
+	repository: HostedRepository;
+	bootstrap?: string;
+	authorize?: () => Promise<boolean>;
+};
+
+export function hostedConfiguration(
+	config: Pick<Config, "model">,
+	toolbox: Toolbox,
+	options: HostedSession,
+): SessionConfig {
+	let repository = `${options.repository.owner}/${options.repository.name}`;
+	let tools = toolbox.tools.map(tool => ({ ...tool, skipPermission: false }));
+	return {
+		model: config.model,
+		streaming: true,
+		largeOutput: { enabled: false },
+		gitHubToken: options.token,
+		availableTools: HOSTED_TOOLS,
+		tools,
+		customAgents: [hostedPlanner(repository)],
+		agent: NAME,
+		enableConfigDiscovery: false,
+		skipCustomInstructions: true,
+		enableOnDemandInstructionDiscovery: false,
+		enableFileHooks: false,
+		enableHostGitOperations: false,
+		enableSessionStore: false,
+		enableSkills: false,
+		skillDirectories: [],
+		pluginDirectories: [],
+		infiniteSessions: { enabled: false },
+		skipEmbeddingRetrieval: true,
+		embeddingCacheStorage: "in-memory",
+		mcpOAuthTokenStorage: "in-memory",
+		enableSessionTelemetry: false,
+		remoteSession: "off",
+		mcpServers: {
+			github: {
+				type: "http",
+				url: "https://api.githubcopilot.com/mcp/",
+				tools: ["*"],
+				headers: {
+					Authorization: `Bearer ${options.token}`,
+					"X-MCP-Readonly": "true",
+					"X-MCP-Toolsets": "pull_requests",
+				},
+			},
+		},
+		systemMessage: {
+			mode: "append",
+			content: [
+				`The selected repository is ${repository}. Repository reads must remain inside it.`,
+				"More than one person may be in this conversation; their messages are prefixed with the speaker's handle.",
+				options.bootstrap ?? "",
+			].filter(Boolean).join(" "),
+		},
+		onPermissionRequest: hostedGate({
+			owner: options.repository.owner,
+			repository: options.repository.name,
+			tools: new Set(tools.map(tool => tool.name)),
+			active: options.authorize,
+		}),
+	} as SessionConfig;
+}
+
+let legacyClient: CopilotClient | undefined;
+let hostedClient: CopilotClient | undefined;
+let hostedHome: string | undefined;
 
 function connect(config: Config): CopilotClient {
-	if (client) return client;
+	if (legacyClient) return legacyClient;
 
 	let cli = locate();
 	if (!cli.ok) throw new Error(cli.reason);
 
-	return client = new CopilotClient({
+	return legacyClient = new CopilotClient({
 		workingDirectory: config.workingDir,
 		// Pointed at the pinned native binary. Left to itself the SDK resolves
 		// the bundled JavaScript and spawns `node`, which under Bun is a literal
@@ -92,6 +165,22 @@ function connect(config: Config): CopilotClient {
 		// a server that fails to connect says so there and nowhere else.
 		logLevel: "info",
 		gitHubToken: config.token,
+	});
+}
+
+function connectHosted(): CopilotClient {
+	if (hostedClient) return hostedClient;
+	let cli = locate();
+	if (!cli.ok) throw new Error(cli.reason);
+	hostedHome = mkdtempSync(join(tmpdir(), "chopin-copilot-"));
+	return hostedClient = new CopilotClient({
+		mode: "empty",
+		workingDirectory: hostedHome,
+		baseDirectory: hostedHome,
+		connection: RuntimeConnection.forStdio({ path: cli.path }),
+		useLoggedInUser: false,
+		env: {},
+		logLevel: "info",
 	});
 }
 
@@ -132,7 +221,7 @@ export async function probe(config: Config, toolbox: Toolbox): Promise<void> {
  * set nobody ever gets. Costs one line per session, and is never fatal — a
  * diagnostic that can stop a turn is worse than no diagnostic.
  */
-async function audit(session: CopilotSession, config: Config): Promise<void> {
+async function audit(session: CopilotSession, mcp: boolean): Promise<void> {
 	try {
 		await session.rpc.tools.initializeAndValidate();
 		let { tools } = await session.rpc.tools.getCurrentMetadata();
@@ -147,7 +236,7 @@ async function audit(session: CopilotSession, config: Config): Promise<void> {
 		console.warn("[agent] could not read the tool list:", err);
 	}
 
-	if (!config.token) return;
+	if (!mcp) return;
 
 	try {
 		// Throws when the server never connected, which is the distinction
@@ -176,7 +265,7 @@ export async function open(
 		try {
 			let session = await started.resumeSession(previous, settings);
 			await session.rpc.agent.select({ name: NAME });
-			await audit(session, config);
+			await audit(session, !!config.token);
 			return { agent: { session, id: previous }, resumed: true };
 		} catch {
 			// The session is gone — a cleared ~/.copilot, a CLI upgrade, an
@@ -187,12 +276,37 @@ export async function open(
 
 	let session = await started.createSession(settings);
 	await session.rpc.agent.select({ name: NAME });
-	await audit(session, config);
+	await audit(session, !!config.token);
 	return { agent: { session, id: session.sessionId }, resumed: false };
+}
+
+/** Create a disposable hosted session authenticated and scoped to one owner and repository. */
+export async function openHosted(
+	config: Pick<Config, "model">,
+	toolbox: Toolbox,
+	options: HostedSession,
+): Promise<Agent> {
+	let started = connectHosted();
+	await started.start();
+	let session = await started.createSession(hostedConfiguration(config, toolbox, options));
+	await session.rpc.agent.select({ name: NAME });
+	await audit(session, true);
+	return { session, id: session.sessionId };
+}
+
+export async function discardHosted(agent: Agent): Promise<void> {
+	await agent.session.disconnect().catch(() => {});
+	await hostedClient?.deleteSession(agent.id).catch(() => {});
 }
 
 /** Let go of the CLI process. Sessions are the caller's to close first. */
 export async function shutdown(): Promise<void> {
-	await client?.stop().catch(() => {});
-	client = undefined;
+	await Promise.all([
+		legacyClient?.stop().catch(() => {}),
+		hostedClient?.stop().catch(() => {}),
+	]);
+	legacyClient = undefined;
+	hostedClient = undefined;
+	if (hostedHome) rmSync(hostedHome, { recursive: true, force: true });
+	hostedHome = undefined;
 }

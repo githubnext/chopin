@@ -75,8 +75,13 @@ async function setup() {
 		clock: () => now,
 	};
 	let router = new Router();
-	registerChannelRoutes(router, auth);
-	return { router, storage, github, cookie: pair(issued.cookie), now };
+	let reset: string[] = [];
+	registerChannelRoutes(router, auth, {
+		onAgentReset: async id => {
+			reset.push(id);
+		},
+	});
+	return { router, storage, github, cookie: pair(issued.cookie), sessionId: issued.id, reset, now };
 }
 
 function request(path: string, cookie?: string, init: RequestInit = {}): Request {
@@ -215,5 +220,28 @@ describe("channel routes", () => {
 		github.repo = { ...github.repo, id: "R_score" };
 		let response = await router.handle(request(`/api/channels/${channel.id}`, cookie));
 		expect(response!.status).toBe(404);
+	});
+
+	it("lets an editor explicitly release the Copilot owner", async () => {
+		let { router, storage, cookie, sessionId, reset, now } = await setup();
+		let channel = await storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Reset",
+			createdBy: "U_octocat",
+			now,
+		});
+		await storage.channels.claimAgentOwner(channel.id, sessionId, now);
+		let response = await router.handle(request(
+			`/api/channels/${channel.id}/agent/reset`,
+			cookie,
+			{ method: "POST", headers: { origin: "https://chopin.test" } },
+		));
+		expect(response!.status).toBe(204);
+		expect(reset).toEqual([channel.id]);
+		expect((await storage.collaboration.load(channel.id, now))!.agent!.ownerSessionId)
+			.toBeUndefined();
 	});
 });

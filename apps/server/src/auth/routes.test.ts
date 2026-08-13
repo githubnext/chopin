@@ -85,7 +85,16 @@ describe("hosted authentication routes", () => {
 		let storage = new MemoryStorage();
 		let github = new FakeGitHub();
 		let router = new Router();
-		registerAuthRoutes(router, { config: CONFIG, storage, github, clock: () => now });
+		let revoked: string[] = [];
+		registerAuthRoutes(router, {
+			config: CONFIG,
+			storage,
+			github,
+			clock: () => now,
+			onSessionRevoked: async id => {
+				revoked.push(id);
+			},
+		});
 
 		let start = await router.handle(new Request("https://chopin.test/auth/github"));
 		expect(start!.status).toBe(302);
@@ -121,6 +130,7 @@ describe("hosted authentication routes", () => {
 		);
 		expect(await session!.json()).toEqual({
 			mode: "github",
+			agent: true,
 			user: { id: "U_octocat", login: "octocat", avatarUrl: "https://avatars.test/octocat" },
 			expiresAt: "2026-09-12T12:00:00.000Z",
 		});
@@ -151,13 +161,14 @@ describe("hosted authentication routes", () => {
 			}),
 		);
 		expect(logout!.status).toBe(204);
+		expect(revoked).toEqual([sessionId]);
 		expect(cookies(logout!)[0]).toContain("Max-Age=0");
 		let gone = await router.handle(
 			new Request("https://chopin.test/api/session", {
 				headers: { cookie: sessionCookie },
 			}),
 		);
-		expect(await gone!.json()).toEqual({ mode: "github", user: null });
+		expect(await gone!.json()).toEqual({ mode: "github", user: null, agent: true });
 	});
 
 	it("rejects missing or mismatched OAuth state", async () => {

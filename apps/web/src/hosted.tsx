@@ -10,6 +10,7 @@ export type HostedWorkspaceProps = {
 	label: string;
 	canEdit: boolean;
 	agent?: boolean;
+	onResetAgent?: () => Promise<void>;
 };
 
 export type HostedRoute =
@@ -327,7 +328,8 @@ function RepositoryChannels(
 }
 
 function ChannelWorkspace(
-	{ id, user, Workspace }: {
+	{ agent, id, user, Workspace }: {
+		agent: boolean;
 		id: string;
 		user: Api.User;
 		Workspace: ComponentType<HostedWorkspaceProps>;
@@ -352,17 +354,22 @@ function ChannelWorkspace(
 	if (!detail) return <Loading label="Opening channel..." />;
 	return (
 		<Workspace
-			agent={false}
+			agent={agent}
 			canEdit={detail.canEdit}
 			handle={user.login}
 			label={`${detail.repository.fullName} / ${detail.channel.title}`}
+			onResetAgent={agent ? () => Api.resetAgent(id) : undefined}
 			room={detail.channel.id}
 		/>
 	);
 }
 
 export function HostedApp(
-	{ user, Workspace }: { user: Api.User; Workspace: ComponentType<HostedWorkspaceProps> },
+	{
+		agent,
+		user,
+		Workspace,
+	}: { agent: boolean; user: Api.User; Workspace: ComponentType<HostedWorkspaceProps> },
 ) {
 	let route = hostedRoute(location.pathname);
 	switch (route.page) {
@@ -371,7 +378,7 @@ export function HostedApp(
 		case "repository":
 			return <RepositoryChannels owner={route.owner} repository={route.repository} user={user} />;
 		case "channel":
-			return <ChannelWorkspace Workspace={Workspace} id={route.id} user={user} />;
+			return <ChannelWorkspace Workspace={Workspace} agent={agent} id={route.id} user={user} />;
 		case "missing":
 			return <Failure error={new Error("This page does not exist.")} />;
 	}

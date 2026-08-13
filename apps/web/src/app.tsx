@@ -99,6 +99,7 @@ function Header(
 		chatOpen,
 		members,
 		onToggleChat,
+		onResetAgent,
 		reason,
 		label,
 		status,
@@ -106,11 +107,28 @@ function Header(
 		chatOpen: boolean;
 		members: Session.Member[];
 		onToggleChat: () => void;
+		onResetAgent?: () => Promise<void>;
 		reason?: string;
 		label: string;
 		status: Status;
 	},
 ) {
+	let [resetting, setResetting] = useState(false);
+	let [resetError, setResetError] = useState(false);
+
+	async function resetAgent() {
+		if (!onResetAgent || resetting) return;
+		setResetting(true);
+		setResetError(false);
+		try {
+			await onResetAgent();
+		} catch {
+			setResetError(true);
+		} finally {
+			setResetting(false);
+		}
+	}
+
 	return (
 		<header className="hairline-b flex h-12 shrink-0 items-center gap-3 px-4">
 			<PaneToggle onToggle={onToggleChat} open={chatOpen} />
@@ -125,6 +143,16 @@ function Header(
 			>
 				{members.map(member => <Face handle={member.handle} key={member.client} ring size={24} />)}
 			</div>
+			{onResetAgent && (
+				<button
+					className="btn btn-sm btn-ghost"
+					disabled={resetting}
+					onClick={() => void resetAgent()}
+					type="button"
+				>
+					{resetting ? "Resetting..." : resetError ? "Reset failed" : "New planner session"}
+				</button>
+			)}
 		</header>
 	);
 }
@@ -136,6 +164,7 @@ export function RoomWorkspace(
 		canEdit = true,
 		handle,
 		label,
+		onResetAgent,
 		room,
 	}: {
 		accessKey?: string;
@@ -143,6 +172,7 @@ export function RoomWorkspace(
 		canEdit?: boolean;
 		handle: string;
 		label: string;
+		onResetAgent?: () => Promise<void>;
 		room: string;
 	},
 ) {
@@ -259,6 +289,7 @@ export function RoomWorkspace(
 					chatOpen={chatOpen}
 					members={members}
 					onToggleChat={() => setChatOpen(value => !value)}
+					onResetAgent={effectiveCanEdit ? onResetAgent : undefined}
 					reason={status === "connected" && !effectiveCanEdit ? "view only" : reason}
 					label={label}
 					status={status}
@@ -332,5 +363,5 @@ export function App() {
 	if (!session) return <HostedLoading />;
 	if (session.mode === "legacy") return <LegacyApp />;
 	if (!session.user) return <HostedLogin />;
-	return <HostedApp Workspace={RoomWorkspace} user={session.user} />;
+	return <HostedApp Workspace={RoomWorkspace} agent={session.agent} user={session.user} />;
 }

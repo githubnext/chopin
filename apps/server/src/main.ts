@@ -105,13 +105,31 @@ function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Service.Pla
 }
 
 /** A room's conversation, with everything it needs to run a turn. */
-function conversation(room: Rooms.Room): Chat.Room {
+function conversation(room: Rooms.Room, ws: Socket): Chat.Room {
+	let hosted = hostedAuth
+			&& ws.data.sessionId
+			&& ws.data.repositoryId
+			&& ws.data.repositoryOwner
+			&& ws.data.repositoryName
+			&& ws.data.repositoryDefaultBranch
+		? {
+			auth: hostedAuth,
+			claimantSessionId: ws.data.sessionId,
+			repository: {
+				id: ws.data.repositoryId,
+				owner: ws.data.repositoryOwner,
+				name: ws.data.repositoryName,
+				defaultBranch: ws.data.repositoryDefaultBranch,
+			},
+		}
+		: undefined;
 	return {
 		chat: room.plan!.chat,
 		plan: room.plan!,
 		server,
 		room: room.id,
-		config: hostedAuth ? { ...config, agent: false } : config,
+		config,
+		...(hosted ? { hosted } : {}),
 	};
 }
 
@@ -177,15 +195,15 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			return;
 
 		case "chat:send":
-			if (room.plan) await Chat.send(conversation(room), ws, frame);
+			if (room.plan) await Chat.send(conversation(room, ws), ws, frame);
 			return;
 
 		case "chat:abort":
-			if (room.plan) await Chat.abort(conversation(room), ws);
+			if (room.plan) await Chat.abort(conversation(room, ws), ws);
 			return;
 
 		case "chat:unqueue":
-			if (room.plan) Chat.unqueue(conversation(room), ws, frame);
+			if (room.plan) Chat.unqueue(conversation(room, ws), ws, frame);
 			return;
 
 		case "question:open":
@@ -221,11 +239,11 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			return;
 
 		case "comment:accept":
-			if (room.plan) await Comments.accept(conversation(room), ws, frame);
+			if (room.plan) await Comments.accept(conversation(room, ws), ws, frame);
 			return;
 
 		case "comment:dismiss":
-			if (room.plan) await Comments.dismiss(conversation(room), ws, frame);
+			if (room.plan) await Comments.dismiss(conversation(room, ws), ws, frame);
 			return;
 	}
 }
@@ -282,6 +300,7 @@ async function checkAccess(ws: Socket, forceGitHub: boolean): Promise<boolean> {
 		data.canEdit = canEdit;
 		data.accessCheckedAt = Date.now();
 		data.authorizedUntil = session.session.expiresAt.getTime();
+		data.repositoryDefaultBranch = repository.defaultBranch;
 		return true;
 	} catch {
 		return false;
@@ -425,6 +444,17 @@ function cleanSessions(): void {
 	});
 }
 
+async function resetOpenAgents(
+	filter: (room: Rooms.Room) => boolean,
+	sessionId?: string,
+): Promise<void> {
+	await Promise.all(
+		Rooms.all().filter(filter).map(room =>
+			room.plan ? Chat.resetHosted(room.plan.chat, sessionId) : Promise.resolve()
+		),
+	);
+}
+
 /**
  * Refuse to start rather than start half-working.
  *
@@ -439,8 +469,15 @@ if (misconfigured) {
 	process.exit(1);
 }
 
-let hostedAuth = registerAuthRoutes(router, { config: config.auth, storage });
-registerChannelRoutes(router, hostedAuth);
+let hostedAuth = registerAuthRoutes(router, {
+	config: config.auth,
+	storage,
+	agent: config.agent,
+	onSessionRevoked: sessionId => resetOpenAgents(() => true, sessionId),
+});
+registerChannelRoutes(router, hostedAuth, {
+	onAgentReset: channelId => resetOpenAgents(room => room.id === channelId),
+});
 
 if (storage) {
 	try {
