@@ -30,6 +30,7 @@ export type SocketData = Identity & {
 	repositoryId?: string;
 	repositoryOwner?: string;
 	repositoryName?: string;
+	repositoryDefaultBranch?: string;
 	accessCheckedAt?: number;
 	authorizationTimer?: ReturnType<typeof setTimeout>;
 	authorizationRefresh?: Promise<boolean>;

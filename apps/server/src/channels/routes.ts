@@ -138,7 +138,11 @@ async function authorizedRepository(
 }
 
 /** Authenticated metadata routes; live collaboration is still the following stage. */
-export function registerChannelRoutes(router: Router, auth: HostedAuth | undefined): void {
+export function registerChannelRoutes(
+	router: Router,
+	auth: HostedAuth | undefined,
+	options: { onAgentReset?: (channelId: string) => Promise<void> } = {},
+): void {
 	if (!auth) return;
 
 	router.on(
@@ -242,6 +246,42 @@ export function registerChannelRoutes(router: Router, auth: HostedAuth | undefin
 				canEdit: repo.permissions.push || repo.permissions.admin,
 				channel: serialized(channel),
 			});
+		} catch (err) {
+			return failure(err, request, auth);
+		}
+	});
+
+	router.on("POST", "/api/channels/:channelId/agent/reset", async (request, _url, params) => {
+		if (request.headers.get("origin") !== auth.config.origin) {
+			return json({ error: "origin is not allowed" }, 403);
+		}
+		try {
+			let session = await auth.sessions.authenticate(request);
+			if (!session) return json({ error: "authentication required" }, 401);
+			let channel = await auth.storage.channels.get(params.channelId!);
+			if (!channel) return json({ error: "channel not found" }, 404);
+			let repo = await authorizedRepository(
+				auth,
+				session.oauthToken,
+				channel.repositoryOwner,
+				channel.repositoryName,
+			);
+			if (
+				repo.id !== channel.repositoryId
+				|| (!repo.permissions.push && !repo.permissions.admin)
+			) return json({ error: "repository write access is required" }, 403);
+			let stored = await auth.storage.collaboration.load(channel.id, auth.clock());
+			let owner = stored?.agent;
+			if (owner?.ownerSessionId) {
+				await auth.storage.channels.clearAgentOwner(
+					channel.id,
+					owner.ownerSessionId,
+					owner.generation,
+					auth.clock(),
+				);
+			}
+			await options.onAgentReset?.(channel.id);
+			return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
 		} catch (err) {
 			return failure(err, request, auth);
 		}

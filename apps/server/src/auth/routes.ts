@@ -14,6 +14,8 @@ type Dependencies = {
 	storage: StorageAdapter | undefined;
 	github?: GitHub;
 	clock?: Clock;
+	agent?: boolean;
+	onSessionRevoked?: (sessionId: string) => Promise<void>;
 };
 
 export type HostedAuth = {
@@ -152,9 +154,12 @@ export function registerAuthRoutes(
 	router.on("GET", "/api/session", async request => {
 		try {
 			let authenticated = await sessions.authenticate(request);
-			if (!authenticated) return json({ mode: "github", user: null });
+			if (!authenticated) {
+				return json({ mode: "github", user: null, agent: dependencies.agent ?? true });
+			}
 			return json({
 				mode: "github",
+				agent: dependencies.agent ?? true,
 				user: {
 					id: authenticated.user.id,
 					login: authenticated.user.login,
@@ -179,7 +184,8 @@ export function registerAuthRoutes(
 				return json(await github.repositories(authenticated.oauthToken, requestedPage));
 			} catch (err) {
 				if (err instanceof GitHubError && err.status === 401) {
-					await sessions.revoke(request);
+					let revoked = await sessions.revoke(request);
+					if (revoked) await dependencies.onSessionRevoked?.(revoked);
 					return json({ error: "GitHub authorization expired" }, 401, sessions.clearCookie());
 				}
 				throw err;
@@ -194,7 +200,8 @@ export function registerAuthRoutes(
 			return json({ error: "origin is not allowed" }, 403);
 		}
 		try {
-			await sessions.revoke(request);
+			let revoked = await sessions.revoke(request);
+			if (revoked) await dependencies.onSessionRevoked?.(revoked);
 			return empty(204, sessions.clearCookie());
 		} catch (err) {
 			return failure(err);

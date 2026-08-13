@@ -32,6 +32,7 @@ test("an authenticated repository leads into its channel workspace", async ({ pa
 			return route.fulfill({
 				json: {
 					mode: "github",
+					agent: true,
 					user: { id: "U_octocat", login: "octocat", avatarUrl: "avatar" },
 					expiresAt: "2026-09-12T12:00:00.000Z",
 				},

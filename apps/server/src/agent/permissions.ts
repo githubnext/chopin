@@ -137,3 +137,49 @@ export function gate(options: GateOptions): PermissionHandler {
 		}
 	};
 }
+
+export type HostedGateOptions = {
+	owner: string;
+	repository: string;
+	tools: Set<string>;
+	active?: () => Promise<boolean>;
+};
+
+/** Shared-runtime gate: only app-owned tools and repository-bound read-only MCP calls. */
+export function hostedGate(options: HostedGateOptions): PermissionHandler {
+	return async (request: PermissionRequest): Promise<PermissionRequestResult> => {
+		if (options.active && !(await options.active())) {
+			return deny("The hosted Copilot owner or repository permission is no longer active.");
+		}
+		if (request.kind === "custom-tool") {
+			return options.tools.has(request.toolName)
+				? allow()
+				: deny(`${request.toolName} is not available to the hosted planner.`);
+		}
+		if (request.kind === "mcp") {
+			if (request.serverName !== "github" || !request.readOnly) {
+				return deny("Only read-only GitHub MCP calls are available.");
+			}
+			let owner = request.args?.owner;
+			let repository = request.args?.repo;
+			let tool = request.toolName.toLowerCase();
+			let unsafe = tool.includes("search") || tool.includes("issue")
+				|| hasForeignScope(request.args, options.owner, options.repository);
+			return !unsafe && owner === options.owner && repository === options.repository
+				? allow()
+				: deny("GitHub MCP calls must name this channel's repository.");
+		}
+		return deny("Hosted planning has no host filesystem, shell or URL access.");
+	};
+}
+
+function hasForeignScope(value: unknown, owner: string, repository: string): boolean {
+	if (typeof value === "string") return /\b(?:repo|org|user):/i.test(value);
+	if (Array.isArray(value)) return value.some(item => hasForeignScope(item, owner, repository));
+	if (!value || typeof value !== "object") return false;
+	return Object.entries(value).some(([key, child]) => {
+		if (key === "owner" && child !== owner) return true;
+		if (key === "repo" && child !== repository) return true;
+		return hasForeignScope(child, owner, repository);
+	});
+}

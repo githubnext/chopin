@@ -34,7 +34,6 @@ update journal, transcript, questionnaire drafts and comment records through
 fenced durable commit. `DATA_DIR` remains solely for `AUTH_DRIVER=off` legacy
 rooms.
 
-The prototype agent is deliberately disabled in hosted mode. It has one global
-working directory and credential, which cannot safely serve repository-scoped
-users. Hosted agent turns resume only after Copilot runs with the channel
-owner's OAuth session and repository-scoped GitHub tools.
+Hosted agent turns use the first invoking editor's OAuth session and
+repository-scoped GitHub tools. The isolation and ownership model is described
+in [Hosted Copilot agent](hosted-agent.md).

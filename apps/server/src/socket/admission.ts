@@ -51,6 +51,7 @@ export async function admit(
 				repositoryId: repository.id,
 				repositoryOwner: repository.owner,
 				repositoryName: repository.name,
+				repositoryDefaultBranch: repository.defaultBranch,
 				accessCheckedAt: Date.now(),
 			},
 		};

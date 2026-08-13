@@ -6,7 +6,7 @@ export type User = {
 
 export type Session =
 	| { mode: "legacy"; user: null }
-	| { mode: "github"; user: User | null; expiresAt?: string };
+	| { mode: "github"; user: User | null; agent: boolean; expiresAt?: string };
 
 export type Repository = {
 	id: string;
@@ -111,6 +111,13 @@ export function createChannel(
 
 export function channel(id: string): Promise<ChannelDetail> {
 	return response(`/api/channels/${encodeURIComponent(id)}`);
+}
+
+export async function resetAgent(id: string): Promise<void> {
+	let result = await fetch(`/api/channels/${encodeURIComponent(id)}/agent/reset`, {
+		method: "POST",
+	});
+	if (!result.ok) throw new ApiError(`agent reset failed (${result.status})`, result.status);
 }
 
 export async function logout(): Promise<void> {

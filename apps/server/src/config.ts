@@ -163,7 +163,7 @@ export function describe(config: Config): string {
 		config.agent && config.auth.driver === "off"
 			? `agent: ${config.model}`
 			: config.agent
-			? "agent: deferred (hosted)"
+			? `agent: ${config.model} (hosted on demand)`
 			: "agent: off",
 		`auth: ${config.auth.driver}`,
 		`storage: ${config.storage.driver}`,

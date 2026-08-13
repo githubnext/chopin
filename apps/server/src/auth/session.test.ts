@@ -43,6 +43,7 @@ describe("hosted login sessions", () => {
 		expect(authenticated?.user.login).toBe("octocat");
 		expect(authenticated?.oauthToken).toBe("gho_plaintext_secret");
 		expect(authenticated?.session.id).toBe(issued.id);
+		expect((await sessions.resolve(issued.id))?.oauthToken).toBe("gho_plaintext_secret");
 	});
 
 	it("rejects the wrong secret, duplicate cookies and the wrong encryption key", async () => {
