@@ -254,6 +254,14 @@ export class Sessions {
 		return cleared(this.cookieName, this.#secure);
 	}
 
+	/** The one credential needed to revalidate an already-open hosted socket. */
+	credential(request: Request): string | undefined {
+		let cookies = values(request, this.cookieName);
+		return cookies.length === 1 && this.#parse(request)
+			? `${this.cookieName}=${cookies[0]}`
+			: undefined;
+	}
+
 	#parse(request: Request): { id: string; secret: Uint8Array } | undefined {
 		let cookies = values(request, this.cookieName);
 		if (cookies.length !== 1) return undefined;

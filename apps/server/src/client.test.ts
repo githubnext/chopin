@@ -127,7 +127,7 @@ describe("development", () => {
 		expect(api.status).toBe(404);
 		expect(await api.text()).toBe("API route not found");
 		let session = await fetch(`http://127.0.0.1:${port}/api/session`);
-		expect(await session.json()).toEqual({ user: null });
+		expect(await session.json()).toEqual({ mode: "legacy", user: null });
 	});
 
 	it("keeps the socket for itself", async () => {

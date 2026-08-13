@@ -160,7 +160,11 @@ export function describe(config: Config): string {
 		"chopin",
 		`http://${config.host}:${config.port}`,
 		config.devClient ? `client: vite (${config.devClient})` : "client: built",
-		config.agent ? `agent: ${config.model}` : "agent: off",
+		config.agent && config.auth.driver === "off"
+			? `agent: ${config.model}`
+			: config.agent
+			? "agent: deferred (hosted)"
+			: "agent: off",
 		`auth: ${config.auth.driver}`,
 		`storage: ${config.storage.driver}`,
 		`working dir: ${config.workingDir}`,

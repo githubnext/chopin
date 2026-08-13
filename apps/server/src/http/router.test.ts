@@ -34,4 +34,34 @@ describe("HTTP routing", () => {
 		);
 		expect(await router.handle(new Request("https://chopin.test/r/main"))).toBeUndefined();
 	});
+
+	it("matches and decodes complete path segments", async () => {
+		let router = new Router();
+		router.on(
+			"GET",
+			"/api/repositories/:owner/:repository/channels",
+			(_request, _url, params) => Response.json(params),
+		);
+		let response = await router.handle(
+			new Request(
+				"https://chopin.test/api/repositories/github%20next/chopin/channels",
+			),
+		);
+		expect(await response!.json()).toEqual({ owner: "github next", repository: "chopin" });
+		let wrongMethod = await router.handle(
+			new Request(
+				"https://chopin.test/api/repositories/github/chopin/channels",
+				{ method: "POST" },
+			),
+		);
+		expect(wrongMethod!.status).toBe(405);
+		expect(wrongMethod!.headers.get("allow")).toBe("GET");
+		expect(
+			(await router.handle(
+				new Request(
+					"https://chopin.test/api/repositories/github%2Fnext/chopin/channels",
+				),
+			))!.status,
+		).toBe(404);
+	});
 });

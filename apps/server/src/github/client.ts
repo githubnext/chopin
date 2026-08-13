@@ -40,6 +40,8 @@ export interface GitHub {
 	}): Promise<string>;
 	user(token: string): Promise<GitHubUser>;
 	repositories(token: string, page: number): Promise<RepositoryPage>;
+	repository(token: string, owner: string, name: string): Promise<Repository>;
+	repositoryAccess(token: string, owner: string, name: string): Promise<Repository | undefined>;
 }
 
 export class GitHubError extends Error {
@@ -230,6 +232,28 @@ export class GitHubClient implements GitHub {
 		};
 	}
 
+	async repository(token: string, owner: string, name: string): Promise<Repository> {
+		let path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
+		return repository(await this.#api(path, token));
+	}
+
+	async repositoryAccess(
+		token: string,
+		owner: string,
+		name: string,
+	): Promise<Repository | undefined> {
+		let fullName = `${owner}/${name}`.toLowerCase();
+		let page = 1;
+		for (let request = 0; request < 20; request++) {
+			let result = await this.repositories(token, page);
+			let found = result.repositories.find(item => item.fullName.toLowerCase() === fullName);
+			if (found) return found;
+			if (!result.nextPage || result.nextPage === page) return undefined;
+			page = result.nextPage;
+		}
+		throw new GitHubError("GitHub repository listing exceeded its safety limit");
+	}
+
 	async #api(path: string, token: string): Promise<unknown> {
 		return body(await this.#request(new URL(path, this.#endpoints.api), token));
 	}
@@ -251,7 +275,10 @@ export class GitHubClient implements GitHub {
 			throw new GitHubError("GitHub API is unavailable");
 		}
 		if (!response.ok) {
-			let status = response.status === 401 || response.status === 403 || response.status === 429
+			let status = response.status === 401
+					|| response.status === 403
+					|| response.status === 404
+					|| response.status === 429
 				? response.status
 				: 502;
 			throw new GitHubError("GitHub API rejected the request", status);

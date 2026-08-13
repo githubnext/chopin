@@ -16,6 +16,8 @@ import {
 
 import { Chat } from "./chat/chat";
 import { decisionAttention, DecisionViewControl } from "./decision-view-control";
+import * as Api from "./api";
+import { HostedApp, HostedFailure, HostedLoading, HostedLogin } from "./hosted";
 import * as Identity from "./identity";
 import { Wire } from "./wire";
 import { paneId, usePaneOpen, Workspace } from "./workspace";
@@ -98,14 +100,14 @@ function Header(
 		members,
 		onToggleChat,
 		reason,
-		room,
+		label,
 		status,
 	}: {
 		chatOpen: boolean;
 		members: Session.Member[];
 		onToggleChat: () => void;
 		reason?: string;
-		room: string;
+		label: string;
 		status: Status;
 	},
 ) {
@@ -113,7 +115,7 @@ function Header(
 		<header className="hairline-b flex h-12 shrink-0 items-center gap-3 px-4">
 			<PaneToggle onToggle={onToggleChat} open={chatOpen} />
 			<span className="text-sm font-semibold">chopin</span>
-			<span className="text-sm text-text-tertiary">/r/{room}</span>
+			<span className="truncate text-sm text-text-tertiary">{label}</span>
 			<span className={`text-sm ${TONE[status]}`}>
 				{status === "connected" ? reason : reason ?? status}
 			</span>
@@ -127,12 +129,28 @@ function Header(
 	);
 }
 
-function Room({ handle }: { handle: string }) {
+export function RoomWorkspace(
+	{
+		accessKey,
+		agent = true,
+		canEdit = true,
+		handle,
+		label,
+		room,
+	}: {
+		accessKey?: string;
+		agent?: boolean;
+		canEdit?: boolean;
+		handle: string;
+		label: string;
+		room: string;
+	},
+) {
 	let [wire, setWire] = useState<Wire>();
 	let [status, setStatus] = useState<Status>("connecting");
 	let [reason, setReason] = useState<string>();
 	let [members, setMembers] = useState<Session.Member[]>([]);
-	let room = Identity.room();
+	let [effectiveCanEdit, setEffectiveCanEdit] = useState(canEdit);
 	let user = useMemo(() => cursor(handle), [handle]);
 	let [chatOpen, setChatOpen] = usePaneOpen("chat");
 	let [questions] = useState(() => new QuestionnaireStore());
@@ -193,10 +211,14 @@ function Room({ handle }: { handle: string }) {
 	};
 
 	useEffect(() => {
+		setEffectiveCanEdit(canEdit);
+	}, [canEdit, room]);
+
+	useEffect(() => {
 		let socket = new Wire({
 			room,
 			handle,
-			key: Identity.key(),
+			key: accessKey,
 			onStatus: (next, why) => {
 				setStatus(next);
 				setReason(why);
@@ -205,8 +227,12 @@ function Room({ handle }: { handle: string }) {
 		setWire(socket);
 
 		let off = [
-			socket.on<Session.Hello>("session:hello", frame => setMembers(frame.members)),
+			socket.on<Session.Hello>("session:hello", frame => {
+				setMembers(frame.members);
+				setEffectiveCanEdit(frame.canEdit);
+			}),
 			socket.on<Session.Presence>("session:presence", frame => setMembers(frame.members)),
+			socket.on<Session.Access>("session:access", frame => setEffectiveCanEdit(frame.canEdit)),
 			threads.listen(socket),
 		];
 
@@ -215,13 +241,14 @@ function Room({ handle }: { handle: string }) {
 			socket.dispose();
 			setWire(undefined);
 		};
-	}, [room, handle, threads]);
+	}, [room, handle, accessKey, threads]);
 
 	return (
 		<Workspace
 			chat={
 				<Chat
-					connected={status === "connected"}
+					agent={agent}
+					connected={status === "connected" && effectiveCanEdit}
 					handle={handle}
 					wire={wire}
 				/>
@@ -232,8 +259,8 @@ function Room({ handle }: { handle: string }) {
 					chatOpen={chatOpen}
 					members={members}
 					onToggleChat={() => setChatOpen(value => !value)}
-					reason={reason}
-					room={room}
+					reason={status === "connected" && !effectiveCanEdit ? "view only" : reason}
+					label={label}
 					status={status}
 				/>
 			}
@@ -247,7 +274,7 @@ function Room({ handle }: { handle: string }) {
 			}
 			decisions={
 				<Decisions
-					connected={status === "connected"}
+					connected={status === "connected" && effectiveCanEdit}
 					onShowPlan={showPlan}
 					reveal={reveal}
 					store={questions}
@@ -259,6 +286,7 @@ function Room({ handle }: { handle: string }) {
 					connection={status}
 					onScrollTop={setPlanScrollTop}
 					questions={questions}
+					readOnly={!effectiveCanEdit}
 					scrollTop={planScrollTop}
 					threads={threads}
 					user={user}
@@ -270,8 +298,39 @@ function Room({ handle }: { handle: string }) {
 	);
 }
 
-export function App() {
+function LegacyApp() {
 	let [handle, setHandle] = useState(Identity.handle);
 	if (!handle) return <SignIn onDone={setHandle} />;
-	return <Room handle={handle} />;
+	let room = Identity.room();
+	return (
+		<RoomWorkspace
+			accessKey={Identity.key()}
+			handle={handle}
+			label={`/r/${room}`}
+			room={room}
+		/>
+	);
+}
+
+export function App() {
+	let [session, setSession] = useState<Api.Session>();
+	let [error, setError] = useState<unknown>();
+
+	useEffect(() => {
+		let active = true;
+		Api.session().then(value => {
+			if (active) setSession(value);
+		}, reason => {
+			if (active) setError(reason);
+		});
+		return () => {
+			active = false;
+		};
+	}, []);
+
+	if (error) return <HostedFailure error={error} />;
+	if (!session) return <HostedLoading />;
+	if (session.mode === "legacy") return <LegacyApp />;
+	if (!session.user) return <HostedLogin />;
+	return <HostedApp Workspace={RoomWorkspace} user={session.user} />;
 }

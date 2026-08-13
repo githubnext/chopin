@@ -52,6 +52,23 @@ class FakeGitHub implements GitHub {
 			nextPage: page + 1,
 		};
 	}
+
+	async repository(_token: string, owner: string, name: string) {
+		return {
+			id: "R_score",
+			owner,
+			name,
+			fullName: `${owner}/${name}`,
+			private: true,
+			url: `https://github.test/${owner}/${name}`,
+			defaultBranch: "main",
+			permissions: { pull: true, push: true, admin: false },
+		};
+	}
+
+	async repositoryAccess(token: string, owner: string, name: string) {
+		return this.repository(token, owner, name);
+	}
 }
 
 const CONFIG: AuthConfig = {
@@ -103,6 +120,7 @@ describe("hosted authentication routes", () => {
 			}),
 		);
 		expect(await session!.json()).toEqual({
+			mode: "github",
 			user: { id: "U_octocat", login: "octocat", avatarUrl: "https://avatars.test/octocat" },
 			expiresAt: "2026-09-12T12:00:00.000Z",
 		});
@@ -139,7 +157,7 @@ describe("hosted authentication routes", () => {
 				headers: { cookie: sessionCookie },
 			}),
 		);
-		expect(await gone!.json()).toEqual({ user: null });
+		expect(await gone!.json()).toEqual({ mode: "github", user: null });
 	});
 
 	it("rejects missing or mismatched OAuth state", async () => {
@@ -197,7 +215,7 @@ describe("hosted authentication routes", () => {
 		let router = new Router();
 		registerAuthRoutes(router, { config: { driver: "off" }, storage: undefined });
 		expect(await (await router.handle(new Request("https://chopin.test/api/session")))!.json())
-			.toEqual({ user: null });
+			.toEqual({ mode: "legacy", user: null });
 		expect((await router.handle(new Request("https://chopin.test/api/repositories")))!.status)
 			.toBe(401);
 	});

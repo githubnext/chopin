@@ -16,6 +16,14 @@ type Dependencies = {
 	clock?: Clock;
 };
 
+export type HostedAuth = {
+	config: Extract<AuthConfig, { driver: "github" }>;
+	storage: StorageAdapter;
+	github: GitHub;
+	sessions: Sessions;
+	clock: Clock;
+};
+
 function headers(): Headers {
 	return new Headers({
 		"cache-control": "no-store",
@@ -77,13 +85,16 @@ function parameter(url: URL, name: string): string | undefined {
 }
 
 /** Register the hosted auth surface while leaving prototype room admission untouched. */
-export function registerAuthRoutes(router: Router, dependencies: Dependencies): void {
+export function registerAuthRoutes(
+	router: Router,
+	dependencies: Dependencies,
+): HostedAuth | undefined {
 	let clock = dependencies.clock ?? (() => new Date());
 	if (dependencies.config.driver === "off") {
-		router.on("GET", "/api/session", () => json({ user: null }));
+		router.on("GET", "/api/session", () => json({ mode: "legacy", user: null }));
 		router.on("GET", "/api/repositories", () => json({ error: "authentication required" }, 401));
 		router.on("POST", "/auth/logout", () => empty(204));
-		return;
+		return undefined;
 	}
 
 	let config = dependencies.config;
@@ -94,6 +105,7 @@ export function registerAuthRoutes(router: Router, dependencies: Dependencies): 
 	let sessions = new Sessions(storage, config.encryptionKey, secure, clock);
 	let attempts = new OAuthAttempts(config.encryptionKey, secure, clock);
 	let redirectUri = `${config.origin}/auth/github/callback`;
+	let context: HostedAuth = { config, storage, github, sessions, clock };
 
 	router.on("GET", "/auth/github", async () => {
 		let issued = await attempts.issue();
@@ -140,8 +152,9 @@ export function registerAuthRoutes(router: Router, dependencies: Dependencies): 
 	router.on("GET", "/api/session", async request => {
 		try {
 			let authenticated = await sessions.authenticate(request);
-			if (!authenticated) return json({ user: null });
+			if (!authenticated) return json({ mode: "github", user: null });
 			return json({
+				mode: "github",
 				user: {
 					id: authenticated.user.id,
 					login: authenticated.user.login,
@@ -187,4 +200,5 @@ export function registerAuthRoutes(router: Router, dependencies: Dependencies): 
 			return failure(err);
 		}
 	});
+	return context;
 }

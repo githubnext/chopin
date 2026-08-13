@@ -14,7 +14,7 @@ import type { Server, ServerWebSocket } from "bun";
 import type { Frame, Outgoing } from "@chopin/protocol";
 
 export type Identity = {
-	/** Unverified GitHub handle. */
+	/** Verified in hosted mode; claimed only by the legacy prototype. */
 	handle: string;
 	/** Distinguishes two tabs belonging to the same handle. */
 	client: string;
@@ -22,6 +22,18 @@ export type Identity = {
 
 export type SocketData = Identity & {
 	room: string;
+	canEdit: boolean;
+	principalId?: string;
+	sessionId?: string;
+	authorizedUntil?: number;
+	credential?: string;
+	repositoryId?: string;
+	repositoryOwner?: string;
+	repositoryName?: string;
+	accessCheckedAt?: number;
+	authorizationTimer?: ReturnType<typeof setTimeout>;
+	authorizationRefresh?: Promise<boolean>;
+	closed?: boolean;
 };
 
 export type Socket = ServerWebSocket<SocketData>;

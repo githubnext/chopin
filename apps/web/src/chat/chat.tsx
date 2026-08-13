@@ -25,9 +25,11 @@ export type ChatProps = {
 	wire: Socket | undefined;
 	handle: string;
 	connected: boolean;
+	/** Hosted mode keeps the shared conversation while repository-scoped agent work is disabled. */
+	agent?: boolean;
 };
 
-export function Chat({ connected, handle, wire }: ChatProps) {
+export function Chat({ agent = true, connected, handle, wire }: ChatProps) {
 	let [entries, setEntries] = useState<Wire.Entry[]>([]);
 	let [arrived, setArrived] = useState<ReadonlySet<string>>(new Set());
 	let [queue, setQueue] = useState<Wire.Waiting[]>([]);
@@ -143,7 +145,7 @@ export function Chat({ connected, handle, wire }: ChatProps) {
 						// Enter sends; a newline needs a modifier, as everywhere else.
 						if (event.key !== "Enter" || event.shiftKey) return;
 						event.preventDefault();
-						submit(addressed(text) ? "planner" : "room");
+						submit(agent && addressed(text) ? "planner" : "room");
 					}}
 					placeholder="Say something…"
 					rows={3}
@@ -169,14 +171,16 @@ export function Chat({ connected, handle, wire }: ChatProps) {
 						>
 							Send to room
 						</button>
-						<button
-							className="btn btn-md btn-primary"
-							disabled={!connected || !text.trim()}
-							onClick={() => submit("planner")}
-							type="button"
-						>
-							Ask Planner
-						</button>
+						{agent && (
+							<button
+								className="btn btn-md btn-primary"
+								disabled={!connected || !text.trim()}
+								onClick={() => submit("planner")}
+								type="button"
+							>
+								Ask Planner
+							</button>
+						)}
 					</div>
 				</div>
 			</div>

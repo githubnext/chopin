@@ -154,7 +154,9 @@ writer lease before the server accepts traffic.
 Hosted sign-in also needs a GitHub OAuth App whose callback is
 `<APP_ORIGIN>/auth/github/callback`. Generate its session key with
 `openssl rand -hex 32`; the complete flow and credential boundary are described
-in [Hosted authentication](docs/authentication.md).
+in [Hosted authentication](docs/authentication.md). Repository authorization,
+viewer/editor roles and the channel shell are described in
+[Repository channels](docs/channels.md).
 
 ```bash
 bun test          # 500 tests, no browser

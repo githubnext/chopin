@@ -63,6 +63,8 @@ export type PlanEditorProps = {
 	user: { name: string; color: string };
 	/** Read-only while an agent turn may be rewriting the plan. */
 	busy?: boolean;
+	/** Read-only because this participant may view but not edit. */
+	readOnly?: boolean;
 	/**
 	 * Where the plan's questionnaires are published.
 	 *
@@ -89,8 +91,18 @@ export type PlanState = {
 };
 
 export function PlanEditor(
-	{ busy, className, connection, onScrollTop, questions, scrollTop, threads, user, wire }:
-		PlanEditorProps,
+	{
+		busy,
+		className,
+		connection,
+		onScrollTop,
+		questions,
+		readOnly,
+		scrollTop,
+		threads,
+		user,
+		wire,
+	}: PlanEditorProps,
 ) {
 	let ref = useRef<MDXEditorMethods>(null);
 	let scroller = useRef<HTMLDivElement>(null);
@@ -189,7 +201,7 @@ export function PlanEditor(
 	}, [presence, connection]);
 
 	let offline = connection !== undefined && connection !== "connected";
-	let locked = offline || !!busy || !state.synced;
+	let locked = offline || !!busy || !!readOnly || !state.synced;
 
 	// Empty without a connection, and never used: the editor is not rendered
 	// at all until there is one, so there is nothing to configure.
