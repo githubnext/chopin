@@ -20,6 +20,7 @@ import * as room from "./room";
 import * as Chat from "../chat/service";
 import * as Comments from "../comments/service";
 import * as Questions from "../questions/service";
+import { restore as restoreGraph } from "../tasks/graphs";
 import { broadcast, relay, reply, tell } from "../wire";
 
 import type { Server } from "bun";
@@ -32,6 +33,7 @@ import type { Block } from "./edit";
 import type { Brief, CreationOrigin } from "../mcp";
 import type { InitialChannel, JsonValue, Lease, StoredChannel } from "../storage/model";
 import type { StorageAdapter } from "../storage/port";
+import type { Graph } from "../tasks/graphs";
 
 /** Updates are grouped for this long before being applied together. */
 const GROUP_MS = 5;
@@ -124,6 +126,8 @@ export type Plan = {
 	threads: Map<string, Comments.Record>;
 	/** Bumped on every committed change; the agent's concurrency token. */
 	revision: number;
+	/** Implementation work, stored beside rather than inside the plan. */
+	graph?: Graph;
 	/**
 	 * Block outlines by revision.
 	 *
@@ -159,6 +163,7 @@ type Sidecar = {
 	revision: number;
 	documentSeq: number;
 	creation?: CreationMetadata;
+	graph?: Graph;
 	questions: Questions.Record[];
 	openQuestions: Questions.StoredOpen[];
 	threads: Comments.Record[];
@@ -170,7 +175,9 @@ function state(plan: Plan): Sidecar {
 		version: 1,
 		revision: plan.revision,
 		documentSeq: plan.document.seq,
+<<<<<<< HEAD
 		...(plan.creation ? { creation: plan.creation } : {}),
+		...(plan.graph ? { graph: plan.graph } : {}),
 		questions: [...plan.records.values()],
 		openQuestions: Questions.dump(plan.questions),
 		threads: [...plan.threads.values()],
@@ -308,11 +315,13 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 	}
 	let item = value as Record<string, JsonValue>;
 	let keys = Object.keys(item).sort();
+<<<<<<< HEAD
 	let legacy = item.creation === undefined
 		&& (item.brief !== undefined || item.origin !== undefined);
 	let created = item.creation === undefined
 		? legacyCreation(item.brief, item.origin)
 		: creation(item.creation);
+	let graph = restoreGraph(item.graph);
 	let expected = [
 		"documentSeq",
 		"openQuestions",
@@ -322,7 +331,9 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 		"transcript",
 		"version",
 	];
+<<<<<<< HEAD
 	if (created) expected.push(...(legacy ? ["brief", "origin"] : ["creation"]));
+	if (Object.hasOwn(item, "graph")) expected.push("graph");
 	expected.sort();
 	if (
 		keys.length !== expected.length
@@ -378,7 +389,9 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 		version: 1,
 		revision: item.revision,
 		documentSeq: item.documentSeq,
+<<<<<<< HEAD
 		...(created ? { creation: created } : {}),
+		...(graph ? { graph } : {}),
 		questions: questions as never[],
 		openQuestions: openQuestions as unknown as Questions.StoredOpen[],
 		threads: threads as never[],
@@ -659,6 +672,7 @@ export async function open(
 		records: new Map(sidecar.questions.map(record => [record.id, record])),
 		threads: new Map(sidecar.threads.map(record => [record.id, record])),
 		revision: sidecar.revision,
+		graph: sidecar.graph,
 		queue: [],
 		timer: undefined,
 		attention: undefined,
