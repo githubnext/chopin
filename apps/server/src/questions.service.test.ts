@@ -10,7 +10,7 @@ import { openPlan } from "./testing/plan";
 
 import type { Server } from "bun";
 import type { Plan } from "./plan/service";
-import type { SocketData } from "./wire";
+import type { Socket, SocketData } from "./wire";
 
 let plans: Plan[] = [];
 
@@ -231,4 +231,44 @@ test("unplaced questions remain valid before any prose exists", async () => {
 
 	await answer(plan);
 	await Promise.all([first.waiting, second.waiting]);
+});
+
+test("an active implementation leaves an open questionnaire in the plan when cancellation is refused", async () => {
+	let plan = await opened();
+	let server = { publish() {} } as unknown as Server<SocketData>;
+	let asked = asking(plan, server, definition());
+	await asked.created;
+	let id = [...plan.records.keys()][0]!;
+	let replies: Array<{ kind: string; message?: string; rid?: string; ts?: number }> = [];
+	let ws = {
+		data: { handle: "ana", client: "client-ana", room: "test" },
+		send(raw: string) {
+			replies.push(JSON.parse(raw));
+		},
+	} as unknown as Socket;
+	plan.execution = { id: "run-1" } as never;
+
+	await Questions.cancel(plan, server, "test", ws, {
+		kind: "question:cancel",
+		ts: 0,
+		rid: "cancel",
+		id,
+	});
+
+	expect(replies).toEqual([{
+		kind: "session:error",
+		message: "implementation is active",
+		ts: expect.any(Number),
+		rid: "cancel",
+	}]);
+	expect(plan.records.get(id)?.status).toBe("open");
+	expect(room.project(plan.document)).toContain("<Questionnaire");
+	plan.execution = undefined;
+	await Questions.cancel(plan, server, "test", ws, {
+		kind: "question:cancel",
+		ts: 0,
+		rid: "cleanup",
+		id,
+	});
+	await asked.waiting;
 });

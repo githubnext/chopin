@@ -21,7 +21,7 @@ import { limits, ulid } from "@chopin/dialect";
 
 import * as room from "../plan/room";
 import * as Store from "./store";
-import { broadcast, relay, reply, tell } from "../wire";
+import { broadcast, fail, relay, reply, tell } from "../wire";
 
 import * as Chat from "../chat/service";
 import * as Service from "../plan/service";
@@ -379,6 +379,7 @@ async function settle(
 	kind: Resolution,
 ): Promise<void> {
 	let { plan, room: roomId, server } = context;
+	if (kind === "accept" && plan.execution) return fail(ws, msg.rid, "implementation is active");
 
 	let held = plan.threads.get(msg.id);
 	// Read the passage before claiming: a decision records the prose as it read

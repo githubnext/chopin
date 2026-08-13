@@ -349,6 +349,7 @@ export async function cancel(
 	ws: Socket,
 	msg: Request<Wire.Cancel.Ask>,
 ): Promise<void> {
+	if (plan.execution) return fail(ws, msg.rid, "implementation is active");
 	let claimed = Store.claimCancel(plan.questions, msg.id, ws.data.handle);
 	if (!claimed.ok) {
 		return reply(ws, msg.rid, { kind: "question:cancel", ts: 0, id: msg.id, ...claimed });
