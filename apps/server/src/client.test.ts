@@ -42,6 +42,7 @@ async function start(port: number, env: Record<string, string>): Promise<void> {
 			PORT: String(port),
 			SERVER_HOST: "127.0.0.1",
 			AGENT: "off",
+			STORAGE_DRIVER: "legacy",
 			DATA_DIR: scratch(),
 			...env,
 		},

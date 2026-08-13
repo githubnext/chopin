@@ -13,7 +13,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { load, problem } from "./config";
+import { describe as description, load, problem } from "./config";
 
 import type { Subprocess } from "bun";
 
@@ -34,9 +34,12 @@ async function temporary(): Promise<string> {
 }
 
 /** Load configuration as it would be with these variables set. */
-function configured(env: Record<string, string>) {
+function configured(env: Record<string, string | undefined>) {
 	let previous = { ...process.env };
-	Object.assign(process.env, env);
+	for (let [key, value] of Object.entries(env)) {
+		if (value === undefined) delete process.env[key];
+		else process.env[key] = value;
+	}
 	try {
 		return load();
 	} finally {
@@ -80,6 +83,38 @@ describe("the working directory", () => {
 	});
 });
 
+describe("storage", () => {
+	it("keeps the prototype filesystem unless a driver is selected", () => {
+		let config = configured({ STORAGE_DRIVER: undefined, DATABASE_URL: undefined });
+		expect(config.storage).toEqual({ driver: "legacy" });
+	});
+
+	it("accepts an explicit PostgreSQL database", () => {
+		let config = configured({
+			STORAGE_DRIVER: "postgres",
+			DATABASE_URL: "postgresql://chopin:secret@database.test/chopin",
+		});
+		expect(config.storage).toEqual({
+			driver: "postgres",
+			url: "postgresql://chopin:secret@database.test/chopin",
+		});
+		expect(description(config)).toContain("storage: postgres");
+		expect(description(config)).not.toContain("secret");
+	});
+
+	it("requires a database URL for PostgreSQL", () => {
+		expect(() => configured({ STORAGE_DRIVER: "postgres", DATABASE_URL: undefined })).toThrow(
+			"DATABASE_URL is required",
+		);
+	});
+
+	it("refuses unsupported drivers and URL schemes", () => {
+		expect(() => configured({ STORAGE_DRIVER: "cosmos" })).toThrow("STORAGE_DRIVER");
+		expect(() => configured({ STORAGE_DRIVER: "postgres", DATABASE_URL: "https://database.test" }))
+			.toThrow("PostgreSQL URL");
+	});
+});
+
 describe("starting", () => {
 	/**
 	 * The failure this exists for, end to end: the server must refuse, say
@@ -90,7 +125,13 @@ describe("starting", () => {
 		let missing = join(tmpdir(), "chopin-nowhere-4c21");
 
 		let server = Bun.spawn(["bun", join(import.meta.dir, "main.ts")], {
-			env: { ...process.env, PORT: "8971", WORKING_DIR: missing, AGENT: "off" },
+			env: {
+				...process.env,
+				PORT: "8971",
+				WORKING_DIR: missing,
+				AGENT: "off",
+				STORAGE_DRIVER: "legacy",
+			},
 			stdout: "pipe",
 			stderr: "pipe",
 		});

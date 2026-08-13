@@ -9,6 +9,8 @@
 import { statSync } from "node:fs";
 import { join, resolve } from "node:path";
 
+import type { StorageConfig } from "./storage/registry";
+
 /**
  * The installation root.
  *
@@ -66,6 +68,8 @@ export type Config = {
 	 * a build and would make development quietly serve stale files.
 	 */
 	devClient: string | undefined;
+	/** Durable service storage; legacy keeps the prototype room files during cutover. */
+	storage: StorageConfig;
 };
 
 const DEFAULT_PORT = 8787;
@@ -81,6 +85,24 @@ function port(): number {
 	return value;
 }
 
+function storage(): StorageConfig {
+	let driver = process.env.STORAGE_DRIVER || "legacy";
+	if (driver === "legacy") return { driver };
+	if (driver !== "postgres") {
+		throw new Error(`STORAGE_DRIVER must be "legacy" or "postgres", got ${JSON.stringify(driver)}`);
+	}
+
+	let raw = process.env.DATABASE_URL;
+	if (!raw) throw new Error("DATABASE_URL is required when STORAGE_DRIVER=postgres");
+	try {
+		let url = new URL(raw);
+		if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") throw new Error();
+	} catch {
+		throw new Error("DATABASE_URL must be a PostgreSQL URL");
+	}
+	return { driver, url: raw };
+}
+
 export function load(): Config {
 	return {
 		host: process.env.SERVER_HOST || "127.0.0.1",
@@ -92,6 +114,7 @@ export function load(): Config {
 		token: process.env.GITHUB_TOKEN || undefined,
 		agent: process.env.AGENT !== "off",
 		devClient: process.env.DEV_CLIENT || undefined,
+		storage: storage(),
 	};
 }
 
@@ -129,6 +152,7 @@ export function describe(config: Config): string {
 		`http://${config.host}:${config.port}`,
 		config.devClient ? `client: vite (${config.devClient})` : "client: built",
 		config.agent ? `agent: ${config.model}` : "agent: off",
+		`storage: ${config.storage.driver}`,
 		`working dir: ${config.workingDir}`,
 	];
 	if (config.key) parts.push("access key: required");

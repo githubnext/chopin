@@ -63,16 +63,18 @@ WORKING_DIR=../some-project bun run dev
 
 ## Configuration
 
-| Variable       | Default             | Meaning                                                                                   |
-| -------------- | ------------------- | ----------------------------------------------------------------------------------------- |
-| `GITHUB_TOKEN` | —                   | Required. The agent's credential and the GitHub MCP bearer.                               |
-| `WORKING_DIR`  | repository root     | Everything the agent may read. Relative to where you run the command. Printed at startup. |
-| `SERVER_HOST`  | `127.0.0.1`         | Bind address. `0.0.0.0` for a LAN or a tunnel.                                            |
-| `ACCESS_KEY`   | unset               | When set, required to connect.                                                            |
-| `MODEL`        | `claude-sonnet-4.6` | The planner's model.                                                                      |
-| `AGENT`        | on                  | `AGENT=off` runs the editor with no agent at all.                                         |
-| `PORT`         | `8787`              |                                                                                           |
-| `DATA_DIR`     | `data`              | Where rooms are written.                                                                  |
+| Variable         | Default             | Meaning                                                                                   |
+| ---------------- | ------------------- | ----------------------------------------------------------------------------------------- |
+| `GITHUB_TOKEN`   | —                   | Required. The agent's credential and the GitHub MCP bearer.                               |
+| `WORKING_DIR`    | repository root     | Everything the agent may read. Relative to where you run the command. Printed at startup. |
+| `SERVER_HOST`    | `127.0.0.1`         | Bind address. `0.0.0.0` for a LAN or a tunnel.                                            |
+| `ACCESS_KEY`     | unset               | When set, required to connect.                                                            |
+| `MODEL`          | `claude-sonnet-4.6` | The planner's model.                                                                      |
+| `AGENT`          | on                  | `AGENT=off` runs the editor with no agent at all.                                         |
+| `PORT`           | `8787`              |                                                                                           |
+| `DATA_DIR`       | `data`              | Where rooms are written.                                                                  |
+| `STORAGE_DRIVER` | `legacy`            | Durable service adapter. `postgres` selects the hosted storage foundation.                |
+| `DATABASE_URL`   | unset               | Required by `STORAGE_DRIVER=postgres`; never printed by the server.                       |
 
 ## Sharing a room
 
@@ -129,8 +131,24 @@ Three things are worth knowing if you intend to change it:
 
 ## Development
 
+The hosted service uses ordinary PostgreSQL. Start the development database and
+apply its migrations with:
+
+```bash
+bun run db:up
+STORAGE_DRIVER=postgres \
+  DATABASE_URL=postgresql://chopin:chopin@127.0.0.1:5432/chopin?sslmode=disable \
+  bun run migrate
+```
+
+`bun run db:down` stops it without removing its named volume. The current `/r/*`
+prototype remains on `DATA_DIR` while its room sink is moved onto the storage
+adapter; selecting PostgreSQL now proves the schema, health check and singleton
+writer lease before the server accepts traffic.
+
 ```bash
 bun test          # 500 tests, no browser
+bun run test:postgres # storage contract against the Docker database
 bun run e2e       # 40 tests in Chromium, against the built client
 bun run types     # every package, and e2e
 bun run ci        # dprint + oxlint
