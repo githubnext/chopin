@@ -6,6 +6,7 @@
 	"scripts": {
 		"dev": "bun --watch src/main.ts",
 		"start": "bun src/main.ts",
+		"migrate": "bun src/storage/migrate.ts",
 		"types": "tsgo --noEmit --skipLibCheck"
 	},
 	"dependencies": {

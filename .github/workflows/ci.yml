@@ -27,6 +27,20 @@ jobs:
   checks:
     name: format, lint, types, tests
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: chopin
+          POSTGRES_USER: chopin
+          POSTGRES_PASSWORD: chopin
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U chopin -d chopin"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
     steps:
       - uses: actions/checkout@v7
 
@@ -53,6 +67,10 @@ jobs:
       # 500 tests, no browser, no agent. `AGENT=off` is set by the tests that
       # spawn a server; nothing here needs a token.
       - run: bun test
+
+      # Every durable provider passes the same behavioral contract. The ordinary
+      # unit command leaves this one skipped so it stays usable without Docker.
+      - run: bun run test:postgres
 
   browser:
     name: e2e

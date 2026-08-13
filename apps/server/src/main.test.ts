@@ -58,6 +58,7 @@ beforeAll(async () => {
 			ACCESS_KEY: KEY,
 			SERVER_HOST: "127.0.0.1",
 			AGENT: "off",
+			STORAGE_DRIVER: "legacy",
 		},
 		stdout: "ignore",
 		stderr: "inherit",

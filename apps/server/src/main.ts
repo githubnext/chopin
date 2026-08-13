@@ -20,13 +20,16 @@ import * as Inject from "./questions/inject";
 import * as Marks from "./comments/inject";
 import * as Questions from "./questions/service";
 import * as Rooms from "./rooms";
+import { createStorage } from "./storage/registry";
 import { broadcast, fail, relay, tell, topic } from "./wire";
 
 import type { Server } from "bun";
 import type { Incoming } from "@chopin/protocol";
+import type { Lease } from "./storage/model";
 import type { Socket, SocketData } from "./wire";
 
 const config = load();
+const storage = createStorage(config.storage);
 
 /** Where the built client lands. Used only when there is no dev client. */
 const CLIENT = join(import.meta.dir, "../../web/dist");
@@ -38,6 +41,18 @@ const CLIENT = join(import.meta.dir, "../../web/dist");
  * in between would cost the epoch and everyone's undo history for a keypress.
  */
 const EVICT_MS = 30_000;
+const LEASE_TTL_MS = 30_000;
+const LEASE_RENEW_MS = 10_000;
+const LEASE_SAFETY_MS = 5_000;
+const SESSION_CLEANUP_MS = 5 * 60_000;
+
+let server: Server<SocketData>;
+let heldLease: Lease | undefined;
+let leaseRenewal: ReturnType<typeof setInterval> | undefined;
+let leaseWatchdog: ReturnType<typeof setTimeout> | undefined;
+let renewingLease: Promise<void> | undefined;
+let sessionCleanup: ReturnType<typeof setInterval> | undefined;
+let cleaningSessions: Promise<void> | undefined;
 
 function presence(server: Server<SocketData>, room: Rooms.Room): void {
 	broadcast(server, room.id, {
@@ -202,67 +217,122 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 	}
 }
 
-const server = Bun.serve<SocketData>({
-	hostname: config.host,
-	port: config.port,
+function listen(): Server<SocketData> {
+	return Bun.serve<SocketData>({
+		hostname: config.host,
+		port: config.port,
 
-	fetch(req, self) {
-		let url = new URL(req.url);
+		fetch(req, self) {
+			let url = new URL(req.url);
 
-		if (url.pathname === "/ws") {
-			let outcome = admit(url);
-			if ("status" in outcome) {
-				return new Response(outcome.reason, { status: outcome.status });
+			if (url.pathname === "/ws") {
+				let outcome = admit(url);
+				if ("status" in outcome) {
+					return new Response(outcome.reason, { status: outcome.status });
+				}
+				if (self.upgrade(req, { data: outcome.data })) return undefined;
+				return new Response("upgrade failed", { status: 400 });
 			}
-			if (self.upgrade(req, { data: outcome.data })) return undefined;
-			return new Response("upgrade failed", { status: 400 });
-		}
 
-		return config.devClient ? proxy(req, url, config.devClient) : serve(url, CLIENT);
-	},
-
-	websocket: {
-		open(ws: Socket) {
-			ws.subscribe(topic(ws.data.room));
-			let room = Rooms.join(ws);
-			tell(ws, {
-				kind: "session:hello",
-				ts: 0,
-				room: room.id,
-				you: { handle: ws.data.handle, client: ws.data.client },
-				members: Rooms.members(room),
-			});
-			relay(ws, { kind: "session:presence", ts: 0, members: Rooms.members(room) });
+			return config.devClient ? proxy(req, url, config.devClient) : serve(url, CLIENT);
 		},
 
-		message(ws: Socket, raw) {
-			if (typeof raw === "string") void receive(ws, raw);
-		},
+		websocket: {
+			open(ws: Socket) {
+				ws.subscribe(topic(ws.data.room));
+				let room = Rooms.join(ws);
+				tell(ws, {
+					kind: "session:hello",
+					ts: 0,
+					room: room.id,
+					you: { handle: ws.data.handle, client: ws.data.client },
+					members: Rooms.members(room),
+				});
+				relay(ws, { kind: "session:presence", ts: 0, members: Rooms.members(room) });
+			},
 
-		close(ws: Socket) {
-			let room = Rooms.leave(ws);
-			ws.unsubscribe(topic(ws.data.room));
-			if (!room) return;
-			if (room.plan) {
-				Service.departed(room.plan, ws);
-				Questions.away(room.plan, ws);
-				Comments.away(room.plan, ws);
-			}
-			if (room.members.size > 0) presence(server, room);
-			else evict(room);
-		},
-	},
-});
+			message(ws: Socket, raw) {
+				if (typeof raw === "string") void receive(ws, raw);
+			},
 
-/** Nothing in memory is worth losing to a Ctrl-C. */
-async function drain(): Promise<void> {
-	await Promise.all(Rooms.all().map(room => room.plan && Service.close(room.plan)));
-	await Agent.shutdown();
-	process.exit(0);
+			close(ws: Socket) {
+				let room = Rooms.leave(ws);
+				ws.unsubscribe(topic(ws.data.room));
+				if (!room) return;
+				if (room.plan) {
+					Service.departed(room.plan, ws);
+					Questions.away(room.plan, ws);
+					Comments.away(room.plan, ws);
+				}
+				if (room.members.size > 0) presence(server, room);
+				else evict(room);
+			},
+		},
+	});
 }
 
-process.on("SIGINT", () => void drain());
-process.on("SIGTERM", () => void drain());
+/** Nothing in memory is worth losing to a Ctrl-C. */
+let draining: Promise<void> | undefined;
+
+function drain(): Promise<void> {
+	return draining ??= (async () => {
+		await server.stop(true);
+		await Promise.all(Rooms.all().map(room => room.plan && Service.close(room.plan)));
+		await Agent.shutdown();
+		if (sessionCleanup) clearInterval(sessionCleanup);
+		await cleaningSessions;
+		if (leaseRenewal) clearInterval(leaseRenewal);
+		if (leaseWatchdog) clearTimeout(leaseWatchdog);
+		await renewingLease;
+		if (storage && heldLease) await storage.leases.release(heldLease);
+		await storage?.close();
+	})();
+}
+
+function signal(): void {
+	void drain().then(
+		() => process.exit(0),
+		err => {
+			console.error("chopin: shutdown failed -", err);
+			process.exit(1);
+		},
+	);
+}
+
+function renewLease(): void {
+	if (!storage || !heldLease || renewingLease) return;
+	renewingLease = storage.leases.renew(heldLease, LEASE_TTL_MS).then(renewed => {
+		if (renewed) {
+			heldLease = renewed;
+			armLeaseWatchdog();
+		} else {
+			console.error("chopin: lost the storage writer lease");
+			signal();
+		}
+	}, err => {
+		console.error("chopin: could not renew the storage writer lease -", err);
+		signal();
+	}).finally(() => {
+		renewingLease = undefined;
+	});
+}
+
+function armLeaseWatchdog(): void {
+	if (leaseWatchdog) clearTimeout(leaseWatchdog);
+	leaseWatchdog = setTimeout(() => {
+		console.error("chopin: storage writer lease was not renewed before its safety deadline");
+		signal();
+	}, LEASE_TTL_MS - LEASE_SAFETY_MS);
+}
+
+function cleanSessions(): void {
+	if (!storage || cleaningSessions) return;
+	cleaningSessions = storage.sessions.deleteExpired(new Date()).then(() => {}, err => {
+		console.error("chopin: could not delete expired login sessions -", err);
+	}).finally(() => {
+		cleaningSessions = undefined;
+	});
+}
 
 /**
  * Refuse to start rather than start half-working.
@@ -278,8 +348,20 @@ if (misconfigured) {
 	process.exit(1);
 }
 
+if (storage) {
+	try {
+		await storage.health();
+	} catch (err) {
+		await storage.close().catch(() => {});
+		let reason = err instanceof Error ? err.message : String(err);
+		console.error(`chopin: storage could not start - ${reason}`);
+		process.exit(1);
+	}
+}
+
 if (config.agent) {
 	if (!config.token) {
+		await storage?.close().catch(() => {});
 		console.error("chopin: GITHUB_TOKEN is not set. Set one, or start with AGENT=off.");
 		process.exit(1);
 	}
@@ -287,10 +369,48 @@ if (config.agent) {
 	try {
 		await Agent.probe(config, { tools: [] });
 	} catch (err) {
+		await storage?.close().catch(() => {});
 		let reason = err instanceof Error ? err.message : String(err);
-		console.error(`chopin: the agent could not start — ${reason}`);
+		console.error(`chopin: the agent could not start - ${reason}`);
 		process.exit(1);
 	}
 }
+
+if (storage) {
+	try {
+		heldLease = await storage.leases.acquire(
+			"chopin:writer",
+			crypto.randomUUID(),
+			LEASE_TTL_MS,
+		);
+		if (!heldLease) throw new Error("another Chopin instance owns the database");
+	} catch (err) {
+		await Agent.shutdown();
+		await storage.close().catch(() => {});
+		let reason = err instanceof Error ? err.message : String(err);
+		console.error(`chopin: storage writer lease could not start - ${reason}`);
+		process.exit(1);
+	}
+	armLeaseWatchdog();
+	leaseRenewal = setInterval(renewLease, LEASE_RENEW_MS);
+	cleanSessions();
+	sessionCleanup = setInterval(cleanSessions, SESSION_CLEANUP_MS);
+}
+
+try {
+	server = listen();
+} catch (err) {
+	if (sessionCleanup) clearInterval(sessionCleanup);
+	if (leaseRenewal) clearInterval(leaseRenewal);
+	if (leaseWatchdog) clearTimeout(leaseWatchdog);
+	await cleaningSessions;
+	await renewingLease;
+	await Agent.shutdown();
+	if (storage && heldLease) await storage.leases.release(heldLease).catch(() => {});
+	await storage?.close().catch(() => {});
+	throw err;
+}
+process.on("SIGINT", signal);
+process.on("SIGTERM", signal);
 
 console.log(describe(config));
