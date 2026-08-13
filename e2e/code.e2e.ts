@@ -39,7 +39,7 @@ async function colours(page: Page): Promise<number> {
 		.evaluateAll(nodes => new Set(nodes.map(node => (node as HTMLElement).style.color)).size);
 }
 
-test("a named fence is coloured, beside the source it came from", async ({ join, seed }) => {
+test("a named fence is coloured with its source hidden by default", async ({ join, seed }) => {
 	await seed("```ts\nexport function open(room: string) {\n\treturn 1;\n}\n```\n");
 	let page = await join("ana");
 
@@ -49,10 +49,19 @@ test("a named fence is coloured, beside the source it came from", async ({ join,
 	// never loaded and every token was painted as plain text.
 	await expect.poll(() => colours(page)).toBeGreaterThan(1);
 
-	// The source is what the room is collaborating in, and it stays. A preview
-	// that replaced it would be a second copy of the text with the caret in
-	// the wrong one.
-	await expect(content(page).locator("[data-plan-source]")).toContainText("export function open");
+	// A preview replaces the source until this reader asks to edit it. The
+	// document still carries the source, but it does not compete with the view.
+	await expect(content(page).locator("[data-plan-source]")).toBeHidden();
+	await expect(content(page).getByRole("button", { name: "Show source" })).toBeVisible();
+});
+
+test("a diagram is shown with its source hidden by default", async ({ join, seed }) => {
+	await seed("```mermaid\ngraph TD;\nA-->B;\n```\n");
+	let page = await join("ana");
+
+	await expect(content(page).locator("[data-plan-preview] svg")).toBeVisible();
+	await expect(content(page).locator("[data-plan-source]")).toBeHidden();
+	await expect(content(page).getByRole("button", { name: "Show source" })).toBeVisible();
 });
 
 test("naming a fence colours it, and the name reaches the file", async ({ join, room, seed }) => {
@@ -132,6 +141,8 @@ test("hiding the source leaves what was drawn from it", async ({ join, seed }) =
 	let page = await join("ana");
 
 	await expect(content(page).locator("[data-file]")).toBeVisible();
+	await content(page).getByRole("button", { name: "Show source" }).click();
+	await expect(content(page).locator("[data-plan-source]")).toBeVisible();
 	await content(page).getByRole("button", { name: "Hide source" }).click();
 
 	await expect(content(page).locator("[data-plan-source]")).toBeHidden();
@@ -210,18 +221,18 @@ test("a language chosen by one is a change for everyone", async ({ join, room, s
 	await written(ana, room, /^```typescript$/m);
 });
 
-test("hiding the source hides nobody else's", async ({ join, seed }) => {
+test("showing the source leaves everybody else's hidden", async ({ join, seed }) => {
 	await seed("```ts\nlet a = 1;\n```\n");
 	let ana = await join("ana");
 	let bo = await join("bo");
 
 	await expect(content(bo).locator("[data-file]")).toBeVisible();
-	await content(ana).getByRole("button", { name: "Hide source" }).click();
-	await expect(content(ana).locator("[data-plan-source]")).toBeHidden();
+	await content(ana).getByRole("button", { name: "Show source" }).click();
+	await expect(content(ana).locator("[data-plan-source]")).toBeVisible();
 
-	// Collapsing is a way of looking at a block, not a fact about it. A reader
-	// who hid a fence for themselves has not hidden it for the person editing
-	// it, who would otherwise watch their own caret leave the page.
-	await expect(content(bo).locator("[data-plan-source]")).toBeVisible();
-	await expect(content(bo).getByRole("button", { name: "Hide source" })).toBeVisible();
+	// Visibility is a way of looking at a block, not a fact about it. A reader
+	// who reveals a fence for themselves has not revealed it for the other
+	// person, who should keep reading the preview.
+	await expect(content(bo).locator("[data-plan-source]")).toBeHidden();
+	await expect(content(bo).getByRole("button", { name: "Show source" })).toBeVisible();
 });
