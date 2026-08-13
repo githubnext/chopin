@@ -441,6 +441,29 @@ describe("accepting, as the service orders it", () => {
 		expect(room.project(plan.document)).toContain(`<Decision id="${id}"`);
 	});
 
+	it("leaves an open thread and plan unchanged while implementation is active", async () => {
+		let { plan, server } = await opened();
+		let ana = member("ana");
+		let id = await mark(plan, server, ana);
+		let source = room.project(plan.document);
+		ana.replies.length = 0;
+		plan.execution = { id: "run-1" } as never;
+
+		await Comments.accept(
+			context(plan, server),
+			ana.socket,
+			ask({ kind: "comment:accept" as const, id }),
+		);
+
+		expect(ana.replies).toHaveLength(1);
+		expect(ana.replies[0]).toMatchObject({
+			kind: "session:error",
+			message: "implementation is active",
+		});
+		expect(plan.threads.get(id)?.status).toBe("open");
+		expect(room.project(plan.document)).toBe(source);
+	});
+
 	/**
 	 * Once the document holds the decision, committing is no longer optional.
 	 * Rolling back on a failed relay would leave a `<Decision>` in a plan whose
