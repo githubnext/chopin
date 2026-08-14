@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import * as Api from "./api";
+import { RepositoryPicker } from "./repository-picker";
 
 import type { ComponentType, FormEvent, ReactNode } from "react";
 
@@ -8,6 +9,7 @@ export type HostedWorkspaceProps = {
 	room: string;
 	handle: string;
 	label: string;
+	repository: Api.Repository;
 	canEdit: boolean;
 	agent?: boolean;
 	onResetAgent?: () => Promise<void>;
@@ -40,7 +42,19 @@ export function hostedRoute(pathname: string): HostedRoute {
 	return { page: "missing" };
 }
 
-function Frame({ children, user }: { children: ReactNode; user: Api.User }) {
+function Frame(
+	{
+		children,
+		currentRepository,
+		openRepositoryPicker = false,
+		user,
+	}: {
+		children: ReactNode;
+		currentRepository?: Api.Repository | { owner: string; name: string; fullName: string };
+		openRepositoryPicker?: boolean;
+		user: Api.User;
+	},
+) {
 	async function signOut() {
 		await Api.logout();
 		location.assign("/");
@@ -48,10 +62,12 @@ function Frame({ children, user }: { children: ReactNode; user: Api.User }) {
 
 	return (
 		<div className="min-h-full bg-ground text-text-primary">
-			<header className="hairline-b flex h-14 items-center bg-page px-6">
+			<header className="hairline-b flex h-14 items-center bg-page px-3 sm:px-6">
 				<a className="text-sm font-semibold" href="/">chopin</a>
+				<span aria-hidden="true" className="mx-1 h-4 hairline-l sm:mx-2" />
+				<RepositoryPicker current={currentRepository} initialOpen={openRepositoryPicker} />
 				<div className="ml-auto flex items-center gap-3">
-					<span className="text-sm text-text-secondary">{user.login}</span>
+					<span className="hidden text-sm text-text-secondary sm:inline">{user.login}</span>
 					<button className="btn btn-sm btn-ghost" onClick={() => void signOut()} type="button">
 						Sign out
 					</button>
@@ -113,87 +129,13 @@ export function HostedLogin() {
 	);
 }
 
-function RepositoryList({ user }: { user: Api.User }) {
-	let [page, setPage] = useState<Api.RepositoryPage>();
-	let [error, setError] = useState<unknown>();
-	let [loadingMore, setLoadingMore] = useState(false);
-
-	useEffect(() => {
-		let active = true;
-		Api.repositories().then(value => {
-			if (active) setPage(value);
-		}, reason => {
-			if (active) setError(reason);
-		});
-		return () => {
-			active = false;
-		};
-	}, []);
-
-	async function more() {
-		if (!page?.nextPage || loadingMore) return;
-		setLoadingMore(true);
-		try {
-			let next = await Api.repositories(page.nextPage);
-			setPage({
-				repositories: [...page.repositories, ...next.repositories],
-				nextPage: next.nextPage,
-			});
-		} catch (reason) {
-			setError(reason);
-		} finally {
-			setLoadingMore(false);
-		}
-	}
-
-	if (error) return <Failure error={error} />;
+function RepositoryHome({ user }: { user: Api.User }) {
 	return (
-		<Frame user={user}>
-			<main className="mx-auto w-full max-w-5xl px-6 py-12">
-				<p className="text-sm font-medium text-brand-ink">Repositories</p>
-				<h1 className="mt-2 text-2xl font-semibold">Where are you planning?</h1>
-				<p className="mt-3 text-sm text-text-secondary">
-					Choose a repository. Its channels live in Chopin; its code stays in GitHub.
+		<Frame openRepositoryPicker user={user}>
+			<main className="mx-auto w-full max-w-4xl px-6 py-12">
+				<p className="text-sm text-text-tertiary">
+					Choose a repository from the menu to see its planning channels.
 				</p>
-				{!page
-					? <p className="mt-10 text-sm text-text-tertiary">Loading repositories...</p>
-					: (
-						<div className="mt-8 grid gap-3 sm:grid-cols-2">
-							{page.repositories.map(repository => (
-								<a
-									className="ring-hairline rounded-lg bg-page p-5 shadow-resting transition-shadow hover:shadow-raised"
-									href={`/repositories/${encodeURIComponent(repository.owner)}/${
-										encodeURIComponent(repository.name)
-									}`}
-									key={repository.id}
-								>
-									<div className="flex items-center gap-2">
-										<span className="text-sm font-semibold">{repository.fullName}</span>
-										{repository.private && (
-											<span className="rounded-sm bg-inset px-1.5 text-sm text-text-tertiary">
-												Private
-											</span>
-										)}
-									</div>
-									<p className="mt-4 text-sm text-text-tertiary">
-										{repository.permissions.push || repository.permissions.admin
-											? "Create and edit channels"
-											: "View channels"}
-									</p>
-								</a>
-							))}
-						</div>
-					)}
-				{page?.nextPage && (
-					<button
-						className="btn btn-md btn-secondary mt-6"
-						disabled={loadingMore}
-						onClick={() => void more()}
-						type="button"
-					>
-						{loadingMore ? "Loading..." : "More repositories"}
-					</button>
-				)}
 			</main>
 		</Frame>
 	);
@@ -248,13 +190,18 @@ function RepositoryChannels(
 
 	if (error) return <Failure error={error} />;
 	return (
-		<Frame user={user}>
+		<Frame
+			currentRepository={page?.repository ?? {
+				owner,
+				name: repository,
+				fullName: `${owner}/${repository}`,
+			}}
+			user={user}
+		>
 			<main className="mx-auto w-full max-w-4xl px-6 py-12">
-				<a className="text-sm text-brand-ink" href="/">Repositories</a>
-				<h1 className="mt-3 text-2xl font-semibold">{owner}/{repository}</h1>
-				<div className="mt-8 flex items-end justify-between gap-6">
+				<div className="flex items-end justify-between gap-6">
 					<div>
-						<h2 className="text-xl font-semibold">Planning channels</h2>
+						<h1 className="text-2xl font-semibold">Planning channels</h1>
 						<p className="mt-1 text-sm text-text-secondary">
 							One shared plan and conversation per channel.
 						</p>
@@ -357,8 +304,9 @@ function ChannelWorkspace(
 			agent={agent}
 			canEdit={detail.canEdit}
 			handle={user.login}
-			label={`${detail.repository.fullName} / ${detail.channel.title}`}
+			label={detail.channel.title}
 			onResetAgent={agent ? () => Api.resetAgent(id) : undefined}
+			repository={detail.repository}
 			room={detail.channel.id}
 		/>
 	);
@@ -374,7 +322,7 @@ export function HostedApp(
 	let route = hostedRoute(location.pathname);
 	switch (route.page) {
 		case "repositories":
-			return <RepositoryList user={user} />;
+			return <RepositoryHome user={user} />;
 		case "repository":
 			return <RepositoryChannels owner={route.owner} repository={route.repository} user={user} />;
 		case "channel":
