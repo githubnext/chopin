@@ -20,10 +20,16 @@
  */
 
 import { dirname, join } from "node:path";
+import manifest from "../package.json";
 
 import type { Subprocess } from "bun";
 
 const ROOT = dirname(import.meta.dir);
+
+if (`bun@${Bun.version}` !== manifest.packageManager) {
+	console.error(`[dev] ${manifest.packageManager} is required; found bun@${Bun.version}`);
+	process.exit(1);
+}
 
 /** How long a child gets to leave politely before it is made to. */
 const GRACE_MS = 2_000;

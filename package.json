@@ -1,6 +1,7 @@
 {
 	"name": "chopin",
 	"private": true,
+	"packageManager": "bun@1.3.2",
 	"type": "module",
 	"scripts": {
 		"dev": "bun scripts/dev.ts",
