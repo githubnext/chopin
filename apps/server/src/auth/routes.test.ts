@@ -17,17 +17,19 @@ function cookies(response: Response): string[] {
 }
 
 class FakeGitHub implements GitHub {
-	exchanged: { code: string; verifier: string } | undefined;
+	authorized: Parameters<GitHub["authorize"]>[0] | undefined;
+	exchanged: Parameters<GitHub["exchange"]>[0] | undefined;
 	denyRepositories = false;
 
-	authorize(input: { state: string; challenge: string }): string {
+	authorize(input: Parameters<GitHub["authorize"]>[0]): string {
+		this.authorized = input;
 		let url = new URL("https://github.test/authorize");
 		url.searchParams.set("state", input.state);
 		url.searchParams.set("challenge", input.challenge);
 		return url.href;
 	}
 
-	async exchange(input: { code: string; verifier: string }): Promise<string> {
+	async exchange(input: Parameters<GitHub["exchange"]>[0]): Promise<string> {
 		this.exchanged = input;
 		return "gho_route_secret";
 	}
@@ -185,6 +187,43 @@ describe("hosted authentication routes", () => {
 		expect(missing!.status).toBe(400);
 		expect(await missing!.json()).toEqual({ error: "OAuth state is missing or invalid" });
 		expect(cookies(missing!)[0]).toContain("Max-Age=0");
+	});
+
+	it("uses the configured public origin behind a reverse proxy", async () => {
+		let config = { ...CONFIG, origin: "https://sample-vm.exe.xyz" };
+		let github = new FakeGitHub();
+		let router = new Router();
+		registerAuthRoutes(router, { config, storage: new MemoryStorage(), github });
+		let forwarded = {
+			"x-forwarded-host": "evil.test",
+			"x-forwarded-proto": "http",
+		};
+
+		let start = await router.handle(
+			new Request("http://127.0.0.1:8787/auth/github", { headers: forwarded }),
+		);
+		expect(github.authorized).toMatchObject({
+			clientId: "client-id",
+			redirectUri: "https://sample-vm.exe.xyz/auth/github/callback",
+		});
+		let stateCookie = cookies(start!)[0]!;
+		expect(stateCookie).toStartWith("__Host-chopin_oauth_state=");
+		expect(stateCookie).toContain("; Secure");
+		let state = new URL(start!.headers.get("location")!).searchParams.get("state");
+
+		let callback = await router.handle(
+			new Request(
+				`http://127.0.0.1:8787/auth/github/callback?code=oauth-code&state=${state}`,
+				{ headers: { ...forwarded, cookie: pair(stateCookie) } },
+			),
+		);
+		expect(callback!.status).toBe(303);
+		expect(github.exchanged).toMatchObject({
+			clientId: "client-id",
+			clientSecret: "client-secret",
+			redirectUri: "https://sample-vm.exe.xyz/auth/github/callback",
+			code: "oauth-code",
+		});
 	});
 
 	it("revokes the local session when GitHub rejects its token", async () => {
