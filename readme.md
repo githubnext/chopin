@@ -10,8 +10,9 @@ prose they produced.
 
 ## Running it
 
-Chopin requires PostgreSQL and a GitHub OAuth App. Register this callback on the
-OAuth App:
+Chopin requires Bun 1.3.2, PostgreSQL, and a GitHub OAuth App. The Bun version
+matches CI and the production image; verify it with `bun --version`. Register
+this callback on the OAuth App:
 
 ```text
 http://127.0.0.1:8787/auth/github/callback
