@@ -21,6 +21,7 @@
 
 import { dirname, join } from "node:path";
 import manifest from "../package.json";
+import { discoverExeDev, parseDevTarget } from "./dev-options";
 
 import type { Subprocess } from "bun";
 
@@ -36,8 +37,22 @@ const GRACE_MS = 2_000;
 
 const WEB = "http://127.0.0.1:5173";
 
-/** Defaults kept in step with `apps/server/src/config.ts`. */
-const APP = `http://${process.env.SERVER_HOST || "127.0.0.1"}:${process.env.PORT || 8787}`;
+async function exeDevelopment() {
+	try {
+		return parseDevTarget(process.argv.slice(2)) === "exe" ? await discoverExeDev() : undefined;
+	} catch (error) {
+		console.error(`[dev] ${error instanceof Error ? error.message : String(error)}`);
+		process.exit(1);
+	}
+}
+
+let exe = await exeDevelopment();
+
+/** Local defaults kept in step with `apps/server/src/config.ts`. */
+const APP = exe?.origin
+	?? `http://${process.env.SERVER_HOST || "127.0.0.1"}:${process.env.PORT || 8787}`;
+const READY = exe ? "http://127.0.0.1:8787" : APP;
+const HMR = exe ? `wss://${exe.host}:5173` : undefined;
 
 const READY_MS = 30_000;
 
@@ -112,10 +127,12 @@ async function announce(): Promise<void> {
 		if (stopping) return;
 
 		try {
-			let response = await fetch(APP, { redirect: "manual" });
+			let response = await fetch(READY, { redirect: "manual" });
 			await response.body?.cancel();
 			if (response.ok) {
-				console.log(`\n[dev] chopin is at ${APP}\n`);
+				console.log(`\n[dev] chopin is at ${APP}`);
+				if (HMR) console.log(`[dev] vite hmr is at ${HMR} (private alternate port)`);
+				console.log();
 				return;
 			}
 		} catch {}
@@ -128,9 +145,19 @@ children = [
 	// Vite's own entry, run by Bun. Going through `bun run dev` would add the
 	// wrapper described above, and the shim in `.bin` carries a Node shebang —
 	// which is one more thing that has to be installed for no benefit.
-	start("web", "apps/web", ["bun", "node_modules/vite/bin/vite.js"]),
+	start("web", "apps/web", ["bun", "node_modules/vite/bin/vite.js"], {
+		APP_ORIGIN: exe?.origin ?? process.env.APP_ORIGIN ?? "",
+		CHOPIN_DEV_EXE_HOST: exe?.host ?? "",
+	}),
 	start("server", "apps/server", ["bun", "--watch", "src/main.ts"], {
 		DEV_CLIENT: WEB,
+		...(exe
+			? {
+				APP_ORIGIN: exe.origin,
+				SERVER_HOST: "0.0.0.0",
+				PORT: "8787",
+			}
+			: {}),
 	}),
 ];
 

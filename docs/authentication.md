@@ -31,6 +31,29 @@ fragment, or trailing slash. HTTPS is required except for loopback development,
 such as `http://127.0.0.1:8787`. OAuth callbacks are built only from this value,
 never from incoming Host or forwarded headers.
 
+### exe.dev development
+
+`bun run dev:exe` discovers the current VM through exe.dev's Reflection
+integration and supplies this exact runtime value without editing `.env`:
+
+```text
+APP_ORIGIN=https://<vm-name>.exe.xyz
+```
+
+A reusable development OAuth App may register
+`https://exe.xyz/auth/github/callback` with GitHub wildcard matching enabled.
+GitHub then accepts the exact callback Chopin sends for each VM:
+
+```text
+https://<vm-name>.exe.xyz/auth/github/callback
+```
+
+The wildcard setting covers sibling `*.exe.xyz` hosts outside this project's
+control. It is a development tradeoff, not a production callback policy. State,
+PKCE, the confidential-client exchange, and the exact configured
+`redirect_uri` remain enforced; incoming Host and `X-Forwarded-*` values remain
+untrusted.
+
 The OAuth App currently requests `read:user repo`. The `repo` scope is broad,
 but it is required to discover private repositories with an OAuth App. Chopin
 does not write repository content. The token lists and authorizes repositories,

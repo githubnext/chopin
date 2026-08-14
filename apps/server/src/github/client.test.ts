@@ -27,6 +27,8 @@ describe("the GitHub client", () => {
 
 		expect(url.origin).toBe("https://github.com");
 		expect(url.searchParams.get("client_id")).toBe("client-id");
+		expect(url.searchParams.get("redirect_uri"))
+			.toBe("https://chopin.test/auth/github/callback");
 		expect(url.searchParams.get("scope")).toBe("read:user repo");
 		expect(url.searchParams.get("state")).toBe("state");
 		expect(url.searchParams.get("code_challenge")).toBe("challenge");
@@ -56,6 +58,7 @@ describe("the GitHub client", () => {
 		expect(called!.url).not.toContain("client-secret");
 		let body = new URLSearchParams(called!.init!.body as string);
 		expect(body.get("client_secret")).toBe("client-secret");
+		expect(body.get("redirect_uri")).toBe("https://chopin.test/auth/github/callback");
 		expect(body.get("code_verifier")).toBe("verifier");
 		expect(called!.init!.redirect).toBe("error");
 	});

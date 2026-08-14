@@ -3,7 +3,30 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import tsconfigPaths from "vite-tsconfig-paths";
 
+import type { ServerOptions } from "vite";
+
 const PORT = 5173;
+const EXE_HOST = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.exe\.xyz$/;
+
+type DevNetwork = Pick<ServerOptions, "host" | "allowedHosts" | "hmr">;
+
+export function devNetwork(exeHost: string | undefined): DevNetwork {
+	if (!exeHost) {
+		return {
+			host: "127.0.0.1",
+			allowedHosts: [],
+			hmr: { protocol: "ws", host: "127.0.0.1", clientPort: PORT },
+		};
+	}
+	if (!EXE_HOST.test(exeHost)) {
+		throw new Error("CHOPIN_DEV_EXE_HOST must be one exact <vm>.exe.xyz hostname");
+	}
+	return {
+		host: "0.0.0.0",
+		allowedHosts: [exeHost],
+		hmr: { protocol: "wss", host: exeHost, clientPort: PORT },
+	};
+}
 
 export default defineConfig({
 	plugins: [react(), tailwindcss(), tsconfigPaths()],
@@ -17,6 +40,8 @@ export default defineConfig({
 	},
 
 	server: {
+		...devNetwork(process.env.CHOPIN_DEV_EXE_HOST),
+
 		/*
 		 * One address, explicitly.
 		 *
@@ -27,12 +52,10 @@ export default defineConfig({
 		 * server proxying to whichever the OS resolves first and edits landing
 		 * in the one nobody is watching.
 		 */
-		host: "127.0.0.1",
 		port: PORT,
 		strictPort: true,
-
 		/*
-		 * The browser never comes here directly.
+		 * Normal browser traffic never comes here directly.
 		 *
 		 * The Bun server is the only origin: it owns `/ws` and forwards
 		 * everything else to this process, so development, production and a
@@ -40,15 +63,9 @@ export default defineConfig({
 		 * second origin that only exists during development, and the client
 		 * would need to know which mode it was in.
 		 *
-		 * Hot reload is the exception, and deliberately so. Its socket is
-		 * pointed straight back here rather than through the server, because
-		 * relaying a WebSocket upgrade is the one thing that has to work
-		 * perfectly and cannot be tested from here. Nothing proxies a socket.
+		 * Hot reload is the exception. Locally its socket points at loopback; in
+		 * exe.dev it uses the VM's private alternate port with the exact VM host
+		 * allowlisted. Bun cannot relay it because `/ws` belongs to the product.
 		 */
-		hmr: {
-			protocol: "ws",
-			host: "127.0.0.1",
-			clientPort: PORT,
-		},
 	},
 });
