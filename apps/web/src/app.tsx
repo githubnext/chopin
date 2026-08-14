@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { SidebarSimpleIcon } from "@phosphor-icons/react";
+import { ArrowClockwiseIcon, SidebarSimpleIcon } from "@phosphor-icons/react";
 import {
 	advanceDecisionView,
 	countUnanswered,
@@ -18,6 +18,7 @@ import { Chat } from "./chat/chat";
 import { decisionAttention, DecisionViewControl } from "./decision-view-control";
 import * as Api from "./api";
 import { HostedApp, HostedFailure, HostedLoading, HostedLogin } from "./hosted";
+import { RepositoryPicker } from "./repository-picker";
 import { Wire } from "./wire";
 import { paneId, usePaneOpen, Workspace } from "./workspace";
 
@@ -56,6 +57,7 @@ function Header(
 		onResetAgent,
 		reason,
 		label,
+		repository,
 		status,
 	}: {
 		chatOpen: boolean;
@@ -64,11 +66,13 @@ function Header(
 		onResetAgent?: () => Promise<void>;
 		reason?: string;
 		label: string;
+		repository: Api.Repository;
 		status: Status;
 	},
 ) {
 	let [resetting, setResetting] = useState(false);
 	let [resetError, setResetError] = useState(false);
+	let resetLabel = resetting ? "Resetting..." : resetError ? "Reset failed" : "New planner session";
 
 	async function resetAgent() {
 		if (!onResetAgent || resetting) return;
@@ -84,27 +88,34 @@ function Header(
 	}
 
 	return (
-		<header className="hairline-b flex h-12 shrink-0 items-center gap-3 px-4">
+		<header className="hairline-b flex min-h-12 shrink-0 flex-wrap items-center gap-x-2 px-2 py-2 sm:h-12 sm:flex-nowrap sm:gap-3 sm:px-4 sm:py-0">
 			<PaneToggle onToggle={onToggleChat} open={chatOpen} />
-			<span className="text-sm font-semibold">chopin</span>
-			<span className="truncate text-sm text-text-tertiary">{label}</span>
-			<span className={`text-sm ${TONE[status]}`}>
-				{status === "connected" ? reason : reason ?? status}
-			</span>
+			<a className="hidden text-sm font-semibold sm:inline" href="/">chopin</a>
+			<span aria-hidden="true" className="hidden h-4 hairline-l sm:block" />
+			<RepositoryPicker current={repository} />
+			<div className="order-last flex min-w-0 basis-full items-center gap-2 pl-9 pt-1 sm:order-none sm:basis-auto sm:flex-1 sm:pl-0 sm:pt-0">
+				<span aria-hidden="true" className="hidden text-sm text-text-tertiary sm:inline">/</span>
+				<span className="min-w-0 flex-1 truncate text-sm text-text-tertiary">{label}</span>
+				<span className={`shrink-0 text-sm ${TONE[status]}`}>
+					{status === "connected" ? reason : reason ?? status}
+				</span>
+			</div>
 			<div
 				aria-label={`People here: ${members.map(member => member.handle).join(", ")}`}
-				className="ml-auto flex items-center [&>*+*]:-ml-1.5"
+				className="ml-auto flex shrink-0 items-center [&>*+*]:-ml-1.5"
 			>
 				{members.map(member => <Face handle={member.handle} key={member.client} ring size={24} />)}
 			</div>
 			{onResetAgent && (
 				<button
+					aria-label={resetLabel}
 					className="btn btn-sm btn-ghost"
 					disabled={resetting}
 					onClick={() => void resetAgent()}
 					type="button"
 				>
-					{resetting ? "Resetting..." : resetError ? "Reset failed" : "New planner session"}
+					<ArrowClockwiseIcon aria-hidden="true" className="lg:hidden" size={16} />
+					<span className="hidden lg:inline">{resetLabel}</span>
 				</button>
 			)}
 		</header>
@@ -118,6 +129,7 @@ export function RoomWorkspace(
 		handle,
 		label,
 		onResetAgent,
+		repository,
 		room,
 	}: {
 		agent?: boolean;
@@ -125,6 +137,7 @@ export function RoomWorkspace(
 		handle: string;
 		label: string;
 		onResetAgent?: () => Promise<void>;
+		repository: Api.Repository;
 		room: string;
 	},
 ) {
@@ -242,6 +255,7 @@ export function RoomWorkspace(
 					onResetAgent={effectiveCanEdit ? onResetAgent : undefined}
 					reason={status === "connected" && !effectiveCanEdit ? "view only" : reason}
 					label={label}
+					repository={repository}
 					status={status}
 				/>
 			}

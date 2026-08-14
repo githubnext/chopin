@@ -4,16 +4,38 @@
  */
 let network = globalThis.fetch;
 
-const repository = {
-	node_id: "R_score",
-	owner: { login: "octo-org" },
-	name: "score",
-	full_name: "octo-org/score",
-	private: true,
-	html_url: "https://github.com/octo-org/score",
-	default_branch: "main",
-	permissions: { pull: true, push: true, admin: false },
-};
+const repositories = [
+	{
+		node_id: "R_score",
+		owner: { login: "octo-org" },
+		name: "score",
+		full_name: "octo-org/score",
+		private: true,
+		html_url: "https://github.com/octo-org/score",
+		default_branch: "main",
+		permissions: { pull: true, push: true, admin: false },
+	},
+	{
+		node_id: "R_notes",
+		owner: { login: "octocat" },
+		name: "notes",
+		full_name: "octocat/notes",
+		private: false,
+		html_url: "https://github.com/octocat/notes",
+		default_branch: "main",
+		permissions: { pull: true, push: false, admin: false },
+	},
+	...Array.from({ length: 12 }, (_, index) => ({
+		node_id: `R_archive_${index + 1}`,
+		owner: { login: "octo-org" },
+		name: `archive-${index + 1}`,
+		full_name: `octo-org/archive-${index + 1}`,
+		private: false,
+		html_url: `https://github.com/octo-org/archive-${index + 1}`,
+		default_branch: "main",
+		permissions: { pull: true, push: false, admin: false },
+	})),
+];
 
 function json(value: unknown, init: ResponseInit = {}): Response {
 	return Response.json(value, init);
@@ -35,8 +57,12 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 				avatar_url: `https://example.invalid/${handle}.png`,
 			});
 		}
-		if (url.pathname === "/user/repos") return json([repository]);
-		if (url.pathname === "/repos/octo-org/score") return json(repository);
+		if (url.pathname === "/user/repos") {
+			if (handle === "expired") return json({ message: "Bad credentials" }, { status: 401 });
+			return json(repositories);
+		}
+		let repository = repositories.find(value => url.pathname === `/repos/${value.full_name}`);
+		if (repository) return json(repository);
 		return json({ message: "Not Found" }, { status: 404 });
 	}
 	return network(input, init);
