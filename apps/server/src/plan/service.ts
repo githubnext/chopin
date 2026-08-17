@@ -493,6 +493,7 @@ export async function readStored(
 ): Promise<{ source: string; revision: number }> {
 	let restored = await restoreHosted(loaded.channel.id, loaded);
 	try {
+		Questions.shutdown(Questions.restore(restored.sidecar.openQuestions));
 		return { source: room.project(restored.document), revision: restored.sidecar.revision };
 	} finally {
 		restored.document.doc.destroy();
