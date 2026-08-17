@@ -420,13 +420,6 @@ describe("migration", () => {
 				utility: "field",
 			},
 			{
-				file: "packages/editor/src/widgets/callout.tsx",
-				marker: 'aria-label="Callout title"',
-				name: "callout title",
-				tag: "input",
-				utility: "field",
-			},
-			{
 				file: "packages/question/src/react/question-view.tsx",
 				marker: "Type another answer",
 				name: "custom questionnaire answer",
@@ -446,13 +439,6 @@ describe("migration", () => {
 				name: "custom questionnaire choice",
 				tag: "input",
 				utility: "choice-control",
-			},
-			{
-				file: "packages/editor/src/widgets/callout.tsx",
-				marker: 'aria-label="Callout type"',
-				name: "callout kind",
-				tag: "select",
-				utility: "field-ghost",
 			},
 			{
 				file: "packages/editor/src/widgets/render-blocks.tsx",

@@ -269,13 +269,13 @@ export class CalloutNode extends ContainerNode {
 		return super.getDOMSlot(element).withElement(body ?? element);
 	}
 
-	override updateDOM(prev: CalloutNode, dom: HTMLElement): boolean {
-		if (prev.getCalloutType() !== this.getCalloutType()) {
-			dom.dataset.planType = this.getCalloutType();
-		}
-		if (prev.getTitle() !== this.getTitle()) {
-			dom.setAttribute("aria-label", this.getTitle());
-		}
+	override updateDOM(_prev: CalloutNode, dom: HTMLElement): boolean {
+		// Node state may already read as the new value through the previous clone,
+		// so comparing the two can leave the DOM one edit behind.
+		dom.dataset.planType = this.getCalloutType();
+		let title = this.getTitle();
+		if (title) dom.setAttribute("aria-label", title);
+		else dom.removeAttribute("aria-label");
 		return false;
 	}
 }
