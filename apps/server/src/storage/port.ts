@@ -24,15 +24,13 @@ export interface UserStore {
 export interface SessionStore {
 	create(session: CreateWebSession): Promise<void>;
 	get(id: string, now: Date): Promise<WebSession | undefined>;
-	replaceToken(
-		id: string,
-		expected: Uint8Array,
-		replacement: Uint8Array,
-		now: Date,
-	): Promise<boolean>;
-	deleteToken(id: string, expected: Uint8Array, now: Date): Promise<boolean>;
 	delete(id: string): Promise<boolean>;
 	deleteExpired(now: Date): Promise<number>;
+	deleteAll(
+		now: Date,
+		lease: Lease,
+		leaseTtlMs: number,
+	): Promise<{ deleted: number; lease: Lease }>;
 }
 
 export interface ChannelStore {
@@ -74,7 +72,7 @@ export interface StorageAdapter {
 	readonly collaboration: CollaborationStore;
 	readonly leases: LeaseStore;
 
-	migrate(): Promise<void>;
+	migrate(handoffOwner?: string): Promise<void>;
 	health(): Promise<void>;
 	close(): Promise<void>;
 }

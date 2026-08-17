@@ -26,7 +26,10 @@ type Pending = {
 export type WireOptions = {
 	channelId: string;
 	onStatus?: (status: Status, reason?: string) => void;
+	onAuthenticationRequired?: () => void;
 };
+
+type Refusal = { reason: string; authentication: boolean };
 
 const BASE_DELAY = 500;
 const MAX_DELAY = 15_000;
@@ -117,17 +120,24 @@ export class Wire {
 	}
 
 	/**
-	 * Work out why a connection that never opened was refused.
+	 * Work out why a connection attempt was refused.
 	 *
 	 * A browser cannot see the status of a failed upgrade — a rejected access
 	 * key and an unreachable server both surface as a bare close. The endpoint
 	 * answers an ordinary request with the reason, so ask it once rather than
 	 * retrying eight times against a door that will not open.
 	 */
-	async #refusal(): Promise<string | undefined> {
+	async #refusal(): Promise<Refusal | undefined> {
 		try {
-			let response = await fetch(endpoint(this.#options).replace(/^ws/, "http"));
-			if (response.status >= 400 && response.status < 500) return await response.text();
+			let response = await fetch(endpoint(this.#options).replace(/^ws/, "http"), {
+				headers: { "x-chopin-socket-probe": "1" },
+			});
+			if (response.status >= 400 && response.status < 500) {
+				return {
+					reason: await response.text(),
+					authentication: response.status === 401,
+				};
+			}
 		} catch {
 			// Unreachable rather than refused; the retry loop is the right answer.
 		}
@@ -137,9 +147,11 @@ export class Wire {
 	async #retry(): Promise<void> {
 		if (this.#disposed) return;
 
-		if (!this.#everConnected) {
-			let reason = await this.#refusal();
-			if (reason) return this.#set("denied", reason);
+		let refusal = await this.#refusal();
+		if (this.#disposed) return;
+		if (refusal) {
+			if (refusal.authentication) this.#options.onAuthenticationRequired?.();
+			return this.#set("denied", refusal.reason);
 		}
 
 		let delay = Math.min(BASE_DELAY * 2 ** this.#attempts, MAX_DELAY) * (0.5 + Math.random());

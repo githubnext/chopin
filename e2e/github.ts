@@ -1,5 +1,5 @@
 /**
- * Fake only GitHub's network boundary. OAuth state, PKCE, encrypted sessions,
+ * Fake only GitHub's network boundary. OAuth state, PKCE, process-local sessions,
  * channel authorization and WebSocket admission still run in the real server.
  */
 let network = globalThis.fetch;

@@ -19,12 +19,10 @@ export type PutUser = Omit<UserRecord, "createdAt" | "updatedAt"> & {
 	now: Date;
 };
 
-/** OAuth ciphertext is opaque to storage and is decrypted only by auth code. */
+/** Process-lifetime registry row used only by durable agent ownership. */
 export type WebSession = {
 	id: string;
 	userId: string;
-	secretHash: Uint8Array;
-	oauthToken: Uint8Array;
 	expiresAt: Date;
 	createdAt: Date;
 };

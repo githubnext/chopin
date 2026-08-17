@@ -21,18 +21,18 @@ Every built-in adapter must provide:
 - ordered binary update and event replay;
 - monotonic sequences across checkpoints;
 - atomic first-agent ownership with a generation token;
-- expiring login sessions;
-- compare-and-swap replacement and conditional deletion of encrypted login
-  credentials;
+- expiring, token-free login registries;
+- atomic removal of every login registry and agent owner at process startup;
 - renewable leases whose fencing token is checked by collaboration commits,
   epoch replacements, and checkpoints;
 - atomic checkpoint replacement; and
 - distinct conflict, missing, corrupt and unavailable failures.
 
-The application owns GitHub credential encryption, payload validation and Yjs
-semantics. An adapter must return encrypted credential bundles, Yjs updates and
-checkpoint byte arrays byte-for-byte, and versioned JSON with the same semantic
-value.
+GitHub credentials and browser-cookie verifiers never cross `StorageAdapter`;
+they live only in the serving process. An adapter stores session identifiers and
+timestamps solely so durable agent ownership can reference an active process
+session. It must return Yjs updates and checkpoint byte arrays byte-for-byte,
+and versioned JSON with the same semantic value.
 
 ## Adding an adapter
 
@@ -63,3 +63,10 @@ database. A second process refuses startup. The holder renews the lease while
 serving and shuts down if renewal fails or its safety deadline passes. Adapter
 fencing prevents an expired holder from committing collaboration state even
 before shutdown completes.
+
+Pending schema migrations also refuse to run while that writer lease is active.
+Stop the serving process before upgrading; this prevents a replacement image
+from changing the session registry underneath the current binary. The
+production entrypoint retains a migration-owned fence and hands the same owner
+identity to the serving process, so an older process already waiting for the
+lease cannot enter between migration and startup.

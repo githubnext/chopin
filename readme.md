@@ -108,23 +108,25 @@ knowing. The composer says which destination a message has before you send it.
 The first editor to invoke the planner lends their GitHub App session to that
 channel's Copilot usage. The agent receives repository-scoped read tools and no
 host filesystem or shell. **New planner session** releases ownership so another
-editor can take it.
+editor can take it. Login sessions and GitHub credentials exist only in the
+server process; restarting Chopin signs everyone out and releases Planner
+ownership without losing plans or transcripts.
 
 ## Configuration
 
-| Variable                   | Default             | Meaning                                                                 |
-| -------------------------- | ------------------- | ----------------------------------------------------------------------- |
-| `DATABASE_URL`             | required            | PostgreSQL connection URL; never printed by the server.                 |
-| `STORAGE_DRIVER`           | `postgres`          | Built-in storage adapter.                                               |
-| `APP_ORIGIN`               | required            | Exact public HTTP(S) origin used for callbacks and Origin checks.       |
-| `GITHUB_APP_SLUG`          | required            | Slug from the GitHub App's public link.                                 |
-| `GITHUB_APP_CLIENT_ID`     | required            | GitHub App OAuth client id, distinct from the App id.                   |
-| `GITHUB_APP_CLIENT_SECRET` | required            | GitHub App client secret used for user-token exchange and refresh.      |
-| `SESSION_ENCRYPTION_KEY`   | required            | 32 random bytes as 64 hex characters; encrypts access and refresh data. |
-| `SERVER_HOST`              | `127.0.0.1`         | Bind address.                                                           |
-| `PORT`                     | `8787`              | HTTP and WebSocket port.                                                |
-| `MODEL`                    | `claude-sonnet-4.6` | Planner model.                                                          |
-| `AGENT`                    | on                  | `AGENT=off` hides and disables the planner.                             |
+| Variable                   | Default             | Meaning                                                              |
+| -------------------------- | ------------------- | -------------------------------------------------------------------- |
+| `DATABASE_URL`             | required            | PostgreSQL connection URL; never printed by the server.              |
+| `STORAGE_DRIVER`           | `postgres`          | Built-in storage adapter.                                            |
+| `APP_ORIGIN`               | required            | Exact public HTTP(S) origin used for callbacks and Origin checks.    |
+| `GITHUB_APP_SLUG`          | required            | Slug from the GitHub App's public link.                              |
+| `GITHUB_APP_CLIENT_ID`     | required            | GitHub App OAuth client id, distinct from the App id.                |
+| `GITHUB_APP_CLIENT_SECRET` | required            | GitHub App client secret used for user-token exchange and refresh.   |
+| `SESSION_ENCRYPTION_KEY`   | required            | 32 random bytes as 64 hex characters; encrypts OAuth state and PKCE. |
+| `SERVER_HOST`              | `127.0.0.1`         | Bind address.                                                        |
+| `PORT`                     | `8787`              | HTTP and WebSocket port.                                             |
+| `MODEL`                    | `claude-sonnet-4.6` | Planner model.                                                       |
+| `AGENT`                    | on                  | `AGENT=off` hides and disables the planner.                          |
 
 Generate the session key with `openssl rand -hex 32`. `APP_ORIGIN` has no
 trailing slash and must match the GitHub App callback's origin exactly.
@@ -190,8 +192,8 @@ bun run start         # serve the built client
 The browser suite needs Chromium once with `bun run e2e:browsers`. It starts two
 temporary PostgreSQL services, migrates them, builds the client, and runs with
 `AGENT=off`. Its fake GitHub implementation replaces only GitHub's network
-responses; OAuth state, rotating encrypted sessions, repository authorization, channel
-routes, WebSockets, and persistence are the production implementations.
+responses; OAuth state, process-local sessions, repository authorization,
+channel routes, WebSockets, and persistence are the production implementations.
 
 `AGENTS.md` is the companion for maintainers: invariants, deliberate decisions,
 and failure modes that are otherwise easy to miss.

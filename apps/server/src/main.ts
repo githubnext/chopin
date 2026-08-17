@@ -343,6 +343,10 @@ function listen(): Server<SocketData> {
 				if ("status" in outcome) {
 					return new Response(outcome.reason, { status: outcome.status });
 				}
+				if (
+					req.headers.get("x-chopin-socket-probe") === "1"
+					&& req.headers.get("upgrade")?.toLowerCase() !== "websocket"
+				) return new Response(null, { status: 204 });
 				if (self.upgrade(req, { data: outcome.data })) return undefined;
 				return new Response("upgrade failed", { status: 400 });
 			}
@@ -449,7 +453,7 @@ function armLeaseWatchdog(): void {
 
 function cleanSessions(): void {
 	if (cleaningSessions) return;
-	cleaningSessions = storage.sessions.deleteExpired(new Date()).then(() => {}, err => {
+	cleaningSessions = hostedAuth.sessions.cleanupExpired().then(() => {}, err => {
 		console.error("chopin: could not delete expired login sessions -", err);
 	}).finally(() => {
 		cleaningSessions = undefined;
@@ -498,12 +502,15 @@ try {
 try {
 	heldLease = await storage.leases.acquire(
 		"chopin:writer",
-		crypto.randomUUID(),
+		process.env.CHOPIN_WRITER_OWNER || crypto.randomUUID(),
 		LEASE_TTL_MS,
 	);
 	if (!heldLease) throw new Error("another Chopin instance owns the database");
+	let reset = await storage.sessions.deleteAll(new Date(), heldLease, LEASE_TTL_MS);
+	heldLease = reset.lease;
 } catch (err) {
 	await Agent.shutdown();
+	if (heldLease) await storage.leases.release(heldLease).catch(() => {});
 	await storage.close().catch(() => {});
 	let reason = err instanceof Error ? err.message : String(err);
 	console.error(`chopin: storage writer lease could not start - ${reason}`);

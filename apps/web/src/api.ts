@@ -94,6 +94,7 @@ async function response<T>(path: string, init?: RequestInit): Promise<T> {
 		value = undefined;
 	}
 	if (!result.ok) {
+		if (result.status === 401 && typeof location !== "undefined") location.assign("/");
 		let message = value && typeof value === "object" && "error" in value
 				&& typeof value.error === "string"
 			? value.error

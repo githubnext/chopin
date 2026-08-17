@@ -7,7 +7,7 @@
  * prose, and presence and carets are not asserted at all. What only exists
  * once there is a browser is what this file is for.
  *
- * Each person has an isolated browser context because identity is an encrypted
+ * Each person has an isolated browser context because identity uses an authenticated
  * login session cookie. They still meet in one repository-authorized channel.
  */
 

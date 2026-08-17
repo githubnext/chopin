@@ -160,4 +160,25 @@ describe("hosted repository tools", () => {
 		let result = await (read.handler as (raw: unknown) => Promise<string>)({ path: "../secret" });
 		expect(result).toContain("relative repository path");
 	});
+
+	it("resolves authorization again when a repository handler starts", async () => {
+		let token: string | undefined = "ghu_current";
+		let requests = 0;
+		let tools = repositoryTools({
+			token: () => token,
+			repository: { id: "R", owner: "o", name: "r", defaultBranch: "main" },
+			fetch: async (_input, init) => {
+				requests++;
+				expect(new Headers(init?.headers).get("authorization")).toBe("Bearer ghu_current");
+				return Response.json({ tree: [], truncated: false });
+			},
+		});
+		let tree = tools.find(tool => tool.name === "list_repository_tree")!;
+		expect(await (tree.handler as (raw: unknown) => Promise<string>)({})).not.toContain("Error:");
+		token = undefined;
+		expect(await (tree.handler as (raw: unknown) => Promise<string>)({})).toContain(
+			"authorization expired",
+		);
+		expect(requests).toBe(1);
+	});
 });

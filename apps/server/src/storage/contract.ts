@@ -38,8 +38,6 @@ async function userAndChannel(storage: StorageAdapter): Promise<{
 	await storage.sessions.create({
 		id: sessionId,
 		userId,
-		secretHash: new Uint8Array([1, 2, 3]),
-		oauthToken: new Uint8Array([4, 5, 6]),
 		expiresAt: new Date("2026-02-02T03:04:05.000Z"),
 		createdAt: now,
 	});
@@ -64,7 +62,7 @@ async function userAndChannel(storage: StorageAdapter): Promise<{
 /** The behavioral gate every built-in storage adapter must pass. */
 export function storageContract(name: string, factory: Factory): void {
 	describe(`${name} storage`, () => {
-		it("keeps OAuth ciphertext only for the lifetime of a login session", async () => {
+		it("keeps only process-lifetime registry metadata for a login session", async () => {
 			let storage = await opened(factory);
 			try {
 				let now = new Date("2026-01-02T03:04:05.000Z");
@@ -79,8 +77,6 @@ export function storageContract(name: string, factory: Factory): void {
 				await storage.sessions.create({
 					id: sessionId,
 					userId,
-					secretHash: new Uint8Array([10, 11]),
-					oauthToken: new Uint8Array([20, 21]),
 					expiresAt: new Date("2026-01-02T04:04:05.000Z"),
 					createdAt: now,
 				});
@@ -89,8 +85,7 @@ export function storageContract(name: string, factory: Factory): void {
 					sessionId,
 					new Date("2026-01-02T03:30:00.000Z"),
 				);
-				expect([...active!.secretHash]).toEqual([10, 11]);
-				expect([...active!.oauthToken]).toEqual([20, 21]);
+				expect(active).toMatchObject({ id: sessionId, userId });
 				expect(
 					await storage.sessions.get(sessionId, new Date("2026-01-02T04:04:05.000Z")),
 				).toBeUndefined();
@@ -102,37 +97,30 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
-		it("rotates session ciphertext with compare-and-swap semantics", async () => {
+		it("deletes all session registries while preserving durable agent context", async () => {
 			let storage = await opened(factory);
 			try {
-				let { sessionId, channelId } = await userAndChannel(storage);
+				let { sessionId, channelId, lease } = await userAndChannel(storage);
 				let now = new Date("2026-01-03T03:04:05.000Z");
 				let claimed = await storage.channels.claimAgentOwner(channelId, sessionId, now);
-				let original = new Uint8Array([4, 5, 6]);
-				let replacement = new Uint8Array([7, 8, 9]);
-
-				expect(
-					await storage.sessions.replaceToken(
-						sessionId,
-						original,
-						replacement,
-						now,
-					),
-				).toBe(true);
-				expect(
-					await storage.sessions.replaceToken(
-						sessionId,
-						original,
-						new Uint8Array([10]),
-						now,
-					),
-				).toBe(false);
-				expect(await storage.sessions.deleteToken(sessionId, original, now)).toBe(false);
-				expect(await storage.sessions.deleteToken(sessionId, replacement, now)).toBe(true);
+				await storage.channels.updateAgentContext({
+					channelId,
+					ownerSessionId: sessionId,
+					generation: claimed.generation,
+					summary: "durable summary",
+					transcriptCursor: 7,
+					status: "ready",
+					now,
+				});
+				let reset = await storage.sessions.deleteAll(now, lease, 60_000);
+				expect(reset.deleted).toBeGreaterThan(0);
+				expect(reset.lease.fencing).toBe(lease.fencing);
 				expect(await storage.sessions.get(sessionId, now)).toBeUndefined();
 				let saved = await storage.collaboration.load(channelId, now);
 				expect(saved!.agent).toMatchObject({
 					generation: claimed.generation,
+					summary: "durable summary",
+					transcriptCursor: 7,
 					status: "unavailable",
 				});
 				expect(saved!.agent!.ownerSessionId).toBeUndefined();
@@ -174,8 +162,6 @@ export function storageContract(name: string, factory: Factory): void {
 				await storage.sessions.create({
 					id: second,
 					userId,
-					secretHash: new Uint8Array([7]),
-					oauthToken: new Uint8Array([8]),
 					expiresAt: new Date("2026-02-03T03:04:05.000Z"),
 					createdAt: now,
 				});

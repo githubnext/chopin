@@ -15,7 +15,9 @@ export async function admit(
 	auth: HostedAuth,
 ): Promise<Admission> {
 	try {
-		if (request.headers.get("origin") !== auth.config.origin) {
+		let probe = request.headers.get("x-chopin-socket-probe") === "1"
+			&& request.headers.get("upgrade")?.toLowerCase() !== "websocket";
+		if (!probe && request.headers.get("origin") !== auth.config.origin) {
 			return { status: 403, reason: "origin is not allowed" };
 		}
 		let session = await auth.sessions.authenticate(request);

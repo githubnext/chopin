@@ -72,7 +72,7 @@ describe("hosted Copilot ownership", () => {
 		for (let [id, login] of [["U_ana", "ana"], ["U_bob", "bob"]]) {
 			await storage.users.put({ id, login, avatarUrl: "", now });
 		}
-		let sessions = new Sessions(storage, key, true, () => now);
+		let sessions = new Sessions(storage, true, () => now);
 		let ana = await sessions.issue("U_ana", grant("ghu_ana"));
 		let bob = await sessions.issue("U_bob", grant("ghu_bob"));
 		let channel = await storage.channels.create({

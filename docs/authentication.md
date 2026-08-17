@@ -43,9 +43,15 @@ used. Chopin acts on behalf of each signed-in user with a GitHub App user access
 token so repository-role checks and the user's Copilot entitlement remain
 theirs.
 
-This is a clean cutover from the former OAuth App integration. Legacy encrypted
-sessions are intentionally not read; replace the environment variables, sign in
-again, and revoke the old OAuth App after validating the new App.
+This is a clean cutover from the former OAuth App integration. The migration
+removes all browser verifiers and GitHub credentials from PostgreSQL; replace
+the environment variables, sign in again, and revoke the old OAuth App after
+validating the new App.
+
+Dropping the columns prevents future persistence but does not rewrite old
+backups or PostgreSQL WAL. Revoke the old authorization and retire any
+token-bearing backup retention separately if a previous deployment stored
+credentials.
 
 Configure Chopin with the App's slug and OAuth client credentials:
 
@@ -60,7 +66,7 @@ SESSION_ENCRYPTION_KEY=<64 hex characters>
 ```
 
 The client id is distinct from the numeric App id. Generate the encryption key
-with `openssl rand -hex 32`.
+with `openssl rand -hex 32`; it protects only the OAuth state and PKCE cookie.
 
 `APP_ORIGIN` must be exactly one HTTP(S) origin: no credentials, path, query,
 fragment, or trailing slash. HTTPS is required except for loopback development,
@@ -114,15 +120,18 @@ policy. Use an exact callback in production.
 ## Session boundary
 
 The browser receives an HttpOnly, SameSite=Lax cookie containing a random
-session id and a 256-bit secret. Storage receives only SHA-256 of that secret.
-The GitHub access token, refresh token, expirations, and credential revision are
-encrypted together with AES-256-GCM and additional data tying the bundle to the
-session and user.
+session id and a 256-bit secret. The serving process keeps the secret hash,
+GitHub access and refresh tokens, expirations, user, and credential revision in
+memory. PostgreSQL receives only the session id, user id, expiry, and creation
+time so durable Planner ownership can reference an active process session. A
+database row or session id cannot authenticate a request without the in-memory
+secret hash.
 
 GitHub App user access tokens expire after eight hours. Chopin refreshes five
 minutes early, rotates the one-use refresh token, and atomically replaces the
-encrypted bundle with compare-and-swap semantics. Concurrent requests share one
-refresh. Logout or expiry racing a refresh cannot resurrect a session.
+process-local credential object. Concurrent requests share one refresh. Logout
+removes the memory entry before any asynchronous cleanup, so a racing refresh
+cannot resurrect a session.
 
 A rejected refresh token or a second API `401` deletes the matching local
 session. Network failures, rate limits, malformed responses, and GitHub `5xx`
@@ -130,14 +139,18 @@ responses do not delete it. A transient proactive refresh may continue using
 the still-valid access token; after access expiry it reports a temporary error
 and retains the session for retry.
 
-Sessions expire absolutely after 30 days. Logout deletes the local encrypted
-record but does not revoke the GitHub App authorization. Expired records are
-deleted by the server's storage cleanup loop.
+Sessions expire absolutely after 30 days or whenever the server process stops.
+After acquiring the database writer lease, every new process clears session
+registry rows and Planner ownership before accepting traffic. Plans,
+transcripts, summaries, and repository installations remain durable. Logout
+deletes the process-local session and registry row but does not revoke the
+GitHub App authorization.
 
 OAuth state and the PKCE verifier are held in a separate encrypted, ten-minute
 HttpOnly cookie. State-changing HTTP routes and WebSocket upgrades require an
 Origin header exactly equal to `APP_ORIGIN`. Open sockets periodically recheck
-the stored session and installation repository permission.
+the process-local session and installation repository permission. A browser
+whose socket reconnects after a restart is returned to sign-in.
 
 When a credential rotates, any Planner SDK session holding the previous token
 is aborted and discarded before refresh. A later turn recreates it from the

@@ -197,7 +197,12 @@ describe("hosted authentication routes", () => {
 
 		let sessionId = sessionCookie.slice(sessionCookie.indexOf("=") + 1).split(".")[0]!;
 		let stored = await storage.sessions.get(sessionId, now);
-		expect(Buffer.from(stored!.oauthToken).toString("utf8")).not.toContain("ghu_route_secret");
+		expect(stored).toEqual({
+			id: sessionId,
+			userId: "U_octocat",
+			expiresAt: new Date("2026-09-12T12:00:00.000Z"),
+			createdAt: now,
+		});
 		let setup = await router.handle(
 			new Request("https://chopin.test/auth/github/setup?installation_id=spoofed", {
 				headers: { cookie: sessionCookie },

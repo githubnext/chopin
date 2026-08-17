@@ -37,7 +37,7 @@ export type Config = {
 	devClient: string | undefined;
 	/** Durable service storage. */
 	storage: StorageConfig;
-	/** GitHub identity and session encryption. */
+	/** GitHub identity and short-lived OAuth attempt encryption. */
 	auth: AuthConfig;
 };
 

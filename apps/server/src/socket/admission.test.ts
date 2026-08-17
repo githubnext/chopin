@@ -83,7 +83,7 @@ describe("socket admission", () => {
 		let now = new Date("2026-08-13T12:00:00.000Z");
 		let storage = new MemoryStorage();
 		await storage.users.put({ id: "U_octocat", login: "octocat", avatarUrl: "avatar", now });
-		let sessions = new Sessions(storage, new Uint8Array(32).fill(2), true, () => now);
+		let sessions = new Sessions(storage, true, () => now);
 		let issued = await sessions.issue("U_octocat", grant("ghu_user"));
 		let channel = await storage.channels.create({
 			id: crypto.randomUUID(),
@@ -125,6 +125,14 @@ describe("socket admission", () => {
 			principalId: "U_octocat",
 			canEdit: false,
 		});
+		let probe = await admit(
+			new Request(url, {
+				headers: { cookie: pair(issued.cookie), "x-chopin-socket-probe": "1" },
+			}),
+			url,
+			auth,
+		);
+		expect("data" in probe).toBe(true);
 
 		github.push = true;
 		let editor = await admit(request, url, auth);

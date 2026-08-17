@@ -491,6 +491,7 @@ async function repositorySession(
 	);
 
 	let { chat } = context;
+	let lifecycle = chat.lifecycle;
 	let reusable = chat.agent;
 	let binding = chat.owner;
 	let reuseLifecycle = chat.lifecycle;
@@ -517,25 +518,44 @@ async function repositorySession(
 		) throw new Error("The Planner session changed while it was being reused. Try again.");
 		return reusable;
 	}
-	if (credentialExpiresAt <= Date.now() + CREDENTIAL_EXPIRY_SKEW_MS) {
-		throw new Error("The Copilot owner's login session is about to expire. Sign in again.");
-	}
-
 	if (chat.agent) await Agent.discard(chat.agent);
 	chat.agent = undefined;
 	chat.owner = undefined;
 	clearTimeout(chat.credentialTimer);
 	chat.credentialTimer = undefined;
-	let lifecycle = chat.lifecycle;
+	let activeOwner = await auth.sessions.inspect(ownerSessionId);
+	if (chat.lifecycle !== lifecycle || activeOwner?.access.revision !== owner.access.revision) {
+		throw new Error(
+			"The Planner credentials changed while its old session was closing. Try again.",
+		);
+	}
+	owner = activeOwner;
+	credentialExpiresAt = Math.min(
+		owner.access.expiresAt.getTime(),
+		owner.session.expiresAt.getTime(),
+	);
+	if (credentialExpiresAt <= Date.now() + CREDENTIAL_EXPIRY_SKEW_MS) {
+		throw new Error("The Copilot owner's login session is about to expire. Sign in again.");
+	}
 	let openingOwner = {
 		sessionId: ownerSessionId,
 		generation: ownership.generation,
 		revision: owner.access.revision,
 	};
 	chat.openingOwner = openingOwner;
+	let bound = () =>
+		chat.lifecycle === lifecycle
+		&& (chat.openingOwner === openingOwner
+			|| (chat.owner?.sessionId === ownerSessionId
+				&& chat.owner.generation === ownership.generation
+				&& chat.owner.revision === owner.access.revision));
+	let activeToken = () => {
+		if (!bound()) return undefined;
+		return auth.sessions.token(ownerSessionId, owner.access.revision);
+	};
 	let tools = [
 		...planTools(context),
-		...repositoryTools({ token: owner.access.token, repository }),
+		...repositoryTools({ token: activeToken, repository }),
 	];
 	let opening: Promise<Agent.Agent> | undefined;
 	let opened: Agent.Agent | undefined;
@@ -545,6 +565,7 @@ async function repositorySession(
 			repository,
 			bootstrap: bootstrap(chat, ownership.transcriptCursor, ownership.summary, currentText),
 			authorize: async () => {
+				if (!bound()) return false;
 				let activeOwner = await auth.sessions.inspect(ownerSessionId);
 				if (!activeOwner || activeOwner.access.revision !== owner.access.revision) return false;
 				let stored = await auth.storage.collaboration.load(context.room, new Date());
@@ -557,7 +578,10 @@ async function repositorySession(
 					repository.owner,
 					repository.name,
 				);
-				return !!access && access.id === repository.id
+				let stillActive = await auth.sessions.inspect(ownerSessionId);
+				return bound()
+					&& stillActive?.access.revision === owner.access.revision
+					&& !!access && access.id === repository.id
 					&& (access.permissions.push || access.permissions.admin);
 			},
 		});

@@ -55,7 +55,7 @@ async function ready(port: number): Promise<void> {
 
 if (database) {
 	describe("postgres server lifecycle", () => {
-		it("excludes a second writer and releases the lease on shutdown", async () => {
+		it("resets sessions only after owning the writer lease", async () => {
 			let setup = new PostgresStorage(database);
 			await setup.migrate();
 			await setup.close();
@@ -64,17 +64,61 @@ if (database) {
 			let session = await fetch("http://127.0.0.1:9071/api/session");
 			expect(await session.json()).toEqual({ user: null, agent: false });
 
+			let storage = new PostgresStorage(database);
+			let now = new Date();
+			let userId = `user-${crypto.randomUUID()}`;
+			let sessionId = crypto.randomUUID();
+			let channelId = crypto.randomUUID();
+			await storage.users.put({ id: userId, login: "mona", avatarUrl: "", now });
+			await storage.sessions.create({
+				id: sessionId,
+				userId,
+				expiresAt: new Date(now.getTime() + 60_000),
+				createdAt: now,
+			});
+			await storage.channels.create({
+				id: channelId,
+				repositoryId: `repository-${crypto.randomUUID()}`,
+				repositoryOwner: "octo-org",
+				repositoryName: "score",
+				title: "Plan",
+				createdBy: userId,
+				now,
+			});
+			let owner = await storage.channels.claimAgentOwner(channelId, sessionId, now);
+			await storage.channels.updateAgentContext({
+				channelId,
+				ownerSessionId: sessionId,
+				generation: owner.generation,
+				summary: "keep this",
+				transcriptCursor: 4,
+				status: "ready",
+				now,
+			});
+
 			let refused = spawn(9072, "pipe");
 			expect(await refused.exited).toBe(1);
 			let reason = await new Response(refused.stderr as ReadableStream).text();
 			expect(reason).toContain("another Chopin instance owns the database");
+			expect(await storage.sessions.get(sessionId, now)).toBeDefined();
+			expect((await storage.collaboration.load(channelId, now))!.agent!.ownerSessionId)
+				.toBe(sessionId);
 
 			first.kill("SIGTERM");
 			expect(await first.exited).toBe(0);
 			let replacement = spawn(9072);
 			await ready(9072);
+			expect(await storage.sessions.get(sessionId, now)).toBeUndefined();
+			expect((await storage.collaboration.load(channelId, now))!.agent).toMatchObject({
+				ownerSessionId: undefined,
+				generation: owner.generation,
+				summary: "keep this",
+				transcriptCursor: 4,
+				status: "unavailable",
+			});
 			replacement.kill("SIGTERM");
 			expect(await replacement.exited).toBe(0);
+			await storage.close();
 		});
 	});
 } else {

@@ -33,10 +33,6 @@ function bytes(value: Uint8Array): Uint8Array {
 	return new Uint8Array(value);
 }
 
-function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
-	return left.length === right.length && left.every((value, index) => value === right[index]);
-}
-
 function json(value: JsonValue): JsonValue {
 	return structuredClone(value);
 }
@@ -48,8 +44,6 @@ function user(value: UserRecord): UserRecord {
 function session(value: WebSession): WebSession {
 	return {
 		...value,
-		secretHash: bytes(value.secretHash),
-		oauthToken: bytes(value.oauthToken),
 		expiresAt: new Date(value.expiresAt),
 		createdAt: new Date(value.createdAt),
 	};
@@ -121,23 +115,6 @@ export class MemoryStorage implements StorageAdapter {
 			let found = this.#sessions.get(id);
 			return Promise.resolve(found && found.expiresAt > now ? session(found) : undefined);
 		},
-		replaceToken: (id, expected, replacement, now) => {
-			let found = this.#sessions.get(id);
-			if (!found || found.expiresAt <= now || !equalBytes(found.oauthToken, expected)) {
-				return Promise.resolve(false);
-			}
-			this.#sessions.set(id, { ...found, oauthToken: bytes(replacement) });
-			return Promise.resolve(true);
-		},
-		deleteToken: (id, expected, now) => {
-			let found = this.#sessions.get(id);
-			if (!found || found.expiresAt <= now || !equalBytes(found.oauthToken, expected)) {
-				return Promise.resolve(false);
-			}
-			this.#sessions.delete(id);
-			this.#expireOwners(new Set([id]), now);
-			return Promise.resolve(true);
-		},
 		delete: id => {
 			let deleted = this.#sessions.delete(id);
 			if (deleted) this.#expireOwners(new Set([id]), new Date());
@@ -153,6 +130,15 @@ export class MemoryStorage implements StorageAdapter {
 			}
 			this.#expireOwners(expired, now);
 			return Promise.resolve(expired.size);
+		},
+		deleteAll: async (now, held, ttlMs) => {
+			this.#assertLease(held);
+			let deleted = new Set(this.#sessions.keys());
+			this.#sessions.clear();
+			this.#expireOwners(deleted, now);
+			let renewed = await this.#renew(held, ttlMs);
+			if (!renewed) throw conflict(`storage lease ${held.name} is no longer held`);
+			return { deleted: deleted.size, lease: renewed };
 		},
 	};
 
@@ -180,7 +166,7 @@ export class MemoryStorage implements StorageAdapter {
 		release: held => this.#release(held),
 	};
 
-	async migrate(): Promise<void> {}
+	async migrate(_handoffOwner?: string): Promise<void> {}
 
 	async health(): Promise<void> {}
 
