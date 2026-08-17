@@ -5,6 +5,8 @@ import type {
 	ChannelCursor,
 	ChannelPage,
 	ChannelRecord,
+	ChannelScanCursor,
+	ChannelScanPage,
 	ChannelSnapshot,
 	ChannelUpdate,
 	CommitChannel,
@@ -146,6 +148,7 @@ export class MemoryStorage implements StorageAdapter {
 		create: input => this.#createChannel(input),
 		get: id => Promise.resolve(this.#channels.get(id)).then(value => value && channel(value)),
 		list: (repositoryId, limit, after) => this.#listChannels(repositoryId, limit, after),
+		scan: (repositoryId, limit, after) => this.#scanChannels(repositoryId, limit, after),
 		claimAgentOwner: (channelId, sessionId, now) =>
 			this.#claimAgentOwner(channelId, sessionId, now),
 		clearAgentOwner: (channelId, expectedSessionId, expectedGeneration, now) =>
@@ -224,6 +227,33 @@ export class MemoryStorage implements StorageAdapter {
 			channels: page.map(channel),
 			next: ordered.length > page.length && last
 				? { updatedAt: new Date(last.updatedAt), id: last.id }
+				: undefined,
+		});
+	}
+
+	#scanChannels(
+		repositoryId: string,
+		limit: number,
+		after?: ChannelScanCursor,
+	): Promise<ChannelScanPage> {
+		let count = Math.min(100, Math.max(1, limit));
+		let ordered = [...this.#channels.values()]
+			.filter(value => value.repositoryId === repositoryId)
+			.sort((left, right) =>
+				right.createdAt.getTime() - left.createdAt.getTime() || left.id.localeCompare(right.id)
+			);
+		if (after) {
+			ordered = ordered.filter(value =>
+				value.createdAt < after.createdAt
+				|| (value.createdAt.getTime() === after.createdAt.getTime() && value.id > after.id)
+			);
+		}
+		let page = ordered.slice(0, count);
+		let last = page.at(-1);
+		return Promise.resolve({
+			channels: page.map(channel),
+			next: ordered.length > page.length && last
+				? { createdAt: new Date(last.createdAt), id: last.id }
 				: undefined,
 		});
 	}

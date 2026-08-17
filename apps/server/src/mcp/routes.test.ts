@@ -64,6 +64,11 @@ function request(method: string, init: RequestInit = {}): Request {
 	return new Request("https://chopin.test/mcp", { method, ...init, headers });
 }
 
+function expectProtected(response: Response | undefined): void {
+	expect(response?.headers.get("cache-control")).toBe("no-store");
+	expect(response?.headers.get("x-content-type-options")).toBe("nosniff");
+}
+
 describe("the hosted MCP route", () => {
 	it("passes originless POST and same-origin GET requests to authenticated MCP", async () => {
 		let { router } = setup();
@@ -76,12 +81,14 @@ describe("the hosted MCP route", () => {
 		}));
 
 		expect(initialized?.status).toBe(200);
+		expectProtected(initialized);
 		expect(await initialized?.json()).toMatchObject({
 			jsonrpc: "2.0",
 			id: 1,
 			result: { serverInfo: { name: "chopin" } },
 		});
 		expect(stream?.status).toBe(200);
+		expectProtected(stream);
 		expect(stream?.headers.get("content-type")).toBe("text/event-stream");
 	});
 
@@ -94,6 +101,7 @@ describe("the hosted MCP route", () => {
 			}));
 
 			expect(response?.status).toBe(403);
+			expectProtected(response);
 			expect(await response?.text()).toBe("origin is not allowed");
 		}
 	});
@@ -108,6 +116,7 @@ describe("the hosted MCP route", () => {
 		let text = await response?.text();
 
 		expect(response?.status).toBe(500);
+		expectProtected(response);
 		expect(text).toBe("MCP request failed");
 		expect(text).not.toContain("access-token");
 		expect(text).not.toContain("Private roadmap");

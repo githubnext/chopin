@@ -153,6 +153,51 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
+		it("scans repository channels through updates without changing its creation cursor", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, channelId, repositoryId, lease } = await userAndChannel(storage);
+				let second = id("channel");
+				let third = id("channel");
+				await storage.channels.create({
+					id: second,
+					repositoryId,
+					repositoryOwner: "octo-org",
+					repositoryName: "score",
+					title: "Second plan",
+					createdBy: userId,
+					now: new Date("2026-01-03T03:04:05.000Z"),
+				});
+				await storage.channels.create({
+					id: third,
+					repositoryId,
+					repositoryOwner: "octo-org",
+					repositoryName: "score",
+					title: "Third plan",
+					createdBy: userId,
+					now: new Date("2026-01-04T03:04:05.000Z"),
+				});
+
+				let first = await storage.channels.scan(repositoryId, 2);
+				await storage.collaboration.commit({
+					channelId,
+					lease,
+					expectedRevision: 0,
+					operationId: id("operation"),
+					epoch: "epoch-1",
+					events: [],
+					now: new Date("2026-01-05T03:04:05.000Z"),
+				});
+				let next = await storage.channels.scan(repositoryId, 2, first.next);
+
+				expect(first.channels.map(channel => channel.id)).toEqual([third, second]);
+				expect(next.channels.map(channel => channel.id)).toEqual([channelId]);
+				expect(next.next).toBeUndefined();
+			} finally {
+				await storage.close();
+			}
+		});
+
 		it("assigns the first active session as the agent owner", async () => {
 			let storage = await opened(factory);
 			try {

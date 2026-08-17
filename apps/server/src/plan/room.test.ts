@@ -6,7 +6,7 @@
  * when an update leaves it in a state the dialect will not accept.
  */
 
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 import { createHeadlessEditor } from "@lexical/headless";
 import { createYjsBinding, syncLexicalUpdateToYjs, syncYjsChangesToLexical } from "@lexical/yjs";
 import { $getRoot, $isElementNode, $isParagraphNode } from "lexical";
@@ -253,6 +253,24 @@ describe("concurrent editing", () => {
 });
 
 describe("recovery", () => {
+	it("destroys a scratch restoration when a journal update throws", async () => {
+		let document = await room.create("# Title\n");
+		let checkpoint = Y.encodeStateAsUpdate(document.doc);
+		let destroy = spyOn(Y.Doc.prototype, "destroy");
+		try {
+			await expect(
+				room.restore(document.epoch, checkpoint, "# Title\n", [{
+					epoch: document.epoch,
+					update: new Uint8Array([255]),
+				}]),
+			).rejects.toThrow();
+			expect(destroy).toHaveBeenCalledTimes(1);
+		} finally {
+			destroy.mockRestore();
+			document.doc.destroy();
+		}
+	});
+
 	/**
 	 * A rejected batch cannot be undone — Yjs has no such operation — so the
 	 * document is rebuilt from the last state that was known to be good.

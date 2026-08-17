@@ -134,6 +134,8 @@ describe("the MCP read protocol", () => {
 		expect((read.inputSchema.properties as Record<string, { pattern: string }>).id.pattern).toBe(
 			"\\S",
 		);
+		expect((read.inputSchema.properties as Record<string, { maxLength: number }>).id.maxLength)
+			.toBe(128);
 	});
 
 	it("does not reveal documents to an unauthenticated caller", async () => {
@@ -169,6 +171,43 @@ describe("the MCP read protocol", () => {
 		);
 	});
 
+	it("rejects declared and streamed request bodies beyond the read-only transport budget", async () => {
+		let mcp = endpoint();
+		let declared = await mcp(
+			new Request("https://chopin.test/mcp", {
+				method: "POST",
+				headers: {
+					authorization: "Bearer allowed",
+					"content-length": "65537",
+					"content-type": "application/json",
+				},
+				body: "{}",
+			}),
+		);
+		let streamed = await mcp(
+			new Request("https://chopin.test/mcp", {
+				method: "POST",
+				headers: {
+					authorization: "Bearer allowed",
+					"content-type": "application/json",
+				},
+				body: new ReadableStream({
+					start(controller) {
+						for (let index = 0; index < 3; index++) {
+							controller.enqueue(new Uint8Array(32_768));
+						}
+						controller.close();
+					},
+				}),
+			}),
+		);
+
+		for (let response of [declared, streamed]) {
+			expect(response.status).toBe(413);
+			expect(await response.text()).toBe("request too large");
+		}
+	});
+
 	it("rejects non-scalar JSON-RPC ids and scalar initialize or tools-list parameters", async () => {
 		let mcp = endpoint();
 		for (
@@ -193,6 +232,7 @@ describe("the MCP read protocol", () => {
 				[5, "list_documents", { repository: "./chopin" }, "list_documents requires a repository"],
 				[6, "list_documents", { repository: "owner/.." }, "list_documents requires a repository"],
 				[7, "read_document", { id: " \t" }, "read_document requires an id"],
+				[9, "read_document", { id: "x".repeat(129) }, "read_document requires an id"],
 			]
 		) {
 			let invalid = await json(
@@ -215,6 +255,20 @@ describe("the MCP read protocol", () => {
 			})),
 		);
 		expect(unknown.error).toEqual({ code: -32601, message: "tool not found" });
+	});
+
+	it("counts read-document ids by JSON Schema characters", async () => {
+		let boundary = await json(
+			await endpoint()(request({
+				jsonrpc: "2.0",
+				id: 10,
+				method: "tools/call",
+				params: { name: "read_document", arguments: { id: "😀".repeat(128) } },
+			})),
+		);
+
+		expect(boundary.error).toBeUndefined();
+		expect(boundary.result).toEqual({ content: [], isError: true });
 	});
 
 	it("returns tool-level absence for a missing or inaccessible channel", async () => {
@@ -293,5 +347,31 @@ describe("the MCP read protocol", () => {
 		);
 		expect(unsupported.status).toBe(405);
 		expect(unsupported.headers.get("allow")).toBe("GET, POST");
+	});
+
+	it("honors event-stream Accept quality values", async () => {
+		let mcp = endpoint();
+		for (
+			let accept of [
+				"text/event-stream;q=0",
+				"application/json, text/event-stream; q=0",
+				"text/event-stream;q=0, */*;q=1",
+				"*/*;q=0",
+			]
+		) {
+			let response = await mcp(
+				new Request("https://chopin.test/mcp", {
+					headers: { authorization: "Bearer allowed", accept },
+				}),
+			);
+			expect(response.status).toBe(406);
+		}
+
+		let accepted = await mcp(
+			new Request("https://chopin.test/mcp", {
+				headers: { authorization: "Bearer allowed", accept: "text/event-stream;q=0.25" },
+			}),
+		);
+		expect(accepted.status).toBe(200);
 	});
 });

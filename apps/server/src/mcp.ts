@@ -38,6 +38,9 @@ const REPOSITORY_PATTERN = "(?!\\.\\.?$)[A-Za-z0-9._-]{1,100}";
 const REPOSITORY_PATH_PATTERN = `^${OWNER_PATTERN}/${REPOSITORY_PATTERN}$`;
 const OWNER = new RegExp(`^${OWNER_PATTERN}$`);
 const REPOSITORY = new RegExp(`^${REPOSITORY_PATTERN}$`);
+const MAX_DOCUMENT_ID_LENGTH = 128;
+/** Read-only JSON-RPC calls need arguments, not document-sized request bodies. */
+const MAX_REQUEST_BYTES = 64 * 1_024;
 
 const DOCUMENT = {
 	type: "object",
@@ -74,7 +77,14 @@ export const TOOLS: Tool[] = [
 		description: "Read a Chopin channel's canonical source and revision.",
 		inputSchema: {
 			type: "object",
-			properties: { id: { type: "string", minLength: 1, pattern: "\\S" } },
+			properties: {
+				id: {
+					type: "string",
+					minLength: 1,
+					maxLength: MAX_DOCUMENT_ID_LENGTH,
+					pattern: "\\S",
+				},
+			},
 			required: ["id"],
 			additionalProperties: false,
 		},
@@ -144,7 +154,9 @@ function isRepository(value: unknown): value is string {
 }
 
 function isId(value: unknown): value is string {
-	return typeof value === "string" && value.trim().length > 0;
+	return typeof value === "string"
+		&& Array.from(value).length <= MAX_DOCUMENT_ID_LENGTH
+		&& value.trim().length > 0;
 }
 
 function isJsonRpcId(value: unknown): value is string | number | null {
@@ -158,10 +170,65 @@ function hasObjectParams(call: Call): boolean {
 }
 
 function acceptsEvents(request: Request): boolean {
-	return (request.headers.get("accept") ?? "*/*")
-		.split(",")
-		.map(value => value.trim().split(";", 1)[0])
-		.some(value => value === "text/event-stream" || value === "*/*");
+	let selected: { specificity: number; quality: number } | undefined;
+	for (let item of (request.headers.get("accept") ?? "*/*").split(",")) {
+		let [media, ...parameters] = item.split(";").map(value => value.trim());
+		let specificity = media?.toLowerCase() === "text/event-stream"
+			? 2
+			: media?.toLowerCase() === "text/*"
+			? 1
+			: media === "*/*"
+			? 0
+			: -1;
+		if (specificity < 0) continue;
+		let quality = 1;
+		let parameter = parameters.find(value => value.split("=", 1)[0]?.trim().toLowerCase() === "q");
+		if (parameter) {
+			let value = parameter.slice(parameter.indexOf("=") + 1).trim();
+			quality = /^(?:0(?:\.\d{0,3})?|1(?:\.0{0,3})?)$/.test(value) ? Number(value) : 0;
+		}
+		if (
+			!selected
+			|| specificity > selected.specificity
+			|| (specificity === selected.specificity && quality > selected.quality)
+		) selected = { specificity, quality };
+	}
+	return (selected?.quality ?? 0) > 0;
+}
+
+async function requestBody(request: Request): Promise<{ body?: unknown; tooLarge: boolean }> {
+	let declared = request.headers.get("content-length");
+	if (declared && /^\d+$/.test(declared) && Number(declared) > MAX_REQUEST_BYTES) {
+		return { tooLarge: true };
+	}
+
+	let reader = request.body?.getReader();
+	if (!reader) throw new Error("request has no body");
+	let chunks: Uint8Array[] = [];
+	let length = 0;
+	try {
+		while (true) {
+			let { done, value } = await reader.read();
+			if (done) break;
+			if (!value) continue;
+			length += value.byteLength;
+			if (length > MAX_REQUEST_BYTES) {
+				await reader.cancel().catch(() => {});
+				return { tooLarge: true };
+			}
+			chunks.push(value);
+		}
+	} finally {
+		reader.releaseLock();
+	}
+
+	let bytes = new Uint8Array(length);
+	let offset = 0;
+	for (let chunk of chunks) {
+		bytes.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+	return { body: JSON.parse(new TextDecoder().decode(bytes)), tooLarge: false };
 }
 
 /** A stateless JSON-response Streamable HTTP MCP handler for read-only tools. */
@@ -246,7 +313,9 @@ export function handler<Caller>(
 
 		let body: unknown;
 		try {
-			body = await request.json();
+			let read = await requestBody(request);
+			if (read.tooLarge) return new Response("request too large", { status: 413 });
+			body = read.body;
 		} catch {
 			return Response.json(error(null, -32700, "parse error"));
 		}

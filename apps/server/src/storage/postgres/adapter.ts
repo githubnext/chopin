@@ -9,6 +9,8 @@ import type {
 	ChannelCursor,
 	ChannelPage,
 	ChannelRecord,
+	ChannelScanCursor,
+	ChannelScanPage,
 	ChannelSnapshot,
 	ChannelUpdate,
 	CommitChannel,
@@ -437,6 +439,7 @@ export class PostgresStorage implements StorageAdapter {
 				return found ? channel(found) : undefined;
 			}),
 		list: (repositoryId, limit, after) => this.#listChannels(repositoryId, limit, after),
+		scan: (repositoryId, limit, after) => this.#scanChannels(repositoryId, limit, after),
 		claimAgentOwner: (channelId, sessionId, now) =>
 			this.#claimAgentOwner(channelId, sessionId, now),
 		clearAgentOwner: (channelId, expectedSessionId, expectedGeneration, now) =>
@@ -537,6 +540,42 @@ export class PostgresStorage implements StorageAdapter {
 			return {
 				channels: page,
 				next: more && last ? { updatedAt: last.updatedAt, id: last.id } : undefined,
+			};
+		});
+	}
+
+	#scanChannels(
+		repositoryId: string,
+		limit: number,
+		after?: ChannelScanCursor,
+	): Promise<ChannelScanPage> {
+		return this.#run("scan channels", async () => {
+			let count = Math.min(100, Math.max(1, limit));
+			let rows = after
+				? await this.#sql<ChannelRow[]>`
+					SELECT ${this.#sql.unsafe(CHANNEL_COLUMNS)}
+					FROM channels
+					WHERE repository_id = ${repositoryId}
+						AND (
+							created_at < ${after.createdAt}
+							OR (created_at = ${after.createdAt} AND id > ${after.id})
+						)
+					ORDER BY created_at DESC, id ASC
+					LIMIT ${count + 1}
+				`
+				: await this.#sql<ChannelRow[]>`
+					SELECT ${this.#sql.unsafe(CHANNEL_COLUMNS)}
+					FROM channels
+					WHERE repository_id = ${repositoryId}
+					ORDER BY created_at DESC, id ASC
+					LIMIT ${count + 1}
+				`;
+			let more = rows.length > count;
+			let page = rows.slice(0, count).map(channel);
+			let last = page.at(-1);
+			return {
+				channels: page,
+				next: more && last ? { createdAt: last.createdAt, id: last.id } : undefined,
 			};
 		});
 	}

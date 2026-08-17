@@ -275,25 +275,28 @@ export async function restore(
 	journal: RestoredUpdate[],
 ): Promise<Document> {
 	let restored = build(epoch);
-	Y.applyUpdate(restored.doc, checkpoint, REMOTE);
-	await settle();
-	if (project(restored) !== source) {
-		restored.doc.destroy();
-		throw new Error("stored plan source does not match its Yjs checkpoint");
-	}
-
-	for (let item of journal) {
-		if (item.epoch !== restored.epoch) {
-			restored.doc.destroy();
-			throw new Error("stored plan journal changes epoch without a checkpoint");
-		}
-		Y.applyUpdate(restored.doc, item.update, REMOTE);
+	try {
+		Y.applyUpdate(restored.doc, checkpoint, REMOTE);
 		await settle();
-		project(restored);
+		if (project(restored) !== source) {
+			throw new Error("stored plan source does not match its Yjs checkpoint");
+		}
+
+		for (let item of journal) {
+			if (item.epoch !== restored.epoch) {
+				throw new Error("stored plan journal changes epoch without a checkpoint");
+			}
+			Y.applyUpdate(restored.doc, item.update, REMOTE);
+			await settle();
+			project(restored);
+		}
+		await settle();
+		restored.checkpoint = Y.encodeStateAsUpdate(restored.doc);
+		return restored;
+	} catch (err) {
+		restored.doc.destroy();
+		throw err;
 	}
-	await settle();
-	restored.checkpoint = Y.encodeStateAsUpdate(restored.doc);
-	return restored;
 }
 
 /** State the given client is missing, or the whole document when it has none. */

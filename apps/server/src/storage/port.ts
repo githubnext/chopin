@@ -2,6 +2,8 @@ import type {
 	AgentState,
 	ChannelPage,
 	ChannelRecord,
+	ChannelScanCursor,
+	ChannelScanPage,
 	CommitChannel,
 	CommitResult,
 	CreateChannel,
@@ -40,6 +42,7 @@ export interface ChannelStore {
 		updatedAt: Date;
 		id: string;
 	}): Promise<ChannelPage>;
+	scan(repositoryId: string, limit: number, after?: ChannelScanCursor): Promise<ChannelScanPage>;
 	claimAgentOwner(channelId: string, sessionId: string, now: Date): Promise<AgentState>;
 	clearAgentOwner(
 		channelId: string,
