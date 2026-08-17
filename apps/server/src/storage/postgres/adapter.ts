@@ -47,8 +47,6 @@ type UserRow = {
 type SessionRow = {
 	id: string;
 	userId: string;
-	secretHash: Uint8Array;
-	oauthToken: Uint8Array;
 	expiresAt: Timestamp;
 	createdAt: Timestamp;
 };
@@ -176,8 +174,6 @@ function user(row: UserRow): UserRecord {
 function session(row: SessionRow): WebSession {
 	return {
 		...row,
-		secretHash: bytes(row.secretHash, "session secret hash"),
-		oauthToken: bytes(row.oauthToken, "OAuth ciphertext"),
 		expiresAt: date(row.expiresAt, "session expiry"),
 		createdAt: date(row.createdAt, "session creation time"),
 	};
@@ -261,8 +257,6 @@ const USER_COLUMNS = `
 const SESSION_COLUMNS = `
 	id,
 	user_id AS "userId",
-	secret_hash AS "secretHash",
-	oauth_token AS "oauthToken",
 	expires_at AS "expiresAt",
 	created_at AS "createdAt"
 `;
@@ -365,10 +359,9 @@ export class PostgresStorage implements StorageAdapter {
 			this.#run("create login session", async () => {
 				await this.#sql`
 				INSERT INTO web_sessions (
-					id, user_id, secret_hash, oauth_token, expires_at, created_at
+					id, user_id, expires_at, created_at
 				) VALUES (
-					${input.id}, ${input.userId}, ${input.secretHash}, ${input.oauthToken},
-					${input.expiresAt}, ${input.createdAt}
+					${input.id}, ${input.userId}, ${input.expiresAt}, ${input.createdAt}
 				)
 			`;
 			}),
@@ -381,37 +374,6 @@ export class PostgresStorage implements StorageAdapter {
 			`;
 				return found ? session(found) : undefined;
 			}),
-		replaceToken: (id, expected, replacement, now) =>
-			this.#run("replace login credentials", async () => {
-				let changed = await this.#sql<{ id: string }[]>`
-				UPDATE web_sessions
-				SET oauth_token = ${replacement}
-				WHERE id = ${id} AND oauth_token = ${expected} AND expires_at > ${now}
-				RETURNING id
-			`;
-				return changed.length > 0;
-			}),
-		deleteToken: (id, expected, now) =>
-			this.#run("delete rejected login credentials", () =>
-				this.#sql.begin(async transaction => {
-					let [locked] = await transaction<{ id: string }[]>`
-					SELECT id FROM web_sessions
-					WHERE id = ${id} AND oauth_token = ${expected} AND expires_at > ${now}
-					FOR UPDATE
-				`;
-					if (!locked) return false;
-					await transaction`
-					UPDATE agent_state
-					SET owner_session_id = NULL, status = 'unavailable', updated_at = ${now}
-					WHERE owner_session_id = ${id}
-				`;
-					let deleted = await transaction<{ id: string }[]>`
-					DELETE FROM web_sessions
-					WHERE id = ${id}
-					RETURNING id
-				`;
-					return deleted.length > 0;
-				})),
 		delete: id =>
 			this.#run("delete login session", () =>
 				this.#sql.begin(async transaction => {
@@ -439,6 +401,29 @@ export class PostgresStorage implements StorageAdapter {
 					DELETE FROM web_sessions WHERE expires_at <= ${now} RETURNING id
 				`;
 					return deleted.length;
+				})),
+		deleteAll: (now, held, ttlMs) =>
+			this.#run("delete all login sessions", () =>
+				this.#sql.begin(async transaction => {
+					await this.#assertLease(transaction, held);
+					await transaction`
+					UPDATE agent_state
+					SET owner_session_id = NULL, status = 'unavailable', updated_at = ${now}
+					WHERE owner_session_id IS NOT NULL
+				`;
+					let deleted = await transaction<{ id: string }[]>`
+					DELETE FROM web_sessions RETURNING id
+					`;
+					let [renewed] = await transaction<LeaseRow[]>`
+					UPDATE storage_leases
+					SET expires_at = clock_timestamp() + (${ttlMs} * interval '1 millisecond')
+					WHERE name = ${held.name}
+						AND owner = ${held.owner}
+						AND fencing = ${held.fencing}
+					RETURNING ${transaction.unsafe(LEASE_COLUMNS)}
+					`;
+					if (!renewed) throw conflict(`storage lease ${held.name} is no longer held`);
+					return { deleted: deleted.length, lease: lease(renewed) };
 				})),
 	};
 
@@ -472,10 +457,10 @@ export class PostgresStorage implements StorageAdapter {
 		release: held => this.#release(held),
 	};
 
-	async migrate(): Promise<void> {
+	async migrate(handoffOwner?: string): Promise<void> {
 		await this.#run("migrate storage", async () => {
 			await this.#sql.connect();
-			await migrate(this.#sql);
+			await migrate(this.#sql, handoffOwner);
 		});
 	}
 

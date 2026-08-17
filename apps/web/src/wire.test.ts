@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 
 import { Wire } from "./wire";
 
-import type { Server } from "bun";
+import type { Server, ServerWebSocket } from "bun";
 import type { Status } from "./wire";
 
 let servers: Array<Server<undefined>> = [];
@@ -49,12 +49,59 @@ function unavailable(): number {
 	return server.port!;
 }
 
-function connect(port: number, seen: Status[]): Wire {
+function unauthorized(): number {
+	let server = Bun.serve({
+		port: 0,
+		hostname: "127.0.0.1",
+		fetch: () => new Response("authentication required", { status: 401 }),
+	});
+	servers.push(server);
+	return server.port!;
+}
+
+function restartable(): { port: number; deny: () => void; drop: () => void } {
+	let denied = false;
+	let sockets = new Set<ServerWebSocket<undefined>>();
+	let server = Bun.serve<undefined>({
+		port: 0,
+		hostname: "127.0.0.1",
+		fetch(req, self) {
+			if (req.headers.get("x-chopin-socket-probe") === "1") {
+				return new Response(null, { status: denied ? 401 : 204 });
+			}
+			if (denied) return new Response("authentication required", { status: 401 });
+			return self.upgrade(req) ? undefined : new Response("no", { status: 400 });
+		},
+		websocket: {
+			open: socket => {
+				sockets.add(socket);
+			},
+			close: socket => {
+				sockets.delete(socket);
+			},
+			message() {},
+		},
+	});
+	servers.push(server);
+	return {
+		port: server.port!,
+		drop: () => {
+			for (let socket of sockets) socket.terminate();
+		},
+		deny: () => {
+			denied = true;
+			for (let socket of sockets) socket.terminate();
+		},
+	};
+}
+
+function connect(port: number, seen: Status[], onAuthenticationRequired?: () => void): Wire {
 	// `location` is what the client derives its URL from, and there is none in
 	// a test runtime.
 	globalThis.location = { href: `http://127.0.0.1:${port}/`, protocol: "http:" } as Location;
 	let wire = new Wire({
 		channelId: "019c1234-1234-4123-8123-123456789abc",
+		onAuthenticationRequired,
 		onStatus: status => seen.push(status),
 	});
 	wires.push(wire);
@@ -111,6 +158,42 @@ describe("status", () => {
 
 		await until(() => wire.status === "reconnecting", "reconnecting");
 		expect(seen).not.toContain("denied");
+	});
+
+	it("requests reauthentication after a 401 admission", async () => {
+		let seen: Status[] = [];
+		let required = 0;
+		let wire = connect(unauthorized(), seen, () => required++);
+
+		await until(() => wire.status === "denied", "denied");
+		expect(required).toBe(1);
+	});
+
+	it("requests reauthentication when a connected server loses its session", async () => {
+		let service = restartable();
+		let seen: Status[] = [];
+		let required = 0;
+		let wire = connect(service.port, seen, () => required++);
+		await until(() => wire.status === "connected", "connected");
+
+		service.deny();
+		await until(() => required === 1, "reauthentication");
+		expect(wire.status).toBe("denied");
+	});
+
+	it("reconnects after a transient socket loss with a valid session", async () => {
+		let service = restartable();
+		let seen: Status[] = [];
+		let wire = connect(service.port, seen);
+		await until(() => wire.status === "connected", "connected");
+		let connections = seen.filter(status => status === "connected").length;
+
+		service.drop();
+		await until(
+			() => seen.filter(status => status === "connected").length > connections,
+			"reconnected",
+		);
+		expect(wire.status).toBe("connected");
 	});
 
 	it("rejects a pending request when the connection goes away", async () => {

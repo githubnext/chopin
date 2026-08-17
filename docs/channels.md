@@ -38,6 +38,6 @@ deletes journal updates through the checkpoint sequence; it is a recovery tail,
 not permanent document history. A client update is acknowledged only after its
 fenced durable commit.
 
-Agent turns use the first invoking editor's GitHub App session and
+Agent turns use the first invoking editor's process-local GitHub App session and
 repository-scoped GitHub tools. The isolation and ownership model is described
 in [Copilot agent](hosted-agent.md).

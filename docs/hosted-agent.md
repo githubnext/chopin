@@ -8,7 +8,7 @@ atomically in the storage adapter and guarded by a generation token.
 Reset and logout abort and discard any active SDK session. Permission
 callbacks also recheck the owner session, ownership generation and repository
 write access before each custom or MCP tool call. The in-memory session is also
-bound to the encrypted credential revision, so a rotated token cannot authorize
+bound to the process-local credential revision, so a rotated token cannot authorize
 one check while an older copied token executes the tool.
 
 The shared Copilot runtime runs in SDK `mode: "empty"`. Each SDK session
@@ -32,7 +32,9 @@ escape, and post-filter code search by GitHub repository node ID.
 
 Copilot CLI session files are disposable. When the process or room restarts,
 Chopin creates a new SDK session and supplies persisted transcript context; the
-current plan is read through `read_plan`. No SDK session ID is stored.
+current plan is read through `read_plan`. No SDK session ID is stored. A process
+restart also clears login sessions and Planner ownership, so the first editor
+must authorize again before invoking the restored channel.
 
 GitHub App user access tokens charge the owning user's Copilot subscription.
 Chopin cannot prove entitlement at login: a user without Copilot sees the

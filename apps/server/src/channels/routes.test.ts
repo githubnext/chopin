@@ -84,7 +84,7 @@ async function setup() {
 	let now = new Date("2026-08-13T12:00:00.000Z");
 	let storage = new MemoryStorage();
 	await storage.users.put({ id: "U_octocat", login: "octocat", avatarUrl: "avatar", now });
-	let sessions = new Sessions(storage, new Uint8Array(32).fill(4), true, () => now);
+	let sessions = new Sessions(storage, true, () => now);
 	let issued = await sessions.issue("U_octocat", grant("ghu_user"));
 	let github = new FakeGitHub();
 	let auth: HostedAuth = {

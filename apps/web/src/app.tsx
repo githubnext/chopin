@@ -212,6 +212,7 @@ export function RoomWorkspace(
 	useEffect(() => {
 		let socket = new Wire({
 			channelId: room,
+			onAuthenticationRequired: () => location.assign("/"),
 			onStatus: (next, why) => {
 				setStatus(next);
 				setReason(why);

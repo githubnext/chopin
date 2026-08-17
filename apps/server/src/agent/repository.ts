@@ -8,7 +8,7 @@ export type HostedRepository = {
 };
 
 type Options = {
-	token: string;
+	token: string | (() => string | undefined);
 	repository: HostedRepository;
 	fetch?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 };
@@ -65,12 +65,14 @@ async function answer(work: () => Promise<unknown>): Promise<string> {
 
 export function repositoryTools(options: Options): Tool[] {
 	let request = async (path: string, search?: URLSearchParams): Promise<unknown> => {
+		let token = typeof options.token === "string" ? options.token : options.token();
+		if (!token) throw new Error("GitHub authorization expired");
 		let url = new URL(path, API);
 		if (search) url.search = search.toString();
 		let response = await (options.fetch ?? fetch)(url, {
 			headers: {
 				accept: "application/vnd.github+json",
-				authorization: `Bearer ${options.token}`,
+				authorization: `Bearer ${token}`,
 				"user-agent": "chopin",
 				"x-github-api-version": "2022-11-28",
 			},

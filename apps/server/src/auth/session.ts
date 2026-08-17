@@ -18,15 +18,6 @@ const decoder = new TextDecoder();
 
 type Clock = () => Date;
 
-type CredentialPlaintext = {
-	v: 2;
-	accessToken: string;
-	accessExpiresAt: string;
-	refreshToken: string;
-	refreshExpiresAt: string;
-	revision: number;
-};
-
 export type SessionAccess = {
 	token: string;
 	expiresAt: Date;
@@ -60,11 +51,15 @@ type StoredAttempt = {
 	expiresAt: string;
 };
 
-type CredentialState = {
-	stored: WebSession;
-	access: SessionAccess;
+type MemorySession = {
+	session: WebSession;
+	user: UserRecord;
+	secretHash: Uint8Array;
+	accessToken: string;
+	accessExpiresAt: Date;
 	refreshToken: string;
 	refreshExpiresAt: Date;
+	revision: number;
 };
 
 type SessionOptions = {
@@ -74,7 +69,7 @@ type SessionOptions = {
 	invalidate?: (accessToken: string) => void;
 };
 
-type Rejection = "deleted" | "changed" | "missing";
+type Rejection = "revoked" | "changed" | "missing";
 
 function random(bytes: number): Uint8Array {
 	let value = new Uint8Array(bytes);
@@ -177,36 +172,6 @@ async function decrypted(key: CryptoKey, aad: string, envelope: Uint8Array): Pro
 	return JSON.parse(decoder.decode(plaintext));
 }
 
-function credentials(value: unknown): Omit<CredentialState, "stored"> | undefined {
-	if (!value || typeof value !== "object") return undefined;
-	let record = value as Record<string, unknown>;
-	if (
-		record.v !== 2
-		|| typeof record.accessToken !== "string"
-		|| !record.accessToken
-		|| typeof record.accessExpiresAt !== "string"
-		|| typeof record.refreshToken !== "string"
-		|| !record.refreshToken
-		|| typeof record.refreshExpiresAt !== "string"
-		|| !Number.isSafeInteger(record.revision)
-		|| (record.revision as number) < 1
-	) return undefined;
-	let accessExpiresAt = new Date(record.accessExpiresAt);
-	let refreshExpiresAt = new Date(record.refreshExpiresAt);
-	if (Number.isNaN(accessExpiresAt.getTime()) || Number.isNaN(refreshExpiresAt.getTime())) {
-		return undefined;
-	}
-	return {
-		access: {
-			token: record.accessToken,
-			expiresAt: accessExpiresAt,
-			revision: record.revision as number,
-		},
-		refreshToken: record.refreshToken,
-		refreshExpiresAt,
-	};
-}
-
 function attempt(value: unknown): StoredAttempt | undefined {
 	if (!value || typeof value !== "object") return undefined;
 	let record = value as Record<string, unknown>;
@@ -219,25 +184,25 @@ function attempt(value: unknown): StoredAttempt | undefined {
 	return { v: 1, state: record.state, verifier: record.verifier, expiresAt: record.expiresAt };
 }
 
-/** Durable login sessions: only a secret hash and OAuth ciphertext reach storage. */
+/** Process-local browser and GitHub credentials backed by a token-free ownership registry. */
 export class Sessions {
 	readonly #storage: StorageAdapter;
-	readonly #key: Promise<CryptoKey>;
 	readonly #secure: boolean;
 	readonly #clock: Clock;
 	readonly #options: SessionOptions;
-	readonly #refreshes = new Map<string, Promise<CredentialState | undefined>>();
+	readonly #sessions = new Map<string, MemorySession>();
+	readonly #refreshes = new Map<string, Promise<MemorySession | undefined>>();
+	readonly #revocations = new Map<string, Promise<boolean>>();
+	readonly #pendingDeletes = new Set<string>();
 	readonly cookieName: string;
 
 	constructor(
 		storage: StorageAdapter,
-		key: Uint8Array,
 		secure: boolean,
 		clock: Clock = () => new Date(),
 		options: SessionOptions = {},
 	) {
 		this.#storage = storage;
-		this.#key = imported(key);
 		this.#secure = secure;
 		this.#clock = clock;
 		this.#options = options;
@@ -249,19 +214,11 @@ export class Sessions {
 		let secret = random(SECRET_BYTES);
 		let createdAt = this.#clock();
 		let expiresAt = new Date(createdAt.getTime() + SESSION_TTL_MS);
-		let token = await encrypted(
-			await this.#key,
-			`chopin:web-session:v2:${id}:${userId}`,
-			this.#plaintext(grant, createdAt, 1),
-		);
-		await this.#storage.sessions.create({
-			id,
-			userId,
-			secretHash: hash(secret),
-			oauthToken: token,
-			expiresAt,
-			createdAt,
-		});
+		let user = await this.#storage.users.get(userId);
+		if (!user) throw new Error("cannot create a session for a missing user");
+		let session = { id, userId, expiresAt, createdAt };
+		await this.#storage.sessions.create(session);
+		this.#sessions.set(id, this.#fromGrant(session, user, hash(secret), grant, 1, createdAt));
 		return {
 			id,
 			cookie: serialized(
@@ -279,25 +236,45 @@ export class Sessions {
 	async authenticate(request: Request): Promise<AuthenticatedSession | undefined> {
 		let parsed = this.#parse(request);
 		if (!parsed) return undefined;
-		let stored = await this.#storage.sessions.get(parsed.id, this.#clock());
-		if (!stored || !equal(hash(parsed.secret), stored.secretHash)) return undefined;
-		return this.#resolve(stored);
+		let current = this.#sessions.get(parsed.id);
+		if (
+			!current
+			|| current.session.expiresAt <= this.#clock()
+			|| !equal(hash(parsed.secret), current.secretHash)
+		) return undefined;
+		return this.#resolve(current);
 	}
 
-	/** Resolve an already-authorized internal owner without exposing ciphertext handling. */
+	/** Resolve an already-authorized internal owner from this process. */
 	async resolve(id: string): Promise<AuthenticatedSession | undefined> {
-		let stored = await this.#storage.sessions.get(id, this.#clock());
-		return stored ? this.#resolve(stored) : undefined;
+		let current = this.#sessions.get(id);
+		return current && current.session.expiresAt > this.#clock()
+			? this.#resolve(current)
+			: undefined;
 	}
 
 	/** Read current credentials without triggering rotation from inside an active agent callback. */
 	async inspect(id: string): Promise<AuthenticatedSession | undefined> {
-		let stored = await this.#storage.sessions.get(id, this.#clock());
-		if (!stored) return undefined;
-		let current = await this.#decrypt(stored);
-		if (!current || current.access.expiresAt <= this.#clock()) return undefined;
-		let user = await this.#storage.users.get(stored.userId);
-		return user ? { session: stored, user, access: current.access } : undefined;
+		if (this.#refreshes.has(id) || this.#revocations.has(id)) return undefined;
+		let current = this.#sessions.get(id);
+		if (
+			!current
+			|| current.session.expiresAt <= this.#clock()
+			|| current.accessExpiresAt <= this.#clock()
+		) return undefined;
+		return this.#authenticated(current);
+	}
+
+	/** Resolve a copied agent credential without yielding before its request starts. */
+	token(id: string, revision: number): string | undefined {
+		if (this.#refreshes.has(id) || this.#revocations.has(id)) return undefined;
+		let current = this.#sessions.get(id);
+		return current
+				&& current.revision === revision
+				&& current.session.expiresAt > this.#clock()
+				&& current.accessExpiresAt > this.#clock()
+			? current.accessToken
+			: undefined;
 	}
 
 	/** Run one idempotent GitHub read, refreshing and retrying once after a 401. */
@@ -305,21 +282,28 @@ export class Sessions {
 		authenticated: AuthenticatedSession,
 		operation: (token: string) => Promise<T>,
 	): Promise<{ value: T; authenticated: AuthenticatedSession }> {
+		let current = this.#current(authenticated);
+		if (!current) throw new GitHubError("GitHub authorization expired", 401);
 		try {
 			return {
-				value: await operation(authenticated.access.token),
-				authenticated,
+				value: await operation(current.accessToken),
+				authenticated: this.#authenticated(current),
 			};
 		} catch (err) {
 			if (!(err instanceof GitHubError) || err.status !== 401) throw err;
 		}
-		let refreshed = await this.#refresh(authenticated.session.id, authenticated.access.revision);
-		if (!refreshed) throw new GitHubError("GitHub authorization expired", 401);
+		let refreshed = await this.#rotate(current.session.id, current.revision);
+		if (!refreshed || this.#sessions.get(current.session.id) !== refreshed) {
+			throw new GitHubError("GitHub authorization expired", 401);
+		}
 		try {
-			return { value: await operation(refreshed.access.token), authenticated: refreshed };
+			return {
+				value: await operation(refreshed.accessToken),
+				authenticated: this.#authenticated(refreshed),
+			};
 		} catch (err) {
 			if (!(err instanceof GitHubError) || err.status !== 401) throw err;
-			let rejected = await this.#reject(refreshed.session, refreshed.access.revision);
+			let rejected = await this.#reject(refreshed.session.id, refreshed.revision);
 			if (rejected === "changed") {
 				throw new GitHubError("GitHub credentials changed; retry the request", 503);
 			}
@@ -327,41 +311,35 @@ export class Sessions {
 		}
 	}
 
-	async #resolve(stored: WebSession): Promise<AuthenticatedSession | undefined> {
-		let current = await this.#fresh(stored);
-		if (!current) return undefined;
-		let user = await this.#storage.users.get(stored.userId);
-		if (!user) return undefined;
-		return { session: current.stored, user, access: current.access };
+	async #resolve(current: MemorySession): Promise<AuthenticatedSession | undefined> {
+		let fresh = await this.#fresh(current);
+		return fresh && this.#sessions.get(current.session.id) === fresh
+			? this.#authenticated(fresh)
+			: undefined;
 	}
 
-	async #fresh(stored: WebSession): Promise<CredentialState | undefined> {
-		let current = await this.#decrypt(stored);
-		if (!current) return undefined;
-		if (current.access.expiresAt.getTime() > this.#clock().getTime() + REFRESH_EARLY_MS) {
+	async #fresh(current: MemorySession): Promise<MemorySession | undefined> {
+		if (current.session.expiresAt <= this.#clock()) {
+			await this.#revokeExact(current);
+			return undefined;
+		}
+		if (current.accessExpiresAt.getTime() > this.#clock().getTime() + REFRESH_EARLY_MS) {
 			return current;
 		}
-		return this.#rotate(stored.id, undefined);
-	}
-
-	async #refresh(id: string, rejectedRevision: number): Promise<AuthenticatedSession | undefined> {
-		let current = await this.#rotate(id, rejectedRevision);
-		if (!current) return undefined;
-		let user = await this.#storage.users.get(current.stored.userId);
-		return user ? { session: current.stored, user, access: current.access } : undefined;
+		return this.#rotate(current.session.id, undefined);
 	}
 
 	async #rotate(
 		id: string,
 		rejectedRevision: number | undefined,
-	): Promise<CredentialState | undefined> {
+	): Promise<MemorySession | undefined> {
 		let active = this.#refreshes.get(id);
 		if (active) {
 			let result = await active;
 			if (
 				rejectedRevision === undefined
 				|| !result
-				|| result.access.revision !== rejectedRevision
+				|| result.revision !== rejectedRevision
 			) return result;
 			if (this.#refreshes.get(id) === active) this.#refreshes.delete(id);
 			return this.#rotate(id, rejectedRevision);
@@ -377,125 +355,191 @@ export class Sessions {
 	async #rotateOnce(
 		id: string,
 		rejectedRevision: number | undefined,
-	): Promise<CredentialState | undefined> {
+	): Promise<MemorySession | undefined> {
 		let now = this.#clock();
-		let stored = await this.#storage.sessions.get(id, now);
-		if (!stored) return undefined;
-		let current = await this.#decrypt(stored);
+		let current = this.#sessions.get(id);
 		if (!current) return undefined;
-		if (rejectedRevision !== undefined && current.access.revision !== rejectedRevision) {
+		if (current.session.expiresAt <= now) {
+			await this.#revokeExact(current);
+			return undefined;
+		}
+		if (rejectedRevision !== undefined && current.revision !== rejectedRevision) {
 			return current;
 		}
 		if (
 			rejectedRevision === undefined
-			&& current.access.expiresAt.getTime() > now.getTime() + REFRESH_EARLY_MS
+			&& current.accessExpiresAt.getTime() > now.getTime() + REFRESH_EARLY_MS
 		) return current;
 		if (current.refreshExpiresAt <= now) {
-			return this.#deleteOrReload(current);
+			await this.#revokeExact(current);
+			return this.#sessions.get(id);
 		}
 		let refresh = this.#options.refresh;
 		if (!refresh) {
-			if (current.access.expiresAt > now && rejectedRevision === undefined) return current;
+			if (current.accessExpiresAt > now && rejectedRevision === undefined) return current;
 			throw new GitHubTokenError("GitHub token refresh is not configured");
 		}
 		try {
-			await this.#options.beforeRefresh?.(id, current.access.revision);
+			await this.#options.beforeRefresh?.(id, current.revision);
+			if (this.#sessions.get(id) !== current) return this.#sessions.get(id);
 			let grant = await refresh(current.refreshToken);
-			let replacement = await encrypted(
-				await this.#key,
-				`chopin:web-session:v2:${stored.id}:${stored.userId}`,
-				this.#plaintext(grant, this.#clock(), current.access.revision + 1),
-			);
-			let changed = await this.#storage.sessions.replaceToken(
-				stored.id,
-				stored.oauthToken,
-				replacement,
-				this.#clock(),
-			);
-			if (!changed) {
-				let latest = await this.#storage.sessions.get(stored.id, this.#clock());
-				return latest ? this.#decrypt(latest) : undefined;
+			if (this.#sessions.get(id) !== current) return this.#sessions.get(id);
+			let refreshedAt = this.#clock();
+			if (current.session.expiresAt <= refreshedAt) {
+				await this.#revokeExact(current);
+				return undefined;
 			}
-			this.#options.invalidate?.(current.access.token);
-			let latest = { ...stored, oauthToken: replacement };
-			return this.#decrypt(latest);
+			let replacement = this.#fromGrant(
+				current.session,
+				current.user,
+				current.secretHash,
+				grant,
+				current.revision + 1,
+				refreshedAt,
+			);
+			this.#sessions.set(id, replacement);
+			this.#options.invalidate?.(current.accessToken);
+			return replacement;
 		} catch (err) {
 			if (err instanceof GitHubTokenError && err.terminal) {
-				return this.#deleteOrReload(current);
+				await this.#revokeExact(current);
+				return this.#sessions.get(id);
 			}
-			if (rejectedRevision === undefined && current.access.expiresAt > this.#clock()) {
+			if (
+				rejectedRevision === undefined
+				&& this.#sessions.get(id) === current
+				&& current.accessExpiresAt > this.#clock()
+			) {
 				return current;
 			}
 			throw err;
 		}
 	}
 
-	async #decrypt(stored: WebSession): Promise<CredentialState | undefined> {
-		try {
-			let parsed = credentials(
-				await decrypted(
-					await this.#key,
-					`chopin:web-session:v2:${stored.id}:${stored.userId}`,
-					stored.oauthToken,
-				),
-			);
-			return parsed ? { stored, ...parsed } : undefined;
-		} catch {
-			return undefined;
-		}
-	}
-
-	#plaintext(grant: GitHubTokenGrant, now: Date, revision: number): CredentialPlaintext {
+	#fromGrant(
+		session: WebSession,
+		user: UserRecord,
+		secretHash: Uint8Array,
+		grant: GitHubTokenGrant,
+		revision: number,
+		now: Date,
+	): MemorySession {
 		return {
-			v: 2,
+			session: {
+				...session,
+				expiresAt: new Date(session.expiresAt),
+				createdAt: new Date(session.createdAt),
+			},
+			user: {
+				...user,
+				createdAt: new Date(user.createdAt),
+				updatedAt: new Date(user.updatedAt),
+			},
+			secretHash: new Uint8Array(secretHash),
 			accessToken: grant.accessToken,
-			accessExpiresAt: new Date(now.getTime() + grant.accessExpiresIn * 1_000).toISOString(),
+			accessExpiresAt: new Date(now.getTime() + grant.accessExpiresIn * 1_000),
 			refreshToken: grant.refreshToken,
-			refreshExpiresAt: new Date(now.getTime() + grant.refreshExpiresIn * 1_000).toISOString(),
+			refreshExpiresAt: new Date(now.getTime() + grant.refreshExpiresIn * 1_000),
 			revision,
 		};
 	}
 
-	async #reject(stored: WebSession, revision: number): Promise<Rejection> {
-		let current = await this.#decrypt(stored);
-		if (!current || current.access.revision !== revision) return "changed";
-		if (await this.#deleteCurrent(current)) return "deleted";
-		return await this.#storage.sessions.get(stored.id, this.#clock()) ? "changed" : "missing";
+	#authenticated(current: MemorySession): AuthenticatedSession {
+		return {
+			session: {
+				...current.session,
+				expiresAt: new Date(current.session.expiresAt),
+				createdAt: new Date(current.session.createdAt),
+			},
+			user: {
+				...current.user,
+				createdAt: new Date(current.user.createdAt),
+				updatedAt: new Date(current.user.updatedAt),
+			},
+			access: {
+				token: current.accessToken,
+				expiresAt: new Date(current.accessExpiresAt),
+				revision: current.revision,
+			},
+		};
 	}
 
-	async #deleteOrReload(current: CredentialState): Promise<CredentialState | undefined> {
-		if (await this.#deleteCurrent(current)) return undefined;
-		let latest = await this.#storage.sessions.get(current.stored.id, this.#clock());
-		return latest ? this.#decrypt(latest) : undefined;
+	#current(authenticated: AuthenticatedSession): MemorySession | undefined {
+		let current = this.#sessions.get(authenticated.session.id);
+		return current
+				&& current.session.expiresAt > this.#clock()
+			? current
+			: undefined;
 	}
 
-	async #deleteCurrent(current: CredentialState): Promise<boolean> {
-		let deleted = await this.#storage.sessions.deleteToken(
-			current.stored.id,
-			current.stored.oauthToken,
-			this.#clock(),
-		);
-		if (deleted) {
-			this.#options.invalidate?.(current.access.token);
-			await this.#options.onRevoked?.(current.stored.id);
-		}
-		return deleted;
+	async #reject(id: string, revision: number): Promise<Rejection> {
+		let refreshing = this.#refreshes.get(id);
+		if (refreshing) await refreshing.catch(() => {});
+		let current = this.#sessions.get(id);
+		if (!current) return "missing";
+		if (current.revision !== revision) return "changed";
+		return this.#revokeExact(current);
+	}
+
+	async #revokeExact(current: MemorySession): Promise<Rejection> {
+		let id = current.session.id;
+		let active = this.#sessions.get(id);
+		if (active !== current) return active ? "changed" : "missing";
+		this.#sessions.delete(id);
+		this.#options.invalidate?.(current.accessToken);
+		await this.#deleteRegistry(id);
+		return "revoked";
+	}
+
+	#deleteRegistry(id: string): Promise<boolean> {
+		let existing = this.#revocations.get(id);
+		if (existing) return existing;
+		let operation = (async () => {
+			let callbackError: unknown;
+			try {
+				await this.#options.onRevoked?.(id);
+			} catch (err) {
+				callbackError = err;
+			}
+			let deleted: boolean;
+			try {
+				deleted = await this.#storage.sessions.delete(id);
+				this.#pendingDeletes.delete(id);
+			} catch (err) {
+				this.#pendingDeletes.add(id);
+				throw err;
+			}
+			if (callbackError) throw callbackError;
+			return deleted;
+		})();
+		this.#revocations.set(id, operation);
+		void operation.finally(() => {
+			if (this.#revocations.get(id) === operation) this.#revocations.delete(id);
+		}).catch(() => {});
+		return operation;
 	}
 
 	async revoke(request: Request): Promise<string | undefined> {
 		let parsed = this.#parse(request);
 		if (!parsed) return undefined;
-		let stored = await this.#storage.sessions.get(parsed.id, this.#clock());
-		if (stored && equal(hash(parsed.secret), stored.secretHash)) {
-			let current = await this.#decrypt(stored);
-			let deleted = await this.#storage.sessions.delete(stored.id);
-			if (deleted) {
-				if (current) this.#options.invalidate?.(current.access.token);
-				await this.#options.onRevoked?.(stored.id);
-			}
-			return stored.id;
+		let current = this.#sessions.get(parsed.id);
+		if (!current || !equal(hash(parsed.secret), current.secretHash)) return undefined;
+		await this.#revokeExact(current);
+		return current.session.id;
+	}
+
+	async cleanupExpired(): Promise<number> {
+		let now = this.#clock();
+		let removed = 0;
+		for (let id of this.#pendingDeletes) {
+			await this.#storage.sessions.delete(id);
+			this.#pendingDeletes.delete(id);
 		}
-		return undefined;
+		for (let current of this.#sessions.values()) {
+			if (current.session.expiresAt > now) continue;
+			if (await this.#revokeExact(current) === "revoked") removed++;
+		}
+		return removed + await this.#storage.sessions.deleteExpired(now);
 	}
 
 	clearCookie(): string {

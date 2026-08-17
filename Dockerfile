@@ -49,4 +49,4 @@ EXPOSE 8787
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
 	CMD ["bun", "-e", "let r=await fetch('http://127.0.0.1:8787/api/session');process.exit(r.ok?0:1)"]
 
-CMD ["sh", "-c", "bun apps/server/src/storage/migrate.ts && exec bun apps/server/src/main.ts"]
+CMD ["bun", "apps/server/src/start.ts"]

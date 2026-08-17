@@ -97,7 +97,7 @@ export function registerAuthRoutes(
 	let storage = dependencies.storage;
 	let github = dependencies.github ?? new GitHubClient();
 	let secure = new URL(config.origin).protocol === "https:";
-	let sessions = new Sessions(storage, config.encryptionKey, secure, clock, {
+	let sessions = new Sessions(storage, secure, clock, {
 		refresh: refreshToken =>
 			github.refresh({
 				clientId: config.clientId,
