@@ -29,7 +29,8 @@ import type { Presence } from "./presence";
 import type { Document } from "./room";
 import type * as edit from "./edit";
 import type { Block } from "./edit";
-import type { JsonValue, Lease, StoredChannel } from "../storage/model";
+import type { Brief, CreationOrigin } from "../mcp";
+import type { InitialChannel, JsonValue, Lease, StoredChannel } from "../storage/model";
 import type { StorageAdapter } from "../storage/port";
 
 /** Updates are grouped for this long before being applied together. */
@@ -89,6 +90,10 @@ type Captured = {
 
 export type Plan = {
 	id: string;
+	/** Structured context retained for plans created through MCP. */
+	brief?: Brief;
+	/** Idempotency and repository provenance retained for plans created through MCP. */
+	origin?: CreationOrigin;
 	server: Server<SocketData>;
 	document: Document;
 	presence: Presence;
@@ -149,6 +154,8 @@ type Sidecar = {
 	version: 1;
 	revision: number;
 	documentSeq: number;
+	brief?: Brief;
+	origin?: CreationOrigin;
 	questions: Questions.Record[];
 	openQuestions: Questions.StoredOpen[];
 	threads: Comments.Record[];
@@ -160,6 +167,7 @@ function state(plan: Plan): Sidecar {
 		version: 1,
 		revision: plan.revision,
 		documentSeq: plan.document.seq,
+		...(plan.brief && plan.origin ? { brief: plan.brief, origin: plan.origin } : {}),
 		questions: [...plan.records.values()],
 		openQuestions: Questions.dump(plan.questions),
 		threads: [...plan.threads.values()],
@@ -198,6 +206,71 @@ function objects(value: JsonValue[], label: string): Array<Record<string, JsonVa
 	});
 }
 
+function strings(value: JsonValue | undefined): string[] | undefined {
+	return Array.isArray(value) && value.every(item => typeof item === "string")
+		? value
+		: undefined;
+}
+
+function creation(
+	briefValue: JsonValue | undefined,
+	originValue: JsonValue | undefined,
+): { brief?: Brief; origin?: CreationOrigin } {
+	if (briefValue === undefined && originValue === undefined) return {};
+	if (
+		!briefValue
+		|| typeof briefValue !== "object"
+		|| Array.isArray(briefValue)
+		|| !originValue
+		|| typeof originValue !== "object"
+		|| Array.isArray(originValue)
+	) throw new Error("hosted channel has invalid creation metadata");
+	let brief = briefValue as Record<string, JsonValue>;
+	let origin = originValue as Record<string, JsonValue>;
+	let briefKeys = [
+		"constraints",
+		"goal",
+		"openQuestions",
+		"repositoryFindings",
+		"settledDecisions",
+	];
+	let originKeys = [
+		"baseBranch",
+		"baseCommit",
+		"fingerprint",
+		"idempotencyKey",
+		"repository",
+		"title",
+	];
+	let constraints = strings(brief.constraints);
+	let settledDecisions = strings(brief.settledDecisions);
+	let openQuestions = strings(brief.openQuestions);
+	let repositoryFindings = strings(brief.repositoryFindings);
+	if (
+		Object.keys(brief).sort().some((key, index) => key !== briefKeys[index])
+		|| Object.keys(brief).length !== briefKeys.length
+		|| typeof brief.goal !== "string"
+		|| !brief.goal.trim()
+		|| !constraints
+		|| !settledDecisions
+		|| !openQuestions
+		|| !repositoryFindings
+		|| Object.keys(origin).sort().some((key, index) => key !== originKeys[index])
+		|| Object.keys(origin).length !== originKeys.length
+		|| originKeys.some(key => typeof origin[key] !== "string" || !origin[key].trim())
+	) throw new Error("hosted channel has invalid creation metadata");
+	return {
+		brief: {
+			goal: brief.goal,
+			constraints,
+			settledDecisions,
+			openQuestions,
+			repositoryFindings,
+		},
+		origin: origin as CreationOrigin,
+	};
+}
+
 function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 	if (value === null && pristine) {
 		return {
@@ -215,6 +288,7 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 	}
 	let item = value as Record<string, JsonValue>;
 	let keys = Object.keys(item).sort();
+	let created = creation(item.brief, item.origin);
 	let expected = [
 		"documentSeq",
 		"openQuestions",
@@ -224,6 +298,8 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 		"transcript",
 		"version",
 	];
+	if (created.brief) expected.push("brief", "origin");
+	expected.sort();
 	if (
 		keys.length !== expected.length
 		|| keys.some((key, index) => key !== expected[index])
@@ -278,6 +354,7 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 		version: 1,
 		revision: item.revision,
 		documentSeq: item.documentSeq,
+		...created,
 		questions: questions as never[],
 		openQuestions: openQuestions as unknown as Questions.StoredOpen[],
 		threads: threads as never[],
@@ -287,6 +364,39 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 
 function digest(source: string): string {
 	return `sha256:${createHash("sha256").update(source).digest("hex")}`;
+}
+
+/** Build the complete revision-zero state published with a newly created channel. */
+export async function initial(
+	source: string,
+	origin: CreationOrigin,
+	brief: Brief,
+): Promise<InitialChannel> {
+	let document = await room.create(source);
+	try {
+		let canonical = room.project(document);
+		let sidecar: Sidecar = {
+			version: 1,
+			revision: 0,
+			documentSeq: document.seq,
+			brief,
+			origin,
+			questions: [],
+			openQuestions: [],
+			threads: [],
+			transcript: [],
+		};
+		return {
+			generation: crypto.randomUUID(),
+			epoch: document.epoch,
+			source: canonical,
+			sourceHash: digest(canonical),
+			document: Y.encodeStateAsUpdate(document.doc),
+			sidecar: JSON.parse(JSON.stringify(sidecar)) as JsonValue,
+		};
+	} finally {
+		document.doc.destroy();
+	}
 }
 
 function scheduleCheckpoint(plan: Plan): void {
@@ -490,11 +600,17 @@ async function restoreHosted(id: string, loaded: StoredChannel): Promise<Restore
 /** Project a closed channel without attaching it to the live room registry. */
 export async function readStored(
 	loaded: StoredChannel,
-): Promise<{ source: string; revision: number }> {
+): Promise<{ source: string; revision: number; brief?: Brief; origin?: CreationOrigin }> {
 	let restored = await restoreHosted(loaded.channel.id, loaded);
 	try {
 		Questions.shutdown(Questions.restore(restored.sidecar.openQuestions));
-		return { source: room.project(restored.document), revision: restored.sidecar.revision };
+		return {
+			source: room.project(restored.document),
+			revision: restored.sidecar.revision,
+			...(restored.sidecar.brief && restored.sidecar.origin
+				? { brief: restored.sidecar.brief, origin: restored.sidecar.origin }
+				: {}),
+		};
 	} finally {
 		restored.document.doc.destroy();
 	}
@@ -512,6 +628,9 @@ export async function open(
 
 	let plan: Plan = {
 		id,
+		...(sidecar.brief && sidecar.origin
+			? { brief: sidecar.brief, origin: sidecar.origin }
+			: {}),
 		server,
 		document,
 		presence: presence.create(),
