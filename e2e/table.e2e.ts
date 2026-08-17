@@ -133,7 +133,7 @@ test("a grip drags its row, and says where it will land", async ({ join, seed })
 	await expect(page.locator(".plan-drop")).toHaveCount(0);
 });
 
-test("a drag that ends where it started writes nothing", async ({ join, seed }) => {
+test("a drag that ends where it started shows no destination and does not reorder", async ({ join, seed }) => {
 	await seed(TABLE);
 	let page = await join("ana");
 	let rail = await rails(page);
@@ -143,9 +143,8 @@ test("a drag that ends where it started writes nothing", async ({ join, seed }) 
 	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
 	await page.mouse.down();
 
-	// Either seam bounding the row is where it already is, so there is nothing
-	// to indicate and nothing to commit — a no-op edit still costs everyone in
-	// the room a sync.
+	// Either seam bounding the row is where it already is, so there is no
+	// destination to indicate and the table should stay where it is.
 	await expect(page.locator(".plan-drop")).toHaveCount(0);
 
 	await page.mouse.up();

@@ -7,7 +7,7 @@
  * callouts already carry an id, so nothing here needs the server.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
 	CheckIcon,
@@ -20,8 +20,9 @@ import {
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { readOnly$ } from "@mdxeditor/editor";
 import { useCellValue } from "@mdxeditor/gurx";
+import * as Select from "@radix-ui/react-select";
 import { $getNodeByKey, $getRoot, $isElementNode } from "lexical";
-import { $isCalloutNode, CALLOUT_TYPES } from "@chopin/dialect";
+import { $isCalloutNode, CALLOUT_TYPES, limits } from "@chopin/dialect";
 
 import type { CalloutType } from "@chopin/dialect";
 import type { ElementNode, LexicalEditor } from "lexical";
@@ -74,6 +75,137 @@ function collect(editor: LexicalEditor): Callout[] {
 	return out;
 }
 
+type TitleSelection = { anchor: number; focus: number };
+
+function titleSelection(element: HTMLElement): TitleSelection | undefined {
+	let selection = window.getSelection();
+	if (!selection?.anchorNode || !selection.focusNode) return;
+	if (!element.contains(selection.anchorNode) || !element.contains(selection.focusNode)) return;
+
+	let offset = (node: Node, at: number) => {
+		let range = document.createRange();
+		range.selectNodeContents(element);
+		range.setEnd(node, at);
+		return range.toString().length;
+	};
+	return {
+		anchor: offset(selection.anchorNode, selection.anchorOffset),
+		focus: offset(selection.focusNode, selection.focusOffset),
+	};
+}
+
+function restoreTitleSelection(element: HTMLElement, saved?: TitleSelection) {
+	if (!saved) return;
+	let text = element.firstChild ?? element.appendChild(document.createTextNode(""));
+	let length = text.textContent?.length ?? 0;
+	window.getSelection()?.setBaseAndExtent(
+		text,
+		Math.min(saved.anchor, length),
+		text,
+		Math.min(saved.focus, length),
+	);
+}
+
+function plainTitle(element: HTMLElement): string {
+	let raw = element.textContent ?? "";
+	let title = raw.replace(/[\r\n]+/g, " ").slice(0, limits.MAX_CALLOUT_TITLE);
+	if (raw === title && element.childElementCount === 0) return title;
+
+	let selection = titleSelection(element);
+	element.textContent = title;
+	restoreTitleSelection(element, selection);
+	return title;
+}
+
+function pastePlainTitle(element: HTMLElement, value: string): string {
+	let selection = window.getSelection();
+	let range = selection?.rangeCount ? selection.getRangeAt(0) : undefined;
+	if (!selection || !range || !element.contains(range.commonAncestorContainer)) {
+		element.append(value.replace(/[\r\n]+/g, " "));
+		return plainTitle(element);
+	}
+
+	let plain = value.replace(/[\r\n]+/g, " ");
+
+	range.deleteContents();
+	let pasted = document.createTextNode(plain);
+	range.insertNode(pasted);
+	range.setStart(pasted, plain.length);
+	range.collapse(true);
+	selection.removeAllRanges();
+	selection.addRange(range);
+	return plainTitle(element);
+}
+
+function CalloutTitle(
+	{ callout, editor, disabled, elementRef }: {
+		callout: Callout;
+		editor: LexicalEditor;
+		disabled?: boolean;
+		elementRef: React.RefObject<HTMLSpanElement | null>;
+	},
+) {
+	let composing = useRef(false);
+	let disabledRef = useRef(disabled);
+	disabledRef.current = disabled;
+
+	let setTitle = useCallback((title: string) => {
+		if (disabledRef.current) return;
+		editor.update(() => {
+			let node = $getNodeByKey(callout.key);
+			if ($isCalloutNode(node)) node.setTitle(title);
+		});
+	}, [editor, callout.key]);
+
+	let sync = useCallback(() => {
+		let element = elementRef.current;
+		if (!element) return;
+		if (disabled) composing.current = false;
+		if (composing.current) return;
+		if (!disabled && document.activeElement === element) return;
+		if (element.textContent !== callout.title || element.childElementCount > 0) {
+			element.textContent = callout.title;
+		}
+	}, [callout.title, disabled, elementRef]);
+
+	useLayoutEffect(sync, [sync]);
+
+	let commit = (element: HTMLElement) => setTitle(plainTitle(element));
+
+	return (
+		<span
+			aria-label="Callout title"
+			className="plan-callout-title"
+			contentEditable={!disabled}
+			data-placeholder={LABELS[callout.type]}
+			onBlur={sync}
+			onCompositionEnd={event => {
+				composing.current = false;
+				commit(event.currentTarget);
+			}}
+			onCompositionStart={() => {
+				composing.current = true;
+			}}
+			onInput={event => {
+				if (!composing.current) commit(event.currentTarget);
+			}}
+			onKeyDown={event => {
+				if (event.key !== "Enter" || composing.current || event.nativeEvent.isComposing) return;
+				event.preventDefault();
+				event.currentTarget.blur();
+			}}
+			onPaste={event => {
+				event.preventDefault();
+				setTitle(pastePlainTitle(event.currentTarget, event.clipboardData.getData("text/plain")));
+			}}
+			ref={elementRef}
+			role={disabled ? undefined : "textbox"}
+			suppressContentEditableWarning
+			tabIndex={disabled ? undefined : 0}
+		/>
+	);
+}
+
 function Heading(
 	{ callout, editor, disabled }: {
 		callout: Callout;
@@ -82,147 +214,74 @@ function Heading(
 	},
 ) {
 	let [choosing, setChoosing] = useState(false);
-	let heading = useRef<HTMLDivElement>(null);
-	let trigger = useRef<HTMLButtonElement>(null);
-	let current = useRef<HTMLButtonElement>(null);
+	let title = useRef<HTMLSpanElement>(null);
+	let disabledRef = useRef(disabled);
+	disabledRef.current = disabled;
 
 	let setType = useCallback((type: CalloutType) => {
+		if (disabledRef.current) return;
 		editor.update(() => {
 			let node = $getNodeByKey(callout.key);
 			if ($isCalloutNode(node)) node.setCalloutType(type);
 		});
 	}, [editor, callout.key]);
 
-	let setTitle = useCallback((title: string) => {
-		editor.update(() => {
-			let node = $getNodeByKey(callout.key);
-			if ($isCalloutNode(node)) node.setTitle(title);
-		});
-	}, [editor, callout.key]);
-
 	useEffect(() => {
-		if (choosing) current.current?.focus();
-	}, [choosing]);
+		if (disabled) setChoosing(false);
+	}, [disabled]);
 
-	useEffect(() => {
-		if (!choosing) return;
-		let dismiss = (event: PointerEvent) => {
-			if (!heading.current?.contains(event.target as Node)) setChoosing(false);
-		};
-		document.addEventListener("pointerdown", dismiss);
-		return () => document.removeEventListener("pointerdown", dismiss);
-	}, [choosing]);
-
-	let choose = (type: CalloutType) => {
-		setType(type);
-		setChoosing(false);
-		trigger.current?.focus();
-	};
-
-	let navigate = (event: React.KeyboardEvent<HTMLDivElement>) => {
-		let options = [
-			...event.currentTarget.querySelectorAll<HTMLButtonElement>("[role='menuitemradio']"),
-		];
-		let at = options.indexOf(document.activeElement as HTMLButtonElement);
-		let next: number;
-
-		if (event.key === "ArrowDown") next = (at + 1) % options.length;
-		else if (event.key === "ArrowUp") next = (at - 1 + options.length) % options.length;
-		else if (event.key === "Home") next = 0;
-		else if (event.key === "End") next = options.length - 1;
-		else if (event.key === "Escape") {
-			setChoosing(false);
-			trigger.current?.focus();
-			return event.preventDefault();
-		} else return;
-
-		event.preventDefault();
-		options[next]?.focus();
-	};
-
-	let updateTitle = (element: HTMLElement) => {
-		let raw = element.textContent ?? "";
-		let title = raw.replace(/[\r\n]+/g, " ").slice(0, 100);
-		// A pasted heading may contain rich markup or line breaks. The title is a
-		// plain attribute, so make the DOM tell that same truth immediately.
-		if (raw !== title || element.childElementCount > 0) {
-			element.textContent = title;
-			let range = document.createRange();
-			range.selectNodeContents(element);
-			range.collapse(false);
-			window.getSelection()?.removeAllRanges();
-			window.getSelection()?.addRange(range);
-		}
-		setTitle(title);
+	let choose = (value: string) => {
+		if (disabledRef.current) return;
+		let type = CALLOUT_TYPES.find(candidate => candidate === value);
+		if (type) setType(type);
 	};
 
 	return (
-		<div
-			contentEditable={false}
-			className="plan-callout-heading"
-			ref={heading}
-			onBlur={event => {
-				if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setChoosing(false);
-			}}
-		>
-			<button
-				aria-expanded={choosing}
-				aria-haspopup="menu"
-				aria-label={`Change callout type: ${LABELS[callout.type]}`}
-				className="plan-callout-type"
-				data-callout-type={callout.type}
+		<div contentEditable={false} className="plan-callout-heading">
+			<Select.Root
 				disabled={disabled}
-				onClick={() => setChoosing(open => !open)}
-				ref={trigger}
-				title={`${LABELS[callout.type]} — change callout type`}
-				type="button"
+				onOpenChange={open => setChoosing(disabledRef.current ? false : open)}
+				onValueChange={choose}
+				open={choosing && !disabled}
+				value={callout.type}
 			>
-				<TypeIcon type={callout.type} />
-			</button>
-
-			{choosing && (
-				<div
-					aria-label="Callout type"
-					className="plan-callout-menu"
-					onKeyDown={navigate}
-					role="menu"
+				<Select.Trigger
+					aria-label={`Change callout type: ${LABELS[callout.type]}`}
+					className="plan-callout-type"
+					data-callout-type={callout.type}
+					title={`${LABELS[callout.type]} — change callout type`}
 				>
-					{CALLOUT_TYPES.map(type => (
-						<button
-							aria-checked={type === callout.type}
-							className="plan-callout-option"
-							data-callout-type={type}
-							key={type}
-							onClick={() => choose(type)}
-							ref={type === callout.type ? current : undefined}
-							role="menuitemradio"
-							type="button"
-						>
-							<TypeIcon type={type} size={16} />
-							<span>{LABELS[type]}</span>
-							{type === callout.type && <CheckIcon aria-hidden="true" size={14} weight="bold" />}
-						</button>
-					))}
-				</div>
-			)}
+					<TypeIcon type={callout.type} />
+				</Select.Trigger>
 
-			<span
-				aria-label="Callout title"
-				className="plan-callout-title"
-				contentEditable={!disabled}
-				data-placeholder={LABELS[callout.type]}
-				onInput={event => updateTitle(event.currentTarget)}
-				onKeyDown={event => {
-					if (event.key !== "Enter") return;
-					event.preventDefault();
-					event.currentTarget.blur();
-				}}
-				role={disabled ? undefined : "textbox"}
-				suppressContentEditableWarning
-				tabIndex={disabled ? undefined : 0}
-			>
-				{callout.title}
-			</span>
+				<Select.Portal>
+					<Select.Content
+						aria-label="Callout type"
+						className="plan-callout-menu"
+						position="popper"
+						sideOffset={4}
+					>
+						<Select.Viewport>
+							{CALLOUT_TYPES.map(type => (
+								<Select.Item
+									className="plan-callout-option"
+									data-callout-type={type}
+									key={type}
+									value={type}
+								>
+									<TypeIcon type={type} size={16} />
+									<Select.ItemText>{LABELS[type]}</Select.ItemText>
+									<Select.ItemIndicator asChild>
+										<CheckIcon aria-hidden="true" size={14} weight="bold" />
+									</Select.ItemIndicator>
+								</Select.Item>
+							))}
+						</Select.Viewport>
+					</Select.Content>
+				</Select.Portal>
+			</Select.Root>
+
+			<CalloutTitle callout={callout} disabled={disabled} editor={editor} elementRef={title} />
 		</div>
 	);
 }

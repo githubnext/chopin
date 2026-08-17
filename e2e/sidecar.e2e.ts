@@ -94,6 +94,7 @@ test(
 		await expect(questionnaire(page)).toHaveCount(2);
 		await expect(plan).toHaveAttribute("aria-pressed", "true");
 		await expect(decisions).toHaveAttribute("aria-pressed", "false");
+		await expect(page.locator('[data-document-view="decisions"]')).toBeHidden();
 		await expect(decisions).toContainText("2");
 		await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBe(scrollTop);
 		expect(await page.evaluate(() => getSelection()?.toString())).toBe(selection);

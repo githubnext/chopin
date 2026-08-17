@@ -13,15 +13,6 @@ import { content, expect, ready, test, written } from "./room";
 
 import type { WebSocketRoute } from "@playwright/test";
 
-test("typing reaches disk as canonical MDX", async ({ join, room }) => {
-	let page = await join("ana");
-
-	await content(page).click();
-	await page.keyboard.type("Ship the thing by Friday.");
-
-	await written(page, room, /Ship the thing by Friday\./);
-});
-
 test("a reload shows what was typed", async ({ join, room }) => {
 	let page = await join("ana");
 

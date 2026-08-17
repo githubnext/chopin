@@ -39,6 +39,25 @@ function canonical(source: string): string {
 	return once;
 }
 
+function attributes(initial: Record<string, string>): HTMLElement {
+	let values = new Map(Object.entries(initial));
+	let dataset = { planType: initial["data-plan-type"] } as DOMStringMap;
+	return {
+		dataset,
+		getAttribute(name: string) {
+			return values.get(name) ?? null;
+		},
+		removeAttribute(name: string) {
+			values.delete(name);
+			if (name === "data-plan-type") delete dataset.planType;
+		},
+		setAttribute(name: string, value: string) {
+			values.set(name, value);
+			if (name === "data-plan-type") dataset.planType = value;
+		},
+	} as unknown as HTMLElement;
+}
+
 const CALLOUT = `<Callout id="${ID}" type="warning" title="Careful">\n\nBody text.\n\n</Callout>\n`;
 
 const TABS = `<Tabs id="${ID}">\n`
@@ -92,6 +111,51 @@ describe("structural components", () => {
 			let first = children[0];
 			expect($isElementNode(first) && first.getChildren()[0]?.getType()).toBe("paragraph");
 		});
+	});
+
+	it("keeps NodeState-backed DOM attributes synchronized after an edit", () => {
+		let instance = editor();
+		importPlan(instance, TABS + CALLOUT, { registry: REGISTRY });
+
+		let previous = instance.getEditorState().read(() => {
+			let tabs = $getRoot().getFirstChild();
+			let tab = $isElementNode(tabs) ? tabs.getFirstChild() : null;
+			let callout = $getRoot().getLastChild();
+			return {
+				callout: $isCalloutNode(callout) ? callout : null,
+				tab: $isTabNode(tab) ? tab : null,
+			};
+		});
+		let tabDOM = attributes({ "aria-label": "macOS" });
+		let calloutDOM = attributes({ "aria-label": "Careful", "data-plan-type": "warning" });
+
+		instance.update(
+			() => {
+				let tabs = $getRoot().getFirstChild();
+				let tab = $isElementNode(tabs) ? tabs.getFirstChild() : null;
+				let callout = $getRoot().getLastChild();
+				if ($isTabNode(tab)) tab.setLabel("Linux");
+				if ($isCalloutNode(callout)) callout.setCalloutType("tip").setTitle("");
+			},
+			{ discrete: true },
+		);
+
+		instance.getEditorState().read(() => {
+			let tabs = $getRoot().getFirstChild();
+			let tab = $isElementNode(tabs) ? tabs.getFirstChild() : null;
+			let callout = $getRoot().getLastChild();
+			expect($isTabNode(tab)).toBe(true);
+			expect($isCalloutNode(callout)).toBe(true);
+			if (!$isTabNode(tab) || !previous.tab) return;
+			if (!$isCalloutNode(callout) || !previous.callout) return;
+
+			tab.updateDOM(previous.tab, tabDOM);
+			callout.updateDOM(previous.callout, calloutDOM);
+		});
+
+		expect(tabDOM.getAttribute("aria-label")).toBe("Linux");
+		expect(calloutDOM.dataset.planType).toBe("tip");
+		expect(calloutDOM.getAttribute("aria-label")).toBeNull();
 	});
 });
 

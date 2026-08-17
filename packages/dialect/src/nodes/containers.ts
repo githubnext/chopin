@@ -38,6 +38,12 @@ function text(value: unknown): string {
 	return typeof value === "string" ? value : "";
 }
 
+/** NodeState getters resolve through the active state even on a previous clone. */
+function syncDOMAttribute(dom: HTMLElement, name: string, value: string | undefined): void {
+	if (value === undefined) dom.removeAttribute(name);
+	else dom.setAttribute(name, value);
+}
+
 /** Stable identity, minted when the component is created. */
 export const idState = createState("plan-id", { parse: text });
 
@@ -185,8 +191,8 @@ export class TabNode extends ContainerNode {
 		return dom;
 	}
 
-	override updateDOM(prev: TabNode, dom: HTMLElement): boolean {
-		if (prev.getLabel() !== this.getLabel()) dom.setAttribute("aria-label", this.getLabel());
+	override updateDOM(_prev: TabNode, dom: HTMLElement): boolean {
+		syncDOMAttribute(dom, "aria-label", this.getLabel());
 		return false;
 	}
 }
@@ -270,12 +276,8 @@ export class CalloutNode extends ContainerNode {
 	}
 
 	override updateDOM(_prev: CalloutNode, dom: HTMLElement): boolean {
-		// Node state may already read as the new value through the previous clone,
-		// so comparing the two can leave the DOM one edit behind.
-		dom.dataset.planType = this.getCalloutType();
-		let title = this.getTitle();
-		if (title) dom.setAttribute("aria-label", title);
-		else dom.removeAttribute("aria-label");
+		syncDOMAttribute(dom, "data-plan-type", this.getCalloutType());
+		syncDOMAttribute(dom, "aria-label", this.getTitle() || undefined);
 		return false;
 	}
 }
