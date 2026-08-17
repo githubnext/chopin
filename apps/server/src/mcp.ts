@@ -33,6 +33,12 @@ type Tool = {
 	outputSchema: Record<string, unknown>;
 };
 
+const OWNER_PATTERN = "[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}";
+const REPOSITORY_PATTERN = "(?!\\.\\.?$)[A-Za-z0-9._-]{1,100}";
+const REPOSITORY_PATH_PATTERN = `^${OWNER_PATTERN}/${REPOSITORY_PATTERN}$`;
+const OWNER = new RegExp(`^${OWNER_PATTERN}$`);
+const REPOSITORY = new RegExp(`^${REPOSITORY_PATTERN}$`);
+
 const DOCUMENT = {
 	type: "object",
 	properties: {
@@ -51,7 +57,7 @@ export const TOOLS: Tool[] = [
 		inputSchema: {
 			type: "object",
 			properties: {
-				repository: { type: "string", pattern: "^[^/\\s]+/[^/\\s]+$" },
+				repository: { type: "string", pattern: REPOSITORY_PATH_PATTERN },
 			},
 			required: ["repository"],
 			additionalProperties: false,
@@ -68,7 +74,7 @@ export const TOOLS: Tool[] = [
 		description: "Read a Chopin channel's canonical source and revision.",
 		inputSchema: {
 			type: "object",
-			properties: { id: { type: "string", minLength: 1 } },
+			properties: { id: { type: "string", minLength: 1, pattern: "\\S" } },
 			required: ["id"],
 			additionalProperties: false,
 		},
@@ -131,9 +137,6 @@ function toolCall(
 	return arguments_ ? { name: value.name, arguments: arguments_ } : undefined;
 }
 
-const OWNER = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
-const REPOSITORY = /^[A-Za-z0-9._-]{1,100}$/;
-
 function isRepository(value: unknown): value is string {
 	if (typeof value !== "string") return false;
 	let parts = value.split("/");
@@ -142,6 +145,16 @@ function isRepository(value: unknown): value is string {
 
 function isId(value: unknown): value is string {
 	return typeof value === "string" && value.trim().length > 0;
+}
+
+function isJsonRpcId(value: unknown): value is string | number | null {
+	return value === null || typeof value === "string" || typeof value === "number";
+}
+
+function hasObjectParams(call: Call): boolean {
+	return call.params === undefined
+		|| (call.method !== "initialize" && call.method !== "tools/list")
+		|| record(call.params) !== undefined;
 }
 
 function acceptsEvents(request: Request): boolean {
@@ -160,6 +173,10 @@ export function handler<Caller>(
 		if (!call || call.jsonrpc !== "2.0" || typeof call.method !== "string") {
 			return error(call?.id, -32600, "invalid request");
 		}
+		if (Object.hasOwn(call, "id") && !isJsonRpcId(call.id)) {
+			return error(null, -32600, "invalid request");
+		}
+		if (!hasObjectParams(call)) return error(call.id, -32600, "invalid request");
 		let notification = !Object.hasOwn(call, "id");
 		let respond = (result: unknown) => notification ? undefined : reply(call.id, result);
 

@@ -124,6 +124,18 @@ describe("the MCP read protocol", () => {
 		]));
 	});
 
+	it("advertises the canonical repository and non-blank channel constraints it enforces", () => {
+		let list = TOOLS.find(tool => tool.name === "list_documents")!;
+		let read = TOOLS.find(tool => tool.name === "read_document")!;
+		expect((list.inputSchema.properties as Record<string, { pattern: string }>).repository.pattern)
+			.toBe(
+				"^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}/(?!\\.\\.?$)[A-Za-z0-9._-]{1,100}$",
+			);
+		expect((read.inputSchema.properties as Record<string, { pattern: string }>).id.pattern).toBe(
+			"\\S",
+		);
+	});
+
 	it("does not reveal documents to an unauthenticated caller", async () => {
 		let response = await endpoint()(request({
 			jsonrpc: "2.0",
@@ -157,25 +169,47 @@ describe("the MCP read protocol", () => {
 		);
 	});
 
+	it("rejects non-scalar JSON-RPC ids and scalar initialize or tools-list parameters", async () => {
+		let mcp = endpoint();
+		for (
+			let [request_, id] of [
+				[{ jsonrpc: "2.0", id: { invalid: true }, method: "tools/list" }, null],
+				[{ jsonrpc: "2.0", id: 5, method: "initialize", params: "invalid" }, 5],
+				[{ jsonrpc: "2.0", id: 6, method: "tools/list", params: 1 }, 6],
+			]
+		) {
+			expect(await json(await mcp(request(request_)))).toEqual({
+				jsonrpc: "2.0",
+				id,
+				error: { code: -32600, message: "invalid request" },
+			});
+		}
+	});
+
 	it("rejects malformed tool arguments and unknown tools without consulting the reader", async () => {
 		let mcp = endpoint();
-		let invalid = await json(
-			await mcp(request({
-				jsonrpc: "2.0",
-				id: 5,
-				method: "tools/call",
-				params: { name: "list_documents", arguments: { repository: "./chopin" } },
-			})),
-		);
-		expect(invalid.error).toEqual({
-			code: -32602,
-			message: "list_documents requires a repository",
-		});
+		for (
+			let [id, name, arguments_, error] of [
+				[5, "list_documents", { repository: "./chopin" }, "list_documents requires a repository"],
+				[6, "list_documents", { repository: "owner/.." }, "list_documents requires a repository"],
+				[7, "read_document", { id: " \t" }, "read_document requires an id"],
+			]
+		) {
+			let invalid = await json(
+				await mcp(request({
+					jsonrpc: "2.0",
+					id,
+					method: "tools/call",
+					params: { name, arguments: arguments_ },
+				})),
+			);
+			expect(invalid.error).toEqual({ code: -32602, message: error });
+		}
 
 		let unknown = await json(
 			await mcp(request({
 				jsonrpc: "2.0",
-				id: 6,
+				id: 8,
 				method: "tools/call",
 				params: { name: "write_document", arguments: {} },
 			})),
@@ -184,7 +218,7 @@ describe("the MCP read protocol", () => {
 	});
 
 	it("returns tool-level absence for a missing or inaccessible channel", async () => {
-		let response = await json(
+		let missing = await json(
 			await endpoint()(request({
 				jsonrpc: "2.0",
 				id: 7,
@@ -192,7 +226,26 @@ describe("the MCP read protocol", () => {
 				params: { name: "read_document", arguments: { id: "missing" } },
 			})),
 		);
-		expect(response.result).toEqual({ content: [], isError: true });
+		let inaccessible = await json(
+			await handler({
+				caller: () => "octocat",
+				documents: {
+					async list() {
+						return [];
+					},
+					async read() {
+						return undefined;
+					},
+				},
+			})(request({
+				jsonrpc: "2.0",
+				id: 8,
+				method: "tools/call",
+				params: { name: "read_document", arguments: { id: document.id } },
+			})),
+		);
+		expect(missing.result).toEqual({ content: [], isError: true });
+		expect(inaccessible.result).toEqual(missing.result);
 	});
 
 	it("does not reply to notifications and rejects unknown methods", async () => {
