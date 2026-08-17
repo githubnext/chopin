@@ -2,13 +2,29 @@ import { describe, expect, it } from "bun:test";
 
 import { handler, TOOLS } from "./mcp";
 
-import type { Document, DocumentReader } from "./mcp";
+import type { CreateDocumentInput, Document, DocumentReader } from "./mcp";
 
 const document: Document = {
 	id: "f401c8d6-3717-4f1d-8473-cfdd0af894e4",
 	title: "Release readiness",
 	source: "# Release readiness\n",
 	revision: 4,
+};
+
+const creation = {
+	idempotencyKey: "create-plan-1",
+	repository: "githubnext/chopin",
+	baseBranch: "main",
+	baseCommit: "0123456789abcdef0123456789abcdef01234567",
+	title: "Ship MCP creation",
+	brief: {
+		goal: "Create a collaborative plan.",
+		constraints: ["Keep plans immutable through MCP."],
+		settledDecisions: ["Use the documented dialect."],
+		openQuestions: ["Which reviewer owns the rollout?"],
+		repositoryFindings: ["The plan becomes a hosted channel."],
+	},
+	plan: '# Draft\n\n<Callout type="note">\nCreated through MCP.\n</Callout>\n',
 };
 
 function request(
@@ -122,6 +138,112 @@ describe("the MCP read protocol", () => {
 				inputSchema: expect.objectContaining({ required: ["id"], additionalProperties: false }),
 			}),
 		]));
+	});
+
+	it("creates a validated canonical document through the host adapter", async () => {
+		let mcp = handler({
+			caller: () => "octocat",
+			documents: reader(),
+			create: {
+				async create(_caller: string, input: CreateDocumentInput) {
+					return {
+						kind: "created" as const,
+						document: {
+							id: "created",
+							title: input.title,
+							brief: input.brief,
+							source: input.plan,
+							revision: 0,
+							url: "/channels/created",
+						},
+					};
+				},
+			},
+		});
+
+		let result = await json(
+			await mcp(request({
+				jsonrpc: "2.0",
+				id: 5,
+				method: "tools/call",
+				params: { name: "create_document", arguments: creation },
+			})),
+		);
+
+		expect(result.error).toBeUndefined();
+		expect((result.result as { structuredContent: Record<string, unknown> }).structuredContent)
+			.toMatchObject({
+				id: "created",
+				title: creation.title,
+				brief: creation.brief,
+				revision: 0,
+				url: "/channels/created",
+			});
+		expect(
+			(result.result as { structuredContent: { source: string } }).structuredContent.source,
+		).toMatch(/<Callout (?=[^>]*id="[0-7][0-9A-HJKMNP-TV-Z]{25}")(?=[^>]*type="note")/);
+	});
+
+	it("returns dialect issues without asking the host to persist an invalid plan", async () => {
+		let created = false;
+		let mcp = handler({
+			caller: () => "octocat",
+			documents: reader(),
+			create: {
+				async create() {
+					created = true;
+					return { kind: "forbidden" as const };
+				},
+			},
+		});
+
+		let result = await json(
+			await mcp(request({
+				jsonrpc: "2.0",
+				id: 6,
+				method: "tools/call",
+				params: {
+					name: "create_document",
+					arguments: { ...creation, plan: "<Chart />\n" },
+				},
+			})),
+		);
+
+		expect((result.result as { isError: boolean }).isError).toBe(true);
+		expect(
+			(result.result as { structuredContent: { issues: unknown[] } }).structuredContent.issues,
+		).toEqual([expect.objectContaining({
+			code: "unknown-component",
+			path: "root > Chart[0]",
+			offset: 0,
+		})]);
+		expect(created).toBe(false);
+	});
+
+	it("reports a changed idempotent request as a tool conflict", async () => {
+		let mcp = handler({
+			caller: () => "octocat",
+			documents: reader(),
+			create: {
+				async create() {
+					return { kind: "conflict" as const };
+				},
+			},
+		});
+
+		let result = await json(
+			await mcp(request({
+				jsonrpc: "2.0",
+				id: 7,
+				method: "tools/call",
+				params: { name: "create_document", arguments: creation },
+			})),
+		);
+
+		expect((result.result as { isError: boolean }).isError).toBe(true);
+		expect((result.result as { structuredContent: unknown }).structuredContent).toEqual({
+			code: "idempotency-conflict",
+		});
 	});
 
 	it("advertises the canonical repository and non-blank channel constraints it enforces", () => {

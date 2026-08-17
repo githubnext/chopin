@@ -1,9 +1,17 @@
 /**
- * Backend-neutral MCP read protocol.
+ * Backend-neutral MCP document protocol.
  *
  * Hosts authenticate callers and resolve repository-scoped documents. This
  * module only validates and presents their results through MCP.
  */
+
+import { createHash } from "node:crypto";
+
+import { lookup, parse, serialize, ulid, validate } from "@chopin/dialect";
+
+import * as room from "./plan/room";
+
+import type { Nodes, Parent, Root } from "mdast";
 
 export type DocumentSummary = {
 	id: string;
@@ -11,6 +19,7 @@ export type DocumentSummary = {
 };
 
 export type Document = DocumentSummary & {
+	brief?: Brief;
 	source: string;
 	revision: number;
 };
@@ -20,10 +29,47 @@ export type DocumentReader<Caller> = {
 	read(caller: Caller, id: string): Promise<Document | undefined>;
 };
 
+export type Brief = {
+	goal: string;
+	constraints: string[];
+	settledDecisions: string[];
+	openQuestions: string[];
+	repositoryFindings: string[];
+};
+
+export type CreationOrigin = {
+	idempotencyKey: string;
+	fingerprint: string;
+	repository: string;
+	baseBranch: string;
+	baseCommit: string;
+	title: string;
+};
+
+export type CreateDocumentInput = CreationOrigin & {
+	brief: Brief;
+	plan: string;
+};
+
+export type CreatedDocument = Document & { url: string };
+
+export type CreateDocument<Caller> = {
+	create(
+		caller: Caller,
+		input: CreateDocumentInput,
+	): Promise<
+		| { kind: "created"; document: CreatedDocument }
+		| { kind: "replayed"; document: CreatedDocument }
+		| { kind: "conflict" }
+		| { kind: "forbidden" }
+	>;
+};
+
 export type McpOptions<Caller> = {
 	/** The host owns authentication; MCP only receives its result. */
 	caller(request: Request): Promise<Caller | undefined> | Caller | undefined;
 	documents: DocumentReader<Caller>;
+	create?: CreateDocument<Caller>;
 };
 
 type Tool = {
@@ -39,6 +85,7 @@ const REPOSITORY_PATH_PATTERN = `^${OWNER_PATTERN}/${REPOSITORY_PATTERN}$`;
 const OWNER = new RegExp(`^${OWNER_PATTERN}$`);
 const REPOSITORY = new RegExp(`^${REPOSITORY_PATTERN}$`);
 const MAX_DOCUMENT_ID_LENGTH = 128;
+const MAX_TITLE_LENGTH = 120;
 /** Read-only JSON-RPC calls need arguments, not document-sized request bodies. */
 const MAX_REQUEST_BYTES = 64 * 1_024;
 
@@ -49,6 +96,19 @@ const DOCUMENT = {
 		title: { type: "string" },
 	},
 	required: ["id", "title"],
+	additionalProperties: false,
+};
+
+const BRIEF = {
+	type: "object",
+	properties: {
+		goal: { type: "string", minLength: 1 },
+		constraints: { type: "array", items: { type: "string" } },
+		settledDecisions: { type: "array", items: { type: "string" } },
+		openQuestions: { type: "array", items: { type: "string" } },
+		repositoryFindings: { type: "array", items: { type: "string" } },
+	},
+	required: ["goal", "constraints", "settledDecisions", "openQuestions", "repositoryFindings"],
 	additionalProperties: false,
 };
 
@@ -92,10 +152,49 @@ export const TOOLS: Tool[] = [
 			type: "object",
 			properties: {
 				...DOCUMENT.properties,
+				brief: BRIEF,
 				source: { type: "string" },
 				revision: { type: "integer", minimum: 0 },
 			},
 			required: ["id", "title", "source", "revision"],
+			additionalProperties: false,
+		},
+	},
+	{
+		name: "create_document",
+		description: "Create a Chopin document from a structured brief and canonical plan.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				idempotencyKey: { type: "string", minLength: 1, maxLength: 128 },
+				repository: { type: "string", pattern: REPOSITORY_PATH_PATTERN },
+				baseBranch: { type: "string", minLength: 1, maxLength: 255 },
+				baseCommit: { type: "string", minLength: 1, maxLength: 64 },
+				title: { type: "string", minLength: 1, maxLength: MAX_TITLE_LENGTH },
+				brief: BRIEF,
+				plan: { type: "string", minLength: 1 },
+			},
+			required: [
+				"idempotencyKey",
+				"repository",
+				"baseBranch",
+				"baseCommit",
+				"title",
+				"brief",
+				"plan",
+			],
+			additionalProperties: false,
+		},
+		outputSchema: {
+			type: "object",
+			properties: {
+				...DOCUMENT.properties,
+				brief: BRIEF,
+				source: { type: "string" },
+				revision: { type: "integer", minimum: 0 },
+				url: { type: "string" },
+			},
+			required: ["id", "title", "brief", "source", "revision", "url"],
 			additionalProperties: false,
 		},
 	},
@@ -131,10 +230,16 @@ function record(value: unknown): Record<string, unknown> | undefined {
 
 function text(
 	value: unknown,
-): { content: Array<{ type: "text"; text: string }>; structuredContent: unknown } {
+	isError = false,
+): {
+	content: Array<{ type: "text"; text: string }>;
+	structuredContent: unknown;
+	isError?: true;
+} {
 	return {
 		content: [{ type: "text", text: JSON.stringify(value) }],
 		structuredContent: value,
+		...(isError ? { isError: true as const } : {}),
 	};
 }
 
@@ -157,6 +262,101 @@ function isId(value: unknown): value is string {
 	return typeof value === "string"
 		&& Array.from(value).length <= MAX_DOCUMENT_ID_LENGTH
 		&& value.trim().length > 0;
+}
+
+function strings(value: unknown): string[] | undefined {
+	return Array.isArray(value) && value.every(item => typeof item === "string") ? value : undefined;
+}
+
+function nonblank(value: unknown, maximum: number): string | undefined {
+	return typeof value === "string"
+			&& Array.from(value).length <= maximum
+			&& value.trim().length > 0
+		? value
+		: undefined;
+}
+
+type CreateArguments = Omit<CreateDocumentInput, "fingerprint">;
+
+function createArguments(value: Record<string, unknown>): CreateArguments | undefined {
+	let expected = [
+		"idempotencyKey",
+		"repository",
+		"baseBranch",
+		"baseCommit",
+		"title",
+		"brief",
+		"plan",
+	];
+	if (
+		Object.keys(value).length !== expected.length
+		|| expected.some(key => !Object.hasOwn(value, key))
+	) return undefined;
+	let brief = record(value.brief);
+	let goal = nonblank(brief?.goal, 4_096);
+	let constraints = strings(brief?.constraints);
+	let settledDecisions = strings(brief?.settledDecisions);
+	let openQuestions = strings(brief?.openQuestions);
+	let repositoryFindings = strings(brief?.repositoryFindings);
+	let idempotencyKey = nonblank(value.idempotencyKey, 128);
+	let baseBranch = nonblank(value.baseBranch, 255);
+	let baseCommit = nonblank(value.baseCommit, 64);
+	let title = nonblank(value.title, MAX_TITLE_LENGTH);
+	let plan = nonblank(value.plan, MAX_REQUEST_BYTES);
+	if (
+		!idempotencyKey
+		|| !isRepository(value.repository)
+		|| !baseBranch
+		|| !baseCommit
+		|| !title
+		|| !goal
+		|| !constraints
+		|| !settledDecisions
+		|| !openQuestions
+		|| !repositoryFindings
+		|| !plan
+	) return undefined;
+	return {
+		idempotencyKey,
+		repository: value.repository,
+		baseBranch,
+		baseCommit,
+		title,
+		brief: { goal, constraints, settledDecisions, openQuestions, repositoryFindings },
+		plan,
+	};
+}
+
+function identify(node: Nodes | Root): void {
+	if (node.type === "mdxJsxFlowElement" || node.type === "mdxJsxTextElement") {
+		let component = lookup(node.name);
+		if (
+			component?.attributes.id?.required
+			&& !node.attributes.some(attribute =>
+				attribute.type === "mdxJsxAttribute" && attribute.name === "id"
+			)
+		) node.attributes.unshift({ type: "mdxJsxAttribute", name: "id", value: ulid() });
+	}
+	if ("children" in node) {
+		for (let child of (node as Parent).children) identify(child);
+	}
+}
+
+function canonical(source: string):
+	| { source: string }
+	| { issues: Array<{ code: string; message: string; path: string; offset?: number }> }
+{
+	let tree = parse(source);
+	identify(tree);
+	let result = validate(tree);
+	if (!result.ok) return { issues: result.issues };
+	let output = serialize(tree);
+	room.validate(output);
+	return { source: output };
+}
+
+function fingerprint(input: CreateArguments): string {
+	return createHash("sha256").update(JSON.stringify(input)).digest("hex");
 }
 
 function isJsonRpcId(value: unknown): value is string | number | null {
@@ -288,6 +488,29 @@ export function handler<Caller>(
 					}
 					let document = await options.documents.read(caller, tool.arguments.id);
 					return document ? respond(text(document)) : respond({ content: [], isError: true });
+				}
+				if (tool.name === "create_document") {
+					let input = createArguments(tool.arguments);
+					if (!input) {
+						return notification
+							? undefined
+							: error(call.id, -32602, "create_document requires a valid draft");
+					}
+					let prepared = canonical(input.plan);
+					if ("issues" in prepared) return respond(text({ issues: prepared.issues }, true));
+					if (!options.create) return respond({ content: [], isError: true });
+					let outcome = await options.create.create(caller, {
+						...input,
+						plan: prepared.source,
+						fingerprint: fingerprint(input),
+					});
+					if (outcome.kind === "created" || outcome.kind === "replayed") {
+						return respond(text(outcome.document));
+					}
+					if (outcome.kind === "conflict") {
+						return respond(text({ code: "idempotency-conflict" }, true));
+					}
+					return respond({ content: [], isError: true });
 				}
 				return notification ? undefined : error(call.id, -32601, "tool not found");
 			}
