@@ -20,7 +20,25 @@ import type {
 	Repository,
 	RepositoryPage,
 } from "../github/client";
+import type { CreateDocumentInput } from "../mcp";
 import type { Socket, SocketData } from "../wire";
+
+const creation: CreateDocumentInput = {
+	idempotencyKey: "create-plan-1",
+	fingerprint: "request-1",
+	repository: "octo-org/score",
+	baseBranch: "main",
+	baseCommit: "0123456789abcdef0123456789abcdef01234567",
+	title: "Created plan",
+	brief: {
+		goal: "Create a collaborative plan.",
+		constraints: ["Keep the source canonical."],
+		settledDecisions: ["Use hosted storage."],
+		openQuestions: ["Who reviews the rollout?"],
+		repositoryFindings: ["The repository uses Bun."],
+	},
+	plan: "# Created\n",
+};
 
 class GitHubBoundary implements GitHub {
 	readonly userTokens: string[] = [];
@@ -222,6 +240,97 @@ describe("the hosted MCP adapter", () => {
 		expect(await adapter.documents.list(caller, "octo-org/score")).toEqual([]);
 		github.accessible = false;
 		expect(await adapter.documents.list(caller, "octo-org/score")).toEqual([]);
+	});
+
+	it("creates a durable repository channel for a caller with write access", async () => {
+		let context = setup();
+		context.github.repositoryValue = {
+			...context.github.repositoryValue,
+			permissions: { pull: true, push: true, admin: false },
+		};
+		let adapter = hosted(context.auth);
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller) throw new Error("test caller was not authenticated");
+		if (!adapter.create) throw new Error("hosted creation adapter is unavailable");
+
+		let result = await adapter.create.create(caller, creation);
+		expect(result.kind).toBe("created");
+		if (result.kind !== "created") return;
+		expect(result.document).toMatchObject({
+			title: creation.title,
+			brief: creation.brief,
+			source: creation.plan,
+			revision: 0,
+			url: `/channels/${result.document.id}`,
+		});
+		let stored = await context.storage.collaboration.load(result.document.id, context.now);
+		if (!stored) throw new Error("created channel was not stored");
+		expect(await Service.readStored(stored)).toMatchObject({
+			brief: creation.brief,
+			origin: expect.objectContaining({
+				idempotencyKey: creation.idempotencyKey,
+				fingerprint: creation.fingerprint,
+			}),
+		});
+		expect(await adapter.documents.read(caller, result.document.id)).toEqual({
+			id: result.document.id,
+			title: creation.title,
+			brief: creation.brief,
+			source: creation.plan,
+			revision: 0,
+		});
+	});
+
+	it("requires repository write access before creating a channel", async () => {
+		let context = setup();
+		let adapter = hosted(context.auth);
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller) throw new Error("test caller was not authenticated");
+		if (!adapter.create) throw new Error("hosted creation adapter is unavailable");
+
+		expect(await adapter.create.create(caller, creation)).toEqual({ kind: "forbidden" });
+		expect((await context.storage.channels.scan("R_score", 10)).channels).toEqual([]);
+	});
+
+	it("replays an accepted idempotent creation request", async () => {
+		let context = setup();
+		context.github.repositoryValue = {
+			...context.github.repositoryValue,
+			permissions: { pull: true, push: true, admin: false },
+		};
+		let adapter = hosted(context.auth);
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller) throw new Error("test caller was not authenticated");
+		if (!adapter.create) throw new Error("hosted creation adapter is unavailable");
+
+		let first = await adapter.create.create(caller, creation);
+		expect(first.kind).toBe("created");
+		if (first.kind !== "created") return;
+		expect(await adapter.create.create(caller, creation)).toEqual({
+			kind: "replayed",
+			document: first.document,
+		});
+	});
+
+	it("rejects changed content under an accepted idempotency key", async () => {
+		let context = setup();
+		context.github.repositoryValue = {
+			...context.github.repositoryValue,
+			permissions: { pull: true, push: true, admin: false },
+		};
+		let adapter = hosted(context.auth);
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller) throw new Error("test caller was not authenticated");
+		if (!adapter.create) throw new Error("hosted creation adapter is unavailable");
+		await adapter.create.create(caller, creation);
+
+		expect(
+			await adapter.create.create(caller, {
+				...creation,
+				fingerprint: "changed-request",
+				title: "Changed title",
+			}),
+		).toEqual({ kind: "conflict" });
 	});
 
 	it("reconstructs a stored checkpoint and journal with the validated plan revision", async () => {
