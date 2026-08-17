@@ -113,6 +113,7 @@
         "@mdxeditor/gurx": "catalog:mdx",
         "@phosphor-icons/react": "^2.1.10",
         "@pierre/diffs": "catalog:diffs",
+        "@radix-ui/react-select": "2.3.7",
         "katex": "catalog:mdx",
         "lexical": "catalog:mdx",
         "mermaid": "catalog:mdx",

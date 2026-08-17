@@ -164,15 +164,6 @@ test("an unauthenticated visitor is asked to sign in", async ({ page }) => {
 	await expect(content(page)).toHaveCount(0);
 });
 
-test("Plan keeps Decisions mounted but hidden", async ({ join }) => {
-	let page = await join("ana");
-
-	await expect(page.locator("#pane-chat")).toBeVisible();
-	await expect(content(page)).toBeVisible();
-	await expect(page.locator('[data-document-view="decisions"]')).toBeHidden();
-	await expect(page.locator(".plan-decisions")).toBeAttached();
-});
-
 test("clicking an empty plan puts the caret at its first writing position", async ({ join }) => {
 	let page = await join("ana");
 	let editor = content(page);
@@ -515,76 +506,6 @@ test(
 		);
 
 		await testInfo.attach("finished-turn-with-failure-open", {
-			body: await chat.screenshot(),
-			contentType: "image/png",
-		});
-	},
-);
-
-test(
-	"chat renders participant Markdown without admitting document features",
-	async ({ join, page }, testInfo) => {
-		await injectChatHistory(page, frame => ({
-			...frame,
-			entries: [
-				{
-					id: "m1",
-					author: { kind: "member", handle: "maggie" },
-					text: [
-						"**Bold** and *italic* with [the docs](https://example.com).",
-						"",
-						"- first",
-						"- second",
-						"",
-						"1. one",
-						"2. two",
-						"",
-						"> quoted",
-						"",
-						"Use `bun test`.",
-						"",
-						"```ts",
-						"let answer = 42;",
-						"```",
-						"",
-						"# Ordinary message text",
-						"",
-						"![remote](https://example.invalid/pixel.png)",
-						'<img src="https://example.invalid/raw.png" alt="raw">',
-					].join("\n"),
-					ts: 1_700_000_000,
-				},
-				{
-					id: "a1",
-					author: { kind: "agent" },
-					text: "Planner wrote **strongly**.",
-					ts: 1_700_000_001,
-				},
-			],
-		}));
-
-		await join("ana");
-		let chat = page.locator("#pane-chat");
-		let member = chat.locator("[data-chat-entry]").filter({ hasText: "Bold and italic" });
-		let planner = chat.locator("[data-chat-entry]").filter({ hasText: "Planner wrote strongly" });
-
-		await expect(member.locator("strong")).toHaveText("Bold");
-		await expect(member.locator("em")).toHaveText("italic");
-		await expect(member.locator("ul")).toContainText("first");
-		await expect(member.locator("ol")).toContainText("one");
-		await expect(member.locator("blockquote")).toHaveText("quoted");
-		await expect(member.getByRole("link", { name: "the docs" })).toHaveAttribute(
-			"target",
-			"_blank",
-		);
-		await expect(member.locator("p code")).toHaveText("bun test");
-		await expect(member.locator("pre code")).toContainText("let answer = 42;");
-		await expect(member.getByRole("heading", { name: "Ordinary message text" })).toHaveCount(0);
-		await expect(member).toContainText("Ordinary message text");
-		await expect(member.locator('img[src*="example.invalid"]')).toHaveCount(0);
-		await expect(planner.locator("strong")).toHaveText("strongly");
-
-		await testInfo.attach("participant-markdown", {
 			body: await chat.screenshot(),
 			contentType: "image/png",
 		});

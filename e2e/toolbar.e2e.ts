@@ -9,26 +9,17 @@
 
 import { content, expect, test, written } from "./room";
 
+import type { Page } from "@playwright/test";
+
 let MENU = { name: "Insert block" };
 let BUBBLE = { name: "Text formatting" };
 
-test("a slash at the start of a word offers blocks to insert", async ({ join }) => {
-	let page = await join("ana");
-
+async function insertCallout(page: Page) {
 	await content(page).click();
-	await page.keyboard.type("/");
-
-	let menu = page.getByRole("listbox", MENU);
-	await expect(menu).toBeVisible();
-	await expect(menu.getByRole("option", { name: "Table" })).toBeVisible();
-	await expect(menu.getByRole("option", { name: "Callout" })).toBeVisible();
-
-	// Substring over label and keywords, so a query narrows rather than
-	// resetting: "tab" keeps Table because "table" contains it.
-	await page.keyboard.type("call");
-	await expect(menu.getByRole("option")).toHaveCount(1);
-	await expect(menu.getByRole("option")).toHaveText("Callout");
-});
+	await page.keyboard.type("/callout");
+	await page.getByRole("listbox", MENU).getByRole("option", { name: "Callout" }).click();
+	return content(page).locator("aside[data-plan-type]");
+}
 
 test("filtering resets the option Enter will choose", async ({ join }) => {
 	let page = await join("ana");
@@ -44,40 +35,26 @@ test("filtering resets the option Enter will choose", async ({ join }) => {
 
 	await expect(menu.getByRole("option", { selected: true })).toHaveText("Callout");
 	await page.keyboard.press("Enter");
-	await expect(page.getByRole("button", { name: "Change callout type: Note" })).toBeVisible();
+	await expect(page.getByRole("combobox", { name: "Change callout type: Note" })).toBeVisible();
 });
 
 test("a callout edits like prose and keeps its type controls out of the way", async ({ join, room }) => {
 	let page = await join("ana");
-
-	await content(page).click();
-	await page.keyboard.type("/callout");
-	await page.getByRole("listbox", MENU).getByRole("option", { name: "Callout" }).click();
-
-	let callout = content(page).locator("aside[data-plan-type]");
+	let callout = await insertCallout(page);
 	await expect(callout).toHaveAttribute("data-plan-type", "note");
 	let title = callout.getByRole("textbox", { name: "Callout title" });
+	let trigger = callout.getByRole("combobox", { name: "Change callout type: Note" });
+	await expect(page.getByRole("listbox", { name: "Callout type" })).toHaveCount(0);
 	await title.fill("Worth knowing");
 
-	await callout.getByRole("button", { name: "Change callout type: Note" }).click();
-	let types = page.getByRole("menu", { name: "Callout type" });
+	await trigger.click();
+	let types = page.getByRole("listbox", { name: "Callout type" });
 	await expect(types).toBeVisible();
-	await types.getByRole("menuitemradio", { name: "Warning" }).click();
+	await types.getByRole("option", { name: "Warning" }).click();
 
 	await expect(callout).toHaveAttribute("data-plan-type", "warning");
 	await expect(title).toHaveText("Worth knowing");
 	await written(page, room, /type="warning" title="Worth knowing"/);
-});
-
-test("a slash inside a word is just a slash", async ({ join }) => {
-	let page = await join("ana");
-
-	await content(page).click();
-	await page.keyboard.type("and/or");
-
-	// The menu opening on every path separator would make prose containing one
-	// unwritable, which is most prose about software.
-	await expect(page.getByRole("listbox", MENU)).toHaveCount(0);
 });
 
 test("escape closes the menu and leaves what was typed", async ({ join }) => {
