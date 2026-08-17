@@ -506,8 +506,25 @@ export class PostgresStorage implements StorageAdapter {
 			`;
 				if (!saved) throw corrupt("creating a channel returned no record");
 				await transaction`
-				INSERT INTO channel_state (channel_id, sidecar) VALUES (${input.id}, 'null'::jsonb)
+				INSERT INTO channel_state (channel_id, sidecar)
+				VALUES (
+					${input.id},
+					${input.initial ? JSON.stringify(input.initial.sidecar) : "null"}::jsonb
+				)
 			`;
+				if (input.initial) {
+					await transaction`
+						INSERT INTO channel_snapshots (
+							channel_id, generation, revision, through_sequence, epoch, source,
+							source_hash, document, sidecar, created_at
+						) VALUES (
+							${input.id}, ${input.initial.generation}, 0, 0, ${input.initial.epoch},
+							${input.initial.source}, ${input.initial.sourceHash},
+							${input.initial.document}, ${JSON.stringify(input.initial.sidecar)}::jsonb,
+							${input.now}
+						)
+					`;
+				}
 				return channel(saved);
 			}));
 	}

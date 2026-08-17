@@ -192,15 +192,27 @@ export class MemoryStorage implements StorageAdapter {
 	#createChannel(input: CreateChannel): Promise<ChannelRecord> {
 		if (!this.#users.has(input.createdBy)) throw missing(`user ${input.createdBy} does not exist`);
 		if (this.#channels.has(input.id)) throw conflict(`channel ${input.id} already exists`);
+		let { initial, now, ...record } = input;
 		let saved: ChannelRecord = {
-			...input,
+			...record,
 			revision: 0,
-			createdAt: input.now,
-			updatedAt: input.now,
+			createdAt: now,
+			updatedAt: now,
 		};
 		this.#channels.set(saved.id, saved);
 		this.#sequences.set(saved.id, 1);
-		this.#sidecars.set(saved.id, null);
+		this.#sidecars.set(saved.id, initial ? json(initial.sidecar) : null);
+		if (initial) {
+			this.#snapshots.set(saved.id, {
+				channelId: saved.id,
+				...initial,
+				revision: 0,
+				throughSequence: 0,
+				document: bytes(initial.document),
+				sidecar: json(initial.sidecar),
+				createdAt: now,
+			});
+		}
 		return Promise.resolve(channel(saved));
 	}
 

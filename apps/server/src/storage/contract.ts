@@ -198,6 +198,59 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
+		it("publishes an initialized channel and checkpoint atomically", async () => {
+			let storage = await opened(factory);
+			try {
+				let now = new Date("2026-01-02T03:04:05.000Z");
+				let userId = id("user");
+				let channelId = id("channel");
+				let sidecar = {
+					version: 1,
+					revision: 0,
+					origin: { idempotencyKey: "create-plan-1", fingerprint: "request-1" },
+				};
+				await storage.users.put({
+					id: userId,
+					login: "octocat",
+					avatarUrl: "https://example.test/a",
+					now,
+				});
+				await storage.channels.create({
+					id: channelId,
+					repositoryId: id("repository"),
+					repositoryOwner: "octo-org",
+					repositoryName: "score",
+					title: "Created plan",
+					createdBy: userId,
+					now,
+					initial: {
+						generation: id("generation"),
+						epoch: "epoch-created",
+						source: "# Created\n",
+						sourceHash: "sha256:created",
+						document: new Uint8Array([1, 2, 3]),
+						sidecar,
+					},
+				});
+
+				let stored = await storage.collaboration.load(channelId, now);
+				expect(stored).toBeDefined();
+				expect(stored!.latestSequence).toBe(0);
+				expect(stored!.sidecar).toEqual(sidecar);
+				expect(stored!.snapshot).toMatchObject({
+					channelId,
+					revision: 0,
+					throughSequence: 0,
+					epoch: "epoch-created",
+					source: "# Created\n",
+					createdAt: now,
+				});
+				expect([...stored!.snapshot!.document]).toEqual([1, 2, 3]);
+			} finally {
+				await storage.close();
+			}
+		});
+
 		it("assigns the first active session as the agent owner", async () => {
 			let storage = await opened(factory);
 			try {

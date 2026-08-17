@@ -41,8 +41,15 @@ export type ChannelRecord = {
 	updatedAt: Date;
 };
 
+export type InitialChannel = Omit<
+	ChannelSnapshot,
+	"channelId" | "revision" | "throughSequence" | "createdAt"
+>;
+
 export type CreateChannel = Omit<ChannelRecord, "revision" | "createdAt" | "updatedAt"> & {
 	now: Date;
+	/** A complete revision-zero checkpoint published in the channel's creation transaction. */
+	initial?: InitialChannel;
 };
 
 export type ChannelCursor = {
