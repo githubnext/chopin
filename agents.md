@@ -7,7 +7,6 @@ people running it; this is for people editing it.
 
 ```bash
 bun run dev        # supervisor: Vite + server on one origin, Ctrl-C stops both
-bun run dev:exe    # exe.dev origin discovery and remote HMR
 bun test           # no browser, no agent spawned
 bun run e2e        # Chromium, PostgreSQL, builds the client first
 bun run types      # every package, and e2e
@@ -26,12 +25,8 @@ failed browser run uploads its report and traces.
 and an OAuth-attempt encryption key. `AGENT=off` runs everything except the
 agent, which is what both suites use.
 
-`bun run dev:exe` queries the documented Reflection integration for the current
-VM name, overrides `APP_ORIGIN` only in its child processes, and binds Bun to
-`0.0.0.0:8787`. Portless HTTPS reaches Bun through exe.dev's primary proxy.
-Vite HMR connects separately to the private alternate port `5173` over WSS;
-`CHOPIN_DEV_EXE_HOST` is the supervisor's internal exact-host handoff to Vite.
-Do not replace it with `.exe.xyz` or `allowedHosts: true`.
+The proxy architecture, remote HMR command, callback policy, and exact-host
+invariants live in [Remote development](docs/exe-dev.md).
 
 `Dockerfile` is one application image, not a web tier and an API tier: the build
 stage produces `apps/web/dist`, and the Bun server serves it on the same origin

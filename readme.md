@@ -43,33 +43,8 @@ the multiplayer half. Ctrl-C stops the web and server processes;
 
 Set `AGENT=off` to run the editor without Copilot.
 
-### exe.dev
-
-For development across changing exe.dev VMs, the reusable GitHub App can
-register this callback with wildcard matching enabled:
-
-```text
-https://exe.xyz/auth/github/callback
-```
-
-Chopin still sends the exact callback for the current VM. Point exe.dev's
-primary proxy at Bun, then use the dedicated supervisor mode:
-
-```bash
-ssh exe.dev share port <vm-name> 8787
-bun run dev:exe
-```
-
-`dev:exe` uses exe.dev's documented Reflection integration to discover the VM
-name. It sets the runtime origin to `https://<vm-name>.exe.xyz` without changing
-`.env`, binds Bun on port `8787`, and exposes Vite HMR through the private
-alternate URL `wss://<vm-name>.exe.xyz:5173`. The application, API, OAuth flow,
-and application WebSocket remain on the portless primary URL.
-
-The wildcard callback trusts sibling `*.exe.xyz` hosts that this project does
-not control. Keep this App configuration and the Vite alternate port for
-development only; use an exact callback and a built client for production or a
-public demonstration.
+For proxied VM development and remote HMR, see
+[Remote development](docs/exe-dev.md).
 
 ### Docker
 
@@ -144,8 +119,8 @@ cloudflared tunnel --url http://127.0.0.1:8787
 Update the GitHub App homepage, callback, and setup URL to the new origin. Every
 participant authorizes the App, and an account owner installs it on the selected
 repositories. Repository access is checked before a channel is listed, opened,
-or edited. This single-port example does not carry Vite HMR; use
-`bun run dev:exe` for the exe.dev two-port development setup.
+or edited. This single-port example does not carry remote Vite HMR; see
+[Remote development](docs/exe-dev.md) for that setup.
 
 ## Architecture
 
