@@ -41,7 +41,7 @@ export function hosted(auth: HostedAuth): McpOptions<HostedCaller> {
 				let documents = [];
 				let cursor;
 				do {
-					let page = await auth.storage.channels.list(resolved.id, 100, cursor);
+					let page = await auth.storage.channels.scan(resolved.id, 100, cursor);
 					documents.push(...page.channels.map(channel => ({
 						id: channel.id,
 						title: channel.title,

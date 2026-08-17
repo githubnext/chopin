@@ -55,6 +55,16 @@ export type ChannelPage = {
 	next?: ChannelCursor;
 };
 
+export type ChannelScanCursor = {
+	createdAt: Date;
+	id: string;
+};
+
+export type ChannelScanPage = {
+	channels: ChannelRecord[];
+	next?: ChannelScanCursor;
+};
+
 export type ChannelSnapshot = {
 	channelId: string;
 	generation: string;
