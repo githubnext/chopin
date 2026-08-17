@@ -18,6 +18,7 @@ import { proxy, serve } from "./client";
 import { describe, load } from "./config";
 import { GitHubError } from "./github/client";
 import { Router } from "./http/router";
+import { registerMcpRoutes } from "./mcp/routes";
 import * as Service from "./plan/service";
 import * as Inject from "./questions/inject";
 import * as Marks from "./comments/inject";
@@ -486,6 +487,7 @@ let hostedAuth = registerAuthRoutes(router, {
 			"GitHub credentials refreshed, so the Planner session was restarted. Ask it to continue.",
 		),
 });
+registerMcpRoutes(router, hostedAuth);
 registerChannelRoutes(router, hostedAuth, {
 	onAgentReset: channelId => resetOpenAgents(room => room.id === channelId),
 });
