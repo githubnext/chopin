@@ -44,7 +44,29 @@ test("filtering resets the option Enter will choose", async ({ join }) => {
 
 	await expect(menu.getByRole("option", { selected: true })).toHaveText("Callout");
 	await page.keyboard.press("Enter");
-	await expect(page.getByLabel("Callout type")).toBeVisible();
+	await expect(page.getByRole("button", { name: "Change callout type: Note" })).toBeVisible();
+});
+
+test("a callout edits like prose and keeps its type controls out of the way", async ({ join, room }) => {
+	let page = await join("ana");
+
+	await content(page).click();
+	await page.keyboard.type("/callout");
+	await page.getByRole("listbox", MENU).getByRole("option", { name: "Callout" }).click();
+
+	let callout = content(page).locator("aside[data-plan-type]");
+	await expect(callout).toHaveAttribute("data-plan-type", "note");
+	let title = callout.getByRole("textbox", { name: "Callout title" });
+	await title.fill("Worth knowing");
+
+	await callout.getByRole("button", { name: "Change callout type: Note" }).click();
+	let types = page.getByRole("menu", { name: "Callout type" });
+	await expect(types).toBeVisible();
+	await types.getByRole("menuitemradio", { name: "Warning" }).click();
+
+	await expect(callout).toHaveAttribute("data-plan-type", "warning");
+	await expect(title).toHaveText("Worth knowing");
+	await written(page, room, /type="warning" title="Worth knowing"/);
 });
 
 test("a slash inside a word is just a slash", async ({ join }) => {
