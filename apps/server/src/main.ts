@@ -16,6 +16,7 @@ import { registerChannelRoutes } from "./channels/routes";
 import * as Comments from "./comments/service";
 import { proxy, serve } from "./client";
 import { describe, load } from "./config";
+import { GitHubError } from "./github/client";
 import { Router } from "./http/router";
 import * as Service from "./plan/service";
 import * as Inject from "./questions/inject";
@@ -23,13 +24,14 @@ import * as Marks from "./comments/inject";
 import * as Questions from "./questions/service";
 import * as Rooms from "./rooms";
 import { admit } from "./socket/admission";
+import { StorageError } from "./storage/errors";
 import { createStorage } from "./storage/registry";
 import { broadcast, fail, relay, tell, topic } from "./wire";
 
 import type { Server } from "bun";
 import type { Incoming } from "@chopin/protocol";
 import type { Lease } from "./storage/model";
-import type { Socket, SocketData } from "./wire";
+import type { AuthorizationResult, Socket, SocketData } from "./wire";
 
 const config = load();
 const storage = createStorage(config.storage);
@@ -141,10 +143,17 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 
 	let room = Rooms.get(ws.data.room);
 	if (!room) return;
-	if (!VIEWER_ALLOWED.has(frame.kind) && !(await refreshAccess(ws))) {
-		if (frame.rid) fail(ws, frame.rid, "authorization expired");
-		ws.close(4403, "authorization expired");
-		return;
+	if (!VIEWER_ALLOWED.has(frame.kind)) {
+		let access = await refreshAccess(ws);
+		if (access === "unavailable") {
+			if (frame.rid) fail(ws, frame.rid, "authorization is temporarily unavailable");
+			return;
+		}
+		if (access === "denied") {
+			if (frame.rid) fail(ws, frame.rid, "authorization expired");
+			ws.close(4403, "authorization expired");
+			return;
+		}
 	}
 	if (!ws.data.canEdit && !VIEWER_ALLOWED.has(frame.kind)) {
 		if (frame.rid) fail(ws, frame.rid, "repository write access is required");
@@ -238,13 +247,17 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 
 const VIEWER_ALLOWED = new Set(["session:ping", "plan:open", "plan:close"]);
 
-async function refreshAccess(ws: Socket, forceGitHub = false): Promise<boolean> {
+async function refreshAccess(ws: Socket, forceGitHub = false): Promise<AuthorizationResult> {
 	let data = ws.data;
-	if (data.closed) return false;
+	if (data.closed) return "denied";
 	if (data.authorizationRefresh) {
-		let valid = await data.authorizationRefresh;
-		if (!valid || !forceGitHub || Date.now() - (data.accessCheckedAt ?? 0) < ACCESS_RECHECK_MS) {
-			return valid;
+		let result = await data.authorizationRefresh;
+		if (
+			result !== "allowed"
+			|| !forceGitHub
+			|| Date.now() - (data.accessCheckedAt ?? 0) < ACCESS_RECHECK_MS
+		) {
+			return result;
 		}
 	}
 	let refresh = checkAccess(ws, forceGitHub);
@@ -256,8 +269,8 @@ async function refreshAccess(ws: Socket, forceGitHub = false): Promise<boolean> 
 	}
 }
 
-async function checkAccess(ws: Socket, forceGitHub: boolean): Promise<boolean> {
-	if (ws.data.closed) return false;
+async function checkAccess(ws: Socket, forceGitHub: boolean): Promise<AuthorizationResult> {
+	if (ws.data.closed) return "denied";
 	let data = ws.data;
 	if (
 		!data.credential
@@ -266,19 +279,26 @@ async function checkAccess(ws: Socket, forceGitHub: boolean): Promise<boolean> {
 		|| !data.repositoryOwner
 		|| !data.repositoryName
 		|| (data.authorizedUntil ?? 0) <= Date.now()
-	) return false;
+	) return "denied";
 	try {
 		let request = new Request(hostedAuth.config.origin, { headers: { cookie: data.credential } });
 		let session = await hostedAuth.sessions.authenticate(request);
-		if (!session || session.user.id !== data.principalId) return false;
-		if (!forceGitHub && Date.now() - (data.accessCheckedAt ?? 0) < ACCESS_RECHECK_MS) return true;
-		let repository = await hostedAuth.github.repositoryAccess(
-			session.oauthToken,
-			data.repositoryOwner,
-			data.repositoryName,
+		if (!session || session.user.id !== data.principalId) return "denied";
+		if (!forceGitHub && Date.now() - (data.accessCheckedAt ?? 0) < ACCESS_RECHECK_MS) {
+			return "allowed";
+		}
+		let access = await hostedAuth.sessions.use(
+			session,
+			token =>
+				hostedAuth.github.repositoryAccess(
+					token,
+					data.repositoryOwner!,
+					data.repositoryName!,
+				),
 		);
+		let repository = access.value;
 		if (!repository || repository.id !== data.repositoryId || !repository.permissions.pull) {
-			return false;
+			return "denied";
 		}
 		let canEdit = repository.permissions.push || repository.permissions.admin;
 		if (canEdit !== data.canEdit && !data.closed) {
@@ -286,20 +306,25 @@ async function checkAccess(ws: Socket, forceGitHub: boolean): Promise<boolean> {
 		}
 		data.canEdit = canEdit;
 		data.accessCheckedAt = Date.now();
-		data.authorizedUntil = session.session.expiresAt.getTime();
+		data.authorizedUntil = access.authenticated.session.expiresAt.getTime();
 		data.repositoryDefaultBranch = repository.defaultBranch;
-		return true;
-	} catch {
-		return false;
+		return "allowed";
+	} catch (err) {
+		if (
+			(err instanceof GitHubError
+				&& (err.status === 429 || err.status === 502 || err.status === 503))
+			|| (err instanceof StorageError && err.failure === "unavailable")
+		) return "unavailable";
+		return "denied";
 	}
 }
 
 function scheduleAuthorization(ws: Socket): void {
 	if (ws.data.closed) return;
 	ws.data.authorizationTimer = setTimeout(() => {
-		void refreshAccess(ws, true).then(valid => {
+		void refreshAccess(ws, true).then(result => {
 			if (ws.data.closed) return;
-			if (!valid) ws.close(4403, "authorization expired");
+			if (result === "denied") ws.close(4403, "authorization expired");
 			else scheduleAuthorization(ws);
 		});
 	}, ACCESS_RECHECK_MS);
@@ -434,10 +459,12 @@ function cleanSessions(): void {
 async function resetOpenAgents(
 	filter: (room: Rooms.Room) => boolean,
 	sessionId?: string,
+	revision?: number,
+	reason?: string,
 ): Promise<void> {
 	await Promise.all(
 		Rooms.all().filter(filter).map(room =>
-			room.plan ? Chat.resetAgent(room.plan.chat, sessionId) : Promise.resolve()
+			room.plan ? Chat.resetAgent(room.plan.chat, sessionId, revision, reason) : Promise.resolve()
 		),
 	);
 }
@@ -447,6 +474,13 @@ let hostedAuth = registerAuthRoutes(router, {
 	storage,
 	agent: config.agent,
 	onSessionRevoked: sessionId => resetOpenAgents(() => true, sessionId),
+	onCredentialsWillRotate: (sessionId, revision) =>
+		resetOpenAgents(
+			() => true,
+			sessionId,
+			revision,
+			"GitHub credentials refreshed, so the Planner session was restarted. Ask it to continue.",
+		),
 });
 registerChannelRoutes(router, hostedAuth, {
 	onAgentReset: channelId => resetOpenAgents(room => room.id === channelId),

@@ -945,10 +945,10 @@ export async function close(plan: Plan): Promise<void> {
 	persistence.closing = true;
 	if (persistence.checkpointTimer) clearTimeout(persistence.checkpointTimer);
 	persistence.checkpointTimer = undefined;
+	await Chat.close(plan.chat);
 	await plan.flushing;
 	await commitHosted(plan, undefined, `state:${crypto.randomUUID()}`, capture(plan));
 	await checkpointHosted(plan);
-	await Chat.close(plan.chat);
 	Questions.shutdown(plan.questions);
 	presence.destroy(plan.presence);
 	plan.document.doc.destroy();

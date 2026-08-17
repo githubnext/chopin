@@ -41,8 +41,9 @@ function server(port: number, database: string, extra: Record<string, string>) {
 			STORAGE_DRIVER: "postgres",
 			DATABASE_URL: database,
 			APP_ORIGIN: `http://${HOST}:${port}`,
-			GITHUB_OAUTH_CLIENT_ID: "e2e",
-			GITHUB_OAUTH_CLIENT_SECRET: "e2e",
+			GITHUB_APP_SLUG: "chopin-e2e",
+			GITHUB_APP_CLIENT_ID: "e2e",
+			GITHUB_APP_CLIENT_SECRET: "e2e",
 			SESSION_ENCRYPTION_KEY: process.env.SESSION_ENCRYPTION_KEY!,
 			// Named even when off, so an exported flag in somebody's shell
 			// cannot quietly put a questionnaire in every room.

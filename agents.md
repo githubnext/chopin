@@ -22,7 +22,7 @@ production image build in three parallel jobs. The browser and container jobs
 build independently so a formatting mistake does not wait behind either one. A
 failed browser run uploads its report and traces.
 
-`bun run dev` needs a migrated PostgreSQL database, GitHub OAuth configuration,
+`bun run dev` needs a migrated PostgreSQL database, GitHub App configuration,
 and a session encryption key. `AGENT=off` runs everything except the agent,
 which is what both suites use.
 
@@ -50,9 +50,9 @@ To iterate on one browser test without rebuilding the unchanged client:
 E2E_SKIP_BUILD=1 bun scripts/e2e.ts e2e/table.e2e.ts --grep "row limit"
 ```
 
-The regular suite fakes only GitHub's network responses. OAuth state, encrypted
-sessions, repository authorization, channel routes, sockets and PostgreSQL
-persistence are the production implementations.
+The regular suite fakes only GitHub's network responses. OAuth state, rotating
+encrypted sessions, installation-aware repository authorization, channel
+routes, sockets and PostgreSQL persistence are the production implementations.
 
 ## Shape
 
@@ -101,9 +101,10 @@ later checkpoint.
 Plan content is parsed and rendered, never evaluated.
 
 **Repository authorization is the boundary.** The first invoking editor's
-encrypted OAuth session owns the planner until reset. The SDK runs in empty mode
-with repository-scoped read tools, no host filesystem or shell, and permission
-callbacks that recheck the session, ownership generation and repository access.
+encrypted GitHub App user session owns the planner until reset. The SDK runs in
+empty mode with repository-scoped read tools, no host filesystem or shell, and
+permission callbacks that recheck the session, credential revision, ownership
+generation and installation repository access.
 
 **Ids are minted wherever a component is created**, client or server. A ULID
 has enough entropy that two editors cannot collide, so buying uniqueness with a
@@ -260,7 +261,7 @@ it: nothing needs redrawing when it lapses, since the lapse redraws itself, and
 a callback fired on the way to replacing a pin would reach a store in the middle
 of walking and wipe the step it had just taken.
 
-**Hard-fail at boot.** Missing OAuth configuration, an unusable database, or a
+**Hard-fail at boot.** Missing GitHub App configuration, an unusable database, or a
 second writer lease are all detectable before serving traffic. `AGENT=off` is
 the deliberate way to run without the planner.
 

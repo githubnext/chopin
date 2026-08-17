@@ -1,29 +1,46 @@
 import { describe, expect, it } from "bun:test";
 
 import { Sessions } from "../auth/session";
+import { GitHubError } from "../github/client";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { admit } from "./admission";
 
 import type { HostedAuth } from "../auth/routes";
-import type { GitHub, GitHubUser, Repository, RepositoryPage } from "../github/client";
+import type {
+	GitHub,
+	GitHubTokenGrant,
+	GitHubUser,
+	InstallationPage,
+	Repository,
+	RepositoryPage,
+} from "../github/client";
 
 class FakeGitHub implements GitHub {
 	repositoryId = "R_score";
 	push = false;
+	failure: number | undefined;
 
 	authorize(): string {
 		return "";
 	}
 
-	async exchange(): Promise<string> {
-		return "gho_user";
+	async exchange(): Promise<GitHubTokenGrant> {
+		return grant("ghu_user");
+	}
+
+	async refresh(): Promise<GitHubTokenGrant> {
+		return grant("ghu_refreshed");
 	}
 
 	async user(): Promise<GitHubUser> {
 		return { id: "U_octocat", login: "octocat", avatarUrl: "avatar" };
 	}
 
-	async repositories(): Promise<RepositoryPage> {
+	async installations(): Promise<InstallationPage> {
+		return { installations: [], nextPage: undefined };
+	}
+
+	async installationRepositories(): Promise<RepositoryPage> {
 		return { repositories: [], nextPage: undefined };
 	}
 
@@ -41,8 +58,20 @@ class FakeGitHub implements GitHub {
 	}
 
 	async repositoryAccess(token: string, owner: string, name: string): Promise<Repository> {
+		if (this.failure) throw new GitHubError("unavailable", this.failure);
 		return this.repository(token, owner, name);
 	}
+
+	invalidate(): void {}
+}
+
+function grant(accessToken: string): GitHubTokenGrant {
+	return {
+		accessToken,
+		accessExpiresIn: 28_800,
+		refreshToken: "ghr_user",
+		refreshExpiresIn: 15_897_600,
+	};
 }
 
 function pair(cookie: string): string {
@@ -55,7 +84,7 @@ describe("socket admission", () => {
 		let storage = new MemoryStorage();
 		await storage.users.put({ id: "U_octocat", login: "octocat", avatarUrl: "avatar", now });
 		let sessions = new Sessions(storage, new Uint8Array(32).fill(2), true, () => now);
-		let issued = await sessions.issue("U_octocat", "gho_user");
+		let issued = await sessions.issue("U_octocat", grant("ghu_user"));
 		let channel = await storage.channels.create({
 			id: crypto.randomUUID(),
 			repositoryId: "R_score",
@@ -69,6 +98,7 @@ describe("socket admission", () => {
 		let auth: HostedAuth = {
 			config: {
 				origin: "https://chopin.test",
+				appSlug: "chopin-test",
 				clientId: "client",
 				clientSecret: "secret",
 				encryptionKey: new Uint8Array(32).fill(2),
@@ -102,5 +132,12 @@ describe("socket admission", () => {
 		github.repositoryId = "R_other";
 		let denied = await admit(request, url, auth);
 		expect(denied).toEqual({ status: 404, reason: "channel not found" });
+
+		github.repositoryId = "R_score";
+		github.failure = 502;
+		expect(await admit(request, url, auth)).toEqual({
+			status: 503,
+			reason: "repository access is temporarily unavailable",
+		});
 	});
 });

@@ -24,6 +24,36 @@ export type RepositoryPage = {
 	nextPage: number | undefined;
 };
 
+export type GitHubInstallation = {
+	id: string;
+	account: {
+		login: string;
+		avatarUrl: string;
+		type: "user" | "organization";
+	};
+	repositorySelection: "all" | "selected";
+	configureUrl: string;
+	suspended: boolean;
+	permissions: {
+		contents: boolean;
+		pullRequests: boolean;
+		checks: boolean;
+		statuses: boolean;
+	};
+};
+
+export type InstallationPage = {
+	installations: GitHubInstallation[];
+	nextPage: number | undefined;
+};
+
+export type GitHubTokenGrant = {
+	accessToken: string;
+	accessExpiresIn: number;
+	refreshToken: string;
+	refreshExpiresIn: number;
+};
+
 export interface GitHub {
 	authorize(input: {
 		clientId: string;
@@ -37,11 +67,21 @@ export interface GitHub {
 		redirectUri: string;
 		code: string;
 		verifier: string;
-	}): Promise<string>;
+	}): Promise<GitHubTokenGrant>;
+	refresh(input: {
+		clientId: string;
+		clientSecret: string;
+		refreshToken: string;
+	}): Promise<GitHubTokenGrant>;
 	user(token: string): Promise<GitHubUser>;
-	repositories(token: string, page: number): Promise<RepositoryPage>;
-	repository(token: string, owner: string, name: string): Promise<Repository>;
+	installations(token: string, page: number): Promise<InstallationPage>;
+	installationRepositories(
+		token: string,
+		installationId: string,
+		page: number,
+	): Promise<RepositoryPage>;
 	repositoryAccess(token: string, owner: string, name: string): Promise<Repository | undefined>;
+	invalidate(token: string): void;
 }
 
 export class GitHubError extends Error {
@@ -54,6 +94,16 @@ export class GitHubError extends Error {
 	}
 }
 
+export class GitHubTokenError extends GitHubError {
+	readonly terminal: boolean;
+
+	constructor(message: string, status = 502, terminal = false) {
+		super(message, status);
+		this.name = "GitHubTokenError";
+		this.terminal = terminal;
+	}
+}
+
 type Endpoints = {
 	authorize: string;
 	token: string;
@@ -63,6 +113,21 @@ type Endpoints = {
 type Options = {
 	fetch?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 	endpoints?: Partial<Endpoints>;
+	clock?: () => number;
+};
+
+type CachedAccess = {
+	expiresAt: number;
+	installations: Promise<GitHubInstallation[]>;
+	repositories: Map<string, RepositoryListing>;
+};
+
+type RepositoryListing = {
+	complete: boolean;
+	index: Map<string, Repository>;
+	loading?: Promise<void>;
+	nextPage: number;
+	visited: Set<number>;
 };
 
 const DEFAULTS: Endpoints = {
@@ -72,6 +137,12 @@ const DEFAULTS: Endpoints = {
 };
 
 const REQUEST_TIMEOUT_MS = 15_000;
+const ACCESS_CACHE_MS = 30_000;
+const MAX_LIST_PAGES = 100;
+
+function tokenKey(token: string): string {
+	return createHash("sha256").update(token).digest("base64url");
+}
 
 function record(value: unknown): Record<string, unknown> | undefined {
 	return value && typeof value === "object" && !Array.isArray(value)
@@ -125,6 +196,44 @@ function repository(value: unknown): Repository {
 	};
 }
 
+function installation(value: unknown): GitHubInstallation {
+	let item = record(value);
+	let account = record(item?.account);
+	let permissions = record(item?.permissions);
+	let type: "user" | "organization" | undefined = account?.type === "User"
+		? "user"
+		: account?.type === "Organization"
+		? "organization"
+		: undefined;
+	if (
+		!item
+		|| !account
+		|| !permissions
+		|| !Number.isSafeInteger(item.id)
+		|| (item.id as number) <= 0
+		|| typeof account.login !== "string"
+		|| typeof account.avatar_url !== "string"
+		|| !type
+		|| (item.repository_selection !== "all" && item.repository_selection !== "selected")
+		|| typeof item.html_url !== "string"
+		|| !(item.suspended_at === null || typeof item.suspended_at === "string")
+	) throw new GitHubError("GitHub returned an invalid installation");
+	let allowed = (name: string) => permissions[name] === "read" || permissions[name] === "write";
+	return {
+		id: String(item.id),
+		account: { login: account.login, avatarUrl: account.avatar_url, type },
+		repositorySelection: item.repository_selection,
+		configureUrl: item.html_url,
+		suspended: item.suspended_at !== null,
+		permissions: {
+			contents: allowed("contents"),
+			pullRequests: allowed("pull_requests"),
+			checks: allowed("checks"),
+			statuses: allowed("statuses"),
+		},
+	};
+}
+
 async function body(response: Response): Promise<unknown> {
 	try {
 		return await response.json();
@@ -133,7 +242,7 @@ async function body(response: Response): Promise<unknown> {
 	}
 }
 
-function nextPage(link: string | null, api: string): number | undefined {
+function nextPage(link: string | null, api: string, path: string): number | undefined {
 	if (!link) return undefined;
 	let next = link.split(",").map(part => part.trim()).find(part => /;\s*rel="next"$/.test(part));
 	let match = next?.match(/^<([^>]+)>/);
@@ -141,7 +250,7 @@ function nextPage(link: string | null, api: string): number | undefined {
 	try {
 		let url = new URL(match[1]!);
 		let expected = new URL(api);
-		if (url.origin !== expected.origin || url.pathname !== "/user/repos") return undefined;
+		if (url.origin !== expected.origin || url.pathname !== path) return undefined;
 		let page = Number(url.searchParams.get("page"));
 		return Number.isSafeInteger(page) && page > 0 ? page : undefined;
 	} catch {
@@ -153,10 +262,13 @@ function nextPage(link: string | null, api: string): number | undefined {
 export class GitHubClient implements GitHub {
 	readonly #fetch: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 	readonly #endpoints: Endpoints;
+	readonly #clock: () => number;
+	readonly #access = new Map<string, CachedAccess>();
 
 	constructor(options: Options = {}) {
 		this.#fetch = options.fetch ?? fetch;
 		this.#endpoints = { ...DEFAULTS, ...options.endpoints };
+		this.#clock = options.clock ?? Date.now;
 	}
 
 	authorize(input: {
@@ -168,7 +280,6 @@ export class GitHubClient implements GitHub {
 		let url = new URL(this.#endpoints.authorize);
 		url.searchParams.set("client_id", input.clientId);
 		url.searchParams.set("redirect_uri", input.redirectUri);
-		url.searchParams.set("scope", "read:user repo");
 		url.searchParams.set("state", input.state);
 		url.searchParams.set("code_challenge", input.challenge);
 		url.searchParams.set("code_challenge_method", "S256");
@@ -181,7 +292,30 @@ export class GitHubClient implements GitHub {
 		redirectUri: string;
 		code: string;
 		verifier: string;
-	}): Promise<string> {
+	}): Promise<GitHubTokenGrant> {
+		return this.#token({
+			client_id: input.clientId,
+			client_secret: input.clientSecret,
+			code: input.code,
+			redirect_uri: input.redirectUri,
+			code_verifier: input.verifier,
+		}, false);
+	}
+
+	async refresh(input: {
+		clientId: string;
+		clientSecret: string;
+		refreshToken: string;
+	}): Promise<GitHubTokenGrant> {
+		return this.#token({
+			client_id: input.clientId,
+			client_secret: input.clientSecret,
+			grant_type: "refresh_token",
+			refresh_token: input.refreshToken,
+		}, true);
+	}
+
+	async #token(parameters: Record<string, string>, refreshing: boolean): Promise<GitHubTokenGrant> {
 		let response: Response;
 		try {
 			response = await this.#fetch(this.#endpoints.token, {
@@ -190,13 +324,7 @@ export class GitHubClient implements GitHub {
 					accept: "application/json",
 					"content-type": "application/x-www-form-urlencoded",
 				},
-				body: new URLSearchParams({
-					client_id: input.clientId,
-					client_secret: input.clientSecret,
-					code: input.code,
-					redirect_uri: input.redirectUri,
-					code_verifier: input.verifier,
-				}),
+				body: new URLSearchParams(parameters),
 				redirect: "error",
 				signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
 			});
@@ -204,37 +332,74 @@ export class GitHubClient implements GitHub {
 			throw new GitHubError("GitHub OAuth is unavailable");
 		}
 		let value = record(await body(response));
-		if (!response.ok || value?.error || typeof value?.access_token !== "string") {
-			throw new GitHubError(
-				"GitHub rejected the OAuth exchange",
-				response.status === 429 ? 429 : 502,
+		let terminal = refreshing && value?.error === "bad_refresh_token";
+		if (!response.ok || value?.error) {
+			throw new GitHubTokenError(
+				refreshing ? "GitHub rejected the token refresh" : "GitHub rejected the OAuth exchange",
+				terminal ? 401 : response.status === 429 ? 429 : 502,
+				terminal,
 			);
 		}
-		return value.access_token;
+		if (
+			typeof value?.access_token !== "string"
+			|| !value.access_token
+			|| typeof value.refresh_token !== "string"
+			|| !value.refresh_token
+			|| !Number.isSafeInteger(value.expires_in)
+			|| (value.expires_in as number) <= 0
+			|| !Number.isSafeInteger(value.refresh_token_expires_in)
+			|| (value.refresh_token_expires_in as number) <= 0
+			|| value.token_type !== "bearer"
+		) {
+			throw new GitHubTokenError("GitHub returned an invalid expiring user token");
+		}
+		return {
+			accessToken: value.access_token,
+			accessExpiresIn: value.expires_in as number,
+			refreshToken: value.refresh_token,
+			refreshExpiresIn: value.refresh_token_expires_in as number,
+		};
 	}
 
 	async user(token: string): Promise<GitHubUser> {
 		return user(await this.#api("/user", token));
 	}
 
-	async repositories(token: string, page: number): Promise<RepositoryPage> {
-		let url = new URL("/user/repos", this.#endpoints.api);
-		url.searchParams.set("affiliation", "owner,collaborator,organization_member");
+	async installations(token: string, page: number): Promise<InstallationPage> {
+		let path = "/user/installations";
+		let url = new URL(path, this.#endpoints.api);
 		url.searchParams.set("per_page", "100");
 		url.searchParams.set("page", String(page));
-		url.searchParams.set("sort", "updated");
 		let response = await this.#request(url, token);
-		let value = await body(response);
-		if (!Array.isArray(value)) throw new GitHubError("GitHub returned an invalid repository list");
+		let value = record(await body(response));
+		if (!Array.isArray(value?.installations)) {
+			throw new GitHubError("GitHub returned an invalid installation list");
+		}
 		return {
-			repositories: value.map(repository),
-			nextPage: nextPage(response.headers.get("link"), this.#endpoints.api),
+			installations: value.installations.map(installation),
+			nextPage: nextPage(response.headers.get("link"), this.#endpoints.api, path),
 		};
 	}
 
-	async repository(token: string, owner: string, name: string): Promise<Repository> {
-		let path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
-		return repository(await this.#api(path, token));
+	async installationRepositories(
+		token: string,
+		installationId: string,
+		page: number,
+	): Promise<RepositoryPage> {
+		if (!/^\d+$/.test(installationId)) throw new GitHubError("installation not found", 404);
+		let path = `/user/installations/${installationId}/repositories`;
+		let url = new URL(path, this.#endpoints.api);
+		url.searchParams.set("per_page", "100");
+		url.searchParams.set("page", String(page));
+		let response = await this.#request(url, token);
+		let value = record(await body(response));
+		if (!Array.isArray(value?.repositories)) {
+			throw new GitHubError("GitHub returned an invalid repository list");
+		}
+		return {
+			repositories: value.repositories.map(repository),
+			nextPage: nextPage(response.headers.get("link"), this.#endpoints.api, path),
+		};
 	}
 
 	async repositoryAccess(
@@ -243,15 +408,101 @@ export class GitHubClient implements GitHub {
 		name: string,
 	): Promise<Repository | undefined> {
 		let fullName = `${owner}/${name}`.toLowerCase();
-		let page = 1;
-		for (let request = 0; request < 20; request++) {
-			let result = await this.repositories(token, page);
-			let found = result.repositories.find(item => item.fullName.toLowerCase() === fullName);
-			if (found) return found;
-			if (!result.nextPage || result.nextPage === page) return undefined;
-			page = result.nextPage;
+		let now = this.#clock();
+		for (let [key, entry] of this.#access) {
+			if (entry.expiresAt <= now) this.#access.delete(key);
 		}
-		throw new GitHubError("GitHub repository listing exceeded its safety limit");
+		let key = tokenKey(token);
+		let cached = this.#access.get(key);
+		if (!cached || cached.expiresAt <= now) {
+			cached = {
+				expiresAt: now + ACCESS_CACHE_MS,
+				installations: this.#installationIndex(token),
+				repositories: new Map(),
+			};
+			this.#access.set(key, cached);
+		}
+		try {
+			let installations = await cached.installations;
+			for (let installed of installations) {
+				if (
+					installed.suspended
+					|| !installed.permissions.contents
+					|| installed.account.login.toLowerCase() !== owner.toLowerCase()
+				) continue;
+				let listing = cached.repositories.get(installed.id);
+				if (!listing) {
+					listing = {
+						complete: false,
+						index: new Map(),
+						nextPage: 1,
+						visited: new Set(),
+					};
+					cached.repositories.set(installed.id, listing);
+				}
+				let found = await this.#findRepository(token, installed.id, fullName, listing);
+				if (found) return found;
+			}
+			return undefined;
+		} catch (err) {
+			if (this.#access.get(key) === cached) this.#access.delete(key);
+			throw err;
+		}
+	}
+
+	invalidate(token: string): void {
+		this.#access.delete(tokenKey(token));
+	}
+
+	async #installationIndex(token: string): Promise<GitHubInstallation[]> {
+		let index: GitHubInstallation[] = [];
+		let installationPage = 1;
+		let installationPages = new Set<number>();
+		while (!installationPages.has(installationPage)) {
+			if (installationPages.size >= MAX_LIST_PAGES) {
+				throw new GitHubError("GitHub installation listing exceeded its safety limit");
+			}
+			installationPages.add(installationPage);
+			let result = await this.installations(token, installationPage);
+			index.push(...result.installations);
+			if (!result.nextPage) return index;
+			installationPage = result.nextPage;
+		}
+		return index;
+	}
+
+	async #findRepository(
+		token: string,
+		installationId: string,
+		fullName: string,
+		listing: RepositoryListing,
+	): Promise<Repository | undefined> {
+		while (true) {
+			let found = listing.index.get(fullName);
+			if (found || listing.complete) return found;
+			if (listing.loading) {
+				await listing.loading;
+				continue;
+			}
+			if (listing.visited.size >= MAX_LIST_PAGES || listing.visited.has(listing.nextPage)) {
+				throw new GitHubError("GitHub repository listing exceeded its safety limit");
+			}
+			let page = listing.nextPage;
+			listing.visited.add(page);
+			let loading = this.installationRepositories(token, installationId, page).then(result => {
+				for (let item of result.repositories) {
+					listing.index.set(item.fullName.toLowerCase(), item);
+				}
+				if (result.nextPage) listing.nextPage = result.nextPage;
+				else listing.complete = true;
+			});
+			listing.loading = loading;
+			try {
+				await loading;
+			} finally {
+				if (listing.loading === loading) listing.loading = undefined;
+			}
+		}
 	}
 
 	async #api(path: string, token: string): Promise<unknown> {
@@ -286,3 +537,4 @@ export class GitHubClient implements GitHub {
 		return response;
 	}
 }
+import { createHash } from "node:crypto";

@@ -42,6 +42,7 @@ const MAX_QUEUE = 20;
 
 /** How long the agent's cursor stays where it finished, after a turn ends. */
 const LINGER_MS = 5_000;
+const CREDENTIAL_EXPIRY_SKEW_MS = 60_000;
 
 /**
  * A queued message, with what the queue needs and clients do not.
@@ -74,6 +75,12 @@ export type Chat = {
 	agent?: Agent.Agent;
 	/** In flight while the session is being opened, so a second prompt waits. */
 	opening?: Promise<Agent.Agent>;
+	openingOwner?: { sessionId: string; generation: number; revision: number };
+	/** Fences an SDK session that finishes opening after it was invalidated. */
+	lifecycle: number;
+	/** Complete top-level turn lifecycle, including queued turns. */
+	running?: Promise<void>;
+	closed: boolean;
 	busy: boolean;
 	/** The transient lifecycle of the running Planner turn. */
 	turn?: Wire.Turn;
@@ -97,7 +104,11 @@ export type Chat = {
 	/** When each running tool call started, for its duration. */
 	timings: Map<string, number>;
 	/** First-invoker ownership, fenced by storage generation. */
-	owner?: { sessionId: string; generation: number };
+	owner?: { sessionId: string; generation: number; revision: number; expiresAt: number };
+	/** Stops a disposable SDK session shortly before its copied token expires. */
+	credentialTimer?: ReturnType<typeof setTimeout>;
+	/** User-facing reason an in-flight turn was interrupted. */
+	interruption?: string;
 	/** Durable context prepended once after recreating a hosted SDK session. */
 	bootstrap?: string;
 	/**
@@ -111,7 +122,15 @@ export type Chat = {
 };
 
 export function create(): Chat {
-	return { entries: [], waiting: [], busy: false, timings: new Map(), backscroll: [] };
+	return {
+		entries: [],
+		waiting: [],
+		busy: false,
+		lifecycle: 0,
+		closed: false,
+		timings: new Map(),
+		backscroll: [],
+	};
 }
 
 /**
@@ -129,6 +148,8 @@ export function restore(entries: Wire.Entry[]): Chat {
 		}),
 		waiting: [],
 		busy: false,
+		lifecycle: 0,
+		closed: false,
 		timings: new Map(),
 		backscroll: [],
 	};
@@ -221,6 +242,7 @@ export async function send(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 	if (!text) return;
 
 	let { chat, room, server } = context;
+	if (chat.closed) return;
 	let handle = ws.data.handle;
 	let destination = msg.to;
 	if (destination !== "room" && destination !== "planner") return;
@@ -306,8 +328,9 @@ export async function send(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		state(chat, server, room);
 		return fail(ws, msg.rid, "could not save message");
 	}
+	if (chat.closed) return;
 	announce(server, room, entry);
-	void run(
+	startRun(
 		context,
 		handle,
 		visible,
@@ -343,6 +366,7 @@ export function instruct(
 ): void | Promise<void> {
 	let { chat, config, room, server } = context;
 	let proceed = (): void | Promise<void> => {
+		if (chat.closed) return;
 		// `AGENT=off` runs the room without one. The decision that got here is
 		// still a decision and is already recorded; only the turn is impossible,
 		// and saying so beats a session failing to open.
@@ -376,7 +400,7 @@ export function instruct(
 			return queued(chat, server, room);
 		}
 
-		void run(context, handle, text, about.thread, context.claimantSessionId);
+		startRun(context, handle, text, about.thread, context.claimantSessionId);
 	};
 	let announced = notice(context, said);
 	return announced instanceof Promise ? announced.then(proceed) : proceed();
@@ -461,12 +485,21 @@ async function repositorySession(
 	);
 	let { auth } = context;
 	let ownerSessionId = ownership.ownerSessionId!;
+	let credentialExpiresAt = Math.min(
+		owner.access.expiresAt.getTime(),
+		owner.session.expiresAt.getTime(),
+	);
 
 	let { chat } = context;
+	let reusable = chat.agent;
+	let binding = chat.owner;
+	let reuseLifecycle = chat.lifecycle;
 	if (
-		chat.agent
-		&& chat.owner?.sessionId === ownerSessionId
-		&& chat.owner.generation === ownership.generation
+		reusable
+		&& binding?.sessionId === ownerSessionId
+		&& binding.generation === ownership.generation
+		&& binding.revision === owner.access.revision
+		&& binding.expiresAt > Date.now() + CREDENTIAL_EXPIRY_SKEW_MS
 	) {
 		await auth.storage.channels.updateAgentContext({
 			channelId: context.room,
@@ -477,30 +510,50 @@ async function repositorySession(
 			status: "ready",
 			now: new Date(),
 		});
-		return chat.agent;
+		if (
+			chat.lifecycle !== reuseLifecycle
+			|| chat.agent !== reusable
+			|| chat.owner !== binding
+		) throw new Error("The Planner session changed while it was being reused. Try again.");
+		return reusable;
+	}
+	if (credentialExpiresAt <= Date.now() + CREDENTIAL_EXPIRY_SKEW_MS) {
+		throw new Error("The Copilot owner's login session is about to expire. Sign in again.");
 	}
 
 	if (chat.agent) await Agent.discard(chat.agent);
 	chat.agent = undefined;
+	chat.owner = undefined;
+	clearTimeout(chat.credentialTimer);
+	chat.credentialTimer = undefined;
+	let lifecycle = chat.lifecycle;
+	let openingOwner = {
+		sessionId: ownerSessionId,
+		generation: ownership.generation,
+		revision: owner.access.revision,
+	};
+	chat.openingOwner = openingOwner;
 	let tools = [
 		...planTools(context),
-		...repositoryTools({ token: owner.oauthToken, repository }),
+		...repositoryTools({ token: owner.access.token, repository }),
 	];
+	let opening: Promise<Agent.Agent> | undefined;
+	let opened: Agent.Agent | undefined;
 	try {
-		let agent = await Agent.open(context.config, { tools }, {
-			token: owner.oauthToken,
+		opening = Agent.open(context.config, { tools }, {
+			token: owner.access.token,
 			repository,
 			bootstrap: bootstrap(chat, ownership.transcriptCursor, ownership.summary, currentText),
 			authorize: async () => {
-				let activeOwner = await auth.sessions.resolve(ownerSessionId);
-				if (!activeOwner) return false;
+				let activeOwner = await auth.sessions.inspect(ownerSessionId);
+				if (!activeOwner || activeOwner.access.revision !== owner.access.revision) return false;
 				let stored = await auth.storage.collaboration.load(context.room, new Date());
 				if (
 					stored?.agent?.ownerSessionId !== ownerSessionId
 					|| stored.agent.generation !== ownership.generation
 				) return false;
 				let access = await auth.github.repositoryAccess(
-					activeOwner.oauthToken,
+					activeOwner.access.token,
 					repository.owner,
 					repository.name,
 				);
@@ -508,8 +561,19 @@ async function repositorySession(
 					&& (access.permissions.push || access.permissions.admin);
 			},
 		});
-		chat.agent = agent;
-		chat.owner = { sessionId: ownerSessionId, generation: ownership.generation };
+		chat.opening = opening;
+		let agent = opened = await opening;
+		let activeOwner = await auth.sessions.inspect(ownerSessionId);
+		let activeOwnership = await auth.storage.collaboration.load(context.room, new Date());
+		if (
+			chat.lifecycle !== lifecycle
+			|| chat.openingOwner !== openingOwner
+			|| activeOwner?.access.revision !== owner.access.revision
+			|| activeOwnership?.agent?.ownerSessionId !== ownerSessionId
+			|| activeOwnership.agent.generation !== ownership.generation
+		) {
+			throw new Error("The Planner session changed while it was opening. Try again.");
+		}
 		await auth.storage.channels.updateAgentContext({
 			channelId: context.room,
 			ownerSessionId,
@@ -519,8 +583,32 @@ async function repositorySession(
 			status: "ready",
 			now: new Date(),
 		});
+		activeOwner = await auth.sessions.inspect(ownerSessionId);
+		if (
+			chat.lifecycle !== lifecycle
+			|| chat.openingOwner !== openingOwner
+			|| activeOwner?.access.revision !== owner.access.revision
+		) {
+			throw new Error("The Planner session changed while it was opening. Try again.");
+		}
+		chat.agent = agent;
+		chat.owner = {
+			sessionId: ownerSessionId,
+			generation: ownership.generation,
+			revision: owner.access.revision,
+			expiresAt: credentialExpiresAt,
+		};
+		chat.credentialTimer = setTimeout(() => {
+			void resetAgent(
+				chat,
+				ownerSessionId,
+				owner.access.revision,
+				"GitHub credentials expired, so the Planner session was restarted. Ask it to continue.",
+			);
+		}, Math.max(0, credentialExpiresAt - Date.now() - CREDENTIAL_EXPIRY_SKEW_MS));
 		return agent;
 	} catch (err) {
+		if (opened && chat.agent !== opened) await Agent.discard(opened);
 		await auth.storage.channels.updateAgentContext({
 			channelId: context.room,
 			ownerSessionId,
@@ -531,6 +619,9 @@ async function repositorySession(
 			now: new Date(),
 		}).catch(() => {});
 		throw err;
+	} finally {
+		if (chat.openingOwner === openingOwner) chat.openingOwner = undefined;
+		if (chat.opening === opening) chat.opening = undefined;
 	}
 }
 
@@ -551,11 +642,12 @@ export async function resolveOwner(
 	if (!owner) {
 		throw new Error("The Copilot owner must sign in again or reset this channel's agent.");
 	}
-	let current = await auth.github.repositoryAccess(
-		owner.oauthToken,
-		repository.owner,
-		repository.name,
+	let checked = await auth.sessions.use(
+		owner,
+		token => auth.github.repositoryAccess(token, repository.owner, repository.name),
 	);
+	owner = checked.authenticated;
+	let current = checked.value;
 	if (
 		!current
 		|| current.id !== repository.id
@@ -598,6 +690,7 @@ async function run(
 	reserved = false,
 ): Promise<void> {
 	let { chat, plan, room, server } = context;
+	if (chat.closed) return;
 
 	if (!reserved) {
 		chat.busy = true;
@@ -608,6 +701,9 @@ async function run(
 
 	try {
 		let agent = await session(context, claimantSessionId, text);
+		if (chat.agent !== agent) {
+			throw new Error("The Planner session changed before the turn started. Try again.");
+		}
 
 		/*
 		 * `send` resolves when the message is accepted, not when the turn is
@@ -636,14 +732,18 @@ async function run(
 		// whoever holds it.
 		await agent.session.send({ prompt });
 		await finished.promise;
+		if (chat.interruption) throw new Error(chat.interruption);
 	} catch (err) {
 		console.error("[chat] turn failed:", err);
-		say(chat, server, room, {
-			id: ulid(),
-			author: { kind: "system" },
-			text: err instanceof Error ? err.message : "The agent could not be reached.",
-			ts: now(),
-		});
+		if (!chat.closed) {
+			say(chat, server, room, {
+				id: ulid(),
+				author: { kind: "system" },
+				text: err instanceof Error ? err.message : "The agent could not be reached.",
+				ts: now(),
+			});
+		}
+		chat.interruption = undefined;
 	} finally {
 		chat.release?.();
 		chat.release = undefined;
@@ -651,7 +751,7 @@ async function run(
 		chat.writing = undefined;
 		chat.tooling = undefined;
 		settle(chat, server, room);
-		await context.persist();
+		if (!chat.closed) await context.persist();
 
 		/*
 		 * The agent's cursor outlives the turn by a moment.
@@ -663,15 +763,19 @@ async function run(
 		 * cursor the next turn had just placed.
 		 */
 		clearTimeout(chat.lingering);
-		chat.lingering = setTimeout(() => {
-			chat.lingering = undefined;
-			Service.release(plan, server, room);
-		}, LINGER_MS);
+		if (!chat.closed) {
+			chat.lingering = setTimeout(() => {
+				chat.lingering = undefined;
+				Service.release(plan, server, room);
+			}, LINGER_MS);
+		}
 	}
 
+	if (chat.closed) return;
 	let next = pending(chat);
 	if (next) {
 		await context.persist();
+		if (chat.closed) return;
 		queued(chat, server, room);
 		let entry = next.message ? chat.entries.find(item => item.id === next.id) : undefined;
 		if (entry) announce(server, room, entry);
@@ -688,6 +792,22 @@ async function run(
 		chat.acting = undefined;
 		state(chat, server, room);
 	}
+}
+
+function startRun(
+	context: Room,
+	handle: string,
+	text: string,
+	thread: string | undefined,
+	claimantSessionId: string,
+	reserved = false,
+): void {
+	if (context.chat.closed) return;
+	let running = run(context, handle, text, thread, claimantSessionId, reserved);
+	context.chat.running = running;
+	void running.finally(() => {
+		if (context.chat.running === running) context.chat.running = undefined;
+	}).catch(() => {});
 }
 
 /**
@@ -906,25 +1026,67 @@ function attach(context: Room, activity: Wire.Activity): string {
 	return entry.id;
 }
 
-export async function resetAgent(chat: Chat, sessionId?: string): Promise<void> {
-	if (!chat.owner || (sessionId && chat.owner.sessionId !== sessionId)) return;
-	await chat.agent?.session.abort().catch(() => {});
+export async function resetAgent(
+	chat: Chat,
+	sessionId?: string,
+	revision?: number,
+	reason?: string,
+): Promise<void> {
+	let binding = chat.owner ?? chat.openingOwner;
+	if (
+		!binding
+		|| (sessionId && binding.sessionId !== sessionId)
+		|| (revision !== undefined && binding.revision !== revision)
+	) return;
+	chat.lifecycle++;
+	clearTimeout(chat.credentialTimer);
+	chat.credentialTimer = undefined;
+	if (reason && chat.finishTurn) chat.interruption = reason;
+	let agent = chat.agent;
+	let opening = chat.opening;
+	chat.agent = undefined;
+	chat.owner = undefined;
+	chat.opening = undefined;
+	chat.openingOwner = undefined;
+	await agent?.session.abort().catch(() => {});
 	chat.finishTurn?.();
 	chat.release?.();
 	chat.release = undefined;
 	chat.finishTurn = undefined;
-	if (chat.agent) await Agent.discard(chat.agent);
-	chat.agent = undefined;
-	chat.owner = undefined;
+	if (agent) await Agent.discard(agent);
+	if (opening) {
+		let opened = await opening.catch(() => undefined);
+		if (opened && opened !== agent) await Agent.discard(opened);
+	}
 }
 
 /** Let go of the session. The conversation is resumable by id. */
 export async function close(chat: Chat): Promise<void> {
+	chat.closed = true;
+	chat.lifecycle++;
+	chat.waiting = [];
+	let running = chat.running;
+	let agent = chat.agent;
+	let opening = chat.opening;
+	chat.agent = undefined;
+	chat.owner = undefined;
+	chat.opening = undefined;
+	chat.openingOwner = undefined;
+	await agent?.session.abort().catch(() => {});
+	chat.finishTurn?.();
 	chat.release?.();
+	chat.release = undefined;
+	chat.finishTurn = undefined;
 	// A cursor waiting to be taken down has nowhere to be taken down from, and
 	// a live timer would hold the loop open for its whole linger.
 	clearTimeout(chat.lingering);
 	chat.lingering = undefined;
-	if (chat.agent) await Agent.discard(chat.agent);
-	chat.agent = undefined;
+	clearTimeout(chat.credentialTimer);
+	chat.credentialTimer = undefined;
+	if (agent) await Agent.discard(agent);
+	if (opening) {
+		let opened = await opening.catch(() => undefined);
+		if (opened && opened !== agent) await Agent.discard(opened);
+	}
+	await running;
 }

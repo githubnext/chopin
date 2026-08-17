@@ -10,20 +10,27 @@ prose they produced.
 
 ## Running it
 
-Chopin requires Bun 1.3.2, PostgreSQL, and a GitHub OAuth App. The Bun version
-matches CI and the production image; verify it with `bun --version`. Register
-this callback on the OAuth App:
+Chopin requires Bun 1.3.2, PostgreSQL, and a GitHub App. The Bun version matches
+CI and the production image; verify it with `bun --version`. Register these URLs
+on a GitHub App owned by the deployment:
 
 ```text
-http://127.0.0.1:8787/auth/github/callback
+Homepage:  http://127.0.0.1:8787
+Callback:  http://127.0.0.1:8787/auth/github/callback
+Setup URL: http://127.0.0.1:8787/auth/github/setup
 ```
+
+Enable expiring user authorization tokens, disable OAuth during installation,
+and grant read access to Contents, Pull requests, Checks, and Commit statuses.
+Make the App installable on any account and disable webhooks. See
+[Authentication](docs/authentication.md) for the complete registration values.
 
 Then configure and start the service:
 
 ```bash
 bun install
 cp .env.example .env
-# Fill in GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET in .env.
+# Fill in the GitHub App slug, client credentials, and session key in .env.
 bun run db:up
 bun run migrate
 bun run dev
@@ -38,7 +45,7 @@ Set `AGENT=off` to run the editor without Copilot.
 
 ### exe.dev
 
-For development across changing exe.dev VMs, the reusable GitHub OAuth App can
+For development across changing exe.dev VMs, the reusable GitHub App can
 register this callback with wildcard matching enabled:
 
 ```text
@@ -60,7 +67,7 @@ alternate URL `wss://<vm-name>.exe.xyz:5173`. The application, API, OAuth flow,
 and application WebSocket remain on the portless primary URL.
 
 The wildcard callback trusts sibling `*.exe.xyz` hosts that this project does
-not control. Keep this OAuth configuration and the Vite alternate port for
+not control. Keep this App configuration and the Vite alternate port for
 development only; use an exact callback and a built client for production or a
 public demonstration.
 
@@ -68,7 +75,7 @@ public demonstration.
 
 The production image builds the browser client and serves it from the same Bun
 process that owns the API and WebSocket. To run the complete stack locally,
-fill in the OAuth and session variables in `.env`, then run:
+fill in the GitHub App and session variables in `.env`, then run:
 
 ```bash
 bun run docker:up
@@ -79,7 +86,7 @@ This builds the image, starts PostgreSQL, applies migrations, and listens on
 `bun run db:up` remains database-only for development with Vite HMR.
 
 For a deployment using a managed database, build `Dockerfile`, provide
-`DATABASE_URL`, `APP_ORIGIN`, the GitHub OAuth credentials, and
+`DATABASE_URL`, `APP_ORIGIN`, the GitHub App credentials and slug, and
 `SESSION_ENCRYPTION_KEY` at runtime, and expose container port `8787`. Do not
 bake `.env` or any credential into the image.
 
@@ -98,28 +105,29 @@ Anything said without the mention is still carried into the agent's next turn,
 so a team can settle something between themselves and the agent arrives already
 knowing. The composer says which destination a message has before you send it.
 
-The first editor to invoke the planner lends their OAuth session to that
+The first editor to invoke the planner lends their GitHub App session to that
 channel's Copilot usage. The agent receives repository-scoped read tools and no
 host filesystem or shell. **New planner session** releases ownership so another
 editor can take it.
 
 ## Configuration
 
-| Variable                     | Default             | Meaning                                                             |
-| ---------------------------- | ------------------- | ------------------------------------------------------------------- |
-| `DATABASE_URL`               | required            | PostgreSQL connection URL; never printed by the server.             |
-| `STORAGE_DRIVER`             | `postgres`          | Built-in storage adapter.                                           |
-| `APP_ORIGIN`                 | required            | Exact public HTTP(S) origin used for OAuth and Origin checks.       |
-| `GITHUB_OAUTH_CLIENT_ID`     | required            | GitHub OAuth App client id.                                         |
-| `GITHUB_OAUTH_CLIENT_SECRET` | required            | GitHub OAuth App client secret.                                     |
-| `SESSION_ENCRYPTION_KEY`     | required            | 32 random bytes as 64 hex characters; encrypts stored OAuth tokens. |
-| `SERVER_HOST`                | `127.0.0.1`         | Bind address.                                                       |
-| `PORT`                       | `8787`              | HTTP and WebSocket port.                                            |
-| `MODEL`                      | `claude-sonnet-4.6` | Planner model.                                                      |
-| `AGENT`                      | on                  | `AGENT=off` hides and disables the planner.                         |
+| Variable                   | Default             | Meaning                                                                 |
+| -------------------------- | ------------------- | ----------------------------------------------------------------------- |
+| `DATABASE_URL`             | required            | PostgreSQL connection URL; never printed by the server.                 |
+| `STORAGE_DRIVER`           | `postgres`          | Built-in storage adapter.                                               |
+| `APP_ORIGIN`               | required            | Exact public HTTP(S) origin used for callbacks and Origin checks.       |
+| `GITHUB_APP_SLUG`          | required            | Slug from the GitHub App's public link.                                 |
+| `GITHUB_APP_CLIENT_ID`     | required            | GitHub App OAuth client id, distinct from the App id.                   |
+| `GITHUB_APP_CLIENT_SECRET` | required            | GitHub App client secret used for user-token exchange and refresh.      |
+| `SESSION_ENCRYPTION_KEY`   | required            | 32 random bytes as 64 hex characters; encrypts access and refresh data. |
+| `SERVER_HOST`              | `127.0.0.1`         | Bind address.                                                           |
+| `PORT`                     | `8787`              | HTTP and WebSocket port.                                                |
+| `MODEL`                    | `claude-sonnet-4.6` | Planner model.                                                          |
+| `AGENT`                    | on                  | `AGENT=off` hides and disables the planner.                             |
 
 Generate the session key with `openssl rand -hex 32`. `APP_ORIGIN` has no
-trailing slash and must match the OAuth callback's origin exactly.
+trailing slash and must match the GitHub App callback's origin exactly.
 
 ## Sharing
 
@@ -131,11 +139,11 @@ SERVER_HOST=0.0.0.0 APP_ORIGIN=https://chopin.example bun run dev
 cloudflared tunnel --url http://127.0.0.1:8787
 ```
 
-Update the GitHub OAuth App callback to
-`https://chopin.example/auth/github/callback`. Every participant signs in with
-GitHub, and repository access is checked before a channel is listed, opened, or
-edited. This single-port example does not carry Vite HMR; use `bun run dev:exe`
-for the exe.dev two-port development setup.
+Update the GitHub App homepage, callback, and setup URL to the new origin. Every
+participant authorizes the App, and an account owner installs it on the selected
+repositories. Repository access is checked before a channel is listed, opened,
+or edited. This single-port example does not carry Vite HMR; use
+`bun run dev:exe` for the exe.dev two-port development setup.
 
 ## Architecture
 
@@ -182,7 +190,7 @@ bun run start         # serve the built client
 The browser suite needs Chromium once with `bun run e2e:browsers`. It starts two
 temporary PostgreSQL services, migrates them, builds the client, and runs with
 `AGENT=off`. Its fake GitHub implementation replaces only GitHub's network
-responses; OAuth state, encrypted sessions, repository authorization, channel
+responses; OAuth state, rotating encrypted sessions, repository authorization, channel
 routes, WebSockets, and persistence are the production implementations.
 
 `AGENTS.md` is the companion for maintainers: invariants, deliberate decisions,

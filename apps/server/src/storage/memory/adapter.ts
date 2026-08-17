@@ -33,6 +33,10 @@ function bytes(value: Uint8Array): Uint8Array {
 	return new Uint8Array(value);
 }
 
+function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
+	return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
 function json(value: JsonValue): JsonValue {
 	return structuredClone(value);
 }
@@ -116,6 +120,23 @@ export class MemoryStorage implements StorageAdapter {
 		get: (id, now) => {
 			let found = this.#sessions.get(id);
 			return Promise.resolve(found && found.expiresAt > now ? session(found) : undefined);
+		},
+		replaceToken: (id, expected, replacement, now) => {
+			let found = this.#sessions.get(id);
+			if (!found || found.expiresAt <= now || !equalBytes(found.oauthToken, expected)) {
+				return Promise.resolve(false);
+			}
+			this.#sessions.set(id, { ...found, oauthToken: bytes(replacement) });
+			return Promise.resolve(true);
+		},
+		deleteToken: (id, expected, now) => {
+			let found = this.#sessions.get(id);
+			if (!found || found.expiresAt <= now || !equalBytes(found.oauthToken, expected)) {
+				return Promise.resolve(false);
+			}
+			this.#sessions.delete(id);
+			this.#expireOwners(new Set([id]), now);
+			return Promise.resolve(true);
 		},
 		delete: id => {
 			let deleted = this.#sessions.delete(id);

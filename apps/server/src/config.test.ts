@@ -6,8 +6,9 @@ const REQUIRED = {
 	STORAGE_DRIVER: "postgres",
 	DATABASE_URL: "postgresql://chopin:secret@database.test/chopin",
 	APP_ORIGIN: "https://chopin.example",
-	GITHUB_OAUTH_CLIENT_ID: "client-id",
-	GITHUB_OAUTH_CLIENT_SECRET: "client-secret",
+	GITHUB_APP_SLUG: "chopin-test",
+	GITHUB_APP_CLIENT_ID: "client-id",
+	GITHUB_APP_CLIENT_SECRET: "client-secret",
 	SESSION_ENCRYPTION_KEY: "11".repeat(32),
 };
 
@@ -50,10 +51,11 @@ describe("configuration", () => {
 		expect(() => configured({ STORAGE_DRIVER: "cosmos" })).toThrow("STORAGE_DRIVER");
 	});
 
-	it("requires complete OAuth configuration and a safe exact origin", () => {
-		expect(() => configured({ GITHUB_OAUTH_CLIENT_ID: undefined })).toThrow(
-			"GITHUB_OAUTH_CLIENT_ID",
+	it("requires complete GitHub App configuration and a safe exact origin", () => {
+		expect(() => configured({ GITHUB_APP_CLIENT_ID: undefined })).toThrow(
+			"GITHUB_APP_CLIENT_ID",
 		);
+		expect(() => configured({ GITHUB_APP_SLUG: "Bad Slug" })).toThrow("GITHUB_APP_SLUG");
 		expect(() => configured({ APP_ORIGIN: "http://chopin.example" })).toThrow("HTTPS");
 		expect(() => configured({ APP_ORIGIN: "https://chopin.example/path" })).toThrow(
 			"only an HTTP or HTTPS origin",

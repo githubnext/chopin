@@ -6,7 +6,13 @@ import { MemoryStorage } from "../storage/memory/adapter";
 import { registerAuthRoutes } from "./routes";
 
 import type { AuthConfig } from "./config";
-import type { GitHub, GitHubUser, RepositoryPage } from "../github/client";
+import type {
+	GitHub,
+	GitHubTokenGrant,
+	GitHubUser,
+	InstallationPage,
+	RepositoryPage,
+} from "../github/client";
 
 function pair(cookie: string): string {
 	return cookie.split(";", 1)[0]!;
@@ -20,6 +26,7 @@ class FakeGitHub implements GitHub {
 	authorized: Parameters<GitHub["authorize"]>[0] | undefined;
 	exchanged: Parameters<GitHub["exchange"]>[0] | undefined;
 	denyRepositories = false;
+	invalidated: string[] = [];
 
 	authorize(input: Parameters<GitHub["authorize"]>[0]): string {
 		this.authorized = input;
@@ -29,16 +36,48 @@ class FakeGitHub implements GitHub {
 		return url.href;
 	}
 
-	async exchange(input: Parameters<GitHub["exchange"]>[0]): Promise<string> {
+	async exchange(input: Parameters<GitHub["exchange"]>[0]): Promise<GitHubTokenGrant> {
 		this.exchanged = input;
-		return "gho_route_secret";
+		return this.grant("ghu_route_secret", "ghr_route_secret");
+	}
+
+	async refresh(_input: Parameters<GitHub["refresh"]>[0]): Promise<GitHubTokenGrant> {
+		return this.grant("ghu_route_refreshed", "ghr_route_refreshed");
 	}
 
 	async user(_token: string): Promise<GitHubUser> {
 		return { id: "U_octocat", login: "octocat", avatarUrl: "https://avatars.test/octocat" };
 	}
 
-	async repositories(_token: string, page: number): Promise<RepositoryPage> {
+	async installations(_token: string, page: number): Promise<InstallationPage> {
+		if (this.denyRepositories) throw new GitHubError("GitHub API rejected the request", 401);
+		return {
+			installations: [{
+				id: "123",
+				account: {
+					login: "octo-org",
+					avatarUrl: "https://avatars.test/octo-org",
+					type: "organization",
+				},
+				repositorySelection: "selected",
+				configureUrl: "https://github.test/settings/installations/123",
+				suspended: false,
+				permissions: {
+					contents: true,
+					pullRequests: true,
+					checks: true,
+					statuses: true,
+				},
+			}],
+			nextPage: page + 1,
+		};
+	}
+
+	async installationRepositories(
+		_token: string,
+		_installationId: string,
+		page: number,
+	): Promise<RepositoryPage> {
 		if (this.denyRepositories) throw new GitHubError("GitHub API rejected the request", 401);
 		return {
 			repositories: [{
@@ -55,26 +94,32 @@ class FakeGitHub implements GitHub {
 		};
 	}
 
-	async repository(_token: string, owner: string, name: string) {
-		return {
-			id: "R_score",
+	async repositoryAccess(token: string, owner: string, name: string) {
+		return (await this.installationRepositories(token, "123", 1)).repositories[0] && {
+			...(await this.installationRepositories(token, "123", 1)).repositories[0]!,
 			owner,
 			name,
 			fullName: `${owner}/${name}`,
-			private: true,
-			url: `https://github.test/${owner}/${name}`,
-			defaultBranch: "main",
-			permissions: { pull: true, push: true, admin: false },
 		};
 	}
 
-	async repositoryAccess(token: string, owner: string, name: string) {
-		return this.repository(token, owner, name);
+	invalidate(token: string): void {
+		this.invalidated.push(token);
+	}
+
+	private grant(accessToken: string, refreshToken: string): GitHubTokenGrant {
+		return {
+			accessToken,
+			accessExpiresIn: 28_800,
+			refreshToken,
+			refreshExpiresIn: 15_897_600,
+		};
 	}
 }
 
 const CONFIG: AuthConfig = {
 	origin: "https://chopin.test",
+	appSlug: "chopin-test",
 	clientId: "client-id",
 	clientSecret: "client-secret",
 	encryptionKey: new Uint8Array(32).fill(6),
@@ -131,21 +176,36 @@ describe("hosted authentication routes", () => {
 		);
 		expect(await session!.json()).toEqual({
 			agent: true,
+			installUrl: "/auth/github/install",
 			user: { id: "U_octocat", login: "octocat", avatarUrl: "https://avatars.test/octocat" },
 			expiresAt: "2026-09-12T12:00:00.000Z",
 		});
 
-		let repositories = await router.handle(
-			new Request("https://chopin.test/api/repositories?page=3", {
+		let installations = await router.handle(
+			new Request("https://chopin.test/api/github/installations?page=3", {
 				headers: { cookie: sessionCookie },
 			}),
 		);
-		expect(repositories!.status).toBe(200);
+		expect(installations!.status).toBe(200);
+		expect((await installations!.json()).nextPage).toBe(4);
+		let repositories = await router.handle(
+			new Request("https://chopin.test/api/github/installations/123/repositories?page=3", {
+				headers: { cookie: sessionCookie },
+			}),
+		);
 		expect((await repositories!.json()).nextPage).toBe(4);
 
 		let sessionId = sessionCookie.slice(sessionCookie.indexOf("=") + 1).split(".")[0]!;
 		let stored = await storage.sessions.get(sessionId, now);
-		expect(Buffer.from(stored!.oauthToken).toString("utf8")).not.toContain("gho_route_secret");
+		expect(Buffer.from(stored!.oauthToken).toString("utf8")).not.toContain("ghu_route_secret");
+		let setup = await router.handle(
+			new Request("https://chopin.test/auth/github/setup?installation_id=spoofed", {
+				headers: { cookie: sessionCookie },
+			}),
+		);
+		expect(setup!.status).toBe(303);
+		expect(setup!.headers.get("location")).toBe("/");
+		expect(github.invalidated).toEqual(["ghu_route_secret"]);
 
 		let refused = await router.handle(
 			new Request("https://chopin.test/auth/logout", {
@@ -169,6 +229,19 @@ describe("hosted authentication routes", () => {
 			}),
 		);
 		expect(await gone!.json()).toEqual({ user: null, agent: true });
+	});
+
+	it("redirects to the configured App installation page", async () => {
+		let router = new Router();
+		registerAuthRoutes(router, {
+			config: CONFIG,
+			storage: new MemoryStorage(),
+			github: new FakeGitHub(),
+		});
+		let response = await router.handle(new Request("https://chopin.test/auth/github/install"));
+		expect(response!.status).toBe(302);
+		expect(response!.headers.get("location"))
+			.toBe("https://github.com/apps/chopin-test/installations/new");
 	});
 
 	it("rejects missing or mismatched OAuth state", async () => {
@@ -250,7 +323,7 @@ describe("hosted authentication routes", () => {
 
 		github.denyRepositories = true;
 		let denied = await router.handle(
-			new Request("https://chopin.test/api/repositories", {
+			new Request("https://chopin.test/api/github/installations", {
 				headers: { cookie: sessionCookie },
 			}),
 		);
