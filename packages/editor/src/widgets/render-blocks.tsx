@@ -114,6 +114,10 @@ async function renderMermaid(key: string, source: string): Promise<string> {
 	let mermaid = await import("mermaid");
 	mermaid.default.initialize({
 		startOnLoad: false,
+		// Its own error drawing is a temporary full-page SVG appended to body,
+		// and a parse failure throws before Mermaid removes it. The preview below
+		// already presents the error beside the source that caused it.
+		suppressErrorRendering: true,
 		// Diagrams come from collaborators and agents, so scripts, click
 		// handlers and HTML labels stay off.
 		securityLevel: "strict",
