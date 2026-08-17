@@ -29,7 +29,7 @@ import type { Presence } from "./presence";
 import type { Document } from "./room";
 import type * as edit from "./edit";
 import type { Block } from "./edit";
-import type { JsonValue, Lease } from "../storage/model";
+import type { JsonValue, Lease, StoredChannel } from "../storage/model";
 import type { StorageAdapter } from "../storage/port";
 
 /** Updates are grouped for this long before being applied together. */
@@ -434,16 +434,15 @@ export function persistExclusive(plan: Plan): Promise<void> {
 	return commitHosted(plan, undefined, `state:${crypto.randomUUID()}`, capture(plan));
 }
 
-/** Restore one durable channel into its authoritative in-memory document. */
-export async function open(
-	id: string,
-	backend: Backend,
-	server: Server<SocketData>,
-): Promise<Plan> {
+type RestoredHosted = {
+	document: Document;
+	needsInitialCheckpoint: boolean;
+	sidecar: Sidecar;
+};
+
+async function restoreHosted(id: string, loaded: StoredChannel): Promise<RestoredHosted> {
 	let document: Document;
 	let needsInitialCheckpoint = false;
-	let loaded = await backend.storage.collaboration.load(id, new Date());
-	if (!loaded) throw new Error(`channel ${id} does not exist`);
 	let pristine = loaded.channel.revision === 0
 		&& loaded.latestSequence === 0
 		&& !loaded.snapshot;
@@ -485,6 +484,30 @@ export async function open(
 		needsInitialCheckpoint = true;
 	}
 	document.seq = sidecar.documentSeq;
+	return { document, needsInitialCheckpoint, sidecar };
+}
+
+/** Project a closed channel without attaching it to the live room registry. */
+export async function readStored(
+	loaded: StoredChannel,
+): Promise<{ source: string; revision: number }> {
+	let restored = await restoreHosted(loaded.channel.id, loaded);
+	try {
+		return { source: room.project(restored.document), revision: restored.sidecar.revision };
+	} finally {
+		restored.document.doc.destroy();
+	}
+}
+
+/** Restore one durable channel into its authoritative in-memory document. */
+export async function open(
+	id: string,
+	backend: Backend,
+	server: Server<SocketData>,
+): Promise<Plan> {
+	let loaded = await backend.storage.collaboration.load(id, new Date());
+	if (!loaded) throw new Error(`channel ${id} does not exist`);
+	let { document, needsInitialCheckpoint, sidecar } = await restoreHosted(id, loaded);
 
 	let plan: Plan = {
 		id,
