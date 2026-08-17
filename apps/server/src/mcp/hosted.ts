@@ -60,39 +60,49 @@ function document(value: Document): PublicDocument & { url?: string } {
 	};
 }
 
+function exposed(
+	channel: ChannelRecord,
+	state: Awaited<ReturnType<typeof Plan.readStored>>,
+): Implementation | undefined {
+	let version = state.graph?.versions.at(-1);
+	if (
+		!state.creation
+		|| !version
+		|| (version.state !== "approved" && version.state !== "locked")
+	) {
+		return undefined;
+	}
+	return {
+		document: document({
+			id: channel.id,
+			title: channel.title,
+			creation: state.creation,
+			source: state.source,
+			revision: state.revision,
+		}),
+		repository: {
+			name: state.creation.origin.repository,
+			baseBranch: state.creation.origin.baseBranch,
+			baseCommit: state.creation.origin.baseCommit,
+		},
+		graph: version,
+		execution: state.execution
+			? { state: "active", run: state.execution }
+			: { state: "idle" },
+	};
+}
+
+function claimResult(value: ClaimResult) {
+	return value.kind === "started"
+		? { kind: "started" as const, run: value.run }
+		: value;
+}
+
 /** Bind the backend-neutral MCP surface to hosted GitHub authentication. */
 export function hosted(
 	auth: HostedAuth,
 	persistence?: ImplementationPersistence,
 ): McpOptions<HostedCaller> {
-	function exposed(
-		channel: ChannelRecord,
-		state: Awaited<ReturnType<typeof Plan.readStored>>,
-	): Implementation | undefined {
-		let version = state.graph?.versions.at(-1);
-		if (!state.origin || !version || (version.state !== "approved" && version.state !== "locked")) {
-			return undefined;
-		}
-		return {
-			document: {
-				id: channel.id,
-				title: channel.title,
-				...(state.brief ? { brief: state.brief } : {}),
-				source: state.source,
-				revision: state.revision,
-			},
-			repository: {
-				name: state.origin.repository,
-				baseBranch: state.origin.baseBranch,
-				baseCommit: state.origin.baseCommit,
-			},
-			graph: version,
-			execution: state.execution
-				? { state: "active", run: state.execution }
-				: { state: "idle" },
-		};
-	}
-
 	function run(caller: HostedCaller, input: ImplementationInput): Run {
 		return {
 			id: crypto.randomUUID(),
@@ -106,12 +116,6 @@ export function hosted(
 			commit: input.commit,
 			startedAt: auth.clock().toISOString(),
 		};
-	}
-
-	function result(value: ClaimResult) {
-		return value.kind === "started"
-			? { kind: "started" as const, run: value.run }
-			: value;
 	}
 
 	return {
@@ -318,7 +322,7 @@ export function hosted(
 						let claimRun = run(caller, input);
 						let live = Rooms.get(input.id)?.plan;
 						if (live) {
-							return result(
+							return claimResult(
 								await Plan.claimImplementation(live, {
 									planRevision: input.planRevision,
 									graphRevision: input.graphRevision,
@@ -335,7 +339,7 @@ export function hosted(
 								run: claimRun,
 							});
 							if (prepared.result.kind !== "started" || !prepared.sidecar) {
-								return result(prepared.result);
+								return claimResult(prepared.result);
 							}
 							try {
 								await auth.storage.collaboration.commit({
@@ -348,7 +352,7 @@ export function hosted(
 									events: [],
 									now: auth.clock(),
 								});
-								return result(prepared.result);
+								return claimResult(prepared.result);
 							} catch (err) {
 								if (!(err instanceof StorageError) || err.failure !== "conflict") throw err;
 							}
