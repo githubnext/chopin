@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { lookup, parse, serialize, ulid, validate } from "@chopin/dialect";
+import { limits, lookup, parse, serialize, ulid, validate } from "@chopin/dialect";
 
 import * as room from "../plan/room";
 
@@ -34,7 +34,8 @@ type CreateArguments = Omit<CreateDocumentInput, "fingerprint">;
 const OWNER_PATTERN = "[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}";
 const REPOSITORY_PATTERN = "(?!\\.\\.?$)[A-Za-z0-9._-]{1,100}";
 export const REPOSITORY_PATH_PATTERN = `^${OWNER_PATTERN}/${REPOSITORY_PATTERN}$`;
-export const MAX_REQUEST_BYTES = 64 * 1_024;
+/** Allows a maximally sized MDX plan plus JSON escaping and its structured brief. */
+export const MAX_REQUEST_BYTES = limits.MAX_SOURCE_BYTES * 3;
 export const MAX_TITLE_LENGTH = 120;
 
 const OWNER = new RegExp(`^${OWNER_PATTERN}$`);

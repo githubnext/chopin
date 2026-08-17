@@ -329,14 +329,14 @@ describe("the MCP read protocol", () => {
 		);
 	});
 
-	it("rejects declared and streamed request bodies beyond the read-only transport budget", async () => {
+	it("rejects declared and streamed request bodies beyond the bounded transport budget", async () => {
 		let mcp = endpoint();
 		let declared = await mcp(
 			new Request("https://chopin.test/mcp", {
 				method: "POST",
 				headers: {
 					authorization: "Bearer allowed",
-					"content-length": "65537",
+					"content-length": "786433",
 					"content-type": "application/json",
 				},
 				body: "{}",
@@ -351,8 +351,8 @@ describe("the MCP read protocol", () => {
 				},
 				body: new ReadableStream({
 					start(controller) {
-						for (let index = 0; index < 3; index++) {
-							controller.enqueue(new Uint8Array(32_768));
+						for (let index = 0; index < 7; index++) {
+							controller.enqueue(new Uint8Array(131_072));
 						}
 						controller.close();
 					},
@@ -364,6 +364,40 @@ describe("the MCP read protocol", () => {
 			expect(response.status).toBe(413);
 			expect(await response.text()).toBe("request too large");
 		}
+	});
+
+	it("accepts a document-creation request beyond the former read-only budget", async () => {
+		let mcp = handler({
+			caller: () => "octocat",
+			documents: reader(),
+			create: {
+				async create(_caller, input) {
+					return {
+						kind: "created" as const,
+						document: {
+							id: "large-plan",
+							title: input.title,
+							brief: input.brief,
+							source: input.plan,
+							revision: 0,
+							url: "/channels/large-plan",
+						},
+					};
+				},
+			},
+		});
+		let response = await mcp(request({
+			jsonrpc: "2.0",
+			id: 11,
+			method: "tools/call",
+			params: {
+				name: "create_document",
+				arguments: { ...creation, plan: `# Large\n\n${"word ".repeat(14_000)}\n` },
+			},
+		}));
+
+		expect(response.status).toBe(200);
+		expect((await json(response)).error).toBeUndefined();
 	});
 
 	it("rejects non-scalar JSON-RPC ids and scalar initialize or tools-list parameters", async () => {
