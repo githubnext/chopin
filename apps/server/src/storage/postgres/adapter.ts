@@ -457,10 +457,10 @@ export class PostgresStorage implements StorageAdapter {
 		release: held => this.#release(held),
 	};
 
-	async migrate(handoffOwner?: string): Promise<void> {
+	async migrate(): Promise<void> {
 		await this.#run("migrate storage", async () => {
 			await this.#sql.connect();
-			await migrate(this.#sql, handoffOwner);
+			await migrate(this.#sql);
 		});
 	}
 

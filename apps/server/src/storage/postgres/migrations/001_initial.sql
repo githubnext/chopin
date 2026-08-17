@@ -9,8 +9,6 @@ CREATE TABLE users (
 CREATE TABLE web_sessions (
 	id text PRIMARY KEY,
 	user_id text NOT NULL REFERENCES users(id),
-	secret_hash bytea NOT NULL,
-	oauth_token bytea NOT NULL,
 	expires_at timestamptz NOT NULL,
 	created_at timestamptz NOT NULL
 );

@@ -63,10 +63,3 @@ database. A second process refuses startup. The holder renews the lease while
 serving and shuts down if renewal fails or its safety deadline passes. Adapter
 fencing prevents an expired holder from committing collaboration state even
 before shutdown completes.
-
-Pending schema migrations also refuse to run while that writer lease is active.
-Stop the serving process before upgrading; this prevents a replacement image
-from changing the session registry underneath the current binary. The
-production entrypoint retains a migration-owned fence and hands the same owner
-identity to the serving process, so an older process already waiting for the
-lease cannot enter between migration and startup.
