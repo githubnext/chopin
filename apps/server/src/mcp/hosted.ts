@@ -1,6 +1,8 @@
 import { GitHubError } from "../github/client";
+import { createHash } from "node:crypto";
 import * as Plan from "../plan/service";
 import * as Rooms from "../rooms";
+import { StorageError } from "../storage/errors";
 
 import type { HostedAuth } from "../auth/routes";
 import type { GitHubUser } from "../github/client";
@@ -12,6 +14,20 @@ export type HostedCaller = {
 };
 
 const BEARER = new RegExp("^Bearer ([A-Za-z0-9._~+/-]+=*)$", "i");
+
+function channelId(repositoryId: string, idempotencyKey: string): string {
+	let bytes = createHash("sha256")
+		.update(repositoryId)
+		.update("\0")
+		.update(idempotencyKey)
+		.digest();
+	bytes[6] = (bytes[6]! & 0x0f) | 0x50;
+	bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+	let hex = bytes.toString("hex", 0, 16);
+	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${
+		hex.slice(20)
+	}`;
+}
 
 /** Bind the backend-neutral MCP surface to hosted GitHub authentication. */
 export function hosted(auth: HostedAuth): McpOptions<HostedCaller> {
@@ -69,6 +85,7 @@ export function hosted(auth: HostedAuth): McpOptions<HostedCaller> {
 						return {
 							id: channel.id,
 							title: channel.title,
+							...(live.brief ? { brief: live.brief } : {}),
 							source: Plan.source(live),
 							revision: live.revision,
 						};
@@ -87,10 +104,85 @@ export function hosted(auth: HostedAuth): McpOptions<HostedCaller> {
 				) return undefined;
 				try {
 					let projected = await Plan.readStored(stored);
-					return { id: channel.id, title: channel.title, ...projected };
+					return {
+						id: channel.id,
+						title: channel.title,
+						...(projected.brief ? { brief: projected.brief } : {}),
+						source: projected.source,
+						revision: projected.revision,
+					};
 				} catch {
 					return undefined;
 				}
+			},
+		},
+		create: {
+			async create(caller, input) {
+				let parts = input.repository.split("/");
+				if (parts.length !== 2 || !parts[0] || !parts[1]) return { kind: "forbidden" };
+				let repository = await auth.github.repositoryAccess(
+					caller.oauthToken,
+					parts[0],
+					parts[1],
+				);
+				if (!repository || (!repository.permissions.push && !repository.permissions.admin)) {
+					return { kind: "forbidden" };
+				}
+				await auth.storage.users.put({
+					id: caller.user.id,
+					login: caller.user.login,
+					avatarUrl: caller.user.avatarUrl,
+					now: auth.clock(),
+				});
+				let { brief, plan, ...origin } = input;
+				let initial = await Plan.initial(plan, origin, brief);
+				let id = channelId(repository.id, input.idempotencyKey);
+				try {
+					await auth.storage.channels.create({
+						id,
+						repositoryId: repository.id,
+						repositoryOwner: repository.owner,
+						repositoryName: repository.name,
+						title: input.title,
+						createdBy: caller.user.id,
+						now: auth.clock(),
+						initial,
+					});
+				} catch (err) {
+					if (!(err instanceof StorageError) || err.failure !== "conflict") throw err;
+					let stored = await auth.storage.collaboration.load(id, auth.clock());
+					if (!stored || stored.channel.repositoryId !== repository.id) {
+						return { kind: "conflict" };
+					}
+					let restored = await Plan.readStored(stored);
+					if (
+						restored.origin?.idempotencyKey !== input.idempotencyKey
+						|| restored.origin.fingerprint !== input.fingerprint
+						|| !restored.brief
+					) return { kind: "conflict" };
+					return {
+						kind: "replayed",
+						document: {
+							id,
+							title: stored.channel.title,
+							brief: restored.brief,
+							source: restored.source,
+							revision: restored.revision,
+							url: `/channels/${id}`,
+						},
+					};
+				}
+				return {
+					kind: "created",
+					document: {
+						id,
+						title: input.title,
+						brief,
+						source: initial.source,
+						revision: 0,
+						url: `/channels/${id}`,
+					},
+				};
 			},
 		},
 	};

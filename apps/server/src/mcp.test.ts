@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { handler, TOOLS } from "./mcp";
 
-import type { CreateDocumentInput, Document, DocumentReader } from "./mcp";
+import type { CreateDocument, CreateDocumentInput, Document, DocumentReader } from "./mcp";
 
 const document: Document = {
 	id: "f401c8d6-3717-4f1d-8473-cfdd0af894e4",
@@ -57,6 +57,14 @@ function reader(): DocumentReader<string> {
 	};
 }
 
+function unavailable(): CreateDocument<string> {
+	return {
+		async create() {
+			return { kind: "forbidden" };
+		},
+	};
+}
+
 function endpoint() {
 	return handler({
 		caller: request =>
@@ -64,6 +72,7 @@ function endpoint() {
 				? "octocat"
 				: undefined,
 		documents: reader(),
+		create: unavailable(),
 	});
 }
 
@@ -218,6 +227,33 @@ describe("the MCP read protocol", () => {
 			offset: 0,
 		})]);
 		expect(created).toBe(false);
+	});
+
+	it("returns a structured issue for plan syntax that cannot be parsed", async () => {
+		let mcp = handler({
+			caller: () => "octocat",
+			documents: reader(),
+			create: {
+				async create() {
+					return { kind: "forbidden" as const };
+				},
+			},
+		});
+
+		let result = await json(
+			await mcp(request({
+				jsonrpc: "2.0",
+				id: 7,
+				method: "tools/call",
+				params: {
+					name: "create_document",
+					arguments: { ...creation, plan: "<Callout" },
+				},
+			})),
+		);
+
+		expect((result.result as { structuredContent: { issues: unknown[] } }).structuredContent.issues)
+			.toEqual([expect.objectContaining({ code: "parse", path: "root" })]);
 	});
 
 	it("reports a changed idempotent request as a tool conflict", async () => {
@@ -405,6 +441,7 @@ describe("the MCP read protocol", () => {
 		let inaccessible = await json(
 			await handler({
 				caller: () => "octocat",
+				create: unavailable(),
 				documents: {
 					async list() {
 						return [];

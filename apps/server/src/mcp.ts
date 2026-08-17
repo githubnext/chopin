@@ -69,7 +69,7 @@ export type McpOptions<Caller> = {
 	/** The host owns authentication; MCP only receives its result. */
 	caller(request: Request): Promise<Caller | undefined> | Caller | undefined;
 	documents: DocumentReader<Caller>;
-	create?: CreateDocument<Caller>;
+	create: CreateDocument<Caller>;
 };
 
 type Tool = {
@@ -346,7 +346,18 @@ function canonical(source: string):
 	| { source: string }
 	| { issues: Array<{ code: string; message: string; path: string; offset?: number }> }
 {
-	let tree = parse(source);
+	let tree: Root;
+	try {
+		tree = parse(source);
+	} catch (err) {
+		return {
+			issues: [{
+				code: "parse",
+				message: err instanceof Error ? err.message : String(err),
+				path: "root",
+			}],
+		};
+	}
 	identify(tree);
 	let result = validate(tree);
 	if (!result.ok) return { issues: result.issues };
@@ -498,7 +509,6 @@ export function handler<Caller>(
 					}
 					let prepared = canonical(input.plan);
 					if ("issues" in prepared) return respond(text({ issues: prepared.issues }, true));
-					if (!options.create) return respond({ content: [], isError: true });
 					let outcome = await options.create.create(caller, {
 						...input,
 						plan: prepared.source,
