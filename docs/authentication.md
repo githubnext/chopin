@@ -92,25 +92,8 @@ Webhooks are intentionally disabled for self-hosted deployments. Installation,
 repository-selection, and revocation changes are observed through request-time
 checks with a cache no longer than the one-minute open-socket recheck interval.
 
-### exe.dev development
-
-`bun run dev:exe` discovers the current VM through exe.dev's documented
-Reflection integration and supplies this exact runtime value without editing
-`.env`:
-
-```text
-APP_ORIGIN=https://<vm-name>.exe.xyz
-```
-
-A reusable development GitHub App may register
-`https://exe.xyz/auth/github/callback` with callback wildcard matching enabled.
-GitHub then accepts the exact callback Chopin sends for each VM. The App has one
-non-wildcard setup URL, so either update it for the current VM or leave it blank
-and return to Chopin manually after changing an installation.
-
-Wildcard callback matching covers sibling `*.exe.xyz` hosts outside this
-project's control. It is a development tradeoff, not a production callback
-policy. Use an exact callback in production.
+Environment-specific callback and proxy configuration is documented in
+[Remote development](exe-dev.md).
 
 ## Session boundary
 
