@@ -79,6 +79,16 @@ test("a diagram is shown with its source hidden by default", async ({ join, seed
 	await expect(content(page).getByRole("button", { name: "Show source" })).toBeVisible();
 });
 
+test("an invalid diagram leaves its error inside the fence", async ({ join, seed }) => {
+	await seed("```mermaid\nflowchart LR\nA[raw MemEntry[]]\n```\n");
+	let page = await join("ana");
+
+	await expect(content(page).locator("[data-plan-error]")).toContainText("Parse error");
+	await expect(
+		page.locator("body > div").filter({ hasText: "Syntax error in text" }),
+	).toHaveCount(0);
+});
+
 test("naming a fence colours it, and the name reaches the file", async ({ join, room, seed }) => {
 	await seed("```\nlet total = 1;\n```\n");
 	let page = await join("ana");
