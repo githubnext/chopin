@@ -502,7 +502,7 @@ try {
 try {
 	heldLease = await storage.leases.acquire(
 		"chopin:writer",
-		process.env.CHOPIN_WRITER_OWNER || crypto.randomUUID(),
+		crypto.randomUUID(),
 		LEASE_TTL_MS,
 	);
 	if (!heldLease) throw new Error("another Chopin instance owns the database");

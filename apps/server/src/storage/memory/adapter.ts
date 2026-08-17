@@ -166,7 +166,7 @@ export class MemoryStorage implements StorageAdapter {
 		release: held => this.#release(held),
 	};
 
-	async migrate(_handoffOwner?: string): Promise<void> {}
+	async migrate(): Promise<void> {}
 
 	async health(): Promise<void> {}
 

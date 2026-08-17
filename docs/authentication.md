@@ -43,15 +43,10 @@ used. Chopin acts on behalf of each signed-in user with a GitHub App user access
 token so repository-role checks and the user's Copilot entitlement remain
 theirs.
 
-This is a clean cutover from the former OAuth App integration. The migration
-removes all browser verifiers and GitHub credentials from PostgreSQL; replace
-the environment variables, sign in again, and revoke the old OAuth App after
+This is a clean cutover from the former OAuth App integration. No browser
+verifier or GitHub credential is part of the PostgreSQL schema; replace the
+environment variables, sign in again, and revoke the old OAuth App after
 validating the new App.
-
-Dropping the columns prevents future persistence but does not rewrite old
-backups or PostgreSQL WAL. Revoke the old authorization and retire any
-token-bearing backup retention separately if a previous deployment stored
-credentials.
 
 Configure Chopin with the App's slug and OAuth client credentials:
 

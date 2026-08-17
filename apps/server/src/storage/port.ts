@@ -72,7 +72,7 @@ export interface StorageAdapter {
 	readonly collaboration: CollaborationStore;
 	readonly leases: LeaseStore;
 
-	migrate(handoffOwner?: string): Promise<void>;
+	migrate(): Promise<void>;
 	health(): Promise<void>;
 	close(): Promise<void>;
 }
