@@ -301,4 +301,40 @@ describe("the hosted MCP adapter", () => {
 
 		expect(await adapter.documents.read(caller, opened.channel.id)).toBeUndefined();
 	});
+
+	it("treats an invalid open questionnaire as absent durable state", async () => {
+		let context = setup();
+		let opened = await plan(context);
+		await Service.close(opened.plan);
+		let stored = await context.storage.collaboration.load(opened.channel.id, context.now);
+		if (!stored?.snapshot) throw new Error("test channel has no checkpoint");
+		await context.storage.collaboration.commit({
+			channelId: opened.channel.id,
+			lease: opened.lease,
+			expectedRevision: stored.channel.revision,
+			operationId: crypto.randomUUID(),
+			epoch: stored.snapshot.epoch,
+			sidecar: {
+				version: 1,
+				revision: 40,
+				documentSeq: 0,
+				questions: [{ id: "question-1", status: "open", definition: {} }],
+				openQuestions: [{
+					id: "question-1",
+					definition: {},
+					model: [],
+					revision: -1,
+				}],
+				threads: [],
+				transcript: [],
+			},
+			events: [],
+			now: context.now,
+		});
+		let adapter = hosted(context.auth);
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller) throw new Error("test caller was not authenticated");
+
+		expect(await adapter.documents.read(caller, opened.channel.id)).toBeUndefined();
+	});
 });
