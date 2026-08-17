@@ -2,6 +2,7 @@ import { GitHubError } from "../github/client";
 import { StorageError } from "../storage/errors";
 
 import type { HostedAuth } from "../auth/routes";
+import type { AuthenticatedSession } from "../auth/session";
 import type { Repository } from "../github/client";
 import type { Router } from "../http/router";
 import type { ChannelCursor, ChannelRecord } from "../storage/model";
@@ -99,10 +100,9 @@ async function title(request: Request): Promise<string | undefined> {
 	}
 }
 
-async function failure(err: unknown, request: Request, auth: HostedAuth): Promise<Response> {
+async function failure(err: unknown, _request: Request, auth: HostedAuth): Promise<Response> {
 	if (err instanceof GitHubError) {
 		if (err.status === 401) {
-			await auth.sessions.revoke(request).catch(() => {});
 			return json({ error: "GitHub authorization expired" }, 401, auth.sessions.clearCookie());
 		}
 		return json({ error: err.message }, err.status);
@@ -125,14 +125,18 @@ async function failure(err: unknown, request: Request, auth: HostedAuth): Promis
 
 async function authorizedRepository(
 	auth: HostedAuth,
-	token: string,
+	session: AuthenticatedSession,
 	owner: string,
 	name: string,
 ): Promise<Repository> {
 	if (!OWNER.test(owner) || !REPOSITORY.test(name)) {
 		throw new GitHubError("repository not found", 404);
 	}
-	let repository = await auth.github.repositoryAccess(token, owner, name);
+	let result = await auth.sessions.use(
+		session,
+		token => auth.github.repositoryAccess(token, owner, name),
+	);
+	let repository = result.value;
 	if (!repository) throw new GitHubError("repository not found", 404);
 	return repository;
 }
@@ -152,7 +156,7 @@ export function registerChannelRoutes(
 				if (!session) return json({ error: "authentication required" }, 401);
 				let repo = await authorizedRepository(
 					auth,
-					session.oauthToken,
+					session,
 					params.owner!,
 					params.repository!,
 				);
@@ -190,7 +194,7 @@ export function registerChannelRoutes(
 				if (!session) return json({ error: "authentication required" }, 401);
 				let repo = await authorizedRepository(
 					auth,
-					session.oauthToken,
+					session,
 					params.owner!,
 					params.repository!,
 				);
@@ -232,7 +236,7 @@ export function registerChannelRoutes(
 			if (!channel) return json({ error: "channel not found" }, 404);
 			let repo = await authorizedRepository(
 				auth,
-				session.oauthToken,
+				session,
 				channel.repositoryOwner,
 				channel.repositoryName,
 			);
@@ -260,7 +264,7 @@ export function registerChannelRoutes(
 			if (!channel) return json({ error: "channel not found" }, 404);
 			let repo = await authorizedRepository(
 				auth,
-				session.oauthToken,
+				session,
 				channel.repositoryOwner,
 				channel.repositoryName,
 			);

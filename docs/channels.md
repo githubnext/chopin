@@ -2,8 +2,9 @@
 
 Chopin keeps channel metadata in the selected storage adapter and uses
 GitHub as the current authorization source. A repository must appear in the
-authenticated user's owner, collaborator or organization-member repository
-listing. Merely being public is not enough to expose its Chopin channels.
+intersection of the authenticated user's access and a personal or organization
+GitHub App installation. The installation must include that repository. Merely
+being public is not enough to expose its Chopin channels.
 
 GitHub read access may list and open channels. Push or admin access may create a
 channel and mutate its plan, chat and decisions. The HTTP API and WebSocket
@@ -37,6 +38,6 @@ deletes journal updates through the checkpoint sequence; it is a recovery tail,
 not permanent document history. A client update is acknowledged only after its
 fenced durable commit.
 
-Agent turns use the first invoking editor's OAuth session and
+Agent turns use the first invoking editor's GitHub App session and
 repository-scoped GitHub tools. The isolation and ownership model is described
 in [Copilot agent](hosted-agent.md).

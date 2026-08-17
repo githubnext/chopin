@@ -24,11 +24,16 @@ export async function admit(
 		if (!CHANNEL.test(id)) return { status: 400, reason: "bad channel" };
 		let channel = await auth.storage.channels.get(id);
 		if (!channel) return { status: 404, reason: "channel not found" };
-		let repository = await auth.github.repositoryAccess(
-			session.oauthToken,
-			channel.repositoryOwner,
-			channel.repositoryName,
+		let access = await auth.sessions.use(
+			session,
+			token =>
+				auth.github.repositoryAccess(
+					token,
+					channel.repositoryOwner,
+					channel.repositoryName,
+				),
 		);
+		let repository = access.value;
 		if (!repository || repository.id !== channel.repositoryId || !repository.permissions.pull) {
 			return { status: 404, reason: "channel not found" };
 		}
@@ -53,10 +58,14 @@ export async function admit(
 		};
 	} catch (err) {
 		if (err instanceof GitHubError) {
-			if (err.status === 401) await auth.sessions.revoke(request).catch(() => {});
+			let transient = err.status === 429 || err.status === 502 || err.status === 503;
 			return {
-				status: err.status === 401 ? 401 : err.status === 429 ? 429 : 403,
-				reason: err.status === 401 ? "GitHub authorization expired" : "repository access failed",
+				status: err.status === 401 ? 401 : transient ? 503 : 403,
+				reason: err.status === 401
+					? "GitHub authorization expired"
+					: transient
+					? "repository access is temporarily unavailable"
+					: "repository access failed",
 			};
 		}
 		if (err instanceof StorageError) {

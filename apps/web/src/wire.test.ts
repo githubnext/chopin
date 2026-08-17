@@ -39,6 +39,16 @@ function endpoint(accept: boolean): number {
 	return server.port!;
 }
 
+function unavailable(): number {
+	let server = Bun.serve({
+		port: 0,
+		hostname: "127.0.0.1",
+		fetch: () => new Response("try again", { status: 503 }),
+	});
+	servers.push(server);
+	return server.port!;
+}
+
 function connect(port: number, seen: Status[]): Wire {
 	// `location` is what the client derives its URL from, and there is none in
 	// a test runtime.
@@ -93,6 +103,14 @@ describe("status", () => {
 
 		await until(() => wire.status === "denied", "denied");
 		expect(seen).toContain("denied");
+	});
+
+	it("retries a temporarily unavailable admission", async () => {
+		let seen: Status[] = [];
+		let wire = connect(unavailable(), seen);
+
+		await until(() => wire.status === "reconnecting", "reconnecting");
+		expect(seen).not.toContain("denied");
 	});
 
 	it("rejects a pending request when the connection goes away", async () => {

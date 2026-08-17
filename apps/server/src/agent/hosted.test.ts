@@ -18,12 +18,12 @@ describe("hosted Copilot configuration", () => {
 			{ model: "model" },
 			{ tools: [tool] },
 			{
-				token: "gho_owner",
+				token: "ghu_owner",
 				repository: { id: "R_repo", owner: "octo-org", name: "score", defaultBranch: "main" },
 			},
 		);
 
-		expect(config.gitHubToken).toBe("gho_owner");
+		expect(config.gitHubToken).toBe("ghu_owner");
 		expect(config.availableTools).toEqual(["mcp:*", "custom:*"]);
 		expect(config.tools?.[0]?.skipPermission).toBe(false);
 		expect(config.enableConfigDiscovery).toBe(false);
@@ -34,7 +34,7 @@ describe("hosted Copilot configuration", () => {
 		expect(config.largeOutput).toEqual({ enabled: false });
 		expect(config.mcpServers?.github).toMatchObject({
 			url: "https://api.githubcopilot.com/mcp/",
-			headers: { Authorization: "Bearer gho_owner", "X-MCP-Readonly": "true" },
+			headers: { Authorization: "Bearer ghu_owner", "X-MCP-Readonly": "true" },
 		});
 		expect(config.customAgents?.[0]?.prompt).toContain("read_repository_file");
 		expect(config.customAgents?.[0]?.prompt).not.toContain("You have `view`, `grep` and `glob`");
@@ -98,7 +98,7 @@ describe("hosted repository tools", () => {
 	it("binds every read to one repository and filters search results", async () => {
 		let urls: URL[] = [];
 		let tools = repositoryTools({
-			token: "gho_owner",
+			token: "ghu_owner",
 			repository: { id: "R_repo", owner: "octo-org", name: "score", defaultBranch: "main" },
 			fetch: async input => {
 				let url = new URL(String(input));

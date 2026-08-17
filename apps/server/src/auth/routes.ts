@@ -16,6 +16,7 @@ type Dependencies = {
 	clock?: Clock;
 	agent?: boolean;
 	onSessionRevoked?: (sessionId: string) => Promise<void>;
+	onCredentialsWillRotate?: (sessionId: string, revision: number) => Promise<void>;
 };
 
 export type HostedAuth = {
@@ -96,7 +97,17 @@ export function registerAuthRoutes(
 	let storage = dependencies.storage;
 	let github = dependencies.github ?? new GitHubClient();
 	let secure = new URL(config.origin).protocol === "https:";
-	let sessions = new Sessions(storage, config.encryptionKey, secure, clock);
+	let sessions = new Sessions(storage, config.encryptionKey, secure, clock, {
+		refresh: refreshToken =>
+			github.refresh({
+				clientId: config.clientId,
+				clientSecret: config.clientSecret,
+				refreshToken,
+			}),
+		beforeRefresh: dependencies.onCredentialsWillRotate,
+		onRevoked: dependencies.onSessionRevoked,
+		invalidate: token => github.invalidate(token),
+	});
 	let attempts = new OAuthAttempts(config.encryptionKey, secure, clock);
 	let redirectUri = `${config.origin}/auth/github/callback`;
 	let context: HostedAuth = { config, storage, github, sessions, clock };
@@ -112,6 +123,21 @@ export function registerAuthRoutes(
 		return redirected(location, 302, [issued.cookie]);
 	});
 
+	router.on("GET", "/auth/github/install", () =>
+		redirected(
+			`https://github.com/apps/${encodeURIComponent(config.appSlug)}/installations/new`,
+			302,
+			[],
+		));
+
+	// GitHub's installation_id query parameter is intentionally ignored. API access is
+	// always re-established from the signed-in user's token.
+	router.on("GET", "/auth/github/setup", async request => {
+		let authenticated = await sessions.authenticate(request).catch(() => undefined);
+		if (authenticated) github.invalidate(authenticated.access.token);
+		return redirected("/", 303, []);
+	});
+
 	router.on("GET", "/auth/github/callback", async (request, url) => {
 		let clear = attempts.clearCookie();
 		try {
@@ -124,17 +150,17 @@ export function registerAuthRoutes(
 			if (!code || !state || !stored || stored.state !== state) {
 				return json({ error: "OAuth state is missing or invalid" }, 400, clear);
 			}
-			let token = await github.exchange({
+			let grant = await github.exchange({
 				clientId: config.clientId,
 				clientSecret: config.clientSecret,
 				redirectUri,
 				code,
 				verifier: stored.verifier,
 			});
-			let profile = await github.user(token);
+			let profile = await github.user(grant.accessToken);
 			let now = clock();
 			await storage.users.put({ ...profile, now });
-			let session = await sessions.issue(profile.id, token);
+			let session = await sessions.issue(profile.id, grant);
 			return redirected("/", 303, [clear, session.cookie]);
 		} catch (err) {
 			let response = failure(err);
@@ -151,6 +177,7 @@ export function registerAuthRoutes(
 			}
 			return json({
 				agent: dependencies.agent ?? true,
+				installUrl: "/auth/github/install",
 				user: {
 					id: authenticated.user.id,
 					login: authenticated.user.login,
@@ -163,7 +190,7 @@ export function registerAuthRoutes(
 		}
 	});
 
-	router.on("GET", "/api/repositories", async (request, url) => {
+	router.on("GET", "/api/github/installations", async (request, url) => {
 		try {
 			let requestedPage = page(url);
 			if (!requestedPage) {
@@ -172,11 +199,13 @@ export function registerAuthRoutes(
 			let authenticated = await sessions.authenticate(request);
 			if (!authenticated) return json({ error: "authentication required" }, 401);
 			try {
-				return json(await github.repositories(authenticated.oauthToken, requestedPage));
+				let result = await sessions.use(
+					authenticated,
+					token => github.installations(token, requestedPage),
+				);
+				return json(result.value);
 			} catch (err) {
 				if (err instanceof GitHubError && err.status === 401) {
-					let revoked = await sessions.revoke(request);
-					if (revoked) await dependencies.onSessionRevoked?.(revoked);
 					return json({ error: "GitHub authorization expired" }, 401, sessions.clearCookie());
 				}
 				throw err;
@@ -186,13 +215,49 @@ export function registerAuthRoutes(
 		}
 	});
 
+	router.on(
+		"GET",
+		"/api/github/installations/:installationId/repositories",
+		async (request, url, params) => {
+			try {
+				let requestedPage = page(url);
+				if (!requestedPage) {
+					return json({ error: "page must be an integer between 1 and 10000" }, 400);
+				}
+				let installationId = params.installationId!;
+				if (!/^\d+$/.test(installationId)) {
+					return json({ error: "installation not found" }, 404);
+				}
+				let authenticated = await sessions.authenticate(request);
+				if (!authenticated) return json({ error: "authentication required" }, 401);
+				try {
+					let result = await sessions.use(
+						authenticated,
+						token => github.installationRepositories(token, installationId, requestedPage),
+					);
+					return json(result.value);
+				} catch (err) {
+					if (err instanceof GitHubError && err.status === 401) {
+						return json(
+							{ error: "GitHub authorization expired" },
+							401,
+							sessions.clearCookie(),
+						);
+					}
+					throw err;
+				}
+			} catch (err) {
+				return failure(err);
+			}
+		},
+	);
+
 	router.on("POST", "/auth/logout", async request => {
 		if (request.headers.get("origin") !== config.origin) {
 			return json({ error: "origin is not allowed" }, 403);
 		}
 		try {
-			let revoked = await sessions.revoke(request);
-			if (revoked) await dependencies.onSessionRevoked?.(revoked);
+			await sessions.revoke(request);
 			return empty(204, sessions.clearCookie());
 		} catch (err) {
 			return failure(err);

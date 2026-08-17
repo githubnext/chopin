@@ -34,8 +34,9 @@ try {
 			DATABASE_URL: supplied[index] || url,
 			STORAGE_DRIVER: "postgres",
 			APP_ORIGIN: `http://127.0.0.1:${8788 + index}`,
-			GITHUB_OAUTH_CLIENT_ID: "e2e",
-			GITHUB_OAUTH_CLIENT_SECRET: "e2e",
+			GITHUB_APP_SLUG: "chopin-e2e",
+			GITHUB_APP_CLIENT_ID: "e2e",
+			GITHUB_APP_CLIENT_SECRET: "e2e",
 			SESSION_ENCRYPTION_KEY: KEY,
 		});
 	}

@@ -4,7 +4,12 @@ export type User = {
 	avatarUrl: string;
 };
 
-export type Session = { user: User | null; agent: boolean; expiresAt?: string };
+export type Session = {
+	user: User | null;
+	agent: boolean;
+	installUrl?: string;
+	expiresAt?: string;
+};
 
 export type Repository = {
 	id: string;
@@ -31,6 +36,29 @@ export type Channel = {
 
 export type RepositoryPage = {
 	repositories: Repository[];
+	nextPage?: number;
+};
+
+export type GitHubInstallation = {
+	id: string;
+	account: {
+		login: string;
+		avatarUrl: string;
+		type: "user" | "organization";
+	};
+	repositorySelection: "all" | "selected";
+	configureUrl: string;
+	suspended: boolean;
+	permissions: {
+		contents: boolean;
+		pullRequests: boolean;
+		checks: boolean;
+		statuses: boolean;
+	};
+};
+
+export type InstallationPage = {
+	installations: GitHubInstallation[];
 	nextPage?: number;
 };
 
@@ -79,8 +107,17 @@ export function session(): Promise<Session> {
 	return response("/api/session");
 }
 
-export function repositories(page = 1): Promise<RepositoryPage> {
-	return response(`/api/repositories?page=${page}`);
+export function installations(page = 1): Promise<InstallationPage> {
+	return response(`/api/github/installations?page=${page}`);
+}
+
+export function installationRepositories(
+	installationId: string,
+	page = 1,
+): Promise<RepositoryPage> {
+	return response(
+		`/api/github/installations/${encodeURIComponent(installationId)}/repositories?page=${page}`,
+	);
 }
 
 export function channels(owner: string, repository: string, cursor?: string): Promise<ChannelPage> {

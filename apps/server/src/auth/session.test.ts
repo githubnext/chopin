@@ -1,7 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
+import { GitHubError, GitHubTokenError } from "../github/client";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { OAuthAttempts, Sessions } from "./session";
+
+import type { GitHubTokenGrant } from "../github/client";
 
 function pair(cookie: string): string {
 	return cookie.split(";", 1)[0]!;
@@ -17,6 +20,15 @@ async function stored(storage: MemoryStorage, id: string, now: Date) {
 	return value;
 }
 
+function grant(accessToken: string, refreshToken = "ghr_refresh"): GitHubTokenGrant {
+	return {
+		accessToken,
+		accessExpiresIn: 28_800,
+		refreshToken,
+		refreshExpiresIn: 15_897_600,
+	};
+}
+
 describe("hosted login sessions", () => {
 	it("stores only a secret hash and encrypted OAuth token", async () => {
 		let storage = new MemoryStorage();
@@ -29,7 +41,7 @@ describe("hosted login sessions", () => {
 			now,
 		});
 		let sessions = new Sessions(storage, key, true, () => now);
-		let issued = await sessions.issue("U_test", "gho_plaintext_secret");
+		let issued = await sessions.issue("U_test", grant("ghu_plaintext_secret"));
 		let record = await stored(storage, issued.id, now);
 
 		expect(issued.cookie).toContain("__Host-chopin_session=");
@@ -37,13 +49,15 @@ describe("hosted login sessions", () => {
 		expect(issued.cookie).toContain("SameSite=Lax");
 		expect(issued.cookie).toContain("Secure");
 		expect(record.secretHash).toHaveLength(32);
-		expect(Buffer.from(record.oauthToken).toString("utf8")).not.toContain("gho_plaintext_secret");
+		expect(Buffer.from(record.oauthToken).toString("utf8")).not.toContain("ghu_plaintext_secret");
+		expect(Buffer.from(record.oauthToken).toString("utf8")).not.toContain("ghr_refresh");
 
 		let authenticated = await sessions.authenticate(request(pair(issued.cookie)));
 		expect(authenticated?.user.login).toBe("octocat");
-		expect(authenticated?.oauthToken).toBe("gho_plaintext_secret");
+		expect(authenticated?.access.token).toBe("ghu_plaintext_secret");
+		expect(authenticated?.access.revision).toBe(1);
 		expect(authenticated?.session.id).toBe(issued.id);
-		expect((await sessions.resolve(issued.id))?.oauthToken).toBe("gho_plaintext_secret");
+		expect((await sessions.resolve(issued.id))?.access.token).toBe("ghu_plaintext_secret");
 	});
 
 	it("rejects the wrong secret, duplicate cookies and the wrong encryption key", async () => {
@@ -52,7 +66,7 @@ describe("hosted login sessions", () => {
 		let key = new Uint8Array(32).fill(3);
 		await storage.users.put({ id: "U_test", login: "mona", avatarUrl: "", now });
 		let sessions = new Sessions(storage, key, false, () => now);
-		let issued = await sessions.issue("U_test", "gho_secret");
+		let issued = await sessions.issue("U_test", grant("ghu_secret"));
 		let cookie = pair(issued.cookie);
 		let id = cookie.slice(cookie.indexOf("=") + 1).split(".")[0]!;
 		let wrong = `${sessions.cookieName}=${id}.${Buffer.alloc(32, 9).toString("base64url")}`;
@@ -68,7 +82,7 @@ describe("hosted login sessions", () => {
 		let now = new Date("2026-08-13T12:00:00.000Z");
 		await storage.users.put({ id: "U_test", login: "mona", avatarUrl: "", now });
 		let sessions = new Sessions(storage, new Uint8Array(32).fill(5), false, () => now);
-		let issued = await sessions.issue("U_test", "gho_secret");
+		let issued = await sessions.issue("U_test", grant("ghu_secret"));
 		let cookie = pair(issued.cookie);
 
 		await sessions.revoke(request(`${sessions.cookieName}=wrong`));
@@ -76,10 +90,154 @@ describe("hosted login sessions", () => {
 		await sessions.revoke(request(cookie));
 		expect(await sessions.authenticate(request(cookie))).toBeUndefined();
 
-		let replacement = await sessions.issue("U_test", "gho_secret");
+		let replacement = await sessions.issue("U_test", grant("ghu_secret"));
 		now = new Date(replacement.expiresAt);
 		expect(await sessions.authenticate(request(pair(replacement.cookie)))).toBeUndefined();
 		expect(sessions.clearCookie()).toContain("Max-Age=0");
+	});
+
+	it("serializes refreshes and stores the rotated credential bundle", async () => {
+		let storage = new MemoryStorage();
+		let now = new Date("2026-08-13T12:00:00.000Z");
+		await storage.users.put({ id: "U_test", login: "mona", avatarUrl: "", now });
+		let refreshes = 0;
+		let sessions = new Sessions(storage, new Uint8Array(32).fill(6), false, () => now, {
+			refresh: async token => {
+				refreshes++;
+				expect(token).toBe("ghr_first");
+				await Bun.sleep(10);
+				return grant("ghu_second", "ghr_second");
+			},
+		});
+		let issued = await sessions.issue("U_test", {
+			...grant("ghu_first", "ghr_first"),
+			accessExpiresIn: 60,
+		});
+		let cookie = request(pair(issued.cookie));
+
+		let [first, second] = await Promise.all([
+			sessions.authenticate(cookie),
+			sessions.authenticate(cookie),
+		]);
+		expect(refreshes).toBe(1);
+		expect(first?.access).toMatchObject({ token: "ghu_second", revision: 2 });
+		expect(second?.access).toMatchObject({ token: "ghu_second", revision: 2 });
+		expect(Buffer.from((await stored(storage, issued.id, now)).oauthToken).toString("utf8"))
+			.not.toContain("ghr_second");
+	});
+
+	it("does not resurrect a session logged out during refresh", async () => {
+		let storage = new MemoryStorage();
+		let now = new Date("2026-08-13T12:00:00.000Z");
+		let key = new Uint8Array(32).fill(10);
+		await storage.users.put({ id: "U_test", login: "mona", avatarUrl: "", now });
+		let started = Promise.withResolvers<void>();
+		let release = Promise.withResolvers<void>();
+		let sessions = new Sessions(storage, key, false, () => now, {
+			refresh: async () => {
+				started.resolve();
+				await release.promise;
+				return grant("ghu_second", "ghr_second");
+			},
+		});
+		let issued = await sessions.issue("U_test", {
+			...grant("ghu_first", "ghr_first"),
+			accessExpiresIn: 60,
+		});
+		let authenticated = sessions.authenticate(request(pair(issued.cookie)));
+		await started.promise;
+		await sessions.revoke(request(pair(issued.cookie)));
+		release.resolve();
+
+		expect(await authenticated).toBeUndefined();
+		expect(await storage.sessions.get(issued.id, now)).toBeUndefined();
+	});
+
+	it("retries one rejected API token with a rotated credential", async () => {
+		let storage = new MemoryStorage();
+		let now = new Date("2026-08-13T12:00:00.000Z");
+		await storage.users.put({ id: "U_test", login: "mona", avatarUrl: "", now });
+		let sessions = new Sessions(storage, new Uint8Array(32).fill(11), false, () => now, {
+			refresh: async () => grant("ghu_second", "ghr_second"),
+		});
+		let issued = await sessions.issue("U_test", grant("ghu_first", "ghr_first"));
+		let authenticated = (await sessions.authenticate(request(pair(issued.cookie))))!;
+		let attempted: string[] = [];
+
+		let result = await sessions.use(authenticated, token => {
+			attempted.push(token);
+			if (token === "ghu_first") throw new GitHubError("rejected", 401);
+			return Promise.resolve("accepted");
+		});
+		expect(result.value).toBe("accepted");
+		expect(result.authenticated.access.revision).toBe(2);
+		expect(attempted).toEqual(["ghu_first", "ghu_second"]);
+	});
+
+	it("does not revoke a newer credential after a stale second 401", async () => {
+		let storage = new MemoryStorage();
+		let now = new Date("2026-08-13T12:00:00.000Z");
+		await storage.users.put({ id: "U_test", login: "mona", avatarUrl: "", now });
+		let revision = 1;
+		let sessions = new Sessions(storage, new Uint8Array(32).fill(13), false, () => now, {
+			refresh: async () => {
+				revision++;
+				return grant(`ghu_${revision}`, `ghr_${revision}`);
+			},
+		});
+		let issued = await sessions.issue("U_test", grant("ghu_1", "ghr_1"));
+		let first = (await sessions.resolve(issued.id))!;
+		let secondAttempt = Promise.withResolvers<void>();
+		let release = Promise.withResolvers<void>();
+		let stale = sessions.use(first, async token => {
+			if (token === "ghu_1") throw new GitHubError("rejected", 401);
+			secondAttempt.resolve();
+			await release.promise;
+			throw new GitHubError("stale rejection", 401);
+		});
+		await secondAttempt.promise;
+
+		let second = (await sessions.resolve(issued.id))!;
+		let current = await sessions.use(second, token => {
+			if (token === "ghu_2") throw new GitHubError("rejected", 401);
+			return Promise.resolve(token);
+		});
+		expect(current.value).toBe("ghu_3");
+		release.resolve();
+		await expect(stale).rejects.toMatchObject({ status: 503 });
+		expect((await sessions.resolve(issued.id))?.access).toMatchObject({
+			token: "ghu_3",
+			revision: 3,
+		});
+	});
+
+	it("retains transiently failed credentials but deletes a rejected refresh token", async () => {
+		let storage = new MemoryStorage();
+		let now = new Date("2026-08-13T12:00:00.000Z");
+		let key = new Uint8Array(32).fill(12);
+		await storage.users.put({ id: "U_test", login: "mona", avatarUrl: "", now });
+		let transient = new Sessions(storage, key, false, () => now, {
+			refresh: async () => {
+				throw new GitHubTokenError("unavailable");
+			},
+		});
+		let issued = await transient.issue("U_test", {
+			...grant("ghu_first", "ghr_first"),
+			accessExpiresIn: 1,
+		});
+		now = new Date(now.getTime() + 2_000);
+		await expect(transient.authenticate(request(pair(issued.cookie)))).rejects.toThrow(
+			"unavailable",
+		);
+		expect(await storage.sessions.get(issued.id, now)).toBeDefined();
+
+		let terminal = new Sessions(storage, key, false, () => now, {
+			refresh: async () => {
+				throw new GitHubTokenError("bad refresh", 401, true);
+			},
+		});
+		expect(await terminal.authenticate(request(pair(issued.cookie)))).toBeUndefined();
+		expect(await storage.sessions.get(issued.id, now)).toBeUndefined();
 	});
 });
 

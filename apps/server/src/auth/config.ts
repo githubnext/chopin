@@ -1,5 +1,6 @@
 export type AuthConfig = {
 	origin: string;
+	appSlug: string;
 	clientId: string;
 	clientSecret: string;
 	encryptionKey: Uint8Array;
@@ -40,14 +41,19 @@ function encryptionKey(raw: string | undefined): Uint8Array {
 }
 
 export function loadAuth(): AuthConfig {
-	let clientId = process.env.GITHUB_OAUTH_CLIENT_ID;
-	let clientSecret = process.env.GITHUB_OAUTH_CLIENT_SECRET;
-	if (!clientId) throw new Error("GITHUB_OAUTH_CLIENT_ID is required");
+	let appSlug = process.env.GITHUB_APP_SLUG;
+	let clientId = process.env.GITHUB_APP_CLIENT_ID;
+	let clientSecret = process.env.GITHUB_APP_CLIENT_SECRET;
+	if (!appSlug || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(appSlug)) {
+		throw new Error("GITHUB_APP_SLUG must be a lowercase GitHub App slug");
+	}
+	if (!clientId) throw new Error("GITHUB_APP_CLIENT_ID is required");
 	if (!clientSecret) {
-		throw new Error("GITHUB_OAUTH_CLIENT_SECRET is required");
+		throw new Error("GITHUB_APP_CLIENT_SECRET is required");
 	}
 	return {
 		origin: origin(process.env.APP_ORIGIN),
+		appSlug,
 		clientId,
 		clientSecret,
 		encryptionKey: encryptionKey(process.env.SESSION_ENCRYPTION_KEY),

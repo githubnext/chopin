@@ -102,6 +102,45 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
+		it("rotates session ciphertext with compare-and-swap semantics", async () => {
+			let storage = await opened(factory);
+			try {
+				let { sessionId, channelId } = await userAndChannel(storage);
+				let now = new Date("2026-01-03T03:04:05.000Z");
+				let claimed = await storage.channels.claimAgentOwner(channelId, sessionId, now);
+				let original = new Uint8Array([4, 5, 6]);
+				let replacement = new Uint8Array([7, 8, 9]);
+
+				expect(
+					await storage.sessions.replaceToken(
+						sessionId,
+						original,
+						replacement,
+						now,
+					),
+				).toBe(true);
+				expect(
+					await storage.sessions.replaceToken(
+						sessionId,
+						original,
+						new Uint8Array([10]),
+						now,
+					),
+				).toBe(false);
+				expect(await storage.sessions.deleteToken(sessionId, original, now)).toBe(false);
+				expect(await storage.sessions.deleteToken(sessionId, replacement, now)).toBe(true);
+				expect(await storage.sessions.get(sessionId, now)).toBeUndefined();
+				let saved = await storage.collaboration.load(channelId, now);
+				expect(saved!.agent).toMatchObject({
+					generation: claimed.generation,
+					status: "unavailable",
+				});
+				expect(saved!.agent!.ownerSessionId).toBeUndefined();
+			} finally {
+				await storage.close();
+			}
+		});
+
 		it("lists only a repository's channels in stable order", async () => {
 			let storage = await opened(factory);
 			try {

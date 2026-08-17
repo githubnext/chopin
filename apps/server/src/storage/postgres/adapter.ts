@@ -381,6 +381,37 @@ export class PostgresStorage implements StorageAdapter {
 			`;
 				return found ? session(found) : undefined;
 			}),
+		replaceToken: (id, expected, replacement, now) =>
+			this.#run("replace login credentials", async () => {
+				let changed = await this.#sql<{ id: string }[]>`
+				UPDATE web_sessions
+				SET oauth_token = ${replacement}
+				WHERE id = ${id} AND oauth_token = ${expected} AND expires_at > ${now}
+				RETURNING id
+			`;
+				return changed.length > 0;
+			}),
+		deleteToken: (id, expected, now) =>
+			this.#run("delete rejected login credentials", () =>
+				this.#sql.begin(async transaction => {
+					let [locked] = await transaction<{ id: string }[]>`
+					SELECT id FROM web_sessions
+					WHERE id = ${id} AND oauth_token = ${expected} AND expires_at > ${now}
+					FOR UPDATE
+				`;
+					if (!locked) return false;
+					await transaction`
+					UPDATE agent_state
+					SET owner_session_id = NULL, status = 'unavailable', updated_at = ${now}
+					WHERE owner_session_id = ${id}
+				`;
+					let deleted = await transaction<{ id: string }[]>`
+					DELETE FROM web_sessions
+					WHERE id = ${id}
+					RETURNING id
+				`;
+					return deleted.length > 0;
+				})),
 		delete: id =>
 			this.#run("delete login session", () =>
 				this.#sql.begin(async transaction => {

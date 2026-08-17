@@ -11,17 +11,6 @@ const score = {
 	permissions: { pull: true, push: true, admin: false },
 };
 
-const notes = {
-	id: "R_notes",
-	owner: "octocat",
-	name: "notes",
-	fullName: "octocat/notes",
-	private: false,
-	url: "https://github.com/octocat/notes",
-	defaultBranch: "main",
-	permissions: { pull: true, push: false, admin: false },
-};
-
 test("an authenticated repository creates a channel workspace", async ({ baseURL, page }) => {
 	await authenticate(page, "octocat", baseURL!);
 	await page.goto("/");
@@ -95,18 +84,71 @@ test("the repository picker stays inside a narrow viewport", async ({ baseURL, p
 	expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(200);
 });
 
+test("an authorized user without an installation is sent to install the App", async ({ baseURL, page }) => {
+	await authenticate(page, "octocat", baseURL!);
+	await page.route(
+		"**/api/github/installations?*",
+		route => route.fulfill({ json: { installations: [] } }),
+	);
+	await page.goto("/");
+
+	await expect(page.getByRole("link", { name: "Install GitHub App" })).toHaveAttribute(
+		"href",
+		"/auth/github/install",
+	);
+});
+
+test("GitHub installation pagination reaches the repository picker", async ({ baseURL, page }) => {
+	await authenticate(page, "paged", baseURL!);
+	await page.goto("/");
+
+	await expect(page.getByRole("option", { name: /octo-org\/score/ })).toBeVisible();
+	await page.getByRole("button", { name: "More from octo-org" }).click();
+	await expect(page.getByRole("option", { name: /^octo-org\/archive-1\b/ })).toBeVisible();
+});
+
 test("the repository picker retries and appends unique pages", async ({ baseURL, page }) => {
 	await authenticate(page, "octocat", baseURL!);
 	let fail = true;
-	await page.route("**/api/repositories?*", async route => {
-		let requested = new URL(route.request().url()).searchParams.get("page");
-		if (requested === "1" && fail) {
+	await page.route(/\/api\/github\/installations\?page=\d+$/, async route => {
+		if (fail) {
 			fail = false;
 			await route.fulfill({ status: 503, json: { error: "temporary failure" } });
-		} else if (requested === "1") {
+		} else {
+			await route.fulfill({
+				json: {
+					installations: [{
+						id: "101",
+						account: { login: "octo-org", avatarUrl: "", type: "organization" },
+						repositorySelection: "selected",
+						configureUrl: "https://github.com/settings/installations/101",
+						suspended: false,
+						permissions: {
+							contents: true,
+							pullRequests: true,
+							checks: true,
+							statuses: true,
+						},
+					}],
+				},
+			});
+		}
+	});
+	await page.route(/\/api\/github\/installations\/101\/repositories\?page=\d+$/, async route => {
+		let requested = new URL(route.request().url()).searchParams.get("page");
+		if (requested === "1") {
 			await route.fulfill({ json: { repositories: [score], nextPage: 2 } });
 		} else {
-			await route.fulfill({ json: { repositories: [score, notes] } });
+			await route.fulfill({
+				json: {
+					repositories: [score, {
+						...score,
+						id: "R_archive",
+						name: "archive",
+						fullName: "octo-org/archive",
+					}],
+				},
+			});
 		}
 	});
 	await page.goto("/");
@@ -114,8 +156,8 @@ test("the repository picker retries and appends unique pages", async ({ baseURL,
 	await expect(page.getByRole("alert")).toHaveText("Could not load repositories.");
 	await page.getByRole("button", { name: "Try again" }).click();
 	await expect(page.getByRole("option", { name: /octo-org\/score/ })).toBeVisible();
-	await page.getByRole("button", { name: "More repositories" }).click();
-	await expect(page.getByRole("option", { name: /octocat\/notes/ })).toBeVisible();
+	await page.getByRole("button", { name: "More from octo-org" }).click();
+	await expect(page.getByRole("option", { name: /octo-org\/archive/ })).toBeVisible();
 	await expect(page.getByRole("option", { name: /octo-org\/score/ })).toHaveCount(1);
 });
 

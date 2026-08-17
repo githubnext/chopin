@@ -20,6 +20,8 @@ export type Identity = {
 	client: string;
 };
 
+export type AuthorizationResult = "allowed" | "denied" | "unavailable";
+
 export type SocketData = Identity & {
 	room: string;
 	canEdit: boolean;
@@ -33,7 +35,7 @@ export type SocketData = Identity & {
 	repositoryDefaultBranch: string;
 	accessCheckedAt: number;
 	authorizationTimer?: ReturnType<typeof setTimeout>;
-	authorizationRefresh?: Promise<boolean>;
+	authorizationRefresh?: Promise<AuthorizationResult>;
 	closed?: boolean;
 };
 

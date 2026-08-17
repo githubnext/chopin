@@ -22,14 +22,17 @@ Every built-in adapter must provide:
 - monotonic sequences across checkpoints;
 - atomic first-agent ownership with a generation token;
 - expiring login sessions;
+- compare-and-swap replacement and conditional deletion of encrypted login
+  credentials;
 - renewable leases whose fencing token is checked by collaboration commits,
   epoch replacements, and checkpoints;
 - atomic checkpoint replacement; and
 - distinct conflict, missing, corrupt and unavailable failures.
 
-The application owns OAuth encryption, payload validation and Yjs semantics.
-An adapter must return encrypted tokens, Yjs updates and checkpoint byte arrays
-byte-for-byte, and versioned JSON with the same semantic value.
+The application owns GitHub credential encryption, payload validation and Yjs
+semantics. An adapter must return encrypted credential bundles, Yjs updates and
+checkpoint byte arrays byte-for-byte, and versioned JSON with the same semantic
+value.
 
 ## Adding an adapter
 

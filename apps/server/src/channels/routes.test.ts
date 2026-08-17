@@ -6,7 +6,14 @@ import { MemoryStorage } from "../storage/memory/adapter";
 import { registerChannelRoutes } from "./routes";
 
 import type { HostedAuth } from "../auth/routes";
-import type { GitHub, GitHubUser, Repository, RepositoryPage } from "../github/client";
+import type {
+	GitHub,
+	GitHubTokenGrant,
+	GitHubUser,
+	InstallationPage,
+	Repository,
+	RepositoryPage,
+} from "../github/client";
 
 class FakeGitHub implements GitHub {
 	affiliated = true;
@@ -25,15 +32,23 @@ class FakeGitHub implements GitHub {
 		return "https://github.test/authorize";
 	}
 
-	async exchange(): Promise<string> {
-		return "gho_user";
+	async exchange(): Promise<GitHubTokenGrant> {
+		return grant("ghu_user");
+	}
+
+	async refresh(): Promise<GitHubTokenGrant> {
+		return grant("ghu_refreshed");
 	}
 
 	async user(): Promise<GitHubUser> {
 		return { id: "U_octocat", login: "octocat", avatarUrl: "avatar" };
 	}
 
-	async repositories(): Promise<RepositoryPage> {
+	async installations(): Promise<InstallationPage> {
+		return { installations: [], nextPage: undefined };
+	}
+
+	async installationRepositories(): Promise<RepositoryPage> {
 		return { repositories: [this.repo], nextPage: undefined };
 	}
 
@@ -48,6 +63,17 @@ class FakeGitHub implements GitHub {
 	): Promise<Repository | undefined> {
 		return this.affiliated ? this.repository(token, owner, name) : undefined;
 	}
+
+	invalidate(): void {}
+}
+
+function grant(accessToken: string): GitHubTokenGrant {
+	return {
+		accessToken,
+		accessExpiresIn: 28_800,
+		refreshToken: "ghr_user",
+		refreshExpiresIn: 15_897_600,
+	};
 }
 
 function pair(cookie: string): string {
@@ -59,11 +85,12 @@ async function setup() {
 	let storage = new MemoryStorage();
 	await storage.users.put({ id: "U_octocat", login: "octocat", avatarUrl: "avatar", now });
 	let sessions = new Sessions(storage, new Uint8Array(32).fill(4), true, () => now);
-	let issued = await sessions.issue("U_octocat", "gho_user");
+	let issued = await sessions.issue("U_octocat", grant("ghu_user"));
 	let github = new FakeGitHub();
 	let auth: HostedAuth = {
 		config: {
 			origin: "https://chopin.test",
+			appSlug: "chopin-test",
 			clientId: "client-id",
 			clientSecret: "client-secret",
 			encryptionKey: new Uint8Array(32).fill(4),
