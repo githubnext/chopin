@@ -437,7 +437,7 @@ describe("the MCP read protocol", () => {
 		expect(created).toBe(false);
 	});
 
-	it("replays creation when the same values arrive in a different member order", async () => {
+	it("replays reordered creation values and conflicts on a changed value", async () => {
 		let accepted: CreateDocumentInput | undefined;
 		let mcp = handler({
 			caller: () => "octocat",
@@ -490,16 +490,41 @@ describe("the MCP read protocol", () => {
 			expect((result.result as { structuredContent: { id: string } }).structuredContent.id)
 				.toBe("replayed");
 		}
+
+		let changed = await json(
+			await mcp(request({
+				jsonrpc: "2.0",
+				id: 15,
+				method: "tools/call",
+				params: {
+					name: "create_document",
+					arguments: { ...creation, title: "A changed title" },
+				},
+			})),
+		);
+		expect((changed.result as { isError: boolean }).isError).toBe(true);
+		expect((changed.result as { structuredContent: unknown }).structuredContent).toEqual({
+			code: "idempotency-conflict",
+		});
 	});
 
-	it("does not advertise creation from a read-only host", async () => {
+	it("does not advertise or dispatch creation from a read-only host", async () => {
 		let mcp = handler({ caller: () => "octocat", documents: reader() });
 		let tools = await json(
-			await mcp(request({ jsonrpc: "2.0", id: 15, method: "tools/list" })),
+			await mcp(request({ jsonrpc: "2.0", id: 16, method: "tools/list" })),
 		);
 
 		expect((tools.result as { tools: Array<{ name: string }> }).tools.map(tool => tool.name))
 			.toEqual(["list_documents", "read_document"]);
+		let creationAttempt = await json(
+			await mcp(request({
+				jsonrpc: "2.0",
+				id: 17,
+				method: "tools/call",
+				params: { name: "create_document", arguments: creation },
+			})),
+		);
+		expect(creationAttempt.error).toEqual({ code: -32601, message: "tool not found" });
 	});
 
 	it("rejects non-scalar JSON-RPC ids and scalar initialize or tools-list parameters", async () => {
