@@ -6,7 +6,14 @@ import { MemoryStorage } from "../storage/memory/adapter";
 import { registerMcpRoutes } from "./routes";
 
 import type { HostedAuth } from "../auth/routes";
-import type { GitHub, GitHubUser, Repository, RepositoryPage } from "../github/client";
+import type {
+	GitHub,
+	GitHubTokenGrant,
+	GitHubUser,
+	InstallationPage,
+	Repository,
+	RepositoryPage,
+} from "../github/client";
 
 class GitHubBoundary implements GitHub {
 	failure: Error | undefined;
@@ -15,8 +22,12 @@ class GitHubBoundary implements GitHub {
 		return "";
 	}
 
-	async exchange(): Promise<string> {
-		return "";
+	async exchange(): Promise<GitHubTokenGrant> {
+		return grant("access-token");
+	}
+
+	async refresh(): Promise<GitHubTokenGrant> {
+		return grant("refreshed-access-token");
 	}
 
 	async user(): Promise<GitHubUser> {
@@ -28,6 +39,14 @@ class GitHubBoundary implements GitHub {
 		return { repositories: [], nextPage: undefined };
 	}
 
+	async installations(): Promise<InstallationPage> {
+		return { installations: [], nextPage: undefined };
+	}
+
+	async installationRepositories(): Promise<RepositoryPage> {
+		return this.repositories();
+	}
+
 	async repository(): Promise<Repository> {
 		throw new Error("not used by MCP route tests");
 	}
@@ -35,6 +54,17 @@ class GitHubBoundary implements GitHub {
 	async repositoryAccess(): Promise<Repository | undefined> {
 		throw new Error("not used by MCP route tests");
 	}
+
+	invalidate(): void {}
+}
+
+function grant(accessToken: string): GitHubTokenGrant {
+	return {
+		accessToken,
+		accessExpiresIn: 28_800,
+		refreshToken: "refresh-token",
+		refreshExpiresIn: 15_897_600,
+	};
 }
 
 function setup() {
@@ -45,13 +75,14 @@ function setup() {
 	let auth: HostedAuth = {
 		config: {
 			origin: "https://chopin.test",
+			appSlug: "chopin-test",
 			clientId: "client-id",
 			clientSecret: "client-secret",
 			encryptionKey: key,
 		},
 		storage,
 		github,
-		sessions: new Sessions(storage, key, true, () => now),
+		sessions: new Sessions(storage, true, () => now),
 		clock: () => now,
 	};
 	let router = new Router();
