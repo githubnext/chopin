@@ -1,9 +1,9 @@
 /**
  * What the planner can do.
  *
- * Three tools, and the shape of them is the design: read the plan, edit it by
- * block against the revision you read, and ask the people in the room when the
- * repository cannot settle something. Everything else the agent has is a way of
+ * Plan and graph tools are the design: plan prose is edited by block against
+ * the revision read, while implementation work is revised beside it against
+ * both the plan and graph revisions. Everything else the agent has is a way of
  * looking at the working directory.
  *
  * Tools are built per room, closing over its plan. A session belongs to one
@@ -15,6 +15,7 @@ import * as Arguments from "./arguments";
 import * as Comments from "../comments/service";
 import * as edit from "../plan/edit";
 import * as Questions from "../questions/service";
+import { implementationGraphs, implementationReadiness } from "../tasks/plan-graphs";
 
 import type { Server } from "bun";
 import type { Tool } from "@github/copilot-sdk";
@@ -291,6 +292,68 @@ export function toolbox(context: Context): Tool[] {
 					};
 				}),
 		},
+		{
+			name: "read_implementation_graph",
+			description: "Read the current plan revision and implementation graph before drafting or "
+				+ "revising tasks. The returned plan_revision and graph_revision are required by "
+				+ "edit_implementation_graph; a newer plan or graph refuses the whole edit.",
+			parameters: { type: "object", properties: {}, additionalProperties: false },
+			skipPermission: true,
+			handler: () =>
+				answer("read_implementation_graph", () => {
+					let version = context.plan.graph?.versions.at(-1);
+					return {
+						plan_revision: context.plan.revision,
+						source: edit.source(context.plan),
+						graph_revision: version?.revision ?? 0,
+						graph: context.plan.graph,
+					};
+				}),
+		},
+
+		{
+			name: "edit_implementation_graph",
+			description: "Create or revise the draft implementation graph against the plan and graph "
+				+ "revisions from read_implementation_graph. Submit one atomic batch of add, replace, "
+				+ "reorder and remove operations. This never changes plan content. Only people may "
+				+ "approve, lock or start implementation.",
+			parameters: {
+				type: "object",
+				properties: {
+					plan_revision: { type: "integer", minimum: 0 },
+					graph_revision: { type: "integer", minimum: 0 },
+					operations: {
+						type: "array",
+						minItems: 1,
+						maxItems: 50,
+						items: {
+							type: "object",
+							properties: {
+								op: { type: "string", enum: ["add", "replace", "reorder", "remove"] },
+								id: { type: "string" },
+								task: { type: "object" },
+								ids: { type: "array", items: { type: "string" } },
+							},
+							required: ["op"],
+							additionalProperties: false,
+						},
+					},
+				},
+				required: ["plan_revision", "graph_revision", "operations"],
+				additionalProperties: false,
+			},
+			handler: raw =>
+				answer("edit_implementation_graph", async () => {
+					let args = Arguments.graphPlan(raw);
+					let ready = implementationReadiness(context.plan, args.planRevision);
+					if (!ready.ok) return { ok: false, reason: "not-ready", blockers: ready.blockers };
+					let result = await implementationGraphs().revise(context.plan, args);
+					return result.ok
+						? { ok: true, graph: result.value }
+						: { ok: false, reason: result.reason };
+				}),
+		},
+
 		{
 			name: "anchor_plan",
 			description: "Say where in the plan each decision lives. Call it immediately after every "
