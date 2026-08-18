@@ -175,7 +175,6 @@ function state(plan: Plan): Sidecar {
 		version: 1,
 		revision: plan.revision,
 		documentSeq: plan.document.seq,
-<<<<<<< HEAD
 		...(plan.creation ? { creation: plan.creation } : {}),
 		...(plan.graph ? { graph: plan.graph } : {}),
 		questions: [...plan.records.values()],
@@ -315,7 +314,6 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 	}
 	let item = value as Record<string, JsonValue>;
 	let keys = Object.keys(item).sort();
-<<<<<<< HEAD
 	let legacy = item.creation === undefined
 		&& (item.brief !== undefined || item.origin !== undefined);
 	let created = item.creation === undefined
@@ -331,7 +329,6 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 		"transcript",
 		"version",
 	];
-<<<<<<< HEAD
 	if (created) expected.push(...(legacy ? ["brief", "origin"] : ["creation"]));
 	if (Object.hasOwn(item, "graph")) expected.push("graph");
 	expected.sort();
@@ -389,7 +386,6 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 		version: 1,
 		revision: item.revision,
 		documentSeq: item.documentSeq,
-<<<<<<< HEAD
 		...(created ? { creation: created } : {}),
 		...(graph ? { graph } : {}),
 		questions: questions as never[],
