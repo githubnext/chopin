@@ -439,11 +439,13 @@ describe("the MCP read protocol", () => {
 
 	it("replays reordered creation values and conflicts on a changed value", async () => {
 		let accepted: CreateDocumentInput | undefined;
+		let fingerprints: string[] = [];
 		let mcp = handler({
 			caller: () => "octocat",
 			documents: reader(),
 			create: {
 				async create(_caller, input) {
+					fingerprints.push(input.fingerprint);
 					let document = {
 						id: "replayed",
 						title: input.title,
@@ -506,6 +508,9 @@ describe("the MCP read protocol", () => {
 		expect((changed.result as { structuredContent: unknown }).structuredContent).toEqual({
 			code: "idempotency-conflict",
 		});
+		expect(fingerprints).toHaveLength(3);
+		expect(fingerprints[1]).toBe(fingerprints[0]);
+		expect(fingerprints[2]).not.toBe(fingerprints[0]);
 	});
 
 	it("does not advertise or dispatch creation from a read-only host", async () => {
