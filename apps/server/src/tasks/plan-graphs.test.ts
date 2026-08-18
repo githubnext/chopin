@@ -1,11 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
+import * as graphPlans from "./plan-graphs";
 import { implementationGraphs } from "./plan-graphs";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { close, open } from "../plan/service";
 
 import type { Server } from "bun";
-import type { Backend } from "../plan/service";
+import type { Backend, Plan } from "../plan/service";
 import type { JsonValue } from "../storage/model";
 import type { SocketData } from "../wire";
 
@@ -48,6 +49,33 @@ const definition = {
 };
 
 describe("the plan graph adapter", () => {
+	it("keeps implementation preparation policy with graph persistence", async () => {
+		let context = await hosted();
+		let plan = await open(context.channel.id, context.backend, context.server);
+		let readiness = (graphPlans as typeof graphPlans & {
+			implementationReadiness?: (plan: Plan, revision: unknown) => unknown;
+		}).implementationReadiness;
+
+		expect(readiness).toBeTypeOf("function");
+		if (typeof readiness !== "function") return;
+
+		plan.records.set("open", { id: "open", status: "open" } as never);
+		plan.threads.set("accepted", { id: "accepted", status: "accepted", notes: [] } as never);
+		expect(readiness(plan, -1)).toEqual({
+			ok: false,
+			blockers: [
+				"unanswered questionnaires",
+				"accepted comments awaiting plan changes",
+				"invalid plan revision",
+			],
+		});
+
+		plan.records.clear();
+		plan.threads.clear();
+		expect(readiness(plan, plan.revision)).toEqual({ ok: true, revision: plan.revision });
+		await close(plan);
+	});
+
 	it("keeps a document graph in the hosted sidecar through a restart", async () => {
 		let context = await hosted();
 		let first = await open(context.channel.id, context.backend, context.server);
