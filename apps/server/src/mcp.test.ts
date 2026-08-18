@@ -13,7 +13,7 @@ const document: Document = {
 	revision: 4,
 };
 
-const creation = {
+let creation = {
 	idempotencyKey: "create-plan-1",
 	repository: "githubnext/chopin",
 	baseBranch: "main",
@@ -480,13 +480,13 @@ describe("the MCP read protocol", () => {
 			idempotencyKey: creation.idempotencyKey,
 		};
 
-		for (let [id, arguments_] of [[13, creation], [14, reordered]]) {
+		for (let [id, createArguments] of [[13, creation], [14, reordered]]) {
 			let result = await json(
 				await mcp(request({
 					jsonrpc: "2.0",
 					id,
 					method: "tools/call",
-					params: { name: "create_document", arguments: arguments_ },
+					params: { name: "create_document", arguments: createArguments },
 				})),
 			);
 			expect((result.result as { structuredContent: { id: string } }).structuredContent.id)

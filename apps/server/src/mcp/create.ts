@@ -31,17 +31,17 @@ export type CreateDocumentInput = CreationOrigin & {
 
 type CreateArguments = Omit<CreateDocumentInput, "fingerprint">;
 
-const OWNER_PATTERN = "[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}";
-const REPOSITORY_PATTERN = "(?!\\.\\.?$)[A-Za-z0-9._-]{1,100}";
-export const REPOSITORY_PATH_PATTERN = `^${OWNER_PATTERN}/${REPOSITORY_PATTERN}$`;
+let OWNER_PATTERN = "[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}";
+let REPOSITORY_PATTERN = "(?!\\.\\.?$)[A-Za-z0-9._-]{1,100}";
+export let REPOSITORY_PATH_PATTERN = `^${OWNER_PATTERN}/${REPOSITORY_PATTERN}$`;
 /** Allows a maximally sized MDX plan plus JSON escaping and its structured brief. */
-export const MAX_REQUEST_BYTES = limits.MAX_SOURCE_BYTES * 3;
-export const MAX_TITLE_LENGTH = 120;
+export let MAX_REQUEST_BYTES = limits.MAX_SOURCE_BYTES * 3;
+export let MAX_TITLE_LENGTH = 120;
 
-const OWNER = new RegExp(`^${OWNER_PATTERN}$`);
-const REPOSITORY = new RegExp(`^${REPOSITORY_PATTERN}$`);
+let OWNER = new RegExp(`^${OWNER_PATTERN}$`);
+let REPOSITORY = new RegExp(`^${REPOSITORY_PATTERN}$`);
 
-export const BRIEF = {
+export let BRIEF = {
 	type: "object",
 	properties: {
 		goal: { type: "string", minLength: 1 },
@@ -78,7 +78,7 @@ export function isRepository(value: unknown): value is string {
 	return parts.length === 2 && OWNER.test(parts[0]!) && REPOSITORY.test(parts[1]!);
 }
 
-function arguments_(value: Record<string, unknown>): CreateArguments | undefined {
+function parseCreationArguments(value: Record<string, unknown>): CreateArguments | undefined {
 	let expected = [
 		"idempotencyKey",
 		"repository",
@@ -185,7 +185,7 @@ function fingerprint(input: CreateArguments): string {
 export function prepare(
 	value: Record<string, unknown>,
 ): { input: CreateDocumentInput } | { issues: Issue[] } | undefined {
-	let input = arguments_(value);
+	let input = parseCreationArguments(value);
 	if (!input) return undefined;
 	let prepared = canonical(input.plan);
 	if ("issues" in prepared) return prepared;

@@ -6,8 +6,8 @@ import { MemoryStorage } from "../storage/memory/adapter";
 import type { Server } from "bun";
 import type { SocketData } from "../wire";
 
-const now = new Date("2026-08-17T15:00:00.000Z");
-const creation: Service.CreationMetadata = {
+let now = new Date("2026-08-17T15:00:00.000Z");
+let creation: Service.CreationMetadata = {
 	brief: {
 		goal: "Create a collaborative plan.",
 		constraints: ["Keep the initial source canonical."],

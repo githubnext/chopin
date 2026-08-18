@@ -23,7 +23,7 @@ import type {
 import type { CreateDocumentInput } from "../mcp";
 import type { Socket, SocketData } from "../wire";
 
-const creation: CreateDocumentInput = {
+let creation: CreateDocumentInput = {
 	idempotencyKey: "create-plan-1",
 	fingerprint: "request-1",
 	repository: "octo-org/score",
