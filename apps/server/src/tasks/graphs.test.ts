@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
+import * as Tasks from "./graphs";
 import { Graphs, restore } from "./graphs";
 
 import type { Definition, Graph, GraphAdapter, Operation, Task } from "./graphs";
@@ -80,6 +81,21 @@ function stored(number: number, state: string): unknown {
 	return { number, planRevision: 0, state, definition: definition() };
 }
 
+function run() {
+	return {
+		id: "run-1",
+		user: "octocat",
+		client: { name: "Codex", version: "1.2.3" },
+		session: "session-1",
+		planRevision: 7,
+		graphRevision: 3,
+		repository: "githubnext/chopin",
+		branch: "tq/017",
+		commit: "deadbeef",
+		startedAt: "2026-08-17T12:00:00.000Z",
+	};
+}
+
 async function expectGraph<T>(
 	value: Promise<{ ok: true; value: T } | { ok: false; reason: string }>,
 ): Promise<T> {
@@ -90,6 +106,43 @@ async function expectGraph<T>(
 }
 
 describe("implementation task graphs", () => {
+	it("locks exactly the graph revision an implementation run records", () => {
+		type Claim = (state: unknown, input: unknown) => unknown;
+		type RestoreRun = (value: unknown, graph: unknown, revision: number) => unknown;
+		let claim = (Tasks as typeof Tasks & { claim?: Claim }).claim;
+		let restoreRun = (Tasks as typeof Tasks & { restoreRun?: RestoreRun }).restoreRun;
+		expect(claim).toBeTypeOf("function");
+		expect(restoreRun).toBeTypeOf("function");
+		if (typeof claim !== "function" || typeof restoreRun !== "function") return;
+
+		let approved: Graph = {
+			versions: [{
+				number: 1,
+				revision: 3,
+				planRevision: 7,
+				state: "approved",
+				definition: definition(),
+			}],
+		};
+		let locked: Graph = {
+			versions: [{ ...approved.versions[0]!, state: "locked" }],
+		};
+		let implementation = run();
+
+		expect(claim(
+			{ graph: approved, revision: 7, execution: undefined },
+			{ planRevision: 7, graphRevision: 3, run: implementation },
+		)).toMatchObject({
+			kind: "started",
+			graph: { versions: [{ state: "locked" }] },
+			run: implementation,
+		});
+		expect(restoreRun(implementation, locked, 7)).toEqual(implementation);
+		expect(restoreRun({ ...implementation, extra: true }, locked, 7)).toBeUndefined();
+		expect(restoreRun(implementation, approved, 7)).toBeUndefined();
+		expect(restoreRun(implementation, locked, 8)).toBeUndefined();
+	});
+
 	it("ignores an unreachable version history while preserving graph revision compatibility", () => {
 		expect(restore({
 			versions: [stored(1, "locked"), stored(2, "approved")],
