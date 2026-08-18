@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
+import { limits } from "@chopin/dialect";
+
 import { handler, TOOLS } from "./mcp";
 
 import type { CreateDocument, CreateDocumentInput, Document, DocumentReader } from "./mcp";
@@ -72,7 +74,6 @@ function endpoint() {
 				? "octocat"
 				: undefined,
 		documents: reader(),
-		create: unavailable(),
 	});
 }
 
@@ -108,7 +109,9 @@ describe("the MCP read protocol", () => {
 				method: "tools/list",
 			})),
 		);
-		expect((tools.result as { tools: unknown[] }).tools).toEqual(TOOLS);
+		expect((tools.result as { tools: unknown[] }).tools).toEqual(
+			TOOLS.filter(tool => tool.name !== "create_document"),
+		);
 
 		let listed = await json(
 			await mcp(request({
@@ -398,6 +401,105 @@ describe("the MCP read protocol", () => {
 
 		expect(response.status).toBe(200);
 		expect((await json(response)).error).toBeUndefined();
+	});
+
+	it("rejects a UTF-8 canonical plan beyond the source limit before creating it", async () => {
+		let created = false;
+		let mcp = handler({
+			caller: () => "octocat",
+			documents: reader(),
+			create: {
+				async create() {
+					created = true;
+					return { kind: "forbidden" as const };
+				},
+			},
+		});
+		let result = await json(
+			await mcp(request({
+				jsonrpc: "2.0",
+				id: 12,
+				method: "tools/call",
+				params: {
+					name: "create_document",
+					arguments: {
+						...creation,
+						plan: `# ${"😀".repeat(limits.MAX_SOURCE_BYTES / 4)}\n`,
+					},
+				},
+			})),
+		);
+
+		expect((result.result as { isError: boolean }).isError).toBe(true);
+		expect(
+			(result.result as { structuredContent: { issues: unknown[] } }).structuredContent.issues,
+		).toEqual([expect.objectContaining({ code: "source-too-large", path: "root" })]);
+		expect(created).toBe(false);
+	});
+
+	it("replays creation when the same values arrive in a different member order", async () => {
+		let accepted: CreateDocumentInput | undefined;
+		let mcp = handler({
+			caller: () => "octocat",
+			documents: reader(),
+			create: {
+				async create(_caller, input) {
+					let document = {
+						id: "replayed",
+						title: input.title,
+						brief: input.brief,
+						source: input.plan,
+						revision: 0,
+						url: "/channels/replayed",
+					};
+					if (!accepted) {
+						accepted = input;
+						return { kind: "created" as const, document };
+					}
+					return accepted.fingerprint === input.fingerprint
+						? { kind: "replayed" as const, document }
+						: { kind: "conflict" as const };
+				},
+			},
+		});
+		let reordered = {
+			plan: creation.plan,
+			brief: {
+				repositoryFindings: creation.brief.repositoryFindings,
+				openQuestions: creation.brief.openQuestions,
+				settledDecisions: creation.brief.settledDecisions,
+				constraints: creation.brief.constraints,
+				goal: creation.brief.goal,
+			},
+			title: creation.title,
+			baseCommit: creation.baseCommit,
+			baseBranch: creation.baseBranch,
+			repository: creation.repository,
+			idempotencyKey: creation.idempotencyKey,
+		};
+
+		for (let [id, arguments_] of [[13, creation], [14, reordered]]) {
+			let result = await json(
+				await mcp(request({
+					jsonrpc: "2.0",
+					id,
+					method: "tools/call",
+					params: { name: "create_document", arguments: arguments_ },
+				})),
+			);
+			expect((result.result as { structuredContent: { id: string } }).structuredContent.id)
+				.toBe("replayed");
+		}
+	});
+
+	it("does not advertise creation from a read-only host", async () => {
+		let mcp = handler({ caller: () => "octocat", documents: reader() });
+		let tools = await json(
+			await mcp(request({ jsonrpc: "2.0", id: 15, method: "tools/list" })),
+		);
+
+		expect((tools.result as { tools: Array<{ name: string }> }).tools.map(tool => tool.name))
+			.toEqual(["list_documents", "read_document"]);
 	});
 
 	it("rejects non-scalar JSON-RPC ids and scalar initialize or tools-list parameters", async () => {

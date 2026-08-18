@@ -52,7 +52,7 @@ export type McpOptions<Caller> = {
 	/** The host owns authentication; MCP only receives its result. */
 	caller(request: Request): Promise<Caller | undefined> | Caller | undefined;
 	documents: DocumentReader<Caller>;
-	create: CreateDocument<Caller>;
+	create?: CreateDocument<Caller>;
 };
 
 type Tool = {
@@ -296,6 +296,9 @@ async function requestBody(request: Request): Promise<{ body?: unknown; tooLarge
 export function handler<Caller>(
 	options: McpOptions<Caller>,
 ): (request: Request) => Promise<Response> {
+	let creation = options.create;
+	let tools = creation ? TOOLS : TOOLS.filter(tool => tool.name !== "create_document");
+
 	async function dispatch(value: unknown, caller: Caller): Promise<Reply | undefined> {
 		let call = record(value) as Call | undefined;
 		if (!call || call.jsonrpc !== "2.0" || typeof call.method !== "string") {
@@ -320,7 +323,7 @@ export function handler<Caller>(
 				return undefined;
 
 			case "tools/list":
-				return respond({ tools: TOOLS });
+				return respond({ tools });
 
 			case "tools/call": {
 				let tool = toolCall(call.params);
@@ -350,7 +353,7 @@ export function handler<Caller>(
 					let document = await options.documents.read(caller, tool.arguments.id);
 					return document ? respond(text(document)) : respond({ content: [], isError: true });
 				}
-				if (tool.name === "create_document") {
+				if (tool.name === "create_document" && creation) {
 					let prepared = prepare(tool.arguments);
 					if (!prepared) {
 						return notification
@@ -358,7 +361,7 @@ export function handler<Caller>(
 							: error(call.id, -32602, "create_document requires a valid draft");
 					}
 					if ("issues" in prepared) return respond(text({ issues: prepared.issues }, true));
-					let outcome = await options.create.create(caller, prepared.input);
+					let outcome = await creation.create(caller, prepared.input);
 					if (outcome.kind === "created" || outcome.kind === "replayed") {
 						return respond(text(outcome.document));
 					}

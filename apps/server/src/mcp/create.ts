@@ -156,11 +156,29 @@ function canonical(source: string): { source: string } | { issues: Issue[] } {
 		};
 	}
 	identify(tree);
-	let result = validate(tree);
-	if (!result.ok) return { issues: result.issues };
 	let output = serialize(tree);
+	let result = validate(tree, { bytes: Buffer.byteLength(output, "utf8") });
+	if (!result.ok) return { issues: result.issues };
 	room.validate(output);
 	return { source: output };
+}
+
+function fingerprint(input: CreateArguments): string {
+	return createHash("sha256").update(JSON.stringify({
+		idempotencyKey: input.idempotencyKey,
+		repository: input.repository,
+		baseBranch: input.baseBranch,
+		baseCommit: input.baseCommit,
+		title: input.title,
+		brief: {
+			goal: input.brief.goal,
+			constraints: input.brief.constraints,
+			settledDecisions: input.brief.settledDecisions,
+			openQuestions: input.brief.openQuestions,
+			repositoryFindings: input.brief.repositoryFindings,
+		},
+		plan: input.plan,
+	})).digest("hex");
 }
 
 /** Turn untrusted tool arguments into the only input a host adapter can receive. */
@@ -175,7 +193,7 @@ export function prepare(
 		input: {
 			...input,
 			plan: prepared.source,
-			fingerprint: createHash("sha256").update(JSON.stringify(input)).digest("hex"),
+			fingerprint: fingerprint(input),
 		},
 	};
 }
