@@ -258,6 +258,23 @@ function Heading(
 					<Select.Content
 						aria-label="Callout type"
 						className="plan-callout-menu"
+						onKeyDown={event => {
+							if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+
+							let options = [
+								...event.currentTarget.querySelectorAll<HTMLElement>(
+									"[role='option']:not([data-disabled])",
+								),
+							];
+							let current = options.indexOf(event.target as HTMLElement);
+							let next = current < 0
+								? options[event.key === "ArrowDown" ? 0 : options.length - 1]
+								: options[current + (event.key === "ArrowDown" ? 1 : -1)];
+							// Radix queues this focus change. A rapid Enter would otherwise
+							// select the option that was focused before the arrow key.
+							next?.focus();
+							event.preventDefault();
+						}}
 						position="popper"
 						sideOffset={4}
 					>

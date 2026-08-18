@@ -29,8 +29,20 @@ test("a callout type menu has one keyboard path", async ({ join, seed }) => {
 
 	await page.keyboard.press("ArrowDown");
 	await expect(menu).toBeVisible();
-	await page.keyboard.press("ArrowDown");
-	await page.keyboard.press("Enter");
+	await expect(menu.getByRole("option", { name: "Note" })).toBeFocused();
+	// Radix queues arrow focus, so keep the second arrow and Enter in the same
+	// browser task: this is the rapid keyboard path the picker has to honour.
+	await page.evaluate(() => {
+		for (let key of ["ArrowDown", "Enter"]) {
+			document.activeElement?.dispatchEvent(
+				new KeyboardEvent("keydown", {
+					bubbles: true,
+					cancelable: true,
+					key,
+				}),
+			);
+		}
+	});
 	await expect(menu).toHaveCount(0);
 	await expect(callout).toHaveAttribute("data-plan-type", "tip");
 	await expect(callout.getByRole("combobox", { name: "Change callout type: Tip" })).toBeFocused();
