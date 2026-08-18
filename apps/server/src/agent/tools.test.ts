@@ -279,3 +279,116 @@ test("a stale ask does not announce an anchor snapshot", async () => {
 	expect(plan.records.size).toBe(0);
 	expect(anchors).toBe(0);
 });
+
+test("planner graph edits draft a revision without changing plan prose", async () => {
+	let { plan, server } = await opened("Prepare the implementation.\n");
+	let before = room.project(plan.document);
+	let graph = toolbox({
+		plan,
+		server,
+		room: "test",
+		persist: () => Service.persist(plan),
+		exclusive: action => Service.exclusive(plan, action),
+		async publish() {},
+		anchors() {},
+		changes() {},
+	}).find(tool => tool.name === "edit_implementation_graph");
+	if (!graph?.handler) throw new Error("edit_implementation_graph is missing");
+	let args = {
+		plan_revision: plan.revision,
+		graph_revision: 0,
+		operations: [{
+			op: "add",
+			task: {
+				id: "graph-tools",
+				title: "Give the planner constrained graph tools",
+				context: "The shared plan is ready for implementation preparation.",
+				goal: "Create a draft implementation graph beside the plan.",
+				acceptance: [
+					"A draft graph is stored against the plan revision.",
+					"The planner does not change plan.mdx.",
+				],
+				dependsOn: [],
+			},
+		}],
+	};
+	let response = await graph.handler(args, {
+		sessionId: "session",
+		toolCallId: "call",
+		toolName: "edit_implementation_graph",
+		arguments: args,
+	});
+	if (typeof response !== "string") throw new Error("graph tool returned no text");
+
+	expect(JSON.parse(response)).toMatchObject({
+		ok: true,
+		graph: { versions: [{ state: "draft", planRevision: plan.revision }] },
+	});
+	expect(plan.graph?.versions[0]?.definition.tasks.map(task => task.id)).toEqual(["graph-tools"]);
+	expect(room.project(plan.document)).toBe(before);
+
+	let stale = await graph.handler({ ...args, graph_revision: 0 }, {
+		sessionId: "session",
+		toolCallId: "later",
+		toolName: "edit_implementation_graph",
+		arguments: args,
+	});
+	expect(JSON.parse(stale as string)).toEqual({ ok: false, reason: "stale-graph" });
+	expect(room.project(plan.document)).toBe(before);
+});
+
+test("planner graph edits name readiness blockers before changing a graph", async () => {
+	let { plan, server } = await opened("Prepare the implementation.\n");
+	plan.records.set("open", {
+		id: "open",
+		status: "open",
+		definition: {
+			questions: [{
+				id: "question",
+				header: "Readiness",
+				question: "May implementation begin?",
+				multiple: false,
+				options: [{ id: "yes", label: "Yes", description: "" }],
+			}],
+		},
+	} as never);
+	let graph = toolbox({
+		plan,
+		server,
+		room: "test",
+		persist: () => Service.persist(plan),
+		exclusive: action => Service.exclusive(plan, action),
+		async publish() {},
+		anchors() {},
+		changes() {},
+	}).find(tool => tool.name === "edit_implementation_graph");
+	if (!graph?.handler) throw new Error("edit_implementation_graph is missing");
+	let args = {
+		plan_revision: plan.revision,
+		graph_revision: 0,
+		operations: [{
+			op: "add",
+			task: {
+				id: "blocked",
+				title: "Blocked graph",
+				context: "The plan still has an open decision.",
+				goal: "Demonstrate that preparation is refused.",
+				acceptance: ["The tool names the blocker.", "No graph is created."],
+				dependsOn: [],
+			},
+		}],
+	};
+	let response = await graph.handler(args, {
+		sessionId: "session",
+		toolCallId: "call",
+		toolName: "edit_implementation_graph",
+		arguments: args,
+	});
+
+	expect(JSON.parse(response as string)).toEqual({
+		ok: false,
+		reason: "not-ready",
+		blockers: ["unanswered questionnaires"],
+	});
+	expect(plan.graph).toBeUndefined();
+});

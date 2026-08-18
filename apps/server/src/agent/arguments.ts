@@ -12,6 +12,7 @@
 import * as Question from "@chopin/question";
 
 import type { Operation } from "../plan/edit";
+import type { Operation as GraphOperation, Revision, Task } from "../tasks/graphs";
 
 /** Thrown for any malformed tool call; the message reaches the model. */
 export class ArgumentError extends Error {
@@ -264,4 +265,80 @@ export function askPlan(raw: unknown): { revision: number; questions: Positioned
 		});
 
 	return { revision, questions };
+}
+
+const GRAPH_OPERATION_FIELDS = ["op", "id", "task", "ids"];
+
+function graphTask(raw: unknown, name: string): Task {
+	let value = record(raw, name);
+	fields(value, ["id", "title", "context", "goal", "acceptance", "dependsOn"], [
+		"id",
+		"title",
+		"context",
+		"goal",
+		"acceptance",
+		"dependsOn",
+	], name);
+	let acceptance = array(value.acceptance, `${name}.acceptance`, "criterion", 2, 8)
+		.map((criterion, index) => text(criterion, `${name}.acceptance[${index}]`));
+	let dependsOn = array(value.dependsOn, `${name}.dependsOn`, "dependency")
+		.map((dependency, index) => text(dependency, `${name}.dependsOn[${index}]`));
+	return {
+		id: text(value.id, `${name}.id`),
+		title: text(value.title, `${name}.title`),
+		context: text(value.context, `${name}.context`),
+		goal: text(value.goal, `${name}.goal`),
+		acceptance,
+		dependsOn,
+	};
+}
+
+function graphOperation(raw: unknown, position: number): GraphOperation {
+	let name = `operations[${position}]`;
+	let value = record(raw, name);
+	fields(value, GRAPH_OPERATION_FIELDS, ["op"], name);
+	if (typeof value.op !== "string" || !["add", "replace", "reorder", "remove"].includes(value.op)) {
+		fail(`\`${name}.op\` must be one of add, replace, reorder, remove.`);
+	}
+	switch (value.op) {
+		case "add":
+			if (!("task" in value)) fail(`\`${name}.task\` is required for "add".`);
+			return { op: "add", task: graphTask(value.task, `${name}.task`) };
+		case "replace":
+			if (!("id" in value)) fail(`\`${name}.id\` is required for "replace".`);
+			if (!("task" in value)) fail(`\`${name}.task\` is required for "replace".`);
+			return {
+				op: "replace",
+				id: text(value.id, `${name}.id`),
+				task: graphTask(value.task, `${name}.task`),
+			};
+		case "reorder":
+			if (!("ids" in value)) fail(`\`${name}.ids\` is required for "reorder".`);
+			return {
+				op: "reorder",
+				ids: array(value.ids, `${name}.ids`, "task id", 1)
+					.map((id, index) => text(id, `${name}.ids[${index}]`)),
+			};
+		case "remove":
+			if (!("id" in value)) fail(`\`${name}.id\` is required for "remove".`);
+			return { op: "remove", id: text(value.id, `${name}.id`) };
+		default:
+			return fail(`\`${name}.op\` must be one of add, replace, reorder, remove.`);
+	}
+}
+
+/** Validate planner graph operations before they reach durable state. */
+export function graphPlan(raw: unknown): Revision {
+	let args = record(raw, "graph arguments");
+	fields(args, ["plan_revision", "graph_revision", "operations"], [
+		"plan_revision",
+		"graph_revision",
+		"operations",
+	], "graph arguments");
+	return {
+		planRevision: integer(args.plan_revision, "plan_revision"),
+		graphRevision: integer(args.graph_revision, "graph_revision"),
+		operations: array(args.operations, "operations", "operation", 1, MAX_OPERATIONS)
+			.map((operation, index) => graphOperation(operation, index)),
+	};
 }

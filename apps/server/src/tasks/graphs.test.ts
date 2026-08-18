@@ -277,4 +277,83 @@ describe("implementation task graphs", () => {
 			}),
 		).toEqual({ ok: false, reason: "locked" });
 	});
+
+	it("applies planner task operations only against the graph revision it read", async () => {
+		let backend = new Memory();
+		backend.revisions.set("plan", 7);
+		let graphs = new Graphs(backend);
+		await expectGraph(graphs.revise("plan", {
+			planRevision: 7,
+			graphRevision: 0,
+			operations: definition().tasks.map(task => ({ op: "add", task })),
+		}));
+
+		let result = await expectGraph(graphs.revise("plan", {
+			planRevision: 7,
+			graphRevision: 1,
+			operations: [
+				{
+					op: "replace",
+					id: "model",
+					task: {
+						...definition().tasks[0],
+						title: "Model planner graph revisions",
+					},
+				},
+				{
+					op: "add",
+					task: {
+						id: "tools",
+						title: "Give the planner graph tools",
+						context: "The planner works through constrained server tools.",
+						goal: "Draft and revise task graphs without changing plan prose.",
+						acceptance: [
+							"The planner reads the current graph before editing it.",
+							"Planner graph edits leave plan source unchanged.",
+						],
+						dependsOn: ["model"],
+					},
+				},
+				{
+					op: "replace",
+					id: "report",
+					task: { ...definition().tasks[2], dependsOn: ["model"] },
+				},
+				{ op: "remove", id: "validate" },
+				{ op: "reorder", ids: ["publish", "model", "tools", "report"] },
+			],
+		}));
+
+		let current = result.versions.at(-1);
+		if (!current) throw new Error("planner revision was missing");
+		expect(current.planRevision).toBe(7);
+		expect(current.revision).toBe(2);
+		expect(current.definition.tasks.find(task => task.id === "model")?.title)
+			.toBe("Model planner graph revisions");
+		expect(current.definition.tasks.find(task => task.id === "tools")?.dependsOn).toEqual([
+			"model",
+		]);
+		expect(current.definition.tasks.map(task => task.id))
+			.toEqual(["publish", "model", "tools", "report"]);
+
+		let before = structuredClone(result);
+		backend.revisions.set("plan", 8);
+		expect(
+			await graphs.revise("plan", {
+				planRevision: 7,
+				graphRevision: 2,
+				operations: [],
+			}),
+		).toEqual({ ok: false, reason: "stale-plan" });
+		expect(backend.graphs.get("plan")).toEqual(before);
+
+		expect(
+			await graphs.revise("plan", {
+				planRevision: 8,
+				graphRevision: 1,
+				operations: [],
+			}),
+		).toEqual({ ok: false, reason: "stale-graph" });
+		expect(backend.graphs.get("plan")).toEqual(before);
+	});
 });
