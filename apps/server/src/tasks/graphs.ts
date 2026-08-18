@@ -44,6 +44,20 @@ export type GraphAdapter<Document> = {
 
 export type Result<T> = { ok: true; value: T } | { ok: false; reason: string };
 
+export type Operation =
+	| { op: "add"; task: Task }
+	| { op: "replace"; id: string; task: Task }
+	| { op: "reorder"; ids: string[] }
+	| { op: "remove"; id: string };
+
+export type Revision = {
+	/** The plan revision returned by the planner's graph read. */
+	planRevision: number;
+	/** The current draft revision, or zero before a graph exists. */
+	graphRevision: number;
+	operations: Operation[];
+};
+
 type Validation = Exclude<Result<Definition>, { ok: true }>;
 
 function copy<T>(value: T): T {
@@ -125,6 +139,12 @@ function current(graph: Graph): Version | undefined {
 	return graph.versions.at(-1);
 }
 
+function state(value: unknown): State | undefined {
+	return value === "draft" || value === "approved" || value === "locked" || value === "superseded"
+		? value
+		: undefined;
+}
+
 function item(value: unknown, keys: string[]): Record<string, unknown> | undefined {
 	if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
 	let record = value as Record<string, unknown>;
@@ -185,6 +205,50 @@ function history(versions: Version[]): boolean {
 	return prior.every(version => version.state === "superseded");
 }
 
+/** Apply a planner's whole graph batch before deciding whether it is valid. */
+function revise(definition: Definition, operations: unknown[]): Result<Definition> {
+	let next = copy(definition);
+	for (let operation of operations) {
+		if (!operation || typeof operation !== "object") return invalid("operation");
+		let value = operation as Partial<Operation>;
+		switch (value.op) {
+			case "add":
+				if (!value.task) return invalid("operation");
+				next.tasks.push(value.task);
+				break;
+			case "replace": {
+				if (typeof value.id !== "string" || !value.task) return invalid("operation");
+				let index = next.tasks.findIndex(task => task.id === value.id);
+				if (index < 0) return invalid("missing");
+				next.tasks[index] = value.task;
+				break;
+			}
+			case "remove": {
+				if (typeof value.id !== "string") return invalid("operation");
+				let index = next.tasks.findIndex(task => task.id === value.id);
+				if (index < 0) return invalid("missing");
+				next.tasks.splice(index, 1);
+				break;
+			}
+			case "reorder": {
+				if (!Array.isArray(value.ids) || value.ids.some(id => typeof id !== "string")) {
+					return invalid("operation");
+				}
+				let tasks = new Map(next.tasks.map(task => [task.id, task]));
+				if (
+					value.ids.length !== next.tasks.length || new Set(value.ids).size !== value.ids.length
+					|| value.ids.some(id => !tasks.has(id))
+				) return invalid("reorder");
+				next.tasks = value.ids.map(id => tasks.get(id)!);
+				break;
+			}
+			default:
+				return invalid("operation");
+		}
+	}
+	return validate(next);
+}
+
 /** Read a graph back from a sidecar without trusting handwritten JSON. */
 export function restore(value: unknown): Graph | undefined {
 	let stored = item(value, ["versions"]);
@@ -194,21 +258,28 @@ export function restore(value: unknown): Graph | undefined {
 		let version = item(value, ["definition", "number", "planRevision", "revision", "state"])
 			?? item(value, ["definition", "number", "planRevision", "state"]);
 		let checked = version && definition(version.definition);
+		let number = version?.number;
+		let revision = version?.revision ?? 1;
+		let planRevision = version?.planRevision;
+		let versionState = state(version?.state);
 		if (
 			!version
-			|| version.number !== index + 1
-			|| !Number.isInteger(version.revision ?? 1)
-			|| (version.revision ?? 1) < 1
-			|| !Number.isInteger(version.planRevision)
-			|| version.planRevision < 0
-			|| !["draft", "approved", "locked", "superseded"].includes(version.state as string)
+			|| typeof number !== "number"
+			|| number !== index + 1
+			|| typeof revision !== "number"
+			|| !Number.isInteger(revision)
+			|| revision < 1
+			|| typeof planRevision !== "number"
+			|| !Number.isInteger(planRevision)
+			|| planRevision < 0
+			|| !versionState
 			|| !checked
 		) return undefined;
 		versions.push({
-			number: version.number,
-			revision: version.revision ?? 1,
-			planRevision: version.planRevision,
-			state: version.state as State,
+			number,
+			revision,
+			planRevision,
+			state: versionState,
 			definition: checked,
 		});
 	}
@@ -241,40 +312,37 @@ export class Graphs<Document> {
 		return result.ok ? { ok: true, value: copy(result.value) } : result;
 	}
 
-	async create(document: Document, definition: Definition): Promise<Result<Graph>> {
+	/** Change a graph by operations from one particular planner read. */
+	async revise(document: Document, change: Revision): Promise<Result<Graph>> {
 		return await this.#transact(document, ({ graph, revision }) => {
-			if (graph) return { ok: false, reason: "exists" };
-			if (revision === undefined) return { ok: false, reason: "missing-document" };
-			let checked = validate(definition);
-			if (!checked.ok) return checked;
-			return {
-				ok: true,
-				value: {
-					versions: [{
-						number: 1,
-						revision: 1,
-						planRevision: revision,
-						state: "draft",
-						definition: checked.value,
-					}],
-				},
-			};
-		});
-	}
-
-	async edit(document: Document, definition: Definition): Promise<Result<Graph>> {
-		return await this.#transact(document, ({ graph, revision }) => {
+			if (revision !== change.planRevision) return { ok: false, reason: "stale-plan" };
 			let version = graph && current(graph);
-			if (!graph || !version) return { ok: false, reason: "missing" };
-			if (version.state === "locked") return { ok: false, reason: "locked" };
-			if (version.state === "superseded") return { ok: false, reason: "superseded" };
-			if (revision === undefined) return { ok: false, reason: "missing-document" };
-			let checked = validate(definition);
-			if (!checked.ok) return checked;
+			if ((version?.revision ?? 0) !== change.graphRevision) {
+				return { ok: false, reason: "stale-graph" };
+			}
+			if (version?.state === "locked") return { ok: false, reason: "locked" };
+			if (version?.state === "superseded") return { ok: false, reason: "superseded" };
+			if (change.operations.length === 0) return { ok: false, reason: "operation" };
 
+			let checked = revise(version?.definition ?? { tasks: [] }, change.operations);
+			if (!checked.ok) return checked;
+			if (!graph || !version) {
+				return {
+					ok: true,
+					value: {
+						versions: [{
+							number: 1,
+							revision: 1,
+							planRevision: revision,
+							state: "draft",
+							definition: checked.value,
+						}],
+					},
+				};
+			}
 			if (version.state === "draft") {
 				graph.versions[graph.versions.length - 1] = {
-					...graph.versions[graph.versions.length - 1],
+					...version,
 					revision: version.revision + 1,
 					planRevision: revision,
 					definition: checked.value,

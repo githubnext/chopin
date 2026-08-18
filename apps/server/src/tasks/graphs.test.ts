@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { Graphs, restore } from "./graphs";
 
-import type { Definition, Graph, GraphAdapter } from "./graphs";
+import type { Definition, Graph, GraphAdapter, Operation, Task } from "./graphs";
 
 class Memory implements GraphAdapter<string> {
 	graphs = new Map<string, Graph>();
@@ -72,6 +72,10 @@ function changed(): Definition {
 	return next;
 }
 
+function add(definition: Definition): Operation[] {
+	return definition.tasks.map(task => ({ op: "add", task }));
+}
+
 function stored(number: number, state: string): unknown {
 	return { number, planRevision: 0, state, definition: definition() };
 }
@@ -98,7 +102,11 @@ describe("implementation task graphs", () => {
 		backend.revisions.set("plan", 7);
 		let graphs = new Graphs(backend);
 
-		let graph = await expectGraph(graphs.create("plan", definition()));
+		let graph = await expectGraph(graphs.revise("plan", {
+			planRevision: 7,
+			graphRevision: 0,
+			operations: add(definition()),
+		}));
 
 		expect(graph.versions).toEqual([expect.objectContaining({
 			number: 1,
@@ -107,6 +115,27 @@ describe("implementation task graphs", () => {
 			definition: definition(),
 		})]);
 		expect(backend.graphs.get("plan")).toEqual(graph);
+	});
+
+	it("refuses a graph edit from an earlier graph read", async () => {
+		let backend = new Memory();
+		backend.revisions.set("plan", 7);
+		let graphs = new Graphs(backend);
+		let task = definition().tasks[0];
+		let first = await graphs.revise("plan", {
+			planRevision: 7,
+			graphRevision: 0,
+			operations: [{ op: "add", task }],
+		});
+		let stale = await graphs.revise("plan", {
+			planRevision: 7,
+			graphRevision: 0,
+			operations: [{ op: "add", task: definition().tasks[1] }],
+		});
+
+		expect(first.ok).toBe(true);
+		expect(stale).toEqual({ ok: false, reason: "stale-graph" });
+		expect(backend.graphs.get("plan")?.versions[0].definition.tasks).toEqual([task]);
 	});
 
 	it("refuses duplicate ids, missing predecessors, self dependencies and cycles", async () => {
@@ -130,7 +159,13 @@ describe("implementation task graphs", () => {
 		];
 
 		for (let [reason, invalid] of cases) {
-			expect(await graphs.create("plan", invalid)).toEqual({ ok: false, reason });
+			expect(
+				await graphs.revise("plan", {
+					planRevision: 1,
+					graphRevision: 0,
+					operations: add(invalid),
+				}),
+			).toEqual({ ok: false, reason });
 		}
 	});
 
@@ -146,8 +181,20 @@ describe("implementation task graphs", () => {
 			(_, index) => `Criterion ${index + 1}.`,
 		);
 
-		expect(await graphs.create("plan", tooFew)).toEqual({ ok: false, reason: "acceptance" });
-		expect(await graphs.create("plan", tooMany)).toEqual({ ok: false, reason: "acceptance" });
+		expect(
+			await graphs.revise("plan", {
+				planRevision: 1,
+				graphRevision: 0,
+				operations: add(tooFew),
+			}),
+		).toEqual({ ok: false, reason: "acceptance" });
+		expect(
+			await graphs.revise("plan", {
+				planRevision: 1,
+				graphRevision: 0,
+				operations: add(tooMany),
+			}),
+		).toEqual({ ok: false, reason: "acceptance" });
 	});
 
 	it("refuses malformed definition data instead of throwing at the persistence boundary", async () => {
@@ -155,7 +202,13 @@ describe("implementation task graphs", () => {
 		backend.revisions.set("plan", 1);
 		let graphs = new Graphs(backend);
 
-		expect(await graphs.create("plan", { tasks: null } as unknown as Definition)).toEqual({
+		expect(
+			await graphs.revise("plan", {
+				planRevision: 1,
+				graphRevision: 0,
+				operations: [{ op: "add", task: { tasks: null } as unknown as Task }],
+			}),
+		).toEqual({
 			ok: false,
 			reason: "task",
 		});
@@ -165,11 +218,19 @@ describe("implementation task graphs", () => {
 		let backend = new Memory();
 		backend.revisions.set("plan", 3);
 		let graphs = new Graphs(backend);
-		let created = await expectGraph(graphs.create("plan", definition()));
+		let created = await expectGraph(graphs.revise("plan", {
+			planRevision: 3,
+			graphRevision: 0,
+			operations: add(definition()),
+		}));
 		let approved = await expectGraph(graphs.approve("plan"));
 
 		expect(approved.versions[0]).toEqual({ ...created.versions[0], state: "approved" });
-		let edited = await expectGraph(graphs.edit("plan", changed()));
+		let edited = await expectGraph(graphs.revise("plan", {
+			planRevision: 3,
+			graphRevision: 1,
+			operations: [{ op: "replace", id: "model", task: changed().tasks[0] }],
+		}));
 
 		expect(edited.versions).toEqual([
 			{ ...created.versions[0], state: "approved" },
@@ -188,18 +249,32 @@ describe("implementation task graphs", () => {
 		let backend = new Memory();
 		backend.revisions.set("plan", 5);
 		let graphs = new Graphs(backend);
-		await expectGraph(graphs.create("plan", definition()));
+		await expectGraph(graphs.revise("plan", {
+			planRevision: 5,
+			graphRevision: 0,
+			operations: add(definition()),
+		}));
 		await expectGraph(graphs.approve("plan"));
 
 		backend.revisions.set("plan", 6);
 		expect(await graphs.start("plan")).toEqual({ ok: false, reason: "stale-plan" });
 
-		let replacement = await expectGraph(graphs.edit("plan", changed()));
+		let replacement = await expectGraph(graphs.revise("plan", {
+			planRevision: 6,
+			graphRevision: 1,
+			operations: [{ op: "replace", id: "model", task: changed().tasks[0] }],
+		}));
 		expect(replacement.versions[1]).toMatchObject({ state: "draft", planRevision: 6 });
 		await expectGraph(graphs.approve("plan"));
 		let locked = await expectGraph(graphs.start("plan"));
 
 		expect(locked.versions[1]).toMatchObject({ state: "locked", planRevision: 6 });
-		expect(await graphs.edit("plan", definition())).toEqual({ ok: false, reason: "locked" });
+		expect(
+			await graphs.revise("plan", {
+				planRevision: 6,
+				graphRevision: 1,
+				operations: [{ op: "add", task: definition().tasks[0] }],
+			}),
+		).toEqual({ ok: false, reason: "locked" });
 	});
 });
