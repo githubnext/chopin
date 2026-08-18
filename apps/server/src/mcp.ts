@@ -15,6 +15,7 @@ import {
 } from "./mcp/create";
 
 import type { Brief, CreateDocumentInput } from "./mcp/create";
+import type { Run, Version } from "./tasks/graphs";
 
 export type { Brief, CreateDocumentInput, CreationOrigin } from "./mcp/create";
 
@@ -36,6 +37,36 @@ export type DocumentReader<Caller> = {
 
 export type CreatedDocument = Document & { url: string };
 
+export type Implementation = {
+	document: Document;
+	repository: { name: string; baseBranch: string; baseCommit: string };
+	graph: Version;
+	execution: { state: "idle" } | { state: "active"; run: Run };
+};
+
+export type ImplementationInput = {
+	id: string;
+	planRevision: number;
+	graphRevision: number;
+	repository: string;
+	branch: string;
+	commit: string;
+	client: { name: string; version: string; session: string };
+};
+
+export type Implementations<Caller> = {
+	readImplementation(caller: Caller, id: string): Promise<Implementation | undefined | "forbidden">;
+	startImplementation(
+		caller: Caller,
+		input: ImplementationInput,
+	): Promise<
+		| { kind: "started"; run: Run }
+		| { kind: "active"; run: Run }
+		| { kind: "forbidden" }
+		| { kind: "refused"; reason: string }
+	>;
+};
+
 export type CreateDocument<Caller> = {
 	create(
 		caller: Caller,
@@ -53,6 +84,7 @@ export type McpOptions<Caller> = {
 	caller(request: Request): Promise<Caller | undefined> | Caller | undefined;
 	documents: DocumentReader<Caller>;
 	create?: CreateDocument<Caller>;
+	implementations?: Implementations<Caller>;
 };
 
 type Tool = {
@@ -71,6 +103,20 @@ const DOCUMENT = {
 		title: { type: "string" },
 	},
 	required: ["id", "title"],
+	additionalProperties: false,
+};
+
+const IMPLEMENTATION = {
+	type: "object",
+	properties: {
+		id: { type: "string", minLength: 1, maxLength: MAX_DOCUMENT_ID_LENGTH },
+		planRevision: { type: "integer", minimum: 0 },
+		graphRevision: { type: "integer", minimum: 1 },
+		repository: { type: "string", pattern: REPOSITORY_PATH_PATTERN },
+		branch: { type: "string", minLength: 1, maxLength: 255 },
+		commit: { type: "string", minLength: 1, maxLength: 64 },
+	},
+	required: ["id", "planRevision", "graphRevision", "repository", "branch", "commit"],
 	additionalProperties: false,
 };
 
@@ -160,6 +206,23 @@ export const TOOLS: Tool[] = [
 			additionalProperties: false,
 		},
 	},
+	{
+		name: "read_implementation",
+		description: "Read the approved implementation graph, plan and repository context.",
+		inputSchema: {
+			type: "object",
+			properties: { id: { type: "string", minLength: 1, maxLength: MAX_DOCUMENT_ID_LENGTH } },
+			required: ["id"],
+			additionalProperties: false,
+		},
+		outputSchema: { type: "object", properties: {}, additionalProperties: true },
+	},
+	{
+		name: "start_implementation",
+		description: "Atomically claim the current approved implementation graph.",
+		inputSchema: IMPLEMENTATION,
+		outputSchema: { type: "object", properties: {}, additionalProperties: true },
+	},
 ];
 
 type Call = {
@@ -212,6 +275,37 @@ function toolCall(
 	if (!value || typeof value.name !== "string") return undefined;
 	let arguments_ = value.arguments === undefined ? {} : record(value.arguments);
 	return arguments_ ? { name: value.name, arguments: arguments_ } : undefined;
+}
+
+type StartArguments = Omit<ImplementationInput, "client">;
+
+function startArguments(value: Record<string, unknown>): StartArguments | undefined {
+	let expected = ["id", "planRevision", "graphRevision", "repository", "branch", "commit"];
+	if (
+		Object.keys(value).length !== expected.length
+		|| expected.some(key => !Object.hasOwn(value, key))
+	) return undefined;
+	if (
+		!isId(value.id)
+		|| !isRepository(value.repository)
+		|| typeof value.branch !== "string"
+		|| !value.branch.trim()
+		|| typeof value.commit !== "string"
+		|| !value.commit.trim()
+		|| !Number.isSafeInteger(value.planRevision)
+		|| (value.planRevision as number) < 0
+		|| !Number.isSafeInteger(value.graphRevision)
+		|| (value.graphRevision as number) < 1
+	) return undefined;
+	return value as StartArguments;
+}
+
+function clientInfo(value: unknown): { name: string; version: string } {
+	let info = record(record(value)?.clientInfo);
+	return {
+		name: typeof info?.name === "string" && info.name.trim() ? info.name : "unknown",
+		version: typeof info?.version === "string" && info.version.trim() ? info.version : "unknown",
+	};
 }
 
 function isId(value: unknown): value is string {
@@ -297,9 +391,19 @@ export function handler<Caller>(
 	options: McpOptions<Caller>,
 ): (request: Request) => Promise<Response> {
 	let creation = options.create;
-	let tools = creation ? TOOLS : TOOLS.filter(tool => tool.name !== "create_document");
+	let sessions = new Map<string, { name: string; version: string }>();
+	let tools = TOOLS.filter(tool =>
+		(tool.name !== "create_document" || creation)
+		&& (!["read_implementation", "start_implementation"].includes(tool.name)
+			|| options.implementations)
+	);
 
-	async function dispatch(value: unknown, caller: Caller): Promise<Reply | undefined> {
+	async function dispatch(
+		value: unknown,
+		caller: Caller,
+		client: { name: string; version: string; session: string },
+		created: { session?: string },
+	): Promise<Reply | undefined> {
 		let call = record(value) as Call | undefined;
 		if (!call || call.jsonrpc !== "2.0" || typeof call.method !== "string") {
 			return error(call?.id, -32600, "invalid request");
@@ -312,12 +416,16 @@ export function handler<Caller>(
 		let respond = (result: unknown) => notification ? undefined : reply(call.id, result);
 
 		switch (call.method) {
-			case "initialize":
+			case "initialize": {
+				let session = crypto.randomUUID();
+				sessions.set(session, clientInfo(call.params));
+				created.session = session;
 				return respond({
 					protocolVersion: "2025-03-26",
 					capabilities: { tools: {} },
 					serverInfo: { name: "chopin", version: "0.0.0" },
 				});
+			}
 
 			case "notifications/initialized":
 				return undefined;
@@ -370,6 +478,51 @@ export function handler<Caller>(
 					}
 					return respond({ content: [], isError: true });
 				}
+				if (tool.name === "read_implementation") {
+					if (Object.keys(tool.arguments).length !== 1 || !isId(tool.arguments.id)) {
+						return notification
+							? undefined
+							: error(call.id, -32602, "read_implementation requires an id");
+					}
+					if (!options.implementations) {
+						return respond(text({ code: "implementation-unavailable" }, true));
+					}
+					let implementation = await options.implementations.readImplementation(
+						caller,
+						tool.arguments.id,
+					);
+					if (implementation === "forbidden") {
+						return respond(text({ code: "repository-forbidden" }, true));
+					}
+					return implementation
+						? respond(text(implementation))
+						: respond(text({ code: "implementation-unavailable" }, true));
+				}
+				if (tool.name === "start_implementation") {
+					let input = startArguments(tool.arguments);
+					if (!input) {
+						return notification
+							? undefined
+							: error(call.id, -32602, "start_implementation requires current revisions");
+					}
+					if (!client.session || !sessions.has(client.session)) {
+						return respond(text({ code: "session-required" }, true));
+					}
+					if (!options.implementations) {
+						return respond(text({ code: "implementation-unavailable" }, true));
+					}
+					let outcome = await options.implementations.startImplementation(caller, {
+						...input,
+						client,
+					});
+					if (outcome.kind === "started" || outcome.kind === "active") {
+						return respond(text({ state: outcome.kind, run: outcome.run }));
+					}
+					if (outcome.kind === "forbidden") {
+						return respond(text({ code: "repository-forbidden" }, true));
+					}
+					return respond(text({ code: outcome.reason }, true));
+				}
 				return notification ? undefined : error(call.id, -32601, "tool not found");
 			}
 
@@ -392,6 +545,9 @@ export function handler<Caller>(
 			return new Response("method not allowed", { status: 405, headers: { allow: "GET, POST" } });
 		}
 
+		let session = request.headers.get("mcp-session-id") ?? "";
+		let client = { ...(sessions.get(session) ?? { name: "unknown", version: "unknown" }), session };
+		let created: { session?: string } = {};
 		let body: unknown;
 		try {
 			let read = await requestBody(request);
@@ -400,7 +556,11 @@ export function handler<Caller>(
 		} catch {
 			return Response.json(error(null, -32700, "parse error"));
 		}
-		let result = await dispatch(body, caller);
-		return result ? Response.json(result) : new Response(null, { status: 202 });
+		let result = await dispatch(body, caller, client, created);
+		return result
+			? Response.json(result, {
+				headers: created.session ? { "mcp-session-id": created.session } : undefined,
+			})
+			: new Response(null, { status: 202 });
 	};
 }

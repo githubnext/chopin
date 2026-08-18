@@ -99,7 +99,7 @@ export async function ask(
 	placement?: AskPlacement,
 	created?: () => void,
 ): Promise<Ended[]> {
-	if (plan.execution) throw new Error("implementation is active");
+	if (Service.implementationActive(plan)) throw new Error("implementation is active");
 	if (definition.questions.length === 0) {
 		Question.reject("A questionnaire needs at least one question");
 	}
@@ -264,7 +264,7 @@ export async function submit(
 	ws: Socket,
 	msg: Request<Wire.Submit.Ask>,
 ): Promise<void> {
-	if (plan.execution) return fail(ws, msg.rid, "implementation is active");
+	if (Service.implementationActive(plan)) return fail(ws, msg.rid, "implementation is active");
 	let claimed = Store.claimSubmit(plan.questions, msg.id, msg.revision, ws.data.handle);
 	if (!claimed.ok) {
 		return reply(ws, msg.rid, { kind: "question:submit", ts: 0, id: msg.id, ...claimed });
@@ -350,7 +350,7 @@ export async function cancel(
 	ws: Socket,
 	msg: Request<Wire.Cancel.Ask>,
 ): Promise<void> {
-	if (plan.execution) return fail(ws, msg.rid, "implementation is active");
+	if (Service.implementationActive(plan)) return fail(ws, msg.rid, "implementation is active");
 	let claimed = Store.claimCancel(plan.questions, msg.id, ws.data.handle);
 	if (!claimed.ok) {
 		return reply(ws, msg.rid, { kind: "question:cancel", ts: 0, id: msg.id, ...claimed });

@@ -34,6 +34,31 @@ export type Graph = {
 	versions: Version[];
 };
 
+/** Durable ownership of the external session implementing one locked graph. */
+export type Run = {
+	id: string;
+	user: string;
+	client: { name: string; version: string };
+	session: string;
+	planRevision: number;
+	graphRevision: number;
+	repository: string;
+	branch: string;
+	commit: string;
+	startedAt: string;
+};
+
+export type ClaimInput = {
+	planRevision: number;
+	graphRevision: number;
+	run: Run;
+};
+
+export type ClaimResult =
+	| { kind: "started"; graph: Graph; run: Run }
+	| { kind: "active"; run: Run }
+	| { kind: "refused"; reason: string };
+
 export type GraphAdapter<Document> = {
 	/** Runs the change against one current graph and plan revision. */
 	transact(
@@ -203,6 +228,97 @@ function history(versions: Version[]): boolean {
 		);
 	}
 	return prior.every(version => version.state === "superseded");
+}
+
+function run(value: unknown): Run | undefined {
+	let stored = item(value, [
+		"branch",
+		"client",
+		"commit",
+		"graphRevision",
+		"id",
+		"planRevision",
+		"repository",
+		"session",
+		"startedAt",
+		"user",
+	]);
+	let client = stored && item(stored.client, ["name", "version"]);
+	let strings = stored && client && [
+		stored.id,
+		stored.user,
+		stored.session,
+		stored.repository,
+		stored.branch,
+		stored.commit,
+		stored.startedAt,
+		client.name,
+		client.version,
+	];
+	if (
+		!stored
+		|| !client
+		|| !strings
+		|| strings.some(value => typeof value !== "string" || !value.trim())
+		|| !Number.isSafeInteger(stored.planRevision)
+		|| (stored.planRevision as number) < 0
+		|| !Number.isSafeInteger(stored.graphRevision)
+		|| (stored.graphRevision as number) < 1
+	) return undefined;
+	return {
+		id: stored.id as string,
+		user: stored.user as string,
+		client: { name: client.name as string, version: client.version as string },
+		session: stored.session as string,
+		planRevision: stored.planRevision as number,
+		graphRevision: stored.graphRevision as number,
+		repository: stored.repository as string,
+		branch: stored.branch as string,
+		commit: stored.commit as string,
+		startedAt: stored.startedAt as string,
+	};
+}
+
+/** Restore a run only when it names this sidecar's locked graph and revision. */
+export function restoreRun(
+	value: unknown,
+	graph: Graph | undefined,
+	revision: number,
+): Run | undefined {
+	let restored = run(value);
+	let version = graph?.versions.at(-1);
+	if (
+		!restored
+		|| !version
+		|| version.state !== "locked"
+		|| version.planRevision !== revision
+		|| restored.planRevision !== revision
+		|| restored.graphRevision !== version.revision
+	) return undefined;
+	return copy(restored);
+}
+
+/** Lock exactly one approved graph revision and record its owner atomically. */
+export function claim(
+	state: { graph: Graph | undefined; revision: number | undefined; execution: Run | undefined },
+	input: ClaimInput,
+): ClaimResult {
+	if (state.execution) return { kind: "active", run: copy(state.execution) };
+	if (state.revision !== input.planRevision) return { kind: "refused", reason: "stale-plan" };
+	let graph = state.graph && copy(state.graph);
+	let version = graph?.versions.at(-1);
+	let owner = run(input.run);
+	if (!graph || !version) return { kind: "refused", reason: "missing" };
+	if (!owner) return { kind: "refused", reason: "run" };
+	if (version.revision !== input.graphRevision) return { kind: "refused", reason: "stale-graph" };
+	if (version.state !== "approved") return { kind: "refused", reason: "not-approved" };
+	if (version.planRevision !== state.revision) return { kind: "refused", reason: "stale-plan" };
+	if (owner.planRevision !== input.planRevision || owner.graphRevision !== input.graphRevision) {
+		return { kind: "refused", reason: "run" };
+	}
+
+	graph.versions[graph.versions.length - 1] = { ...version, state: "locked" };
+	return { kind: "started", graph, run: copy(owner) };
 }
 
 /** Apply a planner's whole graph batch before deciding whether it is valid. */

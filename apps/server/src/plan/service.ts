@@ -20,8 +20,8 @@ import * as room from "./room";
 import * as Chat from "../chat/service";
 import * as Comments from "../comments/service";
 import * as Questions from "../questions/service";
-import { restore as restoreGraph } from "../tasks/graphs";
-import { broadcast, relay, reply, tell } from "../wire";
+import { claim, restore as restoreGraph, restoreRun } from "../tasks/graphs";
+import { broadcast, fail, relay, reply, tell } from "../wire";
 
 import type { Server } from "bun";
 import type { Plan as Wire, Request } from "@chopin/protocol";
@@ -33,7 +33,7 @@ import type { Block } from "./edit";
 import type { Brief, CreationOrigin } from "../mcp";
 import type { InitialChannel, JsonValue, Lease, StoredChannel } from "../storage/model";
 import type { StorageAdapter } from "../storage/port";
-import type { Graph } from "../tasks/graphs";
+import type { ClaimInput, ClaimResult, Graph, Run } from "../tasks/graphs";
 
 /** Updates are grouped for this long before being applied together. */
 const GROUP_MS = 5;
@@ -128,6 +128,10 @@ export type Plan = {
 	revision: number;
 	/** Implementation work, stored beside rather than inside the plan. */
 	graph?: Graph;
+	/** The external implementation run that freezes this plan. */
+	execution?: Run;
+	/** A claim has closed mutation ingress while accepted work drains. */
+	claiming: boolean;
 	/**
 	 * Block outlines by revision.
 	 *
@@ -164,6 +168,7 @@ type Sidecar = {
 	documentSeq: number;
 	creation?: CreationMetadata;
 	graph?: Graph;
+	execution?: Run;
 	questions: Questions.Record[];
 	openQuestions: Questions.StoredOpen[];
 	threads: Comments.Record[];
@@ -177,6 +182,7 @@ function state(plan: Plan): Sidecar {
 		documentSeq: plan.document.seq,
 		...(plan.creation ? { creation: plan.creation } : {}),
 		...(plan.graph ? { graph: plan.graph } : {}),
+		...(plan.execution ? { execution: plan.execution } : {}),
 		questions: [...plan.records.values()],
 		openQuestions: Questions.dump(plan.questions),
 		threads: [...plan.threads.values()],
@@ -331,6 +337,7 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 	];
 	if (created) expected.push(...(legacy ? ["brief", "origin"] : ["creation"]));
 	if (Object.hasOwn(item, "graph")) expected.push("graph");
+	if (Object.hasOwn(item, "execution")) expected.push("execution");
 	expected.sort();
 	if (
 		keys.length !== expected.length
@@ -347,6 +354,12 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 		|| !Array.isArray(item.threads)
 		|| !Array.isArray(item.transcript)
 	) throw new Error("hosted channel has an invalid sidecar");
+	let execution = Object.hasOwn(item, "execution")
+		? restoreRun(item.execution, graph, item.revision)
+		: undefined;
+	if (Object.hasOwn(item, "execution") && !execution) {
+		throw new Error("hosted channel has an invalid implementation run");
+	}
 	let questions = objects(item.questions, "question record");
 	for (let question of questions) {
 		if (
@@ -388,6 +401,7 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 		documentSeq: item.documentSeq,
 		...(created ? { creation: created } : {}),
 		...(graph ? { graph } : {}),
+		...(execution ? { execution } : {}),
 		questions: questions as never[],
 		openQuestions: openQuestions as unknown as Questions.StoredOpen[],
 		threads: threads as never[],
@@ -570,6 +584,20 @@ export function exclusive<T>(plan: Plan, action: () => Promise<T>): Promise<T> {
 	return operation;
 }
 
+/** Drain mutations already admitted before a claim closes the plan to new work. */
+export async function drain(plan: Plan): Promise<void> {
+	if (plan.timer) clearTimeout(plan.timer);
+	plan.timer = undefined;
+	let pending = () => commit(plan);
+	plan.flushing = plan.flushing.then(pending, pending);
+	await plan.flushing;
+}
+
+/** One gate for every path that can mutate a plan during implementation. */
+export function implementationActive(plan: Plan): boolean {
+	return plan.claiming || !!plan.execution;
+}
+
 /** Sidecar-only commit for a caller already holding `exclusive`. */
 export function persistExclusive(plan: Plan): Promise<void> {
 	return commitHosted(plan, undefined, `state:${crypto.randomUUID()}`, capture(plan));
@@ -580,6 +608,34 @@ type RestoredHosted = {
 	needsInitialCheckpoint: boolean;
 	sidecar: Sidecar;
 };
+
+/** Prepare the sidecar half of one atomic claim for a plan that is not live. */
+export function claimStored(
+	loaded: StoredChannel,
+	input: ClaimInput,
+): { result: ClaimResult; sidecar?: JsonValue } {
+	let pristine = loaded.channel.revision === 0 && loaded.latestSequence === 0 && !loaded.snapshot;
+	let sidecar = restoredState(
+		loaded.sidecar === null && loaded.snapshot && loaded.channel.revision === 0
+			? loaded.snapshot.sidecar
+			: loaded.sidecar,
+		pristine,
+	);
+	let result = claim({
+		graph: sidecar.graph,
+		revision: sidecar.revision,
+		execution: sidecar.execution,
+	}, input);
+	if (result.kind !== "started") return { result };
+	return {
+		result,
+		sidecar: JSON.parse(JSON.stringify({
+			...sidecar,
+			graph: result.graph,
+			execution: result.run,
+		})) as JsonValue,
+	};
+}
 
 async function restoreHosted(id: string, loaded: StoredChannel): Promise<RestoredHosted> {
 	let document: Document;
@@ -631,7 +687,13 @@ async function restoreHosted(id: string, loaded: StoredChannel): Promise<Restore
 /** Project a closed channel without attaching it to the live room registry. */
 export async function readStored(
 	loaded: StoredChannel,
-): Promise<{ source: string; revision: number; creation?: CreationMetadata }> {
+): Promise<{
+	source: string;
+	revision: number;
+	creation?: CreationMetadata;
+	graph?: Graph;
+	execution?: Run;
+}> {
 	let restored = await restoreHosted(loaded.channel.id, loaded);
 	try {
 		Questions.shutdown(Questions.restore(restored.sidecar.openQuestions));
@@ -639,6 +701,8 @@ export async function readStored(
 			source: room.project(restored.document),
 			revision: restored.sidecar.revision,
 			...(restored.sidecar.creation ? { creation: restored.sidecar.creation } : {}),
+			...(restored.sidecar.graph ? { graph: restored.sidecar.graph } : {}),
+			...(restored.sidecar.execution ? { execution: restored.sidecar.execution } : {}),
 		};
 	} finally {
 		restored.document.doc.destroy();
@@ -669,6 +733,8 @@ export async function open(
 		threads: new Map(sidecar.threads.map(record => [record.id, record])),
 		revision: sidecar.revision,
 		graph: sidecar.graph,
+		execution: sidecar.execution,
+		claiming: false,
 		queue: [],
 		timer: undefined,
 		attention: undefined,
@@ -740,6 +806,7 @@ function meter(plan: Plan, ws: Socket): Meter {
 
 /** Accept an update for the next batch, or say why not. */
 export function submit(plan: Plan, ws: Socket, msg: Request<Wire.Submit>): void {
+	if (implementationActive(plan)) return fail(ws, msg.rid, "implementation is active");
 	if (msg.epoch !== plan.document.epoch) {
 		// Nothing to correct: the client is describing a history that no longer
 		// exists and needs to re-open, which the reset already told it to do.
@@ -882,6 +949,7 @@ export async function publish(
 	roomId: string,
 	mutation: { update: Uint8Array; source: string },
 ): Promise<void> {
+	if (implementationActive(plan)) throw new Error("implementation is active");
 	plan.document.seq++;
 	plan.revision++;
 	let operationId = `server:${plan.document.epoch}:${

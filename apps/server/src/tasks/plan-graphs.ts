@@ -1,11 +1,11 @@
 /** The hosted persistence boundary for implementation graphs. */
 
-import { Graphs } from "./graphs";
+import { claim, Graphs } from "./graphs";
 import * as Comments from "../comments/service";
-import { exclusive, persistExclusive } from "../plan/service";
+import { drain, exclusive, persistExclusive } from "../plan/service";
 
 import type { Plan } from "../plan/service";
-import type { Graph, GraphAdapter, Result } from "./graphs";
+import type { ClaimInput, ClaimResult, Graph, GraphAdapter, Result } from "./graphs";
 
 const adapter: GraphAdapter<Plan> = {
 	async transact(plan, change): Promise<Result<Graph>> {
@@ -31,6 +31,38 @@ const adapter: GraphAdapter<Plan> = {
 /** The graph service for a live hosted plan. */
 export function implementationGraphs(): Graphs<Plan> {
 	return new Graphs(adapter);
+}
+
+/** Drain accepted work, then durably lock one approved graph for implementation. */
+export async function claimImplementation(plan: Plan, input: ClaimInput): Promise<ClaimResult> {
+	if (plan.execution) {
+		return claim({ graph: plan.graph, revision: plan.revision, execution: plan.execution }, input);
+	}
+	plan.claiming = true;
+	try {
+		await drain(plan);
+		return await exclusive(plan, async () => {
+			let result = claim({
+				graph: plan.graph,
+				revision: plan.revision,
+				execution: plan.execution,
+			}, input);
+			if (result.kind !== "started") return result;
+			let previous = plan.graph;
+			plan.graph = result.graph;
+			plan.execution = result.run;
+			try {
+				await persistExclusive(plan);
+				return result;
+			} catch {
+				plan.graph = previous;
+				plan.execution = undefined;
+				return { kind: "refused", reason: "durability" };
+			}
+		});
+	} finally {
+		plan.claiming = false;
+	}
 }
 
 /** Whether the settled plan can be turned into implementation work. */

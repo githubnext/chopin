@@ -16,6 +16,7 @@ import * as Comments from "../comments/service";
 import * as edit from "../plan/edit";
 import * as Questions from "../questions/service";
 import { implementationGraphs, implementationReadiness } from "../tasks/plan-graphs";
+import { implementationActive } from "../plan/service";
 
 import type { Server } from "bun";
 import type { Tool } from "@github/copilot-sdk";
@@ -156,7 +157,7 @@ export function toolbox(context: Context): Tool[] {
 			handler: raw =>
 				answer("edit_plan", () =>
 					context.exclusive(async () => {
-						if (context.plan.execution) return { ok: false, reason: "locked" };
+						if (implementationActive(context.plan)) return { ok: false, reason: "locked" };
 						let args = Arguments.editPlan(raw);
 						let outcome = edit.apply(context.plan, args.revision, args.operations);
 						if (!outcome.ok) return outcome;
@@ -268,7 +269,7 @@ export function toolbox(context: Context): Tool[] {
 			skipPermission: true,
 			handler: raw =>
 				answer("ask", async () => {
-					if (context.plan.execution) return { ok: false, reason: "locked" };
+					if (implementationActive(context.plan)) return { ok: false, reason: "locked" };
 					let args = Arguments.askPlan(raw);
 					let definition = Questions.identify({
 						questions: args.questions.map(({ blocks, ...question }) => question),
@@ -411,7 +412,7 @@ export function toolbox(context: Context): Tool[] {
 			},
 			handler: raw =>
 				answer("anchor_plan", async () => {
-					if (context.plan.execution) return { ok: false, reason: "locked" };
+					if (implementationActive(context.plan)) return { ok: false, reason: "locked" };
 					let args = Arguments.anchorPlan(raw);
 
 					if (args.revision !== context.plan.revision) {

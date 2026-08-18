@@ -8,6 +8,7 @@ import * as Room from "../plan/room";
 import * as Service from "../plan/service";
 import * as Rooms from "../rooms";
 import { MemoryStorage } from "../storage/memory/adapter";
+import { implementationGraphs } from "../tasks/plan-graphs";
 import { hosted } from "./hosted";
 
 import type { Server } from "bun";
@@ -438,6 +439,81 @@ describe("the hosted MCP adapter", () => {
 			Rooms.forget(live);
 			await Service.close(opened);
 		}
+	});
+
+	it("atomically stores one implementation claim for a closed hosted plan", async () => {
+		let context = setup();
+		context.github.repositoryValue = {
+			...context.github.repositoryValue,
+			permissions: { pull: true, push: true, admin: false },
+		};
+		let opened = await plan(context);
+		opened.plan.creation = {
+			brief: creation.brief,
+			origin: {
+				idempotencyKey: creation.idempotencyKey,
+				fingerprint: creation.fingerprint,
+				repository: creation.repository,
+				baseBranch: creation.baseBranch,
+				baseCommit: creation.baseCommit,
+				title: creation.title,
+			},
+		};
+		let graph = await implementationGraphs().revise(opened.plan, {
+			planRevision: 0,
+			graphRevision: 0,
+			operations: [{
+				op: "add",
+				task: {
+					id: "claim",
+					title: "Claim the graph",
+					context: "The graph and run share one durable sidecar.",
+					goal: "Lock approved work for one external session.",
+					acceptance: ["The graph locks.", "The run is durable."],
+					dependsOn: [],
+				},
+			}],
+		});
+		expect(graph.ok).toBe(true);
+		expect((await implementationGraphs().approve(opened.plan)).ok).toBe(true);
+		await Service.close(opened.plan);
+
+		let adapter = hosted(context.auth, { lease: () => opened.lease });
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller || !adapter.implementations) throw new Error("implementation adapter unavailable");
+		let input = {
+			id: opened.channel.id,
+			planRevision: 0,
+			graphRevision: 1,
+			repository: "octo-org/score",
+			branch: "tq/017",
+			commit: "deadbeef",
+			client: { name: "Codex", version: "1.2.3", session: "session-1" },
+		};
+		expect(await adapter.implementations.startImplementation(caller, input)).toMatchObject({
+			kind: "started",
+			run: {
+				user: "allowed",
+				client: { name: "Codex", version: "1.2.3" },
+				session: "session-1",
+			},
+		});
+
+		let stored = await context.storage.collaboration.load(opened.channel.id, context.now);
+		if (!stored) throw new Error("claimed plan was not stored");
+		expect(await Service.readStored(stored)).toMatchObject({
+			graph: { versions: [{ state: "locked" }] },
+			execution: { branch: "tq/017", commit: "deadbeef" },
+		});
+		expect(await adapter.implementations.readImplementation(caller, opened.channel.id))
+			.toMatchObject({
+				graph: { state: "locked" },
+				execution: { state: "active", run: { session: "session-1" } },
+			});
+		expect(await adapter.implementations.startImplementation(caller, input)).toMatchObject({
+			kind: "active",
+			run: { session: "session-1" },
+		});
 	});
 
 	it("makes an inaccessible channel indistinguishable from a missing channel", async () => {

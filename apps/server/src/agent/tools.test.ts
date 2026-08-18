@@ -316,18 +316,15 @@ test("a stale ask does not announce an anchor snapshot", async () => {
 });
 
 test("ask refuses to create a questionnaire while implementation is active", async () => {
-	let directory = await mkdtemp(join(tmpdir(), "chopin-agent-tools-"));
-	directories.push(directory);
-	await writeFile(join(directory, "plan.mdx"), "Related prose.\n");
-	let server = { publish() {} } as unknown as Server<SocketData>;
-	let plan = await Service.open("test", directory, server);
-	plans.push(plan);
+	let { plan, server } = await opened("Related prose.\n");
 	let anchors = 0;
 	let ask = toolbox({
 		plan,
 		server,
 		room: "test",
-		publish() {},
+		persist: () => Service.persist(plan),
+		exclusive: action => Service.exclusive(plan, action),
+		async publish() {},
 		anchors: () => anchors++,
 		changes() {},
 	}).find(tool => tool.name === "ask");
