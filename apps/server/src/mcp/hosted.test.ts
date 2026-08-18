@@ -12,7 +12,14 @@ import { hosted } from "./hosted";
 
 import type { Server } from "bun";
 import type { HostedAuth } from "../auth/routes";
-import type { GitHub, GitHubUser, Repository, RepositoryPage } from "../github/client";
+import type {
+	GitHub,
+	GitHubTokenGrant,
+	GitHubUser,
+	InstallationPage,
+	Repository,
+	RepositoryPage,
+} from "../github/client";
 import type { Socket, SocketData } from "../wire";
 
 class GitHubBoundary implements GitHub {
@@ -33,8 +40,12 @@ class GitHubBoundary implements GitHub {
 		return "";
 	}
 
-	async exchange(): Promise<string> {
-		return "";
+	async exchange(): Promise<GitHubTokenGrant> {
+		return grant("access-token");
+	}
+
+	async refresh(): Promise<GitHubTokenGrant> {
+		return grant("refreshed-access-token");
 	}
 
 	async user(token: string): Promise<GitHubUser> {
@@ -45,6 +56,14 @@ class GitHubBoundary implements GitHub {
 
 	async repositories(): Promise<RepositoryPage> {
 		return { repositories: [], nextPage: undefined };
+	}
+
+	async installations(): Promise<InstallationPage> {
+		return { installations: [], nextPage: undefined };
+	}
+
+	async installationRepositories(): Promise<RepositoryPage> {
+		return this.repositories();
 	}
 
 	async repository(_token: string, owner: string, name: string): Promise<Repository> {
@@ -59,6 +78,8 @@ class GitHubBoundary implements GitHub {
 		return this.accessible ? this.value(owner, name) : undefined;
 	}
 
+	invalidate(): void {}
+
 	private value(owner: string, name: string): Repository {
 		return {
 			...this.repositoryValue,
@@ -70,6 +91,15 @@ class GitHubBoundary implements GitHub {
 	}
 }
 
+function grant(accessToken: string): GitHubTokenGrant {
+	return {
+		accessToken,
+		accessExpiresIn: 28_800,
+		refreshToken: "refresh-token",
+		refreshExpiresIn: 15_897_600,
+	};
+}
+
 function setup() {
 	let now = new Date("2026-08-17T12:00:00.000Z");
 	let storage = new MemoryStorage();
@@ -78,13 +108,14 @@ function setup() {
 	let auth: HostedAuth = {
 		config: {
 			origin: "https://chopin.test",
+			appSlug: "chopin-test",
 			clientId: "client-id",
 			clientSecret: "client-secret",
 			encryptionKey: key,
 		},
 		storage,
 		github,
-		sessions: new Sessions(storage, key, true, () => now),
+		sessions: new Sessions(storage, true, () => now),
 		clock: () => now,
 	};
 	return { auth, github, now, storage };
