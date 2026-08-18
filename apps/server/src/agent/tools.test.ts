@@ -114,6 +114,36 @@ test("anchor_plan publishes moving a decision beside the validated prose", async
 		.toBeLessThan(source.indexOf("The second paragraph."));
 });
 
+test("edit_plan refuses while an implementation claim drains", async () => {
+	let { plan, server } = await opened("The plan is ready.\n");
+	(plan as typeof plan & { claiming: boolean }).claiming = true;
+	let editPlan = toolbox({
+		plan,
+		server,
+		room: "test",
+		persist: () => Service.persist(plan),
+		exclusive: action => Service.exclusive(plan, action),
+		async publish() {},
+		anchors() {},
+		changes() {},
+	}).find(tool => tool.name === "edit_plan");
+	if (!editPlan?.handler) throw new Error("edit_plan has no handler");
+	let args = {
+		revision: plan.revision,
+		operations: [{ op: "replace", index: 0, source: "The plan was changed.\n" }],
+	};
+
+	let response = await editPlan.handler(args, {
+		sessionId: "session",
+		toolCallId: "call",
+		toolName: "edit_plan",
+		arguments: args,
+	});
+
+	expect(JSON.parse(response as string)).toEqual({ ok: false, reason: "locked" });
+	expect(room.project(plan.document)).toBe("The plan is ready.\n");
+});
+
 test("anchor_plan keeps same-block decisions in original ask order", async () => {
 	let { plan, server } = await opened(
 		SOURCE.replace(
