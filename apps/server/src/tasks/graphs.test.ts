@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { Graphs } from "./graphs";
+import { Graphs, restore } from "./graphs";
 
 import type { Definition, Graph, GraphAdapter } from "./graphs";
 
@@ -72,6 +72,10 @@ function changed(): Definition {
 	return next;
 }
 
+function stored(number: number, state: string): unknown {
+	return { number, planRevision: 0, state, definition: definition() };
+}
+
 async function expectGraph<T>(
 	value: Promise<{ ok: true; value: T } | { ok: false; reason: string }>,
 ): Promise<T> {
@@ -82,6 +86,13 @@ async function expectGraph<T>(
 }
 
 describe("implementation task graphs", () => {
+	it("ignores an unreachable version history while preserving graph revision compatibility", () => {
+		expect(restore({
+			versions: [stored(1, "locked"), stored(2, "approved")],
+		})).toBeUndefined();
+		expect(restore({ versions: [stored(1, "draft")] })?.versions[0].revision).toBe(1);
+	});
+
 	it("persists a draft graph against the document revision with independent and joined work", async () => {
 		let backend = new Memory();
 		backend.revisions.set("plan", 7);

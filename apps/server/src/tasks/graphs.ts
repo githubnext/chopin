@@ -23,6 +23,8 @@ export type State = "draft" | "approved" | "locked" | "superseded";
 
 export type Version = {
 	number: number;
+	/** Changes whenever a draft definition changes. */
+	revision: number;
 	planRevision: number;
 	state: State;
 	definition: Definition;
@@ -123,22 +125,94 @@ function current(graph: Graph): Version | undefined {
 	return graph.versions.at(-1);
 }
 
+function item(value: unknown, keys: string[]): Record<string, unknown> | undefined {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+	let record = value as Record<string, unknown>;
+	let found = Object.keys(record).sort();
+	let expected = [...keys].sort();
+	return found.length === expected.length && found.every((key, index) => key === expected[index])
+		? record
+		: undefined;
+}
+
+function definition(value: unknown): Definition | undefined {
+	let stored = item(value, ["tasks"]);
+	if (!stored || !Array.isArray(stored.tasks)) return undefined;
+	let tasks: Task[] = [];
+	for (let value of stored.tasks) {
+		let task = item(value, ["acceptance", "context", "dependsOn", "goal", "id", "title"]);
+		if (
+			!task
+			|| typeof task.id !== "string"
+			|| typeof task.title !== "string"
+			|| typeof task.context !== "string"
+			|| typeof task.goal !== "string"
+			|| !Array.isArray(task.acceptance)
+			|| !Array.isArray(task.dependsOn)
+			|| task.acceptance.some(value => typeof value !== "string")
+			|| task.dependsOn.some(value => typeof value !== "string")
+		) return undefined;
+		tasks.push({
+			id: task.id,
+			title: task.title,
+			context: task.context,
+			goal: task.goal,
+			acceptance: task.acceptance,
+			dependsOn: task.dependsOn,
+		});
+	}
+	let checked = validate({ tasks });
+	return checked.ok ? checked.value : undefined;
+}
+
+function history(versions: Version[]): boolean {
+	let latest = versions.at(-1);
+	if (!latest || latest.state === "superseded") return false;
+	if (
+		versions.some((version, index) =>
+			index > 0 && version.planRevision < versions[index - 1].planRevision
+		)
+	) {
+		return false;
+	}
+	let prior = versions.slice(0, -1);
+	if (latest.state === "draft") {
+		return prior.every((version, index) =>
+			version.state === "superseded"
+			|| index === prior.length - 1 && version.state === "approved"
+		);
+	}
+	return prior.every(version => version.state === "superseded");
+}
+
 /** Read a graph back from a sidecar without trusting handwritten JSON. */
 export function restore(value: unknown): Graph | undefined {
-	if (!value || typeof value !== "object" || !Array.isArray((value as Graph).versions)) {
-		return undefined;
-	}
-	let graph = value as Graph;
-	if (graph.versions.length === 0) return undefined;
-	for (let [index, version] of graph.versions.entries()) {
+	let stored = item(value, ["versions"]);
+	if (!stored || !Array.isArray(stored.versions) || stored.versions.length === 0) return undefined;
+	let versions: Version[] = [];
+	for (let [index, value] of stored.versions.entries()) {
+		let version = item(value, ["definition", "number", "planRevision", "revision", "state"])
+			?? item(value, ["definition", "number", "planRevision", "state"]);
+		let checked = version && definition(version.definition);
 		if (
-			!version || typeof version !== "object" || version.number !== index + 1
-			|| !Number.isInteger(version.planRevision) || version.planRevision < 0
-			|| !["draft", "approved", "locked", "superseded"].includes(version.state)
-			|| !validate(version.definition).ok
+			!version
+			|| version.number !== index + 1
+			|| !Number.isInteger(version.revision ?? 1)
+			|| (version.revision ?? 1) < 1
+			|| !Number.isInteger(version.planRevision)
+			|| version.planRevision < 0
+			|| !["draft", "approved", "locked", "superseded"].includes(version.state as string)
+			|| !checked
 		) return undefined;
+		versions.push({
+			number: version.number,
+			revision: version.revision ?? 1,
+			planRevision: version.planRevision,
+			state: version.state as State,
+			definition: checked,
+		});
 	}
-	return copy(graph);
+	return history(versions) ? { versions } : undefined;
 }
 
 /**
@@ -178,6 +252,7 @@ export class Graphs<Document> {
 				value: {
 					versions: [{
 						number: 1,
+						revision: 1,
 						planRevision: revision,
 						state: "draft",
 						definition: checked.value,
@@ -200,12 +275,14 @@ export class Graphs<Document> {
 			if (version.state === "draft") {
 				graph.versions[graph.versions.length - 1] = {
 					...graph.versions[graph.versions.length - 1],
+					revision: version.revision + 1,
 					planRevision: revision,
 					definition: checked.value,
 				};
 			} else {
 				graph.versions.push({
 					number: version.number + 1,
+					revision: 1,
 					planRevision: revision,
 					state: "draft",
 					definition: checked.value,
