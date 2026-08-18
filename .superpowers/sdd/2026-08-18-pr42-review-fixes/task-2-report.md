@@ -64,3 +64,34 @@ the four changed files pass dprint.
 
 None. The existing live-read test covers the live response path; the same
 shared projector now handles its metadata-bearing documents as well.
+
+## Review follow-up
+
+### Fixes
+
+- `restoredState` now accepts the former paired `brief` and `origin` sidecar
+  fields only when both are present and valid, then normalizes them to one
+  `CreationMetadata` value in memory. A later state persistence writes only
+  the cohesive `creation` field.
+- Added a live metadata-bearing channel test. Its exact public response keeps
+  the brief and excludes all provenance, including the idempotency fingerprint.
+
+### Evidence
+
+RED:
+
+```sh
+bun test apps/server/src/plan/creation.test.ts apps/server/src/mcp/hosted.test.ts
+```
+
+Result: 14 pass, 1 fail. The legacy sidecar was rejected as invalid before the
+normalization path was added.
+
+GREEN:
+
+```sh
+bun test apps/server/src/plan/creation.test.ts apps/server/src/mcp/hosted.test.ts
+```
+
+Result: 15 pass, 0 fail. The suite includes restoration and rewrite of a
+legacy sidecar plus exact public projection of a live created plan.

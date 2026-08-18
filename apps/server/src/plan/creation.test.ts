@@ -47,6 +47,39 @@ async function created(): Promise<MemoryStorage> {
 	return storage;
 }
 
+async function legacyCreated(): Promise<MemoryStorage> {
+	let storage = new MemoryStorage();
+	await storage.users.put({
+		id: "U_octocat",
+		login: "octocat",
+		avatarUrl: "https://example.test/octocat",
+		now,
+	});
+	let initial = await Service.initial("# Created\n", creation);
+	initial.sidecar = {
+		version: 1,
+		revision: 0,
+		documentSeq: 0,
+		brief: creation.brief,
+		origin: creation.origin,
+		questions: [],
+		openQuestions: [],
+		threads: [],
+		transcript: [],
+	};
+	await storage.channels.create({
+		id: "legacy-created-plan",
+		repositoryId: "R_score",
+		repositoryOwner: "octo-org",
+		repositoryName: "score",
+		title: "Created plan",
+		createdBy: "U_octocat",
+		now,
+		initial,
+	});
+	return storage;
+}
+
 it("restores an MCP-created plan with its creation metadata", async () => {
 	let storage = await created();
 	let stored = await storage.collaboration.load("created-plan", now);
@@ -59,8 +92,20 @@ it("restores an MCP-created plan with its creation metadata", async () => {
 	});
 });
 
-it("retains creation metadata after the plan is persisted", async () => {
-	let storage = await created();
+it("normalizes legacy paired creation metadata when restoring a plan", async () => {
+	let storage = await legacyCreated();
+	let stored = await storage.collaboration.load("legacy-created-plan", now);
+	if (!stored) throw new Error("legacy plan was not stored");
+
+	expect(await Service.readStored(stored)).toEqual({
+		source: "# Created\n",
+		revision: 0,
+		creation,
+	});
+});
+
+it("rewrites legacy creation metadata cohesively when the plan is persisted", async () => {
+	let storage = await legacyCreated();
 	let lease = await storage.leases.acquire("channel-writer", "creation-test", 60_000);
 	if (!lease) throw new Error("could not acquire test lease");
 	let backend: Service.Backend = {
@@ -71,12 +116,15 @@ it("retains creation metadata after the plan is persisted", async () => {
 		},
 	};
 	let server = { publish() {} } as unknown as Server<SocketData>;
-	let plan = await Service.open("created-plan", backend, server);
+	let plan = await Service.open("legacy-created-plan", backend, server);
 	plan.revision = 1;
 	await Service.persist(plan);
 	await Service.close(plan);
-	let stored = await storage.collaboration.load("created-plan", now);
-	if (!stored) throw new Error("created plan was not stored");
+	let stored = await storage.collaboration.load("legacy-created-plan", now);
+	if (!stored) throw new Error("legacy plan was not stored");
 
+	expect(stored.sidecar).toMatchObject({ creation });
+	expect(stored.sidecar).not.toHaveProperty("brief");
+	expect(stored.sidecar).not.toHaveProperty("origin");
 	expect(await Service.readStored(stored)).toMatchObject({ creation });
 });
