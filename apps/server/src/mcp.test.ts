@@ -117,7 +117,9 @@ describe("the MCP read protocol", () => {
 			})),
 		);
 		expect((tools.result as { tools: unknown[] }).tools).toEqual(
-			TOOLS.filter(tool => tool.name !== "create_document"),
+			TOOLS.filter(tool =>
+				!["create_document", "read_implementation", "start_implementation"].includes(tool.name)
+			),
 		);
 
 		let listed = await json(

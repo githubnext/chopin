@@ -379,7 +379,9 @@ async function settle(
 	kind: Resolution,
 ): Promise<void> {
 	let { plan, room: roomId, server } = context;
-	if (kind === "accept" && plan.execution) return fail(ws, msg.rid, "implementation is active");
+	if (kind === "accept" && Service.implementationActive(plan)) {
+		return fail(ws, msg.rid, "implementation is active");
+	}
 
 	let held = plan.threads.get(msg.id);
 	// Read the passage before claiming: a decision records the prose as it read

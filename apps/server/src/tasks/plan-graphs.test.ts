@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import * as graphPlans from "./plan-graphs";
-import { implementationGraphs } from "./plan-graphs";
+import { claimImplementation, implementationGraphs } from "./plan-graphs";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { close, open } from "../plan/service";
 
@@ -47,6 +47,21 @@ const definition = {
 		dependsOn: [],
 	}],
 };
+
+function run(planRevision: number) {
+	return {
+		id: "run-1",
+		user: "octocat",
+		client: { name: "Codex", version: "1.2.3" },
+		session: "session-1",
+		planRevision,
+		graphRevision: 1,
+		repository: "octo-org/score",
+		branch: "tq/017",
+		commit: "deadbeef",
+		startedAt: "2026-08-17T12:00:00.000Z",
+	};
+}
 
 describe("the plan graph adapter", () => {
 	it("keeps implementation preparation policy with graph persistence", async () => {
@@ -135,5 +150,59 @@ describe("the plan graph adapter", () => {
 			}),
 		).toMatchObject({ ok: true });
 		await close(restored);
+	});
+
+	it("restores only a run paired with the locked graph revision", async () => {
+		let context = await hosted();
+		let plan = await open(context.channel.id, context.backend, context.server);
+		let drafted = await implementationGraphs().revise(plan, {
+			planRevision: plan.revision,
+			graphRevision: 0,
+			operations: definition.tasks.map(task => ({ op: "add", task })),
+		});
+		expect(drafted.ok).toBe(true);
+		expect((await implementationGraphs().approve(plan)).ok).toBe(true);
+		expect(
+			await claimImplementation(plan, {
+				planRevision: plan.revision,
+				graphRevision: 1,
+				run: run(plan.revision),
+			}),
+		).toMatchObject({ kind: "started" });
+		await close(plan);
+
+		let stored = await context.storage.collaboration.load(context.channel.id, now);
+		if (!stored?.snapshot || !stored.sidecar || typeof stored.sidecar !== "object") {
+			throw new Error("claimed plan was not stored");
+		}
+		expect(stored.sidecar).toMatchObject({
+			graph: { versions: [{ state: "locked" }] },
+			execution: { graphRevision: 1 },
+		});
+
+		let restored = await open(context.channel.id, context.backend, context.server);
+		expect(restored.execution?.id).toBe("run-1");
+		await close(restored);
+
+		let current = await context.storage.collaboration.load(context.channel.id, now);
+		if (!current?.snapshot || !current.sidecar || typeof current.sidecar !== "object") {
+			throw new Error("restored plan was not stored");
+		}
+		await context.storage.collaboration.commit({
+			channelId: context.channel.id,
+			lease: context.lease,
+			expectedRevision: current.channel.revision,
+			operationId: "mismatched-run",
+			epoch: current.snapshot.epoch,
+			sidecar: {
+				...current.sidecar,
+				execution: { ...run(0), graphRevision: 2 },
+			} as JsonValue,
+			events: [],
+			now,
+		});
+
+		await expect(open(context.channel.id, context.backend, context.server))
+			.rejects.toThrow("invalid implementation run");
 	});
 });

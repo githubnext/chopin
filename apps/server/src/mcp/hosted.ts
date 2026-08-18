@@ -2,6 +2,7 @@ import { GitHubError } from "../github/client";
 import { createHash } from "node:crypto";
 import * as Plan from "../plan/service";
 import * as Rooms from "../rooms";
+import { claimImplementation } from "../tasks/plan-graphs";
 import { StorageError } from "../storage/errors";
 
 import type { HostedAuth } from "../auth/routes";
@@ -292,8 +293,7 @@ export function hosted(
 							return exposed(channel, {
 								source: Plan.source(live),
 								revision: live.revision,
-								...(live.brief ? { brief: live.brief } : {}),
-								...(live.origin ? { origin: live.origin } : {}),
+								...(live.creation ? { creation: live.creation } : {}),
 								...(live.graph ? { graph: live.graph } : {}),
 								...(live.execution ? { execution: live.execution } : {}),
 							});
@@ -323,7 +323,7 @@ export function hosted(
 						let live = Rooms.get(input.id)?.plan;
 						if (live) {
 							return claimResult(
-								await Plan.claimImplementation(live, {
+								await claimImplementation(live, {
 									planRevision: input.planRevision,
 									graphRevision: input.graphRevision,
 									run: claimRun,
