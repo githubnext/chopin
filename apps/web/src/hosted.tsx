@@ -61,8 +61,8 @@ function Frame(
 	}
 
 	return (
-		<div className="min-h-full bg-ground text-text-primary">
-			<header className="hairline-b flex h-14 items-center bg-page px-3 sm:px-6">
+		<div className="min-h-full bg-ground text-text-primary" data-hosted="">
+			<header className="hosted-header hairline-b flex h-14 items-center bg-page px-3 sm:px-6">
 				<a className="text-sm font-semibold" href="/">chopin</a>
 				<span aria-hidden="true" className="mx-1 h-4 hairline-l sm:mx-2" />
 				<RepositoryPicker current={currentRepository} initialOpen={openRepositoryPicker} />
@@ -80,7 +80,10 @@ function Frame(
 
 function Loading({ label = "Loading" }: { label?: string }) {
 	return (
-		<div className="flex h-full items-center justify-center bg-ground text-sm text-text-tertiary">
+		<div
+			className="flex h-full items-center justify-center bg-ground px-4 text-sm text-text-tertiary"
+			data-hosted=""
+		>
 			{label}
 		</div>
 	);
@@ -89,8 +92,8 @@ function Loading({ label = "Loading" }: { label?: string }) {
 function Failure({ error }: { error: unknown }) {
 	let message = error instanceof Error ? error.message : "Something went wrong";
 	return (
-		<div className="flex h-full items-center justify-center bg-ground p-6">
-			<div className="ring-hairline max-w-md rounded-lg bg-page p-6 shadow-resting">
+		<div className="flex h-full items-center justify-center bg-ground p-4 sm:p-6" data-hosted="">
+			<div className="ring-hairline max-w-md rounded-lg bg-page p-4 shadow-resting sm:p-6">
 				<h1 className="text-xl font-semibold">Cannot open Chopin</h1>
 				<p className="mt-2 text-sm text-text-secondary">{message}</p>
 				<a className="btn btn-md btn-secondary mt-5" href="/">Back to repositories</a>
@@ -101,8 +104,8 @@ function Failure({ error }: { error: unknown }) {
 
 export function HostedLogin() {
 	return (
-		<div className="grid h-full bg-ground lg:grid-cols-[1.15fr_0.85fr]">
-			<section className="flex items-end bg-text-primary p-10 text-page lg:p-16">
+		<div className="grid h-full bg-ground lg:grid-cols-[1.15fr_0.85fr]" data-hosted="">
+			<section className="flex items-end bg-text-primary p-6 text-page sm:p-10 lg:p-16">
 				<div className="max-w-xl pb-8">
 					<p className="text-sm font-semibold text-brand-wash">chopin</p>
 					<h1 className="mt-4 text-2xl font-semibold">
@@ -114,7 +117,7 @@ export function HostedLogin() {
 					</p>
 				</div>
 			</section>
-			<section className="flex items-center justify-center p-8">
+			<section className="flex items-center justify-center p-6 sm:p-8">
 				<div className="w-full max-w-sm">
 					<h2 className="text-xl font-semibold">Open your workspace</h2>
 					<p className="mt-2 text-sm text-text-secondary">
@@ -132,7 +135,7 @@ export function HostedLogin() {
 function RepositoryHome({ user }: { user: Api.User }) {
 	return (
 		<Frame openRepositoryPicker user={user}>
-			<main className="mx-auto w-full max-w-4xl px-6 py-12">
+			<main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
 				<p className="text-sm text-text-tertiary">
 					Choose a repository from the menu to see its planning channels.
 				</p>
@@ -198,7 +201,7 @@ function RepositoryChannels(
 			}}
 			user={user}
 		>
-			<main className="mx-auto w-full max-w-4xl px-6 py-12">
+			<main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
 				<div className="flex items-end justify-between gap-6">
 					<div>
 						<h1 className="text-2xl font-semibold">Planning channels</h1>
@@ -208,14 +211,16 @@ function RepositoryChannels(
 					</div>
 				</div>
 				{page?.canEdit && (
-					<form className="ring-hairline mt-6 flex gap-2 rounded-lg bg-page p-3" onSubmit={create}>
+					<form
+						className="ring-hairline mt-6 flex flex-col gap-2 rounded-lg bg-page p-3 sm:flex-row"
+						onSubmit={create}
+					>
 						<label className="sr-only" htmlFor="channel-title">Channel title</label>
 						<input
-							className="field min-w-0 flex-1 px-3 text-sm"
+							className="channel-create-input field min-w-0 flex-1 px-3 text-sm"
 							id="channel-title"
 							maxLength={120}
-							onChange={event =>
-								setTitle(event.target.value)}
+							onChange={event => setTitle(event.target.value)}
 							placeholder="Plan the next release"
 							value={title}
 						/>
@@ -232,7 +237,7 @@ function RepositoryChannels(
 					? <p className="mt-8 text-sm text-text-tertiary">Loading channels...</p>
 					: page.channels.length === 0
 					? (
-						<div className="ring-hairline mt-6 rounded-lg bg-page p-8 text-center">
+						<div className="ring-hairline mt-6 rounded-lg bg-page p-4 text-center sm:p-8">
 							<p className="text-sm font-medium">No planning channels yet</p>
 							<p className="mt-1 text-sm text-text-tertiary">
 								{page.canEdit
@@ -245,14 +250,14 @@ function RepositoryChannels(
 						<div className="ring-hairline mt-6 overflow-hidden rounded-lg bg-page">
 							{page.channels.map((channel, index) => (
 								<a
-									className={`flex items-center justify-between gap-4 px-5 py-4 hover:bg-hover ${
+									className={`flex min-w-0 flex-col items-start justify-between gap-1 px-4 py-4 hover:bg-hover sm:flex-row sm:items-center sm:gap-4 sm:px-5 ${
 										index ? "hairline-t" : ""
 									}`}
 									href={`/channels/${channel.id}`}
 									key={channel.id}
 								>
-									<span className="text-sm font-medium">{channel.title}</span>
-									<span className="text-sm text-text-tertiary">
+									<span className="min-w-0 break-words text-sm font-medium">{channel.title}</span>
+									<span className="text-sm text-text-tertiary sm:shrink-0">
 										{new Date(channel.updatedAt).toLocaleDateString()}
 									</span>
 								</a>

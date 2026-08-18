@@ -195,6 +195,7 @@ function View({ kind, source, language, meta }: CodeViewProps) {
 			// already says that. A snippet quoting a file has a second one.
 			disableFileHeader: !titled(meta),
 			disableLineNumbers: true,
+			overflow: "scroll" as const,
 			disableWorkerPool: true,
 		}),
 		[meta],
@@ -215,6 +216,7 @@ function View({ kind, source, language, meta }: CodeViewProps) {
 			 * which is what the source says too.
 			 */
 			hunkSeparators: "metadata" as const,
+			overflow: "scroll" as const,
 			disableWorkerPool: true,
 		}),
 		[],

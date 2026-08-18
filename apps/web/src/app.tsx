@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowClockwiseIcon, SidebarSimpleIcon } from "@phosphor-icons/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowClockwiseIcon, DotsThreeIcon, SidebarSimpleIcon } from "@phosphor-icons/react";
 import {
 	advanceDecisionView,
 	countUnanswered,
@@ -20,31 +20,44 @@ import * as Api from "./api";
 import { HostedApp, HostedFailure, HostedLoading, HostedLogin } from "./hosted";
 import { RepositoryPicker } from "./repository-picker";
 import { Wire } from "./wire";
-import { paneId, usePaneOpen, Workspace } from "./workspace";
+import { paneId, useWorkspaceMode, useWorkspaceState, Workspace } from "./workspace";
+import { presentWorkspace } from "./workspace-model";
 
 import type { Session } from "@chopin/protocol";
 import type { DecisionView, DecisionViewState } from "@chopin/editor";
 import type { Status } from "./wire";
 
-const TONE: Record<Status, string> = {
-	connecting: "text-text-tertiary",
-	connected: "text-text-tertiary",
-	reconnecting: "text-warning-ink",
-	denied: "text-destructive-ink",
-	closed: "text-text-tertiary",
-};
+type ConversationActivity = { unread: number; busy: boolean };
 
-function PaneToggle({ onToggle, open }: { onToggle: () => void; open: boolean }) {
+function PaneToggle(
+	{
+		activity,
+		onToggle,
+		open,
+	}: { activity: ConversationActivity; onToggle: () => void; open: boolean },
+) {
+	let status = activity.busy
+		? "Planner working"
+		: activity.unread > 0
+		? `${activity.unread} unread`
+		: undefined;
 	return (
 		<button
 			aria-controls={paneId("chat")}
 			aria-expanded={open}
-			aria-label={`${open ? "Hide" : "Show"} conversation pane`}
-			className="btn btn-icon btn-ghost shrink-0"
+			aria-label={`${open ? "Hide" : "Show"} conversation pane${status ? `, ${status}` : ""}`}
+			className="btn btn-icon btn-ghost relative hidden shrink-0 sm:inline-flex"
+			data-activity={activity.busy ? "busy" : activity.unread > 0 ? "unread" : undefined}
 			onClick={onToggle}
 			type="button"
 		>
 			<SidebarSimpleIcon aria-hidden="true" size={18} />
+			{status && (
+				<span
+					aria-hidden="true"
+					className="absolute right-1 top-1 size-1.5 rounded-full bg-brand"
+				/>
+			)}
 		</button>
 	);
 }
@@ -52,22 +65,22 @@ function PaneToggle({ onToggle, open }: { onToggle: () => void; open: boolean })
 function Header(
 	{
 		chatOpen,
+		conversationActivity,
 		members,
 		onToggleChat,
 		onResetAgent,
-		reason,
 		label,
 		repository,
-		status,
+		showConversationToggle,
 	}: {
 		chatOpen: boolean;
+		conversationActivity: ConversationActivity;
 		members: Session.Member[];
 		onToggleChat: () => void;
 		onResetAgent?: () => Promise<void>;
-		reason?: string;
 		label: string;
 		repository: Api.Repository;
-		status: Status;
+		showConversationToggle: boolean;
 	},
 ) {
 	let [resetting, setResetting] = useState(false);
@@ -88,28 +101,42 @@ function Header(
 	}
 
 	return (
-		<header className="hairline-b flex min-h-12 shrink-0 flex-wrap items-center gap-x-2 px-2 py-2 sm:h-12 sm:flex-nowrap sm:gap-3 sm:px-4 sm:py-0">
-			<PaneToggle onToggle={onToggleChat} open={chatOpen} />
+		<header className="room-header hairline-b relative flex min-h-12 shrink-0 flex-nowrap items-center gap-2 px-2 py-2 sm:h-12 sm:gap-3 sm:px-4 sm:py-0">
+			{showConversationToggle && (
+				<PaneToggle activity={conversationActivity} onToggle={onToggleChat} open={chatOpen} />
+			)}
 			<a className="hidden text-sm font-semibold sm:inline" href="/">chopin</a>
 			<span aria-hidden="true" className="hidden h-4 hairline-l sm:block" />
 			<RepositoryPicker current={repository} />
-			<div className="order-last flex min-w-0 basis-full items-center gap-2 pl-9 pt-1 sm:order-none sm:basis-auto sm:flex-1 sm:pl-0 sm:pt-0">
+			<div className="flex min-w-0 flex-1 items-center gap-2">
 				<span aria-hidden="true" className="hidden text-sm text-text-tertiary sm:inline">/</span>
-				<span className="min-w-0 flex-1 truncate text-sm text-text-tertiary">{label}</span>
-				<span className={`shrink-0 text-sm ${TONE[status]}`}>
-					{status === "connected" ? reason : reason ?? status}
+				<span className="min-w-0 flex-1 truncate text-sm text-text-tertiary" title={label}>
+					{label}
 				</span>
 			</div>
 			<div
 				aria-label={`People here: ${members.map(member => member.handle).join(", ")}`}
-				className="ml-auto flex shrink-0 items-center [&>*+*]:-ml-1.5"
+				className="room-members ml-auto flex shrink-0 items-center"
+				role="group"
 			>
-				{members.map(member => <Face handle={member.handle} key={member.client} ring size={24} />)}
+				{members.map(member => (
+					<span className="room-member-face -ml-1.5 first:ml-0" key={member.client}>
+						<Face handle={member.handle} ring size={24} />
+					</span>
+				))}
+				{members.length > 3 && (
+					<span
+						aria-hidden="true"
+						className="room-member-overflow ml-1 hidden text-sm text-text-tertiary"
+					>
+						+{members.length - 3}
+					</span>
+				)}
 			</div>
 			{onResetAgent && (
 				<button
 					aria-label={resetLabel}
-					className="btn btn-sm btn-ghost"
+					className="btn btn-sm btn-ghost hidden sm:inline-flex"
 					disabled={resetting}
 					onClick={() => void resetAgent()}
 					type="button"
@@ -117,6 +144,28 @@ function Header(
 					<ArrowClockwiseIcon aria-hidden="true" className="lg:hidden" size={16} />
 					<span className="hidden lg:inline">{resetLabel}</span>
 				</button>
+			)}
+			{onResetAgent && (
+				<details className="room-secondary-actions sm:hidden">
+					<summary
+						aria-label="More room actions"
+						className="btn btn-icon btn-ghost cursor-pointer list-none"
+						role="button"
+					>
+						<DotsThreeIcon aria-hidden="true" size={18} weight="bold" />
+					</summary>
+					<div className="absolute right-2 top-full z-30 mt-1 min-w-44 rounded-lg bg-page p-1 ring-hairline shadow-overlay">
+						<button
+							className="btn btn-md btn-ghost w-full justify-start"
+							disabled={resetting}
+							onClick={() => void resetAgent()}
+							type="button"
+						>
+							<ArrowClockwiseIcon aria-hidden="true" size={16} />
+							<span className="ml-1">{resetLabel}</span>
+						</button>
+					</div>
+				</details>
 			)}
 		</header>
 	);
@@ -143,11 +192,11 @@ export function RoomWorkspace(
 ) {
 	let [wire, setWire] = useState<Wire>();
 	let [status, setStatus] = useState<Status>("connecting");
-	let [reason, setReason] = useState<string>();
 	let [members, setMembers] = useState<Session.Member[]>([]);
 	let [effectiveCanEdit, setEffectiveCanEdit] = useState(canEdit);
 	let user = useMemo(() => cursor(handle), [handle]);
-	let [chatOpen, setChatOpen] = usePaneOpen("chat");
+	let mode = useWorkspaceMode();
+	let [workspace, dispatch] = useWorkspaceState();
 	let [questions] = useState(() => new QuestionnaireStore());
 	let [threads] = useState(() => new ThreadStore());
 	let [reveal, setReveal] = useState<{ widget: string; token: number }>();
@@ -165,10 +214,29 @@ export function RoomWorkspace(
 	let view = visibleDecisionView(decisionView, hasPlanContent, unanswered);
 	let previousUnanswered = useRef(unanswered);
 	let [attention, setAttention] = useState(false);
+	let workspacePresentation = presentWorkspace(workspace, mode, view);
+	let conversationActive = workspacePresentation.conversationVisible;
+	let [conversationActivity, setConversationActivity] = useState({ unread: 0, busy: false });
+	let onConversationActivity = useCallback(
+		(event: { type: "message" | "working"; busy: boolean }) => {
+			setConversationActivity(current => ({
+				busy: event.busy,
+				unread: event.type === "message" && !conversationActive
+					? current.unread + 1
+					: current.unread,
+			}));
+		},
+		[conversationActive],
+	);
 
 	useEffect(() => {
 		setDecisionView(state => advanceDecisionView(state, hasPlanContent, unanswered));
 	}, [hasPlanContent, unanswered]);
+
+	useEffect(() => {
+		if (!conversationActive) return;
+		setConversationActivity(current => current.unread === 0 ? current : { ...current, unread: 0 });
+	}, [conversationActive]);
 
 	useEffect(() => {
 		let previous = previousUnanswered.current;
@@ -179,10 +247,10 @@ export function RoomWorkspace(
 		return () => window.clearTimeout(timer);
 	}, [unanswered]);
 
-	let selectView = (next: DecisionView) => {
+	let selectView = (next: DecisionView, revealFirst = true) => {
 		setDecisionView(state => ({ ...state, preferred: next }));
 		if (hasPlanContent) localStorage.setItem("chopin:view:document", next);
-		if (next === "decisions") {
+		if (next === "decisions" && revealFirst) {
 			let first = entries.find(entry =>
 				entry.value.questions.some(question => question.answer === undefined)
 			);
@@ -190,8 +258,24 @@ export function RoomWorkspace(
 		}
 	};
 
+	let selectDestination = (destination: "plan" | "decisions") => {
+		selectView(destination, mode === "split");
+		dispatch({ type: "set-conversation", open: false });
+	};
+
+	let toggleConversation = () => {
+		if (mode !== "split") {
+			dispatch({ type: "set-conversation", open: !workspace.conversationOpen });
+			return;
+		}
+		if (workspacePresentation.conversationVisible) {
+			dispatch({ type: "set-desktop-conversation", open: false });
+			dispatch({ type: "set-conversation", open: false });
+		} else dispatch({ type: "set-desktop-conversation", open: true });
+	};
+
 	let showPlan = (widget: string, question: string) => {
-		selectView("plan");
+		selectDestination("plan");
 		requestAnimationFrame(() => {
 			questions.reveal(widget, question);
 			let card = document.querySelector<HTMLElement>(
@@ -213,9 +297,8 @@ export function RoomWorkspace(
 		let socket = new Wire({
 			channelId: room,
 			onAuthenticationRequired: () => location.assign("/"),
-			onStatus: (next, why) => {
+			onStatus: next => {
 				setStatus(next);
-				setReason(why);
 			},
 		});
 		setWire(socket);
@@ -241,33 +324,38 @@ export function RoomWorkspace(
 		<Workspace
 			chat={
 				<Chat
+					active={conversationActive}
 					agent={agent}
 					connected={status === "connected" && effectiveCanEdit}
 					handle={handle}
+					onActivity={onConversationActivity}
 					wire={wire}
 				/>
 			}
-			chatOpen={chatOpen}
+			conversationActivity={conversationActivity}
 			header={
 				<Header
-					chatOpen={chatOpen}
+					chatOpen={workspacePresentation.conversationVisible}
+					conversationActivity={conversationActivity}
 					members={members}
-					onToggleChat={() => setChatOpen(value => !value)}
+					onToggleChat={toggleConversation}
 					onResetAgent={effectiveCanEdit ? onResetAgent : undefined}
-					reason={status === "connected" && !effectiveCanEdit ? "view only" : reason}
 					label={label}
 					repository={repository}
-					status={status}
+					showConversationToggle={mode === "split"}
 				/>
 			}
 			controls={
 				<DecisionViewControl
 					attention={attention}
-					onView={selectView}
+					onView={selectDestination}
 					unanswered={unanswered}
 					view={view}
 				/>
 			}
+			mode={mode}
+			onConversationOpen={open => dispatch({ type: "set-conversation", open })}
+			onDestination={selectDestination}
 			decisions={
 				<Decisions
 					connected={status === "connected" && effectiveCanEdit}
@@ -289,6 +377,8 @@ export function RoomWorkspace(
 					wire={wire}
 				/>
 			}
+			state={workspace}
+			unanswered={unanswered}
 			view={view}
 		/>
 	);

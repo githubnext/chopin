@@ -13,6 +13,7 @@ COPY packages/dialect/package.json ./packages/dialect/package.json
 COPY packages/editor/package.json ./packages/editor/package.json
 COPY packages/protocol/package.json ./packages/protocol/package.json
 COPY packages/question/package.json ./packages/question/package.json
+COPY packages/viewport/package.json ./packages/viewport/package.json
 
 FROM manifests AS build-dependencies
 RUN bun install --frozen-lockfile

@@ -14,6 +14,7 @@
  */
 
 import { content, expect, test, written } from "./room";
+import { expectNoHorizontalOverflow } from "./responsive";
 
 import type { Page } from "@playwright/test";
 
@@ -53,6 +54,20 @@ test("a named fence is coloured with its source hidden by default", async ({ joi
 	// document still carries the source, but it does not compete with the view.
 	await expect(content(page).locator("[data-plan-source]")).toBeHidden();
 	await expect(content(page).getByRole("button", { name: "Show source" })).toBeVisible();
+});
+
+test("a wide preview scrolls inside its code widget", async ({ join, seed }) => {
+	await seed(
+		'```ts\nexport const unbrokenPreviewLine = "ThisPreviewLineIsDeliberatelyLongEnoughToRequireTheCodeWidgetToOwnHorizontalScrollingWithoutWideningTheCollaborativeDocument";\n```\n',
+	);
+	let page = await join("ana", { viewport: { width: 390, height: 844 } });
+	let preview = content(page).locator("[data-plan-preview]");
+	let rendered = preview.locator(":scope > div");
+
+	await expect(preview).toBeVisible();
+	expect(await rendered.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+	expect(await rendered.evaluate(node => getComputedStyle(node).overflowX)).toBe("auto");
+	await expectNoHorizontalOverflow(page);
 });
 
 test("a diagram is shown with its source hidden by default", async ({ join, seed }) => {

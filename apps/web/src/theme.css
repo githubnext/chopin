@@ -366,9 +366,18 @@
 	}
 }
 html,
-body,
-#root {
+body {
 	height: 100%;
+	overflow-x: hidden;
+}
+
+#root {
+	position: fixed;
+	left: var(--app-left, 0px);
+	top: var(--app-top, 0px);
+	width: var(--app-width, 100%);
+	height: 100%;
+	height: var(--app-height, 100dvh);
 }
 
 body {
@@ -380,6 +389,88 @@ body {
 	/* macOS subpixel smoothing thickens Inter past the weight asked for. */
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
+}
+
+/* One owner per edge: top chrome owns the top inset, compact navigation the bottom one. */
+.room-header {
+	padding-right: calc(0.5rem + env(safe-area-inset-right));
+	padding-left: calc(0.5rem + env(safe-area-inset-left));
+	padding-top: calc(0.5rem + env(safe-area-inset-top));
+}
+
+.hosted-header {
+	height: calc(3.5rem + env(safe-area-inset-top));
+	padding-right: calc(0.75rem + env(safe-area-inset-right));
+	padding-left: calc(0.75rem + env(safe-area-inset-left));
+	padding-top: env(safe-area-inset-top);
+}
+
+.workspace-navigation {
+	padding-right: calc(0.25rem + env(safe-area-inset-right));
+	padding-bottom: calc(0.25rem + env(safe-area-inset-bottom));
+	padding-left: calc(0.25rem + env(safe-area-inset-left));
+}
+
+@media (min-width: 640px) {
+	.room-header {
+		height: calc(3rem + env(safe-area-inset-top));
+		padding-right: calc(1rem + env(safe-area-inset-right));
+		padding-left: calc(1rem + env(safe-area-inset-left));
+		padding-top: env(safe-area-inset-top);
+	}
+
+	.hosted-header {
+		padding-right: calc(1.5rem + env(safe-area-inset-right));
+		padding-left: calc(1.5rem + env(safe-area-inset-left));
+	}
+}
+
+@media (min-width: 1200px) {
+	/* The desktop composer reaches the device edge because there is no bottom navigation. */
+	.conversation-composer {
+		padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+	}
+}
+
+@media (max-width: 639px) {
+	/* Touch-sized header controls and their text labels share a vertical center. */
+	.room-header {
+		align-items: center;
+	}
+
+	.room-member-face:nth-child(n+4) {
+		display: none;
+	}
+
+	.room-member-overflow {
+		display: inline;
+	}
+
+	.repository-picker-trigger {
+		max-width: min(8rem, 36vw);
+	}
+}
+
+:root[data-plan-coarse-pointer] .room-header :where(button, summary),
+:root[data-plan-coarse-pointer] .conversation-composer button,
+:root[data-plan-coarse-pointer] .hosted-header button,
+:root[data-plan-coarse-pointer] .repository-picker-search,
+:root[data-plan-coarse-pointer] .channel-create-input,
+:root[data-plan-coarse-pointer] [data-hosted] .btn,
+:root[data-plan-coarse-pointer] .question-tab,
+:root[data-plan-coarse-pointer] .question-choice-row,
+:root[data-plan-coarse-pointer] .question-actions button,
+:root[data-plan-coarse-pointer] :where(button, [role="button"])[data-press="wide"] {
+	min-width: 44px;
+	min-height: 44px;
+}
+
+:root[data-plan-coarse-pointer] .question-choice-row {
+	padding-block: 0.5rem;
+}
+
+.question-custom-answer {
+	scroll-margin-block-end: calc(var(--keyboard-inset, 0px) + 1rem);
 }
 
 /*
@@ -413,11 +504,29 @@ body {
 	}
 }
 
+@keyframes workspace-working-spin {
+	to {
+		rotate: 1turn;
+	}
+}
+
+.workspace-working-indicator {
+	width: 0.875rem;
+	height: 0.875rem;
+	border: 2px solid currentColor;
+	border-right-color: transparent;
+	border-radius: 9999px;
+}
+
 .chat-working {
 	color: var(--color-text-secondary);
 }
 
 @media (prefers-reduced-motion: no-preference) {
+	.workspace-working-indicator {
+		animation: workspace-working-spin 0.8s linear infinite;
+	}
+
 	.chat-working {
 		background: linear-gradient(
 			90deg,

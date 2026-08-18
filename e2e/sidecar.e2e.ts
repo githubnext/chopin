@@ -14,9 +14,14 @@
 import { authenticate, content, expect, test } from "./room";
 import { storedQuestion } from "../apps/server/src/testing/plan";
 
+import type { Page } from "@playwright/test";
+
 /** Long enough to be marked: the injector wants twenty characters. */
 const PROSE = "Room state lives on disk as MDX beside the transcript.\n";
 const TWO_BLOCKS = `${PROSE}\nA second block remains after the marked passage.\n`;
+const TALL_PASSAGE = `${
+	Array.from({ length: 160 }, () => "A selected passage keeps going.").join(" ")
+}\n`;
 const LONG_PLAN = Array.from({ length: 80 }, (_, index) => `Paragraph ${index + 1}.`).join("\n\n");
 const WIDGET = "01K0N4TR8K7JGM4R1J7PW4R8YJ";
 const QUESTION = "01K0N4V4E7Y6P4MJ5WD8XZF3B2";
@@ -81,8 +86,8 @@ test(
 
 		let plan = page.getByRole("button", { name: "Plan", exact: true });
 		let decisions = page.getByRole("button", { name: /^Decisions/ });
-		let scroller = page.locator(".plan-document > div.h-full.min-h-0.overflow-auto");
-		let selected = content(page).locator("p").nth(8);
+		let scroller = page.locator("[data-plan-scroll]");
+		let selected = content(page).getByText("Paragraph 9.", { exact: true });
 		await selected.selectText();
 		await scroller.evaluate(element => {
 			element.scrollTop = 160;
@@ -140,7 +145,7 @@ test("questions leave the chat pane free of a waiting row", async ({ join, seed 
 test("switching views restores the plan scroll position", async ({ join, seed }) => {
 	await seed(LONG_PLAN);
 	let page = await join("ana");
-	let scroller = page.locator(".plan-document > div.h-full.min-h-0.overflow-auto");
+	let scroller = page.locator("[data-plan-scroll]");
 
 	await scroller.evaluate(element => {
 		element.scrollTop = 160;
@@ -151,30 +156,178 @@ test("switching views restores the plan scroll position", async ({ join, seed })
 	await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBe(160);
 });
 
-test("selecting Decisions returns to the first unanswered card after its hidden stack was scrolled", async ({ join, page: browser, seed }) => {
-	await browser.setViewportSize({ width: 1280, height: 360 });
-	await seed(LONG_PLAN);
-	let page = await join("ana");
-	let decisions = page.getByRole("button", { name: /^Decisions/ });
-	let plan = page.getByRole("button", { name: "Plan", exact: true });
-	let stack = page.locator('[data-document-view="decisions"] .plan-decisions > .overflow-auto');
-	let first = questionnaire(page).first();
+async function expectCompactDestinationStatePreserved(page: Page): Promise<void> {
+	let nav = page.getByRole("navigation", { name: "Workspace view" });
+	let planScroller = page.locator("[data-plan-scroll]");
+	await planScroller.evaluate(element => {
+		element.scrollTop = 160;
+		element.dispatchEvent(new Event("scroll"));
+	});
+	await page.evaluate(() => {
+		let plan = document.querySelector("[data-plan-scroll]")!;
+		let textarea = document.querySelector("#pane-chat textarea")!;
+		let tracker = {
+			plan,
+			textarea,
+			removed: false,
+			observer: undefined as MutationObserver | undefined,
+		};
+		tracker.observer = new MutationObserver(records => {
+			for (let record of records) {
+				for (let node of record.removedNodes) {
+					if (node === plan || node === textarea) tracker.removed = true;
+					if (node instanceof Element && (node.contains(plan) || node.contains(textarea))) {
+						tracker.removed = true;
+					}
+				}
+			}
+		});
+		tracker.observer.observe(document.body, { childList: true, subtree: true });
+		(window as typeof window & { __workspaceTracker?: typeof tracker }).__workspaceTracker =
+			tracker;
+	});
 
-	await decisions.click();
-	await expect(first).toBeFocused();
+	await nav.getByRole("button", { name: /Conversation/ }).click();
+	let draft = page.locator("#pane-chat textarea");
+	await draft.fill("unfinished compact thought");
 
-	await stack.evaluate(element => {
+	await nav.getByRole("button", { name: /^Decisions/ }).click();
+	let decisionScroller = page.locator("[data-plan-decisions-scroll]");
+	await decisionScroller.evaluate(element => {
 		element.scrollTop = element.scrollHeight;
 		element.dispatchEvent(new Event("scroll"));
 	});
-	let scrolled = await stack.evaluate(element => element.scrollTop);
-	expect(scrolled).toBeGreaterThan(0);
+	let decisionScroll = await decisionScroller.evaluate(element => element.scrollTop);
+	await nav.getByRole("button", { name: "Plan" }).click();
 
-	await plan.click();
-	await decisions.click();
-	await expect(first).toBeFocused();
-	await expect.poll(() => stack.evaluate(element => element.scrollTop)).toBeLessThan(scrolled);
+	await expect(draft).toHaveValue("unfinished compact thought");
+	await expect.poll(() => planScroller.evaluate(element => element.scrollTop)).toBe(160);
+	await nav.getByRole("button", { name: /^Decisions/ }).click();
+	await expect.poll(() => decisionScroller.evaluate(element => element.scrollTop)).toBe(
+		decisionScroll,
+	);
+	await nav.getByRole("button", { name: "Plan" }).click();
+	expect(decisionScroll).toBeGreaterThan(0);
+	let identity = await page.evaluate(() => {
+		let tracker = (window as typeof window & {
+			__workspaceTracker?: {
+				plan: Element;
+				textarea: Element;
+				removed: boolean;
+				observer: MutationObserver;
+			};
+		}).__workspaceTracker!;
+		tracker.observer.disconnect();
+		return {
+			plan: tracker.plan === document.querySelector("[data-plan-scroll]"),
+			textarea: tracker.textarea === document.querySelector("#pane-chat textarea"),
+			removed: tracker.removed,
+		};
+	});
+	expect(identity).toEqual({ plan: true, textarea: true, removed: false });
+}
+
+for (
+	let viewport of [
+		{ height: 568, width: 320 },
+		{ height: 844, width: 390 },
+	]
+) {
+	test(`${viewport.width}×${viewport.height} compact destinations preserve draft, scroll, and mounted identity`, async ({ join, seed }) => {
+		await seed(LONG_PLAN);
+		let page = await join("ana", { hasTouch: true, viewport });
+		await expectCompactDestinationStatePreserved(page);
+	});
+}
+
+test("automatic Decisions changes reconcile after compact Conversation closes", async ({ baseURL, browser, page: ana, room }) => {
+	await ana.setViewportSize({ width: 390, height: 844 });
+	await authenticate(ana, "ana", baseURL!);
+	await ana.goto(`/channels/${room}`);
+	await expect(ana.locator('[aria-label="editable markdown"]')).toHaveAttribute(
+		"contenteditable",
+		"true",
+		{ timeout: 20_000 },
+	);
+	let nav = ana.getByRole("navigation", { name: "Workspace view" });
+	await expect(nav.getByRole("button", { name: /^Decisions/ })).toHaveAttribute(
+		"aria-current",
+		"page",
+	);
+	await nav.getByRole("button", { name: /Conversation/ }).click();
+
+	let boContext = await browser.newContext({ baseURL, viewport: { width: 1280, height: 800 } });
+	try {
+		let bo = await boContext.newPage();
+		await authenticate(bo, "bo", baseURL!);
+		await bo.goto(`/channels/${room}`);
+		await expect(bo.locator('[aria-label="editable markdown"]')).toHaveAttribute(
+			"contenteditable",
+			"true",
+			{ timeout: 20_000 },
+		);
+		let planHost = bo.locator('[data-document-view="plan"]');
+		await planHost.evaluate(element => {
+			(element as HTMLElement).hidden = false;
+			(element as HTMLElement).inert = false;
+		});
+		await bo.locator('[aria-label="editable markdown"]').fill("Collaborative prose arrived.");
+		await expect(ana.locator('[aria-label="editable markdown"]')).toContainText(
+			"Collaborative prose arrived.",
+		);
+	} finally {
+		await boContext.close();
+	}
+
+	await ana.locator("#workspace-conversation-heading").press("Escape");
+	await expect(ana.locator('[data-document-view="plan"]')).toBeVisible();
+	await expect(nav.getByRole("button", { name: "Plan" })).toHaveAttribute("aria-current", "page");
 });
+
+test("an edit received while compact Plan is hidden appears when it returns", async ({ join, seed }) => {
+	await seed(TWO_BLOCKS);
+	let ana = await join("ana", { viewport: { width: 390, height: 844 } });
+	let bo = await join("bo", { viewport: { width: 1280, height: 800 } });
+	let nav = ana.getByRole("navigation", { name: "Workspace view" });
+	await nav.getByRole("button", { name: /Conversation/ }).click();
+
+	await rewriteFirstBlock(bo, "The hidden plan still receives collaborative edits.");
+	await nav.getByRole("button", { name: "Plan" }).click();
+	await expect(content(ana)).toContainText("The hidden plan still receives collaborative edits.");
+});
+
+for (let width of [768, 1280]) {
+	test(`${width}px explicit Decisions navigation follows the active presentation`, async ({ join, page: browser, seed }) => {
+		await browser.setViewportSize({ width, height: 360 });
+		await seed(LONG_PLAN);
+		let page = await join("ana");
+		let decisions = page.getByRole("button", { name: /^Decisions/ });
+		let plan = page.getByRole("button", { name: "Plan", exact: true });
+		let stack = page.locator("[data-plan-decisions-scroll]");
+		let first = questionnaire(page).first();
+
+		await decisions.click();
+		if (width < 1200) await expect(page.locator("#workspace-decisions-heading")).toBeFocused();
+		else await expect(first).toBeFocused();
+
+		await stack.evaluate(element => {
+			element.scrollTop = element.scrollHeight;
+			element.dispatchEvent(new Event("scroll"));
+		});
+		let scrolled = await stack.evaluate(element => element.scrollTop);
+		expect(scrolled).toBeGreaterThan(0);
+
+		await plan.click();
+		await decisions.click();
+		if (width < 1200) {
+			await expect.poll(() => stack.evaluate(element => element.scrollTop)).toBe(scrolled);
+			await expect(page.locator("#workspace-decisions-heading")).toBeFocused();
+		} else {
+			await expect.poll(() => stack.evaluate(element => element.scrollTop)).toBeLessThan(scrolled);
+			await expect(first).toBeFocused();
+		}
+	});
+}
 
 test("an unanswered inline decision is also shown in Decisions and can be focused in Plan", async ({ join, seed }) => {
 	await seed(ANCHORED, {
@@ -235,6 +388,7 @@ test("saving one decision leaves another unanswered", async ({ join, seed }) => 
 	await storage.getByRole("radio", { name: /On disk as MDX/ }).check();
 	await storage.getByRole("button", { name: "Save" }).click();
 	await expect(scope).toBeVisible();
+	await expect(scope).toBeFocused();
 	await expect(scope.getByRole("button", { name: "Save" })).toBeVisible();
 	await expect(scope).not.toContainText("Answered by");
 
@@ -287,12 +441,192 @@ test("a marked passage has document chrome with a hover preview", async ({ join,
 
 	await button.focus();
 	await expect(page.getByRole("tooltip")).toBeVisible();
+	await page.keyboard.press("Escape");
+	await expect(page.getByRole("tooltip")).toHaveCount(0);
+});
+
+test("a compact new-comment sheet blocks navigation and restores editor focus", async ({ join, seed }) => {
+	await seed(TWO_BLOCKS);
+	let page = await join("ana", {
+		hasTouch: true,
+		isMobile: true,
+		viewport: { width: 390, height: 844 },
+	});
+	let editor = content(page);
+	let plan = page.getByRole("button", { name: "Plan", exact: true });
+	let decisions = page.getByRole("button", { name: /^Decisions/ });
+
+	let openDraft = async () => {
+		await editor.locator("p").nth(1).selectText();
+		await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
+		let sheet = page.getByRole("dialog", { name: "New comment" });
+		await expect(sheet).toHaveAttribute("aria-modal", "true");
+		await expect(sheet.getByPlaceholder("Comment on this passage…")).toBeFocused();
+		return sheet;
+	};
+
+	let sheet = await openDraft();
+	let destination = await decisions.boundingBox();
+	expect(destination).not.toBeNull();
+	await page.mouse.click(
+		destination!.x + destination!.width / 2,
+		destination!.y + destination!.height / 2,
+	);
+	await expect(sheet).toBeVisible();
+	await expect(plan).toHaveAttribute("aria-pressed", "true");
+	await sheet.getByRole("button", { name: "Cancel" }).click();
+	await expect(sheet).toHaveCount(0);
+	await expect(editor).toBeFocused();
+
+	sheet = await openDraft();
+	await page.keyboard.press("Escape");
+	await expect(sheet).toHaveCount(0);
+	await expect(editor).toBeFocused();
+});
+
+test("submitting a compact new comment restores editor focus", async ({ join, seed }) => {
+	await seed(TWO_BLOCKS);
+	let page = await join("ana", {
+		hasTouch: true,
+		isMobile: true,
+		viewport: { width: 390, height: 844 },
+	});
+	let editor = content(page);
+	await editor.locator("p").nth(1).selectText();
+	await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
+	let sheet = page.getByRole("dialog", { name: "New comment" });
+	await sheet.getByPlaceholder("Comment on this passage…").fill("Keep this block as well.");
+	await sheet.getByRole("button", { name: "Comment" }).click();
+
+	await expect(sheet).toHaveCount(0);
+	await expect(editor).toBeFocused();
+});
+
+for (let resolution of ["Accept", "Dismiss"] as const) {
+	test(`${resolution.toLowerCase()}ing a compact comment restores editor focus`, async ({ join, seed }) => {
+		await seed(PROSE);
+		let page = await join("ana", {
+			hasTouch: true,
+			isMobile: true,
+			viewport: { width: 390, height: 844 },
+		});
+		let editor = content(page);
+		let sheet = await thread(page);
+		await sheet.getByRole("button", { name: resolution }).click();
+		await sheet.getByRole("button", { name: "Sure?" }).click();
+
+		await expect(sheet).toHaveCount(0);
+		await expect(editor).toBeFocused();
+	});
+}
+
+test("an unavailable comment position keeps its compact sheet mounted until geometry recovers", async ({ join, seed }) => {
+	await seed(TALL_PASSAGE);
+	let page = await join("ana", {
+		hasTouch: true,
+		isMobile: true,
+		viewport: { width: 390, height: 300 },
+	});
+	let editor = content(page);
+	await editor.locator("p").first().selectText();
+	await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
+	let draft = page.getByRole("dialog", { name: "New comment" });
+	await draft.getByPlaceholder("Comment on this passage…").fill("Keep the whole passage.");
+	await draft.getByRole("button", { name: "Comment" }).click();
+
+	let marker = commentButton(page).last();
+	await expect(marker).toBeAttached();
+	await marker.click();
+	let sheet = page.getByRole("dialog", { name: "Comment thread" });
+	let close = sheet.getByRole("button", { name: "Close comment" });
+	await expect(close).toBeFocused();
+
+	// No 44px point can fit inside this host. The marker moves beyond the passage,
+	// but the open sheet and its focus must not be unmounted while geometry changes.
+	await page.setViewportSize({ width: 32, height: 300 });
+	await expect(marker).toBeAttached();
+	await expect(sheet).toBeVisible();
+	await expect(close).toBeFocused();
+	let markerBox = await marker.boundingBox();
+	let documentBox = await page.locator("[data-plan-scroll]").boundingBox();
+	expect(markerBox).not.toBeNull();
+	expect(documentBox).not.toBeNull();
+	expect(markerBox!.y).toBeGreaterThanOrEqual(documentBox!.y + documentBox!.height);
+
+	await page.setViewportSize({ width: 390, height: 700 });
+	await expect(sheet).toBeVisible();
+	await expect(close).toBeFocused();
+	await expect(marker).toBeAttached();
+	await expect.poll(async () => {
+		markerBox = await marker.boundingBox();
+		documentBox = await page.locator("[data-plan-scroll]").boundingBox();
+		return !!markerBox && !!documentBox
+			&& markerBox.y < documentBox.y + documentBox.height
+			&& markerBox.y + markerBox.height > documentBox.y;
+	}).toBe(true);
+});
+
+test("a touch comment opens as a modal sheet and restores its marker", async ({ join, seed }) => {
+	await seed(TWO_BLOCKS);
+	let page = await join("ana", {
+		hasTouch: true,
+		isMobile: true,
+		viewport: { width: 390, height: 844 },
+	});
+	await secondThread(page);
+	let marker = commentButton(page).first();
+	let markerBox = await marker.boundingBox();
+	expect(markerBox).not.toBeNull();
+	expect(markerBox!.width).toBeGreaterThanOrEqual(44);
+	expect(markerBox!.height).toBeGreaterThanOrEqual(44);
+	let markerBoxes = await commentButton(page).evaluateAll(buttons =>
+		buttons.map(button => {
+			let box = button.getBoundingClientRect();
+			return { bottom: box.bottom, left: box.left, right: box.right, top: box.top };
+		})
+	);
+	expect(
+		markerBoxes.every((box, index) =>
+			markerBoxes.slice(index + 1).every(other =>
+				box.right <= other.left || other.right <= box.left
+				|| box.bottom <= other.top || other.bottom <= box.top
+			)
+		),
+	).toBe(true);
+	let passages = await page.locator("[data-plan-comment-hit]").evaluateAll(hits =>
+		hits.map(hit => {
+			let box = hit.getBoundingClientRect();
+			return { bottom: box.bottom, left: box.left, right: box.right, top: box.top };
+		})
+	);
+	expect(passages.every(passage =>
+		markerBox!.x >= passage.right
+		|| markerBox!.x + markerBox!.width <= passage.left
+		|| markerBox!.y >= passage.bottom
+		|| markerBox!.y + markerBox!.height <= passage.top
+	)).toBe(true);
+
+	await marker.tap();
+	let sheet = page.getByRole("dialog", { name: "Comment thread" });
+	await expect(sheet).toBeVisible();
+	await expect(sheet.getByRole("button", { name: "Close comment" })).toBeFocused();
+	await expect(content(page)).toHaveAttribute("inert", "");
+	let sheetBox = await sheet.boundingBox();
+	let documentBox = await page.locator("[data-plan-scroll]").boundingBox();
+	expect(sheetBox).not.toBeNull();
+	expect(documentBox).not.toBeNull();
+	expect(sheetBox!.x).toBe(documentBox!.x);
+	expect(sheetBox!.width).toBe(documentBox!.width);
+	expect(sheetBox!.y + sheetBox!.height).toBeCloseTo(documentBox!.y + documentBox!.height, 0);
+	await page.keyboard.press("Escape");
+	await expect(sheet).toHaveCount(0);
+	await expect(marker).toBeFocused();
+	await expect(content(page)).not.toHaveAttribute("inert", "");
 });
 
 test("a wrapped passage opens its comment without intercepting text selection", async ({ join, page: browser, seed }) => {
-	// The workspace leaves the document at its 400px minimum beside the
-	// conversation rail, which forces the injected quote across two lines.
-	await browser.setViewportSize({ width: 680, height: 600 });
+	// The compact document forces the injected quote across two lines.
+	await browser.setViewportSize({ width: 390, height: 600 });
 	await seed(PROSE);
 	let page = await join("ana");
 	let hits = page.locator("[data-plan-comment-hit]");
@@ -305,7 +639,7 @@ test("a wrapped passage opens its comment without intercepting text selection", 
 	await page.mouse.move(point.x, point.y);
 	let preview = page.getByRole("tooltip");
 	await expect(preview).toContainText(QUOTED);
-	let pageBox = await page.locator(".plan-document").boundingBox();
+	let pageBox = await page.locator("[data-plan-scroll]").boundingBox();
 	let previewBox = await preview.boundingBox();
 	expect(pageBox).not.toBeNull();
 	expect(previewBox).not.toBeNull();
@@ -382,6 +716,55 @@ test("a removed subject block moves its comment to document orphan chrome", asyn
 	await expect(orphaned).toBeVisible();
 	await orphaned.click();
 	await expect(page.getByRole("dialog", { name: "Orphaned comments" })).toContainText(QUOTED);
+});
+
+test("a compact orphan sheet owns focus and restores its opener", async ({ join, seed }) => {
+	await seed(TWO_BLOCKS);
+	let page = await join("ana", {
+		hasTouch: true,
+		isMobile: true,
+		viewport: { width: 390, height: 844 },
+	});
+	let first = content(page).locator("p").first();
+	await first.selectText();
+	await page.keyboard.press("Backspace");
+	await page.keyboard.press("Backspace");
+
+	let opener = page.getByRole("button", { name: "1 orphaned comments" });
+	await opener.tap();
+	let sheet = page.getByRole("dialog", { name: "Orphaned comments" });
+	await expect(sheet).toHaveAttribute("aria-modal", "true");
+	await expect(sheet.getByRole("button", { name: "Close comment" })).toBeFocused();
+	await expect(content(page)).toHaveAttribute("inert", "");
+	await page.keyboard.press("Shift+Tab");
+	await expect(sheet.getByRole("button", { name: "Dismiss" })).toBeFocused();
+	await page.keyboard.press("Escape");
+	await expect(sheet).toHaveCount(0);
+	await expect(opener).toBeFocused();
+	await expect(content(page)).not.toHaveAttribute("inert", "");
+});
+
+test("a remotely orphaned compact comment closes its sheet and restores editor focus", async ({ join, seed }) => {
+	await seed(TWO_BLOCKS);
+	let page = await join("ana", {
+		hasTouch: true,
+		isMobile: true,
+		viewport: { width: 390, height: 844 },
+	});
+	let editor = content(page);
+	let sheet = await thread(page);
+	await expect(sheet.getByRole("button", { name: "Close comment" })).toBeFocused();
+
+	let collaborator = await join("bo");
+	let subject = content(collaborator).locator("p").first();
+	await subject.selectText();
+	await collaborator.keyboard.press("Backspace");
+	await collaborator.keyboard.press("Backspace");
+
+	await expect(sheet).toHaveCount(0);
+	await expect(editor).toBeFocused();
+	await expect(editor).not.toHaveAttribute("inert", "");
+	await expect(page.getByRole("button", { name: "1 orphaned comments" })).toBeVisible();
 });
 
 function washed(page: import("@playwright/test").Page): Promise<number> {

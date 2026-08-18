@@ -26,9 +26,13 @@ export type ChatProps = {
 	connected: boolean;
 	/** Hosted mode keeps the shared conversation while repository-scoped agent work is disabled. */
 	agent?: boolean;
+	active?: boolean;
+	onActivity?: (event: { type: "message" | "working"; busy: boolean }) => void;
 };
 
-export function Chat({ agent = true, connected, handle, wire }: ChatProps) {
+export function Chat(
+	{ active = true, agent = true, connected, handle, onActivity, wire }: ChatProps,
+) {
 	let [entries, setEntries] = useState<Wire.Entry[]>([]);
 	let [arrived, setArrived] = useState<ReadonlySet<string>>(new Set());
 	let [queue, setQueue] = useState<Wire.Waiting[]>([]);
@@ -36,6 +40,9 @@ export function Chat({ agent = true, connected, handle, wire }: ChatProps) {
 	let [turn, setTurn] = useState<Wire.Turn>();
 	let [text, setText] = useState("");
 	let synchronized = useRef<Socket | undefined>(undefined);
+	let activity = useRef(onActivity);
+	let reportedBusy = useRef(false);
+	activity.current = onActivity;
 
 	// A socket is connected before its fresh history arrives. Do not let a
 	// previous socket's transient turn project into that gap.
@@ -62,11 +69,16 @@ export function Chat({ agent = true, connected, handle, wire }: ChatProps) {
 				setArrived(new Set());
 				setQueue(frame.queued);
 				setBusy(frame.busy);
+				reportedBusy.current = frame.busy;
 				setTurn(frame.turn);
+				// History is not unread, but a turn already in progress still needs
+				// a signal outside a closed Conversation destination.
+				activity.current?.({ type: "working", busy: frame.busy });
 			}),
 			wire.on<Wire.Message>("chat:message", frame => {
 				if (loaded && !seen.has(frame.entry.id)) {
 					setArrived(current => new Set(current).add(frame.entry.id));
+					activity.current?.({ type: "message", busy: reportedBusy.current });
 				}
 				seen.add(frame.entry.id);
 				setEntries(current => {
@@ -104,6 +116,10 @@ export function Chat({ agent = true, connected, handle, wire }: ChatProps) {
 				});
 			}),
 			wire.on<Wire.State>("chat:state", frame => {
+				if (loaded && reportedBusy.current !== frame.busy) {
+					activity.current?.({ type: "working", busy: frame.busy });
+				}
+				reportedBusy.current = frame.busy;
 				setBusy(frame.busy);
 				setTurn(frame.turn);
 			}),
@@ -125,6 +141,7 @@ export function Chat({ agent = true, connected, handle, wire }: ChatProps) {
 	return (
 		<div className="flex h-full min-h-0 flex-col">
 			<Transcript
+				active={active}
 				arrived={arrived}
 				entries={entries}
 				handle={handle}
@@ -135,7 +152,7 @@ export function Chat({ agent = true, connected, handle, wire }: ChatProps) {
 					: undefined}
 			/>
 
-			<div className="flex shrink-0 flex-col gap-2 px-4 pb-4">
+			<div className="conversation-composer flex shrink-0 flex-col gap-2 px-4 pb-4">
 				<textarea
 					className="field h-18 w-full resize-none px-2.5 py-1.5 text-sm"
 					disabled={!connected}
@@ -151,7 +168,7 @@ export function Chat({ agent = true, connected, handle, wire }: ChatProps) {
 					value={text}
 				/>
 
-				<div className="flex items-center gap-2">
+				<div className="conversation-actions flex flex-wrap items-center gap-2">
 					{busy && (
 						<button
 							className="btn btn-md btn-secondary"
@@ -161,7 +178,7 @@ export function Chat({ agent = true, connected, handle, wire }: ChatProps) {
 							Stop
 						</button>
 					)}
-					<div className="ml-auto flex items-center gap-2">
+					<div className="ml-auto flex flex-wrap items-center justify-end gap-2">
 						<button
 							className="btn btn-md btn-secondary"
 							disabled={!connected || !text.trim()}

@@ -269,6 +269,8 @@ export type ThreadCardProps = {
 	onBlur: () => void;
 	/** Take the reader to the prose this points at. */
 	onReveal: () => void;
+	/** Dismiss a document dialog without changing the durable thread. */
+	onClose?: () => void;
 	/** The overlay is document chrome rather than an item in the decisions rail. */
 	inDocument?: boolean;
 };
@@ -279,6 +281,7 @@ export function ThreadCard({
 	focused,
 	onAccept,
 	onBlur,
+	onClose,
 	onDismiss,
 	onFocus,
 	onReply,
@@ -320,6 +323,18 @@ export function ThreadCard({
 			settled={!open}
 			status={!open && <Provenance at={thread.at} by={thread.resolver} verb="Accepted" />}
 		>
+			{onClose && (
+				<div className="flex justify-end">
+					<button
+						className="btn btn-sm btn-ghost"
+						data-plan-comment-close
+						onClick={onClose}
+						type="button"
+					>
+						Close comment
+					</button>
+				</div>
+			)}
 			<Quote
 				drifted={view.drifted}
 				onSelect={onReveal}

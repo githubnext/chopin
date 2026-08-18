@@ -48,11 +48,12 @@ test("the conversation rail is the only resizable aside", async ({ join, page })
 	await expect(handle).toHaveAttribute("aria-valuenow", "400");
 });
 
-test("the document keeps 400 pixels before the conversation takes the deficit", async ({ join, page }) => {
+test("the compact workspace gives the document the full available width", async ({ join, page }) => {
 	await page.setViewportSize({ width: 640, height: 800 });
 	await join("ana");
 
-	expect((await box(page.locator("main"))).width).toBe(400);
+	expect((await box(page.locator("main"))).width).toBe(640);
+	await expect(page.getByRole("separator", { name: "Resize the conversation" })).toHaveCount(0);
 	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(640);
 });
 
@@ -80,4 +81,26 @@ test("the conversation rail remembers its width and visibility", async ({ join, 
 	await ready(page);
 	await page.getByRole("button", { name: "Show conversation pane" }).click();
 	await expect.poll(async () => (await box(page.locator("#pane-chat"))).width).toBe(400);
+});
+
+test("compact navigation does not overwrite the desktop conversation preference", async ({ join, page }) => {
+	await page.setViewportSize({ width: 1600, height: 800 });
+	await join("ana");
+	await page.getByRole("separator", { name: "Resize the conversation" }).press("End");
+
+	await page.setViewportSize({ width: 390, height: 844 });
+	let nav = page.getByRole("navigation", { name: "Workspace view" });
+	await nav.getByRole("button", { name: /Conversation/ }).click();
+	await nav.getByRole("button", { name: "Plan" }).click();
+
+	await page.setViewportSize({ width: 1600, height: 800 });
+	await expect(page.locator("#pane-chat")).toBeVisible();
+	await expect.poll(async () => (await box(page.locator("#pane-chat"))).width).toBe(400);
+});
+
+test("Escape leaves a persistent split Conversation pane open", async ({ join, page }) => {
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await join("ana");
+	await page.locator("#pane-chat textarea").press("Escape");
+	await expect(page.locator("#pane-chat")).toBeVisible();
 });

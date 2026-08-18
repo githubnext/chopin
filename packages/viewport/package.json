@@ -1,0 +1,18 @@
+{
+	"name": "@chopin/viewport",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"types": "tsgo --noEmit --skipLibCheck"
+	},
+	"exports": {
+		".": {
+			"types": "./src/index.ts",
+			"default": "./src/index.ts"
+		}
+	},
+	"devDependencies": {
+		"@types/bun": "catalog:bun"
+	}
+}
