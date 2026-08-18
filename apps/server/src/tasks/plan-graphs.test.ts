@@ -205,4 +205,59 @@ describe("the plan graph adapter", () => {
 		await expect(open(context.channel.id, context.backend, context.server))
 			.rejects.toThrow("invalid implementation run");
 	});
+
+	it("persists lifecycle activity before broadcasting it", async () => {
+		let report = (graphPlans as typeof graphPlans & {
+			reportImplementationLifecycle?: (plan: Plan, input: unknown) => Promise<any>;
+		}).reportImplementationLifecycle;
+		expect(report).toBeTypeOf("function");
+		if (!report) return;
+
+		let context = await hosted();
+		let frames: unknown[] = [];
+		let server = {
+			publish(_topic: string, frame: string) {
+				frames.push(JSON.parse(frame));
+			},
+		} as unknown as Server<SocketData>;
+		let plan = await open(context.channel.id, context.backend, server);
+		expect(
+			(await implementationGraphs().revise(plan, {
+				planRevision: plan.revision,
+				graphRevision: 0,
+				operations: definition.tasks.map(task => ({ op: "add", task })),
+			})).ok,
+		).toBe(true);
+		expect((await implementationGraphs().approve(plan)).ok).toBe(true);
+		expect(
+			await claimImplementation(plan, {
+				planRevision: plan.revision,
+				graphRevision: 1,
+				run: run(plan.revision),
+			}),
+		).toMatchObject({ kind: "started" });
+
+		expect(
+			await report(plan, {
+				kind: "start",
+				taskId: "model",
+				idempotencyKey: "start-model",
+			}),
+		).toMatchObject({ kind: "accepted" });
+		expect(frames).toContainEqual(expect.objectContaining({
+			kind: "plan:lifecycle",
+			activity: expect.objectContaining({
+				tasks: [{ id: "model", state: "in_progress" }],
+			}),
+		}));
+		await close(plan);
+
+		let restored = await open(context.channel.id, context.backend, context.server);
+		expect(restored.lifecycle.events).toEqual([{
+			kind: "start",
+			taskId: "model",
+			idempotencyKey: "start-model",
+		}]);
+		await close(restored);
+	});
 });

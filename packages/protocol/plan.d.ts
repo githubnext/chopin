@@ -23,7 +23,8 @@ export declare namespace Plan {
 		| (Awareness & { sender?: string })
 		| Anchors
 		| Changes
-		| Reset;
+		| Reset
+		| Lifecycle;
 
 	/**
 	 * A decision's place in the prose.
@@ -285,5 +286,21 @@ export declare namespace Plan {
 			| "compacted"
 			/** An update did not validate and the room was rebuilt. */
 			| "rebuilt";
+	};
+
+	/** Durable implementation activity, published only after persistence. */
+	export type Lifecycle = KIND<"plan:lifecycle"> & {
+		execution: { state: "idle" | "active" };
+		activity?: {
+			tasks: Array<{
+				id: string;
+				state: "queued" | "in_progress" | "blocked" | "completed";
+				blocker?: string;
+				summary?: string;
+				pullRequest?: { url: string; state: "open" | "merged" | "closed" };
+			}>;
+			events: Array<{ idempotencyKey: string; kind: string }>;
+		};
+		history: number;
 	};
 }

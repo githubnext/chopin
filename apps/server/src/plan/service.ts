@@ -21,6 +21,7 @@ import * as Chat from "../chat/service";
 import * as Comments from "../comments/service";
 import * as Questions from "../questions/service";
 import { claim, restore as restoreGraph, restoreRun } from "../tasks/graphs";
+import { restoreLifecycle, transition } from "../tasks/lifecycle";
 import { broadcast, fail, relay, reply, tell } from "../wire";
 
 import type { Server } from "bun";
@@ -34,6 +35,7 @@ import type { Brief, CreationOrigin } from "../mcp";
 import type { InitialChannel, JsonValue, Lease, StoredChannel } from "../storage/model";
 import type { StorageAdapter } from "../storage/port";
 import type { ClaimInput, ClaimResult, Graph, Run } from "../tasks/graphs";
+import type { Lifecycle, LifecycleInput, LifecycleResult } from "../tasks/lifecycle";
 
 /** Updates are grouped for this long before being applied together. */
 const GROUP_MS = 5;
@@ -130,6 +132,8 @@ export type Plan = {
 	graph?: Graph;
 	/** The external implementation run that freezes this plan. */
 	execution?: Run;
+	/** Mutable task progress and prior runs, separate from claim identity. */
+	lifecycle: Lifecycle;
 	/** A claim has closed mutation ingress while accepted work drains. */
 	claiming: boolean;
 	/**
@@ -169,6 +173,7 @@ type Sidecar = {
 	creation?: CreationMetadata;
 	graph?: Graph;
 	execution?: Run;
+	lifecycle?: Lifecycle;
 	questions: Questions.Record[];
 	openQuestions: Questions.StoredOpen[];
 	threads: Comments.Record[];
@@ -183,6 +188,9 @@ function state(plan: Plan): Sidecar {
 		...(plan.creation ? { creation: plan.creation } : {}),
 		...(plan.graph ? { graph: plan.graph } : {}),
 		...(plan.execution ? { execution: plan.execution } : {}),
+		...(plan.lifecycle.events?.length || plan.lifecycle.history.length > 0
+			? { lifecycle: plan.lifecycle }
+			: {}),
 		questions: [...plan.records.values()],
 		openQuestions: Questions.dump(plan.questions),
 		threads: [...plan.threads.values()],
@@ -338,6 +346,7 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 	if (created) expected.push(...(legacy ? ["brief", "origin"] : ["creation"]));
 	if (Object.hasOwn(item, "graph")) expected.push("graph");
 	if (Object.hasOwn(item, "execution")) expected.push("execution");
+	if (Object.hasOwn(item, "lifecycle")) expected.push("lifecycle");
 	expected.sort();
 	if (
 		keys.length !== expected.length
@@ -359,6 +368,12 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 		: undefined;
 	if (Object.hasOwn(item, "execution") && !execution) {
 		throw new Error("hosted channel has an invalid implementation run");
+	}
+	let lifecycle = Object.hasOwn(item, "lifecycle") && graph
+		? restoreLifecycle(item.lifecycle, graph, execution)
+		: undefined;
+	if (Object.hasOwn(item, "lifecycle") && !lifecycle) {
+		throw new Error("hosted channel has an invalid implementation lifecycle");
 	}
 	let questions = objects(item.questions, "question record");
 	for (let question of questions) {
@@ -402,6 +417,7 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 		...(created ? { creation: created } : {}),
 		...(graph ? { graph } : {}),
 		...(execution ? { execution } : {}),
+		...(lifecycle ? { lifecycle } : {}),
 		questions: questions as never[],
 		openQuestions: openQuestions as unknown as Questions.StoredOpen[],
 		threads: threads as never[],
@@ -637,6 +653,37 @@ export function claimStored(
 	};
 }
 
+/** Prepare one atomic lifecycle sidecar change for a plan that is not live. */
+export function lifecycleStored(
+	loaded: StoredChannel,
+	input: LifecycleInput,
+): { result: LifecycleResult; sidecar?: JsonValue } {
+	let pristine = loaded.channel.revision === 0 && loaded.latestSequence === 0 && !loaded.snapshot;
+	let sidecar = restoredState(
+		loaded.sidecar === null && loaded.snapshot && loaded.channel.revision === 0
+			? loaded.snapshot.sidecar
+			: loaded.sidecar,
+		pristine,
+	);
+	if (!sidecar.graph) return { result: { kind: "refused", reason: "inactive" } };
+	let result = transition({
+		graph: sidecar.graph,
+		execution: sidecar.execution,
+		lifecycle: sidecar.lifecycle ?? { history: [] },
+	}, input);
+	if (result.kind !== "accepted") return { result };
+	let { graph: _graph, execution: _execution, lifecycle: _lifecycle, ...rest } = sidecar;
+	return {
+		result,
+		sidecar: JSON.parse(JSON.stringify({
+			...rest,
+			graph: result.state.graph,
+			...(result.state.execution ? { execution: result.state.execution } : {}),
+			lifecycle: result.state.lifecycle,
+		})) as JsonValue,
+	};
+}
+
 async function restoreHosted(id: string, loaded: StoredChannel): Promise<RestoredHosted> {
 	let document: Document;
 	let needsInitialCheckpoint = false;
@@ -693,6 +740,7 @@ export async function readStored(
 	creation?: CreationMetadata;
 	graph?: Graph;
 	execution?: Run;
+	lifecycle?: Lifecycle;
 }> {
 	let restored = await restoreHosted(loaded.channel.id, loaded);
 	try {
@@ -703,6 +751,7 @@ export async function readStored(
 			...(restored.sidecar.creation ? { creation: restored.sidecar.creation } : {}),
 			...(restored.sidecar.graph ? { graph: restored.sidecar.graph } : {}),
 			...(restored.sidecar.execution ? { execution: restored.sidecar.execution } : {}),
+			...(restored.sidecar.lifecycle ? { lifecycle: restored.sidecar.lifecycle } : {}),
 		};
 	} finally {
 		restored.document.doc.destroy();
@@ -734,6 +783,7 @@ export async function open(
 		revision: sidecar.revision,
 		graph: sidecar.graph,
 		execution: sidecar.execution,
+		lifecycle: sidecar.lifecycle ?? { history: [] },
 		claiming: false,
 		queue: [],
 		timer: undefined,

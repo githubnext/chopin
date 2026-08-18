@@ -13,9 +13,12 @@ import {
 	prepare,
 	REPOSITORY_PATH_PATTERN,
 } from "./mcp/create";
+import { isLifecycleTool, LIFECYCLE_TOOLS, lifecycleCall } from "./mcp/lifecycle";
 
 import type { Brief, CreateDocumentInput } from "./mcp/create";
 import type { Run, Version } from "./tasks/graphs";
+import type { LifecycleArguments } from "./mcp/lifecycle";
+import type { HistoricalRun, Progress } from "./tasks/lifecycle";
 
 export type { Brief, CreateDocumentInput, CreationOrigin } from "./mcp/create";
 
@@ -42,6 +45,8 @@ export type Implementation = {
 	repository: { name: string; baseBranch: string; baseCommit: string };
 	graph: Version;
 	execution: { state: "idle" } | { state: "active"; run: Run };
+	activity?: Progress;
+	history: HistoricalRun[];
 };
 
 export type ImplementationInput = {
@@ -62,6 +67,14 @@ export type Implementations<Caller> = {
 	): Promise<
 		| { kind: "started"; run: Run }
 		| { kind: "active"; run: Run }
+		| { kind: "forbidden" }
+		| { kind: "refused"; reason: string }
+	>;
+	reportLifecycle?(
+		caller: Caller,
+		input: LifecycleArguments,
+	): Promise<
+		| { kind: "accepted" | "replayed"; lifecycle: unknown }
 		| { kind: "forbidden" }
 		| { kind: "refused"; reason: string }
 	>;
@@ -223,6 +236,7 @@ export const TOOLS: Tool[] = [
 		inputSchema: IMPLEMENTATION,
 		outputSchema: { type: "object", properties: {}, additionalProperties: true },
 	},
+	...LIFECYCLE_TOOLS,
 ];
 
 type Call = {
@@ -396,6 +410,7 @@ export function handler<Caller>(
 		(tool.name !== "create_document" || creation)
 		&& (!["read_implementation", "start_implementation"].includes(tool.name)
 			|| options.implementations)
+		&& (!isLifecycleTool(tool.name) || options.implementations?.reportLifecycle)
 	);
 
 	async function dispatch(
@@ -522,6 +537,29 @@ export function handler<Caller>(
 						return respond(text({ code: "repository-forbidden" }, true));
 					}
 					return respond(text({ code: outcome.reason }, true));
+				}
+				let lifecycle = lifecycleCall(tool.name, tool.arguments);
+				if (lifecycle.known) {
+					if (!lifecycle.input) {
+						return notification
+							? undefined
+							: error(call.id, -32602, `${tool.name} requires its documented arguments`);
+					}
+					if (!client.session || !sessions.has(client.session)) {
+						return respond(text({ code: "session-required" }, true));
+					}
+					let report = options.implementations?.reportLifecycle;
+					if (!report) return respond(text({ code: "implementation-unavailable" }, true));
+					let outcome = await report(caller, lifecycle.input);
+					if (outcome.kind === "accepted" || outcome.kind === "replayed") {
+						return respond(text(outcome.lifecycle));
+					}
+					if (outcome.kind === "forbidden") {
+						return respond(text({ code: "repository-forbidden" }, true));
+					}
+					return outcome.kind === "refused"
+						? respond(text({ code: outcome.reason }, true))
+						: respond(text({ code: "implementation-unavailable" }, true));
 				}
 				return notification ? undefined : error(call.id, -32601, "tool not found");
 			}

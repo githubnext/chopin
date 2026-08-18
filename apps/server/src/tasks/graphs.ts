@@ -298,6 +298,19 @@ export function restoreRun(
 	return copy(restored);
 }
 
+/** Restore a historical run against the graph version it originally claimed. */
+export function restoreRunVersion(value: unknown, graph: Graph): Run | undefined {
+	let restored = run(value);
+	if (
+		!restored
+		|| !graph.versions.some(version =>
+			version.planRevision === restored.planRevision
+			&& version.revision === restored.graphRevision
+		)
+	) return undefined;
+	return copy(restored);
+}
+
 /** Lock exactly one approved graph revision and record its owner atomically. */
 export function claim(
 	state: { graph: Graph | undefined; revision: number | undefined; execution: Run | undefined },

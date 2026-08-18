@@ -514,6 +514,48 @@ describe("the hosted MCP adapter", () => {
 			kind: "active",
 			run: { session: "session-1" },
 		});
+		let report = adapter.implementations.reportLifecycle;
+		expect(report).toBeTypeOf("function");
+		if (!report) return;
+		let start = {
+			id: opened.channel.id,
+			kind: "start" as const,
+			taskId: "claim",
+			idempotencyKey: "start-claim",
+		};
+		expect(await report(caller, start)).toMatchObject({
+			kind: "accepted",
+			lifecycle: {
+				activity: { tasks: [{ id: "claim", state: "in_progress" }] },
+			},
+		});
+		expect(await report(caller, start)).toMatchObject({ kind: "replayed" });
+		let progressed = await context.storage.collaboration.load(opened.channel.id, context.now);
+		if (!progressed) throw new Error("lifecycle progress was not stored");
+		expect((await Service.readStored(progressed)).lifecycle).toMatchObject({
+			events: [{ kind: "start", taskId: "claim", idempotencyKey: "start-claim" }],
+		});
+		expect(
+			await report(caller, {
+				id: opened.channel.id,
+				kind: "request_revision",
+				reason: "The graph needs another delivery step.",
+				idempotencyKey: "request-revision",
+			}),
+		).toMatchObject({
+			kind: "accepted",
+			lifecycle: {
+				execution: { state: "idle" },
+				history: [{ outcome: { kind: "revision_requested" } }],
+			},
+		});
+		let released = await context.storage.collaboration.load(opened.channel.id, context.now);
+		if (!released) throw new Error("released lifecycle was not stored");
+		expect(await Service.readStored(released)).toMatchObject({
+			graph: { versions: [{ state: "approved" }] },
+			lifecycle: { history: [{ outcome: { kind: "revision_requested" } }] },
+		});
+		expect((await Service.readStored(released)).execution).toBeUndefined();
 	});
 
 	it("makes an inaccessible channel indistinguishable from a missing channel", async () => {
