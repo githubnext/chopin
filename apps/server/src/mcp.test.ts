@@ -117,9 +117,7 @@ describe("the MCP read protocol", () => {
 			})),
 		);
 		expect((tools.result as { tools: unknown[] }).tools).toEqual(
-			TOOLS.filter(tool =>
-				!["create_document", "read_implementation", "start_implementation"].includes(tool.name)
-			),
+			TOOLS.filter(tool => ["list_documents", "read_document"].includes(tool.name)),
 		);
 
 		let listed = await json(
@@ -165,6 +163,7 @@ describe("the MCP read protocol", () => {
 						definition: { tasks: [] },
 					},
 					execution: active ? { state: "active", run: active } : { state: "idle" },
+					history: [],
 				};
 			},
 			async startImplementation(_caller, input) {
@@ -247,6 +246,76 @@ describe("the MCP read protocol", () => {
 				client: { name: "Codex", version: "1.2.3" },
 				session,
 			},
+		});
+	});
+
+	it("advertises and dispatches lifecycle tools from one implementation capability", async () => {
+		let received: unknown;
+		let implementations = {
+			async readImplementation() {
+				return undefined;
+			},
+			async startImplementation() {
+				return { kind: "refused" as const, reason: "unused" };
+			},
+			async reportLifecycle(_caller: string, input: unknown) {
+				received = input;
+				return { kind: "accepted" as const, lifecycle: { activity: "recorded" } };
+			},
+		};
+		let mcp = handler({
+			caller: () => "octocat",
+			documents: reader(),
+			implementations,
+		});
+		let initialized = await mcp(request({
+			jsonrpc: "2.0",
+			id: 1,
+			method: "initialize",
+			params: { clientInfo: { name: "Codex", version: "1.2.3" } },
+		}));
+		let session = initialized.headers.get("mcp-session-id")!;
+		let listed = await json(
+			await mcp(request({
+				jsonrpc: "2.0",
+				id: 2,
+				method: "tools/list",
+			}, { headers: { "mcp-session-id": session } })),
+		);
+		expect((listed.result as { tools: Array<{ name: string }> }).tools.map(tool => tool.name))
+			.toEqual(expect.arrayContaining([
+				"start_task",
+				"block_task",
+				"report_pr",
+				"complete_task",
+				"request_revision",
+			]));
+
+		let result = await json(
+			await mcp(request({
+				jsonrpc: "2.0",
+				id: 3,
+				method: "tools/call",
+				params: {
+					name: "block_task",
+					arguments: {
+						id: document.id,
+						taskId: "model",
+						reason: "Waiting for CI.",
+						idempotencyKey: "block-model",
+					},
+				},
+			}, { headers: { "mcp-session-id": session } })),
+		);
+		expect(received).toEqual({
+			id: document.id,
+			kind: "block",
+			taskId: "model",
+			reason: "Waiting for CI.",
+			idempotencyKey: "block-model",
+		});
+		expect((result.result as { structuredContent: unknown }).structuredContent).toEqual({
+			activity: "recorded",
 		});
 	});
 

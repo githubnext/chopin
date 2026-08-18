@@ -1,11 +1,14 @@
 /** The hosted persistence boundary for implementation graphs. */
 
 import { claim, Graphs } from "./graphs";
+import { progressFor, transition } from "./lifecycle";
 import * as Comments from "../comments/service";
 import { drain, exclusive, persistExclusive } from "../plan/service";
+import { broadcast } from "../wire";
 
 import type { Plan } from "../plan/service";
 import type { ClaimInput, ClaimResult, Graph, GraphAdapter, Result } from "./graphs";
+import type { LifecycleInput, LifecycleResult } from "./lifecycle";
 
 const adapter: GraphAdapter<Plan> = {
 	async transact(plan, change): Promise<Result<Graph>> {
@@ -63,6 +66,46 @@ export async function claimImplementation(plan: Plan, input: ClaimInput): Promis
 	} finally {
 		plan.claiming = false;
 	}
+}
+
+/** Persist one lifecycle transition before publishing its projection. */
+export function reportImplementationLifecycle(
+	plan: Plan,
+	input: LifecycleInput,
+): Promise<LifecycleResult> {
+	return exclusive(plan, async () => {
+		if (!plan.graph) return { kind: "refused", reason: "inactive" };
+		let result = transition({
+			graph: plan.graph,
+			execution: plan.execution,
+			lifecycle: plan.lifecycle,
+		}, input);
+		if (result.kind !== "accepted") return result;
+		let previous = {
+			graph: plan.graph,
+			execution: plan.execution,
+			lifecycle: plan.lifecycle,
+		};
+		plan.graph = result.state.graph;
+		plan.execution = result.state.execution;
+		plan.lifecycle = result.state.lifecycle;
+		try {
+			await persistExclusive(plan);
+		} catch {
+			plan.graph = previous.graph;
+			plan.execution = previous.execution;
+			plan.lifecycle = previous.lifecycle;
+			return { kind: "refused", reason: "durability" };
+		}
+		broadcast(plan.server, plan.id, {
+			kind: "plan:lifecycle",
+			ts: 0,
+			execution: plan.execution ? { state: "active" } : { state: "idle" },
+			activity: progressFor(plan.graph, plan.lifecycle, plan.execution),
+			history: plan.lifecycle.history.length,
+		});
+		return result;
+	});
 }
 
 /** Whether the settled plan can be turned into implementation work. */

@@ -2,12 +2,14 @@ import { GitHubError } from "../github/client";
 import { createHash } from "node:crypto";
 import * as Plan from "../plan/service";
 import * as Rooms from "../rooms";
-import { claimImplementation } from "../tasks/plan-graphs";
+import { claimImplementation, reportImplementationLifecycle } from "../tasks/plan-graphs";
 import { StorageError } from "../storage/errors";
+import { historyFor, progressFor } from "../tasks/lifecycle";
 
 import type { HostedAuth } from "../auth/routes";
 import type { GitHubUser } from "../github/client";
 import type { Implementation, ImplementationInput, McpOptions } from "../mcp";
+import type { LifecycleArguments } from "./lifecycle";
 import type { ChannelRecord, Lease } from "../storage/model";
 import type { ClaimResult, Run } from "../tasks/graphs";
 
@@ -90,6 +92,22 @@ function exposed(
 		execution: state.execution
 			? { state: "active", run: state.execution }
 			: { state: "idle" },
+		activity: state.graph && state.lifecycle
+			? progressFor(state.graph, state.lifecycle, state.execution)
+			: undefined,
+		history: state.graph && state.lifecycle ? historyFor(state.graph, state.lifecycle) : [],
+	};
+}
+
+function lifecycle(state: {
+	graph: NonNullable<Awaited<ReturnType<typeof Plan.readStored>>["graph"]>;
+	execution?: Run;
+	lifecycle: NonNullable<Awaited<ReturnType<typeof Plan.readStored>>["lifecycle"]>;
+}) {
+	return {
+		execution: state.execution ? { state: "active" as const } : { state: "idle" as const },
+		activity: progressFor(state.graph, state.lifecycle, state.execution),
+		history: historyFor(state.graph, state.lifecycle),
 	};
 }
 
@@ -296,6 +314,7 @@ export function hosted(
 								...(live.creation ? { creation: live.creation } : {}),
 								...(live.graph ? { graph: live.graph } : {}),
 								...(live.execution ? { execution: live.execution } : {}),
+								lifecycle: live.lifecycle,
 							});
 						}
 						let stored = await auth.storage.collaboration.load(id, auth.clock());
@@ -353,6 +372,74 @@ export function hosted(
 									now: auth.clock(),
 								});
 								return claimResult(prepared.result);
+							} catch (err) {
+								if (!(err instanceof StorageError) || err.failure !== "conflict") throw err;
+							}
+						}
+						return { kind: "refused" as const, reason: "conflict" };
+					},
+					async reportLifecycle(caller: HostedCaller, input: LifecycleArguments) {
+						let channel = await auth.storage.channels.get(input.id);
+						if (!channel) return { kind: "forbidden" as const };
+						let repository = await auth.github.repositoryAccess(
+							caller.oauthToken,
+							channel.repositoryOwner,
+							channel.repositoryName,
+						);
+						if (
+							!repository
+							|| repository.id !== channel.repositoryId
+							|| (!repository.permissions.push && !repository.permissions.admin)
+						) return { kind: "forbidden" as const };
+						let { id: _id, ...event } = input;
+						let live = Rooms.get(input.id)?.plan;
+						if (live) {
+							let result = await reportImplementationLifecycle(live, event);
+							if (result.kind === "refused") return result;
+							return {
+								kind: result.kind,
+								lifecycle: lifecycle({
+									graph: result.state.graph,
+									execution: result.state.execution,
+									lifecycle: result.state.lifecycle,
+								}),
+							};
+						}
+						for (let attempt = 0; attempt < 2; attempt++) {
+							let stored = await auth.storage.collaboration.load(input.id, auth.clock());
+							if (!stored?.snapshot) return { kind: "refused" as const, reason: "inactive" };
+							let prepared = Plan.lifecycleStored(stored, event);
+							if (prepared.result.kind === "refused") return prepared.result;
+							if (prepared.result.kind === "replayed") {
+								return {
+									kind: "replayed" as const,
+									lifecycle: lifecycle({
+										graph: prepared.result.state.graph,
+										execution: prepared.result.state.execution,
+										lifecycle: prepared.result.state.lifecycle,
+									}),
+								};
+							}
+							if (!prepared.sidecar) return { kind: "refused" as const, reason: "inactive" };
+							try {
+								await auth.storage.collaboration.commit({
+									channelId: input.id,
+									lease: persistence.lease(),
+									expectedRevision: stored.channel.revision,
+									operationId: `lifecycle:${input.idempotencyKey}`,
+									epoch: stored.snapshot.epoch,
+									sidecar: prepared.sidecar,
+									events: [],
+									now: auth.clock(),
+								});
+								return {
+									kind: "accepted" as const,
+									lifecycle: lifecycle({
+										graph: prepared.result.state.graph,
+										execution: prepared.result.state.execution,
+										lifecycle: prepared.result.state.lifecycle,
+									}),
+								};
 							} catch (err) {
 								if (!(err instanceof StorageError) || err.failure !== "conflict") throw err;
 							}
