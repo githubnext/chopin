@@ -17,6 +17,7 @@
 		"@chopin/dialect": "workspace:*",
 		"@chopin/protocol": "workspace:*",
 		"@chopin/question": "workspace:*",
+		"@chopin/viewport": "workspace:*",
 		"@lexical/link": "catalog:mdx",
 		"@lexical/list": "catalog:mdx",
 		"@lexical/react": "catalog:mdx",

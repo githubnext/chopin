@@ -35,6 +35,7 @@ import { readOnly$ } from "@mdxeditor/editor";
 import { useCellValue } from "@mdxeditor/gurx";
 import { $getRoot, $getSelection, $isElementNode, $isRangeSelection, mergeRegister } from "lexical";
 
+import { alignmentLabel, nextAlign } from "./alignment";
 import { destination, dropSeam, gripBox, seamAt, seamBox, seams } from "./geometry";
 import {
 	$addColumn,
@@ -48,7 +49,6 @@ import {
 } from "./ops";
 import { canAddColumn, canAddRow, canRemoveColumn, canRemoveRow, HEADER } from "./shape";
 
-import type { Align } from "@chopin/dialect";
 import type { ElementNode, LexicalEditor, NodeKey } from "lexical";
 import type { Axis, Track } from "./geometry";
 import type { Table } from "./ops";
@@ -73,26 +73,6 @@ const SEAM = 16;
 /** One button in the tool lane, and how far each of a pair sits from centre. */
 const BUTTON = 15;
 const PAIR = 8;
-
-/**
- * What the alignment button steps through.
- *
- * `null` first because it is what a column starts as and what the source omits;
- * stepping off the end returns to it, so the control can always be put back.
- */
-const ALIGNMENTS: Align[] = [null, "left", "center", "right"];
-
-const ALIGN_LABEL: Record<string, string> = {
-	null: "default",
-	left: "left",
-	center: "centre",
-	right: "right",
-};
-
-function nextAlign(current: Align): Align {
-	let index = ALIGNMENTS.indexOf(current ?? null);
-	return ALIGNMENTS[(index + 1) % ALIGNMENTS.length] ?? null;
-}
 
 /** Where a measured table is on the screen, and where its tracks are. */
 type Metrics = {
@@ -619,7 +599,7 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks }: Ra
 								<button
 									type="button"
 									aria-label={`Align ${noun} ${index + 1}, currently ${
-										ALIGN_LABEL[String(table.align[index] ?? null)]
+										alignmentLabel(table.align[index] ?? null)
 									}`}
 									className="plan-align"
 									data-plan-align={table.align[index] ?? "default"}

@@ -1,4 +1,5 @@
 import { CaretDownIcon, CheckIcon } from "@phosphor-icons/react";
+import { currentViewport, listenToViewportChanges } from "@chopin/viewport";
 import { createPortal } from "react-dom";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
@@ -8,7 +9,10 @@ import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from "react";
 
 export type RepositoryIdentity = Pick<Api.Repository, "owner" | "name" | "fullName">;
 
-type Position = Pick<CSSProperties, "left" | "maxHeight" | "top" | "visibility" | "width">;
+type Position = Pick<
+	CSSProperties,
+	"height" | "left" | "maxHeight" | "top" | "visibility" | "width"
+>;
 
 type InstalledRepositories = {
 	installation: Api.GitHubInstallation;
@@ -138,28 +142,55 @@ export function RepositoryPicker(
 		function place() {
 			let rect = trigger.current?.getBoundingClientRect();
 			if (!rect) return;
+			let viewport = currentViewport();
+			let viewportLeft = viewport.left;
+			let viewportTop = viewport.top;
+			let viewportWidth = viewport.width;
+			let viewportHeight = viewport.height;
 			let margin = 8;
 			let gap = 4;
-			let width = Math.max(0, Math.min(360, window.innerWidth - margin * 2));
-			let left = Math.max(margin, Math.min(rect.left, window.innerWidth - width - margin));
-			let top = rect.bottom + gap;
+			let topEdge = viewportTop + margin;
+			let bottomEdge = viewportTop + viewportHeight - margin;
+			let width = Math.max(0, Math.min(360, viewportWidth - margin * 2));
+			let left = Math.max(
+				viewportLeft + margin,
+				Math.min(rect.left, viewportLeft + viewportWidth - width - margin),
+			);
+			let above = Math.max(0, Math.min(rect.top - gap, bottomEdge) - topEdge);
+			let below = Math.max(0, bottomEdge - Math.max(rect.bottom + gap, topEdge));
+			let useAbove = above > below;
+			let previousHeight = panel.current?.style.height;
+			let previousMaxHeight = panel.current?.style.maxHeight;
+			if (panel.current) {
+				panel.current.style.height = "auto";
+				panel.current.style.maxHeight = "none";
+			}
+			let naturalHeight = panel.current?.scrollHeight ?? 0;
+			if (panel.current) {
+				panel.current.style.height = previousHeight ?? "";
+				panel.current.style.maxHeight = previousMaxHeight ?? "";
+			}
+			let maxHeight = Math.min(naturalHeight, useAbove ? above : below);
+			let wantedTop = useAbove ? rect.top - gap - maxHeight : rect.bottom + gap;
+			let top = Math.max(topEdge, Math.min(wantedTop, bottomEdge - maxHeight));
 			setPosition({
+				height: maxHeight,
 				left,
-				maxHeight: Math.max(0, window.innerHeight - top - margin),
+				maxHeight,
 				top,
 				visibility: "visible",
 				width,
 			});
 		}
+		function placeForViewportChange(event?: Event) {
+			let target = event?.target;
+			if (target instanceof Node && panel.current?.contains(target)) return;
+			place();
+		}
 
 		place();
-		window.addEventListener("resize", place);
-		document.addEventListener("scroll", place, true);
-		return () => {
-			window.removeEventListener("resize", place);
-			document.removeEventListener("scroll", place, true);
-		};
-	}, [open]);
+		return listenToViewportChanges(placeForViewportChange, { observeDocumentScroll: true });
+	}, [error, installed, matches.length, normalized, open]);
 
 	useEffect(() => {
 		if (!open) return;
@@ -171,10 +202,20 @@ export function RepositoryPicker(
 
 	useEffect(() => {
 		if (!open || !activeRepository) return;
-		document.getElementById(optionId(listId, activeRepository))?.scrollIntoView({
-			block: "nearest",
+		let frame = requestAnimationFrame(() => {
+			let option = document.getElementById(optionId(listId, activeRepository));
+			option?.scrollIntoView({ block: "nearest" });
+			let scroller = option?.closest<HTMLElement>("[data-repository-scroll]");
+			if (!option || !scroller) return;
+			let optionBox = option.getBoundingClientRect();
+			let scrollerBox = scroller.getBoundingClientRect();
+			if (optionBox.top < scrollerBox.top || optionBox.bottom > scrollerBox.bottom) {
+				// Chromium can treat a fractional edge as nearest-visible.
+				option.scrollIntoView({ block: "end" });
+			}
 		});
-	}, [activeRepository, listId, open]);
+		return () => cancelAnimationFrame(frame);
+	}, [activeRepository, listId, open, position.height, position.top]);
 
 	useEffect(() => {
 		if (!open) return;
@@ -322,7 +363,7 @@ export function RepositoryPicker(
 					aria-autocomplete="list"
 					aria-controls={listId}
 					aria-expanded="true"
-					className="field h-8 w-full px-2 text-sm"
+					className="repository-picker-search field h-8 w-full px-2 text-sm"
 					id={`${listId}-search`}
 					onChange={event => {
 						setQuery(event.target.value);
@@ -521,12 +562,14 @@ export function RepositoryPicker(
 	return (
 		<>
 			<button
+				aria-label={current ? `Repository: ${current.fullName}` : "Choose repository"}
 				aria-controls={panelId}
 				aria-expanded={open}
 				aria-haspopup="listbox"
-				className="btn btn-sm btn-ghost min-w-0 max-w-40 shrink-0 gap-1.5 sm:max-w-64"
+				className="repository-picker-trigger btn btn-sm btn-ghost min-w-0 max-w-40 gap-1.5 sm:max-w-64"
 				onClick={() => setOpen(value => !value)}
 				ref={trigger}
+				title={current?.fullName}
 				type="button"
 			>
 				<span className="truncate">{current?.fullName ?? "Choose repository"}</span>

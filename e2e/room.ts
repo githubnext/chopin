@@ -5,7 +5,7 @@ import { expect, test as base } from "@playwright/test";
 import { createChannel, readSource, seedChannel } from "./database";
 
 import type { SeedState } from "../apps/server/src/testing/plan";
-import type { BrowserContext, Page } from "@playwright/test";
+import type { Browser, BrowserContext, BrowserContextOptions, Page } from "@playwright/test";
 
 function port(url: string): number {
 	return Number(new URL(url).port);
@@ -33,11 +33,34 @@ export async function authenticate(page: Page, handle: string, baseURL: string):
 	await page.context().addCookies([{ name: name!, value: value!, url: baseURL }]);
 }
 
+/** Open a room in a context that needs setup before navigation. */
+export async function openIsolatedRoom(
+	browser: Browser,
+	baseURL: string,
+	room: string,
+	handle: string,
+	options: BrowserContextOptions,
+	beforeNavigation?: (context: BrowserContext) => Promise<void>,
+): Promise<{ close: () => Promise<void>; context: BrowserContext; page: Page }> {
+	let context = await browser.newContext({ ...options, baseURL });
+	try {
+		await beforeNavigation?.(context);
+		let page = await context.newPage();
+		await authenticate(page, handle, baseURL);
+		await page.goto(`/channels/${room}`);
+		await ready(page);
+		return { close: () => context.close(), context, page };
+	} catch (error) {
+		await context.close();
+		throw error;
+	}
+}
+
 type Fixtures = {
 	/** The channel this test has to itself. */
 	room: string;
-	/** Open the channel as somebody. The first call uses the default page. */
-	join: (handle: string) => Promise<Page>;
+	/** Open the channel as somebody. Options always receive an isolated context. */
+	join: (handle: string, options?: BrowserContextOptions) => Promise<Page>;
 	/** Set the channel's source and optional sidecar before anyone opens it. */
 	seed: (source: string, state?: SeedState) => Promise<void>;
 };
@@ -52,13 +75,14 @@ export const test = base.extend<Fixtures>({
 	join: async ({ baseURL, browser, context, page, room }, use) => {
 		let first = true;
 		let opened: BrowserContext[] = [];
-		await use(async handle => {
+		await use(async (handle, options) => {
 			let target: Page;
-			if (first) {
+			if (first && !options) {
 				first = false;
 				target = page;
 			} else {
-				let isolated = await browser.newContext({ baseURL });
+				first = false;
+				let isolated = await browser.newContext({ ...options, baseURL });
 				opened.push(isolated);
 				target = await isolated.newPage();
 			}

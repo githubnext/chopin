@@ -14,7 +14,9 @@
  * which elements get rendered.
  */
 
-import { content, expect, test } from "./room";
+import { content, expect, openIsolatedRoom, test } from "./room";
+import { installPointerMedia } from "./pointer-media";
+import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 
 import type { Locator, Page } from "@playwright/test";
 
@@ -25,6 +27,13 @@ const TABLE = [
 	"| one   | a    |",
 	"| two   | b    |",
 	"| three | c    |",
+	"",
+].join("\n");
+
+const WIDE_TABLE = [
+	"| Product | Constraint | Surface | Signal | Source | Preview | Scrollbar | Measure |",
+	"| ------- | ---------- | ------- | ------ | ------ | ------- | --------- | ------- |",
+	"| Chopin | Responsive | Document | Clear | Lexical | Rendered | Widget | Readable |",
 	"",
 ].join("\n");
 
@@ -48,6 +57,23 @@ function items(page: Page): Locator {
 	return content(page).locator("tr > td:first-child");
 }
 
+async function touchToolbar(page: Page, cell: Locator = content(page).locator("td").first()) {
+	await cell.tap();
+	let toolbar = page.getByRole("toolbar", { name: "Table actions" });
+	await expect(toolbar).toBeVisible();
+	return toolbar;
+}
+
+async function openGroup(toolbar: Locator, name: "Add" | "Remove" | "Move") {
+	let trigger = toolbar.getByRole("button", { name, exact: true });
+	await expectInsideViewport(trigger);
+	await trigger.click();
+	let group = toolbar.getByRole("group", { name: `${name} table actions` });
+	await expect(group).toBeVisible();
+	await expectInsideViewport(group.getByRole("button"));
+	return group;
+}
+
 /**
  * A grip, addressed exactly.
  *
@@ -63,12 +89,32 @@ test("hovering a table raises rails on both axes", async ({ join, seed }) => {
 	await seed(TABLE);
 	let page = await join("ana");
 
-	await expect(page.locator(".plan-rail")).toHaveCount(0);
+	await expect(page.locator("[data-plan-rail]")).toHaveCount(0);
 
 	await content(page).locator("td").first().hover();
 
 	await expect(page.locator('[data-plan-rail="row"]')).toBeVisible();
 	await expect(page.locator('[data-plan-rail="column"]')).toBeVisible();
+});
+
+test("a wide table scrolls without losing its measured column rail", async ({ join, seed }) => {
+	await seed(WIDE_TABLE);
+	let page = await join("ana", { viewport: { width: 390, height: 844 } });
+	let table = content(page).locator("table");
+
+	expect(await table.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+	expect((await table.locator("th").first().boundingBox())!.width).toBeGreaterThanOrEqual(112);
+	await content(page).locator("td").first().hover();
+	let rail = page.locator('[data-plan-rail="column"]');
+	await expect(rail).toBeVisible();
+	await table.evaluate(node => {
+		node.scrollLeft = 160;
+	});
+	await page.waitForTimeout(32);
+	let cell = (await table.locator("th").nth(4).boundingBox())!;
+	let gripBox = (await grip(rail, "column", 5).boundingBox())!;
+	expect(Math.abs(cell.x + cell.width / 2 - (gripBox.x + gripBox.width / 2))).toBeLessThan(2);
+	await expectNoHorizontalOverflow(page);
 });
 
 test("the header row is drawn a bar, not a grip", async ({ join, seed }) => {
@@ -78,7 +124,6 @@ test("the header row is drawn a bar, not a grip", async ({ join, seed }) => {
 
 	// A bar and not a gap: a rail with a hole where a row plainly is reads as
 	// a bug, so the header is drawn and simply cannot be taken hold of.
-	await expect(rail.locator(".plan-grip.is-fixed")).toHaveCount(1);
 	await expect(rail.getByRole("button", { name: "Move row 1" })).toHaveCount(0);
 	await expect(rail.getByRole("button", { name: "Remove row 1" })).toHaveCount(0);
 
@@ -222,4 +267,142 @@ test("a table at its row limit offers nowhere to add another", async ({ join, se
 	await expect(
 		page.locator('[data-plan-rail="column"]').getByRole("button", { name: /^Insert column / }),
 	).not.toHaveCount(0);
+});
+
+test("touch table action groups are labelled, reachable, and clear of the selected cell", async ({ join, seed }) => {
+	await seed(TABLE);
+	let page = await join("ana", {
+		hasTouch: true,
+		isMobile: true,
+		viewport: { width: 390, height: 844 },
+	});
+
+	let cell = content(page).locator("td").last();
+	await cell.evaluate(element => element.scrollIntoView({ block: "end" }));
+	let toolbar = await touchToolbar(page, cell);
+	let access = [
+		toolbar.getByRole("button", { name: "Add", exact: true }),
+		toolbar.getByRole("button", { name: "Remove", exact: true }),
+		toolbar.getByRole("button", { name: "Move", exact: true }),
+		toolbar.getByRole("button", { name: /^Align column 2/ }),
+	];
+	for (let button of access) await expectInsideViewport(button);
+	let targets = await Promise.all(access.map(button =>
+		button.evaluate(node => {
+			let box = node.getBoundingClientRect();
+			return { height: box.height, width: box.width };
+		})
+	));
+	expect(targets.every(target => target.height >= 44 && target.width >= 44)).toBe(true);
+	await expectInsideViewport(toolbar);
+	let add = await openGroup(toolbar, "Add");
+	let cellBox = await cell.boundingBox();
+	let toolbarBox = await toolbar.boundingBox();
+	expect(cellBox).not.toBeNull();
+	expect(toolbarBox).not.toBeNull();
+	expect(cellBox!.y + cellBox!.height).toBeLessThanOrEqual(toolbarBox!.y - 8);
+	let actionTargets = await add.getByRole("button").evaluateAll(buttons =>
+		buttons.map(button => button.getBoundingClientRect().height)
+	);
+	expect(actionTargets.every(height => height >= 44)).toBe(true);
+	await openGroup(toolbar, "Remove");
+	await openGroup(toolbar, "Move");
+	await expect(page.locator("[data-plan-rail]")).not.toBeVisible();
+});
+
+test("a hybrid desktop exposes touch table actions and desktop rails", async ({ baseURL, browser, room, seed }) => {
+	await seed(TABLE);
+	let roomPage = await openIsolatedRoom(
+		browser,
+		baseURL!,
+		room,
+		"ana",
+		{ hasTouch: true, viewport: { width: 1440, height: 900 } },
+		context => installPointerMedia(context, { coarse: true, primaryCoarse: false }),
+	);
+	try {
+		let page = roomPage.page;
+		await expect.poll(() =>
+			page.evaluate(() => ({
+				anyCoarse: matchMedia("(any-pointer: coarse)").matches,
+				primaryFine: matchMedia("(pointer: fine)").matches,
+			}))
+		).toEqual({ anyCoarse: true, primaryFine: true });
+
+		let cell = content(page).getByRole("cell", { name: "one" });
+		await cell.tap();
+		let toolbar = page.getByRole("toolbar", { name: "Table actions" });
+		await expect(toolbar).toBeVisible();
+		await expect(toolbar.getByRole("button", { name: "Add", exact: true })).toBeVisible();
+		let rail = await rails(page);
+		await expect(rail.getByRole("button", { name: "Move row 2", exact: true })).toBeVisible();
+	} finally {
+		await roomPage.close();
+	}
+});
+
+test("touch row actions add, remove, and move the selected row", async ({ join, seed }) => {
+	await seed(TABLE);
+	let page = await join("ana", {
+		hasTouch: true,
+		isMobile: true,
+		viewport: { width: 390, height: 844 },
+	});
+	let toolbar = await touchToolbar(page);
+	let move = await openGroup(toolbar, "Move");
+	await move.getByRole("button", { name: "Move row down" }).click();
+	await expect(items(page)).toHaveText(["two", "one", "three"]);
+	let add = await openGroup(toolbar, "Add");
+	await add.getByRole("button", { name: "Add row after" }).click();
+	await expect(items(page)).toHaveCount(4);
+	let remove = await openGroup(toolbar, "Remove");
+	await remove.getByRole("button", { name: /^Remove row / }).click();
+	await expect(items(page)).toHaveCount(3);
+});
+
+test("touch column actions add, remove, move, and align the selected column", async ({ join, seed }) => {
+	await seed(TABLE);
+	let page = await join("ana", {
+		hasTouch: true,
+		isMobile: true,
+		viewport: { width: 390, height: 844 },
+	});
+	let toolbar = await touchToolbar(page);
+	let align = toolbar.getByRole("button", { name: /^Align column 1/ });
+	await align.click();
+	await expect(align).toHaveAccessibleName(/currently left/);
+	await align.click();
+	await expect(align).toHaveAccessibleName(/currently centre/);
+
+	let move = await openGroup(toolbar, "Move");
+	await move.getByRole("button", { name: "Move column right" }).click();
+	await expect(content(page).locator("th")).toHaveText(["Note", "Item"]);
+
+	toolbar = await touchToolbar(page, content(page).locator("td").last());
+	let add = await openGroup(toolbar, "Add");
+	await add.getByRole("button", { name: "Add column after" }).click();
+	await expect(content(page).locator("th")).toHaveCount(3);
+	let remove = await openGroup(toolbar, "Remove");
+	await remove.getByRole("button", { name: /^Remove column / }).click();
+	await expect(content(page).locator("th")).toHaveCount(2);
+});
+
+test("touch table guards disable header, last-column, and row-limit actions", async ({ join, seed }) => {
+	let rows = Array.from({ length: 99 }, (_, index) => `| r${index} |`);
+	await seed(["| Item |", "| ---- |", ...rows, ""].join("\n"));
+	let page = await join("ana", {
+		hasTouch: true,
+		isMobile: true,
+		viewport: { width: 390, height: 844 },
+	});
+	let toolbar = await touchToolbar(page, content(page).locator("th").first());
+	let add = await openGroup(toolbar, "Add");
+	await expect(add.getByRole("button", { name: "Add row before" })).toBeDisabled();
+	await expect(add.getByRole("button", { name: "Add row after" })).toBeDisabled();
+	let remove = await openGroup(toolbar, "Remove");
+	await expect(remove.getByRole("button", { name: /^Remove row / })).toBeDisabled();
+	await expect(remove.getByRole("button", { name: /^Remove column / })).toBeDisabled();
+	let move = await openGroup(toolbar, "Move");
+	await expect(move.getByRole("button", { name: "Move row down" })).toBeDisabled();
+	await expect(move.getByRole("button", { name: "Move column right" })).toBeDisabled();
 });

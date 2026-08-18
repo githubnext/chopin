@@ -129,6 +129,7 @@ packages/dialect     the plan's MDX dialect and Lexical schema
 packages/question    questionnaires: definition, shared answer, derivation
 packages/editor      the browser editor, cursors, decisions pane
 packages/protocol    wire types and addressing rules
+packages/viewport    browser viewport geometry and event subscriptions
 apps/server          auth, channels, documents, persistence, the agent
 apps/web             repositories, channels, and the three-pane workspace
 ```

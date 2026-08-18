@@ -6,10 +6,11 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { ChatCircleIcon } from "@phosphor-icons/react";
 
 import { DraftCard, ThreadCard } from "./comments";
-import { gutterPoint, popoverPoint } from "./comment-geometry";
+import { markerPoints, popoverPoint } from "./comment-geometry";
 import { containsHit, passageHits } from "./comment-hits";
 import { $rangeOf } from "./marks";
 import { blockElement } from "./scroll";
+import { COARSE_POINTER_QUERY, hasCoarsePointer } from "./pointer";
 import { useThreads } from "./threads";
 
 import type { CSSProperties } from "react";
@@ -18,6 +19,7 @@ import type { PassageHit } from "./comment-hits";
 import type { ThreadStore, ThreadView } from "./threads";
 
 type PlacedThread = { view: ThreadView; button: Point; hits: PassageHit[] };
+type MeasuredThread = { view: ThreadView; target: Rect; passages: Rect[]; hits: Rect[] };
 type PassagePress = { id: string; left: number; pointer: number; top: number; moved: boolean };
 
 function rect(value: DOMRect): Rect {
@@ -64,6 +66,22 @@ function replyState(view: ThreadView): string {
 		: `${replies} ${replies === 1 ? "reply" : "replies"} waiting.`;
 }
 
+/** Give a compact document dialog the same outside-content isolation as a native modal. */
+function isolate(dialog: HTMLElement): () => void {
+	let changed: HTMLElement[] = [];
+	for (let current: HTMLElement = dialog; current.parentElement; current = current.parentElement) {
+		for (let sibling of current.parentElement.children) {
+			if (!(sibling instanceof HTMLElement) || sibling === current || sibling.inert) continue;
+			sibling.inert = true;
+			changed.push(sibling);
+		}
+		if (current.parentElement === document.body) break;
+	}
+	return () => {
+		for (let element of changed) element.inert = false;
+	};
+}
+
 export function CommentLayer({ store }: { store: ThreadStore }) {
 	let [editor] = useLexicalComposerContext();
 	let state = useThreads(store);
@@ -71,6 +89,8 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let [placed, setPlaced] = useState<PlacedThread[]>([]);
 	let [preview, setPreview] = useState<string>();
 	let [pinned, setPinned] = useState<string>();
+	let [compact, setCompact] = useState(false);
+	let [coarse, setCoarse] = useState(false);
 	let [cardHeights, setCardHeights] = useState<{ [id: string]: number }>({});
 	let root = useRef<HTMLDivElement>(null);
 	let placedRef = useRef<PlacedThread[]>([]);
@@ -78,9 +98,19 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let press = useRef<PassagePress | undefined>(undefined);
 	let close = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 	let failures = useRef(new Set<string>());
+	let origin = useRef<HTMLElement | undefined>(undefined);
+	let draftOpen = useRef(false);
 
 	useEffect(() => {
 		setHost(document.querySelector<HTMLElement>(".plan-document") ?? undefined);
+	}, []);
+
+	useEffect(() => {
+		let query = matchMedia(COARSE_POINTER_QUERY);
+		let update = () => setCoarse(hasCoarsePointer());
+		update();
+		query.addEventListener("change", update);
+		return () => query.removeEventListener("change", update);
 	}, []);
 
 	let enter = useCallback((id: string) => {
@@ -110,7 +140,8 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let measure = () => {
 		if (!host) return;
 		let page = rect(host.getBoundingClientRect());
-		let next: PlacedThread[] = [];
+		let measured: MeasuredThread[] = [];
+		let size = coarse ? 44 : 24;
 
 		for (let view of state.threads) {
 			if (view.thread.status !== "open") continue;
@@ -130,10 +161,12 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 				});
 				if (!target || (target.bounds.width === 0 && target.bounds.height === 0)) continue;
 				let targetRect = rect(target.bounds);
-				next.push({
+				let passages = target.hits.length > 0 ? target.hits : [targetRect];
+				measured.push({
 					view,
-					button: gutterPoint(targetRect, page),
-					hits: passageHits(page, target.hits),
+					target: targetRect,
+					passages,
+					hits: target.hits,
 				});
 			} catch (error) {
 				// A bad anchor must not break Lexical's update listener.
@@ -142,6 +175,12 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 				console.error(`[plan] could not measure comment ${view.thread.id}:`, error);
 			}
 		}
+		let buttons = markerPoints(measured, page, size);
+		let next = measured.map<PlacedThread>((entry, index) => ({
+			view: entry.view,
+			button: buttons[index]!,
+			hits: passageHits(page, entry.hits),
+		}));
 
 		placedRef.current = next;
 		setPlaced(next);
@@ -149,7 +188,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 
 	useLayoutEffect(() => {
 		measure();
-	}, [host, state.threads]);
+	}, [host, state.threads, coarse]);
 
 	useEffect(() => {
 		if (!host) return;
@@ -158,12 +197,17 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		host.addEventListener("scroll", update, true);
 		let observer = new ResizeObserver(update);
 		observer.observe(host);
+		let compactUpdate = () => setCompact(host.clientWidth <= 640);
+		compactUpdate();
+		let compactObserver = new ResizeObserver(compactUpdate);
+		compactObserver.observe(host);
 		return () => {
 			off();
 			host.removeEventListener("scroll", update, true);
 			observer.disconnect();
+			compactObserver.disconnect();
 		};
-	}, [editor, host, state.threads]);
+	}, [editor, host, state.threads, coarse]);
 
 	useEffect(() => () => clearTimeout(close.current), []);
 
@@ -215,6 +259,9 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			let entry = over(event);
 			let selection = getSelection();
 			if (entry?.view.thread.id !== pending.id || (selection && !selection.isCollapsed)) return;
+			origin.current = root.current?.querySelector<HTMLElement>(
+				`[data-plan-comment-button="${pending.id}"]`,
+			) ?? undefined;
 			enter(pending.id);
 			setPinned(current => current === pending.id ? undefined : pending.id);
 		};
@@ -238,14 +285,61 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		};
 	}, [editor, enter, host, hover, unhover]);
 
-	useEffect(() => {
+	let restoreOrigin = useCallback(() => {
+		let target = origin.current;
+		requestAnimationFrame(() => {
+			let fallback = editor.getRootElement();
+			(target?.isConnected ? target : fallback)?.focus();
+		});
+	}, [editor]);
+	let dismiss = useCallback(() => {
+		setPinned(undefined);
+		setPreview(undefined);
+		restoreOrigin();
+	}, [restoreOrigin]);
+	let cancelDraft = useCallback(() => {
+		draftOpen.current = false;
+		store.draft(undefined);
+		restoreOrigin();
+	}, [restoreOrigin, store]);
+
+	useLayoutEffect(() => {
+		let draft = !!state.draft;
+		if (draft && !draftOpen.current) {
+			let active = document.activeElement;
+			origin.current = active instanceof HTMLElement
+				? active
+				: editor.getRootElement() ?? undefined;
+		} else if (!draft && draftOpen.current) restoreOrigin();
+		draftOpen.current = draft;
+
 		if (!pinned) return;
+		let available = pinned === "orphans"
+			? state.threads.some(view => view.thread.status === "open" && view.orphaned)
+			: state.threads.some(view =>
+				view.thread.id === pinned && view.thread.status === "open" && !view.orphaned
+			);
+		if (available) return;
+		setPinned(undefined);
+		setPreview(undefined);
+		store.focus(undefined);
+		restoreOrigin();
+	}, [editor, pinned, restoreOrigin, state.draft, state.threads, store]);
+
+	useEffect(() => {
+		if (!pinned && !preview) return;
 		let outside = (event: PointerEvent) => {
-			if (root.current?.contains(event.target as Node)) return;
-			setPinned(undefined);
+			let dialog = pinned
+				? document.getElementById(`plan-comment-thread-${pinned}`)
+				: undefined;
+			if (dialog?.contains(event.target as Node)) return;
+			if (pinned) dismiss();
+			else setPreview(undefined);
 		};
 		let escape = (event: KeyboardEvent) => {
-			if (event.key === "Escape") setPinned(undefined);
+			if (event.key !== "Escape") return;
+			if (pinned) dismiss();
+			else setPreview(undefined);
 		};
 		document.addEventListener("pointerdown", outside);
 		document.addEventListener("keydown", escape);
@@ -253,7 +347,50 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			document.removeEventListener("pointerdown", outside);
 			document.removeEventListener("keydown", escape);
 		};
-	}, [pinned]);
+	}, [dismiss, pinned, preview]);
+
+	useLayoutEffect(() => {
+		if (!compact || (!pinned && !state.draft)) return;
+		let editorHost = editor.getRootElement();
+		let dialog = pinned
+			? document.getElementById(`plan-comment-thread-${pinned}`)
+			: root.current?.querySelector<HTMLElement>('[aria-label="New comment"]');
+		if (!dialog) return;
+		let release = isolate(dialog);
+		editorHost?.setAttribute("inert", "");
+		let initial = dialog.querySelector<HTMLElement>(
+			pinned ? "[data-plan-comment-close]" : "textarea, button, [tabindex]",
+		);
+		initial?.focus();
+		let trap = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				event.preventDefault();
+				if (pinned) dismiss();
+				else cancelDraft();
+				return;
+			}
+			if (event.key !== "Tab") return;
+			let focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
+				'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+			)).filter(element => element.offsetParent !== null);
+			if (focusable.length === 0) return;
+			let first = focusable[0]!;
+			let last = focusable[focusable.length - 1]!;
+			if (event.shiftKey && document.activeElement === first) {
+				event.preventDefault();
+				last.focus();
+			} else if (!event.shiftKey && document.activeElement === last) {
+				event.preventDefault();
+				first.focus();
+			}
+		};
+		document.addEventListener("keydown", trap);
+		return () => {
+			release();
+			editorHost?.removeAttribute("inert");
+			document.removeEventListener("keydown", trap);
+		};
+	}, [cancelDraft, compact, dismiss, editor, pinned, state.draft]);
 
 	if (!host) return null;
 
@@ -266,6 +403,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			key={view.thread.id}
 			onAccept={() => store.accept(view.thread.id)}
 			onBlur={() => unhover(view.thread.id)}
+			onClose={dismiss}
 			onDismiss={() => store.dismiss(view.thread.id)}
 			onFocus={() => hover(view.thread.id)}
 			onReply={text => store.reply(view.thread.id, text)}
@@ -295,10 +433,10 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 					{
 						top: page.top + button.top,
 						left: page.left + button.left,
-						right: page.left + button.left + 24,
-						bottom: page.top + button.top + 24,
-						width: 24,
-						height: 24,
+						right: page.left + button.left + (coarse ? 44 : 24),
+						bottom: page.top + button.top + (coarse ? 44 : 24),
+						width: coarse ? 44 : 24,
+						height: coarse ? 44 : 24,
 					},
 					page,
 					cardWidth,
@@ -322,9 +460,13 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 							aria-description={replyState(view)}
 							aria-expanded={shown}
 							className="plan-comment-button"
+							data-plan-comment-button={view.thread.id}
 							onBlur={() => unhover(view.thread.id)}
-							onClick={() =>
-								setPinned(current => current === view.thread.id ? undefined : view.thread.id)}
+							onClick={event => {
+								origin.current = event.currentTarget;
+								if (shown) dismiss();
+								else setPinned(view.thread.id);
+							}}
 							onFocus={() => hover(view.thread.id)}
 							onMouseEnter={() => hover(view.thread.id)}
 							onMouseLeave={() => unhover(view.thread.id)}
@@ -342,10 +484,10 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 										{
 											top: page.top + button.top,
 											left: page.left + button.left,
-											right: page.left + button.left + 24,
-											bottom: page.top + button.top + 24,
-											width: 24,
-											height: 24,
+											right: page.left + button.left + (coarse ? 44 : 24),
+											bottom: page.top + button.top + (coarse ? 44 : 24),
+											width: coarse ? 44 : 24,
+											height: coarse ? 44 : 24,
 										},
 										page,
 										previewWidth,
@@ -359,6 +501,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 						{shown && (
 							<div
 								aria-label="Comment thread"
+								aria-modal={compact || undefined}
 								className="plan-comment-card"
 								id={`plan-comment-thread-${view.thread.id}`}
 								ref={element => rememberHeight(view.thread.id, element)}
@@ -377,6 +520,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			{state.draft?.placement && (
 				<div
 					aria-label="New comment"
+					aria-modal={compact || undefined}
 					className="plan-comment-card"
 					role="dialog"
 					ref={element => rememberHeight("draft", element)}
@@ -389,7 +533,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 				>
 					<DraftCard
 						busy={false}
-						onCancel={() => store.draft(undefined)}
+						onCancel={cancelDraft}
 						onSend={text => store.start(text)}
 						quote={state.draft.quote}
 					/>
@@ -399,10 +543,14 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			{orphaned.length > 0 && (
 				<div className="plan-comment-orphans">
 					<button
+						aria-controls={pinned === "orphans" ? "plan-comment-thread-orphans" : undefined}
 						aria-expanded={pinned === "orphans"}
 						aria-label={`${orphaned.length} orphaned comments`}
 						className="plan-comment-orphan-button"
-						onClick={() => setPinned(current => current === "orphans" ? undefined : "orphans")}
+						onClick={event => {
+							origin.current = event.currentTarget;
+							setPinned(current => current === "orphans" ? undefined : "orphans");
+						}}
 						type="button"
 					>
 						{orphaned.length} comments without prose
@@ -410,7 +558,9 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 					{pinned === "orphans" && (
 						<div
 							aria-label="Orphaned comments"
+							aria-modal={compact || undefined}
 							className="plan-comment-card plan-comment-orphan-card"
+							id="plan-comment-thread-orphans"
 							role="dialog"
 						>
 							{orphaned.map(card)}

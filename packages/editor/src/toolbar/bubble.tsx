@@ -13,7 +13,17 @@ import { TOGGLE_LINK_COMMAND } from "@lexical/link";
 import { LINK_PROTOCOLS } from "@chopin/dialect";
 
 import { askForUrl } from "./url";
-import { CELL, CELL_OFF, CELL_ON, SEAM, SHELL } from "./surface";
+import { placeSurface } from "./placement";
+import {
+	CELL,
+	CELL_OFF,
+	CELL_ON,
+	editorSurfaceViewport,
+	listenToEditorGeometry,
+	nativeSelectionRect,
+	SEAM,
+	SHELL,
+} from "./surface";
 import {
 	$isListItemNode,
 	$isListNode,
@@ -42,6 +52,7 @@ import {
 
 import type { HeadingTagType } from "@lexical/rich-text";
 import type { ElementNode, LexicalNode, TextFormatType } from "lexical";
+import type { DOMRectLike, SurfacePlacement } from "./placement";
 
 /** Block shapes the bubble can switch between. */
 export type Block = "paragraph" | "quote" | "bullet" | "number" | HeadingTagType;
@@ -128,16 +139,12 @@ const MARKS: Mark[] = [
 	{ format: "code", label: "Inline code", glyph: "<>", shortcut: "⌘E" },
 ];
 
-type Position = { top: number; left: number };
-
-/** How close to the window edge the bubble may sit. */
-const EDGE = 8;
-
 export function SelectionBubble(
 	{ disabled, onComment }: { disabled?: boolean; onComment?: () => void },
 ) {
 	let [editor] = useLexicalComposerContext();
-	let [position, setPosition] = useState<Position>();
+	let [anchor, setAnchor] = useState<DOMRectLike>();
+	let [position, setPosition] = useState<SurfacePlacement>();
 	let [active, setActive] = useState<Set<TextFormatType>>(new Set());
 	let [block, setBlock] = useState<Block>("paragraph");
 	/** Whether the bubble is showing block types instead of its marks. */
@@ -149,6 +156,7 @@ export function SelectionBubble(
 			let selection = $getSelection();
 
 			if (!$isRangeSelection(selection) || selection.isCollapsed() || disabled) {
+				setAnchor(undefined);
 				setPosition(undefined);
 				// Losing the selection dismisses the bubble, so the menu must
 				// not be left open to reappear over the next one.
@@ -165,13 +173,11 @@ export function SelectionBubble(
 
 			// Position against the live DOM selection: Lexical offsets do not
 			// map to screen coordinates, and the caret may span nodes.
-			let native = window.getSelection();
-			if (!native || native.rangeCount === 0) return setPosition(undefined);
-
-			let rect = native.getRangeAt(0).getBoundingClientRect();
+			let rect = nativeSelectionRect();
+			if (!rect) return setPosition(undefined);
 			if (rect.width === 0 && rect.height === 0) return setPosition(undefined);
 
-			setPosition({ top: rect.top, left: rect.left + rect.width / 2 });
+			setAnchor(rect);
 		});
 	}, [editor, disabled]);
 
@@ -255,35 +261,45 @@ export function SelectionBubble(
 		);
 	}, [editor, choosing]);
 
-	/**
-	 * Sit the bubble above the selection, and keep it on screen.
-	 *
-	 * This is the only thing that places the bubble. It used to share the job
-	 * with Tailwind's translate utilities, which compile to the `translate`
-	 * property rather than `transform` — a separate property that composes
-	 * with it, so the bubble was offset by a full width and two full heights.
-	 *
-	 * Width comes from `offsetWidth` rather than a measured rect, because a
-	 * rect already includes the transform being calculated: reading one here
-	 * would make the edge correction depend on its own previous output, and
-	 * near an edge it would alternate between two positions every time the
-	 * block menu changed the bubble's width.
-	 */
-	useLayoutEffect(() => {
+	let place = useCallback(() => {
 		let element = ref.current;
-		if (!element || !position) return;
+		if (!element || !anchor) return;
+		let liveAnchor = nativeSelectionRect();
+		if (!liveAnchor || (liveAnchor.width === 0 && liveAnchor.height === 0)) {
+			setPosition(undefined);
+			return;
+		}
+		let viewport = editorSurfaceViewport(editor);
+		element.style.maxWidth = `${Math.max(0, viewport.width - 16)}px`;
+		let width = element.offsetWidth;
+		let centre = liveAnchor.left + liveAnchor.width / 2;
+		let next = placeSurface(
+			{
+				bottom: liveAnchor.bottom,
+				height: liveAnchor.height,
+				left: centre - width / 2,
+				right: centre + width / 2,
+				top: liveAnchor.top,
+				width: liveAnchor.width,
+			},
+			{ width, height: element.offsetHeight },
+			viewport,
+		);
+		setPosition(current =>
+			current?.left === next.left && current.top === next.top
+				&& current.maxHeight === next.maxHeight
+				? current
+				: next
+		);
+	}, [anchor]);
+	useLayoutEffect(place, [place, choosing]);
 
-		let half = element.offsetWidth / 2;
-		let overflow = position.left + half - (window.innerWidth - EDGE);
-		// The plan is a middle column now and can be dragged narrow, so a
-		// selection near its left edge needs the same treatment as its right.
-		let underflow = EDGE - (position.left - half);
-		let shift = overflow > 0 ? -overflow : underflow > 0 ? underflow : 0;
+	useEffect(() => {
+		if (!anchor) return;
+		return listenToEditorGeometry(editor, place);
+	}, [anchor, editor, place]);
 
-		element.style.transform = `translate(calc(-50% + ${shift}px), -100%)`;
-	}, [position, choosing]);
-
-	if (!position) return null;
+	if (!anchor) return null;
 
 	return (
 		<div
@@ -293,8 +309,10 @@ export function SelectionBubble(
 			contentEditable={false}
 			// No translate utilities here: placement belongs to the layout effect,
 			// and Tailwind's would compose with its transform rather than replace it.
-			className={`${SHELL} flex items-center gap-0.5`}
-			style={{ top: position.top - EDGE, left: position.left }}
+			className={`${SHELL} plan-formatting-toolbar flex max-w-[calc(100vw-1rem)] items-center gap-0.5 overflow-x-auto`}
+			style={position
+				? { top: position.top, left: position.left, maxHeight: position.maxHeight }
+				: { top: anchor.bottom + 8, left: anchor.left, visibility: "hidden" }}
 			/*
 			 * Nothing in here may take focus: the selection it acts on would go
 			 * with it. That rules out any control whose behaviour is a mousedown

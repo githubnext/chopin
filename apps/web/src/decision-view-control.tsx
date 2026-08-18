@@ -17,6 +17,7 @@ export function DecisionViewControl(
 	return (
 		<div aria-label="Document view" className="flex items-center gap-1" role="group">
 			<button
+				aria-current={view === "plan" ? "page" : undefined}
 				aria-pressed={view === "plan"}
 				className="btn btn-sm btn-ghost"
 				onClick={() => onView("plan")}
@@ -25,6 +26,7 @@ export function DecisionViewControl(
 				Plan
 			</button>
 			<button
+				aria-current={view === "decisions" ? "page" : undefined}
 				aria-label={unanswered > 0 ? `Decisions, ${unanswered} unanswered` : "Decisions"}
 				aria-pressed={view === "decisions"}
 				className={`btn btn-sm btn-ghost ${attention ? "animate-enter" : ""}`}

@@ -52,6 +52,8 @@ export function Decisions({ connected, onShowPlan, reveal, store, wire }: Decisi
 	let entries = useQuestionnaires(store);
 	let content = useRef<HTMLDivElement>(null);
 	let heading = useRef<HTMLHeadingElement>(null);
+	let focusedQuestionnaire = useRef<HTMLElement | undefined>(undefined);
+	let revealed = useRef<number | undefined>(undefined);
 	let [history, setHistory] = useHistory();
 
 	// Leaving the pane should not leave the prose lit. A highlight belongs to
@@ -61,7 +63,8 @@ export function Decisions({ connected, onShowPlan, reveal, store, wire }: Decisi
 	}, [store]);
 
 	useEffect(() => {
-		if (!reveal) return;
+		if (!reveal || revealed.current === reveal.token) return;
+		revealed.current = reveal.token;
 		let id = CSS.escape(reveal.widget);
 		let target = content.current?.querySelector<HTMLElement>(
 			`[data-plan-sidecar-questionnaire="${id}"]`,
@@ -72,6 +75,24 @@ export function Decisions({ connected, onShowPlan, reveal, store, wire }: Decisi
 			target.focus({ preventScroll: true });
 		} else heading.current?.focus();
 	}, [entries, reveal]);
+
+	// Removing a focused card sends focus to body without a blur event. Remember
+	// the actual card so its removal can hand focus to the remaining work.
+	useEffect(() => {
+		let previous = focusedQuestionnaire.current;
+		if (!previous || previous.isConnected || document.activeElement !== document.body) return;
+		focusedQuestionnaire.current = undefined;
+		let next = entries.find(undecided);
+		let target = next
+			? content.current?.querySelector<HTMLElement>(
+				`[data-plan-sidecar-questionnaire="${CSS.escape(next.id)}"]`,
+			)
+			: undefined;
+		if (target) {
+			target.tabIndex = -1;
+			target.focus({ preventScroll: true });
+		} else heading.current?.focus({ preventScroll: true });
+	}, [entries]);
 
 	let waiting = entries.filter(undecided);
 	let settled = entries.filter(entry => !undecided(entry));
@@ -108,7 +129,22 @@ export function Decisions({ connected, onShowPlan, reveal, store, wire }: Decisi
 				{outstanding > 0 && <Count>{outstanding}</Count>}
 			</header>
 
-			<div className="min-h-0 flex-1 overflow-auto p-3" ref={content}>
+			<div
+				className="min-h-0 flex-1 overflow-auto p-3"
+				data-plan-decisions-scroll=""
+				onBlurCapture={event => {
+					let next = event.relatedTarget;
+					if (next instanceof Node && !event.currentTarget.contains(next)) {
+						focusedQuestionnaire.current = undefined;
+					}
+				}}
+				onFocusCapture={event => {
+					focusedQuestionnaire.current = (event.target as HTMLElement).closest<HTMLElement>(
+						"[data-plan-sidecar-questionnaire]",
+					) ?? undefined;
+				}}
+				ref={content}
+			>
 				{outstanding === 0 && resolved === 0
 					? (
 						<p className="m-0 text-sm text-text-secondary">
@@ -122,10 +158,10 @@ export function Decisions({ connected, onShowPlan, reveal, store, wire }: Decisi
 					)}
 
 				{resolved > 0 && (
-					<div className={outstanding > 0 ? "mt-3" : ""}>
+					<div className={`min-w-0 ${outstanding > 0 ? "mt-3" : ""}`}>
 						<button
 							aria-expanded={history}
-							className="btn btn-sm btn-ghost w-full justify-start gap-2 text-left"
+							className="btn btn-sm btn-ghost h-auto min-h-6 w-full flex-wrap justify-start gap-2 text-left"
 							data-press="wide"
 							onClick={() => setHistory(value => !value)}
 							type="button"

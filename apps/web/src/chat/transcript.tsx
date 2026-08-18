@@ -20,9 +20,9 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 	let summary = summarize(tools);
 	if (summary.state === "running") {
 		return (
-			<div className="flex h-7 items-center gap-2 py-1 text-sm text-text-quaternary">
+			<div className="flex min-h-7 min-w-0 flex-wrap items-center gap-2 py-1 text-sm text-text-quaternary">
 				<ClockIcon aria-hidden="true" size={16} />
-				<span className="font-mono text-text-secondary">{summary.name}</span>
+				<span className="min-w-0 break-all font-mono text-text-secondary">{summary.name}</span>
 				<span className="tabular-nums">{summary.completed} done</span>
 			</div>
 		);
@@ -32,7 +32,7 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 		<div>
 			<button
 				aria-expanded={open}
-				className="flex h-7 items-center gap-2 bg-transparent py-1 text-sm text-text-quaternary"
+				className="flex min-h-7 min-w-0 flex-wrap items-center gap-2 bg-transparent py-1 text-sm text-text-quaternary"
 				onClick={() => setOpen(value => !value)}
 				type="button"
 			>
@@ -58,8 +58,8 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 					className="m-0 flex list-none flex-col pl-6 text-sm text-text-quaternary"
 				>
 					{tools.map(tool => (
-						<li className="flex h-6 items-center gap-3" key={tool.id}>
-							<span className="min-w-0 flex-1 truncate font-mono text-text-secondary">
+						<li className="flex min-h-6 items-start gap-3" key={tool.id}>
+							<span className="min-w-0 flex-1 break-all font-mono text-text-secondary">
 								{toolCopy(tool.name)}
 							</span>
 							{tool.status === "failed" && (
@@ -87,7 +87,9 @@ function SystemEntry(
 			<div className="shrink-0">
 				<SignInIcon aria-hidden="true" size={20} />
 			</div>
-			<p className="m-0 text-sm">{displayText(item.text)}</p>
+			<p className="m-0 min-w-0 break-words text-sm [overflow-wrap:anywhere]">
+				{displayText(item.text)}
+			</p>
 		</div>
 	);
 }
@@ -108,7 +110,9 @@ function MessageBody(
 				<div className="flex items-start gap-1">
 					<div className="min-w-0 flex-1">
 						<MessageMarkdown
-							className={message.working ? "chat-working" : undefined}
+							className={`${
+								message.working ? "chat-working " : ""
+							}break-words [overflow-wrap:anywhere]`}
 							source={text}
 						/>
 						{message.streaming && <span className="ml-0.5 animate-pulse">▍</span>}
@@ -157,7 +161,7 @@ function MessageGroup(
 			</div>
 			<div className={`flex min-w-0 flex-1 flex-col gap-1 ${item.queued ? "opacity-60" : ""}`}>
 				<div className="flex items-baseline gap-1.5 text-sm">
-					<span className="font-semibold">{name}</span>
+					<span className="min-w-0 break-all font-semibold">{name}</span>
 					<span className="text-text-tertiary tabular-nums">
 						{item.queued ? "queued" : when(first.ts!)}
 					</span>
@@ -172,6 +176,7 @@ function MessageGroup(
 
 export function Transcript(
 	{
+		active,
 		arrived,
 		entries,
 		handle,
@@ -179,6 +184,7 @@ export function Transcript(
 		queued,
 		working,
 	}: {
+		active: boolean;
 		arrived: ReadonlySet<string>;
 		entries: Chat.Entry[];
 		handle: string;
@@ -192,12 +198,12 @@ export function Transcript(
 	let groups = group(entries, queued, working);
 
 	useEffect(() => {
-		if (pinned.current) bottom.current?.scrollIntoView({ block: "end" });
-	}, [entries, queued]);
+		if (active && pinned.current) bottom.current?.scrollIntoView({ block: "end" });
+	}, [active, entries, queued]);
 
 	return (
 		<div
-			className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto p-4"
+			className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-auto p-4"
 			onScroll={event => {
 				let element = event.currentTarget;
 				let distance = element.scrollHeight - element.scrollTop - element.clientHeight;

@@ -106,7 +106,7 @@ function Choices(
 				return (
 					<label
 						key={option.id}
-						className="flex items-start gap-2 rounded-md px-1 py-1.5 text-sm hover:bg-hover"
+						className="question-choice-row flex min-w-0 items-start gap-2 rounded-md px-1 py-1.5 text-sm hover:bg-hover"
 					>
 						<input
 							type={question.multiple ? "checkbox" : "radio"}
@@ -125,7 +125,7 @@ function Choices(
 										: { mode: "choices", choice: option.id },
 								);
 							}}
-							className="mt-1 size-3.5 shrink-0 choice-control"
+							className="mt-0.5 size-[18px] shrink-0 choice-control"
 						/>
 						<span className="min-w-0">
 							<span className="font-medium text-text-primary">{option.label}</span>
@@ -150,10 +150,31 @@ function Custom(
 	},
 ) {
 	let active = draft?.mode === "custom";
+	let textarea = useRef<HTMLTextAreaElement>(null);
+
+	useEffect(() => {
+		let viewport = window.visualViewport;
+		if (!viewport) return;
+		let height = viewport.height;
+		let reveal = () => {
+			let previous = height;
+			height = viewport.height;
+			let control = textarea.current;
+			if (height >= previous || document.activeElement !== control || !control) return;
+			let bounds = control.getBoundingClientRect();
+			let top = viewport.offsetTop;
+			let bottom = top + viewport.height;
+			if (bounds.top >= top && bounds.bottom <= bottom) return;
+			requestAnimationFrame(() => control.scrollIntoView({ block: "nearest" }));
+		};
+
+		viewport.addEventListener("resize", reveal);
+		return () => viewport.removeEventListener("resize", reveal);
+	}, []);
 
 	return (
 		<div className="mt-2">
-			<label className="flex items-start gap-2 text-sm">
+			<label className="question-choice-row flex min-w-0 items-start gap-2 rounded-md px-1 text-sm hover:bg-hover">
 				<input
 					type={question.multiple ? "checkbox" : "radio"}
 					name={question.multiple ? undefined : name}
@@ -161,7 +182,7 @@ function Custom(
 					disabled={disabled}
 					onChange={event =>
 						onChange?.({ mode: event.currentTarget.checked ? "custom" : "choices" })}
-					className="mt-1 size-3.5 shrink-0 choice-control"
+					className="mt-0.5 size-[18px] shrink-0 choice-control"
 				/>
 				<span className="font-medium">Write a custom answer</span>
 			</label>
@@ -175,7 +196,8 @@ function Custom(
 				placeholder="Type another answer"
 				onFocus={() => onChange?.({ mode: "custom" })}
 				onChange={event => onChange?.({ mode: "custom", custom: event.currentTarget.value })}
-				className="field mt-1.5 min-h-16 w-full resize-y px-2.5 py-2 text-sm transition placeholder:text-text-tertiary disabled:cursor-not-allowed"
+				className="question-custom-answer field mt-1.5 min-h-16 w-full resize-y px-2.5 py-2 text-sm transition placeholder:text-text-tertiary disabled:cursor-not-allowed"
+				ref={textarea}
 			/>
 		</div>
 	);
@@ -342,6 +364,12 @@ export function QuestionView(props: QuestionViewProps) {
 		);
 	}, [definition]);
 
+	useEffect(() => {
+		if (!active) return;
+		tabs.current?.querySelector<HTMLElement>(`#${CSS.escape(`${base}-tab-${active}`)}`)
+			?.scrollIntoView({ block: "nearest", inline: "nearest" });
+	}, [active, base]);
+
 	let move = useCallback((event: KeyboardEvent, index: number) => {
 		let total = definition.questions.length;
 		let next = index;
@@ -392,7 +420,20 @@ export function QuestionView(props: QuestionViewProps) {
 
 	let multiple = !single;
 	let current = definition.questions.find(question => question.id === active);
-	let last = definition.questions.at(-1)?.id === active;
+	let index = definition.questions.findIndex(question => question.id === active);
+	let last = index === definition.questions.length - 1;
+	let unanswered = definition.questions.filter(question => !answered(question, drafts[question.id]))
+		.length;
+	let step = (offset: number) => {
+		let question = definition.questions[index + offset];
+		if (!question) return;
+		setActive(question.id);
+		// At either end the activated navigation button disappears. Move focus
+		// to the selected tab so the new question is named instead of dropping
+		// focus to the document body.
+		tabs.current?.querySelector<HTMLElement>(`#${CSS.escape(`${base}-tab-${question.id}`)}`)
+			?.focus();
+	};
 
 	return (
 		<div>
@@ -435,7 +476,7 @@ export function QuestionView(props: QuestionViewProps) {
 								onBlur={event =>
 									!event.currentTarget.matches(":hover") && onQuestionLeave?.(question.id)}
 								onKeyDown={event => move(event, index)}
-								className={`shrink-0 rounded-t-md px-2.5 py-1 text-sm font-medium transition ${
+								className={`question-tab max-w-64 shrink-0 rounded-t-md px-2.5 py-1 text-left text-sm leading-tight font-medium whitespace-normal transition ${
 									question.id === active
 										? "bg-selected text-text-primary"
 										: "text-text-tertiary hover:text-text-primary"
@@ -471,8 +512,10 @@ export function QuestionView(props: QuestionViewProps) {
 						&& !event.currentTarget.matches(":hover")
 						&& onQuestionLeave?.(current.id)}
 				>
-					<header className="flex items-baseline justify-between gap-2">
-						<h4 className="m-0 text-sm font-semibold text-text-primary">{current.header}</h4>
+					<header className="flex min-w-0 flex-wrap items-baseline justify-between gap-2">
+						<h4 className="m-0 min-w-0 break-words text-sm font-semibold text-text-primary">
+							{current.header}
+						</h4>
 						<Badges people={collaborators.filter(person => person.question === current.id)} />
 					</header>
 
@@ -511,8 +554,13 @@ export function QuestionView(props: QuestionViewProps) {
 				</p>
 			)}
 
-			{(onSubmit || onCancel) && (!multiple || last) && (
-				<footer className="flex items-center justify-end gap-2 px-3 py-2 hairline-t">
+			{(onSubmit || onCancel || multiple) && (
+				<footer className="question-actions flex flex-wrap items-center justify-end gap-2 px-3 py-2 hairline-t">
+					{multiple && !confirming && (
+						<p className="m-0 mr-auto text-sm text-text-tertiary tabular-nums">
+							{index + 1} of {definition.questions.length} · {unanswered} unanswered
+						</p>
+					)}
 					{onCancel && confirming && (
 						<>
 							<p className="m-0 mr-auto text-sm text-text-secondary">
@@ -537,6 +585,15 @@ export function QuestionView(props: QuestionViewProps) {
 							</button>
 						</>
 					)}
+					{multiple && !confirming && index > 0 && (
+						<button
+							type="button"
+							onClick={() => step(-1)}
+							className="btn btn-sm btn-secondary"
+						>
+							Back
+						</button>
+					)}
 					{onCancel && !confirming && (
 						<button
 							type="button"
@@ -548,7 +605,16 @@ export function QuestionView(props: QuestionViewProps) {
 							Cancel
 						</button>
 					)}
-					{onSubmit && !confirming && (
+					{multiple && !confirming && !last && (
+						<button
+							type="button"
+							onClick={() => step(1)}
+							className="btn btn-sm btn-primary"
+						>
+							Next
+						</button>
+					)}
+					{onSubmit && !confirming && (!multiple || last) && (
 						<button
 							type="button"
 							onClick={onSubmit}

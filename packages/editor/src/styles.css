@@ -10,7 +10,6 @@
 
 .plan {
 	--plan-gutter: 2rem;
-	container-type: inline-size;
 	/*
 	 * A comfortable measure. The panel is resizable and a plan is read far more
 	 * often than it is written, so the text stops widening well before the pane
@@ -42,11 +41,19 @@
 
 .plan-document {
 	position: relative;
+	container-type: inline-size;
 	flex: 1;
 	min-width: 0;
 	min-height: 0;
 	background: var(--color-page);
 	box-shadow: var(--shadow-raised);
+}
+
+/* A narrow document needs breathing room, but never a 32px tax on each side. */
+@container (max-width: 40rem) {
+	.plan-content {
+		--plan-gutter: 1rem;
+	}
 }
 
 /* Reader-local comment chrome must not move collaborative line boxes. */
@@ -74,6 +81,11 @@
 	place-items: center;
 	border-radius: var(--radius-md);
 	font-size: 0.75rem;
+}
+
+:root[data-plan-coarse-pointer] .plan-comment-button {
+	width: 44px;
+	height: 44px;
 }
 
 /* The host receives hits so prose keeps native selection. */
@@ -144,6 +156,19 @@
 .plan-comment-orphan-card {
 	top: 2.5rem;
 	right: 0;
+}
+
+@container (max-width: 40rem) {
+	.plan-comment-card {
+		top: auto !important;
+		right: 0;
+		bottom: 0;
+		left: 0 !important;
+		width: 100%;
+		max-height: calc(100% - 0.5rem);
+		padding-bottom: env(safe-area-inset-bottom, 0px);
+		border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+	}
 }
 
 .plan-decisions {
@@ -291,6 +316,17 @@
 	outline: none;
 }
 
+:root[data-plan-coarse-pointer] .plan-menu-row {
+	height: 44px;
+	min-height: 44px;
+}
+
+:root[data-plan-coarse-pointer] .plan-menu-cell {
+	width: 44px;
+	height: 44px;
+	min-width: 44px;
+}
+
 /*
  * Document typography.
  *
@@ -363,6 +399,12 @@
 	color: var(--color-brand);
 	text-decoration: underline;
 	text-underline-offset: 2px;
+	overflow-wrap: anywhere;
+}
+
+/* Prose has no scrollbar of its own, so an authored token must be allowed to wrap. */
+.plan-content :is(p, li, blockquote, h1, h2, h3, h4, h5, h6) {
+	overflow-wrap: anywhere;
 }
 
 .plan-content hr {
@@ -400,19 +442,17 @@
 	font-size: 0.875em;
 }
 
-/* Tables scroll independently so a wide one never widens the document. */
 /*
  * Tables scroll independently so a wide one never widens the document.
  *
- * `display: block` is what allows that, but it also stops the table sizing
- * itself from its contents — columns get squeezed until neighbouring values
- * touch and read as one word. `width: max-content` gives that back, and the
- * `max-width` keeps a narrow table from stretching to fill the measure.
+ * `display: block` turns the table itself into the scrollport. Its inline size
+ * is the readable width, while the cells' minimum widths preserve usable
+ * columns and create overflow inside that scrollport when necessary.
  */
 .plan-content table {
 	display: block;
-	width: max-content;
-	max-width: 100%;
+	inline-size: 100%;
+	max-inline-size: 100%;
 	overflow-x: auto;
 	border-collapse: collapse;
 	margin-block: 1em;
@@ -426,7 +466,11 @@
 	/* Without this a cell collapses onto its neighbour when a column is
 	   narrow, and two values read as one word. */
 	vertical-align: top;
-	min-width: 4rem;
+	min-inline-size: 7rem;
+	/* A table is deliberately allowed to scroll as a whole; breaking each
+	   unbroken identifier into syllables makes its columns unreadable. */
+	word-break: normal;
+	overflow-wrap: normal;
 }
 
 .plan-content th {
@@ -438,6 +482,24 @@
 /* A cell's paragraph is the cell; it should not add document spacing. */
 .plan-content :is(th, td) > p {
 	margin-block: 0;
+	word-break: normal;
+	overflow-wrap: normal;
+}
+
+/* Images and rendered diagrams are readings of the document, never its width. */
+.plan-content :is(img, svg) {
+	max-inline-size: 100%;
+	block-size: auto;
+}
+
+.plan-content :is([data-plan-type], [data-plan-panels], .planMath) {
+	min-inline-size: 0;
+	max-inline-size: 100%;
+}
+
+.plan-content .planMath [data-plan-preview] {
+	max-inline-size: 100%;
+	overflow-x: auto;
 }
 
 /*
@@ -657,6 +719,69 @@
 	pointer-events: none;
 }
 
+.plan-table-touch-toolbar {
+	position: fixed;
+	z-index: 50;
+	display: block;
+	max-width: calc(100vw - 1rem);
+	padding: 0.25rem;
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+	box-shadow: var(--shadow-overlay);
+}
+
+.plan-table-touch-groups,
+.plan-table-touch-panel {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 0.25rem;
+}
+
+.plan-table-touch-panel {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	padding-block-start: 0.25rem;
+	border-block-start: var(--edge-width) solid var(--color-edge);
+}
+
+.plan-table-touch-action {
+	width: 100%;
+	min-width: 0;
+	min-height: 44px;
+	padding: 0.375rem 0.5rem;
+	border-radius: var(--radius-md);
+	color: var(--color-text-secondary);
+	font-size: var(--text-sm);
+	line-height: 1.15;
+}
+
+.plan-table-touch-action[aria-expanded="true"] {
+	background: var(--color-selected);
+	color: var(--color-text-primary);
+}
+
+.plan-table-touch-action:hover,
+.plan-table-touch-action:focus-visible {
+	background: var(--color-hover);
+	color: var(--color-text-primary);
+}
+
+.plan-table-touch-action:focus-visible {
+	outline: 2px solid var(--color-brand);
+	outline-offset: -2px;
+}
+
+.plan-table-touch-action:disabled {
+	opacity: 0.45;
+}
+
+:root[data-plan-primary-coarse-pointer] .plan-rail {
+	display: none;
+}
+
+:root:not([data-plan-coarse-pointer]) .plan-table-touch-toolbar {
+	display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.plan-grip,
 	.plan-grip-remove,
@@ -700,6 +825,9 @@
 	line-height: 1rem;
 	font-weight: 500;
 	white-space: nowrap;
+	max-inline-size: min(20rem, calc(100cqi - 2rem));
+	overflow: hidden;
+	text-overflow: ellipsis;
 	pointer-events: none;
 	opacity: 0;
 	transition: opacity var(--duration-base) var(--ease-out);
@@ -771,10 +899,17 @@
 	 * a rim of the wrong grey — but with neither, a snippet on a white page
 	 * has nothing to say where it starts.
 	 */
-	overflow: hidden;
+	max-inline-size: 100%;
+	overflow-x: auto;
 	border-radius: var(--radius-md);
 	outline: var(--edge-width) solid var(--color-edge);
 	outline-offset: calc(-1 * var(--edge-width));
+}
+
+/* The renderer's shadow root owns syntax painting; this host supplies the
+ * readable width that the surrounding widget scrolls when a line exceeds it. */
+.plan-content .plan-code-view > diffs-container {
+	min-inline-size: max-content;
 }
 
 /* Each file in a patch is its own box, and they stack. */
@@ -786,6 +921,7 @@
 /* Source stays visible and editable beneath its preview. */
 .plan-content [data-plan-source] {
 	white-space: pre-wrap;
+	overflow-wrap: normal;
 	font-family: ui-monospace, SFMono-Regular, monospace;
 	font-size: var(--text-sm);
 }
@@ -882,7 +1018,7 @@
 	display: flex;
 	align-items: center;
 	gap: 0.375rem;
-	max-width: min(22rem, 60%);
+	max-width: min(22rem, calc(100% - 1.5rem));
 	pointer-events: none;
 	font-size: var(--text-sm);
 	line-height: var(--text-sm--line-height);
@@ -1023,7 +1159,7 @@
 	display: flex;
 	flex-direction: column;
 	gap: 0.375rem;
-	max-width: min(24rem, 80%);
+	max-width: min(24rem, calc(100% - 1.5rem));
 }
 
 .plan-changes[data-side="above"] {
@@ -1047,10 +1183,12 @@
 	font-size: var(--text-sm);
 	line-height: var(--text-sm--line-height);
 	overflow: hidden;
+	max-inline-size: 100%;
 }
 
 .plan-changes-go,
 .plan-changes-more {
+	min-inline-size: 0;
 	display: flex;
 	align-items: center;
 	gap: 0.375rem;

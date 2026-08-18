@@ -7,12 +7,74 @@
  * required. Everything here is on the other side of that line.
  */
 
-import { content, expect, test, written } from "./room";
+import { content, expect, openIsolatedRoom, test, written } from "./room";
+import { expectInsideViewport } from "./responsive";
+import { installVisualViewport } from "./visual-viewport";
 
-import type { Page } from "@playwright/test";
+import type { Browser, Locator, Page } from "@playwright/test";
 
 let MENU = { name: "Insert block" };
 let BUBBLE = { name: "Text formatting" };
+let LONG_EDITOR = Array.from({ length: 40 }, (_, index) => `Paragraph ${index + 1}.`).join("\n\n");
+
+async function emulatedVisualViewportPage(
+	browser: Browser,
+	baseURL: string,
+	room: string,
+): Promise<{ close: () => Promise<void>; page: Page }> {
+	return openIsolatedRoom(browser, baseURL, room, "ana", {
+		hasTouch: true,
+		isMobile: true,
+		viewport: { width: 390, height: 844 },
+	}, context =>
+		installVisualViewport(context, {
+			height: 640,
+			offsetLeft: 0,
+			offsetTop: 72,
+			pageLeft: 0,
+			pageTop: 0,
+			scale: 1,
+			width: 390,
+		}));
+}
+
+async function expectSurfaceToFollowEditorScroll(
+	page: Page,
+	surface: Locator,
+): Promise<void> {
+	// The surface's passive effect owns the scroll listeners; wait one frame so
+	// this exercise is about their geometry rather than React effect scheduling.
+	await page.waitForTimeout(32);
+	let scroller = page.locator("[data-plan-scroll]");
+	let beforeScroll = await scroller.evaluate(element => element.scrollTop);
+	let beforeRange = await page.evaluate(() =>
+		getSelection()!.getRangeAt(0).getBoundingClientRect().top
+	);
+	await scroller.evaluate(element => {
+		element.scrollTop += 72;
+	});
+	await expect.poll(() => scroller.evaluate(element => element.scrollTop))
+		.toBeGreaterThan(beforeScroll + 50);
+	await expect.poll(() =>
+		page.evaluate(() => getSelection()!.getRangeAt(0).getBoundingClientRect().top)
+	).toBeLessThan(beforeRange - 50);
+	// Dispatch after the range has its post-scroll layout. This keeps the test
+	// deterministic across Chromium's compositor and main-thread scroll paths.
+	await scroller.dispatchEvent("scroll");
+	await expect.poll(async () => {
+		let box = await surface.boundingBox();
+		if (!box) return Infinity;
+		let range = await page.evaluate(() => {
+			let box = getSelection()!.getRangeAt(0).getBoundingClientRect();
+			return { bottom: box.bottom, top: box.top };
+		});
+		return Math.min(
+			Math.abs(box.y - range.bottom - 8),
+			Math.abs(range.top - box.y - box.height - 8),
+		);
+	}).toBeLessThan(3);
+	await expectInsideViewport(surface);
+}
 
 async function insertCallout(page: Page) {
 	await content(page).click();
@@ -168,4 +230,77 @@ test("the link prompt refuses a scheme the dialect will not carry", async ({ joi
 	await expect(content(page).locator("a")).toHaveCount(0);
 
 	await written(page, room, /^Read the docs\.$/m);
+});
+
+test("touch editor menus use reachable targets and stay inside the viewport", async ({ join }) => {
+	let page = await join("ana", {
+		hasTouch: true,
+		isMobile: true,
+		viewport: { width: 390, height: 844 },
+	});
+
+	await content(page).click();
+	await page.keyboard.type("/");
+	let menu = page.getByRole("listbox", MENU);
+	await expect(menu).toBeVisible();
+	let rowHeights = await menu.getByRole("option").evaluateAll(options =>
+		options.map(option => option.getBoundingClientRect().height)
+	);
+	expect(rowHeights.every(height => height >= 44)).toBe(true);
+	let menuBox = await menu.boundingBox();
+	expect(menuBox).not.toBeNull();
+	expect(menuBox!.x).toBeGreaterThanOrEqual(0);
+	expect(menuBox!.x + menuBox!.width).toBeLessThanOrEqual(390);
+	expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(844);
+
+	await page.keyboard.press("Escape");
+	await content(page).click();
+	await page.keyboard.type("Format this selection.");
+	await page.keyboard.press("Shift+Home");
+	let bubble = page.getByRole("toolbar", BUBBLE);
+	await expect(bubble).toBeVisible();
+	let targets = await bubble.getByRole("button").evaluateAll(buttons =>
+		buttons.map(button => {
+			let box = button.getBoundingClientRect();
+			return { height: box.height, width: box.width };
+		})
+	);
+	expect(targets.every(target => target.height >= 44 && target.width >= 44)).toBe(true);
+	let bubbleBox = await bubble.boundingBox();
+	expect(bubbleBox).not.toBeNull();
+	expect(bubbleBox!.x).toBeGreaterThanOrEqual(0);
+	expect(bubbleBox!.x + bubbleBox!.width).toBeLessThanOrEqual(390);
+});
+
+test("an open slash menu follows its caret while the editor scrolls", async ({ baseURL, browser, room, seed }) => {
+	await seed(LONG_EDITOR);
+	let emulation = await emulatedVisualViewportPage(browser, baseURL!, room);
+	try {
+		let block = content(emulation.page).getByText("Paragraph 9.", { exact: true });
+		await block.scrollIntoViewIfNeeded();
+		await block.selectText();
+		await emulation.page.keyboard.type("/");
+		let menu = emulation.page.getByRole("listbox", MENU);
+		await expect(menu).toBeVisible();
+
+		await expectSurfaceToFollowEditorScroll(emulation.page, menu);
+	} finally {
+		await emulation.close();
+	}
+});
+
+test("an open selection toolbar follows its range while the editor scrolls", async ({ baseURL, browser, room, seed }) => {
+	await seed(LONG_EDITOR);
+	let emulation = await emulatedVisualViewportPage(browser, baseURL!, room);
+	try {
+		let block = content(emulation.page).getByText("Paragraph 9.", { exact: true });
+		await block.scrollIntoViewIfNeeded();
+		await block.selectText();
+		let bubble = emulation.page.getByRole("toolbar", BUBBLE);
+		await expect(bubble).toBeVisible();
+
+		await expectSurfaceToFollowEditorScroll(emulation.page, bubble);
+	} finally {
+		await emulation.close();
+	}
 });

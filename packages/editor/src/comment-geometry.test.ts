@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 
-import { gutterPoint, popoverPoint } from "./comment-geometry";
+import { markerPoints, popoverPoint } from "./comment-geometry";
+
+import type { Rect } from "./comment-geometry";
 
 const host = {
 	top: 100,
@@ -11,43 +13,192 @@ const host = {
 	height: 600,
 };
 
+function place(target: Rect, size = 24, passages = [target]) {
+	return markerPoints([{ target, passages }], host, size)[0];
+}
+
 test("places a gutter button beside the first line of an exact passage", () => {
-	let point = gutterPoint({
+	let point = place({
 		top: 180,
 		right: 520,
 		bottom: 200,
 		left: 340,
 		width: 180,
 		height: 20,
-	}, host);
+	});
 
 	expect(point).toEqual({ top: 80, left: 428 });
 });
 
 test("places a gutter button at the top of a surviving block", () => {
-	let point = gutterPoint({
+	let point = place({
 		top: 320,
 		right: 520,
 		bottom: 420,
 		left: 340,
 		width: 180,
 		height: 100,
-	}, host);
+	});
 
 	expect(point).toEqual({ top: 220, left: 428 });
 });
 
 test("clamps a gutter button inside the document", () => {
-	let point = gutterPoint({
+	let point = place({
 		top: 90,
 		right: 1_000,
 		bottom: 110,
 		left: 950,
 		width: 50,
 		height: 20,
-	}, host);
+	});
 
 	expect(point).toEqual({ top: 0, left: 776 });
+});
+
+test("moves a coarse gutter button clear of a passage at the right edge", () => {
+	let point = place(
+		{
+			top: 180,
+			right: 890,
+			bottom: 200,
+			left: 700,
+			width: 190,
+			height: 20,
+		},
+		44,
+	);
+
+	expect(point).toEqual({ top: 108, left: 756 });
+});
+
+test("places a tall right-edge passage's marker in the free left gutter", () => {
+	let point = place(
+		{
+			top: 100,
+			right: 890,
+			bottom: 700,
+			left: 700,
+			width: 190,
+			height: 600,
+		},
+		44,
+	);
+
+	expect(point).toEqual({ top: 0, left: 548 });
+});
+
+test("keeps an impossible marker mounted just beyond its passage", () => {
+	let point = place(
+		{
+			top: 100,
+			right: 900,
+			bottom: 700,
+			left: 100,
+			width: 800,
+			height: 600,
+		},
+		44,
+	);
+
+	expect(point).toEqual({ top: 608, left: 756 });
+});
+
+test("finds a safe in-host point between full-height passage columns", () => {
+	let narrowHost = {
+		top: 0,
+		right: 400,
+		bottom: 200,
+		left: 0,
+		width: 400,
+		height: 200,
+	};
+	let target = {
+		top: 50,
+		right: 250,
+		bottom: 100,
+		left: 100,
+		width: 150,
+		height: 50,
+	};
+	let columns = [
+		{ top: 0, right: 100, bottom: 200, left: 0, width: 100, height: 200 },
+		{ top: 0, right: 300, bottom: 200, left: 250, width: 50, height: 200 },
+		{ top: 0, right: 400, bottom: 200, left: 356, width: 44, height: 200 },
+	];
+	let passages = [target, ...columns];
+
+	expect(markerPoints([{ target, passages }], narrowHost, 44)[0]).toEqual({
+		top: 50,
+		left: 304,
+	});
+	expect(markerPoints([{ target, passages: passages.toReversed() }], narrowHost, 44)[0])
+		.toEqual({ top: 50, left: 304 });
+});
+
+test("keeps stacked markers clear of both bottom-edge passages", () => {
+	let earlier = {
+		top: 608,
+		right: 900,
+		bottom: 652,
+		left: 856,
+		width: 44,
+		height: 44,
+	};
+	let target = {
+		top: 660,
+		right: 890,
+		bottom: 690,
+		left: 700,
+		width: 190,
+		height: 30,
+	};
+
+	expect(markerPoints(
+		[
+			{ target: earlier, passages: [earlier] },
+			{ target, passages: [target] },
+		],
+		host,
+		44,
+	)).toEqual([
+		{ top: 456, left: 756 },
+		{ top: 404, left: 756 },
+	]);
+});
+
+test("places an earlier marker clear of every later thread passage", () => {
+	let earlier = {
+		top: 180,
+		right: 520,
+		bottom: 200,
+		left: 340,
+		width: 180,
+		height: 20,
+	};
+	let later = {
+		top: 180,
+		right: 552,
+		bottom: 204,
+		left: 528,
+		width: 24,
+		height: 24,
+	};
+
+	expect(markerPoints([
+		{ target: earlier, passages: [earlier] },
+		{ target: later, passages: [later] },
+	], host)).toEqual([
+		{ top: 108, left: 428 },
+		{ top: 80, left: 460 },
+	]);
+	expect(markerPoints([
+		{ target: later, passages: [later] },
+		{ target: earlier, passages: [earlier] },
+	], host)).toEqual([
+		{ top: 80, left: 460 },
+		{ top: 108, left: 428 },
+	]);
 });
 
 test("places a popover to the left when the right side lacks room", () => {

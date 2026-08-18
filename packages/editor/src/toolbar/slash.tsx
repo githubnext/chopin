@@ -7,7 +7,15 @@
  * the block appear later than the keystroke that asked for it.
  */
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	Fragment,
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $setBlocksType } from "@lexical/selection";
 import {
@@ -36,9 +44,18 @@ import { $createTableNodeWithDimensions } from "@lexical/table";
 import { $createParagraphNode, $createTextNode, $insertNodes } from "lexical";
 
 import { askForUrl } from "./url";
-import { DIVIDER, ROW, SHELL } from "./surface";
+import { placeSurface } from "./placement";
+import {
+	DIVIDER,
+	editorSurfaceViewport,
+	listenToEditorGeometry,
+	nativeSelectionRect,
+	ROW,
+	SHELL,
+} from "./surface";
 
 import type { ElementNode, LexicalEditor } from "lexical";
+import type { DOMRectLike, SurfacePlacement } from "./placement";
 
 export type SlashCommand = {
 	id: string;
@@ -236,8 +253,10 @@ export type SlashMenuProps = {
 export function SlashMenu({ disabled }: SlashMenuProps) {
 	let [editor] = useLexicalComposerContext();
 	let [query, setQuery] = useState<string>();
-	let [position, setPosition] = useState<{ top: number; left: number }>();
+	let [anchor, setAnchor] = useState<DOMRectLike>();
+	let [position, setPosition] = useState<SurfacePlacement>();
 	let [index, setIndex] = useState(0);
+	let surface = useRef<HTMLDivElement>(null);
 	let open = query !== undefined && !disabled;
 
 	let matches = useMemo(() => COMMANDS.filter(item => match(item, query ?? "")), [query]);
@@ -269,6 +288,8 @@ export function SlashMenu({ disabled }: SlashMenuProps) {
 		armed.current = false;
 		currentQuery.current = undefined;
 		setQuery(undefined);
+		setAnchor(undefined);
+		setPosition(undefined);
 		setIndex(0);
 	}, []);
 
@@ -345,17 +366,47 @@ export function SlashMenu({ disabled }: SlashMenuProps) {
 				if (decision === "ignore") return;
 				if (decision === "close") return close();
 
-				let native = window.getSelection();
-				if (!native || native.rangeCount === 0) return close();
-				let rect = native.getRangeAt(0).getBoundingClientRect();
+				let rect = nativeSelectionRect();
+				if (!rect) return close();
 
 				if (typed !== currentQuery.current) setIndex(0);
 				currentQuery.current = typed;
 				setQuery(typed);
-				setPosition({ top: rect.bottom + 4, left: rect.left });
+				setAnchor(rect);
 			});
 		});
 	}, [editor, close, disabled]);
+
+	let place = useCallback(() => {
+		let element = surface.current;
+		if (!element || !anchor) return;
+		let liveAnchor = nativeSelectionRect();
+		if (!liveAnchor) {
+			setPosition(undefined);
+			return;
+		}
+		let viewport = editorSurfaceViewport(editor);
+		element.style.maxWidth = `${Math.max(0, viewport.width - 16)}px`;
+		let next = placeSurface(
+			liveAnchor,
+			{ width: element.offsetWidth, height: element.scrollHeight },
+			viewport,
+		);
+		setPosition(current =>
+			current?.left === next.left && current.top === next.top
+				&& current.maxHeight === next.maxHeight
+				? current
+				: next
+		);
+	}, [anchor]);
+	useLayoutEffect(() => {
+		if (open) place();
+	}, [open, grouped, place]);
+
+	useEffect(() => {
+		if (!open) return;
+		return listenToEditorGeometry(editor, place);
+	}, [editor, open, place]);
 
 	let selected = useRef(matches[0]);
 	selected.current = matches[index];
@@ -385,17 +436,20 @@ export function SlashMenu({ disabled }: SlashMenuProps) {
 		);
 	}, [editor, open, matches.length, close, choose]);
 
-	if (!open || !position || matches.length === 0) return null;
+	if (!open || !anchor || matches.length === 0) return null;
 
 	let flat = matches;
 
 	return (
 		<div
+			ref={surface}
 			role="listbox"
 			aria-label="Insert block"
 			contentEditable={false}
 			className={`${SHELL} max-h-72 w-56 overflow-y-auto`}
-			style={{ top: position.top, left: position.left }}
+			style={position
+				? { top: position.top, left: position.left, maxHeight: position.maxHeight }
+				: { top: anchor.bottom + 8, left: anchor.left, visibility: "hidden" }}
 			onMouseDown={event => event.preventDefault()}
 		>
 			{grouped.map(([group, commands], place) => (

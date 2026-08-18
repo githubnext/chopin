@@ -86,3 +86,18 @@ export async function readSource(port: number, id: string): Promise<string> {
 		return row?.source ?? "";
 	});
 }
+
+/** The checkpoint that `plan:open` starts from, for protocol-level browser fixtures. */
+export async function readDocument(port: number, id: string): Promise<{
+	epoch: string;
+	source: string;
+	update: Uint8Array;
+}> {
+	return sql(port, async database => {
+		let [row] = await database<{ document: Uint8Array; epoch: string; source: string }[]>`
+			SELECT epoch, source, document FROM channel_snapshots WHERE channel_id = ${id}
+		`;
+		if (!row) throw new Error(`missing checkpoint for ${id}`);
+		return { epoch: row.epoch, source: row.source, update: new Uint8Array(row.document) };
+	});
+}

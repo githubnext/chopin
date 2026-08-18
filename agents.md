@@ -56,6 +56,7 @@ packages/dialect     4.6k   the MDX dialect and its Lexical schema
 packages/editor     10.5k   the browser editor, cursors, the sidecar, agent marks
 packages/question    1.8k   questionnaires: definition, shared answer, derivation
 packages/protocol    0.9k   the wire, as types, plus the addressing rule
+packages/viewport    0.1k   browser viewport geometry and event subscriptions
 apps/server         11.4k   rooms, documents, questions, comments, the agent
 apps/web             1.5k   the three panes
 e2e                  1.3k   the browser suite, and the servers it runs against
