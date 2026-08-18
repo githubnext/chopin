@@ -1,12 +1,17 @@
 import { afterEach, expect, test } from "bun:test";
 
 import { toolbox } from "./tools";
+import { Sessions } from "../auth/session";
+import * as Chat from "../chat/service";
 import * as room from "../plan/room";
 import * as Service from "../plan/service";
 import * as Store from "../questions/store";
 import { openPlan } from "../testing/plan";
 
+import type { HostedAuth } from "../auth/routes";
 import type { SeedState } from "../testing/plan";
+import type { Config } from "../config";
+import type { Socket } from "../wire";
 
 const WIDGET = "01K0N4TR8K7JGM4R1J7PW4R8YJ";
 const QUESTION = "01K0N4V4E7Y6P4MJ5WD8XZF3B2";
@@ -282,6 +287,11 @@ test("a stale ask does not announce an anchor snapshot", async () => {
 
 test("planner graph edits draft a revision without changing plan prose", async () => {
 	let { plan, server } = await opened("Prepare the implementation.\n");
+	// The graph tool is called from inside the planner turn that `chat:send`
+	// started. That turn is busy by definition; readiness must not mistake it
+	// for a competing request.
+	plan.chat.busy = true;
+	plan.chat.turn = { id: "turn", handle: "ana", started: 1, responded: false };
 	let before = room.project(plan.document);
 	let graph = toolbox({
 		plan,
@@ -335,6 +345,130 @@ test("planner graph edits draft a revision without changing plan prose", async (
 	});
 	expect(JSON.parse(stale as string)).toEqual({ ok: false, reason: "stale-graph" });
 	expect(room.project(plan.document)).toBe(before);
+});
+
+test("a chat-started planner turn can draft an implementation graph", async () => {
+	let { plan, server, storage, channel } = await opened("Prepare the implementation.\n");
+	let now = new Date();
+	let tools = toolbox({
+		plan,
+		server,
+		room: "test",
+		persist: () => Service.persist(plan),
+		exclusive: action => Service.exclusive(plan, action),
+		async publish() {},
+		anchors() {},
+		changes() {},
+	});
+	let graph = tools.find(tool => tool.name === "edit_implementation_graph");
+	if (!graph?.handler) throw new Error("edit_implementation_graph is missing");
+	let args = {
+		plan_revision: plan.revision,
+		graph_revision: 0,
+		operations: [{
+			op: "add",
+			task: {
+				id: "chat-graph",
+				title: "Draft from the chat turn",
+				context: "The planner turn began from the room conversation.",
+				goal: "Create a graph while the planner is busy.",
+				acceptance: ["The graph is drafted.", "The chat turn can complete."],
+				dependsOn: [],
+			},
+		}],
+	};
+	let response: string | undefined;
+	let event: ((value: { type: string }) => void) | undefined;
+	let sent = Promise.withResolvers<void>();
+	plan.chat.agent = {
+		id: "session",
+		session: {
+			on(listener: (value: { type: string }) => void) {
+				event = listener;
+				return () => {};
+			},
+			async send() {
+				let result = await graph.handler!(args, {
+					sessionId: "session",
+					toolCallId: "call",
+					toolName: "edit_implementation_graph",
+					arguments: args,
+				});
+				if (typeof result !== "string") throw new Error("graph tool returned no text");
+				response = result;
+				event?.({ type: "session.idle" });
+				sent.resolve();
+			},
+			async abort() {},
+			async disconnect() {},
+		} as never,
+	};
+	let key = new Uint8Array(32).fill(7);
+	let sessions = new Sessions(storage, true, () => now);
+	let claimant = await sessions.issue("U_test", {
+		accessToken: "gho_test",
+		accessExpiresIn: 28_800,
+		refreshToken: "ghr_test",
+		refreshExpiresIn: 15_897_600,
+	});
+	let repository = { id: "R_test", owner: "owner", name: "repository", defaultBranch: "main" };
+	let auth: HostedAuth = {
+		config: {
+			origin: "https://test",
+			appSlug: "chopin-test",
+			clientId: "id",
+			clientSecret: "secret",
+			encryptionKey: key,
+		},
+		storage,
+		github: {
+			async repositoryAccess() {
+				return {
+					...repository,
+					fullName: "owner/repository",
+					private: true,
+					url: "",
+					permissions: { pull: true, push: true, admin: false },
+				};
+			},
+		} as never,
+		sessions,
+		clock: () => now,
+	};
+	let ownership = await Chat.resolveOwner(auth, repository, channel.id, claimant.id);
+	plan.chat.owner = {
+		sessionId: claimant.id,
+		generation: ownership.ownership.generation,
+		revision: ownership.owner.access.revision,
+		expiresAt: Math.min(
+			ownership.owner.access.expiresAt.getTime(),
+			ownership.owner.session.expiresAt.getTime(),
+		),
+	};
+	let context: Chat.Room = {
+		chat: plan.chat,
+		plan,
+		server,
+		room: channel.id,
+		config: { agent: true } as Config,
+		auth,
+		claimantSessionId: claimant.id,
+		repository,
+		persist: () => Service.persist(plan),
+	};
+
+	await Chat.send(
+		context,
+		{ data: { handle: "ana" }, send() {} } as unknown as Socket,
+		{ kind: "chat:send", rid: "request", text: "prepare implementation", to: "planner", ts: 0 },
+	);
+	await sent.promise;
+
+	expect(JSON.parse(response ?? "")).toMatchObject({
+		ok: true,
+		graph: { versions: [{ state: "draft", planRevision: 0 }] },
+	});
+	expect(plan.graph?.versions[0]?.definition.tasks.map(task => task.id)).toEqual(["chat-graph"]);
 });
 
 test("planner graph edits name readiness blockers before changing a graph", async () => {
