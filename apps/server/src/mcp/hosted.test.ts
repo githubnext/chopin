@@ -40,6 +40,16 @@ const creation: CreateDocumentInput = {
 	plan: "# Created\n",
 };
 
+function createdDocument(id: string) {
+	return {
+		id,
+		title: creation.title,
+		brief: creation.brief,
+		source: creation.plan,
+		revision: 0,
+	};
+}
+
 class GitHubBoundary implements GitHub {
 	readonly userTokens: string[] = [];
 	accessible = true;
@@ -256,29 +266,23 @@ describe("the hosted MCP adapter", () => {
 		let result = await adapter.create.create(caller, creation);
 		expect(result.kind).toBe("created");
 		if (result.kind !== "created") return;
-		expect(result.document).toMatchObject({
-			title: creation.title,
-			brief: creation.brief,
-			source: creation.plan,
-			revision: 0,
+		let expected = createdDocument(result.document.id);
+		expect(result.document).toEqual({
+			...expected,
 			url: `/channels/${result.document.id}`,
 		});
 		let stored = await context.storage.collaboration.load(result.document.id, context.now);
 		if (!stored) throw new Error("created channel was not stored");
 		expect(await Service.readStored(stored)).toMatchObject({
-			brief: creation.brief,
-			origin: expect.objectContaining({
-				idempotencyKey: creation.idempotencyKey,
-				fingerprint: creation.fingerprint,
-			}),
+			creation: {
+				brief: creation.brief,
+				origin: expect.objectContaining({
+					idempotencyKey: creation.idempotencyKey,
+					fingerprint: creation.fingerprint,
+				}),
+			},
 		});
-		expect(await adapter.documents.read(caller, result.document.id)).toEqual({
-			id: result.document.id,
-			title: creation.title,
-			brief: creation.brief,
-			source: creation.plan,
-			revision: 0,
-		});
+		expect(await adapter.documents.read(caller, result.document.id)).toEqual(expected);
 	});
 
 	it("requires repository write access before creating a channel", async () => {
@@ -308,7 +312,10 @@ describe("the hosted MCP adapter", () => {
 		if (first.kind !== "created") return;
 		expect(await adapter.create.create(caller, creation)).toEqual({
 			kind: "replayed",
-			document: first.document,
+			document: {
+				...createdDocument(first.document.id),
+				url: `/channels/${first.document.id}`,
+			},
 		});
 	});
 
