@@ -402,6 +402,44 @@ describe("the hosted MCP adapter", () => {
 		}
 	});
 
+	it("reads a live created plan with its public brief but not provenance", async () => {
+		let context = setup();
+		context.github.repositoryValue = {
+			...context.github.repositoryValue,
+			permissions: { pull: true, push: true, admin: false },
+		};
+		let adapter = hosted(context.auth);
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller) throw new Error("test caller was not authenticated");
+		if (!adapter.create) throw new Error("hosted creation adapter is unavailable");
+		let result = await adapter.create.create(caller, creation);
+		if (result.kind !== "created") throw new Error("test plan was not created");
+		let lease = await context.storage.leases.acquire("writer", "mcp-test", 60_000);
+		if (!lease) throw new Error("could not acquire test lease");
+		let server = { publish() {} } as unknown as Server<SocketData>;
+		let opened = await Service.open(result.document.id, {
+			storage: context.storage,
+			lease: () => lease,
+			fatal: error => {
+				throw error;
+			},
+		}, server);
+		let socket = {
+			data: { room: result.document.id, client: "mcp-test" },
+		} as unknown as Socket;
+		let live = Rooms.join(socket);
+		live.plan = opened;
+
+		try {
+			expect(await adapter.documents.read(caller, result.document.id)).toEqual(
+				createdDocument(result.document.id),
+			);
+		} finally {
+			Rooms.forget(live);
+			await Service.close(opened);
+		}
+	});
+
 	it("makes an inaccessible channel indistinguishable from a missing channel", async () => {
 		let context = setup();
 		let opened = await plan(context);

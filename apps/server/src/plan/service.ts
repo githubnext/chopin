@@ -280,6 +280,17 @@ function creation(value: JsonValue | undefined): CreationMetadata | undefined {
 	};
 }
 
+function legacyCreation(
+	brief: JsonValue | undefined,
+	origin: JsonValue | undefined,
+): CreationMetadata | undefined {
+	if (brief === undefined && origin === undefined) return undefined;
+	if (brief === undefined || origin === undefined) {
+		throw new Error("hosted channel has invalid creation metadata");
+	}
+	return creation({ brief, origin });
+}
+
 function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 	if (value === null && pristine) {
 		return {
@@ -297,7 +308,11 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 	}
 	let item = value as Record<string, JsonValue>;
 	let keys = Object.keys(item).sort();
-	let created = creation(item.creation);
+	let legacy = item.creation === undefined
+		&& (item.brief !== undefined || item.origin !== undefined);
+	let created = item.creation === undefined
+		? legacyCreation(item.brief, item.origin)
+		: creation(item.creation);
 	let expected = [
 		"documentSeq",
 		"openQuestions",
@@ -307,7 +322,7 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 		"transcript",
 		"version",
 	];
-	if (created) expected.push("creation");
+	if (created) expected.push(...(legacy ? ["brief", "origin"] : ["creation"]));
 	expected.sort();
 	if (
 		keys.length !== expected.length
