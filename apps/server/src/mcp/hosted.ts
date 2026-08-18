@@ -29,6 +29,33 @@ function channelId(repositoryId: string, idempotencyKey: string): string {
 	}`;
 }
 
+type Document = {
+	id: string;
+	title: string;
+	creation?: Plan.CreationMetadata;
+	source: string;
+	revision: number;
+	url?: string;
+};
+
+type PublicDocument = Omit<Document, "creation" | "url"> & {
+	brief?: Plan.CreationMetadata["brief"];
+};
+
+/** Strip durable idempotency and repository provenance from MCP responses. */
+function document(value: Document & { url: string }): PublicDocument & { url: string };
+function document(value: Document): PublicDocument;
+function document(value: Document): PublicDocument & { url?: string } {
+	return {
+		id: value.id,
+		title: value.title,
+		...(value.creation ? { brief: value.creation.brief } : {}),
+		source: value.source,
+		revision: value.revision,
+		...(value.url ? { url: value.url } : {}),
+	};
+}
+
 /** Bind the backend-neutral MCP surface to hosted GitHub authentication. */
 export function hosted(auth: HostedAuth): McpOptions<HostedCaller> {
 	return {
@@ -82,13 +109,13 @@ export function hosted(auth: HostedAuth): McpOptions<HostedCaller> {
 				let live = Rooms.get(channel.id)?.plan;
 				if (live) {
 					try {
-						return {
+						return document({
 							id: channel.id,
 							title: channel.title,
-							...(live.brief ? { brief: live.brief } : {}),
+							creation: live.creation,
 							source: Plan.source(live),
 							revision: live.revision,
-						};
+						});
 					} catch {
 						return undefined;
 					}
@@ -104,13 +131,13 @@ export function hosted(auth: HostedAuth): McpOptions<HostedCaller> {
 				) return undefined;
 				try {
 					let projected = await Plan.readStored(stored);
-					return {
+					return document({
 						id: channel.id,
 						title: channel.title,
-						...(projected.brief ? { brief: projected.brief } : {}),
+						creation: projected.creation,
 						source: projected.source,
 						revision: projected.revision,
-					};
+					});
 				} catch {
 					return undefined;
 				}
@@ -135,7 +162,8 @@ export function hosted(auth: HostedAuth): McpOptions<HostedCaller> {
 					now: auth.clock(),
 				});
 				let { brief, plan, ...origin } = input;
-				let initial = await Plan.initial(plan, origin, brief);
+				let creation: Plan.CreationMetadata = { brief, origin };
+				let initial = await Plan.initial(plan, creation);
 				let id = channelId(repository.id, input.idempotencyKey);
 				try {
 					await auth.storage.channels.create({
@@ -156,32 +184,32 @@ export function hosted(auth: HostedAuth): McpOptions<HostedCaller> {
 					}
 					let restored = await Plan.readStored(stored);
 					if (
-						restored.origin?.idempotencyKey !== input.idempotencyKey
-						|| restored.origin.fingerprint !== input.fingerprint
-						|| !restored.brief
+						!restored.creation
+						|| restored.creation.origin.idempotencyKey !== input.idempotencyKey
+						|| restored.creation.origin.fingerprint !== input.fingerprint
 					) return { kind: "conflict" };
 					return {
 						kind: "replayed",
-						document: {
+						document: document({
 							id,
 							title: stored.channel.title,
-							brief: restored.brief,
+							creation: restored.creation,
 							source: restored.source,
 							revision: restored.revision,
 							url: `/channels/${id}`,
-						},
+						}),
 					};
 				}
 				return {
 					kind: "created",
-					document: {
+					document: document({
 						id,
 						title: input.title,
-						brief,
+						creation,
 						source: initial.source,
 						revision: 0,
 						url: `/channels/${id}`,
-					},
+					}),
 				};
 			},
 		},

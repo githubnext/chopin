@@ -67,6 +67,12 @@ export type Backend = {
 	fatal: (error: unknown) => void;
 };
 
+/** Durable MCP context for a document created through the hosted surface. */
+export type CreationMetadata = {
+	brief: Brief;
+	origin: CreationOrigin;
+};
+
 type Persistence = Backend & {
 	channelId: string;
 	revision: number;
@@ -90,10 +96,8 @@ type Captured = {
 
 export type Plan = {
 	id: string;
-	/** Structured context retained for plans created through MCP. */
-	brief?: Brief;
-	/** Idempotency and repository provenance retained for plans created through MCP. */
-	origin?: CreationOrigin;
+	/** Context retained for plans created through MCP. */
+	creation?: CreationMetadata;
 	server: Server<SocketData>;
 	document: Document;
 	presence: Presence;
@@ -154,8 +158,7 @@ type Sidecar = {
 	version: 1;
 	revision: number;
 	documentSeq: number;
-	brief?: Brief;
-	origin?: CreationOrigin;
+	creation?: CreationMetadata;
 	questions: Questions.Record[];
 	openQuestions: Questions.StoredOpen[];
 	threads: Comments.Record[];
@@ -167,7 +170,7 @@ function state(plan: Plan): Sidecar {
 		version: 1,
 		revision: plan.revision,
 		documentSeq: plan.document.seq,
-		...(plan.brief && plan.origin ? { brief: plan.brief, origin: plan.origin } : {}),
+		...(plan.creation ? { creation: plan.creation } : {}),
 		questions: [...plan.records.values()],
 		openQuestions: Questions.dump(plan.questions),
 		threads: [...plan.threads.values()],
@@ -212,21 +215,27 @@ function strings(value: JsonValue | undefined): string[] | undefined {
 		: undefined;
 }
 
-function creation(
-	briefValue: JsonValue | undefined,
-	originValue: JsonValue | undefined,
-): { brief?: Brief; origin?: CreationOrigin } {
-	if (briefValue === undefined && originValue === undefined) return {};
+function creation(value: JsonValue | undefined): CreationMetadata | undefined {
+	if (value === undefined) return undefined;
 	if (
-		!briefValue
-		|| typeof briefValue !== "object"
-		|| Array.isArray(briefValue)
-		|| !originValue
-		|| typeof originValue !== "object"
-		|| Array.isArray(originValue)
+		!value
+		|| typeof value !== "object"
+		|| Array.isArray(value)
 	) throw new Error("hosted channel has invalid creation metadata");
-	let brief = briefValue as Record<string, JsonValue>;
-	let origin = originValue as Record<string, JsonValue>;
+	let metadata = value as Record<string, JsonValue>;
+	if (
+		Object.keys(metadata).length !== 2
+		|| !Object.hasOwn(metadata, "brief")
+		|| !Object.hasOwn(metadata, "origin")
+		|| !metadata.brief
+		|| typeof metadata.brief !== "object"
+		|| Array.isArray(metadata.brief)
+		|| !metadata.origin
+		|| typeof metadata.origin !== "object"
+		|| Array.isArray(metadata.origin)
+	) throw new Error("hosted channel has invalid creation metadata");
+	let brief = metadata.brief as Record<string, JsonValue>;
+	let origin = metadata.origin as Record<string, JsonValue>;
 	let briefKeys = [
 		"constraints",
 		"goal",
@@ -288,7 +297,7 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 	}
 	let item = value as Record<string, JsonValue>;
 	let keys = Object.keys(item).sort();
-	let created = creation(item.brief, item.origin);
+	let created = creation(item.creation);
 	let expected = [
 		"documentSeq",
 		"openQuestions",
@@ -298,7 +307,7 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 		"transcript",
 		"version",
 	];
-	if (created.brief) expected.push("brief", "origin");
+	if (created) expected.push("creation");
 	expected.sort();
 	if (
 		keys.length !== expected.length
@@ -354,7 +363,7 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 		version: 1,
 		revision: item.revision,
 		documentSeq: item.documentSeq,
-		...created,
+		...(created ? { creation: created } : {}),
 		questions: questions as never[],
 		openQuestions: openQuestions as unknown as Questions.StoredOpen[],
 		threads: threads as never[],
@@ -369,8 +378,7 @@ function digest(source: string): string {
 /** Build the complete revision-zero state published with a newly created channel. */
 export async function initial(
 	source: string,
-	origin: CreationOrigin,
-	brief: Brief,
+	creation: CreationMetadata,
 ): Promise<InitialChannel> {
 	let document = await room.create(source);
 	try {
@@ -379,8 +387,7 @@ export async function initial(
 			version: 1,
 			revision: 0,
 			documentSeq: document.seq,
-			brief,
-			origin,
+			creation,
 			questions: [],
 			openQuestions: [],
 			threads: [],
@@ -600,16 +607,14 @@ async function restoreHosted(id: string, loaded: StoredChannel): Promise<Restore
 /** Project a closed channel without attaching it to the live room registry. */
 export async function readStored(
 	loaded: StoredChannel,
-): Promise<{ source: string; revision: number; brief?: Brief; origin?: CreationOrigin }> {
+): Promise<{ source: string; revision: number; creation?: CreationMetadata }> {
 	let restored = await restoreHosted(loaded.channel.id, loaded);
 	try {
 		Questions.shutdown(Questions.restore(restored.sidecar.openQuestions));
 		return {
 			source: room.project(restored.document),
 			revision: restored.sidecar.revision,
-			...(restored.sidecar.brief && restored.sidecar.origin
-				? { brief: restored.sidecar.brief, origin: restored.sidecar.origin }
-				: {}),
+			...(restored.sidecar.creation ? { creation: restored.sidecar.creation } : {}),
 		};
 	} finally {
 		restored.document.doc.destroy();
@@ -628,9 +633,7 @@ export async function open(
 
 	let plan: Plan = {
 		id,
-		...(sidecar.brief && sidecar.origin
-			? { brief: sidecar.brief, origin: sidecar.origin }
-			: {}),
+		...(sidecar.creation ? { creation: sidecar.creation } : {}),
 		server,
 		document,
 		presence: presence.create(),

@@ -4,24 +4,25 @@ import * as Service from "./service";
 import { MemoryStorage } from "../storage/memory/adapter";
 
 import type { Server } from "bun";
-import type { Brief, CreationOrigin } from "../mcp";
 import type { SocketData } from "../wire";
 
 const now = new Date("2026-08-17T15:00:00.000Z");
-const brief: Brief = {
-	goal: "Create a collaborative plan.",
-	constraints: ["Keep the initial source canonical."],
-	settledDecisions: ["Use hosted storage."],
-	openQuestions: ["Who reviews the rollout?"],
-	repositoryFindings: ["The repository uses Bun."],
-};
-const origin: CreationOrigin = {
-	idempotencyKey: "create-plan-1",
-	fingerprint: "request-1",
-	repository: "octo-org/score",
-	baseBranch: "main",
-	baseCommit: "0123456789abcdef0123456789abcdef01234567",
-	title: "Created plan",
+const creation: Service.CreationMetadata = {
+	brief: {
+		goal: "Create a collaborative plan.",
+		constraints: ["Keep the initial source canonical."],
+		settledDecisions: ["Use hosted storage."],
+		openQuestions: ["Who reviews the rollout?"],
+		repositoryFindings: ["The repository uses Bun."],
+	},
+	origin: {
+		idempotencyKey: "create-plan-1",
+		fingerprint: "request-1",
+		repository: "octo-org/score",
+		baseBranch: "main",
+		baseCommit: "0123456789abcdef0123456789abcdef01234567",
+		title: "Created plan",
+	},
 };
 
 async function created(): Promise<MemoryStorage> {
@@ -32,7 +33,7 @@ async function created(): Promise<MemoryStorage> {
 		avatarUrl: "https://example.test/octocat",
 		now,
 	});
-	let initial = await Service.initial("# Created\n", origin, brief);
+	let initial = await Service.initial("# Created\n", creation);
 	await storage.channels.create({
 		id: "created-plan",
 		repositoryId: "R_score",
@@ -46,7 +47,7 @@ async function created(): Promise<MemoryStorage> {
 	return storage;
 }
 
-it("restores an MCP-created plan with its brief and provenance", async () => {
+it("restores an MCP-created plan with its creation metadata", async () => {
 	let storage = await created();
 	let stored = await storage.collaboration.load("created-plan", now);
 	if (!stored) throw new Error("created plan was not stored");
@@ -54,8 +55,7 @@ it("restores an MCP-created plan with its brief and provenance", async () => {
 	expect(await Service.readStored(stored)).toEqual({
 		source: "# Created\n",
 		revision: 0,
-		brief,
-		origin,
+		creation,
 	});
 });
 
@@ -78,5 +78,5 @@ it("retains creation metadata after the plan is persisted", async () => {
 	let stored = await storage.collaboration.load("created-plan", now);
 	if (!stored) throw new Error("created plan was not stored");
 
-	expect(await Service.readStored(stored)).toMatchObject({ brief, origin });
+	expect(await Service.readStored(stored)).toMatchObject({ creation });
 });
