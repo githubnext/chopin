@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
+import { implementationGraphs } from "./plan-graphs";
 import { MemoryStorage } from "../storage/memory/adapter";
-import { close, implementationGraphs, open } from "../plan/service";
+import { close, open } from "../plan/service";
 
 import type { Server } from "bun";
 import type { Backend } from "../plan/service";
@@ -51,7 +52,11 @@ describe("the plan graph adapter", () => {
 		let context = await hosted();
 		let first = await open(context.channel.id, context.backend, context.server);
 
-		let graph = await implementationGraphs().create(first, definition);
+		let graph = await implementationGraphs().revise(first, {
+			planRevision: 0,
+			graphRevision: 0,
+			operations: definition.tasks.map(task => ({ op: "add", task })),
+		});
 		expect(graph.ok).toBe(true);
 		await close(first);
 		let stored = await context.storage.collaboration.load(context.channel.id, now);
@@ -60,7 +65,13 @@ describe("the plan graph adapter", () => {
 		});
 
 		let restored = await open(context.channel.id, context.backend, context.server);
-		expect((await implementationGraphs().edit(restored, definition)).ok).toBe(true);
+		expect(
+			(await implementationGraphs().revise(restored, {
+				planRevision: 0,
+				graphRevision: 1,
+				operations: [{ op: "replace", id: "model", task: definition.tasks[0] }],
+			})).ok,
+		).toBe(true);
 		await close(restored);
 	});
 
@@ -88,7 +99,13 @@ describe("the plan graph adapter", () => {
 		});
 
 		let restored = await open(context.channel.id, context.backend, context.server);
-		expect(await implementationGraphs().create(restored, definition)).toMatchObject({ ok: true });
+		expect(
+			await implementationGraphs().revise(restored, {
+				planRevision: 0,
+				graphRevision: 0,
+				operations: definition.tasks.map(task => ({ op: "add", task })),
+			}),
+		).toMatchObject({ ok: true });
 		await close(restored);
 	});
 });
