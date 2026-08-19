@@ -21,6 +21,7 @@ class GitHubBoundary implements GitHub {
 	failure: Error | undefined;
 	membership: { state: "active" | "pending"; role: "member" } | undefined;
 	membershipFailure: GitHubError | undefined;
+	repositoryFailure: GitHubError | undefined;
 
 	authorize(): string {
 		return "";
@@ -56,12 +57,22 @@ class GitHubBoundary implements GitHub {
 		return this.repositories();
 	}
 
-	async repository(): Promise<Repository> {
-		throw new Error("not used by MCP route tests");
+	async repository(_token: string, owner: string, name: string): Promise<Repository> {
+		if (this.repositoryFailure) throw this.repositoryFailure;
+		return {
+			id: "R_score",
+			owner,
+			name,
+			fullName: `${owner}/${name}`,
+			private: true,
+			url: `https://github.test/${owner}/${name}`,
+			defaultBranch: "main",
+			permissions: { pull: true, push: true, admin: false },
+		};
 	}
 
 	async repositoryAccess(): Promise<Repository | undefined> {
-		throw new Error("not used by MCP route tests");
+		throw new Error("installation-gated access must not be used by MCP");
 	}
 
 	invalidate(): void {}
@@ -110,6 +121,18 @@ function request(method: string, init: RequestInit = {}): Request {
 function expectProtected(response: Response | undefined): void {
 	expect(response?.headers.get("cache-control")).toBe("no-store");
 	expect(response?.headers.get("x-content-type-options")).toBe("nosniff");
+}
+
+function listDocuments(): RequestInit {
+	return {
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({
+			jsonrpc: "2.0",
+			id: 2,
+			method: "tools/call",
+			params: { name: "list_documents", arguments: { repository: "octo-org/score" } },
+		}),
+	};
 }
 
 describe("the hosted MCP route", () => {
@@ -182,7 +205,7 @@ describe("the hosted MCP route", () => {
 			body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
 		}));
 		expect(unavailableResponse?.status).toBe(503);
-		expect(await unavailableResponse?.text()).toBe("admission is temporarily unavailable");
+		expect(await unavailableResponse?.text()).toBe("GitHub access is temporarily unavailable");
 		expectProtected(unavailableResponse);
 
 		let member = setup({ allowedOrganizations: new Set(["githubnext"]) });
@@ -192,5 +215,45 @@ describe("the hosted MCP route", () => {
 			body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
 		}));
 		expect(memberResponse?.status).toBe(200);
+	});
+
+	it("returns repository-forbidden for direct repository denials", async () => {
+		for (let status of [403, 404]) {
+			let { github, router } = setup();
+			github.repositoryFailure = new GitHubError("private repository title", status);
+			let response = await router.handle(request("POST", listDocuments()));
+			let body = await response?.json() as {
+				result: { structuredContent: { code: string }; isError: boolean };
+			};
+
+			expect(response?.status).toBe(200);
+			expectProtected(response);
+			expect(body.result).toMatchObject({
+				structuredContent: { code: "repository-forbidden" },
+				isError: true,
+			});
+			expect(JSON.stringify(body)).not.toContain("private repository title");
+		}
+	});
+
+	it("maps direct repository authentication and provider failures", async () => {
+		for (
+			let [provider, expected, message] of [
+				[401, 401, "unauthorized"],
+				[429, 503, "GitHub access is temporarily unavailable"],
+				[502, 503, "GitHub access is temporarily unavailable"],
+			] as const
+		) {
+			let { github, router } = setup();
+			github.repositoryFailure = new GitHubError("access-token private repository", provider);
+			let response = await router.handle(request("POST", listDocuments()));
+			let text = await response?.text();
+
+			expect(response?.status).toBe(expected);
+			expectProtected(response);
+			expect(text).toBe(message);
+			expect(text).not.toContain("access-token");
+			expect(text).not.toContain("private repository");
+		}
 	});
 });

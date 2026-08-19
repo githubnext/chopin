@@ -15,6 +15,13 @@ private organization membership. The normal `gh auth login` flow includes
 needs Members read access for an allowed organization and any required SSO
 authorization.
 
+The MCP bearer boundary is separate from Chopin's browser GitHub App session.
+Chopin authenticates the supplied token, applies the instance admission policy,
+and asks GitHub directly for that token's repository permissions. The Chopin App
+does not need to be installed on a repository for MCP access. Browser routes,
+WebSockets, and the hosted Planner still require an active App installation that
+includes the repository.
+
 ```bash
 export CHOPIN_URL="https://your-chopin-workspace.example"
 export GITHUB_TOKEN="$(gh auth token)"
@@ -71,16 +78,19 @@ instructions and current tool descriptions are authoritative.
 
 ## Access and troubleshooting
 
-HTTP `401` means bearer authentication failed: renew the GitHub CLI login with
+HTTP `401` means the bearer is invalid or expired: renew the GitHub CLI login with
 `gh auth login`, export `GITHUB_TOKEN` again, replace Claude's stored header if
 you use Claude Code, and reconnect the agent.
 
-HTTP `403` means the GitHub identity is not admitted by this Chopin instance.
-HTTP `503` means Chopin could not verify admission; check the token's `read:org`
-or Members access, SSO authorization, and GitHub availability.
+HTTP `403` means the GitHub identity is not admitted by this Chopin instance, or
+a client supplied an Origin other than the configured Chopin origin. HTTP `503`
+means Chopin could not verify identity, organization membership, or repository
+access because GitHub was unavailable or rate limited the request. Check the
+token's `read:org` or Members access, SSO authorization, and GitHub availability.
 
-`repository-forbidden` means the identity authenticated but lacks the
-operation's repository permission. Pull access is enough for
+`repository-forbidden` means the supplied token cannot expose the repository or
+lacks the operation's repository permission; it does not mean the Chopin App
+must be installed. Pull access is enough for
 `list_documents`, `read_document`, and `read_implementation`. Push or admin
 access is required for create, start, and report lifecycle operations. Use an
 account with the required access or ask a repository owner to grant it.

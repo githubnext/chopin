@@ -1,10 +1,11 @@
 # Authentication
 
-Authentication covers the HTTP product, WebSocket admission, repository tools,
-and Copilot. A verified GitHub user supplies presence and attribution. Optional
-instance admission lists restrict who may use Chopin. The GitHub App
-installation then limits which repositories Chopin can see, and the user's own
-repository role limits what they can do inside Chopin.
+Authentication covers the HTTP product, WebSocket admission, local MCP,
+repository tools, and Copilot. A verified GitHub user supplies presence and
+attribution. Optional instance admission lists restrict who may use Chopin. The
+browser, WebSocket, and hosted Planner boundaries intersect the user's
+repository role with the GitHub App installation. Local MCP instead checks the
+repository role granted directly to its caller-supplied bearer token.
 
 ## GitHub App
 
@@ -97,8 +98,9 @@ Organization checks use the caller's token with
 has Members read access. Pending invitations and outside collaborators are not
 admitted, nor are billing managers who are not organization members.
 Public-membership lookup is not used. Organization admission does not restrict
-repository ownership; the existing App installation and repository role checks
-remain a separate boundary.
+repository ownership. Browser and hosted authorization retain separate App
+installation and repository role checks; local MCP checks the supplied token's
+repository role directly.
 
 Admission results are cached by a hash of the access token for 30 seconds.
 Browser requests, open-socket authorization, MCP requests, and agent permission
@@ -120,6 +122,12 @@ authorize the App without installing it. After sign-in, Chopin lists only the
 personal and organization installations that user can access and only the
 repositories selected for each installation. The repository picker links to
 the App installation page when access has not been installed or needs updating.
+
+Local MCP is an intentional exception to this installation boundary. Its bearer
+token is authenticated independently and authorized with a direct repository
+lookup. An MCP-created channel for a repository outside the App installation is
+not available through browser routes, WebSockets, or the hosted Planner until
+the installation includes that repository. See [Local agent MCP](local-agent-mcp.md).
 
 The authorization-code flow uses state, S256 PKCE, the exact configured callback,
 and the App client secret. It does not request OAuth scopes; permissions come

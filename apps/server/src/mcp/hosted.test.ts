@@ -63,6 +63,7 @@ function createdDocument(id: string) {
 
 class GitHubBoundary implements GitHub {
 	readonly userTokens: string[] = [];
+	readonly repositoryCalls: Array<{ token: string; owner: string; name: string }> = [];
 	accessible = true;
 	repositoryValue: Repository = {
 		id: "R_score",
@@ -109,16 +110,14 @@ class GitHubBoundary implements GitHub {
 		return this.repositories();
 	}
 
-	async repository(_token: string, owner: string, name: string): Promise<Repository> {
+	async repository(token: string, owner: string, name: string): Promise<Repository> {
+		this.repositoryCalls.push({ token, owner, name });
+		if (!this.accessible) throw new GitHubError("repository not found", 404);
 		return this.value(owner, name);
 	}
 
-	async repositoryAccess(
-		_token: string,
-		owner: string,
-		name: string,
-	): Promise<Repository | undefined> {
-		return this.accessible ? this.value(owner, name) : undefined;
+	async repositoryAccess(): Promise<Repository | undefined> {
+		throw new Error("installation-gated access must not be used by MCP");
 	}
 
 	invalidate(): void {}
@@ -261,6 +260,11 @@ describe("the hosted MCP adapter", () => {
 		if (listed === "forbidden") throw new Error("readable repository was forbidden");
 		expect(listed).toHaveLength(101);
 		expect(listed.map(document => document.title)).not.toContain("Foreign title");
+		expect(github.repositoryCalls).toContainEqual({
+			token: "allowed",
+			owner: "octo-org",
+			name: "score",
+		});
 
 		github.repositoryValue = {
 			...github.repositoryValue,
