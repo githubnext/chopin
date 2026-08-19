@@ -115,6 +115,17 @@ export function hosted(
 	auth: HostedAuth,
 	persistence?: ImplementationPersistence,
 ): McpOptions<HostedCaller> {
+	async function directRepository(caller: HostedCaller, owner: string, name: string) {
+		try {
+			return await auth.github.repository(caller.oauthToken, owner, name);
+		} catch (err) {
+			if (err instanceof GitHubError && (err.status === 403 || err.status === 404)) {
+				return undefined;
+			}
+			throw err;
+		}
+	}
+
 	function run(caller: HostedCaller, input: ImplementationInput): Run {
 		return {
 			id: crypto.randomUUID(),
@@ -147,11 +158,7 @@ export function hosted(
 			async list(caller, repository) {
 				let parts = repository.split("/");
 				if (parts.length !== 2 || !parts[0] || !parts[1]) return "forbidden";
-				let resolved = await auth.github.repositoryAccess(
-					caller.oauthToken,
-					parts[0],
-					parts[1],
-				);
+				let resolved = await directRepository(caller, parts[0], parts[1]);
 				if (!resolved?.permissions.pull) return "forbidden";
 
 				let documents = [];
@@ -169,8 +176,8 @@ export function hosted(
 			async read(caller, id) {
 				let channel = await auth.storage.channels.get(id);
 				if (!channel) return undefined;
-				let repository = await auth.github.repositoryAccess(
-					caller.oauthToken,
+				let repository = await directRepository(
+					caller,
 					channel.repositoryOwner,
 					channel.repositoryName,
 				);
@@ -220,11 +227,7 @@ export function hosted(
 			async create(caller, input) {
 				let parts = input.repository.split("/");
 				if (parts.length !== 2 || !parts[0] || !parts[1]) return { kind: "forbidden" };
-				let repository = await auth.github.repositoryAccess(
-					caller.oauthToken,
-					parts[0],
-					parts[1],
-				);
+				let repository = await directRepository(caller, parts[0], parts[1]);
 				if (!repository || (!repository.permissions.push && !repository.permissions.admin)) {
 					return { kind: "forbidden" };
 				}
@@ -292,8 +295,8 @@ export function hosted(
 					async readImplementation(caller: HostedCaller, id: string) {
 						let channel = await auth.storage.channels.get(id);
 						if (!channel) return undefined;
-						let repository = await auth.github.repositoryAccess(
-							caller.oauthToken,
+						let repository = await directRepository(
+							caller,
 							channel.repositoryOwner,
 							channel.repositoryName,
 						);
@@ -322,8 +325,8 @@ export function hosted(
 						) {
 							return { kind: "forbidden" as const };
 						}
-						let repository = await auth.github.repositoryAccess(
-							caller.oauthToken,
+						let repository = await directRepository(
+							caller,
 							channel.repositoryOwner,
 							channel.repositoryName,
 						);
@@ -375,8 +378,8 @@ export function hosted(
 					async reportLifecycle(caller: HostedCaller, input: LifecycleArguments) {
 						let channel = await auth.storage.channels.get(input.id);
 						if (!channel) return { kind: "forbidden" as const };
-						let repository = await auth.github.repositoryAccess(
-							caller.oauthToken,
+						let repository = await directRepository(
+							caller,
 							channel.repositoryOwner,
 							channel.repositoryName,
 						);

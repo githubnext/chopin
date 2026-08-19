@@ -90,6 +90,9 @@ export interface GitHub {
 		installationId: string,
 		page: number,
 	): Promise<RepositoryPage>;
+	/** Resolve the repository role granted directly to a bearer token. */
+	repository(token: string, owner: string, name: string): Promise<Repository>;
+	/** Resolve the repository role within this GitHub App's active installations. */
 	repositoryAccess(token: string, owner: string, name: string): Promise<Repository | undefined>;
 	invalidate(token: string): void;
 }
@@ -260,6 +263,24 @@ async function body(response: Response): Promise<unknown> {
 		return await response.json();
 	} catch {
 		throw new GitHubError("GitHub returned an unreadable response");
+	}
+}
+
+async function isRateLimited(response: Response): Promise<boolean> {
+	if (response.status === 429) return true;
+	if (response.status !== 403) return false;
+	if (
+		response.headers.get("x-ratelimit-remaining") === "0"
+		|| response.headers.has("retry-after")
+	) return true;
+	try {
+		let value = record(await response.clone().json());
+		return (typeof value?.message === "string"
+			&& /(rate limit|abuse detection)/i.test(value.message))
+			|| (typeof value?.documentation_url === "string"
+				&& /(rate-limits|rate_limit)/i.test(value.documentation_url));
+	} catch {
+		return false;
 	}
 }
 
@@ -437,6 +458,11 @@ export class GitHubClient implements GitHub {
 		};
 	}
 
+	async repository(token: string, owner: string, name: string): Promise<Repository> {
+		let path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
+		return repository(await this.#api(path, token));
+	}
+
 	async repositoryAccess(
 		token: string,
 		owner: string,
@@ -561,10 +587,12 @@ export class GitHubClient implements GitHub {
 			throw new GitHubError("GitHub API is unavailable");
 		}
 		if (!response.ok) {
-			let status = response.status === 401
-					|| response.status === 403
-					|| response.status === 404
-					|| response.status === 429
+			let rateLimited = await isRateLimited(response);
+			let status = rateLimited
+				? 429
+				: response.status === 401
+						|| response.status === 403
+						|| response.status === 404
 				? response.status
 				: 502;
 			throw new GitHubError("GitHub API rejected the request", status);

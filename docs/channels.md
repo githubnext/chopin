@@ -1,17 +1,22 @@
 # Repository channels
 
-Chopin keeps channel metadata in the selected storage adapter and uses
-GitHub as the current authorization source. An identity must first pass the
-instance's optional user or organization admission policy. A repository must
-then appear in the intersection of the authenticated user's access and a
-personal or organization GitHub App installation. The installation must include
-that repository. Merely being public is not enough to expose its Chopin
-channels.
+Chopin keeps channel metadata in the selected storage adapter and uses GitHub as
+the current authorization source. An identity must first pass the instance's
+optional user or organization admission policy. Browser routes, WebSockets, and
+the hosted Planner then require a repository to appear in the intersection of
+the authenticated user's access and a personal or organization GitHub App
+installation. The installation must include that repository. Merely being
+public is not enough to expose its Chopin channels through those surfaces.
 
 GitHub read access may list and open channels. Push or admin access may create a
 channel and mutate its plan, chat and decisions. The HTTP API and WebSocket
 upgrade both recheck those permissions; open sockets revalidate their
 session and repository access periodically.
+
+Local MCP checks the caller-supplied bearer token's repository permissions
+directly and does not require the Chopin App installation. A channel created
+through MCP remains unavailable to the browser, WebSockets, and hosted Planner
+until the installation includes its repository.
 
 ```text
 GET  /api/repositories/:owner/:repository/channels

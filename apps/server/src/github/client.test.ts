@@ -298,6 +298,97 @@ describe("the GitHub client", () => {
 			.toBeUndefined();
 	});
 
+	it("keeps direct bearer permissions separate from GitHub App installation access", async () => {
+		let requests: Array<{ path: string; authorization: string | null }> = [];
+		let client = new GitHubClient({
+			fetch: async (input, init) => {
+				let url = new URL(String(input));
+				requests.push({
+					path: url.pathname,
+					authorization: new Headers(init?.headers).get("authorization"),
+				});
+				if (url.pathname === "/user") {
+					return Response.json({
+						node_id: "U_octocat",
+						login: "octocat",
+						avatar_url: "avatar",
+					});
+				}
+				if (url.pathname === "/user/installations") {
+					return Response.json({ message: "GitHub App token required" }, { status: 403 });
+				}
+				return Response.json(repository("R_score"));
+			},
+			endpoints: { api: "https://api.test" },
+		});
+
+		expect((await client.user("gho_cli")).login).toBe("octocat");
+		try {
+			await client.repositoryAccess("gho_cli", "octo-org", "score");
+			expect.unreachable();
+		} catch (err) {
+			expect(err).toBeInstanceOf(GitHubError);
+			expect((err as GitHubError).status).toBe(403);
+		}
+		expect(await client.repository("gho_cli", "octo-org", "score")).toMatchObject({
+			id: "R_score",
+			permissions: { pull: true, push: true, admin: false },
+		});
+		expect(requests.map(request => request.path)).toEqual([
+			"/user",
+			"/user/installations",
+			"/repos/octo-org/score",
+		]);
+		expect(requests.every(request => request.authorization === "Bearer gho_cli")).toBe(true);
+	});
+
+	it("preserves provider statuses for direct repository checks", async () => {
+		for (let [provider, expected] of [[401, 401], [403, 403], [404, 404], [429, 429], [500, 502]]) {
+			let client = new GitHubClient({
+				fetch: async () => Response.json({ message: "denied" }, { status: provider }),
+				endpoints: { api: "https://api.test" },
+			});
+			try {
+				await client.repository("token", "octo-org", "score");
+				expect.unreachable();
+			} catch (err) {
+				expect(err).toBeInstanceOf(GitHubError);
+				expect((err as GitHubError).status).toBe(expected);
+			}
+		}
+
+		let rateLimited = new GitHubClient({
+			fetch: async () =>
+				Response.json({ message: "rate limited" }, {
+					status: 403,
+					headers: { "x-ratelimit-remaining": "0" },
+				}),
+			endpoints: { api: "https://api.test" },
+		});
+		try {
+			await rateLimited.repository("token", "octo-org", "score");
+			expect.unreachable();
+		} catch (err) {
+			expect(err).toBeInstanceOf(GitHubError);
+			expect((err as GitHubError).status).toBe(429);
+		}
+
+		let secondaryRateLimit = new GitHubClient({
+			fetch: async () =>
+				Response.json({
+					message: "You have exceeded a secondary rate limit.",
+				}, { status: 403 }),
+			endpoints: { api: "https://api.test" },
+		});
+		try {
+			await secondaryRateLimit.repository("token", "octo-org", "score");
+			expect.unreachable();
+		} catch (err) {
+			expect(err).toBeInstanceOf(GitHubError);
+			expect((err as GitHubError).status).toBe(429);
+		}
+	});
+
 	it("rejects malformed or unsuccessful provider responses", async () => {
 		let client = new GitHubClient({
 			fetch: async () => Response.json({ login: "missing id" }),

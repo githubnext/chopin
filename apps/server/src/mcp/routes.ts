@@ -9,8 +9,11 @@ import type { ImplementationPersistence } from "./hosted";
 
 function failure(err: unknown): Response {
 	if (err instanceof AdmissionDenied) return new Response("forbidden", { status: 403 });
-	if (err instanceof GitHubError && err.status === 503) {
-		return new Response("admission is temporarily unavailable", { status: 503 });
+	if (err instanceof GitHubError) {
+		if (err.status === 401) return new Response("unauthorized", { status: 401 });
+		if (err.status === 429 || err.status >= 500) {
+			return new Response("GitHub access is temporarily unavailable", { status: 503 });
+		}
 	}
 	return new Response("MCP request failed", { status: 500 });
 }

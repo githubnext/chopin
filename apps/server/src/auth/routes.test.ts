@@ -12,6 +12,7 @@ import type {
 	GitHubTokenGrant,
 	GitHubUser,
 	InstallationPage,
+	Repository,
 	RepositoryPage,
 } from "../github/client";
 
@@ -102,6 +103,10 @@ class FakeGitHub implements GitHub {
 			}],
 			nextPage: page + 1,
 		};
+	}
+
+	async repository(): Promise<Repository> {
+		throw new Error("not used by auth route tests");
 	}
 
 	async repositoryAccess(token: string, owner: string, name: string) {
