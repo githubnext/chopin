@@ -85,7 +85,24 @@ type DerivedRun =
 	| { phase: "revision_requested"; progress: Progress; reason: string }
 	| { phase: "implemented" | "delivered"; progress: Progress };
 
-type Refusal = { reason?: string };
+type ReducerContext = { tasks: Task[]; run: Run };
+type ReducerProgress = { tasks: TaskProgress[]; verification?: VerificationReport };
+type ReducerState =
+	| { phase: "active"; context: ReducerContext; progress: ReducerProgress }
+	| {
+		phase: "revision_requested";
+		context: ReducerContext;
+		progress: ReducerProgress;
+		reason: string;
+	}
+	| {
+		phase: "implemented" | "delivered";
+		context: ReducerContext;
+		progress: ReducerProgress;
+	};
+type Reduction =
+	| { kind: "accepted"; state: ReducerState }
+	| { kind: "refused"; reason: string };
 
 function copy<T>(value: T): T {
 	return structuredClone(value);
@@ -120,8 +137,12 @@ function activeVersion(graph: Graph, run: Run): Version | undefined {
 	return version?.state === "locked" && matches(run, version) ? version : undefined;
 }
 
-function initial(tasks: Task[]): Progress {
-	return { tasks: tasks.map(task => ({ id: task.id, state: "queued" })), events: [] };
+function initial(tasks: Task[], run: Run): ReducerState {
+	return {
+		phase: "active",
+		context: { tasks, run },
+		progress: { tasks: tasks.map(task => ({ id: task.id, state: "queued" })) },
+	};
 }
 
 function reportFrom(value: VerificationReport): VerificationReport {
@@ -175,165 +196,186 @@ function deliveryPhase(tasks: TaskProgress[]): "implemented" | "delivered" {
 		: "implemented";
 }
 
-function deriveRun(
-	tasks: Task[],
-	run: Run,
-	events: ProgressEvent[],
-	refusal?: Refusal,
-): DerivedRun | undefined {
-	let progress = initial(tasks);
-	let phase: "active" | "revision_requested" | "implemented" | "delivered" = "active";
-	let revisionReason: string | undefined;
-	let refuse = (reason: string): undefined => {
-		if (refusal) refusal.reason = reason;
-		return undefined;
-	};
+function accepted(state: ReducerState): Reduction {
+	return { kind: "accepted", state };
+}
 
-	for (let stored of events) {
-		if (phase === "revision_requested") return refuse("terminal");
-		if (phase === "implemented" || phase === "delivered") {
-			if (stored.kind !== "report_pr") return refuse("terminal");
-			let addressed = progress.tasks.find(task => task.id === stored.taskId);
+function refused(reason: string): Reduction {
+	return { kind: "refused", reason };
+}
+
+function reduceEvent(state: ReducerState, stored: ProgressEvent): Reduction {
+	let { run, tasks } = state.context;
+	let progress = state.progress;
+	if (state.phase === "revision_requested") return refused("terminal");
+	if (state.phase === "implemented" || state.phase === "delivered") {
+		if (stored.kind !== "report_pr") return refused("terminal");
+		let addressed = progress.tasks.find(task => task.id === stored.taskId);
+		if (
+			!addressed || addressed.state !== "completed"
+			|| addressed.pullRequest.url !== stored.url
+		) return refused("pull-request");
+		if (!ownPullRequest(run.repository, stored.url)) return refused("repository");
+		if (
+			progress.tasks.some(task =>
+				task.state === "completed"
+				&& task.pullRequest.url === stored.url
+				&& task.pullRequest.state === "merged"
+			)
+			&& stored.state !== "merged"
+		) return refused("pull-request-state");
+		let nextTasks = progress.tasks.map(task =>
+			task.state === "completed" && task.pullRequest.url === stored.url
+				? { ...task, pullRequest: { url: stored.url, state: stored.state } }
+				: task
+		);
+		return accepted({
+			phase: deliveryPhase(nextTasks),
+			context: state.context,
+			progress: { ...progress, tasks: nextTasks },
+		});
+	}
+
+	if (stored.kind === "request_revision") {
+		if (!text(stored.reason)) return refused("reason");
+		return accepted({
+			phase: "revision_requested",
+			context: state.context,
+			progress,
+			reason: stored.reason,
+		});
+	}
+
+	if (stored.kind === "report_verification") {
+		if (!validReport(stored, tasks)) return refused("verification");
+		for (let item of progress.tasks) {
+			if (item.state !== "completed") return refused("task-state");
+			if (item.pullRequest.state !== "open" && item.pullRequest.state !== "merged") {
+				return refused("pull-request");
+			}
+			if (!ownPullRequest(run.repository, item.pullRequest.url)) {
+				return refused("repository");
+			}
+		}
+		let verification = reportFrom(stored);
+		if (stored.passed) {
+			return accepted({
+				phase: deliveryPhase(progress.tasks),
+				context: state.context,
+				progress: { ...progress, verification },
+			});
+		}
+		let work = new Set(stored.tasksNeedingWork);
+		let nextTasks = progress.tasks.map(item =>
+			work.has(item.id) && item.state === "completed"
+				? {
+					id: item.id,
+					state: "in_progress" as const,
+					pullRequest: copy(item.pullRequest),
+				}
+				: item
+		);
+		return accepted({
+			phase: "active",
+			context: state.context,
+			progress: { ...progress, tasks: nextTasks, verification },
+		});
+	}
+
+	let index = progress.tasks.findIndex(item => item.id === stored.taskId);
+	let task = tasks[index];
+	let item = progress.tasks[index];
+	if (!task || !item) return refused("task");
+	let next: TaskProgress;
+	switch (stored.kind) {
+		case "start":
+			if (item.state !== "queued" && item.state !== "blocked") {
+				return refused("task-state");
+			}
 			if (
-				!addressed || addressed.state !== "completed"
-				|| addressed.pullRequest.url !== stored.url
-			) return refuse("pull-request");
-			if (!ownPullRequest(run.repository, stored.url)) return refuse("repository");
-			if (
-				progress.tasks.some(task =>
-					task.state === "completed"
-					&& task.pullRequest.url === stored.url
-					&& task.pullRequest.state === "merged"
+				task.dependsOn.some(id =>
+					progress.tasks.find(item => item.id === id)?.state !== "completed"
 				)
+			) return refused("dependency");
+			next = {
+				id: item.id,
+				state: "in_progress",
+				...(item.state === "blocked" && item.pullRequest
+					? { pullRequest: item.pullRequest }
+					: {}),
+			};
+			break;
+		case "block":
+			if (item.state !== "in_progress") return refused("task-state");
+			if (!text(stored.reason)) return refused("reason");
+			next = {
+				id: item.id,
+				state: "blocked",
+				blocker: stored.reason,
+				...(item.pullRequest ? { pullRequest: item.pullRequest } : {}),
+			};
+			break;
+		case "report_pr": {
+			if (item.state === "queued") return refused("task-state");
+			if (!text(stored.url) || !pullRequestState(stored.state)) {
+				return refused("pull-request");
+			}
+			if (!ownPullRequest(run.repository, stored.url)) return refused("repository");
+			let shared = progress.tasks.filter(task =>
+				"pullRequest" in task && task.pullRequest?.url === stored.url
+			);
+			if (
+				shared.some(task => "pullRequest" in task && task.pullRequest?.state === "merged")
 				&& stored.state !== "merged"
-			) return refuse("pull-request-state");
-			progress.tasks = progress.tasks.map(task =>
-				task.state === "completed" && task.pullRequest.url === stored.url
-					? { ...task, pullRequest: { url: stored.url, state: stored.state } }
-					: task
-			);
-			progress.events.push(copy(stored));
-			phase = deliveryPhase(progress.tasks);
-			continue;
+			) return refused("pull-request-state");
+			let pullRequest = { url: stored.url, state: stored.state };
+			next = { ...item, pullRequest };
+			break;
 		}
-
-		if (stored.kind === "request_revision") {
-			if (!text(stored.reason)) return refuse("reason");
-			progress.events.push(copy(stored));
-			phase = "revision_requested";
-			revisionReason = stored.reason;
-			continue;
-		}
-
-		if (stored.kind === "report_verification") {
-			if (!validReport(stored, tasks)) return refuse("verification");
-			for (let item of progress.tasks) {
-				if (item.state !== "completed") return refuse("task-state");
-				if (item.pullRequest.state !== "open" && item.pullRequest.state !== "merged") {
-					return refuse("pull-request");
-				}
-				if (!ownPullRequest(run.repository, item.pullRequest.url)) {
-					return refuse("repository");
-				}
-			}
-			progress.verification = reportFrom(stored);
-			progress.events.push(copy(stored));
-			if (stored.passed) {
-				phase = deliveryPhase(progress.tasks);
-				continue;
-			}
-			let work = new Set(stored.tasksNeedingWork);
-			progress.tasks = progress.tasks.map(item =>
-				work.has(item.id) && item.state === "completed"
-					? {
-						id: item.id,
-						state: "in_progress" as const,
-						pullRequest: copy(item.pullRequest),
-					}
-					: item
-			);
-			continue;
-		}
-
-		let index = progress.tasks.findIndex(item => item.id === stored.taskId);
-		let task = tasks[index];
-		let item = progress.tasks[index];
-		if (!task || !item) return refuse("task");
-		let next: TaskProgress;
-		switch (stored.kind) {
-			case "start":
-				if (item.state !== "queued" && item.state !== "blocked") {
-					return refuse("task-state");
-				}
-				if (
-					task.dependsOn.some(id =>
-						progress.tasks.find(item => item.id === id)?.state !== "completed"
-					)
-				) return refuse("dependency");
-				next = {
-					id: item.id,
-					state: "in_progress",
-					...(item.state === "blocked" && item.pullRequest
-						? { pullRequest: item.pullRequest }
-						: {}),
-				};
-				break;
-			case "block":
-				if (item.state !== "in_progress") return refuse("task-state");
-				if (!text(stored.reason)) return refuse("reason");
-				next = {
-					id: item.id,
-					state: "blocked",
-					blocker: stored.reason,
-					...(item.pullRequest ? { pullRequest: item.pullRequest } : {}),
-				};
-				break;
-			case "report_pr": {
-				if (item.state === "queued") return refuse("task-state");
-				if (!text(stored.url) || !pullRequestState(stored.state)) {
-					return refuse("pull-request");
-				}
-				if (!ownPullRequest(run.repository, stored.url)) return refuse("repository");
-				let shared = progress.tasks.filter(task =>
-					"pullRequest" in task && task.pullRequest?.url === stored.url
-				);
-				if (
-					shared.some(task => "pullRequest" in task && task.pullRequest?.state === "merged")
-					&& stored.state !== "merged"
-				) return refuse("pull-request-state");
-				let pullRequest = { url: stored.url, state: stored.state };
-				next = { ...item, pullRequest };
-				if (stored.state === "merged") {
-					progress.tasks = progress.tasks.map(task =>
-						"pullRequest" in task && task.pullRequest?.url === stored.url
-							? { ...task, pullRequest }
-							: task
-					);
-				}
-				break;
-			}
-			case "complete":
-				if (item.state !== "in_progress") return refuse("task-state");
-				if (!item.pullRequest) return refuse("pull-request");
-				if (!text(stored.summary)) return refuse("summary");
-				next = {
-					id: item.id,
-					state: "completed",
-					summary: stored.summary,
-					pullRequest: item.pullRequest,
-				};
-				break;
-		}
-		progress.tasks[index] = next;
-		progress.events.push(copy(stored));
+		case "complete":
+			if (item.state !== "in_progress") return refused("task-state");
+			if (!item.pullRequest) return refused("pull-request");
+			if (!text(stored.summary)) return refused("summary");
+			next = {
+				id: item.id,
+				state: "completed",
+				summary: stored.summary,
+				pullRequest: item.pullRequest,
+			};
+			break;
 	}
+	let nextTasks = progress.tasks.map((task, taskIndex) => {
+		if (taskIndex === index) return next;
+		return stored.kind === "report_pr" && stored.state === "merged"
+				&& "pullRequest" in task && task.pullRequest?.url === stored.url
+			? { ...task, pullRequest: { url: stored.url, state: stored.state } }
+			: task;
+	});
+	return accepted({
+		phase: "active",
+		context: state.context,
+		progress: { ...progress, tasks: nextTasks },
+	});
+}
 
-	if (phase === "revision_requested") {
-		return revisionReason
-			? { phase, progress, reason: revisionReason }
-			: refuse("terminal");
+function foldRun(tasks: Task[], run: Run, events: ProgressEvent[]): Reduction {
+	let state = initial(tasks, run);
+	for (let stored of events) {
+		let result = reduceEvent(state, stored);
+		if (result.kind === "refused") return result;
+		state = result.state;
 	}
-	return { phase, progress };
+	return accepted(state);
+}
+
+function projectRun(state: ReducerState, events: ProgressEvent[]): DerivedRun {
+	let progress: Progress = {
+		...copy(state.progress),
+		events: copy(events),
+	};
+	return state.phase === "revision_requested"
+		? { phase: state.phase, progress, reason: state.reason }
+		: { phase: state.phase, progress };
 }
 
 function evidence(value: unknown): VerificationEvidence[] | undefined {
@@ -450,9 +492,11 @@ function projectHistory(graph: Graph, history: ArchivedRun[]): HistoricalRun[] |
 	let projected: HistoricalRun[] = [];
 	for (let archived of history) {
 		let version = versionFor(graph, archived.run);
-		let derived = version
-			&& deriveRun(version.definition.tasks, archived.run, archived.events);
-		if (!derived || derived.phase === "active") return undefined;
+		if (!version) return undefined;
+		let folded = foldRun(version.definition.tasks, archived.run, archived.events);
+		if (folded.kind === "refused") return undefined;
+		let derived = projectRun(folded.state, archived.events);
+		if (derived.phase === "active") return undefined;
 		let outcome: HistoricalRun["outcome"] = derived.phase === "revision_requested"
 			? { kind: derived.phase, reason: derived.reason }
 			: { kind: derived.phase };
@@ -465,22 +509,34 @@ function projectHistory(graph: Graph, history: ArchivedRun[]): HistoricalRun[] |
 	return projected;
 }
 
+function eligibility(
+	history: Array<{ run: Run; successful: boolean }>,
+	version: Version,
+	runId: string,
+): ClaimEligibility {
+	if (history.some(item => item.successful && matches(item.run, version))) {
+		return { ok: false, reason: "already-verified" };
+	}
+	if (history.some(item => item.run.id === runId)) return { ok: false, reason: "run" };
+	return { ok: true };
+}
+
 /** Decide whether a run may own this exact graph without reusing lifecycle identity. */
 export function claimEligibility(
 	lifecycle: Lifecycle,
 	version: Version,
 	runId: string,
 ): ClaimEligibility {
-	let verified = lifecycle.history.some(archived => {
-		if (!matches(archived.run, version)) return false;
-		let derived = deriveRun(version.definition.tasks, archived.run, archived.events);
-		return derived?.phase === "implemented" || derived?.phase === "delivered";
+	let history = lifecycle.history.map(archived => {
+		if (!matches(archived.run, version)) return { run: archived.run, successful: false };
+		let folded = foldRun(version.definition.tasks, archived.run, archived.events);
+		return {
+			run: archived.run,
+			successful: folded.kind === "accepted"
+				&& (folded.state.phase === "implemented" || folded.state.phase === "delivered"),
+		};
 	});
-	if (verified) return { ok: false, reason: "already-verified" };
-	if (lifecycle.history.some(archived => archived.run.id === runId)) {
-		return { ok: false, reason: "run" };
-	}
-	return { ok: true };
+	return eligibility(history, version, runId);
 }
 
 /** Restore lifecycle data only when it describes this graph and claim exactly. */
@@ -505,9 +561,17 @@ export function restoreLifecycle(
 	if (execution) {
 		let version = activeVersion(graph, execution);
 		if (!version) return undefined;
-		let derived = deriveRun(version.definition.tasks, execution, events ?? []);
-		if (!derived || derived.phase !== "active") return undefined;
-		if (!claimEligibility({ ...(events ? { events } : {}), history }, version, execution.id).ok) {
+		let folded = foldRun(version.definition.tasks, execution, events ?? []);
+		if (folded.kind === "refused" || folded.state.phase !== "active") return undefined;
+		let eligible = eligibility(
+			projected.map(item => ({
+				run: item.run,
+				successful: item.outcome.kind !== "revision_requested",
+			})),
+			version,
+			execution.id,
+		);
+		if (!eligible.ok) {
 			return undefined;
 		}
 	}
@@ -659,20 +723,20 @@ export function transition(state: LifecycleState, input: LifecycleInput): Lifecy
 		if (input.kind !== "report_pr") return { kind: "refused", reason: "inactive" };
 		let archived = state.lifecycle.history[archivedIndex]!;
 		let version = versionFor(state.graph, archived.run);
-		let refusal: Refusal = {};
-		let derived = version && deriveRun(
-			version.definition.tasks,
-			archived.run,
-			[...archived.events, event(input)],
-			refusal,
-		);
-		if (!derived || derived.phase === "active" || derived.phase === "revision_requested") {
-			return { kind: "refused", reason: refusal.reason ?? "inactive" };
+		if (!version) return { kind: "refused", reason: "inactive" };
+		let folded = foldRun(version.definition.tasks, archived.run, archived.events);
+		if (folded.kind === "refused") return folded;
+		let stored = event(input);
+		let reduced = reduceEvent(folded.state, stored);
+		if (reduced.kind === "refused") return reduced;
+		if (reduced.state.phase === "active" || reduced.state.phase === "revision_requested") {
+			return { kind: "refused", reason: "inactive" };
 		}
+		let events = [...archived.events, stored];
 		let next = copy(state);
 		next.lifecycle.history[archivedIndex] = {
 			run: copy(archived.run),
-			events: copy(derived.progress.events),
+			events: copy(events),
 		};
 		return { kind: "accepted", state: next };
 	}
@@ -682,29 +746,26 @@ export function transition(state: LifecycleState, input: LifecycleInput): Lifecy
 	if (!run || input.runId !== run.id || !version) {
 		return { kind: "refused", reason: "run" };
 	}
-	let existing = deriveRun(version.definition.tasks, run, state.lifecycle.events ?? []);
-	if (!existing || existing.phase !== "active") {
+	let existingEvents = state.lifecycle.events ?? [];
+	let folded = foldRun(version.definition.tasks, run, existingEvents);
+	if (folded.kind === "refused" || folded.state.phase !== "active") {
 		return { kind: "refused", reason: "invalid-lifecycle" };
 	}
-	let refusal: Refusal = {};
-	let derived = deriveRun(
-		version.definition.tasks,
-		run,
-		[...existing.progress.events, event(input)],
-		refusal,
-	);
-	if (!derived) return { kind: "refused", reason: refusal.reason ?? "event" };
-	if (derived.phase !== "active") {
+	let stored = event(input);
+	let reduced = reduceEvent(folded.state, stored);
+	if (reduced.kind === "refused") return reduced;
+	let events = [...existingEvents, stored];
+	if (reduced.state.phase !== "active") {
 		return {
 			kind: "accepted",
-			state: released(state, run, derived.progress.events),
+			state: released(state, run, events),
 		};
 	}
 	return {
 		kind: "accepted",
 		state: {
 			...state,
-			lifecycle: { ...state.lifecycle, events: copy(derived.progress.events) },
+			lifecycle: { ...state.lifecycle, events: copy(events) },
 		},
 	};
 }
@@ -717,9 +778,11 @@ export function progressFor(
 ): Progress | undefined {
 	if (!execution) return undefined;
 	let version = activeVersion(graph, execution);
-	let derived = version
-		&& deriveRun(version.definition.tasks, execution, lifecycle.events ?? []);
-	return derived?.phase === "active" ? copy(derived.progress) : undefined;
+	if (!version) return undefined;
+	let events = lifecycle.events ?? [];
+	let folded = foldRun(version.definition.tasks, execution, events);
+	if (folded.kind === "refused" || folded.state.phase !== "active") return undefined;
+	return projectRun(folded.state, events).progress;
 }
 
 /** Project archived event logs against the graph versions they implemented. */
