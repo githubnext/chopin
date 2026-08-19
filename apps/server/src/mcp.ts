@@ -34,7 +34,7 @@ export type Document = DocumentSummary & {
 };
 
 export type DocumentReader<Caller> = {
-	list(caller: Caller, repository: string): Promise<DocumentSummary[]>;
+	list(caller: Caller, repository: string): Promise<DocumentSummary[] | "forbidden">;
 	read(caller: Caller, id: string): Promise<Document | undefined>;
 };
 
@@ -500,9 +500,10 @@ export function handler<Caller>(
 							? undefined
 							: error(call.id, -32602, "list_documents requires a repository");
 					}
-					return respond(
-						text({ documents: await options.documents.list(caller, tool.arguments.repository) }),
-					);
+					let documents = await options.documents.list(caller, tool.arguments.repository);
+					return documents === "forbidden"
+						? respond(text({ code: "repository-forbidden" }, true))
+						: respond(text({ documents }));
 				}
 				if (tool.name === "read_document") {
 					if (Object.keys(tool.arguments).length !== 1 || !isId(tool.arguments.id)) {

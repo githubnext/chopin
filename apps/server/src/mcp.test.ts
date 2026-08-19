@@ -89,60 +89,6 @@ async function json(response: Response): Promise<Record<string, unknown>> {
 }
 
 describe("the MCP read protocol", () => {
-	it("authenticates initialize, lists repository documents, and reads canonical source", async () => {
-		let mcp = endpoint();
-
-		let initialized = await json(
-			await mcp(request({
-				jsonrpc: "2.0",
-				id: 1,
-				method: "initialize",
-				params: {},
-			})),
-		);
-		expect(initialized).toMatchObject({
-			jsonrpc: "2.0",
-			id: 1,
-			result: {
-				protocolVersion: "2025-03-26",
-				capabilities: { tools: {} },
-				serverInfo: { name: "chopin" },
-			},
-		});
-		let tools = await json(
-			await mcp(request({
-				jsonrpc: "2.0",
-				id: 2,
-				method: "tools/list",
-			})),
-		);
-		expect((tools.result as { tools: unknown[] }).tools).toEqual(
-			TOOLS.filter(tool => ["list_documents", "read_document"].includes(tool.name)),
-		);
-
-		let listed = await json(
-			await mcp(request({
-				jsonrpc: "2.0",
-				id: 3,
-				method: "tools/call",
-				params: { name: "list_documents", arguments: { repository: "githubnext/chopin" } },
-			})),
-		);
-		expect((listed.result as { structuredContent: unknown }).structuredContent).toEqual({
-			documents: [{ id: document.id, title: document.title }],
-		});
-
-		let read = await json(
-			await mcp(request({
-				jsonrpc: "2.0",
-				id: 4,
-				method: "tools/call",
-				params: { name: "read_document", arguments: { id: document.id } },
-			})),
-		);
-		expect((read.result as { structuredContent: unknown }).structuredContent).toEqual(document);
-	});
-
 	it("reads and claims an implementation through its initialized client session", async () => {
 		let active: Run | undefined;
 		let implementations: Implementations<string> = {

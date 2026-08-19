@@ -146,13 +146,13 @@ export function hosted(
 		documents: {
 			async list(caller, repository) {
 				let parts = repository.split("/");
-				if (parts.length !== 2 || !parts[0] || !parts[1]) return [];
+				if (parts.length !== 2 || !parts[0] || !parts[1]) return "forbidden";
 				let resolved = await auth.github.repositoryAccess(
 					caller.oauthToken,
 					parts[0],
 					parts[1],
 				);
-				if (!resolved?.permissions.pull) return [];
+				if (!resolved?.permissions.pull) return "forbidden";
 
 				let documents = [];
 				let cursor;
