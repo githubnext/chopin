@@ -266,10 +266,6 @@ export function PlanEditor(
 		],
 	);
 
-	// Adjusting state during render, per React's guidance for state that must
-	// reset when a prop changes: comparing against a ref here (rather than in
-	// an Effect) avoids the extra render an Effect-driven reset would cause,
-	// and it cannot be skipped by Strict Mode's double-invoked Effects.
 	if (previousWire.current !== wire) {
 		previousWire.current = wire;
 		setState({ synced: false });
