@@ -22,11 +22,13 @@
 ### Task 1: Publish canonical MCP instructions
 
 **Files:**
+
 - Modify: `apps/server/src/mcp/lifecycle.ts`
 - Modify: `apps/server/src/mcp.ts`
 - Test: `skills/implementing-chopin-plans/contract.test.ts`
 
 **Interfaces:**
+
 - Consumes: `TOOLS` and `LIFECYCLE_TOOLS` public tool descriptors.
 - Produces: an MCP initialize `instructions` string derived from advertised implementation tools.
 
@@ -58,10 +60,12 @@ Expected: PASS.
 ### Task 2: Reduce and verify the portable skill
 
 **Files:**
+
 - Modify: `skills/implementing-chopin-plans/SKILL.md`
 - Modify: `skills/implementing-chopin-plans/prompt.md`
 
 **Interfaces:**
+
 - Consumes: MCP initialize instructions and current tool descriptions.
 - Produces: provider-neutral local implementation guidance without a copied lifecycle contract.
 

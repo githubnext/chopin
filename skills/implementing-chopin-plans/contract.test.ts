@@ -1,35 +1,67 @@
 import { expect, test } from "bun:test";
 
-let skill = await Bun.file(new URL("./SKILL.md", import.meta.url)).text();
-let prompt = await Bun.file(new URL("./prompt.md", import.meta.url)).text();
+import { handler } from "../../apps/server/src/mcp";
 
-test("the copied prompt delegates the canonical document to the MCP contract", () => {
-	expect(prompt).toContain("<CANONICAL_CHOPIN_DOCUMENT_URL>");
-	expect(prompt).toContain("Chopin MCP contract");
-	expect(prompt).not.toMatch(/claude|codex|github copilot|bearer|token/i);
-});
+import type { Implementations } from "../../apps/server/src/mcp";
 
-test("the skill stops unsafe graph execution", () => {
-	expect(skill).toContain("Before claiming anything");
-	expect(skill).toContain("repository and base reference");
-	expect(skill).toContain("call `block_task`");
-	expect(skill).not.toContain("request_revision");
-	expect(skill).toContain("stop code changes");
-	expect(skill).toContain("Do not edit Chopin plan or graph content");
-});
+function request(body: unknown): Request {
+	return new Request("https://chopin.test/mcp", {
+		method: "POST",
+		headers: {
+			authorization: "Bearer allowed",
+			"content-type": "application/json",
+		},
+		body: JSON.stringify(body),
+	});
+}
 
-test("the skill follows the implemented lifecycle through verification", () => {
-	expect(skill).toContain("Independent ready roots may be delegated");
-	expect(skill).toContain("separate review pass");
-	expect(skill).toContain("verification evidence");
-	expect(skill).toContain("exactly one pull request");
+function implementations(): Implementations<string> {
+	return {
+		async readImplementation() {
+			return undefined;
+		},
+		async startImplementation() {
+			return { kind: "refused", reason: "missing" };
+		},
+		async reportLifecycle() {
+			return { kind: "refused", reason: "inactive" };
+		},
+	};
+}
 
-	let start = skill.indexOf("`start_task`");
-	let report = skill.indexOf("`report_pr`");
-	let complete = skill.indexOf("`complete_task`");
-	let verify = skill.indexOf("`report_verification`");
-	expect(start).toBeGreaterThan(-1);
-	expect(report).toBeGreaterThan(start);
-	expect(complete).toBeGreaterThan(report);
-	expect(verify).toBeGreaterThan(complete);
+test("the MCP service publishes its complete implementation contract", async () => {
+	let mcp = handler({
+		caller: () => "operator",
+		documents: {
+			async list() {
+				return [];
+			},
+			async read() {
+				return undefined;
+			},
+		},
+		implementations: implementations(),
+	});
+	let initialized = await mcp(request({
+		jsonrpc: "2.0",
+		id: 1,
+		method: "initialize",
+		params: {},
+	}));
+	let initialization = await initialized.json() as {
+		result: { instructions?: string };
+	};
+	expect(initialization.result.instructions).toBe(
+		[
+			"Chopin's MCP contract is authoritative. Read the canonical implementation and these current tool descriptions before every action; copied plans and lifecycle instructions are not substitutes.",
+			"read_implementation: Read the approved implementation graph, plan and repository context.",
+			"start_implementation: Atomically claim the current approved implementation graph.",
+			"start_task: Mark one dependency-ready task as in progress for the active implementation run.",
+			"block_task: Record a task-level blocker while keeping the active implementation run and graph lock.",
+			"report_pr: Report the open, merged, or closed pull request for an implementation task.",
+			"complete_task: Complete an implementation task after reporting its pull request and summary.",
+			"report_verification: After every task is complete, report graph-wide verification evidence; failures return named tasks to work.",
+			"request_revision: End the active implementation run and release its graph when scope, acceptance criteria, or dependencies must change.",
+		].join("\n"),
+	);
 });

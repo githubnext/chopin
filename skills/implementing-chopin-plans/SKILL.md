@@ -5,45 +5,38 @@ description: Use when implementing an approved Chopin task graph through its MCP
 
 # Implementing Chopin plans
 
-Chopin's MCP contract is authoritative. This skill supplies local work habits without changing the approved graph.
+Chopin's MCP initialize instructions and current tool descriptions are authoritative. This skill adds local work practices; it does not restate the lifecycle.
 
 ## Claim the canonical graph
 
-1. Resolve the supplied canonical document URL through the Chopin MCP server. Call `read_implementation` and read the graph, acceptance criteria, dependencies, repository context, current revisions, and service instructions.
-2. Before claiming anything, compare the graph's repository and base reference with the local checkout. Inspect the repository identity, branch, remotes, and requested base ref.
-3. If they differ, surface the mismatch to the operator and stop before claiming or changing code.
-4. Call `start_implementation` with the current revisions and checkout context. Re-read the returned state and begin only when the claim succeeds.
+1. Resolve the supplied canonical document URL through Chopin MCP and call `read_implementation`.
+2. Read the returned graph, acceptance criteria, dependencies, repository context, revisions, lifecycle state, MCP initialize instructions, and current tool descriptions. Copied plans and remembered command sequences are not substitutes.
+3. Compare the graph's repository, base branch, and base commit with the local checkout. Inspect repository identity, branch, remotes, commit, and working tree before claiming or editing.
+4. If the checkout does not match, surface the mismatch and stop.
+5. Call `start_implementation` with the returned revisions and current checkout context. Begin only when the claim succeeds, and retain the returned run identity for later calls.
 
-Use the canonical document throughout; copied plans and stale task lists are not substitutes.
+## Execute ready work
 
-## Execute dependency-ready tasks
+Re-read the implementation before every lifecycle action, then follow the service instructions for the current state.
 
-Work only on tasks whose dependencies are complete. Independent ready roots may be delegated when the runtime supports it, but the owning agent remains responsible for MCP reports, review, verification evidence, and one PR per task.
-
-For each task:
-
-1. Refresh `read_implementation`, then read the task and acceptance criteria.
-2. Call `start_task`; begin only when it accepts the task.
-3. Make only the required changes. Do not edit Chopin plan or graph content or start another top-level agent CLI session.
-4. When the graph must change or work cannot continue, call `block_task` with the cause and what is needed, then stop code changes for that task.
-5. Perform a separate review pass after implementation. Prefer a fresh reviewer sub-agent; otherwise review independently after stepping away. Resolve in-scope findings and run focused checks.
-6. Create exactly one pull request. Call `report_pr` before `complete_task`; include the implementation summary when completing. Both reports must succeed.
+- Work only on tasks whose dependencies are complete. Independent ready roots may be delegated when the runtime supports it; the owning agent remains responsible for MCP reporting, review, verification evidence, and one pull request per task.
+- Make only the required changes. Do not edit Chopin plan or graph content or start another top-level agent CLI session.
+- Stop code changes whenever the service requires a blocker or graph release. Explain what must change and wait for the next valid lifecycle state.
+- Perform a separate review pass after implementation. Prefer a fresh reviewer sub-agent; otherwise review independently after stepping away. Resolve in-scope findings and run focused checks.
+- Create exactly one pull request per task. Update that pull request if later verification returns the task to work.
 
 ## Verify the graph
 
-After every task is complete, perform an independent verification pass over the whole graph. Run all relevant checks and capture command names, outcomes, and limitations as verification evidence for every task.
-
-Call `report_verification` with the reviewer method, evidence, summary, and any tasks needing work. A failed report returns those tasks to work: re-read the implementation, update their existing PRs, complete them again, and repeat verification. Only an accepted passing report releases the implementation.
+After every task is complete, perform an independent whole-graph verification. Run all relevant checks and capture command names, outcomes, and limitations as evidence for every task. Submit that evidence through the current service contract and follow the returned lifecycle state; only an accepted passing result releases a successful implementation.
 
 ## Boundaries
 
-| Situation                                  | Required response                     |
-| ------------------------------------------ | ------------------------------------- |
-| MCP instructions conflict with this skill  | Follow MCP instructions.              |
-| Repository or base ref differs             | Surface it and stop before claiming.  |
-| Scope, criteria, or dependencies must move | Call `block_task` and stop that task. |
-| A dependency is incomplete                 | Leave the task waiting.               |
-| A task has no PR                           | Do not call `complete_task`.          |
-| Any task lacks verification evidence       | Do not pass `report_verification`.    |
+| Situation                                  | Required response                         |
+| ------------------------------------------ | ----------------------------------------- |
+| MCP instructions conflict with this skill  | Follow current MCP instructions.          |
+| Repository or base ref differs             | Stop before claiming or changing code.    |
+| Scope, criteria, or dependencies must move | Follow graph-release guidance; stop code. |
+| A dependency is incomplete                 | Leave the task waiting.                   |
+| Verification evidence is incomplete        | Do not report a passing result.           |
 
 Keep this provider-neutral Agent Skills directory intact when installing it in the shared skill location supported by the local runtime.

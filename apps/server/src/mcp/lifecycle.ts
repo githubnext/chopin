@@ -79,7 +79,8 @@ const definitions = {
 		},
 	},
 	block_task: {
-		description: "Record a visible blocker for an in-progress implementation task.",
+		description:
+			"Record a task-level blocker while keeping the active implementation run and graph lock.",
 		properties: { id: ID, runId: ID, taskId: TASK, reason: TEXT, idempotencyKey: KEY },
 		required: ["id", "runId", "taskId", "reason", "idempotencyKey"],
 		parse(value, required) {
@@ -109,7 +110,7 @@ const definitions = {
 		},
 	},
 	complete_task: {
-		description: "Complete an implementation task with its pull request and summary.",
+		description: "Complete an implementation task after reporting its pull request and summary.",
 		properties: { id: ID, runId: ID, taskId: TASK, summary: TEXT, idempotencyKey: KEY },
 		required: ["id", "runId", "taskId", "summary", "idempotencyKey"],
 		parse(value, required) {
@@ -119,7 +120,8 @@ const definitions = {
 		},
 	},
 	report_verification: {
-		description: "Report implementation verification evidence for every task in the active run.",
+		description:
+			"After every task is complete, report graph-wide verification evidence; failures return named tasks to work.",
 		properties: {
 			id: ID,
 			runId: ID,
@@ -177,7 +179,8 @@ const definitions = {
 		},
 	},
 	request_revision: {
-		description: "End the active implementation run and release its graph for revision.",
+		description:
+			"End the active implementation run and release its graph when scope, acceptance criteria, or dependencies must change.",
 		properties: { id: ID, runId: ID, reason: TEXT, idempotencyKey: KEY },
 		required: ["id", "runId", "reason", "idempotencyKey"],
 		parse(value, required) {
