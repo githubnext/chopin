@@ -53,7 +53,8 @@ test("the MCP service publishes its complete implementation contract", async () 
 	};
 	expect(initialization.result.instructions).toBe(
 		[
-			"Chopin's MCP contract is authoritative. Read the canonical implementation and these current tool descriptions before every action; copied plans and lifecycle instructions are not substitutes.",
+			"Chopin's MCP contract and current tool descriptions are authoritative.",
+			"Read the canonical implementation before every implementation or lifecycle action; copied plans and lifecycle instructions are not substitutes.",
 			"read_implementation: Read the approved implementation graph, plan and repository context.",
 			"start_implementation: Atomically claim the current approved implementation graph.",
 			"start_task: Mark one dependency-ready task as in progress for the active implementation run.",
