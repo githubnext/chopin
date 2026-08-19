@@ -1,7 +1,7 @@
 /** The hosted persistence boundary for implementation graphs. */
 
 import { claim, Graphs } from "./graphs";
-import { progressFor, transition, verified } from "./lifecycle";
+import { historyFor, progressFor, transition, verified } from "./lifecycle";
 import * as Comments from "../comments/service";
 import { drain, exclusive, persistExclusive } from "../plan/service";
 import { broadcast } from "../wire";
@@ -106,7 +106,7 @@ export function reportImplementationLifecycle(
 			ts: 0,
 			execution: plan.execution ? { state: "active" } : { state: "idle" },
 			activity: progressFor(plan.graph, plan.lifecycle, plan.execution),
-			history: plan.lifecycle.history.length,
+			history: historyFor(plan.graph, plan.lifecycle),
 		});
 		return result;
 	});

@@ -131,7 +131,15 @@ const IMPLEMENTATION = {
 		branch: { type: "string", minLength: 1, maxLength: 255 },
 		commit: { type: "string", minLength: 1, maxLength: 64 },
 	},
-	required: ["id", "planRevision", "graphVersion", "graphRevision", "repository", "branch", "commit"],
+	required: [
+		"id",
+		"planRevision",
+		"graphVersion",
+		"graphRevision",
+		"repository",
+		"branch",
+		"commit",
+	],
 	additionalProperties: false,
 };
 
@@ -296,7 +304,15 @@ function toolCall(
 type StartArguments = Omit<ImplementationInput, "client">;
 
 function startArguments(value: Record<string, unknown>): StartArguments | undefined {
-	let expected = ["id", "planRevision", "graphVersion", "graphRevision", "repository", "branch", "commit"];
+	let expected = [
+		"id",
+		"planRevision",
+		"graphVersion",
+		"graphRevision",
+		"repository",
+		"branch",
+		"commit",
+	];
 	if (
 		Object.keys(value).length !== expected.length
 		|| expected.some(key => !Object.hasOwn(value, key))

@@ -313,9 +313,7 @@ export function restoreRunVersion(value: unknown, graph: Graph): Run | undefined
 	let restored = run(value);
 	if (
 		!restored
-		|| !graph.versions.some(version =>
-			matches(restored, version)
-		)
+		|| !graph.versions.some(version => matches(restored, version))
 	) return undefined;
 	return copy(restored);
 }

@@ -291,16 +291,46 @@ export declare namespace Plan {
 	/** Durable implementation activity, published only after persistence. */
 	export type Lifecycle = KIND<"plan:lifecycle"> & {
 		execution: { state: "idle" | "active" };
-		activity?: {
-			tasks: Array<{
+		activity?: ImplementationProgress;
+		history: Array<{
+			run: {
 				id: string;
-				state: "queued" | "in_progress" | "blocked" | "completed";
-				blocker?: string;
-				summary?: string;
-				pullRequest?: { url: string; state: "open" | "merged" | "closed" };
-			}>;
-			events: Array<{ idempotencyKey: string; kind: string }>;
-		};
-		history: number;
+				user: string;
+				client: { name: string; version: string };
+				session: string;
+				planRevision: number;
+				graphVersion: number;
+				graphRevision: number;
+				repository: string;
+				branch: string;
+				commit: string;
+				startedAt: string;
+			};
+			progress: ImplementationProgress;
+			outcome:
+				| { kind: "revision_requested"; reason: string }
+				| { kind: "implemented" }
+				| { kind: "delivered" };
+		}>;
+	};
+
+	export type Verification = {
+		passed: boolean;
+		summary: string;
+		reviewerMethod: string;
+		evidence: Array<{ taskId: string; evidence: string[] }>;
+		tasksNeedingWork: string[];
+	};
+
+	export type ImplementationProgress = {
+		tasks: Array<{
+			id: string;
+			state: "queued" | "in_progress" | "blocked" | "completed";
+			blocker?: string;
+			summary?: string;
+			pullRequest?: { url: string; state: "open" | "merged" | "closed" };
+		}>;
+		events: Array<{ idempotencyKey: string; kind: string }>;
+		verification?: Verification;
 	};
 }
