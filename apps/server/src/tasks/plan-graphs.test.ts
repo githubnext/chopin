@@ -241,6 +241,7 @@ describe("the plan graph adapter", () => {
 		expect(
 			await report(plan, {
 				kind: "start",
+				runId: "run-1",
 				taskId: "model",
 				idempotencyKey: "start-model",
 			}),
