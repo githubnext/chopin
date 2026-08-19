@@ -87,6 +87,16 @@ describe("hosted Copilot configuration", () => {
 			} as PermissionRequest, { sessionId: "s" }),
 		).toMatchObject({ kind: "reject" });
 		expect(
+			await decide({
+				kind: "mcp",
+				serverName: "github",
+				readOnly: true,
+				toolName: "get_pull_request",
+				toolTitle: "Pull request",
+				args: "octo-org/score",
+			} as PermissionRequest, { sessionId: "s" }),
+		).toMatchObject({ kind: "reject" });
+		expect(
 			await decide({ kind: "read", path: "/etc/passwd", intention: "read" } as PermissionRequest, {
 				sessionId: "s",
 			}),

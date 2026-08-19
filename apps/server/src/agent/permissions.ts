@@ -35,8 +35,11 @@ export function gate(options: GateOptions): PermissionHandler {
 			if (request.serverName !== "github" || !request.readOnly) {
 				return deny("Only read-only GitHub MCP calls are available.");
 			}
-			let owner = request.args?.owner;
-			let repository = request.args?.repo;
+			let args = request.args && typeof request.args === "object" && !Array.isArray(request.args)
+				? request.args
+				: undefined;
+			let owner = args?.owner;
+			let repository = args?.repo;
 			let tool = request.toolName.toLowerCase();
 			let unsafe = tool.includes("search") || tool.includes("issue")
 				|| hasForeignScope(request.args, options.owner, options.repository);
