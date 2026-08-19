@@ -40,13 +40,31 @@ async function injectChatHistory(
 async function scriptPlanner(page: Page) {
 	let started = Promise.withResolvers<void>();
 	let send: ((frame: Record<string, unknown>) => void) | undefined;
+	let sends: { text: string; to: Chat.Destination }[] = [];
 	let turn = 0;
+	let busy = false;
+	let queued: Chat.Waiting[] = [];
 	let active = () => ({
 		id: `turn-${++turn}`,
 		handle: "ana",
 		started: 1_700_000_001,
 		responded: false,
 	});
+	let announce = (id: string, text: string) =>
+		send?.({
+			kind: "chat:message",
+			ts: 0,
+			entry: {
+				id,
+				author: { kind: "member", handle: "ana" },
+				text,
+				ts: 1_700_000_000,
+			},
+		});
+	let start = () => {
+		busy = true;
+		send?.({ kind: "chat:state", ts: 0, busy: true, turn: active() });
+	};
 	await page.route("**/api/session", async route => {
 		let response = await route.fetch();
 		let session = await response.json() as Record<string, unknown>;
@@ -59,24 +77,41 @@ async function scriptPlanner(page: Page) {
 		route.onMessage(message => {
 			if (typeof message !== "string") return server.send(message);
 			try {
-				let frame = JSON.parse(message) as { kind?: string; text?: string };
+				let frame = JSON.parse(message) as {
+					kind?: string;
+					text?: string;
+					to?: Chat.Destination;
+				};
 				if (frame.kind === "chat:send") {
-					send?.({
-						kind: "chat:message",
-						ts: 0,
-						entry: {
-							id: "prompt",
-							author: { kind: "member", handle: "ana" },
-							text: frame.text ?? "",
-							ts: 1_700_000_000,
-						},
-					});
-					send?.({ kind: "chat:state", ts: 0, busy: true, turn: active() });
-					started.resolve();
+					sends.push({ text: frame.text ?? "", to: frame.to! });
+					if (frame.to === "planner") {
+						if (busy) {
+							queued = [...queued, {
+								id: `queued-${queued.length + 1}`,
+								handle: "ana",
+								text: frame.text ?? "",
+							}];
+							send?.({ kind: "chat:queue", ts: 0, waiting: queued });
+							return;
+						}
+						announce("prompt", frame.text ?? "");
+						start();
+						started.resolve();
+						return;
+					}
+					announce("prompt", frame.text ?? "");
 					return;
 				}
 				if (frame.kind === "chat:abort") {
-					send?.({ kind: "chat:state", ts: 0, busy: false });
+					let next = queued.shift();
+					if (next) {
+						send?.({ kind: "chat:queue", ts: 0, waiting: queued });
+						announce(next.id, next.text);
+						start();
+					} else {
+						busy = false;
+						send?.({ kind: "chat:state", ts: 0, busy: false });
+					}
 					return;
 				}
 			} catch {
@@ -89,6 +124,7 @@ async function scriptPlanner(page: Page) {
 
 	return {
 		started: started.promise,
+		sends: () => sends,
 		answer() {
 			send?.({
 				kind: "chat:message",
@@ -100,6 +136,7 @@ async function scriptPlanner(page: Page) {
 					ts: 1_700_000_001,
 				},
 			});
+			busy = false;
 			send?.({ kind: "chat:state", ts: 0, busy: false });
 		},
 		tool() {
@@ -144,6 +181,7 @@ async function scriptPlanner(page: Page) {
 					ts: 1_700_000_001,
 				},
 			});
+			busy = false;
 			send?.({ kind: "chat:state", ts: 0, busy: false });
 		},
 	};
@@ -204,15 +242,96 @@ test("clicking an empty plan puts the caret at its first writing position", asyn
 	expect(text.left).toBeCloseTo(text.paragraphLeft, 1);
 });
 
-test("chat offers the room destination when the planner is off", async ({ join }) => {
+test("chat uses one room-message composer when the planner is off", async ({ join }) => {
 	let page = await join("ana");
 	let chat = page.locator("#pane-chat");
+	let composer = chat.locator(".conversation-composer");
+	let draft = chat.getByPlaceholder("Message the room — use @ai to ask Planner");
+	let send = chat.getByRole("button", { name: "Send message" });
 
 	await expect(chat.locator("header")).toHaveCount(0);
-	await expect(chat.getByPlaceholder("Say something…")).toBeVisible();
-	await expect(chat.getByRole("button", { name: "Send to room" })).toBeVisible();
+	await expect(draft).toBeVisible();
+	await expect(send).toBeDisabled();
+	await expect(composer.getByRole("button", { name: "Send message" })).toHaveCount(1);
+	await expect(send).toHaveAttribute("title", "Send message");
+	await expect(chat.getByRole("button", { name: "Send message" })).toHaveCount(1);
+	await expect(chat.getByRole("button", { name: "Send to room" })).toHaveCount(0);
 	await expect(chat.getByRole("button", { name: "Ask Planner" })).toHaveCount(0);
-	await expect(chat.getByRole("button", { name: "Stop" })).toHaveCount(0);
+	await expect(chat.getByRole("button", { name: "Stop Planner" })).toHaveCount(0);
+
+	await draft.fill("A room message");
+	await expect(send).toBeEnabled();
+	await send.click();
+	await expect(chat.getByText("A room message")).toBeVisible();
+
+	await draft.fill("@ai Do not start a turn here.");
+	await send.click();
+	await expect(chat.locator(".chat-working")).toHaveCount(0);
+	await expect(chat.getByRole("button", { name: "Stop Planner" })).toHaveCount(0);
+});
+
+test("chat disables Send when its socket disconnects", async ({ join, page }) => {
+	let sockets: WebSocketRoute[] = [];
+	await page.routeWebSocket("**/ws?**", route => {
+		route.connectToServer();
+		sockets.push(route);
+	});
+
+	let chat = (await join("ana")).locator("#pane-chat");
+	let draft = chat.getByPlaceholder("Message the room — use @ai to ask Planner");
+	let send = chat.getByRole("button", { name: "Send message" });
+	await draft.fill("A draft left during reconnect.");
+	await expect(send).toBeEnabled();
+
+	await sockets.at(-1)!.close();
+	await expect(send).toBeDisabled();
+});
+
+test("chat routes one Send action by @ai without blocking room messages or its queue", async ({ join, page }) => {
+	let planner = await scriptPlanner(page);
+	let chat = (await join("ana")).locator("#pane-chat");
+	let composer = chat.locator(".conversation-composer");
+	let draft = chat.getByPlaceholder("Message the room — use @ai to ask Planner");
+	let send = chat.getByRole("button", { name: "Send message" });
+
+	await draft.fill("@ai Start the migration.");
+	await draft.press("Enter");
+	await planner.started;
+	await expect(composer.getByRole("button", { name: "Stop Planner" })).toBeVisible();
+	await expect(chat.getByRole("button", { name: "Stop Planner" })).toHaveAttribute(
+		"title",
+		"Stop Planner",
+	);
+
+	await draft.fill("Keep the release notes brief.");
+	await expect(send).toBeEnabled();
+	await send.click();
+	await draft.fill("@ai Queue the rollback checks.");
+	await send.click();
+	await expect.poll(planner.sends).toEqual([
+		{ text: "@ai Start the migration.", to: "planner" },
+		{ text: "Keep the release notes brief.", to: "room" },
+		{ text: "@ai Queue the rollback checks.", to: "planner" },
+	]);
+	await expect(chat.getByText("queued", { exact: true })).toBeVisible();
+
+	await draft.fill("@ai Keep\nthe new line.");
+	await draft.press("Shift+Enter");
+	await expect(draft).toHaveValue("@ai Keep\nthe new line.\n");
+	await draft.press("Enter");
+	await expect.poll(planner.sends).toContainEqual({
+		text: "@ai Keep\nthe new line.",
+		to: "planner",
+	});
+
+	await chat.getByRole("button", { name: "Stop Planner" }).click();
+	await expect(chat.locator(".chat-working")).toBeVisible();
+	let next = chat.locator("[data-chat-entry]").filter({ hasText: "Queue the rollback checks." });
+	let later = chat.locator("[data-chat-entry]").filter({ hasText: /Keep\s+the new line/ });
+	await expect(next).toHaveCount(1);
+	await expect(next).not.toContainText("queued");
+	await expect(later).toHaveCount(1);
+	await expect(later).toContainText("queued");
 });
 
 test("chat replaces the Planner working row with its response", async ({ join, page }) => {
@@ -220,8 +339,10 @@ test("chat replaces the Planner working row with its response", async ({ join, p
 	let planner = await scriptPlanner(page);
 	let chat = (await join("ana")).locator("#pane-chat");
 
-	await chat.getByPlaceholder("Say something…").fill("Draft the migration.");
-	await chat.getByRole("button", { name: "Ask Planner" }).click();
+	await chat.getByPlaceholder("Message the room — use @ai to ask Planner").fill(
+		"@ai Draft the migration.",
+	);
+	await chat.getByRole("button", { name: "Send message" }).click();
 	await planner.started;
 
 	let working = chat.locator(".chat-working");
@@ -250,16 +371,18 @@ test("chat clears the Planner working row when a turn stops or fails", async ({ 
 	let planner = await scriptPlanner(page);
 	let chat = (await join("ana")).locator("#pane-chat");
 
-	await chat.getByPlaceholder("Say something…").fill("Draft the migration.");
-	await chat.getByRole("button", { name: "Ask Planner" }).click();
+	await chat.getByPlaceholder("Message the room — use @ai to ask Planner").fill(
+		"@ai Draft the migration.",
+	);
+	await chat.getByRole("button", { name: "Send message" }).click();
 	await planner.started;
 	await expect(chat.locator(".chat-working")).toBeVisible();
 
-	await chat.getByRole("button", { name: "Stop" }).click();
+	await chat.getByRole("button", { name: "Stop Planner" }).click();
 	await expect(chat.locator(".chat-working")).toHaveCount(0);
 
-	await chat.getByPlaceholder("Say something…").fill("Try again.");
-	await chat.getByRole("button", { name: "Ask Planner" }).click();
+	await chat.getByPlaceholder("Message the room — use @ai to ask Planner").fill("@ai Try again.");
+	await chat.getByRole("button", { name: "Send message" }).click();
 	await expect(chat.locator(".chat-working")).toBeVisible();
 	planner.fail();
 	await expect(chat.locator(".chat-working")).toHaveCount(0);
@@ -274,8 +397,10 @@ test("chat keeps Working on it through tool activity and streamed prose", async 
 	let planner = await scriptPlanner(page);
 	let chat = (await join("ana")).locator("#pane-chat");
 
-	await chat.getByPlaceholder("Say something…").fill("Check the current plan.");
-	await chat.getByRole("button", { name: "Ask Planner" }).click();
+	await chat.getByPlaceholder("Message the room — use @ai to ask Planner").fill(
+		"@ai Check the current plan.",
+	);
+	await chat.getByRole("button", { name: "Send message" }).click();
 	await planner.started;
 	await expect(chat.locator(".chat-working")).toBeVisible();
 
@@ -287,7 +412,7 @@ test("chat keeps Working on it through tool activity and streamed prose", async 
 	await expect(chat.locator(".chat-working")).toBeVisible();
 	await expect(chat.getByText("I found it.")).toBeVisible();
 
-	await chat.getByRole("button", { name: "Stop" }).click();
+	await chat.getByRole("button", { name: "Stop Planner" }).click();
 	await expect(chat.locator(".chat-working")).toHaveCount(0);
 });
 
@@ -405,7 +530,7 @@ test(
 		await expect(live).toContainText("7 done");
 		expect((await live.boundingBox())?.height).toBe(28);
 		await expect(chat.getByRole("button", { name: /Edit plan/ })).toHaveCount(0);
-		await expect(chat.getByRole("button", { name: "Stop" })).toBeVisible();
+		await expect(chat.getByRole("button", { name: "Stop Planner" })).toHaveCount(0);
 		let person = chat.getByRole("img", { name: "maggie" });
 		let planner = chat.getByRole("img", { name: "Planner" });
 		expect((await person.boundingBox())?.width).toBe(20);

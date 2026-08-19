@@ -6,12 +6,12 @@
  * to the agent meanwhile is queued in order, with its author's name on it, so
  * nobody is silenced because a colleague prompted first.
  *
- * The agent only acts when addressed, so the composer says where a message is
- * going before it goes. The failure worth designing out is typing into what
- * looks like a prompt and being met with silence.
+ * The agent only acts when addressed, so one Send action can follow the
+ * message's own signal rather than asking its author to select a destination.
  */
 
 import { useEffect, useRef, useState } from "react";
+import { PaperPlaneTiltIcon, StopIcon } from "@phosphor-icons/react";
 
 import { addressed } from "@chopin/protocol/address";
 
@@ -131,10 +131,10 @@ export function Chat(
 		};
 	}, [wire]);
 
-	let submit = (to: Wire.Destination) => {
+	let submit = () => {
 		let value = text.trim();
 		if (!value || !wire || !connected) return;
-		wire.send("chat:send", { text: value, to });
+		wire.send("chat:send", { text: value, to: agent && addressed(text) ? "planner" : "room" });
 		setText("");
 	};
 
@@ -152,51 +152,45 @@ export function Chat(
 					: undefined}
 			/>
 
-			<div className="conversation-composer flex shrink-0 flex-col gap-2 px-4 pb-4">
-				<textarea
-					className="field h-18 w-full resize-none px-2.5 py-1.5 text-sm"
-					disabled={!connected}
-					onChange={event => setText(event.target.value)}
-					onKeyDown={event => {
-						// Enter sends; a newline needs a modifier, as everywhere else.
-						if (event.key !== "Enter" || event.shiftKey) return;
-						event.preventDefault();
-						submit(agent && addressed(text) ? "planner" : "room");
-					}}
-					placeholder="Say something…"
-					rows={3}
-					value={text}
-				/>
+			<div className="conversation-composer shrink-0 px-4 pb-4">
+				<div className="field flex flex-col">
+					<textarea
+						className="h-18 w-full resize-none bg-transparent px-2.5 py-1.5 text-sm outline-none"
+						disabled={!connected}
+						onChange={event => setText(event.target.value)}
+						onKeyDown={event => {
+							// Enter sends; a newline needs a modifier, as everywhere else.
+							if (event.key !== "Enter" || event.shiftKey) return;
+							event.preventDefault();
+							submit();
+						}}
+						placeholder="Message the room — use @ai to ask Planner"
+						rows={3}
+						value={text}
+					/>
 
-				<div className="conversation-actions flex flex-wrap items-center gap-2">
-					{busy && (
-						<button
-							className="btn btn-md btn-secondary"
-							onClick={() => wire?.send("chat:abort")}
-							type="button"
-						>
-							Stop
-						</button>
-					)}
-					<div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-						<button
-							className="btn btn-md btn-secondary"
-							disabled={!connected || !text.trim()}
-							onClick={() => submit("room")}
-							type="button"
-						>
-							Send to room
-						</button>
-						{agent && (
+					<div className="flex items-center justify-end gap-1 px-1.5 pb-1.5">
+						{agent && busy && (
 							<button
-								className="btn btn-md btn-primary"
-								disabled={!connected || !text.trim()}
-								onClick={() => submit("planner")}
+								aria-label="Stop Planner"
+								className="btn btn-icon btn-secondary"
+								onClick={() => wire?.send("chat:abort")}
+								title="Stop Planner"
 								type="button"
 							>
-								Ask Planner
+								<StopIcon aria-hidden="true" size={16} />
 							</button>
 						)}
+						<button
+							aria-label="Send message"
+							className="btn btn-icon btn-primary"
+							disabled={!connected || !text.trim()}
+							onClick={submit}
+							title="Send message"
+							type="button"
+						>
+							<PaperPlaneTiltIcon aria-hidden="true" size={16} />
+						</button>
 					</div>
 				</div>
 			</div>

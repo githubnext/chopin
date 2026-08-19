@@ -185,8 +185,10 @@ test("conversation activity appears while closed and clears when opened", async 
 	let nav = page.getByRole("navigation", { name: "Workspace view" });
 	await expect(nav.getByRole("button", { name: "Conversation" })).toBeVisible();
 	let sender = await join("ben");
-	await sender.getByPlaceholder("Say something…").fill("A new room message");
-	await sender.getByRole("button", { name: "Send to room" }).click();
+	await sender.getByPlaceholder("Message the room — use @ai to ask Planner").fill(
+		"A new room message",
+	);
+	await sender.getByRole("button", { name: "Send message" }).click();
 	await expect(nav.getByRole("button", { name: "Conversation, 1 unread" })).toBeVisible();
 	await nav.getByRole("button", { name: /Conversation/ }).click();
 	await expect(nav.getByRole("button", { name: "Conversation" })).toBeVisible();
@@ -197,7 +199,7 @@ test("a Conversation draft survives Chromium orientation emulation", async ({ jo
 	let page = await join("ana", { viewport: { width: 390, height: 844 } });
 	await page.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: /Conversation/ }).click();
-	let textarea = page.getByPlaceholder("Say something…");
+	let textarea = page.getByPlaceholder("Message the room — use @ai to ask Planner");
 	await textarea.fill("Keep this draft");
 	await page.setViewportSize({ width: 844, height: 390 });
 	await expect(textarea).toHaveValue("Keep this draft");
