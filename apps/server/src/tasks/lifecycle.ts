@@ -698,6 +698,15 @@ export function progressFor(
 	return derived?.phase === "active" ? copy(derived.progress) : undefined;
 }
 
+/** Whether this exact graph version has a successfully verified historical run. */
+export function verified(lifecycle: Lifecycle, version: Version): boolean {
+	return lifecycle.history.some(archived => {
+		if (!matches(archived.run, version)) return false;
+		let derived = deriveRun(version.definition.tasks, archived.run, archived.events);
+		return derived?.phase === "implemented" || derived?.phase === "delivered";
+	});
+}
+
 /** Project archived event logs against the graph versions they implemented. */
 export function historyFor(graph: Graph, lifecycle: Lifecycle): HistoricalRun[] {
 	return copy(projectHistory(graph, lifecycle.history) ?? []);

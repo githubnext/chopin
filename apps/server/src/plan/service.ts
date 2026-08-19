@@ -21,7 +21,7 @@ import * as Chat from "../chat/service";
 import * as Comments from "../comments/service";
 import * as Questions from "../questions/service";
 import { claim, restore as restoreGraph, restoreRun } from "../tasks/graphs";
-import { restoreLifecycle, transition } from "../tasks/lifecycle";
+import { restoreLifecycle, transition, verified } from "../tasks/lifecycle";
 import { broadcast, fail, relay, reply, tell } from "../wire";
 
 import type { Server } from "bun";
@@ -637,6 +637,10 @@ export function claimStored(
 			: loaded.sidecar,
 		pristine,
 	);
+	let version = sidecar.graph?.versions.at(-1);
+	if (version && verified(sidecar.lifecycle ?? { history: [] }, version)) {
+		return { result: { kind: "refused", reason: "already-verified" } };
+	}
 	let result = claim({
 		graph: sidecar.graph,
 		revision: sidecar.revision,

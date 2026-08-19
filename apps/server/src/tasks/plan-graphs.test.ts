@@ -1,7 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
 import * as graphPlans from "./plan-graphs";
-import { claimImplementation, implementationGraphs } from "./plan-graphs";
+import {
+	claimImplementation,
+	implementationGraphs,
+	reportImplementationLifecycle,
+} from "./plan-graphs";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { close, open } from "../plan/service";
 
@@ -48,20 +52,62 @@ const definition = {
 	}],
 };
 
-function run(planRevision: number) {
+function run(planRevision: number, graphVersion = 1, id = "run-1") {
 	return {
-		id: "run-1",
+		id,
 		user: "octocat",
 		client: { name: "Codex", version: "1.2.3" },
 		session: "session-1",
 		planRevision,
-		graphVersion: 1,
+		graphVersion,
 		graphRevision: 1,
 		repository: "octo-org/score",
 		branch: "tq/017",
 		commit: "deadbeef",
 		startedAt: "2026-08-17T12:00:00.000Z",
 	};
+}
+
+async function verifyRun(plan: Plan, runId: string) {
+	for (
+		let input of [
+			{
+				kind: "start" as const,
+				runId,
+				taskId: "model",
+				idempotencyKey: `${runId}-start`,
+			},
+			{
+				kind: "report_pr" as const,
+				runId,
+				taskId: "model",
+				url: "https://github.com/octo-org/score/pull/49",
+				state: "open" as const,
+				idempotencyKey: `${runId}-pr`,
+			},
+			{
+				kind: "complete" as const,
+				runId,
+				taskId: "model",
+				summary: "The graph is durable.",
+				idempotencyKey: `${runId}-complete`,
+			},
+			{
+				kind: "report_verification" as const,
+				runId,
+				passed: true,
+				summary: "The implementation passed review.",
+				reviewerMethod: "Ran the focused implementation suite.",
+				evidence: [{ taskId: "model", evidence: ["Focused suite passed."] }],
+				tasksNeedingWork: [],
+				idempotencyKey: `${runId}-verification`,
+			},
+		]
+	) {
+		expect(await reportImplementationLifecycle(plan, input)).toMatchObject({
+			kind: "accepted",
+		});
+	}
 }
 
 describe("the plan graph adapter", () => {
@@ -261,5 +307,51 @@ describe("the plan graph adapter", () => {
 			idempotencyKey: "start-model",
 		}]);
 		await close(restored);
+	});
+
+	it("refuses a verified graph but claims a new graph version with reused revisions", async () => {
+		let context = await hosted();
+		let plan = await open(context.channel.id, context.backend, context.server);
+		expect(
+			(await implementationGraphs().revise(plan, {
+				planRevision: plan.revision,
+				graphRevision: 0,
+				operations: definition.tasks.map(task => ({ op: "add", task })),
+			})).ok,
+		).toBe(true);
+		expect((await implementationGraphs().approve(plan)).ok).toBe(true);
+		expect(
+			await claimImplementation(plan, {
+				planRevision: plan.revision,
+				graphRevision: 1,
+				run: run(plan.revision),
+			}),
+		).toMatchObject({ kind: "started" });
+		await verifyRun(plan, "run-1");
+
+		expect(
+			await claimImplementation(plan, {
+				planRevision: plan.revision,
+				graphRevision: 1,
+				run: run(plan.revision, 1, "run-2"),
+			}),
+		).toEqual({ kind: "refused", reason: "already-verified" });
+
+		expect(
+			(await implementationGraphs().revise(plan, {
+				planRevision: plan.revision,
+				graphRevision: 1,
+				operations: [{ op: "replace", id: "model", task: definition.tasks[0] }],
+			})).ok,
+		).toBe(true);
+		expect((await implementationGraphs().approve(plan)).ok).toBe(true);
+		expect(
+			await claimImplementation(plan, {
+				planRevision: plan.revision,
+				graphRevision: 1,
+				run: run(plan.revision, 2, "run-2"),
+			}),
+		).toMatchObject({ kind: "started" });
+		await close(plan);
 	});
 });
