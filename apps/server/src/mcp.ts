@@ -52,6 +52,7 @@ export type Implementation = {
 export type ImplementationInput = {
 	id: string;
 	planRevision: number;
+	graphVersion: number;
 	graphRevision: number;
 	repository: string;
 	branch: string;
@@ -124,12 +125,13 @@ const IMPLEMENTATION = {
 	properties: {
 		id: { type: "string", minLength: 1, maxLength: MAX_DOCUMENT_ID_LENGTH },
 		planRevision: { type: "integer", minimum: 0 },
+		graphVersion: { type: "integer", minimum: 1 },
 		graphRevision: { type: "integer", minimum: 1 },
 		repository: { type: "string", pattern: REPOSITORY_PATH_PATTERN },
 		branch: { type: "string", minLength: 1, maxLength: 255 },
 		commit: { type: "string", minLength: 1, maxLength: 64 },
 	},
-	required: ["id", "planRevision", "graphRevision", "repository", "branch", "commit"],
+	required: ["id", "planRevision", "graphVersion", "graphRevision", "repository", "branch", "commit"],
 	additionalProperties: false,
 };
 
@@ -294,7 +296,7 @@ function toolCall(
 type StartArguments = Omit<ImplementationInput, "client">;
 
 function startArguments(value: Record<string, unknown>): StartArguments | undefined {
-	let expected = ["id", "planRevision", "graphRevision", "repository", "branch", "commit"];
+	let expected = ["id", "planRevision", "graphVersion", "graphRevision", "repository", "branch", "commit"];
 	if (
 		Object.keys(value).length !== expected.length
 		|| expected.some(key => !Object.hasOwn(value, key))
@@ -308,6 +310,8 @@ function startArguments(value: Record<string, unknown>): StartArguments | undefi
 		|| !value.commit.trim()
 		|| !Number.isSafeInteger(value.planRevision)
 		|| (value.planRevision as number) < 0
+		|| !Number.isSafeInteger(value.graphVersion)
+		|| (value.graphVersion as number) < 1
 		|| !Number.isSafeInteger(value.graphRevision)
 		|| (value.graphRevision as number) < 1
 	) return undefined;

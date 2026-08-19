@@ -129,6 +129,7 @@ export function hosted(
 			client: { name: input.client.name, version: input.client.version },
 			session: input.client.session,
 			planRevision: input.planRevision,
+			graphVersion: input.graphVersion,
 			graphRevision: input.graphRevision,
 			repository: input.repository,
 			branch: input.branch,

@@ -174,6 +174,7 @@ describe("the MCP read protocol", () => {
 					client: { name: input.client.name, version: input.client.version },
 					session: input.client.session,
 					planRevision: input.planRevision,
+					graphVersion: input.graphVersion,
 					graphRevision: input.graphRevision,
 					repository: input.repository,
 					branch: input.branch,
@@ -214,6 +215,7 @@ describe("the MCP read protocol", () => {
 		let arguments_ = {
 			id: document.id,
 			planRevision: 4,
+			graphVersion: 1,
 			graphRevision: 4,
 			repository: "githubnext/chopin",
 			branch: "tq/017",
@@ -243,6 +245,7 @@ describe("the MCP read protocol", () => {
 			state: "started",
 			run: {
 				id: "run-1",
+				graphVersion: 1,
 				client: { name: "Codex", version: "1.2.3" },
 				session,
 			},
