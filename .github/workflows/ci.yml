@@ -100,7 +100,10 @@ jobs:
       # Run unconditionally, cache hit or not: the browser is cached but the
       # shared libraries it links against are installed by apt and are not.
       # With the binary already present this only does the second half.
-      - run: bun node_modules/@playwright/test/cli.js install --with-deps chromium
+      # A runner's apt mirror can stop responding; fail this prerequisite in
+      # minutes rather than leaving the E2E check alive until GitHub cancels it.
+      - timeout-minutes: 5
+        run: bun node_modules/@playwright/test/cli.js install --with-deps chromium
 
       # Builds the client, then runs it. The build is deliberately here rather
       # than inside the Playwright config: web servers start before any global
