@@ -43,6 +43,9 @@ the multiplayer half. Ctrl-C stops the web and server processes;
 
 Set `AGENT=off` to run the editor without Copilot.
 
+For a local coding agent connection, see
+[Connect a local coding agent](docs/local-agent-mcp.md).
+
 For proxied VM development and remote HMR, see
 [Remote development](docs/exe-dev.md).
 

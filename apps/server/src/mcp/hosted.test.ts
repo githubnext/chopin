@@ -224,6 +224,11 @@ describe("the hosted MCP adapter", () => {
 
 	it("lists every channel under the currently readable repository node id", async () => {
 		let { auth, github, now, storage } = setup();
+		let adapter = hosted(auth);
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller) throw new Error("test caller was not authenticated");
+
+		expect(await adapter.documents.list(caller, "octo-org/score")).toEqual([]);
 		await storage.users.put({ id: "U_allowed", login: "allowed", avatarUrl: "", now });
 		for (let index = 0; index < 101; index++) {
 			await storage.channels.create({
@@ -245,11 +250,8 @@ describe("the hosted MCP adapter", () => {
 			createdBy: "U_allowed",
 			now,
 		});
-		let adapter = hosted(auth);
-		let caller = await adapter.caller(request("Bearer allowed"));
-		if (!caller) throw new Error("test caller was not authenticated");
-
 		let listed = await adapter.documents.list(caller, "octo-org/score");
+		if (listed === "forbidden") throw new Error("readable repository was forbidden");
 		expect(listed).toHaveLength(101);
 		expect(listed.map(document => document.title)).not.toContain("Foreign title");
 
@@ -257,9 +259,9 @@ describe("the hosted MCP adapter", () => {
 			...github.repositoryValue,
 			permissions: { pull: false, push: true, admin: false },
 		};
-		expect(await adapter.documents.list(caller, "octo-org/score")).toEqual([]);
+		expect(await adapter.documents.list(caller, "octo-org/score")).toBe("forbidden");
 		github.accessible = false;
-		expect(await adapter.documents.list(caller, "octo-org/score")).toEqual([]);
+		expect(await adapter.documents.list(caller, "octo-org/score")).toBe("forbidden");
 	});
 
 	it("creates a durable repository channel for a caller with write access", async () => {
