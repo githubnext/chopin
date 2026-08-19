@@ -109,6 +109,22 @@ ownership without losing plans or transcripts.
 Generate the session key with `openssl rand -hex 32`. `APP_ORIGIN` has no
 trailing slash and must match the GitHub App callback's origin exactly.
 
+## Creating a plan from an agent conversation
+
+The optional, provider-neutral
+[creating-chopin-plans skill](skills/creating-chopin-plans/SKILL.md) turns a
+settled coding-agent conversation into one initial Chopin document. Copy the
+whole directory into an Agent Skills location supported by the local runtime:
+
+```bash
+mkdir -p ~/.agents/skills
+cp -R skills/creating-chopin-plans ~/.agents/skills/
+```
+
+Use [implementing-chopin-plans](skills/implementing-chopin-plans/SKILL.md)
+instead when an approved Chopin implementation graph is ready for local work.
+Neither skill is needed to call Chopin's MCP tools directly.
+
 ## Sharing
 
 The client derives the application socket from the page origin, so a tunnel

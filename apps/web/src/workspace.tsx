@@ -1,6 +1,15 @@
 /** Three panes on one ground, with the document as the only raised surface. */
 
-import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from "react";
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useReducer,
+	useRef,
+	useState,
+	useSyncExternalStore,
+} from "react";
+import { SidebarSimpleIcon } from "@phosphor-icons/react";
 
 import {
 	presentWorkspace,
@@ -9,7 +18,7 @@ import {
 	workspaceMode,
 } from "./workspace-model";
 
-import type { Dispatch, ReactNode } from "react";
+import type { Dispatch, ReactNode, RefObject } from "react";
 import type {
 	WorkspaceDestination,
 	WorkspaceEvent,
@@ -160,10 +169,53 @@ export type WorkspaceProps = {
 	state: WorkspaceState;
 	view: "plan" | "decisions";
 	onConversationOpen: (open: boolean) => void;
+	onDesktopConversationOpen: (open: boolean) => void;
 	onDestination: (destination: "plan" | "decisions") => void;
 	unanswered: number;
 	conversationActivity: { unread: number; busy: boolean };
 };
+
+function ConversationToggle(
+	{
+		activity,
+		buttonRef,
+		className,
+		onToggle,
+		open,
+	}: {
+		activity: WorkspaceProps["conversationActivity"];
+		buttonRef?: RefObject<HTMLButtonElement | null>;
+		className?: string;
+		onToggle: () => void;
+		open: boolean;
+	},
+) {
+	let status = activity.busy
+		? "Planner working"
+		: activity.unread > 0
+		? `${activity.unread} unread`
+		: undefined;
+	return (
+		<button
+			aria-controls={paneId("chat")}
+			aria-expanded={open}
+			aria-label={`${open ? "Hide" : "Show"} conversation pane${status ? `, ${status}` : ""}`}
+			className={`btn btn-icon btn-ghost relative shrink-0 ${className ?? ""}`}
+			data-activity={activity.busy ? "busy" : activity.unread > 0 ? "unread" : undefined}
+			onClick={onToggle}
+			ref={buttonRef}
+			type="button"
+		>
+			<SidebarSimpleIcon aria-hidden="true" size={18} />
+			{status && (
+				<span
+					aria-hidden="true"
+					className="absolute right-1 top-1 size-1.5 rounded-full bg-brand"
+				/>
+			)}
+		</button>
+	);
+}
 
 const HEADING: Record<WorkspaceDestination, string> = {
 	plan: "workspace-plan-heading",
@@ -200,6 +252,7 @@ export function Workspace(
 		header,
 		mode,
 		onConversationOpen,
+		onDesktopConversationOpen,
 		onDestination,
 		plan,
 		state,
@@ -210,6 +263,7 @@ export function Workspace(
 	let [chatWidth, resizeChat] = usePaneWidth("chopin:pane:chat", 280, mode === "split");
 	let presentation = presentWorkspace(state, mode, view);
 	let opener = useRef<HTMLElement | undefined>(undefined);
+	let edgeTab = useRef<HTMLButtonElement>(null);
 	let previousConversationOpen = useRef(state.conversationOpen);
 	let conversationHidden = !presentation.conversationVisible;
 	let planHidden = !presentation.documentVisible || presentation.documentView !== "plan";
@@ -217,14 +271,12 @@ export function Workspace(
 		|| presentation.documentView !== "decisions";
 	let destinations: WorkspaceDestination[] = ["conversation", "plan", "decisions"];
 
-	useEffect(() => {
+	useLayoutEffect(() => {
 		if (!previousConversationOpen.current && state.conversationOpen) {
 			let active = document.activeElement;
 			if (active instanceof HTMLElement) opener.current = active;
 			if (mode !== "split") {
-				requestAnimationFrame(() => {
-					document.getElementById(HEADING.conversation)?.focus({ preventScroll: true });
-				});
+				document.getElementById(HEADING.conversation)?.focus({ preventScroll: true });
 			}
 		}
 		previousConversationOpen.current = state.conversationOpen;
@@ -240,8 +292,20 @@ export function Workspace(
 	};
 
 	let dismissConversation = () => {
-		onConversationOpen(false);
-		requestAnimationFrame(() => opener.current?.focus({ preventScroll: true }));
+		if (mode === "split") {
+			onDesktopConversationOpen(false);
+			requestAnimationFrame(() => edgeTab.current?.focus({ preventScroll: true }));
+		} else {
+			onConversationOpen(false);
+			requestAnimationFrame(() => opener.current?.focus({ preventScroll: true }));
+		}
+	};
+
+	let showDesktopConversation = () => {
+		onDesktopConversationOpen(true);
+		requestAnimationFrame(() => {
+			document.getElementById(HEADING.conversation)?.focus({ preventScroll: true });
+		});
 	};
 
 	return (
@@ -256,7 +320,7 @@ export function Workspace(
 					<aside
 						aria-hidden={conversationHidden || undefined}
 						aria-labelledby={HEADING.conversation}
-						className="min-w-0 overflow-hidden"
+						className="flex min-w-0 flex-col overflow-hidden"
 						hidden={conversationHidden}
 						id={paneId("chat")}
 						inert={conversationHidden}
@@ -271,11 +335,36 @@ export function Workspace(
 							? { width: chatWidth }
 							: { width: "100%" }}
 					>
-						<h2 className="sr-only" id={HEADING.conversation} tabIndex={-1}>Conversation</h2>
-						<div className="h-full min-h-0">
+						{mode === "split"
+							? (
+								<div className="flex h-10 shrink-0 items-center justify-between px-3 hairline-b">
+									<h2 className="text-sm font-semibold" id={HEADING.conversation} tabIndex={-1}>
+										Conversation
+									</h2>
+									<ConversationToggle
+										activity={conversationActivity}
+										onToggle={dismissConversation}
+										open
+									/>
+								</div>
+							)
+							: <h2 className="sr-only" id={HEADING.conversation} tabIndex={-1}>Conversation</h2>}
+						<div className="min-h-0 flex-1">
 							{chat}
 						</div>
 					</aside>
+				)}
+
+				{chat && mode === "split" && !presentation.conversationVisible && (
+					<div className="absolute left-0 top-4 z-20">
+						<ConversationToggle
+							activity={conversationActivity}
+							buttonRef={edgeTab}
+							className="rounded-l-none"
+							onToggle={showDesktopConversation}
+							open={false}
+						/>
+					</div>
 				)}
 
 				<main
@@ -303,7 +392,12 @@ export function Workspace(
 					)}
 					<div className="relative flex h-full flex-col overflow-hidden rounded-t-xl">
 						{mode === "split" && (
-							<div className="flex h-10 shrink-0 items-center px-3 hairline-b">{controls}</div>
+							<div
+								className="grid h-10 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center px-3 hairline-b"
+								data-document-toolbar
+							>
+								<div className="col-start-2 justify-self-center">{controls}</div>
+							</div>
 						)}
 						<section
 							aria-hidden={planHidden || undefined}

@@ -15,11 +15,20 @@ export function DecisionViewControl(
 	},
 ) {
 	return (
-		<div aria-label="Document view" className="flex items-center gap-1" role="group">
+		<div
+			aria-label="Document view"
+			className="flex items-center rounded-md bg-control p-0.5"
+			data-document-view-control
+			role="group"
+		>
 			<button
 				aria-current={view === "plan" ? "page" : undefined}
 				aria-pressed={view === "plan"}
-				className="btn btn-sm btn-ghost"
+				className={`btn btn-sm rounded-sm transition-[background-color,box-shadow,color] ${
+					view === "plan"
+						? "bg-page font-semibold text-text-primary shadow-resting"
+						: "text-text-secondary hover:bg-gray-300"
+				}`}
 				onClick={() => onView("plan")}
 				type="button"
 			>
@@ -29,7 +38,11 @@ export function DecisionViewControl(
 				aria-current={view === "decisions" ? "page" : undefined}
 				aria-label={unanswered > 0 ? `Decisions, ${unanswered} unanswered` : "Decisions"}
 				aria-pressed={view === "decisions"}
-				className={`btn btn-sm btn-ghost ${attention ? "animate-enter" : ""}`}
+				className={`btn btn-sm rounded-sm transition-[background-color,box-shadow,color] ${
+					view === "decisions"
+						? "bg-page font-semibold text-text-primary shadow-resting"
+						: "text-text-secondary hover:bg-gray-300"
+				} ${attention ? "animate-enter" : ""}`}
 				data-attention={attention || undefined}
 				onClick={() => onView("decisions")}
 				type="button"

@@ -519,7 +519,7 @@ describe("migration", () => {
 	it("puts each standard action on one button size and tier", () => {
 		let actions = [
 			[
-				"apps/web/src/app.tsx",
+				"apps/web/src/workspace.tsx",
 				{
 					action: "pane toggle",
 					marker: 'aria-controls={paneId("chat")}',

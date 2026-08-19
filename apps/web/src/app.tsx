@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowClockwiseIcon, DotsThreeIcon, SidebarSimpleIcon } from "@phosphor-icons/react";
+import { ArrowClockwiseIcon, DotsThreeIcon } from "@phosphor-icons/react";
 import {
 	advanceDecisionView,
 	countUnanswered,
@@ -20,67 +20,24 @@ import * as Api from "./api";
 import { HostedApp, HostedFailure, HostedLoading, HostedLogin } from "./hosted";
 import { RepositoryPicker } from "./repository-picker";
 import { Wire } from "./wire";
-import { paneId, useWorkspaceMode, useWorkspaceState, Workspace } from "./workspace";
+import { useWorkspaceMode, useWorkspaceState, Workspace } from "./workspace";
 import { presentWorkspace } from "./workspace-model";
 
 import type { Session } from "@chopin/protocol";
 import type { DecisionView, DecisionViewState } from "@chopin/editor";
 import type { Status } from "./wire";
 
-type ConversationActivity = { unread: number; busy: boolean };
-
-function PaneToggle(
-	{
-		activity,
-		onToggle,
-		open,
-	}: { activity: ConversationActivity; onToggle: () => void; open: boolean },
-) {
-	let status = activity.busy
-		? "Planner working"
-		: activity.unread > 0
-		? `${activity.unread} unread`
-		: undefined;
-	return (
-		<button
-			aria-controls={paneId("chat")}
-			aria-expanded={open}
-			aria-label={`${open ? "Hide" : "Show"} conversation pane${status ? `, ${status}` : ""}`}
-			className="btn btn-icon btn-ghost relative hidden shrink-0 sm:inline-flex"
-			data-activity={activity.busy ? "busy" : activity.unread > 0 ? "unread" : undefined}
-			onClick={onToggle}
-			type="button"
-		>
-			<SidebarSimpleIcon aria-hidden="true" size={18} />
-			{status && (
-				<span
-					aria-hidden="true"
-					className="absolute right-1 top-1 size-1.5 rounded-full bg-brand"
-				/>
-			)}
-		</button>
-	);
-}
-
 function Header(
 	{
-		chatOpen,
-		conversationActivity,
 		members,
-		onToggleChat,
 		onResetAgent,
 		label,
 		repository,
-		showConversationToggle,
 	}: {
-		chatOpen: boolean;
-		conversationActivity: ConversationActivity;
 		members: Session.Member[];
-		onToggleChat: () => void;
 		onResetAgent?: () => Promise<void>;
 		label: string;
 		repository: Api.Repository;
-		showConversationToggle: boolean;
 	},
 ) {
 	let [resetting, setResetting] = useState(false);
@@ -102,9 +59,6 @@ function Header(
 
 	return (
 		<header className="room-header hairline-b relative flex min-h-12 shrink-0 flex-nowrap items-center gap-2 px-2 py-2 sm:h-12 sm:gap-3 sm:px-4 sm:py-0">
-			{showConversationToggle && (
-				<PaneToggle activity={conversationActivity} onToggle={onToggleChat} open={chatOpen} />
-			)}
 			<a className="hidden text-sm font-semibold sm:inline" href="/">chopin</a>
 			<span aria-hidden="true" className="hidden h-4 hairline-l sm:block" />
 			<RepositoryPicker current={repository} />
@@ -263,15 +217,9 @@ export function RoomWorkspace(
 		dispatch({ type: "set-conversation", open: false });
 	};
 
-	let toggleConversation = () => {
-		if (mode !== "split") {
-			dispatch({ type: "set-conversation", open: !workspace.conversationOpen });
-			return;
-		}
-		if (workspacePresentation.conversationVisible) {
-			dispatch({ type: "set-desktop-conversation", open: false });
-			dispatch({ type: "set-conversation", open: false });
-		} else dispatch({ type: "set-desktop-conversation", open: true });
+	let setDesktopConversationOpen = (open: boolean) => {
+		dispatch({ type: "set-desktop-conversation", open });
+		if (!open) dispatch({ type: "set-conversation", open: false });
 	};
 
 	let showPlan = (widget: string, question: string) => {
@@ -335,14 +283,10 @@ export function RoomWorkspace(
 			conversationActivity={conversationActivity}
 			header={
 				<Header
-					chatOpen={workspacePresentation.conversationVisible}
-					conversationActivity={conversationActivity}
 					members={members}
-					onToggleChat={toggleConversation}
 					onResetAgent={effectiveCanEdit ? onResetAgent : undefined}
 					label={label}
 					repository={repository}
-					showConversationToggle={mode === "split"}
 				/>
 			}
 			controls={
@@ -354,6 +298,7 @@ export function RoomWorkspace(
 				/>
 			}
 			mode={mode}
+			onDesktopConversationOpen={setDesktopConversationOpen}
 			onConversationOpen={open => dispatch({ type: "set-conversation", open })}
 			onDestination={selectDestination}
 			decisions={

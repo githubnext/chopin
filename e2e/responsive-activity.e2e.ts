@@ -128,6 +128,23 @@ test("a closed desktop Conversation toggle exposes initial planner activity", as
 	let toggle = page.getByRole("button", { name: "Show conversation pane, Planner working" });
 	await expect(toggle).toBeVisible();
 	await expect(toggle).toHaveAttribute("aria-expanded", "false");
+	await expect(toggle.locator('span[aria-hidden="true"]')).toHaveCount(1);
+});
+
+test("a closed desktop Conversation tab keeps unread activity visible", async ({ join, page, seed }) => {
+	await seed(RESPONSIVE_SOURCE);
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:open", "false"));
+	page = await join("ana");
+	let sender = await join("ben");
+	await sender.getByPlaceholder("Say something…").fill("A new room message");
+	await sender.getByRole("button", { name: "Send to room" }).click();
+	let toggle = page.getByRole("button", { name: "Show conversation pane, 1 unread" });
+	await expect(toggle).toBeVisible();
+	await expect(toggle.locator('span[aria-hidden="true"]')).toHaveCount(1);
+	await toggle.click();
+	await expect(page.getByRole("heading", { name: "Conversation" })).toBeFocused();
+	await expect(page.getByRole("button", { name: "Hide conversation pane" })).toBeVisible();
 });
 
 test("completed tool names wrap instead of truncating", async ({ join, seed }) => {

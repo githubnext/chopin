@@ -56,6 +56,43 @@ function commentButton(page: import("@playwright/test").Page) {
 	return page.getByRole("button", { name: /Comment on “/ });
 }
 
+test("the desktop document view is a centred segmented control", async ({ join, seed }) => {
+	await seed(PROSE);
+	let page = await join("ana");
+	let toolbar = page.locator("[data-document-toolbar]");
+	let control = page.getByRole("group", { name: "Document view" });
+	let plan = control.getByRole("button", { name: "Plan", exact: true });
+	let decisions = control.getByRole("button", { name: /^Decisions, 2 unanswered$/ });
+
+	await expect(control).toBeVisible();
+	await expect(decisions).toContainText("2");
+	let [toolbarBox, controlBox, planBox, decisionsBox, planStyle, decisionsStyle] = await Promise
+		.all([
+			toolbar.boundingBox(),
+			control.boundingBox(),
+			plan.boundingBox(),
+			decisions.boundingBox(),
+			plan.evaluate(element => getComputedStyle(element).backgroundColor),
+			decisions.evaluate(element => getComputedStyle(element).backgroundColor),
+		]);
+	expect(toolbarBox).toBeTruthy();
+	expect(controlBox).toBeTruthy();
+	expect(planBox).toBeTruthy();
+	expect(decisionsBox).toBeTruthy();
+	expect(Math.abs(
+		controlBox!.x + controlBox!.width / 2 - (toolbarBox!.x + toolbarBox!.width / 2),
+	)).toBeLessThan(1);
+	expect(Math.abs(planBox!.x + planBox!.width - decisionsBox!.x)).toBeLessThanOrEqual(1);
+	expect(planStyle).not.toBe(decisionsStyle);
+
+	await decisions.click();
+	await expect(page.locator('[data-document-view="decisions"]')).toBeVisible();
+	await expect(decisions).toHaveAttribute("aria-pressed", "true");
+	await plan.click();
+	await expect(page.locator('[data-document-view="plan"]')).toBeVisible();
+	await expect(plan).toHaveAttribute("aria-pressed", "true");
+});
+
 async function rewriteFirstBlock(page: import("@playwright/test").Page, value: string) {
 	let block = content(page).locator("p").first();
 	await block.selectText();
