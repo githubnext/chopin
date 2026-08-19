@@ -6,6 +6,7 @@ import type { ThreadStore } from "./threads";
 import type { Transport } from "./transport";
 
 export type WidgetOptions = {
+	commentPresentation?: "popover" | "sheet";
 	questions?: QuestionnaireStore;
 	threads?: ThreadStore;
 	changes?: ChangeStore;

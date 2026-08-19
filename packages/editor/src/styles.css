@@ -158,17 +158,15 @@
 	right: 0;
 }
 
-@container (max-width: 40rem) {
-	.plan-comment-card {
-		top: auto !important;
-		right: 0;
-		bottom: 0;
-		left: 0 !important;
-		width: 100%;
-		max-height: calc(100% - 0.5rem);
-		padding-bottom: env(safe-area-inset-bottom, 0px);
-		border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-	}
+.plan-comment-layer[data-plan-comment-sheet] .plan-comment-card {
+	top: auto !important;
+	right: 0;
+	bottom: 0;
+	left: 0 !important;
+	width: 100%;
+	max-height: calc(100% - 0.5rem);
+	padding-bottom: env(safe-area-inset-bottom, 0px);
+	border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
 .plan-decisions {

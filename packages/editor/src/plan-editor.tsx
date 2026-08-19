@@ -59,6 +59,8 @@ register();
 export type PlanEditorProps = {
 	wire: Transport | undefined;
 	connection?: Connection;
+	/** How comment threads are presented by the surrounding workspace. */
+	commentPresentation?: "popover" | "sheet";
 	/** Identity for this client's remote cursor. */
 	user: { name: string; color: string };
 	/** Read-only while an agent turn may be rewriting the plan. */
@@ -94,6 +96,7 @@ export function PlanEditor(
 	{
 		busy,
 		className,
+		commentPresentation = "popover",
 		connection,
 		onScrollTop,
 		questions,
@@ -243,6 +246,7 @@ export function PlanEditor(
 						onChanges,
 					}),
 					widgetsPlugin({
+						commentPresentation,
 						questions,
 						threads,
 						changes,
@@ -260,6 +264,7 @@ export function PlanEditor(
 			onAnchors,
 			onChanges,
 			questions,
+			commentPresentation,
 			threads,
 			changes,
 			offline,
