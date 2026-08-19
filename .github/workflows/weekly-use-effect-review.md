@@ -1,7 +1,7 @@
 ---
 on:
   schedule:
-    - cron: "30 9 * * 3"
+    - cron: "18 9 * * 3"
       timezone: Europe/London
   workflow_dispatch:
 
