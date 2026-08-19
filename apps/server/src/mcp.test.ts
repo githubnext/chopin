@@ -254,7 +254,22 @@ describe("the MCP read protocol", () => {
 
 	it("advertises and dispatches lifecycle tools from one implementation capability", async () => {
 		let received: unknown;
-		let implementations = {
+		type LifecycleReport = Awaited<
+			ReturnType<NonNullable<Implementations<string>["reportLifecycle"]>>
+		>;
+		let malformed: LifecycleReport = {
+			kind: "accepted",
+			// @ts-expect-error lifecycle reports require the complete implementation projection
+			lifecycle: { activity: "recorded" },
+		};
+		expect(malformed).toMatchObject({ lifecycle: { activity: "recorded" } });
+
+		let lifecycle = {
+			execution: { state: "active" as const },
+			activity: { tasks: [], events: [] },
+			history: [],
+		};
+		let implementations: Implementations<string> = {
 			async readImplementation() {
 				return undefined;
 			},
@@ -263,7 +278,7 @@ describe("the MCP read protocol", () => {
 			},
 			async reportLifecycle(_caller: string, input: unknown) {
 				received = input;
-				return { kind: "accepted" as const, lifecycle: { activity: "recorded" } };
+				return { kind: "accepted" as const, lifecycle };
 			},
 		};
 		let mcp = handler({
@@ -346,7 +361,7 @@ describe("the MCP read protocol", () => {
 			idempotencyKey: "block-model",
 		});
 		expect((result.result as { structuredContent: unknown }).structuredContent).toEqual({
-			activity: "recorded",
+			...lifecycle,
 		});
 
 		let verification = {
@@ -414,7 +429,7 @@ describe("the MCP read protocol", () => {
 		);
 		expect(received).toEqual({ ...verification, kind: "report_verification" });
 		expect((verified.result as { structuredContent: unknown }).structuredContent).toEqual({
-			activity: "recorded",
+			...lifecycle,
 		});
 	});
 

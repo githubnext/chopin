@@ -1,5 +1,6 @@
 import { matches, restoreRunVersion } from "./graphs";
 
+import type { Plan as WirePlan } from "@chopin/protocol";
 import type { Graph, Run, Task, Version } from "./graphs";
 
 export type PullRequest = {
@@ -69,6 +70,11 @@ export type LifecycleState = {
 	execution?: Run;
 	lifecycle: Lifecycle;
 };
+
+export type ImplementationLifecycle = Pick<
+	WirePlan.Lifecycle,
+	"execution" | "activity" | "history"
+>;
 
 export type LifecycleInput = Command & { runId: string };
 
@@ -788,4 +794,13 @@ export function progressFor(
 /** Project archived event logs against the graph versions they implemented. */
 export function historyFor(graph: Graph, lifecycle: Lifecycle): HistoricalRun[] {
 	return copy(projectHistory(graph, lifecycle.history) ?? []);
+}
+
+/** Project durable lifecycle state into the shape shared by MCP and the wire. */
+export function implementationLifecycle(state: LifecycleState): ImplementationLifecycle {
+	return {
+		execution: state.execution ? { state: "active" } : { state: "idle" },
+		activity: progressFor(state.graph, state.lifecycle, state.execution),
+		history: historyFor(state.graph, state.lifecycle),
+	};
 }

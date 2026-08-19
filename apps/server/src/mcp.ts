@@ -18,7 +18,7 @@ import { isLifecycleTool, LIFECYCLE_TOOLS, lifecycleCall } from "./mcp/lifecycle
 import type { Brief, CreateDocumentInput } from "./mcp/create";
 import type { Run, Version } from "./tasks/graphs";
 import type { LifecycleArguments } from "./mcp/lifecycle";
-import type { HistoricalRun, Progress } from "./tasks/lifecycle";
+import type { ImplementationLifecycle } from "./tasks/lifecycle";
 
 export type { Brief, CreateDocumentInput, CreationOrigin } from "./mcp/create";
 
@@ -45,8 +45,8 @@ export type Implementation = {
 	repository: { name: string; baseBranch: string; baseCommit: string };
 	graph: Version;
 	execution: { state: "idle" } | { state: "active"; run: Run };
-	activity?: Progress;
-	history: HistoricalRun[];
+	activity?: ImplementationLifecycle["activity"];
+	history: ImplementationLifecycle["history"];
 };
 
 export type ImplementationInput = {
@@ -75,7 +75,7 @@ export type Implementations<Caller> = {
 		caller: Caller,
 		input: LifecycleArguments,
 	): Promise<
-		| { kind: "accepted" | "replayed"; lifecycle: unknown }
+		| { kind: "accepted" | "replayed"; lifecycle: ImplementationLifecycle }
 		| { kind: "forbidden" }
 		| { kind: "refused"; reason: string }
 	>;
