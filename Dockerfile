@@ -30,6 +30,10 @@ RUN bun install --frozen-lockfile --production --filter '*'
 FROM oven/bun:${BUN_VERSION} AS runtime
 WORKDIR /app
 
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends ca-certificates \
+	&& rm -rf /var/lib/apt/lists/*
+
 ENV NODE_ENV=production \
 	PORT=8787 \
 	SERVER_HOST=0.0.0.0
