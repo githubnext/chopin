@@ -392,7 +392,12 @@ export function Workspace(
 					)}
 					<div className="relative flex h-full flex-col overflow-hidden rounded-t-xl">
 						{mode === "split" && (
-							<div className="flex h-10 shrink-0 items-center px-3 hairline-b">{controls}</div>
+							<div
+								className="grid h-10 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center px-3 hairline-b"
+								data-document-toolbar
+							>
+								<div className="col-start-2 justify-self-center">{controls}</div>
+							</div>
 						)}
 						<section
 							aria-hidden={planHidden || undefined}
