@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  copilot-requests: write
 
 runtimes:
   bun:
@@ -16,10 +17,7 @@ steps:
   - name: Install repository dependencies
     run: bun install --frozen-lockfile
 
-engine:
-  id: codex
-
-model: gpt-5.6-terra
+engine: copilot
 
 safe-outputs:
   create-pull-request:
