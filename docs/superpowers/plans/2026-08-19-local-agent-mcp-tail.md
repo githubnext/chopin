@@ -24,6 +24,7 @@
 ### Task 1: Rebuild PR #40 — repository access and local-agent setup
 
 **Files:**
+
 - Modify: `apps/server/src/mcp.ts`
 - Modify: `apps/server/src/mcp/hosted.ts`
 - Modify: `apps/server/src/mcp/hosted.test.ts`
@@ -98,6 +99,7 @@ Expected: all commands pass. Commit the rebuilt PR #40 payload.
 ### Task 2: Rebuild PR #43 — canonical creation skill and instructions
 
 **Files:**
+
 - Modify: `apps/server/src/mcp.ts`
 - Modify: `skills/implementing-chopin-plans/contract.test.ts`
 - Create: `skills/creating-chopin-plans/SKILL.md`
