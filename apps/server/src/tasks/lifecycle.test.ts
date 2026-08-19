@@ -510,6 +510,48 @@ describe("implementation task lifecycle", () => {
 		)).toBeUndefined();
 	});
 
+	it("applies the existing lifecycle log once when accepting the next event", async () => {
+		let module = await lifecycle() as {
+			transition: (state: any, input: any) => any;
+		};
+		let dependencyChecks = 0;
+		let measuredGraph: Graph = {
+			versions: [{
+				...graph.versions[0]!,
+				definition: {
+					tasks: [{
+						...tasks[0]!,
+						get dependsOn() {
+							dependencyChecks++;
+							return [];
+						},
+					}],
+				},
+			}],
+		};
+		let result = module.transition({
+			graph: measuredGraph,
+			execution,
+			lifecycle: {
+				history: [],
+				events: [{
+					kind: "start",
+					taskId: "foundation",
+					idempotencyKey: "start-foundation",
+				}],
+			},
+		}, {
+			kind: "block",
+			runId: execution.id,
+			taskId: "foundation",
+			reason: "Waiting for review.",
+			idempotencyKey: "block-foundation",
+		});
+
+		expect(result.kind).toBe("accepted");
+		expect(dependencyChecks).toBe(1);
+	});
+
 	it("keeps mutable progress outside the immutable implementation run", async () => {
 		let module = await lifecycle() as {
 			transition?: (state: unknown, input: unknown) => any;
