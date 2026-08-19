@@ -368,7 +368,7 @@ type StandardControl = {
 	file: string;
 	marker: string;
 	name: string;
-	tag: "input" | "select" | "textarea";
+	tag: "div" | "input" | "select" | "textarea";
 	utility: "choice-control" | "field" | "field-ghost";
 };
 
@@ -407,9 +407,9 @@ describe("migration", () => {
 		let controls: StandardControl[] = [
 			{
 				file: "apps/web/src/chat/chat.tsx",
-				marker: "Say something…",
+				marker: 'className="field flex flex-col"',
 				name: "chat composer",
-				tag: "textarea",
+				tag: "div",
 				utility: "field",
 			},
 			{
@@ -534,21 +534,15 @@ describe("migration", () => {
 				tiers: ["btn-ghost"],
 			}],
 			["apps/web/src/chat/chat.tsx", {
-				action: "Stop",
+				action: "Stop Planner",
 				marker: 'wire?.send("chat:abort")',
-				size: "btn-md",
+				size: "btn-icon",
 				tiers: ["btn-secondary"],
 			}],
 			["apps/web/src/chat/chat.tsx", {
-				action: "send to room",
-				marker: 'submit("room")',
-				size: "btn-md",
-				tiers: ["btn-secondary"],
-			}],
-			["apps/web/src/chat/chat.tsx", {
-				action: "ask Planner",
-				marker: 'submit("planner")',
-				size: "btn-md",
+				action: "Send message",
+				marker: 'aria-label="Send message"',
+				size: "btn-icon",
 				tiers: ["btn-primary"],
 			}],
 			["packages/editor/src/comments.tsx", {
