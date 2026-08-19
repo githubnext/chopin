@@ -2,7 +2,7 @@
 
 ## Goal
 
-Run a Codex-backed GitHub Agentic Workflow every Wednesday at 09:30 in the
+Run a Copilot-backed GitHub Agentic Workflow every Wednesday at 09:30 in the
 `Europe/London` timezone. It audits every React Effect in the repository and,
 when it finds a correctable violation, opens one draft pull request per
 independent violation. A run may create at most five pull requests.
@@ -13,8 +13,9 @@ independent violation. A run may create at most five pull requests.
   commits its matching `.lock.yml` file.
 - Trigger: cron `30 9 * * 3` with `timezone: Europe/London`, plus
   `workflow_dispatch` for a deliberate manual run.
-- Engine: `codex` using the `gpt-5.6-terra` model, authenticated through the
-  repository `CODEX_API_KEY` (or `OPENAI_API_KEY`) secret.
+- Engine: `copilot`, authenticated by the workflow's `copilot-requests: write`
+  permission. It uses the GitHub Copilot model configured for the organization;
+  no repository API-key secret is required.
 - The agent checks `useEffect`, `useLayoutEffect`, `useInsertionEffect`, and
   custom Effect-like hooks. It follows the repository's review-use-effect
   rules: identify the synchronization boundary, classify the intent, prefer
@@ -38,7 +39,8 @@ independent violation. A run may create at most five pull requests.
 
 The agent runs with read-oriented repository access. Code writes travel only
 through gh-aw's `create-pull-request` safe output, configured with `max: 5`,
-draft PRs, blocked protected files, no issue fallback, and no stacked PRs.
+draft PRs, blocked protected files, and no issue fallback. The agent
+instructions prohibit stacked PRs.
 Invalid credentials, compilation failures, or failed verification create no
 pull request. A run with no violations completes without a PR.
 
@@ -50,5 +52,5 @@ pull request. A run with no violations completes without a PR.
    a manual dispatch trigger.
 4. The safe-output configuration permits at most five independent draft PRs
    and rejects protected-file changes.
-5. The repository is initialized for the Codex engine and has the required
-   OpenAI secret before the workflow is pushed and enabled.
+5. The organization permits GitHub Copilot requests for this repository before
+   the workflow is pushed and enabled.
