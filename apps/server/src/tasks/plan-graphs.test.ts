@@ -7,7 +7,7 @@ import {
 	reportImplementationLifecycle,
 } from "./plan-graphs";
 import { MemoryStorage } from "../storage/memory/adapter";
-import { close, open } from "../plan/service";
+import { claimStored, close, open } from "../plan/service";
 
 import type { Server } from "bun";
 import type { Backend, Plan } from "../plan/service";
@@ -219,7 +219,10 @@ describe("the plan graph adapter", () => {
 		await close(plan);
 
 		let stored = await context.storage.collaboration.load(context.channel.id, now);
-		if (!stored?.snapshot || !stored.sidecar || typeof stored.sidecar !== "object") {
+		if (
+			!stored?.snapshot || !stored.sidecar || typeof stored.sidecar !== "object"
+			|| Array.isArray(stored.sidecar)
+		) {
 			throw new Error("claimed plan was not stored");
 		}
 		expect(stored.sidecar).toMatchObject({
@@ -251,6 +254,106 @@ describe("the plan graph adapter", () => {
 
 		await expect(open(context.channel.id, context.backend, context.server))
 			.rejects.toThrow("invalid implementation run");
+	});
+
+	it("rejects a locked graph without its execution while reopening", async () => {
+		let context = await hosted();
+		let plan = await open(context.channel.id, context.backend, context.server);
+		expect(
+			(await implementationGraphs().revise(plan, {
+				planRevision: plan.revision,
+				graphRevision: 0,
+				operations: definition.tasks.map(task => ({ op: "add", task })),
+			})).ok,
+		).toBe(true);
+		expect((await implementationGraphs().approve(plan)).ok).toBe(true);
+		expect(
+			await claimImplementation(plan, {
+				planRevision: plan.revision,
+				graphRevision: 1,
+				run: run(plan.revision),
+			}),
+		).toMatchObject({ kind: "started" });
+		await close(plan);
+
+		let stored = await context.storage.collaboration.load(context.channel.id, now);
+		let sidecar = stored?.sidecar;
+		if (!stored?.snapshot || !sidecar || typeof sidecar !== "object" || Array.isArray(sidecar)) {
+			throw new Error("claimed plan was not stored");
+		}
+		let { execution: _execution, ...withoutExecution } = sidecar;
+		await context.storage.collaboration.commit({
+			channelId: context.channel.id,
+			lease: context.lease,
+			expectedRevision: stored.channel.revision,
+			operationId: "locked-without-execution",
+			epoch: stored.snapshot.epoch,
+			sidecar: withoutExecution as JsonValue,
+			events: [],
+			now,
+		});
+
+		await expect(open(context.channel.id, context.backend, context.server))
+			.rejects.toThrow("invalid implementation lifecycle");
+	});
+
+	it("rejects an active execution for an already verified graph while reopening", async () => {
+		let context = await hosted();
+		let plan = await open(context.channel.id, context.backend, context.server);
+		expect(
+			(await implementationGraphs().revise(plan, {
+				planRevision: plan.revision,
+				graphRevision: 0,
+				operations: definition.tasks.map(task => ({ op: "add", task })),
+			})).ok,
+		).toBe(true);
+		expect((await implementationGraphs().approve(plan)).ok).toBe(true);
+		expect(
+			await claimImplementation(plan, {
+				planRevision: plan.revision,
+				graphRevision: 1,
+				run: run(plan.revision),
+			}),
+		).toMatchObject({ kind: "started" });
+		await verifyRun(plan, "run-1");
+		await close(plan);
+
+		let stored = await context.storage.collaboration.load(context.channel.id, now);
+		let sidecar = stored?.sidecar;
+		if (
+			!stored?.snapshot || !sidecar || typeof sidecar !== "object"
+			|| Array.isArray(sidecar)
+		) {
+			throw new Error("verified plan was not stored");
+		}
+		let graph = sidecar.graph;
+		if (!graph || typeof graph !== "object" || Array.isArray(graph)) {
+			throw new Error("verified graph was not stored");
+		}
+		let versions = graph.versions;
+		if (!Array.isArray(versions) || !versions[0] || typeof versions[0] !== "object") {
+			throw new Error("verified graph version was not stored");
+		}
+		await context.storage.collaboration.commit({
+			channelId: context.channel.id,
+			lease: context.lease,
+			expectedRevision: stored.channel.revision,
+			operationId: "verified-graph-active-again",
+			epoch: stored.snapshot.epoch,
+			sidecar: {
+				...sidecar,
+				graph: {
+					...graph,
+					versions: [{ ...versions[0], state: "locked" }],
+				},
+				execution: run(0, 1, "run-2"),
+			} as JsonValue,
+			events: [],
+			now,
+		});
+
+		await expect(open(context.channel.id, context.backend, context.server))
+			.rejects.toThrow("invalid implementation lifecycle");
 	});
 
 	it("persists lifecycle activity before broadcasting implemented and delivered history", async () => {
@@ -527,5 +630,91 @@ describe("the plan graph adapter", () => {
 			}),
 		).toMatchObject({ kind: "started" });
 		await close(plan);
+	});
+
+	it("refuses an archived revision run id before claiming live work", async () => {
+		let context = await hosted();
+		let plan = await open(context.channel.id, context.backend, context.server);
+		expect(
+			(await implementationGraphs().revise(plan, {
+				planRevision: plan.revision,
+				graphRevision: 0,
+				operations: definition.tasks.map(task => ({ op: "add", task })),
+			})).ok,
+		).toBe(true);
+		expect((await implementationGraphs().approve(plan)).ok).toBe(true);
+		expect(
+			await claimImplementation(plan, {
+				planRevision: plan.revision,
+				graphRevision: 1,
+				run: run(plan.revision),
+			}),
+		).toMatchObject({ kind: "started" });
+		expect(
+			await reportImplementationLifecycle(plan, {
+				kind: "request_revision",
+				runId: "run-1",
+				reason: "The graph needs another pass.",
+				idempotencyKey: "revise-run-1",
+			}),
+		).toMatchObject({ kind: "accepted" });
+
+		expect(
+			await claimImplementation(plan, {
+				planRevision: plan.revision,
+				graphRevision: 1,
+				run: run(plan.revision),
+			}),
+		).toEqual({ kind: "refused", reason: "run" });
+		expect(
+			await claimImplementation(plan, {
+				planRevision: plan.revision,
+				graphRevision: 1,
+				run: run(plan.revision, 1, "run-2"),
+			}),
+		).toMatchObject({ kind: "started" });
+		await close(plan);
+	});
+
+	it("refuses an archived revision run id before preparing a stored claim", async () => {
+		let context = await hosted();
+		let plan = await open(context.channel.id, context.backend, context.server);
+		expect(
+			(await implementationGraphs().revise(plan, {
+				planRevision: plan.revision,
+				graphRevision: 0,
+				operations: definition.tasks.map(task => ({ op: "add", task })),
+			})).ok,
+		).toBe(true);
+		expect((await implementationGraphs().approve(plan)).ok).toBe(true);
+		expect(
+			await claimImplementation(plan, {
+				planRevision: plan.revision,
+				graphRevision: 1,
+				run: run(plan.revision),
+			}),
+		).toMatchObject({ kind: "started" });
+		expect(
+			await reportImplementationLifecycle(plan, {
+				kind: "request_revision",
+				runId: "run-1",
+				reason: "The graph needs another pass.",
+				idempotencyKey: "revise-run-1",
+			}),
+		).toMatchObject({ kind: "accepted" });
+		await close(plan);
+
+		let stored = await context.storage.collaboration.load(context.channel.id, now);
+		if (!stored) throw new Error("released plan was not stored");
+		expect(claimStored(stored, {
+			planRevision: 0,
+			graphRevision: 1,
+			run: run(0),
+		})).toEqual({ result: { kind: "refused", reason: "run" } });
+		expect(claimStored(stored, {
+			planRevision: 0,
+			graphRevision: 1,
+			run: run(0, 1, "run-2"),
+		})).toMatchObject({ result: { kind: "started" }, sidecar: {} });
 	});
 });
