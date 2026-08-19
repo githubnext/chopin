@@ -88,6 +88,7 @@ function run() {
 		client: { name: "Codex", version: "1.2.3" },
 		session: "session-1",
 		planRevision: 7,
+		graphVersion: 2,
 		graphRevision: 3,
 		repository: "githubnext/chopin",
 		branch: "tq/017",
@@ -117,7 +118,7 @@ describe("implementation task graphs", () => {
 
 		let approved: Graph = {
 			versions: [{
-				number: 1,
+				number: 2,
 				revision: 3,
 				planRevision: 7,
 				state: "approved",
@@ -138,9 +139,29 @@ describe("implementation task graphs", () => {
 			run: implementation,
 		});
 		expect(restoreRun(implementation, locked, 7)).toEqual(implementation);
+		expect(restoreRun({ ...implementation, graphVersion: 1 }, locked, 7)).toBeUndefined();
+		expect(claim(
+			{ graph: approved, revision: 7, execution: undefined },
+			{ planRevision: 7, graphRevision: 3, run: { ...implementation, graphVersion: 1 } },
+		)).toEqual({ kind: "refused", reason: "run" });
 		expect(restoreRun({ ...implementation, extra: true }, locked, 7)).toBeUndefined();
 		expect(restoreRun(implementation, approved, 7)).toBeUndefined();
 		expect(restoreRun(implementation, locked, 8)).toBeUndefined();
+	});
+
+	it("restores a historical run by its graph number", () => {
+		let implementation = run();
+		let version = {
+			number: 1,
+			revision: 3,
+			planRevision: 7,
+			state: "superseded" as const,
+			definition: definition(),
+		};
+		let graph: Graph = { versions: [version, { ...version, number: 2, state: "locked" }] };
+
+		expect(Tasks.restoreRunVersion(implementation, graph)).toEqual(implementation);
+		expect(Tasks.restoreRunVersion({ ...implementation, graphVersion: 3 }, graph)).toBeUndefined();
 	});
 
 	it("ignores an unreachable version history while preserving graph revision compatibility", () => {

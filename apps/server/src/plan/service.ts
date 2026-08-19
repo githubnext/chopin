@@ -21,7 +21,7 @@ import * as Chat from "../chat/service";
 import * as Comments from "../comments/service";
 import * as Questions from "../questions/service";
 import { claim, restore as restoreGraph, restoreRun } from "../tasks/graphs";
-import { restoreLifecycle, transition } from "../tasks/lifecycle";
+import { claimEligibility, restoreLifecycle, transition } from "../tasks/lifecycle";
 import { broadcast, fail, relay, reply, tell } from "../wire";
 
 import type { Server } from "bun";
@@ -369,12 +369,14 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 	if (Object.hasOwn(item, "execution") && !execution) {
 		throw new Error("hosted channel has an invalid implementation run");
 	}
-	let lifecycle = Object.hasOwn(item, "lifecycle") && graph
-		? restoreLifecycle(item.lifecycle, graph, execution)
+	let hasLifecycle = Object.hasOwn(item, "lifecycle");
+	let restoredLifecycle = graph
+		? restoreLifecycle(hasLifecycle ? item.lifecycle : { history: [] }, graph, execution)
 		: undefined;
-	if (Object.hasOwn(item, "lifecycle") && !lifecycle) {
+	if (graph && !restoredLifecycle || hasLifecycle && !graph) {
 		throw new Error("hosted channel has an invalid implementation lifecycle");
 	}
+	let lifecycle = hasLifecycle ? restoredLifecycle : undefined;
 	let questions = objects(item.questions, "question record");
 	for (let question of questions) {
 		if (
@@ -637,6 +639,12 @@ export function claimStored(
 			: loaded.sidecar,
 		pristine,
 	);
+	let version = sidecar.graph?.versions.at(-1);
+	let eligibility = version
+		&& claimEligibility(sidecar.lifecycle ?? { history: [] }, version, input.run.id);
+	if (eligibility && !eligibility.ok) {
+		return { result: { kind: "refused", reason: eligibility.reason } };
+	}
 	let result = claim({
 		graph: sidecar.graph,
 		revision: sidecar.revision,

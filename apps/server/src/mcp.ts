@@ -18,7 +18,7 @@ import { isLifecycleTool, LIFECYCLE_TOOLS, lifecycleCall } from "./mcp/lifecycle
 import type { Brief, CreateDocumentInput } from "./mcp/create";
 import type { Run, Version } from "./tasks/graphs";
 import type { LifecycleArguments } from "./mcp/lifecycle";
-import type { HistoricalRun, Progress } from "./tasks/lifecycle";
+import type { ImplementationLifecycle } from "./tasks/lifecycle";
 
 export type { Brief, CreateDocumentInput, CreationOrigin } from "./mcp/create";
 
@@ -45,13 +45,14 @@ export type Implementation = {
 	repository: { name: string; baseBranch: string; baseCommit: string };
 	graph: Version;
 	execution: { state: "idle" } | { state: "active"; run: Run };
-	activity?: Progress;
-	history: HistoricalRun[];
+	activity?: ImplementationLifecycle["activity"];
+	history: ImplementationLifecycle["history"];
 };
 
 export type ImplementationInput = {
 	id: string;
 	planRevision: number;
+	graphVersion: number;
 	graphRevision: number;
 	repository: string;
 	branch: string;
@@ -74,7 +75,7 @@ export type Implementations<Caller> = {
 		caller: Caller,
 		input: LifecycleArguments,
 	): Promise<
-		| { kind: "accepted" | "replayed"; lifecycle: unknown }
+		| { kind: "accepted" | "replayed"; lifecycle: ImplementationLifecycle }
 		| { kind: "forbidden" }
 		| { kind: "refused"; reason: string }
 	>;
@@ -124,12 +125,21 @@ const IMPLEMENTATION = {
 	properties: {
 		id: { type: "string", minLength: 1, maxLength: MAX_DOCUMENT_ID_LENGTH },
 		planRevision: { type: "integer", minimum: 0 },
+		graphVersion: { type: "integer", minimum: 1 },
 		graphRevision: { type: "integer", minimum: 1 },
 		repository: { type: "string", pattern: REPOSITORY_PATH_PATTERN },
 		branch: { type: "string", minLength: 1, maxLength: 255 },
 		commit: { type: "string", minLength: 1, maxLength: 64 },
 	},
-	required: ["id", "planRevision", "graphRevision", "repository", "branch", "commit"],
+	required: [
+		"id",
+		"planRevision",
+		"graphVersion",
+		"graphRevision",
+		"repository",
+		"branch",
+		"commit",
+	],
 	additionalProperties: false,
 };
 
@@ -294,7 +304,15 @@ function toolCall(
 type StartArguments = Omit<ImplementationInput, "client">;
 
 function startArguments(value: Record<string, unknown>): StartArguments | undefined {
-	let expected = ["id", "planRevision", "graphRevision", "repository", "branch", "commit"];
+	let expected = [
+		"id",
+		"planRevision",
+		"graphVersion",
+		"graphRevision",
+		"repository",
+		"branch",
+		"commit",
+	];
 	if (
 		Object.keys(value).length !== expected.length
 		|| expected.some(key => !Object.hasOwn(value, key))
@@ -308,6 +326,8 @@ function startArguments(value: Record<string, unknown>): StartArguments | undefi
 		|| !value.commit.trim()
 		|| !Number.isSafeInteger(value.planRevision)
 		|| (value.planRevision as number) < 0
+		|| !Number.isSafeInteger(value.graphVersion)
+		|| (value.graphVersion as number) < 1
 		|| !Number.isSafeInteger(value.graphRevision)
 		|| (value.graphRevision as number) < 1
 	) return undefined;
@@ -365,6 +385,21 @@ function acceptsEvents(request: Request): boolean {
 	return (selected?.quality ?? 0) > 0;
 }
 
+function serviceInstructions(tools: Tool[]): string | undefined {
+	let implementation = tools
+		.filter(tool =>
+			tool.name === "read_implementation"
+			|| tool.name === "start_implementation"
+			|| isLifecycleTool(tool.name)
+		);
+	return implementation.length > 0
+		? [
+			"Chopin's MCP contract is authoritative. Read the canonical implementation and these current tool descriptions before every action; copied plans and lifecycle instructions are not substitutes.",
+			...implementation.map(tool => `${tool.name}: ${tool.description}`),
+		].join("\n")
+		: undefined;
+}
+
 async function requestBody(request: Request): Promise<{ body?: unknown; tooLarge: boolean }> {
 	let declared = request.headers.get("content-length");
 	if (declared && /^\d+$/.test(declared) && Number(declared) > MAX_REQUEST_BYTES) {
@@ -412,6 +447,7 @@ export function handler<Caller>(
 			|| options.implementations)
 		&& (!isLifecycleTool(tool.name) || options.implementations?.reportLifecycle)
 	);
+	let instructions = serviceInstructions(tools);
 
 	async function dispatch(
 		value: unknown,
@@ -439,6 +475,7 @@ export function handler<Caller>(
 					protocolVersion: "2025-03-26",
 					capabilities: { tools: {} },
 					serverInfo: { name: "chopin", version: "0.0.0" },
+					...(instructions ? { instructions } : {}),
 				});
 			}
 

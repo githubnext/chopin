@@ -4,21 +4,29 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { createPortal } from "react-dom";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { ChatCircleIcon } from "@phosphor-icons/react";
+import { useCellValue } from "@mdxeditor/gurx";
 
 import { DraftCard, ThreadCard } from "./comments";
 import { markerPoints, popoverPoint } from "./comment-geometry";
 import { containsHit, passageHits } from "./comment-hits";
+import { useCommentSheetReveal } from "./comment-sheet-reveal";
 import { $rangeOf } from "./marks";
 import { blockElement } from "./scroll";
 import { COARSE_POINTER_QUERY, hasCoarsePointer } from "./pointer";
 import { useThreads } from "./threads";
+import { widgets$ } from "./widget-options";
 
 import type { CSSProperties } from "react";
 import type { Point, Rect } from "./comment-geometry";
 import type { PassageHit } from "./comment-hits";
 import type { ThreadStore, ThreadView } from "./threads";
 
-type PlacedThread = { view: ThreadView; button: Point; hits: PassageHit[] };
+type PlacedThread = {
+	view: ThreadView;
+	button: Point;
+	hits: PassageHit[];
+	passages: Rect[];
+};
 type MeasuredThread = { view: ThreadView; target: Rect; passages: Rect[]; hits: Rect[] };
 type PassagePress = { id: string; left: number; pointer: number; top: number; moved: boolean };
 
@@ -89,7 +97,6 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let [placed, setPlaced] = useState<PlacedThread[]>([]);
 	let [preview, setPreview] = useState<string>();
 	let [pinned, setPinned] = useState<string>();
-	let [compact, setCompact] = useState(false);
 	let [coarse, setCoarse] = useState(false);
 	let [cardHeights, setCardHeights] = useState<{ [id: string]: number }>({});
 	let root = useRef<HTMLDivElement>(null);
@@ -100,6 +107,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let failures = useRef(new Set<string>());
 	let origin = useRef<HTMLElement | undefined>(undefined);
 	let draftOpen = useRef(false);
+	let compact = useCellValue(widgets$).commentPresentation === "sheet";
 
 	useEffect(() => {
 		setHost(document.querySelector<HTMLElement>(".plan-document") ?? undefined);
@@ -136,7 +144,6 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		hoverOwner.current = undefined;
 		leave(id);
 	}, [leave]);
-
 	let measure = () => {
 		if (!host) return;
 		let page = rect(host.getBoundingClientRect());
@@ -180,6 +187,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			view: entry.view,
 			button: buttons[index]!,
 			hits: passageHits(page, entry.hits),
+			passages: entry.passages,
 		}));
 
 		placedRef.current = next;
@@ -197,15 +205,10 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		host.addEventListener("scroll", update, true);
 		let observer = new ResizeObserver(update);
 		observer.observe(host);
-		let compactUpdate = () => setCompact(host.clientWidth <= 640);
-		compactUpdate();
-		let compactObserver = new ResizeObserver(compactUpdate);
-		compactObserver.observe(host);
 		return () => {
 			off();
 			host.removeEventListener("scroll", update, true);
 			observer.disconnect();
-			compactObserver.disconnect();
 		};
 	}, [editor, host, state.threads, coarse]);
 
@@ -326,6 +329,15 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		restoreOrigin();
 	}, [editor, pinned, restoreOrigin, state.draft, state.threads, store]);
 
+	let sheetId = compact && pinned !== "orphans" ? pinned : undefined;
+	let sheet = placed.find(entry => entry.view.thread.id === sheetId);
+	useCommentSheetReveal({
+		height: sheetId ? cardHeights[sheetId] : undefined,
+		host,
+		id: sheetId,
+		passages: sheet?.passages,
+	});
+
 	useEffect(() => {
 		if (!pinned && !preview) return;
 		let outside = (event: PointerEvent) => {
@@ -425,7 +437,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let previewWidth = Math.min(288, host.clientWidth * 0.8);
 
 	return createPortal(
-		<div className="plan-comment-layer" ref={root}>
+		<div className="plan-comment-layer" data-plan-comment-sheet={compact || undefined} ref={root}>
 			{placed.map(({ button, hits, view }) => {
 				let shown = pinned === view.thread.id;
 				let previewId = `plan-comment-preview-${view.thread.id}`;

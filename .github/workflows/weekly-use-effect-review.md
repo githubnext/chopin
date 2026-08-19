@@ -5,6 +5,9 @@ on:
       timezone: Europe/London
   workflow_dispatch:
 
+imports:
+  - shared/dprint-verification.md
+
 permissions:
   contents: read
   copilot-requests: write

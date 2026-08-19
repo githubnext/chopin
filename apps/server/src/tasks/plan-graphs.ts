@@ -1,7 +1,7 @@
 /** The hosted persistence boundary for implementation graphs. */
 
 import { claim, Graphs } from "./graphs";
-import { progressFor, transition } from "./lifecycle";
+import { claimEligibility, implementationLifecycle, transition } from "./lifecycle";
 import * as Comments from "../comments/service";
 import { drain, exclusive, persistExclusive } from "../plan/service";
 import { broadcast } from "../wire";
@@ -45,6 +45,12 @@ export async function claimImplementation(plan: Plan, input: ClaimInput): Promis
 	try {
 		await drain(plan);
 		return await exclusive(plan, async () => {
+			let version = plan.graph?.versions.at(-1);
+			let eligibility = version
+				&& claimEligibility(plan.lifecycle, version, input.run.id);
+			if (eligibility && !eligibility.ok) {
+				return { kind: "refused", reason: eligibility.reason };
+			}
 			let result = claim({
 				graph: plan.graph,
 				revision: plan.revision,
@@ -100,9 +106,7 @@ export function reportImplementationLifecycle(
 		broadcast(plan.server, plan.id, {
 			kind: "plan:lifecycle",
 			ts: 0,
-			execution: plan.execution ? { state: "active" } : { state: "idle" },
-			activity: progressFor(plan.graph, plan.lifecycle, plan.execution),
-			history: plan.lifecycle.history.length,
+			...implementationLifecycle(result.state),
 		});
 		return result;
 	});

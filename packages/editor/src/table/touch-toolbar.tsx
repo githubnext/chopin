@@ -9,6 +9,7 @@ import {
 } from "@lexical/table";
 import { $getSelection, $isRangeSelection } from "lexical";
 
+import { planScroller } from "../scroll";
 import { placeSurface } from "../toolbar/placement";
 import { editorSurfaceViewport, listenToEditorGeometry } from "../toolbar/surface";
 import {
@@ -116,8 +117,7 @@ export function TableTouchToolbar(
 	useLayoutEffect(() => {
 		if (!selected) return;
 		let element = surface.current;
-		let scroller = editor.getRootElement()?.closest<HTMLElement>(".plan-document")
-			?.firstElementChild as HTMLElement | null;
+		let scroller = planScroller(editor.getRootElement());
 		if (!element || !scroller) return;
 		let previous = scroller.style.scrollPaddingBottom;
 		scroller.style.scrollPaddingBottom = `${element.offsetHeight + 16}px`;
