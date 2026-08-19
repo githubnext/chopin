@@ -57,13 +57,32 @@ test("the compact workspace gives the document the full available width", async 
 	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(640);
 });
 
-test("chat keeps its draft while hidden", async ({ join, page }) => {
+test("split Conversation owns its controls and keeps its draft while hidden", async ({ join, page }) => {
+	await page.setViewportSize({ width: 1280, height: 800 });
 	await join("ana");
 	let draft = page.locator("#pane-chat textarea");
+	let header = page.getByRole("banner");
+	let heading = page.getByRole("heading", { name: "Conversation" });
+	let close = page.getByRole("button", { name: "Hide conversation pane" });
 
 	await draft.fill("unfinished thought");
-	await page.getByRole("button", { name: "Hide conversation pane" }).click();
-	await page.getByRole("button", { name: "Show conversation pane" }).click();
+	await expect(header.getByRole("button", { name: /conversation pane/ })).toHaveCount(0);
+	await expect(heading).toBeVisible();
+	await expect(close).toBeVisible();
+	await expect(close).toHaveAttribute("aria-controls", "pane-chat");
+	await expect(close).toHaveAttribute("aria-expanded", "true");
+	await close.click();
+	let opener = page.getByRole("button", { name: "Show conversation pane" });
+	await expect(page.locator("#pane-chat")).toBeHidden();
+	await expect(opener).toHaveAttribute("aria-controls", "pane-chat");
+	await expect(opener).toHaveAttribute("aria-expanded", "false");
+	let [openerBox, documentBox] = await Promise.all([box(opener), box(page.locator("main"))]);
+	expect(openerBox.width).toBe(28);
+	expect(openerBox.x).toBe(documentBox.x);
+	expect(openerBox.y).toBe(documentBox.y);
+	await expect(opener).toBeFocused();
+	await opener.click();
+	await expect(heading).toBeFocused();
 	await expect(draft).toHaveValue("unfinished thought");
 });
 

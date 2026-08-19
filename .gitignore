@@ -22,6 +22,7 @@ e2e/blob-report/
 .zed/
 
 # Agents
+.codex/
 .claude/settings.local.json
 .opencode/*
 
