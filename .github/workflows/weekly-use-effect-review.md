@@ -19,6 +19,11 @@ steps:
 
 engine: copilot
 
+network:
+  allowed:
+    - defaults
+    - "releaseassets.githubusercontent.com"
+
 safe-outputs:
   create-pull-request:
     title-prefix: "[use-effect] "
