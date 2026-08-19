@@ -25,6 +25,10 @@ claude mcp add --scope user --transport http chopin "${CHOPIN_URL%/}/mcp" \
   --header "Authorization: Bearer ${GITHUB_TOKEN}"
 ```
 
+Claude stores the expanded header when this command runs. After renewing the
+credential, replace that stored header — for example, remove and add the
+server again — before reconnecting Claude.
+
 ## Codex CLI
 
 Install and sign in to Codex CLI, then register the server. Codex reads the
@@ -62,7 +66,8 @@ instructions and current tool descriptions are authoritative.
 ## Access and troubleshooting
 
 HTTP `401` means bearer authentication failed: renew the GitHub CLI login with
-`gh auth login`, export `GITHUB_TOKEN` again, and reconnect the agent.
+`gh auth login`, export `GITHUB_TOKEN` again, replace Claude's stored header if
+you use Claude Code, and reconnect the agent.
 
 `repository-forbidden` means the identity authenticated but lacks the
 operation's repository permission. Pull access is enough for
