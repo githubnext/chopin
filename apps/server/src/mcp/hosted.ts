@@ -4,7 +4,7 @@ import * as Plan from "../plan/service";
 import * as Rooms from "../rooms";
 import { claimImplementation, reportImplementationLifecycle } from "../tasks/plan-graphs";
 import { StorageError } from "../storage/errors";
-import { historyFor, progressFor } from "../tasks/lifecycle";
+import { implementationLifecycle } from "../tasks/lifecycle";
 
 import type { HostedAuth } from "../auth/routes";
 import type { GitHubUser } from "../github/client";
@@ -75,6 +75,13 @@ function exposed(
 	) {
 		return undefined;
 	}
+	let lifecycle = state.graph && state.lifecycle
+		? implementationLifecycle({
+			graph: state.graph,
+			execution: state.execution,
+			lifecycle: state.lifecycle,
+		})
+		: undefined;
 	return {
 		document: document({
 			id: channel.id,
@@ -92,22 +99,8 @@ function exposed(
 		execution: state.execution
 			? { state: "active", run: state.execution }
 			: { state: "idle" },
-		activity: state.graph && state.lifecycle
-			? progressFor(state.graph, state.lifecycle, state.execution)
-			: undefined,
-		history: state.graph && state.lifecycle ? historyFor(state.graph, state.lifecycle) : [],
-	};
-}
-
-function lifecycle(state: {
-	graph: NonNullable<Awaited<ReturnType<typeof Plan.readStored>>["graph"]>;
-	execution?: Run;
-	lifecycle: NonNullable<Awaited<ReturnType<typeof Plan.readStored>>["lifecycle"]>;
-}) {
-	return {
-		execution: state.execution ? { state: "active" as const } : { state: "idle" as const },
-		activity: progressFor(state.graph, state.lifecycle, state.execution),
-		history: historyFor(state.graph, state.lifecycle),
+		activity: lifecycle?.activity,
+		history: lifecycle?.history ?? [],
 	};
 }
 
@@ -399,7 +392,7 @@ export function hosted(
 							if (result.kind === "refused") return result;
 							return {
 								kind: result.kind,
-								lifecycle: lifecycle({
+								lifecycle: implementationLifecycle({
 									graph: result.state.graph,
 									execution: result.state.execution,
 									lifecycle: result.state.lifecycle,
@@ -414,7 +407,7 @@ export function hosted(
 							if (prepared.result.kind === "replayed") {
 								return {
 									kind: "replayed" as const,
-									lifecycle: lifecycle({
+									lifecycle: implementationLifecycle({
 										graph: prepared.result.state.graph,
 										execution: prepared.result.state.execution,
 										lifecycle: prepared.result.state.lifecycle,
@@ -435,7 +428,7 @@ export function hosted(
 								});
 								return {
 									kind: "accepted" as const,
-									lifecycle: lifecycle({
+									lifecycle: implementationLifecycle({
 										graph: prepared.result.state.graph,
 										execution: prepared.result.state.execution,
 										lifecycle: prepared.result.state.lifecycle,
