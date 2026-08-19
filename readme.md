@@ -1,4 +1,4 @@
-# chopin
+# GitHub Next Chopin
 
 A collaborative plan, written by a team and an agent together.
 
