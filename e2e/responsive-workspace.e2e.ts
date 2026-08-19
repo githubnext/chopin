@@ -257,6 +257,8 @@ for (
 		await expect(page.locator("#workspace-plan-heading")).toBeFocused();
 
 		await opener.click();
+		await expect(conversation).toBeVisible();
+		await expect(page.locator("#workspace-conversation-heading")).toBeFocused();
 		await page.keyboard.press("Escape");
 		await expect(conversation).toBeHidden();
 		await expect(opener).toBeFocused();
