@@ -13,7 +13,7 @@ bun run types      # every package, and e2e
 bun run ci         # dprint check && oxlint && token checks
 bun run build      # production client
 bun run start      # serve the built client
-bun run docker:up  # production image + PostgreSQL through the app Compose profile
+bun run docker:up  # production image + PostgreSQL with local port mappings
 ```
 
 `.github/workflows/ci.yml` runs the static/unit checks, browser suite, and
@@ -31,8 +31,10 @@ invariants live in [Remote development](docs/exe-dev.md).
 `Dockerfile` is one application image, not a web tier and an API tier: the build
 stage produces `apps/web/dist`, and the Bun server serves it on the same origin
 as `/api` and `/ws`. Its default command migrates before serving and runs as the
-image's unprivileged `bun` user. Compose keeps that service behind the `app`
-profile so `bun run db:up` continues to start only PostgreSQL for development.
+image's unprivileged `bun` user. `compose.yaml` is safe to deploy without host
+port mappings; local commands merge `compose.local.yaml`, and `bun run db:up`
+targets only PostgreSQL. The two browser-test databases stay behind the `test`
+profile and are also started when the e2e script targets them explicitly.
 
 `bun run e2e` needs a browser once: `bun run e2e:browsers`. It builds the
 client, starts two temporary PostgreSQL services and two servers of its own —
