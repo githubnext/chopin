@@ -66,8 +66,9 @@ This builds the image, starts PostgreSQL, applies migrations, and listens on
 `bun run db:up` remains database-only for development with Vite HMR. The base
 `compose.yaml` publishes no host ports; these local commands merge the committed
 `compose.local.yaml` port mappings. Coolify can supply the optional
-`SERVICE_NAME_DB` and `SERVICE_URL_APP_8787` values for isolated previews;
-ordinary Compose deployments fall back to the `db` service and `APP_ORIGIN`.
+`SERVICE_NAME_DB` and `SERVICE_URL_APP` values for isolated previews; the empty
+`SERVICE_URL_APP_8787` entry marks the app's internal proxy port. Ordinary
+Compose deployments fall back to the `db` service and `APP_ORIGIN`.
 
 For a deployment using a managed database, build `Dockerfile`, provide
 `DATABASE_URL`, `APP_ORIGIN`, the GitHub App credentials and slug, and
