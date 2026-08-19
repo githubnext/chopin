@@ -285,6 +285,67 @@ describe("hosted login sessions", () => {
 		expect(await sessions.authenticate(request(pair(issued.cookie)))).toBeUndefined();
 		expect(await storage.sessions.get(issued.id, now)).toBeUndefined();
 	});
+
+	it("revokes a session that no longer passes external admission", async () => {
+		let storage = new MemoryStorage();
+		let now = new Date("2026-08-13T12:00:00.000Z");
+		await storage.users.put({ id: "U_test", login: "mona", avatarUrl: "", now });
+		let allowed = true;
+		let revoked: string[] = [];
+		let sessions = new Sessions(storage, false, () => now, {
+			authorize: async (user, token) => {
+				expect(user.id).toBe("U_test");
+				expect(token).toBe("ghu_secret");
+				return allowed;
+			},
+			onRevoked: async id => {
+				revoked.push(id);
+			},
+		});
+		let issued = await sessions.issue("U_test", grant("ghu_secret"));
+		let cookie = request(pair(issued.cookie));
+		expect(await sessions.authenticate(cookie)).toBeDefined();
+
+		allowed = false;
+		expect(await sessions.authenticate(cookie)).toBeUndefined();
+		expect(await storage.sessions.get(issued.id, now)).toBeUndefined();
+		expect(revoked).toEqual([issued.id]);
+	});
+
+	it("retains a session when external admission is temporarily unavailable", async () => {
+		let storage = new MemoryStorage();
+		let now = new Date("2026-08-13T12:00:00.000Z");
+		await storage.users.put({ id: "U_test", login: "mona", avatarUrl: "", now });
+		let sessions = new Sessions(storage, false, () => now, {
+			authorize: async () => {
+				throw new GitHubError("membership unavailable", 503);
+			},
+		});
+		let issued = await sessions.issue("U_test", grant("ghu_secret"));
+		await expect(sessions.authenticate(request(pair(issued.cookie))))
+			.rejects.toMatchObject({ status: 503 });
+		expect(await storage.sessions.get(issued.id, now)).toBeDefined();
+	});
+
+	it("refreshes and retries a token rejected during external admission", async () => {
+		let storage = new MemoryStorage();
+		let now = new Date("2026-08-13T12:00:00.000Z");
+		await storage.users.put({ id: "U_test", login: "mona", avatarUrl: "", now });
+		let attempts: string[] = [];
+		let sessions = new Sessions(storage, false, () => now, {
+			refresh: async () => grant("ghu_second", "ghr_second"),
+			authorize: async (_user, token) => {
+				attempts.push(token);
+				if (token === "ghu_first") throw new GitHubError("expired", 401);
+				return true;
+			},
+		});
+		let issued = await sessions.issue("U_test", grant("ghu_first", "ghr_first"));
+		let authenticated = await sessions.authenticate(request(pair(issued.cookie)));
+
+		expect(authenticated?.access).toMatchObject({ token: "ghu_second", revision: 2 });
+		expect(attempts).toEqual(["ghu_first", "ghu_second"]);
+	});
 });
 
 describe("OAuth attempts", () => {

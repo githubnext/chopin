@@ -24,6 +24,8 @@ Enable expiring user authorization tokens, disable OAuth during installation,
 and grant read access to Contents, Pull requests, Checks, and Commit statuses.
 Make the App installable on any account and disable webhooks. See
 [Authentication](docs/authentication.md) for the complete registration values.
+Deployments admitting organization members also need organization Members read
+access and an approved App installation on each allowed organization.
 
 Then configure and start the service:
 
@@ -92,22 +94,26 @@ ownership without losing plans or transcripts.
 
 ## Configuration
 
-| Variable                   | Default             | Meaning                                                              |
-| -------------------------- | ------------------- | -------------------------------------------------------------------- |
-| `DATABASE_URL`             | required            | PostgreSQL connection URL; never printed by the server.              |
-| `STORAGE_DRIVER`           | `postgres`          | Built-in storage adapter.                                            |
-| `APP_ORIGIN`               | required            | Exact public HTTP(S) origin used for callbacks and Origin checks.    |
-| `GITHUB_APP_SLUG`          | required            | Slug from the GitHub App's public link.                              |
-| `GITHUB_APP_CLIENT_ID`     | required            | GitHub App OAuth client id, distinct from the App id.                |
-| `GITHUB_APP_CLIENT_SECRET` | required            | GitHub App client secret used for user-token exchange and refresh.   |
-| `SESSION_ENCRYPTION_KEY`   | required            | 32 random bytes as 64 hex characters; encrypts OAuth state and PKCE. |
-| `SERVER_HOST`              | `127.0.0.1`         | Bind address.                                                        |
-| `PORT`                     | `8787`              | HTTP and WebSocket port.                                             |
-| `MODEL`                    | `claude-sonnet-4.6` | Planner model.                                                       |
-| `AGENT`                    | on                  | `AGENT=off` hides and disables the planner.                          |
+| Variable                       | Default             | Meaning                                                              |
+| ------------------------------ | ------------------- | -------------------------------------------------------------------- |
+| `DATABASE_URL`                 | required            | PostgreSQL connection URL; never printed by the server.              |
+| `STORAGE_DRIVER`               | `postgres`          | Built-in storage adapter.                                            |
+| `APP_ORIGIN`                   | required            | Exact public HTTP(S) origin used for callbacks and Origin checks.    |
+| `GITHUB_APP_SLUG`              | required            | Slug from the GitHub App's public link.                              |
+| `GITHUB_APP_CLIENT_ID`         | required            | GitHub App OAuth client id, distinct from the App id.                |
+| `GITHUB_APP_CLIENT_SECRET`     | required            | GitHub App client secret used for user-token exchange and refresh.   |
+| `GITHUB_ALLOWED_USERS`         | unrestricted        | Comma-separated GitHub usernames admitted to this instance.          |
+| `GITHUB_ALLOWED_ORGANIZATIONS` | unrestricted        | Comma-separated organizations whose active members are admitted.     |
+| `SESSION_ENCRYPTION_KEY`       | required            | 32 random bytes as 64 hex characters; encrypts OAuth state and PKCE. |
+| `SERVER_HOST`                  | `127.0.0.1`         | Bind address.                                                        |
+| `PORT`                         | `8787`              | HTTP and WebSocket port.                                             |
+| `MODEL`                        | `claude-sonnet-4.6` | Planner model.                                                       |
+| `AGENT`                        | on                  | `AGENT=off` hides and disables the planner.                          |
 
 Generate the session key with `openssl rand -hex 32`. `APP_ORIGIN` has no
 trailing slash and must match the GitHub App callback's origin exactly.
+The two admission lists are case-insensitive and combined: matching either one
+is sufficient. Leaving both empty preserves unrestricted sign-in.
 
 ## Sharing
 
@@ -151,8 +157,9 @@ Three things are worth knowing before changing it:
 
 - **The dialect is an allowlist.** Plan content is parsed and rendered, never
   evaluated.
-- **Repository authorization is the boundary.** HTTP routes, WebSocket upgrades,
-  and agent tools recheck the owning GitHub session and repository permission.
+- **Admission and repository authorization are separate boundaries.** Optional
+  user and organization lists admit an identity; routes, sockets, and agent
+  tools then recheck repository permission.
 - **An unhandled node type kills collaboration silently.** `registry.test.ts`
   asserts that every dialect node can be serialized and synchronized.
 

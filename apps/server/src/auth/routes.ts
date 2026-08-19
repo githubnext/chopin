@@ -1,5 +1,6 @@
 import { GitHubClient, GitHubError } from "../github/client";
 import { StorageError } from "../storage/errors";
+import { Admission, AdmissionDenied } from "./admission";
 import { OAuthAttempts, Sessions } from "./session";
 
 import type { AuthConfig } from "./config";
@@ -23,6 +24,7 @@ export type HostedAuth = {
 	config: AuthConfig;
 	storage: StorageAdapter;
 	github: GitHub;
+	admission: Admission;
 	sessions: Sessions;
 	clock: Clock;
 };
@@ -60,6 +62,9 @@ function redirected(location: string, status: 302 | 303, cookies: string[]): Res
 }
 
 function failure(err: unknown): Response {
+	if (err instanceof AdmissionDenied) {
+		return json({ error: err.message }, 403);
+	}
 	if (err instanceof GitHubError) {
 		return json({ error: err.message }, err.status);
 	}
@@ -96,6 +101,7 @@ export function registerAuthRoutes(
 	let config = dependencies.config;
 	let storage = dependencies.storage;
 	let github = dependencies.github ?? new GitHubClient();
+	let admission = new Admission(config, github, () => clock().getTime());
 	let secure = new URL(config.origin).protocol === "https:";
 	let sessions = new Sessions(storage, secure, clock, {
 		refresh: refreshToken =>
@@ -106,11 +112,14 @@ export function registerAuthRoutes(
 			}),
 		beforeRefresh: dependencies.onCredentialsWillRotate,
 		onRevoked: dependencies.onSessionRevoked,
-		invalidate: token => github.invalidate(token),
+		authorize: admission.restricted
+			? (user, token) => admission.allowed(token, user.id)
+			: undefined,
+		invalidate: token => admission.invalidate(token),
 	});
 	let attempts = new OAuthAttempts(config.encryptionKey, secure, clock);
 	let redirectUri = `${config.origin}/auth/github/callback`;
-	let context: HostedAuth = { config, storage, github, sessions, clock };
+	let context: HostedAuth = { config, storage, github, admission, sessions, clock };
 
 	router.on("GET", "/auth/github", async () => {
 		let issued = await attempts.issue();
@@ -134,7 +143,7 @@ export function registerAuthRoutes(
 	// always re-established from the signed-in user's token.
 	router.on("GET", "/auth/github/setup", async request => {
 		let authenticated = await sessions.authenticate(request).catch(() => undefined);
-		if (authenticated) github.invalidate(authenticated.access.token);
+		if (authenticated) admission.invalidate(authenticated.access.token);
 		return redirected("/", 303, []);
 	});
 
@@ -157,7 +166,7 @@ export function registerAuthRoutes(
 				code,
 				verifier: stored.verifier,
 			});
-			let profile = await github.user(grant.accessToken);
+			let profile = await admission.user(grant.accessToken);
 			let now = clock();
 			await storage.users.put({ ...profile, now });
 			let session = await sessions.issue(profile.id, grant);

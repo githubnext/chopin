@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 
 import { toolbox } from "./tools";
+import { Admission } from "../auth/admission";
 import { Sessions } from "../auth/session";
 import * as Chat from "../chat/service";
 import * as room from "../plan/room";
@@ -481,26 +482,29 @@ test("a chat-started planner turn can draft an implementation graph", async () =
 		refreshExpiresIn: 15_897_600,
 	});
 	let repository = { id: "R_test", owner: "owner", name: "repository", defaultBranch: "main" };
-	let auth: HostedAuth = {
-		config: {
-			origin: "https://test",
-			appSlug: "chopin-test",
-			clientId: "id",
-			clientSecret: "secret",
-			encryptionKey: key,
+	let config = {
+		origin: "https://test",
+		appSlug: "chopin-test",
+		clientId: "id",
+		clientSecret: "secret",
+		encryptionKey: key,
+	};
+	let github = {
+		async repositoryAccess() {
+			return {
+				...repository,
+				fullName: "owner/repository",
+				private: true,
+				url: "",
+				permissions: { pull: true, push: true, admin: false },
+			};
 		},
+	} as never;
+	let auth: HostedAuth = {
+		config,
 		storage,
-		github: {
-			async repositoryAccess() {
-				return {
-					...repository,
-					fullName: "owner/repository",
-					private: true,
-					url: "",
-					permissions: { pull: true, push: true, admin: false },
-				};
-			},
-		} as never,
+		github,
+		admission: new Admission(config, github, () => now.getTime()),
 		sessions,
 		clock: () => now,
 	};

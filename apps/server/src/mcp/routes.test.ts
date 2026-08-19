@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
 import { Sessions } from "../auth/session";
+import { Admission } from "../auth/admission";
 import { Router } from "../http/router";
+import { GitHubError } from "../github/client";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { registerMcpRoutes } from "./routes";
 
@@ -17,6 +19,8 @@ import type {
 
 class GitHubBoundary implements GitHub {
 	failure: Error | undefined;
+	membership: { state: "active" | "pending"; role: "member" } | undefined;
+	membershipFailure: GitHubError | undefined;
 
 	authorize(): string {
 		return "";
@@ -33,6 +37,11 @@ class GitHubBoundary implements GitHub {
 	async user(): Promise<GitHubUser> {
 		if (this.failure) throw this.failure;
 		return { id: "U_octocat", login: "octocat", avatarUrl: "" };
+	}
+
+	async organizationMembership() {
+		if (this.membershipFailure) throw this.membershipFailure;
+		return this.membership;
 	}
 
 	async repositories(): Promise<RepositoryPage> {
@@ -67,21 +76,24 @@ function grant(accessToken: string): GitHubTokenGrant {
 	};
 }
 
-function setup() {
+function setup(overrides: Partial<HostedAuth["config"]> = {}) {
 	let now = new Date("2026-08-17T12:00:00.000Z");
 	let storage = new MemoryStorage();
 	let github = new GitHubBoundary();
 	let key = new Uint8Array(32).fill(3);
+	let config = {
+		origin: "https://chopin.test",
+		appSlug: "chopin-test",
+		clientId: "client-id",
+		clientSecret: "client-secret",
+		encryptionKey: key,
+		...overrides,
+	};
 	let auth: HostedAuth = {
-		config: {
-			origin: "https://chopin.test",
-			appSlug: "chopin-test",
-			clientId: "client-id",
-			clientSecret: "client-secret",
-			encryptionKey: key,
-		},
+		config,
 		storage,
 		github,
+		admission: new Admission(config, github, () => now.getTime()),
 		sessions: new Sessions(storage, true, () => now),
 		clock: () => now,
 	};
@@ -151,5 +163,34 @@ describe("the hosted MCP route", () => {
 		expect(text).toBe("MCP request failed");
 		expect(text).not.toContain("access-token");
 		expect(text).not.toContain("Private roadmap");
+	});
+
+	it("distinguishes denied and temporarily unverifiable organization admission", async () => {
+		let denied = setup({ allowedOrganizations: new Set(["githubnext"]) });
+		let deniedResponse = await denied.router.handle(request("POST", {
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
+		}));
+		expect(deniedResponse?.status).toBe(403);
+		expect(await deniedResponse?.text()).toBe("forbidden");
+		expectProtected(deniedResponse);
+
+		let unavailable = setup({ allowedOrganizations: new Set(["githubnext"]) });
+		unavailable.github.membershipFailure = new GitHubError("permission missing", 403);
+		let unavailableResponse = await unavailable.router.handle(request("POST", {
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
+		}));
+		expect(unavailableResponse?.status).toBe(503);
+		expect(await unavailableResponse?.text()).toBe("admission is temporarily unavailable");
+		expectProtected(unavailableResponse);
+
+		let member = setup({ allowedOrganizations: new Set(["githubnext"]) });
+		member.github.membership = { state: "active", role: "member" };
+		let memberResponse = await member.router.handle(request("POST", {
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
+		}));
+		expect(memberResponse?.status).toBe(200);
 	});
 });

@@ -8,6 +8,7 @@ import { registerAuthRoutes } from "./routes";
 import type { AuthConfig } from "./config";
 import type {
 	GitHub,
+	GitHubOrganizationMembership,
 	GitHubTokenGrant,
 	GitHubUser,
 	InstallationPage,
@@ -27,6 +28,9 @@ class FakeGitHub implements GitHub {
 	exchanged: Parameters<GitHub["exchange"]>[0] | undefined;
 	denyRepositories = false;
 	invalidated: string[] = [];
+	membership: GitHubOrganizationMembership | undefined;
+	membershipFailure: GitHubError | undefined;
+	membershipCalls: string[] = [];
 
 	authorize(input: Parameters<GitHub["authorize"]>[0]): string {
 		this.authorized = input;
@@ -47,6 +51,12 @@ class FakeGitHub implements GitHub {
 
 	async user(_token: string): Promise<GitHubUser> {
 		return { id: "U_octocat", login: "octocat", avatarUrl: "https://avatars.test/octocat" };
+	}
+
+	async organizationMembership(_token: string, organization: string) {
+		this.membershipCalls.push(organization);
+		if (this.membershipFailure) throw this.membershipFailure;
+		return this.membership;
 	}
 
 	async installations(_token: string, page: number): Promise<InstallationPage> {
@@ -124,6 +134,18 @@ const CONFIG: AuthConfig = {
 	clientSecret: "client-secret",
 	encryptionKey: new Uint8Array(32).fill(6),
 };
+
+async function callback(router: Router): Promise<Response> {
+	let start = await router.handle(new Request("https://chopin.test/auth/github"));
+	let state = new URL(start!.headers.get("location")!).searchParams.get("state");
+	let stateCookie = pair(cookies(start!)[0]!);
+	return (await router.handle(
+		new Request(
+			`https://chopin.test/auth/github/callback?code=code&state=${state}`,
+			{ headers: { cookie: stateCookie } },
+		),
+	))!;
+}
 
 describe("hosted authentication routes", () => {
 	it("signs in, reports the session, lists repositories and logs out", async () => {
@@ -265,6 +287,105 @@ describe("hosted authentication routes", () => {
 		expect(missing!.status).toBe(400);
 		expect(await missing!.json()).toEqual({ error: "OAuth state is missing or invalid" });
 		expect(cookies(missing!)[0]).toContain("Max-Age=0");
+	});
+
+	it("admits the union of explicit users and active organization members", async () => {
+		let explicitGitHub = new FakeGitHub();
+		explicitGitHub.membershipFailure = new GitHubError("must not be queried", 500);
+		let explicitRouter = new Router();
+		registerAuthRoutes(explicitRouter, {
+			config: {
+				...CONFIG,
+				allowedUsers: new Set(["octocat"]),
+				allowedOrganizations: new Set(["githubnext"]),
+			},
+			storage: new MemoryStorage(),
+			github: explicitGitHub,
+		});
+		expect((await callback(explicitRouter)).status).toBe(303);
+		expect(explicitGitHub.membershipCalls).toEqual([]);
+
+		let memberGitHub = new FakeGitHub();
+		memberGitHub.membership = { state: "active", role: "member" };
+		let memberRouter = new Router();
+		registerAuthRoutes(memberRouter, {
+			config: { ...CONFIG, allowedOrganizations: new Set(["githubnext"]) },
+			storage: new MemoryStorage(),
+			github: memberGitHub,
+		});
+		expect((await callback(memberRouter)).status).toBe(303);
+		expect(memberGitHub.membershipCalls).toEqual(["githubnext"]);
+	});
+
+	it("refuses unlisted OAuth identities before persisting a user or session", async () => {
+		let storage = new MemoryStorage();
+		let github = new FakeGitHub();
+		let router = new Router();
+		registerAuthRoutes(router, {
+			config: { ...CONFIG, allowedOrganizations: new Set(["githubnext"]) },
+			storage,
+			github,
+		});
+
+		let denied = await callback(router);
+		expect(denied.status).toBe(403);
+		expect(await denied.json()).toEqual({
+			error: "GitHub account is not allowed to use this Chopin instance",
+		});
+		expect(await storage.users.get("U_octocat")).toBeUndefined();
+		expect(cookies(denied)).toHaveLength(1);
+		expect(cookies(denied)[0]).toContain("Max-Age=0");
+	});
+
+	it("fails closed without persisting identity when organization verification is unavailable", async () => {
+		let storage = new MemoryStorage();
+		let github = new FakeGitHub();
+		github.membershipFailure = new GitHubError("App permission is missing", 403);
+		let router = new Router();
+		registerAuthRoutes(router, {
+			config: { ...CONFIG, allowedOrganizations: new Set(["githubnext"]) },
+			storage,
+			github,
+		});
+
+		let unavailable = await callback(router);
+		expect(unavailable.status).toBe(503);
+		expect(await storage.users.get("U_octocat")).toBeUndefined();
+	});
+
+	it("revokes an active browser session after organization membership is removed", async () => {
+		let now = new Date("2026-08-13T12:00:00.000Z");
+		let storage = new MemoryStorage();
+		let github = new FakeGitHub();
+		github.membership = { state: "active", role: "member" };
+		let revoked: string[] = [];
+		let router = new Router();
+		registerAuthRoutes(router, {
+			config: { ...CONFIG, allowedOrganizations: new Set(["githubnext"]) },
+			storage,
+			github,
+			clock: () => now,
+			onSessionRevoked: async id => {
+				revoked.push(id);
+			},
+		});
+
+		let signedIn = await callback(router);
+		let sessionCookie = pair(
+			cookies(signedIn).find(value => value.startsWith("__Host-chopin_session="))!,
+		);
+		let sessionId = sessionCookie.slice(sessionCookie.indexOf("=") + 1).split(".")[0]!;
+		github.membership = undefined;
+		now = new Date(now.getTime() + 30_000);
+		let session = await router.handle(
+			new Request("https://chopin.test/api/session", {
+				headers: { cookie: sessionCookie },
+			}),
+		);
+
+		expect(await session!.json()).toEqual({ user: null, agent: true });
+		expect(await storage.sessions.get(sessionId, now)).toBeUndefined();
+		expect(revoked).toEqual([sessionId]);
 	});
 
 	it("uses the configured public origin behind a reverse proxy", async () => {

@@ -1,10 +1,12 @@
 # Repository channels
 
 Chopin keeps channel metadata in the selected storage adapter and uses
-GitHub as the current authorization source. A repository must appear in the
-intersection of the authenticated user's access and a personal or organization
-GitHub App installation. The installation must include that repository. Merely
-being public is not enough to expose its Chopin channels.
+GitHub as the current authorization source. An identity must first pass the
+instance's optional user or organization admission policy. A repository must
+then appear in the intersection of the authenticated user's access and a
+personal or organization GitHub App installation. The installation must include
+that repository. Merely being public is not enough to expose its Chopin
+channels.
 
 GitHub read access may list and open channels. Push or admin access may create a
 channel and mutate its plan, chat and decisions. The HTTP API and WebSocket

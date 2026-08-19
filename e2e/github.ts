@@ -100,6 +100,13 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 				avatar_url: `https://example.invalid/${handle}.png`,
 			});
 		}
+		if (url.pathname === "/user/memberships/orgs/githubnext") {
+			if (handle === "outsider") return json({ message: "Not Found" }, { status: 404 });
+			return json({
+				state: handle === "pending" ? "pending" : "active",
+				role: "member",
+			});
+		}
 		if (handle === "expired") return json({ message: "Bad credentials" }, { status: 401 });
 		if (url.pathname === "/user/installations") {
 			return json({ installations });

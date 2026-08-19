@@ -13,6 +13,29 @@ const score = {
 	permissions: { pull: true, push: true, admin: false },
 };
 
+test("organization admission rejects outsiders and pending members", async ({ baseURL }) => {
+	for (let handle of ["outsider", "pending"]) {
+		let started = await fetch(`${baseURL}/auth/github`, { redirect: "manual" });
+		let authorization = new URL(started.headers.get("location")!);
+		let state = authorization.searchParams.get("state");
+		let stateCookie = (started.headers as Headers & { getSetCookie(): string[] })
+			.getSetCookie()[0]!.split(";", 1)[0]!;
+		let callback = await fetch(
+			`${baseURL}/auth/github/callback?code=e2e-${handle}&state=${state}`,
+			{ headers: { cookie: stateCookie }, redirect: "manual" },
+		);
+
+		expect(callback.status).toBe(403);
+		expect(await callback.json()).toEqual({
+			error: "GitHub account is not allowed to use this Chopin instance",
+		});
+		expect(
+			(callback.headers as Headers & { getSetCookie(): string[] }).getSetCookie()
+				.some(value => value.startsWith("chopin_session=")),
+		).toBe(false);
+	}
+});
+
 test("an authenticated repository creates a channel workspace", async ({ baseURL, page }) => {
 	await authenticate(page, "octocat", baseURL!);
 	await page.goto("/");

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { Sessions } from "../auth/session";
+import { Admission } from "../auth/admission";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { close, create, resetAgent, resolveOwner } from "./service";
 
@@ -27,6 +28,9 @@ class GitHubAccess implements GitHub {
 	}
 	async user(): Promise<GitHubUser> {
 		return { id: "", login: "", avatarUrl: "" };
+	}
+	async organizationMembership() {
+		return undefined;
 	}
 	async installations(): Promise<InstallationPage> {
 		return { installations: [], nextPage: undefined };
@@ -84,16 +88,19 @@ describe("hosted Copilot ownership", () => {
 			createdBy: "U_ana",
 			now,
 		});
+		let config = {
+			origin: "https://test",
+			appSlug: "chopin-test",
+			clientId: "id",
+			clientSecret: "secret",
+			encryptionKey: key,
+		};
+		let github = new GitHubAccess();
 		let auth: HostedAuth = {
-			config: {
-				origin: "https://test",
-				appSlug: "chopin-test",
-				clientId: "id",
-				clientSecret: "secret",
-				encryptionKey: key,
-			},
+			config,
 			storage,
-			github: new GitHubAccess(),
+			github,
+			admission: new Admission(config, github, () => now.getTime()),
 			sessions,
 			clock: () => now,
 		};

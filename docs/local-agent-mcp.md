@@ -9,6 +9,12 @@ GitHub account that needs repository access. Keep the token in your shell or
 user-level agent configuration — never commit it, add it to a repository
 `.env`, or copy it into a shared configuration file.
 
+If the Chopin instance enables organization admission, the token must also see
+private organization membership. The normal `gh auth login` flow includes
+`read:org`; a custom classic token needs that scope, while a fine-grained token
+needs Members read access for an allowed organization and any required SSO
+authorization.
+
 ```bash
 export CHOPIN_URL="https://your-chopin-workspace.example"
 export GITHUB_TOKEN="$(gh auth token)"
@@ -68,6 +74,10 @@ instructions and current tool descriptions are authoritative.
 HTTP `401` means bearer authentication failed: renew the GitHub CLI login with
 `gh auth login`, export `GITHUB_TOKEN` again, replace Claude's stored header if
 you use Claude Code, and reconnect the agent.
+
+HTTP `403` means the GitHub identity is not admitted by this Chopin instance.
+HTTP `503` means Chopin could not verify admission; check the token's `read:org`
+or Members access, SSO authorization, and GitHub availability.
 
 `repository-forbidden` means the identity authenticated but lacks the
 operation's repository permission. Pull access is enough for

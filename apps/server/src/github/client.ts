@@ -4,6 +4,11 @@ export type GitHubUser = {
 	avatarUrl: string;
 };
 
+export type GitHubOrganizationMembership = {
+	state: "active" | "pending";
+	role: "admin" | "member" | "billing_manager";
+};
+
 export type Repository = {
 	id: string;
 	owner: string;
@@ -74,6 +79,10 @@ export interface GitHub {
 		refreshToken: string;
 	}): Promise<GitHubTokenGrant>;
 	user(token: string): Promise<GitHubUser>;
+	organizationMembership(
+		token: string,
+		organization: string,
+	): Promise<GitHubOrganizationMembership | undefined>;
 	installations(token: string, page: number): Promise<InstallationPage>;
 	installationRepositories(
 		token: string,
@@ -159,6 +168,16 @@ function user(value: unknown): GitHubUser {
 		|| typeof item.avatar_url !== "string"
 	) throw new GitHubError("GitHub returned an invalid user");
 	return { id: item.node_id, login: item.login, avatarUrl: item.avatar_url };
+}
+
+function organizationMembership(value: unknown): GitHubOrganizationMembership {
+	let item = record(value);
+	if (
+		!item
+		|| (item.state !== "active" && item.state !== "pending")
+		|| (item.role !== "admin" && item.role !== "member" && item.role !== "billing_manager")
+	) throw new GitHubError("GitHub returned an invalid organization membership");
+	return { state: item.state, role: item.role };
 }
 
 function repository(value: unknown): Repository {
@@ -363,6 +382,20 @@ export class GitHubClient implements GitHub {
 
 	async user(token: string): Promise<GitHubUser> {
 		return user(await this.#api("/user", token));
+	}
+
+	async organizationMembership(
+		token: string,
+		organization: string,
+	): Promise<GitHubOrganizationMembership | undefined> {
+		try {
+			return organizationMembership(
+				await this.#api(`/user/memberships/orgs/${encodeURIComponent(organization)}`, token),
+			);
+		} catch (err) {
+			if (err instanceof GitHubError && err.status === 404) return undefined;
+			throw err;
+		}
 	}
 
 	async installations(token: string, page: number): Promise<InstallationPage> {

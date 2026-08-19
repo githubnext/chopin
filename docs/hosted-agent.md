@@ -6,8 +6,9 @@ logs out, or an editor chooses **New planner session**. Ownership is assigned
 atomically in the storage adapter and guarded by a generation token.
 
 Reset and logout abort and discard any active SDK session. Permission
-callbacks also recheck the owner session, ownership generation and repository
-write access before each custom or MCP tool call. The in-memory session is also
+callbacks also recheck instance admission, the owner session, ownership
+generation and repository write access before each custom or MCP tool call. The
+in-memory session is also
 bound to the process-local credential revision, so a rotated token cannot authorize
 one check while an older copied token executes the tool.
 
