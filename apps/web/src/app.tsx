@@ -367,6 +367,7 @@ export function RoomWorkspace(
 			}
 			plan={
 				<PlanEditor
+					commentPresentation={mode === "split" ? "popover" : "sheet"}
 					connection={status}
 					onScrollTop={setPlanScrollTop}
 					questions={questions}
