@@ -26,4 +26,5 @@ export type { PlanStatusProps } from "./status";
 export { ThreadObserver, ThreadStore, useThreads } from "./threads";
 export type { Draft, ThreadState, ThreadView } from "./threads";
 export type { Connection, Transport, Unsubscribe } from "./transport";
+export type { CommentPresentation } from "./widget-options";
 export { QuestionnaireCard, register as registerPlanWidgets } from "./widgets";
