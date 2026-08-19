@@ -12,6 +12,16 @@
 				"--isolated"
 			],
 			"enabled": true
+		},
+		"chopin": {
+			"type": "remote",
+			"url": "https://chopin.githubnext.com/mcp",
+			"headers": {
+				"Authorization": "Bearer {env:GH_TOKEN}"
+			},
+			"oauth": false,
+			"timeout": 30000,
+			"enabled": true
 		}
 	}
 }
