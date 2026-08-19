@@ -155,7 +155,7 @@ export function Chat(
 			<div className="conversation-composer shrink-0 px-4 pb-4">
 				<div className="field flex flex-col">
 					<textarea
-						className="h-18 w-full resize-none bg-transparent px-2.5 py-1.5 text-sm outline-none"
+						className="h-18 w-full resize-none bg-transparent px-2.5 py-1.5 text-sm"
 						disabled={!connected}
 						onChange={event => setText(event.target.value)}
 						onKeyDown={event => {
