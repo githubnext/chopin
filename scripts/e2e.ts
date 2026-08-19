@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const KEY = "33".repeat(32);
+const COMPOSE = ["docker", "compose", "-f", "compose.yaml", "-f", "compose.local.yaml"];
 const databases = [
 	"postgresql://chopin:chopin@127.0.0.1:5433/chopin?sslmode=disable",
 	"postgresql://chopin:chopin@127.0.0.1:5434/chopin?sslmode=disable",
@@ -27,7 +28,7 @@ let managed = !supplied[0];
 try {
 	if (process.env.E2E_SKIP_BUILD !== "1") await run(["bun", "run", "build"]);
 	if (managed) {
-		await run(["docker", "compose", "up", "-d", "--wait", "db-e2e", "db-e2e-fixtures"]);
+		await run([...COMPOSE, "up", "-d", "--wait", "db-e2e", "db-e2e-fixtures"]);
 	}
 	for (let [index, url] of databases.entries()) {
 		await run(["bun", "apps/server/src/storage/migrate.ts"], {
@@ -56,7 +57,7 @@ try {
 	});
 } finally {
 	if (managed) {
-		await run(["docker", "compose", "rm", "-s", "-f", "db-e2e", "db-e2e-fixtures"])
+		await run([...COMPOSE, "rm", "-s", "-f", "db-e2e", "db-e2e-fixtures"])
 			.catch(() => {});
 	}
 }
