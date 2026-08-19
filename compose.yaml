@@ -4,7 +4,7 @@ services:
       context: .
     environment:
       AGENT: ${AGENT:-on}
-      APP_ORIGIN: ${SERVICE_URL_APP:-${APP_ORIGIN:-http://127.0.0.1:8787}}
+      APP_ORIGIN: ${APP_ORIGIN:-http://127.0.0.1:8787}
       DATABASE_URL: postgresql://chopin:chopin@${SERVICE_NAME_DB:-db}:5432/chopin?sslmode=disable
       GITHUB_APP_SLUG: ${GITHUB_APP_SLUG:-}
       GITHUB_APP_CLIENT_ID: ${GITHUB_APP_CLIENT_ID:-}
