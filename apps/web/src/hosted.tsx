@@ -12,7 +12,6 @@ export type HostedWorkspaceProps = {
 	repository: Api.Repository;
 	canEdit: boolean;
 	agent?: boolean;
-	onResetAgent?: () => Promise<void>;
 };
 
 export type HostedRoute =
@@ -310,7 +309,6 @@ function ChannelWorkspace(
 			canEdit={detail.canEdit}
 			handle={user.login}
 			label={detail.channel.title}
-			onResetAgent={agent ? () => Api.resetAgent(id) : undefined}
 			repository={detail.repository}
 			room={detail.channel.id}
 		/>

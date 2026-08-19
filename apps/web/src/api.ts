@@ -14,6 +14,7 @@ export type Session = {
 export type Repository = {
 	id: string;
 	owner: string;
+	ownerAvatarUrl?: string;
 	name: string;
 	fullName: string;
 	private: boolean;
@@ -121,26 +122,34 @@ export function installationRepositories(
 	);
 }
 
-export function channels(owner: string, repository: string, cursor?: string): Promise<ChannelPage> {
-	let query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+export function channels(
+	owner: string,
+	repository: string,
+	cursor?: string,
+	query?: string,
+): Promise<ChannelPage> {
+	let parameters = new URLSearchParams();
+	if (cursor) parameters.set("cursor", cursor);
+	if (query) parameters.set("query", query);
+	let suffix = parameters.size ? `?${parameters}` : "";
 	return response(
 		`/api/repositories/${encodeURIComponent(owner)}/${
 			encodeURIComponent(repository)
-		}/channels${query}`,
+		}/channels${suffix}`,
 	);
 }
 
 export function createChannel(
 	owner: string,
 	repository: string,
-	title: string,
+	title?: string,
 ): Promise<ChannelDetail> {
 	return response(
 		`/api/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/channels`,
 		{
 			method: "POST",
 			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ title }),
+			body: JSON.stringify(title === undefined ? {} : { title }),
 		},
 	);
 }

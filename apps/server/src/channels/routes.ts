@@ -1,6 +1,8 @@
 import { GitHubError } from "../github/client";
 import { StorageError } from "../storage/errors";
 
+import { documentTitles } from "./document-title";
+
 import type { HostedAuth } from "../auth/routes";
 import type { AuthenticatedSession } from "../auth/session";
 import type { Repository } from "../github/client";
@@ -40,6 +42,7 @@ function repository(value: Repository) {
 	return {
 		id: value.id,
 		owner: value.owner,
+		ownerAvatarUrl: value.ownerAvatarUrl,
 		name: value.name,
 		fullName: value.fullName,
 		private: value.private,
@@ -49,30 +52,45 @@ function repository(value: Repository) {
 	};
 }
 
-function encoded(cursor: ChannelCursor): string {
+function encoded(cursor: ChannelCursor, query: string): string {
 	return Buffer.from(JSON.stringify({
-		v: 1,
+		v: 2,
 		updatedAt: cursor.updatedAt.toISOString(),
 		id: cursor.id,
+		query,
 	})).toString("base64url");
 }
 
-function decoded(value: string | null): ChannelCursor | undefined | false {
+function decoded(
+	value: string | null,
+): { cursor: ChannelCursor; query: string } | undefined | false {
 	if (value === null) return undefined;
 	if (!/^[A-Za-z0-9_-]+$/.test(value)) return false;
 	try {
 		let parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as unknown;
 		if (!parsed || typeof parsed !== "object") return false;
 		let item = parsed as Record<string, unknown>;
-		if (item.v !== 1 || typeof item.updatedAt !== "string" || typeof item.id !== "string") {
+		if (
+			item.v !== 2
+			|| typeof item.updatedAt !== "string"
+			|| typeof item.id !== "string"
+			|| typeof item.query !== "string"
+		) {
 			return false;
 		}
 		let updatedAt = new Date(item.updatedAt);
 		if (Number.isNaN(updatedAt.getTime()) || !CHANNEL.test(item.id)) return false;
-		return { updatedAt, id: item.id };
+		return { cursor: { updatedAt, id: item.id }, query: item.query };
 	} catch {
 		return false;
 	}
+}
+
+function query(url: URL): string | false {
+	let values = url.searchParams.getAll("query");
+	if (values.length > 1) return false;
+	let value = values[0]?.trim().toLowerCase() ?? "";
+	return value.length <= 120 ? value : false;
 }
 
 function limit(url: URL): number | undefined {
@@ -83,20 +101,23 @@ function limit(url: URL): number | undefined {
 	return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= 100 ? parsed : undefined;
 }
 
-async function title(request: Request): Promise<string | undefined> {
+async function requestedTitle(request: Request): Promise<{ title?: string; valid: boolean }> {
 	let length = Number(request.headers.get("content-length") || "0");
-	if (Number.isFinite(length) && length > 4_096) return undefined;
+	if (Number.isFinite(length) && length > 4_096) return { valid: false };
 	let source = await request.text();
-	if (new TextEncoder().encode(source).length > 4_096) return undefined;
+	if (new TextEncoder().encode(source).length > 4_096) return { valid: false };
 	try {
 		let value = JSON.parse(source) as unknown;
-		if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+		if (!value || typeof value !== "object" || Array.isArray(value)) return { valid: false };
 		let raw = (value as Record<string, unknown>).title;
-		if (typeof raw !== "string") return undefined;
+		if (raw === undefined) return { valid: true };
+		if (typeof raw !== "string") return { valid: false };
 		let result = raw.trim();
-		return result.length >= 1 && result.length <= 120 ? result : undefined;
+		return result.length >= 1 && result.length <= 120
+			? { valid: true, title: result }
+			: { valid: false };
 	} catch {
-		return undefined;
+		return { valid: false };
 	}
 }
 
@@ -145,7 +166,7 @@ async function authorizedRepository(
 export function registerChannelRoutes(
 	router: Router,
 	auth: HostedAuth,
-	options: { onAgentReset?: (channelId: string) => Promise<void> } = {},
+	options: { onAgentReset?: (channelId: string) => Promise<void>; random?: () => number } = {},
 ): void {
 	router.on(
 		"GET",
@@ -164,17 +185,26 @@ export function registerChannelRoutes(
 					return json({ error: "repository read access is required" }, 403);
 				}
 				let requestedLimit = limit(url);
+				let requestedQuery = query(url);
 				let cursorValues = url.searchParams.getAll("cursor");
 				let cursor = cursorValues.length <= 1 ? decoded(cursorValues[0] ?? null) : false;
-				if (!requestedLimit || cursor === false) {
+				if (!requestedLimit || requestedQuery === false || cursor === false) {
 					return json({ error: "invalid channel pagination" }, 400);
 				}
-				let page = await auth.storage.channels.list(repo.id, requestedLimit, cursor);
+				if (cursor && cursor.query !== requestedQuery) {
+					return json({ error: "invalid channel pagination" }, 400);
+				}
+				let page = await auth.storage.channels.list(
+					repo.id,
+					requestedLimit,
+					cursor?.cursor,
+					requestedQuery || undefined,
+				);
 				return json({
 					repository: repository(repo),
 					canEdit: repo.permissions.push || repo.permissions.admin,
 					channels: page.channels.map(serialized),
-					nextCursor: page.next ? encoded(page.next) : undefined,
+					nextCursor: page.next ? encoded(page.next, requestedQuery) : undefined,
 				});
 			} catch (err) {
 				return failure(err, request, auth);
@@ -201,19 +231,36 @@ export function registerChannelRoutes(
 				if (!repo.permissions.push && !repo.permissions.admin) {
 					return json({ error: "repository write access is required" }, 403);
 				}
-				let requestedTitle = await title(request);
-				if (!requestedTitle) {
+				let title = await requestedTitle(request);
+				if (!title.valid) {
 					return json({ error: "title must be between 1 and 120 characters" }, 400);
 				}
-				let channel = await auth.storage.channels.create({
-					id: crypto.randomUUID(),
-					repositoryId: repo.id,
-					repositoryOwner: repo.owner,
-					repositoryName: repo.name,
-					title: requestedTitle,
-					createdBy: session.user.id,
-					now: auth.clock(),
-				});
+				let channel: ChannelRecord | undefined;
+				let candidates = title.title === undefined
+					? documentTitles(options.random)
+					: [title.title];
+				for (let candidate of candidates) {
+					try {
+						channel = await auth.storage.channels.create({
+							id: crypto.randomUUID(),
+							repositoryId: repo.id,
+							repositoryOwner: repo.owner,
+							repositoryName: repo.name,
+							title: candidate,
+							createdBy: session.user.id,
+							now: auth.clock(),
+						});
+						break;
+					} catch (err) {
+						if (
+							title.title !== undefined || !(err instanceof StorageError)
+							|| err.failure !== "conflict"
+						) {
+							throw err;
+						}
+					}
+				}
+				if (!channel) throw new StorageError("conflict", "could not reserve a generated title");
 				return json(
 					{ repository: repository(repo), canEdit: true, channel: serialized(channel) },
 					201,

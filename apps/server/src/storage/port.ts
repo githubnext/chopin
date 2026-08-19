@@ -41,7 +41,7 @@ export interface ChannelStore {
 	list(repositoryId: string, limit: number, after?: {
 		updatedAt: Date;
 		id: string;
-	}): Promise<ChannelPage>;
+	}, query?: string): Promise<ChannelPage>;
 	scan(repositoryId: string, limit: number, after?: ChannelScanCursor): Promise<ChannelScanPage>;
 	claimAgentOwner(channelId: string, sessionId: string, now: Date): Promise<AgentState>;
 	clearAgentOwner(

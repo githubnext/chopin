@@ -79,11 +79,8 @@ test("the compact room header preserves long identity and secondary actions", as
 	);
 	expect(visibleFaces).toBe(3);
 	await expect(people.getByText("+2")).toBeVisible();
-	let actions = header.getByRole("button", { name: "More room actions" });
-	await expect(actions).toBeVisible();
-	await actions.click();
-	await expect(actions).toBeFocused();
-	await expect(header.getByRole("button", { name: "New planner session" })).toBeVisible();
+	await expect(header.getByRole("button", { name: "More room actions" })).toHaveCount(0);
+	await expect(header.getByRole("button", { name: /planner session/i })).toHaveCount(0);
 	await expect(header.getByRole("status")).toHaveCount(0);
 	await expect(header).not.toContainText("connected");
 	await expect(header.getByRole("menu")).toHaveCount(0);

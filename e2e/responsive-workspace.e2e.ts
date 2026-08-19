@@ -29,7 +29,7 @@ async function expectCompactWorkspaceChrome(page: Page): Promise<void> {
 	let header = page.getByRole("banner");
 	let nav = page.getByRole("navigation", { name: "Workspace view" });
 	let repository = header.getByRole("button", { name: /^Repository:/ });
-	let document = header.locator("span[title]");
+	let document = header.getByRole("button", { name: /^Document:/ });
 	let destinations = nav.getByRole("button");
 
 	await expect(header.getByRole("button", { name: /conversation pane/ })).toHaveCount(0);
@@ -58,7 +58,7 @@ async function expectCompactWorkspaceChrome(page: Page): Promise<void> {
 	};
 	expect(geometry.height).toBeLessThan(64);
 	expect(geometry.documentWidth).toBeGreaterThan(geometry.repositoryWidth);
-	expect(geometry.repositoryWidth).toBeGreaterThan(112);
+	expect(geometry.repositoryWidth).toBeGreaterThan(48);
 	expect(Math.abs(geometry.repositoryLabelCenter - geometry.documentLabelCenter)).toBeLessThan(2);
 
 	let heights = await destinations.evaluateAll(buttons =>

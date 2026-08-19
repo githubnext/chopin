@@ -1,17 +1,15 @@
 import { CaretDownIcon, CheckIcon } from "@phosphor-icons/react";
-import { currentViewport, listenToViewportChanges } from "@chopin/viewport";
 import { createPortal } from "react-dom";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
+import { useAnchoredPicker } from "./anchored-picker";
 import * as Api from "./api";
 
-import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
-export type RepositoryIdentity = Pick<Api.Repository, "owner" | "name" | "fullName">;
-
-type Position = Pick<
-	CSSProperties,
-	"height" | "left" | "maxHeight" | "top" | "visibility" | "width"
+export type RepositoryIdentity = Pick<
+	Api.Repository,
+	"owner" | "ownerAvatarUrl" | "name" | "fullName"
 >;
 
 type InstalledRepositories = {
@@ -81,22 +79,23 @@ async function installedRepositories(
 }
 
 export function RepositoryPicker(
-	{ current, initialOpen = false }: { current?: RepositoryIdentity; initialOpen?: boolean },
+	{
+		compact = false,
+		current,
+		initialOpen = false,
+	}: { compact?: boolean; current?: RepositoryIdentity; initialOpen?: boolean },
 ) {
-	let trigger = useRef<HTMLButtonElement>(null);
-	let panel = useRef<HTMLDivElement>(null);
-	let search = useRef<HTMLInputElement>(null);
 	let request = useRef<Promise<InstalledRepositories[]> | undefined>(undefined);
 	let mounted = useRef(true);
 	let panelId = useId();
 	let listId = useId();
 	let [open, setOpen] = useState(initialOpen);
-	let [position, setPosition] = useState<Position>({ visibility: "hidden" });
 	let [installed, setInstalled] = useState<InstalledRepositories[]>();
 	let [error, setError] = useState<unknown>();
 	let [attempt, setAttempt] = useState(0);
 	let [query, setQuery] = useState("");
 	let [active, setActive] = useState(0);
+	let [avatarFailed, setAvatarFailed] = useState(false);
 
 	let normalized = query.trim().toLowerCase();
 	let repositories = installed?.flatMap(group => group.page.repositories) ?? [];
@@ -105,6 +104,11 @@ export function RepositoryPicker(
 		: repositories;
 	let activeIndex = matches.length === 0 ? -1 : Math.min(active, matches.length - 1);
 	let activeRepository = matches[activeIndex];
+	let pickerContent = useMemo(
+		() => ({ error, installed, matches: matches.length, normalized }),
+		[error, installed, matches.length, normalized],
+	);
+	let { panel, position, search, trigger } = useAnchoredPicker(open, setOpen, pickerContent);
 
 	useEffect(() => {
 		mounted.current = true;
@@ -112,6 +116,8 @@ export function RepositoryPicker(
 			mounted.current = false;
 		};
 	}, []);
+
+	useEffect(() => setAvatarFailed(false), [current?.ownerAvatarUrl]);
 
 	useEffect(() => {
 		if (!open) return;
@@ -137,69 +143,6 @@ export function RepositoryPicker(
 		};
 	}, [attempt, open]);
 
-	useLayoutEffect(() => {
-		if (!open) return;
-		function place() {
-			let rect = trigger.current?.getBoundingClientRect();
-			if (!rect) return;
-			let viewport = currentViewport();
-			let viewportLeft = viewport.left;
-			let viewportTop = viewport.top;
-			let viewportWidth = viewport.width;
-			let viewportHeight = viewport.height;
-			let margin = 8;
-			let gap = 4;
-			let topEdge = viewportTop + margin;
-			let bottomEdge = viewportTop + viewportHeight - margin;
-			let width = Math.max(0, Math.min(360, viewportWidth - margin * 2));
-			let left = Math.max(
-				viewportLeft + margin,
-				Math.min(rect.left, viewportLeft + viewportWidth - width - margin),
-			);
-			let above = Math.max(0, Math.min(rect.top - gap, bottomEdge) - topEdge);
-			let below = Math.max(0, bottomEdge - Math.max(rect.bottom + gap, topEdge));
-			let useAbove = above > below;
-			let previousHeight = panel.current?.style.height;
-			let previousMaxHeight = panel.current?.style.maxHeight;
-			if (panel.current) {
-				panel.current.style.height = "auto";
-				panel.current.style.maxHeight = "none";
-			}
-			let naturalHeight = panel.current?.scrollHeight ?? 0;
-			if (panel.current) {
-				panel.current.style.height = previousHeight ?? "";
-				panel.current.style.maxHeight = previousMaxHeight ?? "";
-			}
-			let maxHeight = Math.min(naturalHeight, useAbove ? above : below);
-			let wantedTop = useAbove ? rect.top - gap - maxHeight : rect.bottom + gap;
-			let top = Math.max(topEdge, Math.min(wantedTop, bottomEdge - maxHeight));
-			setPosition({
-				height: maxHeight,
-				left,
-				maxHeight,
-				top,
-				visibility: "visible",
-				width,
-			});
-		}
-		function placeForViewportChange(event?: Event) {
-			let target = event?.target;
-			if (target instanceof Node && panel.current?.contains(target)) return;
-			place();
-		}
-
-		place();
-		return listenToViewportChanges(placeForViewportChange, { observeDocumentScroll: true });
-	}, [error, installed, matches.length, normalized, open]);
-
-	useEffect(() => {
-		if (!open) return;
-		let frame = requestAnimationFrame(() => {
-			if (!panel.current?.contains(document.activeElement)) search.current?.focus();
-		});
-		return () => cancelAnimationFrame(frame);
-	}, [installed, open]);
-
 	useEffect(() => {
 		if (!open || !activeRepository) return;
 		let frame = requestAnimationFrame(() => {
@@ -216,39 +159,6 @@ export function RepositoryPicker(
 		});
 		return () => cancelAnimationFrame(frame);
 	}, [activeRepository, listId, open, position.height, position.top]);
-
-	useEffect(() => {
-		if (!open) return;
-		function closeOnPointer(event: PointerEvent) {
-			let target = event.target;
-			if (!(target instanceof Node)) return;
-			if (trigger.current?.contains(target) || panel.current?.contains(target)) return;
-			setOpen(false);
-		}
-
-		function closeOnFocus(event: FocusEvent) {
-			let target = event.target;
-			if (!(target instanceof Node)) return;
-			if (trigger.current?.contains(target) || panel.current?.contains(target)) return;
-			setOpen(false);
-		}
-
-		function closeOnEscape(event: KeyboardEvent) {
-			if (event.key !== "Escape") return;
-			event.preventDefault();
-			setOpen(false);
-			trigger.current?.focus();
-		}
-
-		document.addEventListener("pointerdown", closeOnPointer);
-		document.addEventListener("focusin", closeOnFocus);
-		document.addEventListener("keydown", closeOnEscape);
-		return () => {
-			document.removeEventListener("pointerdown", closeOnPointer);
-			document.removeEventListener("focusin", closeOnFocus);
-			document.removeEventListener("keydown", closeOnEscape);
-		};
-	}, [open]);
 
 	function retry() {
 		request.current = undefined;
@@ -566,13 +476,40 @@ export function RepositoryPicker(
 				aria-controls={panelId}
 				aria-expanded={open}
 				aria-haspopup="listbox"
-				className="repository-picker-trigger btn btn-sm btn-ghost min-w-0 max-w-40 gap-1.5 sm:max-w-64"
+				className={`repository-picker-trigger btn btn-sm btn-ghost min-w-0 gap-1.5 ${
+					compact ? "max-w-32 sm:max-w-40" : "max-w-40 sm:max-w-64"
+				}`}
 				onClick={() => setOpen(value => !value)}
 				ref={trigger}
 				title={current?.fullName}
 				type="button"
 			>
-				<span className="truncate">{current?.fullName ?? "Choose repository"}</span>
+				{compact && current && (
+					<span
+						aria-hidden="true"
+						className="size-5 shrink-0 overflow-hidden rounded-full bg-inset"
+					>
+						{current.ownerAvatarUrl && !avatarFailed
+							? (
+								<img
+									alt=""
+									className="size-full object-cover"
+									onError={() => setAvatarFailed(true)}
+									src={current.ownerAvatarUrl}
+								/>
+							)
+							: (
+								<span className="flex size-full items-center justify-center text-[10px] font-medium">
+									{current.owner.slice(0, 1).toUpperCase()}
+								</span>
+							)}
+					</span>
+				)}
+				<span className="truncate">
+					{compact
+						? current?.name ?? "Choose repository"
+						: current?.fullName ?? "Choose repository"}
+				</span>
 				<CaretDownIcon aria-hidden="true" className="shrink-0" size={14} />
 			</button>
 			{popup}

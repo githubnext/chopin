@@ -248,6 +248,10 @@ function postgresCode(err: unknown): string | undefined {
 	return undefined;
 }
 
+function titlePattern(query: string): string {
+	return `%${query.replace(/[\\%_]/g, "\\$&")}%`;
+}
+
 const USER_COLUMNS = `
 	id,
 	login,
@@ -438,7 +442,8 @@ export class PostgresStorage implements StorageAdapter {
 			`;
 				return found ? channel(found) : undefined;
 			}),
-		list: (repositoryId, limit, after) => this.#listChannels(repositoryId, limit, after),
+		list: (repositoryId, limit, after, query) =>
+			this.#listChannels(repositoryId, limit, after, query),
 		scan: (repositoryId, limit, after) => this.#scanChannels(repositoryId, limit, after),
 		claimAgentOwner: (channelId, sessionId, now) =>
 			this.#claimAgentOwner(channelId, sessionId, now),
@@ -529,14 +534,21 @@ export class PostgresStorage implements StorageAdapter {
 			}));
 	}
 
-	#listChannels(repositoryId: string, limit: number, after?: ChannelCursor): Promise<ChannelPage> {
+	#listChannels(
+		repositoryId: string,
+		limit: number,
+		after?: ChannelCursor,
+		query?: string,
+	): Promise<ChannelPage> {
 		return this.#run("list channels", async () => {
 			let count = Math.min(100, Math.max(1, limit));
+			let pattern = query ? titlePattern(query) : "";
 			let rows = after
 				? await this.#sql<ChannelRow[]>`
 					SELECT ${this.#sql.unsafe(CHANNEL_COLUMNS)}
 					FROM channels
 					WHERE repository_id = ${repositoryId}
+						AND (${!query} OR title ILIKE ${pattern} ESCAPE '\\')
 						AND (
 							updated_at < ${after.updatedAt}
 							OR (updated_at = ${after.updatedAt} AND id > ${after.id})
@@ -548,6 +560,7 @@ export class PostgresStorage implements StorageAdapter {
 					SELECT ${this.#sql.unsafe(CHANNEL_COLUMNS)}
 					FROM channels
 					WHERE repository_id = ${repositoryId}
+						AND (${!query} OR title ILIKE ${pattern} ESCAPE '\\')
 					ORDER BY updated_at DESC, id ASC
 					LIMIT ${count + 1}
 				`;

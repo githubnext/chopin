@@ -7,6 +7,7 @@ export type GitHubUser = {
 export type Repository = {
 	id: string;
 	owner: string;
+	ownerAvatarUrl?: string;
 	name: string;
 	fullName: string;
 	private: boolean;
@@ -183,6 +184,7 @@ function repository(value: unknown): Repository {
 	return {
 		id: item.node_id,
 		owner: owner.login,
+		...(typeof owner.avatar_url === "string" ? { ownerAvatarUrl: owner.avatar_url } : {}),
 		name: item.name,
 		fullName: item.full_name,
 		private: item.private,

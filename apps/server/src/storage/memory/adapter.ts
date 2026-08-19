@@ -147,7 +147,8 @@ export class MemoryStorage implements StorageAdapter {
 	readonly channels: ChannelStore = {
 		create: input => this.#createChannel(input),
 		get: id => Promise.resolve(this.#channels.get(id)).then(value => value && channel(value)),
-		list: (repositoryId, limit, after) => this.#listChannels(repositoryId, limit, after),
+		list: (repositoryId, limit, after, query) =>
+			this.#listChannels(repositoryId, limit, after, query),
 		scan: (repositoryId, limit, after) => this.#scanChannels(repositoryId, limit, after),
 		claimAgentOwner: (channelId, sessionId, now) =>
 			this.#claimAgentOwner(channelId, sessionId, now),
@@ -189,9 +190,15 @@ export class MemoryStorage implements StorageAdapter {
 		}
 	}
 
-	#createChannel(input: CreateChannel): Promise<ChannelRecord> {
+	async #createChannel(input: CreateChannel): Promise<ChannelRecord> {
 		if (!this.#users.has(input.createdBy)) throw missing(`user ${input.createdBy} does not exist`);
 		if (this.#channels.has(input.id)) throw conflict(`channel ${input.id} already exists`);
+		if (
+			[...this.#channels.values()].some(channel =>
+				channel.repositoryId === input.repositoryId
+				&& channel.title.toLowerCase() === input.title.toLowerCase()
+			)
+		) throw conflict(`channel title ${input.title} already exists in this repository`);
 		let { initial, now, ...record } = input;
 		let saved: ChannelRecord = {
 			...record,
@@ -213,17 +220,19 @@ export class MemoryStorage implements StorageAdapter {
 				createdAt: now,
 			});
 		}
-		return Promise.resolve(channel(saved));
+		return channel(saved);
 	}
 
 	#listChannels(
 		repositoryId: string,
 		limit: number,
 		after?: ChannelCursor,
+		query?: string,
 	): Promise<ChannelPage> {
 		let count = Math.min(100, Math.max(1, limit));
 		let ordered = [...this.#channels.values()]
 			.filter(value => value.repositoryId === repositoryId)
+			.filter(value => !query || value.title.toLowerCase().includes(query.toLowerCase()))
 			.sort((left, right) =>
 				right.updatedAt.getTime() - left.updatedAt.getTime() || left.id.localeCompare(right.id)
 			);
