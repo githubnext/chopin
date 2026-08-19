@@ -41,6 +41,15 @@ let creation: CreateDocumentInput = {
 	plan: "# Created\n",
 };
 
+let claimTask = {
+	id: "claim",
+	title: "Claim the graph",
+	context: "The graph and run share one durable sidecar.",
+	goal: "Lock approved work for one external session.",
+	acceptance: ["The graph locks.", "The run is durable."],
+	dependsOn: [],
+};
+
 function createdDocument(id: string) {
 	return {
 		id,
@@ -462,17 +471,7 @@ describe("the hosted MCP adapter", () => {
 		let graph = await implementationGraphs().revise(opened.plan, {
 			planRevision: 0,
 			graphRevision: 0,
-			operations: [{
-				op: "add",
-				task: {
-					id: "claim",
-					title: "Claim the graph",
-					context: "The graph and run share one durable sidecar.",
-					goal: "Lock approved work for one external session.",
-					acceptance: ["The graph locks.", "The run is durable."],
-					dependsOn: [],
-				},
-			}],
+			operations: [{ op: "add", task: claimTask }],
 		});
 		expect(graph.ok).toBe(true);
 		expect((await implementationGraphs().approve(opened.plan)).ok).toBe(true);
@@ -572,6 +571,116 @@ describe("the hosted MCP adapter", () => {
 		});
 		expect(durable.lifecycle?.history[0]).not.toHaveProperty("outcome");
 		expect(durable.execution).toBeUndefined();
+	});
+
+	it("refuses a verified graph but claims a new version for a closed hosted plan", async () => {
+		let context = setup();
+		context.github.repositoryValue = {
+			...context.github.repositoryValue,
+			permissions: { pull: true, push: true, admin: false },
+		};
+		let opened = await plan(context);
+		expect(
+			(await implementationGraphs().revise(opened.plan, {
+				planRevision: 0,
+				graphRevision: 0,
+				operations: [{ op: "add", task: claimTask }],
+			})).ok,
+		).toBe(true);
+		expect((await implementationGraphs().approve(opened.plan)).ok).toBe(true);
+		await Service.close(opened.plan);
+
+		let adapter = hosted(context.auth, { lease: () => opened.lease });
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller || !adapter.implementations) throw new Error("implementation adapter unavailable");
+		let input = {
+			id: opened.channel.id,
+			planRevision: 0,
+			graphVersion: 1,
+			graphRevision: 1,
+			repository: "octo-org/score",
+			branch: "tq/017",
+			commit: "deadbeef",
+			client: { name: "Codex", version: "1.2.3", session: "session-1" },
+		};
+		let claimed = await adapter.implementations.startImplementation(caller, input);
+		expect(claimed).toMatchObject({ kind: "started" });
+		if (claimed.kind !== "started") throw new Error("implementation was not claimed");
+		let report = adapter.implementations.reportLifecycle;
+		if (!report) throw new Error("lifecycle adapter unavailable");
+		for (
+			let event of [
+				{
+					id: opened.channel.id,
+					kind: "start" as const,
+					runId: claimed.run.id,
+					taskId: "claim",
+					idempotencyKey: "verified-start",
+				},
+				{
+					id: opened.channel.id,
+					kind: "report_pr" as const,
+					runId: claimed.run.id,
+					taskId: "claim",
+					url: "https://github.com/octo-org/score/pull/49",
+					state: "merged" as const,
+					idempotencyKey: "verified-pr",
+				},
+				{
+					id: opened.channel.id,
+					kind: "complete" as const,
+					runId: claimed.run.id,
+					taskId: "claim",
+					summary: "The graph is durable.",
+					idempotencyKey: "verified-complete",
+				},
+				{
+					id: opened.channel.id,
+					kind: "report_verification" as const,
+					runId: claimed.run.id,
+					passed: true,
+					summary: "The implementation passed review.",
+					reviewerMethod: "Ran the focused implementation suite.",
+					evidence: [{ taskId: "claim", evidence: ["Focused suite passed."] }],
+					tasksNeedingWork: [],
+					idempotencyKey: "verified-report",
+				},
+			]
+		) {
+			expect(await report(caller, event)).toMatchObject({ kind: "accepted" });
+		}
+
+		expect(
+			await adapter.implementations.startImplementation(caller, {
+				...input,
+				client: { ...input.client, session: "session-2" },
+			}),
+		).toEqual({ kind: "refused", reason: "already-verified" });
+
+		let reopened = await Service.open(opened.channel.id, {
+			storage: context.storage,
+			lease: () => opened.lease,
+			fatal: error => {
+				throw error;
+			},
+		}, opened.server);
+		expect(
+			(await implementationGraphs().revise(reopened, {
+				planRevision: 0,
+				graphRevision: 1,
+				operations: [{ op: "replace", id: "claim", task: claimTask }],
+			})).ok,
+		).toBe(true);
+		expect((await implementationGraphs().approve(reopened)).ok).toBe(true);
+		await Service.close(reopened);
+
+		expect(
+			await adapter.implementations.startImplementation(caller, {
+				...input,
+				graphVersion: 2,
+				client: { ...input.client, session: "session-2" },
+			}),
+		).toMatchObject({ kind: "started" });
 	});
 
 	it("makes an inaccessible channel indistinguishable from a missing channel", async () => {
