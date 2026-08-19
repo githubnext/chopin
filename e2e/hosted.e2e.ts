@@ -23,7 +23,8 @@ test("an authenticated repository creates a channel workspace", async ({ baseURL
 	await expect(page.getByRole("heading", { name: "Planning channels" })).toBeVisible();
 	let channelTitle = page.getByLabel("Channel title");
 	expect((await channelTitle.boundingBox())!.height).toBeLessThan(44);
-	await channelTitle.fill("Release readiness");
+	let title = `Release readiness ${crypto.randomUUID()}`;
+	await channelTitle.fill(title);
 	await page.getByRole("button", { name: "New channel" }).click();
 
 	await expect(page).toHaveURL(/\/channels\/[0-9a-f-]{36}$/);
@@ -31,17 +32,18 @@ test("an authenticated repository creates a channel workspace", async ({ baseURL
 	await expect(page.getByRole("textbox", { name: "editable markdown" })).toBeVisible();
 	await expect(page.locator(".plan-decisions")).toBeAttached();
 	await expect(page.getByRole("button", { name: /octo-org\/score/ })).toBeVisible();
-	await expect(page.getByText("Release readiness", { exact: true })).toBeVisible();
+	await expect(page.getByText(title, { exact: true })).toBeVisible();
 
 	await page.setViewportSize({ width: 320, height: 480 });
 	let workspacePicker = page.getByRole("button", { name: /octo-org\/score/ });
 	let pickerBounds = await workspacePicker.boundingBox();
 	expect(pickerBounds).toBeTruthy();
 	expect(pickerBounds!.width).toBeGreaterThan(80);
-	await expect(page.getByText("Release readiness", { exact: true })).toBeVisible();
+	await expect(page.getByText(title, { exact: true })).toBeVisible();
 	await workspacePicker.click();
 	await expect(search).toBeFocused();
 	await search.fill("notes");
+	await expect(page.getByRole("option", { name: /octocat\/notes/ })).toBeVisible();
 	await search.press("Enter");
 	await expect(page).toHaveURL("/repositories/octocat/notes");
 	await expect(page.getByRole("heading", { name: "Planning channels" })).toBeVisible();
@@ -92,6 +94,7 @@ test("the repository picker supports dismissal and keyboard selection", async ({
 		}, { activeId, panelId })
 	).toBe(true);
 	await search.fill("notes");
+	await expect(page.getByRole("option", { name: /octocat\/notes/ })).toBeVisible();
 	await search.press("Enter");
 	await expect(page).toHaveURL("/repositories/octocat/notes");
 });
