@@ -1,9 +1,10 @@
 # Authentication
 
 Authentication covers the HTTP product, WebSocket admission, repository tools,
-and Copilot. A verified GitHub user supplies presence and attribution. The
-GitHub App installation limits which repositories Chopin can see, and the
-user's own repository role limits what they can do inside Chopin.
+and Copilot. A verified GitHub user supplies presence and attribution. Optional
+instance admission lists restrict who may use Chopin. The GitHub App
+installation then limits which repositories Chopin can see, and the user's own
+repository role limits what they can do inside Chopin.
 
 ## GitHub App
 
@@ -36,7 +37,19 @@ Metadata:        Read-only (automatic)
 Contents backs file, tree, code-search, and commit-history tools. The other
 read-only permissions back the hosted GitHub MCP pull-request toolset. Chopin
 does not request repository, organization, or account write permission. An
-`AGENT=off` deployment only needs Contents and automatic Metadata access.
+`AGENT=off` deployment only needs Contents and automatic Metadata access unless
+organization admission is enabled.
+
+Organization admission additionally requires:
+
+```text
+Organization permissions:
+Members: Read-only
+```
+
+The App must be installed on every allowed organization, and an organization
+owner must approve this permission. Existing installations continue with their
+old permissions until the owner approves the update.
 
 No App id, private key, JWT, installation access token, or webhook secret is
 used. Chopin acts on behalf of each signed-in user with a GitHub App user access
@@ -57,6 +70,8 @@ APP_ORIGIN=https://chopin.example
 GITHUB_APP_SLUG=chopin-example
 GITHUB_APP_CLIENT_ID=...
 GITHUB_APP_CLIENT_SECRET=...
+GITHUB_ALLOWED_USERS=octocat,hubot
+GITHUB_ALLOWED_ORGANIZATIONS=githubnext
 SESSION_ENCRYPTION_KEY=<64 hex characters>
 ```
 
@@ -67,6 +82,36 @@ with `openssl rand -hex 32`; it protects only the OAuth state and PKCE cookie.
 fragment, or trailing slash. HTTPS is required except for loopback development,
 such as `http://127.0.0.1:8787`. Callback URLs are built only from this value,
 never from incoming Host or forwarded headers.
+
+## Instance admission
+
+`GITHUB_ALLOWED_USERS` and `GITHUB_ALLOWED_ORGANIZATIONS` are optional,
+comma-separated, case-insensitive GitHub login lists. If both are empty or
+unset, every verified GitHub user is admitted. If either has entries, a user is
+admitted when their current username is listed or they have active membership
+in any listed organization. Explicit usernames therefore also provide a
+break-glass path when organization verification is unavailable.
+
+Organization checks use the caller's token with
+`GET /user/memberships/orgs/{org}`, which sees private membership when the App
+has Members read access. Pending invitations and outside collaborators are not
+admitted, nor are billing managers who are not organization members.
+Public-membership lookup is not used. Organization admission does not restrict
+repository ownership; the existing App installation and repository role checks
+remain a separate boundary.
+
+Admission results are cached by a hash of the access token for 30 seconds.
+Browser requests, open-socket authorization, MCP requests, and agent permission
+callbacks recheck the policy. A definitive removal revokes the process-local
+browser session and Planner ownership at the next browser or socket recheck; an
+agent permission callback refuses the operation immediately. GitHub outages,
+rate limits, malformed responses, blocked Apps, and missing permission fail
+closed for new requests but do not revoke an established browser session; they
+are reported as a temporary `503` and retried later.
+
+Configuration is read at process startup. Restart after changing either list;
+startup already clears every process-local login session. GitHub usernames and
+organization names can be renamed, so update the lists when that happens.
 
 ## Authorization and installation
 
@@ -127,8 +172,9 @@ GitHub App authorization.
 OAuth state and the PKCE verifier are held in a separate encrypted, ten-minute
 HttpOnly cookie. State-changing HTTP routes and WebSocket upgrades require an
 Origin header exactly equal to `APP_ORIGIN`. Open sockets periodically recheck
-the process-local session and installation repository permission. A browser
-whose socket reconnects after a restart is returned to sign-in.
+the process-local session, instance admission, and installation repository
+permission. A browser whose socket reconnects after a restart is returned to
+sign-in.
 
 When a credential rotates, any Planner SDK session holding the previous token
 is aborted and discarded before refresh. A later turn recreates it from the

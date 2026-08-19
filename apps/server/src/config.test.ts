@@ -13,7 +13,12 @@ const REQUIRED = {
 };
 
 function configured(overrides: Record<string, string | undefined> = {}) {
-	let env = { ...REQUIRED, ...overrides };
+	let env: Record<string, string | undefined> = {
+		...REQUIRED,
+		GITHUB_ALLOWED_USERS: undefined,
+		GITHUB_ALLOWED_ORGANIZATIONS: undefined,
+		...overrides,
+	};
 	let previous = { ...process.env };
 	for (let [key, value] of Object.entries(env)) {
 		if (value === undefined) delete process.env[key];
@@ -62,5 +67,32 @@ describe("configuration", () => {
 		);
 		expect(() => configured({ APP_ORIGIN: "http://127.0.0.1:8787" })).not.toThrow();
 		expect(() => configured({ SESSION_ENCRYPTION_KEY: "short" })).toThrow("32 bytes");
+	});
+
+	it("loads normalized user and organization admission lists", () => {
+		let config = configured({
+			GITHUB_ALLOWED_USERS: " OctoCat,hubot,octocat,managed_user ",
+			GITHUB_ALLOWED_ORGANIZATIONS: " GitHubNext,github ",
+		});
+		expect([...config.auth.allowedUsers!]).toEqual(["octocat", "hubot", "managed_user"]);
+		expect([...config.auth.allowedOrganizations!]).toEqual(["githubnext", "github"]);
+		expect(description(config)).toContain("restricted: 3 users, 2 organizations");
+		expect(description(config)).not.toContain("octocat");
+	});
+
+	it("keeps blank admission lists unrestricted and rejects malformed entries", () => {
+		let config = configured({ GITHUB_ALLOWED_USERS: " ", GITHUB_ALLOWED_ORGANIZATIONS: "" });
+		expect(config.auth.allowedUsers).toBeUndefined();
+		expect(config.auth.allowedOrganizations).toBeUndefined();
+		expect(description(config)).toContain("unrestricted");
+		expect(() => configured({ GITHUB_ALLOWED_USERS: "octocat,,hubot" })).toThrow(
+			"GITHUB_ALLOWED_USERS",
+		);
+		expect(() => configured({ GITHUB_ALLOWED_ORGANIZATIONS: "-githubnext" })).toThrow(
+			"GITHUB_ALLOWED_ORGANIZATIONS",
+		);
+		expect(() => configured({ GITHUB_ALLOWED_ORGANIZATIONS: "managed_org" })).toThrow(
+			"GITHUB_ALLOWED_ORGANIZATIONS",
+		);
 	});
 });

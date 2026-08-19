@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { Sessions } from "../auth/session";
+import { Admission } from "../auth/admission";
 import { Router } from "../http/router";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { registerChannelRoutes } from "./routes";
@@ -43,6 +44,10 @@ class FakeGitHub implements GitHub {
 
 	async user(): Promise<GitHubUser> {
 		return { id: "U_octocat", login: "octocat", avatarUrl: "avatar" };
+	}
+
+	async organizationMembership() {
+		return undefined;
 	}
 
 	async installations(): Promise<InstallationPage> {
@@ -88,16 +93,18 @@ async function setup(random?: () => number) {
 	let sessions = new Sessions(storage, true, () => now);
 	let issued = await sessions.issue("U_octocat", grant("ghu_user"));
 	let github = new FakeGitHub();
+	let config = {
+		origin: "https://chopin.test",
+		appSlug: "chopin-test",
+		clientId: "client-id",
+		clientSecret: "client-secret",
+		encryptionKey: new Uint8Array(32).fill(4),
+	};
 	let auth: HostedAuth = {
-		config: {
-			origin: "https://chopin.test",
-			appSlug: "chopin-test",
-			clientId: "client-id",
-			clientSecret: "client-secret",
-			encryptionKey: new Uint8Array(32).fill(4),
-		},
+		config,
 		storage,
 		github,
+		admission: new Admission(config, github, () => now.getTime()),
 		sessions,
 		clock: () => now,
 	};

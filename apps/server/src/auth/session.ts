@@ -64,6 +64,7 @@ type MemorySession = {
 
 type SessionOptions = {
 	refresh?: (refreshToken: string) => Promise<GitHubTokenGrant>;
+	authorize?: (user: UserRecord, accessToken: string) => Promise<boolean>;
 	beforeRefresh?: (sessionId: string, revision: number) => Promise<void>;
 	onRevoked?: (sessionId: string) => Promise<void>;
 	invalidate?: (accessToken: string) => void;
@@ -313,7 +314,39 @@ export class Sessions {
 
 	async #resolve(current: MemorySession): Promise<AuthenticatedSession | undefined> {
 		let fresh = await this.#fresh(current);
-		return fresh && this.#sessions.get(current.session.id) === fresh
+		if (!fresh) return undefined;
+		let authorize = this.#options.authorize;
+		if (authorize) {
+			let allowed: boolean;
+			try {
+				allowed = await authorize(fresh.user, fresh.accessToken);
+			} catch (err) {
+				if (!(err instanceof GitHubError) || err.status !== 401) throw err;
+				let refreshed = await this.#rotate(fresh.session.id, fresh.revision);
+				if (!refreshed || this.#sessions.get(fresh.session.id) !== refreshed) return undefined;
+				fresh = refreshed;
+				try {
+					allowed = await authorize(fresh.user, fresh.accessToken);
+				} catch (retryError) {
+					if (!(retryError instanceof GitHubError) || retryError.status !== 401) {
+						throw retryError;
+					}
+					let rejected = await this.#reject(fresh.session.id, fresh.revision);
+					if (rejected === "changed") {
+						let active = this.#sessions.get(fresh.session.id);
+						return active ? this.#resolve(active) : undefined;
+					}
+					return undefined;
+				}
+			}
+			let active = this.#sessions.get(fresh.session.id);
+			if (active !== fresh) return active ? this.#resolve(active) : undefined;
+			if (!allowed) {
+				await this.#revokeExact(fresh);
+				return undefined;
+			}
+		}
+		return this.#sessions.get(fresh.session.id) === fresh
 			? this.#authenticated(fresh)
 			: undefined;
 	}

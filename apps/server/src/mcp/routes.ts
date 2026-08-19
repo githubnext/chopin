@@ -1,11 +1,17 @@
 import { handler } from "../mcp";
+import { AdmissionDenied } from "../auth/admission";
+import { GitHubError } from "../github/client";
 import { hosted } from "./hosted";
 
 import type { HostedAuth } from "../auth/routes";
 import type { Router } from "../http/router";
 import type { ImplementationPersistence } from "./hosted";
 
-function failure(): Response {
+function failure(err: unknown): Response {
+	if (err instanceof AdmissionDenied) return new Response("forbidden", { status: 403 });
+	if (err instanceof GitHubError && err.status === 503) {
+		return new Response("admission is temporarily unavailable", { status: 503 });
+	}
 	return new Response("MCP request failed", { status: 500 });
 }
 
@@ -33,8 +39,8 @@ export function registerMcpRoutes(
 		}
 		try {
 			return protectedResponse(await endpoint(request));
-		} catch {
-			return protectedResponse(failure());
+		} catch (err) {
+			return protectedResponse(failure(err));
 		}
 	};
 	router.on("GET", "/mcp", route);

@@ -208,6 +208,48 @@ describe("the GitHub client", () => {
 		expect(requests.every(request => request.authorization === "Bearer ghu_user")).toBe(true);
 	});
 
+	it("resolves active, pending, and absent organization membership", async () => {
+		let requested: string[] = [];
+		let client = new GitHubClient({
+			fetch: async input => {
+				let url = new URL(String(input));
+				requested.push(url.pathname);
+				if (url.pathname.endsWith("/missing")) {
+					return Response.json({ message: "Not Found" }, { status: 404 });
+				}
+				return Response.json({
+					state: url.pathname.endsWith("/pending") ? "pending" : "active",
+					role: "member",
+				});
+			},
+			endpoints: { api: "https://api.test" },
+		});
+
+		expect(await client.organizationMembership("token", "GitHubNext")).toEqual({
+			state: "active",
+			role: "member",
+		});
+		expect(await client.organizationMembership("token", "pending")).toEqual({
+			state: "pending",
+			role: "member",
+		});
+		expect(await client.organizationMembership("token", "missing")).toBeUndefined();
+		expect(requested).toEqual([
+			"/user/memberships/orgs/GitHubNext",
+			"/user/memberships/orgs/pending",
+			"/user/memberships/orgs/missing",
+		]);
+	});
+
+	it("rejects malformed organization membership responses", async () => {
+		let client = new GitHubClient({
+			fetch: async () => Response.json({ state: "active", role: "outsider" }),
+			endpoints: { api: "https://api.test" },
+		});
+		await expect(client.organizationMembership("token", "githubnext"))
+			.rejects.toThrow("invalid organization membership");
+	});
+
 	it("grants channel access only through an active installation repository listing", async () => {
 		let requests = 0;
 		let now = 0;

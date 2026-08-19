@@ -568,6 +568,9 @@ async function repositorySession(
 				if (!bound()) return false;
 				let activeOwner = await auth.sessions.inspect(ownerSessionId);
 				if (!activeOwner || activeOwner.access.revision !== owner.access.revision) return false;
+				if (!await auth.admission.allowed(activeOwner.access.token, activeOwner.user.id)) {
+					return false;
+				}
 				let stored = await auth.storage.collaboration.load(context.room, new Date());
 				if (
 					stored?.agent?.ownerSessionId !== ownerSessionId

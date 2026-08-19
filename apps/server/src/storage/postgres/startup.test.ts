@@ -28,6 +28,8 @@ function spawn(
 			GITHUB_APP_SLUG: "chopin-test",
 			GITHUB_APP_CLIENT_ID: "client-id",
 			GITHUB_APP_CLIENT_SECRET: "client-secret",
+			GITHUB_ALLOWED_USERS: "",
+			GITHUB_ALLOWED_ORGANIZATIONS: "",
 			PORT: String(port),
 			SESSION_ENCRYPTION_KEY: "22".repeat(32),
 			SERVER_HOST: "127.0.0.1",

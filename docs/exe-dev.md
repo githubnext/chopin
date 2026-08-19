@@ -69,6 +69,8 @@ APP_ORIGIN=http://127.0.0.1:8787
 GITHUB_APP_SLUG=<app-slug>
 GITHUB_APP_CLIENT_ID=<client-id>
 GITHUB_APP_CLIENT_SECRET=<client-secret>
+# Optional instance admission:
+GITHUB_ALLOWED_ORGANIZATIONS=githubnext
 ```
 
 Then run:

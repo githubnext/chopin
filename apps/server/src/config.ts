@@ -91,12 +91,17 @@ export function load(): Config {
  * start one somewhere you did not intend.
  */
 export function describe(config: Config): string {
+	let users = config.auth.allowedUsers?.size ?? 0;
+	let organizations = config.auth.allowedOrganizations?.size ?? 0;
+	let admission = users || organizations
+		? `auth: github (restricted: ${users} users, ${organizations} organizations)`
+		: "auth: github (unrestricted)";
 	let parts = [
 		"chopin",
 		`http://${config.host}:${config.port}`,
 		config.devClient ? `client: vite (${config.devClient})` : "client: built",
 		config.agent ? `agent: ${config.model} (on demand)` : "agent: off",
-		"auth: github",
+		admission,
 		`storage: ${config.storage.driver}`,
 	];
 	return parts.join("  ·  ");

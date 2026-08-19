@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { ulid } from "@chopin/dialect";
 
 import { Sessions } from "../auth/session";
+import { Admission } from "../auth/admission";
 import { GitHubError } from "../github/client";
 import * as Room from "../plan/room";
 import * as Service from "../plan/service";
@@ -92,6 +93,10 @@ class GitHubBoundary implements GitHub {
 		return { id: `U_${token}`, login: token, avatarUrl: "https://github.test/avatar" };
 	}
 
+	async organizationMembership() {
+		return undefined;
+	}
+
 	async repositories(): Promise<RepositoryPage> {
 		return { repositories: [], nextPage: undefined };
 	}
@@ -143,16 +148,18 @@ function setup() {
 	let storage = new MemoryStorage();
 	let github = new GitHubBoundary();
 	let key = new Uint8Array(32).fill(3);
+	let config = {
+		origin: "https://chopin.test",
+		appSlug: "chopin-test",
+		clientId: "client-id",
+		clientSecret: "client-secret",
+		encryptionKey: key,
+	};
 	let auth: HostedAuth = {
-		config: {
-			origin: "https://chopin.test",
-			appSlug: "chopin-test",
-			clientId: "client-id",
-			clientSecret: "client-secret",
-			encryptionKey: key,
-		},
+		config,
 		storage,
 		github,
+		admission: new Admission(config, github, () => now.getTime()),
 		sessions: new Sessions(storage, true, () => now),
 		clock: () => now,
 	};
@@ -219,7 +226,7 @@ describe("the hosted MCP adapter", () => {
 		});
 		expect(await adapter.caller(request("bearer allowed"))).toBeDefined();
 		expect(await adapter.caller(request("Bearer token+/=="))).toBeDefined();
-		expect(github.userTokens).toEqual(["denied", "allowed", "allowed", "token+/=="]);
+		expect(github.userTokens).toEqual(["denied", "allowed", "token+/=="]);
 	});
 
 	it("lists every channel under the currently readable repository node id", async () => {

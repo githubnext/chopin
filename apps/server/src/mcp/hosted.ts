@@ -137,7 +137,7 @@ export function hosted(
 			if (!match) return undefined;
 			let oauthToken = match[1]!;
 			try {
-				return { oauthToken, user: await auth.github.user(oauthToken) };
+				return { oauthToken, user: await auth.admission.user(oauthToken) };
 			} catch (err) {
 				if (err instanceof GitHubError && err.status === 401) return undefined;
 				throw err;

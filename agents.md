@@ -96,11 +96,13 @@ later checkpoint.
 `packages/dialect/src/dialect.ts` is rejected before it reaches a renderer.
 Plan content is parsed and rendered, never evaluated.
 
-**Repository authorization is the boundary.** The first invoking editor's
-process-local GitHub App user session owns the planner until reset. The SDK runs in
-empty mode with repository-scoped read tools, no host filesystem or shell, and
-permission callbacks that recheck the session, credential revision, ownership
-generation and installation repository access.
+**Admission and repository authorization are separate boundaries.** Optional
+user and organization lists are a union and are rechecked from the caller's
+GitHub token. The first invoking editor's process-local GitHub App user session
+owns the planner until reset. The SDK runs in empty mode with repository-scoped
+read tools, no host filesystem or shell, and permission callbacks that recheck
+admission, the session, credential revision, ownership generation and
+installation repository access.
 
 **Ids are minted wherever a component is created**, client or server. A ULID
 has enough entropy that two editors cannot collide, so buying uniqueness with a
@@ -257,9 +259,10 @@ it: nothing needs redrawing when it lapses, since the lapse redraws itself, and
 a callback fired on the way to replacing a pin would reach a store in the middle
 of walking and wipe the step it had just taken.
 
-**Hard-fail at boot.** Missing GitHub App configuration, an unusable database, or a
-second writer lease are all detectable before serving traffic. `AGENT=off` is
-the deliberate way to run without the planner.
+**Hard-fail at boot.** Missing or malformed GitHub App and admission
+configuration, an unusable database, or a second writer lease are all detectable
+before serving traffic. `AGENT=off` is the deliberate way to run without the
+planner.
 
 **A mark for an agent edit waits to be seen.** The agent writes wherever it
 likes, including several screens away from whoever is reading, so a mark that

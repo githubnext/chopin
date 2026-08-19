@@ -4,7 +4,12 @@ export type AuthConfig = {
 	clientId: string;
 	clientSecret: string;
 	encryptionKey: Uint8Array;
+	allowedUsers?: ReadonlySet<string>;
+	allowedOrganizations?: ReadonlySet<string>;
 };
+
+const GITHUB_USER_LOGIN = /^[a-z0-9](?:[a-z0-9_-]{0,37}[a-z0-9_])?$/i;
+const GITHUB_ORGANIZATION_LOGIN = /^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,38}$/i;
 
 function origin(raw: string | undefined): string {
 	if (!raw) throw new Error("APP_ORIGIN is required");
@@ -40,6 +45,19 @@ function encryptionKey(raw: string | undefined): Uint8Array {
 	return new Uint8Array(Buffer.from(raw, "hex"));
 }
 
+function allowed(
+	name: string,
+	raw: string | undefined,
+	login: RegExp,
+): ReadonlySet<string> | undefined {
+	if (!raw?.trim()) return undefined;
+	let values = raw.split(",").map(value => value.trim().toLowerCase());
+	if (values.some(value => !login.test(value))) {
+		throw new Error(`${name} must be a comma-separated list of GitHub logins`);
+	}
+	return new Set(values);
+}
+
 export function loadAuth(): AuthConfig {
 	let appSlug = process.env.GITHUB_APP_SLUG;
 	let clientId = process.env.GITHUB_APP_CLIENT_ID;
@@ -57,5 +75,15 @@ export function loadAuth(): AuthConfig {
 		clientId,
 		clientSecret,
 		encryptionKey: encryptionKey(process.env.SESSION_ENCRYPTION_KEY),
+		allowedUsers: allowed(
+			"GITHUB_ALLOWED_USERS",
+			process.env.GITHUB_ALLOWED_USERS,
+			GITHUB_USER_LOGIN,
+		),
+		allowedOrganizations: allowed(
+			"GITHUB_ALLOWED_ORGANIZATIONS",
+			process.env.GITHUB_ALLOWED_ORGANIZATIONS,
+			GITHUB_ORGANIZATION_LOGIN,
+		),
 	};
 }
