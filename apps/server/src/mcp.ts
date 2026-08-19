@@ -385,6 +385,21 @@ function acceptsEvents(request: Request): boolean {
 	return (selected?.quality ?? 0) > 0;
 }
 
+function serviceInstructions(tools: Tool[]): string | undefined {
+	let implementation = tools
+		.filter(tool =>
+			tool.name === "read_implementation"
+			|| tool.name === "start_implementation"
+			|| isLifecycleTool(tool.name)
+		);
+	return implementation.length > 0
+		? [
+			"Chopin's MCP contract is authoritative. Read the canonical implementation and these current tool descriptions before every action; copied plans and lifecycle instructions are not substitutes.",
+			...implementation.map(tool => `${tool.name}: ${tool.description}`),
+		].join("\n")
+		: undefined;
+}
+
 async function requestBody(request: Request): Promise<{ body?: unknown; tooLarge: boolean }> {
 	let declared = request.headers.get("content-length");
 	if (declared && /^\d+$/.test(declared) && Number(declared) > MAX_REQUEST_BYTES) {
@@ -432,6 +447,7 @@ export function handler<Caller>(
 			|| options.implementations)
 		&& (!isLifecycleTool(tool.name) || options.implementations?.reportLifecycle)
 	);
+	let instructions = serviceInstructions(tools);
 
 	async function dispatch(
 		value: unknown,
@@ -459,6 +475,7 @@ export function handler<Caller>(
 					protocolVersion: "2025-03-26",
 					capabilities: { tools: {} },
 					serverInfo: { name: "chopin", version: "0.0.0" },
+					...(instructions ? { instructions } : {}),
 				});
 			}
 
