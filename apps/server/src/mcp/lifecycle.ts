@@ -1,4 +1,4 @@
-import type { LifecycleInput } from "../tasks/lifecycle";
+import type { LifecycleInput, VerificationEvidence } from "../tasks/lifecycle";
 
 export type LifecycleArguments = LifecycleInput & { id: string };
 
@@ -21,6 +21,17 @@ function bounded(value: unknown, maximum: number): string | undefined {
 		: undefined;
 }
 
+function boundedStrings(value: unknown, maximum: number, minimum = 0): string[] | undefined {
+	if (!Array.isArray(value) || value.length < minimum) return undefined;
+	let restored: string[] = [];
+	for (let item of value) {
+		let text = bounded(item, maximum);
+		if (!text) return undefined;
+		restored.push(text);
+	}
+	return restored;
+}
+
 function base(value: Record<string, unknown>, required: string[]) {
 	if (
 		Object.keys(value).length !== required.length
@@ -36,6 +47,25 @@ function task(value: Record<string, unknown>, required: string[]) {
 	let common = base(value, required);
 	let taskId = bounded(value.taskId, 128);
 	return common && taskId ? { ...common, taskId } : undefined;
+}
+
+function verificationEvidence(value: unknown): VerificationEvidence[] | undefined {
+	if (!Array.isArray(value) || value.length === 0) return undefined;
+	let evidence: VerificationEvidence[] = [];
+	for (let entry of value) {
+		if (!entry || typeof entry !== "object" || Array.isArray(entry)) return undefined;
+		let item = entry as Record<string, unknown>;
+		if (
+			Object.keys(item).length !== 2
+			|| !Object.hasOwn(item, "taskId")
+			|| !Object.hasOwn(item, "evidence")
+		) return undefined;
+		let taskId = bounded(item.taskId, 128);
+		let entries = boundedStrings(item.evidence, 5000, 1);
+		if (!taskId || !entries) return undefined;
+		evidence.push({ taskId, evidence: entries });
+	}
+	return evidence;
 }
 
 const definitions = {
@@ -86,6 +116,64 @@ const definitions = {
 			let input = task(value, required);
 			let summary = bounded(value.summary, 5000);
 			return input && summary ? { ...input, kind: "complete", summary } : undefined;
+		},
+	},
+	report_verification: {
+		description: "Report implementation verification evidence for every task in the active run.",
+		properties: {
+			id: ID,
+			runId: ID,
+			passed: { type: "boolean" },
+			summary: TEXT,
+			reviewerMethod: TEXT,
+			evidence: {
+				type: "array",
+				minItems: 1,
+				items: {
+					type: "object",
+					properties: {
+						taskId: TASK,
+						evidence: { type: "array", minItems: 1, items: TEXT },
+					},
+					required: ["taskId", "evidence"],
+					additionalProperties: false,
+				},
+			},
+			tasksNeedingWork: { type: "array", items: TASK },
+			idempotencyKey: KEY,
+		},
+		required: [
+			"id",
+			"runId",
+			"passed",
+			"summary",
+			"reviewerMethod",
+			"evidence",
+			"tasksNeedingWork",
+			"idempotencyKey",
+		],
+		parse(value, required) {
+			let common = base(value, required);
+			let summary = bounded(value.summary, 5000);
+			let reviewerMethod = bounded(value.reviewerMethod, 5000);
+			let evidence = verificationEvidence(value.evidence);
+			let tasksNeedingWork = boundedStrings(value.tasksNeedingWork, 128);
+			return common
+					&& typeof value.passed === "boolean"
+					&& summary
+					&& reviewerMethod
+					&& evidence
+					&& tasksNeedingWork
+				? {
+					...common,
+					kind: "report_verification",
+					passed: value.passed,
+					summary,
+					reviewerMethod,
+					evidence,
+					tasksNeedingWork,
+				}
+				: undefined;
 		},
 	},
 	request_revision: {

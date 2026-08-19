@@ -253,7 +253,7 @@ describe("the plan graph adapter", () => {
 			.rejects.toThrow("invalid implementation run");
 	});
 
-	it("persists lifecycle activity before broadcasting it", async () => {
+	it("persists lifecycle activity before broadcasting implemented and delivered history", async () => {
 		let report = (graphPlans as typeof graphPlans & {
 			reportImplementationLifecycle?: (plan: Plan, input: unknown) => Promise<any>;
 		}).reportImplementationLifecycle;
@@ -298,15 +298,189 @@ describe("the plan graph adapter", () => {
 				tasks: [{ id: "model", state: "in_progress" }],
 			}),
 		}));
+		for (
+			let input of [
+				{
+					kind: "report_pr" as const,
+					runId: "run-1",
+					taskId: "model",
+					url: "https://github.com/octo-org/score/pull/49",
+					state: "open" as const,
+					idempotencyKey: "pr-model",
+				},
+				{
+					kind: "complete" as const,
+					runId: "run-1",
+					taskId: "model",
+					summary: "The graph is durable.",
+					idempotencyKey: "complete-model",
+				},
+			]
+		) {
+			expect(await report(plan, input)).toMatchObject({ kind: "accepted" });
+		}
+		expect(
+			await report(plan, {
+				kind: "report_verification",
+				runId: "run-1",
+				passed: false,
+				summary: "The model needs another pass.",
+				reviewerMethod: "Ran the focused implementation suite.",
+				evidence: [{ taskId: "model", evidence: ["One focused assertion failed."] }],
+				tasksNeedingWork: ["model"],
+				idempotencyKey: "verify-model-failed",
+			}),
+		).toMatchObject({ kind: "accepted" });
+		expect(frames.at(-1)).toMatchObject({
+			activity: {
+				tasks: [{ id: "model", state: "in_progress" }],
+				verification: { passed: false, tasksNeedingWork: ["model"] },
+			},
+			history: [],
+		});
+		expect(
+			await report(plan, {
+				kind: "complete",
+				runId: "run-1",
+				taskId: "model",
+				summary: "The graph remains durable after rework.",
+				idempotencyKey: "complete-model-rework",
+			}),
+		).toMatchObject({ kind: "accepted" });
+		expect(
+			await report(plan, {
+				kind: "report_verification",
+				runId: "run-1",
+				passed: true,
+				summary: "The implementation passed review.",
+				reviewerMethod: "Ran the focused implementation suite.",
+				evidence: [{ taskId: "model", evidence: ["Focused suite passed."] }],
+				tasksNeedingWork: [],
+				idempotencyKey: "verify-model",
+			}),
+		).toMatchObject({ kind: "accepted" });
+		expect(frames.at(-1)).toMatchObject({
+			kind: "plan:lifecycle",
+			execution: { state: "idle" },
+			history: [{
+				outcome: { kind: "implemented" },
+				progress: { verification: { passed: true } },
+			}],
+		});
+		expect(frames.at(-1)).not.toHaveProperty("activity");
+		expect(
+			await report(plan, {
+				kind: "report_pr",
+				runId: "run-1",
+				taskId: "model",
+				url: "https://github.com/octo-org/score/pull/49",
+				state: "merged",
+				idempotencyKey: "merge-model",
+			}),
+		).toMatchObject({ kind: "accepted" });
+		expect(frames.at(-1)).toMatchObject({
+			kind: "plan:lifecycle",
+			history: [{ outcome: { kind: "delivered" } }],
+		});
 		await close(plan);
 
 		let restored = await open(context.channel.id, context.backend, context.server);
-		expect(restored.lifecycle.events).toEqual([{
-			kind: "start",
+		expect(restored.execution).toBeUndefined();
+		expect(restored.lifecycle).not.toHaveProperty("events");
+		expect(restored.lifecycle.history[0]?.events.at(-1)).toEqual({
+			kind: "report_pr",
 			taskId: "model",
-			idempotencyKey: "start-model",
-		}]);
+			url: "https://github.com/octo-org/score/pull/49",
+			state: "merged",
+			idempotencyKey: "merge-model",
+		});
+		expect(restored.lifecycle.history[0]?.events.some(event => "runId" in event)).toBe(false);
 		await close(restored);
+	});
+
+	it("rolls a failed lifecycle commit back before broadcasting", async () => {
+		let context = await hosted();
+		let frames: unknown[] = [];
+		let server = {
+			publish(_topic: string, frame: string) {
+				frames.push(JSON.parse(frame));
+			},
+		} as unknown as Server<SocketData>;
+		let plan = await open(context.channel.id, context.backend, server);
+		expect(
+			(await implementationGraphs().revise(plan, {
+				planRevision: plan.revision,
+				graphRevision: 0,
+				operations: definition.tasks.map(task => ({ op: "add", task })),
+			})).ok,
+		).toBe(true);
+		expect((await implementationGraphs().approve(plan)).ok).toBe(true);
+		expect(
+			await claimImplementation(plan, {
+				planRevision: plan.revision,
+				graphRevision: 1,
+				run: run(plan.revision),
+			}),
+		).toMatchObject({ kind: "started" });
+		for (
+			let input of [
+				{
+					kind: "start" as const,
+					runId: "run-1",
+					taskId: "model",
+					idempotencyKey: "rollback-start",
+				},
+				{
+					kind: "report_pr" as const,
+					runId: "run-1",
+					taskId: "model",
+					url: "https://github.com/octo-org/score/pull/49",
+					state: "open" as const,
+					idempotencyKey: "rollback-pr",
+				},
+				{
+					kind: "complete" as const,
+					runId: "run-1",
+					taskId: "model",
+					summary: "Ready to verify.",
+					idempotencyKey: "rollback-complete",
+				},
+			]
+		) {
+			expect(await reportImplementationLifecycle(plan, input)).toMatchObject({
+				kind: "accepted",
+			});
+		}
+		let before = {
+			graph: plan.graph,
+			execution: plan.execution,
+			lifecycle: plan.lifecycle,
+			frames: frames.length,
+		};
+		let original = context.storage.collaboration.commit;
+		(context.storage.collaboration as { commit: typeof original }).commit = async () => {
+			throw new Error("storage unavailable");
+		};
+
+		expect(
+			await reportImplementationLifecycle(plan, {
+				kind: "report_verification",
+				runId: "run-1",
+				passed: true,
+				summary: "The implementation passed review.",
+				reviewerMethod: "Ran the focused implementation suite.",
+				evidence: [{ taskId: "model", evidence: ["Focused suite passed."] }],
+				tasksNeedingWork: [],
+				idempotencyKey: "rollback-verification",
+			}),
+		).toEqual({ kind: "refused", reason: "durability" });
+		expect(plan.graph).toBe(before.graph);
+		expect(plan.execution).toBe(before.execution);
+		expect(plan.lifecycle).toBe(before.lifecycle);
+		expect(frames).toHaveLength(before.frames);
+		expect(plan.lifecycle.events?.some(event => event.kind === "report_verification")).toBe(false);
+		(context.storage.collaboration as { commit: typeof original }).commit = original;
+		await close(plan);
 	});
 
 	it("refuses a verified graph but claims a new graph version with reused revisions", async () => {

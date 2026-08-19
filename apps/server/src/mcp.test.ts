@@ -285,14 +285,40 @@ describe("the MCP read protocol", () => {
 				method: "tools/list",
 			}, { headers: { "mcp-session-id": session } })),
 		);
-		expect((listed.result as { tools: Array<{ name: string }> }).tools.map(tool => tool.name))
+		let listedTools = (listed.result as {
+			tools: Array<{ name: string; inputSchema: Record<string, unknown> }>;
+		}).tools;
+		let toolNames = listedTools.map(tool => tool.name);
+		expect(toolNames.filter(name => name === "report_verification")).toHaveLength(1);
+		expect(toolNames)
 			.toEqual(expect.arrayContaining([
 				"start_task",
 				"block_task",
 				"report_pr",
 				"complete_task",
+				"report_verification",
 				"request_revision",
 			]));
+		expect(listedTools.find(tool => tool.name === "report_verification")?.inputSchema)
+			.toMatchObject({
+				required: [
+					"id",
+					"runId",
+					"passed",
+					"summary",
+					"reviewerMethod",
+					"evidence",
+					"tasksNeedingWork",
+					"idempotencyKey",
+				],
+				additionalProperties: false,
+				properties: {
+					evidence: {
+						minItems: 1,
+						items: { required: ["taskId", "evidence"], additionalProperties: false },
+					},
+				},
+			});
 
 		let result = await json(
 			await mcp(request({
@@ -320,6 +346,74 @@ describe("the MCP read protocol", () => {
 			idempotencyKey: "block-model",
 		});
 		expect((result.result as { structuredContent: unknown }).structuredContent).toEqual({
+			activity: "recorded",
+		});
+
+		let verification = {
+			id: document.id,
+			runId: "run-1",
+			passed: true,
+			summary: "Every acceptance criterion passed.",
+			reviewerMethod: "Ran the focused suite and inspected the diff.",
+			evidence: [{ taskId: "model", evidence: ["The focused suite passed."] }],
+			tasksNeedingWork: [],
+			idempotencyKey: "verify-model",
+		};
+		let withoutRunId: Record<string, unknown> = { ...verification };
+		delete withoutRunId.runId;
+		let withoutSession = await json(
+			await mcp(request({
+				jsonrpc: "2.0",
+				id: 4,
+				method: "tools/call",
+				params: { name: "report_verification", arguments: verification },
+			})),
+		);
+		expect((withoutSession.result as { structuredContent: unknown }).structuredContent).toEqual({
+			code: "session-required",
+		});
+
+		for (
+			let invalid of [
+				withoutRunId,
+				{
+					...verification,
+					evidence: [{ taskId: "model", evidence: ["passed"], extra: true }],
+				},
+				{
+					...verification,
+					evidence: [{ taskId: "model", evidence: ["x".repeat(5001)] }],
+				},
+				{ ...verification, summary: "x".repeat(5001) },
+				{ ...verification, reviewerMethod: "x".repeat(5001) },
+				{
+					...verification,
+					evidence: [{ taskId: "x".repeat(129), evidence: ["passed"] }],
+				},
+				{ ...verification, tasksNeedingWork: ["x".repeat(129)] },
+			]
+		) {
+			let invalidResult = await json(
+				await mcp(request({
+					jsonrpc: "2.0",
+					id: 5,
+					method: "tools/call",
+					params: { name: "report_verification", arguments: invalid },
+				}, { headers: { "mcp-session-id": session } })),
+			);
+			expect(invalidResult).toMatchObject({ error: { code: -32602 } });
+		}
+
+		let verified = await json(
+			await mcp(request({
+				jsonrpc: "2.0",
+				id: 6,
+				method: "tools/call",
+				params: { name: "report_verification", arguments: verification },
+			}, { headers: { "mcp-session-id": session } })),
+		);
+		expect(received).toEqual({ ...verification, kind: "report_verification" });
+		expect((verified.result as { structuredContent: unknown }).structuredContent).toEqual({
 			activity: "recorded",
 		});
 	});

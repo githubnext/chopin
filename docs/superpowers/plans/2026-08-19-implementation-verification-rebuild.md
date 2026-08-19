@@ -37,6 +37,7 @@
 ### Task 1: Give every run an exact graph identity
 
 **Files:**
+
 - Modify: `apps/server/src/tasks/graphs.ts`
 - Modify: `apps/server/src/tasks/graphs.test.ts`
 - Modify: `apps/server/src/mcp.ts`
@@ -124,6 +125,7 @@ Commit: `Model exact implementation graph identity`
 ### Task 2: Replace outcome snapshots with one verified event reducer
 
 **Files:**
+
 - Modify: `apps/server/src/tasks/lifecycle.ts`
 - Modify: `apps/server/src/tasks/lifecycle.test.ts`
 - Modify: `apps/server/src/mcp/lifecycle.ts` (mechanical `runId` contract so types remain green)
@@ -178,7 +180,13 @@ export type HistoricalRun = {
 type Command =
 	| { kind: "start"; taskId: string; idempotencyKey: string }
 	| { kind: "block"; taskId: string; reason: string; idempotencyKey: string }
-	| { kind: "report_pr"; taskId: string; url: string; state: PullRequest["state"]; idempotencyKey: string }
+	| {
+		kind: "report_pr";
+		taskId: string;
+		url: string;
+		state: PullRequest["state"];
+		idempotencyKey: string;
+	}
 	| { kind: "complete"; taskId: string; summary: string; idempotencyKey: string }
 	| ({ kind: "report_verification"; idempotencyKey: string } & VerificationReport)
 	| { kind: "request_revision"; reason: string; idempotencyKey: string };
@@ -227,6 +235,7 @@ Commit: `Model verified implementation lifecycle events`
 ### Task 3: Prevent verified graph reclaims atomically
 
 **Files:**
+
 - Modify: `apps/server/src/tasks/lifecycle.ts`
 - Modify: `apps/server/src/tasks/plan-graphs.ts`
 - Modify: `apps/server/src/tasks/plan-graphs.test.ts`
@@ -281,6 +290,7 @@ Commit: `Prevent verified graph reclaims`
 ### Task 4: Expose verification through the canonical MCP and hosted paths
 
 **Files:**
+
 - Modify: `apps/server/src/mcp/lifecycle.ts`
 - Modify: `apps/server/src/mcp.test.ts`
 - Modify: `apps/server/src/mcp/hosted.test.ts`
@@ -357,6 +367,7 @@ Commit: `Require implementation verification reports`
 ### Task 5: Whole-branch verification and review fixes
 
 **Files:**
+
 - Modify only files implicated by concrete verification or final-review findings.
 
 - [ ] **Step 1: Run every non-browser check**
