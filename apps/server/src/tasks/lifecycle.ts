@@ -1,4 +1,4 @@
-import { restoreRunVersion } from "./graphs";
+import { matches, restoreRunVersion } from "./graphs";
 
 import type { Graph, Run, Task } from "./graphs";
 
@@ -200,10 +200,7 @@ function projectHistory(graph: Graph, history: ArchivedRun[]): HistoricalRun[] |
 		let progress: Progress | undefined;
 		for (let index = nextVersion; index < graph.versions.length; index++) {
 			let version = graph.versions[index]!;
-			if (
-				version.planRevision !== archived.run.planRevision
-				|| version.revision !== archived.run.graphRevision
-			) continue;
+			if (!matches(archived.run, version)) continue;
 			progress = derive(
 				version.definition.tasks,
 				archived.run,
