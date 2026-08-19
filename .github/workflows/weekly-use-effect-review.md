@@ -5,6 +5,9 @@ on:
       timezone: Europe/London
   workflow_dispatch:
 
+imports:
+  - shared/dprint-verification.md
+
 permissions:
   contents: read
   copilot-requests: write
@@ -18,11 +21,6 @@ steps:
     run: bun install --frozen-lockfile
 
 engine: copilot
-
-network:
-  allowed:
-    - defaults
-    - "releaseassets.githubusercontent.com"
 
 safe-outputs:
   create-pull-request:
