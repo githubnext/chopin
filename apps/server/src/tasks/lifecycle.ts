@@ -76,6 +76,10 @@ export type LifecycleResult =
 	| { kind: "accepted" | "replayed"; state: LifecycleState }
 	| { kind: "refused"; reason: string };
 
+export type ClaimEligibility =
+	| { ok: true }
+	| { ok: false; reason: "already-verified" | "run" };
+
 type DerivedRun =
 	| { phase: "active"; progress: Progress }
 	| { phase: "revision_requested"; progress: Progress; reason: string }
@@ -461,6 +465,24 @@ function projectHistory(graph: Graph, history: ArchivedRun[]): HistoricalRun[] |
 	return projected;
 }
 
+/** Decide whether a run may own this exact graph without reusing lifecycle identity. */
+export function claimEligibility(
+	lifecycle: Lifecycle,
+	version: Version,
+	runId: string,
+): ClaimEligibility {
+	let verified = lifecycle.history.some(archived => {
+		if (!matches(archived.run, version)) return false;
+		let derived = deriveRun(version.definition.tasks, archived.run, archived.events);
+		return derived?.phase === "implemented" || derived?.phase === "delivered";
+	});
+	if (verified) return { ok: false, reason: "already-verified" };
+	if (lifecycle.history.some(archived => archived.run.id === runId)) {
+		return { ok: false, reason: "run" };
+	}
+	return { ok: true };
+}
+
 /** Restore lifecycle data only when it describes this graph and claim exactly. */
 export function restoreLifecycle(
 	value: unknown,
@@ -477,18 +499,20 @@ export function restoreLifecycle(
 	if (!projected) return undefined;
 	let events = stored.events === undefined ? undefined : restoreEvents(stored.events);
 	if (stored.events !== undefined && !events) return undefined;
+	let current = graph.versions.at(-1);
+	if (!current || (current.state === "locked") !== Boolean(execution)) return undefined;
 	if (events && !execution) return undefined;
 	if (execution) {
 		let version = activeVersion(graph, execution);
-		let derived = version
-			&& deriveRun(version.definition.tasks, execution, events ?? []);
+		if (!version) return undefined;
+		let derived = deriveRun(version.definition.tasks, execution, events ?? []);
 		if (!derived || derived.phase !== "active") return undefined;
+		if (!claimEligibility({ ...(events ? { events } : {}), history }, version, execution.id).ok) {
+			return undefined;
+		}
 	}
 
-	let runIds = [
-		...(execution ? [execution.id] : []),
-		...history.map(item => item.run.id),
-	];
+	let runIds = history.map(item => item.run.id);
 	if (new Set(runIds).size !== runIds.length) return undefined;
 	let allEvents = [...(events ?? []), ...history.flatMap(item => item.events)];
 	if (new Set(allEvents.map(event => event.idempotencyKey)).size !== allEvents.length) {
@@ -696,15 +720,6 @@ export function progressFor(
 	let derived = version
 		&& deriveRun(version.definition.tasks, execution, lifecycle.events ?? []);
 	return derived?.phase === "active" ? copy(derived.progress) : undefined;
-}
-
-/** Whether this exact graph version has a successfully verified historical run. */
-export function verified(lifecycle: Lifecycle, version: Version): boolean {
-	return lifecycle.history.some(archived => {
-		if (!matches(archived.run, version)) return false;
-		let derived = deriveRun(version.definition.tasks, archived.run, archived.events);
-		return derived?.phase === "implemented" || derived?.phase === "delivered";
-	});
 }
 
 /** Project archived event logs against the graph versions they implemented. */
