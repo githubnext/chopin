@@ -153,6 +153,108 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
+		it("keeps document titles unique within a repository without regard to case", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, repositoryId } = await userAndChannel(storage);
+				let now = new Date("2026-01-03T03:04:05.000Z");
+				await storage.channels.create({
+					id: id("channel"),
+					repositoryId,
+					repositoryOwner: "octo-org",
+					repositoryName: "score",
+					title: "Release notes",
+					createdBy: userId,
+					now,
+				});
+				expect(storage.channels.create({
+					id: id("channel"),
+					repositoryId,
+					repositoryOwner: "octo-org",
+					repositoryName: "score",
+					title: "release NOTES",
+					createdBy: userId,
+					now,
+				})).rejects.toBeInstanceOf(StorageError);
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("atomically reserves one title for concurrent creators", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, repositoryId } = await userAndChannel(storage);
+				let now = new Date("2026-01-03T03:04:05.000Z");
+				let create = (id: string) =>
+					storage.channels.create({
+						id,
+						repositoryId,
+						repositoryOwner: "octo-org",
+						repositoryName: "score",
+						title: "bright-road",
+						createdBy: userId,
+						now,
+					});
+				let results = await Promise.allSettled([create(id("channel")), create(id("channel"))]);
+				expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
+				expect(results.filter(result => result.status === "rejected")).toHaveLength(1);
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("paginates a case-insensitive title search independently from the full list", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, repositoryId } = await userAndChannel(storage);
+				let now = new Date("2026-01-03T03:04:05.000Z");
+				for (let title of ["Draft map", "Draft release", "Roadmap"]) {
+					await storage.channels.create({
+						id: id("channel"),
+						repositoryId,
+						repositoryOwner: "octo-org",
+						repositoryName: "score",
+						title,
+						createdBy: userId,
+						now,
+					});
+				}
+				let first = await storage.channels.list(repositoryId, 1, undefined, "DRAFT");
+				expect(first.channels.map(channel => channel.title)).toHaveLength(1);
+				expect(first.channels[0]!.title).toMatch(/^Draft/);
+				let second = await storage.channels.list(repositoryId, 1, first.next, "draft");
+				expect(second.channels.map(channel => channel.title)).toHaveLength(1);
+				expect(second.channels[0]!.title).toMatch(/^Draft/);
+				expect(second.next).toBeUndefined();
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("treats title-search punctuation as literal text", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, repositoryId } = await userAndChannel(storage);
+				let now = new Date("2026-01-03T03:04:05.000Z");
+				for (let title of ["Budget 100%_\\plan", "Budget 100abcplan"]) {
+					await storage.channels.create({
+						id: id("channel"),
+						repositoryId,
+						repositoryOwner: "octo-org",
+						repositoryName: "score",
+						title,
+						createdBy: userId,
+						now,
+					});
+				}
+				let page = await storage.channels.list(repositoryId, 20, undefined, "100%_\\plan");
+				expect(page.channels.map(channel => channel.title)).toEqual(["Budget 100%_\\plan"]);
+			} finally {
+				await storage.close();
+			}
+		});
+
 		it("scans repository channels through updates without changing its creation cursor", async () => {
 			let storage = await opened(factory);
 			try {

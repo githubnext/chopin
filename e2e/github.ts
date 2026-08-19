@@ -7,7 +7,7 @@ let network = globalThis.fetch;
 const repositories = [
 	{
 		node_id: "R_score",
-		owner: { login: "octo-org" },
+		owner: { login: "octo-org", avatar_url: "https://example.invalid/octo-org.png" },
 		name: "score",
 		full_name: "octo-org/score",
 		private: true,
@@ -17,7 +17,7 @@ const repositories = [
 	},
 	{
 		node_id: "R_notes",
-		owner: { login: "octocat" },
+		owner: { login: "octocat", avatar_url: "https://example.invalid/octocat.png" },
 		name: "notes",
 		full_name: "octocat/notes",
 		private: false,
@@ -27,7 +27,7 @@ const repositories = [
 	},
 	...Array.from({ length: 12 }, (_, index) => ({
 		node_id: `R_archive_${index + 1}`,
-		owner: { login: "octo-org" },
+		owner: { login: "octo-org", avatar_url: "https://example.invalid/octo-org.png" },
 		name: `archive-${index + 1}`,
 		full_name: `octo-org/archive-${index + 1}`,
 		private: false,
@@ -106,6 +106,12 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 		}
 		if (url.pathname === "/user/installations/101/repositories") {
 			let available = repositories.filter(value => value.owner.login === "octo-org");
+			if (handle === "readonly") {
+				available = available.map(value => ({
+					...value,
+					permissions: { ...value.permissions, push: false },
+				}));
+			}
 			if (handle === "paged" && url.searchParams.get("page") !== "2") {
 				return json({ repositories: available.slice(0, 1) }, {
 					headers: {

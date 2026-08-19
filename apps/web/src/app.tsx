@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowClockwiseIcon, DotsThreeIcon } from "@phosphor-icons/react";
 import {
 	advanceDecisionView,
 	countUnanswered,
@@ -16,6 +15,7 @@ import {
 
 import { Chat } from "./chat/chat";
 import { decisionAttention, DecisionViewControl } from "./decision-view-control";
+import { DocumentPicker } from "./document-picker";
 import * as Api from "./api";
 import { HostedApp, HostedFailure, HostedLoading, HostedLogin } from "./hosted";
 import { RepositoryPicker } from "./repository-picker";
@@ -29,44 +29,31 @@ import type { Status } from "./wire";
 
 function Header(
 	{
+		canEdit,
 		members,
-		onResetAgent,
 		label,
 		repository,
+		room,
 	}: {
+		canEdit: boolean;
 		members: Session.Member[];
-		onResetAgent?: () => Promise<void>;
 		label: string;
 		repository: Api.Repository;
+		room: string;
 	},
 ) {
-	let [resetting, setResetting] = useState(false);
-	let [resetError, setResetError] = useState(false);
-	let resetLabel = resetting ? "Resetting..." : resetError ? "Reset failed" : "New planner session";
-
-	async function resetAgent() {
-		if (!onResetAgent || resetting) return;
-		setResetting(true);
-		setResetError(false);
-		try {
-			await onResetAgent();
-		} catch {
-			setResetError(true);
-		} finally {
-			setResetting(false);
-		}
-	}
-
 	return (
 		<header className="room-header hairline-b relative flex min-h-12 shrink-0 flex-nowrap items-center gap-2 px-2 py-2 sm:h-12 sm:gap-3 sm:px-4 sm:py-0">
 			<a className="hidden text-sm font-semibold sm:inline" href="/">chopin</a>
 			<span aria-hidden="true" className="hidden h-4 hairline-l sm:block" />
-			<RepositoryPicker current={repository} />
+			<RepositoryPicker compact current={repository} />
 			<div className="flex min-w-0 flex-1 items-center gap-2">
 				<span aria-hidden="true" className="hidden text-sm text-text-tertiary sm:inline">/</span>
-				<span className="min-w-0 flex-1 truncate text-sm text-text-tertiary" title={label}>
-					{label}
-				</span>
+				<DocumentPicker
+					canEdit={canEdit}
+					current={{ id: room, title: label }}
+					repository={repository}
+				/>
 			</div>
 			<div
 				aria-label={`People here: ${members.map(member => member.handle).join(", ")}`}
@@ -87,40 +74,6 @@ function Header(
 					</span>
 				)}
 			</div>
-			{onResetAgent && (
-				<button
-					aria-label={resetLabel}
-					className="btn btn-sm btn-ghost hidden sm:inline-flex"
-					disabled={resetting}
-					onClick={() => void resetAgent()}
-					type="button"
-				>
-					<ArrowClockwiseIcon aria-hidden="true" className="lg:hidden" size={16} />
-					<span className="hidden lg:inline">{resetLabel}</span>
-				</button>
-			)}
-			{onResetAgent && (
-				<details className="room-secondary-actions sm:hidden">
-					<summary
-						aria-label="More room actions"
-						className="btn btn-icon btn-ghost cursor-pointer list-none"
-						role="button"
-					>
-						<DotsThreeIcon aria-hidden="true" size={18} weight="bold" />
-					</summary>
-					<div className="absolute right-2 top-full z-30 mt-1 min-w-44 rounded-lg bg-page p-1 ring-hairline shadow-overlay">
-						<button
-							className="btn btn-md btn-ghost w-full justify-start"
-							disabled={resetting}
-							onClick={() => void resetAgent()}
-							type="button"
-						>
-							<ArrowClockwiseIcon aria-hidden="true" size={16} />
-							<span className="ml-1">{resetLabel}</span>
-						</button>
-					</div>
-				</details>
-			)}
 		</header>
 	);
 }
@@ -131,7 +84,6 @@ export function RoomWorkspace(
 		canEdit = true,
 		handle,
 		label,
-		onResetAgent,
 		repository,
 		room,
 	}: {
@@ -139,7 +91,6 @@ export function RoomWorkspace(
 		canEdit?: boolean;
 		handle: string;
 		label: string;
-		onResetAgent?: () => Promise<void>;
 		repository: Api.Repository;
 		room: string;
 	},
@@ -283,10 +234,11 @@ export function RoomWorkspace(
 			conversationActivity={conversationActivity}
 			header={
 				<Header
+					canEdit={effectiveCanEdit}
 					members={members}
-					onResetAgent={effectiveCanEdit ? onResetAgent : undefined}
 					label={label}
 					repository={repository}
+					room={room}
 				/>
 			}
 			controls={

@@ -20,6 +20,7 @@ class FakeGitHub implements GitHub {
 	repo: Repository = {
 		id: "R_score",
 		owner: "octo-org",
+		ownerAvatarUrl: "https://avatars.test/octo-org.png",
 		name: "score",
 		fullName: "octo-org/score",
 		private: true,
@@ -80,7 +81,7 @@ function pair(cookie: string): string {
 	return cookie.split(";", 1)[0]!;
 }
 
-async function setup() {
+async function setup(random?: () => number) {
 	let now = new Date("2026-08-13T12:00:00.000Z");
 	let storage = new MemoryStorage();
 	await storage.users.put({ id: "U_octocat", login: "octocat", avatarUrl: "avatar", now });
@@ -106,6 +107,7 @@ async function setup() {
 		onAgentReset: async id => {
 			reset.push(id);
 		},
+		random,
 	});
 	return { router, storage, github, cookie: pair(issued.cookie), sessionId: issued.id, reset, now };
 }
@@ -171,6 +173,78 @@ describe("channel routes", () => {
 		expect((await storage.collaboration.load(body.channel.id, now))?.channel.id).toBe(
 			body.channel.id,
 		);
+	});
+
+	it("lists matching documents with a query-bound cursor and repository avatar", async () => {
+		let { router, storage, cookie, now } = await setup();
+		for (let title of ["Launch notes", "Launch checklist", "Roadmap"]) {
+			await storage.channels.create({
+				id: crypto.randomUUID(),
+				repositoryId: "R_score",
+				repositoryOwner: "octo-org",
+				repositoryName: "score",
+				title,
+				createdBy: "U_octocat",
+				now,
+			});
+		}
+		let response = await router.handle(request(
+			"/api/repositories/octo-org/score/channels?query=launch&limit=1",
+			cookie,
+		));
+		expect(response!.status).toBe(200);
+		let page = await response!.json();
+		expect(page.repository.ownerAvatarUrl).toBe("https://avatars.test/octo-org.png");
+		expect(page.channels[0].title).toMatch(/launch/i);
+		expect(page.nextCursor).toBeString();
+		let next = await router.handle(request(
+			`/api/repositories/octo-org/score/channels?query=launch&limit=1&cursor=${page.nextCursor}`,
+			cookie,
+		));
+		expect((await next!.json()).channels[0].title).toMatch(/launch/i);
+		let mismatch = await router.handle(request(
+			`/api/repositories/octo-org/score/channels?query=road&cursor=${page.nextCursor}`,
+			cookie,
+		));
+		expect(mismatch!.status).toBe(400);
+	});
+
+	it("creates a unique generated document when a title is omitted", async () => {
+		let { router, cookie } = await setup();
+		let create = () =>
+			router.handle(request(
+				"/api/repositories/octo-org/score/channels",
+				cookie,
+				{ method: "POST", headers: { origin: "https://chopin.test" }, body: "{}" },
+			));
+		let first = await create();
+		let second = await create();
+		expect(first!.status).toBe(201);
+		expect(second!.status).toBe(201);
+		let firstBody = await first!.json();
+		let secondBody = await second!.json();
+		expect(firstBody.channel.title).toMatch(/^[a-z]+-[a-z]+$/);
+		expect(secondBody.channel.title).not.toBe(firstBody.channel.title);
+	});
+
+	it("tries another generated title when its random starting title is reserved", async () => {
+		let { router, storage, cookie, now } = await setup(() => 0);
+		await storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "amber-anchor",
+			createdBy: "U_octocat",
+			now,
+		});
+		let created = await router.handle(request(
+			"/api/repositories/octo-org/score/channels",
+			cookie,
+			{ method: "POST", headers: { origin: "https://chopin.test" }, body: "{}" },
+		));
+		expect(created!.status).toBe(201);
+		expect((await created!.json()).channel.title).toBe("amber-arch");
 	});
 
 	it("keeps viewers read-only and requires a matching Origin", async () => {

@@ -31,6 +31,9 @@ CREATE TABLE channels (
 CREATE INDEX channels_repository_listing
 	ON channels (repository_id, updated_at DESC, id ASC);
 
+CREATE UNIQUE INDEX channels_repository_title_ci
+	ON channels (repository_id, lower(title));
+
 CREATE TABLE channel_state (
 	channel_id text PRIMARY KEY REFERENCES channels(id) ON DELETE CASCADE,
 	sidecar jsonb NOT NULL DEFAULT 'null'::jsonb
