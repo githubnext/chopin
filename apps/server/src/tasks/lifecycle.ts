@@ -1,6 +1,6 @@
 import { matches, restoreRunVersion } from "./graphs";
 
-import type { Graph, Run, Task } from "./graphs";
+import type { Graph, Run, Task, Version } from "./graphs";
 
 export type PullRequest = {
 	url: string;
@@ -18,33 +18,45 @@ export type TaskProgress =
 	| (Working & { state: "blocked"; blocker: string })
 	| { id: string; state: "completed"; summary: string; pullRequest: PullRequest };
 
-export type ProgressEvent =
+export type VerificationEvidence = { taskId: string; evidence: string[] };
+export type VerificationReport = {
+	passed: boolean;
+	summary: string;
+	reviewerMethod: string;
+	evidence: VerificationEvidence[];
+	tasksNeedingWork: string[];
+};
+
+type Command =
 	| { kind: "start"; taskId: string; idempotencyKey: string }
 	| { kind: "block"; taskId: string; reason: string; idempotencyKey: string }
 	| {
 		kind: "report_pr";
 		taskId: string;
-		pullRequest: PullRequest;
+		url: string;
+		state: PullRequest["state"];
 		idempotencyKey: string;
 	}
 	| { kind: "complete"; taskId: string; summary: string; idempotencyKey: string }
+	| ({ kind: "report_verification"; idempotencyKey: string } & VerificationReport)
 	| { kind: "request_revision"; reason: string; idempotencyKey: string };
+
+export type ProgressEvent = Command;
 
 export type Progress = {
 	tasks: TaskProgress[];
 	events: ProgressEvent[];
+	verification?: VerificationReport;
 };
 
-export type ArchivedRun = {
-	run: Run;
-	events: ProgressEvent[];
-	outcome: { kind: "revision_requested"; reason: string };
-};
-
+export type ArchivedRun = { run: Run; events: ProgressEvent[] };
 export type HistoricalRun = {
 	run: Run;
 	progress: Progress;
-	outcome: ArchivedRun["outcome"];
+	outcome:
+		| { kind: "revision_requested"; reason: string }
+		| { kind: "implemented" }
+		| { kind: "delivered" };
 };
 
 export type Lifecycle = {
@@ -58,34 +70,21 @@ export type LifecycleState = {
 	lifecycle: Lifecycle;
 };
 
-export type LifecycleInput =
-	| { kind: "start"; taskId: string; idempotencyKey: string }
-	| { kind: "block"; taskId: string; reason: string; idempotencyKey: string }
-	| {
-		kind: "report_pr";
-		taskId: string;
-		url: string;
-		state: PullRequest["state"];
-		idempotencyKey: string;
-	}
-	| { kind: "complete"; taskId: string; summary: string; idempotencyKey: string }
-	| { kind: "request_revision"; reason: string; idempotencyKey: string };
+export type LifecycleInput = Command & { runId: string };
 
 export type LifecycleResult =
 	| { kind: "accepted" | "replayed"; state: LifecycleState }
 	| { kind: "refused"; reason: string };
 
+type DerivedRun =
+	| { phase: "active"; progress: Progress }
+	| { phase: "revision_requested"; progress: Progress; reason: string }
+	| { phase: "implemented" | "delivered"; progress: Progress };
+
+type Refusal = { reason?: string };
+
 function copy<T>(value: T): T {
 	return structuredClone(value);
-}
-
-function current(graph: Graph): Task[] | undefined {
-	let version = graph.versions.at(-1);
-	return version?.state === "locked" ? version.definition.tasks : undefined;
-}
-
-function initial(tasks: Task[]): Progress {
-	return { tasks: tasks.map(task => ({ id: task.id, state: "queued" })), events: [] };
 }
 
 function exact(value: Record<string, unknown>, keys: string[]): boolean {
@@ -95,30 +94,302 @@ function exact(value: Record<string, unknown>, keys: string[]): boolean {
 		&& actual.every((key, index) => key === expected[index]);
 }
 
-function pullRequest(value: unknown): PullRequest | undefined {
-	if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-	let item = value as Record<string, unknown>;
+function text(value: unknown): value is string {
+	return typeof value === "string" && Boolean(value.trim());
+}
+
+function pullRequestState(value: unknown): value is PullRequest["state"] {
+	return value === "open" || value === "merged" || value === "closed";
+}
+
+function ownPullRequest(repository: string, url: string): boolean {
+	let match = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/([1-9]\d*)\/?$/.exec(url);
+	return match?.[1] === repository;
+}
+
+function versionFor(graph: Graph, run: Run): Version | undefined {
+	return graph.versions.find(version => matches(run, version));
+}
+
+function activeVersion(graph: Graph, run: Run): Version | undefined {
+	let version = graph.versions.at(-1);
+	return version?.state === "locked" && matches(run, version) ? version : undefined;
+}
+
+function initial(tasks: Task[]): Progress {
+	return { tasks: tasks.map(task => ({ id: task.id, state: "queued" })), events: [] };
+}
+
+function reportFrom(value: VerificationReport): VerificationReport {
+	return {
+		passed: value.passed,
+		summary: value.summary,
+		reviewerMethod: value.reviewerMethod,
+		evidence: copy(value.evidence),
+		tasksNeedingWork: copy(value.tasksNeedingWork),
+	};
+}
+
+function validReport(report: VerificationReport, tasks: Task[]): boolean {
 	if (
-		!exact(item, ["state", "url"])
-		|| typeof item.url !== "string"
-		|| !item.url.trim()
-		|| (item.state !== "open" && item.state !== "merged" && item.state !== "closed")
-	) return undefined;
-	return { url: item.url, state: item.state };
+		typeof report.passed !== "boolean"
+		|| !text(report.summary)
+		|| !text(report.reviewerMethod)
+		|| !Array.isArray(report.evidence)
+		|| !Array.isArray(report.tasksNeedingWork)
+	) return false;
+	let taskIds = new Set(tasks.map(task => task.id));
+	let evidenceIds = new Set<string>();
+	for (let entry of report.evidence) {
+		if (
+			!entry || typeof entry !== "object" || Array.isArray(entry)
+			|| !exact(entry as unknown as Record<string, unknown>, ["evidence", "taskId"])
+			|| !text(entry.taskId)
+			|| !taskIds.has(entry.taskId)
+			|| evidenceIds.has(entry.taskId)
+			|| !Array.isArray(entry.evidence)
+			|| entry.evidence.length === 0
+			|| entry.evidence.some(item => !text(item))
+		) return false;
+		evidenceIds.add(entry.taskId);
+	}
+	if (evidenceIds.size !== taskIds.size) return false;
+	if (report.tasksNeedingWork.some(id => !text(id) || !taskIds.has(id))) return false;
+	let work = new Set(report.tasksNeedingWork);
+	if (work.size !== report.tasksNeedingWork.length) return false;
+	return report.passed ? work.size === 0 : work.size > 0;
+}
+
+function deliveryPhase(tasks: TaskProgress[]): "implemented" | "delivered" {
+	let requests = new Map<string, PullRequest["state"]>();
+	for (let task of tasks) {
+		if (task.state !== "completed") return "implemented";
+		requests.set(task.pullRequest.url, task.pullRequest.state);
+	}
+	return [...requests.values()].every(state => state === "merged")
+		? "delivered"
+		: "implemented";
+}
+
+function deriveRun(
+	tasks: Task[],
+	run: Run,
+	events: ProgressEvent[],
+	refusal?: Refusal,
+): DerivedRun | undefined {
+	let progress = initial(tasks);
+	let phase: "active" | "revision_requested" | "implemented" | "delivered" = "active";
+	let revisionReason: string | undefined;
+	let refuse = (reason: string): undefined => {
+		if (refusal) refusal.reason = reason;
+		return undefined;
+	};
+
+	for (let stored of events) {
+		if (phase === "revision_requested") return refuse("terminal");
+		if (phase === "implemented" || phase === "delivered") {
+			if (stored.kind !== "report_pr") return refuse("terminal");
+			let addressed = progress.tasks.find(task => task.id === stored.taskId);
+			if (
+				!addressed || addressed.state !== "completed"
+				|| addressed.pullRequest.url !== stored.url
+			) return refuse("pull-request");
+			if (!ownPullRequest(run.repository, stored.url)) return refuse("repository");
+			if (
+				progress.tasks.some(task =>
+					task.state === "completed"
+					&& task.pullRequest.url === stored.url
+					&& task.pullRequest.state === "merged"
+				)
+				&& stored.state !== "merged"
+			) return refuse("pull-request-state");
+			progress.tasks = progress.tasks.map(task =>
+				task.state === "completed" && task.pullRequest.url === stored.url
+					? { ...task, pullRequest: { url: stored.url, state: stored.state } }
+					: task
+			);
+			progress.events.push(copy(stored));
+			phase = deliveryPhase(progress.tasks);
+			continue;
+		}
+
+		if (stored.kind === "request_revision") {
+			if (!text(stored.reason)) return refuse("reason");
+			progress.events.push(copy(stored));
+			phase = "revision_requested";
+			revisionReason = stored.reason;
+			continue;
+		}
+
+		if (stored.kind === "report_verification") {
+			if (!validReport(stored, tasks)) return refuse("verification");
+			for (let item of progress.tasks) {
+				if (item.state !== "completed") return refuse("task-state");
+				if (item.pullRequest.state !== "open" && item.pullRequest.state !== "merged") {
+					return refuse("pull-request");
+				}
+				if (!ownPullRequest(run.repository, item.pullRequest.url)) {
+					return refuse("repository");
+				}
+			}
+			progress.verification = reportFrom(stored);
+			progress.events.push(copy(stored));
+			if (stored.passed) {
+				phase = deliveryPhase(progress.tasks);
+				continue;
+			}
+			let work = new Set(stored.tasksNeedingWork);
+			progress.tasks = progress.tasks.map(item =>
+				work.has(item.id) && item.state === "completed"
+					? {
+						id: item.id,
+						state: "in_progress" as const,
+						pullRequest: copy(item.pullRequest),
+					}
+					: item
+			);
+			continue;
+		}
+
+		let index = progress.tasks.findIndex(item => item.id === stored.taskId);
+		let task = tasks[index];
+		let item = progress.tasks[index];
+		if (!task || !item) return refuse("task");
+		let next: TaskProgress;
+		switch (stored.kind) {
+			case "start":
+				if (item.state !== "queued" && item.state !== "blocked") {
+					return refuse("task-state");
+				}
+				if (
+					task.dependsOn.some(id =>
+						progress.tasks.find(item => item.id === id)?.state !== "completed"
+					)
+				) return refuse("dependency");
+				next = {
+					id: item.id,
+					state: "in_progress",
+					...(item.state === "blocked" && item.pullRequest
+						? { pullRequest: item.pullRequest }
+						: {}),
+				};
+				break;
+			case "block":
+				if (item.state !== "in_progress") return refuse("task-state");
+				if (!text(stored.reason)) return refuse("reason");
+				next = {
+					id: item.id,
+					state: "blocked",
+					blocker: stored.reason,
+					...(item.pullRequest ? { pullRequest: item.pullRequest } : {}),
+				};
+				break;
+			case "report_pr": {
+				if (item.state === "queued") return refuse("task-state");
+				if (!text(stored.url) || !pullRequestState(stored.state)) {
+					return refuse("pull-request");
+				}
+				if (!ownPullRequest(run.repository, stored.url)) return refuse("repository");
+				let shared = progress.tasks.filter(task =>
+					"pullRequest" in task && task.pullRequest?.url === stored.url
+				);
+				if (
+					shared.some(task => "pullRequest" in task && task.pullRequest?.state === "merged")
+					&& stored.state !== "merged"
+				) return refuse("pull-request-state");
+				let pullRequest = { url: stored.url, state: stored.state };
+				next = { ...item, pullRequest };
+				if (stored.state === "merged") {
+					progress.tasks = progress.tasks.map(task =>
+						"pullRequest" in task && task.pullRequest?.url === stored.url
+							? { ...task, pullRequest }
+							: task
+					);
+				}
+				break;
+			}
+			case "complete":
+				if (item.state !== "in_progress") return refuse("task-state");
+				if (!item.pullRequest) return refuse("pull-request");
+				if (!text(stored.summary)) return refuse("summary");
+				next = {
+					id: item.id,
+					state: "completed",
+					summary: stored.summary,
+					pullRequest: item.pullRequest,
+				};
+				break;
+		}
+		progress.tasks[index] = next;
+		progress.events.push(copy(stored));
+	}
+
+	if (phase === "revision_requested") {
+		return revisionReason
+			? { phase, progress, reason: revisionReason }
+			: refuse("terminal");
+	}
+	return { phase, progress };
+}
+
+function evidence(value: unknown): VerificationEvidence[] | undefined {
+	if (!Array.isArray(value)) return undefined;
+	let restored: VerificationEvidence[] = [];
+	for (let entry of value) {
+		if (!entry || typeof entry !== "object" || Array.isArray(entry)) return undefined;
+		let item = entry as Record<string, unknown>;
+		if (
+			!exact(item, ["evidence", "taskId"])
+			|| typeof item.taskId !== "string"
+			|| !Array.isArray(item.evidence)
+			|| item.evidence.some(value => typeof value !== "string")
+		) return undefined;
+		restored.push({ taskId: item.taskId, evidence: item.evidence as string[] });
+	}
+	return restored;
 }
 
 function progressEvent(value: unknown): ProgressEvent | undefined {
 	if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
 	let item = value as Record<string, unknown>;
-	if (typeof item.idempotencyKey !== "string" || !item.idempotencyKey.trim()) return undefined;
+	if (!text(item.idempotencyKey)) return undefined;
 	let idempotencyKey = item.idempotencyKey;
-	if (item.kind === "request_revision") {
-		return exact(item, ["idempotencyKey", "kind", "reason"])
-				&& typeof item.reason === "string" && item.reason.trim()
-			? { kind: item.kind, reason: item.reason, idempotencyKey }
+	if (
+		item.kind === "request_revision"
+		&& exact(item, ["idempotencyKey", "kind", "reason"])
+		&& text(item.reason)
+	) return { kind: item.kind, reason: item.reason, idempotencyKey };
+	if (
+		item.kind === "report_verification"
+		&& exact(item, [
+			"evidence",
+			"idempotencyKey",
+			"kind",
+			"passed",
+			"reviewerMethod",
+			"summary",
+			"tasksNeedingWork",
+		])
+		&& typeof item.passed === "boolean"
+		&& typeof item.summary === "string"
+		&& typeof item.reviewerMethod === "string"
+		&& Array.isArray(item.tasksNeedingWork)
+		&& item.tasksNeedingWork.every(value => typeof value === "string")
+	) {
+		let restored = evidence(item.evidence);
+		return restored
+			? {
+				kind: item.kind,
+				passed: item.passed,
+				summary: item.summary,
+				reviewerMethod: item.reviewerMethod,
+				evidence: restored,
+				tasksNeedingWork: item.tasksNeedingWork as string[],
+				idempotencyKey,
+			}
 			: undefined;
 	}
-	if (typeof item.taskId !== "string" || !item.taskId.trim()) return undefined;
+	if (!text(item.taskId)) return undefined;
 	let taskId = item.taskId;
 	if (item.kind === "start" && exact(item, ["idempotencyKey", "kind", "taskId"])) {
 		return { kind: item.kind, taskId, idempotencyKey };
@@ -126,39 +397,28 @@ function progressEvent(value: unknown): ProgressEvent | undefined {
 	if (
 		item.kind === "block"
 		&& exact(item, ["idempotencyKey", "kind", "reason", "taskId"])
-		&& typeof item.reason === "string"
-		&& item.reason.trim()
+		&& text(item.reason)
 	) return { kind: item.kind, taskId, reason: item.reason, idempotencyKey };
 	if (
-		item.kind === "report_pr" && exact(item, ["idempotencyKey", "kind", "pullRequest", "taskId"])
+		item.kind === "report_pr"
+		&& exact(item, ["idempotencyKey", "kind", "state", "taskId", "url"])
+		&& text(item.url)
+		&& pullRequestState(item.state)
 	) {
-		let restored = pullRequest(item.pullRequest);
-		return restored
-			? { kind: item.kind, taskId, pullRequest: restored, idempotencyKey }
-			: undefined;
+		return {
+			kind: item.kind,
+			taskId,
+			url: item.url,
+			state: item.state,
+			idempotencyKey,
+		};
 	}
 	if (
 		item.kind === "complete"
 		&& exact(item, ["idempotencyKey", "kind", "summary", "taskId"])
-		&& typeof item.summary === "string"
-		&& item.summary.trim()
+		&& text(item.summary)
 	) return { kind: item.kind, taskId, summary: item.summary, idempotencyKey };
 	return undefined;
-}
-
-function inputFor(stored: Exclude<ProgressEvent, { kind: "request_revision" }>): Exclude<
-	LifecycleInput,
-	{ kind: "request_revision" }
-> {
-	return stored.kind === "report_pr"
-		? {
-			kind: stored.kind,
-			taskId: stored.taskId,
-			url: stored.pullRequest.url,
-			state: stored.pullRequest.state,
-			idempotencyKey: stored.idempotencyKey,
-		}
-		: stored;
 }
 
 function restoreEvents(value: unknown): ProgressEvent[] | undefined {
@@ -167,83 +427,38 @@ function restoreEvents(value: unknown): ProgressEvent[] | undefined {
 	return restored.some(event => !event) ? undefined : restored as ProgressEvent[];
 }
 
-function derive(
-	tasks: Task[],
-	run: Run,
-	events: ProgressEvent[],
-	revisionReason?: string,
-): Progress | undefined {
-	let revision = events.at(-1);
-	if (revisionReason === undefined) {
-		if (events.some(event => event.kind === "request_revision")) return undefined;
-	} else if (
-		revision?.kind !== "request_revision"
-		|| revision.reason !== revisionReason
-		|| events.slice(0, -1).some(event => event.kind === "request_revision")
-	) return undefined;
-	let work = revisionReason === undefined ? events : events.slice(0, -1);
-	let progress = initial(tasks);
-	for (let storedEvent of work) {
-		if (storedEvent.kind === "request_revision") return undefined;
-		let result = advance(progress, tasks, run, inputFor(storedEvent));
-		if (result.kind === "refused") return undefined;
-		progress = result.progress;
-	}
-	if (revisionReason !== undefined) progress.events.push(revision!);
-	return progress;
-}
-
-function projectHistory(graph: Graph, history: ArchivedRun[]): HistoricalRun[] | undefined {
-	let projected: HistoricalRun[] = [];
-	let nextVersion = 0;
-	for (let archived of history) {
-		let progress: Progress | undefined;
-		for (let index = nextVersion; index < graph.versions.length; index++) {
-			let version = graph.versions[index]!;
-			if (!matches(archived.run, version)) continue;
-			progress = derive(
-				version.definition.tasks,
-				archived.run,
-				archived.events,
-				archived.outcome.reason,
-			);
-			if (progress) {
-				nextVersion = index;
-				break;
-			}
-		}
-		if (!progress) return undefined;
-		projected.push({ run: copy(archived.run), progress, outcome: copy(archived.outcome) });
-	}
-	return projected;
-}
-
 function restoreHistory(stored: unknown, graph: Graph): ArchivedRun[] | undefined {
 	if (!Array.isArray(stored)) return undefined;
 	let history: ArchivedRun[] = [];
 	for (let value of stored) {
 		if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
 		let item = value as Record<string, unknown>;
-		if (!exact(item, ["events", "outcome", "run"])) return undefined;
+		if (!exact(item, ["events", "run"])) return undefined;
 		let run = restoreRunVersion(item.run, graph);
 		let events = restoreEvents(item.events);
-		let outcome = item.outcome;
-		if (!outcome || typeof outcome !== "object" || Array.isArray(outcome)) return undefined;
-		let result = outcome as Record<string, unknown>;
-		if (
-			!run || !events
-			|| !exact(result, ["kind", "reason"])
-			|| result.kind !== "revision_requested"
-			|| typeof result.reason !== "string"
-			|| !result.reason.trim()
-		) return undefined;
-		history.push({
-			run,
-			events,
-			outcome: { kind: "revision_requested", reason: result.reason },
+		if (!run || !events) return undefined;
+		history.push({ run, events });
+	}
+	return history;
+}
+
+function projectHistory(graph: Graph, history: ArchivedRun[]): HistoricalRun[] | undefined {
+	let projected: HistoricalRun[] = [];
+	for (let archived of history) {
+		let version = versionFor(graph, archived.run);
+		let derived = version
+			&& deriveRun(version.definition.tasks, archived.run, archived.events);
+		if (!derived || derived.phase === "active") return undefined;
+		let outcome: HistoricalRun["outcome"] = derived.phase === "revision_requested"
+			? { kind: derived.phase, reason: derived.reason }
+			: { kind: derived.phase };
+		projected.push({
+			run: copy(archived.run),
+			progress: copy(derived.progress),
+			outcome,
 		});
 	}
-	return projectHistory(graph, history) ? history : undefined;
+	return projected;
 }
 
 /** Restore lifecycle data only when it describes this graph and claim exactly. */
@@ -258,33 +473,93 @@ export function restoreLifecycle(
 	if (!exact(stored, keys)) return undefined;
 	let history = restoreHistory(stored.history, graph);
 	if (!history) return undefined;
+	let projected = projectHistory(graph, history);
+	if (!projected) return undefined;
 	let events = stored.events === undefined ? undefined : restoreEvents(stored.events);
-	let tasks = execution && current(graph);
-	if (events && (!tasks || !execution || !derive(tasks, execution, events))) return undefined;
 	if (stored.events !== undefined && !events) return undefined;
-	let all = [...(events ?? []), ...history.flatMap(item => item.events)];
-	if (new Set(all.map(event => event.idempotencyKey)).size !== all.length) return undefined;
+	if (events && !execution) return undefined;
+	if (execution) {
+		let version = activeVersion(graph, execution);
+		let derived = version
+			&& deriveRun(version.definition.tasks, execution, events ?? []);
+		if (!derived || derived.phase !== "active") return undefined;
+	}
+
+	let runIds = [
+		...(execution ? [execution.id] : []),
+		...history.map(item => item.run.id),
+	];
+	if (new Set(runIds).size !== runIds.length) return undefined;
+	let allEvents = [...(events ?? []), ...history.flatMap(item => item.events)];
+	if (new Set(allEvents.map(event => event.idempotencyKey)).size !== allEvents.length) {
+		return undefined;
+	}
+	let successful = new Set<string>();
+	for (let [index, archived] of history.entries()) {
+		if (projected[index]?.outcome.kind === "revision_requested") continue;
+		let reference = [
+			archived.run.graphVersion,
+			archived.run.graphRevision,
+			archived.run.planRevision,
+		].join(":");
+		if (successful.has(reference)) return undefined;
+		successful.add(reference);
+	}
 	return { ...(events ? { events } : {}), history };
 }
 
 function event(input: LifecycleInput): ProgressEvent {
 	switch (input.kind) {
 		case "start":
-			return { ...input };
+			return {
+				kind: input.kind,
+				taskId: input.taskId,
+				idempotencyKey: input.idempotencyKey,
+			};
 		case "block":
-			return { ...input };
+			return {
+				kind: input.kind,
+				taskId: input.taskId,
+				reason: input.reason,
+				idempotencyKey: input.idempotencyKey,
+			};
 		case "report_pr":
 			return {
 				kind: input.kind,
 				taskId: input.taskId,
-				pullRequest: { url: input.url, state: input.state },
+				url: input.url,
+				state: input.state,
 				idempotencyKey: input.idempotencyKey,
 			};
 		case "complete":
-			return { ...input };
+			return {
+				kind: input.kind,
+				taskId: input.taskId,
+				summary: input.summary,
+				idempotencyKey: input.idempotencyKey,
+			};
+		case "report_verification":
+			return {
+				kind: input.kind,
+				...reportFrom(input),
+				idempotencyKey: input.idempotencyKey,
+			};
 		case "request_revision":
-			return { ...input };
+			return {
+				kind: input.kind,
+				reason: input.reason,
+				idempotencyKey: input.idempotencyKey,
+			};
 	}
+}
+
+function sameEvidence(left: VerificationEvidence[], right: VerificationEvidence[]): boolean {
+	return left.length === right.length && left.every((entry, index) => {
+		let other = right[index];
+		return entry.taskId === other?.taskId
+			&& entry.evidence.length === other.evidence.length
+			&& entry.evidence.every((value, evidenceIndex) => value === other.evidence[evidenceIndex]);
+	});
 }
 
 function same(stored: ProgressEvent, input: LifecycleInput): boolean {
@@ -297,144 +572,115 @@ function same(stored: ProgressEvent, input: LifecycleInput): boolean {
 				&& stored.reason === input.reason;
 		case "report_pr":
 			return input.kind === "report_pr" && stored.taskId === input.taskId
-				&& stored.pullRequest.url === input.url && stored.pullRequest.state === input.state;
+				&& stored.url === input.url && stored.state === input.state;
 		case "complete":
 			return input.kind === "complete" && stored.taskId === input.taskId
 				&& stored.summary === input.summary;
+		case "report_verification":
+			return input.kind === "report_verification"
+				&& stored.passed === input.passed
+				&& stored.summary === input.summary
+				&& stored.reviewerMethod === input.reviewerMethod
+				&& sameEvidence(stored.evidence, input.evidence)
+				&& stored.tasksNeedingWork.length === input.tasksNeedingWork.length
+				&& stored.tasksNeedingWork.every((value, index) => value === input.tasksNeedingWork[index]);
 		case "request_revision":
 			return input.kind === "request_revision" && stored.reason === input.reason;
 	}
 }
 
 function replay(state: LifecycleState, input: LifecycleInput): LifecycleResult | undefined {
-	let events = [
-		...(state.lifecycle.events ?? []),
-		...state.lifecycle.history.flatMap(item => item.events),
+	let owned = [
+		...(state.execution
+			? (state.lifecycle.events ?? []).map(event => ({ runId: state.execution!.id, event }))
+			: []),
+		...state.lifecycle.history.flatMap(item =>
+			item.events.map(event => ({ runId: item.run.id, event }))
+		),
 	];
-	let prior = events.find(event => event.idempotencyKey === input.idempotencyKey);
+	let prior = owned.find(item => item.event.idempotencyKey === input.idempotencyKey);
 	return prior
-		? same(prior, input)
+		? prior.runId === input.runId && same(prior.event, input)
 			? { kind: "replayed", state: copy(state) }
 			: { kind: "refused", reason: "idempotency-conflict" }
 		: undefined;
 }
 
-function ownPullRequest(repository: string, url: string): boolean {
-	let match = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/([1-9]\d*)\/?$/.exec(url);
-	return match?.[1] === repository;
-}
-
-type WorkInput = Exclude<LifecycleInput, { kind: "request_revision" }>;
-
-type AdvanceResult =
-	| { kind: "accepted"; progress: Progress }
-	| { kind: "refused"; reason: string };
-
-function advance(progress: Progress, tasks: Task[], run: Run, input: WorkInput): AdvanceResult {
-	let nextProgress = copy(progress);
-	let index = nextProgress.tasks.findIndex(item => item.id === input.taskId);
-	let task = tasks[index];
-	let item = nextProgress.tasks[index];
-	if (!task || !item) return { kind: "refused", reason: "task" };
-	let next: TaskProgress;
-	switch (input.kind) {
-		case "start":
-			if (item.state !== "queued" && item.state !== "blocked") {
-				return { kind: "refused", reason: "task-state" };
-			}
-			if (
-				task.dependsOn.some(id =>
-					nextProgress.tasks.find(item => item.id === id)?.state !== "completed"
-				)
-			) {
-				return { kind: "refused", reason: "dependency" };
-			}
-			next = {
-				id: item.id,
-				state: "in_progress",
-				...(item.state === "blocked" && item.pullRequest
-					? { pullRequest: item.pullRequest }
-					: {}),
-			};
-			break;
-		case "block":
-			if (item.state !== "in_progress") return { kind: "refused", reason: "task-state" };
-			if (!input.reason.trim()) return { kind: "refused", reason: "reason" };
-			next = {
-				id: item.id,
-				state: "blocked",
-				blocker: input.reason,
-				...(item.pullRequest ? { pullRequest: item.pullRequest } : {}),
-			};
-			break;
-		case "report_pr": {
-			if (item.state === "queued") return { kind: "refused", reason: "task-state" };
-			if (!ownPullRequest(run.repository, input.url)) {
-				return { kind: "refused", reason: "repository" };
-			}
-			let pullRequest = { url: input.url, state: input.state };
-			next = { ...item, pullRequest };
-			break;
-		}
-		case "complete":
-			if (item.state !== "in_progress") return { kind: "refused", reason: "task-state" };
-			if (!item.pullRequest) return { kind: "refused", reason: "pull-request" };
-			if (!input.summary.trim()) return { kind: "refused", reason: "summary" };
-			next = {
-				id: item.id,
-				state: "completed",
-				summary: input.summary,
-				pullRequest: item.pullRequest,
-			};
-			break;
-	}
-	nextProgress.tasks[index] = next;
-	nextProgress.events.push(event(input));
-	return { kind: "accepted", progress: nextProgress };
+function released(
+	state: LifecycleState,
+	run: Run,
+	events: ProgressEvent[],
+): LifecycleState {
+	let next = copy(state);
+	let version = next.graph.versions.at(-1)!;
+	next.graph.versions[next.graph.versions.length - 1] = { ...version, state: "approved" };
+	next.execution = undefined;
+	next.lifecycle = {
+		history: [...next.lifecycle.history, { run: copy(run), events: copy(events) }],
+	};
+	return next;
 }
 
 /** Apply one lifecycle event without mutating the graph or claim identity. */
 export function transition(state: LifecycleState, input: LifecycleInput): LifecycleResult {
-	if (!input.idempotencyKey.trim()) {
+	if (!text(input.runId)) return { kind: "refused", reason: "run" };
+	if (!text(input.idempotencyKey)) {
 		return { kind: "refused", reason: "idempotency-key" };
 	}
 	let prior = replay(state, input);
 	if (prior) return prior;
-	let tasks = current(state.graph);
-	let run = state.execution;
-	if (!tasks || !run) return { kind: "refused", reason: "inactive" };
-	let progress = derive(tasks, run, state.lifecycle.events ?? []);
-	if (!progress) return { kind: "refused", reason: "invalid-lifecycle" };
 
-	if (input.kind === "request_revision") {
-		if (!input.reason.trim()) return { kind: "refused", reason: "reason" };
-		let events = [...progress.events, event(input)];
-		let graph = copy(state.graph);
-		let version = graph.versions.at(-1)!;
-		graph.versions[graph.versions.length - 1] = { ...version, state: "approved" };
-		return {
-			kind: "accepted",
-			state: {
-				graph,
-				execution: undefined,
-				lifecycle: {
-					history: [...state.lifecycle.history, {
-						run: copy(run),
-						events,
-						outcome: { kind: "revision_requested", reason: input.reason },
-					}],
-				},
-			},
+	let archivedIndex = state.lifecycle.history.findIndex(item => item.run.id === input.runId);
+	if (archivedIndex >= 0) {
+		if (input.kind !== "report_pr") return { kind: "refused", reason: "inactive" };
+		let archived = state.lifecycle.history[archivedIndex]!;
+		let version = versionFor(state.graph, archived.run);
+		let refusal: Refusal = {};
+		let derived = version && deriveRun(
+			version.definition.tasks,
+			archived.run,
+			[...archived.events, event(input)],
+			refusal,
+		);
+		if (!derived || derived.phase === "active" || derived.phase === "revision_requested") {
+			return { kind: "refused", reason: refusal.reason ?? "inactive" };
+		}
+		let next = copy(state);
+		next.lifecycle.history[archivedIndex] = {
+			run: copy(archived.run),
+			events: copy(derived.progress.events),
 		};
+		return { kind: "accepted", state: next };
 	}
 
-	let advanced = advance(progress, tasks, run, input);
-	if (advanced.kind === "refused") return advanced;
+	let run = state.execution;
+	let version = run && activeVersion(state.graph, run);
+	if (!run || input.runId !== run.id || !version) {
+		return { kind: "refused", reason: "run" };
+	}
+	let existing = deriveRun(version.definition.tasks, run, state.lifecycle.events ?? []);
+	if (!existing || existing.phase !== "active") {
+		return { kind: "refused", reason: "invalid-lifecycle" };
+	}
+	let refusal: Refusal = {};
+	let derived = deriveRun(
+		version.definition.tasks,
+		run,
+		[...existing.progress.events, event(input)],
+		refusal,
+	);
+	if (!derived) return { kind: "refused", reason: refusal.reason ?? "event" };
+	if (derived.phase !== "active") {
+		return {
+			kind: "accepted",
+			state: released(state, run, derived.progress.events),
+		};
+	}
 	return {
 		kind: "accepted",
 		state: {
 			...state,
-			lifecycle: { ...state.lifecycle, events: advanced.progress.events },
+			lifecycle: { ...state.lifecycle, events: copy(derived.progress.events) },
 		},
 	};
 }
@@ -445,12 +691,11 @@ export function progressFor(
 	lifecycle: Lifecycle,
 	execution?: Run,
 ): Progress | undefined {
-	let version = graph.versions.at(-1);
-	if (!version || !execution) return undefined;
-	let events = lifecycle.events ?? [];
-	return events.length === 0
-		? initial(version.definition.tasks)
-		: derive(version.definition.tasks, execution, events);
+	if (!execution) return undefined;
+	let version = activeVersion(graph, execution);
+	let derived = version
+		&& deriveRun(version.definition.tasks, execution, lifecycle.events ?? []);
+	return derived?.phase === "active" ? copy(derived.progress) : undefined;
 }
 
 /** Project archived event logs against the graph versions they implemented. */

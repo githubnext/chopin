@@ -491,11 +491,14 @@ describe("the hosted MCP adapter", () => {
 			commit: "deadbeef",
 			client: { name: "Codex", version: "1.2.3", session: "session-1" },
 		};
-		expect(await adapter.implementations.startImplementation(caller, {
-			...input,
-			graphVersion: 2,
-		})).toEqual({ kind: "refused", reason: "run" });
-		expect(await adapter.implementations.startImplementation(caller, input)).toMatchObject({
+		expect(
+			await adapter.implementations.startImplementation(caller, {
+				...input,
+				graphVersion: 2,
+			}),
+		).toEqual({ kind: "refused", reason: "run" });
+		let claimed = await adapter.implementations.startImplementation(caller, input);
+		expect(claimed).toMatchObject({
 			kind: "started",
 			run: {
 				user: "allowed",
@@ -503,6 +506,7 @@ describe("the hosted MCP adapter", () => {
 				session: "session-1",
 			},
 		});
+		if (claimed.kind !== "started") throw new Error("implementation was not claimed");
 
 		let stored = await context.storage.collaboration.load(opened.channel.id, context.now);
 		if (!stored) throw new Error("claimed plan was not stored");
@@ -525,6 +529,7 @@ describe("the hosted MCP adapter", () => {
 		let start = {
 			id: opened.channel.id,
 			kind: "start" as const,
+			runId: claimed.run.id,
 			taskId: "claim",
 			idempotencyKey: "start-claim",
 		};
@@ -544,6 +549,7 @@ describe("the hosted MCP adapter", () => {
 			await report(caller, {
 				id: opened.channel.id,
 				kind: "request_revision",
+				runId: claimed.run.id,
 				reason: "The graph needs another delivery step.",
 				idempotencyKey: "request-revision",
 			}),
@@ -556,11 +562,16 @@ describe("the hosted MCP adapter", () => {
 		});
 		let released = await context.storage.collaboration.load(opened.channel.id, context.now);
 		if (!released) throw new Error("released lifecycle was not stored");
-		expect(await Service.readStored(released)).toMatchObject({
+		let durable = await Service.readStored(released);
+		expect(durable).toMatchObject({
 			graph: { versions: [{ state: "approved" }] },
-			lifecycle: { history: [{ outcome: { kind: "revision_requested" } }] },
 		});
-		expect((await Service.readStored(released)).execution).toBeUndefined();
+		expect(durable.lifecycle?.history[0]?.events.at(-1)).toMatchObject({
+			kind: "request_revision",
+			reason: "The graph needs another delivery step.",
+		});
+		expect(durable.lifecycle?.history[0]).not.toHaveProperty("outcome");
+		expect(durable.execution).toBeUndefined();
 	});
 
 	it("makes an inaccessible channel indistinguishable from a missing channel", async () => {

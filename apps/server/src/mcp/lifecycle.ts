@@ -27,8 +27,9 @@ function base(value: Record<string, unknown>, required: string[]) {
 		|| required.some(key => !Object.hasOwn(value, key))
 	) return undefined;
 	let id = bounded(value.id, 128);
+	let runId = bounded(value.runId, 128);
 	let idempotencyKey = bounded(value.idempotencyKey, 128);
-	return id && idempotencyKey ? { id, idempotencyKey } : undefined;
+	return id && runId && idempotencyKey ? { id, runId, idempotencyKey } : undefined;
 }
 
 function task(value: Record<string, unknown>, required: string[]) {
@@ -40,8 +41,8 @@ function task(value: Record<string, unknown>, required: string[]) {
 const definitions = {
 	start_task: {
 		description: "Mark one dependency-ready task as in progress for the active implementation run.",
-		properties: { id: ID, taskId: TASK, idempotencyKey: KEY },
-		required: ["id", "taskId", "idempotencyKey"],
+		properties: { id: ID, runId: ID, taskId: TASK, idempotencyKey: KEY },
+		required: ["id", "runId", "taskId", "idempotencyKey"],
 		parse(value, required) {
 			let input = task(value, required);
 			return input ? { ...input, kind: "start" } : undefined;
@@ -49,8 +50,8 @@ const definitions = {
 	},
 	block_task: {
 		description: "Record a visible blocker for an in-progress implementation task.",
-		properties: { id: ID, taskId: TASK, reason: TEXT, idempotencyKey: KEY },
-		required: ["id", "taskId", "reason", "idempotencyKey"],
+		properties: { id: ID, runId: ID, taskId: TASK, reason: TEXT, idempotencyKey: KEY },
+		required: ["id", "runId", "taskId", "reason", "idempotencyKey"],
 		parse(value, required) {
 			let input = task(value, required);
 			let reason = bounded(value.reason, 5000);
@@ -61,12 +62,13 @@ const definitions = {
 		description: "Report the open, merged, or closed pull request for an implementation task.",
 		properties: {
 			id: ID,
+			runId: ID,
 			taskId: TASK,
 			url: { type: "string", minLength: 1, maxLength: 2048 },
 			state: { enum: ["open", "merged", "closed"] },
 			idempotencyKey: KEY,
 		},
-		required: ["id", "taskId", "url", "state", "idempotencyKey"],
+		required: ["id", "runId", "taskId", "url", "state", "idempotencyKey"],
 		parse(value, required) {
 			let input = task(value, required);
 			let url = bounded(value.url, 2048);
@@ -78,8 +80,8 @@ const definitions = {
 	},
 	complete_task: {
 		description: "Complete an implementation task with its pull request and summary.",
-		properties: { id: ID, taskId: TASK, summary: TEXT, idempotencyKey: KEY },
-		required: ["id", "taskId", "summary", "idempotencyKey"],
+		properties: { id: ID, runId: ID, taskId: TASK, summary: TEXT, idempotencyKey: KEY },
+		required: ["id", "runId", "taskId", "summary", "idempotencyKey"],
 		parse(value, required) {
 			let input = task(value, required);
 			let summary = bounded(value.summary, 5000);
@@ -88,8 +90,8 @@ const definitions = {
 	},
 	request_revision: {
 		description: "End the active implementation run and release its graph for revision.",
-		properties: { id: ID, reason: TEXT, idempotencyKey: KEY },
-		required: ["id", "reason", "idempotencyKey"],
+		properties: { id: ID, runId: ID, reason: TEXT, idempotencyKey: KEY },
+		required: ["id", "runId", "reason", "idempotencyKey"],
 		parse(value, required) {
 			let input = base(value, required);
 			let reason = bounded(value.reason, 5000);

@@ -303,6 +303,7 @@ describe("the MCP read protocol", () => {
 					name: "block_task",
 					arguments: {
 						id: document.id,
+						runId: "run-1",
 						taskId: "model",
 						reason: "Waiting for CI.",
 						idempotencyKey: "block-model",
@@ -313,6 +314,7 @@ describe("the MCP read protocol", () => {
 		expect(received).toEqual({
 			id: document.id,
 			kind: "block",
+			runId: "run-1",
 			taskId: "model",
 			reason: "Waiting for CI.",
 			idempotencyKey: "block-model",
