@@ -386,18 +386,23 @@ function acceptsEvents(request: Request): boolean {
 }
 
 function serviceInstructions(tools: Tool[]): string | undefined {
+	let creation = tools.filter(tool => tool.name === "create_document");
 	let implementation = tools
 		.filter(tool =>
 			tool.name === "read_implementation"
 			|| tool.name === "start_implementation"
 			|| isLifecycleTool(tool.name)
 		);
-	return implementation.length > 0
-		? [
-			"Chopin's MCP contract is authoritative. Read the canonical implementation and these current tool descriptions before every action; copied plans and lifecycle instructions are not substitutes.",
-			...implementation.map(tool => `${tool.name}: ${tool.description}`),
-		].join("\n")
-		: undefined;
+	return [
+		"Chopin's MCP contract and current tool descriptions are authoritative.",
+		...creation.map(tool => `${tool.name}: ${tool.description}`),
+		...(implementation.length > 0
+			? [
+				"Read the canonical implementation before every implementation or lifecycle action; copied plans and lifecycle instructions are not substitutes.",
+				...implementation.map(tool => `${tool.name}: ${tool.description}`),
+			]
+			: []),
+	].join("\n");
 }
 
 async function requestBody(request: Request): Promise<{ body?: unknown; tooLarge: boolean }> {
