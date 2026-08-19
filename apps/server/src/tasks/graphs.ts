@@ -165,7 +165,7 @@ function current(graph: Graph): Version | undefined {
 	return graph.versions.at(-1);
 }
 
-function matches(run: Run, version: Version): boolean {
+export function matches(run: Run, version: Version): boolean {
 	return run.graphVersion === version.number
 		&& run.graphRevision === version.revision
 		&& run.planRevision === version.planRevision;

@@ -308,4 +308,60 @@ describe("implementation task lifecycle", () => {
 			undefined,
 		)).toEqual(releasedAgain.lifecycle);
 	});
+
+	it("derives historical progress from the run's exact graph version", async () => {
+		let module = await lifecycle() as {
+			historyFor: (graph: Graph, lifecycle: unknown) => unknown;
+		};
+		let replacement = {
+			id: "replacement",
+			title: "Replace the approach",
+			context: "The later graph removes work that is no longer needed.",
+			goal: "Implement the replacement.",
+			acceptance: ["The replacement works.", "Its result is recorded."],
+			dependsOn: [],
+		};
+		let legacy = {
+			id: "legacy",
+			title: "Retire the old approach",
+			context: "This task exists only in the earlier graph version.",
+			goal: "Remove obsolete work.",
+			acceptance: ["The task is retired.", "The graph no longer needs it."],
+			dependsOn: [],
+		};
+		let versions: Graph = {
+			versions: [
+				{
+					number: 1,
+					revision: 1,
+					planRevision: 3,
+					state: "superseded",
+					definition: { tasks: [replacement, legacy] },
+				},
+				{
+					number: 2,
+					revision: 1,
+					planRevision: 3,
+					state: "approved",
+					definition: { tasks: [replacement] },
+				},
+			],
+		};
+
+		let history = module.historyFor(versions, {
+			history: [{
+				run: { ...execution, graphVersion: 2 },
+				events: [
+					{ kind: "start", taskId: "replacement", idempotencyKey: "start-replacement" },
+					{
+						kind: "request_revision",
+						reason: "A newer graph superseded it.",
+						idempotencyKey: "request-revision",
+					},
+				],
+				outcome: { kind: "revision_requested", reason: "A newer graph superseded it." },
+			}],
+		}) as Array<{ progress: { tasks: unknown } }>;
+		expect(history[0]?.progress.tasks).toEqual([{ id: "replacement", state: "in_progress" }]);
+	});
 });
