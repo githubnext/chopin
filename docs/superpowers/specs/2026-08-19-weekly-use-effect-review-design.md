@@ -13,8 +13,8 @@ independent violation. A run may create at most five pull requests.
   commits its matching `.lock.yml` file.
 - Trigger: cron `30 9 * * 3` with `timezone: Europe/London`, plus
   `workflow_dispatch` for a deliberate manual run.
-- Engine: `codex`, authenticated through the repository `CODEX_API_KEY` (or
-  `OPENAI_API_KEY`) secret.
+- Engine: `codex` using the `gpt-5.6-terra` model, authenticated through the
+  repository `CODEX_API_KEY` (or `OPENAI_API_KEY`) secret.
 - The agent checks `useEffect`, `useLayoutEffect`, `useInsertionEffect`, and
   custom Effect-like hooks. It follows the repository's review-use-effect
   rules: identify the synchronization boundary, classify the intent, prefer
