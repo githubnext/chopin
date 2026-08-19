@@ -28,6 +28,7 @@ import type { PlanProvider } from "./provider";
 import type { QuestionnaireStore } from "./questionnaires";
 import type { ThreadStore } from "./threads";
 import type { Connection, Transport } from "./transport";
+import type { CommentPresentation } from "./widget-options";
 
 /**
  * Lexical paints remote cursors with inline styles unless the theme names a
@@ -60,7 +61,7 @@ export type PlanEditorProps = {
 	wire: Transport | undefined;
 	connection?: Connection;
 	/** How comment threads are presented by the surrounding workspace. */
-	commentPresentation?: "popover" | "sheet";
+	commentPresentation?: CommentPresentation;
 	/** Identity for this client's remote cursor. */
 	user: { name: string; color: string };
 	/** Read-only while an agent turn may be rewriting the plan. */

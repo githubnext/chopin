@@ -20,6 +20,12 @@
 
 import type { LexicalEditor } from "lexical";
 
+/** The explicitly marked scroll owner for editor chrome anchored to the plan. */
+export function planScroller(element: Element | null | undefined): HTMLElement | undefined {
+	return element?.closest<HTMLElement>(".plan-document")
+		?.querySelector<HTMLElement>(":scope > [data-plan-scroll]") ?? undefined;
+}
+
 /**
  * The block element a node key sits in.
  *

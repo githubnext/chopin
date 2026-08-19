@@ -2,6 +2,7 @@
 
 import { currentViewport, listenToViewportChanges } from "@chopin/viewport";
 
+import { planScroller } from "../scroll";
 import { intersectViewport } from "./placement";
 
 import type { LexicalEditor } from "lexical";
@@ -24,8 +25,7 @@ export function editorSurfaceViewport(editor: LexicalEditor): ViewportBox {
 
 /** Keep fixed editor chrome attached through document and visual-viewport movement. */
 export function listenToEditorGeometry(editor: LexicalEditor, listener: () => void): () => void {
-	let scroller = editor.getRootElement()?.closest<HTMLElement>(".plan-document")
-		?.firstElementChild;
+	let scroller = planScroller(editor.getRootElement());
 	return listenToViewportChanges(listener, {
 		observeDocumentScroll: true,
 		scrollTargets: scroller ? [scroller] : [],

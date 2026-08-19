@@ -5,8 +5,10 @@ import type { QuestionnaireStore } from "./questionnaires";
 import type { ThreadStore } from "./threads";
 import type { Transport } from "./transport";
 
+export type CommentPresentation = "popover" | "sheet";
+
 export type WidgetOptions = {
-	commentPresentation?: "popover" | "sheet";
+	commentPresentation?: CommentPresentation;
 	questions?: QuestionnaireStore;
 	threads?: ThreadStore;
 	changes?: ChangeStore;

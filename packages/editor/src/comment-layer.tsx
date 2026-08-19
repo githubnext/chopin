@@ -9,7 +9,7 @@ import { useCellValue } from "@mdxeditor/gurx";
 import { DraftCard, ThreadCard } from "./comments";
 import { markerPoints, popoverPoint } from "./comment-geometry";
 import { containsHit, passageHits } from "./comment-hits";
-import { commentRevealScroll } from "./comment-reveal";
+import { useCommentSheetReveal } from "./comment-sheet-reveal";
 import { $rangeOf } from "./marks";
 import { blockElement } from "./scroll";
 import { COARSE_POINTER_QUERY, hasCoarsePointer } from "./pointer";
@@ -39,11 +39,6 @@ function rect(value: DOMRect): Rect {
 		width: value.width,
 		height: value.height,
 	};
-}
-
-function commentScroller(host: HTMLElement): HTMLElement | undefined {
-	let child = host.firstElementChild;
-	return child instanceof HTMLElement ? child : undefined;
 }
 
 function Preview({
@@ -112,7 +107,6 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let failures = useRef(new Set<string>());
 	let origin = useRef<HTMLElement | undefined>(undefined);
 	let draftOpen = useRef(false);
-	let compactScroll = useRef<{ id: string; top: number; revealed: boolean } | undefined>(undefined);
 	let compact = useCellValue(widgets$).commentPresentation === "sheet";
 
 	useEffect(() => {
@@ -150,14 +144,6 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		hoverOwner.current = undefined;
 		leave(id);
 	}, [leave]);
-	let rememberCompactScroll = useCallback((id: string) => {
-		if (!host || id === "orphans") return;
-		let scroller = commentScroller(host);
-		if (scroller) {
-			compactScroll.current = { id, top: scroller.scrollTop, revealed: false };
-		}
-	}, [host]);
-
 	let measure = () => {
 		if (!host) return;
 		let page = rect(host.getBoundingClientRect());
@@ -280,12 +266,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 				`[data-plan-comment-button="${pending.id}"]`,
 			) ?? undefined;
 			enter(pending.id);
-			if (pinned === pending.id) {
-				setPinned(undefined);
-			} else {
-				rememberCompactScroll(pending.id);
-				setPinned(pending.id);
-			}
+			setPinned(current => current === pending.id ? undefined : pending.id);
 		};
 		let out = () => {
 			if (hoverOwner.current) unhover(hoverOwner.current);
@@ -305,7 +286,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			host.removeEventListener("pointerleave", out);
 			host.removeEventListener("pointercancel", cancel);
 		};
-	}, [editor, enter, host, hover, pinned, rememberCompactScroll, unhover]);
+	}, [editor, enter, host, hover, unhover]);
 
 	let restoreOrigin = useCallback(() => {
 		let target = origin.current;
@@ -348,39 +329,14 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		restoreOrigin();
 	}, [editor, pinned, restoreOrigin, state.draft, state.threads, store]);
 
-	useLayoutEffect(() => {
-		if (pinned || !host) return;
-		let saved = compactScroll.current;
-		if (!saved) return;
-		compactScroll.current = undefined;
-		if (!saved.revealed) return;
-		let scroller = commentScroller(host);
-		if (scroller) scroller.scrollTop = saved.top;
-	}, [host, pinned]);
-
-	useLayoutEffect(() => {
-		if (!compact || !host || !pinned || pinned === "orphans") return;
-		let dialog = document.getElementById(`plan-comment-thread-${pinned}`);
-		let scroller = commentScroller(host);
-		let passages = placed.find(entry => entry.view.thread.id === pinned)?.passages;
-		if (!dialog || !scroller || !passages || passages.length === 0) return;
-		let passageTop = Math.min(...passages.map(passage => passage.top));
-		let passageBottom = Math.max(...passages.map(passage => passage.bottom));
-		let next = commentRevealScroll({
-			currentScroll: scroller.scrollTop,
-			gap: 20,
-			maxScroll: scroller.scrollHeight - scroller.clientHeight,
-			passageBottom,
-			passageTop,
-			sheetTop: dialog.getBoundingClientRect().top,
-			viewportTop: host.getBoundingClientRect().top,
-		});
-		if (Math.abs(next - scroller.scrollTop) >= 1) {
-			let saved = compactScroll.current;
-			if (saved?.id === pinned) saved.revealed = true;
-			scroller.scrollTop = next;
-		}
-	}, [cardHeights, compact, host, pinned, placed]);
+	let sheetId = compact && pinned !== "orphans" ? pinned : undefined;
+	let sheet = placed.find(entry => entry.view.thread.id === sheetId);
+	useCommentSheetReveal({
+		height: sheetId ? cardHeights[sheetId] : undefined,
+		host,
+		id: sheetId,
+		passages: sheet?.passages,
+	});
 
 	useEffect(() => {
 		if (!pinned && !preview) return;
@@ -521,10 +477,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 							onClick={event => {
 								origin.current = event.currentTarget;
 								if (shown) dismiss();
-								else {
-									rememberCompactScroll(view.thread.id);
-									setPinned(view.thread.id);
-								}
+								else setPinned(view.thread.id);
 							}}
 							onFocus={() => hover(view.thread.id)}
 							onMouseEnter={() => hover(view.thread.id)}
