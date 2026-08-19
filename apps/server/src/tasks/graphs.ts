@@ -41,6 +41,7 @@ export type Run = {
 	client: { name: string; version: string };
 	session: string;
 	planRevision: number;
+	graphVersion: number;
 	graphRevision: number;
 	repository: string;
 	branch: string;
@@ -164,6 +165,12 @@ function current(graph: Graph): Version | undefined {
 	return graph.versions.at(-1);
 }
 
+function matches(run: Run, version: Version): boolean {
+	return run.graphVersion === version.number
+		&& run.graphRevision === version.revision
+		&& run.planRevision === version.planRevision;
+}
+
 function state(value: unknown): State | undefined {
 	return value === "draft" || value === "approved" || value === "locked" || value === "superseded"
 		? value
@@ -236,6 +243,7 @@ function run(value: unknown): Run | undefined {
 		"client",
 		"commit",
 		"graphRevision",
+		"graphVersion",
 		"id",
 		"planRevision",
 		"repository",
@@ -262,6 +270,8 @@ function run(value: unknown): Run | undefined {
 		|| strings.some(value => typeof value !== "string" || !value.trim())
 		|| !Number.isSafeInteger(stored.planRevision)
 		|| (stored.planRevision as number) < 0
+		|| !Number.isSafeInteger(stored.graphVersion)
+		|| (stored.graphVersion as number) < 1
 		|| !Number.isSafeInteger(stored.graphRevision)
 		|| (stored.graphRevision as number) < 1
 	) return undefined;
@@ -271,6 +281,7 @@ function run(value: unknown): Run | undefined {
 		client: { name: client.name as string, version: client.version as string },
 		session: stored.session as string,
 		planRevision: stored.planRevision as number,
+		graphVersion: stored.graphVersion as number,
 		graphRevision: stored.graphRevision as number,
 		repository: stored.repository as string,
 		branch: stored.branch as string,
@@ -292,8 +303,7 @@ export function restoreRun(
 		|| !version
 		|| version.state !== "locked"
 		|| version.planRevision !== revision
-		|| restored.planRevision !== revision
-		|| restored.graphRevision !== version.revision
+		|| !matches(restored, version)
 	) return undefined;
 	return copy(restored);
 }
@@ -304,8 +314,7 @@ export function restoreRunVersion(value: unknown, graph: Graph): Run | undefined
 	if (
 		!restored
 		|| !graph.versions.some(version =>
-			version.planRevision === restored.planRevision
-			&& version.revision === restored.graphRevision
+			matches(restored, version)
 		)
 	) return undefined;
 	return copy(restored);
@@ -326,7 +335,7 @@ export function claim(
 	if (version.revision !== input.graphRevision) return { kind: "refused", reason: "stale-graph" };
 	if (version.state !== "approved") return { kind: "refused", reason: "not-approved" };
 	if (version.planRevision !== state.revision) return { kind: "refused", reason: "stale-plan" };
-	if (owner.planRevision !== input.planRevision || owner.graphRevision !== input.graphRevision) {
+	if (!matches(owner, version)) {
 		return { kind: "refused", reason: "run" };
 	}
 

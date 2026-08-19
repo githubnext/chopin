@@ -484,12 +484,17 @@ describe("the hosted MCP adapter", () => {
 		let input = {
 			id: opened.channel.id,
 			planRevision: 0,
+			graphVersion: 1,
 			graphRevision: 1,
 			repository: "octo-org/score",
 			branch: "tq/017",
 			commit: "deadbeef",
 			client: { name: "Codex", version: "1.2.3", session: "session-1" },
 		};
+		expect(await adapter.implementations.startImplementation(caller, {
+			...input,
+			graphVersion: 2,
+		})).toEqual({ kind: "refused", reason: "run" });
 		expect(await adapter.implementations.startImplementation(caller, input)).toMatchObject({
 			kind: "started",
 			run: {

@@ -37,6 +37,7 @@ let execution: Run = {
 	client: { name: "Codex", version: "1.2.3" },
 	session: "session-1",
 	planRevision: 3,
+	graphVersion: 1,
 	graphRevision: 1,
 	repository: "githubnext/chopin",
 	branch: "tq/018",

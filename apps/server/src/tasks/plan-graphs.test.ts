@@ -55,6 +55,7 @@ function run(planRevision: number) {
 		client: { name: "Codex", version: "1.2.3" },
 		session: "session-1",
 		planRevision,
+		graphVersion: 1,
 		graphRevision: 1,
 		repository: "octo-org/score",
 		branch: "tq/017",
