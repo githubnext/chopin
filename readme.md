@@ -69,7 +69,7 @@ This builds the image, starts PostgreSQL, applies migrations, and listens on
 isolated preview database; the empty `SERVICE_URL_APP_8787` entry marks the
 app's internal proxy port. Set preview `APP_ORIGIN` to
 `https://${SERVICE_FQDN_APP}` when TLS terminates in front of Coolify. Ordinary
-Compose deployments fall back to the `db` service and local `APP_ORIGIN`.
+Compose deployments use the `db` service and the local `APP_ORIGIN` from `.env`.
 
 For a deployment using a managed database, build `Dockerfile`, provide
 `DATABASE_URL`, `APP_ORIGIN`, the GitHub App credentials and slug, and
