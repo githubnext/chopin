@@ -41,7 +41,7 @@ export type Request<T> = T & { rid: string };
 export declare namespace Session {
 	export type Incoming = Request<Ping>;
 
-	export type Outgoing = Hello | Presence | Access | Failure | Ping;
+	export type Outgoing = Hello | Presence | Access | Channel | Failure | Ping;
 
 	/** A member, as everyone else sees them. */
 	export type Member = {
@@ -54,10 +54,19 @@ export declare namespace Session {
 	/** Sent once, immediately, to the socket that just joined. */
 	export type Hello = KIND<"session:hello"> & {
 		channelId: string;
+		title: string;
+		updatedAt: string;
 		you: Member;
 		members: Member[];
 		/** Effective repository capability for this connection. */
 		canEdit: boolean;
+	};
+
+	/** Durable channel metadata changed while this room was open. */
+	export type Channel = KIND<"session:channel"> & {
+		channelId: string;
+		title: string;
+		updatedAt: string;
 	};
 
 	/** Repository permission changed while the socket was open. */

@@ -10,6 +10,8 @@ import type {
 	CreateWebSession,
 	Lease,
 	PutUser,
+	RenameChannel,
+	RenameResult,
 	ReplaceChannel,
 	SaveCheckpoint,
 	StoredChannel,
@@ -38,6 +40,7 @@ export interface SessionStore {
 export interface ChannelStore {
 	create(channel: CreateChannel): Promise<ChannelRecord>;
 	get(id: string): Promise<ChannelRecord | undefined>;
+	rename(channel: RenameChannel): Promise<RenameResult>;
 	list(repositoryId: string, limit: number, after?: {
 		updatedAt: Date;
 		id: string;

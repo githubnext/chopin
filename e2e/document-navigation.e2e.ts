@@ -93,6 +93,62 @@ test("the document picker searches beyond the first page in a capped result list
 	expect(requests.some(url => url.searchParams.get("query") === "needle")).toBe(true);
 });
 
+test("renaming the current document updates collaborators and survives reload", async ({ join, room }) => {
+	let ana = await join("ana");
+	let bo = await join("bo");
+	let title = `Launch plan ${room.slice(0, 8)}`;
+	let anaTrigger = ana.getByRole("banner").getByRole("button", { name: /^Document:/ });
+	let boTrigger = bo.getByRole("banner").getByRole("button", { name: /^Document:/ });
+
+	await ana.setViewportSize({ width: 320, height: 568 });
+	await anaTrigger.click();
+	await ana.getByRole("button", { name: "Rename document" }).click();
+	let input = ana.getByRole("textbox", { name: "Document title" });
+	await expect(input).toBeFocused();
+	await input.fill(title);
+	await ana.getByRole("button", { name: "Save" }).click();
+
+	await expect(anaTrigger).toHaveAccessibleName(`Document: ${title}`);
+	await expect(boTrigger).toHaveAccessibleName(`Document: ${title}`);
+	await ana.reload();
+	await expect(ana.getByRole("banner").getByRole("button", { name: `Document: ${title}` }))
+		.toBeVisible();
+});
+
+test("a delayed rename response cannot overwrite a newer collaborator rename", async ({ join, room }) => {
+	let ana = await join("ana");
+	let bo = await join("bo");
+	let release = Promise.withResolvers<void>();
+	let delay = true;
+	await ana.route(`**/api/channels/${room}`, async route => {
+		if (route.request().method() !== "PATCH" || !delay) return route.continue();
+		delay = false;
+		let response = await route.fetch();
+		await release.promise;
+		await route.fulfill({ response });
+	});
+	let first = `First rename ${room.slice(0, 8)}`;
+	let latest = `Latest rename ${room.slice(0, 8)}`;
+	let anaTrigger = ana.getByRole("banner").getByRole("button", { name: /^Document:/ });
+	let boTrigger = bo.getByRole("banner").getByRole("button", { name: /^Document:/ });
+
+	await anaTrigger.click();
+	await ana.getByRole("button", { name: "Rename document" }).click();
+	await ana.getByRole("textbox", { name: "Document title" }).fill(first);
+	await ana.getByRole("button", { name: "Save" }).click();
+	await expect(boTrigger).toHaveAccessibleName(`Document: ${first}`);
+
+	await boTrigger.click();
+	await bo.getByRole("button", { name: "Rename document" }).click();
+	await bo.getByRole("textbox", { name: "Document title" }).fill(latest);
+	await bo.getByRole("button", { name: "Save" }).click();
+	await expect(anaTrigger).toHaveAccessibleName(`Document: ${latest}`);
+
+	release.resolve();
+	await expect(ana.getByRole("button", { name: "Rename document" })).toBeVisible();
+	await expect(anaTrigger).toHaveAccessibleName(`Document: ${latest}`);
+});
+
 test("read-only visitors can browse documents without a creation action", async ({ baseURL, page, room }) => {
 	await authenticate(page, "readonly", baseURL!);
 	await page.goto(`/channels/${room}`);
@@ -104,6 +160,32 @@ test("read-only visitors can browse documents without a creation action", async 
 	await page.getByRole("banner").getByRole("button", { name: /^Document:/ }).click();
 	await expect(page.getByRole("combobox", { name: "Search documents" })).toBeFocused();
 	await expect(page.getByRole("button", { name: "Create new document" })).toHaveCount(0);
+	await expect(page.getByRole("button", { name: "Rename document" })).toHaveCount(0);
+});
+
+test("document rename failures preserve the draft and can be retried", async ({ join, room }) => {
+	let page = await join("ana");
+	let failed = true;
+	await page.route("**/api/channels/*", async route => {
+		if (route.request().method() === "PATCH" && failed) {
+			failed = false;
+			await route.fulfill({ status: 503, json: { error: "rename is unavailable" } });
+			return;
+		}
+		await route.continue();
+	});
+	let title = `Retry rename ${room.slice(0, 8)}`;
+	let trigger = page.getByRole("banner").getByRole("button", { name: /^Document:/ });
+	await trigger.click();
+	await page.getByRole("button", { name: "Rename document" }).click();
+	let input = page.getByRole("textbox", { name: "Document title" });
+	await input.fill(title);
+	await page.getByRole("button", { name: "Save" }).click();
+	await expect(page.getByRole("alert")).toHaveText("rename is unavailable");
+	await expect(input).toHaveValue(title);
+
+	await page.getByRole("button", { name: "Save" }).click();
+	await expect(trigger).toHaveAccessibleName(`Document: ${title}`);
 });
 
 test("document picker keeps failures open and makes creation retryable", async ({ join }) => {

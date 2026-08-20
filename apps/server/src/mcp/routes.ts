@@ -5,7 +5,7 @@ import { hosted } from "./hosted";
 
 import type { HostedAuth } from "../auth/routes";
 import type { Router } from "../http/router";
-import type { ImplementationPersistence } from "./hosted";
+import type { HostedCallbacks, ImplementationPersistence } from "./hosted";
 
 function failure(err: unknown): Response {
 	if (err instanceof AdmissionDenied) return new Response("forbidden", { status: 403 });
@@ -34,8 +34,9 @@ export function registerMcpRoutes(
 	router: Router,
 	auth: HostedAuth,
 	persistence?: ImplementationPersistence,
+	callbacks?: HostedCallbacks,
 ): void {
-	let endpoint = handler(hosted(auth, persistence));
+	let endpoint = handler(hosted(auth, persistence, callbacks));
 	let route = async (request: Request): Promise<Response> => {
 		if (request.headers.has("origin") && request.headers.get("origin") !== auth.config.origin) {
 			return protectedResponse(new Response("origin is not allowed", { status: 403 }));

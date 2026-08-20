@@ -309,6 +309,90 @@ describe("the hosted MCP adapter", () => {
 		expect(await adapter.documents.read(caller, result.document.id)).toEqual(expected);
 	});
 
+	it("renames document metadata with current write access and announces real changes", async () => {
+		let context = setup();
+		context.github.repositoryValue = {
+			...context.github.repositoryValue,
+			permissions: { pull: true, push: true, admin: false },
+		};
+		await context.storage.users.put({
+			id: "U_allowed",
+			login: "allowed",
+			avatarUrl: "",
+			now: context.now,
+		});
+		let channel = await context.storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Release plan",
+			createdBy: "U_allowed",
+			now: context.now,
+		});
+		let announcements: string[] = [];
+		let adapter = hosted(context.auth, undefined, {
+			onChannelRenamed: renamed => announcements.push(renamed.title),
+		});
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller || !adapter.rename) throw new Error("hosted rename adapter is unavailable");
+
+		let renamed = await adapter.rename.rename(caller, { id: channel.id, title: "Launch plan" });
+		expect(renamed).toEqual({
+			kind: "renamed",
+			document: { id: channel.id, title: "Launch plan" },
+		});
+		expect((await context.storage.channels.get(channel.id))!.revision).toBe(channel.revision);
+		expect(announcements).toEqual(["Launch plan"]);
+
+		let repeated = await adapter.rename.rename(caller, { id: channel.id, title: "Launch plan" });
+		expect(repeated.kind).toBe("unchanged");
+		expect(announcements).toEqual(["Launch plan"]);
+	});
+
+	it("refuses MCP renames without write access or a unique repository title", async () => {
+		let context = setup();
+		await context.storage.users.put({
+			id: "U_allowed",
+			login: "allowed",
+			avatarUrl: "",
+			now: context.now,
+		});
+		let first = await context.storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Release plan",
+			createdBy: "U_allowed",
+			now: context.now,
+		});
+		await context.storage.channels.create({
+			...first,
+			id: crypto.randomUUID(),
+			title: "Launch plan",
+			now: context.now,
+		});
+		let adapter = hosted(context.auth);
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller || !adapter.rename) throw new Error("hosted rename adapter is unavailable");
+
+		expect(await adapter.rename.rename(caller, { id: first.id, title: "Blocked" })).toEqual({
+			kind: "forbidden",
+		});
+		context.github.repositoryValue = {
+			...context.github.repositoryValue,
+			permissions: { pull: true, push: true, admin: false },
+		};
+		expect(await adapter.rename.rename(caller, { id: first.id, title: "launch PLAN" })).toEqual({
+			kind: "conflict",
+		});
+		context.github.accessible = false;
+		expect(await adapter.rename.rename(caller, { id: first.id, title: "Hidden" })).toEqual({
+			kind: "missing",
+		});
+	});
+
 	it("requires repository write access before creating a channel", async () => {
 		let context = setup();
 		let adapter = hosted(context.auth);

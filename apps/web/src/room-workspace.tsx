@@ -14,6 +14,7 @@ import {
 } from "@chopin/editor";
 
 import { Chat } from "./chat/chat";
+import { rememberChannel } from "./channel-recovery";
 import { decisionAttention, DecisionViewControl } from "./decision-view-control";
 import { DocumentPicker } from "./document-picker";
 import * as Api from "./api";
@@ -33,6 +34,7 @@ function Header(
 		canEdit,
 		members,
 		label,
+		onRename,
 		repository,
 		room,
 		userId,
@@ -40,6 +42,7 @@ function Header(
 		canEdit: boolean;
 		members: Session.Member[];
 		label: string;
+		onRename: (channel: Pick<Api.Channel, "title" | "updatedAt">) => void;
 		repository: Api.Repository;
 		room: string;
 		userId: string;
@@ -56,6 +59,7 @@ function Header(
 				<DocumentPicker
 					canEdit={canEdit}
 					current={{ id: room, title: label }}
+					onRename={onRename}
 					repository={repository}
 					userId={userId}
 				/>
@@ -91,6 +95,7 @@ export function RoomWorkspace(
 		label,
 		repository,
 		room,
+		updatedAt,
 		userId,
 	}: HostedWorkspaceProps,
 ) {
@@ -98,6 +103,8 @@ export function RoomWorkspace(
 	let [status, setStatus] = useState<Status>("connecting");
 	let [members, setMembers] = useState<Session.Member[]>([]);
 	let [effectiveCanEdit, setEffectiveCanEdit] = useState(canEdit);
+	let [metadata, setMetadata] = useState({ title: label, updatedAt });
+	let metadataRef = useRef(metadata);
 	let user = useMemo(() => cursor(handle), [handle]);
 	let mode = useWorkspaceMode();
 	let [workspace, dispatch] = useWorkspaceState();
@@ -132,6 +139,12 @@ export function RoomWorkspace(
 		},
 		[conversationActive],
 	);
+	let updateMetadata = useCallback((next: { title: string; updatedAt: string }) => {
+		if (Date.parse(next.updatedAt) <= Date.parse(metadataRef.current.updatedAt)) return;
+		metadataRef.current = next;
+		setMetadata(next);
+		rememberChannel(userId, { id: room, title: next.title }, repository);
+	}, [repository, room, userId]);
 
 	useEffect(() => {
 		setDecisionView(state => advanceDecisionView(state, hasPlanContent, unanswered));
@@ -192,6 +205,12 @@ export function RoomWorkspace(
 	}, [canEdit, room]);
 
 	useEffect(() => {
+		let next = { title: label, updatedAt };
+		metadataRef.current = next;
+		setMetadata(next);
+	}, [label, room, updatedAt]);
+
+	useEffect(() => {
 		let socket = new Wire({
 			channelId: room,
 			onAuthenticationRequired: () => location.assign("/"),
@@ -205,6 +224,10 @@ export function RoomWorkspace(
 			socket.on<Session.Hello>("session:hello", frame => {
 				setMembers(frame.members);
 				setEffectiveCanEdit(frame.canEdit);
+				updateMetadata(frame);
+			}),
+			socket.on<Session.Channel>("session:channel", frame => {
+				if (frame.channelId === room) updateMetadata(frame);
 			}),
 			socket.on<Session.Presence>("session:presence", frame => setMembers(frame.members)),
 			socket.on<Session.Access>("session:access", frame => setEffectiveCanEdit(frame.canEdit)),
@@ -216,7 +239,7 @@ export function RoomWorkspace(
 			socket.dispose();
 			setWire(undefined);
 		};
-	}, [room, handle, threads]);
+	}, [room, handle, threads, updateMetadata]);
 
 	return (
 		<Workspace
@@ -235,7 +258,8 @@ export function RoomWorkspace(
 				<Header
 					canEdit={effectiveCanEdit}
 					members={members}
-					label={label}
+					label={metadata.title}
+					onRename={updateMetadata}
 					repository={repository}
 					room={room}
 					userId={userId}

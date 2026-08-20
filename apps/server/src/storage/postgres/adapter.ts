@@ -18,6 +18,8 @@ import type {
 	CreateChannel,
 	JsonValue,
 	Lease,
+	RenameChannel,
+	RenameResult,
 	ReplaceChannel,
 	SaveCheckpoint,
 	StoredChannel,
@@ -442,6 +444,7 @@ export class PostgresStorage implements StorageAdapter {
 			`;
 				return found ? channel(found) : undefined;
 			}),
+		rename: input => this.#renameChannel(input),
 		list: (repositoryId, limit, after, query) =>
 			this.#listChannels(repositoryId, limit, after, query),
 		scan: (repositoryId, limit, after) => this.#scanChannels(repositoryId, limit, after),
@@ -531,6 +534,34 @@ export class PostgresStorage implements StorageAdapter {
 					`;
 				}
 				return channel(saved);
+			}));
+	}
+
+	#renameChannel(input: RenameChannel): Promise<RenameResult> {
+		return this.#run("rename channel", () =>
+			this.#sql.begin(async transaction => {
+				let [current] = await transaction<ChannelRow[]>`
+					SELECT ${transaction.unsafe(CHANNEL_COLUMNS)}
+					FROM channels
+					WHERE id = ${input.id}
+					FOR UPDATE
+				`;
+				if (!current) throw missing(`channel ${input.id} does not exist`);
+				let existing = channel(current);
+				if (existing.title === input.title) {
+					return { channel: existing, changed: false };
+				}
+				let updatedAt = input.now > existing.updatedAt
+					? input.now
+					: new Date(existing.updatedAt.getTime() + 1);
+				let [saved] = await transaction<ChannelRow[]>`
+					UPDATE channels
+					SET title = ${input.title}, updated_at = ${updatedAt}
+					WHERE id = ${input.id}
+					RETURNING ${transaction.unsafe(CHANNEL_COLUMNS)}
+				`;
+				if (!saved) throw corrupt("renaming a channel returned no record");
+				return { channel: channel(saved), changed: true };
 			}));
 	}
 
@@ -818,7 +849,8 @@ export class PostgresStorage implements StorageAdapter {
 				}
 				await transaction`
 				UPDATE channels
-				SET revision = ${revision}, next_sequence = ${sequence + 1}, updated_at = ${input.now}
+				SET revision = ${revision}, next_sequence = ${sequence + 1},
+					updated_at = GREATEST(updated_at, ${input.now})
 				WHERE id = ${input.channelId}
 			`;
 				return { revision, sequence, repeated: false };
@@ -946,7 +978,8 @@ export class PostgresStorage implements StorageAdapter {
 				`;
 				await transaction`
 					UPDATE channels
-					SET revision = ${revision}, next_sequence = ${sequence + 1}, updated_at = ${input.now}
+					SET revision = ${revision}, next_sequence = ${sequence + 1},
+						updated_at = GREATEST(updated_at, ${input.now})
 					WHERE id = ${input.channelId}
 				`;
 				return { revision, sequence, repeated: false };

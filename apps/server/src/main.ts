@@ -31,7 +31,7 @@ import { broadcast, fail, relay, tell, topic } from "./wire";
 
 import type { Server } from "bun";
 import type { Incoming } from "@chopin/protocol";
-import type { Lease } from "./storage/model";
+import type { ChannelRecord, Lease } from "./storage/model";
 import type { AuthorizationResult, Socket, SocketData } from "./wire";
 
 const config = load();
@@ -331,6 +331,23 @@ function scheduleAuthorization(ws: Socket): void {
 	}, ACCESS_RECHECK_MS);
 }
 
+async function refreshChannelMetadata(ws: Socket, room: Rooms.Room): Promise<void> {
+	try {
+		let channel = await storage.channels.get(room.id);
+		if (!channel || channel.updatedAt <= new Date(ws.data.channelUpdatedAt)) return;
+		if (ws.data.closed) return;
+		tell(ws, {
+			kind: "session:channel",
+			ts: 0,
+			channelId: channel.id,
+			title: channel.title,
+			updatedAt: channel.updatedAt.toISOString(),
+		});
+	} catch {
+		// Hello already carried the admission snapshot; a later rename event can supersede it.
+	}
+}
+
 function listen(): Server<SocketData> {
 	return Bun.serve<SocketData>({
 		hostname: config.host,
@@ -365,10 +382,13 @@ function listen(): Server<SocketData> {
 					kind: "session:hello",
 					ts: 0,
 					channelId: room.id,
+					title: ws.data.channelTitle,
+					updatedAt: ws.data.channelUpdatedAt,
 					you: { handle: ws.data.handle, client: ws.data.client },
 					members: Rooms.members(room),
 					canEdit: ws.data.canEdit,
 				});
+				void refreshChannelMetadata(ws, room);
 				relay(ws, { kind: "session:presence", ts: 0, members: Rooms.members(room) });
 				scheduleAuthorization(ws);
 			},
@@ -474,6 +494,16 @@ async function resetOpenAgents(
 	);
 }
 
+function announceChannelRename(channel: ChannelRecord): void {
+	broadcast(server, channel.id, {
+		kind: "session:channel",
+		ts: 0,
+		channelId: channel.id,
+		title: channel.title,
+		updatedAt: channel.updatedAt.toISOString(),
+	});
+}
+
 let hostedAuth = registerAuthRoutes(router, {
 	config: config.auth,
 	storage,
@@ -492,9 +522,12 @@ registerMcpRoutes(router, hostedAuth, {
 		if (!heldLease) throw new Error("storage writer lease is unavailable");
 		return heldLease;
 	},
+}, {
+	onChannelRenamed: announceChannelRename,
 });
 registerChannelRoutes(router, hostedAuth, {
 	onAgentReset: channelId => resetOpenAgents(room => room.id === channelId),
+	onChannelRenamed: announceChannelRename,
 });
 
 try {

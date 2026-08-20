@@ -99,6 +99,28 @@ test("an authenticated repository creates a channel workspace", async ({ baseURL
 	await expect(page.getByRole("button", { name: "New channel" })).toHaveCount(0);
 });
 
+test("an editor renames a channel from the repository list", async ({ join, room }) => {
+	let page = await join("ana");
+	let before = `Test ${room.slice(0, 8)}`;
+	let after = `Repository rename ${room.slice(0, 8)}`;
+	await page.goto("/repositories/octo-org/score");
+	await expect(page.getByRole("heading", { name: "Planning channels" })).toBeVisible();
+
+	await page.setViewportSize({ width: 320, height: 568 });
+	await page.getByRole("button", { name: `Rename ${before}` }).click();
+	let input = page.getByRole("textbox", { name: "Document title" });
+	await expect(input).toHaveValue(before);
+	await expectNoHorizontalOverflow(page);
+	await input.fill(after);
+	await page.getByRole("button", { name: "Save" }).click();
+	await expect(page.getByText(after, { exact: true })).toBeVisible();
+	await expect(page.getByText(before, { exact: true })).toHaveCount(0);
+	await expect(page.getByRole("button", { name: `Rename ${after}` })).toBeFocused();
+
+	await page.reload();
+	await expect(page.getByText(after, { exact: true })).toBeVisible();
+});
+
 test("a known deleted channel keeps its context and routes back without retry", async ({ baseURL, page }) => {
 	await authenticate(page, "octocat", baseURL!);
 	await page.route(

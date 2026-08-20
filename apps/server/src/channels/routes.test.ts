@@ -110,13 +110,26 @@ async function setup(random?: () => number) {
 	};
 	let router = new Router();
 	let reset: string[] = [];
+	let renamed: string[] = [];
 	registerChannelRoutes(router, auth, {
 		onAgentReset: async id => {
 			reset.push(id);
 		},
+		onChannelRenamed: channel => {
+			renamed.push(channel.title);
+		},
 		random,
 	});
-	return { router, storage, github, cookie: pair(issued.cookie), sessionId: issued.id, reset, now };
+	return {
+		router,
+		storage,
+		github,
+		cookie: pair(issued.cookie),
+		sessionId: issued.id,
+		reset,
+		renamed,
+		now,
+	};
 }
 
 function request(path: string, cookie?: string, init: RequestInit = {}): Request {
@@ -199,6 +212,108 @@ describe("channel routes", () => {
 		let response = await router.handle(request(`/api/channels/${id}`, cookie));
 		expect(response!.status).toBe(200);
 		expect((await response!.json()).channel.id).toBe(id);
+	});
+
+	it("lets an editor rename a document without changing its plan revision", async () => {
+		let { router, storage, cookie, renamed, now } = await setup();
+		let channel = await storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Release plan",
+			createdBy: "U_octocat",
+			now,
+		});
+		let response = await router.handle(request(`/api/channels/${channel.id}`, cookie, {
+			method: "PATCH",
+			headers: { "content-type": "application/json", origin: "https://chopin.test" },
+			body: JSON.stringify({ title: "  Launch plan  " }),
+		}));
+
+		expect(response!.status).toBe(200);
+		let body = await response!.json();
+		expect(body.channel).toMatchObject({
+			id: channel.id,
+			title: "Launch plan",
+			revision: channel.revision,
+		});
+		expect((await storage.channels.get(channel.id))!.title).toBe("Launch plan");
+		expect(renamed).toEqual(["Launch plan"]);
+
+		let repeated = await router.handle(request(`/api/channels/${channel.id}`, cookie, {
+			method: "PATCH",
+			headers: { origin: "https://chopin.test" },
+			body: JSON.stringify({ title: "Launch plan" }),
+		}));
+		expect(repeated!.status).toBe(200);
+		expect(renamed).toEqual(["Launch plan"]);
+	});
+
+	it("validates rename titles and preserves a document after a title conflict", async () => {
+		let { router, storage, cookie, now } = await setup();
+		let channel = await storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Release plan",
+			createdBy: "U_octocat",
+			now,
+		});
+		await storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Launch plan",
+			createdBy: "U_octocat",
+			now,
+		});
+		let patch = (body: unknown) =>
+			router.handle(request(`/api/channels/${channel.id}`, cookie, {
+				method: "PATCH",
+				headers: { origin: "https://chopin.test" },
+				body: JSON.stringify(body),
+			}));
+
+		expect((await patch({}))!.status).toBe(400);
+		expect((await patch({ title: " " }))!.status).toBe(400);
+		expect((await patch({ title: "x".repeat(121) }))!.status).toBe(400);
+		let conflict = await patch({ title: "launch PLAN" });
+		expect(conflict!.status).toBe(409);
+		expect(await conflict!.json()).toEqual({
+			error: "a document with this title already exists",
+		});
+		expect((await storage.channels.get(channel.id))!.title).toBe("Release plan");
+	});
+
+	it("requires current write access and the configured origin to rename", async () => {
+		let { router, storage, github, cookie, now } = await setup();
+		let channel = await storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Release plan",
+			createdBy: "U_octocat",
+			now,
+		});
+		let body = JSON.stringify({ title: "Launch plan" });
+		let csrf = await router.handle(request(`/api/channels/${channel.id}`, cookie, {
+			method: "PATCH",
+			headers: { origin: "https://evil.test" },
+			body,
+		}));
+		expect(csrf!.status).toBe(403);
+
+		github.repo = { ...github.repo, permissions: { pull: true, push: false, admin: false } };
+		let viewer = await router.handle(request(`/api/channels/${channel.id}`, cookie, {
+			method: "PATCH",
+			headers: { origin: "https://chopin.test" },
+			body,
+		}));
+		expect(viewer!.status).toBe(403);
 	});
 
 	it("lists matching documents with a query-bound cursor and repository avatar", async () => {

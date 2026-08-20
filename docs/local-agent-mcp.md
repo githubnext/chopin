@@ -108,6 +108,10 @@ Start the agent from the repository you want to inspect and ask:
 Use the Chopin list_documents tool to list the documents available for this repository. Return each document's id and title.
 ```
 
+`rename_document` accepts a document `id` and replacement `title`. It changes
+the catalog title only, leaving canonical plan source, plan revision, and
+creation provenance intact. Repeating the same title is safe and has no effect.
+
 `{"documents":[]}` is a successful response for a repository with no Chopin
 documents. After the connection is established, the MCP `initialize`
 instructions and current tool descriptions are authoritative.
@@ -128,8 +132,8 @@ token's `read:org` or Members access, SSO authorization, and GitHub availability
 lacks the operation's repository permission; it does not mean the GitHub App for
 Chopin must be installed. Pull access is enough for
 `list_documents`, `read_document`, and `read_implementation`. Push or admin
-access is required for create, start, and report lifecycle operations. Use an
-account with the required access or ask a repository owner to grant it.
+access is required for create, rename, start, and report lifecycle operations.
+Use an account with the required access or ask a repository owner to grant it.
 
 Use the optional
 [creating-chopin-plans skill](../skills/creating-chopin-plans/SKILL.md) to turn a

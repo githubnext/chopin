@@ -128,6 +128,8 @@ describe("socket admission", () => {
 		let viewer = await admit(request, url, auth);
 		expect("data" in viewer && viewer.data).toMatchObject({
 			room: channel.id,
+			channelTitle: "Plan",
+			channelUpdatedAt: now.toISOString(),
 			handle: "octocat",
 			principalId: "U_octocat",
 			canEdit: false,

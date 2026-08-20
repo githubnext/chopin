@@ -5,6 +5,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useAnchoredPicker } from "./anchored-picker";
 import * as Api from "./api";
 import { rememberChannel } from "./channel-recovery";
+import { DocumentRename } from "./document-rename";
 
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
@@ -30,11 +31,13 @@ export function DocumentPicker(
 	{
 		canEdit,
 		current,
+		onRename,
 		repository,
 		userId,
 	}: {
 		canEdit: boolean;
 		current: Pick<Api.Channel, "id" | "title">;
+		onRename: (channel: Pick<Api.Channel, "title" | "updatedAt">) => void;
 		repository: Pick<Api.Repository, "name" | "owner" | "fullName">;
 		userId: string;
 	},
@@ -48,6 +51,9 @@ export function DocumentPicker(
 	let [listError, setListError] = useState<unknown>();
 	let [createError, setCreateError] = useState<unknown>();
 	let [creating, setCreating] = useState(false);
+	let [renaming, setRenaming] = useState(false);
+	let [renameError, setRenameError] = useState<unknown>();
+	let [renameSaving, setRenameSaving] = useState(false);
 	let [loadingMore, setLoadingMore] = useState(false);
 	let [active, setActive] = useState(0);
 	let [retry, setRetry] = useState(0);
@@ -56,10 +62,14 @@ export function DocumentPicker(
 	let activeIndex = channels.length === 0 ? -1 : Math.min(active, channels.length - 1);
 	let activeChannel = channels[activeIndex];
 	let pickerContent = useMemo(
-		() => ({ channels: channels.length, createError, listError }),
-		[channels.length, createError, listError],
+		() => ({ channels: channels.length, createError, listError, renameError, renaming }),
+		[channels.length, createError, listError, renameError, renaming],
 	);
-	let { panel, position, search, trigger } = useAnchoredPicker(open, setOpen, pickerContent);
+	let setPickerOpen = (next: boolean) => {
+		if (!next && renameSaving) return;
+		setOpen(next);
+	};
+	let { panel, position, search, trigger } = useAnchoredPicker(open, setPickerOpen, pickerContent);
 
 	useEffect(() => {
 		if (!open) return;
@@ -77,7 +87,7 @@ export function DocumentPicker(
 			});
 		}, normalized ? 160 : 0);
 		return () => window.clearTimeout(timer);
-	}, [normalized, open, repository.name, repository.owner, retry]);
+	}, [current.title, normalized, open, repository.name, repository.owner, retry]);
 
 	useEffect(() => {
 		if (!open || !activeChannel) return;
@@ -139,6 +149,22 @@ export function DocumentPicker(
 			setCreateError(reason);
 			setCreating(false);
 		}
+	}
+
+	function finishRename(detail: Api.ChannelDetail) {
+		onRename(detail.channel);
+		setRenaming(false);
+		setRenameError(undefined);
+		setRenameSaving(false);
+		setRetry(value => value + 1);
+		requestAnimationFrame(() => search.current?.focus());
+	}
+
+	function cancelRename() {
+		setRenaming(false);
+		setRenameError(undefined);
+		setRenameSaving(false);
+		requestAnimationFrame(() => search.current?.focus());
 	}
 
 	let popup = open && createPortal(
@@ -236,20 +262,45 @@ export function DocumentPicker(
 			</div>
 			{canEdit && (
 				<div className="p-1 hairline-t">
-					{createError !== undefined && (
-						<p className="px-2 py-2 text-sm text-destructive-ink" role="alert">
-							{message(createError, "Could not create document.")}
-						</p>
-					)}
-					<button
-						className="btn btn-md btn-ghost w-full justify-start"
-						disabled={creating}
-						onClick={() => void create()}
-						type="button"
-					>
-						<PlusIcon aria-hidden="true" size={16} />
-						<span className="ml-1">{creating ? "Creating..." : "Create new document"}</span>
-					</button>
+					{renaming
+						? (
+							<DocumentRename
+								channel={current}
+								className="p-2"
+								onCancel={cancelRename}
+								onErrorChange={setRenameError}
+								onRenamed={finishRename}
+								onSavingChange={setRenameSaving}
+							/>
+						)
+						: (
+							<>
+								{createError !== undefined && (
+									<p className="px-2 py-2 text-sm text-destructive-ink" role="alert">
+										{message(createError, "Could not create document.")}
+									</p>
+								)}
+								<button
+									className="btn btn-md btn-ghost w-full justify-start"
+									disabled={creating}
+									onClick={() => setRenaming(true)}
+									type="button"
+								>
+									Rename document
+								</button>
+								<button
+									className="btn btn-md btn-ghost w-full justify-start"
+									disabled={creating}
+									onClick={() => void create()}
+									type="button"
+								>
+									<PlusIcon aria-hidden="true" size={16} />
+									<span className="ml-1">
+										{creating ? "Creating..." : "Create new document"}
+									</span>
+								</button>
+							</>
+						)}
 				</div>
 			)}
 		</div>,
@@ -264,7 +315,7 @@ export function DocumentPicker(
 				aria-haspopup="listbox"
 				aria-label={`Document: ${current.title}`}
 				className="document-picker-trigger btn btn-sm btn-ghost min-w-0 max-w-64 justify-start gap-1 text-text-tertiary"
-				onClick={() => setOpen(value => !value)}
+				onClick={() => setPickerOpen(!open)}
 				ref={trigger}
 				title={current.title}
 				type="button"
