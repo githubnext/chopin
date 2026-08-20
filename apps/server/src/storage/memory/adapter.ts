@@ -14,6 +14,8 @@ import type {
 	CreateChannel,
 	JsonValue,
 	Lease,
+	RenameChannel,
+	RenameResult,
 	ReplaceChannel,
 	SaveCheckpoint,
 	StoredChannel,
@@ -147,6 +149,7 @@ export class MemoryStorage implements StorageAdapter {
 	readonly channels: ChannelStore = {
 		create: input => this.#createChannel(input),
 		get: id => Promise.resolve(this.#channels.get(id)).then(value => value && channel(value)),
+		rename: input => this.#renameChannel(input),
 		list: (repositoryId, limit, after, query) =>
 			this.#listChannels(repositoryId, limit, after, query),
 		scan: (repositoryId, limit, after) => this.#scanChannels(repositoryId, limit, after),
@@ -221,6 +224,25 @@ export class MemoryStorage implements StorageAdapter {
 			});
 		}
 		return channel(saved);
+	}
+
+	async #renameChannel(input: RenameChannel): Promise<RenameResult> {
+		let found = this.#channels.get(input.id);
+		if (!found) throw missing(`channel ${input.id} does not exist`);
+		if (found.title === input.title) return { channel: channel(found), changed: false };
+		if (
+			[...this.#channels.values()].some(value =>
+				value.id !== found.id
+				&& value.repositoryId === found.repositoryId
+				&& value.title.toLowerCase() === input.title.toLowerCase()
+			)
+		) throw conflict(`channel title ${input.title} already exists in this repository`);
+		let updatedAt = input.now > found.updatedAt
+			? input.now
+			: new Date(found.updatedAt.getTime() + 1);
+		let saved = { ...found, title: input.title, updatedAt };
+		this.#channels.set(saved.id, saved);
+		return { channel: channel(saved), changed: true };
 	}
 
 	#listChannels(
@@ -421,7 +443,11 @@ export class MemoryStorage implements StorageAdapter {
 			})));
 			this.#events.set(input.channelId, existingEvents);
 		}
-		this.#channels.set(input.channelId, { ...found, revision, updatedAt: input.now });
+		this.#channels.set(input.channelId, {
+			...found,
+			revision,
+			updatedAt: new Date(Math.max(found.updatedAt.getTime(), input.now.getTime())),
+		});
 		this.#sequences.set(input.channelId, sequence + 1);
 		let result = { revision, sequence, repeated: false };
 		operations.set(input.operationId, result);
@@ -482,7 +508,11 @@ export class MemoryStorage implements StorageAdapter {
 			createdAt: input.now,
 		});
 		this.#updates.set(input.channelId, []);
-		this.#channels.set(input.channelId, { ...found, revision, updatedAt: input.now });
+		this.#channels.set(input.channelId, {
+			...found,
+			revision,
+			updatedAt: new Date(Math.max(found.updatedAt.getTime(), input.now.getTime())),
+		});
 		this.#sequences.set(input.channelId, sequence + 1);
 		let result = { revision, sequence, repeated: false };
 		operations.set(input.operationId, result);

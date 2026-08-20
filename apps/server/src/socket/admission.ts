@@ -43,6 +43,8 @@ export async function admit(
 		return {
 			data: {
 				room: channel.id,
+				channelTitle: channel.title,
+				channelUpdatedAt: channel.updatedAt.toISOString(),
 				handle: session.user.login,
 				client: uid(),
 				canEdit: repository.permissions.push || repository.permissions.admin,

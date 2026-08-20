@@ -8,7 +8,7 @@ import { implementationLifecycle } from "../tasks/lifecycle";
 
 import type { HostedAuth } from "../auth/routes";
 import type { GitHubUser } from "../github/client";
-import type { Implementation, ImplementationInput, McpOptions } from "../mcp";
+import type { Implementation, ImplementationInput, McpOptions, RenameDocumentInput } from "../mcp";
 import type { LifecycleArguments } from "./lifecycle";
 import type { ChannelRecord, Lease } from "../storage/model";
 import type { ClaimResult, Run } from "../tasks/graphs";
@@ -19,6 +19,7 @@ export type HostedCaller = {
 };
 
 export type ImplementationPersistence = { lease(): Lease };
+export type HostedCallbacks = { onChannelRenamed?: (channel: ChannelRecord) => void };
 
 const BEARER = new RegExp("^Bearer ([A-Za-z0-9._~+/-]+=*)$", "i");
 
@@ -100,6 +101,7 @@ function claimResult(value: ClaimResult) {
 export function hosted(
 	auth: HostedAuth,
 	persistence?: ImplementationPersistence,
+	callbacks: HostedCallbacks = {},
 ): McpOptions<HostedCaller> {
 	async function directRepository(caller: HostedCaller, owner: string, name: string) {
 		try {
@@ -206,6 +208,45 @@ export function hosted(
 					});
 				} catch {
 					return undefined;
+				}
+			},
+		},
+		rename: {
+			async rename(caller, input: RenameDocumentInput) {
+				let channel = await auth.storage.channels.get(input.id);
+				if (!channel) return { kind: "missing" as const };
+				let repository = await directRepository(
+					caller,
+					channel.repositoryOwner,
+					channel.repositoryName,
+				);
+				if (
+					!repository
+					|| repository.id !== channel.repositoryId
+					|| !repository.permissions.pull
+				) return { kind: "missing" as const };
+				if (!repository.permissions.push && !repository.permissions.admin) {
+					return { kind: "forbidden" as const };
+				}
+				try {
+					let result = await auth.storage.channels.rename({
+						id: channel.id,
+						title: input.title,
+						now: auth.clock(),
+					});
+					if (result.changed) callbacks.onChannelRenamed?.(result.channel);
+					return {
+						kind: result.changed ? "renamed" as const : "unchanged" as const,
+						document: { id: result.channel.id, title: result.channel.title },
+					};
+				} catch (err) {
+					if (err instanceof StorageError && err.failure === "conflict") {
+						return { kind: "conflict" as const };
+					}
+					if (err instanceof StorageError && err.failure === "missing") {
+						return { kind: "missing" as const };
+					}
+					throw err;
 				}
 			},
 		},

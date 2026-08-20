@@ -14,6 +14,7 @@ import {
 	REPOSITORY_PATH_PATTERN,
 } from "./mcp/create";
 import { isLifecycleTool, LIFECYCLE_TOOLS, lifecycleCall } from "./mcp/lifecycle";
+import { normalizedTitle } from "./channels/title";
 
 import type { Brief, CreateDocumentInput } from "./mcp/create";
 import type { Run, Version } from "./tasks/graphs";
@@ -93,11 +94,27 @@ export type CreateDocument<Caller> = {
 	>;
 };
 
+export type RenameDocumentInput = {
+	id: string;
+	title: string;
+};
+
+export type RenameDocument<Caller> = {
+	rename(
+		caller: Caller,
+		input: RenameDocumentInput,
+	): Promise<
+		| { kind: "renamed" | "unchanged"; document: DocumentSummary }
+		| { kind: "conflict" | "forbidden" | "missing" }
+	>;
+};
+
 export type McpOptions<Caller> = {
 	/** The host owns authentication; MCP only receives its result. */
 	caller(request: Request): Promise<Caller | undefined> | Caller | undefined;
 	documents: DocumentReader<Caller>;
 	create?: CreateDocument<Caller>;
+	rename?: RenameDocument<Caller>;
 	implementations?: Implementations<Caller>;
 };
 
@@ -230,6 +247,40 @@ export const TOOLS: Tool[] = [
 		},
 	},
 	{
+		name: "rename_document",
+		description: "Rename a Chopin document without changing its canonical plan or revision.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				id: {
+					type: "string",
+					minLength: 1,
+					maxLength: MAX_DOCUMENT_ID_LENGTH,
+					pattern: "\\S",
+				},
+				title: { type: "string", minLength: 1, maxLength: MAX_TITLE_LENGTH },
+			},
+			required: ["id", "title"],
+			additionalProperties: false,
+		},
+		outputSchema: {
+			oneOf: [
+				DOCUMENT,
+				{
+					type: "object",
+					properties: {
+						code: {
+							type: "string",
+							enum: ["title-conflict", "repository-forbidden", "document-unavailable"],
+						},
+					},
+					required: ["code"],
+					additionalProperties: false,
+				},
+			],
+		},
+	},
+	{
 		name: "read_implementation",
 		description: "Read the approved implementation graph, plan and repository context.",
 		inputSchema: {
@@ -348,6 +399,17 @@ function isId(value: unknown): value is string {
 		&& value.trim().length > 0;
 }
 
+function renameArguments(value: Record<string, unknown>): RenameDocumentInput | undefined {
+	if (
+		Object.keys(value).length !== 2
+		|| !Object.hasOwn(value, "id")
+		|| !Object.hasOwn(value, "title")
+		|| !isId(value.id)
+	) return undefined;
+	let title = normalizedTitle(value.title);
+	return title ? { id: value.id, title } : undefined;
+}
+
 function isJsonRpcId(value: unknown): value is string | number | null {
 	return value === null || typeof value === "string" || typeof value === "number";
 }
@@ -386,7 +448,9 @@ function acceptsEvents(request: Request): boolean {
 }
 
 function serviceInstructions(tools: Tool[]): string | undefined {
-	let creation = tools.filter(tool => tool.name === "create_document");
+	let documentMutations = tools.filter(tool =>
+		tool.name === "create_document" || tool.name === "rename_document"
+	);
 	let implementation = tools
 		.filter(tool =>
 			tool.name === "read_implementation"
@@ -395,7 +459,7 @@ function serviceInstructions(tools: Tool[]): string | undefined {
 		);
 	return [
 		"Chopin's MCP contract and current tool descriptions are authoritative.",
-		...creation.map(tool => `${tool.name}: ${tool.description}`),
+		...documentMutations.map(tool => `${tool.name}: ${tool.description}`),
 		...(implementation.length > 0
 			? [
 				"Read the canonical implementation before every implementation or lifecycle action; copied plans and lifecycle instructions are not substitutes.",
@@ -445,9 +509,11 @@ export function handler<Caller>(
 	options: McpOptions<Caller>,
 ): (request: Request) => Promise<Response> {
 	let creation = options.create;
+	let renaming = options.rename;
 	let sessions = new Map<string, { name: string; version: string }>();
 	let tools = TOOLS.filter(tool =>
 		(tool.name !== "create_document" || creation)
+		&& (tool.name !== "rename_document" || renaming)
 		&& (!["read_implementation", "start_implementation"].includes(tool.name)
 			|| options.implementations)
 		&& (!isLifecycleTool(tool.name) || options.implementations?.reportLifecycle)
@@ -535,6 +601,24 @@ export function handler<Caller>(
 						return respond(text({ code: "idempotency-conflict" }, true));
 					}
 					return respond({ content: [], isError: true });
+				}
+				if (tool.name === "rename_document" && renaming) {
+					let input = renameArguments(tool.arguments);
+					if (!input) {
+						return notification
+							? undefined
+							: error(call.id, -32602, "rename_document requires an id and valid title");
+					}
+					let outcome = await renaming.rename(caller, input);
+					if (outcome.kind === "renamed" || outcome.kind === "unchanged") {
+						return respond(text(outcome.document));
+					}
+					let code = outcome.kind === "conflict"
+						? "title-conflict"
+						: outcome.kind === "forbidden"
+						? "repository-forbidden"
+						: "document-unavailable";
+					return respond(text({ code }, true));
 				}
 				if (tool.name === "read_implementation") {
 					if (Object.keys(tool.arguments).length !== 1 || !isId(tool.arguments.id)) {

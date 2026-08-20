@@ -31,6 +31,7 @@ that repository to the installation.
 GET  /api/repositories/:owner/:repository/channels
 POST /api/repositories/:owner/:repository/channels
 GET  /api/channels/:channelId
+PATCH /api/channels/:channelId
 POST /api/channels/:channelId/agent/reset
 ```
 
@@ -42,6 +43,11 @@ original query and cannot be reused with another search.
 A title is optional during browser creation. Chopin generates one when omitted,
 or accepts a trimmed title from 1 through 120 characters. Titles are unique per
 repository without regard to case.
+
+`PATCH /api/channels/:channelId` accepts `{ "title": "..." }`. It updates only
+channel metadata, not the canonical MDX heading or plan revision. A changed
+title updates the channel activity time and is broadcast to clients in the open
+room; submitting the current title is a no-op.
 
 The reset endpoint releases Planner ownership and aborts its disposable runtime
 session. The current web application does not expose a control that calls it.

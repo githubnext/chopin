@@ -179,6 +179,14 @@ export function channel(id: string): Promise<ChannelDetail> {
 	return response(`/api/channels/${encodeURIComponent(id)}`);
 }
 
+export function renameChannel(id: string, title: string): Promise<ChannelDetail> {
+	return response(`/api/channels/${encodeURIComponent(id)}`, {
+		method: "PATCH",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ title }),
+	});
+}
+
 export async function resetAgent(id: string): Promise<void> {
 	let result = await fetch(`/api/channels/${encodeURIComponent(id)}/agent/reset`, {
 		method: "POST",

@@ -49,6 +49,16 @@ describe("channel recovery context", () => {
 		expect(readChannelRecovery("U_octocat", channel.id, storage)).toEqual({ channel, repository });
 	});
 
+	it("replaces the cached title after a document is renamed", () => {
+		let storage = new MemoryStorage();
+		rememberChannel("U_octocat", channel, repository, storage);
+		rememberChannel("U_octocat", { ...channel, title: "Launch plan" }, repository, storage);
+
+		expect(readChannelRecovery("U_octocat", channel.id, storage)?.channel.title).toBe(
+			"Launch plan",
+		);
+	});
+
 	it("does not return another channel's context", () => {
 		let storage = new MemoryStorage();
 		rememberChannel("U_octocat", channel, repository, storage);

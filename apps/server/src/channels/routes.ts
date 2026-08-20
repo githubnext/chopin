@@ -3,6 +3,7 @@ import { StorageError } from "../storage/errors";
 
 import { documentTitles } from "./document-title";
 import { isChannelId, newChannelId } from "./id";
+import { normalizedTitle } from "./title";
 
 import type { HostedAuth } from "../auth/routes";
 import type { AuthenticatedSession } from "../auth/session";
@@ -101,7 +102,10 @@ function limit(url: URL): number | undefined {
 	return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= 100 ? parsed : undefined;
 }
 
-async function requestedTitle(request: Request): Promise<{ title?: string; valid: boolean }> {
+async function requestedTitle(
+	request: Request,
+	optional: boolean,
+): Promise<{ title?: string; valid: boolean }> {
 	let length = Number(request.headers.get("content-length") || "0");
 	if (Number.isFinite(length) && length > 4_096) return { valid: false };
 	let source = await request.text();
@@ -110,12 +114,9 @@ async function requestedTitle(request: Request): Promise<{ title?: string; valid
 		let value = JSON.parse(source) as unknown;
 		if (!value || typeof value !== "object" || Array.isArray(value)) return { valid: false };
 		let raw = (value as Record<string, unknown>).title;
-		if (raw === undefined) return { valid: true };
-		if (typeof raw !== "string") return { valid: false };
-		let result = raw.trim();
-		return result.length >= 1 && result.length <= 120
-			? { valid: true, title: result }
-			: { valid: false };
+		if (raw === undefined) return { valid: optional };
+		let title = normalizedTitle(raw);
+		return title ? { valid: true, title } : { valid: false };
 	} catch {
 		return { valid: false };
 	}
@@ -166,7 +167,11 @@ async function authorizedRepository(
 export function registerChannelRoutes(
 	router: Router,
 	auth: HostedAuth,
-	options: { onAgentReset?: (channelId: string) => Promise<void>; random?: () => number } = {},
+	options: {
+		onAgentReset?: (channelId: string) => Promise<void>;
+		onChannelRenamed?: (channel: ChannelRecord) => void;
+		random?: () => number;
+	} = {},
 ): void {
 	router.on(
 		"GET",
@@ -231,7 +236,7 @@ export function registerChannelRoutes(
 				if (!repo.permissions.push && !repo.permissions.admin) {
 					return json({ error: "repository write access is required" }, 403);
 				}
-				let title = await requestedTitle(request);
+				let title = await requestedTitle(request, true);
 				if (!title.valid) {
 					return json({ error: "title must be between 1 and 120 characters" }, 400);
 				}
@@ -296,6 +301,52 @@ export function registerChannelRoutes(
 				channel: serialized(channel),
 			});
 		} catch (err) {
+			return failure(err, request, auth);
+		}
+	});
+
+	router.on("PATCH", "/api/channels/:channelId", async (request, _url, params) => {
+		if (request.headers.get("origin") !== auth.config.origin) {
+			return json({ error: "origin is not allowed" }, 403);
+		}
+		try {
+			let session = await auth.sessions.authenticate(request);
+			if (!session) return json({ error: "authentication required" }, 401);
+			let id = params.channelId!;
+			if (!isChannelId(id)) return json({ error: "channel not found" }, 404);
+			let channel = await auth.storage.channels.get(id);
+			if (!channel) return json({ error: "channel not found" }, 404);
+			let repo = await authorizedRepository(
+				auth,
+				session,
+				channel.repositoryOwner,
+				channel.repositoryName,
+			);
+			if (repo.id !== channel.repositoryId || !repo.permissions.pull) {
+				return json({ error: "channel not found" }, 404);
+			}
+			if (!repo.permissions.push && !repo.permissions.admin) {
+				return json({ error: "repository write access is required" }, 403);
+			}
+			let requested = await requestedTitle(request, false);
+			if (!requested.valid || !requested.title) {
+				return json({ error: "title must be between 1 and 120 characters" }, 400);
+			}
+			let renamed = await auth.storage.channels.rename({
+				id,
+				title: requested.title,
+				now: auth.clock(),
+			});
+			if (renamed.changed) options.onChannelRenamed?.(renamed.channel);
+			return json({
+				repository: repository(repo),
+				canEdit: true,
+				channel: serialized(renamed.channel),
+			});
+		} catch (err) {
+			if (err instanceof StorageError && err.failure === "conflict") {
+				return json({ error: "a document with this title already exists" }, 409);
+			}
 			return failure(err, request, auth);
 		}
 	});

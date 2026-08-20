@@ -52,6 +52,17 @@ export type CreateChannel = Omit<ChannelRecord, "revision" | "createdAt" | "upda
 	initial?: InitialChannel;
 };
 
+export type RenameChannel = {
+	id: string;
+	title: string;
+	now: Date;
+};
+
+export type RenameResult = {
+	channel: ChannelRecord;
+	changed: boolean;
+};
+
 export type ChannelCursor = {
 	updatedAt: Date;
 	id: string;

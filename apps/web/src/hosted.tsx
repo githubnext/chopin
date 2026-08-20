@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import * as Api from "./api";
 import { readChannelRecovery, rememberChannel } from "./channel-recovery";
+import { DocumentRename } from "./document-rename";
 import { RepositoryPicker } from "./repository-picker";
 import { clearRepositoryCache } from "./repository-cache";
 
@@ -11,6 +12,7 @@ export type HostedWorkspaceProps = {
 	room: string;
 	handle: string;
 	label: string;
+	updatedAt: string;
 	repository: Api.Repository;
 	canEdit: boolean;
 	agent?: boolean;
@@ -211,6 +213,7 @@ function RepositoryChannels(
 	let [title, setTitle] = useState("");
 	let [creating, setCreating] = useState(false);
 	let [loadingMore, setLoadingMore] = useState(false);
+	let [renaming, setRenaming] = useState<string>();
 
 	useEffect(() => {
 		let active = true;
@@ -239,16 +242,47 @@ function RepositoryChannels(
 	}
 
 	async function more() {
-		if (!page?.nextCursor || loadingMore) return;
+		let cursor = page?.nextCursor;
+		if (!cursor || loadingMore) return;
 		setLoadingMore(true);
 		try {
-			let next = await Api.channels(owner, repository, page.nextCursor);
-			setPage({ ...next, channels: [...page.channels, ...next.channels] });
+			let next = await Api.channels(owner, repository, cursor);
+			setPage(current =>
+				current && {
+					...next,
+					channels: [
+						...current.channels,
+						...next.channels.filter(channel =>
+							!current.channels.some(known => known.id === channel.id)
+						),
+					],
+				}
+			);
 		} catch (reason) {
 			setError(reason);
 		} finally {
 			setLoadingMore(false);
 		}
+	}
+
+	function stopRenaming(id: string) {
+		setRenaming(undefined);
+		requestAnimationFrame(() => document.getElementById(`rename-channel-${id}`)?.focus());
+	}
+
+	function renamed(detail: Api.ChannelDetail) {
+		rememberChannel(user.id, detail.channel, detail.repository);
+		setPage(current => {
+			if (!current) return current;
+			let channels = current.channels
+				.map(channel => channel.id === detail.channel.id ? detail.channel : channel)
+				.sort((left, right) =>
+					new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
+					|| left.id.localeCompare(right.id)
+				);
+			return { ...current, channels };
+		});
+		stopRenaming(detail.channel.id);
 	}
 
 	if (error) return <Failure error={error} />;
@@ -309,19 +343,45 @@ function RepositoryChannels(
 					: (
 						<div className="ring-hairline mt-6 overflow-hidden rounded-lg bg-page">
 							{page.channels.map((channel, index) => (
-								<a
-									className={`flex min-w-0 flex-col items-start justify-between gap-1 px-4 py-4 hover:bg-hover sm:flex-row sm:items-center sm:gap-4 sm:px-5 ${
-										index ? "hairline-t" : ""
-									}`}
-									href={`/channels/${channel.id}`}
-									key={channel.id}
-									onClick={() => rememberChannel(user.id, channel, page.repository)}
-								>
-									<span className="min-w-0 break-words text-sm font-medium">{channel.title}</span>
-									<span className="text-sm text-text-tertiary sm:shrink-0">
-										{new Date(channel.updatedAt).toLocaleDateString()}
-									</span>
-								</a>
+								<div className={index ? "hairline-t" : ""} key={channel.id}>
+									{renaming === channel.id
+										? (
+											<DocumentRename
+												channel={channel}
+												className="px-4 py-4 sm:px-5"
+												onCancel={() => stopRenaming(channel.id)}
+												onRenamed={renamed}
+											/>
+										)
+										: (
+											<div className="flex min-w-0 items-center gap-2 pr-3 hover:bg-hover sm:pr-4">
+												<a
+													className="flex min-w-0 flex-1 flex-col items-start justify-between gap-1 px-4 py-4 sm:flex-row sm:items-center sm:gap-4 sm:px-5"
+													href={`/channels/${channel.id}`}
+													onClick={() => rememberChannel(user.id, channel, page.repository)}
+												>
+													<span className="min-w-0 break-words text-sm font-medium">
+														{channel.title}
+													</span>
+													<span className="text-sm text-text-tertiary sm:shrink-0">
+														{new Date(channel.updatedAt).toLocaleDateString()}
+													</span>
+												</a>
+												{page.canEdit && (
+													<button
+														aria-label={`Rename ${channel.title}`}
+														className="btn btn-sm btn-ghost shrink-0"
+														disabled={renaming !== undefined}
+														id={`rename-channel-${channel.id}`}
+														onClick={() => setRenaming(channel.id)}
+														type="button"
+													>
+														Rename
+													</button>
+												)}
+											</div>
+										)}
+								</div>
 							))}
 						</div>
 					)}
@@ -393,6 +453,7 @@ function ChannelWorkspace(
 			canEdit={detail.canEdit}
 			handle={user.login}
 			label={detail.channel.title}
+			updatedAt={detail.channel.updatedAt}
 			repository={detail.repository}
 			room={detail.channel.id}
 			userId={user.id}

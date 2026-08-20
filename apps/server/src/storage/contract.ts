@@ -153,6 +153,79 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
+		it("renames channel metadata without advancing its collaboration revision", async () => {
+			let storage = await opened(factory);
+			try {
+				let { channelId, lease, repositoryId } = await userAndChannel(storage);
+				let before = await storage.channels.get(channelId);
+				let now = new Date("2026-01-03T03:04:05.000Z");
+				let renamed = await storage.channels.rename({
+					id: channelId,
+					title: "Launch plan",
+					now,
+				});
+
+				expect(renamed).toMatchObject({ changed: true, channel: { title: "Launch plan" } });
+				expect(renamed.channel.updatedAt).toEqual(now);
+				expect(renamed.channel.revision).toBe(before!.revision);
+				expect((await storage.channels.list(repositoryId, 20, undefined, "launch")).channels)
+					.toHaveLength(1);
+				expect((await storage.channels.list(repositoryId, 20, undefined, "release")).channels)
+					.toEqual([]);
+				await storage.collaboration.commit({
+					channelId,
+					lease,
+					expectedRevision: 0,
+					operationId: id("operation"),
+					epoch: "epoch-1",
+					events: [],
+					now: new Date("2026-01-02T12:00:00.000Z"),
+				});
+				expect((await storage.channels.get(channelId))!.updatedAt).toEqual(now);
+
+				let repeated = await storage.channels.rename({
+					id: channelId,
+					title: "Launch plan",
+					now: new Date("2026-01-04T03:04:05.000Z"),
+				});
+				expect(repeated.changed).toBe(false);
+				expect(repeated.channel.updatedAt).toEqual(now);
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("keeps renamed document titles unique within their repository", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, channelId, repositoryId } = await userAndChannel(storage);
+				let now = new Date("2026-01-03T03:04:05.000Z");
+				let other = await storage.channels.create({
+					id: id("channel"),
+					repositoryId,
+					repositoryOwner: "octo-org",
+					repositoryName: "score",
+					title: "Launch plan",
+					createdBy: userId,
+					now,
+				});
+
+				expect(storage.channels.rename({
+					id: channelId,
+					title: "launch PLAN",
+					now,
+				})).rejects.toBeInstanceOf(StorageError);
+				let recased = await storage.channels.rename({
+					id: other.id,
+					title: "LAUNCH PLAN",
+					now,
+				});
+				expect(recased.channel.title).toBe("LAUNCH PLAN");
+			} finally {
+				await storage.close();
+			}
+		});
+
 		it("keeps document titles unique within a repository without regard to case", async () => {
 			let storage = await opened(factory);
 			try {
