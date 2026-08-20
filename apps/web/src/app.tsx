@@ -56,6 +56,7 @@ function Header(
 					canEdit={canEdit}
 					current={{ id: room, title: label }}
 					repository={repository}
+					userId={userId}
 				/>
 			</div>
 			<div

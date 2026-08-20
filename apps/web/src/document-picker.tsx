@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { useAnchoredPicker } from "./anchored-picker";
 import * as Api from "./api";
+import { rememberChannel } from "./channel-recovery";
 
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
@@ -15,7 +16,12 @@ function message(error: unknown, fallback: string): string {
 	return error instanceof Error ? error.message : fallback;
 }
 
-function select(channel: Api.Channel) {
+function select(
+	userId: string,
+	channel: Api.Channel,
+	repository: Pick<Api.Repository, "owner" | "name" | "fullName">,
+) {
+	rememberChannel(userId, channel, repository);
 	location.assign(`/channels/${channel.id}`);
 }
 
@@ -25,10 +31,12 @@ export function DocumentPicker(
 		canEdit,
 		current,
 		repository,
+		userId,
 	}: {
 		canEdit: boolean;
 		current: Pick<Api.Channel, "id" | "title">;
-		repository: Pick<Api.Repository, "name" | "owner">;
+		repository: Pick<Api.Repository, "name" | "owner" | "fullName">;
+		userId: string;
 	},
 ) {
 	let request = useRef(0);
@@ -89,7 +97,7 @@ export function DocumentPicker(
 				channels.length === 0 ? 0 : (value - 1 + channels.length) % channels.length
 			);
 		} else if (event.key === "Enter" && activeChannel) {
-			select(activeChannel);
+			select(userId, activeChannel, repository);
 		} else return;
 		event.preventDefault();
 	}
@@ -125,6 +133,7 @@ export function DocumentPicker(
 		setCreateError(undefined);
 		try {
 			let created = await Api.createChannel(repository.owner, repository.name);
+			rememberChannel(userId, created.channel, created.repository);
 			location.assign(`/channels/${created.channel.id}`);
 		} catch (reason) {
 			setCreateError(reason);
@@ -207,7 +216,7 @@ export function DocumentPicker(
 								}`}
 								id={optionId(listId, channel)}
 								key={channel.id}
-								onClick={() => select(channel)}
+								onClick={() => select(userId, channel, repository)}
 								onMouseEnter={() => setActive(index)}
 								role="option"
 								tabIndex={-1}

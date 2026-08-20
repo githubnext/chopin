@@ -13,6 +13,31 @@ const score = {
 	permissions: { pull: true, push: true, admin: false },
 };
 
+const recoveryChannel = {
+	createdAt: "2026-08-14T12:00:00.000Z",
+	createdBy: "U_octocat",
+	id: "11111111-1111-4111-8111-111111111111",
+	repositoryId: score.id,
+	repositoryName: score.name,
+	repositoryOwner: score.owner,
+	revision: 1,
+	title: "Release readiness",
+	updatedAt: "2026-08-14T12:00:00.000Z",
+};
+
+async function showKnownChannel(page: Parameters<typeof authenticate>[0]) {
+	await page.route("**/api/repositories/octo-org/score/channels*", route =>
+		route.fulfill({
+			json: {
+				canEdit: true,
+				channels: [recoveryChannel],
+				repository: score,
+			},
+		}));
+	await page.goto("/repositories/octo-org/score");
+	await page.getByRole("link", { name: recoveryChannel.title }).click();
+}
+
 test("organization admission rejects outsiders and pending members", async ({ baseURL }) => {
 	for (let handle of ["outsider", "pending"]) {
 		let started = await fetch(`${baseURL}/auth/github`, { redirect: "manual" });
@@ -72,6 +97,71 @@ test("an authenticated repository creates a channel workspace", async ({ baseURL
 	await expect(page.getByRole("heading", { name: "Planning channels" })).toBeVisible();
 	await expect(page.getByRole("button", { name: /octocat\/notes/ })).toBeVisible();
 	await expect(page.getByRole("button", { name: "New channel" })).toHaveCount(0);
+});
+
+test("a known deleted channel keeps its context and routes back without retry", async ({ baseURL, page }) => {
+	await authenticate(page, "octocat", baseURL!);
+	await page.route(
+		new RegExp(`/api/channels/${recoveryChannel.id}$`),
+		route => route.fulfill({ status: 404, json: { error: "channel not found" } }),
+	);
+	await showKnownChannel(page);
+
+	await expect(page.getByRole("heading", { name: "Cannot open Chopin" })).toBeVisible();
+	await expect(page.getByText(recoveryChannel.title, { exact: true })).toBeVisible();
+	await expect(page.getByText(recoveryChannel.id, { exact: true })).toBeVisible();
+	await expect(page.getByText(score.fullName, { exact: true })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(0);
+	let channels = page.getByRole("link", { name: `View ${score.fullName} channels` });
+	await expect(channels).toHaveAttribute("href", "/repositories/octo-org/score");
+	await channels.click();
+	await expect(page).toHaveURL("/repositories/octo-org/score");
+	await expect(page.getByRole("heading", { name: "Planning channels" })).toBeVisible();
+});
+
+test("a transient channel failure retries the safe read", async ({ baseURL, page }) => {
+	await authenticate(page, "octocat", baseURL!);
+	let attempts = 0;
+	await page.route(new RegExp(`/api/channels/${recoveryChannel.id}$`), async route => {
+		attempts++;
+		if (attempts === 1) {
+			await route.fulfill({ status: 503, json: { error: "storage is unavailable" } });
+			return;
+		}
+		await route.fulfill({
+			json: { canEdit: true, channel: recoveryChannel, repository: score },
+		});
+	});
+	await showKnownChannel(page);
+
+	await expect(page.getByText(recoveryChannel.title, { exact: true })).toBeVisible();
+	await page.getByRole("button", { name: "Try again" }).click();
+	await expect(page.getByRole("button", { name: `Document: ${recoveryChannel.title}` }))
+		.toBeVisible();
+	expect(attempts).toBe(2);
+});
+
+test("an unknown direct channel link stays privacy-safe", async ({ baseURL, page }) => {
+	await authenticate(page, "octocat", baseURL!);
+	await page.route(
+		new RegExp(`/api/channels/${recoveryChannel.id}$`),
+		route => route.fulfill({ status: 404, json: { error: "channel not found" } }),
+	);
+	await showKnownChannel(page);
+	await expect(page.getByText(recoveryChannel.title, { exact: true })).toBeVisible();
+	let unknown = "22222222-2222-4222-8222-222222222222";
+	await page.route(
+		new RegExp(`/api/channels/${unknown}$`),
+		route => route.fulfill({ status: 404, json: { error: "channel not found" } }),
+	);
+	await page.goto(`/channels/${unknown}`);
+
+	await expect(page.getByText(unknown, { exact: true })).toBeVisible();
+	await expect(page.getByText(recoveryChannel.title, { exact: true })).toHaveCount(0);
+	await expect(page.getByText(score.fullName, { exact: true })).toHaveCount(0);
+	await expect(page.getByRole("link", { name: /channels$/ })).toHaveCount(0);
+	await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(0);
+	await expect(page.getByRole("link", { name: "Back to repositories" })).toBeVisible();
 });
 
 test("the repository picker supports dismissal and keyboard selection", async ({ baseURL, page }) => {
