@@ -54,6 +54,9 @@
 	--color-brand-active: oklch(0.37546 0.06382 210.435); /* #034a54 */
 	--color-brand-wash: oklch(0.95547 0.0277 207.843); /* #dcf6fa */
 	--color-brand-ink: oklch(0.43882 0.07476 210.193); /* #045d69 */
+	--focus-ring-color: var(--color-brand);
+	--focus-ring-width: 2px;
+	--focus-ring-offset: 2px;
 
 	--color-success: oklch(0.51958 0.10966 145.072); /* #3b793f */
 	--color-success-wash: oklch(0.95503 0.03552 145.29); /* #e2f7e2 */
@@ -479,9 +482,13 @@ body {
  * layout. `:where()` gives it zero specificity, so a component needing
  * something else overrides it with one class and no fight.
  */
+[data-focus-boundary] {
+	--focus-ring-offset: -2px;
+}
+
 :where(a, button, input, select, summary, textarea, [role="button"], [tabindex]):focus-visible {
-	outline: 2px solid var(--color-brand);
-	outline-offset: 2px;
+	outline: var(--focus-ring-width) solid var(--focus-ring-color);
+	outline-offset: var(--focus-ring-offset);
 }
 
 @keyframes item-enter {
