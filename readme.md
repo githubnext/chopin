@@ -125,16 +125,21 @@ is sufficient. Leaving both empty preserves unrestricted sign-in.
 
 The optional, provider-neutral
 [creating-chopin-plans skill](skills/creating-chopin-plans/SKILL.md) turns a
-settled coding-agent conversation into one initial Chopin document. Copy the
-whole directory into an Agent Skills location supported by the local runtime:
+settled coding-agent conversation into one initial Chopin document. Use
+[implementing-chopin-plans](skills/implementing-chopin-plans/SKILL.md) instead
+when an approved Chopin implementation graph is ready for local work.
+
+Agent harnesses that support the shared project location discover both skills
+through `.agents/skills` while working in this repository. To use them from
+another repository, copy the canonical directories into a shared Agent Skills
+location supported by the local runtime:
 
 ```bash
 mkdir -p ~/.agents/skills
 cp -R skills/creating-chopin-plans ~/.agents/skills/
+cp -R skills/implementing-chopin-plans ~/.agents/skills/
 ```
 
-Use [implementing-chopin-plans](skills/implementing-chopin-plans/SKILL.md)
-instead when an approved Chopin implementation graph is ready for local work.
 Neither skill is needed to call Chopin's MCP tools directly.
 
 ## Sharing
