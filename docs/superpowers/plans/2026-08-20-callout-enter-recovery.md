@@ -161,7 +161,7 @@ import { registerCalloutNormalization } from "./callout-shape";
 Add this effect immediately after the state declarations in `CalloutPlugin`:
 
 ```ts
-	useEffect(() => registerCalloutNormalization(editor), [editor]);
+useEffect(() => registerCalloutNormalization(editor), [editor]);
 ```
 
 Do not change `EnterPlugin`: keeping its command registration untouched also
@@ -195,12 +195,12 @@ git commit -m "Repair legacy callout children"
 In `enter twice leaves a callout at the end of the plan`, replace the two Enter presses after `Still in it.` with:
 
 ```ts
-	await page.keyboard.press("Enter");
-	await expect(body.locator(":scope > p")).toHaveCount(3);
-	await expect(body.locator(":scope > p").last()).toBeEmpty();
+await page.keyboard.press("Enter");
+await expect(body.locator(":scope > p")).toHaveCount(3);
+await expect(body.locator(":scope > p").last()).toBeEmpty();
 
-	await page.keyboard.press("Enter");
-	await expect(body.locator(":scope > p")).toHaveCount(2);
+await page.keyboard.press("Enter");
+await expect(body.locator(":scope > p")).toHaveCount(2);
 ```
 
 Keep the subsequent `Outside the callout.` typing and persistence assertions. The immediate count of two proves the empty paragraph was removed as part of exit, rather than merely hidden or left in the source.
