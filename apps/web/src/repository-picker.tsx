@@ -4,20 +4,22 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { useAnchoredPicker } from "./anchored-picker";
 import * as Api from "./api";
+import {
+	clearRepositoryCache,
+	installedRepositoryGroups,
+	loadRepositorySnapshot,
+	readRepositoryCache,
+	repositoryCacheIsStale,
+	writeRepositoryCache,
+} from "./repository-cache";
 
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import type { InstalledRepositoryGroup, RepositorySnapshot } from "./repository-cache";
 
 export type RepositoryIdentity = Pick<
 	Api.Repository,
 	"owner" | "ownerAvatarUrl" | "name" | "fullName"
 >;
-
-type InstalledRepositories = {
-	installation: Api.GitHubInstallation;
-	page: Api.RepositoryPage;
-	error?: boolean;
-	loadingMore?: boolean;
-};
 
 function repositoryHref(repository: RepositoryIdentity): string {
 	return `/repositories/${encodeURIComponent(repository.owner)}/${
@@ -34,48 +36,11 @@ function optionId(list: string, repository: Api.Repository): string {
 	return `${list}-option-${repository.id}`;
 }
 
-function reauthenticate(reason: unknown): boolean {
+function reauthenticate(reason: unknown, userId: string): boolean {
 	if (!(reason instanceof Api.ApiError) || reason.status !== 401) return false;
+	clearRepositoryCache(userId);
 	location.assign("/");
 	return true;
-}
-
-async function installedRepositories(
-	publish: (installed: InstalledRepositories[], replace: boolean) => void,
-): Promise<InstalledRepositories[]> {
-	let installations: Api.GitHubInstallation[] = [];
-	let page = 1;
-	let visited = new Set<number>();
-	while (!visited.has(page)) {
-		visited.add(page);
-		let result = await Api.installations(page);
-		installations.push(...result.installations);
-		if (!result.nextPage) break;
-		page = result.nextPage;
-	}
-	let installed: InstalledRepositories[] = installations.map(installation => ({
-		installation,
-		page: { repositories: [] },
-		loadingMore: !installation.suspended && installation.permissions.contents,
-	}));
-	publish(installed, true);
-	for (let index = 0; index < installed.length; index++) {
-		let group = installed[index]!;
-		if (!group.loadingMore) continue;
-		try {
-			let page = await Api.installationRepositories(group.installation.id);
-			installed = installed.map((value, position) =>
-				position === index ? { installation: group.installation, page, loadingMore: false } : value
-			);
-		} catch (reason) {
-			if (reauthenticate(reason)) throw reason;
-			installed = installed.map((value, position) =>
-				position === index ? { ...group, error: true, loadingMore: false } : value
-			);
-		}
-		publish([installed[index]!], false);
-	}
-	return installed;
 }
 
 export function RepositoryPicker(
@@ -83,35 +48,43 @@ export function RepositoryPicker(
 		compact = false,
 		current,
 		initialOpen = false,
-	}: { compact?: boolean; current?: RepositoryIdentity; initialOpen?: boolean },
+		userId,
+	}: { compact?: boolean; current?: RepositoryIdentity; initialOpen?: boolean; userId: string },
 ) {
-	let request = useRef<Promise<InstalledRepositories[]> | undefined>(undefined);
+	let [initial] = useState(() => readRepositoryCache(userId));
+	let request = useRef<Promise<void> | undefined>(undefined);
+	let snapshot = useRef<RepositorySnapshot | undefined>(initial);
 	let mounted = useRef(true);
+	let previousQuery = useRef("");
 	let panelId = useId();
 	let listId = useId();
 	let [open, setOpen] = useState(initialOpen);
-	let [installed, setInstalled] = useState<InstalledRepositories[]>();
+	let [installed, setInstalled] = useState<InstalledRepositoryGroup[] | undefined>(() =>
+		initial ? installedRepositoryGroups(initial) : undefined
+	);
 	let [error, setError] = useState<unknown>();
-	let [attempt, setAttempt] = useState(0);
+	let [loading, setLoading] = useState(!initial);
+	let [refreshing, setRefreshing] = useState(false);
 	let [query, setQuery] = useState("");
 	let [active, setActive] = useState(0);
 	let [avatarFailed, setAvatarFailed] = useState(false);
 
 	let normalized = query.trim().toLowerCase();
-	let repositories = installed?.flatMap(group => group.page.repositories) ?? [];
+	let repositories = installed?.flatMap(group => group.repositories) ?? [];
 	let matches = normalized
 		? repositories.filter(repository => repository.fullName.toLowerCase().includes(normalized))
 		: repositories;
 	let activeIndex = matches.length === 0 ? -1 : Math.min(active, matches.length - 1);
 	let activeRepository = matches[activeIndex];
 	let pickerContent = useMemo(
-		() => ({ error, installed, matches: matches.length, normalized }),
-		[error, installed, matches.length, normalized],
+		() => ({ error, installed, loading, matches: matches.length, normalized, refreshing }),
+		[error, installed, loading, matches.length, normalized, refreshing],
 	);
 	let { panel, position, search, trigger } = useAnchoredPicker(open, setOpen, pickerContent);
 
 	useEffect(() => {
 		mounted.current = true;
+		if (!snapshot.current) void refresh();
 		return () => {
 			mounted.current = false;
 		};
@@ -120,28 +93,14 @@ export function RepositoryPicker(
 	useEffect(() => setAvatarFailed(false), [current?.ownerAvatarUrl]);
 
 	useEffect(() => {
-		if (!open) return;
-		let active = true;
-		let pending = request.current;
-		if (!pending) {
-			let created = installedRepositories((value, replace) => {
-				if (!mounted.current) return;
-				if (replace) return setInstalled(value);
-				let replacements = new Map(value.map(group => [group.installation.id, group]));
-				setInstalled(current =>
-					current?.map(group => replacements.get(group.installation.id) ?? group) ?? value
-				);
-			});
-			request.current = created;
-			pending = created;
+		if (!open) {
+			previousQuery.current = "";
+			return;
 		}
-		pending.then(() => {}, reason => {
-			if (active && !reauthenticate(reason)) setError(reason);
-		});
-		return () => {
-			active = false;
-		};
-	}, [attempt, open]);
+		let started = !previousQuery.current && !!normalized;
+		previousQuery.current = normalized;
+		if (started && snapshot.current && repositoryCacheIsStale(snapshot.current)) void refresh();
+	}, [normalized, open]);
 
 	useEffect(() => {
 		if (!open || !activeRepository) return;
@@ -160,86 +119,40 @@ export function RepositoryPicker(
 		return () => cancelAnimationFrame(frame);
 	}, [activeRepository, listId, open, position.height, position.top]);
 
-	function retry() {
-		request.current = undefined;
+	function refresh(): Promise<void> {
+		if (request.current) return request.current;
+		let previous = snapshot.current;
 		setError(undefined);
-		setInstalled(undefined);
-		setAttempt(value => value + 1);
-	}
-
-	async function more(installationId: string) {
-		let group = installed?.find(value => value.installation.id === installationId);
-		if (!group?.page.nextPage || group.loadingMore) return;
-		setInstalled(current =>
-			current?.map(value =>
-				value.installation.id === installationId ? { ...value, loadingMore: true } : value
-			)
-		);
-		setError(undefined);
-		try {
-			let next = await Api.installationRepositories(installationId, group.page.nextPage);
+		if (previous) setRefreshing(true);
+		else setLoading(true);
+		let pending = loadRepositorySnapshot(
+			userId,
+			previous,
+			previous
+				? undefined
+				: value => {
+					if (mounted.current) setInstalled(installedRepositoryGroups(value));
+				},
+		).then(value => {
 			if (!mounted.current) return;
-			setInstalled(current =>
-				current?.map(value => {
-					if (value.installation.id !== installationId) return value;
-					let known = new Set(value.page.repositories.map(repository => repository.id));
-					return {
-						...value,
-						loadingMore: false,
-						page: {
-							repositories: [
-								...value.page.repositories,
-								...next.repositories.filter(repository => !known.has(repository.id)),
-							],
-							nextPage: next.nextPage,
-						},
-					};
-				})
-			);
-		} catch (reason) {
-			if (mounted.current && !reauthenticate(reason)) setError(reason);
-		} finally {
+			snapshot.current = value;
+			writeRepositoryCache(value);
+			setInstalled(installedRepositoryGroups(value));
+		}, reason => {
+			if (mounted.current && !reauthenticate(reason, userId)) setError(reason);
+		}).finally(() => {
+			if (request.current === pending) request.current = undefined;
 			if (mounted.current) {
-				setInstalled(current =>
-					current?.map(value =>
-						value.installation.id === installationId
-							? { ...value, loadingMore: false }
-							: value
-					)
-				);
+				setLoading(false);
+				setRefreshing(false);
 			}
-		}
+		});
+		request.current = pending;
+		return pending;
 	}
 
-	async function retryInstallation(installationId: string) {
-		setInstalled(current =>
-			current?.map(value =>
-				value.installation.id === installationId
-					? { ...value, error: false, loadingMore: true }
-					: value
-			)
-		);
-		try {
-			let page = await Api.installationRepositories(installationId);
-			if (!mounted.current) return;
-			setInstalled(current =>
-				current?.map(value =>
-					value.installation.id === installationId
-						? { ...value, error: false, loadingMore: false, page }
-						: value
-				)
-			);
-		} catch (reason) {
-			if (mounted.current && !reauthenticate(reason)) {
-				setInstalled(current =>
-					current?.map(value =>
-						value.installation.id === installationId
-							? { ...value, error: true, loadingMore: false }
-							: value
-					)
-				);
-			}
-		}
+	function retry() {
+		void refresh();
 	}
 
 	function select(repository: Api.Repository) {
@@ -287,12 +200,12 @@ export function RepositoryPicker(
 				/>
 			</div>
 			<div className="min-h-0 flex-1 overflow-y-auto p-1" data-repository-scroll="">
-				{!installed && !error && (
+				{!installed && loading && (
 					<p className="px-2 py-3 text-sm text-text-tertiary" role="status">
 						Loading repositories...
 					</p>
 				)}
-				{!installed && error !== undefined && (
+				{!installed && !loading && error !== undefined && (
 					<div className="px-2 py-3">
 						<p className="text-sm text-destructive-ink" role="alert">
 							Could not load repositories.
@@ -302,7 +215,7 @@ export function RepositoryPicker(
 						</button>
 					</div>
 				)}
-				{installed?.length === 0 && (
+				{installed?.length === 0 && !loading && (
 					<div className="px-2 py-3">
 						<p className="text-sm font-medium">Install the GitHub App</p>
 						<p className="mt-1 text-sm text-text-tertiary">
@@ -313,15 +226,25 @@ export function RepositoryPicker(
 						</a>
 					</div>
 				)}
-				{installed?.some(group => group.loadingMore) && repositories.length === 0 && (
+				{installed && loading && repositories.length === 0 && installed.length > 0 && (
 					<p className="px-2 py-3 text-sm text-text-tertiary" role="status">
 						Loading installed repositories...
+					</p>
+				)}
+				{installed && loading && repositories.length > 0 && (
+					<p className="px-2 py-2 text-sm text-text-tertiary" role="status">
+						Loading remaining repositories...
+					</p>
+				)}
+				{installed && refreshing && (
+					<p className="px-2 py-2 text-sm text-text-tertiary" role="status">
+						Refreshing repositories...
 					</p>
 				)}
 				{installed
 					&& repositories.length === 0
 					&& installed.length > 0
-					&& !installed.some(group => group.loadingMore)
+					&& !loading
 					&& (
 						<p className="px-2 py-3 text-sm text-text-tertiary" role="status">
 							No installed repositories are available.
@@ -329,52 +252,35 @@ export function RepositoryPicker(
 					)}
 				{installed && repositories.length > 0 && matches.length === 0 && (
 					<p className="px-2 py-3 text-sm text-text-tertiary" role="status">
-						{installed.some(group =>
-								group.page.nextPage
-							)
-							? "No matches in loaded repositories."
+						{loading || refreshing
+							? "Checking for matching repositories..."
 							: "No matching repositories."}
 					</p>
 				)}
 				{installed?.filter(group =>
-					group.error || group.installation.suspended || !group.installation.permissions.contents
+					group.installation.suspended || !group.installation.permissions.contents
 				).map(group => (
 					<div className="flex items-center gap-2 px-2 py-2 text-sm" key={group.installation.id}>
 						<span className="min-w-0 flex-1 truncate text-text-tertiary">
 							{group.installation.account.login}
 						</span>
-						{group.error
-							? (
-								<button
-									className="text-brand-ink hover:underline"
-									disabled={group.loadingMore}
-									onClick={() => void retryInstallation(group.installation.id)}
-									type="button"
-								>
-									{group.loadingMore ? "Retrying..." : "Try again"}
-								</button>
-							)
-							: (
-								<a
-									className="text-brand-ink hover:underline"
-									href={group.installation.configureUrl}
-								>
-									Configure
-								</a>
-							)}
+						<a
+							className="text-brand-ink hover:underline"
+							href={group.installation.configureUrl}
+						>
+							Configure
+						</a>
 					</div>
 				))}
 				<div
-					aria-busy={(!installed && error === undefined)
-						|| installed?.some(group => group.loadingMore)}
+					aria-busy={loading || refreshing}
 					aria-label="Repositories"
 					id={listId}
 					role="listbox"
 				>
 					{installed?.map(group => {
-						let groupRepositories = matches.filter(repository =>
-							repository.owner.toLowerCase() === group.installation.account.login.toLowerCase()
-						);
+						let known = new Set(group.repositories.map(repository => repository.id));
+						let groupRepositories = matches.filter(repository => known.has(repository.id));
 						if (groupRepositories.length === 0) return null;
 						return (
 							<div
@@ -443,23 +349,17 @@ export function RepositoryPicker(
 			{installed && (
 				<div className="p-1 hairline-t">
 					{error !== undefined && (
-						<p className="px-2 py-1 text-sm text-destructive-ink" role="alert">
-							Could not load more repositories.
-						</p>
+						<div className="flex items-center gap-2 px-2 py-1 text-sm" role="alert">
+							<span className="min-w-0 flex-1 text-destructive-ink">
+								{snapshot.current
+									? "Could not refresh repositories."
+									: "Could not load all repositories."}
+							</span>
+							<button className="text-brand-ink hover:underline" onClick={retry} type="button">
+								Try again
+							</button>
+						</div>
 					)}
-					{installed.filter(group => group.page.nextPage).map(group => (
-						<button
-							className="btn btn-md btn-ghost w-full"
-							disabled={group.loadingMore}
-							key={group.installation.id}
-							onClick={() => void more(group.installation.id)}
-							type="button"
-						>
-							{group.loadingMore
-								? "Loading..."
-								: `More from ${group.installation.account.login}`}
-						</button>
-					))}
 					<a className="btn btn-md btn-ghost w-full" href="/auth/github/install">
 						Manage repository access
 					</a>

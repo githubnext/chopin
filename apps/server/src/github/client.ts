@@ -53,6 +53,14 @@ export type InstallationPage = {
 	nextPage: number | undefined;
 };
 
+export type GitHubCondition = {
+	ifNoneMatch?: string;
+};
+
+export type GitHubConditional<T extends object> =
+	| (T & { etag?: string })
+	| { notModified: true; etag?: string };
+
 export type GitHubTokenGrant = {
 	accessToken: string;
 	accessExpiresIn: number;
@@ -85,11 +93,22 @@ export interface GitHub {
 		organization: string,
 	): Promise<GitHubOrganizationMembership | undefined>;
 	installations(token: string, page: number): Promise<InstallationPage>;
+	installations(
+		token: string,
+		page: number,
+		condition: GitHubCondition,
+	): Promise<GitHubConditional<InstallationPage>>;
 	installationRepositories(
 		token: string,
 		installationId: string,
 		page: number,
 	): Promise<RepositoryPage>;
+	installationRepositories(
+		token: string,
+		installationId: string,
+		page: number,
+		condition: GitHubCondition,
+	): Promise<GitHubConditional<RepositoryPage>>;
 	/** Resolve the repository role granted directly to a bearer token. */
 	repository(token: string, owner: string, name: string): Promise<Repository>;
 	/** Resolve the repository role within this GitHub App's active installations. */
@@ -421,41 +440,75 @@ export class GitHubClient implements GitHub {
 		}
 	}
 
-	async installations(token: string, page: number): Promise<InstallationPage> {
+	installations(token: string, page: number): Promise<InstallationPage>;
+	installations(
+		token: string,
+		page: number,
+		condition: GitHubCondition,
+	): Promise<GitHubConditional<InstallationPage>>;
+	async installations(
+		token: string,
+		page: number,
+		condition?: GitHubCondition,
+	): Promise<GitHubConditional<InstallationPage>> {
 		let path = "/user/installations";
 		let url = new URL(path, this.#endpoints.api);
 		url.searchParams.set("per_page", "100");
 		url.searchParams.set("page", String(page));
-		let response = await this.#request(url, token);
+		let response = await this.#request(url, token, condition?.ifNoneMatch);
+		if (response.status === 304) {
+			let etag = response.headers.get("etag") ?? condition?.ifNoneMatch;
+			return { notModified: true, ...(etag ? { etag } : {}) };
+		}
 		let value = record(await body(response));
 		if (!Array.isArray(value?.installations)) {
 			throw new GitHubError("GitHub returned an invalid installation list");
 		}
-		return {
+		let result: InstallationPage = {
 			installations: value.installations.map(installation),
 			nextPage: nextPage(response.headers.get("link"), this.#endpoints.api, path),
 		};
+		let etag = condition && response.headers.get("etag");
+		return etag ? { ...result, etag } : result;
 	}
 
+	installationRepositories(
+		token: string,
+		installationId: string,
+		page: number,
+	): Promise<RepositoryPage>;
+	installationRepositories(
+		token: string,
+		installationId: string,
+		page: number,
+		condition: GitHubCondition,
+	): Promise<GitHubConditional<RepositoryPage>>;
 	async installationRepositories(
 		token: string,
 		installationId: string,
 		page: number,
-	): Promise<RepositoryPage> {
+		condition?: GitHubCondition,
+	): Promise<GitHubConditional<RepositoryPage>> {
 		if (!/^\d+$/.test(installationId)) throw new GitHubError("installation not found", 404);
 		let path = `/user/installations/${installationId}/repositories`;
 		let url = new URL(path, this.#endpoints.api);
 		url.searchParams.set("per_page", "100");
 		url.searchParams.set("page", String(page));
-		let response = await this.#request(url, token);
+		let response = await this.#request(url, token, condition?.ifNoneMatch);
+		if (response.status === 304) {
+			let etag = response.headers.get("etag") ?? condition?.ifNoneMatch;
+			return { notModified: true, ...(etag ? { etag } : {}) };
+		}
 		let value = record(await body(response));
 		if (!Array.isArray(value?.repositories)) {
 			throw new GitHubError("GitHub returned an invalid repository list");
 		}
-		return {
+		let result: RepositoryPage = {
 			repositories: value.repositories.map(repository),
 			nextPage: nextPage(response.headers.get("link"), this.#endpoints.api, path),
 		};
+		let etag = condition && response.headers.get("etag");
+		return etag ? { ...result, etag } : result;
 	}
 
 	async repository(token: string, owner: string, name: string): Promise<Repository> {
@@ -570,22 +623,25 @@ export class GitHubClient implements GitHub {
 		return body(await this.#request(new URL(path, this.#endpoints.api), token));
 	}
 
-	async #request(url: URL, token: string): Promise<Response> {
+	async #request(url: URL, token: string, ifNoneMatch?: string): Promise<Response> {
 		let response: Response;
 		try {
+			let headers = new Headers({
+				accept: "application/vnd.github+json",
+				authorization: `Bearer ${token}`,
+				"user-agent": "chopin",
+				"x-github-api-version": "2022-11-28",
+			});
+			if (ifNoneMatch) headers.set("if-none-match", ifNoneMatch);
 			response = await this.#fetch(url, {
-				headers: {
-					accept: "application/vnd.github+json",
-					authorization: `Bearer ${token}`,
-					"user-agent": "chopin",
-					"x-github-api-version": "2022-11-28",
-				},
+				headers,
 				redirect: "error",
 				signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
 			});
 		} catch {
 			throw new GitHubError("GitHub API is unavailable");
 		}
+		if (response.status === 304 && ifNoneMatch) return response;
 		if (!response.ok) {
 			let rateLimited = await isRateLimited(response);
 			let status = rateLimited

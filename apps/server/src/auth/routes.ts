@@ -4,7 +4,7 @@ import { Admission, AdmissionDenied } from "./admission";
 import { OAuthAttempts, Sessions } from "./session";
 
 import type { AuthConfig } from "./config";
-import type { GitHub } from "../github/client";
+import type { GitHub, GitHubConditional } from "../github/client";
 import type { Router } from "../http/router";
 import type { StorageAdapter } from "../storage/port";
 
@@ -49,6 +49,17 @@ function empty(status: number, cookie?: string): Response {
 	responseHeaders.delete("content-type");
 	if (cookie) responseHeaders.append("set-cookie", cookie);
 	return new Response(null, { status, headers: responseHeaders });
+}
+
+function conditional<T extends object>(value: GitHubConditional<T>): Response {
+	let responseHeaders = headers();
+	if (value.etag) responseHeaders.set("etag", value.etag);
+	if ("notModified" in value) {
+		responseHeaders.delete("content-type");
+		return new Response(null, { status: 304, headers: responseHeaders });
+	}
+	let { etag: _etag, ...body } = value;
+	return Response.json(body, { headers: responseHeaders });
 }
 
 function redirected(location: string, status: 302 | 303, cookies: string[]): Response {
@@ -144,7 +155,7 @@ export function registerAuthRoutes(
 	router.on("GET", "/auth/github/setup", async request => {
 		let authenticated = await sessions.authenticate(request).catch(() => undefined);
 		if (authenticated) admission.invalidate(authenticated.access.token);
-		return redirected("/", 303, []);
+		return redirected("/?repository_access=changed", 303, []);
 	});
 
 	router.on("GET", "/auth/github/callback", async (request, url) => {
@@ -210,9 +221,12 @@ export function registerAuthRoutes(
 			try {
 				let result = await sessions.use(
 					authenticated,
-					token => github.installations(token, requestedPage),
+					token =>
+						github.installations(token, requestedPage, {
+							ifNoneMatch: request.headers.get("if-none-match") ?? undefined,
+						}),
 				);
-				return json(result.value);
+				return conditional(result.value);
 			} catch (err) {
 				if (err instanceof GitHubError && err.status === 401) {
 					return json({ error: "GitHub authorization expired" }, 401, sessions.clearCookie());
@@ -242,9 +256,12 @@ export function registerAuthRoutes(
 				try {
 					let result = await sessions.use(
 						authenticated,
-						token => github.installationRepositories(token, installationId, requestedPage),
+						token =>
+							github.installationRepositories(token, installationId, requestedPage, {
+								ifNoneMatch: request.headers.get("if-none-match") ?? undefined,
+							}),
 					);
-					return json(result.value);
+					return conditional(result.value);
 				} catch (err) {
 					if (err instanceof GitHubError && err.status === 401) {
 						return json(

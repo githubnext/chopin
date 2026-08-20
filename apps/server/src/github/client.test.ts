@@ -208,6 +208,54 @@ describe("the GitHub client", () => {
 		expect(requests.every(request => request.authorization === "Bearer ghu_user")).toBe(true);
 	});
 
+	it("passes conditional list validators through without caching response bodies", async () => {
+		let validators: Array<string | null> = [];
+		let client = new GitHubClient({
+			fetch: async (input, init) => {
+				let validator = new Headers(init?.headers).get("if-none-match");
+				validators.push(validator);
+				let url = new URL(String(input));
+				let etag = url.pathname === "/user/installations" ? 'W/"installations"' : '"repositories"';
+				if (validator === etag) return new Response(null, { status: 304, headers: { etag } });
+				return Response.json(
+					url.pathname === "/user/installations"
+						? { installations: [installation()] }
+						: { repositories: [repository("R_score")] },
+					{ headers: { etag } },
+				);
+			},
+			endpoints: { api: "https://api.test" },
+		});
+
+		let installations = await client.installations("ghu_user", 1, {});
+		expect("notModified" in installations).toBe(false);
+		expect(installations.etag).toBe('W/"installations"');
+		let unchangedInstallations = await client.installations("ghu_user", 1, {
+			ifNoneMatch: installations.etag,
+		});
+		expect(unchangedInstallations).toEqual({
+			notModified: true,
+			etag: 'W/"installations"',
+		});
+
+		let repositories = await client.installationRepositories("ghu_user", "123", 1, {});
+		expect("notModified" in repositories).toBe(false);
+		expect(repositories.etag).toBe('"repositories"');
+		let unchangedRepositories = await client.installationRepositories("ghu_user", "123", 1, {
+			ifNoneMatch: repositories.etag,
+		});
+		expect(unchangedRepositories).toEqual({
+			notModified: true,
+			etag: '"repositories"',
+		});
+		expect(validators).toEqual([
+			null,
+			'W/"installations"',
+			null,
+			'"repositories"',
+		]);
+	});
+
 	it("resolves active, pending, and absent organization membership", async () => {
 		let requested: string[] = [];
 		let client = new GitHubClient({

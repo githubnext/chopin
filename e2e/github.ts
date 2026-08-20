@@ -89,10 +89,19 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 		});
 	}
 	if (url.origin === "https://api.github.com") {
-		let authorization = new Headers(init?.headers).get("authorization") ?? "";
+		let requestHeaders = new Headers(init?.headers);
+		let authorization = requestHeaders.get("authorization") ?? "";
 		let authorized = /^Bearer ghu_e2e_(.+)_\d+$/.exec(authorization);
 		if (!authorized) return json({ message: "Bad credentials" }, { status: 401 });
 		let handle = authorized[1]!;
+		let tagged = (value: unknown, etag: string, responseInit: ResponseInit = {}) => {
+			let headers = new Headers(responseInit.headers);
+			headers.set("etag", etag);
+			if (requestHeaders.get("if-none-match") === etag) {
+				return new Response(null, { status: 304, headers });
+			}
+			return json(value, { ...responseInit, headers });
+		};
 		if (url.pathname === "/user") {
 			return json({
 				node_id: `U_${handle}`,
@@ -109,7 +118,7 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 		}
 		if (handle === "expired") return json({ message: "Bad credentials" }, { status: 401 });
 		if (url.pathname === "/user/installations") {
-			return json({ installations });
+			return tagged({ installations }, `"installations-${handle}"`);
 		}
 		if (url.pathname === "/user/installations/101/repositories") {
 			let available = repositories.filter(value => value.owner.login === "octo-org");
@@ -120,17 +129,27 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 				}));
 			}
 			if (handle === "paged" && url.searchParams.get("page") !== "2") {
-				return json({ repositories: available.slice(0, 1) }, {
-					headers: {
-						link:
-							'<https://api.github.com/user/installations/101/repositories?per_page=100&page=2>; rel="next"',
+				return tagged(
+					{ repositories: available.slice(0, 1) },
+					`"repositories-${handle}-101-1"`,
+					{
+						headers: {
+							link:
+								'<https://api.github.com/user/installations/101/repositories?per_page=100&page=2>; rel="next"',
+						},
 					},
-				});
+				);
 			}
-			return json({ repositories: handle === "paged" ? available.slice(1) : available });
+			return tagged(
+				{ repositories: handle === "paged" ? available.slice(1) : available },
+				`"repositories-${handle}-101-${url.searchParams.get("page") ?? "1"}"`,
+			);
 		}
 		if (url.pathname === "/user/installations/102/repositories") {
-			return json({ repositories: repositories.filter(value => value.owner.login === "octocat") });
+			return tagged(
+				{ repositories: repositories.filter(value => value.owner.login === "octocat") },
+				`"repositories-${handle}-102-${url.searchParams.get("page") ?? "1"}"`,
+			);
 		}
 		let repository = repositories.find(value => url.pathname === `/repos/${value.full_name}`);
 		if (repository) return json(repository);

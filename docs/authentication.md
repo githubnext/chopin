@@ -123,6 +123,13 @@ personal and organization installations that user can access and only the
 repositories selected for each installation. The repository picker links to
 the App installation page when access has not been installed or needs updating.
 
+The picker loads every repository page in the background and keeps a validated
+snapshot for the lifetime of the browser tab. Stale snapshots are revalidated
+page by page with GitHub ETags when search begins. The snapshot is scoped to the
+GitHub user and cleared on logout, account changes, and the installation setup
+callback. Listing responses remain `no-store`; the server forwards conditional
+requests but does not retain picker repository data.
+
 Local MCP is an intentional exception to this installation boundary. Its bearer
 token is authenticated independently and authorized with a direct repository
 lookup. An MCP-created channel for a repository outside the App installation is
