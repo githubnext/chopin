@@ -12,8 +12,7 @@
 
 import { useEffect, useRef, useSyncExternalStore } from "react";
 
-import { incomplete } from "../answer";
-import { crdt } from "../draft";
+import { answered, crdt } from "../draft";
 
 import type { Definition, Drafts } from "../index";
 import type { Collaborator } from "./question-view";
@@ -168,12 +167,19 @@ export class QuestionnaireController {
 			|| this.#snapshot.submitting
 		) return;
 
-		let drafts = doc.view() as Drafts;
-		let missing = incomplete(definition, drafts);
-		if (missing) {
+		// The server gives each durable decision its own controller and record.
+		// Validate that card only: unanswered sibling cards have independent
+		// controllers and must not block this save.
+		let question = definition.questions[0];
+		let draft = question ? (doc.view() as Drafts)[question.id] : undefined;
+		if (!question || !answered(question, draft)) {
 			this.#set({
-				focus: missing,
-				error: "Every question needs an answer before submitting.",
+				focus: question?.id,
+				error: question
+					? (draft?.mode === "custom"
+						? `${question.header} requires a custom answer`
+						: `${question.header} requires an answer`)
+					: "This decision requires an answer",
 			});
 			return;
 		}

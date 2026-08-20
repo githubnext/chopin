@@ -87,6 +87,7 @@ for (let viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }])
 			await page.goto(`/channels/${room}`);
 			let card = questionnaire(page).filter({ hasText: LONG_QUESTIONS[0]!.header });
 			await expect(card).toBeVisible();
+			await expect(card.getByRole("textbox", { name: /Custom answer for/ })).toHaveCount(0);
 			await expectNoHorizontalOverflow(page);
 
 			let firstChoice = card.getByRole("radio", { name: "Use the compact layout" });
@@ -175,8 +176,11 @@ for (let viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }])
 			).toBeVisible();
 
 			await tabTargets.first().click();
+			let customChoice = card.getByRole("radio", { name: "Write a custom answer" });
+			await customChoice.focus();
+			await page.keyboard.press("Space");
 			let custom = card.getByRole("textbox", { name: /Custom answer for/ });
-			await custom.focus();
+			await expect(custom).toBeFocused();
 			await setVisualViewport(page, { event: "resize", height: 360 });
 			await expect.poll(() =>
 				custom.evaluate(node => {

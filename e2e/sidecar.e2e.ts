@@ -415,38 +415,62 @@ test("an unanswered inline decision is also shown in Decisions and can be focuse
 	).toBeFocused();
 });
 
-test("saving one decision leaves another unanswered", async ({ join, seed }) => {
+test("decision cards save independently with progressive custom answers", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
 	await page.getByRole("button", { name: /^Decisions/ }).click();
 	let storage = questionnaire(page).filter({ has: page.getByRole("heading", { name: "Storage" }) });
 	let scope = questionnaire(page).filter({ has: page.getByRole("heading", { name: "Scope" }) });
+	let saveStorage = storage.getByRole("button", { name: "Save answer" });
+
+	await expect(storage.getByRole("textbox", { name: /Custom answer for/ })).toHaveCount(0);
+	await expect(scope.getByRole("textbox", { name: /Custom answer for/ })).toHaveCount(0);
+	await expect(saveStorage.locator("svg")).toHaveAttribute("aria-hidden", "true");
+	await expect(saveStorage.locator('svg path[d^="M232.49,80.49"]'))
+		.toHaveCount(1);
 
 	await storage.getByRole("radio", { name: /On disk as MDX/ }).check();
-	await storage.getByRole("button", { name: "Save" }).click();
+	await saveStorage.click();
 	await expect(scope).toBeVisible();
 	await expect(scope).toBeFocused();
-	await expect(scope.getByRole("button", { name: "Save" })).toBeVisible();
+	await expect(scope.getByRole("button", { name: "Save answer" })).toBeVisible();
 	await expect(scope).not.toContainText("Answered by");
+	await expect(scope.getByRole("checkbox", { name: "Anchors" })).not.toBeChecked();
 
 	await page.getByRole("button", { name: "1 resolved" }).click();
 	let resolved = questionnaire(page).filter({ hasText: "Where should room state live?" });
 	await expect(resolved).toContainText("On disk as MDX");
 	await expect(resolved).toContainText("Answered by @ana");
-	await expect(resolved.getByRole("button", { name: "Save" })).toHaveCount(0);
+	await expect(resolved.getByRole("button", { name: "Save answer" })).toHaveCount(0);
+
+	let customChoice = scope.getByRole("checkbox", { name: "Write a custom answer" });
+	await customChoice.focus();
+	await page.keyboard.press("Space");
+	let custom = scope.getByRole("textbox", { name: "Custom answer for Scope" });
+	await expect(custom).toBeFocused();
+	await scope.getByRole("button", { name: "Save answer" }).click();
+	await expect(scope.getByRole("alert")).toHaveText("Scope requires a custom answer");
+	await custom.fill("Only collaborative anchors");
+	await scope.getByRole("checkbox", { name: "Anchors" }).check();
+	await expect(custom).toHaveCount(0);
+	await customChoice.check();
+	custom = scope.getByRole("textbox", { name: "Custom answer for Scope" });
+	await expect(custom).toHaveValue("Only collaborative anchors");
+	await expect(custom).toBeFocused();
+	await scope.getByRole("button", { name: "Save answer" }).click();
+	await expect(questionnaire(page).filter({ hasText: "Which of these belong in the first cut?" }))
+		.toContainText("Only collaborative anchors");
 });
 
-test("an unanswered question refuses to submit and says which", async ({ join, seed }) => {
+test("an unanswered decision reports its own validation error", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
 	await page.getByRole("button", { name: /^Decisions/ }).click();
 	let card = questionnaire(page).filter({ has: page.getByRole("heading", { name: "Scope" }) });
 
-	await card.getByRole("button", { name: "Save" }).click();
+	await card.getByRole("button", { name: "Save answer" }).click();
 
-	await expect(card.getByRole("alert")).toHaveText(
-		"Every question needs an answer before submitting.",
-	);
+	await expect(card.getByRole("alert")).toHaveText("Scope requires an answer");
 	await expect(card).not.toContainText("Answered by");
 });
 
@@ -460,7 +484,7 @@ test("cancelling asks first", async ({ join, seed }) => {
 
 	await expect(card).toContainText("Cancel without answering?");
 	await card.getByRole("button", { name: "Keep it" }).click();
-	await expect(card.getByRole("button", { name: "Save" })).toBeVisible();
+	await expect(card.getByRole("button", { name: "Save answer" })).toBeVisible();
 });
 
 test("a marked passage has document chrome with a hover preview", async ({ join, seed }) => {

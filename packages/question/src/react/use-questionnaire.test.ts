@@ -21,6 +21,7 @@ function transport() {
 	let opens = 0;
 	let edits = 0;
 	let submits = 0;
+	let submitIds: string[] = [];
 	let submitRevisions: number[] = [];
 	let presence = 0;
 	let handlers = new Map<string, Set<(event: never) => void>>();
@@ -44,6 +45,7 @@ function transport() {
 			}
 			if (kind === "question:submit") {
 				submits++;
+				submitIds.push(payload.id as string);
 				submitRevisions.push(payload.revision as number);
 				return { ok: true };
 			}
@@ -65,6 +67,7 @@ function transport() {
 		opens: () => opens,
 		edits: () => edits,
 		submits: () => submits,
+		submitIds: () => submitIds,
 		submitRevisions: () => submitRevisions,
 		presence: () => presence,
 	};
@@ -125,6 +128,40 @@ describe("QuestionnaireController", () => {
 		expect(bridge.edits()).toBe(2);
 		expect(bridge.submitRevisions()).toEqual([2]);
 		off();
+	});
+
+	it("keeps validation inside the card being saved", async () => {
+		let bridge = transport();
+		let controller = new QuestionnaireController(bridge.value, "question-1", DEFINITION, true);
+		let off = controller.subscribe(() => {});
+		await new Promise(resolve => setTimeout(resolve, 0));
+
+		controller.submit();
+
+		expect(bridge.submits()).toBe(0);
+		expect(controller.getSnapshot().focus).toBe("q0");
+		expect(controller.getSnapshot().error).toBe("Rollout requires an answer");
+		off();
+	});
+
+	it("persists one card without changing its unanswered sibling", async () => {
+		let bridge = transport();
+		let first = new QuestionnaireController(bridge.value, "first", DEFINITION, true);
+		let sibling = new QuestionnaireController(bridge.value, "sibling", DEFINITION, true);
+		let offFirst = first.subscribe(() => {});
+		let offSibling = sibling.subscribe(() => {});
+		await new Promise(resolve => setTimeout(resolve, 0));
+
+		first.change("q0", { choice: "o0" });
+		first.submit();
+		await new Promise(resolve => setTimeout(resolve, 10));
+
+		expect(bridge.submitIds()).toEqual(["first"]);
+		expect(sibling.getSnapshot().drafts.q0?.choice).toBeNull();
+		expect(sibling.getSnapshot().error).toBeUndefined();
+		expect(sibling.getSnapshot().submitting).toBe(false);
+		offFirst();
+		offSibling();
 	});
 
 	it("does not restart transport during a Strict Mode subscribe cycle", async () => {
