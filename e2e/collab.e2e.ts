@@ -11,7 +11,7 @@
  * login session cookie. They still meet in one repository-authorized channel.
  */
 
-import { content, expect, test } from "./room";
+import { content, expect, ready, test } from "./room";
 
 test("an edit by one appears for the other", async ({ join }) => {
 	let ana = await join("ana");
@@ -47,6 +47,27 @@ test("the header represents everyone here as faces", async ({ join }) => {
 	// A roster that keeps naming somebody who closed the tab is worse than no
 	// roster, because it is what you check before assuming you are alone.
 	await expect(ana.getByRole("img", { name: "bo" })).toHaveCount(0);
+});
+
+test("the header represents one account once across its open tabs", async ({ join }) => {
+	let first = await join("e2e");
+	let second = await first.context().newPage();
+	let third = await first.context().newPage();
+	await Promise.all([second.goto(first.url()), third.goto(first.url())]);
+	await Promise.all([ready(second), ready(third)]);
+
+	let people = first.getByRole("banner").getByRole("group", {
+		exact: true,
+		name: "People here: e2e",
+	});
+	await expect(people.getByRole("img", { name: "e2e" })).toHaveCount(1);
+
+	await first.close();
+	let remaining = third.getByRole("banner").getByRole("group", {
+		exact: true,
+		name: "People here: e2e",
+	});
+	await expect(remaining.getByRole("img", { name: "e2e" })).toHaveCount(1);
 });
 
 test("a peer's caret is drawn, and named", async ({ join }) => {

@@ -18,6 +18,7 @@ import { decisionAttention, DecisionViewControl } from "./decision-view-control"
 import { DocumentPicker } from "./document-picker";
 import * as Api from "./api";
 import { HostedApp, HostedFailure, HostedLoading, HostedLogin } from "./hosted";
+import { peopleHere } from "./presence";
 import { RepositoryPicker } from "./repository-picker";
 import { clearRepositoryCache } from "./repository-cache";
 import { Wire } from "./wire";
@@ -45,6 +46,7 @@ function Header(
 		userId: string;
 	},
 ) {
+	let people = peopleHere(members);
 	return (
 		<header className="room-header hairline-b relative flex min-h-12 shrink-0 flex-nowrap items-center gap-2 px-2 py-2 sm:h-12 sm:gap-3 sm:px-4 sm:py-0">
 			<a className="hidden text-sm font-semibold sm:inline" href="/">chopin</a>
@@ -59,21 +61,21 @@ function Header(
 				/>
 			</div>
 			<div
-				aria-label={`People here: ${members.map(member => member.handle).join(", ")}`}
+				aria-label={`People here: ${people.map(member => member.handle).join(", ")}`}
 				className="room-members ml-auto flex shrink-0 items-center"
 				role="group"
 			>
-				{members.map(member => (
-					<span className="room-member-face -ml-1.5 first:ml-0" key={member.client}>
+				{people.map(member => (
+					<span className="room-member-face -ml-1.5 first:ml-0" key={member.handle.toLowerCase()}>
 						<Face handle={member.handle} ring size={24} />
 					</span>
 				))}
-				{members.length > 3 && (
+				{people.length > 3 && (
 					<span
 						aria-hidden="true"
 						className="room-member-overflow ml-1 hidden text-sm text-text-tertiary"
 					>
-						+{members.length - 3}
+						+{people.length - 3}
 					</span>
 				)}
 			</div>
