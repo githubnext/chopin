@@ -17,7 +17,7 @@ import {
 	useState,
 } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { $setBlocksType } from "@lexical/selection";
+import { $copyBlockFormatIndent, $setBlocksType } from "@lexical/selection";
 import {
 	$getSelection,
 	$isRangeSelection,
@@ -71,6 +71,32 @@ function replace(editor: LexicalEditor, build: () => ElementNode) {
 		let selection = $getSelection();
 		if (!$isRangeSelection(selection)) return;
 		$setBlocksType(selection, build);
+	});
+}
+
+/** Keep the replaced block as a block inside the new container. */
+function insertCallout(editor: LexicalEditor) {
+	editor.update(() => {
+		let selection = $getSelection();
+		if (!$isRangeSelection(selection)) return;
+		let body: ElementNode | undefined;
+
+		$setBlocksType(
+			selection,
+			() => $createCalloutNode(ulid()),
+			(previous, callout) => {
+				let paragraph = $createParagraphNode();
+				$copyBlockFormatIndent(previous, paragraph);
+				paragraph.append(...previous.getChildren());
+				callout.append(paragraph);
+				body = paragraph;
+			},
+		);
+
+		// An empty text child is normalised away after this update; anchor the
+		// caret to its paragraph so the next character does not become a direct
+		// child of the callout instead.
+		if (body?.getTextContentSize() === 0) body.selectEnd();
 	});
 }
 
@@ -132,12 +158,7 @@ const COMMANDS: SlashCommand[] = [
 		label: "Callout",
 		group: "Layout",
 		keywords: ["note", "warning", "aside", "admonition"],
-		run: editor =>
-			replace(editor, () => {
-				let callout = $createCalloutNode();
-				callout.setId(ulid());
-				return callout;
-			}),
+		run: insertCallout,
 	},
 	{
 		id: "table",

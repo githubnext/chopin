@@ -119,6 +119,32 @@ test("a callout edits like prose and keeps its type controls out of the way", as
 	await written(page, room, /type="warning" title="Worth knowing"/);
 });
 
+test("enter twice leaves a callout at the end of the plan", async ({ join, room }) => {
+	let page = await join("ana");
+	let callout = await insertCallout(page);
+	let body = callout.locator("[data-plan-body]");
+	await expect(body.locator(":scope > p")).toHaveCount(1);
+
+	await page.keyboard.type("Keep this in the callout.");
+	await expect(body.locator(":scope > p")).toHaveText("Keep this in the callout.");
+	await page.keyboard.press("Enter");
+	await expect(body.locator(":scope > p")).toHaveCount(2);
+	await page.keyboard.type("Still in it.");
+	await page.keyboard.press("Enter");
+	await page.keyboard.press("Enter");
+	await page.keyboard.type("Outside the callout.");
+
+	await expect(body.locator(":scope > p")).toHaveCount(2);
+	await expect(callout).toContainText("Keep this in the callout.");
+	await expect(callout).toContainText("Still in it.");
+	await expect(callout).not.toContainText("Outside the callout.");
+	await written(
+		page,
+		room,
+		/Keep this in the callout\.[\s\S]*Still in it\.[\s\S]*<\/Callout>[\s\S]*Outside the callout\./,
+	);
+});
+
 test("escape closes the menu and leaves what was typed", async ({ join }) => {
 	let page = await join("ana");
 
