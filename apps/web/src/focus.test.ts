@@ -25,6 +25,15 @@ const COMPONENTS = ROOTS.flatMap(root => sources(root, [".tsx"]));
 const THEME = join(ROOT, "apps/web/src/theme.css");
 const STYLES = ROOTS.flatMap(root => sources(root, [".css"])).filter(file => file !== THEME);
 
+const FOCUS_OUTLINE =
+	/:focus(?:-visible|-within)?\b[^{]*\{[^}]*(?:\boutline(?:-(?:color|offset|style|width))?\s*:)/s;
+const FOCUS_UTILITY =
+	/\b(?:(?:group|peer)-)?focus(?:-visible|-within)?:!?(?:outline|ring)(?=[-:\s"'`}\]])/;
+const OUTLINE_SUPPRESSION =
+	/\boutline(?:-style|-width)?\s*:\s*(?:none\b|0(?:[a-z%]+)?(?:\s|[;}!]))/;
+const OUTLINE_SUPPRESSION_UTILITY = /\b(?:outline-none|outline-0|outline-hidden)\b/;
+const FOCUS_TOKEN_OVERRIDE = /--focus-ring-(?:color|width|offset)\s*:/;
+
 /** Files whose markup matches, reported by path so a failure names the offender. */
 function offenders(files: string[], pattern: RegExp): string[] {
 	return files
@@ -34,19 +43,16 @@ function offenders(files: string[], pattern: RegExp): string[] {
 
 describe("focus", () => {
 	it("leaves no component suppressing the outline it is meant to show", () => {
-		expect(offenders(COMPONENTS, /\boutline-none\b/)).toEqual([]);
+		expect(offenders(COMPONENTS, OUTLINE_SUPPRESSION_UTILITY)).toEqual([]);
+		expect(offenders(STYLES, OUTLINE_SUPPRESSION)).toEqual([]);
 	});
 
 	it("keeps one focus dialect rather than three", () => {
-		expect(offenders(COMPONENTS, /focus-visible:ring-[\w-]+/)).toEqual([]);
+		expect(offenders(COMPONENTS, FOCUS_UTILITY)).toEqual([]);
 	});
 
 	it("keeps focus geometry in the theme", () => {
-		expect(
-			offenders(
-				STYLES,
-				/:focus-visible[^{]*\{[^}]*\boutline(?:-offset)?\s*:/s,
-			),
-		).toEqual([]);
+		expect(offenders(STYLES, FOCUS_OUTLINE)).toEqual([]);
+		expect(offenders([...STYLES, ...COMPONENTS], FOCUS_TOKEN_OVERRIDE)).toEqual([]);
 	});
 });

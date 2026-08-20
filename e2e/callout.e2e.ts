@@ -28,10 +28,41 @@ test("a callout type menu has one keyboard path", async ({ join, seed }) => {
 	await expect(menu).toHaveCount(0);
 	await expect(trigger).toBeFocused();
 
+	let pausedAnimations = await page.addStyleTag({
+		content: ".plan-callout-menu { animation-play-state: paused !important; }",
+	});
 	await page.keyboard.press("ArrowDown");
 	await expect(menu).toBeVisible();
-	await expect(menu.getByRole("option", { name: "Note" })).toBeFocused();
-	await expectFocusIndicator(menu.getByRole("option", { name: "Note" }));
+	let note = menu.getByRole("option", { name: "Note" });
+	await expect(note).toBeFocused();
+	let midFlight = await menu.evaluate(element => {
+		let animation = element.getAnimations()[0];
+		let duration = animation?.effect?.getComputedTiming().duration;
+		if (!animation || typeof duration !== "number") throw new Error("Callout animation is missing");
+		animation.currentTime = duration / 2;
+		animation.pause();
+		return { currentTime: animation.currentTime, duration, playState: animation.playState };
+	});
+	expect(midFlight).toEqual({
+		currentTime: midFlight.duration / 2,
+		duration: midFlight.duration,
+		playState: "paused",
+	});
+	await expectFocusIndicator(note);
+	let settled = await menu.evaluate(element => {
+		let animation = element.getAnimations()[0];
+		let duration = animation?.effect?.getComputedTiming().duration;
+		if (!animation || typeof duration !== "number") throw new Error("Callout animation is missing");
+		animation.finish();
+		return { currentTime: animation.currentTime, duration, playState: animation.playState };
+	});
+	expect(settled).toEqual({
+		currentTime: settled.duration,
+		duration: settled.duration,
+		playState: "finished",
+	});
+	await expectFocusIndicator(note);
+	await pausedAnimations.evaluate(element => element.parentNode?.removeChild(element));
 	// Radix queues arrow focus, so keep the second arrow and Enter in the same
 	// browser task: this is the rapid keyboard path the picker has to honour.
 	await page.evaluate(() => {

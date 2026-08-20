@@ -327,10 +327,6 @@
 	color: var(--color-text-primary);
 }
 
-.plan .plan-content:focus {
-	outline: none;
-}
-
 :root[data-plan-coarse-pointer] .plan-menu-row {
 	height: 44px;
 	min-height: 44px;
