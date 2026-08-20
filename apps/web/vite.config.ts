@@ -3,6 +3,8 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import tsconfigPaths from "vite-tsconfig-paths";
 
+import { initialJavaScriptBudget } from "./bundle-budget";
+
 import type { ServerOptions } from "vite";
 
 const PORT = 5173;
@@ -29,7 +31,7 @@ export function devNetwork(exeHost: string | undefined): DevNetwork {
 }
 
 export default defineConfig({
-	plugins: [react(), tailwindcss(), tsconfigPaths()],
+	plugins: [react(), tailwindcss(), tsconfigPaths(), initialJavaScriptBudget()],
 
 	resolve: {
 		// Only what this app resolves itself. Lexical and Yjs belong to the
