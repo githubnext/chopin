@@ -16,7 +16,7 @@
 
 import * as Question from "@chopin/question";
 
-import type { Answer, Definition, Drafts, Model } from "@chopin/question";
+import type { Answer, DecisionDefinition, Definition, Drafts, Model } from "@chopin/question";
 
 /** How long a resolved questionnaire is remembered, for late arrivals. */
 const CLOSED_TTL = 5 * 60 * 1_000;
@@ -34,7 +34,7 @@ export type Ended =
 
 type Open = {
 	id: string;
-	definition: Definition;
+	definition: DecisionDefinition;
 	/** The plan node this belongs to, when it has one. */
 	widget?: string;
 	model: Model;
@@ -68,7 +68,7 @@ export type Questions = {
 
 export type StoredOpen = {
 	id: string;
-	definition: Definition;
+	definition: DecisionDefinition;
 	widget?: string;
 	model: number[];
 	revision: number;
@@ -99,11 +99,12 @@ export function restore(entries: StoredOpen[]): Questions {
 			!Array.isArray(entry.model)
 			|| entry.model.some(value => !Number.isInteger(value) || value < 0 || value > 255)
 		) Question.reject("Questionnaire model is invalid");
+		let definition = Question.decision(entry.definition);
 		questions.open.set(entry.id, {
 			id: entry.id,
-			definition: entry.definition,
+			definition,
 			...(entry.widget ? { widget: entry.widget } : {}),
-			model: Question.restore(entry.model, entry.definition),
+			model: Question.restore(entry.model, definition),
 			revision: entry.revision,
 			presence: new Map(),
 		});
@@ -139,15 +140,16 @@ export function ask(
 	if (questions.open.has(id)) Question.reject("Questionnaire is already open");
 	questions.closed.delete(id);
 
-	let model = Question.create(definition);
+	let decision = Question.decision(definition);
+	let model = Question.create(decision);
 	// Proves the freshly built model reads back as the definition describes,
 	// rather than discovering it does not on the first patch.
-	Question.read(model, definition);
+	Question.read(model, decision);
 
 	return new Promise<Ended>(settle => {
 		questions.open.set(id, {
 			id,
-			definition,
+			definition: decision,
 			...(widget ? { widget } : {}),
 			model,
 			revision: 0,
@@ -164,7 +166,7 @@ export function get(questions: Questions, id: string): Open | undefined {
 /** Everything still open, for a client that has just joined. */
 export function outstanding(
 	questions: Questions,
-): Array<{ id: string; definition: Definition; widget?: string }> {
+): Array<{ id: string; definition: DecisionDefinition; widget?: string }> {
 	return [...questions.open.values()].map(entry => ({
 		id: entry.id,
 		definition: entry.definition,
@@ -175,7 +177,7 @@ export function outstanding(
 export type Opened =
 	| {
 		open: true;
-		definition: Definition;
+		definition: DecisionDefinition;
 		model: number[];
 		revision: number;
 		presence: Collaborator[];

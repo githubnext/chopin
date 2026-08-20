@@ -25,7 +25,7 @@ import type { Server } from "bun";
 // `Plan` is the room's plan here; the protocol namespace of the same name is
 // aliased so the two cannot be confused at a glance.
 import type { Plan as Wired, Question as Wire, Request } from "@chopin/protocol";
-import type { Answer, Definition } from "@chopin/question";
+import type { Answer, DecisionDefinition, Definition } from "@chopin/question";
 import * as Service from "../plan/service";
 
 import type { Plan } from "../plan/service";
@@ -105,7 +105,7 @@ export async function ask(
 	}
 	let asked: Array<{
 		id: string;
-		single: Definition;
+		single: DecisionDefinition;
 		value: room.QuestionnaireInsertion["value"];
 		waiting: Promise<Ended>;
 		at: room.QuestionnaireInsertion["at"];
@@ -113,7 +113,7 @@ export async function ask(
 	await Service.exclusive(plan, async () => {
 		let anchors = placement ? validatePlacement(plan, definition, placement) : undefined;
 		asked = definition.questions.map((question, index) => {
-			let single = { questions: [question] };
+			let single = Question.decision({ questions: [question] });
 			// Widget and question identities are deliberately distinct.
 			let id = ulid();
 			let waiting = Store.ask(plan.questions, id, single, id);

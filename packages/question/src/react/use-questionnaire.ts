@@ -12,9 +12,11 @@
 
 import { useEffect, useRef, useSyncExternalStore } from "react";
 
-import { answered, crdt } from "../draft";
+import { derive } from "../answer";
+import { crdt } from "../draft";
+import { decision } from "../schema";
 
-import type { Definition, Drafts } from "../index";
+import type { DecisionDefinition, Definition, Drafts } from "../index";
 import type { Collaborator } from "./question-view";
 
 type Unsubscribe = () => void;
@@ -71,6 +73,7 @@ export class QuestionnaireController {
 	#listeners = new Set<() => void>();
 	#teardown: Unsubscribe[] = [];
 	#model: Model | undefined;
+	#definition: DecisionDefinition | undefined;
 	#revision = 0;
 	#outbox: number[][] = [];
 	#pending = Promise.resolve();
@@ -160,26 +163,18 @@ export class QuestionnaireController {
 	};
 
 	submit = (): void => {
-		let definition = this.#snapshot.definition;
+		let definition = this.#definition;
 		let doc = this.#model;
 		if (
 			!this.bridge || !definition || !doc || this.#snapshot.closed || this.#terminal
 			|| this.#snapshot.submitting
 		) return;
 
-		// The server gives each durable decision its own controller and record.
-		// Validate that card only: unanswered sibling cards have independent
-		// controllers and must not block this save.
-		let question = definition.questions[0];
-		let draft = question ? (doc.view() as Drafts)[question.id] : undefined;
-		if (!question || !answered(question, draft)) {
+		let outcome = derive(definition, doc.view() as Drafts);
+		if (!outcome.ok) {
 			this.#set({
-				focus: question?.id,
-				error: question
-					? (draft?.mode === "custom"
-						? `${question.header} requires a custom answer`
-						: `${question.header} requires an answer`)
-					: "This decision requires an answer",
+				focus: outcome.question,
+				error: outcome.message,
 			});
 			return;
 		}
@@ -269,6 +264,7 @@ export class QuestionnaireController {
 		this.#generation++;
 		for (let off of this.#teardown.splice(0)) off();
 		this.#model = undefined;
+		this.#definition = undefined;
 		if (presence && this.bridge && this.#connected) {
 			this.bridge.send("question:presence", { id: this.id });
 		}
@@ -344,6 +340,13 @@ export class QuestionnaireController {
 
 		if (!this.#valid(generation)) return;
 		if (!reply.open) return this.#close();
+		let definition: DecisionDefinition;
+		try {
+			definition = decision(reply.definition!);
+		} catch {
+			this.#set({ syncing: false, error: "Unable to sync shared answers." });
+			return;
+		}
 
 		let doc = crdt.Model
 			.fromBinary<crdt.JsonNode<Drafts>>(new Uint8Array(reply.model!))
@@ -396,10 +399,11 @@ export class QuestionnaireController {
 
 		this.#teardown.push(offChanges);
 		this.#model = doc;
+		this.#definition = definition;
 		for (let patch of this.#outbox) send(patch);
 
 		this.#set({
-			definition: reply.definition,
+			definition,
 			drafts: doc.view() as Drafts,
 			collaborators: (reply.presence ?? []).map(normalize),
 			syncing: false,

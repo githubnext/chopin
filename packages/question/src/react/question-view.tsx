@@ -631,7 +631,12 @@ export function QuestionView(props: QuestionViewProps) {
 							disabled={disabled || submitting}
 							className="btn btn-sm btn-primary"
 						>
-							<CheckIcon aria-hidden="true" size={16} weight="bold" />
+							<CheckIcon
+								aria-hidden="true"
+								data-plan-icon="check"
+								size={16}
+								weight="bold"
+							/>
 							{submitting
 								? (single ? "Saving…" : "Submitting…")
 								: (single ? "Save answer" : "Submit")}

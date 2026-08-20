@@ -17,7 +17,24 @@ const DEFINITION = normalize({
 	}],
 });
 
-function transport() {
+const QUESTIONNAIRE = normalize({
+	questions: [
+		{
+			header: "Rollout",
+			question: "How should we deploy?",
+			multiple: false,
+			options: [{ label: "Canary", description: "Small percentage first." }],
+		},
+		{
+			header: "Timing",
+			question: "When should we deploy?",
+			multiple: false,
+			options: [{ label: "Tomorrow", description: "" }],
+		},
+	],
+});
+
+function transport(definition = DEFINITION) {
 	let opens = 0;
 	let edits = 0;
 	let submits = 0;
@@ -25,7 +42,7 @@ function transport() {
 	let submitRevisions: number[] = [];
 	let presence = 0;
 	let handlers = new Map<string, Set<(event: never) => void>>();
-	let model = create(DEFINITION);
+	let model = create(definition);
 
 	let value = {
 		async ask(kind: string, payload: Record<string, unknown>) {
@@ -33,7 +50,7 @@ function transport() {
 				opens++;
 				return {
 					open: true,
-					definition: DEFINITION,
+					definition,
 					model: [...model.toBinary()],
 					revision: 0,
 					presence: [],
@@ -74,6 +91,22 @@ function transport() {
 }
 
 describe("QuestionnaireController", () => {
+	it("rejects a questionnaire returned for an independent decision record", async () => {
+		let bridge = transport(QUESTIONNAIRE);
+		let controller = new QuestionnaireController(
+			bridge.value,
+			"question-1",
+			QUESTIONNAIRE,
+			true,
+		);
+		let off = controller.subscribe(() => {});
+		await new Promise(resolve => setTimeout(resolve, 0));
+
+		expect(controller.getSnapshot().error).toBe("Unable to sync shared answers.");
+		expect(bridge.submits()).toBe(0);
+		off();
+	});
+
 	it("gives two surfaces one model, one open and one presence lifecycle", async () => {
 		let bridge = transport();
 		let controller = new QuestionnaireController(bridge.value, "question-1", DEFINITION, true);
