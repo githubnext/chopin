@@ -33,11 +33,43 @@ const PATCH = `\`\`\`diff
 \`\`\`
 `;
 
+const WIDE_MERMAID = `flowchart LR
+	A[Compact document measure that readers can track] --> B[Independent widget scrollers that preserve the document width]
+	B --> C[Keyboard-safe destination switching across responsive workspaces]
+	C --> D[Durable agent change chips and collaborator cursor labels]`;
+const TALL_MERMAID = WIDE_MERMAID.replace("flowchart LR", "flowchart TD");
+
 /** How many colours the highlighter ended up using. */
 async function colours(page: Page): Promise<number> {
 	return await page
 		.locator("[data-line] span[style*='color']")
 		.evaluateAll(nodes => new Set(nodes.map(node => (node as HTMLElement).style.color)).size);
+}
+
+async function diagramGeometry(page: Page) {
+	let region = content(page).getByRole("region", { name: "Diagram preview" });
+	return await region.evaluate(element => {
+		let svg = element.querySelector("svg")!;
+		let bounds = svg.getBoundingClientRect();
+		let labels = [...svg.querySelectorAll("text")];
+		let drawn = [...svg.querySelectorAll("text, rect, path[marker-end]")];
+		let scale = bounds.width / svg.viewBox.baseVal.width;
+		return {
+			edges: svg.querySelectorAll("path[marker-end]").length,
+			labels: labels.length,
+			minimumFontSize: Math.min(
+				...labels.map(label => Number.parseFloat(getComputedStyle(label).fontSize) * scale),
+			),
+			nodes: svg.querySelectorAll("rect").length,
+			region: { clientWidth: element.clientWidth, scrollWidth: element.scrollWidth },
+			regionHeight: element.getBoundingClientRect().height,
+			svg: { height: bounds.height, width: bounds.width },
+			verticallyContained: drawn.every(item => {
+				let rectangle = item.getBoundingClientRect();
+				return rectangle.top >= bounds.top - 1 && rectangle.bottom <= bounds.bottom + 1;
+			}),
+		};
+	});
 }
 
 test("a named fence is coloured with its source hidden by default", async ({ join, seed }) => {
@@ -67,6 +99,68 @@ test("a wide preview scrolls inside its code widget", async ({ join, seed }) => 
 	await expect(preview).toBeVisible();
 	expect(await rendered.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
 	expect(await rendered.evaluate(node => getComputedStyle(node).overflowX)).toBe("auto");
+	await expectNoHorizontalOverflow(page);
+});
+
+test("an inserted wide diagram stays readable in its own keyboard scroller", async ({ join }) => {
+	let page = await join("ana", { viewport: { width: 1440, height: 1000 } });
+	await content(page).click();
+	await page.keyboard.type("/diagram");
+	await page.getByRole("listbox", MENU).getByRole("option", { name: "Diagram" }).click();
+	await page.keyboard.insertText(WIDE_MERMAID);
+
+	let region = content(page).getByRole("region", { name: "Diagram preview" });
+	await expect(region).toBeVisible();
+
+	for (let viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
+		await page.setViewportSize(viewport);
+		let geometry = await diagramGeometry(page);
+		expect(geometry.labels).toBe(4);
+		expect(geometry.nodes).toBeGreaterThanOrEqual(4);
+		expect(geometry.edges).toBe(3);
+		expect(geometry.minimumFontSize, JSON.stringify(geometry)).toBeGreaterThanOrEqual(12);
+		expect(geometry.verticallyContained).toBe(true);
+		expect(geometry.region.scrollWidth).toBeGreaterThan(geometry.region.clientWidth);
+		await expectNoHorizontalOverflow(page);
+	}
+
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	await expect(region).toHaveCSS("scroll-behavior", "auto");
+	await region.focus();
+	expect(await region.evaluate(node => node === document.activeElement)).toBe(true);
+	await page.keyboard.press("ArrowRight");
+	await expect.poll(() => region.evaluate(node => node.scrollLeft)).toBeGreaterThan(0);
+});
+
+test("a diagram recomputes its height after source and viewport changes", async ({ join, seed }) => {
+	await seed(`\`\`\`mermaid
+${WIDE_MERMAID}
+\`\`\`
+`);
+	let page = await join("ana", { viewport: { width: 1440, height: 1000 } });
+	let region = content(page).getByRole("region", { name: "Diagram preview" });
+	await expect(region).toBeVisible();
+	let wide = await diagramGeometry(page);
+
+	await content(page).getByRole("button", { name: "Show source" }).click();
+	let source = content(page).locator("[data-plan-source]");
+	await source.selectText();
+	await page.keyboard.insertText(TALL_MERMAID);
+
+	await expect.poll(async () => (await diagramGeometry(page)).svg.height).toBeGreaterThan(
+		wide.svg.height * 2,
+	);
+	let rerendered = await diagramGeometry(page);
+	expect(rerendered.regionHeight).toBeGreaterThanOrEqual(rerendered.svg.height);
+
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expect.poll(async () => (await diagramGeometry(page)).region.clientWidth).toBeLessThan(
+		rerendered.region.clientWidth,
+	);
+	let resized = await diagramGeometry(page);
+	expect(resized.svg.height).toBeCloseTo(rerendered.svg.height, 0);
+	expect(resized.regionHeight).toBeGreaterThanOrEqual(resized.svg.height);
+	expect(resized.verticallyContained).toBe(true);
 	await expectNoHorizontalOverflow(page);
 });
 
