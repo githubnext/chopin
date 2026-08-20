@@ -1,3 +1,14 @@
+---
+target: Chopin web app
+total_score: 24
+max_score: 40
+na_heuristics:
+p0_count: 0
+p1_count: 4
+timestamp: 2026-08-20T08-52-53Z
+slug: apps-web-src-app-tsx
+---
+
 ⚠️ **DEGRADED: single-context audit.** The critique method normally uses independent reviewer contexts; this run stayed uninterrupted because the brief explicitly said not to stop before the audit was complete. The screenshots, code inspection, scoring, and recommendations are complete, but the severity calibration has not been cross-checked by a second reviewer.
 
 # Chopin interface and interaction audit
