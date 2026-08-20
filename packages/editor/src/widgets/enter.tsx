@@ -1,5 +1,5 @@
 /**
- * Enter, in a block whose content is lines.
+ * Enter, in a block that otherwise has no way out.
  *
  * Lexical asks a block to make its own successor, and one that cannot returns
  * null — which is what a code block does, and why Enter inside one did nothing
@@ -7,9 +7,11 @@
  * common keystroke there is when writing code, and a block at the end of the
  * document with no way past it is a corner a reader can be typed into.
  *
- * So Enter is a line break here, and Enter on a line that is already empty
- * leaves instead. Pressing it twice is how every editor lets go of a fence,
- * and it is the only exit that has to be discovered rather than explained.
+ * So Enter is a line break in a fence, and Enter on a line that is already
+ * empty leaves instead. A callout already contains ordinary blocks, so its
+ * first Enter makes an empty paragraph normally and its second removes that
+ * paragraph and leaves the container. In either case, pressing Enter twice is
+ * the only exit that has to be discovered rather than explained.
  *
  * Registered on `INSERT_PARAGRAPH_COMMAND` rather than on the keystroke: that
  * is what rich text turns an unshifted Enter into, and it is also what
@@ -24,12 +26,13 @@ import {
 	$createParagraphNode,
 	$getSelection,
 	$isLineBreakNode,
+	$isParagraphNode,
 	$isRangeSelection,
 	$isTextNode,
 	COMMAND_PRIORITY_LOW,
 	INSERT_PARAGRAPH_COMMAND,
 } from "lexical";
-import { $isCodeBlockNode, $isMathNode } from "@chopin/dialect";
+import { $isCalloutNode, $isCodeBlockNode, $isMathNode } from "@chopin/dialect";
 
 import type { ElementNode, LexicalNode } from "lexical";
 
@@ -46,6 +49,25 @@ function lines(node: LexicalNode | null): ElementNode | undefined {
 		if ($isCodeBlockNode(cursor)) return cursor;
 		if ($isMathNode(cursor)) return cursor.isInlineMath() ? undefined : cursor;
 		cursor = cursor.getParent();
+	}
+	return undefined;
+}
+
+/** A blank final paragraph that a preceding Enter added to a callout. */
+function calloutExit(node: LexicalNode | null) {
+	let cursor = node;
+	while (cursor) {
+		let parent = cursor.getParent();
+		if ($isCalloutNode(parent)) {
+			if (
+				$isParagraphNode(cursor)
+				&& cursor.getTextContentSize() === 0
+				&& cursor.getPreviousSibling() !== null
+				&& cursor.getNextSibling() === null
+			) return { callout: parent, paragraph: cursor };
+			return undefined;
+		}
+		cursor = parent;
 	}
 	return undefined;
 }
@@ -86,6 +108,17 @@ export function EnterPlugin() {
 			() => {
 				let selection = $getSelection();
 				if (!$isRangeSelection(selection)) return false;
+
+				if (selection.isCollapsed()) {
+					let exit = calloutExit(selection.anchor.getNode());
+					if (exit) {
+						exit.paragraph.remove();
+						let paragraph = $createParagraphNode();
+						exit.callout.insertAfter(paragraph);
+						paragraph.select();
+						return true;
+					}
+				}
 
 				let block = lines(selection.anchor.getNode());
 				if (!block) return false;
