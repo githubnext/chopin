@@ -445,7 +445,6 @@ export type QuestionnaireOptions = {
 	bridge: Transport | undefined;
 	connected: boolean;
 	definition?: Definition;
-	onResolved?: () => void;
 };
 
 export function useQuestionnaire(options: QuestionnaireOptions): QuestionnaireState {
@@ -477,10 +476,6 @@ export function useQuestionnaire(options: QuestionnaireOptions): QuestionnaireSt
 	useEffect(() => {
 		controller.configure(options.definition, options.connected);
 	}, [controller, options.connected, options.definition]);
-
-	useEffect(() => {
-		if (snapshot.closed) options.onResolved?.();
-	}, [snapshot.closed, options.onResolved]);
 
 	return {
 		definition: snapshot.definition,
