@@ -174,7 +174,7 @@ export function RepositoryPicker(
 
 	let popup = open && createPortal(
 		<div
-			className="fixed z-50 flex flex-col overflow-hidden rounded-lg bg-page ring-hairline shadow-overlay"
+			className="fixed z-50 flex flex-col rounded-lg bg-page ring-hairline shadow-overlay"
 			id={panelId}
 			ref={panel}
 			style={position}

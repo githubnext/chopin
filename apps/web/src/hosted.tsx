@@ -341,48 +341,55 @@ function RepositoryChannels(
 						</div>
 					)
 					: (
-						<div className="ring-hairline mt-6 overflow-hidden rounded-lg bg-page">
-							{page.channels.map((channel, index) => (
-								<div className={index ? "hairline-t" : ""} key={channel.id}>
-									{renaming === channel.id
-										? (
-											<DocumentRename
-												channel={channel}
-												className="px-4 py-4 sm:px-5"
-												onCancel={() => stopRenaming(channel.id)}
-												onRenamed={renamed}
-											/>
-										)
-										: (
-											<div className="flex min-w-0 items-center gap-2 pr-3 hover:bg-hover sm:pr-4">
-												<a
-													className="flex min-w-0 flex-1 flex-col items-start justify-between gap-1 px-4 py-4 sm:flex-row sm:items-center sm:gap-4 sm:px-5"
-													href={`/channels/${channel.id}`}
-													onClick={() => rememberChannel(user.id, channel, page.repository)}
+						<div className="ring-hairline mt-6 rounded-lg bg-page">
+							{page.channels.map((channel, index) => {
+								let corners = `${index === 0 ? "rounded-t-lg" : ""} ${
+									index === page.channels.length - 1 ? "rounded-b-lg" : ""
+								}`;
+								return (
+									<div className={`${index ? "hairline-t" : ""} ${corners}`} key={channel.id}>
+										{renaming === channel.id
+											? (
+												<DocumentRename
+													channel={channel}
+													className={`${corners} px-4 py-4 sm:px-5`}
+													onCancel={() => stopRenaming(channel.id)}
+													onRenamed={renamed}
+												/>
+											)
+											: (
+												<div
+													className={`${corners} flex min-w-0 items-center gap-2 pr-3 hover:bg-hover sm:pr-4`}
 												>
-													<span className="min-w-0 break-words text-sm font-medium">
-														{channel.title}
-													</span>
-													<span className="text-sm text-text-tertiary sm:shrink-0">
-														{new Date(channel.updatedAt).toLocaleDateString()}
-													</span>
-												</a>
-												{page.canEdit && (
-													<button
-														aria-label={`Rename ${channel.title}`}
-														className="btn btn-sm btn-ghost shrink-0"
-														disabled={renaming !== undefined}
-														id={`rename-channel-${channel.id}`}
-														onClick={() => setRenaming(channel.id)}
-														type="button"
+													<a
+														className="flex min-w-0 flex-1 flex-col items-start justify-between gap-1 px-4 py-4 sm:flex-row sm:items-center sm:gap-4 sm:px-5"
+														href={`/channels/${channel.id}`}
+														onClick={() => rememberChannel(user.id, channel, page.repository)}
 													>
-														Rename
-													</button>
-												)}
-											</div>
-										)}
-								</div>
-							))}
+														<span className="min-w-0 break-words text-sm font-medium">
+															{channel.title}
+														</span>
+														<span className="text-sm text-text-tertiary sm:shrink-0">
+															{new Date(channel.updatedAt).toLocaleDateString()}
+														</span>
+													</a>
+													{page.canEdit && (
+														<button
+															aria-label={`Rename ${channel.title}`}
+															className="btn btn-sm btn-ghost shrink-0"
+															disabled={renaming !== undefined}
+															id={`rename-channel-${channel.id}`}
+															onClick={() => setRenaming(channel.id)}
+															type="button"
+														>
+															Rename
+														</button>
+													)}
+												</div>
+											)}
+									</div>
+								);
+							})}
 						</div>
 					)}
 				{page?.nextCursor && (

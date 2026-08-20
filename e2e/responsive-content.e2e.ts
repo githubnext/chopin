@@ -1,5 +1,6 @@
 import { content, expect, test } from "./room";
 import { readDocument } from "./database";
+import { expectFocusIndicator } from "./focus";
 import * as Room from "../apps/server/src/plan/room";
 import {
 	expectNoHorizontalOverflow,
@@ -322,7 +323,11 @@ async function expectRepresentativeSurfaces(
 	let chip = ana.locator("[data-side]");
 	await expect(chip).toBeVisible();
 	await expectInsideDocumentWidth("agent change chip", chip);
-	await chip.getByRole("button", { name: "What the agent changed" }).click();
+	let disclosure = chip.getByRole("button", { name: "What the agent changed" });
+	await ana.keyboard.press("Tab");
+	await disclosure.focus();
+	await expectFocusIndicator(disclosure);
+	await disclosure.click();
 	await expectOwnScroller(
 		"agent change excerpt",
 		chip.getByText(
