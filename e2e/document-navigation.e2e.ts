@@ -35,7 +35,8 @@ test("the document trigger fits short labels without widening its menu", async (
 	expect(triggerBox!.width).toBeLessThan(200);
 
 	await trigger.click();
-	let panel = page.getByRole("combobox", { name: "Search documents" }).locator("..").locator("..");
+	let popupId = await trigger.getAttribute("aria-controls");
+	let panel = page.locator(`[id="${popupId}"]`);
 	let panelBox = await panel.boundingBox();
 	expect(panelBox).toBeTruthy();
 	expect(panelBox!.width).toBe(360);
