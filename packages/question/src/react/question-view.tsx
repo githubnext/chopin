@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { FloppyDiskIcon, ShuffleSimpleIcon, XIcon } from "@phosphor-icons/react";
+import { CheckIcon, ShuffleSimpleIcon, XIcon } from "@phosphor-icons/react";
 
 import { answered } from "../draft";
 
@@ -151,6 +151,13 @@ function Custom(
 ) {
 	let active = draft?.mode === "custom";
 	let textarea = useRef<HTMLTextAreaElement>(null);
+	let focusOnReveal = useRef(false);
+
+	useEffect(() => {
+		if (!active || !focusOnReveal.current) return;
+		focusOnReveal.current = false;
+		textarea.current?.focus();
+	}, [active]);
 
 	useEffect(() => {
 		let viewport = window.visualViewport;
@@ -180,25 +187,28 @@ function Custom(
 					name={question.multiple ? undefined : name}
 					checked={active}
 					disabled={disabled}
-					onChange={event =>
-						onChange?.({ mode: event.currentTarget.checked ? "custom" : "choices" })}
+					onChange={event => {
+						focusOnReveal.current = event.currentTarget.checked;
+						onChange?.({ mode: event.currentTarget.checked ? "custom" : "choices" });
+					}}
 					className="mt-0.5 size-[18px] shrink-0 choice-control"
 				/>
 				<span className="font-medium">Write a custom answer</span>
 			</label>
 
-			<textarea
-				rows={2}
-				maxLength={4000}
-				value={draft?.custom ?? ""}
-				disabled={disabled}
-				aria-label={`Custom answer for ${question.header}`}
-				placeholder="Type another answer"
-				onFocus={() => onChange?.({ mode: "custom" })}
-				onChange={event => onChange?.({ mode: "custom", custom: event.currentTarget.value })}
-				className="question-custom-answer field mt-1.5 min-h-16 w-full resize-y px-2.5 py-2 text-sm transition placeholder:text-text-tertiary disabled:cursor-not-allowed"
-				ref={textarea}
-			/>
+			{active && (
+				<textarea
+					rows={2}
+					maxLength={4000}
+					value={draft?.custom ?? ""}
+					disabled={disabled}
+					aria-label={`Custom answer for ${question.header}`}
+					placeholder="Type another answer"
+					onChange={event => onChange?.({ custom: event.currentTarget.value })}
+					className="question-custom-answer field mt-1.5 min-h-16 w-full resize-y px-2.5 py-2 text-sm transition placeholder:text-text-tertiary disabled:cursor-not-allowed"
+					ref={textarea}
+				/>
+			)}
 		</div>
 	);
 }
@@ -621,8 +631,10 @@ export function QuestionView(props: QuestionViewProps) {
 							disabled={disabled || submitting}
 							className="btn btn-sm btn-primary"
 						>
-							<FloppyDiskIcon aria-hidden="true" size={16} weight="bold" />
-							{submitting ? (single ? "Saving…" : "Submitting…") : (single ? "Save" : "Submit")}
+							<CheckIcon aria-hidden="true" size={16} weight="bold" />
+							{submitting
+								? (single ? "Saving…" : "Submitting…")
+								: (single ? "Save answer" : "Submit")}
 						</button>
 					)}
 				</footer>
