@@ -306,6 +306,7 @@ export function SelectionBubble(
 			ref={ref}
 			role="toolbar"
 			aria-label="Text formatting"
+			data-focus-boundary=""
 			contentEditable={false}
 			// No translate utilities here: placement belongs to the layout effect,
 			// and Tailwind's would compose with its transform rather than replace it.

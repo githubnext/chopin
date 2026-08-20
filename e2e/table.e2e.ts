@@ -15,6 +15,7 @@
  */
 
 import { content, expect, openIsolatedRoom, test } from "./room";
+import { expectFocusIndicator } from "./focus";
 import { installPointerMedia } from "./pointer-media";
 import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 
@@ -145,7 +146,10 @@ test("a grip moves its row from the keyboard", async ({ join, seed }) => {
 
 	// A reorder that is only ever a drag is a reorder some people cannot
 	// perform at all.
-	await grip(rail, "row", 2).focus();
+	await page.keyboard.press("Tab");
+	let rowGrip = grip(rail, "row", 2);
+	await rowGrip.focus();
+	await expectFocusIndicator(rowGrip);
 	await page.keyboard.press("Meta+ArrowDown");
 
 	await expect(items(page)).toHaveText(["two", "one", "three"]);
