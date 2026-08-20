@@ -8,23 +8,20 @@ describe("people here", () => {
 			{ handle: "e2e", client: "tab-1" },
 			{ handle: "e2e", client: "tab-2" },
 			{ handle: "E2E", client: "tab-3" },
-		])).toEqual([{ handle: "e2e", client: "tab-1" }]);
+		])).toEqual(["e2e"]);
 	});
 
 	it("keeps different verified GitHub accounts separate", () => {
 		expect(peopleHere([
 			{ handle: "ana", client: "ana-tab" },
 			{ handle: "bo", client: "bo-tab" },
-		])).toEqual([
-			{ handle: "ana", client: "ana-tab" },
-			{ handle: "bo", client: "bo-tab" },
-		]);
+		])).toEqual(["ana", "bo"]);
 	});
 
 	it("keeps a person while any of their connections remains", () => {
 		expect(peopleHere([
 			{ handle: "e2e", client: "tab-2" },
 			{ handle: "e2e", client: "tab-3" },
-		])).toEqual([{ handle: "e2e", client: "tab-2" }]);
+		])).toEqual(["e2e"]);
 	});
 });
