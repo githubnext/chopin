@@ -217,7 +217,7 @@ function ConversationToggle(
 	);
 }
 
-const HEADING: Record<WorkspaceDestination, string> = {
+export const HEADING: Record<WorkspaceDestination, string> = {
 	plan: "workspace-plan-heading",
 	decisions: "workspace-decisions-heading",
 	conversation: "workspace-conversation-heading",
@@ -418,7 +418,6 @@ export function Workspace(
 							hidden={decisionsHidden}
 							inert={decisionsHidden}
 						>
-							<h2 className="sr-only" id={HEADING.decisions} tabIndex={-1}>Decisions</h2>
 							{decisions}
 						</section>
 					</div>

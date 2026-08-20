@@ -20,6 +20,7 @@ export type DecisionsProps = {
 	store: QuestionnaireStore;
 	wire?: Transport;
 	connected?: boolean;
+	headingId?: string;
 	/** Reveal the plan before taking the reader to a questionnaire's result. */
 	onShowPlan?: (widget: string, question: string) => void;
 	/**
@@ -48,7 +49,9 @@ function useHistory() {
 	return [history, setHistory] as const;
 }
 
-export function Decisions({ connected, onShowPlan, reveal, store, wire }: DecisionsProps) {
+export function Decisions(
+	{ connected, headingId, onShowPlan, reveal, store, wire }: DecisionsProps,
+) {
 	let entries = useQuestionnaires(store);
 	let content = useRef<HTMLDivElement>(null);
 	let heading = useRef<HTMLHeadingElement>(null);
@@ -121,6 +124,7 @@ export function Decisions({ connected, onShowPlan, reveal, store, wire }: Decisi
 			<header className="flex shrink-0 items-center gap-2 px-3 py-2 hairline-b">
 				<h2
 					className="text-sm font-semibold tracking-wide text-text-tertiary uppercase"
+					id={headingId}
 					ref={heading}
 					tabIndex={-1}
 				>

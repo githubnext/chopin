@@ -22,7 +22,7 @@ import { peopleHere } from "./presence";
 import { RepositoryPicker } from "./repository-picker";
 import { clearRepositoryCache } from "./repository-cache";
 import { Wire } from "./wire";
-import { useWorkspaceMode, useWorkspaceState, Workspace } from "./workspace";
+import { HEADING, useWorkspaceMode, useWorkspaceState, Workspace } from "./workspace";
 import { presentWorkspace } from "./workspace-model";
 
 import type { Session } from "@chopin/protocol";
@@ -264,6 +264,7 @@ export function RoomWorkspace(
 			decisions={
 				<Decisions
 					connected={status === "connected" && effectiveCanEdit}
+					headingId={HEADING.decisions}
 					onShowPlan={showPlan}
 					reveal={reveal}
 					store={questions}
