@@ -464,6 +464,14 @@ whenever one paragraph is added at the top. What genuinely moved is knowable
 only from the operations that were asked for, which is why `edit.ts` derives
 what was written from object identity and what moved or went from the batch.
 
+**A Compose default becomes a production value in Coolify previews.** Coolify
+materialises `${NAME:-default}` while parsing the service and writes the
+production value into `environment`; that explicit value then wins over the
+preview `.env` file it attaches later. Settings that may differ in a preview
+stay as direct `${NAME}` references in `compose.yaml`, and `compose.test.ts`
+guards that late-binding contract. Application defaults and `.env.example`
+carry the defaults instead.
+
 **`bun run <script>` does not exit when what it started dies.** It sits there
 with no child. `scripts/dev.ts` spawns both processes directly for this reason,
 and gives each its own process group so the whole tree can be taken down.

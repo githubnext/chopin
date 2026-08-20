@@ -3,17 +3,19 @@ services:
     build:
       context: .
     environment:
-      AGENT: ${AGENT:-on}
-      APP_ORIGIN: ${APP_ORIGIN:-http://127.0.0.1:8787}
+      # Coolify resolves default-bearing values from production before attaching
+      # the preview env file, so preview-overridable values stay late-bound.
+      AGENT: ${AGENT}
+      APP_ORIGIN: ${APP_ORIGIN}
       DATABASE_URL: postgresql://chopin:chopin@${SERVICE_NAME_DB:-db}:5432/chopin?sslmode=disable
-      GITHUB_APP_SLUG: ${GITHUB_APP_SLUG:-}
-      GITHUB_APP_CLIENT_ID: ${GITHUB_APP_CLIENT_ID:-}
-      GITHUB_APP_CLIENT_SECRET: ${GITHUB_APP_CLIENT_SECRET:-}
-      GITHUB_ALLOWED_USERS: ${GITHUB_ALLOWED_USERS:-}
-      GITHUB_ALLOWED_ORGANIZATIONS: ${GITHUB_ALLOWED_ORGANIZATIONS:-}
-      MODEL: ${MODEL:-claude-sonnet-4.6}
+      GITHUB_APP_SLUG: ${GITHUB_APP_SLUG}
+      GITHUB_APP_CLIENT_ID: ${GITHUB_APP_CLIENT_ID}
+      GITHUB_APP_CLIENT_SECRET: ${GITHUB_APP_CLIENT_SECRET}
+      GITHUB_ALLOWED_USERS: ${GITHUB_ALLOWED_USERS}
+      GITHUB_ALLOWED_ORGANIZATIONS: ${GITHUB_ALLOWED_ORGANIZATIONS}
+      MODEL: ${MODEL}
       SERVICE_URL_APP_8787:
-      SESSION_ENCRYPTION_KEY: ${SESSION_ENCRYPTION_KEY:-}
+      SESSION_ENCRYPTION_KEY: ${SESSION_ENCRYPTION_KEY}
       STORAGE_DRIVER: postgres
     depends_on:
       db:
