@@ -131,7 +131,11 @@ test("enter twice leaves a callout at the end of the plan", async ({ join, room 
 	await expect(body.locator(":scope > p")).toHaveCount(2);
 	await page.keyboard.type("Still in it.");
 	await page.keyboard.press("Enter");
+	await expect(body.locator(":scope > p")).toHaveCount(3);
+	await expect(body.locator(":scope > p").last()).toBeEmpty();
+
 	await page.keyboard.press("Enter");
+	await expect(body.locator(":scope > p")).toHaveCount(2);
 	await page.keyboard.type("Outside the callout.");
 
 	await expect(body.locator(":scope > p")).toHaveCount(2);
