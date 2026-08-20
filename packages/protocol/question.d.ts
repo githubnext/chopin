@@ -49,6 +49,11 @@ export declare namespace Question {
 		questions: Item[];
 	};
 
+	/** One independently persisted decision card. */
+	export type DecisionDefinition = {
+		questions: [Item];
+	};
+
 	/**
 	 * One question's answer, as it exists while being decided.
 	 *
@@ -96,14 +101,14 @@ export declare namespace Question {
 	/** A new questionnaire, announced to the room. */
 	export type Asked = KIND<"question:asked"> & {
 		id: string;
-		definition: Definition;
+		definition: DecisionDefinition;
 		/** Present once the questionnaire has a node in the plan. */
 		widget?: string;
 	};
 
 	/** Every open questionnaire, sent when a client joins. */
 	export type Sync = KIND<"question:sync"> & {
-		open: Array<{ id: string; definition: Definition; widget?: string }>;
+		open: Array<{ id: string; definition: DecisionDefinition; widget?: string }>;
 	};
 
 	export namespace Open {
@@ -114,7 +119,7 @@ export declare namespace Question {
 			& (
 				| {
 					open: true;
-					definition: Definition;
+					definition: DecisionDefinition;
 					/** json-joy model, as bytes. */
 					model: number[];
 					revision: number;

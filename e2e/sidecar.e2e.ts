@@ -425,9 +425,9 @@ test("decision cards save independently with progressive custom answers", async 
 
 	await expect(storage.getByRole("textbox", { name: /Custom answer for/ })).toHaveCount(0);
 	await expect(scope.getByRole("textbox", { name: /Custom answer for/ })).toHaveCount(0);
-	await expect(saveStorage.locator("svg")).toHaveAttribute("aria-hidden", "true");
-	await expect(saveStorage.locator('svg path[d^="M232.49,80.49"]'))
-		.toHaveCount(1);
+	let check = saveStorage.locator('svg[data-plan-icon="check"]');
+	await expect(check).toHaveCount(1);
+	await expect(check).toHaveAttribute("aria-hidden", "true");
 
 	await storage.getByRole("radio", { name: /On disk as MDX/ }).check();
 	await saveStorage.click();

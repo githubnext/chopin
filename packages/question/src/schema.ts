@@ -14,6 +14,7 @@ import type { Question } from "@chopin/protocol";
 export type Option = Question.Option;
 export type Item = Question.Item;
 export type Definition = Question.Definition;
+export type DecisionDefinition = Question.DecisionDefinition;
 export type Answer = Question.Answer;
 
 /** Thrown for any malformed definition; the message reaches the agent. */
@@ -118,6 +119,14 @@ export function normalize(raw: unknown): Definition {
 	Object.freeze(questions);
 
 	return Object.freeze({ questions });
+}
+
+/** Narrow a questionnaire to the shape owned by one durable decision card. */
+export function decision(definition: Definition): DecisionDefinition {
+	if (definition.questions.length !== 1) {
+		fail("A decision record must contain exactly one question");
+	}
+	return definition as DecisionDefinition;
 }
 
 /** Reject a tool call id that could not have come from the SDK. */
