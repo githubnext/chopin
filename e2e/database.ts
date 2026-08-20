@@ -48,14 +48,6 @@ export async function createChannel(port: number, id: string): Promise<void> {
 	});
 }
 
-export async function renameChannel(port: number, id: string, title: string): Promise<void> {
-	await sql(port, async database => {
-		await database`
-			UPDATE channels SET title = ${title}, updated_at = ${new Date()} WHERE id = ${id}
-		`;
-	});
-}
-
 export async function seedChannel(
 	port: number,
 	id: string,
