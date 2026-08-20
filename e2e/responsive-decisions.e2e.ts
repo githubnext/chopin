@@ -3,7 +3,6 @@ import { storedQuestion } from "../apps/server/src/testing/plan";
 import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 import { installVisualViewport, setVisualViewport } from "./visual-viewport";
 
-const LONG_WIDGET = "01K0N500000000000000000001";
 const LONG_QUESTIONS = [
 	{
 		id: "01K0N500000000000000000002",
@@ -37,39 +36,42 @@ const LONG_QUESTIONS = [
 	})),
 ];
 
-const LONG_DEFINITION = { questions: LONG_QUESTIONS };
-const LONG_QUESTIONNAIRE = `<Questionnaire id="${LONG_WIDGET}" by="ana">
+const LONG_WIDGETS = LONG_QUESTIONS.map((_, index) =>
+	`01K0N4${String(index + 1).padStart(20, "0")}`
+);
+const LONG_QUESTIONNAIRES = LONG_QUESTIONS.map((question, index) =>
+	`<Questionnaire id="${LONG_WIDGETS[index]}" by="ana">
+<Question id="${question.id}" header="${question.header}" prompt="${question.question}" multiple="false">
 ${
-	LONG_QUESTIONS.map(question =>
-		`<Question id="${question.id}" header="${question.header}" prompt="${question.question}" multiple="false">
-${
-			question.options.map(option =>
-				`<Option id="${option.id}" label="${option.label}"${
-					option.description ? ` description="${option.description}"` : ""
-				} />`
-			).join("\n")
-		}
-</Question>`
-	).join("\n")
-}
-</Questionnaire>
-`;
+		question.options.map(option =>
+			`<Option id="${option.id}" label="${option.label}"${
+				option.description ? ` description="${option.description}"` : ""
+			} />`
+		).join("\n")
+	}
+</Question>
+</Questionnaire>`
+).join("\n");
 
 function questionnaire(page: import("@playwright/test").Page) {
 	return page.locator('[data-document-view="decisions"] article[data-plan-sidecar-questionnaire]');
 }
 
 for (let viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }]) {
-	test(`long coarse decisions preserve drafts and focus at ${viewport.width}x${viewport.height}`, async ({ baseURL, browser, room, seed }) => {
-		await seed(LONG_QUESTIONNAIRE, {
+	test(`long independent decisions preserve drafts and focus at ${viewport.width}x${viewport.height}`, async ({ baseURL, browser, room, seed }) => {
+		await seed(LONG_QUESTIONNAIRES, {
 			revision: 1,
-			openQuestions: [{
-				definition: LONG_DEFINITION,
-				id: LONG_WIDGET,
-				model: storedQuestion(LONG_DEFINITION),
-				revision: 0,
-				widget: LONG_WIDGET,
-			}],
+			openQuestions: LONG_QUESTIONS.map((question, index) => {
+				let definition = { questions: [question] };
+				let id = LONG_WIDGETS[index]!;
+				return {
+					definition,
+					id,
+					model: storedQuestion(definition),
+					revision: 0,
+					widget: id,
+				};
+			}),
 		});
 		let context = await browser.newContext({ baseURL, hasTouch: true, isMobile: true, viewport });
 		try {
@@ -102,57 +104,16 @@ for (let viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }])
 			expect(firstChoiceBox!.height).toBeGreaterThanOrEqual(18);
 			await firstLabel.click();
 			await expect(firstChoice).toBeChecked();
-			await expect(card.getByText("5 unanswered", { exact: false })).toBeVisible();
 
-			let tabs = card.getByRole("tablist", { name: "Questions" });
-			let tabTargets = tabs.getByRole("tab");
-			expect(await tabTargets.count()).toBe(LONG_QUESTIONS.length);
-			for (
-				let box of await tabTargets.evaluateAll(nodes =>
-					nodes.map(node => node.getBoundingClientRect().height)
-				)
-			) expect(box).toBeGreaterThanOrEqual(44);
-			expect(await tabs.evaluate(node => node.scrollWidth)).toBeGreaterThan(
-				await tabs.evaluate(node => node.clientWidth),
-			);
-
-			let next = card.getByRole("button", { name: "Next" });
-			let nextBox = await next.boundingBox();
-			expect(nextBox).toBeTruthy();
-			expect(nextBox!.height).toBeGreaterThanOrEqual(44);
-			await next.click();
-			await expect(tabTargets.nth(1)).toHaveAttribute("aria-selected", "true");
-			await expect(tabTargets.nth(1)).toBeFocused();
-			let secondChoice = card.getByRole("radio", { name: "Its current state" });
-			await card.getByText("Its current state", { exact: true }).click();
+			let second = questionnaire(page).filter({ hasText: LONG_QUESTIONS[1]!.header });
+			let secondChoice = second.getByRole("radio", { name: "Its current state" });
+			await second.getByText("Its current state", { exact: true }).click();
 			await expect(secondChoice).toBeChecked();
-			await expect(card.getByText("4 unanswered", { exact: false })).toBeVisible();
-
-			await card.getByRole("button", { name: "Back" }).click();
-			await expect(tabTargets.first()).toHaveAttribute("aria-selected", "true");
-			await expect(tabTargets.first()).toBeFocused();
 			await expect(firstChoice).toBeChecked();
 
-			await card.getByRole("button", { name: "Next" }).click();
-			await expect(tabTargets.nth(1)).toBeFocused();
-			await expect(secondChoice).toBeChecked();
-			for (let index = 2; index < LONG_QUESTIONS.length; index++) {
-				await card.getByRole("button", { name: "Next" }).click();
-				await expect(tabTargets.nth(index)).toHaveAttribute("aria-selected", "true");
-				await expect(tabTargets.nth(index)).toBeFocused();
-			}
-			await expect.poll(() =>
-				tabTargets.last().evaluate(node => {
-					let tab = node.getBoundingClientRect();
-					let list = node.parentElement!.getBoundingClientRect();
-					return tab.left >= list.left && tab.right <= list.right;
-				})
-			).toBe(true);
-
 			let actions = [
-				card.getByRole("button", { name: "Back" }),
 				card.getByRole("button", { name: "Cancel" }),
-				card.getByRole("button", { name: "Submit" }),
+				card.getByRole("button", { name: "Save answer" }),
 			];
 			for (let action of actions) {
 				await action.scrollIntoViewIfNeeded();
@@ -175,7 +136,6 @@ for (let viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }])
 					.getByRole("button", { name: /Decisions, 8 unanswered/ }),
 			).toBeVisible();
 
-			await tabTargets.first().click();
 			let customChoice = card.getByRole("radio", { name: "Write a custom answer" });
 			await customChoice.focus();
 			await page.keyboard.press("Space");
