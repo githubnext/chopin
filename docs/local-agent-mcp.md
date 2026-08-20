@@ -4,7 +4,13 @@ Connect your coding agent to Chopin's remote Streamable HTTP MCP service before
 using a copied prompt or optional Chopin skill. This configuration does not
 start a local Chopin server.
 
-Set the workspace origin and use the existing GitHub CLI credential for the
+> [!IMPORTANT]
+> `/mcp` is always registered, including when `AGENT=off`. It is not a read-only
+> endpoint: a caller with repository push or administration access can create a
+> document and mutate an implementation lifecycle. Use HTTPS and treat every
+> configured bearer token as a credential.
+
+Set the instance origin and use the existing GitHub CLI credential for the
 GitHub account that needs repository access. Keep the token in your shell or
 user-level agent configuration — never commit it, add it to a repository
 `.env`, or copy it into a shared configuration file.
@@ -17,17 +23,43 @@ authorization.
 
 The MCP bearer boundary is separate from Chopin's browser GitHub App session.
 Chopin authenticates the supplied token, applies the instance admission policy,
-and asks GitHub directly for that token's repository permissions. The Chopin App
-does not need to be installed on a repository for MCP access. Browser routes,
-WebSockets, and the hosted Planner still require an active App installation that
-includes the repository.
+and asks GitHub directly for that token's repository permissions. The GitHub App
+for Chopin does not need to be installed on a repository for MCP access. Browser
+routes, WebSockets, and the hosted Planner still require an active App
+installation that includes the repository.
 
 ```bash
-export CHOPIN_URL="https://your-chopin-workspace.example"
+export CHOPIN_URL="https://your-chopin-instance.example"
 export GITHUB_TOKEN="$(gh auth token)"
 ```
 
 The MCP endpoint is `${CHOPIN_URL%/}/mcp`.
+
+Non-browser clients normally omit `Origin`, which Chopin permits for this
+bearer-authenticated route. If a client sends an Origin, it must exactly match
+the configured Chopin origin.
+
+## Available workflows
+
+The current MCP contract can:
+
+- list and read Chopin documents for the current repository;
+- create one document from a structured brief, canonical plan, and
+  caller-supplied repository provenance;
+- read an approved implementation graph and plan; and
+- claim a graph and report task, pull-request, blocker, revision, and
+  verification lifecycle transitions.
+
+Chopin validates the shape of `baseBranch` and `baseCommit` during creation but
+does not resolve them against GitHub. The creating agent is responsible for
+reading those values from its checkout rather than asserting arbitrary input.
+
+Document creation is available now. The supported implementation handoff is
+experimental and limited to documents created through `create_document`, whose
+provenance `read_implementation` can return. The backend can execute an approved
+graph, but the product has no user-facing way to approve the Planner's draft.
+See
+[Experimental implementation lifecycle](implementation-lifecycle.md).
 
 ## Claude Code
 
@@ -89,11 +121,19 @@ access because GitHub was unavailable or rate limited the request. Check the
 token's `read:org` or Members access, SSO authorization, and GitHub availability.
 
 `repository-forbidden` means the supplied token cannot expose the repository or
-lacks the operation's repository permission; it does not mean the Chopin App
-must be installed. Pull access is enough for
+lacks the operation's repository permission; it does not mean the GitHub App for
+Chopin must be installed. Pull access is enough for
 `list_documents`, `read_document`, and `read_implementation`. Push or admin
 access is required for create, start, and report lifecycle operations. Use an
 account with the required access or ask a repository owner to grant it.
+
+Use the optional
+[creating-chopin-plans skill](../skills/creating-chopin-plans/SKILL.md) to turn a
+settled coding-agent conversation into one initial document. The
+[implementing-chopin-plans skill](../skills/implementing-chopin-plans/SKILL.md)
+applies only after an implementation graph has been approved through a future or
+operator-provided approval path. Current MCP initialization instructions and
+tool descriptions override copied prompts or remembered command sequences.
 
 ## References
 

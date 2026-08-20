@@ -1,8 +1,12 @@
-# exe.dev development
+# exe.dev remote development
 
 Chopin has a dedicated supervisor mode for developing inside an exe.dev VM. It
 keeps the application, API, OAuth flow, and application WebSocket on one browser
 origin while exposing Vite HMR through a private alternate port.
+
+This is a development setup, not the generic deployment path. See
+[Self-hosting](self-hosting.md) for Docker, TLS proxy, database, and operations
+guidance.
 
 ## Proxy setup
 

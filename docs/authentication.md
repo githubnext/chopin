@@ -1,11 +1,11 @@
-# Authentication
+# Authentication and authorization
 
-Authentication covers the HTTP product, WebSocket admission, local MCP,
-repository tools, and Copilot. A verified GitHub user supplies presence and
-attribution. Optional instance admission lists restrict who may use Chopin. The
-browser, WebSocket, and hosted Planner boundaries intersect the user's
-repository role with the GitHub App installation. Local MCP instead checks the
-repository role granted directly to its caller-supplied bearer token.
+Authentication covers the browser product, WebSocket, local MCP, repository
+tools, and Copilot. A verified GitHub user supplies presence and attribution.
+Optional instance admission lists restrict who may use Chopin. Browser,
+WebSocket, and hosted Planner authorization intersects the user's repository
+role with the GitHub App installation. Local MCP instead checks the repository
+role granted directly to its caller-supplied bearer token.
 
 ## GitHub App
 
@@ -52,21 +52,17 @@ The App must be installed on every allowed organization, and an organization
 owner must approve this permission. Existing installations continue with their
 old permissions until the owner approves the update.
 
-No App id, private key, JWT, installation access token, or webhook secret is
+No App ID, private key, JWT, installation access token, or webhook secret is
 used. Chopin acts on behalf of each signed-in user with a GitHub App user access
 token so repository-role checks and the user's Copilot entitlement remain
 theirs.
 
-This is a clean cutover from the former OAuth App integration. No browser
-verifier or GitHub credential is part of the PostgreSQL schema; replace the
-environment variables, sign in again, and revoke the old OAuth App after
-validating the new App.
-
-Configure Chopin with the App's slug and OAuth client credentials:
+Configure Chopin with the App's slug and OAuth client credentials. A minimal
+production environment contains:
 
 ```text
 STORAGE_DRIVER=postgres
-DATABASE_URL=postgresql://chopin:chopin@database:5432/chopin
+DATABASE_URL=postgresql://<user>:<password>@<database-host>:5432/<database>
 APP_ORIGIN=https://chopin.example
 GITHUB_APP_SLUG=chopin-example
 GITHUB_APP_CLIENT_ID=...
@@ -76,13 +72,16 @@ GITHUB_ALLOWED_ORGANIZATIONS=githubnext
 SESSION_ENCRYPTION_KEY=<64 hex characters>
 ```
 
-The client id is distinct from the numeric App id. Generate the encryption key
+The client ID is distinct from the numeric App ID. Generate the encryption key
 with `openssl rand -hex 32`; it protects only the OAuth state and PKCE cookie.
 
 `APP_ORIGIN` must be exactly one HTTP(S) origin: no credentials, path, query,
 fragment, or trailing slash. HTTPS is required except for loopback development,
 such as `http://127.0.0.1:8787`. Callback URLs are built only from this value,
 never from incoming Host or forwarded headers.
+
+The complete variable reference and deployment procedures live in
+[Self-hosting](self-hosting.md).
 
 ## Instance admission
 
@@ -103,10 +102,10 @@ installation and repository role checks; local MCP checks the supplied token's
 repository role directly.
 
 Admission results are cached by a hash of the access token for 30 seconds.
-Browser requests, open-socket authorization, MCP requests, and agent permission
-callbacks recheck the policy. A definitive removal revokes the process-local
-browser session and Planner ownership at the next browser or socket recheck; an
-agent permission callback refuses the operation immediately. GitHub outages,
+Browser requests, open-socket authorization, MCP requests, and Planner
+permission callbacks recheck the policy. A definitive removal revokes the
+process-local browser session and Planner ownership at the next browser or
+socket recheck; a Planner permission callback refuses the operation immediately. GitHub outages,
 rate limits, malformed responses, blocked Apps, and missing permission fail
 closed for new requests but do not revoke an established browser session; they
 are reported as a temporary `503` and retried later.
@@ -136,11 +135,13 @@ lookup. An MCP-created channel for a repository outside the App installation is
 not available through browser routes, WebSockets, or the hosted Planner until
 the installation includes that repository. See [Local agent MCP](local-agent-mcp.md).
 
-The authorization-code flow uses state, S256 PKCE, the exact configured callback,
-and the App client secret. It does not request OAuth scopes; permissions come
-from the App registration and each installation. The setup callback ignores
-GitHub's untrusted `installation_id` query parameter and re-queries GitHub with
-the signed-in user's token.
+The authorization-code flow uses state, S256 PKCE, the exact configured
+callback, and the App client secret. It does not request OAuth scopes;
+permissions come from the App registration and each installation. The setup
+callback ignores GitHub's untrusted `installation_id` query parameter, clears
+the browser's installation snapshot, and redirects into the product. The next
+picker or authorization request re-queries GitHub with the signed-in user's
+token.
 
 Organization members may need an owner to approve installation or new
 permissions. For an organization using SAML SSO, establish an active SAML
@@ -158,11 +159,11 @@ Environment-specific callback and proxy configuration is documented in
 ## Session boundary
 
 The browser receives an HttpOnly, SameSite=Lax cookie containing a random
-session id and a 256-bit secret. The serving process keeps the secret hash,
+session ID and a 256-bit secret. The serving process keeps the secret hash,
 GitHub access and refresh tokens, expirations, user, and credential revision in
-memory. PostgreSQL receives only the session id, user id, expiry, and creation
+memory. PostgreSQL receives only the session ID, user ID, expiry, and creation
 time so durable Planner ownership can reference an active process session. A
-database row or session id cannot authenticate a request without the in-memory
+database row or session ID cannot authenticate a request without the in-memory
 secret hash.
 
 GitHub App user access tokens expire after eight hours. Chopin refreshes five
@@ -180,23 +181,24 @@ and retains the session for retry.
 Sessions expire absolutely after 30 days or whenever the server process stops.
 After acquiring the database writer lease, every new process clears session
 registry rows and Planner ownership before accepting traffic. Plans,
-transcripts, summaries, and repository installations remain durable. Logout
-deletes the process-local session and registry row but does not revoke the
-GitHub App authorization.
+transcripts, reserved Planner context fields, and repository installations
+remain durable. Logout deletes the process-local session and registry row but
+does not revoke the GitHub App authorization.
 
 OAuth state and the PKCE verifier are held in a separate encrypted, ten-minute
-HttpOnly cookie. State-changing HTTP routes and WebSocket upgrades require an
-Origin header exactly equal to `APP_ORIGIN`. Open sockets periodically recheck
-the process-local session, instance admission, and installation repository
-permission. A browser whose socket reconnects after a restart is returned to
-sign-in.
+HttpOnly cookie. Browser state-changing routes and WebSocket upgrades require an
+Origin header exactly equal to `APP_ORIGIN`. The bearer-authenticated MCP route
+accepts a missing Origin, as non-browser clients normally omit it, but rejects a
+present mismatched Origin. Open sockets periodically recheck the process-local
+session, instance admission, and installation repository permission. A browser
+whose socket reconnects after a restart is returned to sign-in.
 
 When a credential rotates, any Planner SDK session holding the previous token
 is aborted and discarded before refresh. A later turn recreates it from the
 durable transcript and plan. An interrupted turn is not replayed automatically
 because it may already have made durable tool changes.
 
-## API
+## Browser HTTP API
 
 ```text
 GET  /auth/github
@@ -215,3 +217,8 @@ POST /auth/logout
 
 API and authentication paths are owned by the server in development and
 production.
+
+Live collaboration is multiplexed over `/ws`. External coding agents use the
+separate Streamable HTTP endpoint at `/mcp`; unlike the browser API, its
+caller-supplied bearer is independent of the GitHub App installation and can
+perform write-authorized document and implementation lifecycle operations.
