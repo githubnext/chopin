@@ -24,6 +24,8 @@ import * as Select from "@radix-ui/react-select";
 import { $getNodeByKey, $getRoot, $isElementNode } from "lexical";
 import { $isCalloutNode, CALLOUT_TYPES, limits } from "@chopin/dialect";
 
+import { registerCalloutNormalization } from "./callout-shape";
+
 import type { CalloutType } from "@chopin/dialect";
 import type { ElementNode, LexicalEditor } from "lexical";
 
@@ -307,6 +309,8 @@ export function CalloutPlugin() {
 	let [editor] = useLexicalComposerContext();
 	let disabled = useCellValue(readOnly$);
 	let [callouts, setCallouts] = useState<Callout[]>([]);
+
+	useEffect(() => registerCalloutNormalization(editor), [editor]);
 
 	useEffect(() => {
 		let update = () => setCallouts(collect(editor));
