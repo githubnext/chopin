@@ -11,6 +11,10 @@
 			"types": "./src/index.ts",
 			"default": "./src/index.ts"
 		},
+		"./pointer": {
+			"types": "./src/pointer.ts",
+			"default": "./src/pointer.ts"
+		},
 		"./styles.css": "./src/styles.css"
 	},
 	"dependencies": {

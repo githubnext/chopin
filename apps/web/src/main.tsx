@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { usePointerCapabilities } from "@chopin/editor";
+import { usePointerCapabilities } from "@chopin/editor/pointer";
 
 import { App } from "./app";
 import { useVisualViewport } from "./viewport";

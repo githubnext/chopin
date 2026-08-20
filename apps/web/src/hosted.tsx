@@ -341,25 +341,28 @@ function RepositoryChannels(
 }
 
 function ChannelWorkspace(
-	{ agent, id, user, Workspace }: {
+	{ agent, id, user }: {
 		agent: boolean;
 		id: string;
 		user: Api.User;
-		Workspace: ComponentType<HostedWorkspaceProps>;
 	},
 ) {
-	let [detail, setDetail] = useState<Api.ChannelDetail>();
+	let [loaded, setLoaded] = useState<{
+		detail: Api.ChannelDetail;
+		Workspace: ComponentType<HostedWorkspaceProps>;
+	}>();
 	let [error, setError] = useState<unknown>();
 	let [retry, setRetry] = useState(0);
 	let recovery = readChannelRecovery(user.id, id);
 
 	useEffect(() => {
 		let active = true;
-		Api.channel(id).then(value => {
-			if (active) {
-				rememberChannel(user.id, value.channel, value.repository);
-				setDetail(value);
-			}
+		let detail = Api.channel(id).then(value => {
+			if (active) rememberChannel(user.id, value.channel, value.repository);
+			return value;
+		});
+		Promise.all([detail, import("./room-workspace")]).then(([detail, module]) => {
+			if (active) setLoaded({ detail, Workspace: module.RoomWorkspace });
 		}, reason => {
 			if (active) setError(reason);
 		});
@@ -367,7 +370,6 @@ function ChannelWorkspace(
 			active = false;
 		};
 	}, [id, retry]);
-
 	if (error) {
 		return (
 			<Failure
@@ -383,7 +385,8 @@ function ChannelWorkspace(
 			/>
 		);
 	}
-	if (!detail) return <Loading label="Opening channel..." />;
+	if (!loaded) return <Loading label="Opening channel..." />;
+	let { detail, Workspace } = loaded;
 	return (
 		<Workspace
 			agent={agent}
@@ -398,11 +401,7 @@ function ChannelWorkspace(
 }
 
 export function HostedApp(
-	{
-		agent,
-		user,
-		Workspace,
-	}: { agent: boolean; user: Api.User; Workspace: ComponentType<HostedWorkspaceProps> },
+	{ agent, user }: { agent: boolean; user: Api.User },
 ) {
 	let route = hostedRoute(location.pathname);
 	switch (route.page) {
@@ -411,7 +410,7 @@ export function HostedApp(
 		case "repository":
 			return <RepositoryChannels owner={route.owner} repository={route.repository} user={user} />;
 		case "channel":
-			return <ChannelWorkspace Workspace={Workspace} agent={agent} id={route.id} user={user} />;
+			return <ChannelWorkspace agent={agent} id={route.id} user={user} />;
 		case "missing":
 			return <Failure error={new Error("This page does not exist.")} />;
 	}
