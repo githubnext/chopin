@@ -61,13 +61,13 @@ function Header(
 				/>
 			</div>
 			<div
-				aria-label={`People here: ${people.map(member => member.handle).join(", ")}`}
+				aria-label={`People here: ${people.join(", ")}`}
 				className="room-members ml-auto flex shrink-0 items-center"
 				role="group"
 			>
-				{people.map(member => (
-					<span className="room-member-face -ml-1.5 first:ml-0" key={member.handle.toLowerCase()}>
-						<Face handle={member.handle} ring size={24} />
+				{people.map(handle => (
+					<span className="room-member-face -ml-1.5 first:ml-0" key={handle.toLowerCase()}>
+						<Face handle={handle} ring size={24} />
 					</span>
 				))}
 				{people.length > 3 && (

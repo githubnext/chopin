@@ -1,12 +1,14 @@
 import type { Session } from "@chopin/protocol";
 
 /** Derive people from a connection roster using GitHub's case-insensitive login identity. */
-export function peopleHere(members: readonly Session.Member[]): Session.Member[] {
+export function peopleHere(members: readonly Session.Member[]): string[] {
 	let seen = new Set<string>();
-	return members.filter(member => {
+	let people: string[] = [];
+	for (let member of members) {
 		let identity = member.handle.toLowerCase();
-		if (seen.has(identity)) return false;
+		if (seen.has(identity)) continue;
 		seen.add(identity);
-		return true;
-	});
+		people.push(member.handle);
+	}
+	return people;
 }
