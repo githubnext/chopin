@@ -50,7 +50,7 @@ function Header(
 			<a className="hidden text-sm font-semibold sm:inline" href="/">chopin</a>
 			<span aria-hidden="true" className="hidden h-4 hairline-l sm:block" />
 			<RepositoryPicker compact current={repository} key={userId} userId={userId} />
-			<div className="flex min-w-0 flex-1 items-center gap-2">
+			<div className="flex min-w-0 items-center gap-2">
 				<span aria-hidden="true" className="hidden text-sm text-text-tertiary sm:inline">/</span>
 				<DocumentPicker
 					canEdit={canEdit}

@@ -254,7 +254,7 @@ export function DocumentPicker(
 				aria-expanded={open}
 				aria-haspopup="listbox"
 				aria-label={`Document: ${current.title}`}
-				className="document-picker-trigger btn btn-sm btn-ghost min-w-0 flex-1 justify-start gap-1 text-text-tertiary"
+				className="document-picker-trigger btn btn-sm btn-ghost min-w-0 max-w-64 justify-start gap-1 text-text-tertiary"
 				onClick={() => setOpen(value => !value)}
 				ref={trigger}
 				title={current.title}
