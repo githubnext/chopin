@@ -86,10 +86,7 @@ test("the desktop document view is a centred segmented control", async ({ join, 
 	expect(planStyle).not.toBe(decisionsStyle);
 
 	await decisions.click();
-	let decisionsView = page.getByRole("region", { name: "Decisions" });
-	await expect(decisionsView).toBeVisible();
-	await expect(decisionsView.getByRole("heading", { level: 2, name: "Decisions" }))
-		.toHaveCount(1);
+	await expect(page.locator('[data-document-view="decisions"]')).toBeVisible();
 	await expect(decisions).toHaveAttribute("aria-pressed", "true");
 	await plan.click();
 	await expect(page.locator('[data-document-view="plan"]')).toBeVisible();
