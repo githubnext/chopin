@@ -479,8 +479,8 @@ body {
 /*
  * What focus looks like, once, for everything that can take it. An outline
  * rather than a ring: it follows `border-radius` and takes no space in the
- * layout. `:where()` gives it zero specificity, so a component needing
- * something else overrides it with one class and no fight.
+ * layout. Components may still own their focused fill or other state; the
+ * indicator's colour, width, and offset stay here.
  */
 [data-focus-boundary] {
 	--focus-ring-offset: -2px;
