@@ -1,7 +1,8 @@
 # Working on Chopin
 
-Chopin is an experimental collaborative planning system: several people and a
-hosted Planner share one rich plan associated with a GitHub repository. Read
+Chopin is an experimental collaborative authoring system: several people and a
+hosted agent share one rich, repository-connected document. Plans are one
+document workflow, not the product boundary. Read
 [README.md](README.md) for the product framing and [Architecture](docs/architecture.md)
 before changing cross-package behavior.
 
@@ -10,7 +11,7 @@ The most useful technical references are:
 - [Authentication and authorization](docs/authentication.md)
 - [Repository channels](docs/channels.md)
 - [Storage and persistence](docs/storage.md)
-- [Hosted Planner](docs/hosted-agent.md)
+- [Hosted agent (Planner)](docs/hosted-agent.md)
 - [Experimental implementation lifecycle](docs/implementation-lifecycle.md)
 - [Self-hosting](docs/self-hosting.md)
 
@@ -67,10 +68,11 @@ harnesses as runtime package boundaries.
 
 ## Runtime model
 
-The browser edits Lexical bound to Yjs. One WebSocket multiplexes session, plan,
-conversation, questions, comments, and implementation lifecycle messages. The
-server keeps each open channel as an authoritative Y.Doc with a headless Lexical
-mirror so it can validate and serialize the document without trusting a browser.
+The browser edits Lexical bound to Yjs. One WebSocket multiplexes session,
+document (`plan:*` on the wire), conversation, questions, comments, and
+implementation lifecycle messages. The server keeps each open channel as an
+authoritative Y.Doc with a headless Lexical mirror so it can validate and
+serialize the document without trusting a browser.
 
 Human updates are grouped for 5 ms, applied, projected to canonical MDX,
 validated, and committed with sidecar state before acknowledgement or relay. An
@@ -90,12 +92,12 @@ external implementation runs are durable.
 
 ## Authority and security
 
-- **The dialect is an allowlist.** Plan MDX is parsed and rendered, never
+- **The dialect is an allowlist.** Document MDX is parsed and rendered, never
   evaluated. Keep imports, exports, expressions, raw HTML, and unknown JSX out.
 - **Records own decisions.** Question answers and accepted comment decisions live
-  in sidecar records. Their plan components are projections. Planner operations
-  protect those projections, but browser CRDT validation does not yet
-  cross-check them against records; do not treat the projection as authority.
+  in sidecar records. Their document components are projections. Planner
+  operations protect those projections, but browser CRDT validation does not
+  yet cross-check them against records; do not treat the projection as authority.
 - **Admission is not authorization.** Optional user and organization lists admit
   an identity. Browser routes, sockets, and Planner tools separately recheck the
   App installation and repository role.
@@ -209,7 +211,8 @@ and storage revision. See [Experimental implementation lifecycle](docs/implement
 - Planner changes broadcast only after the Yjs update that created their target
   nodes.
 - Added and moved marks attach to live block elements. Removed marks use a gap
-  between surviving blocks; no empty tombstone node is inserted into the plan.
+  between surviving blocks; no empty tombstone node is inserted into the
+  document.
 - A Planner cursor and a change mark are separate. The cursor points after the
   final changed block even if that block is outside the current viewport.
 - Change marks are broadcast decoration, not durable server history. A client
@@ -236,8 +239,8 @@ so merge ranges from all mounted editors before replacing a registry entry.
   registry.
 - Lexical may report listener failures without throwing from the transaction.
   Capture editor errors explicitly when correctness depends on detecting them.
-- Open the plan on provider connection, not only editor mount. Otherwise a late
-  initial socket connection never requests state.
+- Open the document on provider connection, not only editor mount. Otherwise a
+  late initial socket connection never requests state.
 - A draft edit must not leave the queue until its acknowledgement. Dropping it
   after `send()` loses edits on disconnect.
 - Rebuilds and reconnects must replay unacknowledged updates only when the epoch
@@ -259,7 +262,7 @@ so merge ranges from all mounted editors before replacing a registry entry.
   the refusal from the permission callback path.
 - The external GitHub MCP server can change its offered tool count. Diagnose by
   required names and denied capabilities, not literal counts.
-- `AGENT=off` prevents hosted Planner turns but does not disable local MCP and
+- `AGENT=off` prevents hosted agent turns but does not disable local MCP and
   does not currently remove every Planner label from the UI.
 - A success callback for persisted sidecar work is not optional. Calling it
   after persistence prevents durable transcript state from being dropped.
@@ -307,7 +310,7 @@ so merge ranges from all mounted editors before replacing a registry entry.
 Use the narrowest layer that exercises the behavior:
 
 - **Unit and domain tests** cover parsing, serialization, graph transitions,
-  permissions, plans, questions, comments, and pure editor logic.
+  permissions, documents, questions, comments, and pure editor logic.
 - **Provider contract tests** run the shared storage suite against memory and
   real PostgreSQL, including process lifecycle and fencing.
 - **Browser and system integration tests** cover OAuth/session flows, repository
@@ -339,6 +342,9 @@ keys, and geometry-derived selectors unless geometry is the behavior under test.
 - Use current terminology: **Planner** for the hosted agent, **coding agent** for
   an external MCP client, **GitHub App for Chopin** for deployment identity, and
   **room** only for the live server representation.
+- Use **document** for the authored product artifact. Use **plan** only for a
+  planning-specific workflow, a literal UI label, or an implementation name such
+  as `plan:*`, `read_plan`, and `planRevision`.
 
 Run `bun run fix` after code edits and inspect its changes. For documentation,
 run `bun run ci` and validate relative links with exact casing.
@@ -347,9 +353,10 @@ run `bun run ci` and validate relative links with exact casing.
 
 When a disposable Planner session is created, diagnostics report available tool
 names and the external GitHub MCP contribution. Counts vary with SDK and remote
-MCP versions. A healthy boundary includes Chopin's plan and repository tools
-plus the allowed pull-request tools, and excludes ambient capabilities such as
-`bash`, filesystem access, URL fetch, host Git, issues, and unrestricted search.
+MCP versions. A healthy boundary includes Chopin's document tools (currently
+plan-named), repository tools, and allowed pull-request tools, and excludes
+ambient capabilities such as `bash`, filesystem access, URL fetch, host Git,
+issues, and unrestricted search.
 
 Treat a missing required tool or an unexpected ambient tool as a security or
 configuration failure even when the overall count looks plausible.

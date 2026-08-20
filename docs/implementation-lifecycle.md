@@ -1,7 +1,7 @@
 # Experimental implementation lifecycle
 
-Chopin contains an experimental handoff from a collaboratively approved plan to
-an external coding agent. It persists a versioned dependency graph, lets a
+One current planning-specific workflow hands a document used as a settled plan
+to an external coding agent. It persists a versioned dependency graph, lets a
 coding agent claim an approved version, records task and pull-request progress,
 and requires graph-wide verification before releasing a successful run. The
 supported read-before-claim path requires a document originally created through

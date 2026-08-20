@@ -1,8 +1,9 @@
 # Repository channels
 
-A channel is Chopin's durable collaborative workspace for one GitHub
-repository. Its metadata is stored locally; GitHub remains the current source of
-identity, installation access, and repository roles.
+A channel is Chopin's durable collaboration container for one document, its
+conversation, decisions, and one GitHub repository. Its metadata is stored
+locally; GitHub remains the current source of identity, installation access, and
+repository roles.
 
 ## Authorization
 
@@ -12,16 +13,16 @@ authorization then depends on the surface:
 | Surface                    | Credential                                 | Repository boundary                                                                                            |
 | -------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
 | Browser HTTP and WebSocket | Process-local GitHub App user session      | The repository must be in an App installation available to the user.                                           |
-| Hosted Planner             | The owning browser user's GitHub App token | The installation, ownership generation, session, credential revision, and role are rechecked before tools run. |
+| Hosted agent (Planner)     | The owning browser user's GitHub App token | The installation, ownership generation, session, credential revision, and role are rechecked before tools run. |
 | Local MCP                  | Caller-supplied GitHub bearer              | GitHub is queried directly; no App installation is required.                                                   |
 
 Pull access may list and open channels. Push or administration access may create
-a channel, edit its plan, change decisions, invoke the Planner, and mutate an
-implementation lifecycle. A public repository is not sufficient to expose its
-channels through the browser.
+a channel, edit its document, change decisions, invoke the hosted agent, and
+mutate an implementation lifecycle. A public repository is not sufficient to
+expose its channels through the browser.
 
 An MCP-created channel outside the App installation remains unavailable to
-browser routes, WebSockets, and the hosted Planner until an account owner adds
+browser routes, WebSockets, and the hosted agent until an account owner adds
 that repository to the installation.
 
 ## HTTP catalog
@@ -65,14 +66,16 @@ recreated repository name from inheriting another repository's channels.
 Browser and MCP creation intentionally initialize storage differently.
 
 Browser creation writes channel metadata first. It has no document checkpoint
-until the first `plan:open`, which lazily creates and persists the empty plan.
-An unopened browser-created channel can therefore have metadata and no snapshot.
+until the first `plan:open`, which lazily creates and persists the empty
+document. An unopened browser-created channel can therefore have metadata and no
+snapshot.
 
 MCP `create_document` validates the supplied brief, repository provenance, and
-canonical plan before one creation transaction publishes channel metadata, a
-revision-zero checkpoint, sidecar creation metadata, and the deterministic ID.
-A repeated idempotency key either returns that same document or reports a
-conflict when its original input differs.
+canonical document source supplied through its current `plan` field before one
+creation transaction publishes channel metadata, a revision-zero checkpoint,
+sidecar creation metadata, and the deterministic ID. A repeated idempotency key
+either returns that same document or reports a conflict when its original input
+differs.
 
 ## Browser routes
 
@@ -83,9 +86,10 @@ conflict when its original input differs.
 ```
 
 The application first authorizes metadata over HTTP, then opens one WebSocket
-for live channel traffic. Wide split mode shows Conversation beside either Plan
-or Decisions; compact mode shows one destination at a time. Plan and Decisions
-are alternatives rather than simultaneous document panes.
+for live channel traffic. Wide split mode shows Conversation beside either Plan,
+the current label for the document-content view, or Decisions. Compact mode
+shows one destination at a time. Plan and Decisions are alternatives rather
+than simultaneous document panes.
 
 ## WebSocket lifecycle
 
@@ -116,10 +120,10 @@ A channel persists:
 - metadata and repository identity;
 - canonical MDX, a complete Yjs checkpoint, and the accepted update journal
   after that checkpoint;
-- plan counters and a versioned sidecar;
+- document sequence and plan revision counters plus a versioned sidecar;
 - question definitions, shared draft CRDTs, answers, and relationships;
 - comment threads, passages, decisions, and result relationships;
-- durable transcript and reserved hosted Planner context fields;
+- durable transcript and reserved hosted agent context fields;
 - MCP creation metadata and repository provenance when created through MCP;
 - implementation graph versions, active execution, task progress,
   verification, and archived runs; and

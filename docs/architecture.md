@@ -3,7 +3,8 @@
 Chopin is one Bun application, one browser client, and one PostgreSQL database.
 The application serves the built client, HTTP API, Streamable HTTP MCP endpoint,
 and WebSocket from the same origin. GitHub supplies identity and repository
-authorization; GitHub Copilot supplies the hosted Planner runtime.
+authorization; GitHub Copilot supplies the hosted document agent runtime,
+currently named Planner.
 
 This document describes the system boundaries and collaborative document model.
 See [Repository channels](channels.md) for channel creation and access,
@@ -12,16 +13,27 @@ durable model, and [Self-hosting](self-hosting.md) for deployment.
 
 ## Vocabulary
 
-- A **channel** is the durable collaborative workspace associated with one
-  GitHub repository.
-- The **plan** is the channel's canonical restricted-MDX document and its rich
-  collaborative representation.
-- A **document** is the public MCP projection of a channel, including its plan,
-  brief, repository provenance, and revision where applicable.
+- A **document** is the collaboratively authored, repository-connected artifact
+  represented as restricted MDX, Lexical, and Yjs.
+- A **channel** is the durable collaboration container for one document, its
+  conversation, decisions, repository identity, and sidecar state.
+- An **MCP document** is the public API projection of a channel and document,
+  including its ID, title, source, revision, and optional brief.
+- A **plan** is a document being used for planning. It is not the product noun
+  for every document.
 - A **room** is the server's live in-memory representation of an open channel.
-- The **Planner** is Chopin's hosted Copilot-backed planning agent.
+- The **Planner** is the current name of Chopin's hosted Copilot-backed document
+  agent.
 - A **coding agent** is an external MCP client that creates or implements a
   document from its own local workspace.
+
+The current UI, protocol, and server grew from a planning workflow and retain
+literal names such as **Plan**, `plan:*`, `read_plan`, and `planRevision`. This
+documentation uses **document** for the product artifact and **plan** only for a
+planning-specific workflow or one of those implementation names.
+
+The hosted agent's product role is document co-authoring, while its current
+prompt remains optimized for planning.
 
 ## System context
 
@@ -63,10 +75,10 @@ they are not runtime dependency boundaries.
 
 ## Trust boundaries
 
-### Plan content
+### Document content
 
 The MDX dialect is an allowlist. Imports, exports, expressions, raw HTML, and
-unknown JSX are rejected. Plan content is parsed and rendered; it is never
+unknown JSX are rejected. Document content is parsed and rendered; it is never
 evaluated. Every accepted document state must serialize through the registered
 dialect and pass server-side validation.
 
@@ -85,13 +97,13 @@ requiring the GitHub App for Chopin installation. Pull access permits reads;
 push or administration access permits document creation and implementation
 lifecycle mutations.
 
-### Hosted Planner
+### Hosted agent
 
-The first eligible editor to invoke the Planner becomes the channel owner for
-the lifetime of that process session. Permission callbacks recheck admission,
-session identity, credential revision, ownership generation, repository role,
-and App installation before execution. The Planner has bounded, repository-fixed
-read tools and no ambient checkout, shell, or host filesystem.
+The first eligible editor to invoke the Planner becomes that channel's Planner
+owner for the lifetime of the process session. Permission callbacks recheck
+admission, session identity, credential revision, ownership generation,
+repository role, and App installation before execution. The Planner has bounded,
+repository-fixed read tools and no ambient checkout, shell, or host filesystem.
 
 ## State ownership
 
@@ -116,7 +128,7 @@ read tools and no ambient checkout, shell, or host filesystem.
 - repository and admission caches.
 
 Startup deliberately clears every process-session registry row and Planner
-owner reference. Transcripts, plan state, reserved context fields, and
+owner reference. Transcripts, document state, reserved context fields, and
 implementation runs remain. The current runtime does not generate a durable
 summary or advance its transcript cursor.
 
@@ -136,8 +148,8 @@ not interchangeable:
 | Value                      | Scope and purpose                                                                                                                                             |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Yjs epoch                  | Identifies one collaborative history. Rebuild or replacement creates a new epoch so clients discard incompatible updates.                                     |
-| Document sequence          | Advances for accepted document updates and server-authored document mutations. It is the `seq` used by plan update and acknowledgement messages.              |
-| Plan revision              | Optimistic-concurrency token for canonical plan reads and Planner block operations. One accepted document batch or server-authored plan mutation advances it. |
+| Document sequence          | Advances for accepted document updates and server-authored document mutations. It is the `seq` used by `plan:update` and `plan:ack`.                          |
+| Plan revision              | Plan-named optimistic-concurrency token for document reads and Planner block operations. One accepted document batch or server-authored mutation advances it. |
 | Storage channel revision   | Advances for every durable channel commit, including sidecar-only transcript, graph, draft, or relationship changes. It fences adapter writes.                |
 | Storage sequence           | Orders committed updates and events. Sidecar-only commits can create gaps in the Yjs update journal because they still consume a sequence.                    |
 | Graph version and revision | Identify one implementation graph generation and the edits within its current draft. A claim also binds the exact plan revision.                              |
@@ -149,7 +161,7 @@ for graph counters.
 
 ## Collaborative document
 
-Chopin represents one plan in three forms: Lexical for rich editing, Yjs for
+Chopin represents one document in three forms: Lexical for rich editing, Yjs for
 live collaboration, and canonical MDX for a readable durable projection. These
 are not competing sources of truth. While a room is open, the server's Yjs
 document and its headless Lexical mirror are authoritative.
@@ -170,7 +182,7 @@ The browser mounts MDXEditor and binds its Lexical editor to a browser Y.Doc
 with `@lexical/yjs`. The server owns the authoritative Y.Doc for each open room.
 A headless Lexical editor bound to it lets the server interpret CRDT updates,
 validate the resulting tree, and project canonical MDX without trusting a
-connected browser to serialize the plan.
+connected browser to serialize the document.
 
 The room also holds counters, question and comment records, transcript, Planner
 context, implementation state, pending client batches, and its persistence
@@ -218,11 +230,11 @@ sequenceDiagram
 	end
 ```
 
-## Planner edit flow
+## Hosted agent edit flow
 
-The Planner reads canonical MDX, a plan revision, and an outline of addressable
-top-level blocks. `edit_plan` accepts structural block operations against that
-revision rather than a text patch.
+The hosted agent, currently named Planner, reads canonical MDX, a plan revision,
+and an outline of addressable top-level document blocks. `edit_plan` accepts
+structural block operations against that revision rather than a text patch.
 
 1. Operations stage against parsed MDAST without touching the live room.
 2. New fragments are parsed, restricted components are refused, and missing
@@ -265,8 +277,8 @@ dialect but does not independently compare those projections with their records,
 so a custom client can create an inconsistent projection without changing the
 authoritative decision record.
 
-A relationship points from one of those records to top-level plan blocks. Each
-anchor combines a Yjs relative position with a digest of the canonical block.
+A relationship points from one of those records to top-level document blocks.
+Each anchor combines a Yjs relative position with a digest of the canonical block.
 The position survives surrounding edits; the digest can recover one unique
 match after a move or epoch change. Ambiguous or missing matches are orphaned
 rather than guessed.
