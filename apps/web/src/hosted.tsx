@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import * as Api from "./api";
+import { readChannelRecovery, rememberChannel } from "./channel-recovery";
 import { RepositoryPicker } from "./repository-picker";
 import { clearRepositoryCache } from "./repository-cache";
 
@@ -41,6 +42,13 @@ export function hostedRoute(pathname: string): HostedRoute {
 	let channel = /^\/channels\/([0-9a-f-]{36})\/?$/i.exec(pathname);
 	if (channel) return { page: "channel", id: channel[1]!.toLowerCase() };
 	return { page: "missing" };
+}
+
+export function retryableChannelFailure(error: unknown): boolean {
+	return !(error instanceof Api.ApiError)
+		|| error.status === 408
+		|| error.status === 429
+		|| error.status >= 500;
 }
 
 function Frame(
@@ -96,14 +104,58 @@ function Loading({ label = "Loading" }: { label?: string }) {
 	);
 }
 
-function Failure({ error }: { error: unknown }) {
+function repositoryHref(repository: { owner: string; name: string }): string {
+	return `/repositories/${encodeURIComponent(repository.owner)}/${
+		encodeURIComponent(repository.name)
+	}`;
+}
+
+function Failure(
+	{
+		channel,
+		error,
+		onRetry,
+		repository,
+	}: {
+		channel?: { id: string; title?: string };
+		error: unknown;
+		onRetry?: () => void;
+		repository?: Pick<Api.Repository, "owner" | "name" | "fullName">;
+	},
+) {
 	let message = error instanceof Error ? error.message : "Something went wrong";
 	return (
 		<div className="flex h-full items-center justify-center bg-ground p-4 sm:p-6" data-hosted="">
 			<div className="ring-hairline max-w-md rounded-lg bg-page p-4 shadow-resting sm:p-6">
 				<h1 className="text-xl font-semibold">Cannot open Chopin</h1>
 				<p className="mt-2 text-sm text-text-secondary">{message}</p>
-				<a className="btn btn-md btn-secondary mt-5" href="/">Back to repositories</a>
+				{channel && (
+					<div className="mt-4 min-w-0">
+						{channel.title && <p className="break-words text-sm font-medium">{channel.title}</p>}
+						<p className="mt-1 break-all text-sm text-text-tertiary">{channel.id}</p>
+						{repository && (
+							<p className="mt-2 break-words text-sm text-text-secondary">
+								{repository.fullName}
+							</p>
+						)}
+					</div>
+				)}
+				<div className="mt-5 flex flex-wrap gap-2">
+					{onRetry && (
+						<button className="btn btn-md btn-primary" onClick={onRetry} type="button">
+							Try again
+						</button>
+					)}
+					{repository && (
+						<a
+							className={`btn btn-md ${onRetry ? "btn-secondary" : "btn-primary"}`}
+							href={repositoryHref(repository)}
+						>
+							View {repository.fullName} channels
+						</a>
+					)}
+					<a className="btn btn-md btn-secondary" href="/">Back to repositories</a>
+				</div>
 			</div>
 		</div>
 	);
@@ -178,6 +230,7 @@ function RepositoryChannels(
 		setCreating(true);
 		try {
 			let result = await Api.createChannel(owner, repository, title.trim());
+			rememberChannel(user.id, result.channel, result.repository);
 			location.assign(`/channels/${result.channel.id}`);
 		} catch (reason) {
 			setError(reason);
@@ -262,6 +315,7 @@ function RepositoryChannels(
 									}`}
 									href={`/channels/${channel.id}`}
 									key={channel.id}
+									onClick={() => rememberChannel(user.id, channel, page.repository)}
 								>
 									<span className="min-w-0 break-words text-sm font-medium">{channel.title}</span>
 									<span className="text-sm text-text-tertiary sm:shrink-0">
@@ -296,20 +350,39 @@ function ChannelWorkspace(
 ) {
 	let [detail, setDetail] = useState<Api.ChannelDetail>();
 	let [error, setError] = useState<unknown>();
+	let [retry, setRetry] = useState(0);
+	let recovery = readChannelRecovery(user.id, id);
 
 	useEffect(() => {
 		let active = true;
 		Api.channel(id).then(value => {
-			if (active) setDetail(value);
+			if (active) {
+				rememberChannel(user.id, value.channel, value.repository);
+				setDetail(value);
+			}
 		}, reason => {
 			if (active) setError(reason);
 		});
 		return () => {
 			active = false;
 		};
-	}, [id]);
+	}, [id, retry]);
 
-	if (error) return <Failure error={error} />;
+	if (error) {
+		return (
+			<Failure
+				channel={recovery?.channel ?? { id }}
+				error={error}
+				onRetry={retryableChannelFailure(error)
+					? () => {
+						setError(undefined);
+						setRetry(value => value + 1);
+					}
+					: undefined}
+				repository={recovery?.repository}
+			/>
+		);
+	}
 	if (!detail) return <Loading label="Opening channel..." />;
 	return (
 		<Workspace

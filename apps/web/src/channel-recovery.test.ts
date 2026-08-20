@@ -1,0 +1,77 @@
+import { describe, expect, it } from "bun:test";
+
+import { readChannelRecovery, rememberChannel } from "./channel-recovery";
+
+class MemoryStorage implements Storage {
+	readonly #values = new Map<string, string>();
+
+	get length(): number {
+		return this.#values.size;
+	}
+
+	clear(): void {
+		this.#values.clear();
+	}
+
+	getItem(key: string): string | null {
+		return this.#values.get(key) ?? null;
+	}
+
+	key(index: number): string | null {
+		return [...this.#values.keys()][index] ?? null;
+	}
+
+	removeItem(key: string): void {
+		this.#values.delete(key);
+	}
+
+	setItem(key: string, value: string): void {
+		this.#values.set(key, value);
+	}
+}
+
+const channel = {
+	id: "11111111-1111-4111-8111-111111111111",
+	title: "Release readiness",
+};
+
+const repository = {
+	owner: "octo-org",
+	name: "score",
+	fullName: "octo-org/score",
+};
+
+describe("channel recovery context", () => {
+	it("keeps known channel and repository context in this tab", () => {
+		let storage = new MemoryStorage();
+		rememberChannel("U_octocat", channel, repository, storage);
+
+		expect(readChannelRecovery("U_octocat", channel.id, storage)).toEqual({ channel, repository });
+	});
+
+	it("does not return another channel's context", () => {
+		let storage = new MemoryStorage();
+		rememberChannel("U_octocat", channel, repository, storage);
+
+		expect(readChannelRecovery(
+			"U_octocat",
+			"22222222-2222-4222-8222-222222222222",
+			storage,
+		))
+			.toBeUndefined();
+	});
+
+	it("does not return a previous user's context", () => {
+		let storage = new MemoryStorage();
+		rememberChannel("U_octocat", channel, repository, storage);
+
+		expect(readChannelRecovery("U_other", channel.id, storage)).toBeUndefined();
+	});
+
+	it("ignores malformed stored context", () => {
+		let storage = new MemoryStorage();
+		storage.setItem(`chopin:channel-recovery:U_octocat:${channel.id}`, "not json");
+
+		expect(readChannelRecovery("U_octocat", channel.id, storage)).toBeUndefined();
+	});
+});
