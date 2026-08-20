@@ -289,6 +289,7 @@ describe("the hosted MCP adapter", () => {
 		let result = await adapter.create.create(caller, creation);
 		expect(result.kind).toBe("created");
 		if (result.kind !== "created") return;
+		expect(result.document.id[14]).toBe("5");
 		let expected = createdDocument(result.document.id);
 		expect(result.document).toEqual({
 			...expected,

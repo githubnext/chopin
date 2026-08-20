@@ -161,6 +161,7 @@ describe("channel routes", () => {
 		expect(created!.status).toBe(201);
 		let body = await created!.json();
 		expect(body.channel.title).toBe("Release readiness");
+		expect(body.channel.id[14]).toBe("5");
 		expect(body.channel.repositoryId).toBe("R_score");
 		expect(body.channel.createdBy).toBe("U_octocat");
 		expect(created!.headers.get("location")).toBe(`/channels/${body.channel.id}`);
@@ -180,6 +181,24 @@ describe("channel routes", () => {
 		expect((await storage.collaboration.load(body.channel.id, now))?.channel.id).toBe(
 			body.channel.id,
 		);
+	});
+
+	it("continues to open a legacy UUIDv4 channel", async () => {
+		let { router, storage, cookie, now } = await setup();
+		let id = "019c1234-1234-4123-8123-123456789abc";
+		await storage.channels.create({
+			id,
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Legacy plan",
+			createdBy: "U_octocat",
+			now,
+		});
+
+		let response = await router.handle(request(`/api/channels/${id}`, cookie));
+		expect(response!.status).toBe(200);
+		expect((await response!.json()).channel.id).toBe(id);
 	});
 
 	it("lists matching documents with a query-bound cursor and repository avatar", async () => {
@@ -283,9 +302,14 @@ describe("channel routes", () => {
 
 	it("paginates opaquely and rejects malformed cursors", async () => {
 		let { router, storage, cookie, now } = await setup();
-		for (let index = 0; index < 2; index++) {
+		let ids = [
+			"019c1234-1234-5123-8123-123456789abc",
+			"119c1234-1234-4123-8123-123456789abc",
+			"219c1234-1234-5123-8123-123456789abc",
+		];
+		for (let [index, id] of ids.entries()) {
 			await storage.channels.create({
-				id: crypto.randomUUID(),
+				id,
 				repositoryId: "R_score",
 				repositoryOwner: "octo-org",
 				repositoryName: "score",
@@ -300,12 +324,20 @@ describe("channel routes", () => {
 		));
 		let page = await first!.json();
 		expect(page.channels).toHaveLength(1);
+		expect(page.channels[0].id).toBe(ids[0]);
 		expect(page.nextCursor).toBeString();
 		let second = await router.handle(request(
 			`/api/repositories/octo-org/score/channels?limit=1&cursor=${page.nextCursor}`,
 			cookie,
 		));
-		expect((await second!.json()).channels).toHaveLength(1);
+		let secondPage = await second!.json();
+		expect(secondPage.channels[0].id).toBe(ids[1]);
+		expect(secondPage.nextCursor).toBeString();
+		let third = await router.handle(request(
+			`/api/repositories/octo-org/score/channels?limit=1&cursor=${secondPage.nextCursor}`,
+			cookie,
+		));
+		expect((await third!.json()).channels[0].id).toBe(ids[2]);
 		let bad = await router.handle(request(
 			"/api/repositories/octo-org/score/channels?cursor=not-json",
 			cookie,

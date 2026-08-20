@@ -1,5 +1,5 @@
+import { deterministicChannelId } from "../channels/id";
 import { GitHubError } from "../github/client";
-import { createHash } from "node:crypto";
 import * as Plan from "../plan/service";
 import * as Rooms from "../rooms";
 import { claimImplementation, reportImplementationLifecycle } from "../tasks/plan-graphs";
@@ -21,20 +21,6 @@ export type HostedCaller = {
 export type ImplementationPersistence = { lease(): Lease };
 
 const BEARER = new RegExp("^Bearer ([A-Za-z0-9._~+/-]+=*)$", "i");
-
-function channelId(repositoryId: string, idempotencyKey: string): string {
-	let bytes = createHash("sha256")
-		.update(repositoryId)
-		.update("\0")
-		.update(idempotencyKey)
-		.digest();
-	bytes[6] = (bytes[6]! & 0x0f) | 0x50;
-	bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-	let hex = bytes.toString("hex", 0, 16);
-	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${
-		hex.slice(20)
-	}`;
-}
 
 type Document = {
 	id: string;
@@ -240,7 +226,7 @@ export function hosted(
 				let { brief, plan, ...origin } = input;
 				let creation: Plan.CreationMetadata = { brief, origin };
 				let initial = await Plan.initial(plan, creation);
-				let id = channelId(repository.id, input.idempotencyKey);
+				let id = deterministicChannelId(repository.id, input.idempotencyKey);
 				try {
 					await auth.storage.channels.create({
 						id,

@@ -19,6 +19,10 @@ describe("hosted routes", () => {
 			page: "channel",
 			id: "019c1234-1234-4123-8123-123456789abc",
 		});
+		expect(hostedRoute("/channels/019c1234-1234-5123-8123-123456789abc")).toEqual({
+			page: "channel",
+			id: "019c1234-1234-5123-8123-123456789abc",
+		});
 		expect(hostedRoute("/plans/main")).toEqual({ page: "missing" });
 	});
 });
