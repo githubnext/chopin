@@ -118,8 +118,6 @@
 .plan-comment-orphan-button:hover,
 .plan-comment-orphan-button:focus-visible {
 	background: var(--color-brand-wash);
-	outline: 2px solid var(--color-brand);
-	outline-offset: 2px;
 }
 
 .plan-comment-preview,
@@ -586,11 +584,6 @@
 	background: color-mix(in oklch, var(--color-brand) 45%, transparent);
 }
 
-.plan-grip:focus-visible {
-	outline: 2px solid var(--color-brand);
-	outline-offset: 1px;
-}
-
 [data-plan-rail="column"] .plan-grip {
 	cursor: grab;
 }
@@ -647,13 +640,6 @@
 .plan-align:hover {
 	color: var(--color-text-primary);
 	outline-color: var(--color-brand);
-}
-
-.plan-grip-remove:focus-visible,
-.plan-insert:focus-visible,
-.plan-align:focus-visible {
-	outline: 2px solid var(--color-brand);
-	outline-offset: 1px;
 }
 
 /* Drawn rather than lettered: at fifteen pixels a glyph is a smudge, and these
@@ -780,11 +766,6 @@
 .plan-table-action:focus-visible {
 	background: var(--color-hover);
 	color: var(--color-text-primary);
-}
-
-.plan-table-action:focus-visible {
-	outline: 2px solid var(--color-brand);
-	outline-offset: -2px;
 }
 
 .plan-table-action:disabled {

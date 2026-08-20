@@ -89,13 +89,6 @@
 	transform: scale(0.94);
 }
 
-.plan-callout-type:focus-visible,
-.plan-callout-title:focus-visible,
-.plan-callout-option:focus-visible {
-	outline: 2px solid var(--color-brand);
-	outline-offset: 2px;
-}
-
 .plan-callout-type:disabled {
 	cursor: default;
 }
@@ -130,7 +123,6 @@
 	background: var(--color-page);
 	box-shadow: 0 0 0 1px color-mix(in oklab, var(--callout-accent) 25%, transparent);
 	color: var(--color-text-primary);
-	outline: none;
 }
 
 .plan-callout-title:empty::before {
