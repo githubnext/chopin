@@ -2,6 +2,7 @@ import { GitHubError } from "../github/client";
 import { StorageError } from "../storage/errors";
 
 import { documentTitles } from "./document-title";
+import { isChannelId, newChannelId } from "./id";
 
 import type { HostedAuth } from "../auth/routes";
 import type { AuthenticatedSession } from "../auth/session";
@@ -11,7 +12,6 @@ import type { ChannelCursor, ChannelRecord } from "../storage/model";
 
 const OWNER = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
 const REPOSITORY = /^[A-Za-z0-9._-]{1,100}$/;
-const CHANNEL = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 function json(value: unknown, status = 200, cookie?: string, location?: string): Response {
 	let headers = new Headers({
@@ -79,7 +79,7 @@ function decoded(
 			return false;
 		}
 		let updatedAt = new Date(item.updatedAt);
-		if (Number.isNaN(updatedAt.getTime()) || !CHANNEL.test(item.id)) return false;
+		if (Number.isNaN(updatedAt.getTime()) || !isChannelId(item.id)) return false;
 		return { cursor: { updatedAt, id: item.id }, query: item.query };
 	} catch {
 		return false;
@@ -242,7 +242,7 @@ export function registerChannelRoutes(
 				for (let candidate of candidates) {
 					try {
 						channel = await auth.storage.channels.create({
-							id: crypto.randomUUID(),
+							id: newChannelId(repo.id),
 							repositoryId: repo.id,
 							repositoryOwner: repo.owner,
 							repositoryName: repo.name,
@@ -278,7 +278,7 @@ export function registerChannelRoutes(
 			let session = await auth.sessions.authenticate(request);
 			if (!session) return json({ error: "authentication required" }, 401);
 			let id = params.channelId!;
-			if (!CHANNEL.test(id)) return json({ error: "channel not found" }, 404);
+			if (!isChannelId(id)) return json({ error: "channel not found" }, 404);
 			let channel = await auth.storage.channels.get(id);
 			if (!channel) return json({ error: "channel not found" }, 404);
 			let repo = await authorizedRepository(

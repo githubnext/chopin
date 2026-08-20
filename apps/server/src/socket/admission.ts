@@ -1,11 +1,10 @@
+import { isChannelId } from "../channels/id";
 import { GitHubError } from "../github/client";
 import { uid } from "../ids";
 import { StorageError } from "../storage/errors";
 
 import type { HostedAuth } from "../auth/routes";
 import type { SocketData } from "../wire";
-
-const CHANNEL = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 export type Admission = { data: SocketData } | { status: number; reason: string };
 
@@ -23,7 +22,7 @@ export async function admit(
 		let session = await auth.sessions.authenticate(request);
 		if (!session) return { status: 401, reason: "authentication required" };
 		let id = (url.searchParams.get("channel") || "").toLowerCase();
-		if (!CHANNEL.test(id)) return { status: 400, reason: "bad channel" };
+		if (!isChannelId(id)) return { status: 400, reason: "bad channel" };
 		let channel = await auth.storage.channels.get(id);
 		if (!channel) return { status: 404, reason: "channel not found" };
 		let access = await auth.sessions.use(

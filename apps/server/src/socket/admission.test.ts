@@ -141,6 +141,22 @@ describe("socket admission", () => {
 		);
 		expect("data" in probe).toBe(true);
 
+		let deterministic = await storage.channels.create({
+			id: "019c1234-1234-5123-8123-123456789abc",
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "MCP plan",
+			createdBy: "U_octocat",
+			now,
+		});
+		let deterministicUrl = new URL(`https://chopin.test/ws?channel=${deterministic.id}`);
+		let deterministicRequest = new Request(deterministicUrl, {
+			headers: { cookie: pair(issued.cookie), origin: "https://chopin.test" },
+		});
+		let admitted = await admit(deterministicRequest, deterministicUrl, auth);
+		expect("data" in admitted && admitted.data.room).toBe(deterministic.id);
+
 		github.push = true;
 		let editor = await admit(request, url, auth);
 		expect("data" in editor && editor.data.canEdit).toBe(true);
