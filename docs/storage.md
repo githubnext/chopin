@@ -14,11 +14,12 @@ browser-cookie verifiers, open rooms, Awareness presence, and Copilot SDK
 sessions never cross the storage boundary.
 
 The versioned sidecar is the atomic domain snapshot associated with a channel.
-It includes plan counters, question and comment records, shared drafts,
-transcript, relationships, creation metadata, implementation graphs, active
-execution, and lifecycle history. Restoration validates the sidecar version and
-selected shapes before exposing a room, but it does not deeply
-validate every nested question, passage, note, or transcript-author field.
+It includes document sequence and plan revision counters, question and comment
+records, shared drafts, transcript, relationships, creation metadata,
+implementation graphs, active execution, and lifecycle history. Restoration
+validates the sidecar version and selected shapes before exposing a room, but it
+does not deeply validate every nested question, passage, note, or
+transcript-author field.
 Compatibility conversion is limited to explicitly supported former fields. An
 invalid optional implementation graph is dropped instead of rejecting the
 sidecar.
@@ -42,13 +43,13 @@ Every adapter must provide:
 `collaboration.commit` can append a Yjs update, replace sidecar state, append
 events, or combine them in one transaction. Transcript, draft, relationship,
 graph, and lifecycle changes use the same commit even when the document itself
-does not change. Splitting those writes could restore a plan and decision state
-that no connected client was ever shown.
+does not change. Splitting those writes could restore a document and decision
+state that no connected client was ever shown.
 
 ## Counters
 
-The adapter's `revision` and `sequence` are storage counters, not the plan's
-optimistic-concurrency revision or its WebSocket document sequence.
+The adapter's `revision` and `sequence` are storage counters, not the plan
+revision used by document block operations or the WebSocket document sequence.
 
 - The channel storage revision advances for every accepted durable commit.
 - The storage sequence orders commits that may carry updates or events.
@@ -91,7 +92,7 @@ storage revision and writer fencing token, checks operation idempotency, assigns
 the next revision and sequence, and writes the update and sidecar atomically.
 Only then does the service acknowledge or broadcast the mutation.
 
-Server-authored plan edits, decisions, transcript entries, implementation graph
+Server-authored document edits, decisions, transcript entries, implementation graph
 changes, and lifecycle reports follow the same persistence-before-publication
 rule.
 
@@ -139,7 +140,7 @@ After acquiring the writer lease, every application start deletes all
 transcript cursor fields and the generation remain unchanged; the current
 runtime does not advance the summary or cursor, and startup forces status to
 `unavailable`. A later owner creates a fresh Copilot SDK session from bounded
-transcript context and the current plan.
+transcript context and the current document.
 
 Active external implementation runs are different: their graph lock, run
 identity, progress, and history remain durable across application restart.

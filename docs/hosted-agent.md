@@ -1,9 +1,14 @@
-# Hosted Planner
+# Hosted agent (Planner)
 
-The Planner is Chopin's Copilot-backed agent for producing and maintaining the
-shared plan. It can inspect one selected GitHub repository, edit the plan, ask
-the participants structured questions, anchor decisions to prose, and draft an
-implementation graph. It does not implement code or change GitHub.
+Chopin's Copilot-backed document agent is currently named Planner. It can
+inspect one selected GitHub repository, co-author the shared document, ask the
+participants structured questions, and anchor decisions to prose. For documents
+used as plans, it can also draft an implementation graph. It does not implement
+code or change GitHub.
+
+The product role is document co-authoring. The current prompt and tool vocabulary
+remain optimized for planning and may structure another document type as a plan;
+that is an implementation limitation, not the document model's boundary.
 
 ## Ownership
 
@@ -21,8 +26,8 @@ one of those release conditions occurs.
 PostgreSQL stores the owner session ID only so durable ownership can refer to an
 active process session. The cookie verifier and GitHub credential remain in
 memory. Startup clears every browser-session registry row and owner reference,
-while preserving the plan, transcript, reserved context fields, and ownership
-generation.
+while preserving the document, transcript, reserved context fields, and
+ownership generation.
 
 ## Runtime isolation
 
@@ -40,7 +45,8 @@ The Planner has no:
 
 Available capabilities are:
 
-- Chopin plan, question, relationship, and implementation-graph tools;
+- Chopin document, question, relationship, and implementation-graph tools (with
+  current plan-oriented tool names);
 - bounded file and tree reads plus commit history fixed to the default branch
   captured when the SDK session is created;
 - repository-scoped code search, post-filtered by repository node ID; and
@@ -89,8 +95,8 @@ every turn.
 - A recreated Copilot session receives at most the last 100 transcript entries
   and 50,000 characters. Summary and cursor fields exist in storage, but the
   current runtime does not advance them or generate a durable summary.
-- The Planner reads the current plan through `read_plan` instead of receiving a
-  stale embedded copy.
+- The Planner reads the current document through the plan-named `read_plan` tool
+  instead of receiving a stale embedded copy.
 
 Messages from people retain their GitHub handles so disagreement is not merged
 into one anonymous user voice.
@@ -99,10 +105,10 @@ into one anonymous user voice.
 
 Copilot CLI session files and SDK session IDs are disposable. A process restart,
 credential rotation, logout, or ownership reset discards the SDK session. A
-later turn bootstraps from the bounded transcript and reads the current plan.
+later turn bootstraps from the bounded transcript and reads the current document.
 
 An interrupted turn is visible and is never replayed automatically because it
-may already have made durable plan or question changes. `session.send()` only
+may already have made durable document or question changes. `session.send()` only
 accepts a message; the conversation handler remains active until the SDK emits
 its idle event.
 

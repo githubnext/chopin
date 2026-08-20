@@ -1,10 +1,11 @@
 # Chopin
 
-Chopin is a GitHub Next research prototype exploring how a software team and a
-repository-grounded planning agent can produce one durable implementation plan
-together. People edit the plan and own its decisions; the Planner reads the
-selected repository, proposes changes, and asks the team when the code cannot
-settle a choice.
+Chopin is a GitHub Next research prototype exploring how people and
+repository-grounded agents can author durable documents together. A document
+might be an implementation plan, technical specification, RFC, proposal, or
+decision record. People shape the document and own its decisions; the hosted
+agent, currently named **Planner**, reads the selected repository, proposes
+changes, and asks the team when the code cannot settle a choice.
 
 > [!IMPORTANT]
 > Chopin is experimental research software, not a supported GitHub product or a
@@ -13,21 +14,28 @@ settle a choice.
 
 ## What Chopin explores
 
-A planning channel combines three views of the same piece of work:
+A channel combines one repository-connected document with its collaboration
+context:
 
-- **Conversation** is shared by the team and the Planner. Ordinary messages stay
-  in the channel conversation; `@ai` asks the Planner to act.
-- **Plan** is a multiplayer rich-text document backed by readable MDX. People
-  and the Planner edit the same document, with presence, cursors, and visible
-  change markers.
-- **Decisions** retains attributed questionnaire answers and accepted comments
+- **Conversation** is shared by the team and the hosted agent. Ordinary messages
+  do not start an agent turn, although they can enter its bounded context;
+  `@ai` asks the agent to act.
+- **Document** is a multiplayer rich-text artifact backed by readable, restricted
+  MDX. The current interface labels this view **Plan**. People and the agent edit
+  the same document, with presence, cursors, and transient markers for recent
+  agent changes.
+- **Decisions** retain attributed questionnaire answers and accepted comments
   separately from the prose they produced, so a later rewrite cannot silently
   change what the team decided.
 
 The Planner can inspect the selected GitHub repository and its pull requests
-through bounded, read-only tools. It cannot write to GitHub, edit a checkout, or
-implement the plan. A separate coding agent can connect to Chopin through MCP to
-create documents or consume an approved implementation graph.
+through bounded, read-only tools, then co-author the document. It cannot write to
+GitHub, edit a checkout, or implement code. A separate coding agent can connect
+to Chopin through MCP to create documents or consume an approved implementation
+graph.
+
+The document model supports broader artifacts, while the current Planner prompt
+and tool vocabulary remain optimized for planning.
 
 ## Current boundaries
 
@@ -36,17 +44,19 @@ create documents or consume an approved implementation graph.
 - The Planner's file, tree, and history tools read the default branch captured
   when its session starts; code search is repository-scoped. It never reads a
   local checkout or uncommitted changes.
-- Every participant signs in, passes the instance admission policy, and needs
-  repository access through the GitHub App installation. A public repository
-  does not make its Chopin channels public.
+- Every browser participant signs in, passes the instance admission policy, and
+  needs repository access through the GitHub App installation. MCP callers also
+  pass instance admission, but use their own bearer token for repository
+  authorization instead of the App installation. A public repository does not
+  make its Chopin channels public.
 - Pull access can view channels. Push or administration access is required to
   create or change them and to invoke the Planner.
 - The first person to invoke the Planner supplies the GitHub App user token and
   Copilot entitlement used for that channel. A server restart signs everyone
   out and releases that ownership.
-- Plan and conversation context, along with repository material selected by the
-  Planner, is sent to GitHub Copilot during a Planner turn. GitHub credentials
-  remain process-local; plans, transcripts, decisions, and token-free session
+- Document and conversation context, along with repository material selected by
+  the Planner, is sent to GitHub Copilot during a turn. GitHub credentials remain
+  process-local; documents, transcripts, decisions, and token-free session
   records are stored in PostgreSQL.
 - One Chopin process may write to a database at a time. Horizontal application
   scaling and zero-downtime rolling deployment are not supported.
@@ -92,14 +102,15 @@ host. See [Self-hosting](docs/self-hosting.md) for an internet-facing deployment
 
 Open [http://127.0.0.1:8787](http://127.0.0.1:8787), sign in, and install or
 update the GitHub App when the repository picker asks. Select a repository and
-create a planning channel. Opening the channel in a second browser profile shows
-the multiplayer path.
+create a channel, then start writing. The current interface calls these planning
+channels. Opening the channel in a second browser profile shows the multiplayer
+path.
 
 Ctrl-C stops the development supervisor. `bun run db:down` tears down the local
-Compose project. Set `AGENT=off` to prevent hosted Planner turns; this does not
+Compose project. Set `AGENT=off` to prevent Planner turns; this does not
 disable the `/mcp` endpoint used by external coding agents.
 
-## Talk to the Planner
+## Collaborate with the Planner
 
 The web composer treats `@ai` as an instruction for the Planner:
 
@@ -111,8 +122,8 @@ yes, Markdown for now                  -> channel conversation
 ```
 
 Recent channel conversation is supplied as bounded context for the next turn,
-even when those messages did not address the Planner. The first eligible editor to
-invoke it owns the channel's Copilot usage until their session ends or the
+even when those messages did not address the Planner. The first eligible editor
+to invoke it owns the channel's Copilot usage until their session ends or the
 server restarts. The current web interface has no control for transferring that
 ownership manually.
 
@@ -122,8 +133,9 @@ Chopin exposes a bearer-authenticated Streamable HTTP MCP endpoint. See
 [Connect a local coding agent](docs/local-agent-mcp.md) for Claude Code, Codex
 CLI, and GitHub Copilot CLI configuration.
 
-The optional [creating-chopin-plans skill](skills/creating-chopin-plans/SKILL.md)
-turns a settled coding-agent conversation into an initial Chopin document.
+Planning is one way to use a Chopin document today. The optional
+[creating-chopin-plans skill](skills/creating-chopin-plans/SKILL.md) turns a
+settled coding-agent conversation into an initial plan document.
 [Implementation handoff](docs/implementation-lifecycle.md) and the
 [implementing-chopin-plans skill](skills/implementing-chopin-plans/SKILL.md) are
 experimental. The supported read-before-claim flow works only for documents
@@ -140,7 +152,7 @@ a draft graph.
 | Understand the system                      | [Architecture](docs/architecture.md)                         |
 | Understand channel identity and access     | [Repository channels](docs/channels.md)                      |
 | Understand persistence                     | [Storage](docs/storage.md)                                   |
-| Review the hosted Planner boundary         | [Hosted Planner](docs/hosted-agent.md)                       |
+| Review the hosted agent boundary           | [Hosted agent](docs/hosted-agent.md)                         |
 | Review experimental implementation handoff | [Implementation lifecycle](docs/implementation-lifecycle.md) |
 | Develop on exe.dev                         | [exe.dev development](docs/exe-dev.md)                       |
 | Test an authenticated PR preview           | [PR preview testing](docs/preview-testing.md)                |

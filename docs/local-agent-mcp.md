@@ -25,7 +25,7 @@ The MCP bearer boundary is separate from Chopin's browser GitHub App session.
 Chopin authenticates the supplied token, applies the instance admission policy,
 and asks GitHub directly for that token's repository permissions. The GitHub App
 for Chopin does not need to be installed on a repository for MCP access. Browser
-routes, WebSockets, and the hosted Planner still require an active App
+routes, WebSockets, and the hosted agent still require an active App
 installation that includes the repository.
 
 ```bash
@@ -44,15 +44,19 @@ the configured Chopin origin.
 The current MCP contract can:
 
 - list and read Chopin documents for the current repository;
-- create one document from a structured brief, canonical plan, and
-  caller-supplied repository provenance;
-- read an approved implementation graph and plan; and
+- create one document from a structured brief, canonical source supplied through
+  the current `plan` input, and caller-supplied repository provenance;
+- read an approved implementation graph and its document source; and
 - claim a graph and report task, pull-request, blocker, revision, and
   verification lifecycle transitions.
 
 Chopin validates the shape of `baseBranch` and `baseCommit` during creation but
 does not resolve them against GitHub. The creating agent is responsible for
 reading those values from its checkout rather than asserting arbitrary input.
+
+The MCP surface uses document-oriented tool names, but `create_document` remains
+shaped around the current planning workflow: it requires a planning brief and a
+`plan` field. That API shape does not define Chopin's broader document model.
 
 Document creation is available now. The supported implementation handoff is
 experimental and limited to documents created through `create_document`, whose

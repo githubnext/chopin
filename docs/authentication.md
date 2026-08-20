@@ -2,10 +2,10 @@
 
 Authentication covers the browser product, WebSocket, local MCP, repository
 tools, and Copilot. A verified GitHub user supplies presence and attribution.
-Optional instance admission lists restrict who may use Chopin. Browser,
-WebSocket, and hosted Planner authorization intersects the user's repository
-role with the GitHub App installation. Local MCP instead checks the repository
-role granted directly to its caller-supplied bearer token.
+Optional instance admission lists restrict who may use Chopin. Browser routes,
+WebSockets, and the hosted agent intersect the user's repository role with the
+GitHub App installation. Local MCP instead checks the repository role granted
+directly to its caller-supplied bearer token.
 
 ## GitHub App
 
@@ -132,7 +132,7 @@ requests but does not retain picker repository data.
 Local MCP is an intentional exception to this installation boundary. Its bearer
 token is authenticated independently and authorized with a direct repository
 lookup. An MCP-created channel for a repository outside the App installation is
-not available through browser routes, WebSockets, or the hosted Planner until
+not available through browser routes, WebSockets, or the hosted agent until
 the installation includes that repository. See [Local agent MCP](local-agent-mcp.md).
 
 The authorization-code flow uses state, S256 PKCE, the exact configured
@@ -180,7 +180,7 @@ and retains the session for retry.
 
 Sessions expire absolutely after 30 days or whenever the server process stops.
 After acquiring the database writer lease, every new process clears session
-registry rows and Planner ownership before accepting traffic. Plans,
+registry rows and Planner ownership before accepting traffic. Documents,
 transcripts, reserved Planner context fields, and repository installations
 remain durable. Logout deletes the process-local session and registry row but
 does not revoke the GitHub App authorization.
@@ -195,8 +195,8 @@ whose socket reconnects after a restart is returned to sign-in.
 
 When a credential rotates, any Planner SDK session holding the previous token
 is aborted and discarded before refresh. A later turn recreates it from the
-durable transcript and plan. An interrupted turn is not replayed automatically
-because it may already have made durable tool changes.
+durable transcript and document. An interrupted turn is not replayed
+automatically because it may already have made durable tool changes.
 
 ## Browser HTTP API
 

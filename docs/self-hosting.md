@@ -19,8 +19,8 @@ that origin.
 - PostgreSQL 17 is the version used by the repository and browser tests. Other
   versions are not covered by the project test suite.
 - Database migrations are forward-only. There is no automated schema rollback.
-- Restarting the application signs every browser out and releases hosted Planner
-  ownership. Plans, transcripts, decisions, and implementation state remain.
+- Restarting the application signs every browser out and releases hosted agent
+  ownership. Documents, transcripts, decisions, and implementation state remain.
 
 ## Choose the access policy first
 
@@ -43,7 +43,7 @@ GitHub bearer token, applies the instance admission policy, and authorizes
 repositories directly from that token. It does not require a GitHub App
 installation and can create documents or advance implementation lifecycle
 state for callers with push or administration access. `AGENT=off` disables
-hosted Planner turns; it does not disable MCP.
+hosted agent turns; it does not disable MCP.
 
 Use restricted admission for any internet-facing evaluation unless unrestricted
 access is a deliberate choice. Protect the entire origin with TLS because MCP
@@ -57,7 +57,7 @@ bearer tokens and browser sessions traverse it.
 - Outbound HTTPS access to GitHub and the hosted Copilot service.
 - A GitHub App owned by the deployment.
 - At least one user with repository push or administration access.
-- An active Copilot entitlement for each user who may own a hosted Planner
+- An active Copilot entitlement for each user who may own a hosted agent
   session.
 
 ## Register the GitHub App
@@ -106,8 +106,8 @@ the image.
 | `SESSION_ENCRYPTION_KEY`       | required            | Exactly 64 hexadecimal characters used for the short-lived OAuth state and PKCE cookie.                                            |
 | `SERVER_HOST`                  | `127.0.0.1`         | Source-process bind address. The image sets `0.0.0.0`.                                                                             |
 | `PORT`                         | `8787`              | Source-process HTTP and WebSocket port. The supplied image and health check expect internal port 8787.                             |
-| `MODEL`                        | `claude-sonnet-4.6` | Model requested for hosted Planner sessions.                                                                                       |
-| `AGENT`                        | on                  | Set exactly `off` to prevent hosted Planner turns and Copilot CLI startup.                                                         |
+| `MODEL`                        | `claude-sonnet-4.6` | Model requested for hosted agent sessions.                                                                                         |
+| `AGENT`                        | on                  | Set exactly `off` to prevent hosted agent turns and Copilot CLI startup.                                                           |
 | `COPILOT_CLI_PATH`             | automatic           | Advanced override for the Copilot CLI executable.                                                                                  |
 
 Generate the encryption key with:
@@ -241,7 +241,7 @@ After the first deployment:
 5. Create a channel with a user who has push or administration access.
 6. Open the channel in a second browser and verify presence and live edits.
 7. Send one `@ai` request to verify the owner's Copilot entitlement and the
-   hosted Planner runtime.
+   hosted agent runtime.
 8. Connect a local coding agent and call `list_documents` if MCP is part of the
    deployment's intended surface.
 
@@ -316,7 +316,7 @@ error with reason `repository-forbidden`. See
 ## Related references
 
 - [Authentication](authentication.md)
-- [Hosted Planner](hosted-agent.md)
+- [Hosted agent (Planner)](hosted-agent.md)
 - [Local agent MCP](local-agent-mcp.md)
 - [Storage](storage.md)
 - [Repository channels](channels.md)
