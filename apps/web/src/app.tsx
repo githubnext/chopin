@@ -19,6 +19,7 @@ import { DocumentPicker } from "./document-picker";
 import * as Api from "./api";
 import { HostedApp, HostedFailure, HostedLoading, HostedLogin } from "./hosted";
 import { RepositoryPicker } from "./repository-picker";
+import { clearRepositoryCache } from "./repository-cache";
 import { Wire } from "./wire";
 import { useWorkspaceMode, useWorkspaceState, Workspace } from "./workspace";
 import { presentWorkspace } from "./workspace-model";
@@ -34,19 +35,21 @@ function Header(
 		label,
 		repository,
 		room,
+		userId,
 	}: {
 		canEdit: boolean;
 		members: Session.Member[];
 		label: string;
 		repository: Api.Repository;
 		room: string;
+		userId: string;
 	},
 ) {
 	return (
 		<header className="room-header hairline-b relative flex min-h-12 shrink-0 flex-nowrap items-center gap-2 px-2 py-2 sm:h-12 sm:gap-3 sm:px-4 sm:py-0">
 			<a className="hidden text-sm font-semibold sm:inline" href="/">chopin</a>
 			<span aria-hidden="true" className="hidden h-4 hairline-l sm:block" />
-			<RepositoryPicker compact current={repository} />
+			<RepositoryPicker compact current={repository} key={userId} userId={userId} />
 			<div className="flex min-w-0 flex-1 items-center gap-2">
 				<span aria-hidden="true" className="hidden text-sm text-text-tertiary sm:inline">/</span>
 				<DocumentPicker
@@ -86,6 +89,7 @@ export function RoomWorkspace(
 		label,
 		repository,
 		room,
+		userId,
 	}: {
 		agent?: boolean;
 		canEdit?: boolean;
@@ -93,6 +97,7 @@ export function RoomWorkspace(
 		label: string;
 		repository: Api.Repository;
 		room: string;
+		userId: string;
 	},
 ) {
 	let [wire, setWire] = useState<Wire>();
@@ -239,6 +244,7 @@ export function RoomWorkspace(
 					label={label}
 					repository={repository}
 					room={room}
+					userId={userId}
 				/>
 			}
 			controls={
@@ -285,6 +291,7 @@ export function RoomWorkspace(
 export function App() {
 	let [session, setSession] = useState<Api.Session>();
 	let [error, setError] = useState<unknown>();
+	let [repositoryCacheReady, setRepositoryCacheReady] = useState(false);
 
 	useEffect(() => {
 		let active = true;
@@ -298,8 +305,26 @@ export function App() {
 		};
 	}, []);
 
+	useEffect(() => {
+		if (!session) return;
+		let parameters = new URLSearchParams(location.search);
+		let accessChanged = parameters.get("repository_access") === "changed";
+		if (!session.user) clearRepositoryCache();
+		else if (accessChanged) clearRepositoryCache(session.user.id);
+		if (accessChanged) {
+			parameters.delete("repository_access");
+			let query = parameters.toString();
+			history.replaceState(
+				null,
+				"",
+				`${location.pathname}${query ? `?${query}` : ""}${location.hash}`,
+			);
+		}
+		setRepositoryCacheReady(true);
+	}, [session]);
+
 	if (error) return <HostedFailure error={error} />;
-	if (!session) return <HostedLoading />;
+	if (!session || !repositoryCacheReady) return <HostedLoading />;
 	if (!session.user) return <HostedLogin />;
 	return <HostedApp Workspace={RoomWorkspace} agent={session.agent} user={session.user} />;
 }

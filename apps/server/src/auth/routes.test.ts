@@ -8,6 +8,8 @@ import { registerAuthRoutes } from "./routes";
 import type { AuthConfig } from "./config";
 import type {
 	GitHub,
+	GitHubCondition,
+	GitHubConditional,
 	GitHubOrganizationMembership,
 	GitHubTokenGrant,
 	GitHubUser,
@@ -60,9 +62,21 @@ class FakeGitHub implements GitHub {
 		return this.membership;
 	}
 
-	async installations(_token: string, page: number): Promise<InstallationPage> {
+	installations(_token: string, page: number): Promise<InstallationPage>;
+	installations(
+		_token: string,
+		page: number,
+		condition: GitHubCondition,
+	): Promise<GitHubConditional<InstallationPage>>;
+	async installations(
+		_token: string,
+		page: number,
+		condition?: GitHubCondition,
+	): Promise<GitHubConditional<InstallationPage>> {
 		if (this.denyRepositories) throw new GitHubError("GitHub API rejected the request", 401);
-		return {
+		let etag = 'W/"installations"';
+		if (condition?.ifNoneMatch === etag) return { notModified: true, etag };
+		let result: InstallationPage = {
 			installations: [{
 				id: "123",
 				account: {
@@ -82,15 +96,30 @@ class FakeGitHub implements GitHub {
 			}],
 			nextPage: page + 1,
 		};
+		return condition ? { ...result, etag } : result;
 	}
 
+	installationRepositories(
+		_token: string,
+		_installationId: string,
+		page: number,
+	): Promise<RepositoryPage>;
+	installationRepositories(
+		_token: string,
+		_installationId: string,
+		page: number,
+		condition: GitHubCondition,
+	): Promise<GitHubConditional<RepositoryPage>>;
 	async installationRepositories(
 		_token: string,
 		_installationId: string,
 		page: number,
-	): Promise<RepositoryPage> {
+		condition?: GitHubCondition,
+	): Promise<GitHubConditional<RepositoryPage>> {
 		if (this.denyRepositories) throw new GitHubError("GitHub API rejected the request", 401);
-		return {
+		let etag = '"repositories"';
+		if (condition?.ifNoneMatch === etag) return { notModified: true, etag };
+		let result: RepositoryPage = {
 			repositories: [{
 				id: "R_score",
 				owner: "octo-org",
@@ -103,6 +132,7 @@ class FakeGitHub implements GitHub {
 			}],
 			nextPage: page + 1,
 		};
+		return condition ? { ...result, etag } : result;
 	}
 
 	async repository(): Promise<Repository> {
@@ -214,13 +244,32 @@ describe("hosted authentication routes", () => {
 			}),
 		);
 		expect(installations!.status).toBe(200);
+		expect(installations!.headers.get("etag")).toBe('W/"installations"');
+		expect(installations!.headers.get("cache-control")).toBe("no-store");
 		expect((await installations!.json()).nextPage).toBe(4);
+		let unchangedInstallations = await router.handle(
+			new Request("https://chopin.test/api/github/installations?page=3", {
+				headers: { cookie: sessionCookie, "if-none-match": 'W/"installations"' },
+			}),
+		);
+		expect(unchangedInstallations!.status).toBe(304);
+		expect(unchangedInstallations!.headers.get("etag")).toBe('W/"installations"');
+		expect(unchangedInstallations!.headers.get("cache-control")).toBe("no-store");
+		expect(await unchangedInstallations!.text()).toBe("");
 		let repositories = await router.handle(
 			new Request("https://chopin.test/api/github/installations/123/repositories?page=3", {
 				headers: { cookie: sessionCookie },
 			}),
 		);
+		expect(repositories!.headers.get("etag")).toBe('"repositories"');
 		expect((await repositories!.json()).nextPage).toBe(4);
+		let unchangedRepositories = await router.handle(
+			new Request("https://chopin.test/api/github/installations/123/repositories?page=3", {
+				headers: { cookie: sessionCookie, "if-none-match": '"repositories"' },
+			}),
+		);
+		expect(unchangedRepositories!.status).toBe(304);
+		expect(unchangedRepositories!.headers.get("etag")).toBe('"repositories"');
 
 		let sessionId = sessionCookie.slice(sessionCookie.indexOf("=") + 1).split(".")[0]!;
 		let stored = await storage.sessions.get(sessionId, now);
@@ -236,7 +285,7 @@ describe("hosted authentication routes", () => {
 			}),
 		);
 		expect(setup!.status).toBe(303);
-		expect(setup!.headers.get("location")).toBe("/");
+		expect(setup!.headers.get("location")).toBe("/?repository_access=changed");
 		expect(github.invalidated).toEqual(["ghu_route_secret"]);
 
 		let refused = await router.handle(

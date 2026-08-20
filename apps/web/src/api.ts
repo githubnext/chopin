@@ -63,6 +63,10 @@ export type InstallationPage = {
 	nextPage?: number;
 };
 
+export type ValidatedPage<T> =
+	| { page: T; etag?: string }
+	| { notModified: true; etag?: string };
+
 export type ChannelPage = {
 	repository: Repository;
 	canEdit: boolean;
@@ -86,8 +90,7 @@ export class ApiError extends Error {
 	}
 }
 
-async function response<T>(path: string, init?: RequestInit): Promise<T> {
-	let result = await fetch(path, init);
+async function decoded<T>(result: Response): Promise<T> {
 	let value: unknown;
 	try {
 		value = await result.json();
@@ -105,20 +108,38 @@ async function response<T>(path: string, init?: RequestInit): Promise<T> {
 	return value as T;
 }
 
+async function response<T>(path: string, init?: RequestInit): Promise<T> {
+	return decoded(await fetch(path, init));
+}
+
+async function validatedPage<T>(path: string, ifNoneMatch?: string): Promise<ValidatedPage<T>> {
+	let result = await fetch(path, {
+		headers: ifNoneMatch ? { "if-none-match": ifNoneMatch } : undefined,
+	});
+	let etag = result.headers.get("etag") ?? undefined;
+	if (result.status === 304) return { notModified: true, ...(etag ? { etag } : {}) };
+	return { page: await decoded<T>(result), ...(etag ? { etag } : {}) };
+}
+
 export function session(): Promise<Session> {
 	return response("/api/session");
 }
 
-export function installations(page = 1): Promise<InstallationPage> {
-	return response(`/api/github/installations?page=${page}`);
+export function installations(
+	page = 1,
+	ifNoneMatch?: string,
+): Promise<ValidatedPage<InstallationPage>> {
+	return validatedPage(`/api/github/installations?page=${page}`, ifNoneMatch);
 }
 
 export function installationRepositories(
 	installationId: string,
 	page = 1,
-): Promise<RepositoryPage> {
-	return response(
+	ifNoneMatch?: string,
+): Promise<ValidatedPage<RepositoryPage>> {
+	return validatedPage(
 		`/api/github/installations/${encodeURIComponent(installationId)}/repositories?page=${page}`,
+		ifNoneMatch,
 	);
 }
 

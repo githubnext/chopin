@@ -186,7 +186,7 @@ test("the repository picker stays inside a narrow visual viewport", async ({ bas
 	).toBe(true);
 });
 
-test("the repository picker repositions as repository results and pagination errors arrive", async ({ baseURL, page }) => {
+test("the repository picker repositions as background results and errors arrive", async ({ baseURL, page }) => {
 	await page.setViewportSize({ width: 320, height: 568 });
 	await authenticate(page, "octocat", baseURL!);
 	let releaseInitial: (() => void) | undefined;
@@ -204,7 +204,17 @@ test("the repository picker repositions as repository results and pagination err
 				await route.fulfill({
 					json: installation === "101"
 						? { repositories: [score], nextPage: 2 }
-						: { repositories: [] },
+						: {
+							repositories: [{
+								...score,
+								id: "R_notes",
+								owner: "octocat",
+								name: "notes",
+								fullName: "octocat/notes",
+								private: false,
+								permissions: { pull: true, push: false, admin: false },
+							}],
+						},
 				});
 				return;
 			}
@@ -235,16 +245,15 @@ test("the repository picker repositions as repository results and pagination err
 	expect(loaded!.height).toBeGreaterThan(loading!.height + 40);
 	expect(loaded!.y).toBeLessThan(loading!.y - 40);
 
-	let more = page.getByRole("button", { name: "More from octo-org" });
-	await more.click();
-	await expect(page.getByRole("button", { name: "Loading..." })).toBeDisabled();
 	await expect.poll(() => releaseSecond !== undefined).toBe(true);
 	releaseSecond!();
-	await expect(page.getByRole("alert")).toHaveText("Could not load more repositories.");
+	await expect(page.getByRole("alert")).toContainText("Could not load all repositories.");
+	await expect(page.getByRole("option", { name: /octocat\/notes/ })).toBeVisible();
 	let failed = await popup.boundingBox();
 	expect(failed).toBeTruthy();
-	expect(failed!.height).toBeGreaterThan(loaded!.height);
-	expect(failed!.y).toBeLessThan(loaded!.y);
+	expect(failed!.height).toBeGreaterThan(0);
+	expect(failed!.y).toBeGreaterThanOrEqual(0);
+	expect(failed!.y + failed!.height).toBeLessThanOrEqual(568);
 });
 
 test("narrow coarse hosted controls and channel content remain reachable", async ({ baseURL, browser }) => {
@@ -370,16 +379,40 @@ test("an authorized user without an installation is sent to install the App", as
 	);
 });
 
-test("GitHub installation pagination reaches the repository picker", async ({ baseURL, page }) => {
+test("returning from GitHub App setup invalidates the tab cache", async ({ baseURL, page }) => {
+	await authenticate(page, "paged", baseURL!);
+	await page.goto("/");
+	await expect(page.getByRole("option", { name: /^octo-org\/archive-12\b/ })).toBeVisible();
+	await page.evaluate(() => {
+		let user = sessionStorage.getItem("chopin:repositories:active-user")!;
+		let key = `chopin:repositories:${encodeURIComponent(user)}`;
+		let snapshot = JSON.parse(sessionStorage.getItem(key)!) as {
+			validatedAt: number;
+			installationPages: Array<{ value: { installations: unknown[] } }>;
+			repositoryPages: Record<string, unknown>;
+		};
+		snapshot.validatedAt = Date.now();
+		snapshot.installationPages[0]!.value.installations = [];
+		snapshot.repositoryPages = {};
+		sessionStorage.setItem(key, JSON.stringify(snapshot));
+	});
+
+	await page.goto("/auth/github/setup?installation_id=101");
+	await expect(page).toHaveURL("/");
+	await expect(page.getByRole("option", { name: /^octo-org\/archive-12\b/ })).toBeVisible();
+});
+
+test("repository search includes pages loaded in the background", async ({ baseURL, page }) => {
 	await authenticate(page, "paged", baseURL!);
 	await page.goto("/");
 
-	await expect(page.getByRole("option", { name: /octo-org\/score/ })).toBeVisible();
-	await page.getByRole("button", { name: "More from octo-org" }).click();
-	await expect(page.getByRole("option", { name: /^octo-org\/archive-1\b/ })).toBeVisible();
+	let search = page.getByRole("combobox", { name: "Search repositories" });
+	await search.fill("archive-12");
+	await expect(page.getByRole("option", { name: /^octo-org\/archive-12\b/ })).toBeVisible();
+	await expect(page.getByRole("button", { name: /More from/ })).toHaveCount(0);
 });
 
-test("the repository picker retries and appends unique pages", async ({ baseURL, page }) => {
+test("the repository picker retries and appends unique background pages", async ({ baseURL, page }) => {
 	await authenticate(page, "octocat", baseURL!);
 	let fail = true;
 	await page.route(/\/api\/github\/installations\?page=\d+$/, async route => {
@@ -428,9 +461,37 @@ test("the repository picker retries and appends unique pages", async ({ baseURL,
 	await expect(page.getByRole("alert")).toHaveText("Could not load repositories.");
 	await page.getByRole("button", { name: "Try again" }).click();
 	await expect(page.getByRole("option", { name: /octo-org\/score/ })).toBeVisible();
-	await page.getByRole("button", { name: "More from octo-org" }).click();
 	await expect(page.getByRole("option", { name: /octo-org\/archive/ })).toBeVisible();
 	await expect(page.getByRole("option", { name: /octo-org\/score/ })).toHaveCount(1);
+});
+
+test("the tab cache revalidates stale repository pages with etags", async ({ baseURL, page }) => {
+	await authenticate(page, "paged", baseURL!);
+	await page.goto("/");
+	await expect(page.getByRole("option", { name: /^octo-org\/archive-12\b/ })).toBeVisible();
+
+	let cachedAt = await page.evaluate(() => {
+		let user = sessionStorage.getItem("chopin:repositories:active-user")!;
+		let key = `chopin:repositories:${encodeURIComponent(user)}`;
+		let snapshot = JSON.parse(sessionStorage.getItem(key)!) as { validatedAt: number };
+		snapshot.validatedAt = 0;
+		sessionStorage.setItem(key, JSON.stringify(snapshot));
+		return snapshot.validatedAt;
+	});
+	expect(cachedAt).toBe(0);
+
+	let validators: string[] = [];
+	page.on("request", async request => {
+		if (!request.url().includes("/api/github/installations")) return;
+		let validator = await request.headerValue("if-none-match");
+		if (validator) validators.push(validator);
+	});
+	await page.reload();
+	await expect(page.getByRole("option", { name: /^octo-org\/archive-12\b/ })).toBeVisible();
+	await page.getByRole("combobox", { name: "Search repositories" }).fill("archive-12");
+	await expect.poll(() => validators.length).toBeGreaterThanOrEqual(4);
+	await expect(page.getByText("Refreshing repositories...", { exact: true })).toHaveCount(0);
+	await expect(page.getByRole("option", { name: /^octo-org\/archive-12\b/ })).toBeVisible();
 });
 
 test("expired GitHub authorization returns to sign in", async ({ baseURL, page }) => {

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import * as Api from "./api";
 import { RepositoryPicker } from "./repository-picker";
+import { clearRepositoryCache } from "./repository-cache";
 
 import type { ComponentType, FormEvent, ReactNode } from "react";
 
@@ -12,6 +13,7 @@ export type HostedWorkspaceProps = {
 	repository: Api.Repository;
 	canEdit: boolean;
 	agent?: boolean;
+	userId: string;
 };
 
 export type HostedRoute =
@@ -56,6 +58,7 @@ function Frame(
 ) {
 	async function signOut() {
 		await Api.logout();
+		clearRepositoryCache(user.id);
 		location.assign("/");
 	}
 
@@ -64,7 +67,12 @@ function Frame(
 			<header className="hosted-header hairline-b flex h-14 items-center bg-page px-3 sm:px-6">
 				<a className="text-sm font-semibold" href="/">chopin</a>
 				<span aria-hidden="true" className="mx-1 h-4 hairline-l sm:mx-2" />
-				<RepositoryPicker current={currentRepository} initialOpen={openRepositoryPicker} />
+				<RepositoryPicker
+					current={currentRepository}
+					initialOpen={openRepositoryPicker}
+					key={user.id}
+					userId={user.id}
+				/>
 				<div className="ml-auto flex items-center gap-3">
 					<span className="hidden text-sm text-text-secondary sm:inline">{user.login}</span>
 					<button className="btn btn-sm btn-ghost" onClick={() => void signOut()} type="button">
@@ -311,6 +319,7 @@ function ChannelWorkspace(
 			label={detail.channel.title}
 			repository={detail.repository}
 			room={detail.channel.id}
+			userId={user.id}
 		/>
 	);
 }
