@@ -222,8 +222,14 @@ describe("controls", () => {
 	});
 
 	it("keeps focus and invalid outlines visible above their surface", () => {
+		expect(declared("--focus-ring-color")).toBe("var(--color-brand)");
+		expect(declared("--focus-ring-width")).toBe("2px");
+		expect(declared("--focus-ring-offset")).toBe("2px");
 		expect(THEME).toMatch(
-			/:focus-visible\s*\{[\s\S]*outline:\s*2px solid var\(--color-brand\);[\s\S]*outline-offset:\s*2px/,
+			/\[data-focus-boundary\]\s*\{[\s\S]*--focus-ring-offset:\s*-2px/,
+		);
+		expect(THEME).toMatch(
+			/:focus-visible\s*\{[\s\S]*outline:\s*var\(--focus-ring-width\) solid var\(--focus-ring-color\);[\s\S]*outline-offset:\s*var\(--focus-ring-offset\)/,
 		);
 		expect(utility("field")).toMatch(
 			/&\[aria-invalid="true"\]\s*\{[\s\S]*outline:\s*2px solid var\(--color-destructive\);[\s\S]*outline-offset:\s*2px/,
