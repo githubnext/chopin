@@ -53,21 +53,15 @@ function lines(node: LexicalNode | null): ElementNode | undefined {
 	return undefined;
 }
 
-/** A blank final paragraph that a preceding Enter added to a callout. */
-function calloutExit(node: LexicalNode | null) {
-	let cursor = node;
-	while (cursor) {
-		let parent = cursor.getParent();
+/** The direct callout child that contains this node. */
+function calloutPosition(node: LexicalNode | null) {
+	let child = node;
+	while (child) {
+		let parent = child.getParent();
 		if ($isCalloutNode(parent)) {
-			if (
-				$isParagraphNode(cursor)
-				&& cursor.getTextContentSize() === 0
-				&& cursor.getPreviousSibling() !== null
-				&& cursor.getNextSibling() === null
-			) return { callout: parent, paragraph: cursor };
-			return undefined;
+			return { callout: parent, child };
 		}
-		cursor = parent;
+		child = parent;
 	}
 	return undefined;
 }
@@ -99,47 +93,85 @@ function done(block: ElementNode): boolean {
 	return $isTextNode(last) ? anchor.offset === last.getTextContentSize() : true;
 }
 
+export function handleEnter(): boolean {
+	let selection = $getSelection();
+	if (!$isRangeSelection(selection)) return false;
+
+	if (selection.isCollapsed()) {
+		let position = calloutPosition(selection.anchor.getNode());
+		if (position?.child.isInline()) {
+			/*
+			 * The old slash command stored callout prose as direct inline children.
+			 * Its canonical source is valid, so restoring the Yjs checkpoint keeps
+			 * that shape and Lexical asks the callout itself to handle Enter. Wrap
+			 * only the inline run at the caret before asking the paragraph instead.
+			 */
+			let first = position.child;
+			let previous = first.getPreviousSibling();
+			while (previous?.isInline()) {
+				first = previous;
+				previous = first.getPreviousSibling();
+			}
+
+			let inline: LexicalNode[] = [];
+			let cursor: LexicalNode | null = first;
+			while (cursor?.isInline()) {
+				inline.push(cursor);
+				cursor = cursor.getNextSibling();
+			}
+
+			let paragraph = $createParagraphNode()
+				.setFormat(position.callout.getFormatType())
+				.setIndent(position.callout.getIndent());
+			first.insertBefore(paragraph);
+			paragraph.append(...inline);
+			selection.insertParagraph();
+			return true;
+		}
+
+		if (
+			position
+			&& $isParagraphNode(position.child)
+			&& position.child.getTextContentSize() === 0
+			&& position.child.getPreviousSibling() !== null
+			&& position.child.getNextSibling() === null
+		) {
+			position.child.remove();
+			let paragraph = $createParagraphNode();
+			position.callout.insertAfter(paragraph);
+			paragraph.select();
+			return true;
+		}
+	}
+
+	let block = lines(selection.anchor.getNode());
+	if (!block) return false;
+
+	if (done(block)) {
+		// The blank line was the request to leave, not content, so
+		// it goes with it — otherwise every fence anybody escaped
+		// from would keep a trailing empty line nobody typed.
+		let last = block.getLastDescendant();
+		if ($isLineBreakNode(last)) last.remove();
+		else if ($isTextNode(last)) last.setTextContent(last.getTextContent().slice(0, -1));
+
+		let paragraph = $createParagraphNode();
+		block.insertAfter(paragraph);
+		paragraph.select();
+		return true;
+	}
+
+	selection.insertLineBreak();
+	return true;
+}
+
 export function EnterPlugin() {
 	let [editor] = useLexicalComposerContext();
 
 	useEffect(() => {
 		return editor.registerCommand(
 			INSERT_PARAGRAPH_COMMAND,
-			() => {
-				let selection = $getSelection();
-				if (!$isRangeSelection(selection)) return false;
-
-				if (selection.isCollapsed()) {
-					let exit = calloutExit(selection.anchor.getNode());
-					if (exit) {
-						exit.paragraph.remove();
-						let paragraph = $createParagraphNode();
-						exit.callout.insertAfter(paragraph);
-						paragraph.select();
-						return true;
-					}
-				}
-
-				let block = lines(selection.anchor.getNode());
-				if (!block) return false;
-
-				if (done(block)) {
-					// The blank line was the request to leave, not content, so
-					// it goes with it — otherwise every fence anybody escaped
-					// from would keep a trailing empty line nobody typed.
-					let last = block.getLastDescendant();
-					if ($isLineBreakNode(last)) last.remove();
-					else if ($isTextNode(last)) last.setTextContent(last.getTextContent().slice(0, -1));
-
-					let paragraph = $createParagraphNode();
-					block.insertAfter(paragraph);
-					paragraph.select();
-					return true;
-				}
-
-				selection.insertLineBreak();
-				return true;
-			},
+			handleEnter,
 			COMMAND_PRIORITY_LOW,
 		);
 	}, [editor]);
