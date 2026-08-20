@@ -57,6 +57,13 @@ export type QuestionViewProps = {
 	aside?: ReactNode;
 };
 
+export function currentQuestion(
+	definition: Definition,
+	active: string | undefined,
+): Item {
+	return definition.questions.find(question => question.id === active) ?? definition.questions[0]!;
+}
+
 function Badges({ people }: { people: Collaborator[] }) {
 	if (people.length === 0) return null;
 	return (
@@ -358,21 +365,14 @@ export function QuestionView(props: QuestionViewProps) {
 
 	let base = useId();
 	let single = definition.questions.length === 1;
-	let [active, setActive] = useState(() => definition.questions[0]?.id);
+	let [selected, setActive] = useState(() => definition.questions[0]?.id);
+	let current = currentQuestion(definition, selected);
+	let active = current.id;
+	if (active !== selected) setActive(active);
 	// Cancelling cannot be undone and the agent is waiting, so it takes a
 	// second, deliberate click rather than a modal nobody reads.
 	let [confirming, setConfirming] = useState(false);
 	let tabs = useRef<HTMLDivElement>(null);
-
-	// A question can disappear if the definition is replaced; fall back rather
-	// than rendering an empty panel.
-	useEffect(() => {
-		setActive(current =>
-			definition.questions.some(question => question.id === current)
-				? current
-				: definition.questions[0]?.id
-		);
-	}, [definition]);
 
 	useEffect(() => {
 		if (!active) return;
@@ -429,7 +429,6 @@ export function QuestionView(props: QuestionViewProps) {
 	}
 
 	let multiple = !single;
-	let current = definition.questions.find(question => question.id === active);
 	let index = definition.questions.findIndex(question => question.id === active);
 	let last = index === definition.questions.length - 1;
 	let unanswered = definition.questions.filter(question => !answered(question, drafts[question.id]))
