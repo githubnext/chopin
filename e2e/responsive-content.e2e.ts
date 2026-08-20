@@ -125,31 +125,39 @@ async function expectIntrinsicWidth(
 }
 
 async function expectVisibleMermaidSvg(page: Page): Promise<void> {
-	let result = await content(page).locator("[data-plan-language='mermaid'] svg").evaluateAll(
-		nodes => {
+	let result = await content(page).getByRole("region", { name: "Diagram preview" }).evaluateAll(
+		regions => {
 			let documentBox = globalThis.document.querySelector("[data-plan-scroll]")
 				?.getBoundingClientRect();
-			let visible = nodes.flatMap(node => {
-				let element = node as SVGSVGElement;
-				let style = getComputedStyle(element);
-				let rectangle = element.getBoundingClientRect();
+			let visible = regions.flatMap(region => {
+				let svg = region.querySelector("svg");
+				if (!svg) return [];
+				let style = getComputedStyle(svg);
+				let rectangle = svg.getBoundingClientRect();
+				let regionBox = region.getBoundingClientRect();
 				if (
 					style.display === "none" || style.visibility === "hidden" || rectangle.width === 0
 					|| rectangle.height === 0
 				) return [];
 				return [{
-					inside: !!documentBox && rectangle.left >= documentBox.left
-						&& rectangle.right <= documentBox.right,
-					intrinsicWidth: element.viewBox.baseVal.width || element.width.baseVal.value,
+					inside: !!documentBox && regionBox.left >= documentBox.left
+						&& regionBox.right <= documentBox.right,
+					intrinsicWidth: svg.viewBox.baseVal.width || svg.width.baseVal.value,
 					documentWidth: documentBox?.width ?? 0,
+					overflows: region.scrollWidth > region.clientWidth,
 				}];
 			});
-			return { all: nodes.length, visible };
+			return { all: regions.length, visible };
 		},
 	);
 	expect(result.all, "Mermaid must create SVG output").toBeGreaterThan(0);
 	expect(result.visible.length, "Mermaid must paint a visible SVG").toBeGreaterThan(0);
-	expect(result.visible.every(value => value.inside), "visible Mermaid SVGs must fit the document")
+	expect(result.visible.every(value => value.inside), "Mermaid scrollers must fit the document")
+		.toBe(true);
+	expect(
+		result.visible.every(value => value.overflows),
+		"wide Mermaid diagrams must scroll internally",
+	)
 		.toBe(true);
 	expect(
 		result.visible.some(value => value.intrinsicWidth > value.documentWidth),

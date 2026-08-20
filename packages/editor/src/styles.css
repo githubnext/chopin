@@ -992,6 +992,23 @@
 	height: auto;
 }
 
+.plan-content .plan-diagram {
+	max-inline-size: 100%;
+	overflow-x: auto;
+	overflow-y: hidden;
+	overscroll-behavior-inline: contain;
+}
+
+.plan-content .plan-diagram svg {
+	display: block;
+	max-width: none;
+}
+
+.plan-content .plan-diagram:focus-visible {
+	outline: 2px solid var(--color-brand);
+	outline-offset: 2px;
+}
+
 /* Tabs ------------------------------------------------------------------- */
 
 .plan-content [data-plan-chrome="tabs"] {

@@ -125,7 +125,27 @@ async function renderMermaid(key: string, source: string): Promise<string> {
 		theme: "neutral",
 	});
 	let { svg } = await mermaid.default.render(`ace-mermaid-${key}`, source);
-	return svg;
+	let parsed = new DOMParser().parseFromString(svg, "image/svg+xml");
+	let root = parsed.documentElement;
+	let viewBox = root.getAttribute("viewBox")?.trim().split(/[\s,]+/).map(Number);
+	if (root.localName !== "svg" || viewBox?.length !== 4) return svg;
+	let width = viewBox[2]!;
+	let height = viewBox[3]!;
+	if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+		return svg;
+	}
+
+	/*
+	 * Mermaid writes `width="100%"` and an inline maximum from this viewBox.
+	 * In prose that makes a wide diagram shrink until its labels are unreadable.
+	 * Give the SVG its authored drawing size instead; the preview owns overflow
+	 * and normal document flow owns height after every render and resize.
+	 */
+	root.setAttribute("width", String(width));
+	root.setAttribute("height", String(height));
+	root.style.removeProperty("max-width");
+	if (!root.getAttribute("style")) root.removeAttribute("style");
+	return root.outerHTML;
 }
 
 /**
@@ -316,13 +336,25 @@ function Rendered(
 		);
 	}
 
-	// Produced by KaTeX or Mermaid from validated source under their strict
-	// modes, not by anything the author wrote.
+	if (!html) return null;
+	if (block.kind === "mermaid") {
+		return (
+			<div
+				aria-label="Diagram preview"
+				className="plan-diagram"
+				role="region"
+				tabIndex={0}
+				dangerouslySetInnerHTML={{ __html: html }}
+			/>
+		);
+	}
+
+	// Produced by KaTeX from validated source under its strict mode, not by
+	// anything the author wrote.
 	//
 	// Inline math is a span inside a sentence, so what wraps it has to be one
 	// too: a block element here would put a formula somebody wrote mid-clause
 	// on a line of its own, and the rest of the sentence after it.
-	if (!html) return null;
 	if (block.inline) return <span dangerouslySetInnerHTML={{ __html: html }} />;
 	return <div dangerouslySetInnerHTML={{ __html: html }} />;
 }
