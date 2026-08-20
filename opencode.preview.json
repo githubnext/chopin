@@ -1,0 +1,24 @@
+{
+	"$schema": "https://opencode.ai/config.json",
+	"default_agent": "preview-browser",
+	"agent": {
+		"build": {
+			"disable": true
+		},
+		"plan": {
+			"disable": true
+		},
+		"general": {
+			"disable": true
+		},
+		"explore": {
+			"disable": true
+		}
+	},
+	"mcp": {
+		"chopin": {
+			"enabled": false
+		}
+	},
+	"permission": "deny"
+}
