@@ -55,6 +55,7 @@ export function SidecarCard(
 			className={`flex flex-col overflow-hidden rounded-lg ring-hairline ${surface} ${
 				focused ? "bg-selected" : ""
 			}`}
+			data-focus-boundary=""
 			{...rest}
 		>
 			{status && <div className="flex justify-end px-3 pt-2.5 empty:hidden">{status}</div>}

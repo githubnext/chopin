@@ -1,6 +1,7 @@
 /** Browser-owned callout behavior: focus, composition and a live editor lock. */
 
 import { content, expect, test, written } from "./room";
+import { expectFocusIndicator } from "./focus";
 
 import type { WebSocketRoute } from "@playwright/test";
 
@@ -30,6 +31,7 @@ test("a callout type menu has one keyboard path", async ({ join, seed }) => {
 	await page.keyboard.press("ArrowDown");
 	await expect(menu).toBeVisible();
 	await expect(menu.getByRole("option", { name: "Note" })).toBeFocused();
+	await expectFocusIndicator(menu.getByRole("option", { name: "Note" }));
 	// Radix queues arrow focus, so keep the second arrow and Enter in the same
 	// browser task: this is the rapid keyboard path the picker has to honour.
 	await page.evaluate(() => {

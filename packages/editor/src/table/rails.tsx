@@ -393,6 +393,7 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks, tool
 	return (
 		<div
 			className="plan-rail"
+			data-focus-boundary=""
 			data-plan-rail={axis}
 			// Placement is measured, so it is a style rather than a class.
 			style={frame}

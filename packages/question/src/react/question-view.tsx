@@ -452,6 +452,7 @@ export function QuestionView(props: QuestionViewProps) {
 					ref={tabs}
 					role="tablist"
 					aria-label="Questions"
+					data-focus-boundary=""
 					className="flex gap-1 overflow-x-auto px-2 pt-2 hairline-b"
 				>
 					{definition.questions.map((question, index) => {

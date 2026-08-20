@@ -197,6 +197,7 @@ export function DocumentPicker(
 			<div
 				className="min-h-0 overflow-y-auto p-1"
 				data-document-scroll=""
+				data-focus-boundary=""
 				onScroll={event => {
 					let node = event.currentTarget;
 					if (node.scrollHeight - node.scrollTop - node.clientHeight < 32) void more();

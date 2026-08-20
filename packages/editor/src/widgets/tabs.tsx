@@ -90,6 +90,7 @@ function Strip(
 		<div
 			ref={strip}
 			role="tablist"
+			data-focus-boundary=""
 			// The strip is chrome, not content: keep it out of the editable tree.
 			contentEditable={false}
 			className="flex gap-1 overflow-x-auto pb-1 hairline-b"

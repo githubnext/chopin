@@ -466,6 +466,7 @@ export function SlashMenu({ disabled }: SlashMenuProps) {
 			ref={surface}
 			role="listbox"
 			aria-label="Insert block"
+			data-focus-boundary=""
 			contentEditable={false}
 			className={`${SHELL} max-h-72 w-56 overflow-y-auto`}
 			style={position

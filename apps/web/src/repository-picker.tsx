@@ -199,7 +199,11 @@ export function RepositoryPicker(
 					value={query}
 				/>
 			</div>
-			<div className="min-h-0 flex-1 overflow-y-auto p-1" data-repository-scroll="">
+			<div
+				className="min-h-0 flex-1 overflow-y-auto p-1"
+				data-focus-boundary=""
+				data-repository-scroll=""
+			>
 				{!installed && loading && (
 					<p className="px-2 py-3 text-sm text-text-tertiary" role="status">
 						Loading repositories...

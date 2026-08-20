@@ -278,7 +278,7 @@ function Heading(
 						position="popper"
 						sideOffset={4}
 					>
-						<Select.Viewport>
+						<Select.Viewport data-focus-boundary="">
 							{CALLOUT_TYPES.map(type => (
 								<Select.Item
 									className="plan-callout-option"
