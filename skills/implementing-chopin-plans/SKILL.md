@@ -40,3 +40,6 @@ After every task is complete, perform an independent whole-graph verification. R
 | Verification evidence is incomplete        | Do not report a passing result.           |
 
 Keep this provider-neutral Agent Skills directory intact when installing it in the shared skill location supported by the local runtime.
+
+Use [prompt.md](prompt.md) as a starter only after Chopin exposes an approved
+graph through `read_implementation`.

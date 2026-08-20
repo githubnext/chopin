@@ -1,9 +1,14 @@
-# Test PR previews with Playwright
+# Test GitHub Next PR previews with Playwright
 
-Chopin publishes a Coolify deployment for each trusted pull request. A coding
-agent can inspect that deployment through Playwright MCP, including the real
-GitHub App OAuth flow, without putting a GitHub password in the repository or
-the model context.
+GitHub Next's external Coolify configuration publishes a deployment for each
+trusted pull request. That deployment automation and its trusted ready-comment
+contract do not live in this repository. This runbook assumes both are already
+configured; repository CI only tests and builds the application image.
+
+A coding agent can inspect a trusted deployment through Playwright MCP,
+including the real GitHub App OAuth flow, without putting a GitHub password in
+the repository or model context. This is a maintainer security procedure, not a
+general self-hosting prerequisite.
 
 This setup is independent of the agent harness. The harness needs to run one
 local stdio MCP server, pass it one environment variable, retain a browser

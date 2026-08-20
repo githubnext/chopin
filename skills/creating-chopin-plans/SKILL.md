@@ -34,3 +34,6 @@ same key. Once creation succeeds, do not call `create_document` again.
 
 Return the created document's `url` as the canonical handoff, with its title
 and identifier. Do not open it automatically.
+
+Use [prompt.md](prompt.md) as a starter when handing an already-settled
+conversation to an agent with this skill installed.
