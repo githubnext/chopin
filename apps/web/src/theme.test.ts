@@ -150,7 +150,10 @@ describe("product motion", () => {
 		);
 		expect(fastDurations).toEqual(["120ms"]);
 		expect(THEME).not.toMatch(/--duration-fast:\s*250ms/);
-		expect(THEME).toMatch(/--ease-out:\s*cubic-bezier\(0\.2,\s*0,\s*0,\s*1\)\s*;/);
+		let easeOutCurves = [...THEME.matchAll(/--ease-out:\s*([^;]+);/g)].map(match =>
+			match[1]!.trim()
+		);
+		expect(easeOutCurves).toEqual(["cubic-bezier(0.2, 0, 0, 1)"]);
 		for (
 			let token of [
 				"dropdown-open-dur",
