@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 
 export const COARSE_POINTER_QUERY = "(any-pointer: coarse)";
-const PRIMARY_COARSE_POINTER_QUERY = "(pointer: coarse)";
+export const PRIMARY_COARSE_POINTER_QUERY = "(pointer: coarse)";
 
 export function hasCoarsePointer(
 	media: (query: string) => Pick<MediaQueryList, "matches"> = matchMedia,

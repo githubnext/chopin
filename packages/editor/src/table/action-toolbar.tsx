@@ -1,4 +1,4 @@
-/** Coarse-pointer table actions over the same Lexical table the desktop rails edit. */
+/** Reachable table actions for compact and coarse-pointer layouts. */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
@@ -23,7 +23,6 @@ import {
 	$setAlign,
 } from "./ops";
 import { alignmentLabel, nextAlign } from "./alignment";
-import { COARSE_POINTER_QUERY, hasCoarsePointer } from "../pointer";
 import { touchAvailability } from "./touch-actions";
 
 import type { LexicalEditor, NodeKey } from "lexical";
@@ -34,25 +33,16 @@ type SelectedCell = { cell: NodeKey; column: number; row: number; table: Table }
 type DockPlacement = SurfacePlacement & { width: number };
 type ActionGroup = "add" | "move" | "remove";
 
-export function TableTouchToolbar(
+export function TableActionToolbar(
 	{ editor, disabled }: { editor: LexicalEditor; disabled?: boolean },
 ) {
-	let [coarse, setCoarse] = useState(false);
 	let [selected, setSelected] = useState<SelectedCell>();
 	let [position, setPosition] = useState<DockPlacement>();
 	let [group, setGroup] = useState<ActionGroup>("add");
 	let surface = useRef<HTMLDivElement>(null);
 
-	useEffect(() => {
-		let query = matchMedia(COARSE_POINTER_QUERY);
-		let update = () => setCoarse(hasCoarsePointer());
-		update();
-		query.addEventListener("change", update);
-		return () => query.removeEventListener("change", update);
-	}, []);
-
 	let sync = useCallback(() => {
-		if (!coarse || disabled) return setSelected(undefined);
+		if (disabled) return setSelected(undefined);
 		editor.getEditorState().read(() => {
 			let selection = $getSelection();
 			if (!$isRangeSelection(selection)) return setSelected(undefined);
@@ -66,16 +56,21 @@ export function TableTouchToolbar(
 				table: $describe(table),
 			});
 		});
-	}, [coarse, disabled, editor]);
+	}, [disabled, editor]);
 
 	useEffect(() => {
 		sync();
 		let off = editor.registerUpdateListener(sync);
 		let root = editor.getRootElement();
-		let afterPointer = () => requestAnimationFrame(sync);
+		let frame = 0;
+		let afterPointer = () => {
+			cancelAnimationFrame(frame);
+			frame = requestAnimationFrame(sync);
+		};
 		root?.addEventListener("pointerup", afterPointer);
 		root?.addEventListener("focusin", afterPointer);
 		return () => {
+			cancelAnimationFrame(frame);
 			off();
 			root?.removeEventListener("pointerup", afterPointer);
 			root?.removeEventListener("focusin", afterPointer);
@@ -126,19 +121,19 @@ export function TableTouchToolbar(
 		};
 	}, [editor, group, selected]);
 
-	if (!coarse || disabled || !selected) return null;
+	if (disabled || !selected) return null;
 
 	let { column, row, table } = selected;
 	let act = (op: () => void) => editor.update(op);
 	let align = table.align[column] ?? null;
-	let button = "plan-table-touch-action";
+	let button = "plan-table-action";
 	let available = touchAvailability(table.shape, row, column);
 	let show = (next: ActionGroup) => setGroup(next);
 
 	return (
 		<div
 			aria-label="Table actions"
-			className="plan-table-touch-toolbar"
+			className="plan-table-action-toolbar"
 			contentEditable={false}
 			onMouseDown={event => event.preventDefault()}
 			ref={surface}
@@ -152,7 +147,7 @@ export function TableTouchToolbar(
 				}
 				: { left: 8, top: 8, visibility: "hidden" }}
 		>
-			<div className="plan-table-touch-groups">
+			<div className="plan-table-action-groups">
 				<button
 					aria-expanded={group === "add"}
 					className={button}
@@ -188,7 +183,7 @@ export function TableTouchToolbar(
 			</div>
 
 			{group === "add" && (
-				<div aria-label="Add table actions" className="plan-table-touch-panel" role="group">
+				<div aria-label="Add table actions" className="plan-table-action-panel" role="group">
 					<button
 						className={button}
 						disabled={!available.addRowBefore}
@@ -228,7 +223,7 @@ export function TableTouchToolbar(
 			)}
 
 			{group === "remove" && (
-				<div aria-label="Remove table actions" className="plan-table-touch-panel" role="group">
+				<div aria-label="Remove table actions" className="plan-table-action-panel" role="group">
 					<button
 						className={button}
 						disabled={!available.removeRow}
@@ -252,7 +247,7 @@ export function TableTouchToolbar(
 			)}
 
 			{group === "move" && (
-				<div aria-label="Move table actions" className="plan-table-touch-panel" role="group">
+				<div aria-label="Move table actions" className="plan-table-action-panel" role="group">
 					<button
 						className={button}
 						disabled={!available.moveRowUp}

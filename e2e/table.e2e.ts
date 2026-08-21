@@ -99,7 +99,7 @@ test("hovering a table raises rails on both axes", async ({ join, seed }) => {
 
 test("a wide table scrolls without losing its measured column rail", async ({ join, seed }) => {
 	await seed(WIDE_TABLE);
-	let page = await join("ana", { viewport: { width: 390, height: 844 } });
+	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
 	let table = content(page).locator("table");
 
 	expect(await table.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
@@ -308,6 +308,62 @@ test("touch table action groups are labelled, reachable, and clear of the select
 	await openGroup(toolbar, "Remove");
 	await openGroup(toolbar, "Move");
 	await expect(page.locator("[data-plan-rail]")).not.toBeVisible();
+});
+
+test("a compact fine-pointer table keeps drag grips and actions reachable", async ({ join, seed }) => {
+	await seed(WIDE_TABLE);
+	let page = await join("ana", { viewport: { width: 390, height: 844 } });
+	let cell = content(page).locator("td").first();
+	await cell.click();
+
+	let toolbar = page.getByRole("toolbar", { name: "Table actions" });
+	await expect(toolbar).toBeVisible();
+	await expectInsideViewport(toolbar);
+	let rowRail = page.locator('[data-plan-rail="row"]');
+	let columnRail = page.locator('[data-plan-rail="column"]');
+	await expect(rowRail).toBeVisible();
+	await expect(columnRail).toBeVisible();
+	let rowGrip = grip(rowRail, "row", 2);
+	let columnGrip = grip(columnRail, "column", 1);
+	await expectInsideViewport(rowGrip);
+	await expectInsideViewport(columnGrip);
+	let rowRailBox = (await rowRail.boundingBox())!;
+	let rowGripBox = (await rowGrip.boundingBox())!;
+	let columnRailBox = (await columnRail.boundingBox())!;
+	let columnGripBox = (await columnGrip.boundingBox())!;
+	expect(rowRailBox.width).toBe(rowGripBox.width);
+	expect(columnRailBox.height).toBe(columnGripBox.height);
+	await expect(page.locator(".plan-grip-remove:visible, .plan-insert:visible, .plan-align:visible"))
+		.toHaveCount(0);
+	let controls = toolbar.getByRole("button");
+	let targets = await controls.evaluateAll(buttons =>
+		buttons.map(button => {
+			let box = button.getBoundingClientRect();
+			return { height: box.height, width: box.width };
+		})
+	);
+	expect(targets.every(target => target.height >= 44 && target.width >= 44)).toBe(true);
+	await controls.first().focus();
+	await expect(controls.first()).toBeFocused();
+	await expectInsideViewport(controls);
+	await expectNoHorizontalOverflow(page);
+});
+
+test("a compact fine-pointer grip still drags a row", async ({ join, seed }) => {
+	await seed(TABLE);
+	let page = await join("ana", { viewport: { width: 390, height: 844 } });
+	let rowRail = await rails(page);
+	let held = grip(rowRail, "row", 2);
+	let from = (await held.boundingBox())!;
+	let table = (await content(page).locator("table").boundingBox())!;
+
+	await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(from.x + from.width / 2, table.y + table.height + 8);
+	await page.mouse.up();
+
+	await expect(items(page)).toHaveText(["two", "three", "one"]);
+	await expectNoHorizontalOverflow(page);
 });
 
 test("a hybrid desktop exposes touch table actions and desktop rails", async ({ baseURL, browser, room, seed }) => {

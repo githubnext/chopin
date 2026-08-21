@@ -161,11 +161,86 @@ async function expectOwnScroller(
 	name: string,
 	surface: ReturnType<Page["locator"]>,
 ): Promise<void> {
+	await expect(surface.first(), `${name} must be rendered`).toBeAttached();
 	expect(await surface.count(), `${name} must be rendered`).toBeGreaterThan(0);
 	expect(
 		await surface.evaluateAll(nodes => nodes.every(node => node.scrollWidth > node.clientWidth)),
 		`${name} must overflow internally`,
 	).toBe(true);
+}
+
+async function expectHorizontalScroll(
+	name: string,
+	surface: ReturnType<Page["locator"]>,
+): Promise<void> {
+	await surface.first().evaluate(node => {
+		node.scrollLeft = node.scrollWidth;
+	});
+	await expect.poll(
+		() => surface.first().evaluate(node => node.scrollLeft),
+		{ message: `${name} must allow its hidden content to be reached` },
+	).toBeGreaterThan(0);
+}
+
+async function expectPerceptibleHorizontalOverflow(
+	name: string,
+	surface: ReturnType<Page["locator"]>,
+): Promise<void> {
+	await expectOwnScroller(name, surface);
+	let geometry = await surface.evaluateAll(nodes =>
+		nodes.map(node => {
+			let style = getComputedStyle(node);
+			return {
+				overflow: style.overflowX,
+				thumb: getComputedStyle(node, "::-webkit-scrollbar-thumb").backgroundColor,
+				track: Number.parseFloat(getComputedStyle(node, "::-webkit-scrollbar").height),
+			};
+		})
+	);
+	expect(
+		geometry.every(value =>
+			value.overflow === "auto" && value.track >= 6
+			&& value.thumb !== "rgba(0, 0, 0, 0)" && value.thumb !== "transparent"
+		),
+		`${name} must expose a persistent horizontal overflow affordance (${JSON.stringify(geometry)})`,
+	).toBe(true);
+}
+
+async function expectWrapped(name: string, surface: ReturnType<Page["locator"]>): Promise<void> {
+	let geometry = await surface.evaluate(node => {
+		let style = getComputedStyle(node);
+		let line = Number.parseFloat(style.lineHeight);
+		let box = node.getBoundingClientRect();
+		let documentBox = node.closest("[data-plan-scroll]")!.getBoundingClientRect();
+		return {
+			height: box.height,
+			inside: box.left >= documentBox.left && box.right <= documentBox.right,
+			line,
+		};
+	});
+	expect(geometry.inside, `${name} must stay inside the document`).toBe(true);
+	expect(geometry.height, `${name} must wrap onto more than one line`).toBeGreaterThan(
+		geometry.line * 1.5,
+	);
+}
+
+async function expectTabInsideStrip(tab: ReturnType<Page["getByRole"]>) {
+	await expect.poll(() =>
+		tab.evaluate(node => {
+			let strip = node.closest('[role="tablist"]')!.getBoundingClientRect();
+			let box = node.getBoundingClientRect();
+			return box.left >= strip.left - 1 && box.right <= strip.right + 1;
+		})
+	).toBe(true);
+}
+
+async function selectLastTab(tabs: ReturnType<Page["getByRole"]>) {
+	await tabs.first().focus();
+	await tabs.first().press("End");
+	let last = tabs.last();
+	await expect(last).toHaveAttribute("aria-selected", "true");
+	await expect(last).toBeFocused();
+	await expectTabInsideStrip(last);
 }
 
 type Join = (handle: string) => Promise<Page>;
@@ -304,6 +379,82 @@ test("compact and desktop documents render the intended gutter and reading measu
 	expect(desktopGeometry.prose).toBeCloseTo(640, 0);
 	expect(desktopGeometry.content).toBeCloseTo(704, 0);
 	expect(desktopGeometry.documentLeft).toBeCloseTo(desktopGeometry.documentRight, 0);
+});
+
+for (let viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
+	test(`${viewport.width}px keeps hostile rich content readable and navigable`, async ({ join, seed }) => {
+		await seed(RESPONSIVE_SOURCE);
+		let page = await join(`reader-${viewport.width}`, { viewport });
+		let document = content(page);
+		await expectWrapped(
+			"normal heading",
+			document.getByRole("heading", {
+				name:
+					"A deliberately detailed authored heading that must wrap at normal word boundaries inside a compact document",
+			}),
+		);
+		await expectWrapped(
+			"unbroken heading",
+			document.getByRole("heading", {
+				name:
+					"CompactDocumentMeasureMustRemainReadableWithoutForcingTheViewportWiderThanTheDocument",
+			}),
+		);
+		let code = document.locator("[data-plan-language='typescript'] [data-plan-preview] > div");
+		let table = document.locator("table");
+		if (viewport.width === 390) {
+			await expectPerceptibleHorizontalOverflow("long code line", code);
+			await expectPerceptibleHorizontalOverflow("wide table", table);
+			await expectHorizontalScroll("long code line", code);
+			await expectHorizontalScroll("wide table", table);
+		} else {
+			await expectInsideDocumentWidth("long code line", code);
+			await expectOwnScroller("wide table", table);
+		}
+
+		let strip = document.getByRole("tablist");
+		if (viewport.width === 390) await expectPerceptibleHorizontalOverflow("tab strip", strip);
+		else await expectOwnScroller("tab strip", strip);
+		await selectLastTab(strip.getByRole("tab"));
+
+		let callout = document.locator("[data-plan-type='warning']");
+		await expectInsideDocumentWidth("callout", callout);
+		await expectWrapped("callout title", callout.getByRole("textbox", { name: "Callout title" }));
+		await expectNoHorizontalOverflow(page);
+	});
+}
+
+test("reduced motion reveals a keyboard-selected tab immediately", async ({ join, seed }) => {
+	await seed(RESPONSIVE_SOURCE);
+	let page = await join("reduced-motion-reader", {
+		reducedMotion: "reduce",
+		viewport: { width: 390, height: 844 },
+	});
+	let tabs = content(page).getByRole("tablist").getByRole("tab");
+	await selectLastTab(tabs);
+});
+
+test("a selected tab follows strip layout changes without moving the document", async ({ join, seed }) => {
+	await seed(RESPONSIVE_SOURCE);
+	let page = await join("resized-tab-reader", { viewport: { width: 390, height: 844 } });
+	let scroller = page.locator("[data-plan-scroll]");
+	let tabs = content(page).getByRole("tablist").getByRole("tab");
+	await selectLastTab(tabs);
+	await scroller.evaluate(node => {
+		node.scrollTop = node.scrollHeight;
+	});
+	expect(
+		await scroller.evaluate(node => node.scrollHeight - node.clientHeight - node.scrollTop),
+	).toBeLessThanOrEqual(1);
+	await tabs.first().evaluate(node => {
+		node.textContent = "A preceding collaborative tab label that became dramatically wider";
+	});
+	await expectTabInsideStrip(tabs.last());
+	await page.setViewportSize({ width: 320, height: 844 });
+	await expectTabInsideStrip(tabs.last());
+	await expect.poll(() =>
+		scroller.evaluate(node => node.scrollHeight - node.clientHeight - node.scrollTop)
+	).toBeLessThanOrEqual(1);
 });
 
 test("narrow documents keep equal inline gutters", async ({ join, seed }) => {
