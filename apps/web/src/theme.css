@@ -48,7 +48,7 @@
 	--color-text-tertiary: var(--color-gray-600);
 	--color-text-quaternary: var(--color-gray-500);
 	--color-conversation-body: #3e453b;
-	--color-conversation-pane: #f5f4f1;
+	--color-conversation-pane: color-mix(in srgb, var(--color-ground) 30%, var(--color-page));
 
 	/* Petrol is the only accent: action, focus, presence and links all agree. */
 	--color-brand: oklch(0.50006 0.08514 210.06); /* #06707e */
@@ -430,6 +430,10 @@ body {
 
 .conversation-header-control:hover:not(:disabled),
 .conversation-header-control:active:not(:disabled) {
+	background-color: transparent;
+}
+
+.task-progress-tab:disabled {
 	background-color: transparent;
 }
 

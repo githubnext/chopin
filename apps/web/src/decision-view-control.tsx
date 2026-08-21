@@ -55,7 +55,7 @@ export function DecisionViewControl(
 				)}
 			</button>
 			<button
-				className="btn h-[26px] rounded-md bg-transparent px-2.5 text-[14px] text-text-tertiary opacity-50"
+				className="task-progress-tab btn h-[26px] rounded-md px-2.5 text-[14px] text-text-tertiary opacity-50"
 				disabled
 				type="button"
 			>

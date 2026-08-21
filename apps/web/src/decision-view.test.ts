@@ -39,6 +39,7 @@ test("the unavailable Tasks & Progress tab is disabled without a count", () => {
 	);
 
 	expect(markup).toContain('disabled=""');
+	expect(markup).toContain("task-progress-tab");
 	expect(markup).toContain(">Tasks &amp; Progress<");
 });
 

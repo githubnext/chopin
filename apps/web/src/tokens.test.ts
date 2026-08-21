@@ -127,8 +127,10 @@ describe("palette", () => {
 		expect(declared("--color-conversation-body")).toBe("#3e453b");
 	});
 
-	it("keeps the Conversation pane on its exact Figma ground", () => {
-		expect(declared("--color-conversation-pane")).toBe("#f5f4f1");
+	it("washes the Conversation pane with thirty percent of the app shell", () => {
+		expect(declared("--color-conversation-pane")).toBe(
+			"color-mix(in srgb, var(--color-ground) 30%, var(--color-page))",
+		);
 	});
 
 	it("gives every text level at least AA contrast on the page", () => {
