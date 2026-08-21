@@ -158,7 +158,9 @@ function MessageGroup(
 					? <AgentFace size={24} />
 					: <Face handle={item.author.handle} size={24} />}
 			</div>
-			<div className={`flex min-w-0 flex-1 flex-col gap-1.5 ${item.queued ? "opacity-60" : ""}`}>
+			<div
+				className={`-mt-0.5 flex min-w-0 flex-1 flex-col gap-1 ${item.queued ? "opacity-60" : ""}`}
+			>
 				<div className="flex items-baseline gap-1.5 text-[14px]">
 					<span className="min-w-0 break-all font-semibold">{name}</span>
 					<span className="text-[13px] text-text-tertiary tabular-nums">
@@ -210,20 +212,22 @@ export function Transcript(
 				pinned.current = distance < 40;
 			}}
 		>
-			{groups.map(item =>
-				item.kind === "system"
-					? <SystemEntry arrived={arrived.has(item.id)} item={item} key={item.id} />
-					: (
-						<MessageGroup
-							arrived={arrived}
-							group={item}
-							handle={handle}
-							key={`${item.queued ? "queued" : "sent"}-${item.messages[0]!.id}`}
-							onWithdraw={onWithdraw}
-						/>
-					)
-			)}
-			<div ref={bottom} />
+			<div className="flex min-h-full flex-col justify-end gap-6" data-chat-stack>
+				{groups.map(item =>
+					item.kind === "system"
+						? <SystemEntry arrived={arrived.has(item.id)} item={item} key={item.id} />
+						: (
+							<MessageGroup
+								arrived={arrived}
+								group={item}
+								handle={handle}
+								key={`${item.queued ? "queued" : "sent"}-${item.messages[0]!.id}`}
+								onWithdraw={onWithdraw}
+							/>
+						)
+				)}
+				<div ref={bottom} />
+			</div>
 		</div>
 	);
 }
