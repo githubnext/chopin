@@ -2,7 +2,7 @@
 
 import { expect, test as base } from "@playwright/test";
 
-import { createChannel, readSource, seedChannel } from "./database";
+import { createChannel, readSource, seedChannel, seedLegacyCalloutChannel } from "./database";
 
 import type { SeedState } from "../apps/server/src/testing/plan";
 import type { Browser, BrowserContext, BrowserContextOptions, Page } from "@playwright/test";
@@ -63,6 +63,8 @@ type Fixtures = {
 	join: (handle: string, options?: BrowserContextOptions) => Promise<Page>;
 	/** Set the channel's source and optional sidecar before anyone opens it. */
 	seed: (source: string, state?: SeedState) => Promise<void>;
+	/** Seed the direct-text callout shape written by the original client. */
+	seedLegacyCallout: (source: string) => Promise<void>;
 };
 
 export const test = base.extend<Fixtures>({
@@ -97,6 +99,10 @@ export const test = base.extend<Fixtures>({
 
 	seed: async ({ baseURL, room }, use) => {
 		await use((source, state) => seedChannel(port(baseURL!), room, source, state));
+	},
+
+	seedLegacyCallout: async ({ baseURL, room }, use) => {
+		await use(source => seedLegacyCalloutChannel(port(baseURL!), room, source));
 	},
 });
 

@@ -119,14 +119,24 @@ test("a callout edits like prose and keeps its type controls out of the way", as
 	await written(page, room, /type="warning" title="Worth knowing"/);
 });
 
-test("enter twice leaves a callout at the end of the plan", async ({ join, room }) => {
+test("enter twice leaves a legacy callout at the end of the plan", async ({ join, room, seedLegacyCallout }) => {
+	await seedLegacyCallout(
+		`<Callout id="01K0N4W3B7P27CBAEC7A8C8WEA" type="note" title="Note">\n\nKeep this in the callout.\n\n</Callout>`,
+	);
 	let page = await join("ana");
-	let callout = await insertCallout(page);
+	let callout = content(page).locator("aside[data-plan-type]");
 	let body = callout.locator("[data-plan-body]");
 	await expect(body.locator(":scope > p")).toHaveCount(1);
 
-	await page.keyboard.type("Keep this in the callout.");
 	await expect(body.locator(":scope > p")).toHaveText("Keep this in the callout.");
+	await body.locator(":scope > p").evaluate(element => {
+		let range = document.createRange();
+		range.selectNodeContents(element);
+		range.collapse(false);
+		let selection = getSelection()!;
+		selection.removeAllRanges();
+		selection.addRange(range);
+	});
 	await page.keyboard.press("Enter");
 	await expect(body.locator(":scope > p")).toHaveCount(2);
 	await page.keyboard.type("Still in it.");

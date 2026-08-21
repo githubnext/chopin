@@ -1,6 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import { createHeadlessEditor } from "@lexical/headless";
-import { $createParagraphNode, $createTextNode, $getRoot, $isParagraphNode } from "lexical";
+import {
+	$createParagraphNode,
+	$createTextNode,
+	$getRoot,
+	$isParagraphNode,
+	COLLABORATION_TAG,
+} from "lexical";
 import { $createCalloutNode, $isCalloutNode, registry } from "@chopin/dialect";
 
 import { registerCalloutNormalization } from "./callout-shape";
@@ -61,6 +67,28 @@ describe("callout shape", () => {
 			expect($isCalloutNode(callout)).toBe(true);
 			if (!$isCalloutNode(callout)) return;
 			expect(callout.getFirstChild()?.getKey()).toBe(paragraphKey);
+		});
+		unregister();
+	});
+
+	it("repairs direct text arriving through collaboration", () => {
+		let editor = headless();
+		let unregister = registerCalloutNormalization(editor);
+
+		editor.update(
+			() => {
+				let callout = $createCalloutNode("01K0N4W3B7P27CBAEC7A8C8WEA");
+				callout.append($createTextNode("Body text."));
+				$getRoot().append(callout);
+			},
+			{ discrete: true, skipTransforms: true, tag: COLLABORATION_TAG },
+		);
+
+		editor.getEditorState().read(() => {
+			let callout = $getRoot().getFirstChild();
+			expect($isCalloutNode(callout)).toBe(true);
+			if (!$isCalloutNode(callout)) return;
+			expect($isParagraphNode(callout.getFirstChild())).toBe(true);
 		});
 		unregister();
 	});

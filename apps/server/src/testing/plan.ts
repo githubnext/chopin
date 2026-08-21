@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
+import { $isParagraphNode, $nodesOfType } from "lexical";
 import * as Y from "yjs";
+import { CalloutNode } from "@chopin/dialect";
 import * as Question from "@chopin/question";
 
 import * as Room from "../plan/room";
@@ -26,6 +28,33 @@ export function storedQuestion(definition: Definition): number[] {
 export async function storedDocument(source: string) {
 	let document = await Room.create(source);
 	try {
+		return {
+			epoch: document.epoch,
+			source: Room.project(document),
+			update: Y.encodeStateAsUpdate(document.doc),
+		};
+	} finally {
+		document.doc.destroy();
+	}
+}
+
+/** Reproduce the direct-text shape written by the original callout client. */
+export async function storedLegacyCallout(source: string) {
+	let document = await Room.create(source);
+	try {
+		document.editor.update(
+			() => {
+				for (let callout of $nodesOfType(CalloutNode)) {
+					for (let child of callout.getChildren()) {
+						if (!$isParagraphNode(child)) continue;
+						for (let inline of child.getChildren()) child.insertBefore(inline);
+						child.remove();
+					}
+				}
+			},
+			{ discrete: true },
+		);
+		await Room.settle();
 		return {
 			epoch: document.epoch,
 			source: Room.project(document),

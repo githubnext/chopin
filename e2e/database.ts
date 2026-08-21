@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { SQL } from "bun";
-import { storedDocument } from "../apps/server/src/testing/plan";
+import { storedDocument, storedLegacyCallout } from "../apps/server/src/testing/plan";
 
 import type { SeedState } from "../apps/server/src/testing/plan";
 
@@ -54,7 +54,25 @@ export async function seedChannel(
 	source: string,
 	state: SeedState = {},
 ): Promise<void> {
-	let document = await storedDocument(source);
+	return seed(port, id, source, state, storedDocument);
+}
+
+export async function seedLegacyCalloutChannel(
+	port: number,
+	id: string,
+	source: string,
+): Promise<void> {
+	return seed(port, id, source, {}, storedLegacyCallout);
+}
+
+async function seed(
+	port: number,
+	id: string,
+	source: string,
+	state: SeedState,
+	encode: typeof storedDocument,
+): Promise<void> {
+	let document = await encode(source);
 	let sidecar = {
 		version: 1,
 		revision: state.revision ?? 0,
