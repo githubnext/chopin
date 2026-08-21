@@ -433,6 +433,15 @@ body {
 	background-color: transparent;
 }
 
+.conversation-send-button:disabled {
+	background-color: var(--color-brand);
+	color: var(--color-page);
+}
+
+.conversation-send-icon {
+	filter: brightness(0) invert(1);
+}
+
 .task-progress-tab:disabled {
 	background-color: transparent;
 }

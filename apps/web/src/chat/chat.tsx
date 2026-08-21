@@ -16,7 +16,7 @@ import { addressed } from "@chopin/protocol/address";
 
 import { Transcript } from "./transcript";
 import plannerStop from "../assets/figma/workspace/planner-stop.svg";
-import send from "../assets/figma/workspace/send.svg";
+import send from "../assets/figma/workspace/send-arrow-up.svg";
 
 import type { Chat as Wire } from "@chopin/protocol";
 import type { Wire as Socket } from "../wire";
@@ -184,13 +184,13 @@ export function Chat(
 						)}
 						<button
 							aria-label="Send message"
-							className="btn btn-icon btn-primary"
+							className="conversation-send-button btn btn-icon btn-primary rounded-full"
 							disabled={!connected || !text.trim()}
 							onClick={submit}
 							title="Send message"
 							type="button"
 						>
-							<img alt="" className="size-6" src={send} />
+							<img alt="" className="conversation-send-icon size-[18px]" src={send} />
 						</button>
 					</div>
 				</div>
