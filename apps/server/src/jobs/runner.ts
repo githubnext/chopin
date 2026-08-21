@@ -1,6 +1,6 @@
 import { StorageError } from "../storage/errors";
 
-import type { BackgroundJob, JsonValue, Lease } from "../storage/model";
+import type { BackgroundJob, BackgroundJobCursor, JsonValue, Lease } from "../storage/model";
 import type { StorageAdapter } from "../storage/port";
 import type { JobExecutionCredential, JobRegistry } from "./registry";
 import type { JobService, JobView } from "./service";
@@ -107,6 +107,7 @@ export class JobRunner {
 	#dirty = false;
 	#pump?: Promise<void>;
 	#poll?: () => void;
+	#ownerRecovery = new Map<string, () => void>();
 	#shutdown?: Promise<void>;
 	#pollFailures = 0;
 
@@ -193,12 +194,54 @@ export class JobRunner {
 		);
 	}
 
+	async ownerAvailable(channelId: string): Promise<void> {
+		this.#ownerRecovery.get(channelId)?.();
+		this.#ownerRecovery.delete(channelId);
+		try {
+			let cursor: BackgroundJobCursor | undefined;
+			do {
+				let page = await this.#options.service.list(channelId, 100, cursor);
+				if (!page) return;
+				for (let job of page.jobs) {
+					let definition = this.#options.registry.get(job.type, job.version);
+					if (
+						job.state !== "paused"
+						|| job.reason !== "owner-unavailable"
+						|| definition?.credential !== "active-planner"
+					) continue;
+					try {
+						await this.#options.service.resume({
+							channelId,
+							jobId: job.id,
+							expectedRevision: job.revision,
+						});
+					} catch (err) {
+						if (!expected(err)) throw err;
+					}
+				}
+				cursor = page.next;
+			} while (cursor);
+			this.wake();
+		} catch (err) {
+			this.#options.fatal?.(err);
+			if (!this.#stopped && !this.#ownerRecovery.has(channelId)) {
+				let cancel = this.#scheduler.after(this.#options.pollMs, () => {
+					this.#ownerRecovery.delete(channelId);
+					void this.ownerAvailable(channelId);
+				});
+				this.#ownerRecovery.set(channelId, cancel);
+			}
+		}
+	}
+
 	shutdown(): Promise<void> {
 		if (this.#shutdown) return this.#shutdown;
 		this.#stopped = true;
 		this.#dirty = false;
 		this.#poll?.();
 		this.#poll = undefined;
+		for (let cancel of this.#ownerRecovery.values()) cancel();
+		this.#ownerRecovery.clear();
 		let attempts = [...this.#attempts];
 		for (let attempt of attempts) {
 			attempt.accepting = false;

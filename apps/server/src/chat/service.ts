@@ -227,6 +227,7 @@ export type Room = {
 	claimantSessionId: string;
 	repository: HostedRepository;
 	persist: () => Promise<void>;
+	ownerAvailable?: () => Promise<void>;
 };
 
 /**
@@ -483,6 +484,7 @@ async function repositorySession(
 		context.room,
 		claimantSessionId,
 	);
+	if (context.ownerAvailable) void context.ownerAvailable().catch(() => {});
 	let { auth } = context;
 	let ownerSessionId = ownership.ownerSessionId!;
 	let credentialExpiresAt = Math.min(
