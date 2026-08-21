@@ -19,6 +19,7 @@ import { describe, load } from "./config";
 import { GitHubError } from "./github/client";
 import { Router } from "./http/router";
 import { registerMcpRoutes } from "./mcp/routes";
+import { registerNavigationRoutes } from "./navigation/routes";
 import * as Service from "./plan/service";
 import * as Inject from "./questions/inject";
 import * as Marks from "./comments/inject";
@@ -532,6 +533,7 @@ registerChannelRoutes(router, hostedAuth, {
 	onAgentReset: channelId => resetOpenAgents(room => room.id === channelId),
 	onChannelRenamed: announceChannelRename,
 });
+registerNavigationRoutes(router, hostedAuth, { storage });
 
 try {
 	await storage.health();

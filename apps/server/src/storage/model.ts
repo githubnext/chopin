@@ -19,6 +19,32 @@ export type PutUser = Omit<UserRecord, "createdAt" | "updatedAt"> & {
 	now: Date;
 };
 
+export type UserProject = {
+	userId: string;
+	repositoryId: string;
+	repositoryOwner: string;
+	repositoryName: string;
+	position: number;
+	addedAt: Date;
+};
+
+export type AddUserProject = Omit<UserProject, "position" | "addedAt"> & { now: Date };
+
+export type AddUserProjectResult = {
+	project: UserProject;
+	added: boolean;
+};
+
+export type RecordNavigationVisit = AddUserProject & {
+	documentId: string;
+};
+
+export type UserNavigation = {
+	userId: string;
+	lastDocumentId: string | undefined;
+	updatedAt: Date;
+};
+
 /** Process-lifetime registry row used only by durable agent ownership. */
 export type WebSession = {
 	id: string;

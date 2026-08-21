@@ -2,6 +2,8 @@ import { conflict, missing } from "../errors";
 import { documentSlug, documentSlugCandidate } from "../../channels/slug";
 
 import type {
+	AddUserProject,
+	AddUserProjectResult,
 	AgentState,
 	ChannelCursor,
 	ChannelPage,
@@ -15,6 +17,7 @@ import type {
 	CreateChannel,
 	JsonValue,
 	Lease,
+	RecordNavigationVisit,
 	RenameChannel,
 	RenameResult,
 	ReplaceChannel,
@@ -22,6 +25,8 @@ import type {
 	StoredChannel,
 	StoredEvent,
 	UpdateAgentContext,
+	UserNavigation,
+	UserProject,
 	UserRecord,
 	WebSession,
 } from "../model";
@@ -29,6 +34,7 @@ import type {
 	ChannelStore,
 	CollaborationStore,
 	LeaseStore,
+	NavigationStore,
 	SessionStore,
 	StorageAdapter,
 	UserStore,
@@ -52,6 +58,14 @@ function session(value: WebSession): WebSession {
 		expiresAt: new Date(value.expiresAt),
 		createdAt: new Date(value.createdAt),
 	};
+}
+
+function project(value: UserProject): UserProject {
+	return { ...value, addedAt: new Date(value.addedAt) };
+}
+
+function navigation(value: UserNavigation): UserNavigation {
+	return { ...value, updatedAt: new Date(value.updatedAt) };
 }
 
 function channel(value: ChannelRecord): ChannelRecord {
@@ -83,6 +97,8 @@ export class MemoryStorage implements StorageAdapter {
 
 	#users = new Map<string, UserRecord>();
 	#sessions = new Map<string, WebSession>();
+	#projects = new Map<string, UserProject[]>();
+	#navigation = new Map<string, UserNavigation>();
 	#channels = new Map<string, ChannelRecord>();
 	#channelSlugs = new Map<string, Map<string, string>>();
 	#snapshots = new Map<string, ChannelSnapshot>();
@@ -148,6 +164,21 @@ export class MemoryStorage implements StorageAdapter {
 		},
 	};
 
+	readonly navigation: NavigationStore = {
+		projects: userId => {
+			this.#requireUser(userId);
+			return Promise.resolve((this.#projects.get(userId) ?? []).map(project));
+		},
+		addProject: input => this.#addProject(input),
+		get: userId => {
+			this.#requireUser(userId);
+			let found = this.#navigation.get(userId);
+			return Promise.resolve(found && navigation(found));
+		},
+		setLastDocument: (userId, documentId, now) => this.#setLastDocument(userId, documentId, now),
+		recordVisit: input => this.#recordVisit(input),
+	};
+
 	readonly channels: ChannelStore = {
 		create: input => this.#createChannel(input),
 		get: id => Promise.resolve(this.#channels.get(id)).then(value => value && channel(value)),
@@ -198,6 +229,53 @@ export class MemoryStorage implements StorageAdapter {
 				});
 			}
 		}
+	}
+
+	#requireUser(userId: string): void {
+		if (!this.#users.has(userId)) throw missing(`user ${userId} does not exist`);
+	}
+
+	#addProject(input: AddUserProject): Promise<AddUserProjectResult> {
+		this.#requireUser(input.userId);
+		let projects = this.#projects.get(input.userId) ?? [];
+		let existing = projects.find(project => project.repositoryId === input.repositoryId);
+		if (existing) return Promise.resolve({ project: project(existing), added: false });
+		let saved: UserProject = {
+			userId: input.userId,
+			repositoryId: input.repositoryId,
+			repositoryOwner: input.repositoryOwner,
+			repositoryName: input.repositoryName,
+			position: Math.max(-1, ...projects.map(project => project.position)) + 1,
+			addedAt: input.now,
+		};
+		this.#projects.set(input.userId, [...projects, saved]);
+		return Promise.resolve({ project: project(saved), added: true });
+	}
+
+	async #setLastDocument(
+		userId: string,
+		documentId: string | undefined,
+		now: Date,
+	): Promise<UserNavigation> {
+		this.#requireUser(userId);
+		if (documentId && !this.#channels.has(documentId)) {
+			throw missing(`channel ${documentId} does not exist`);
+		}
+		let saved: UserNavigation = { userId, lastDocumentId: documentId, updatedAt: now };
+		this.#navigation.set(userId, saved);
+		return navigation(saved);
+	}
+
+	async #recordVisit(input: RecordNavigationVisit): Promise<UserNavigation> {
+		this.#requireUser(input.userId);
+		let document = this.#channels.get(input.documentId);
+		if (!document || document.repositoryId !== input.repositoryId) {
+			throw missing(
+				`channel ${input.documentId} does not exist in repository ${input.repositoryId}`,
+			);
+		}
+		await this.#addProject(input);
+		return this.#setLastDocument(input.userId, input.documentId, input.now);
 	}
 
 	async #createChannel(input: CreateChannel): Promise<ChannelRecord> {

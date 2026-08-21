@@ -3,6 +3,7 @@ import { SQL } from "bun";
 import { documentSlug, documentSlugCandidate } from "../../channels/slug";
 import { conflict, corrupt, missing, StorageError, unavailable } from "../errors";
 import { migrate, verifyMigrations } from "./migrations";
+import { PostgresNavigationStore } from "./navigation";
 
 import type { TransactionSQL } from "bun";
 import type {
@@ -33,6 +34,7 @@ import type {
 	ChannelStore,
 	CollaborationStore,
 	LeaseStore,
+	NavigationStore,
 	SessionStore,
 	StorageAdapter,
 	UserStore,
@@ -357,6 +359,10 @@ export class PostgresStorage implements StorageAdapter {
 
 	constructor(url: string) {
 		this.#sql = new SQL(url, { connectionTimeout: 10, idleTimeout: 30, max: 10 });
+		this.navigation = new PostgresNavigationStore(
+			this.#sql,
+			(action, execute) => this.#run(action, execute),
+		);
 	}
 
 	readonly users: UserStore = {
@@ -455,6 +461,8 @@ export class PostgresStorage implements StorageAdapter {
 					return { deleted: deleted.length, lease: lease(renewed) };
 				})),
 	};
+
+	readonly navigation: NavigationStore;
 
 	readonly channels: ChannelStore = {
 		create: input => this.#createChannel(input),

@@ -232,6 +232,20 @@ describe("channel routes", () => {
 		));
 		expect(alias!.status).toBe(200);
 		expect((await alias!.json()).channel.slug).toBe("résumé-計画");
+		expect(await storage.navigation.projects("U_octocat")).toMatchObject([
+			{ repositoryId: "R_score", repositoryOwner: "octo-org", repositoryName: "score" },
+		]);
+		expect((await storage.navigation.get("U_octocat"))!.lastDocumentId).toBe(channel.id);
+		let remembered = await storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Remembered document",
+			createdBy: "U_octocat",
+			now,
+		});
+		await storage.navigation.setLastDocument("U_octocat", remembered.id, now);
 
 		github.repo = { ...github.repo, permissions: { pull: false, push: false, admin: false } };
 		let denied = await router.handle(request(
@@ -239,6 +253,7 @@ describe("channel routes", () => {
 			cookie,
 		));
 		expect(denied!.status).toBe(404);
+		expect((await storage.navigation.get("U_octocat"))!.lastDocumentId).toBe(remembered.id);
 
 		github.repo = {
 			...github.repo,
@@ -250,6 +265,7 @@ describe("channel routes", () => {
 			cookie,
 		));
 		expect(recreated!.status).toBe(404);
+		expect((await storage.navigation.get("U_octocat"))!.lastDocumentId).toBe(remembered.id);
 	});
 
 	it("continues to open a legacy UUIDv4 channel", async () => {
@@ -268,6 +284,40 @@ describe("channel routes", () => {
 		let response = await router.handle(request(`/api/channels/${id}`, cookie));
 		expect(response!.status).toBe(200);
 		expect((await response!.json()).channel.id).toBe(id);
+	});
+
+	it("adds an authorized deep-linked document's repository to navigation", async () => {
+		let { router, storage, cookie, now } = await setup();
+		let channel = await storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Deep link",
+			createdBy: "U_octocat",
+			now,
+		});
+		let recorded: Parameters<typeof storage.navigation.recordVisit>[0][] = [];
+		let recordVisit = storage.navigation.recordVisit;
+		storage.navigation.recordVisit = async input => {
+			recorded.push(input);
+			return recordVisit(input);
+		};
+
+		let response = await router.handle(request(`/api/channels/${channel.id}`, cookie));
+		expect(response!.status).toBe(200);
+		expect(recorded).toEqual([{
+			userId: "U_octocat",
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			documentId: channel.id,
+			now,
+		}]);
+		expect(await storage.navigation.projects("U_octocat")).toMatchObject([
+			{ repositoryId: "R_score", repositoryOwner: "octo-org", repositoryName: "score" },
+		]);
+		expect((await storage.navigation.get("U_octocat"))!.lastDocumentId).toBe(channel.id);
 	});
 
 	it("lets an editor rename a document without changing its plan revision", async () => {

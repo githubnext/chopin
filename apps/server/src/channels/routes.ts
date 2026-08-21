@@ -167,6 +167,29 @@ async function authorizedRepository(
 	return repository;
 }
 
+/** Opens a document only after its current repository identity has been revalidated. */
+async function openedDocument(
+	auth: HostedAuth,
+	session: AuthenticatedSession,
+	repo: Repository,
+	channel: ChannelRecord,
+) {
+	if (repo.id !== channel.repositoryId || !repo.permissions.pull) return undefined;
+	await auth.storage.navigation.recordVisit({
+		userId: session.user.id,
+		repositoryId: repo.id,
+		repositoryOwner: repo.owner,
+		repositoryName: repo.name,
+		documentId: channel.id,
+		now: auth.clock(),
+	});
+	return {
+		repository: repository(repo),
+		canEdit: repo.permissions.push || repo.permissions.admin,
+		channel: serialized(channel),
+	};
+}
+
 /** Authenticated metadata routes; live collaboration is still the following stage. */
 export function registerChannelRoutes(
 	router: Router,
@@ -298,11 +321,8 @@ export function registerChannelRoutes(
 				if (!repo.permissions.pull) return json({ error: "channel not found" }, 404);
 				let channel = await auth.storage.channels.resolve(repo.id, documentSlug(params.slug!));
 				if (!channel) return json({ error: "channel not found" }, 404);
-				return json({
-					repository: repository(repo),
-					canEdit: repo.permissions.push || repo.permissions.admin,
-					channel: serialized(channel),
-				});
+				let opened = await openedDocument(auth, session, repo, channel);
+				return opened ? json(opened) : json({ error: "channel not found" }, 404);
 			} catch (err) {
 				return failure(err, request, auth);
 			}
@@ -323,14 +343,8 @@ export function registerChannelRoutes(
 				channel.repositoryOwner,
 				channel.repositoryName,
 			);
-			if (repo.id !== channel.repositoryId || !repo.permissions.pull) {
-				return json({ error: "channel not found" }, 404);
-			}
-			return json({
-				repository: repository(repo),
-				canEdit: repo.permissions.push || repo.permissions.admin,
-				channel: serialized(channel),
-			});
+			let opened = await openedDocument(auth, session, repo, channel);
+			return opened ? json(opened) : json({ error: "channel not found" }, 404);
 		} catch (err) {
 			return failure(err, request, auth);
 		}
