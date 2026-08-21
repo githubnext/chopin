@@ -4,6 +4,14 @@ import type { TransitionEventHandler } from "react";
 
 export type PresencePhase = "closed" | "opening" | "open" | "closing";
 export type PresenceAction = "open" | "close" | "finish";
+export type PresenceState = {
+	immediately: boolean;
+	open: boolean;
+	phase: PresencePhase;
+};
+export type PresenceStateAction =
+	| { immediately: boolean; open: boolean; type: "sync" }
+	| { type: "finish" };
 
 export type TransitionPresence<T> = {
 	className: "" | "is-open" | "is-closing";
@@ -30,6 +38,17 @@ export function resolvedPresence(
 		? phase
 		: transitionPresence(phase, open ? "open" : "close");
 	return immediately ? transitionPresence(next, "finish") : next;
+}
+
+export function presenceState(state: PresenceState, action: PresenceStateAction): PresenceState {
+	if (action.type === "finish") {
+		return { ...state, phase: transitionPresence(state.phase, "finish") };
+	}
+	return {
+		immediately: action.immediately,
+		open: action.open,
+		phase: resolvedPresence(state.phase, action.open, action.immediately),
+	};
 }
 
 export function presenceValue<T>(
@@ -69,30 +88,35 @@ export function useTransitionPresence<T>(
 ): TransitionPresence<T> {
 	let latest = useRef<T | undefined>(value);
 	let open = value !== undefined;
-	let [phase, dispatch] = useReducer(
-		transitionPresence,
-		open ? "open" : "closed",
-	);
 	let immediately = immediate();
-	let resolved = resolvedPresence(phase, open, immediately);
+	let [state, dispatch] = useReducer(presenceState, {
+		immediately,
+		open,
+		phase: open ? "open" : "closed",
+	});
+	if (state.open !== open || state.immediately !== immediately) {
+		let action: PresenceStateAction = { immediately, open, type: "sync" };
+		state = presenceState(state, action);
+		dispatch(action);
+	}
+	let resolved = state.phase;
 	let presented = presenceValue(value, latest.current, resolved);
 
 	useEffect(() => {
 		if (value !== undefined) latest.current = value;
 	}, [value]);
 	useEffect(() => {
-		dispatch(open ? "open" : "close");
-		if (immediately) dispatch("finish");
-	}, [immediately, open]);
-	useEffect(() => {
 		if (immediately) return;
 		if (resolved === "opening") {
-			let frame = requestAnimationFrame(() => dispatch("finish"));
+			let frame = requestAnimationFrame(() => dispatch({ type: "finish" }));
 			return () => cancelAnimationFrame(frame);
 		}
 		if (resolved !== "closing") return;
 		let raw = getComputedStyle(document.documentElement).getPropertyValue(closeDuration).trim();
-		let timer = window.setTimeout(() => dispatch("finish"), closeDelay(raw, fallback, immediately));
+		let timer = window.setTimeout(
+			() => dispatch({ type: "finish" }),
+			closeDelay(raw, fallback, immediately),
+		);
 		return () => window.clearTimeout(timer);
 	}, [closeDuration, fallback, immediately, resolved]);
 
@@ -100,7 +124,9 @@ export function useTransitionPresence<T>(
 		className: presenceClass(resolved),
 		mounted: presented !== undefined,
 		onTransitionEnd: event => {
-			if (resolved === "closing" && event.target === event.currentTarget) dispatch("finish");
+			if (resolved === "closing" && event.target === event.currentTarget) {
+				dispatch({ type: "finish" });
+			}
 		},
 		phase: resolved,
 		value: presented,
