@@ -133,6 +133,12 @@ describe("palette", () => {
 		);
 	});
 
+	it("keeps the Conversation pane edge subtly stronger than the frame hairline", () => {
+		expect(THEME).toMatch(
+			/\.workspace-frame #pane-chat\s*\{\s*border-color:\s*rgb\(0 0 0 \/ 9%\);/,
+		);
+	});
+
 	it("gives every text level at least AA contrast on the page", () => {
 		for (let level of ["primary", "secondary", "tertiary", "quaternary"]) {
 			let ratio = contrast(`--color-text-${level}`, "--color-page");
