@@ -298,6 +298,7 @@ export function PlanEditor(
 					<div
 						ref={scroller}
 						className="h-full min-h-0 overflow-auto"
+						data-focus-boundary=""
 						data-plan-scroll=""
 					>
 						<MDXEditor
@@ -311,7 +312,7 @@ export function PlanEditor(
 							readOnly={locked}
 							plugins={plugins}
 							lexicalTheme={THEME}
-							contentEditableClassName="plan-content"
+							contentEditableClassName="plan-content focus-caret"
 							placeholder="Start writing, or ask the agent to plan"
 							spellCheck
 							// The dialect has no raw HTML. Left on, MDXEditor registers
