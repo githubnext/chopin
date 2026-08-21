@@ -246,6 +246,11 @@ describe("controls", () => {
 		);
 	});
 
+	it("puts Conversation focus around the complete composer rather than its textarea", () => {
+		expect(THEME).toContain(".conversation-composer .field:focus-within");
+		expect(THEME).toContain(".conversation-composer textarea:focus");
+	});
+
 	it("uses the two designed control edges across fields and choices", () => {
 		for (let name of ["field", "choice-control"]) {
 			let rule = utility(name);
