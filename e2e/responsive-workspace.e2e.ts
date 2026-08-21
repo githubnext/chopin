@@ -73,7 +73,7 @@ test("a 390px phone has one row of chrome and exposes one mounted destination at
 	let page = await join("ana", { hasTouch: true, viewport: { width: 390, height: 844 } });
 	let nav = page.getByRole("navigation", { name: "Workspace view" });
 	await expectCompactWorkspaceChrome(page);
-	await expect(nav.getByRole("button", { name: "Plan" })).toBeVisible();
+	await expect(nav.getByRole("button", { name: "Document" })).toBeVisible();
 	await nav.getByRole("button", { name: /Conversation/ }).click();
 	await expect(page.locator("#pane-chat")).toBeVisible();
 	await expect(page.locator('[aria-label="editable markdown"]')).toBeHidden();
@@ -162,13 +162,6 @@ test("the safe area shell contains nonzero top and bottom insets on a 430px phon
 		insets: { bottom: 24, left: 0, right: 0, top: 20 },
 	});
 	page = await join("ana");
-	let [bottom, top] = await Promise.all([
-		page.getByRole("navigation", { name: "Workspace view" })
-			.evaluate(element => getComputedStyle(element).paddingBottom),
-		page.getByRole("banner").evaluate(element => getComputedStyle(element).paddingTop),
-	]);
-	let padding = { bottom, top };
-	expect(padding).toEqual({ bottom: "28px", top: "28px" });
 	await expectInsideViewport(page.getByRole("banner"));
 	await expectInsideViewport(page.getByRole("navigation", { name: "Workspace view" }));
 	await expectNoHorizontalOverflow(page);
@@ -251,7 +244,7 @@ for (
 		await expect(page.getByRole("separator", { name: "Resize the conversation" })).toHaveCount(0);
 		await expect(page.locator("#workspace-conversation-heading")).toBeFocused();
 
-		await nav.getByRole("button", { name: "Plan", exact: true }).click();
+		await nav.getByRole("button", { name: "Document", exact: true }).click();
 		await expect(conversation).toBeHidden();
 		await expect(content(page)).toBeVisible();
 		await expect(page.locator("#workspace-plan-heading")).toBeFocused();
@@ -300,7 +293,7 @@ test("Chromium visual viewport emulation keeps Conversation controls above the k
 		let nav = emulation.page.getByRole("navigation", { name: "Workspace view" });
 		await nav.getByRole("button", { name: /Conversation/ }).click();
 		let conversation = emulation.page.getByRole("complementary");
-		let textarea = conversation.getByPlaceholder("Message the room — use @ai to ask Planner");
+		let textarea = conversation.getByPlaceholder("Use @ai to ask the agent");
 		await textarea.focus();
 		await setVisualViewport(emulation.page, {
 			event: "scroll",

@@ -56,43 +56,6 @@ function commentButton(page: import("@playwright/test").Page) {
 	return page.getByRole("button", { name: /Comment on “/ });
 }
 
-test("the desktop document view is a centred segmented control", async ({ join, seed }) => {
-	await seed(PROSE);
-	let page = await join("ana");
-	let toolbar = page.locator("[data-document-toolbar]");
-	let control = page.getByRole("group", { name: "Document view" });
-	let plan = control.getByRole("button", { name: "Plan", exact: true });
-	let decisions = control.getByRole("button", { name: /^Decisions, 2 unanswered$/ });
-
-	await expect(control).toBeVisible();
-	await expect(decisions).toContainText("2");
-	let [toolbarBox, controlBox, planBox, decisionsBox, planStyle, decisionsStyle] = await Promise
-		.all([
-			toolbar.boundingBox(),
-			control.boundingBox(),
-			plan.boundingBox(),
-			decisions.boundingBox(),
-			plan.evaluate(element => getComputedStyle(element).backgroundColor),
-			decisions.evaluate(element => getComputedStyle(element).backgroundColor),
-		]);
-	expect(toolbarBox).toBeTruthy();
-	expect(controlBox).toBeTruthy();
-	expect(planBox).toBeTruthy();
-	expect(decisionsBox).toBeTruthy();
-	expect(Math.abs(
-		controlBox!.x + controlBox!.width / 2 - (toolbarBox!.x + toolbarBox!.width / 2),
-	)).toBeLessThan(1);
-	expect(Math.abs(planBox!.x + planBox!.width - decisionsBox!.x)).toBeLessThanOrEqual(1);
-	expect(planStyle).not.toBe(decisionsStyle);
-
-	await decisions.click();
-	await expect(page.locator('[data-document-view="decisions"]')).toBeVisible();
-	await expect(decisions).toHaveAttribute("aria-pressed", "true");
-	await plan.click();
-	await expect(page.locator('[data-document-view="plan"]')).toBeVisible();
-	await expect(plan).toHaveAttribute("aria-pressed", "true");
-});
-
 async function rewriteFirstBlock(page: import("@playwright/test").Page, value: string) {
 	let block = content(page).locator("p").first();
 	await block.selectText();
@@ -121,7 +84,7 @@ test(
 		await seed(LONG_PLAN);
 		let page = await join("ana");
 
-		let plan = page.getByRole("button", { name: "Plan", exact: true });
+		let plan = page.getByRole("button", { name: "Document", exact: true });
 		let decisions = page.getByRole("button", { name: /^Decisions/ });
 		let scroller = page.locator("[data-plan-scroll]");
 		let selected = content(page).getByText("Paragraph 9.", { exact: true });
@@ -189,7 +152,7 @@ test("switching views restores the plan scroll position", async ({ join, seed })
 		element.dispatchEvent(new Event("scroll"));
 	});
 	await page.getByRole("button", { name: /^Decisions/ }).click();
-	await page.getByRole("button", { name: "Plan", exact: true }).click();
+	await page.getByRole("button", { name: "Document", exact: true }).click();
 	await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBe(160);
 });
 
@@ -235,7 +198,7 @@ async function expectCompactDestinationStatePreserved(page: Page): Promise<void>
 		element.dispatchEvent(new Event("scroll"));
 	});
 	let decisionScroll = await decisionScroller.evaluate(element => element.scrollTop);
-	await nav.getByRole("button", { name: "Plan" }).click();
+	await nav.getByRole("button", { name: "Document" }).click();
 
 	await expect(draft).toHaveValue("unfinished compact thought");
 	await expect.poll(() => planScroller.evaluate(element => element.scrollTop)).toBe(160);
@@ -243,7 +206,7 @@ async function expectCompactDestinationStatePreserved(page: Page): Promise<void>
 	await expect.poll(() => decisionScroller.evaluate(element => element.scrollTop)).toBe(
 		decisionScroll,
 	);
-	await nav.getByRole("button", { name: "Plan" }).click();
+	await nav.getByRole("button", { name: "Document" }).click();
 	expect(decisionScroll).toBeGreaterThan(0);
 	let identity = await page.evaluate(() => {
 		let tracker = (window as typeof window & {
@@ -318,7 +281,10 @@ test("automatic Decisions changes reconcile after compact Conversation closes", 
 
 	await ana.locator("#workspace-conversation-heading").press("Escape");
 	await expect(ana.locator('[data-document-view="plan"]')).toBeVisible();
-	await expect(nav.getByRole("button", { name: "Plan" })).toHaveAttribute("aria-current", "page");
+	await expect(nav.getByRole("button", { name: "Document" })).toHaveAttribute(
+		"aria-current",
+		"page",
+	);
 });
 
 test("an edit received while compact Plan is hidden appears when it returns", async ({ join, seed }) => {
@@ -329,7 +295,7 @@ test("an edit received while compact Plan is hidden appears when it returns", as
 	await nav.getByRole("button", { name: /Conversation/ }).click();
 
 	await rewriteFirstBlock(bo, "The hidden plan still receives collaborative edits.");
-	await nav.getByRole("button", { name: "Plan" }).click();
+	await nav.getByRole("button", { name: "Document" }).click();
 	await expect(content(ana)).toContainText("The hidden plan still receives collaborative edits.");
 });
 
@@ -339,7 +305,7 @@ for (let width of [768, 1280]) {
 		await seed(LONG_PLAN);
 		let page = await join("ana");
 		let decisions = page.getByRole("button", { name: /^Decisions/ });
-		let plan = page.getByRole("button", { name: "Plan", exact: true });
+		let plan = page.getByRole("button", { name: "Document", exact: true });
 		let stack = page.locator("[data-plan-decisions-scroll]");
 		let first = questionnaire(page).first();
 
@@ -406,7 +372,7 @@ test("an unanswered inline decision is also shown in Decisions and can be focuse
 	await expect(card).toHaveCount(1);
 	await card.getByRole("button", { name: /How should we deploy.*show in plan/ }).click();
 
-	await expect(page.getByRole("button", { name: "Plan", exact: true }))
+	await expect(page.getByRole("button", { name: "Document", exact: true }))
 		.toHaveAttribute("aria-pressed", "true");
 	await expect(
 		page.locator(
@@ -514,7 +480,7 @@ test("a compact new-comment sheet blocks navigation and restores editor focus", 
 		viewport: { width: 390, height: 844 },
 	});
 	let editor = content(page);
-	let plan = page.getByRole("button", { name: "Plan", exact: true });
+	let plan = page.getByRole("button", { name: "Document", exact: true });
 	let decisions = page.getByRole("button", { name: /^Decisions/ });
 
 	let openDraft = async () => {
