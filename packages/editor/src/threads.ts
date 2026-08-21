@@ -196,7 +196,7 @@ export class ThreadStore {
 		let view = this.#state.threads.find(entry => entry.thread.id === id);
 		if (!view || !this.#wire) return;
 		this.#wire.send("chat:send", {
-			text: `@ai apply the accepted comment on "${view.quote}" — it has not been actioned yet.`,
+			text: `@chopin apply the accepted comment on "${view.quote}" — it has not been actioned yet.`,
 			to: "planner",
 		});
 	}

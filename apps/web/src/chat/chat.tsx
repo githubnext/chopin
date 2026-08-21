@@ -165,7 +165,7 @@ export function Chat(
 							event.preventDefault();
 							submit();
 						}}
-						placeholder="Use @ai to ask the agent"
+						placeholder="Use @chopin to ask Chopin"
 						rows={3}
 						value={text}
 					/>
