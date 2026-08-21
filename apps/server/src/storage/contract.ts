@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { StorageError } from "./errors";
 
-import type { JsonValue, Lease } from "./model";
+import type { EnqueueBackgroundJob, JsonValue, Lease } from "./model";
 import type { StorageAdapter } from "./port";
 
 type Factory = () => StorageAdapter | Promise<StorageAdapter>;
@@ -57,6 +57,29 @@ async function userAndChannel(storage: StorageAdapter): Promise<{
 	);
 	if (!lease) throw new Error("test could not acquire its storage lease");
 	return { userId, sessionId, channelId, repositoryId, lease };
+}
+
+function backgroundJob(
+	channelId: string,
+	lease: Lease,
+	overrides: Partial<EnqueueBackgroundJob> = {},
+): EnqueueBackgroundJob {
+	let now = overrides.now ?? new Date();
+	return {
+		id: id("job"),
+		channelId,
+		type: "document-summary",
+		version: 1,
+		origin: "scheduler",
+		targetKey: "document-summary",
+		idempotencyKey: id("enqueue"),
+		fingerprint: id("fingerprint"),
+		input: { revision: 1 },
+		availableAt: now,
+		now,
+		lease,
+		...overrides,
+	};
 }
 
 /** The behavioral gate every built-in storage adapter must pass. */
@@ -871,6 +894,272 @@ export function storageContract(name: string, factory: Factory): void {
 				expect(stored!.sidecar).toEqual(input.sidecar);
 				expect(stored!.updates).toEqual([]);
 				expect(await storage.collaboration.replace(input)).toMatchObject({ repeated: true });
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("enqueues background targets idempotently without collaboration side effects", async () => {
+			let storage = await opened(factory);
+			try {
+				let { channelId, lease } = await userAndChannel(storage);
+				let beforeChannel = await storage.channels.get(channelId);
+				let beforeCollaboration = await storage.collaboration.load(channelId, new Date());
+				expect(await storage.jobs.list(channelId, 20)).toEqual({ revision: 0, jobs: [] });
+				await expect(storage.jobs.enqueue(backgroundJob(channelId, lease, { id: "" })))
+					.rejects.toMatchObject({ failure: "conflict" });
+				expect((await storage.jobs.list(channelId, 20))!.revision).toBe(0);
+
+				let input = backgroundJob(channelId, lease, {
+					id: id("first-job"),
+					idempotencyKey: id("first-enqueue"),
+					fingerprint: "sha256:first",
+					input: { revision: 1, nested: ["source"] },
+				});
+				let first = await storage.jobs.enqueue(input);
+				expect(first.repeated).toBe(false);
+				expect(first.job).toMatchObject({
+					state: "pending",
+					targetGeneration: 1,
+					revision: 1,
+				});
+				let repeated = await storage.jobs.enqueue({ ...input, id: id("ignored-job") });
+				expect(repeated).toEqual({ job: first.job, repeated: true });
+				expect((await storage.jobs.list(channelId, 20))!.revision).toBe(1);
+				await expect(storage.jobs.enqueue({
+					...input,
+					id: id("conflicting-job"),
+					fingerprint: "sha256:changed",
+				})).rejects.toMatchObject({ failure: "conflict" });
+
+				let second = await storage.jobs.enqueue(backgroundJob(channelId, lease, {
+					fingerprint: "sha256:second",
+					input: { revision: 2 },
+					now: new Date(input.now.getTime() + 1),
+				}));
+				expect(second.job).toMatchObject({ targetGeneration: 2, revision: 2 });
+				expect((await storage.jobs.get(channelId, first.job.id))!.job.state).toBe("superseded");
+				let independent = await storage.jobs.enqueue(backgroundJob(channelId, lease, {
+					targetKey: "research:question-1",
+					type: "research-question",
+					origin: "user",
+					now: new Date(input.now.getTime() + 2),
+				}));
+				expect(independent.job).toMatchObject({ targetGeneration: 1, revision: 3 });
+				let page = await storage.jobs.list(channelId, 2);
+				expect(page!.jobs.map(job => job.id)).toEqual([independent.job.id, second.job.id]);
+				expect(page!.next).toBeDefined();
+				expect("input" in page!.jobs[0]!).toBe(false);
+				let remainder = await storage.jobs.list(channelId, 2, page!.next);
+				expect(remainder!.jobs.map(job => job.id)).toEqual([first.job.id]);
+
+				let detail = await storage.jobs.get(channelId, second.job.id);
+				(detail!.job.input as { revision: number }).revision = 99;
+				expect((await storage.jobs.get(channelId, second.job.id))!.job.input)
+					.toEqual({ revision: 2 });
+				expect(await storage.channels.get(channelId)).toEqual(beforeChannel);
+				expect(await storage.collaboration.load(channelId, new Date())).toEqual(
+					beforeCollaboration,
+				);
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("fences claims and publishes a background artifact atomically", async () => {
+			let storage = await opened(factory);
+			try {
+				let { channelId, lease } = await userAndChannel(storage);
+				let now = new Date();
+				let queued = (await storage.jobs.enqueue(backgroundJob(channelId, lease, { now }))).job;
+				let [claimed] = await storage.jobs.claim({
+					channelId,
+					claimOwner: "worker-1",
+					count: 1,
+					ttlMs: 10_000,
+					now: new Date(now.getTime() + 1),
+					lease,
+				});
+				expect(claimed).toMatchObject({
+					id: queued.id,
+					state: "running",
+					attempts: 1,
+					claimGeneration: 1,
+					revision: 2,
+				});
+				let renewed = await storage.jobs.renew({
+					channelId,
+					jobId: claimed!.id,
+					claimOwner: "worker-1",
+					claimGeneration: claimed!.claimGeneration,
+					expectedRevision: claimed!.revision,
+					claimBinding: { ownerSessionId: "session-1", ownerGeneration: 3 },
+					ttlMs: 10_000,
+					now: new Date(now.getTime() + 2),
+					lease,
+				});
+				expect(renewed).toMatchObject({
+					revision: 3,
+					claimBinding: { ownerSessionId: "session-1" },
+				});
+				await expect(storage.jobs.renew({
+					channelId,
+					jobId: claimed!.id,
+					claimOwner: "worker-1",
+					claimGeneration: claimed!.claimGeneration,
+					expectedRevision: claimed!.revision,
+					claimBinding: { ownerSessionId: "stale-session" },
+					ttlMs: 20_000,
+					now: new Date(now.getTime() + 3),
+					lease,
+				})).rejects.toMatchObject({ failure: "conflict" });
+				await expect(storage.jobs.settle({
+					channelId,
+					jobId: claimed!.id,
+					claimOwner: "worker-1",
+					claimGeneration: claimed!.claimGeneration + 1,
+					artifact: { abstract: "wrong" },
+					now: new Date(now.getTime() + 3),
+					lease,
+				})).rejects.toMatchObject({ failure: "conflict" });
+				expect((await storage.jobs.get(channelId, claimed!.id))!.artifact).toBeUndefined();
+
+				let requeued = await storage.jobs.requeue({
+					channelId,
+					jobId: claimed!.id,
+					claimOwner: "worker-1",
+					claimGeneration: claimed!.claimGeneration,
+					availableAt: new Date(now.getTime() + 4),
+					reason: "retry",
+					now: new Date(now.getTime() + 3),
+					lease,
+				});
+				expect(requeued).toMatchObject({ state: "pending", revision: 4, reason: "retry" });
+				let [secondClaim] = await storage.jobs.claim({
+					channelId,
+					claimOwner: "worker-2",
+					count: 1,
+					ttlMs: 10_000,
+					now: new Date(now.getTime() + 5),
+					lease,
+				});
+				expect(secondClaim).toMatchObject({ attempts: 2, claimGeneration: 2, revision: 5 });
+				let paused = await storage.jobs.pause({
+					channelId,
+					jobId: secondClaim!.id,
+					expectedRevision: secondClaim!.revision,
+					reason: "owner-unavailable",
+					now: new Date(now.getTime() + 6),
+					lease,
+				});
+				expect(paused).toMatchObject({ state: "paused", revision: 6 });
+				await expect(storage.jobs.fail({
+					channelId,
+					jobId: secondClaim!.id,
+					claimOwner: "worker-2",
+					claimGeneration: secondClaim!.claimGeneration,
+					reason: "late",
+					now: new Date(now.getTime() + 7),
+					lease,
+				})).rejects.toMatchObject({ failure: "conflict" });
+				let resumed = await storage.jobs.resume({
+					channelId,
+					jobId: paused.id,
+					expectedRevision: paused.revision,
+					availableAt: new Date(now.getTime() + 8),
+					now: new Date(now.getTime() + 8),
+					lease,
+				});
+				expect(resumed).toMatchObject({ state: "pending", revision: 7 });
+				let [finalClaim] = await storage.jobs.claim({
+					channelId,
+					claimOwner: "worker-3",
+					count: 1,
+					ttlMs: 10_000,
+					now: new Date(now.getTime() + 9),
+					lease,
+				});
+				let completed = await storage.jobs.settle({
+					channelId,
+					jobId: finalClaim!.id,
+					claimOwner: "worker-3",
+					claimGeneration: finalClaim!.claimGeneration,
+					artifact: { abstract: "Current summary", sources: [] },
+					now: new Date(now.getTime() + 10),
+					lease,
+				});
+				expect(completed.job).toMatchObject({ state: "completed", revision: 9 });
+				expect(completed.artifact).toMatchObject({
+					revision: 9,
+					value: { abstract: "Current summary", sources: [] },
+				});
+				(completed.artifact!.value as { abstract: string }).abstract = "mutated";
+				expect((await storage.jobs.get(channelId, completed.job.id))!.artifact!.value)
+					.toMatchObject({ abstract: "Current summary" });
+				await expect(storage.jobs.cancel({
+					channelId,
+					jobId: completed.job.id,
+					expectedRevision: completed.job.revision,
+					now: new Date(now.getTime() + 11),
+					lease,
+				})).rejects.toMatchObject({ failure: "conflict" });
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("reclaims expired background claims and rejects a fenced writer", async () => {
+			let storage = await opened(factory);
+			try {
+				let { channelId, lease } = await userAndChannel(storage);
+				let now = new Date();
+				let queued = (await storage.jobs.enqueue(backgroundJob(channelId, lease, { now }))).job;
+				let [first] = await storage.jobs.claim({
+					channelId,
+					claimOwner: "old-worker",
+					count: 1,
+					ttlMs: 1,
+					now,
+					lease,
+				});
+				let [replacement] = await storage.jobs.claim({
+					channelId,
+					claimOwner: "new-worker",
+					count: 1,
+					ttlMs: 10_000,
+					now: new Date(now.getTime() + 2),
+					lease,
+				});
+				expect(replacement).toMatchObject({
+					id: queued.id,
+					attempts: 2,
+					claimGeneration: 2,
+				});
+				await expect(storage.jobs.fail({
+					channelId,
+					jobId: queued.id,
+					claimOwner: "old-worker",
+					claimGeneration: first!.claimGeneration,
+					reason: "stale",
+					now: new Date(now.getTime() + 3),
+					lease,
+				})).rejects.toMatchObject({ failure: "conflict" });
+				let failed = await storage.jobs.fail({
+					channelId,
+					jobId: queued.id,
+					claimOwner: "new-worker",
+					claimGeneration: replacement!.claimGeneration,
+					reason: "attempts-exhausted",
+					now: new Date(now.getTime() + 4),
+					lease,
+				});
+				expect(failed.state).toBe("failed");
+
+				expect(await storage.leases.release(lease)).toBe(true);
+				let nextLease = await storage.leases.acquire(lease.name, "replacement", 60_000);
+				expect(nextLease).toBeDefined();
+				await expect(storage.jobs.enqueue(backgroundJob(channelId, lease)))
+					.rejects.toMatchObject({ failure: "conflict" });
 			} finally {
 				await storage.close();
 			}

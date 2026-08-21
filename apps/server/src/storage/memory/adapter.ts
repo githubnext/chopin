@@ -1,5 +1,6 @@
 import { conflict, missing } from "../errors";
 import { documentSlug, documentSlugCandidate } from "../../channels/slug";
+import { MemoryBackgroundJobStore } from "./jobs";
 
 import type {
 	AddUserProject,
@@ -31,6 +32,7 @@ import type {
 	WebSession,
 } from "../model";
 import type {
+	BackgroundJobStore,
 	ChannelStore,
 	CollaborationStore,
 	LeaseStore,
@@ -204,6 +206,11 @@ export class MemoryStorage implements StorageAdapter {
 		replace: input => this.#replace(input),
 		checkpoint: input => this.#checkpoint(input),
 	};
+
+	readonly jobs: BackgroundJobStore = new MemoryBackgroundJobStore({
+		channelExists: channelId => this.#channels.has(channelId),
+		assertLease: held => this.#assertLease(held),
+	});
 
 	readonly leases: LeaseStore = {
 		acquire: (name, owner, ttlMs) => this.#acquire(name, owner, ttlMs),

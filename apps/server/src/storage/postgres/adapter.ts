@@ -4,6 +4,7 @@ import { documentSlug, documentSlugCandidate } from "../../channels/slug";
 import { conflict, corrupt, missing, StorageError, unavailable } from "../errors";
 import { migrate, verifyMigrations } from "./migrations";
 import { PostgresNavigationStore } from "./navigation";
+import { PostgresBackgroundJobStore } from "./jobs";
 
 import type { TransactionSQL } from "bun";
 import type {
@@ -31,6 +32,7 @@ import type {
 	WebSession,
 } from "../model";
 import type {
+	BackgroundJobStore,
 	ChannelStore,
 	CollaborationStore,
 	LeaseStore,
@@ -363,6 +365,17 @@ export class PostgresStorage implements StorageAdapter {
 			this.#sql,
 			(action, execute) => this.#run(action, execute),
 		);
+		this.jobs = new PostgresBackgroundJobStore(
+			this.#sql,
+			(action, execute) => this.#run(action, execute),
+			async (transaction, lease) => {
+				await this.#assertLease(transaction, lease);
+				// The deployment owns one writer; preserve that ordering even if a caller
+				// supplies another valid lease name to the provider-neutral port.
+				await transaction`SELECT pg_advisory_xact_lock(2043237432)`;
+				await this.#assertLease(transaction, lease);
+			},
+		);
 	}
 
 	readonly users: UserStore = {
@@ -463,6 +476,7 @@ export class PostgresStorage implements StorageAdapter {
 	};
 
 	readonly navigation: NavigationStore;
+	readonly jobs: BackgroundJobStore;
 
 	readonly channels: ChannelStore = {
 		create: input => this.#createChannel(input),
@@ -1137,6 +1151,13 @@ export class PostgresStorage implements StorageAdapter {
 	}
 
 	async #assertLease(transaction: TransactionSQL, held: Lease): Promise<void> {
+		let [locked] = await transaction<{ name: string }[]>`
+			SELECT name
+			FROM storage_leases
+			WHERE name = ${held.name}
+			FOR UPDATE
+		`;
+		if (!locked) throw conflict(`storage lease ${held.name} is no longer held`);
 		let [active] = await transaction<{ name: string }[]>`
 			SELECT name
 			FROM storage_leases
@@ -1144,7 +1165,6 @@ export class PostgresStorage implements StorageAdapter {
 				AND owner = ${held.owner}
 				AND fencing = ${held.fencing}
 				AND expires_at > clock_timestamp()
-			FOR UPDATE
 		`;
 		if (!active) throw conflict(`storage lease ${held.name} is no longer held`);
 	}

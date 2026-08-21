@@ -2,22 +2,36 @@ import type {
 	AddUserProject,
 	AddUserProjectResult,
 	AgentState,
+	BackgroundJob,
+	BackgroundJobCursor,
+	BackgroundJobDetail,
+	BackgroundJobPage,
 	ChannelPage,
 	ChannelRecord,
 	ChannelScanCursor,
 	ChannelScanPage,
+	ClaimBackgroundJobs,
 	CommitChannel,
 	CommitResult,
+	ControlBackgroundJob,
 	CreateChannel,
 	CreateWebSession,
+	EnqueueBackgroundJob,
+	FailBackgroundJob,
 	Lease,
+	PauseBackgroundJob,
 	PutUser,
 	RecordNavigationVisit,
 	RenameChannel,
 	RenameResult,
+	RenewBackgroundJob,
 	ReplaceChannel,
+	RequeueBackgroundJob,
+	ResumeBackgroundJob,
 	SaveCheckpoint,
+	SettleBackgroundJob,
 	StoredChannel,
+	SupersedeBackgroundJob,
 	UpdateAgentContext,
 	UserNavigation,
 	UserProject,
@@ -87,6 +101,25 @@ export interface LeaseStore {
 	release(lease: Lease): Promise<boolean>;
 }
 
+export interface BackgroundJobStore {
+	enqueue(input: EnqueueBackgroundJob): Promise<{ job: BackgroundJob; repeated: boolean }>;
+	claim(input: ClaimBackgroundJobs): Promise<BackgroundJob[]>;
+	renew(input: RenewBackgroundJob): Promise<BackgroundJob>;
+	requeue(input: RequeueBackgroundJob): Promise<BackgroundJob>;
+	settle(input: SettleBackgroundJob): Promise<BackgroundJobDetail>;
+	pause(input: PauseBackgroundJob): Promise<BackgroundJob>;
+	resume(input: ResumeBackgroundJob): Promise<BackgroundJob>;
+	fail(input: FailBackgroundJob): Promise<BackgroundJob>;
+	cancel(input: ControlBackgroundJob): Promise<BackgroundJob>;
+	supersede(input: SupersedeBackgroundJob): Promise<BackgroundJob>;
+	list(
+		channelId: string,
+		limit: number,
+		after?: BackgroundJobCursor,
+	): Promise<BackgroundJobPage | undefined>;
+	get(channelId: string, jobId: string): Promise<BackgroundJobDetail | undefined>;
+}
+
 /** The complete durable boundary. No provider-specific primitive crosses it. */
 export interface StorageAdapter {
 	readonly driver: string;
@@ -96,6 +129,7 @@ export interface StorageAdapter {
 	readonly channels: ChannelStore;
 	readonly collaboration: CollaborationStore;
 	readonly leases: LeaseStore;
+	readonly jobs: BackgroundJobStore;
 
 	migrate(): Promise<void>;
 	health(): Promise<void>;
