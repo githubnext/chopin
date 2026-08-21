@@ -56,7 +56,7 @@ export function presenceValue<T>(
 	latest: T | undefined,
 	phase: PresencePhase,
 ): T | undefined {
-	return phase === "closed" ? undefined : value ?? latest;
+	return phase === "closed" ? undefined : value !== undefined ? value : latest;
 }
 
 export function presenceClass(phase: PresencePhase): TransitionPresence<unknown>["className"] {
@@ -75,27 +75,27 @@ export function closeDelay(raw: string, fallback: number, immediately: boolean):
 	return immediately ? 0 : duration(raw, fallback) + 50;
 }
 
-function immediate(): boolean {
+function reducedMotion(): boolean {
 	return typeof window !== "undefined"
-		&& (matchMedia("(prefers-reduced-motion: reduce)").matches
-			|| document.documentElement.dataset.motionInput === "keyboard");
+		&& window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
 export function useTransitionPresence<T>(
 	value: T | undefined,
 	closeDuration: string,
 	fallback: number,
+	immediately: boolean,
 ): TransitionPresence<T> {
 	let latest = useRef<T | undefined>(value);
 	let open = value !== undefined;
-	let immediately = immediate();
+	let settleImmediately = immediately || reducedMotion();
 	let [state, dispatch] = useReducer(presenceState, {
-		immediately,
+		immediately: settleImmediately,
 		open,
 		phase: open ? "open" : "closed",
 	});
-	if (state.open !== open || state.immediately !== immediately) {
-		let action: PresenceStateAction = { immediately, open, type: "sync" };
+	if (state.open !== open || state.immediately !== settleImmediately) {
+		let action: PresenceStateAction = { immediately: settleImmediately, open, type: "sync" };
 		state = presenceState(state, action);
 		dispatch(action);
 	}
@@ -106,7 +106,7 @@ export function useTransitionPresence<T>(
 		if (value !== undefined) latest.current = value;
 	}, [value]);
 	useEffect(() => {
-		if (immediately) return;
+		if (settleImmediately) return;
 		if (resolved === "opening") {
 			let frame = requestAnimationFrame(() => dispatch({ type: "finish" }));
 			return () => cancelAnimationFrame(frame);
@@ -115,10 +115,10 @@ export function useTransitionPresence<T>(
 		let raw = getComputedStyle(document.documentElement).getPropertyValue(closeDuration).trim();
 		let timer = window.setTimeout(
 			() => dispatch({ type: "finish" }),
-			closeDelay(raw, fallback, immediately),
+			closeDelay(raw, fallback, settleImmediately),
 		);
 		return () => window.clearTimeout(timer);
-	}, [closeDuration, fallback, immediately, resolved]);
+	}, [closeDuration, fallback, resolved, settleImmediately]);
 
 	return {
 		className: presenceClass(resolved),

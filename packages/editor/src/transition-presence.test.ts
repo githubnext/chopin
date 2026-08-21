@@ -75,6 +75,11 @@ describe("transition presence", () => {
 		expect(presenceValue(undefined, committed, "closing")).toBe(committed);
 		expect(presenceValue(undefined, committed, "closed")).toBeUndefined();
 	});
+
+	test("treats null as present content when undefined is the absence sentinel", () => {
+		let committed = { version: 1 };
+		expect(presenceValue(null, committed, "open")).toBeNull();
+	});
 });
 
 describe("close delay", () => {
