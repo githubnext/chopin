@@ -145,7 +145,12 @@ describe("sidebar navigation", () => {
 
 describe("product motion", () => {
 	it("keeps frequent feedback separate from surface motion", () => {
-		expect(THEME).toMatch(/--duration-fast:\s*120ms/);
+		let fastDurations = [...THEME.matchAll(/--duration-fast:\s*([^;]+);/g)].map(match =>
+			match[1]!.trim()
+		);
+		expect(fastDurations).toEqual(["120ms"]);
+		expect(THEME).not.toMatch(/--duration-fast:\s*250ms/);
+		expect(THEME).toMatch(/--ease-out:\s*cubic-bezier\(0\.2,\s*0,\s*0,\s*1\)\s*;/);
 		for (
 			let token of [
 				"dropdown-open-dur",
