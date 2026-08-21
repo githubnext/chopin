@@ -3,6 +3,7 @@ import { readDocument } from "./database";
 import { expectFocusIndicator } from "./focus";
 import * as Room from "../apps/server/src/plan/room";
 import {
+	COMPACT_SURFACES_SOURCE,
 	expectNoHorizontalOverflow,
 	RESPONSIVE_IMAGE_URL,
 	RESPONSIVE_SOURCE,
@@ -468,6 +469,43 @@ test("a selected tab follows strip layout changes without moving the document", 
 	await expect.poll(() =>
 		scroller.evaluate(node => node.scrollHeight - node.clientHeight - node.scrollTop)
 	).toBeLessThanOrEqual(1);
+});
+
+test("compact tables and diagrams stay centered without stretching", async ({ join, page, seed }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await seed(COMPACT_SURFACES_SOURCE);
+	page = await join("compact-surface-reader");
+	let document = content(page);
+	await expect(document.getByRole("region", { name: "Diagram preview" })).toBeVisible();
+	let geometry = await document.evaluate(root => {
+		let rectangle = (element: Element | null) => {
+			if (!element) throw new Error("compact surface is missing");
+			let box = element.getBoundingClientRect();
+			return { left: box.left, right: box.right, width: box.width };
+		};
+		let table = root.querySelector(":scope > table");
+		let preview = root.querySelector(":scope > [data-plan-language='mermaid'] .plan-diagram");
+		let svg = preview?.querySelector("svg") ?? null;
+		let scroller = root.closest("[data-plan-scroll]");
+		return {
+			document: rectangle(scroller),
+			preview: rectangle(preview),
+			svg: rectangle(svg),
+			table: {
+				...rectangle(table),
+				clientWidth: table?.clientWidth ?? 0,
+				scrollWidth: table?.scrollWidth ?? 0,
+			},
+		};
+	});
+
+	let center = (box: { left: number; right: number }) => (box.left + box.right) / 2;
+	expect(geometry.table.width).toBeLessThan(geometry.preview.width);
+	expect(geometry.table.scrollWidth).toBe(geometry.table.clientWidth);
+	expect(Math.abs(center(geometry.table) - center(geometry.document))).toBeLessThan(2);
+	expect(geometry.svg.width).toBeLessThan(geometry.preview.width);
+	expect(Math.abs(center(geometry.svg) - center(geometry.document))).toBeLessThan(2);
+	await expectNoHorizontalOverflow(page);
 });
 
 test("top-level rich surfaces use the document width while nested surfaces stay contained", async ({ join, page, seed }) => {

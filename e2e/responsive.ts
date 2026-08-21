@@ -125,6 +125,19 @@ Inline \`UnbreakableInlineCodeTokenThatMustStayInsideTheReadableDocumentMeasureE
 ${paragraphs}
 `;
 
+export const COMPACT_SURFACES_SOURCE = `# Compact surfaces
+
+| Service | Language |
+| ------- | -------- |
+| Auth | Go |
+| Search | Python |
+
+\`\`\`mermaid
+flowchart LR
+	Client --> Gateway
+\`\`\`
+`;
+
 export async function expectNoHorizontalOverflow(page: Page): Promise<void> {
 	let dimensions = await page.evaluate(() => ({
 		scrollWidth: document.documentElement.scrollWidth,
