@@ -27,34 +27,42 @@ const repository = {
 	url: "https://github.com/octo-org/score",
 };
 
-test("the room header switches documents with keyboard focus and creates one immediately", async ({ join }) => {
+function sidebar(page: import("@playwright/test").Page) {
+	return page.getByRole("complementary", { name: "Projects" });
+}
+
+function headerDocument(page: import("@playwright/test").Page) {
+	return page.getByRole("banner").locator('[aria-label^="Document:"]');
+}
+
+function headerRename(page: import("@playwright/test").Page) {
+	return page.getByRole("banner").getByRole("button", { name: /^Rename / });
+}
+
+test("the room header renames the current document and the sidebar creates one immediately", async ({ join }) => {
 	let page = await join("ana");
 	let header = page.getByRole("banner");
-	let repository = header.getByRole("button", { name: "Repository: octo-org/score" });
-	let trigger = header.getByRole("button", { name: /^Document:/ });
+	let trigger = headerRename(page);
+	let projects = sidebar(page);
 
-	await expect(repository).toContainText("score");
-	await expect(repository).toHaveAttribute("title", "octo-org/score");
+	await expect(headerDocument(page)).toBeVisible();
+	await expect(projects.locator('[aria-current="page"]')).toHaveCount(1);
 	await expect(header.getByRole("button", { name: /planner session/i })).toHaveCount(0);
 	await trigger.click();
-	let search = page.getByRole("combobox", { name: "Search documents" });
-	await expect(search).toBeFocused();
-	await expect(page.getByRole("listbox", { name: "Documents" })).toBeVisible();
-	await expect(page.getByRole("option", { selected: true })).toHaveCount(1);
-	await search.press("Escape");
+	let title = page.getByRole("textbox", { name: "Document title" });
+	await expect(title).toBeFocused();
+	await title.press("Escape");
 	await expect(trigger).toBeFocused();
 
-	await trigger.click();
-	await page.getByRole("button", { name: "Create new document" }).click();
+	await projects.getByRole("button", { name: "New document", exact: true }).click();
 	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
-	await expect(header.getByRole("button", { name: /^Document: [a-z]+-[a-z]+$/ })).toBeVisible();
+	await expect(headerDocument(page)).toHaveAccessibleName(/^Document: [a-z]+-[a-z]+$/);
 });
 
-test("the document picker searches beyond the first page in a capped result list", async ({ join }) => {
-	let page = await join("ana");
+test("the sidebar paginates documents and global search queries beyond the loaded page", async ({ join, page }) => {
 	let requests: URL[] = [];
 	let first = Array.from(
-		{ length: 50 },
+		{ length: 2 },
 		(_, index) =>
 			channel(
 				`${String(index + 1).padStart(8, "0")}-0000-4000-8000-000000000000`,
@@ -75,22 +83,18 @@ test("the document picker searches beyond the first page in a capped result list
 		await route.fulfill({ json: body });
 	});
 
-	let trigger = page.getByRole("banner").getByRole("button", { name: /^Document:/ });
-	await trigger.click();
-	let search = page.getByRole("combobox", { name: "Search documents" });
-	let scroller = page.locator("[data-document-scroll]");
-	await expect(page.getByRole("option", { name: "Note 50" })).toBeVisible();
-	expect(await scroller.evaluate(node => getComputedStyle(node).overflowY)).toBe("auto");
-	expect(await scroller.evaluate(node => node.getBoundingClientRect().height)).toBeLessThanOrEqual(
-		384,
-	);
-	await scroller.evaluate(node => {
-		node.scrollTop = node.scrollHeight;
-		node.dispatchEvent(new Event("scroll"));
-	});
-	await expect(page.getByRole("option", { name: "Continued document" })).toBeVisible();
+	page = await join("ana");
+	let projects = sidebar(page);
+	await expect(projects.getByRole("button", { name: "Note 2", exact: true })).toBeVisible();
+	await projects.getByRole("button", { name: "Load more documents in score" }).click();
+	await expect(projects.getByRole("button", { name: "Continued document", exact: true }))
+		.toBeVisible();
+	await projects.getByRole("button", { name: "Search", exact: true }).click();
+	let dialog = page.getByRole("dialog", { name: "Search documents" });
+	let search = dialog.getByRole("textbox", { name: "Search documents" });
+	await expect(search).toBeFocused();
 	await search.fill("needle");
-	await expect(page.getByRole("option", { name: "Search needle" })).toBeVisible();
+	await expect(dialog.getByRole("button", { name: /Search needle/ })).toBeVisible();
 	expect(requests.some(url => url.searchParams.get("query") === "needle")).toBe(true);
 });
 
@@ -100,23 +104,21 @@ test("renaming the current document updates collaborators and survives reload", 
 	let title = `Launch plan ${room.slice(0, 8)}`;
 	let previousPath = roomPath(room);
 	let renamedPath = `/documents/octo-org/score/${title.toLowerCase().replaceAll(" ", "-")}`;
-	let anaTrigger = ana.getByRole("banner").getByRole("button", { name: /^Document:/ });
-	let boTrigger = bo.getByRole("banner").getByRole("button", { name: /^Document:/ });
+	let anaTrigger = headerRename(ana);
 
 	await ana.setViewportSize({ width: 320, height: 568 });
 	await anaTrigger.click();
-	await ana.getByRole("button", { name: "Rename document" }).click();
 	let input = ana.getByRole("textbox", { name: "Document title" });
 	await expect(input).toBeFocused();
 	await input.fill(title);
 	await ana.getByRole("button", { name: "Save" }).click();
 
-	await expect(anaTrigger).toHaveAccessibleName(`Document: ${title}`);
-	await expect(boTrigger).toHaveAccessibleName(`Document: ${title}`);
+	await expect(headerDocument(ana)).toHaveAccessibleName(`Document: ${title}`);
+	await expect(headerDocument(bo)).toHaveAccessibleName(`Document: ${title}`);
 	await expect(ana).toHaveURL(renamedPath);
 	await expect(bo).toHaveURL(renamedPath);
 	await ana.reload();
-	await expect(ana.getByRole("banner").getByRole("button", { name: `Document: ${title}` }))
+	await expect(ana.getByRole("banner").locator(`[aria-label="Document: ${title}"]`))
 		.toBeVisible();
 	await ana.goto(previousPath);
 	await expect(ana).toHaveURL(renamedPath);
@@ -136,27 +138,24 @@ test("a delayed rename response cannot overwrite a newer collaborator rename", a
 	});
 	let first = `First rename ${room.slice(0, 8)}`;
 	let latest = `Latest rename ${room.slice(0, 8)}`;
-	let anaTrigger = ana.getByRole("banner").getByRole("button", { name: /^Document:/ });
-	let boTrigger = bo.getByRole("banner").getByRole("button", { name: /^Document:/ });
+	let anaTrigger = headerRename(ana);
+	let boTrigger = headerRename(bo);
 
 	await anaTrigger.click();
-	await ana.getByRole("button", { name: "Rename document" }).click();
 	await ana.getByRole("textbox", { name: "Document title" }).fill(first);
 	await ana.getByRole("button", { name: "Save" }).click();
-	await expect(boTrigger).toHaveAccessibleName(`Document: ${first}`);
+	await expect(headerDocument(bo)).toHaveAccessibleName(`Document: ${first}`);
 
 	await boTrigger.click();
-	await bo.getByRole("button", { name: "Rename document" }).click();
 	await bo.getByRole("textbox", { name: "Document title" }).fill(latest);
 	await bo.getByRole("button", { name: "Save" }).click();
-	await expect(anaTrigger).toHaveAccessibleName(`Document: ${latest}`);
+	await expect(headerDocument(ana)).toHaveAccessibleName(`Document: ${latest}`);
 
 	release.resolve();
-	await expect(ana.getByRole("button", { name: "Rename document" })).toBeVisible();
-	await expect(anaTrigger).toHaveAccessibleName(`Document: ${latest}`);
+	await expect(headerDocument(ana)).toHaveAccessibleName(`Document: ${latest}`);
 });
 
-test("read-only visitors can browse documents without a creation action", async ({ baseURL, page, room }) => {
+test("read-only visitors can browse documents while mutation actions stay disabled", async ({ baseURL, page, room }) => {
 	await authenticate(page, "readonly", baseURL!);
 	await page.goto(roomPath(room));
 	await expect(page.getByRole("banner")).toBeVisible();
@@ -164,10 +163,11 @@ test("read-only visitors can browse documents without a creation action", async 
 		"contenteditable",
 		"false",
 	);
-	await page.getByRole("banner").getByRole("button", { name: /^Document:/ }).click();
-	await expect(page.getByRole("combobox", { name: "Search documents" })).toBeFocused();
-	await expect(page.getByRole("button", { name: "Create new document" })).toHaveCount(0);
-	await expect(page.getByRole("button", { name: "Rename document" })).toHaveCount(0);
+	await expect(headerRename(page)).toBeDisabled();
+	await expect(sidebar(page).getByRole("button", { name: "New document", exact: true }))
+		.toBeDisabled();
+	await sidebar(page).getByRole("button", { name: "Search", exact: true }).click();
+	await expect(page.getByRole("textbox", { name: "Search documents" })).toBeFocused();
 });
 
 test("document rename failures preserve the draft and can be retried", async ({ join, room }) => {
@@ -182,9 +182,8 @@ test("document rename failures preserve the draft and can be retried", async ({ 
 		await route.continue();
 	});
 	let title = `Retry rename ${room.slice(0, 8)}`;
-	let trigger = page.getByRole("banner").getByRole("button", { name: /^Document:/ });
+	let trigger = headerRename(page);
 	await trigger.click();
-	await page.getByRole("button", { name: "Rename document" }).click();
 	let input = page.getByRole("textbox", { name: "Document title" });
 	await input.fill(title);
 	await page.getByRole("button", { name: "Save" }).click();
@@ -192,19 +191,12 @@ test("document rename failures preserve the draft and can be retried", async ({ 
 	await expect(input).toHaveValue(title);
 
 	await page.getByRole("button", { name: "Save" }).click();
-	await expect(trigger).toHaveAccessibleName(`Document: ${title}`);
+	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${title}`);
 });
 
-test("document picker keeps failures open and makes creation retryable", async ({ join }) => {
-	let page = await join("ana");
-	let listFailed = true;
+test("sidebar creation failures remain retryable", async ({ join, page }) => {
 	let creationFailed = true;
 	await page.route("**/api/repositories/octo-org/score/channels*", async route => {
-		if (route.request().method() === "GET" && listFailed) {
-			listFailed = false;
-			await route.fulfill({ status: 503, json: { error: "documents are unavailable" } });
-			return;
-		}
 		if (route.request().method() === "POST" && creationFailed) {
 			creationFailed = false;
 			await route.fulfill({ status: 503, json: { error: "creation is unavailable" } });
@@ -213,14 +205,10 @@ test("document picker keeps failures open and makes creation retryable", async (
 		await route.continue();
 	});
 
-	let trigger = page.getByRole("banner").getByRole("button", { name: /^Document:/ });
-	await trigger.click();
-	await expect(page.getByRole("alert")).toHaveText("documents are unavailable");
-	await page.getByRole("button", { name: "Try again" }).click();
-	await expect(page.getByRole("alert")).toHaveCount(0);
-	let create = page.getByRole("button", { name: "Create new document" });
+	page = await join("ana");
+	let create = sidebar(page).getByRole("button", { name: "New document", exact: true });
 	await create.click();
-	await expect(page.getByRole("alert")).toHaveText("creation is unavailable");
+	await expect(page.getByRole("alert")).toContainText("creation is unavailable");
 	await expect(create).toBeEnabled();
 	await create.click();
 	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);

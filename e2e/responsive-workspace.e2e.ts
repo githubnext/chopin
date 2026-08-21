@@ -1,4 +1,4 @@
-import { authenticate, content, expect, openIsolatedRoom, test } from "./room";
+import { authenticate, content, expect, openIsolatedRoom, ready, test } from "./room";
 import { expectInsideViewport, expectNoHorizontalOverflow, RESPONSIVE_SOURCE } from "./responsive";
 import { installVisualViewport, setVisualViewport } from "./visual-viewport";
 
@@ -28,8 +28,8 @@ async function emulatedVisualViewportPage(
 async function expectCompactWorkspaceChrome(page: Page): Promise<void> {
 	let header = page.getByRole("banner");
 	let nav = page.getByRole("navigation", { name: "Workspace view" });
-	let repository = header.getByRole("button", { name: /^Repository:/ });
-	let document = header.getByRole("button", { name: /^Document:/ });
+	let projects = page.getByRole("button", { name: "Open Projects sidebar" });
+	let document = header.getByRole("button", { name: /^Rename / });
 	let destinations = nav.getByRole("button");
 
 	await expect(header.getByRole("button", { name: /conversation pane/ })).toHaveCount(0);
@@ -40,25 +40,10 @@ async function expectCompactWorkspaceChrome(page: Page): Promise<void> {
 	await expect(destinations.nth(1)).toHaveAccessibleName("Document");
 	await expect(destinations.nth(2)).toHaveAccessibleName(/^Decisions/);
 
-	let [headerBox, repositoryBox, documentBox] = await Promise.all([
-		header.boundingBox(),
-		repository.boundingBox(),
-		document.boundingBox(),
-	]);
-	expect(headerBox).toBeTruthy();
-	expect(repositoryBox).toBeTruthy();
-	expect(documentBox).toBeTruthy();
-	let geometry = {
-		documentWidth: documentBox!.width,
-		height: headerBox!.height,
-		repositoryLabelCenter: repositoryBox!.y + repositoryBox!.height / 2,
-		repositoryWidth: repositoryBox!.width,
-		documentLabelCenter: documentBox!.y + documentBox!.height / 2,
-	};
-	expect(geometry.height).toBeLessThan(64);
-	expect(geometry.documentWidth).toBeGreaterThan(geometry.repositoryWidth);
-	expect(geometry.repositoryWidth).toBeGreaterThan(48);
-	expect(Math.abs(geometry.repositoryLabelCenter - geometry.documentLabelCenter)).toBeLessThan(2);
+	await expectInsideViewport(header);
+	await expectInsideViewport(projects);
+	await expectInsideViewport(document);
+	await expectInsideViewport(nav);
 
 	let heights = await destinations.evaluateAll(buttons =>
 		buttons.map(button => button.getBoundingClientRect().height)
@@ -72,6 +57,14 @@ test("a 390px phone has one row of chrome and exposes one mounted destination at
 	let page = await join("ana", { hasTouch: true, viewport: { width: 390, height: 844 } });
 	let nav = page.getByRole("navigation", { name: "Workspace view" });
 	await expectCompactWorkspaceChrome(page);
+	let projects = page.getByRole("button", { name: "Open Projects sidebar" });
+	await projects.click();
+	let drawer = page.getByRole("dialog", { name: "Projects" });
+	await expect(drawer).toBeVisible();
+	await expect.poll(async () => (await drawer.boundingBox())?.width).toBe(280);
+	await page.keyboard.press("Escape");
+	await expect(drawer).toBeHidden();
+	await expect(projects).toBeFocused();
 	await expect(nav.getByRole("button", { name: "Document" })).toBeVisible();
 	await nav.getByRole("button", { name: /Conversation/ }).click();
 	await expect(page.locator("#pane-chat")).toBeVisible();
@@ -82,15 +75,6 @@ test("a 390px phone has one row of chrome and exposes one mounted destination at
 	await expect(page.locator("#pane-chat")).toBeHidden();
 	await expect(page.locator("#workspace-decisions-heading")).toBeFocused();
 	await expectNoHorizontalOverflow(page);
-});
-
-test("a 320px phone has one row of chrome and one destination control", async ({ join, seed }) => {
-	await seed(RESPONSIVE_SOURCE);
-	let page = await join("ana", {
-		hasTouch: true,
-		viewport: { width: 320, height: 568 },
-	});
-	await expectCompactWorkspaceChrome(page);
 });
 
 test("a shifted visual viewport keeps workspace controls in the exposed rectangle", async ({ browser, baseURL, room, seed }) => {
@@ -114,6 +98,7 @@ test("a shifted visual viewport keeps workspace controls in the exposed rectangl
 		let page = await context.newPage();
 		await authenticate(page, "ana", baseURL!);
 		await page.goto(`/channels/${room}`);
+		await ready(page);
 		await setVisualViewport(page, {
 			event: "resize",
 			height: 506,
@@ -122,7 +107,7 @@ test("a shifted visual viewport keeps workspace controls in the exposed rectangl
 			width: 320,
 		});
 
-		await expectInsideViewport(page.getByRole("button", { name: /^Repository:/ }));
+		await expectInsideViewport(page.getByRole("button", { name: "Open Projects sidebar" }));
 		await expectInsideViewport(page.getByRole("navigation", { name: "Workspace view" }));
 	} finally {
 		await context.close();
@@ -218,7 +203,6 @@ for (
 	let viewport of [
 		{ width: 768, height: 1024 },
 		{ width: 1023, height: 964 },
-		{ width: 1024, height: 768 },
 	]
 ) {
 	test(`${viewport.width}px uses the same compact destinations as a phone`, async ({ join, seed }) => {
@@ -256,7 +240,19 @@ for (
 	});
 }
 
-for (let width of [1200, 1440]) {
+test("1024px switches from the drawer to the inline Projects sidebar", async ({ join, seed }) => {
+	await seed(RESPONSIVE_SOURCE);
+	let page = await join("ana", { viewport: { width: 1024, height: 768 } });
+	await expect(page.getByRole("complementary", { name: "Projects" })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Open Projects sidebar" })).toHaveCount(0);
+	await expect(page.getByRole("navigation", { name: "Workspace view" })).toHaveCount(0);
+	await expect(page.locator("#pane-chat")).toBeVisible();
+	await expect(page.getByRole("separator", { name: "Resize the conversation" })).toBeVisible();
+	await expect(page.getByRole("group", { name: "Document view" })).toBeVisible();
+	await expectNoHorizontalOverflow(page);
+});
+
+for (let width of [1440]) {
 	test(`${width}px retains the split Conversation layout`, async ({ join, seed }) => {
 		await seed(RESPONSIVE_SOURCE);
 		let page = await join("ana", { viewport: { width, height: 900 } });

@@ -33,7 +33,7 @@ test("an edit by one appears for the other", async ({ join }) => {
 test("the header represents everyone here as faces", async ({ join }) => {
 	let ana = await join("ana");
 	let bo = await join("bo");
-	let header = ana.locator("header").first();
+	let header = ana.getByRole("banner");
 
 	await expect(header.getByRole("img", { name: "ana" })).toHaveCount(1);
 	await expect(header.getByRole("img", { name: "bo" })).toHaveCount(1);

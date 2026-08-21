@@ -30,13 +30,13 @@ test("a drag the browser takes away still puts the bar down", async ({ join, pag
 	await expect.poll(() => drawn(handle)).toBe("0");
 });
 
-test("the conversation rail is the only resizable aside", async ({ join, page }) => {
+test("the conversation rail has its own resize control", async ({ join, page }) => {
 	await join("ana");
 
-	let rail = page.locator("aside");
+	let rail = page.getByRole("complementary", { name: "Conversation" });
 	let handle = page.getByRole("separator", { name: "Resize the conversation" });
-	await expect(rail).toHaveCount(1);
-	await expect(page.getByRole("separator")).toHaveCount(1);
+	await expect(rail).toBeVisible();
+	await expect(handle).toBeVisible();
 
 	let before = Number(await handle.getAttribute("aria-valuenow"));
 	await handle.press("ArrowRight");

@@ -189,14 +189,12 @@ async function scriptPlanner(page: Page) {
 
 test("a GitHub session joins its authorized channel", async ({ join, room }) => {
 	let page = await join("ana");
-	let repository = page.getByRole("banner").getByRole("button", {
-		name: "Repository: octo-org/score",
-	});
+	let projects = page.getByRole("complementary", { name: "Projects" });
+	let repository = projects.getByRole("button", { name: "score", exact: true });
 
 	await expect(page).toHaveURL(roomPath(room));
-	await expect(repository).toContainText("score");
-	await expect(repository).toHaveAttribute("title", "octo-org/score");
-	await expect(page.locator("header").first().getByRole("img", { name: "ana" })).toHaveCount(1);
+	await expect(repository).toHaveAttribute("aria-expanded", "true");
+	await expect(page.getByRole("banner").getByRole("img", { name: "ana" })).toHaveCount(1);
 });
 
 test("an unauthenticated visitor is asked to sign in", async ({ page }) => {

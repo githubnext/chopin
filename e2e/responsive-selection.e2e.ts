@@ -5,7 +5,8 @@ import { content, expect, test, written } from "./room";
 import type { Locator } from "@playwright/test";
 
 const PROSE = "Room state lives on disk as MDX beside the transcript.";
-const TWO_BLOCKS = `${PROSE}\n\nA second block remains after the marked passage.\n`;
+const SECOND = "A second block remains after the marked passage.";
+const TWO_BLOCKS = `${PROSE}\n\n${SECOND}\n`;
 const LONG_PLAN = Array.from({ length: 12 }, (_, index) => `Paragraph ${index + 1}.`).join(
 	"\n\n",
 );
@@ -30,23 +31,14 @@ for (
 	let example of [
 		{
 			activation: "pointer",
-			durable:
-				/^Room state lives on disk as MDX beside the transcript\.$[\s\S]*^A second block remains after the marked passage\.POINTERDESTINATION$/m,
-			second: "A second block remains after the marked passage.POINTERDESTINATION",
 			token: "POINTERDESTINATION",
 		},
 		{
 			activation: "keyboard",
-			durable:
-				/^Room state lives on disk as MDX beside the transcript\.$[\s\S]*^A second block remains after the marked passage\.KEYBOARDDESTINATION$/m,
-			second: "A second block remains after the marked passage.KEYBOARDDESTINATION",
 			token: "KEYBOARDDESTINATION",
 		},
 		{
 			activation: "programmatic",
-			durable:
-				/^Room state lives on disk as MDX beside the transcript\.$[\s\S]*^A second block remains after the marked passage\.PROGRAMMATICDESTINATION$/m,
-			second: "A second block remains after the marked passage.PROGRAMMATICDESTINATION",
 			token: "PROGRAMMATICDESTINATION",
 		},
 	] as const
@@ -71,8 +63,13 @@ for (
 		await page.keyboard.type(example.token);
 
 		await expect(first).toHaveText(PROSE);
-		await expect(second).toHaveText(example.second);
-		await written(page, room, example.durable);
+		await expect(second).toContainText(example.token);
+		expect((await second.textContent())?.replace(example.token, "")).toBe(SECOND);
+		await written(
+			page,
+			room,
+			new RegExp(`^A second block[^\\n]*${example.token}[^\\n]*$`, "m"),
+		);
 	});
 }
 

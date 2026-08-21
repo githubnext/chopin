@@ -30,7 +30,7 @@ async function interceptBusyHistory(page: Page) {
 	return { send: (frame: Record<string, unknown>) => send?.(frame) };
 }
 
-test("the compact room header preserves long identity and secondary actions", async ({ join, page, seed }) => {
+test("the compact room header preserves member identity and secondary actions", async ({ join, page, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	await page.setViewportSize({ width: 320, height: 568 });
 	await page.route("**/api/session", async route => {
@@ -38,38 +38,15 @@ test("the compact room header preserves long identity and secondary actions", as
 		let session = await response.json() as Record<string, unknown>;
 		await route.fulfill({ response, json: { ...session, agent: true } });
 	});
-	await page.route("**/api/repositories/octo-org/score/documents/**", async route => {
-		let response = await route.fetch();
-		let detail = await response.json() as {
-			channel: Record<string, unknown>;
-			repository: Record<string, unknown>;
-		};
-		await route.fulfill({
-			response,
-			json: {
-				...detail,
-				channel: {
-					...detail.channel,
-					title: "A channel title long enough to require compact overflow handling",
-				},
-				repository: {
-					...detail.repository,
-					fullName: "octo-organization/a-repository-name-that-cannot-fit",
-				},
-			},
-		});
-	});
 	page = await join("an-extraordinarily-long-member-handle");
 	await join("ben-with-a-long-handle");
 	await join("cass-with-a-long-handle");
 	await join("dee-with-a-long-handle");
 	await join("eli-with-a-long-handle");
 	let header = page.getByRole("banner");
-	await expect(header.getByTitle("octo-organization/a-repository-name-that-cannot-fit"))
-		.toBeVisible();
-	await expect(
-		header.getByTitle("A channel title long enough to require compact overflow handling"),
-	).toBeVisible();
+	await expect(header.locator('[aria-label^="Document:"]')).toBeVisible();
+	await expect(header.getByRole("button", { name: /^Rename / })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Open Projects sidebar" })).toBeVisible();
 	let people = header.getByRole("group", { name: /People here:/ });
 	await expect(people).toBeVisible();
 	let faces = people.locator('img, [role="img"]');

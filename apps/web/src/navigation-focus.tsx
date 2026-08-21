@@ -20,12 +20,11 @@ export function NavigationFocusScope(
 	},
 ) {
 	let scope = useRef<HTMLDivElement>(null);
-	let previous = useRef<HTMLElement | undefined>(undefined);
+	let previous = useRef<HTMLElement | undefined>(
+		document.activeElement instanceof HTMLElement ? document.activeElement : undefined,
+	);
 
 	useEffect(() => {
-		previous.current = document.activeElement instanceof HTMLElement
-			? document.activeElement
-			: undefined;
 		let frame = requestAnimationFrame(() => {
 			(initialFocus?.current ?? focusable(scope.current!)[0] ?? scope.current)?.focus();
 		});

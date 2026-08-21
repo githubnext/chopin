@@ -177,9 +177,9 @@ async function expectOwnScroller(
 ): Promise<void> {
 	await expect(surface.first(), `${name} must be rendered`).toBeAttached();
 	expect(await surface.count(), `${name} must be rendered`).toBeGreaterThan(0);
-	expect(
-		await surface.evaluateAll(nodes => nodes.every(node => node.scrollWidth > node.clientWidth)),
-		`${name} must overflow internally`,
+	await expect.poll(
+		() => surface.evaluateAll(nodes => nodes.every(node => node.scrollWidth > node.clientWidth)),
+		{ message: `${name} must overflow internally` },
 	).toBe(true);
 }
 

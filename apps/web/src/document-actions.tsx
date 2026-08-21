@@ -7,6 +7,7 @@ import {
 	installedRepositoryGroups,
 	loadRepositorySnapshot,
 	readRepositoryCache,
+	writeRepositoryCache,
 } from "./repository-cache";
 
 import type { RepositorySnapshot } from "./repository-cache";
@@ -114,6 +115,12 @@ export async function searchAvailableDocuments(
 	};
 }
 
+export function newestDocument(current: Api.Channel, replacement: Api.Channel): Api.Channel {
+	return current.id === replacement.id && current.updatedAt > replacement.updatedAt
+		? current
+		: replacement;
+}
+
 export function replaceLoadedDocument(
 	documents: LoadedDocuments,
 	replacement: Api.Channel,
@@ -131,7 +138,9 @@ export function replaceLoadedDocument(
 		[replacement.repositoryId]: {
 			...current,
 			channels: found
-				? current.channels.map(channel => channel.id === replacement.id ? replacement : channel)
+				? current.channels.map(channel =>
+					channel.id === replacement.id ? newestDocument(channel, replacement) : channel
+				)
 				: [...current.channels, replacement],
 		},
 	};
@@ -149,7 +158,9 @@ export function updateLoadedDocument(
 			[repositoryId]: {
 				...state,
 				channels: state.channels.map(channel =>
-					channel.id === documentId ? { ...channel, ...update } : channel
+					channel.id === documentId && channel.updatedAt <= update.updatedAt
+						? { ...channel, ...update }
+						: channel
 				),
 			},
 		};
@@ -189,7 +200,10 @@ export function AddProjectDialog(
 		loadRepositorySnapshot(userId, cached, value => {
 			if (active) setSnapshot(value);
 		}).then(value => {
-			if (active) setSnapshot(value);
+			if (active) {
+				writeRepositoryCache(value);
+				setSnapshot(value);
+			}
 		}, reason => {
 			if (active) setError(reason);
 		});
