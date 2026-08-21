@@ -12,6 +12,10 @@ import {
 import type { Plan } from "../packages/protocol/index";
 import type { Page } from "@playwright/test";
 
+function center(box: { left: number; right: number }): number {
+	return (box.left + box.right) / 2;
+}
+
 async function routeResponsiveImage(page: Page): Promise<void> {
 	await page.route(RESPONSIVE_IMAGE_URL, route =>
 		route.fulfill({
@@ -495,8 +499,6 @@ test("compact tables and diagrams stay centered without stretching", async ({ jo
 		};
 	});
 
-	// oxlint-disable-next-line unicorn(consistent-function-scoping) -- This assertion-specific helper has no production scope.
-	let center = (box: { left: number; right: number }) => (box.left + box.right) / 2;
 	expect(geometry.table.width).toBeLessThan(geometry.preview.width);
 	expect(geometry.table.scrollWidth).toBe(geometry.table.clientWidth);
 	expect(Math.abs(center(geometry.table) - center(geometry.document))).toBeLessThan(2);
