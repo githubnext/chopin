@@ -478,6 +478,7 @@ test("compact tables and diagrams stay centered without stretching", async ({ jo
 	let document = content(page);
 	await expect(document.getByRole("region", { name: "Diagram preview" })).toBeVisible();
 	let geometry = await document.evaluate(root => {
+		// oxlint-disable-next-line unicorn(consistent-function-scoping) -- The callback executes in the browser realm.
 		let rectangle = (element: Element | null) => {
 			if (!element) throw new Error("compact surface is missing");
 			let box = element.getBoundingClientRect();
@@ -499,6 +500,7 @@ test("compact tables and diagrams stay centered without stretching", async ({ jo
 		};
 	});
 
+	// oxlint-disable-next-line unicorn(consistent-function-scoping) -- This assertion-specific helper has no production scope.
 	let center = (box: { left: number; right: number }) => (box.left + box.right) / 2;
 	expect(geometry.table.width).toBeLessThan(geometry.preview.width);
 	expect(geometry.table.scrollWidth).toBe(geometry.table.clientWidth);
