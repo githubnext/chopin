@@ -1,4 +1,7 @@
-import { deterministicChannelId } from "../channels/id";
+import { documentPath, parseDocumentPath } from "@chopin/protocol/document-url";
+
+import { deterministicChannelId, isChannelId } from "../channels/id";
+import { documentSlug } from "../channels/slug";
 import { GitHubError } from "../github/client";
 import * as Plan from "../plan/service";
 import * as Rooms from "../rooms";
@@ -114,6 +117,43 @@ export function hosted(
 		}
 	}
 
+	async function locatedChannel(caller: HostedCaller, locator: string) {
+		let path: URL | undefined;
+		try {
+			path = new URL(locator, auth.config.origin);
+		} catch {
+			path = undefined;
+		}
+		let parsed = path?.origin === auth.config.origin
+			? parseDocumentPath(path.pathname)
+			: undefined;
+		if (parsed?.slug) {
+			let repository = await directRepository(caller, parsed.owner, parsed.repository);
+			if (!repository?.permissions.pull) return "forbidden" as const;
+			let channel = await auth.storage.channels.resolve(
+				repository.id,
+				documentSlug(parsed.slug),
+			);
+			return channel ? { channel, repository } : undefined;
+		}
+
+		let legacy = path?.origin === auth.config.origin
+			? /^\/channels\/([0-9a-f-]{36})\/?$/i.exec(path.pathname)
+			: undefined;
+		let id = legacy?.[1]?.toLowerCase();
+		let channel = await auth.storage.channels.get(id && isChannelId(id) ? id : locator);
+		if (!channel) return undefined;
+		let repository = await directRepository(
+			caller,
+			channel.repositoryOwner,
+			channel.repositoryName,
+		);
+		if (!repository?.permissions.pull || repository.id !== channel.repositoryId) {
+			return "forbidden" as const;
+		}
+		return { channel, repository };
+	}
+
 	function run(caller: HostedCaller, input: ImplementationInput): Run {
 		return {
 			id: crypto.randomUUID(),
@@ -162,17 +202,9 @@ export function hosted(
 				return documents;
 			},
 			async read(caller, id) {
-				let channel = await auth.storage.channels.get(id);
-				if (!channel) return undefined;
-				let repository = await directRepository(
-					caller,
-					channel.repositoryOwner,
-					channel.repositoryName,
-				);
-				if (
-					!repository?.permissions.pull
-					|| repository.id !== channel.repositoryId
-				) return undefined;
+				let located = await locatedChannel(caller, id);
+				if (!located || located === "forbidden") return undefined;
+				let { channel } = located;
 
 				let live = Rooms.get(channel.id)?.plan;
 				if (live) {
@@ -268,8 +300,9 @@ export function hosted(
 				let creation: Plan.CreationMetadata = { brief, origin };
 				let initial = await Plan.initial(plan, creation);
 				let id = deterministicChannelId(repository.id, input.idempotencyKey);
+				let created: ChannelRecord;
 				try {
-					await auth.storage.channels.create({
+					created = await auth.storage.channels.create({
 						id,
 						repositoryId: repository.id,
 						repositoryOwner: repository.owner,
@@ -299,7 +332,11 @@ export function hosted(
 							creation: restored.creation,
 							source: restored.source,
 							revision: restored.revision,
-							url: `/channels/${id}`,
+							url: documentPath(
+								repository.owner,
+								repository.name,
+								stored.channel.slug,
+							),
 						}),
 					};
 				}
@@ -307,11 +344,11 @@ export function hosted(
 					kind: "created",
 					document: document({
 						id,
-						title: input.title,
+						title: created.title,
 						creation,
 						source: initial.source,
 						revision: 0,
-						url: `/channels/${id}`,
+						url: documentPath(repository.owner, repository.name, created.slug),
 					}),
 				};
 			},
@@ -320,17 +357,11 @@ export function hosted(
 			? {
 				implementations: {
 					async readImplementation(caller: HostedCaller, id: string) {
-						let channel = await auth.storage.channels.get(id);
-						if (!channel) return undefined;
-						let repository = await directRepository(
-							caller,
-							channel.repositoryOwner,
-							channel.repositoryName,
-						);
-						if (!repository?.permissions.pull || repository.id !== channel.repositoryId) {
-							return "forbidden" as const;
-						}
-						let live = Rooms.get(id)?.plan;
+						let located = await locatedChannel(caller, id);
+						if (located === "forbidden") return "forbidden" as const;
+						if (!located) return undefined;
+						let { channel } = located;
+						let live = Rooms.get(channel.id)?.plan;
 						if (live) {
 							return exposed(channel, {
 								source: Plan.source(live),
@@ -341,7 +372,7 @@ export function hosted(
 								lifecycle: live.lifecycle,
 							});
 						}
-						let stored = await auth.storage.collaboration.load(id, auth.clock());
+						let stored = await auth.storage.collaboration.load(channel.id, auth.clock());
 						return stored ? exposed(channel, await Plan.readStored(stored)) : undefined;
 					},
 					async startImplementation(caller: HostedCaller, input: ImplementationInput) {

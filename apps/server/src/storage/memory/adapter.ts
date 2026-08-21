@@ -1,4 +1,5 @@
 import { conflict, missing } from "../errors";
+import { documentSlug, documentSlugCandidate } from "../../channels/slug";
 
 import type {
 	AgentState,
@@ -83,6 +84,7 @@ export class MemoryStorage implements StorageAdapter {
 	#users = new Map<string, UserRecord>();
 	#sessions = new Map<string, WebSession>();
 	#channels = new Map<string, ChannelRecord>();
+	#channelSlugs = new Map<string, Map<string, string>>();
 	#snapshots = new Map<string, ChannelSnapshot>();
 	#sequences = new Map<string, number>();
 	#updates = new Map<string, ChannelUpdate[]>();
@@ -149,6 +151,11 @@ export class MemoryStorage implements StorageAdapter {
 	readonly channels: ChannelStore = {
 		create: input => this.#createChannel(input),
 		get: id => Promise.resolve(this.#channels.get(id)).then(value => value && channel(value)),
+		resolve: (repositoryId, slug) => {
+			let id = this.#channelSlugs.get(repositoryId)?.get(slug);
+			let found = id ? this.#channels.get(id) : undefined;
+			return Promise.resolve(found && channel(found));
+		},
 		rename: input => this.#renameChannel(input),
 		list: (repositoryId, limit, after, query) =>
 			this.#listChannels(repositoryId, limit, after, query),
@@ -203,8 +210,10 @@ export class MemoryStorage implements StorageAdapter {
 			)
 		) throw conflict(`channel title ${input.title} already exists in this repository`);
 		let { initial, now, ...record } = input;
+		let slug = this.#reserveSlug(input.repositoryId, input.id, input.title);
 		let saved: ChannelRecord = {
 			...record,
+			slug,
 			revision: 0,
 			createdAt: now,
 			updatedAt: now,
@@ -240,9 +249,26 @@ export class MemoryStorage implements StorageAdapter {
 		let updatedAt = input.now > found.updatedAt
 			? input.now
 			: new Date(found.updatedAt.getTime() + 1);
-		let saved = { ...found, title: input.title, updatedAt };
+		let slug = this.#reserveSlug(found.repositoryId, found.id, input.title);
+		let saved = { ...found, title: input.title, slug, updatedAt };
 		this.#channels.set(saved.id, saved);
 		return { channel: channel(saved), changed: true };
+	}
+
+	#reserveSlug(repositoryId: string, channelId: string, title: string): string {
+		let aliases = this.#channelSlugs.get(repositoryId);
+		if (!aliases) {
+			aliases = new Map();
+			this.#channelSlugs.set(repositoryId, aliases);
+		}
+		let base = documentSlug(title);
+		for (let index = 1;; index++) {
+			let candidate = documentSlugCandidate(base, index);
+			let owner = aliases.get(candidate);
+			if (owner && owner !== channelId) continue;
+			aliases.set(candidate, channelId);
+			return candidate;
+		}
 	}
 
 	#listChannels(

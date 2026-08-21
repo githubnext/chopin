@@ -29,6 +29,7 @@ export type Channel = {
 	repositoryOwner: string;
 	repositoryName: string;
 	title: string;
+	slug: string;
 	createdBy: string;
 	revision: number;
 	createdAt: string;
@@ -98,7 +99,7 @@ async function decoded<T>(result: Response): Promise<T> {
 		value = undefined;
 	}
 	if (!result.ok) {
-		if (result.status === 401 && typeof location !== "undefined") location.assign("/");
+		if (result.status === 401 && typeof location !== "undefined") location.reload();
 		let message = value && typeof value === "object" && "error" in value
 				&& typeof value.error === "string"
 			? value.error
@@ -177,6 +178,18 @@ export function createChannel(
 
 export function channel(id: string): Promise<ChannelDetail> {
 	return response(`/api/channels/${encodeURIComponent(id)}`);
+}
+
+export function document(
+	owner: string,
+	repository: string,
+	slug: string,
+): Promise<ChannelDetail> {
+	return response(
+		`/api/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/documents/${
+			encodeURIComponent(slug)
+		}`,
+	);
 }
 
 export function renameChannel(id: string, title: string): Promise<ChannelDetail> {

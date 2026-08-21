@@ -9,6 +9,14 @@ const DEFAULT_DATABASES: Record<number, string> = {
 	8789: "postgresql://chopin:chopin@127.0.0.1:5434/chopin?sslmode=disable",
 };
 
+export function testChannelSlug(id: string): string {
+	return `test-${id.slice(0, 8)}`;
+}
+
+export function testChannelPath(id: string): string {
+	return `/documents/octo-org/score/${testChannelSlug(id)}`;
+}
+
 function url(port: number): string {
 	let index = port === 8789 ? 1 : 0;
 	return process.env[`E2E_DATABASE_URL_${index}`] || DEFAULT_DATABASES[port]!;
@@ -26,6 +34,7 @@ async function sql<T>(port: number, action: (database: SQL) => Promise<T>): Prom
 export async function createChannel(port: number, id: string): Promise<void> {
 	await sql(port, async database => {
 		let now = new Date();
+		let slug = testChannelSlug(id);
 		await database.begin(async transaction => {
 			await transaction`
 				INSERT INTO users (id, login, avatar_url, created_at, updated_at)
@@ -40,6 +49,11 @@ export async function createChannel(port: number, id: string): Promise<void> {
 					${id}, 'R_score', 'octo-org', 'score', ${`Test ${id.slice(0, 8)}`},
 					'U_e2e', 0, 1, ${now}, ${now}
 				)
+			`;
+			await transaction`
+				INSERT INTO channel_slugs (
+					repository_id, slug, channel_id, canonical, created_at
+				) VALUES ('R_score', ${slug}, ${id}, true, ${now})
 			`;
 			await transaction`
 				INSERT INTO channel_state (channel_id, sidecar) VALUES (${id}, 'null'::jsonb)

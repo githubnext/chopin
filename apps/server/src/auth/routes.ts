@@ -10,6 +10,9 @@ import type { StorageAdapter } from "../storage/port";
 
 type Clock = () => Date;
 
+const RETURN_PATH_MAX_LENGTH = 2_048;
+const RESERVED_RETURN_PATHS = ["/api", "/auth", "/ws", "/mcp"];
+
 type Dependencies = {
 	config: AuthConfig;
 	storage: StorageAdapter;
@@ -103,6 +106,39 @@ function parameter(url: URL, name: string): string | undefined {
 	return values.length === 1 && values[0] ? values[0] : undefined;
 }
 
+function returnPath(url: URL, origin: string): string {
+	let values = url.searchParams.getAll("return_to");
+	if (values.length !== 1) return "/";
+	let value = values[0]!;
+	if (
+		!value
+		|| value.length > RETURN_PATH_MAX_LENGTH
+		|| !value.startsWith("/")
+		|| value.startsWith("//")
+		|| value.includes("\\")
+	) return "/";
+	let hasControl = [...value].some(character => {
+		let code = character.charCodeAt(0);
+		return code <= 0x1f || (code >= 0x7f && code <= 0x9f);
+	});
+	if (hasControl) return "/";
+
+	let target: URL;
+	try {
+		target = new URL(value, origin);
+	} catch {
+		return "/";
+	}
+	if (target.origin !== origin || target.pathname.startsWith("//")) return "/";
+	if (
+		RESERVED_RETURN_PATHS.some(path =>
+			target.pathname === path || target.pathname.startsWith(`${path}/`)
+		)
+	) return "/";
+	let canonical = target.pathname + target.search + target.hash;
+	return canonical.length <= RETURN_PATH_MAX_LENGTH ? canonical : "/";
+}
+
 /** Register the GitHub OAuth and authenticated session surface. */
 export function registerAuthRoutes(
 	router: Router,
@@ -132,8 +168,8 @@ export function registerAuthRoutes(
 	let redirectUri = `${config.origin}/auth/github/callback`;
 	let context: HostedAuth = { config, storage, github, admission, sessions, clock };
 
-	router.on("GET", "/auth/github", async () => {
-		let issued = await attempts.issue();
+	router.on("GET", "/auth/github", async (_request, url) => {
+		let issued = await attempts.issue(returnPath(url, config.origin));
 		let location = github.authorize({
 			clientId: config.clientId,
 			redirectUri,
@@ -181,7 +217,7 @@ export function registerAuthRoutes(
 			let now = clock();
 			await storage.users.put({ ...profile, now });
 			let session = await sessions.issue(profile.id, grant);
-			return redirected("/", 303, [clear, session.cookie]);
+			return redirected(stored.returnPath ?? "/", 303, [clear, session.cookie]);
 		} catch (err) {
 			let response = failure(err);
 			response.headers.append("set-cookie", clear);

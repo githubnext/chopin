@@ -254,6 +254,87 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
+		it("resolves canonical and historical document slugs without rebinding aliases", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, channelId, repositoryId } = await userAndChannel(storage);
+				let original = await storage.channels.get(channelId);
+				expect(original?.slug).toBe("release-plan");
+				expect((await storage.channels.resolve(repositoryId, "release-plan"))?.id)
+					.toBe(channelId);
+
+				let renamed = await storage.channels.rename({
+					id: channelId,
+					title: "Résumé 計画",
+					now: new Date("2026-01-03T03:04:05.000Z"),
+				});
+				expect(renamed.channel.slug).toBe("résumé-計画");
+				expect((await storage.channels.resolve(repositoryId, "release-plan"))?.id)
+					.toBe(channelId);
+				expect((await storage.channels.resolve(repositoryId, "résumé-計画"))?.id)
+					.toBe(channelId);
+
+				let restored = await storage.channels.rename({
+					id: channelId,
+					title: "Release plan",
+					now: new Date("2026-01-04T03:04:05.000Z"),
+				});
+				expect(restored.channel.slug).toBe("release-plan");
+				await storage.channels.rename({
+					id: channelId,
+					title: "Launch plan",
+					now: new Date("2026-01-05T03:04:05.000Z"),
+				});
+
+				let replacement = await storage.channels.create({
+					id: id("replacement-channel"),
+					repositoryId,
+					repositoryOwner: "octo-org",
+					repositoryName: "score",
+					title: "Release plan",
+					createdBy: userId,
+					now: new Date("2026-01-06T03:04:05.000Z"),
+				});
+				expect(replacement.slug).toBe("release-plan-2");
+				expect((await storage.channels.resolve(repositoryId, "release-plan"))?.id)
+					.toBe(channelId);
+				expect((await storage.channels.resolve(repositoryId, "release-plan-2"))?.id)
+					.toBe(replacement.id);
+				expect(await storage.channels.resolve(repositoryId, "missing"))
+					.toBeUndefined();
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("atomically disambiguates different titles with the same document slug", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, repositoryId } = await userAndChannel(storage);
+				let now = new Date("2026-01-03T03:04:05.000Z");
+				let create = (channelId: string, title: string) =>
+					storage.channels.create({
+						id: channelId,
+						repositoryId,
+						repositoryOwner: "octo-org",
+						repositoryName: "score",
+						title,
+						createdBy: userId,
+						now,
+					});
+				let channels = await Promise.all([
+					create(id("channel"), "Bright road"),
+					create(id("channel"), "Bright-road!"),
+				]);
+				expect(channels.map(channel => channel.slug).sort()).toEqual([
+					"bright-road",
+					"bright-road-2",
+				]);
+			} finally {
+				await storage.close();
+			}
+		});
+
 		it("atomically reserves one title for concurrent creators", async () => {
 			let storage = await opened(factory);
 			try {

@@ -293,7 +293,7 @@ describe("the hosted MCP adapter", () => {
 		let expected = createdDocument(result.document.id);
 		expect(result.document).toEqual({
 			...expected,
-			url: `/channels/${result.document.id}`,
+			url: "/documents/octo-org/score/created-plan",
 		});
 		let stored = await context.storage.collaboration.load(result.document.id, context.now);
 		if (!stored) throw new Error("created channel was not stored");
@@ -307,6 +307,12 @@ describe("the hosted MCP adapter", () => {
 			},
 		});
 		expect(await adapter.documents.read(caller, result.document.id)).toEqual(expected);
+		expect(await adapter.documents.read(caller, result.document.url)).toEqual(expected);
+		expect(await adapter.documents.read(caller, `/channels/${result.document.id}`))
+			.toEqual(expected);
+		expect(
+			await adapter.documents.read(caller, `https://chopin.test/channels/${result.document.id}`),
+		).toEqual(expected);
 	});
 
 	it("renames document metadata with current write access and announces real changes", async () => {
@@ -422,7 +428,7 @@ describe("the hosted MCP adapter", () => {
 			kind: "replayed",
 			document: {
 				...createdDocument(first.document.id),
-				url: `/channels/${first.document.id}`,
+				url: "/documents/octo-org/score/created-plan",
 			},
 		});
 	});
@@ -743,6 +749,21 @@ describe("the hosted MCP adapter", () => {
 				graph: { state: "locked" },
 				execution: { state: "active", run: { session: "session-1" } },
 			});
+		expect(
+			await adapter.implementations.readImplementation(
+				caller,
+				"/documents/octo-org/score/release-readiness",
+			),
+		).toMatchObject({
+			graph: { state: "locked" },
+			execution: { state: "active", run: { session: "session-1" } },
+		});
+		expect(
+			await adapter.implementations.readImplementation(
+				caller,
+				`/channels/${opened.channel.id}`,
+			),
+		).toMatchObject({ graph: { state: "locked" } });
 		expect(await adapter.implementations.startImplementation(caller, input)).toMatchObject({
 			kind: "active",
 			run: { session: "session-1" },

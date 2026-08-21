@@ -32,8 +32,10 @@ same key. Once creation succeeds, do not call `create_document` again.
 
 ## Hand off
 
-Return the created document's `url` as the canonical handoff, with its title
-and identifier. Do not open it automatically.
+Return the created document's human-readable `url` as the canonical handoff,
+with its title. Treat the returned `id` as an internal MCP identifier: include it
+separately when useful, but never replace the `/documents/...` URL with a
+`/channels/<id>` link. Do not open it automatically.
 
 Use [prompt.md](prompt.md) as a starter when handing an already-settled
 conversation to an agent with this skill installed.

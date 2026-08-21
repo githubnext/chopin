@@ -1,4 +1,4 @@
-import { authenticate, expect, test } from "./room";
+import { authenticate, expect, roomPath, test } from "./room";
 import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 import { installVisualViewport } from "./visual-viewport";
 
@@ -21,6 +21,7 @@ const recoveryChannel = {
 	repositoryName: score.name,
 	repositoryOwner: score.owner,
 	revision: 1,
+	slug: "release-readiness",
 	title: "Release readiness",
 	updatedAt: "2026-08-14T12:00:00.000Z",
 };
@@ -34,7 +35,7 @@ async function showKnownChannel(page: Parameters<typeof authenticate>[0]) {
 				repository: score,
 			},
 		}));
-	await page.goto("/repositories/octo-org/score");
+	await page.goto("/documents/octo-org/score");
 	await page.getByRole("link", { name: recoveryChannel.title }).click();
 }
 
@@ -75,7 +76,9 @@ test("an authenticated repository creates a channel workspace", async ({ baseURL
 	await channelTitle.fill(title);
 	await page.getByRole("button", { name: "New channel" }).click();
 
-	await expect(page).toHaveURL(/\/channels\/[0-9a-f-]{36}$/);
+	await expect(page).toHaveURL(
+		`/documents/octo-org/score/${title.toLowerCase().replaceAll(" ", "-")}`,
+	);
 	await expect(page.locator("#pane-chat")).toBeVisible();
 	await expect(page.getByRole("textbox", { name: "editable markdown" })).toBeVisible();
 	await expect(page.locator(".plan-decisions")).toBeAttached();
@@ -93,17 +96,33 @@ test("an authenticated repository creates a channel workspace", async ({ baseURL
 	await search.fill("notes");
 	await expect(page.getByRole("option", { name: /octocat\/notes/ })).toBeVisible();
 	await search.press("Enter");
-	await expect(page).toHaveURL("/repositories/octocat/notes");
+	await expect(page).toHaveURL("/documents/octocat/notes");
 	await expect(page.getByRole("heading", { name: "Planning channels" })).toBeVisible();
 	await expect(page.getByRole("button", { name: /octocat\/notes/ })).toBeVisible();
 	await expect(page.getByRole("button", { name: "New channel" })).toHaveCount(0);
+});
+
+test("a signed-out document link returns to the document after OAuth", async ({ baseURL, page, room }) => {
+	let path = roomPath(room);
+	await page.goto(path);
+	await expect(page).toHaveURL(path);
+	let login = page.getByRole("link", { name: "Continue with GitHub" });
+	let href = await login.getAttribute("href");
+	let returnTo = new URL(href!, baseURL).searchParams.get("return_to");
+	expect(returnTo).toBe(path);
+
+	let destination = await authenticate(page, "octocat", baseURL!, returnTo!);
+	expect(destination).toBe(path);
+	await page.goto(destination);
+	await expect(page).toHaveURL(path);
+	await expect(page.getByRole("banner")).toBeVisible();
 });
 
 test("an editor renames a channel from the repository list", async ({ join, room }) => {
 	let page = await join("ana");
 	let before = `Test ${room.slice(0, 8)}`;
 	let after = `Repository rename ${room.slice(0, 8)}`;
-	await page.goto("/repositories/octo-org/score");
+	await page.goto("/documents/octo-org/score");
 	await expect(page.getByRole("heading", { name: "Planning channels" })).toBeVisible();
 
 	await page.setViewportSize({ width: 320, height: 568 });
@@ -121,39 +140,55 @@ test("an editor renames a channel from the repository list", async ({ join, room
 	await expect(page.getByText(after, { exact: true })).toBeVisible();
 });
 
+test("a legacy repository path adopts the resolved repository casing", async ({ baseURL, page }) => {
+	await authenticate(page, "octocat", baseURL!);
+	await page.route(
+		"**/api/repositories/OCTO-ORG/SCORE/channels*",
+		route => route.fulfill({ json: { canEdit: true, channels: [], repository: score } }),
+	);
+	await page.goto("/repositories/OCTO-ORG/SCORE?view=list#documents");
+
+	await expect(page).toHaveURL("/documents/octo-org/score?view=list#documents");
+	await expect(page.getByText("No planning channels yet")).toBeVisible();
+});
+
 test("a known deleted channel keeps its context and routes back without retry", async ({ baseURL, page }) => {
 	await authenticate(page, "octocat", baseURL!);
 	await page.route(
-		new RegExp(`/api/channels/${recoveryChannel.id}$`),
+		"**/api/repositories/octo-org/score/documents/release-readiness",
 		route => route.fulfill({ status: 404, json: { error: "channel not found" } }),
 	);
 	await showKnownChannel(page);
 
 	await expect(page.getByRole("heading", { name: "Cannot open Chopin" })).toBeVisible();
 	await expect(page.getByText(recoveryChannel.title, { exact: true })).toBeVisible();
-	await expect(page.getByText(recoveryChannel.id, { exact: true })).toBeVisible();
+	await expect(page.getByText(recoveryChannel.id, { exact: true })).toHaveCount(0);
+	await expect(page.getByText(recoveryChannel.slug, { exact: true })).toBeVisible();
 	await expect(page.getByText(score.fullName, { exact: true })).toBeVisible();
 	await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(0);
 	let channels = page.getByRole("link", { name: `View ${score.fullName} channels` });
-	await expect(channels).toHaveAttribute("href", "/repositories/octo-org/score");
+	await expect(channels).toHaveAttribute("href", "/documents/octo-org/score");
 	await channels.click();
-	await expect(page).toHaveURL("/repositories/octo-org/score");
+	await expect(page).toHaveURL("/documents/octo-org/score");
 	await expect(page.getByRole("heading", { name: "Planning channels" })).toBeVisible();
 });
 
 test("a transient channel failure retries the safe read", async ({ baseURL, page }) => {
 	await authenticate(page, "octocat", baseURL!);
 	let attempts = 0;
-	await page.route(new RegExp(`/api/channels/${recoveryChannel.id}$`), async route => {
-		attempts++;
-		if (attempts === 1) {
-			await route.fulfill({ status: 503, json: { error: "storage is unavailable" } });
-			return;
-		}
-		await route.fulfill({
-			json: { canEdit: true, channel: recoveryChannel, repository: score },
-		});
-	});
+	await page.route(
+		"**/api/repositories/octo-org/score/documents/release-readiness",
+		async route => {
+			attempts++;
+			if (attempts === 1) {
+				await route.fulfill({ status: 503, json: { error: "storage is unavailable" } });
+				return;
+			}
+			await route.fulfill({
+				json: { canEdit: true, channel: recoveryChannel, repository: score },
+			});
+		},
+	);
 	await showKnownChannel(page);
 
 	await expect(page.getByText(recoveryChannel.title, { exact: true })).toBeVisible();
@@ -166,7 +201,7 @@ test("a transient channel failure retries the safe read", async ({ baseURL, page
 test("an unknown direct channel link stays privacy-safe", async ({ baseURL, page }) => {
 	await authenticate(page, "octocat", baseURL!);
 	await page.route(
-		new RegExp(`/api/channels/${recoveryChannel.id}$`),
+		"**/api/repositories/octo-org/score/documents/release-readiness",
 		route => route.fulfill({ status: 404, json: { error: "channel not found" } }),
 	);
 	await showKnownChannel(page);
@@ -178,7 +213,7 @@ test("an unknown direct channel link stays privacy-safe", async ({ baseURL, page
 	);
 	await page.goto(`/channels/${unknown}`);
 
-	await expect(page.getByText(unknown, { exact: true })).toBeVisible();
+	await expect(page.getByText(unknown, { exact: true })).toHaveCount(0);
 	await expect(page.getByText(recoveryChannel.title, { exact: true })).toHaveCount(0);
 	await expect(page.getByText(score.fullName, { exact: true })).toHaveCount(0);
 	await expect(page.getByRole("link", { name: /channels$/ })).toHaveCount(0);
@@ -231,7 +266,7 @@ test("the repository picker supports dismissal and keyboard selection", async ({
 	await search.fill("notes");
 	await expect(page.getByRole("option", { name: /octocat\/notes/ })).toBeVisible();
 	await search.press("Enter");
-	await expect(page).toHaveURL("/repositories/octocat/notes");
+	await expect(page).toHaveURL("/documents/octocat/notes");
 });
 
 test("the repository picker stays inside a narrow visual viewport", async ({ baseURL, page }) => {
@@ -403,6 +438,7 @@ test("narrow coarse hosted controls and channel content remain reachable", async
 						repositoryName: score.name,
 						repositoryOwner: score.owner,
 						revision: 1,
+						slug: "a-planning-channel-title-long-enough-to-wrap-beside-a-deliberately-visible-date",
 						title:
 							"A planning channel title long enough to wrap beside a deliberately visible date",
 						updatedAt: "2026-08-14T12:00:00.000Z",
@@ -411,7 +447,7 @@ test("narrow coarse hosted controls and channel content remain reachable", async
 				},
 			});
 		});
-		await page.goto("/repositories/octo-org/score");
+		await page.goto("/documents/octo-org/score");
 		await expect(page.getByText("Loading channels...")).toBeVisible();
 
 		for (
@@ -606,9 +642,11 @@ test("the tab cache revalidates stale repository pages with etags", async ({ bas
 	await expect(page.getByRole("option", { name: /^octo-org\/archive-12\b/ })).toBeVisible();
 });
 
-test("expired GitHub authorization returns to sign in", async ({ baseURL, page }) => {
+test("expired GitHub authorization returns to sign in without losing the document", async ({ baseURL, page, room }) => {
+	let path = roomPath(room);
 	await authenticate(page, "expired", baseURL!);
-	await page.goto("/");
+	await page.goto(path);
 
 	await expect(page.getByRole("link", { name: "Continue with GitHub" })).toBeVisible();
+	await expect(page).toHaveURL(path);
 });

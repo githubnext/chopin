@@ -1,6 +1,6 @@
 # Repository channels
 
-A channel is Chopin's durable collaboration container for one document, its
+A channel is Chopin's internal durable collaboration container for one document, its
 conversation, decisions, and one GitHub repository. Its metadata is stored
 locally; GitHub remains the current source of identity, installation access, and
 repository roles.
@@ -16,12 +16,12 @@ authorization then depends on the surface:
 | Hosted agent (Planner)     | The owning browser user's GitHub App token | The installation, ownership generation, session, credential revision, and role are rechecked before tools run. |
 | Local MCP                  | Caller-supplied GitHub bearer              | GitHub is queried directly; no App installation is required.                                                   |
 
-Pull access may list and open channels. Push or administration access may create
-a channel, edit its document, change decisions, invoke the hosted agent, and
+Pull access may list and open documents. Push or administration access may create
+a document, edit it, change decisions, invoke the hosted agent, and
 mutate an implementation lifecycle. A public repository is not sufficient to
-expose its channels through the browser.
+expose its documents through the browser.
 
-An MCP-created channel outside the App installation remains unavailable to
+An MCP-created document outside the App installation remains unavailable to
 browser routes, WebSockets, and the hosted agent until an account owner adds
 that repository to the installation.
 
@@ -30,10 +30,16 @@ that repository to the installation.
 ```text
 GET  /api/repositories/:owner/:repository/channels
 POST /api/repositories/:owner/:repository/channels
+GET  /api/repositories/:owner/:repository/documents/:slug
 GET  /api/channels/:channelId
 PATCH /api/channels/:channelId
 POST /api/channels/:channelId/agent/reset
 ```
+
+The `channels` and UUID paths are internal API names retained by the current
+implementation. The repository-scoped `documents/:slug` route resolves both the
+current document slug and its historical aliases. Browser creation returns the
+readable canonical document route in `Location`, not a UUID route.
 
 The listing route accepts a case-insensitive `query`, an opaque `cursor`, and a
 `limit` from 1 through 100. The default limit is 50. Results sort by most recent
@@ -44,15 +50,23 @@ A title is optional during browser creation. Chopin generates one when omitted,
 or accepts a trimmed title from 1 through 120 characters. Titles are unique per
 repository without regard to case.
 
-`PATCH /api/channels/:channelId` accepts `{ "title": "..." }`. It updates only
-channel metadata, not the canonical MDX heading or plan revision. A changed
-title updates the channel activity time and is broadcast to clients in the open
-room; submitting the current title is a no-op.
+`PATCH /api/channels/:channelId` accepts `{ "title": "..." }`. It updates the
+document title and canonical slug, but not the canonical MDX heading, UUID
+identity, or plan revision. A changed title updates the channel activity time
+and is broadcast to clients in the open room; submitting the current title is a
+no-op.
+
+Slugs are derived from Unicode-normalized, lowercased titles. Unicode letters,
+numbers, and combining marks remain readable while punctuation and spacing
+collapse to hyphens. Slugs are scoped to a repository and receive numbered
+suffixes such as `-2` when they collide. Every former canonical slug remains a
+permanent alias for the same document and cannot be rebound to another one, so a
+rename changes the canonical route without breaking an old link.
 
 The reset endpoint releases Planner ownership and aborts its disposable runtime
 session. The current web application does not expose a control that calls it.
 
-## Channel identity
+## Document URL and channel identity
 
 New channel IDs are lowercase, UUIDv5-shaped values derived with SHA-256. The
 server also accepts existing UUIDv4 IDs.
@@ -66,6 +80,19 @@ The stored GitHub repository node ID is authoritative. Owner and repository
 name are retained so GitHub can resolve the repository, but they are never
 trusted as a replacement for the node ID. This prevents a transferred or
 recreated repository name from inheriting another repository's channels.
+
+The UUID is the stable internal identity used by storage, UUID API routes,
+WebSocket rooms, and MCP lifecycle calls. Public browser locations use the
+repository and slug instead:
+
+```text
+/documents/:owner/:repository/:slug
+```
+
+Renaming a document promotes its new title-derived slug as canonical while
+retaining the same UUID and plan revision. Browser `Location` headers and the MCP
+`create_document` result expose the readable route rather than
+`/channels/:channelId`.
 
 ## Creation paths
 
@@ -86,10 +113,16 @@ differs.
 ## Browser routes
 
 ```text
-/                                      repository picker
-/repositories/:owner/:repository      channel list and creation
-/channels/:channelId                   conversation plus Plan or Decisions view
+/documents/:owner/:repository         document list and creation
+/documents/:owner/:repository/:slug   conversation plus Plan or Decisions view
+/                                     repository picker
 ```
+
+Historical slug URLs continue to open the document. The legacy
+`/repositories/:owner/:repository` and `/channels/:channelId` browser routes are
+also accepted. After resolving any historical or legacy link, the browser
+replaces its address with the current canonical `/documents/...` route while
+preserving the query and fragment.
 
 The application first authorizes metadata over HTTP, then opens one WebSocket
 for live channel traffic. Wide split mode shows Conversation beside either Plan,

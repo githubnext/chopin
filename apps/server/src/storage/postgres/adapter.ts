@@ -1,5 +1,6 @@
 import { SQL } from "bun";
 
+import { documentSlug, documentSlugCandidate } from "../../channels/slug";
 import { conflict, corrupt, missing, StorageError, unavailable } from "../errors";
 import { migrate, verifyMigrations } from "./migrations";
 
@@ -61,6 +62,7 @@ type ChannelRow = {
 	repositoryOwner: string;
 	repositoryName: string;
 	title: string;
+	slug?: string;
 	createdBy: string;
 	revision: Integer;
 	nextSequence?: Integer;
@@ -184,8 +186,10 @@ function session(row: SessionRow): WebSession {
 }
 
 function channel(row: ChannelRow): ChannelRecord {
+	if (!row.slug) throw corrupt(`channel ${row.id} has no canonical slug`);
 	return {
 		...row,
+		slug: row.slug,
 		revision: integer(row.revision, "channel revision"),
 		createdAt: date(row.createdAt, "channel creation time"),
 		updatedAt: date(row.updatedAt, "channel update time"),
@@ -270,6 +274,23 @@ const SESSION_COLUMNS = `
 `;
 
 const CHANNEL_COLUMNS = `
+	channels.id,
+	channels.repository_id AS "repositoryId",
+	channels.repository_owner AS "repositoryOwner",
+	channels.repository_name AS "repositoryName",
+	channels.title,
+	(
+		SELECT channel_slugs.slug
+		FROM channel_slugs
+		WHERE channel_slugs.channel_id = channels.id AND channel_slugs.canonical
+	) AS slug,
+	channels.created_by AS "createdBy",
+	channels.revision,
+	channels.created_at AS "createdAt",
+	channels.updated_at AS "updatedAt"
+`;
+
+const CHANNEL_RETURNING = `
 	id,
 	repository_id AS "repositoryId",
 	repository_owner AS "repositoryOwner",
@@ -444,6 +465,19 @@ export class PostgresStorage implements StorageAdapter {
 			`;
 				return found ? channel(found) : undefined;
 			}),
+		resolve: (repositoryId, slug) =>
+			this.#run("resolve channel slug", async () => {
+				let [found] = await this.#sql<ChannelRow[]>`
+					SELECT ${this.#sql.unsafe(CHANNEL_COLUMNS)}
+					FROM channel_slugs
+					JOIN channels
+						ON channels.id = channel_slugs.channel_id
+						AND channels.repository_id = channel_slugs.repository_id
+					WHERE channel_slugs.repository_id = ${repositoryId}
+						AND channel_slugs.slug = ${slug}
+				`;
+				return found ? channel(found) : undefined;
+			}),
 		rename: input => this.#renameChannel(input),
 		list: (repositoryId, limit, after, query) =>
 			this.#listChannels(repositoryId, limit, after, query),
@@ -510,9 +544,16 @@ export class PostgresStorage implements StorageAdapter {
 					${input.repositoryName}, ${input.title}, ${input.createdBy}, 0, 1,
 					${input.now}, ${input.now}
 				)
-				RETURNING ${transaction.unsafe(CHANNEL_COLUMNS)}
+				RETURNING ${transaction.unsafe(CHANNEL_RETURNING)}
 			`;
 				if (!saved) throw corrupt("creating a channel returned no record");
+				let slug = await this.#reserveSlug(
+					transaction,
+					input.repositoryId,
+					input.id,
+					input.title,
+					input.now,
+				);
 				await transaction`
 				INSERT INTO channel_state (channel_id, sidecar)
 				VALUES (
@@ -533,7 +574,7 @@ export class PostgresStorage implements StorageAdapter {
 						)
 					`;
 				}
-				return channel(saved);
+				return channel({ ...saved, slug });
 			}));
 	}
 
@@ -558,11 +599,60 @@ export class PostgresStorage implements StorageAdapter {
 					UPDATE channels
 					SET title = ${input.title}, updated_at = ${updatedAt}
 					WHERE id = ${input.id}
-					RETURNING ${transaction.unsafe(CHANNEL_COLUMNS)}
+					RETURNING ${transaction.unsafe(CHANNEL_RETURNING)}
 				`;
 				if (!saved) throw corrupt("renaming a channel returned no record");
-				return { channel: channel(saved), changed: true };
+				let slug = await this.#reserveSlug(
+					transaction,
+					existing.repositoryId,
+					existing.id,
+					input.title,
+					input.now,
+				);
+				return { channel: channel({ ...saved, slug }), changed: true };
 			}));
+	}
+
+	async #reserveSlug(
+		transaction: TransactionSQL,
+		repositoryId: string,
+		channelId: string,
+		title: string,
+		now: Date,
+	): Promise<string> {
+		let base = documentSlug(title);
+		for (let index = 1;; index++) {
+			let candidate = documentSlugCandidate(base, index);
+			let [inserted] = await transaction<{ channelId: string }[]>`
+				INSERT INTO channel_slugs (
+					repository_id, slug, channel_id, canonical, created_at
+				) VALUES (${repositoryId}, ${candidate}, ${channelId}, false, ${now})
+				ON CONFLICT DO NOTHING
+				RETURNING channel_id AS "channelId"
+			`;
+			if (!inserted) {
+				let [existing] = await transaction<{ channelId: string }[]>`
+					SELECT channel_id AS "channelId"
+					FROM channel_slugs
+					WHERE repository_id = ${repositoryId} AND slug = ${candidate}
+				`;
+				if (existing?.channelId !== channelId) continue;
+			}
+
+			await transaction`
+				UPDATE channel_slugs SET canonical = false
+				WHERE channel_id = ${channelId} AND canonical
+			`;
+			let [promoted] = await transaction<{ slug: string }[]>`
+				UPDATE channel_slugs SET canonical = true
+				WHERE repository_id = ${repositoryId}
+					AND slug = ${candidate}
+					AND channel_id = ${channelId}
+				RETURNING slug
+			`;
+			if (!promoted) throw corrupt(`could not reserve a slug for channel ${channelId}`);
+			return promoted.slug;
+		}
 	}
 
 	#listChannels(

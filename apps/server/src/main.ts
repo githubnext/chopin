@@ -341,6 +341,7 @@ async function refreshChannelMetadata(ws: Socket, room: Rooms.Room): Promise<voi
 			ts: 0,
 			channelId: channel.id,
 			title: channel.title,
+			slug: channel.slug,
 			updatedAt: channel.updatedAt.toISOString(),
 		});
 	} catch {
@@ -383,6 +384,7 @@ function listen(): Server<SocketData> {
 					ts: 0,
 					channelId: room.id,
 					title: ws.data.channelTitle,
+					slug: ws.data.channelSlug,
 					updatedAt: ws.data.channelUpdatedAt,
 					you: { handle: ws.data.handle, client: ws.data.client },
 					members: Rooms.members(room),
@@ -500,6 +502,7 @@ function announceChannelRename(channel: ChannelRecord): void {
 		ts: 0,
 		channelId: channel.id,
 		title: channel.title,
+		slug: channel.slug,
 		updatedAt: channel.updatedAt.toISOString(),
 	});
 }

@@ -35,6 +35,7 @@ export type ChannelRecord = {
 	repositoryOwner: string;
 	repositoryName: string;
 	title: string;
+	slug: string;
 	createdBy: string;
 	revision: number;
 	createdAt: Date;
@@ -46,11 +47,16 @@ export type InitialChannel = Omit<
 	"channelId" | "revision" | "throughSequence" | "createdAt"
 >;
 
-export type CreateChannel = Omit<ChannelRecord, "revision" | "createdAt" | "updatedAt"> & {
-	now: Date;
-	/** A complete revision-zero checkpoint published in the channel's creation transaction. */
-	initial?: InitialChannel;
-};
+export type CreateChannel =
+	& Omit<
+		ChannelRecord,
+		"slug" | "revision" | "createdAt" | "updatedAt"
+	>
+	& {
+		now: Date;
+		/** A complete revision-zero checkpoint published in the channel's creation transaction. */
+		initial?: InitialChannel;
+	};
 
 export type RenameChannel = {
 	id: string;

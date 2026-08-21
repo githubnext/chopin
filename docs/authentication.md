@@ -73,7 +73,8 @@ SESSION_ENCRYPTION_KEY=<64 hex characters>
 ```
 
 The client ID is distinct from the numeric App ID. Generate the encryption key
-with `openssl rand -hex 32`; it protects only the OAuth state and PKCE cookie.
+with `openssl rand -hex 32`; it protects the short-lived OAuth attempt cookie,
+including state, the PKCE verifier, and an optional browser return path.
 
 `APP_ORIGIN` must be exactly one HTTP(S) origin: no credentials, path, query,
 fragment, or trailing slash. HTTPS is required except for loopback development,
@@ -131,7 +132,7 @@ requests but does not retain picker repository data.
 
 Local MCP is an intentional exception to this installation boundary. Its bearer
 token is authenticated independently and authorized with a direct repository
-lookup. An MCP-created channel for a repository outside the App installation is
+lookup. An MCP-created document for a repository outside the App installation is
 not available through browser routes, WebSockets, or the hosted agent until
 the installation includes that repository. See [Local agent MCP](local-agent-mcp.md).
 
@@ -142,6 +143,15 @@ callback ignores GitHub's untrusted `installation_id` query parameter, clears
 the browser's installation snapshot, and redirects into the product. The next
 picker or authorization request re-queries GitHub with the signed-in user's
 token.
+
+When a signed-out browser opens a document deep link, the sign-in request sends
+the current path, query, and fragment as `return_to`. Chopin accepts only one
+validated root-relative product path, stores it inside the encrypted OAuth
+attempt cookie, and redirects there after a successful callback. Absolute and
+protocol-relative URLs, control characters, backslashes, and API, auth,
+WebSocket, or MCP paths fall back to `/`; a callback query cannot override the
+stored value. GitHub App installation setup remains separate: its callback still
+ignores return paths and redirects to `/?repository_access=changed`.
 
 Organization members may need an owner to approve installation or new
 permissions. For an organization using SAML SSO, establish an active SAML
@@ -185,13 +195,14 @@ transcripts, reserved Planner context fields, and repository installations
 remain durable. Logout deletes the process-local session and registry row but
 does not revoke the GitHub App authorization.
 
-OAuth state and the PKCE verifier are held in a separate encrypted, ten-minute
-HttpOnly cookie. Browser state-changing routes and WebSocket upgrades require an
-Origin header exactly equal to `APP_ORIGIN`. The bearer-authenticated MCP route
-accepts a missing Origin, as non-browser clients normally omit it, but rejects a
-present mismatched Origin. Open sockets periodically recheck the process-local
-session, instance admission, and installation repository permission. A browser
-whose socket reconnects after a restart is returned to sign-in.
+OAuth state, the PKCE verifier, and the validated browser return path are held in
+a separate encrypted, ten-minute HttpOnly cookie. Browser state-changing routes
+and WebSocket upgrades require an Origin header exactly equal to `APP_ORIGIN`.
+The bearer-authenticated MCP route accepts a missing Origin, as non-browser
+clients normally omit it, but rejects a present mismatched Origin. Open sockets
+periodically recheck the process-local session, instance admission, and
+installation repository permission. A browser whose socket reconnects after a
+restart is returned to sign-in.
 
 When a credential rotates, any Planner SDK session holding the previous token
 is aborted and discarded before refresh. A later turn recreates it from the
@@ -210,10 +221,15 @@ GET  /api/github/installations?page=1
 GET  /api/github/installations/:installationId/repositories?page=1
 GET  /api/repositories/:owner/:repository/channels
 POST /api/repositories/:owner/:repository/channels
+GET  /api/repositories/:owner/:repository/documents/:slug
 GET  /api/channels/:channelId
+PATCH /api/channels/:channelId
 POST /api/channels/:channelId/agent/reset
 POST /auth/logout
 ```
+
+The repository-scoped document endpoint backs readable browser URLs. Existing
+UUID routes remain internal API and collaboration entry points.
 
 API and authentication paths are owned by the server in development and
 production.

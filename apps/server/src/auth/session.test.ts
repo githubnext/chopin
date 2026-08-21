@@ -349,11 +349,14 @@ describe("hosted login sessions", () => {
 });
 
 describe("OAuth attempts", () => {
-	it("carries state and the PKCE verifier in a short-lived encrypted cookie", async () => {
+	it("carries state, PKCE, and an optional return path in a short-lived encrypted cookie", async () => {
 		let now = new Date("2026-08-13T12:00:00.000Z");
 		let attempts = new OAuthAttempts(new Uint8Array(32).fill(8), true, () => now);
-		let issued = await attempts.issue();
+		let returnPath = "/documents/octocat/score?view=plan#decision";
+		let issued = await attempts.issue(returnPath);
 		let recovered = await attempts.read(request(pair(issued.cookie)));
+		let legacy = await attempts.issue();
+		let recoveredLegacy = await attempts.read(request(pair(legacy.cookie)));
 
 		expect(issued.state).toHaveLength(43);
 		expect(issued.verifier).toHaveLength(43);
@@ -363,8 +366,12 @@ describe("OAuth attempts", () => {
 		expect(issued.cookie).toContain("__Host-chopin_oauth_state=");
 		expect(issued.cookie).toContain("Path=/");
 		expect(issued.cookie).not.toContain(issued.state);
+		expect(issued.cookie).not.toContain(returnPath);
 		expect(recovered?.state).toBe(issued.state);
 		expect(recovered?.verifier).toBe(issued.verifier);
+		expect(recovered?.returnPath).toBe(returnPath);
+		expect(recoveredLegacy?.state).toBe(legacy.state);
+		expect(recoveredLegacy?.returnPath).toBeUndefined();
 
 		let cookie = pair(issued.cookie);
 		let tampered = `${cookie.slice(0, -1)}${cookie.endsWith("A") ? "B" : "A"}`;

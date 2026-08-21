@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { documentPath } from "@chopin/protocol/document-url";
 import {
 	advanceDecisionView,
 	countUnanswered,
@@ -42,7 +43,7 @@ function Header(
 		canEdit: boolean;
 		members: Session.Member[];
 		label: string;
-		onRename: (channel: Pick<Api.Channel, "title" | "updatedAt">) => void;
+		onRename: (channel: Pick<Api.Channel, "title" | "slug" | "updatedAt">) => void;
 		repository: Api.Repository;
 		room: string;
 		userId: string;
@@ -95,6 +96,7 @@ export function RoomWorkspace(
 		label,
 		repository,
 		room,
+		slug,
 		updatedAt,
 		userId,
 	}: HostedWorkspaceProps,
@@ -103,7 +105,7 @@ export function RoomWorkspace(
 	let [status, setStatus] = useState<Status>("connecting");
 	let [members, setMembers] = useState<Session.Member[]>([]);
 	let [effectiveCanEdit, setEffectiveCanEdit] = useState(canEdit);
-	let [metadata, setMetadata] = useState({ title: label, updatedAt });
+	let [metadata, setMetadata] = useState({ title: label, slug, updatedAt });
 	let metadataRef = useRef(metadata);
 	let user = useMemo(() => cursor(handle), [handle]);
 	let mode = useWorkspaceMode();
@@ -139,11 +141,15 @@ export function RoomWorkspace(
 		},
 		[conversationActive],
 	);
-	let updateMetadata = useCallback((next: { title: string; updatedAt: string }) => {
+	let updateMetadata = useCallback((next: { title: string; slug: string; updatedAt: string }) => {
 		if (Date.parse(next.updatedAt) <= Date.parse(metadataRef.current.updatedAt)) return;
 		metadataRef.current = next;
 		setMetadata(next);
-		rememberChannel(userId, { id: room, title: next.title }, repository);
+		rememberChannel(userId, { id: room, title: next.title, slug: next.slug }, repository);
+		let path = documentPath(repository.owner, repository.name, next.slug);
+		if (location.pathname !== path) {
+			history.replaceState(null, "", `${path}${location.search}${location.hash}`);
+		}
 	}, [repository, room, userId]);
 
 	useEffect(() => {
@@ -205,15 +211,15 @@ export function RoomWorkspace(
 	}, [canEdit, room]);
 
 	useEffect(() => {
-		let next = { title: label, updatedAt };
+		let next = { title: label, slug, updatedAt };
 		metadataRef.current = next;
 		setMetadata(next);
-	}, [label, room, updatedAt]);
+	}, [label, room, slug, updatedAt]);
 
 	useEffect(() => {
 		let socket = new Wire({
 			channelId: room,
-			onAuthenticationRequired: () => location.assign("/"),
+			onAuthenticationRequired: () => location.reload(),
 			onStatus: next => {
 				setStatus(next);
 			},

@@ -49,6 +49,7 @@ type StoredAttempt = {
 	state: string;
 	verifier: string;
 	expiresAt: string;
+	returnPath?: string;
 };
 
 type MemorySession = {
@@ -181,8 +182,16 @@ function attempt(value: unknown): StoredAttempt | undefined {
 		|| typeof record.state !== "string"
 		|| typeof record.verifier !== "string"
 		|| typeof record.expiresAt !== "string"
+		|| (record.returnPath !== undefined && typeof record.returnPath !== "string")
 	) return undefined;
-	return { v: 1, state: record.state, verifier: record.verifier, expiresAt: record.expiresAt };
+	let stored: StoredAttempt = {
+		v: 1,
+		state: record.state,
+		verifier: record.verifier,
+		expiresAt: record.expiresAt,
+	};
+	if (typeof record.returnPath === "string") stored.returnPath = record.returnPath;
+	return stored;
 }
 
 /** Process-local browser and GitHub credentials backed by a token-free ownership registry. */
@@ -603,7 +612,7 @@ export class Sessions {
 	}
 }
 
-/** Short-lived encrypted OAuth state and PKCE verifier carried only by the browser. */
+/** Short-lived encrypted OAuth attempt data carried only by the browser. */
 export class OAuthAttempts {
 	readonly #key: Promise<CryptoKey>;
 	readonly #secure: boolean;
@@ -617,20 +626,22 @@ export class OAuthAttempts {
 		this.cookieName = secure ? "__Host-chopin_oauth_state" : "chopin_oauth_state";
 	}
 
-	async issue(): Promise<OAuthAttempt> {
+	async issue(returnPath?: string): Promise<OAuthAttempt> {
 		let state = base64(random(SECRET_BYTES));
 		let verifier = base64(random(SECRET_BYTES));
 		let digest = new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(verifier)));
 		let expiresAt = new Date(this.#clock().getTime() + ATTEMPT_TTL_MS);
+		let stored: StoredAttempt = {
+			v: 1,
+			state,
+			verifier,
+			expiresAt: expiresAt.toISOString(),
+		};
+		if (returnPath !== undefined) stored.returnPath = returnPath;
 		let envelope = await encrypted(
 			await this.#key,
 			"chopin:oauth-state:v1",
-			{
-				v: 1,
-				state,
-				verifier,
-				expiresAt: expiresAt.toISOString(),
-			} satisfies StoredAttempt,
+			stored,
 		);
 		return {
 			state,

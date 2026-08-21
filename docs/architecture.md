@@ -159,6 +159,21 @@ keys solve separate identity problems. See [Repository channels](channels.md) fo
 channel ID construction and [Experimental implementation lifecycle](implementation-lifecycle.md)
 for graph counters.
 
+A channel UUID is the stable internal document identity used by storage, UUID
+API routes, WebSocket rooms, and MCP lifecycle mutations. The public browser
+identity is a repository-scoped, title-derived route:
+`/documents/:owner/:repository/:slug`. Slugs retain Unicode letters, numbers,
+and marks, add numeric suffixes for collisions, and keep every former canonical
+slug as an alias. Renaming changes the canonical route without changing the UUID
+or plan revision.
+
+Browser creation `Location` headers and MCP `create_document.url` expose the
+readable route. MCP `read_document` and `read_implementation` bridge the two
+identities by accepting either the canonical URL or UUID and returning the UUID;
+lifecycle calls continue to use that returned UUID. Legacy repository and UUID
+browser paths resolve through the existing internal routes before the browser
+replaces them with the canonical readable location.
+
 ## Collaborative document
 
 Chopin represents one document in three forms: Lexical for rich editing, Yjs for

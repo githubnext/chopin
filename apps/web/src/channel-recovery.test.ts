@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { readChannelRecovery, rememberChannel } from "./channel-recovery";
+import { readChannelRecovery, readDocumentRecovery, rememberChannel } from "./channel-recovery";
 
 class MemoryStorage implements Storage {
 	readonly #values = new Map<string, string>();
@@ -33,6 +33,7 @@ class MemoryStorage implements Storage {
 const channel = {
 	id: "11111111-1111-4111-8111-111111111111",
 	title: "Release readiness",
+	slug: "release-readiness",
 };
 
 const repository = {
@@ -47,6 +48,15 @@ describe("channel recovery context", () => {
 		rememberChannel("U_octocat", channel, repository, storage);
 
 		expect(readChannelRecovery("U_octocat", channel.id, storage)).toEqual({ channel, repository });
+		expect(
+			readDocumentRecovery(
+				"U_octocat",
+				repository.owner,
+				repository.name,
+				channel.slug,
+				storage,
+			),
+		).toEqual({ channel, repository });
 	});
 
 	it("replaces the cached title after a document is renamed", () => {
@@ -78,10 +88,37 @@ describe("channel recovery context", () => {
 		expect(readChannelRecovery("U_other", channel.id, storage)).toBeUndefined();
 	});
 
+	it("restores UUID recovery records written before slugs were introduced", () => {
+		let storage = new MemoryStorage();
+		storage.setItem(
+			`chopin:channel-recovery:${encodeURIComponent("U_octocat")}:${channel.id}`,
+			JSON.stringify({ channel: { id: channel.id, title: channel.title }, repository }),
+		);
+
+		expect(readChannelRecovery("U_octocat", channel.id, storage)).toEqual({
+			channel: { id: channel.id, title: channel.title },
+			repository,
+		});
+		expect(
+			readDocumentRecovery(
+				"U_octocat",
+				repository.owner,
+				repository.name,
+				channel.slug,
+				storage,
+			),
+		).toBeUndefined();
+	});
+
 	it("ignores malformed stored context", () => {
 		let storage = new MemoryStorage();
 		storage.setItem(`chopin:channel-recovery:U_octocat:${channel.id}`, "not json");
 
+		expect(readChannelRecovery("U_octocat", channel.id, storage)).toBeUndefined();
+		storage.setItem(
+			`chopin:channel-recovery:U_octocat:${channel.id}`,
+			JSON.stringify({ channel: { ...channel, slug: { invalid: true } }, repository }),
+		);
 		expect(readChannelRecovery("U_octocat", channel.id, storage)).toBeUndefined();
 	});
 });

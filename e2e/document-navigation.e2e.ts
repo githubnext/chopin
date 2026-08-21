@@ -1,4 +1,4 @@
-import { authenticate, expect, test } from "./room";
+import { authenticate, expect, roomPath, test } from "./room";
 
 function channel(id: string, title: string) {
 	return {
@@ -9,6 +9,7 @@ function channel(id: string, title: string) {
 		repositoryName: "score",
 		repositoryOwner: "octo-org",
 		revision: 0,
+		slug: title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
 		title,
 		updatedAt: "2026-08-19T12:00:00.000Z",
 	};
@@ -45,7 +46,7 @@ test("the room header switches documents with keyboard focus and creates one imm
 
 	await trigger.click();
 	await page.getByRole("button", { name: "Create new document" }).click();
-	await expect(page).toHaveURL(/\/channels\/[0-9a-f-]{36}$/);
+	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
 	await expect(header.getByRole("button", { name: /^Document: [a-z]+-[a-z]+$/ })).toBeVisible();
 });
 
@@ -97,6 +98,8 @@ test("renaming the current document updates collaborators and survives reload", 
 	let ana = await join("ana");
 	let bo = await join("bo");
 	let title = `Launch plan ${room.slice(0, 8)}`;
+	let previousPath = roomPath(room);
+	let renamedPath = `/documents/octo-org/score/${title.toLowerCase().replaceAll(" ", "-")}`;
 	let anaTrigger = ana.getByRole("banner").getByRole("button", { name: /^Document:/ });
 	let boTrigger = bo.getByRole("banner").getByRole("button", { name: /^Document:/ });
 
@@ -110,9 +113,13 @@ test("renaming the current document updates collaborators and survives reload", 
 
 	await expect(anaTrigger).toHaveAccessibleName(`Document: ${title}`);
 	await expect(boTrigger).toHaveAccessibleName(`Document: ${title}`);
+	await expect(ana).toHaveURL(renamedPath);
+	await expect(bo).toHaveURL(renamedPath);
 	await ana.reload();
 	await expect(ana.getByRole("banner").getByRole("button", { name: `Document: ${title}` }))
 		.toBeVisible();
+	await ana.goto(previousPath);
+	await expect(ana).toHaveURL(renamedPath);
 });
 
 test("a delayed rename response cannot overwrite a newer collaborator rename", async ({ join, room }) => {
@@ -151,7 +158,7 @@ test("a delayed rename response cannot overwrite a newer collaborator rename", a
 
 test("read-only visitors can browse documents without a creation action", async ({ baseURL, page, room }) => {
 	await authenticate(page, "readonly", baseURL!);
-	await page.goto(`/channels/${room}`);
+	await page.goto(roomPath(room));
 	await expect(page.getByRole("banner")).toBeVisible();
 	await expect(page.getByRole("textbox", { name: "editable markdown" })).toHaveAttribute(
 		"contenteditable",
@@ -216,5 +223,5 @@ test("document picker keeps failures open and makes creation retryable", async (
 	await expect(page.getByRole("alert")).toHaveText("creation is unavailable");
 	await expect(create).toBeEnabled();
 	await create.click();
-	await expect(page).toHaveURL(/\/channels\/[0-9a-f-]{36}$/);
+	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
 });
