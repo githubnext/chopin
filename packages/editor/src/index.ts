@@ -29,6 +29,8 @@ export { PlanStatus } from "./status";
 export type { PlanStatusProps } from "./status";
 export { ThreadObserver, ThreadStore, useThreads } from "./threads";
 export type { Draft, ThreadState, ThreadView } from "./threads";
+export { presenceClass, transitionPresence, useTransitionPresence } from "./transition-presence";
+export type { PresenceAction, PresencePhase, TransitionPresence } from "./transition-presence";
 export type { Connection, Transport, Unsubscribe } from "./transport";
 export type { CommentPresentation } from "./widget-options";
 export { QuestionnaireCard, register as registerPlanWidgets } from "./widgets";
