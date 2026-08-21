@@ -21,6 +21,15 @@ export function transitionPresence(phase: PresencePhase, action: PresenceAction)
 	return phase;
 }
 
+export function resolvedPresence(
+	phase: PresencePhase,
+	open: boolean,
+	immediately: boolean,
+): PresencePhase {
+	let next = transitionPresence(phase, open ? "open" : "close");
+	return immediately ? transitionPresence(next, "finish") : next;
+}
+
 export function presenceClass(phase: PresencePhase): TransitionPresence<unknown>["className"] {
 	return phase === "open" ? "is-open" : phase === "closing" ? "is-closing" : "";
 }
@@ -38,8 +47,9 @@ export function closeDelay(raw: string, fallback: number, immediately: boolean):
 }
 
 function immediate(): boolean {
-	return matchMedia("(prefers-reduced-motion: reduce)").matches
-		|| document.documentElement.dataset.motionInput === "keyboard";
+	return typeof window !== "undefined"
+		&& (matchMedia("(prefers-reduced-motion: reduce)").matches
+			|| document.documentElement.dataset.motionInput === "keyboard");
 }
 
 export function useTransitionPresence<T>(
@@ -53,26 +63,32 @@ export function useTransitionPresence<T>(
 		transitionPresence,
 		value === undefined ? "closed" : "open",
 	);
+	let immediately = immediate();
+	let resolved = resolvedPresence(phase, value !== undefined, immediately);
 
-	useEffect(() => dispatch(value === undefined ? "close" : "open"), [value]);
 	useEffect(() => {
-		if (phase === "opening") {
+		dispatch(value === undefined ? "close" : "open");
+		if (immediately) dispatch("finish");
+	}, [immediately, value]);
+	useEffect(() => {
+		if (immediately) return;
+		if (resolved === "opening") {
 			let frame = requestAnimationFrame(() => dispatch("finish"));
 			return () => cancelAnimationFrame(frame);
 		}
-		if (phase !== "closing") return;
+		if (resolved !== "closing") return;
 		let raw = getComputedStyle(document.documentElement).getPropertyValue(closeDuration).trim();
-		let timer = window.setTimeout(() => dispatch("finish"), closeDelay(raw, fallback, immediate()));
+		let timer = window.setTimeout(() => dispatch("finish"), closeDelay(raw, fallback, immediately));
 		return () => window.clearTimeout(timer);
-	}, [closeDuration, fallback, phase]);
+	}, [closeDuration, fallback, immediately, resolved]);
 
 	return {
-		className: presenceClass(phase),
-		mounted: phase !== "closed" && latest.current !== undefined,
+		className: presenceClass(resolved),
+		mounted: resolved !== "closed" && latest.current !== undefined,
 		onTransitionEnd: event => {
-			if (phase === "closing" && event.target === event.currentTarget) dispatch("finish");
+			if (resolved === "closing" && event.target === event.currentTarget) dispatch("finish");
 		},
-		phase,
-		value: phase === "closed" ? undefined : latest.current,
+		phase: resolved,
+		value: resolved === "closed" ? undefined : latest.current,
 	};
 }
