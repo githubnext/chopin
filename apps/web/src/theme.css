@@ -536,6 +536,10 @@ body {
 }
 
 @media (prefers-reduced-motion: no-preference) {
+	.conversation-tool-loader {
+		animation: workspace-working-spin 0.8s linear infinite;
+	}
+
 	.workspace-working-indicator {
 		animation: workspace-working-spin 0.8s linear infinite;
 	}

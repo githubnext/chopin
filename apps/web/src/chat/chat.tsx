@@ -11,11 +11,11 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { StopIcon } from "@phosphor-icons/react";
 
 import { addressed } from "@chopin/protocol/address";
 
 import { Transcript } from "./transcript";
+import plannerStop from "../assets/figma/workspace/planner-stop.svg";
 import send from "../assets/figma/workspace/send.svg";
 
 import type { Chat as Wire } from "@chopin/protocol";
@@ -179,7 +179,7 @@ export function Chat(
 								title="Stop Planner"
 								type="button"
 							>
-								<StopIcon aria-hidden="true" size={16} />
+								<img alt="" className="size-[18px]" src={plannerStop} />
 							</button>
 						)}
 						<button
