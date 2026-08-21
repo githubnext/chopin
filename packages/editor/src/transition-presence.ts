@@ -26,7 +26,9 @@ export function resolvedPresence(
 	open: boolean,
 	immediately: boolean,
 ): PresencePhase {
-	let next = transitionPresence(phase, open ? "open" : "close");
+	let next = open && phase === "opening"
+		? phase
+		: transitionPresence(phase, open ? "open" : "close");
 	return immediately ? transitionPresence(next, "finish") : next;
 }
 
