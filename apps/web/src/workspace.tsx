@@ -1,7 +1,6 @@
 /** Three panes on one ground, with the document as the only raised surface. */
 
 import { useEffect, useLayoutEffect, useReducer, useRef, useSyncExternalStore } from "react";
-import { SidebarSimpleIcon } from "@phosphor-icons/react";
 
 import {
 	presentWorkspace,
@@ -9,6 +8,7 @@ import {
 	WORKSPACE_MEDIA,
 	workspaceMode,
 } from "./workspace-model";
+import conversationCloseIcon from "./assets/figma/workspace/conversation-close.svg";
 import conversationIcon from "./assets/figma/workspace/conversation.svg";
 import { ResizeHandle, usePaneWidth } from "./resizable-pane";
 
@@ -83,12 +83,14 @@ function ConversationToggle(
 		className,
 		onToggle,
 		open,
+		swapOnHover = false,
 	}: {
 		activity: WorkspaceProps["conversationActivity"];
 		buttonRef?: RefObject<HTMLButtonElement | null>;
 		className?: string;
 		onToggle: () => void;
 		open: boolean;
+		swapOnHover?: boolean;
 	},
 ) {
 	let status = activity.busy
@@ -107,9 +109,28 @@ function ConversationToggle(
 			ref={buttonRef}
 			type="button"
 		>
-			{open
-				? <SidebarSimpleIcon aria-hidden="true" size={18} />
-				: <img alt="" className="size-[18px]" src={conversationIcon} />}
+			{open && swapOnHover
+				? (
+					<>
+						<img
+							alt=""
+							className="size-[18px] group-hover:hidden group-focus-within:hidden"
+							src={conversationIcon}
+						/>
+						<img
+							alt=""
+							className="hidden size-[18px] opacity-50 group-hover:block group-focus-within:block"
+							src={conversationCloseIcon}
+						/>
+					</>
+				)
+				: (
+					<img
+						alt=""
+						className={`size-[18px] ${open ? "opacity-50" : ""}`}
+						src={open ? conversationCloseIcon : conversationIcon}
+					/>
+				)}
 			{status && (
 				<span
 					aria-hidden="true"
@@ -266,6 +287,7 @@ export function Workspace(
 										activity={conversationActivity}
 										onToggle={dismissConversation}
 										open
+										swapOnHover
 									/>
 								</div>
 							)
@@ -277,7 +299,7 @@ export function Workspace(
 				)}
 
 				{chat && mode === "split" && !presentation.conversationVisible && (
-					<div className="absolute right-0 top-0 z-20">
+					<div className="absolute right-5 top-0 z-20">
 						<ConversationToggle
 							activity={conversationActivity}
 							buttonRef={edgeTab}
