@@ -6,9 +6,14 @@ import { documentSlug } from "../../channels/slug";
 import { storageContract } from "../contract";
 import { StorageError } from "../errors";
 import { PostgresStorage } from "./adapter";
+import { migrate, verifyMigrations } from "./migrations";
 import { backfillDocumentSlugs } from "./migrations/002_document_slugs";
 
 let url = process.env.TEST_DATABASE_URL;
+
+function digest(source: string): string {
+	return new Bun.CryptoHasher("sha256").update(source).digest("hex");
+}
 
 if (url) {
 	storageContract("postgres", () => new PostgresStorage(url));
@@ -102,6 +107,56 @@ if (url) {
 				expect(byId.get("channel-batch-000")).toBe("batch");
 				expect(byId.get("channel-batch-504")).toBe("batch-505");
 			});
+		} finally {
+			await sql.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).simple();
+			await sql.close();
+		}
+	});
+
+	it("upgrades a database that recorded user navigation as migration 002 without rewriting history", async () => {
+		let sql = new SQL(url, { max: 1 });
+		let schema = `legacy_navigation_${crypto.randomUUID().replaceAll("-", "")}`;
+		try {
+			await sql.unsafe(`CREATE SCHEMA "${schema}"`).simple();
+			await sql.unsafe(`SET search_path TO "${schema}"`).simple();
+			let initial = await Bun.file(join(import.meta.dir, "migrations/001_initial.sql")).text();
+			let navigation = await Bun.file(
+				join(import.meta.dir, "migrations/003_user_navigation.sql"),
+			).text();
+			await sql.unsafe(initial).simple();
+			await sql.unsafe(navigation).simple();
+			await sql`
+				CREATE TABLE chopin_migrations (
+					id text PRIMARY KEY,
+					checksum text NOT NULL,
+					applied_at timestamptz NOT NULL DEFAULT now()
+				)
+			`;
+			await sql`
+				INSERT INTO chopin_migrations (id, checksum)
+				VALUES
+					('001_initial', ${digest(initial)}),
+					('002_user_navigation', ${digest(navigation)})
+			`;
+
+			await migrate(sql);
+			await verifyMigrations(sql);
+			let rows = await sql<{ id: string }[]>`
+				SELECT id FROM chopin_migrations ORDER BY id
+			`;
+			expect(rows.map(row => row.id)).toEqual([
+				"001_initial",
+				"002_document_slugs",
+				"002_user_navigation",
+			]);
+			expect(await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`)
+				.toEqual([
+					{ table: "channel_slugs" },
+				]);
+			expect(await sql<{ table: string | null }[]>`SELECT to_regclass('user_navigation') AS table`)
+				.toEqual([
+					{ table: "user_navigation" },
+				]);
 		} finally {
 			await sql.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).simple();
 			await sql.close();

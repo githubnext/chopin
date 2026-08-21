@@ -129,6 +129,136 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
+		it("reports whether adding a project changed navigation and keeps its original order", async () => {
+			let storage = await opened(factory);
+			try {
+				let now = new Date("2026-01-02T03:04:05.000Z");
+				let userId = id("user");
+				await storage.users.put({
+					id: userId,
+					login: "mona",
+					avatarUrl: "https://example.test/mona",
+					now,
+				});
+				let first = await storage.navigation.addProject({
+					userId,
+					repositoryId: "R_first",
+					repositoryOwner: "githubnext",
+					repositoryName: "chopin",
+					now,
+				});
+				let second = await storage.navigation.addProject({
+					userId,
+					repositoryId: "R_second",
+					repositoryOwner: "githubnext",
+					repositoryName: "second",
+					now: new Date(now.getTime() + 1),
+				});
+				let repeated = await storage.navigation.addProject({
+					userId,
+					repositoryId: "R_first",
+					repositoryOwner: "githubnext",
+					repositoryName: "chopin",
+					now: new Date(now.getTime() + 2),
+				});
+
+				expect(first.added).toBe(true);
+				expect(second.added).toBe(true);
+				expect(repeated).toEqual({ project: first.project, added: false });
+				expect((await storage.navigation.projects(userId)).map(project => project.repositoryId))
+					.toEqual(["R_first", "R_second"]);
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("stores the last document idempotently", async () => {
+			let storage = await opened(factory);
+			try {
+				let now = new Date("2026-01-02T03:04:05.000Z");
+				let { userId, channelId } = await userAndChannel(storage);
+				let first = await storage.navigation.setLastDocument(userId, channelId, now);
+				let repeated = await storage.navigation.setLastDocument(userId, channelId, now);
+
+				expect(repeated).toEqual(first);
+				expect(await storage.navigation.get(userId)).toEqual(first);
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("rejects a last document that does not exist", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId } = await userAndChannel(storage);
+				await expect(storage.navigation.setLastDocument(
+					userId,
+					id("missing-channel"),
+					new Date("2026-01-02T03:04:05.000Z"),
+				)).rejects.toMatchObject({ failure: "missing" });
+				expect(await storage.navigation.get(userId)).toBeUndefined();
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("records a deep-link visit without adding a project when its document is missing", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId } = await userAndChannel(storage);
+				await expect(storage.navigation.recordVisit({
+					userId,
+					repositoryId: "R_missing",
+					repositoryOwner: "githubnext",
+					repositoryName: "missing",
+					documentId: id("missing-channel"),
+					now: new Date("2026-01-02T03:04:05.000Z"),
+				})).rejects.toMatchObject({ failure: "missing" });
+				expect(await storage.navigation.projects(userId)).toEqual([]);
+				expect(await storage.navigation.get(userId)).toBeUndefined();
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("rejects a deep-link visit whose document belongs to another repository", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, channelId } = await userAndChannel(storage);
+				await expect(storage.navigation.recordVisit({
+					userId,
+					repositoryId: id("other-repository"),
+					repositoryOwner: "githubnext",
+					repositoryName: "other",
+					documentId: channelId,
+					now: new Date("2026-01-02T03:04:05.000Z"),
+				})).rejects.toMatchObject({ failure: "missing" });
+				expect(await storage.navigation.projects(userId)).toEqual([]);
+				expect(await storage.navigation.get(userId)).toBeUndefined();
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("adds a project and records a deep-link visit together", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, channelId, repositoryId } = await userAndChannel(storage);
+				let saved = await storage.navigation.recordVisit({
+					userId,
+					repositoryId,
+					repositoryOwner: "octo-org",
+					repositoryName: "score",
+					documentId: channelId,
+					now: new Date("2026-01-02T03:04:05.000Z"),
+				});
+				expect(saved.lastDocumentId).toBe(channelId);
+				expect(await storage.navigation.projects(userId)).toMatchObject([{ repositoryId }]);
+			} finally {
+				await storage.close();
+			}
+		});
+
 		it("lists only a repository's channels in stable order", async () => {
 			let storage = await opened(factory);
 			try {

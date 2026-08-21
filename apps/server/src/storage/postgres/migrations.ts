@@ -21,7 +21,13 @@ const MIGRATIONS = [{
 	applyPath: join(import.meta.dir, "migrations/002_document_slugs.ts"),
 	checksumTag: "apply:backfillDocumentSlugs:v1",
 	apply: backfillDocumentSlugs,
+}, {
+	id: "003_user_navigation",
+	path: join(import.meta.dir, "migrations/003_user_navigation.sql"),
 }] satisfies Migration[];
+
+/** Navigation shipped as 002 before document slugs claimed that number on main. */
+const LEGACY_MIGRATION_IDS = new Map([["002_user_navigation", "003_user_navigation"]]);
 
 /** Stable across deployments; it serializes migrations, not ordinary writes. */
 const MIGRATION_LOCK = 2_043_237_431;
@@ -48,12 +54,14 @@ function checked(rows: Applied[], migrations: Expected[], complete: boolean): Ma
 	let known = new Map(migrations.map(migration => [migration.id, migration.checksum]));
 	let applied = new Map<string, string>();
 	for (let row of rows) {
-		let digest = known.get(row.id);
+		let id = LEGACY_MIGRATION_IDS.get(row.id) ?? row.id;
+		let digest = known.get(id);
 		if (!digest) throw new Error(`database has unknown migration ${row.id}`);
 		if (digest !== row.checksum) {
 			throw new Error(`migration ${row.id} changed after it was applied`);
 		}
-		applied.set(row.id, row.checksum);
+		if (applied.has(id)) throw new Error(`database has duplicate migration ${id}`);
+		applied.set(id, row.checksum);
 	}
 	if (complete) {
 		let missing = migrations.find(migration => !applied.has(migration.id));

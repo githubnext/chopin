@@ -1,4 +1,6 @@
 import type {
+	AddUserProject,
+	AddUserProjectResult,
 	AgentState,
 	ChannelPage,
 	ChannelRecord,
@@ -10,12 +12,15 @@ import type {
 	CreateWebSession,
 	Lease,
 	PutUser,
+	RecordNavigationVisit,
 	RenameChannel,
 	RenameResult,
 	ReplaceChannel,
 	SaveCheckpoint,
 	StoredChannel,
 	UpdateAgentContext,
+	UserNavigation,
+	UserProject,
 	UserRecord,
 	WebSession,
 } from "./model";
@@ -35,6 +40,18 @@ export interface SessionStore {
 		lease: Lease,
 		leaseTtlMs: number,
 	): Promise<{ deleted: number; lease: Lease }>;
+}
+
+export interface NavigationStore {
+	projects(userId: string): Promise<UserProject[]>;
+	addProject(input: AddUserProject): Promise<AddUserProjectResult>;
+	get(userId: string): Promise<UserNavigation | undefined>;
+	setLastDocument(
+		userId: string,
+		documentId: string | undefined,
+		now: Date,
+	): Promise<UserNavigation>;
+	recordVisit(input: RecordNavigationVisit): Promise<UserNavigation>;
 }
 
 export interface ChannelStore {
@@ -75,6 +92,7 @@ export interface StorageAdapter {
 	readonly driver: string;
 	readonly users: UserStore;
 	readonly sessions: SessionStore;
+	readonly navigation: NavigationStore;
 	readonly channels: ChannelStore;
 	readonly collaboration: CollaborationStore;
 	readonly leases: LeaseStore;
