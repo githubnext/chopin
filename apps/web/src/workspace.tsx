@@ -8,8 +8,8 @@ import {
 	WORKSPACE_MEDIA,
 	workspaceMode,
 } from "./workspace-model";
-import conversationCloseIcon from "./assets/figma/workspace/conversation-close.svg";
-import conversationIcon from "./assets/figma/workspace/conversation.svg";
+import conversationCloseIcon from "./assets/icons/conversation-close.svg";
+import conversationIcon from "./assets/icons/conversation.svg";
 import { ResizeHandle, usePaneWidth } from "./resizable-pane";
 
 import type { Dispatch, ReactNode, RefObject } from "react";

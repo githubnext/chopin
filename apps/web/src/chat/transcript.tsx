@@ -7,9 +7,9 @@ import { AgentFace, Face } from "@chopin/editor";
 
 import { MessageMarkdown } from "./markdown";
 import { capitalize, displayText, duration, group, summarize, toolCopy } from "./model";
-import toolChevronDown from "../assets/figma/workspace/tool-chevron-down.svg";
-import toolChevronRight from "../assets/figma/workspace/tool-chevron-right.svg";
-import toolLoader from "../assets/figma/workspace/tool-loader.svg";
+import toolChevronDown from "../assets/icons/tool-chevron-down.svg";
+import toolChevronRight from "../assets/icons/tool-chevron-right.svg";
+import toolLoader from "../assets/icons/tool-loader.svg";
 
 import type { Chat } from "@chopin/protocol";
 import type { Group, Message } from "./model";

@@ -15,8 +15,8 @@ import { useEffect, useRef, useState } from "react";
 import { addressed } from "@chopin/protocol/address";
 
 import { Transcript } from "./transcript";
-import plannerStop from "../assets/figma/workspace/planner-stop.svg";
-import send from "../assets/figma/workspace/send-arrow-up.svg";
+import plannerStop from "../assets/icons/planner-stop.svg";
+import send from "../assets/icons/send-arrow-up.svg";
 
 import type { Chat as Wire } from "@chopin/protocol";
 import type { Wire as Socket } from "../wire";
