@@ -3,10 +3,13 @@ import { describe, expect, test } from "bun:test";
 import {
 	closeDelay,
 	presenceClass,
+	presenceState,
 	presenceValue,
 	resolvedPresence,
 	transitionPresence,
 } from "./transition-presence";
+
+import type { PresenceState } from "./transition-presence";
 
 describe("transition presence", () => {
 	test("opens on a frame and closes after its exit", () => {
@@ -49,6 +52,20 @@ describe("transition presence", () => {
 	test("settles immediate paths without an intermediate phase", () => {
 		expect(resolvedPresence("closed", true, true)).toBe("open");
 		expect(resolvedPresence("open", false, true)).toBe("closed");
+	});
+
+	test("synchronizes authoritative inputs before external timing settles the phase", () => {
+		let state: PresenceState = {
+			immediately: false,
+			open: false,
+			phase: "closed",
+		};
+		state = presenceState(state, { immediately: false, open: true, type: "sync" });
+		expect(state).toEqual({ immediately: false, open: true, phase: "opening" });
+		state = presenceState(state, { type: "finish" });
+		expect(state).toEqual({ immediately: false, open: true, phase: "open" });
+		state = presenceState(state, { immediately: true, open: false, type: "sync" });
+		expect(state).toEqual({ immediately: true, open: false, phase: "closed" });
 	});
 
 	test("presents current content before retaining it for a close", () => {
