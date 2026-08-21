@@ -362,7 +362,7 @@ describe("the MCP read protocol", () => {
 		]));
 	});
 
-	it("advertises the canonical repository and non-blank channel constraints it enforces", () => {
+	it("advertises the canonical repository and non-blank document locator constraints", () => {
 		let list = TOOLS.find(tool => tool.name === "list_documents")!;
 		let read = TOOLS.find(tool => tool.name === "read_document")!;
 		expect((list.inputSchema.properties as Record<string, { pattern: string }>).repository.pattern)
@@ -373,7 +373,7 @@ describe("the MCP read protocol", () => {
 			"\\S",
 		);
 		expect((read.inputSchema.properties as Record<string, { maxLength: number }>).id.maxLength)
-			.toBe(128);
+			.toBe(2_048);
 	});
 
 	it("does not reveal documents to an unauthenticated caller", async () => {
@@ -469,8 +469,13 @@ describe("the MCP read protocol", () => {
 			let [id, name, arguments_, error] of [
 				[5, "list_documents", { repository: "./chopin" }, "list_documents requires a repository"],
 				[6, "list_documents", { repository: "owner/.." }, "list_documents requires a repository"],
-				[7, "read_document", { id: " \t" }, "read_document requires an id"],
-				[9, "read_document", { id: "x".repeat(129) }, "read_document requires an id"],
+				[7, "read_document", { id: " \t" }, "read_document requires an id or URL"],
+				[
+					9,
+					"read_document",
+					{ id: "x".repeat(2_049) },
+					"read_document requires an id or URL",
+				],
 			]
 		) {
 			let invalid = await json(
@@ -495,13 +500,13 @@ describe("the MCP read protocol", () => {
 		expect(unknown.error).toEqual({ code: -32601, message: "tool not found" });
 	});
 
-	it("counts read-document ids by JSON Schema characters", async () => {
+	it("counts read-document locators by JSON Schema characters", async () => {
 		let boundary = await json(
 			await endpoint()(request({
 				jsonrpc: "2.0",
 				id: 10,
 				method: "tools/call",
-				params: { name: "read_document", arguments: { id: "😀".repeat(128) } },
+				params: { name: "read_document", arguments: { id: "😀".repeat(2_048) } },
 			})),
 		);
 

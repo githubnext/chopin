@@ -1,17 +1,33 @@
 import { join } from "node:path";
 
-import type { SQL } from "bun";
+import { backfillDocumentSlugs } from "./migrations/002_document_slugs";
+
+import type { SQL, TransactionSQL } from "bun";
+
+type Migration = {
+	id: string;
+	path: string;
+	applyPath?: string;
+	checksumTag?: string;
+	apply?: (sql: TransactionSQL) => Promise<void>;
+};
 
 const MIGRATIONS = [{
 	id: "001_initial",
 	path: join(import.meta.dir, "migrations/001_initial.sql"),
-}];
+}, {
+	id: "002_document_slugs",
+	path: join(import.meta.dir, "migrations/002_document_slugs.sql"),
+	applyPath: join(import.meta.dir, "migrations/002_document_slugs.ts"),
+	checksumTag: "apply:backfillDocumentSlugs:v1",
+	apply: backfillDocumentSlugs,
+}] satisfies Migration[];
 
 /** Stable across deployments; it serializes migrations, not ordinary writes. */
 const MIGRATION_LOCK = 2_043_237_431;
 
 type Applied = { id: string; checksum: string };
-type Expected = { id: string; source: string; checksum: string };
+type Expected = Migration & { source: string; checksum: string };
 
 function checksum(source: string): string {
 	return new Bun.CryptoHasher("sha256").update(source).digest("hex");
@@ -20,7 +36,11 @@ function checksum(source: string): string {
 async function expected(): Promise<Expected[]> {
 	return Promise.all(MIGRATIONS.map(async migration => {
 		let source = await Bun.file(migration.path).text();
-		return { id: migration.id, source, checksum: checksum(source) };
+		let applySource = migration.applyPath ? await Bun.file(migration.applyPath).text() : "";
+		let fingerprint = applySource || migration.checksumTag
+			? `${source}\n-- ${migration.checksumTag ?? "data migration"}\n${applySource}`
+			: source;
+		return { ...migration, source, checksum: checksum(fingerprint) };
 	}));
 }
 
@@ -60,6 +80,7 @@ export async function migrate(sql: SQL): Promise<void> {
 			let previous = applied.get(migration.id);
 			if (previous) continue;
 			await transaction.unsafe(migration.source).simple();
+			await migration.apply?.(transaction);
 			await transaction`
 				INSERT INTO chopin_migrations (id, checksum)
 				VALUES (${migration.id}, ${migration.checksum})

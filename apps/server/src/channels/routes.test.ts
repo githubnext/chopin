@@ -174,10 +174,12 @@ describe("channel routes", () => {
 		expect(created!.status).toBe(201);
 		let body = await created!.json();
 		expect(body.channel.title).toBe("Release readiness");
+		expect(body.channel.slug).toBe("release-readiness");
 		expect(body.channel.id[14]).toBe("5");
 		expect(body.channel.repositoryId).toBe("R_score");
 		expect(body.channel.createdBy).toBe("U_octocat");
-		expect(created!.headers.get("location")).toBe(`/channels/${body.channel.id}`);
+		expect(created!.headers.get("location"))
+			.toBe("/documents/octo-org/score/release-readiness");
 		expect(await storage.channels.get(body.channel.id)).toMatchObject({
 			repositoryOwner: "octo-org",
 			repositoryName: "score",
@@ -194,6 +196,60 @@ describe("channel routes", () => {
 		expect((await storage.collaboration.load(body.channel.id, now))?.channel.id).toBe(
 			body.channel.id,
 		);
+	});
+
+	it("resolves canonical and historical document paths within the authorized repository", async () => {
+		let { router, storage, github, cookie, now } = await setup();
+		let channel = await storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Release plan",
+			createdBy: "U_octocat",
+			now,
+		});
+		await storage.channels.rename({
+			id: channel.id,
+			title: "Résumé 計画",
+			now: new Date(now.getTime() + 1),
+		});
+
+		let canonical = await router.handle(request(
+			"/api/repositories/octo-org/score/documents/r%C3%A9sum%C3%A9-%E8%A8%88%E7%94%BB",
+			cookie,
+		));
+		expect(canonical!.status).toBe(200);
+		expect((await canonical!.json()).channel).toMatchObject({
+			id: channel.id,
+			title: "Résumé 計画",
+			slug: "résumé-計画",
+		});
+
+		let alias = await router.handle(request(
+			"/api/repositories/octo-org/score/documents/Release--Plan",
+			cookie,
+		));
+		expect(alias!.status).toBe(200);
+		expect((await alias!.json()).channel.slug).toBe("résumé-計画");
+
+		github.repo = { ...github.repo, permissions: { pull: false, push: false, admin: false } };
+		let denied = await router.handle(request(
+			"/api/repositories/octo-org/score/documents/release-plan",
+			cookie,
+		));
+		expect(denied!.status).toBe(404);
+
+		github.repo = {
+			...github.repo,
+			id: "R_recreated",
+			permissions: { pull: true, push: true, admin: false },
+		};
+		let recreated = await router.handle(request(
+			"/api/repositories/octo-org/score/documents/release-plan",
+			cookie,
+		));
+		expect(recreated!.status).toBe(404);
 	});
 
 	it("continues to open a legacy UUIDv4 channel", async () => {
@@ -236,6 +292,7 @@ describe("channel routes", () => {
 		expect(body.channel).toMatchObject({
 			id: channel.id,
 			title: "Launch plan",
+			slug: "launch-plan",
 			revision: channel.revision,
 		});
 		expect((await storage.channels.get(channel.id))!.title).toBe("Launch plan");

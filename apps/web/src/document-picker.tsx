@@ -1,4 +1,5 @@
 import { CaretDownIcon, CheckIcon, PlusIcon } from "@phosphor-icons/react";
+import { documentPath } from "@chopin/protocol/document-url";
 import { createPortal } from "react-dom";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
@@ -23,7 +24,7 @@ function select(
 	repository: Pick<Api.Repository, "owner" | "name" | "fullName">,
 ) {
 	rememberChannel(userId, channel, repository);
-	location.assign(`/channels/${channel.id}`);
+	location.assign(documentPath(repository.owner, repository.name, channel.slug));
 }
 
 /** Repository-scoped navigation and creation stay separate from repository selection. */
@@ -37,7 +38,7 @@ export function DocumentPicker(
 	}: {
 		canEdit: boolean;
 		current: Pick<Api.Channel, "id" | "title">;
-		onRename: (channel: Pick<Api.Channel, "title" | "updatedAt">) => void;
+		onRename: (channel: Pick<Api.Channel, "title" | "slug" | "updatedAt">) => void;
 		repository: Pick<Api.Repository, "name" | "owner" | "fullName">;
 		userId: string;
 	},
@@ -144,7 +145,11 @@ export function DocumentPicker(
 		try {
 			let created = await Api.createChannel(repository.owner, repository.name);
 			rememberChannel(userId, created.channel, created.repository);
-			location.assign(`/channels/${created.channel.id}`);
+			location.assign(documentPath(
+				created.repository.owner,
+				created.repository.name,
+				created.channel.slug,
+			));
 		} catch (reason) {
 			setCreateError(reason);
 			setCreating(false);

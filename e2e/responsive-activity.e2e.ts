@@ -38,7 +38,7 @@ test("the compact room header preserves long identity and secondary actions", as
 		let session = await response.json() as Record<string, unknown>;
 		await route.fulfill({ response, json: { ...session, agent: true } });
 	});
-	await page.route("**/api/channels/**", async route => {
+	await page.route("**/api/repositories/octo-org/score/documents/**", async route => {
 		let response = await route.fetch();
 		let detail = await response.json() as {
 			channel: Record<string, unknown>;

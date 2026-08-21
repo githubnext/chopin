@@ -13,6 +13,10 @@
 		"./address": {
 			"types": "./address.ts",
 			"default": "./address.ts"
+		},
+		"./document-url": {
+			"types": "./document-url.ts",
+			"default": "./document-url.ts"
 		}
 	}
 }

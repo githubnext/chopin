@@ -65,6 +65,25 @@ graph, but the product has no user-facing way to approve the Planner's draft.
 See
 [Experimental implementation lifecycle](implementation-lifecycle.md).
 
+## Document URLs and IDs
+
+The `url` returned by `create_document` is the readable canonical route:
+
+```text
+/documents/:owner/:repository/:slug
+```
+
+`read_document` and `read_implementation` accept either a document UUID or that
+canonical URL in their `id` input. The URL may be passed back exactly as
+returned; an absolute URL must use the configured Chopin origin. Both reads
+return the stable UUID as the document `id`.
+
+The UUID remains the internal storage, API, WebSocket, and MCP identity. Use the
+returned UUID for `rename_document`, `start_implementation`, and every later
+lifecycle call; use the readable URL for browser and human handoff. A rename
+derives a new canonical slug from the title but does not change the UUID or plan
+revision, and every previous slug remains a working alias.
+
 ## Claude Code
 
 Install and sign in to Claude Code, then add Chopin to your user configuration:
@@ -108,9 +127,10 @@ Start the agent from the repository you want to inspect and ask:
 Use the Chopin list_documents tool to list the documents available for this repository. Return each document's id and title.
 ```
 
-`rename_document` accepts a document `id` and replacement `title`. It changes
-the catalog title only, leaving canonical plan source, plan revision, and
-creation provenance intact. Repeating the same title is safe and has no effect.
+`rename_document` accepts a document UUID and replacement `title`. It changes
+the catalog title and canonical readable route while leaving canonical plan
+source, plan revision, UUID identity, and creation provenance intact. Repeating
+the same title is safe and has no effect.
 
 `{"documents":[]}` is a successful response for a repository with no Chopin
 documents. After the connection is established, the MCP `initialize`

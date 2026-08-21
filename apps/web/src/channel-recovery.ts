@@ -1,11 +1,14 @@
+import { documentPath } from "@chopin/protocol/document-url";
+
 import type * as Api from "./api";
 
 export type ChannelRecovery = {
-	channel: Pick<Api.Channel, "id" | "title">;
+	channel: Pick<Api.Channel, "id" | "title"> & Partial<Pick<Api.Channel, "slug">>;
 	repository: Pick<Api.Repository, "owner" | "name" | "fullName">;
 };
 
 const KEY = "chopin:channel-recovery:";
+const PATH_KEY = "chopin:document-recovery:";
 
 function record(value: unknown): Record<string, unknown> | undefined {
 	return value && typeof value === "object" && !Array.isArray(value)
@@ -25,6 +28,7 @@ function recovery(value: unknown, id: string): value is ChannelRecovery {
 		&& !!channel
 		&& channel.id === id
 		&& text(channel.title)
+		&& (channel.slug === undefined || text(channel.slug))
 		&& !!repository
 		&& text(repository.owner)
 		&& text(repository.name)
@@ -33,7 +37,7 @@ function recovery(value: unknown, id: string): value is ChannelRecovery {
 
 export function rememberChannel(
 	userId: string,
-	channel: ChannelRecovery["channel"],
+	channel: Pick<Api.Channel, "id" | "title" | "slug">,
 	repository: ChannelRecovery["repository"],
 	storage: Storage = sessionStorage,
 ): void {
@@ -42,8 +46,46 @@ export function rememberChannel(
 			`${KEY}${encodeURIComponent(userId)}:${channel.id}`,
 			JSON.stringify({ channel, repository }),
 		);
+		storage.setItem(
+			`${PATH_KEY}${encodeURIComponent(userId)}:${
+				documentPath(
+					repository.owner,
+					repository.name,
+					channel.slug,
+				)
+			}`,
+			JSON.stringify({ channel, repository }),
+		);
 	} catch {
 		// Recovery context must never prevent the navigation it is meant to help.
+	}
+}
+
+export function readDocumentRecovery(
+	userId: string,
+	owner: string,
+	repository: string,
+	slug: string,
+	storage: Storage = sessionStorage,
+): ChannelRecovery | undefined {
+	try {
+		let path = documentPath(owner, repository, slug);
+		let value: unknown = JSON.parse(
+			storage.getItem(`${PATH_KEY}${encodeURIComponent(userId)}:${path}`) ?? "null",
+		);
+		let item = record(value);
+		let storedChannel = record(item?.channel);
+		let storedRepository = record(item?.repository);
+		return text(storedChannel?.id)
+				&& text(storedChannel.slug)
+				&& storedChannel.slug === slug
+				&& storedRepository?.owner === owner
+				&& storedRepository.name === repository
+				&& recovery(value, storedChannel.id)
+			? value
+			: undefined;
+	} catch {
+		return undefined;
 	}
 }
 

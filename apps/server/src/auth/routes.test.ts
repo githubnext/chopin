@@ -172,13 +172,22 @@ const CONFIG: AuthConfig = {
 
 async function callback(router: Router): Promise<Response> {
 	let start = await router.handle(new Request("https://chopin.test/auth/github"));
+	return complete(router, start!);
+}
+
+async function complete(
+	router: Router,
+	start: Response,
+	callbackReturnTo?: string,
+): Promise<Response> {
 	let state = new URL(start!.headers.get("location")!).searchParams.get("state");
 	let stateCookie = pair(cookies(start!)[0]!);
+	let callback = new URL("https://chopin.test/auth/github/callback");
+	callback.searchParams.set("code", "code");
+	callback.searchParams.set("state", state!);
+	if (callbackReturnTo !== undefined) callback.searchParams.set("return_to", callbackReturnTo);
 	return (await router.handle(
-		new Request(
-			`https://chopin.test/auth/github/callback?code=code&state=${state}`,
-			{ headers: { cookie: stateCookie } },
-		),
+		new Request(callback, { headers: { cookie: stateCookie } }),
 	))!;
 }
 
@@ -280,9 +289,12 @@ describe("hosted authentication routes", () => {
 			createdAt: now,
 		});
 		let setup = await router.handle(
-			new Request("https://chopin.test/auth/github/setup?installation_id=spoofed", {
-				headers: { cookie: sessionCookie },
-			}),
+			new Request(
+				"https://chopin.test/auth/github/setup?installation_id=spoofed&return_to=%2Fignored",
+				{
+					headers: { cookie: sessionCookie },
+				},
+			),
 		);
 		expect(setup!.status).toBe(303);
 		expect(setup!.headers.get("location")).toBe("/?repository_access=changed");
@@ -323,6 +335,90 @@ describe("hosted authentication routes", () => {
 		expect(response!.status).toBe(302);
 		expect(response!.headers.get("location"))
 			.toBe("https://github.com/apps/chopin-test/installations/new");
+	});
+
+	it("returns to the canonical product location stored with the OAuth attempt", async () => {
+		let github = new FakeGitHub();
+		let router = new Router();
+		registerAuthRoutes(router, {
+			config: CONFIG,
+			storage: new MemoryStorage(),
+			github,
+		});
+		let login = new URL("https://request-host.test/auth/github");
+		login.searchParams.set(
+			"return_to",
+			"/documents/octocat/temporary/../score?view=plan#decision-1",
+		);
+
+		let start = await router.handle(new Request(login));
+		let authorization = new URL(start!.headers.get("location")!);
+		expect(authorization.searchParams.has("return_to")).toBe(false);
+		expect(github.authorized?.redirectUri).toBe("https://chopin.test/auth/github/callback");
+		let response = await complete(router, start!, "/documents/callback-override");
+
+		expect(response.status).toBe(303);
+		expect(response.headers.get("location"))
+			.toBe("/documents/octocat/score?view=plan#decision-1");
+	});
+
+	it("falls back to the product root for unsafe, empty, or duplicate return paths", async () => {
+		let router = new Router();
+		registerAuthRoutes(router, {
+			config: CONFIG,
+			storage: new MemoryStorage(),
+			github: new FakeGitHub(),
+		});
+		let invalid = [
+			"",
+			"documents/octocat/score",
+			"//evil.test/documents/octocat/score",
+			"/%2e//evil.test/documents/octocat/score",
+			"/\\evil.test/documents/octocat/score",
+			"/documents/octocat/\u0000score",
+			"https://chopin.test/documents/octocat/score",
+			"https://evil.test/documents/octocat/score",
+			"/api",
+			"/api/session",
+			"/auth",
+			"/auth/github",
+			"/ws",
+			"/ws/connect",
+			"/mcp",
+			"/mcp/tools",
+			`/${"a".repeat(2_048)}`,
+		];
+
+		for (let value of invalid) {
+			let login = new URL("https://chopin.test/auth/github");
+			login.searchParams.set("return_to", value);
+			let start = await router.handle(new Request(login));
+			let response = await complete(router, start!);
+			expect(response.headers.get("location")).toBe("/");
+		}
+
+		let duplicate = new URL("https://chopin.test/auth/github");
+		duplicate.searchParams.append("return_to", "/documents/first");
+		duplicate.searchParams.append("return_to", "/documents/second");
+		let start = await router.handle(new Request(duplicate));
+		let response = await complete(router, start!);
+		expect(response.headers.get("location")).toBe("/");
+	});
+
+	it("accepts a return path at the 2048 character limit", async () => {
+		let router = new Router();
+		registerAuthRoutes(router, {
+			config: CONFIG,
+			storage: new MemoryStorage(),
+			github: new FakeGitHub(),
+		});
+		let returnPath = `/${"a".repeat(2_047)}`;
+		let login = new URL("https://chopin.test/auth/github");
+		login.searchParams.set("return_to", returnPath);
+
+		let start = await router.handle(new Request(login));
+		let response = await complete(router, start!);
+		expect(response.headers.get("location")).toBe(returnPath);
 	});
 
 	it("rejects missing or mismatched OAuth state", async () => {

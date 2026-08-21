@@ -9,15 +9,15 @@ Chopin's MCP initialize instructions and current tool descriptions are authorita
 
 ## Claim the canonical graph
 
-1. Resolve the supplied canonical document URL through Chopin MCP and call `read_implementation`.
-2. Read the returned graph, acceptance criteria, dependencies, repository context, revisions, lifecycle state, MCP initialize instructions, and current tool descriptions. Copied plans and remembered command sequences are not substitutes.
+1. Pass the supplied canonical document URL directly as the `id` input to `read_implementation`; the read tool accepts either that URL or a document UUID.
+2. Read the returned document UUID, graph, acceptance criteria, dependencies, repository context, revisions, lifecycle state, MCP initialize instructions, and current tool descriptions. Copied plans and remembered command sequences are not substitutes.
 3. Compare the graph's repository, base branch, and base commit with the local checkout. Inspect repository identity, branch, remotes, commit, and working tree before claiming or editing.
 4. If the checkout does not match, surface the mismatch and stop.
-5. Call `start_implementation` with the returned revisions and current checkout context. Begin only when the claim succeeds, and retain the returned run identity for later calls.
+5. Call `start_implementation` with the returned document UUID, revisions, and current checkout context. Begin only when the claim succeeds, and retain the returned run identity for later calls.
 
 ## Execute ready work
 
-Re-read the implementation before every lifecycle action, then follow the service instructions for the current state.
+Re-read the implementation before every lifecycle action, then follow the service instructions for the current state. Reads may use the canonical URL or UUID, but `start_implementation` and every later lifecycle call must use the UUID returned as `document.id`.
 
 - Work only on tasks whose dependencies are complete. Independent ready roots may be delegated when the runtime supports it; the owning agent remains responsible for MCP reporting, review, verification evidence, and one pull request per task.
 - Make only the required changes. Do not edit Chopin plan or graph content or start another top-level agent CLI session.

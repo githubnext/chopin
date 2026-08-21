@@ -8,10 +8,10 @@ runtime `STORAGE_DRIVER`.
 
 ## State model
 
-The database stores channel metadata, collaboration recovery state, domain
-sidecars, token-free ownership references, and the writer lease. GitHub tokens,
-browser-cookie verifiers, open rooms, Awareness presence, and Copilot SDK
-sessions never cross the storage boundary.
+The database stores channel metadata, repository-scoped document slug aliases,
+collaboration recovery state, domain sidecars, token-free ownership references,
+and the writer lease. GitHub tokens, browser-cookie verifiers, open rooms,
+Awareness presence, and Copilot SDK sessions never cross the storage boundary.
 
 The versioned sidecar is the atomic domain snapshot associated with a channel.
 It includes document sequence and plan revision counters, question and comment
@@ -34,6 +34,8 @@ Every adapter must provide:
 - monotonic storage sequences across checkpoints;
 - atomic checkpoint and epoch replacement;
 - atomic first-Planner ownership with a generation token;
+- repository-scoped canonical and historical slug resolution without rebinding
+  aliases;
 - expiring, token-free process-session registry rows;
 - startup removal of every registry row and Planner owner reference;
 - renewable leases whose fencing token protects commits, epoch replacements,
@@ -65,13 +67,14 @@ recovery or acknowledgement behavior.
 ## PostgreSQL schema
 
 The migration runner owns `chopin_migrations`, including a checksum for each
-applied migration. The initial application schema contains:
+applied migration. The application schema contains:
 
 | Table                | Purpose                                                                                                          |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `users`              | GitHub identity and attribution records.                                                                         |
 | `web_sessions`       | Token-free process-session IDs, user IDs, and expiry timestamps used by Planner ownership.                       |
 | `channels`           | Repository identity, title, creator, storage revision, next sequence, and timestamps.                            |
+| `channel_slugs`      | One canonical title-derived slug per channel plus permanent repository-scoped historical aliases.                |
 | `channel_state`      | Current sidecar JSON for a channel.                                                                              |
 | `channel_snapshots`  | Complete Yjs checkpoint, canonical source, source hash, epoch, counters, and checkpoint sidecar.                 |
 | `channel_operations` | Per-channel operation idempotency and the revision and sequence assigned to each operation.                      |
@@ -81,8 +84,11 @@ applied migration. The initial application schema contains:
 | `storage_leases`     | Renewable named leases and fencing tokens.                                                                       |
 
 Channel titles have a case-insensitive unique constraint within each repository.
-Foreign keys remove dependent collaboration state when a channel is deleted,
-although the current product has no channel-deletion route.
+Slug values are also unique per repository, with one canonical slug per channel.
+A rename promotes a new collision-suffixed slug but retains all former slugs as
+aliases that cannot be assigned to another channel. Foreign keys remove slug
+aliases and dependent collaboration state when a channel is deleted, although
+the current product has no channel-deletion route.
 
 ## Commit and acknowledgement
 

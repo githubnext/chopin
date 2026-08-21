@@ -129,6 +129,7 @@ describe("socket admission", () => {
 		expect("data" in viewer && viewer.data).toMatchObject({
 			room: channel.id,
 			channelTitle: "Plan",
+			channelSlug: "plan",
 			channelUpdatedAt: now.toISOString(),
 			handle: "octocat",
 			principalId: "U_octocat",

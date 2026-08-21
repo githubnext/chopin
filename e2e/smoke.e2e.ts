@@ -7,7 +7,7 @@
  * is worth one file that fails in one.
  */
 
-import { content, expect, ready, test } from "./room";
+import { content, expect, ready, roomPath, test } from "./room";
 
 import type { Chat } from "../packages/protocol/index";
 import type { Page, WebSocketRoute } from "@playwright/test";
@@ -193,7 +193,7 @@ test("a GitHub session joins its authorized channel", async ({ join, room }) => 
 		name: "Repository: octo-org/score",
 	});
 
-	await expect(page).toHaveURL(`/channels/${room}`);
+	await expect(page).toHaveURL(roomPath(room));
 	await expect(repository).toContainText("score");
 	await expect(repository).toHaveAttribute("title", "octo-org/score");
 	await expect(page.locator("header").first().getByRole("img", { name: "ana" })).toHaveCount(1);

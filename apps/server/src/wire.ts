@@ -25,6 +25,7 @@ export type AuthorizationResult = "allowed" | "denied" | "unavailable";
 export type SocketData = Identity & {
 	room: string;
 	channelTitle: string;
+	channelSlug: string;
 	channelUpdatedAt: string;
 	canEdit: boolean;
 	principalId: string;

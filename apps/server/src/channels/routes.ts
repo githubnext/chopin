@@ -1,8 +1,11 @@
+import { documentPath } from "@chopin/protocol/document-url";
+
 import { GitHubError } from "../github/client";
 import { StorageError } from "../storage/errors";
 
 import { documentTitles } from "./document-title";
 import { isChannelId, newChannelId } from "./id";
+import { documentSlug } from "./slug";
 import { normalizedTitle } from "./title";
 
 import type { HostedAuth } from "../auth/routes";
@@ -32,6 +35,7 @@ function serialized(channel: ChannelRecord) {
 		repositoryOwner: channel.repositoryOwner,
 		repositoryName: channel.repositoryName,
 		title: channel.title,
+		slug: channel.slug,
 		createdBy: channel.createdBy,
 		revision: channel.revision,
 		createdAt: channel.createdAt.toISOString(),
@@ -270,8 +274,35 @@ export function registerChannelRoutes(
 					{ repository: repository(repo), canEdit: true, channel: serialized(channel) },
 					201,
 					undefined,
-					`/channels/${channel.id}`,
+					documentPath(repo.owner, repo.name, channel.slug),
 				);
+			} catch (err) {
+				return failure(err, request, auth);
+			}
+		},
+	);
+
+	router.on(
+		"GET",
+		"/api/repositories/:owner/:repository/documents/:slug",
+		async (request, _url, params) => {
+			try {
+				let session = await auth.sessions.authenticate(request);
+				if (!session) return json({ error: "authentication required" }, 401);
+				let repo = await authorizedRepository(
+					auth,
+					session,
+					params.owner!,
+					params.repository!,
+				);
+				if (!repo.permissions.pull) return json({ error: "channel not found" }, 404);
+				let channel = await auth.storage.channels.resolve(repo.id, documentSlug(params.slug!));
+				if (!channel) return json({ error: "channel not found" }, 404);
+				return json({
+					repository: repository(repo),
+					canEdit: repo.permissions.push || repo.permissions.admin,
+					channel: serialized(channel),
+				});
 			} catch (err) {
 				return failure(err, request, auth);
 			}

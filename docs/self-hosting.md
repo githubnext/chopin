@@ -103,7 +103,7 @@ the image.
 | `GITHUB_APP_CLIENT_SECRET`     | required            | OAuth client secret used for user-token exchange and refresh.                                                                      |
 | `GITHUB_ALLOWED_USERS`         | empty               | Comma-separated admitted GitHub logins.                                                                                            |
 | `GITHUB_ALLOWED_ORGANIZATIONS` | empty               | Comma-separated organizations whose active members are admitted.                                                                   |
-| `SESSION_ENCRYPTION_KEY`       | required            | Exactly 64 hexadecimal characters used for the short-lived OAuth state and PKCE cookie.                                            |
+| `SESSION_ENCRYPTION_KEY`       | required            | Exactly 64 hexadecimal characters used for the encrypted OAuth attempt cookie, including its validated return path.                |
 | `SERVER_HOST`                  | `127.0.0.1`         | Source-process bind address. The image sets `0.0.0.0`.                                                                             |
 | `PORT`                         | `8787`              | Source-process HTTP and WebSocket port. The supplied image and health check expect internal port 8787.                             |
 | `MODEL`                        | `claude-sonnet-4.6` | Model requested for hosted agent sessions.                                                                                         |

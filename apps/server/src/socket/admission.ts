@@ -44,6 +44,7 @@ export async function admit(
 			data: {
 				room: channel.id,
 				channelTitle: channel.title,
+				channelSlug: channel.slug,
 				channelUpdatedAt: channel.updatedAt.toISOString(),
 				handle: session.user.login,
 				client: uid(),

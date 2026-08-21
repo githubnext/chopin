@@ -1,4 +1,5 @@
 import { CaretDownIcon, CheckIcon } from "@phosphor-icons/react";
+import { documentsPath } from "@chopin/protocol/document-url";
 import { createPortal } from "react-dom";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
@@ -22,9 +23,7 @@ export type RepositoryIdentity = Pick<
 >;
 
 function repositoryHref(repository: RepositoryIdentity): string {
-	return `/repositories/${encodeURIComponent(repository.owner)}/${
-		encodeURIComponent(repository.name)
-	}`;
+	return documentsPath(repository.owner, repository.name);
 }
 
 function sameRepository(left: RepositoryIdentity | undefined, right: RepositoryIdentity): boolean {
@@ -39,7 +38,7 @@ function optionId(list: string, repository: Api.Repository): string {
 function reauthenticate(reason: unknown, userId: string): boolean {
 	if (!(reason instanceof Api.ApiError) || reason.status !== 401) return false;
 	clearRepositoryCache(userId);
-	location.assign("/");
+	location.reload();
 	return true;
 }
 

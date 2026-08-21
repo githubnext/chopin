@@ -55,6 +55,7 @@ export declare namespace Session {
 	export type Hello = KIND<"session:hello"> & {
 		channelId: string;
 		title: string;
+		slug: string;
 		updatedAt: string;
 		you: Member;
 		members: Member[];
@@ -66,6 +67,7 @@ export declare namespace Session {
 	export type Channel = KIND<"session:channel"> & {
 		channelId: string;
 		title: string;
+		slug: string;
 		updatedAt: string;
 	};
 

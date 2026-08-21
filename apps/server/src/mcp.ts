@@ -126,6 +126,7 @@ type Tool = {
 };
 
 const MAX_DOCUMENT_ID_LENGTH = 128;
+const MAX_DOCUMENT_LOCATOR_LENGTH = 2_048;
 
 const DOCUMENT = {
 	type: "object",
@@ -182,14 +183,14 @@ export const TOOLS: Tool[] = [
 	},
 	{
 		name: "read_document",
-		description: "Read a Chopin channel's canonical source and revision.",
+		description: "Read a Chopin document by ID or canonical URL.",
 		inputSchema: {
 			type: "object",
 			properties: {
 				id: {
 					type: "string",
 					minLength: 1,
-					maxLength: MAX_DOCUMENT_ID_LENGTH,
+					maxLength: MAX_DOCUMENT_LOCATOR_LENGTH,
 					pattern: "\\S",
 				},
 			},
@@ -282,10 +283,13 @@ export const TOOLS: Tool[] = [
 	},
 	{
 		name: "read_implementation",
-		description: "Read the approved implementation graph, plan and repository context.",
+		description:
+			"Read the approved implementation graph, plan and repository context by document ID or canonical URL.",
 		inputSchema: {
 			type: "object",
-			properties: { id: { type: "string", minLength: 1, maxLength: MAX_DOCUMENT_ID_LENGTH } },
+			properties: {
+				id: { type: "string", minLength: 1, maxLength: MAX_DOCUMENT_LOCATOR_LENGTH },
+			},
 			required: ["id"],
 			additionalProperties: false,
 		},
@@ -396,6 +400,12 @@ function clientInfo(value: unknown): { name: string; version: string } {
 function isId(value: unknown): value is string {
 	return typeof value === "string"
 		&& Array.from(value).length <= MAX_DOCUMENT_ID_LENGTH
+		&& value.trim().length > 0;
+}
+
+function isLocator(value: unknown): value is string {
+	return typeof value === "string"
+		&& Array.from(value).length <= MAX_DOCUMENT_LOCATOR_LENGTH
 		&& value.trim().length > 0;
 }
 
@@ -577,10 +587,10 @@ export function handler<Caller>(
 						: respond(text({ documents }));
 				}
 				if (tool.name === "read_document") {
-					if (Object.keys(tool.arguments).length !== 1 || !isId(tool.arguments.id)) {
+					if (Object.keys(tool.arguments).length !== 1 || !isLocator(tool.arguments.id)) {
 						return notification
 							? undefined
-							: error(call.id, -32602, "read_document requires an id");
+							: error(call.id, -32602, "read_document requires an id or URL");
 					}
 					let document = await options.documents.read(caller, tool.arguments.id);
 					return document ? respond(text(document)) : respond({ content: [], isError: true });
@@ -621,10 +631,10 @@ export function handler<Caller>(
 					return respond(text({ code }, true));
 				}
 				if (tool.name === "read_implementation") {
-					if (Object.keys(tool.arguments).length !== 1 || !isId(tool.arguments.id)) {
+					if (Object.keys(tool.arguments).length !== 1 || !isLocator(tool.arguments.id)) {
 						return notification
 							? undefined
-							: error(call.id, -32602, "read_implementation requires an id");
+							: error(call.id, -32602, "read_implementation requires an id or URL");
 					}
 					if (!options.implementations) {
 						return respond(text({ code: "implementation-unavailable" }, true));

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
+import { documentPath, documentsPath, parseDocumentPath } from "@chopin/protocol/document-url";
 
 import * as Api from "./api";
-import { readChannelRecovery, rememberChannel } from "./channel-recovery";
+import { readChannelRecovery, readDocumentRecovery, rememberChannel } from "./channel-recovery";
 import { DocumentRename } from "./document-rename";
 import { RepositoryPicker } from "./repository-picker";
 import { clearRepositoryCache } from "./repository-cache";
@@ -12,6 +13,7 @@ export type HostedWorkspaceProps = {
 	room: string;
 	handle: string;
 	label: string;
+	slug: string;
 	updatedAt: string;
 	repository: Api.Repository;
 	canEdit: boolean;
@@ -22,6 +24,7 @@ export type HostedWorkspaceProps = {
 export type HostedRoute =
 	| { page: "repositories" }
 	| { page: "repository"; owner: string; repository: string }
+	| { page: "document"; owner: string; repository: string; slug: string }
 	| { page: "channel"; id: string }
 	| { page: "missing" };
 
@@ -35,6 +38,16 @@ function decoded(value: string): string | undefined {
 
 export function hostedRoute(pathname: string): HostedRoute {
 	if (pathname === "/" || pathname === "") return { page: "repositories" };
+	let document = parseDocumentPath(pathname);
+	if (document?.slug) {
+		return {
+			page: "document",
+			owner: document.owner,
+			repository: document.repository,
+			slug: document.slug,
+		};
+	}
+	if (document) return { page: "repository", ...document };
 	let repository = /^\/repositories\/([^/]+)\/([^/]+)\/?$/.exec(pathname);
 	if (repository) {
 		let owner = decoded(repository[1]!);
@@ -107,9 +120,12 @@ function Loading({ label = "Loading" }: { label?: string }) {
 }
 
 function repositoryHref(repository: { owner: string; name: string }): string {
-	return `/repositories/${encodeURIComponent(repository.owner)}/${
-		encodeURIComponent(repository.name)
-	}`;
+	return documentsPath(repository.owner, repository.name);
+}
+
+function canonicalize(pathname: string): void {
+	if (location.pathname === pathname) return;
+	history.replaceState(null, "", `${pathname}${location.search}${location.hash}`);
 }
 
 function Failure(
@@ -119,7 +135,7 @@ function Failure(
 		onRetry,
 		repository,
 	}: {
-		channel?: { id: string; title?: string };
+		channel?: { title?: string; slug?: string };
 		error: unknown;
 		onRetry?: () => void;
 		repository?: Pick<Api.Repository, "owner" | "name" | "fullName">;
@@ -134,7 +150,9 @@ function Failure(
 				{channel && (
 					<div className="mt-4 min-w-0">
 						{channel.title && <p className="break-words text-sm font-medium">{channel.title}</p>}
-						<p className="mt-1 break-all text-sm text-text-tertiary">{channel.id}</p>
+						{channel.slug && (
+							<p className="mt-1 break-all text-sm text-text-tertiary">{channel.slug}</p>
+						)}
 						{repository && (
 							<p className="mt-2 break-words text-sm text-text-secondary">
 								{repository.fullName}
@@ -164,6 +182,7 @@ function Failure(
 }
 
 export function HostedLogin() {
+	let href = githubLoginHref(location.pathname, location.search, location.hash);
 	return (
 		<div className="grid h-full bg-ground lg:grid-cols-[1.15fr_0.85fr]" data-hosted="">
 			<section className="flex items-end bg-text-primary p-6 text-page sm:p-10 lg:p-16">
@@ -184,13 +203,18 @@ export function HostedLogin() {
 					<p className="mt-2 text-sm text-text-secondary">
 						Sign in with GitHub to choose a repository and its planning channels.
 					</p>
-					<a className="btn btn-md btn-primary mt-6 w-full" href="/auth/github">
+					<a className="btn btn-md btn-primary mt-6 w-full" href={href}>
 						Continue with GitHub
 					</a>
 				</div>
 			</section>
 		</div>
 	);
+}
+
+export function githubLoginHref(pathname: string, search = "", hash = ""): string {
+	let parameters = new URLSearchParams({ return_to: `${pathname}${search}${hash}` });
+	return `/auth/github?${parameters}`;
 }
 
 function RepositoryHome({ user }: { user: Api.User }) {
@@ -216,9 +240,16 @@ function RepositoryChannels(
 	let [renaming, setRenaming] = useState<string>();
 
 	useEffect(() => {
+		canonicalize(documentsPath(owner, repository));
+	}, [owner, repository]);
+
+	useEffect(() => {
 		let active = true;
 		Api.channels(owner, repository).then(value => {
-			if (active) setPage(value);
+			if (active) {
+				canonicalize(documentsPath(value.repository.owner, value.repository.name));
+				setPage(value);
+			}
 		}, reason => {
 			if (active) setError(reason);
 		});
@@ -234,7 +265,11 @@ function RepositoryChannels(
 		try {
 			let result = await Api.createChannel(owner, repository, title.trim());
 			rememberChannel(user.id, result.channel, result.repository);
-			location.assign(`/channels/${result.channel.id}`);
+			location.assign(documentPath(
+				result.repository.owner,
+				result.repository.name,
+				result.channel.slug,
+			));
 		} catch (reason) {
 			setError(reason);
 			setCreating(false);
@@ -363,7 +398,11 @@ function RepositoryChannels(
 												>
 													<a
 														className="flex min-w-0 flex-1 flex-col items-start justify-between gap-1 px-4 py-4 sm:flex-row sm:items-center sm:gap-4 sm:px-5"
-														href={`/channels/${channel.id}`}
+														href={documentPath(
+															page.repository.owner,
+															page.repository.name,
+															channel.slug,
+														)}
 														onClick={() => rememberChannel(user.id, channel, page.repository)}
 													>
 														<span className="min-w-0 break-words text-sm font-medium">
@@ -408,9 +447,12 @@ function RepositoryChannels(
 }
 
 function ChannelWorkspace(
-	{ agent, id, user }: {
+	{ agent, id, owner, repository, slug, user }: {
 		agent: boolean;
-		id: string;
+		id?: string;
+		owner?: string;
+		repository?: string;
+		slug?: string;
 		user: Api.User;
 	},
 ) {
@@ -420,15 +462,29 @@ function ChannelWorkspace(
 	}>();
 	let [error, setError] = useState<unknown>();
 	let [retry, setRetry] = useState(0);
-	let recovery = readChannelRecovery(user.id, id);
+	let recovery = id
+		? readChannelRecovery(user.id, id)
+		: owner && repository && slug
+		? readDocumentRecovery(user.id, owner, repository, slug)
+		: undefined;
 
 	useEffect(() => {
 		let active = true;
-		let detail = Api.channel(id).then(value => {
-			if (active) rememberChannel(user.id, value.channel, value.repository);
+		let detail = id
+			? Api.channel(id)
+			: Api.document(owner!, repository!, slug!);
+		let prepared = detail.then(value => {
+			if (active) {
+				canonicalize(documentPath(
+					value.repository.owner,
+					value.repository.name,
+					value.channel.slug,
+				));
+				rememberChannel(user.id, value.channel, value.repository);
+			}
 			return value;
 		});
-		Promise.all([detail, import("./room-workspace")]).then(([detail, module]) => {
+		Promise.all([prepared, import("./room-workspace")]).then(([detail, module]) => {
 			if (active) setLoaded({ detail, Workspace: module.RoomWorkspace });
 		}, reason => {
 			if (active) setError(reason);
@@ -436,11 +492,14 @@ function ChannelWorkspace(
 		return () => {
 			active = false;
 		};
-	}, [id, retry]);
+	}, [id, owner, repository, retry, slug, user.id]);
 	if (error) {
+		let requestedRepository = owner && repository
+			? { owner, name: repository, fullName: `${owner}/${repository}` }
+			: undefined;
 		return (
 			<Failure
-				channel={recovery?.channel ?? { id }}
+				channel={recovery?.channel ?? (slug ? { slug } : undefined)}
 				error={error}
 				onRetry={retryableChannelFailure(error)
 					? () => {
@@ -448,7 +507,7 @@ function ChannelWorkspace(
 						setRetry(value => value + 1);
 					}
 					: undefined}
-				repository={recovery?.repository}
+				repository={recovery?.repository ?? requestedRepository}
 			/>
 		);
 	}
@@ -460,6 +519,7 @@ function ChannelWorkspace(
 			canEdit={detail.canEdit}
 			handle={user.login}
 			label={detail.channel.title}
+			slug={detail.channel.slug}
 			updatedAt={detail.channel.updatedAt}
 			repository={detail.repository}
 			room={detail.channel.id}
@@ -477,6 +537,16 @@ export function HostedApp(
 			return <RepositoryHome user={user} />;
 		case "repository":
 			return <RepositoryChannels owner={route.owner} repository={route.repository} user={user} />;
+		case "document":
+			return (
+				<ChannelWorkspace
+					agent={agent}
+					owner={route.owner}
+					repository={route.repository}
+					slug={route.slug}
+					user={user}
+				/>
+			);
 		case "channel":
 			return <ChannelWorkspace agent={agent} id={route.id} user={user} />;
 		case "missing":

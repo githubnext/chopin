@@ -64,12 +64,14 @@ storage commit revision described in [Architecture](architecture.md).
 1. The team settles the plan and resolves its questions and comments.
 2. The hosted Planner reads the latest plan and drafts a dependency graph.
 3. A person reviews and approves that exact graph and plan revision.
-4. A coding agent calls `read_implementation` from the document's repository.
+4. A coding agent passes the canonical document URL, or its UUID, to
+   `read_implementation` from the document's repository.
 5. The agent verifies the repository, branch, and commit returned by Chopin
    against its checkout. The service does not inspect the checkout or resolve
    the original branch and commit against GitHub.
-6. `start_implementation` atomically claims the approved graph and creates one
-   run ID.
+6. The agent uses the returned document UUID and revisions with
+   `start_implementation`, which atomically claims the approved graph and creates
+   one run ID.
 7. The agent works only on dependency-ready tasks and reports their lifecycle.
 8. Every task receives one reported pull request and completion summary.
 9. An independent whole-graph review submits verification evidence for every
@@ -88,7 +90,7 @@ experimental.
 
 | Tool                   | Purpose                                                                                   |
 | ---------------------- | ----------------------------------------------------------------------------------------- |
-| `read_implementation`  | Read the approved graph, canonical plan, repository context, and current revisions.       |
+| `read_implementation`  | Read the approved graph, plan, and repository context by UUID or canonical URL.           |
 | `start_implementation` | Claim that exact graph while reporting the coding agent's repository, branch, and commit. |
 | `start_task`           | Move one dependency-ready task to in progress.                                            |
 | `block_task`           | Record a task blocker without releasing the graph lock.                                   |
@@ -100,6 +102,11 @@ experimental.
 Every post-claim lifecycle report carries a caller-generated idempotency key.
 `start_implementation` does not; the service creates a fresh run ID when it
 accepts the claim. Accepted transitions persist before publication.
+
+The readable URL is a locator for `read_implementation`; it is not a lifecycle
+identity. `read_implementation` returns the stable UUID as `document.id`, and
+`start_implementation` plus every task, pull-request, blocker, revision, and
+verification call continues using that UUID.
 
 ## Lock behavior
 

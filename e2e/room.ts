@@ -2,7 +2,13 @@
 
 import { expect, test as base } from "@playwright/test";
 
-import { createChannel, readSource, seedChannel, seedLegacyCalloutChannel } from "./database";
+import {
+	createChannel,
+	readSource,
+	seedChannel,
+	seedLegacyCalloutChannel,
+	testChannelPath,
+} from "./database";
 
 import type { SeedState } from "../apps/server/src/testing/plan";
 import type { Browser, BrowserContext, BrowserContextOptions, Page } from "@playwright/test";
@@ -11,8 +17,15 @@ function port(url: string): number {
 	return Number(new URL(url).port);
 }
 
-export async function authenticate(page: Page, handle: string, baseURL: string): Promise<void> {
-	let started = await fetch(`${baseURL}/auth/github`, { redirect: "manual" });
+export async function authenticate(
+	page: Page,
+	handle: string,
+	baseURL: string,
+	returnTo?: string,
+): Promise<string> {
+	let login = new URL("/auth/github", baseURL);
+	if (returnTo) login.searchParams.set("return_to", returnTo);
+	let started = await fetch(login, { redirect: "manual" });
 	expect(started.status).toBe(302);
 	let authorization = new URL(started.headers.get("location")!);
 	let state = authorization.searchParams.get("state");
@@ -31,6 +44,7 @@ export async function authenticate(page: Page, handle: string, baseURL: string):
 	expect(session).toBeTruthy();
 	let [name, value] = session!.split(";", 1)[0]!.split("=", 2);
 	await page.context().addCookies([{ name: name!, value: value!, url: baseURL }]);
+	return callback.headers.get("location")!;
 }
 
 /** Open a room in a context that needs setup before navigation. */
@@ -47,7 +61,7 @@ export async function openIsolatedRoom(
 		await beforeNavigation?.(context);
 		let page = await context.newPage();
 		await authenticate(page, handle, baseURL);
-		await page.goto(`/channels/${room}`);
+		await page.goto(testChannelPath(room));
 		await ready(page);
 		return { close: () => context.close(), context, page };
 	} catch (error) {
@@ -89,7 +103,7 @@ export const test = base.extend<Fixtures>({
 				target = await isolated.newPage();
 			}
 			await authenticate(target, handle, baseURL!);
-			await target.goto(`/channels/${room}`);
+			await target.goto(testChannelPath(room));
 			await ready(target);
 			return target;
 		});
@@ -107,6 +121,7 @@ export const test = base.extend<Fixtures>({
 });
 
 export { expect };
+export { testChannelPath as roomPath } from "./database";
 
 /** The editable surface. */
 export function content(page: Page) {
