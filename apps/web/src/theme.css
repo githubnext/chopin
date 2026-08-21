@@ -417,7 +417,7 @@ body {
 
 @media (min-width: 640px) {
 	.room-header {
-		height: calc(3rem + env(safe-area-inset-top));
+		height: calc(3.25rem + env(safe-area-inset-top));
 		padding-right: calc(1rem + env(safe-area-inset-right));
 		padding-left: calc(1rem + env(safe-area-inset-left));
 		padding-top: env(safe-area-inset-top);
