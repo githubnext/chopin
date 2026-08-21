@@ -38,9 +38,14 @@ export type FaceProps = {
 	ring?: "ground" | "page";
 };
 
+export const FACE_RING_CLASS = {
+	ground: "ring-2 ring-ground",
+	page: "ring-2 ring-page",
+} as const;
+
 export function Face({ handle, ring, size = 20 }: FaceProps) {
 	let [failed, setFailed] = useState(false);
-	let edge = `shrink-0 rounded-md ${ring ? `ring-2 ring-${ring}` : ""}`;
+	let edge = `shrink-0 rounded-md ${ring ? FACE_RING_CLASS[ring] : ""}`;
 	let box = { width: size, height: size };
 
 	if (failed) {

@@ -22,6 +22,13 @@ import type {
 
 export type Pane = "chat";
 
+const CHAT_PANE = {
+	initial: 304,
+	max: 400,
+	min: 304,
+	storageKey: "chopin:pane:chat",
+};
+
 export function paneId(pane: Pane): string {
 	return `pane-${pane}`;
 }
@@ -184,13 +191,7 @@ export function Workspace(
 		view,
 	}: WorkspaceProps,
 ) {
-	let [chatWidth, resizeChat] = usePaneWidth({
-		active: mode === "split",
-		initial: 304,
-		max: 400,
-		min: 304,
-		storageKey: "chopin:pane:chat",
-	});
+	let [chatWidth, resizeChat] = usePaneWidth({ active: mode === "split", ...CHAT_PANE });
 	let presentation = presentWorkspace(state, mode, view);
 	let opener = useRef<HTMLElement | undefined>(undefined);
 	let edgeTab = useRef<HTMLButtonElement>(null);
@@ -277,8 +278,8 @@ export function Workspace(
 									{presentation.separatorVisible && (
 										<ResizeHandle
 											label="Resize the conversation"
-											max={400}
-											min={304}
+											max={CHAT_PANE.max}
+											min={CHAT_PANE.min}
 											onResize={resizeChat}
 											side="left"
 											width={chatWidth}
