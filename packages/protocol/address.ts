@@ -12,17 +12,17 @@
  */
 
 /** How the agent is summoned. */
-export const MENTION = "@ai";
+export const MENTION = "@chopin";
 
 /**
  * Word-boundary match, so an address in prose does not count.
  *
- * The leading guard rejects a longer token — `hi@ai.dev` is an address, not a
- * summons — and the trailing boundary rejects `@aiden`. `@plan` was the
+ * The leading guard rejects a longer token — `hi@chopin.dev` is an address, not
+ * a summons — and the trailing boundary rejects `@chopina`. `@plan` was the
  * obvious alternative and is hopeless: it is the most common noun in the
  * product, and "rewrite the plan section" would start a turn every time.
  */
-const ADDRESSED = /(^|[^\w@])@ai\b/i;
+const ADDRESSED = /(^|[^\w@])@chopin\b/i;
 
 export function addressed(text: string): boolean {
 	return ADDRESSED.test(text);
@@ -36,7 +36,7 @@ export function addressed(text: string): boolean {
  */
 export function instruction(text: string): string {
 	return text
-		.replace(/(^|[^\w@])@ai\b/gi, "$1")
+		.replace(/(^|[^\w@])@chopin\b/gi, "$1")
 		// Removing a word from the middle of a sentence leaves the gap it sat
 		// in, and a prompt should not carry the shape of what was taken out.
 		.replace(/[^\S\n]{2,}/g, " ")
