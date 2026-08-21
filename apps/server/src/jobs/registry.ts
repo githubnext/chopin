@@ -15,6 +15,7 @@ export type JobExecutionCredential =
 		readonly ownerGeneration: number;
 		readonly credentialRevision: number;
 		readonly expiresAt: Date;
+		readonly signal?: AbortSignal;
 		readonly authorize: () => Promise<boolean>;
 	};
 

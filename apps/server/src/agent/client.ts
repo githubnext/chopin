@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { locate } from "./cli";
-import { gate, terminalGate } from "./permissions";
+import { gate, publicResearchGate, terminalGate } from "./permissions";
 import { NAME, plannerFor, TOOLS } from "./planner";
 import { Runtime } from "./runtime";
 
@@ -157,6 +157,48 @@ export function workerConfiguration(
 	} as SessionConfig;
 }
 
+export function publicResearchConfiguration(
+	config: Pick<Config, "model">,
+	options: WorkerSession,
+): SessionConfig {
+	if (!Number.isFinite(options.maxAiCredits) || options.maxAiCredits <= 0) {
+		throw new Error("Background worker maxAiCredits must be finite and positive.");
+	}
+	let result = { ...options.result, skipPermission: false, isTerminal: true };
+	let worker: CustomAgentConfig = {
+		name: options.name,
+		displayName: "Public research worker",
+		description: "Researches public web evidence without private Chopin or repository context.",
+		prompt: options.prompt,
+		infer: false,
+	};
+	return {
+		...hardened(config, options.token),
+		streaming: false,
+		sessionLimits: { maxAiCredits: options.maxAiCredits },
+		availableTools: [
+			`custom:${result.name}`,
+			"mcp:github-web_search",
+		],
+		tools: [result],
+		customAgents: [worker],
+		agent: worker.name,
+		mcpServers: {
+			github: {
+				type: "http",
+				url: "https://api.githubcopilot.com/mcp/",
+				tools: ["web_search"],
+				headers: {
+					Authorization: `Bearer ${options.token}`,
+					"X-MCP-Readonly": "true",
+					"X-MCP-Tools": "web_search",
+				},
+			},
+		},
+		onPermissionRequest: publicResearchGate(result.name, options.authorize),
+	} as SessionConfig;
+}
+
 function connect() {
 	let cli = locate();
 	if (!cli.ok) throw new Error(cli.reason);
@@ -222,11 +264,13 @@ async function audit(session: CopilotSession): Promise<void> {
 	}
 }
 
-export function assertWorkerTools(names: string[], expected: string): void {
-	let matches = names.length === 1 && names[0] === `custom:${expected}`;
+export function assertWorkerTools(names: string[], expected: string | string[]): void {
+	let wanted = (typeof expected === "string" ? [`custom:${expected}`] : expected).toSorted();
+	let matches = names.length === wanted.length
+		&& names.every((name, index) => name === wanted[index]);
 	if (!matches) {
 		throw new Error(
-			`Background worker capability audit failed: expected custom:${expected}, received ${
+			`Background worker capability audit failed: expected ${wanted.join(", ")}, received ${
 				names.length > 0 ? names.join(", ") : "none"
 			}.`,
 		);
@@ -238,6 +282,16 @@ async function auditWorker(session: CopilotSession, expected: string): Promise<v
 	let { tools } = await session.rpc.tools.getCurrentMetadata();
 	let names = tools?.map(tool => tool.namespacedName || `unqualified:${tool.name}`).sort() ?? [];
 	assertWorkerTools(names, expected);
+}
+
+async function auditPublicResearchWorker(session: CopilotSession, expected: string): Promise<void> {
+	await session.rpc.tools.initializeAndValidate();
+	let { tools } = await session.rpc.tools.getCurrentMetadata();
+	let names = tools?.map(tool => tool.namespacedName || `unqualified:${tool.name}`).sort() ?? [];
+	assertWorkerTools(names, [
+		`custom:${expected}`,
+		"mcp:github-web_search",
+	]);
 }
 
 /** Create a disposable session authenticated and scoped to one owner and repository. */
@@ -268,6 +322,23 @@ export async function openWorker(
 	try {
 		await session.rpc.agent.select({ name: options.name });
 		await auditWorker(session, options.result.name);
+		return { session, id: session.sessionId };
+	} catch (err) {
+		await runtime.discard(session).catch(() => {});
+		throw err;
+	}
+}
+
+/** Create a public-web worker with no private document or repository capabilities. */
+export async function openPublicResearchWorker(
+	config: Pick<Config, "agent" | "model">,
+	options: WorkerSession,
+): Promise<Agent> {
+	if (!config.agent) throw new Error("The hosted agent is disabled.");
+	let session = await runtime.open(publicResearchConfiguration(config, options));
+	try {
+		await session.rpc.agent.select({ name: options.name });
+		await auditPublicResearchWorker(session, options.result.name);
 		return { session, id: session.sessionId };
 	} catch (err) {
 		await runtime.discard(session).catch(() => {});
