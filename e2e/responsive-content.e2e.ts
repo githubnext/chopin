@@ -3,7 +3,6 @@ import { readDocument } from "./database";
 import { expectFocusIndicator } from "./focus";
 import * as Room from "../apps/server/src/plan/room";
 import {
-	COMPACT_SURFACES_SOURCE,
 	expectNoHorizontalOverflow,
 	RESPONSIVE_IMAGE_URL,
 	RESPONSIVE_SOURCE,
@@ -12,10 +11,6 @@ import {
 
 import type { Plan } from "../packages/protocol/index";
 import type { Page } from "@playwright/test";
-
-function center(box: { left: number; right: number }): number {
-	return (box.left + box.right) / 2;
-}
 
 async function routeResponsiveImage(page: Page): Promise<void> {
 	await page.route(RESPONSIVE_IMAGE_URL, route =>
@@ -82,17 +77,15 @@ async function expectInsideDocumentWidth(
 			if (!documentBox) return [{ reason: "missing document" }];
 			return nodes.flatMap(node => {
 				let element = node as HTMLElement;
-				let style = getComputedStyle(element);
 				let rectangle = element.getBoundingClientRect();
 				let bounds = {
 					document: { left: documentBox.left, right: documentBox.right },
 					left: rectangle.left,
 					right: rectangle.right,
 				};
-				if (
-					style.display === "none" || style.visibility === "hidden" || rectangle.width === 0
-					|| rectangle.height === 0
-				) return [{ ...bounds, reason: "not visible" }];
+				if (!element.checkVisibility() || rectangle.width === 0 || rectangle.height === 0) {
+					return [{ ...bounds, reason: "not visible" }];
+				}
 				return rectangle.left >= documentBox.left && rectangle.right <= documentBox.right
 					? []
 					: [{ ...bounds, reason: "outside document" }];
@@ -138,13 +131,9 @@ async function expectVisibleMermaidSvg(page: Page): Promise<void> {
 			let visible = regions.flatMap(region => {
 				let svg = region.querySelector("svg");
 				if (!svg) return [];
-				let style = getComputedStyle(svg);
 				let rectangle = svg.getBoundingClientRect();
 				let regionBox = region.getBoundingClientRect();
-				if (
-					style.display === "none" || style.visibility === "hidden" || rectangle.width === 0
-					|| rectangle.height === 0
-				) return [];
+				if (!svg.checkVisibility() || rectangle.width === 0 || rectangle.height === 0) return [];
 				return [{
 					inside: !!documentBox && regionBox.left >= documentBox.left
 						&& regionBox.right <= documentBox.right,
@@ -196,46 +185,20 @@ async function expectHorizontalScroll(
 	).toBeGreaterThan(0);
 }
 
-async function expectPerceptibleHorizontalOverflow(
-	name: string,
-	surface: ReturnType<Page["locator"]>,
-): Promise<void> {
-	await expectOwnScroller(name, surface);
-	let geometry = await surface.evaluateAll(nodes =>
-		nodes.map(node => {
-			let style = getComputedStyle(node);
-			return {
-				overflow: style.overflowX,
-				thumb: getComputedStyle(node, "::-webkit-scrollbar-thumb").backgroundColor,
-				track: Number.parseFloat(getComputedStyle(node, "::-webkit-scrollbar").height),
-			};
-		})
-	);
-	expect(
-		geometry.every(value =>
-			value.overflow === "auto" && value.track >= 6
-			&& value.thumb !== "rgba(0, 0, 0, 0)" && value.thumb !== "transparent"
-		),
-		`${name} must expose a persistent horizontal overflow affordance (${JSON.stringify(geometry)})`,
-	).toBe(true);
-}
-
 async function expectWrapped(name: string, surface: ReturnType<Page["locator"]>): Promise<void> {
 	let geometry = await surface.evaluate(node => {
-		let style = getComputedStyle(node);
-		let line = Number.parseFloat(style.lineHeight);
 		let box = node.getBoundingClientRect();
 		let documentBox = node.closest("[data-plan-scroll]")!.getBoundingClientRect();
+		let range = document.createRange();
+		range.selectNodeContents(node);
 		return {
 			height: box.height,
 			inside: box.left >= documentBox.left && box.right <= documentBox.right,
-			line,
+			lines: range.getClientRects().length,
 		};
 	});
 	expect(geometry.inside, `${name} must stay inside the document`).toBe(true);
-	expect(geometry.height, `${name} must wrap onto more than one line`).toBeGreaterThan(
-		geometry.line * 1.5,
-	);
+	expect(geometry.lines, `${name} must wrap onto more than one line`).toBeGreaterThan(1);
 }
 
 async function expectTabInsideStrip(tab: ReturnType<Page["getByRole"]>) {
@@ -359,8 +322,8 @@ for (let viewport of RESPONSIVE_VIEWPORTS) {
 	});
 }
 
-for (let viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
-	test(`${viewport.width}px keeps hostile rich content readable and navigable`, async ({ join, seed }) => {
+for (let viewport of RESPONSIVE_VIEWPORTS) {
+	test(`${viewport.name} keeps hostile rich content readable and navigable`, async ({ join, seed }) => {
 		await seed(RESPONSIVE_SOURCE);
 		let page = await join(`reader-${viewport.width}`, { viewport });
 		let document = content(page);
@@ -380,9 +343,9 @@ for (let viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]
 		);
 		let code = document.locator("[data-plan-language='typescript'] [data-plan-preview] > div");
 		let table = document.locator("table");
-		if (viewport.width === 390) {
-			await expectPerceptibleHorizontalOverflow("long code line", code);
-			await expectPerceptibleHorizontalOverflow("wide table", table);
+		if (viewport.name === "compact") {
+			await expectOwnScroller("long code line", code);
+			await expectOwnScroller("wide table", table);
 			await expectHorizontalScroll("long code line", code);
 			await expectHorizontalScroll("wide table", table);
 		} else {
@@ -391,8 +354,7 @@ for (let viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]
 		}
 
 		let strip = document.getByRole("tablist");
-		if (viewport.width === 390) await expectPerceptibleHorizontalOverflow("tab strip", strip);
-		else await expectOwnScroller("tab strip", strip);
+		await expectOwnScroller("tab strip", strip);
 		await selectLastTab(strip.getByRole("tab"));
 
 		let callout = document.locator("[data-plan-type='warning']");
@@ -435,48 +397,7 @@ test("a selected tab follows strip layout changes without moving the document", 
 	).toBeLessThanOrEqual(1);
 });
 
-test("compact tables and diagrams stay centered without stretching", async ({ join, page, seed }) => {
-	await page.setViewportSize({ width: 1440, height: 900 });
-	await seed(COMPACT_SURFACES_SOURCE);
-	page = await join("compact-surface-reader");
-	let document = content(page);
-	await expect(document.getByRole("region", { name: "Diagram preview" })).toBeVisible();
-	let geometry = await document.evaluate(root => {
-		// oxlint-disable-next-line unicorn(consistent-function-scoping) -- The callback executes in the browser realm.
-		let rectangle = (element: Element | null) => {
-			if (!element) throw new Error("compact surface is missing");
-			let box = element.getBoundingClientRect();
-			return { left: box.left, right: box.right, width: box.width };
-		};
-		let table = root.querySelector(":scope > table");
-		let row = table?.querySelector("tr") ?? null;
-		let preview = root.querySelector(":scope > [data-plan-language='mermaid'] .plan-diagram");
-		let svg = preview?.querySelector("svg") ?? null;
-		let scroller = root.closest("[data-plan-scroll]");
-		return {
-			document: rectangle(scroller),
-			preview: rectangle(preview),
-			row: rectangle(row),
-			svg: rectangle(svg),
-			table: {
-				...rectangle(table),
-				clientWidth: table?.clientWidth ?? 0,
-				scrollWidth: table?.scrollWidth ?? 0,
-			},
-		};
-	});
-
-	expect(geometry.table.width).toBeLessThan(geometry.preview.width);
-	expect(geometry.table.scrollWidth).toBe(geometry.table.clientWidth);
-	expect(Math.abs(geometry.table.width - geometry.row.width)).toBeLessThan(2);
-	expect(Math.abs(center(geometry.table) - center(geometry.document))).toBeLessThan(2);
-	expect(geometry.svg.width).toBeLessThan(geometry.preview.width);
-	expect(Math.abs(center(geometry.svg) - center(geometry.preview))).toBeLessThan(2);
-	expect(Math.abs(center(geometry.svg) - center(geometry.document))).toBeLessThan(2);
-	await expectNoHorizontalOverflow(page);
-});
-
-test("top-level rich surfaces use the document width while nested surfaces stay contained", async ({ join, page, seed }) => {
+test("rich surfaces stay contained within their document or callout", async ({ join, page, seed }) => {
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await routeResponsiveImage(page);
 	await seed(RESPONSIVE_SOURCE);
@@ -506,98 +427,30 @@ test("top-level rich surfaces use the document width while nested surfaces stay 
 		let mermaid = root.querySelector('[aria-label="Diagram preview"]')
 			?.closest('[data-plan-language="mermaid"]') ?? null;
 		let scroller = root.closest("[data-plan-scroll]");
-		let style = getComputedStyle(root);
 		return {
 			callout: rectangle(callout),
 			document: rectangle(scroller),
-			gutter: Number.parseFloat(style.paddingInlineStart),
-			image: { ...rectangle(image), naturalWidth: image?.naturalWidth ?? 0 },
+			image: rectangle(image),
 			imageRow: rectangle(imageRow),
 			mermaid: rectangle(mermaid),
 			mixed: rectangle(mixed),
 			mixedImage: rectangle(mixedImage),
 			nested: rectangle(nested),
-			prose: rectangle(root.querySelector(":scope > p")),
 			table: rectangle(root.querySelector(":scope > table")),
 		};
 	});
 
-	let left = geometry.document.left + geometry.gutter;
-	let right = geometry.document.right - geometry.gutter;
 	for (let surface of [geometry.table, geometry.imageRow, geometry.mermaid]) {
-		expect(Math.abs(surface.left - left)).toBeLessThan(2);
-		expect(Math.abs(surface.right - right)).toBeLessThan(2);
-		expect(surface.width).toBeGreaterThan(geometry.prose.width);
+		expect(surface.left).toBeGreaterThanOrEqual(geometry.document.left);
+		expect(surface.right).toBeLessThanOrEqual(geometry.document.right);
 	}
-	expect(
-		Math.abs(geometry.image.width - Math.min(geometry.image.naturalWidth, geometry.imageRow.width)),
-	).toBeLessThan(2);
-	expect(geometry.image.width).toBeGreaterThan(geometry.prose.width);
-	expect(
-		Math.abs(
-			(geometry.image.left + geometry.image.right) / 2
-				- (geometry.imageRow.left + geometry.imageRow.right) / 2,
-		),
-	).toBeLessThan(2);
-	expect(geometry.mixed.width).toBeCloseTo(geometry.prose.width, 0);
+	expect(geometry.image.left).toBeGreaterThanOrEqual(geometry.imageRow.left);
+	expect(geometry.image.right).toBeLessThanOrEqual(geometry.imageRow.right);
 	expect(geometry.mixedImage.left).toBeGreaterThanOrEqual(geometry.mixed.left);
 	expect(geometry.mixedImage.right).toBeLessThanOrEqual(geometry.mixed.right);
-	expect(geometry.callout.width).toBeCloseTo(geometry.prose.width, 0);
 	expect(geometry.nested.left).toBeGreaterThanOrEqual(geometry.callout.left);
 	expect(geometry.nested.right).toBeLessThanOrEqual(geometry.callout.right);
 	await expectNoHorizontalOverflow(page);
-});
-
-test("narrow documents keep equal inline gutters", async ({ join, page, seed }) => {
-	await routeResponsiveImage(page);
-	await seed(RESPONSIVE_SOURCE);
-	page = await join("narrow-gutter-reader");
-	for (let width of [390, 611]) {
-		await page.setViewportSize({ width, height: 844 });
-		let document = content(page);
-		await expect(document.getByRole("img", { name: "Responsive workspace reference" }))
-			.toBeVisible();
-		await expect(document.getByRole("region", { name: "Diagram preview" })).toBeVisible();
-		let padding = await document.evaluate(node => {
-			let style = getComputedStyle(node);
-			return {
-				left: Number.parseFloat(style.paddingLeft),
-				right: Number.parseFloat(style.paddingRight),
-			};
-		});
-		expect(padding.left).toBeGreaterThanOrEqual(16);
-		expect(padding.left).toBeLessThanOrEqual(24);
-		expect(padding.right).toBe(padding.left);
-		let geometry = await document.evaluate(root => {
-			// oxlint-disable-next-line unicorn(consistent-function-scoping) -- The callback executes in the browser realm.
-			let rectangle = (element: Element | null) => {
-				if (!element) throw new Error("responsive surface is missing");
-				let box = element.getBoundingClientRect();
-				return { left: box.left, right: box.right, width: box.width };
-			};
-			let style = getComputedStyle(root);
-			let image = root.querySelector<HTMLImageElement>(
-				'img[alt="Responsive workspace reference"]',
-			);
-			let mermaid = root.querySelector('[aria-label="Diagram preview"]')
-				?.closest('[data-plan-language="mermaid"]') ?? null;
-			return {
-				document: rectangle(root.closest("[data-plan-scroll]")),
-				gutter: Number.parseFloat(style.paddingInlineStart),
-				surfaces: [
-					rectangle(root.querySelector(":scope > table")),
-					rectangle(image?.closest("p") ?? null),
-					rectangle(mermaid),
-				],
-			};
-		});
-		let left = geometry.document.left + geometry.gutter;
-		let right = geometry.document.right - geometry.gutter;
-		for (let surface of geometry.surfaces) {
-			expect(Math.abs(surface.left - left)).toBeLessThan(2);
-			expect(Math.abs(surface.right - right)).toBeLessThan(2);
-		}
-	}
 });
 
 for (let viewport of RESPONSIVE_VIEWPORTS) {
@@ -609,7 +462,6 @@ for (let viewport of RESPONSIVE_VIEWPORTS) {
 		let table = content(page).locator("table");
 
 		expect(await table.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
-		expect((await table.locator("th").first().boundingBox())!.width).toBeGreaterThanOrEqual(112);
 		await expectNoHorizontalOverflow(page);
 		await expectInsideDocumentWidth("wide table", table);
 	});

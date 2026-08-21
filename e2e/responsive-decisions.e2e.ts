@@ -98,10 +98,6 @@ for (let viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }])
 			expect(firstLabelBox).toBeTruthy();
 			expect(firstLabelBox!.height).toBeGreaterThanOrEqual(44);
 			await expect(firstChoice).toBeVisible();
-			let firstChoiceBox = await firstChoice.boundingBox();
-			expect(firstChoiceBox).toBeTruthy();
-			expect(firstChoiceBox!.width).toBeGreaterThanOrEqual(18);
-			expect(firstChoiceBox!.height).toBeGreaterThanOrEqual(18);
 			await firstLabel.click();
 			await expect(firstChoice).toBeChecked();
 

@@ -83,8 +83,8 @@ test("a peer's caret is drawn, and named", async ({ join }) => {
 
 	// A person's caret is one of several and its owner is watching it, so the
 	// name is what tells everyone else whose it is.
-	await expect(ana.locator(".plan-cursor")).toHaveCount(1);
-	await expect(ana.locator(".plan-cursor-name")).toHaveText("bo");
+	await expect(ana.getByRole("region", { name: "Document" }).getByText("bo", { exact: true }))
+		.toBeVisible();
 });
 
 test("nobody sees their own caret twice", async ({ join }) => {
@@ -96,5 +96,6 @@ test("nobody sees their own caret twice", async ({ join }) => {
 	// Awareness reflects every socket including your own, so a mirror that
 	// fails to exclude the local client paints a second caret exactly where
 	// the real one is — invisible until somebody selects a word.
-	await expect(ana.locator(".plan-cursor")).toHaveCount(0);
+	await expect(ana.getByRole("region", { name: "Document" }).getByText("ana", { exact: true }))
+		.toHaveCount(0);
 });

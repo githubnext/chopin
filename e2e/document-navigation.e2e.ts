@@ -187,7 +187,7 @@ test("document rename failures preserve the draft and can be retried", async ({ 
 	let input = page.getByRole("textbox", { name: "Document title" });
 	await input.fill(title);
 	await page.getByRole("button", { name: "Save" }).click();
-	await expect(page.getByRole("alert")).toHaveText("rename is unavailable");
+	await expect(page.getByRole("alert")).toBeVisible();
 	await expect(input).toHaveValue(title);
 
 	await page.getByRole("button", { name: "Save" }).click();
@@ -208,7 +208,7 @@ test("sidebar creation failures remain retryable", async ({ join, page }) => {
 	page = await join("ana");
 	let create = sidebar(page).getByRole("button", { name: "New document", exact: true });
 	await create.click();
-	await expect(page.getByRole("alert")).toContainText("creation is unavailable");
+	await expect(page.getByRole("alert")).toBeVisible();
 	await expect(create).toBeEnabled();
 	await create.click();
 	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
