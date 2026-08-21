@@ -50,6 +50,18 @@ async function expectSurfaceToFollowEditorScroll(
 	let beforeRange = await page.evaluate(() =>
 		getSelection()!.getRangeAt(0).getBoundingClientRect().top
 	);
+	let beforeSurface = await surface.boundingBox();
+	let beforeSelection = await page.evaluate(() => {
+		let box = getSelection()!.getRangeAt(0).getBoundingClientRect();
+		return { bottom: box.bottom, top: box.top };
+	});
+	expect(beforeSurface).not.toBeNull();
+	let beforeDistance = Math.max(
+		beforeSurface!.y - beforeSelection.bottom,
+		beforeSelection.top - (beforeSurface!.y + beforeSurface!.height),
+	);
+	expect(beforeDistance).toBeGreaterThanOrEqual(0);
+	let beforeAboveSelection = beforeSurface!.y + beforeSurface!.height <= beforeSelection.top;
 	await scroller.evaluate(element => {
 		element.scrollTop += 72;
 	});
@@ -63,16 +75,17 @@ async function expectSurfaceToFollowEditorScroll(
 	await scroller.dispatchEvent("scroll");
 	await expect.poll(async () => {
 		let box = await surface.boundingBox();
-		if (!box) return Infinity;
+		if (!box) return false;
 		let range = await page.evaluate(() => {
 			let box = getSelection()!.getRangeAt(0).getBoundingClientRect();
 			return { bottom: box.bottom, top: box.top };
 		});
-		return Math.min(
-			Math.abs(box.y - range.bottom - 8),
-			Math.abs(range.top - box.y - box.height - 8),
-		);
-	}).toBeLessThan(3);
+		let distance = Math.max(box.y - range.bottom, range.top - (box.y + box.height));
+		let movedWithSelection = beforeAboveSelection
+			? box.y + box.height < beforeSurface!.y + beforeSurface!.height
+			: box.y < beforeSurface!.y;
+		return movedWithSelection && distance >= 0 && distance <= beforeDistance;
+	}).toBe(true);
 	await expectInsideViewport(surface);
 }
 
@@ -287,11 +300,7 @@ test("touch editor menus use reachable targets and stay inside the viewport", as
 		options.map(option => option.getBoundingClientRect().height)
 	);
 	expect(rowHeights.every(height => height >= 44)).toBe(true);
-	let menuBox = await menu.boundingBox();
-	expect(menuBox).not.toBeNull();
-	expect(menuBox!.x).toBeGreaterThanOrEqual(0);
-	expect(menuBox!.x + menuBox!.width).toBeLessThanOrEqual(390);
-	expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(844);
+	await expectInsideViewport(menu);
 
 	await page.keyboard.press("Escape");
 	await content(page).click();
@@ -306,10 +315,7 @@ test("touch editor menus use reachable targets and stay inside the viewport", as
 		})
 	);
 	expect(targets.every(target => target.height >= 44 && target.width >= 44)).toBe(true);
-	let bubbleBox = await bubble.boundingBox();
-	expect(bubbleBox).not.toBeNull();
-	expect(bubbleBox!.x).toBeGreaterThanOrEqual(0);
-	expect(bubbleBox!.x + bubbleBox!.width).toBeLessThanOrEqual(390);
+	await expectInsideViewport(bubble);
 });
 
 test("an open slash menu follows its caret while the editor scrolls", async ({ baseURL, browser, room, seed }) => {

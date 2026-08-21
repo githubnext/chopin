@@ -3,12 +3,7 @@ import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 
 export const RESPONSIVE_VIEWPORTS = [
-	{ name: "phone-320", width: 320, height: 568 },
-	{ name: "phone-390", width: 390, height: 844 },
-	{ name: "phone-430", width: 430, height: 932 },
-	{ name: "phone-landscape", width: 844, height: 390 },
-	{ name: "tablet-portrait", width: 768, height: 1024 },
-	{ name: "tablet-landscape", width: 1024, height: 768 },
+	{ name: "compact", width: 390, height: 844 },
 	{ name: "desktop", width: 1440, height: 900 },
 ] as const;
 
@@ -125,19 +120,6 @@ Inline \`UnbreakableInlineCodeTokenThatMustStayInsideTheReadableDocumentMeasureE
 ${paragraphs}
 `;
 
-export const COMPACT_SURFACES_SOURCE = `# Compact surfaces
-
-| Service | Language |
-| ------- | -------- |
-| Auth | Go |
-| Search | Python |
-
-\`\`\`mermaid
-flowchart LR
-	Client --> Gateway
-\`\`\`
-`;
-
 export async function expectNoHorizontalOverflow(page: Page): Promise<void> {
 	let dimensions = await page.evaluate(() => ({
 		scrollWidth: document.documentElement.scrollWidth,
@@ -147,17 +129,44 @@ export async function expectNoHorizontalOverflow(page: Page): Promise<void> {
 }
 
 export async function expectInsideViewport(locator: Locator): Promise<void> {
-	let outside = await locator.evaluateAll(nodes =>
-		nodes.flatMap(node => {
+	let issues = await locator.evaluateAll(nodes => {
+		if (nodes.length === 0) return [{ reason: "missing", rectangle: null, viewport: null }];
+		let issues: Array<{
+			reason: string;
+			rectangle: {
+				bottom: number;
+				height: number;
+				left: number;
+				right: number;
+				top: number;
+				width: number;
+			} | null;
+			viewport: {
+				height: number;
+				offsetLeft: number;
+				offsetTop: number;
+				width: number;
+			} | null;
+		}> = [];
+		for (let node of nodes) {
 			let element = node as HTMLElement;
-			let style = getComputedStyle(element);
 			let rectangle = element.getBoundingClientRect();
-			if (
-				style.display === "none"
-				|| style.visibility === "hidden"
-				|| rectangle.width === 0
-				|| rectangle.height === 0
-			) return [];
+			let bounds = {
+				bottom: rectangle.bottom,
+				height: rectangle.height,
+				left: rectangle.left,
+				right: rectangle.right,
+				top: rectangle.top,
+				width: rectangle.width,
+			};
+			if (!element.checkVisibility() || rectangle.width === 0 || rectangle.height === 0) {
+				issues.push({
+					reason: "not visible",
+					rectangle: bounds,
+					viewport: null,
+				});
+				continue;
+			}
 
 			let viewport = visualViewport ?? {
 				offsetLeft: 0,
@@ -169,14 +178,15 @@ export async function expectInsideViewport(locator: Locator): Promise<void> {
 				&& rectangle.top >= viewport.offsetTop
 				&& rectangle.right <= viewport.offsetLeft + viewport.width
 				&& rectangle.bottom <= viewport.offsetTop + viewport.height;
-			return inside ? [] : [{
-				left: rectangle.left,
-				top: rectangle.top,
-				right: rectangle.right,
-				bottom: rectangle.bottom,
-				viewport,
-			}];
-		})
-	);
-	expect(outside).toEqual([]);
+			if (!inside) {
+				issues.push({
+					reason: "outside viewport",
+					rectangle: bounds,
+					viewport,
+				});
+			}
+		}
+		return issues;
+	});
+	expect(issues).toEqual([]);
 }

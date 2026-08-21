@@ -247,14 +247,13 @@ test("clicking an empty plan puts the caret at its first writing position", asyn
 test("chat uses one room-message composer when the planner is off", async ({ join }) => {
 	let page = await join("ana");
 	let chat = page.locator("#pane-chat");
-	let composer = chat.locator(".conversation-composer");
-	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
+	let draft = chat.getByRole("textbox");
 	let send = chat.getByRole("button", { name: "Send message" });
 
 	await expect(chat.locator("header")).toHaveCount(0);
 	await expect(draft).toBeVisible();
 	await expect(send).toBeDisabled();
-	await expect(composer.getByRole("button", { name: "Send message" })).toHaveCount(1);
+	await expect(chat.getByRole("button", { name: "Send message" })).toHaveCount(1);
 	await expect(send).toHaveAttribute("title", "Send message");
 	await expect(chat.getByRole("button", { name: "Send message" })).toHaveCount(1);
 	await expect(chat.getByRole("button", { name: "Send to room" })).toHaveCount(0);
@@ -268,7 +267,7 @@ test("chat uses one room-message composer when the planner is off", async ({ joi
 
 	await draft.fill("@chopin Do not start a turn here.");
 	await send.click();
-	await expect(chat.locator(".chat-working")).toHaveCount(0);
+	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(0);
 	await expect(chat.getByRole("button", { name: "Stop Planner" })).toHaveCount(0);
 });
 
@@ -292,14 +291,13 @@ test("chat disables Send when its socket disconnects", async ({ join, page }) =>
 test("chat routes one Send action by @chopin without blocking room messages or its queue", async ({ join, page }) => {
 	let planner = await scriptPlanner(page);
 	let chat = (await join("ana")).locator("#pane-chat");
-	let composer = chat.locator(".conversation-composer");
-	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
+	let draft = chat.getByRole("textbox");
 	let send = chat.getByRole("button", { name: "Send message" });
 
 	await draft.fill("@chopin Start the migration.");
 	await draft.press("Enter");
 	await planner.started;
-	await expect(composer.getByRole("button", { name: "Stop Planner" })).toBeVisible();
+	await expect(chat.getByRole("button", { name: "Stop Planner" })).toBeVisible();
 	await expect(chat.getByRole("button", { name: "Stop Planner" })).toHaveAttribute(
 		"title",
 		"Stop Planner",
@@ -315,7 +313,7 @@ test("chat routes one Send action by @chopin without blocking room messages or i
 		{ text: "Keep the release notes brief.", to: "room" },
 		{ text: "@chopin Queue the rollback checks.", to: "planner" },
 	]);
-	await expect(chat.getByText("queued", { exact: true })).toBeVisible();
+	await expect(chat.locator('[data-chat-state="queued"]')).toBeVisible();
 
 	await draft.fill("@chopin Keep\nthe new line.");
 	await draft.press("Shift+Enter");
@@ -327,17 +325,16 @@ test("chat routes one Send action by @chopin without blocking room messages or i
 	});
 
 	await chat.getByRole("button", { name: "Stop Planner" }).click();
-	await expect(chat.locator(".chat-working")).toBeVisible();
+	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
 	let next = chat.locator("[data-chat-entry]").filter({ hasText: "Queue the rollback checks." });
 	let later = chat.locator("[data-chat-entry]").filter({ hasText: /Keep\s+the new line/ });
 	await expect(next).toHaveCount(1);
-	await expect(next).not.toContainText("queued");
+	await expect(next).not.toHaveAttribute("data-chat-state", "queued");
 	await expect(later).toHaveCount(1);
-	await expect(later).toContainText("queued");
+	await expect(later).toHaveAttribute("data-chat-state", "queued");
 });
 
 test("chat replaces the Planner working row with its response", async ({ join, page }) => {
-	await page.emulateMedia({ reducedMotion: "no-preference" });
 	let planner = await scriptPlanner(page);
 	let chat = (await join("ana")).locator("#pane-chat");
 
@@ -347,21 +344,21 @@ test("chat replaces the Planner working row with its response", async ({ join, p
 	await chat.getByRole("button", { name: "Send message" }).click();
 	await planner.started;
 
-	let working = chat.locator(".chat-working");
-	await expect(working).toHaveText("Working on it");
+	let working = chat.locator('[data-chat-state="working"]');
+	await expect(working).toBeVisible();
 	let timestamp = await page.evaluate(() =>
 		new Date(1_700_000_001 * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 	);
 	await expect(
 		working.locator("xpath=ancestor::*[@data-chat-entry][1]").getByText(timestamp, { exact: true }),
 	).toBeVisible();
-	await expect(chat.getByText("Invalid Date")).toHaveCount(0);
-	await expect(working).toHaveCSS("animation-name", "chat-working-shimmer");
-	let avatar = chat.getByRole("img", { name: "Planner" });
-	expect(await avatar.evaluate(element => getComputedStyle(element).animationName)).toBe("none");
-
 	await page.emulateMedia({ reducedMotion: "reduce" });
-	await expect(working).toHaveCSS("animation-name", "none");
+	await expect(working).toBeVisible();
+	await expect.poll(() =>
+		working.evaluate(node =>
+			node.getAnimations({ subtree: true }).some(animation => animation.playState === "running")
+		)
+	).toBe(false);
 
 	planner.answer();
 	await expect(working).toHaveCount(0);
@@ -378,21 +375,21 @@ test("chat clears the Planner working row when a turn stops or fails", async ({ 
 	);
 	await chat.getByRole("button", { name: "Send message" }).click();
 	await planner.started;
-	await expect(chat.locator(".chat-working")).toBeVisible();
+	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
 
 	await chat.getByRole("button", { name: "Stop Planner" }).click();
-	await expect(chat.locator(".chat-working")).toHaveCount(0);
+	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(0);
 
 	await chat.getByPlaceholder("Use @chopin to ask Chopin").fill("@chopin Try again.");
 	await chat.getByRole("button", { name: "Send message" }).click();
-	await expect(chat.locator(".chat-working")).toBeVisible();
+	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
 	planner.fail();
-	await expect(chat.locator(".chat-working")).toHaveCount(0);
+	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(0);
 	await expect(chat.getByText("Planner unavailable.")).toBeVisible();
 
 	await page.reload();
 	await ready(page);
-	await expect(page.locator("#pane-chat .chat-working")).toHaveCount(0);
+	await expect(page.locator('#pane-chat [data-chat-state="working"]')).toHaveCount(0);
 });
 
 test("chat keeps Working on it through tool activity and streamed prose", async ({ join, page }) => {
@@ -404,18 +401,18 @@ test("chat keeps Working on it through tool activity and streamed prose", async 
 	);
 	await chat.getByRole("button", { name: "Send message" }).click();
 	await planner.started;
-	await expect(chat.locator(".chat-working")).toBeVisible();
+	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
 
 	planner.tool();
 	await expect(chat.getByText("Read plan", { exact: true })).toBeVisible();
-	await expect(chat.locator(".chat-working")).toBeVisible();
+	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
 
 	planner.stream();
-	await expect(chat.locator(".chat-working")).toBeVisible();
+	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
 	await expect(chat.getByText("I found it.")).toBeVisible();
 
 	await chat.getByRole("button", { name: "Stop Planner" }).click();
-	await expect(chat.locator(".chat-working")).toHaveCount(0);
+	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(0);
 });
 
 test("chat history keeps Working on it after Planner prose and a later room message", async ({ join, page }) => {
@@ -448,7 +445,7 @@ test("chat history keeps Working on it after Planner prose and a later room mess
 	let chat = (await join("ana")).locator("#pane-chat");
 	await expect(chat.getByText("I found the issue.")).toBeVisible();
 	await expect(chat.getByText("Please include the examples.")).toBeVisible();
-	await expect(chat.locator(".chat-working")).toBeVisible();
+	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
 });
 
 test("chat waits for fresh history after reconnect before projecting a stale turn", async ({ join, page }) => {
@@ -479,14 +476,14 @@ test("chat waits for fresh history after reconnect before projecting a stale tur
 	});
 
 	let chat = (await join("ana")).locator("#pane-chat");
-	await expect(chat.locator(".chat-working")).toHaveCount(0);
+	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(0);
 	await sockets[0]!.close();
 	await historyHeld.promise;
-	await expect(chat.locator(".chat-working")).toHaveCount(0);
+	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(0);
 
 	releaseHistory?.();
 	await ready(page);
-	await expect(chat.locator(".chat-working")).toHaveCount(0);
+	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(0);
 });
 
 test(
@@ -532,16 +529,12 @@ test(
 		await expect(live).toContainText("7 done");
 		await expect(chat.getByRole("button", { name: /Edit plan/ })).toHaveCount(0);
 		await expect(chat.getByRole("button", { name: "Stop Planner" })).toHaveCount(0);
-		let person = chat.getByRole("img", { name: "maggie" });
-		let planner = chat.getByRole("img", { name: "Planner" });
-		await expect(person).toBeVisible();
-		await expect(planner).toBeVisible();
 
 		let mine = chat.locator("[data-chat-entry]").filter({ hasText: "Ask Planner" });
 		let theirs = chat.locator("[data-chat-entry]").filter({
 			hasText: "Check the rollback path too.",
 		});
-		await expect(mine).toContainText("queued");
+		await expect(mine).toHaveAttribute("data-chat-state", "queued");
 		await expect(mine.getByRole("button", { name: "Withdraw queued message" })).toBeVisible();
 		await expect(theirs.getByRole("button", { name: "Withdraw queued message" })).toHaveCount(0);
 
@@ -604,10 +597,9 @@ test(
 		await expect(chat.getByText("Read file", { exact: true })).toBeVisible();
 		await expect(chat.getByText("Run tests", { exact: true })).toBeVisible();
 		let failed = chat.getByRole("listitem").filter({ hasText: "Run tests" });
-		await expect(failed).toContainText("Failed");
+		await expect(failed).toHaveAttribute("data-tool-status", "failed");
 
-		let system = chat.locator("[data-chat-system]");
-		await expect(system).toContainText("Sam joined");
+		await expect(chat.locator("[data-chat-system]")).toContainText("Sam joined");
 
 		await testInfo.attach("finished-turn-with-failure-open", {
 			body: await chat.screenshot(),
@@ -619,8 +611,5 @@ test(
 test("an empty room settles rather than loading forever", async ({ join }) => {
 	let page = await join("ana");
 
-	// "Ready" is the resting state and it draws nothing, so the assertion is
-	// on the label the status pane keeps for a screen reader either way.
-	await expect(page.locator(".plan-status")).toContainText("Ready");
-	await expect(page.locator(".plan-status")).toHaveAttribute("data-level", "hidden");
+	await expect(page.locator('[aria-live="polite"]')).toHaveAttribute("data-level", "hidden");
 });

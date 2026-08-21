@@ -57,7 +57,11 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 					className="m-0 flex list-none flex-col pl-6 text-sm text-text-quaternary"
 				>
 					{tools.map(tool => (
-						<li className="flex min-h-6 items-start gap-3" key={tool.id}>
+						<li
+							className="flex min-h-6 items-start gap-3"
+							data-tool-status={tool.status}
+							key={tool.id}
+						>
 							<span className="min-w-0 flex-1 break-all font-mono text-text-secondary">
 								{toolCopy(tool.name)}
 							</span>
@@ -104,7 +108,7 @@ function MessageBody(
 		|| (message.author.kind === "member" ? "Ask Planner" : "");
 
 	return (
-		<div>
+		<div data-chat-state={message.working ? "working" : undefined}>
 			{text && (
 				<div className="flex items-start gap-1">
 					<div className="min-w-0 flex-1">
@@ -152,6 +156,7 @@ function MessageGroup(
 				item.messages.some(message => arrived.has(message.id)) ? "animate-enter" : ""
 			}`}
 			data-chat-entry
+			data-chat-state={item.queued ? "queued" : undefined}
 		>
 			<div className={`shrink-0 ${item.queued ? "opacity-45" : ""}`}>
 				{item.author.kind === "agent"

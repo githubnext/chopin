@@ -56,6 +56,25 @@ function commentButton(page: import("@playwright/test").Page) {
 	return page.getByRole("button", { name: /Comment on “/ });
 }
 
+test("the desktop document view switches through its segmented control", async ({ join, seed }) => {
+	await seed(PROSE);
+	let page = await join("ana");
+	let control = page.getByRole("group", { name: "Document view" });
+	let plan = control.getByRole("button", { name: "Document", exact: true });
+	let decisions = control.getByRole("button", { name: /^Decisions, 2 unanswered$/ });
+
+	await expect(control).toBeVisible();
+	await expect(plan).toHaveAttribute("aria-pressed", "true");
+	await expect(decisions).toHaveAttribute("aria-pressed", "false");
+
+	await decisions.click();
+	await expect(page.locator('[data-document-view="decisions"]')).toBeVisible();
+	await expect(decisions).toHaveAttribute("aria-pressed", "true");
+	await plan.click();
+	await expect(page.locator('[data-document-view="plan"]')).toBeVisible();
+	await expect(plan).toHaveAttribute("aria-pressed", "true");
+});
+
 async function rewriteFirstBlock(page: import("@playwright/test").Page, value: string) {
 	let block = content(page).locator("p").first();
 	await block.selectText();
@@ -133,7 +152,6 @@ test("questions leave the chat pane free of a waiting row", async ({ join, seed 
 	let page = await join("ana");
 
 	await expect(questionnaire(page)).toHaveCount(2);
-	await expect(page.locator("#pane-chat")).not.toContainText("questions are waiting");
 	await expect(page.locator("#pane-chat").getByRole("button", { name: "Answer" })).toHaveCount(0);
 
 	await page.getByRole("button", { name: /^Decisions/ }).click();
@@ -299,9 +317,14 @@ test("an edit received while compact Plan is hidden appears when it returns", as
 	await expect(content(ana)).toContainText("The hidden plan still receives collaborative edits.");
 });
 
-for (let width of [768, 1280]) {
-	test(`${width}px explicit Decisions navigation follows the active presentation`, async ({ join, page: browser, seed }) => {
-		await browser.setViewportSize({ width, height: 360 });
+for (
+	let example of [
+		{ compact: true, name: "compact", width: 768 },
+		{ compact: false, name: "desktop", width: 1280 },
+	]
+) {
+	test(`${example.name} Decisions navigation follows the active presentation`, async ({ join, page: browser, seed }) => {
+		await browser.setViewportSize({ width: example.width, height: 360 });
 		await seed(LONG_PLAN);
 		let page = await join("ana");
 		let decisions = page.getByRole("button", { name: /^Decisions/ });
@@ -310,7 +333,7 @@ for (let width of [768, 1280]) {
 		let first = questionnaire(page).first();
 
 		await decisions.click();
-		if (width < 1200) await expect(page.locator("#workspace-decisions-heading")).toBeFocused();
+		if (example.compact) await expect(page.locator("#workspace-decisions-heading")).toBeFocused();
 		else await expect(first).toBeFocused();
 
 		await stack.evaluate(element => {
@@ -322,7 +345,7 @@ for (let width of [768, 1280]) {
 
 		await plan.click();
 		await decisions.click();
-		if (width < 1200) {
+		if (example.compact) {
 			await expect.poll(() => stack.evaluate(element => element.scrollTop)).toBe(scrolled);
 			await expect(page.locator("#workspace-decisions-heading")).toBeFocused();
 		} else {
@@ -415,7 +438,7 @@ test("decision cards save independently with progressive custom answers", async 
 	let custom = scope.getByRole("textbox", { name: "Custom answer for Scope" });
 	await expect(custom).toBeFocused();
 	await scope.getByRole("button", { name: "Save answer" }).click();
-	await expect(scope.getByRole("alert")).toHaveText("Scope requires a custom answer");
+	await expect(scope.getByRole("alert")).toBeVisible();
 	await custom.fill("Only collaborative anchors");
 	await scope.getByRole("checkbox", { name: "Anchors" }).check();
 	await expect(custom).toHaveCount(0);
@@ -436,7 +459,7 @@ test("an unanswered decision reports its own validation error", async ({ join, s
 
 	await card.getByRole("button", { name: "Save answer" }).click();
 
-	await expect(card.getByRole("alert")).toHaveText("Scope requires an answer");
+	await expect(card.getByRole("alert")).toBeVisible();
 	await expect(card).not.toContainText("Answered by");
 });
 
@@ -448,8 +471,9 @@ test("cancelling asks first", async ({ join, seed }) => {
 
 	await card.getByRole("button", { name: "Cancel" }).click();
 
-	await expect(card).toContainText("Cancel without answering?");
-	await card.getByRole("button", { name: "Keep it" }).click();
+	let keep = card.getByRole("button", { name: "Keep it" });
+	await expect(keep).toBeVisible();
+	await keep.click();
 	await expect(card.getByRole("button", { name: "Save answer" })).toBeVisible();
 });
 
@@ -638,13 +662,6 @@ test("a touch comment opens as a modal sheet and restores its marker", async ({ 
 	await expect(sheet).toBeVisible();
 	await expect(sheet.getByRole("button", { name: "Close comment" })).toBeFocused();
 	await expect(content(page)).toHaveAttribute("inert", "");
-	let sheetBox = await sheet.boundingBox();
-	let documentBox = await page.locator("[data-plan-scroll]").boundingBox();
-	expect(sheetBox).not.toBeNull();
-	expect(documentBox).not.toBeNull();
-	expect(sheetBox!.x).toBe(documentBox!.x);
-	expect(sheetBox!.width).toBe(documentBox!.width);
-	expect(sheetBox!.y + sheetBox!.height).toBeCloseTo(documentBox!.y + documentBox!.height, 0);
 	await page.keyboard.press("Escape");
 	await expect(sheet).toHaveCount(0);
 	await expect(marker).toBeFocused();

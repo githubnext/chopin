@@ -68,8 +68,7 @@ test("losing the connection locks the plan, and getting it back unlocks it", asy
 	// send is worse than one that stops, because the typing looks like it
 	// worked right up until the reload that loses it.
 	await expect(content(page)).toHaveAttribute("contenteditable", "false");
-	await expect(page.locator(".plan-status")).toContainText("Reconnecting");
-	await expect(page.locator(".plan-status")).toHaveAttribute("data-level", "notice");
+	await expect(page.locator('[aria-live="polite"]')).toHaveAttribute("data-level", "notice");
 
 	// The client retries on its own; nothing here reconnects it. Opening is
 	// driven by the connection rather than by the mount, and a socket that

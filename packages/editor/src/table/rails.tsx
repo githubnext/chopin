@@ -416,6 +416,7 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks, tool
 						type="button"
 						aria-label={`Move ${noun} ${index + 1}`}
 						className={`plan-grip ${mine?.from === index ? "is-held" : ""}`}
+						data-plan-held={mine?.from === index || undefined}
 						style={box}
 						title={`Drag to move this ${noun}`}
 						onPointerEnter={() => setUnder(index)}
@@ -551,6 +552,7 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks, tool
 					<div
 						aria-hidden="true"
 						className="plan-drop"
+						data-plan-drop
 						style={seamBox(axis, lines[at] ?? 0, origin, GRIP, 2, gripLane)}
 					/>
 				)

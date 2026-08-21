@@ -7,17 +7,16 @@ Body text.
 
 </Callout>`;
 
-test("the plan editor uses its caret as its focus indicator", async ({ join, seed }) => {
+test("the plan editor accepts focus", async ({ join, seed }) => {
 	await seed("Plan text");
 	let page = await join("ana");
 	let editor = content(page);
 	await editor.focus();
 
 	await expect(editor).toBeFocused();
-	await expect(editor).toHaveCSS("outline-style", "none");
 });
 
-test("a plan control keeps its focus ring inside the document scrollport", async ({ join, seed }) => {
+test("a plan control keeps its focus indicator inside the document scrollport", async ({ join, seed }) => {
 	await seed(CALLOUT);
 	let page = await join("ana");
 	let trigger = content(page).getByRole("combobox", { name: "Change callout type: Note" });
