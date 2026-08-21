@@ -14,7 +14,7 @@ type Activation = "keyboard" | "pointer" | "programmatic";
 
 async function activateDestination(
 	nav: Locator,
-	name: "Plan" | RegExp,
+	name: "Document" | RegExp,
 	activation: Activation,
 ): Promise<void> {
 	let button = nav.getByRole("button", { name });
@@ -63,7 +63,7 @@ for (
 		await expect.poll(() => page.evaluate(() => getSelection()?.toString())).toBe(PROSE);
 		await activateDestination(nav, /^Decisions/, example.activation);
 		await expect(page.locator("#workspace-decisions-heading")).toBeFocused();
-		await activateDestination(nav, "Plan", example.activation);
+		await activateDestination(nav, "Document", example.activation);
 		await expect(page.locator("#workspace-plan-heading")).toBeFocused();
 
 		await second.click();
@@ -95,7 +95,7 @@ for (
 		await expect(page.locator("main")).toBeHidden();
 		await activateDestination(nav, /^Decisions/, "keyboard");
 		await expect(page.locator("#workspace-decisions-heading")).toBeFocused();
-		await activateDestination(nav, "Plan", "keyboard");
+		await activateDestination(nav, "Document", "keyboard");
 		await expect(page.locator("#workspace-plan-heading")).toBeFocused();
 
 		await page.keyboard.press("Tab");

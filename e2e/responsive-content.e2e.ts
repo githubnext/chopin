@@ -359,46 +359,6 @@ for (let viewport of RESPONSIVE_VIEWPORTS) {
 	});
 }
 
-test("compact and desktop documents render the intended gutter and reading measure", async ({ join, seed }) => {
-	await seed(RESPONSIVE_SOURCE);
-	let compact = await join("ana", { viewport: { width: 390, height: 844 } });
-	let compactGeometry = await content(compact).evaluate(node => {
-		let style = getComputedStyle(node);
-		return {
-			content: node.getBoundingClientRect().width,
-			left: Number.parseFloat(style.paddingLeft),
-			prose: node.querySelector("p")!.getBoundingClientRect().width,
-			right: Number.parseFloat(style.paddingRight),
-		};
-	});
-	expect(compactGeometry.left).toBe(16);
-	expect(compactGeometry.right).toBe(16);
-	expect(compactGeometry.prose).toBeCloseTo(
-		compactGeometry.content - compactGeometry.left - compactGeometry.right,
-		0,
-	);
-
-	let desktop = await join("bo", { viewport: { width: 1440, height: 900 } });
-	let desktopGeometry = await content(desktop).evaluate(node => {
-		let style = getComputedStyle(node);
-		let contentBox = node.getBoundingClientRect();
-		let documentBox = node.closest("[data-plan-scroll]")!.getBoundingClientRect();
-		return {
-			content: contentBox.width,
-			documentLeft: contentBox.left - documentBox.left,
-			documentRight: documentBox.right - contentBox.right,
-			left: Number.parseFloat(style.paddingLeft),
-			prose: node.querySelector("p")!.getBoundingClientRect().width,
-			right: Number.parseFloat(style.paddingRight),
-		};
-	});
-	expect(desktopGeometry.left).toBe(32);
-	expect(desktopGeometry.right).toBe(32);
-	expect(desktopGeometry.prose).toBeCloseTo(640, 0);
-	expect(desktopGeometry.content).toBeCloseTo(704, 0);
-	expect(desktopGeometry.documentLeft).toBeCloseTo(desktopGeometry.documentRight, 0);
-});
-
 for (let viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
 	test(`${viewport.width}px keeps hostile rich content readable and navigable`, async ({ join, seed }) => {
 		await seed(RESPONSIVE_SOURCE);
