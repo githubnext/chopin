@@ -114,6 +114,8 @@ The final destination stays reachable without animated navigation.
 
 Every visible control and focused element stays inside the visual viewport.
 
+![Contained callout reference](${RESPONSIVE_IMAGE_URL})
+
 </Callout>
 
 Inline \`UnbreakableInlineCodeTokenThatMustStayInsideTheReadableDocumentMeasureEvenWhenItsAuthoredIntrinsicWidthFarExceedsTheDesktopReadingColumnAndNeedsToWrapWithoutWideningTheCollaborativeDocument\` belongs with the surrounding prose.

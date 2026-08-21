@@ -314,6 +314,8 @@
  * property of how the CSS happens to be chunked, not of anything we control.
  */
 .plan .plan-content {
+	--plan-wide-inline-size: calc(100cqi - 2 * var(--plan-gutter));
+	--plan-wide-inline-offset: calc((100% - var(--plan-wide-inline-size)) / 2);
 	/*
 	 * The trailing space is deliberate and large: the caret should never sit
 	 * against the bottom of the pane, and a plan is usually appended to.
@@ -501,6 +503,21 @@
 .plan-content :is(img, svg) {
 	max-inline-size: 100%;
 	block-size: auto;
+}
+
+/* Visual and data-heavy top-level blocks can use the document beyond the prose measure. */
+.plan-content
+	> :is(table, p:has(> [data-plan-src]
+		> img.plan-image:only-child), [data-plan-language="mermaid"]) {
+	inline-size: var(--plan-wide-inline-size);
+	max-inline-size: var(--plan-wide-inline-size);
+	margin-inline: var(--plan-wide-inline-offset);
+}
+
+/* The paragraph owns the wide row; the image keeps its intrinsic size inside it. */
+.plan-content > p:has(> [data-plan-src] > img.plan-image:only-child) {
+	display: grid;
+	place-items: center;
 }
 
 .plan-content :is([data-plan-type], [data-plan-panels], .planMath) {
