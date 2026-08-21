@@ -11,7 +11,7 @@ export type WorkspaceEvent =
 	| { type: "set-conversation"; open: boolean }
 	| { type: "set-desktop-conversation"; open: boolean };
 
-export const WORKSPACE_MEDIA = ["(max-width: 1199px)"] as const;
+export const WORKSPACE_MEDIA = ["(max-width: 1039px)"] as const;
 
 /** Classify the same media queries the subscription observes. */
 export function workspaceMode(matchMedia: (query: string) => { matches: boolean }): WorkspaceMode {

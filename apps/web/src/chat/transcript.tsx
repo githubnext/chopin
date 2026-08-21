@@ -112,7 +112,7 @@ function MessageBody(
 						<MessageMarkdown
 							className={`${
 								message.working ? "chat-working " : ""
-							}break-words [overflow-wrap:anywhere]`}
+							}break-words text-conversation-body [overflow-wrap:anywhere]`}
 							source={text}
 						/>
 						{message.streaming && <span className="ml-0.5 animate-pulse">▍</span>}
@@ -156,10 +156,10 @@ function MessageGroup(
 		>
 			<div className={`shrink-0 ${item.queued ? "opacity-45" : ""}`}>
 				{item.author.kind === "agent"
-					? <AgentFace size={20} />
-					: <Face handle={item.author.handle} size={20} />}
+					? <AgentFace size={24} />
+					: <Face handle={item.author.handle} size={24} />}
 			</div>
-			<div className={`flex min-w-0 flex-1 flex-col gap-1 ${item.queued ? "opacity-60" : ""}`}>
+			<div className={`flex min-w-0 flex-1 flex-col gap-1.5 ${item.queued ? "opacity-60" : ""}`}>
 				<div className="flex items-baseline gap-1.5 text-sm">
 					<span className="min-w-0 break-all font-semibold">{name}</span>
 					<span className="text-text-tertiary tabular-nums">
@@ -203,7 +203,7 @@ export function Transcript(
 
 	return (
 		<div
-			className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-auto p-4"
+			className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto p-3"
 			data-focus-boundary=""
 			onScroll={event => {
 				let element = event.currentTarget;

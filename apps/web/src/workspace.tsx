@@ -9,6 +9,7 @@ import {
 	WORKSPACE_MEDIA,
 	workspaceMode,
 } from "./workspace-model";
+import conversationIcon from "./assets/figma/workspace/conversation.svg";
 import { ResizeHandle, usePaneWidth } from "./resizable-pane";
 
 import type { Dispatch, ReactNode, RefObject } from "react";
@@ -106,7 +107,9 @@ function ConversationToggle(
 			ref={buttonRef}
 			type="button"
 		>
-			<SidebarSimpleIcon aria-hidden="true" size={18} />
+			{open
+				? <SidebarSimpleIcon aria-hidden="true" size={18} />
+				: <img alt="" className="size-[18px]" src={conversationIcon} />}
 			{status && (
 				<span
 					aria-hidden="true"
@@ -140,7 +143,7 @@ function destinationLabel(
 	}
 	return destination === "conversation" ? "Conversation" : destination === "decisions"
 		? "Decisions"
-		: "Plan";
+		: "Document";
 }
 
 export function Workspace(
@@ -218,15 +221,13 @@ export function Workspace(
 		<div className="flex h-full flex-col overflow-hidden bg-ground">
 			{header}
 
-			<div
-				className={`relative flex min-h-0 flex-1 pt-4 ${mode === "split" ? "" : "pb-2"}`}
-			>
+			<div className={`relative flex min-h-0 flex-1 ${mode === "split" ? "" : "pb-2"}`}>
 				{/* `hidden` preserves pane state and subscriptions while removing it from layout. */}
 				{chat && (
 					<aside
 						aria-hidden={conversationHidden || undefined}
 						aria-labelledby={HEADING.conversation}
-						className="flex min-w-0 flex-col overflow-hidden"
+						className="order-2 relative flex min-w-0 flex-col overflow-hidden bg-ground"
 						hidden={conversationHidden}
 						id={paneId("chat")}
 						inert={conversationHidden}
@@ -243,8 +244,22 @@ export function Workspace(
 					>
 						{mode === "split"
 							? (
-								<div className="flex h-10 shrink-0 items-center justify-between px-3 hairline-b">
-									<h2 className="text-sm font-semibold" id={HEADING.conversation} tabIndex={-1}>
+								<div className="group flex h-[46px] shrink-0 items-center justify-between px-3.5 hairline-b">
+									{presentation.separatorVisible && (
+										<ResizeHandle
+											label="Resize the conversation"
+											max={400}
+											min={304}
+											onResize={resizeChat}
+											side="left"
+											width={chatWidth}
+										/>
+									)}
+									<h2
+										className="text-sm font-medium text-text-tertiary"
+										id={HEADING.conversation}
+										tabIndex={-1}
+									>
 										Conversation
 									</h2>
 									<ConversationToggle
@@ -262,7 +277,7 @@ export function Workspace(
 				)}
 
 				{chat && mode === "split" && !presentation.conversationVisible && (
-					<div className="absolute left-0 top-4 z-20">
+					<div className="absolute right-0 top-0 z-20">
 						<ConversationToggle
 							activity={conversationActivity}
 							buttonRef={edgeTab}
@@ -275,33 +290,22 @@ export function Workspace(
 
 				<main
 					aria-hidden={!presentation.documentVisible || undefined}
-					className="relative min-w-0 w-full flex-1 px-1"
+					className="order-1 relative min-w-0 w-full flex-1 px-3"
 					hidden={!presentation.documentVisible}
 					inert={!presentation.documentVisible}
 				>
 					{/* Decoration extends below the viewport without moving the editor contents. */}
 					<div
 						aria-hidden="true"
-						className={`pointer-events-none absolute inset-x-1 top-0 rounded-t-xl bg-page shadow-raised ring-hairline ${
+						className={`pointer-events-none absolute inset-x-3 top-0 rounded-t-xl bg-page shadow-raised ring-hairline ${
 							mode === "split" ? "-bottom-3" : "bottom-0"
 						}`}
 					/>
 
-					{/* Lexical consumes Tab, so the resize handle precedes the editor. */}
-					{chat && presentation.separatorVisible && (
-						<ResizeHandle
-							label="Resize the conversation"
-							max={400}
-							min={304}
-							onResize={resizeChat}
-							side="left"
-							width={chatWidth}
-						/>
-					)}
 					<div className="relative flex h-full flex-col overflow-hidden rounded-t-xl">
 						{mode === "split" && (
 							<div
-								className="grid h-10 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center px-3 hairline-b"
+								className="grid h-[46px] shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center px-3 hairline-b"
 								data-document-toolbar
 							>
 								<div className="col-start-2 justify-self-center">{controls}</div>
@@ -315,7 +319,7 @@ export function Workspace(
 							hidden={planHidden}
 							inert={planHidden}
 						>
-							<h2 className="sr-only" id={HEADING.plan} tabIndex={-1}>Plan</h2>
+							<h2 className="sr-only" id={HEADING.plan} tabIndex={-1}>Document</h2>
 							{plan}
 						</section>
 						<section
@@ -354,7 +358,7 @@ export function Workspace(
 							>
 								{destination === "conversation" ? "Conversation" : destination === "decisions"
 									? "Decisions"
-									: "Plan"}
+									: "Document"}
 								{destination === "decisions" && unanswered > 0 && (
 									<span aria-hidden="true" className="ml-1">{unanswered}</span>
 								)}

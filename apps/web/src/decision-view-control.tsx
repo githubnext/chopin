@@ -32,7 +32,7 @@ export function DecisionViewControl(
 				onClick={() => onView("plan")}
 				type="button"
 			>
-				Plan
+				Document
 			</button>
 			<button
 				aria-current={view === "decisions" ? "page" : undefined}
@@ -53,6 +53,9 @@ export function DecisionViewControl(
 						<Count>{unanswered}</Count>
 					</span>
 				)}
+			</button>
+			<button className="btn btn-sm" disabled type="button">
+				Tasks &amp; Progress
 			</button>
 		</div>
 	);

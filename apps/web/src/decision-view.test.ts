@@ -25,6 +25,23 @@ test("zero unanswered decisions suppresses the badge", () => {
 	expect(markup).not.toContain("data-plan-decision-count");
 });
 
+test("the document tab uses the public Document name", () => {
+	let markup = renderToStaticMarkup(
+		createElement(DecisionViewControl, { onView: () => {}, unanswered: 0, view: "plan" }),
+	);
+
+	expect(markup).toContain(">Document<");
+});
+
+test("the unavailable Tasks & Progress tab is disabled without a count", () => {
+	let markup = renderToStaticMarkup(
+		createElement(DecisionViewControl, { onView: () => {}, unanswered: 0, view: "plan" }),
+	);
+
+	expect(markup).toContain('disabled=""');
+	expect(markup).toContain(">Tasks &amp; Progress<");
+});
+
 test("the Decisions control names its unanswered count", () => {
 	let markup = renderToStaticMarkup(
 		createElement(DecisionViewControl, { onView: () => {}, unanswered: 2, view: "plan" }),

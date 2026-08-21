@@ -47,6 +47,7 @@
 	--color-text-secondary: var(--color-gray-700);
 	--color-text-tertiary: var(--color-gray-600);
 	--color-text-quaternary: var(--color-gray-500);
+	--color-conversation-body: #3e453b;
 
 	/* Petrol is the only accent: action, focus, presence and links all agree. */
 	--color-brand: oklch(0.50006 0.08514 210.06); /* #06707e */

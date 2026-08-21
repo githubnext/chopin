@@ -2,7 +2,7 @@
 	min-width: 0;
 	overflow-wrap: anywhere;
 	font-size: var(--text-sm);
-	line-height: 1.5;
+	line-height: 1.4;
 }
 
 .chat-markdown > :first-child {

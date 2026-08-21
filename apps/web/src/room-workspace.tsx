@@ -72,7 +72,7 @@ function Header(
 			>
 				{people.map(handle => (
 					<span className="room-member-face -ml-1.5 first:ml-0" key={handle.toLowerCase()}>
-						<Face handle={handle} ring size={24} />
+						<Face handle={handle} ring="ground" size={24} />
 					</span>
 				))}
 				{people.length > 3 && (
