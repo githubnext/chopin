@@ -46,6 +46,7 @@ type JobRow = {
 	state: string;
 	revision: Integer;
 	attempts: Integer;
+	failures: Integer;
 	claimGeneration: Integer;
 	claimOwner: string | null;
 	claimBinding: unknown | null;
@@ -83,6 +84,7 @@ const JOB_COLUMNS = `
 	state,
 	revision,
 	attempts,
+	failures,
 	claim_generation AS "claimGeneration",
 	claim_owner AS "claimOwner",
 	claim_binding AS "claimBinding",
@@ -107,6 +109,7 @@ const QUALIFIED_JOB_COLUMNS = `
 	jobs.state,
 	jobs.revision,
 	jobs.attempts,
+	jobs.failures,
 	jobs.claim_generation AS "claimGeneration",
 	jobs.claim_owner AS "claimOwner",
 	jobs.claim_binding AS "claimBinding",
@@ -208,6 +211,7 @@ function job(row: JobRow): BackgroundJob {
 		state,
 		revision,
 		attempts: integer(row.attempts, "background job attempts"),
+		failures: integer(row.failures, "background job failures"),
 		claimGeneration: integer(row.claimGeneration, "background job claim generation"),
 		claimOwner,
 		claimBinding: row.claimBinding === null
@@ -429,6 +433,7 @@ export class PostgresBackgroundJobStore implements BackgroundJobStore {
 			"pending",
 			input.reason,
 			input.availableAt,
+			input.countFailure,
 		);
 
 	readonly settle = (input: SettleBackgroundJob): Promise<BackgroundJobDetail> =>
@@ -487,7 +492,7 @@ export class PostgresBackgroundJobStore implements BackgroundJobStore {
 		);
 
 	readonly fail = (input: FailBackgroundJob): Promise<BackgroundJob> =>
-		this.#claimedTransition("fail background job", input, "failed", input.reason);
+		this.#claimedTransition("fail background job", input, "failed", input.reason, undefined, true);
 
 	readonly cancel = (input: ControlBackgroundJob): Promise<BackgroundJob> =>
 		this.#controlTransition(
@@ -588,6 +593,7 @@ export class PostgresBackgroundJobStore implements BackgroundJobStore {
 		state: BackgroundJobState,
 		reason?: string,
 		availableAt?: Date,
+		countFailure = false,
 	): Promise<BackgroundJob> {
 		return this.#run(action, () =>
 			this.#sql.begin(async transaction => {
@@ -598,6 +604,7 @@ export class PostgresBackgroundJobStore implements BackgroundJobStore {
 					UPDATE background_jobs SET
 						state = ${state},
 						revision = ${revision},
+						failures = failures + ${countFailure ? 1 : 0},
 						claim_owner = NULL,
 						claim_binding = NULL,
 						claim_expires_at = NULL,

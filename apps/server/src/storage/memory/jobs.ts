@@ -145,6 +145,7 @@ export class MemoryBackgroundJobStore implements BackgroundJobStore {
 			state: "pending",
 			revision,
 			attempts: 0,
+			failures: 0,
 			claimGeneration: 0,
 			claimOwner: undefined,
 			claimBinding: undefined,
@@ -234,7 +235,14 @@ export class MemoryBackgroundJobStore implements BackgroundJobStore {
 	readonly requeue = async (input: RequeueBackgroundJob): Promise<BackgroundJob> => {
 		this.#options.assertLease(input.lease);
 		let found = this.#claimed(input);
-		return this.#claimTransition(found, "pending", input.now, input.reason, input.availableAt);
+		return this.#claimTransition(
+			found,
+			"pending",
+			input.now,
+			input.reason,
+			input.availableAt,
+			input.countFailure,
+		);
 	};
 
 	readonly settle = async (input: SettleBackgroundJob): Promise<BackgroundJobDetail> => {
@@ -275,7 +283,7 @@ export class MemoryBackgroundJobStore implements BackgroundJobStore {
 	readonly fail = async (input: FailBackgroundJob): Promise<BackgroundJob> => {
 		this.#options.assertLease(input.lease);
 		let found = this.#claimed(input);
-		return this.#claimTransition(found, "failed", input.now, input.reason);
+		return this.#claimTransition(found, "failed", input.now, input.reason, found.availableAt, true);
 	};
 
 	readonly cancel = async (input: ControlBackgroundJob): Promise<BackgroundJob> => {
@@ -379,12 +387,14 @@ export class MemoryBackgroundJobStore implements BackgroundJobStore {
 		now: Date,
 		reason?: string,
 		availableAt = found.availableAt,
+		countFailure = false,
 	): BackgroundJob {
 		let saved = this.#clearClaim({
 			...found,
 			state,
 			revision: this.#bump(found.channelId),
 			availableAt: new Date(availableAt),
+			failures: found.failures + (countFailure ? 1 : 0),
 			reason,
 			updatedAt: new Date(now),
 		});

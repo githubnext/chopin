@@ -6,6 +6,7 @@ import type {
 	BackgroundJobCursor,
 	BackgroundJobDetail,
 	BackgroundJobPage,
+	ChannelAgent,
 	ChannelPage,
 	ChannelRecord,
 	ChannelScanCursor,
@@ -86,6 +87,7 @@ export interface ChannelStore {
 		now: Date,
 	): Promise<boolean>;
 	updateAgentContext(context: UpdateAgentContext): Promise<AgentState>;
+	readAgent(channelId: string, now: Date): Promise<ChannelAgent | undefined>;
 }
 
 export interface CollaborationStore {

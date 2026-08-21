@@ -38,6 +38,7 @@ function definition(version = 1): JobDefinition {
 				return { report: report.trim() };
 			},
 		},
+		execute: async () => ({ report: "unused" }),
 	};
 }
 

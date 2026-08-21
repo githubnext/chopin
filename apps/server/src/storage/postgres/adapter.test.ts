@@ -383,6 +383,7 @@ if (url) {
 				"002_document_slugs",
 				"002_user_navigation",
 				"004_background_jobs",
+				"005_background_job_failures",
 			]);
 			expect(await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`)
 				.toEqual([

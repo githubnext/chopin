@@ -160,6 +160,11 @@ export type AgentState = {
 	updatedAt: Date;
 };
 
+export type ChannelAgent = {
+	channel: ChannelRecord;
+	agent: AgentState | undefined;
+};
+
 export type StoredChannel = {
 	channel: ChannelRecord;
 	latestSequence: number;
@@ -244,6 +249,7 @@ export type BackgroundJob = {
 	state: BackgroundJobState;
 	revision: number;
 	attempts: number;
+	failures: number;
 	claimGeneration: number;
 	claimOwner: string | undefined;
 	claimBinding: JsonValue | undefined;
@@ -336,6 +342,7 @@ export type SettleBackgroundJob = ClaimedBackgroundJob & {
 export type RequeueBackgroundJob = ClaimedBackgroundJob & {
 	availableAt: Date;
 	reason: string;
+	countFailure: boolean;
 };
 
 export type FailBackgroundJob = ClaimedBackgroundJob & {

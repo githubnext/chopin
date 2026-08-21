@@ -675,6 +675,11 @@ export function storageContract(name: string, factory: Factory): void {
 
 				let first = await storage.channels.claimAgentOwner(channelId, sessionId, now);
 				expect(first.ownerSessionId).toBe(sessionId);
+				expect(await storage.channels.readAgent(channelId, now)).toMatchObject({
+					channel: { id: channelId },
+					agent: { ownerSessionId: sessionId, generation: first.generation },
+				});
+				expect(await storage.channels.readAgent(id("missing-channel"), now)).toBeUndefined();
 				expect((await storage.channels.claimAgentOwner(channelId, second, now)).ownerSessionId)
 					.toBe(sessionId);
 				expect(await storage.channels.clearAgentOwner(channelId, second, first.generation, now))
@@ -1031,10 +1036,16 @@ export function storageContract(name: string, factory: Factory): void {
 					claimGeneration: claimed!.claimGeneration,
 					availableAt: new Date(now.getTime() + 4),
 					reason: "retry",
+					countFailure: true,
 					now: new Date(now.getTime() + 3),
 					lease,
 				});
-				expect(requeued).toMatchObject({ state: "pending", revision: 4, reason: "retry" });
+				expect(requeued).toMatchObject({
+					state: "pending",
+					revision: 4,
+					reason: "retry",
+					failures: 1,
+				});
 				let [secondClaim] = await storage.jobs.claim({
 					channelId,
 					claimOwner: "worker-2",

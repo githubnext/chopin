@@ -6,6 +6,26 @@ export type JobCodec<T extends JsonValue = JsonValue> = {
 
 export type JobCredential = "active-planner" | "none";
 
+export type JobExecutionCredential =
+	| { readonly kind: "none" }
+	| {
+		readonly kind: "active-planner";
+		readonly token: string;
+		readonly ownerSessionId: string;
+		readonly ownerGeneration: number;
+		readonly credentialRevision: number;
+		readonly expiresAt: Date;
+		readonly authorize: () => Promise<boolean>;
+	};
+
+export type JobExecution<Input extends JsonValue = JsonValue> = {
+	readonly job: Readonly<BackgroundJob>;
+	readonly input: Input;
+	readonly credential: JobExecutionCredential;
+	readonly signal: AbortSignal;
+	readonly deadline: Date;
+};
+
 export type JobLimits = {
 	timeoutMs: number;
 	maxAttempts: number;
@@ -33,6 +53,7 @@ export type JobDefinition<
 	readonly limits: Readonly<JobLimits>;
 	readonly input: Readonly<JobCodec<Input>>;
 	readonly artifact: Readonly<JobCodec<Artifact>>;
+	readonly execute: (execution: JobExecution<Input>) => Promise<Artifact>;
 	readonly publish?: (publication: JobPublication) => Promise<void>;
 };
 
@@ -78,8 +99,9 @@ function validate(definition: JobDefinition): void {
 	if (
 		typeof definition.input?.parse !== "function"
 		|| typeof definition.artifact?.parse !== "function"
+		|| typeof definition.execute !== "function"
 	) {
-		throw new Error(`Background job ${definition.type} must declare input and artifact codecs.`);
+		throw new Error(`Background job ${definition.type} must declare codecs and an executor.`);
 	}
 	if (definition.publish !== undefined && typeof definition.publish !== "function") {
 		throw new Error(`Background job ${definition.type} has an invalid publication hook.`);
