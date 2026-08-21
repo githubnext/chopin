@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	closeDelay,
 	presenceClass,
+	presenceValue,
 	resolvedPresence,
 	transitionPresence,
 } from "./transition-presence";
@@ -37,9 +38,25 @@ describe("transition presence", () => {
 		expect(resolvedPresence(phase, true, false)).toBe("open");
 	});
 
+	test("keeps opening when its defined content changes identity", () => {
+		let phase = transitionPresence("closed", "open");
+		let initial = {};
+		let replacement = {};
+		expect(resolvedPresence(phase, initial !== undefined, false)).toBe("opening");
+		expect(resolvedPresence(phase, replacement !== undefined, false)).toBe("opening");
+	});
+
 	test("settles immediate paths without an intermediate phase", () => {
 		expect(resolvedPresence("closed", true, true)).toBe("open");
 		expect(resolvedPresence("open", false, true)).toBe("closed");
+	});
+
+	test("presents current content before retaining it for a close", () => {
+		let committed = { version: 1 };
+		let current = { version: 2 };
+		expect(presenceValue(current, committed, "opening")).toBe(current);
+		expect(presenceValue(undefined, committed, "closing")).toBe(committed);
+		expect(presenceValue(undefined, committed, "closed")).toBeUndefined();
 	});
 });
 
