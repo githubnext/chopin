@@ -142,3 +142,24 @@ describe("sidebar navigation", () => {
 		);
 	});
 });
+
+describe("product motion", () => {
+	it("keeps frequent feedback separate from surface motion", () => {
+		expect(THEME).toMatch(/--duration-fast:\s*120ms/);
+		for (
+			let token of [
+				"dropdown-open-dur",
+				"modal-open-dur",
+				"drawer-open-dur",
+				"panel-open-dur",
+				"page-slide-dur",
+				"icon-swap-dur",
+				"badge-pop-dur",
+				"acc-expand",
+				"toast-open",
+			]
+		) {
+			expect(THEME).toContain(`--${token}:`);
+		}
+	});
+});

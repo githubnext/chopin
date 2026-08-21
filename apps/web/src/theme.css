@@ -148,6 +148,39 @@
 	--duration-base: 200ms;
 	--duration-linger: 600ms;
 
+	/* Surface motion uses semantic names so 120ms control feedback stays fast. */
+	--motion-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+	--dropdown-open-dur: 250ms;
+	--dropdown-close-dur: 150ms;
+	--dropdown-pre-scale: 0.97;
+	--dropdown-closing-scale: 0.99;
+	--dropdown-ease: var(--motion-smooth-out);
+	--modal-open-dur: 250ms;
+	--modal-close-dur: 150ms;
+	--modal-scale: 0.96;
+	--modal-scale-close: 0.96;
+	--modal-ease: var(--motion-smooth-out);
+	--sidebar-open-dur: 250ms;
+	--sidebar-close-dur: 180ms;
+	--drawer-open-dur: 250ms;
+	--drawer-close-dur: 180ms;
+	--drawer-distance: 8px;
+	--panel-open-dur: 280ms;
+	--panel-close-dur: 220ms;
+	--panel-distance: 12px;
+	--panel-blur: 2px;
+	--page-slide-dur: 250ms;
+	--page-slide-distance: 8px;
+	--page-blur: 3px;
+	--icon-swap-dur: 250ms;
+	--icon-swap-blur: 2px;
+	--badge-pop-dur: 500ms;
+	--badge-close-dur: 180ms;
+	--acc-expand: 250ms;
+	--acc-collapse: 250ms;
+	--toast-open: 280ms;
+	--toast-close: 200ms;
+
 	/* Retunes all fifteen `transition-*` utilities, none of which names a curve. */
 	--default-transition-duration: var(--duration-fast);
 	--default-transition-timing-function: var(--ease-out);
