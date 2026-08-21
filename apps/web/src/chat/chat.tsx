@@ -11,11 +11,12 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { PaperPlaneTiltIcon, StopIcon } from "@phosphor-icons/react";
+import { StopIcon } from "@phosphor-icons/react";
 
 import { addressed } from "@chopin/protocol/address";
 
 import { Transcript } from "./transcript";
+import send from "../assets/figma/workspace/send.svg";
 
 import type { Chat as Wire } from "@chopin/protocol";
 import type { Wire as Socket } from "../wire";
@@ -189,7 +190,7 @@ export function Chat(
 							title="Send message"
 							type="button"
 						>
-							<PaperPlaneTiltIcon aria-hidden="true" size={16} />
+							<img alt="" className="size-6" src={send} />
 						</button>
 					</div>
 				</div>

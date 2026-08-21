@@ -123,6 +123,10 @@ describe("palette", () => {
 		expect(hex("--color-destructive")).toBe("#d54d4c");
 	});
 
+	it("keeps the Conversation body ink distinct from the general secondary text", () => {
+		expect(declared("--color-conversation-body")).toBe("#3e453b");
+	});
+
 	it("gives every text level at least AA contrast on the page", () => {
 		for (let level of ["primary", "secondary", "tertiary", "quaternary"]) {
 			let ratio = contrast(`--color-text-${level}`, "--color-page");
