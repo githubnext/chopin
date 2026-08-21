@@ -250,7 +250,7 @@ test("chat uses one room-message composer when the planner is off", async ({ joi
 	let page = await join("ana");
 	let chat = page.locator("#pane-chat");
 	let composer = chat.locator(".conversation-composer");
-	let draft = chat.getByPlaceholder("Use @ai to ask the agent");
+	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
 	let send = chat.getByRole("button", { name: "Send message" });
 
 	await expect(chat.locator("header")).toHaveCount(0);

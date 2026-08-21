@@ -182,6 +182,30 @@ describe("what an accepted thread still owes", () => {
 
 		expect(subject.snapshot().threads[0]?.applied).toBe(true);
 	});
+
+	it("asks Chopin to retry an unapplied accepted comment", () => {
+		let sent: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+		let subject = store();
+		subject.listen({
+			on: () => () => {},
+			send: (kind, payload) => sent.push({ kind, payload }),
+			ask: async () => {
+				throw new Error("not used");
+			},
+		});
+		subject.sync([thread({ id: "t1", status: "accepted", quote: "shorten this" })]);
+
+		subject.retry("t1");
+
+		expect(sent).toEqual([{
+			kind: "chat:send",
+			payload: {
+				text:
+					'@chopin apply the accepted comment on "shorten this" — it has not been actioned yet.',
+				to: "planner",
+			},
+		}]);
+	});
 });
 
 describe("who is writing", () => {
