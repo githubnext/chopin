@@ -268,7 +268,7 @@ test("chat uses one room-message composer when the planner is off", async ({ joi
 	await send.click();
 	await expect(chat.getByText("A room message")).toBeVisible();
 
-	await draft.fill("@ai Do not start a turn here.");
+	await draft.fill("@chopin Do not start a turn here.");
 	await send.click();
 	await expect(chat.locator(".chat-working")).toHaveCount(0);
 	await expect(chat.getByRole("button", { name: "Stop Planner" })).toHaveCount(0);
@@ -282,7 +282,7 @@ test("chat disables Send when its socket disconnects", async ({ join, page }) =>
 	});
 
 	let chat = (await join("ana")).locator("#pane-chat");
-	let draft = chat.getByPlaceholder("Use @ai to ask the agent");
+	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
 	let send = chat.getByRole("button", { name: "Send message" });
 	await draft.fill("A draft left during reconnect.");
 	await expect(send).toBeEnabled();
@@ -291,14 +291,14 @@ test("chat disables Send when its socket disconnects", async ({ join, page }) =>
 	await expect(send).toBeDisabled();
 });
 
-test("chat routes one Send action by @ai without blocking room messages or its queue", async ({ join, page }) => {
+test("chat routes one Send action by @chopin without blocking room messages or its queue", async ({ join, page }) => {
 	let planner = await scriptPlanner(page);
 	let chat = (await join("ana")).locator("#pane-chat");
 	let composer = chat.locator(".conversation-composer");
-	let draft = chat.getByPlaceholder("Use @ai to ask the agent");
+	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
 	let send = chat.getByRole("button", { name: "Send message" });
 
-	await draft.fill("@ai Start the migration.");
+	await draft.fill("@chopin Start the migration.");
 	await draft.press("Enter");
 	await planner.started;
 	await expect(composer.getByRole("button", { name: "Stop Planner" })).toBeVisible();
@@ -310,21 +310,21 @@ test("chat routes one Send action by @ai without blocking room messages or its q
 	await draft.fill("Keep the release notes brief.");
 	await expect(send).toBeEnabled();
 	await send.click();
-	await draft.fill("@ai Queue the rollback checks.");
+	await draft.fill("@chopin Queue the rollback checks.");
 	await send.click();
 	await expect.poll(planner.sends).toEqual([
-		{ text: "@ai Start the migration.", to: "planner" },
+		{ text: "@chopin Start the migration.", to: "planner" },
 		{ text: "Keep the release notes brief.", to: "room" },
-		{ text: "@ai Queue the rollback checks.", to: "planner" },
+		{ text: "@chopin Queue the rollback checks.", to: "planner" },
 	]);
 	await expect(chat.getByText("queued", { exact: true })).toBeVisible();
 
-	await draft.fill("@ai Keep\nthe new line.");
+	await draft.fill("@chopin Keep\nthe new line.");
 	await draft.press("Shift+Enter");
-	await expect(draft).toHaveValue("@ai Keep\nthe new line.\n");
+	await expect(draft).toHaveValue("@chopin Keep\nthe new line.\n");
 	await draft.press("Enter");
 	await expect.poll(planner.sends).toContainEqual({
-		text: "@ai Keep\nthe new line.",
+		text: "@chopin Keep\nthe new line.",
 		to: "planner",
 	});
 
@@ -343,8 +343,8 @@ test("chat replaces the Planner working row with its response", async ({ join, p
 	let planner = await scriptPlanner(page);
 	let chat = (await join("ana")).locator("#pane-chat");
 
-	await chat.getByPlaceholder("Use @ai to ask the agent").fill(
-		"@ai Draft the migration.",
+	await chat.getByPlaceholder("Use @chopin to ask Chopin").fill(
+		"@chopin Draft the migration.",
 	);
 	await chat.getByRole("button", { name: "Send message" }).click();
 	await planner.started;
@@ -375,8 +375,8 @@ test("chat clears the Planner working row when a turn stops or fails", async ({ 
 	let planner = await scriptPlanner(page);
 	let chat = (await join("ana")).locator("#pane-chat");
 
-	await chat.getByPlaceholder("Use @ai to ask the agent").fill(
-		"@ai Draft the migration.",
+	await chat.getByPlaceholder("Use @chopin to ask Chopin").fill(
+		"@chopin Draft the migration.",
 	);
 	await chat.getByRole("button", { name: "Send message" }).click();
 	await planner.started;
@@ -385,7 +385,7 @@ test("chat clears the Planner working row when a turn stops or fails", async ({ 
 	await chat.getByRole("button", { name: "Stop Planner" }).click();
 	await expect(chat.locator(".chat-working")).toHaveCount(0);
 
-	await chat.getByPlaceholder("Use @ai to ask the agent").fill("@ai Try again.");
+	await chat.getByPlaceholder("Use @chopin to ask Chopin").fill("@chopin Try again.");
 	await chat.getByRole("button", { name: "Send message" }).click();
 	await expect(chat.locator(".chat-working")).toBeVisible();
 	planner.fail();
@@ -401,8 +401,8 @@ test("chat keeps Working on it through tool activity and streamed prose", async 
 	let planner = await scriptPlanner(page);
 	let chat = (await join("ana")).locator("#pane-chat");
 
-	await chat.getByPlaceholder("Use @ai to ask the agent").fill(
-		"@ai Check the current plan.",
+	await chat.getByPlaceholder("Use @chopin to ask Chopin").fill(
+		"@chopin Check the current plan.",
 	);
 	await chat.getByRole("button", { name: "Send message" }).click();
 	await planner.started;
@@ -429,7 +429,7 @@ test("chat history keeps Working on it after Planner prose and a later room mess
 			{
 				id: "prompt",
 				author: { kind: "member", handle: "ana" },
-				text: "@ai Check the current plan.",
+				text: "@chopin Check the current plan.",
 				ts: 1_700_000_000,
 			},
 			{
@@ -501,7 +501,7 @@ test(
 				{
 					id: "m1",
 					author: { kind: "member", handle: "maggie" },
-					text: "@ai Draft the migration plan.",
+					text: "@chopin Draft the migration plan.",
 					ts: 1_700_000_000,
 				},
 				{
@@ -522,7 +522,7 @@ test(
 				},
 			],
 			queued: [
-				{ id: "q1", handle: "ana", text: "@ai" },
+				{ id: "q1", handle: "ana", text: "@chopin" },
 				{ id: "q2", handle: "sam", text: "Check the rollback path too." },
 			],
 		}));
@@ -562,7 +562,7 @@ test(
 				{
 					id: "m1",
 					author: { kind: "member", handle: "maggie" },
-					text: "@ai Can you draft the migration?",
+					text: "@chopin Can you draft the migration?",
 					ts: 1_700_000_000,
 				},
 				{

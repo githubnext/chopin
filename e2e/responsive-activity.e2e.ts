@@ -134,7 +134,7 @@ test("a closed desktop Conversation tab keeps unread activity visible", async ({
 	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:open", "false"));
 	page = await join("ana");
 	let sender = await join("ben");
-	await sender.getByPlaceholder("Use @ai to ask the agent").fill(
+	await sender.getByPlaceholder("Use @chopin to ask Chopin").fill(
 		"A new room message",
 	);
 	await sender.getByRole("button", { name: "Send message" }).click();
@@ -184,7 +184,7 @@ test("conversation activity appears while closed and clears when opened", async 
 	let nav = page.getByRole("navigation", { name: "Workspace view" });
 	await expect(nav.getByRole("button", { name: "Conversation" })).toBeVisible();
 	let sender = await join("ben");
-	await sender.getByPlaceholder("Use @ai to ask the agent").fill(
+	await sender.getByPlaceholder("Use @chopin to ask Chopin").fill(
 		"A new room message",
 	);
 	await sender.getByRole("button", { name: "Send message" }).click();
@@ -198,7 +198,7 @@ test("a Conversation draft survives Chromium orientation emulation", async ({ jo
 	let page = await join("ana", { viewport: { width: 390, height: 844 } });
 	await page.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: /Conversation/ }).click();
-	let textarea = page.getByPlaceholder("Use @ai to ask the agent");
+	let textarea = page.getByPlaceholder("Use @chopin to ask Chopin");
 	await textarea.fill("Keep this draft");
 	await page.setViewportSize({ width: 844, height: 390 });
 	await expect(textarea).toHaveValue("Keep this draft");

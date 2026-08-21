@@ -271,7 +271,7 @@ diff could only guess.
 
 ## Conversation addressing
 
-The web composer uses the shared `addressed()` helper to translate an `@ai`
+The web composer uses the shared `addressed()` helper to translate an `@chopin`
 mention into `Chat.Send.to = "planner"`; other messages use `to = "room"`. The
 wire destination is authoritative on the server. A custom write-authorized
 client can therefore address the Planner explicitly without including the

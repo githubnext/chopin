@@ -117,9 +117,9 @@ external implementation runs are durable.
 
 ## Conversation and Planner addressing
 
-The web composer uses `packages/protocol/address.ts` to translate `@ai` into
+The web composer uses `packages/protocol/address.ts` to translate `@chopin` into
 `Chat.Send.to = "planner"`; ordinary messages use `to = "room"`. The wire
-destination is authoritative on the server. Do not describe `@ai` as a server
+destination is authoritative on the server. Do not describe `@chopin` as a server
 authorization boundary: a custom write-authorized client can send an explicit
 Planner destination without a mention.
 
