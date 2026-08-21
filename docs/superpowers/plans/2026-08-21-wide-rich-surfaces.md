@@ -24,12 +24,14 @@
 ### Task 1: Widen the explicit top-level surface allowlist
 
 **Files:**
+
 - Modify: `e2e/responsive.ts:26-120`
 - Modify: `e2e/responsive-content.e2e.ts:392-497`
 - Modify: `packages/editor/src/styles.css:318-330, 462-520`
 
 **Interfaces:**
-- Consumes: `.plan-document` as the existing inline-size container; `--plan-gutter`; Lexical's direct-child `table`, `[data-plan-src]`, and `[data-plan-language="mermaid"]` DOM.
+
+- Consumes: `.plan-document` as the existing inline-size container; `--plan-gutter`; Lexical's direct-child `table`, standalone-image paragraph, and `[data-plan-language="mermaid"]` DOM.
 - Produces: `--plan-wide-inline-size` and `--plan-wide-inline-offset` CSS properties scoped to `.plan-content`; no TypeScript API changes.
 
 - [ ] **Step 1: Add a contained rich-surface fixture**
@@ -53,11 +55,7 @@ This reuses the routed image and gives the layout test a nested surface that mus
 Add this test before `narrow documents keep equal inline gutters` in `e2e/responsive-content.e2e.ts`:
 
 ```ts
-test("top-level rich surfaces use the document width while nested surfaces stay contained", async ({
-	join,
-	page,
-	seed,
-}) => {
+test("top-level rich surfaces use the document width while nested surfaces stay contained", async ({ join, page, seed }) => {
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await routeResponsiveImage(page);
 	await seed(RESPONSIVE_SOURCE);
@@ -72,10 +70,10 @@ test("top-level rich surfaces use the document width while nested surfaces stay 
 			let box = element.getBoundingClientRect();
 			return { left: box.left, right: box.right, width: box.width };
 		};
-		let image = root.querySelector<HTMLImageElement>(
-			':scope > [data-plan-src] > img[alt="Responsive workspace reference"]',
-		);
-		let imageRow = root.querySelector(":scope > [data-plan-src]");
+		let imageRow = root.querySelector(":scope > p:has(> [data-plan-src]:only-child)");
+		let image = imageRow?.querySelector<HTMLImageElement>(
+			'img[alt="Responsive workspace reference"]',
+		) ?? null;
 		let callout = root.querySelector('[data-plan-type="warning"]');
 		let nested = callout?.querySelector<HTMLImageElement>(
 			'img[alt="Contained callout reference"]',
@@ -129,12 +127,14 @@ let widths = await content(page).evaluate(root => {
 		- Number.parseFloat(style.paddingInlineEnd);
 	let selectors = [
 		":scope > table",
-		":scope > [data-plan-src]",
+		":scope > p:has(> [data-plan-src]:only-child)",
 		':scope > [data-plan-language="mermaid"]',
 	];
 	return {
 		available,
-		surfaces: selectors.map(selector => root.querySelector(selector)!.getBoundingClientRect().width),
+		surfaces: selectors.map(selector =>
+			root.querySelector(selector)!.getBoundingClientRect().width
+		),
 	};
 });
 for (let surface of widths.surfaces) expect(Math.abs(surface - widths.available)).toBeLessThan(2);
@@ -165,14 +165,14 @@ After the general image sizing rule, add the direct-child allowlist and image ce
 
 ```css
 /* Visual and data-heavy top-level blocks can use the document beyond the prose measure. */
-.plan-content > :is(table, [data-plan-src], [data-plan-language="mermaid"]) {
+.plan-content > :is(table, p:has(> [data-plan-src]:only-child), [data-plan-language="mermaid"]) {
 	inline-size: var(--plan-wide-inline-size);
 	max-inline-size: var(--plan-wide-inline-size);
 	margin-inline: var(--plan-wide-inline-offset);
 }
 
 /* The decorator owns the wide row; the image keeps its intrinsic size inside it. */
-.plan-content > [data-plan-src] {
+.plan-content > p:has(> [data-plan-src]:only-child) {
 	display: grid;
 	place-items: center;
 }
