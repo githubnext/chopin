@@ -1,12 +1,15 @@
 /** The shared conversation, grouped for reading rather than event delivery. */
 
 import { useEffect, useRef, useState } from "react";
-import { CaretRightIcon, ClockIcon, SignInIcon } from "@phosphor-icons/react";
+import { SignInIcon } from "@phosphor-icons/react";
 
 import { AgentFace, Face } from "@chopin/editor";
 
 import { MessageMarkdown } from "./markdown";
 import { capitalize, displayText, duration, group, summarize, toolCopy } from "./model";
+import toolChevronDown from "../assets/figma/workspace/tool-chevron-down.svg";
+import toolChevronRight from "../assets/figma/workspace/tool-chevron-right.svg";
+import toolLoader from "../assets/figma/workspace/tool-loader.svg";
 
 import type { Chat } from "@chopin/protocol";
 import type { Group, Message } from "./model";
@@ -21,7 +24,7 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 	if (summary.state === "running") {
 		return (
 			<div className="flex min-h-7 min-w-0 flex-wrap items-center gap-2 py-1 text-sm text-text-quaternary">
-				<ClockIcon aria-hidden="true" size={16} />
+				<img alt="" className="conversation-tool-loader size-[18px]" src={toolLoader} />
 				<span className="min-w-0 break-all font-mono text-text-secondary">{summary.name}</span>
 				<span className="tabular-nums">{summary.completed} done</span>
 			</div>
@@ -36,11 +39,7 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 				onClick={() => setOpen(value => !value)}
 				type="button"
 			>
-				<CaretRightIcon
-					aria-hidden="true"
-					className={`transition-transform ${open ? "rotate-90" : ""}`}
-					size={16}
-				/>
+				<img alt="" className="size-[14px]" src={open ? toolChevronDown : toolChevronRight} />
 				<span className="tabular-nums">
 					{summary.count} {summary.count === 1 ? "tool" : "tools"}
 				</span>
