@@ -24,6 +24,9 @@ const MIGRATIONS = [{
 }, {
 	id: "003_user_navigation",
 	path: join(import.meta.dir, "migrations/003_user_navigation.sql"),
+}, {
+	id: "004_background_jobs",
+	path: join(import.meta.dir, "migrations/004_background_jobs.sql"),
 }] satisfies Migration[];
 
 /** Navigation shipped as 002 before document slugs claimed that number on main. */

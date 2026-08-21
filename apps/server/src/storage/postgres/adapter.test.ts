@@ -40,6 +40,240 @@ if (url) {
 		}
 	});
 
+	it("cascades background jobs and artifacts with their channel", async () => {
+		let storage = new PostgresStorage(url);
+		let suffix = crypto.randomUUID();
+		let channelId = `job-channel-${suffix}`;
+		try {
+			await storage.migrate();
+			let now = new Date();
+			let userId = `job-user-${suffix}`;
+			await storage.users.put({ id: userId, login: "jobs", avatarUrl: "", now });
+			await storage.channels.create({
+				id: channelId,
+				repositoryId: `job-repository-${suffix}`,
+				repositoryOwner: "octo-org",
+				repositoryName: "score",
+				title: `Job cascade ${suffix}`,
+				createdBy: userId,
+				now,
+			});
+			let lease = await storage.leases.acquire(`job-writer-${suffix}`, "test", 60_000);
+			let queued = await storage.jobs.enqueue({
+				id: `job-${suffix}`,
+				channelId,
+				type: "document-summary",
+				version: 1,
+				origin: "scheduler",
+				targetKey: "document-summary",
+				idempotencyKey: `enqueue-${suffix}`,
+				fingerprint: `fingerprint-${suffix}`,
+				input: { revision: 1 },
+				availableAt: now,
+				now,
+				lease: lease!,
+			});
+			let [claimed] = await storage.jobs.claim({
+				channelId,
+				claimOwner: "worker",
+				count: 1,
+				ttlMs: 60_000,
+				now: new Date(now.getTime() + 1),
+				lease: lease!,
+			});
+			await storage.jobs.settle({
+				channelId,
+				jobId: queued.job.id,
+				claimOwner: "worker",
+				claimGeneration: claimed!.claimGeneration,
+				artifact: { abstract: "summary" },
+				now: new Date(now.getTime() + 2),
+				lease: lease!,
+			});
+		} finally {
+			await storage.close();
+		}
+
+		let sql = new SQL(url);
+		try {
+			await sql`DELETE FROM channels WHERE id = ${channelId}`;
+			let [counts] = await sql<{
+				channels: number;
+				targets: number;
+				jobs: number;
+				artifacts: number;
+			}[]>`
+				SELECT
+					(SELECT count(*)::int FROM background_job_channels WHERE channel_id = ${channelId}) AS channels,
+					(SELECT count(*)::int FROM background_job_targets WHERE channel_id = ${channelId}) AS targets,
+					(SELECT count(*)::int FROM background_jobs WHERE channel_id = ${channelId}) AS jobs,
+					(SELECT count(*)::int FROM background_job_artifacts WHERE job_id = ${`job-${suffix}`}) AS artifacts
+			`;
+			expect(counts).toEqual({ channels: 0, targets: 0, jobs: 0, artifacts: 0 });
+		} finally {
+			await sql.close();
+		}
+	});
+
+	it("rechecks a writer lease after waiting for its row lock", async () => {
+		let storage = new PostgresStorage(url);
+		let sql = new SQL(url);
+		let suffix = crypto.randomUUID();
+		let locked = Promise.withResolvers<void>();
+		let release = Promise.withResolvers<void>();
+		try {
+			await storage.migrate();
+			let now = new Date();
+			let userId = `lease-user-${suffix}`;
+			let channelId = `lease-channel-${suffix}`;
+			await storage.users.put({ id: userId, login: "lease", avatarUrl: "", now });
+			await storage.channels.create({
+				id: channelId,
+				repositoryId: `lease-repository-${suffix}`,
+				repositoryOwner: "octo-org",
+				repositoryName: "score",
+				title: `Lease check ${suffix}`,
+				createdBy: userId,
+				now,
+			});
+			let lease = await storage.leases.acquire(`lease-${suffix}`, "old-writer", 50);
+			let blocker = sql.begin(async transaction => {
+				await transaction`SELECT name FROM storage_leases WHERE name = ${lease!.name} FOR UPDATE`;
+				locked.resolve();
+				await release.promise;
+			});
+			await locked.promise;
+			let enqueue = storage.jobs.enqueue({
+				id: `lease-job-${suffix}`,
+				channelId,
+				type: "document-summary",
+				version: 1,
+				origin: "scheduler",
+				targetKey: "document-summary",
+				idempotencyKey: `lease-enqueue-${suffix}`,
+				fingerprint: `lease-fingerprint-${suffix}`,
+				input: { revision: 1 },
+				availableAt: now,
+				now,
+				lease: lease!,
+			});
+			let settled = false;
+			void enqueue.then(
+				() => settled = true,
+				() => settled = true,
+			);
+			await Bun.sleep(10);
+			expect(settled).toBe(false);
+			await Bun.sleep(75);
+			release.resolve();
+			await blocker;
+			await expect(enqueue).rejects.toMatchObject({ failure: "conflict" });
+			expect((await storage.jobs.list(channelId, 10))!.jobs).toEqual([]);
+		} finally {
+			release.resolve();
+			await storage.close();
+			await sql.close();
+		}
+	});
+
+	it("replays concurrent idempotent enqueues across independent lease rows", async () => {
+		let storage = new PostgresStorage(url);
+		let suffix = crypto.randomUUID();
+		try {
+			await storage.migrate();
+			let now = new Date();
+			let userId = `idempotency-user-${suffix}`;
+			let channelId = `idempotency-channel-${suffix}`;
+			await storage.users.put({ id: userId, login: "idempotency", avatarUrl: "", now });
+			await storage.channels.create({
+				id: channelId,
+				repositoryId: `idempotency-repository-${suffix}`,
+				repositoryOwner: "octo-org",
+				repositoryName: "score",
+				title: `Idempotency ${suffix}`,
+				createdBy: userId,
+				now,
+			});
+			let firstLease = await storage.leases.acquire(`first-${suffix}`, "one", 60_000);
+			let secondLease = await storage.leases.acquire(`second-${suffix}`, "two", 60_000);
+			let common = {
+				channelId,
+				type: "document-summary",
+				version: 1,
+				origin: "scheduler" as const,
+				targetKey: "document-summary",
+				idempotencyKey: `enqueue-${suffix}`,
+				fingerprint: `fingerprint-${suffix}`,
+				input: { revision: 1 },
+				availableAt: now,
+				now,
+			};
+			let results = await Promise.all([
+				storage.jobs.enqueue({ ...common, id: `first-job-${suffix}`, lease: firstLease! }),
+				storage.jobs.enqueue({ ...common, id: `second-job-${suffix}`, lease: secondLease! }),
+			]);
+			expect(results.map(result => result.repeated).sort()).toEqual([false, true]);
+			expect(new Set(results.map(result => result.job.id)).size).toBe(1);
+			expect((await storage.jobs.list(channelId, 10))!.jobs).toHaveLength(1);
+		} finally {
+			await storage.close();
+		}
+	});
+
+	it("rechecks a writer lease after waiting for the job mutation lock", async () => {
+		let storage = new PostgresStorage(url);
+		let sql = new SQL(url);
+		let suffix = crypto.randomUUID();
+		let locked = Promise.withResolvers<void>();
+		let release = Promise.withResolvers<void>();
+		try {
+			await storage.migrate();
+			let now = new Date();
+			let userId = `job-lock-user-${suffix}`;
+			let channelId = `job-lock-channel-${suffix}`;
+			await storage.users.put({ id: userId, login: "job-lock", avatarUrl: "", now });
+			await storage.channels.create({
+				id: channelId,
+				repositoryId: `job-lock-repository-${suffix}`,
+				repositoryOwner: "octo-org",
+				repositoryName: "score",
+				title: `Job lock ${suffix}`,
+				createdBy: userId,
+				now,
+			});
+			let lease = await storage.leases.acquire(`job-lock-${suffix}`, "old-writer", 50);
+			let blocker = sql.begin(async transaction => {
+				await transaction`SELECT pg_advisory_xact_lock(2043237432)`;
+				locked.resolve();
+				await release.promise;
+			});
+			await locked.promise;
+			let enqueue = storage.jobs.enqueue({
+				id: `job-lock-job-${suffix}`,
+				channelId,
+				type: "document-summary",
+				version: 1,
+				origin: "scheduler",
+				targetKey: "document-summary",
+				idempotencyKey: `job-lock-enqueue-${suffix}`,
+				fingerprint: `job-lock-fingerprint-${suffix}`,
+				input: { revision: 1 },
+				availableAt: now,
+				now,
+				lease: lease!,
+			});
+			await Bun.sleep(75);
+			release.resolve();
+			await blocker;
+			await expect(enqueue).rejects.toMatchObject({ failure: "conflict" });
+			expect((await storage.jobs.list(channelId, 10))!.jobs).toEqual([]);
+		} finally {
+			release.resolve();
+			await storage.close();
+			await sql.close();
+		}
+	});
+
 	it("backfills unique readable slugs for channels created before the slug migration", async () => {
 		let sql = new SQL(url);
 		let schema = `slug_migration_${crypto.randomUUID().replaceAll("-", "")}`;
@@ -148,6 +382,7 @@ if (url) {
 				"001_initial",
 				"002_document_slugs",
 				"002_user_navigation",
+				"004_background_jobs",
 			]);
 			expect(await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`)
 				.toEqual([

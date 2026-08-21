@@ -219,6 +219,141 @@ export type UpdateAgentContext = {
 	now: Date;
 };
 
+export type BackgroundJobOrigin = "scheduler" | "planner" | "user";
+
+export type BackgroundJobState =
+	| "pending"
+	| "paused"
+	| "running"
+	| "completed"
+	| "failed"
+	| "cancelled"
+	| "superseded";
+
+export type BackgroundJob = {
+	id: string;
+	channelId: string;
+	type: string;
+	version: number;
+	origin: BackgroundJobOrigin;
+	targetKey: string;
+	targetGeneration: number;
+	idempotencyKey: string;
+	fingerprint: string;
+	input: JsonValue;
+	state: BackgroundJobState;
+	revision: number;
+	attempts: number;
+	claimGeneration: number;
+	claimOwner: string | undefined;
+	claimBinding: JsonValue | undefined;
+	claimExpiresAt: Date | undefined;
+	availableAt: Date;
+	reason: string | undefined;
+	createdAt: Date;
+	updatedAt: Date;
+};
+
+export type BackgroundJobTarget = {
+	channelId: string;
+	targetKey: string;
+	generation: number;
+};
+
+export type BackgroundJobArtifact = {
+	jobId: string;
+	revision: number;
+	value: JsonValue;
+	createdAt: Date;
+};
+
+export type BackgroundJobSummary = Omit<
+	BackgroundJob,
+	"claimBinding" | "fingerprint" | "idempotencyKey" | "input"
+>;
+
+export type BackgroundJobCursor = {
+	createdAt: Date;
+	id: string;
+};
+
+export type BackgroundJobPage = {
+	revision: number;
+	jobs: BackgroundJobSummary[];
+	next?: BackgroundJobCursor;
+};
+
+export type BackgroundJobDetail = {
+	revision: number;
+	target: BackgroundJobTarget;
+	job: BackgroundJob;
+	artifact: BackgroundJobArtifact | undefined;
+};
+
+export type EnqueueBackgroundJob = {
+	id: string;
+	channelId: string;
+	type: string;
+	version: number;
+	origin: BackgroundJobOrigin;
+	targetKey: string;
+	idempotencyKey: string;
+	fingerprint: string;
+	input: JsonValue;
+	availableAt: Date;
+	now: Date;
+	lease: Lease;
+};
+
+export type ClaimBackgroundJobs = {
+	channelId?: string;
+	claimOwner: string;
+	count: number;
+	ttlMs: number;
+	now: Date;
+	lease: Lease;
+};
+
+export type ClaimedBackgroundJob = {
+	channelId: string;
+	jobId: string;
+	claimOwner: string;
+	claimGeneration: number;
+	now: Date;
+	lease: Lease;
+};
+
+export type RenewBackgroundJob = ClaimedBackgroundJob & {
+	expectedRevision: number;
+	ttlMs: number;
+	claimBinding: JsonValue | undefined;
+};
+
+export type SettleBackgroundJob = ClaimedBackgroundJob & {
+	artifact: JsonValue;
+};
+
+export type RequeueBackgroundJob = ClaimedBackgroundJob & {
+	availableAt: Date;
+	reason: string;
+};
+
+export type FailBackgroundJob = ClaimedBackgroundJob & {
+	reason: string;
+};
+
+export type ControlBackgroundJob = {
+	channelId: string;
+	jobId: string;
+	expectedRevision: number;
+	now: Date;
+	lease: Lease;
+};
+
+export type PauseBackgroundJob = ControlBackgroundJob & { reason: string };
+export type ResumeBackgroundJob = ControlBackgroundJob & { availableAt: Date };
+export type SupersedeBackgroundJob = ControlBackgroundJob & { reason?: string };
+
 export type Lease = {
 	name: string;
 	owner: string;
