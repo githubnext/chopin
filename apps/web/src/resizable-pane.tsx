@@ -2,6 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 export type PaneSide = "left" | "right";
 
+export type PaneBounds = {
+	initial: number;
+	min: number;
+	max: number;
+};
+
 const STEP = 16;
 const LEAP = 64;
 
@@ -12,6 +18,25 @@ export function clampPane(value: number, min: number, max: number): number {
 /** Translates an on-screen drag into the width change for the pane's edge. */
 export function resizeDelta(side: PaneSide, delta: number): number {
 	return side === "left" ? delta : -delta;
+}
+
+export function restorePaneWidth(stored: string | null, { initial, min, max }: PaneBounds): number {
+	let value = Number(stored);
+	return Number.isFinite(value) && value > 0 ? clampPane(value, min, max) : initial;
+}
+
+export function keyboardPaneDelta(
+	side: PaneSide,
+	key: string,
+	shiftKey: boolean,
+	width: number,
+	{ min, max }: Pick<PaneBounds, "min" | "max">,
+): number | undefined {
+	let step = shiftKey ? LEAP : STEP;
+	if (key === "ArrowRight") return resizeDelta(side, step);
+	if (key === "ArrowLeft") return resizeDelta(side, -step);
+	if (key === "Home") return min - width;
+	if (key === "End") return max - width;
 }
 
 export function ResizeHandle(
@@ -41,15 +66,10 @@ export function ResizeHandle(
 				data-dragging:after:opacity-100 ${side === "left" ? "left-0" : "right-0"}`}
 			data-dragging={dragging || undefined}
 			onKeyDown={event => {
-				let step = event.shiftKey ? LEAP : STEP;
-				let toward = side === "left" ? 1 : -1;
+				let delta = keyboardPaneDelta(side, event.key, event.shiftKey, width, { min, max });
+				if (delta === undefined) return;
 
-				if (event.key === "ArrowRight") onResize(step * toward);
-				else if (event.key === "ArrowLeft") onResize(-step * toward);
-				else if (event.key === "Home") onResize(min - width);
-				else if (event.key === "End") onResize(max - width);
-				else return;
-
+				onResize(delta);
 				event.preventDefault();
 			}}
 			onPointerDown={event => {
@@ -72,11 +92,8 @@ export function ResizeHandle(
 }
 
 export function usePaneWidth(
-	{ active, initial, max, min, storageKey }: {
+	{ active, initial, max, min, storageKey }: PaneBounds & {
 		active: boolean;
-		initial: number;
-		max: number;
-		min: number;
 		storageKey: string;
 	},
 ): readonly [number, (delta: number) => void] {
@@ -87,10 +104,7 @@ export function usePaneWidth(
 		if (!active) return;
 		if (!loaded.current) {
 			loaded.current = true;
-			let stored = Number(localStorage.getItem(storageKey));
-			let restored = Number.isFinite(stored) && stored > 0
-				? clampPane(stored, min, max)
-				: initial;
+			let restored = restorePaneWidth(localStorage.getItem(storageKey), { initial, min, max });
 			if (restored !== width) {
 				setWidth(restored);
 				return;
