@@ -420,7 +420,7 @@ export async function abort(context: Room, ws: Socket): Promise<void> {
 	let { chat, room, server } = context;
 	if (!chat.busy || !chat.agent) return;
 
-	await chat.agent.session.abort().catch(() => {});
+	await Agent.abort(chat.agent);
 	say(chat, server, room, {
 		id: ulid(),
 		author: { kind: "system" },
@@ -560,7 +560,7 @@ async function repositorySession(
 	let opening: Promise<Agent.Agent> | undefined;
 	let opened: Agent.Agent | undefined;
 	try {
-		opening = Agent.open(context.config, { tools }, {
+		opening = Agent.openPlanner(context.config, { tools }, {
 			token: owner.access.token,
 			repository,
 			bootstrap: bootstrap(chat, ownership.transcriptCursor, ownership.summary, currentText),
@@ -1075,14 +1075,14 @@ export async function resetAgent(
 	chat.owner = undefined;
 	chat.opening = undefined;
 	chat.openingOwner = undefined;
-	await agent?.session.abort().catch(() => {});
+	if (agent) await Agent.abort(agent);
 	chat.finishTurn?.();
 	chat.release?.();
 	chat.release = undefined;
 	chat.finishTurn = undefined;
 	if (agent) await Agent.discard(agent);
 	if (opening) {
-		let opened = await opening.catch(() => undefined);
+		let opened = await Agent.settle(opening);
 		if (opened && opened !== agent) await Agent.discard(opened);
 	}
 }
@@ -1099,7 +1099,7 @@ export async function close(chat: Chat): Promise<void> {
 	chat.owner = undefined;
 	chat.opening = undefined;
 	chat.openingOwner = undefined;
-	await agent?.session.abort().catch(() => {});
+	if (agent) await Agent.abort(agent);
 	chat.finishTurn?.();
 	chat.release?.();
 	chat.release = undefined;
@@ -1112,7 +1112,7 @@ export async function close(chat: Chat): Promise<void> {
 	chat.credentialTimer = undefined;
 	if (agent) await Agent.discard(agent);
 	if (opening) {
-		let opened = await opening.catch(() => undefined);
+		let opened = await Agent.settle(opening);
 		if (opened && opened !== agent) await Agent.discard(opened);
 	}
 	await running;

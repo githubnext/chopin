@@ -1,9 +1,9 @@
 /**
  * Starting the agent.
  *
- * One disposable session per active channel, authenticated by its first
- * invoking editor. A restarted process reconstructs context from durable
- * Chopin state rather than resuming Copilot's filesystem state.
+ * Disposable Planner and worker sessions share one hardened runtime. A
+ * restarted process reconstructs context from durable Chopin state rather
+ * than resuming Copilot's filesystem state.
  */
 
 import { CopilotClient, RuntimeConnection } from "@github/copilot-sdk";
@@ -12,10 +12,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { locate } from "./cli";
-import { gate } from "./permissions";
+import { gate, terminalGate } from "./permissions";
 import { NAME, plannerFor, TOOLS } from "./planner";
+import { Runtime } from "./runtime";
 
-import type { CopilotSession, SessionConfig, Tool } from "@github/copilot-sdk";
+import type { CopilotSession, CustomAgentConfig, SessionConfig, Tool } from "@github/copilot-sdk";
 import type { Config } from "../config";
 import type { HostedRepository } from "./repository";
 
@@ -28,29 +29,45 @@ export type Agent = {
 /** The tools a planner may call, over and above the runtime's own. */
 export type Toolbox = { tools: Tool[] };
 
-export type RepositorySession = {
+export type PlannerSession = {
 	token: string;
 	repository: HostedRepository;
 	bootstrap?: string;
 	authorize?: () => Promise<boolean>;
 };
 
-export function configuration(
-	config: Pick<Config, "model">,
-	toolbox: Toolbox,
-	options: RepositorySession,
-): SessionConfig {
-	let repository = `${options.repository.owner}/${options.repository.name}`;
-	let tools = toolbox.tools.map(tool => ({ ...tool, skipPermission: false }));
+export type WorkerSession = {
+	token: string;
+	name: string;
+	prompt: string;
+	result: Tool;
+	maxAiCredits: number;
+	authorize?: () => Promise<boolean>;
+};
+
+const SESSION_CONTROL_TIMEOUT_MS = 10_000;
+
+function bounded<T>(operation: Promise<T>, message: string): Promise<T> {
+	return new Promise<T>((resolve, reject) => {
+		let timer = setTimeout(() => reject(new Error(message)), SESSION_CONTROL_TIMEOUT_MS);
+		operation.then(
+			value => {
+				clearTimeout(timer);
+				resolve(value);
+			},
+			err => {
+				clearTimeout(timer);
+				reject(err);
+			},
+		);
+	});
+}
+
+function hardened(config: Pick<Config, "model">, token: string): SessionConfig {
 	return {
 		model: config.model,
-		streaming: true,
 		largeOutput: { enabled: false },
-		gitHubToken: options.token,
-		availableTools: TOOLS,
-		tools,
-		customAgents: [plannerFor(repository)],
-		agent: NAME,
+		gitHubToken: token,
 		enableConfigDiscovery: false,
 		skipCustomInstructions: true,
 		enableOnDemandInstructionDiscovery: false,
@@ -66,6 +83,23 @@ export function configuration(
 		mcpOAuthTokenStorage: "in-memory",
 		enableSessionTelemetry: false,
 		remoteSession: "off",
+	} as SessionConfig;
+}
+
+export function plannerConfiguration(
+	config: Pick<Config, "model">,
+	toolbox: Toolbox,
+	options: PlannerSession,
+): SessionConfig {
+	let repository = `${options.repository.owner}/${options.repository.name}`;
+	let tools = toolbox.tools.map(tool => ({ ...tool, skipPermission: false }));
+	return {
+		...hardened(config, options.token),
+		streaming: true,
+		availableTools: TOOLS,
+		tools,
+		customAgents: [plannerFor(repository)],
+		agent: NAME,
 		mcpServers: {
 			github: {
 				type: "http",
@@ -95,24 +129,56 @@ export function configuration(
 	} as SessionConfig;
 }
 
-let client: CopilotClient | undefined;
-let home: string | undefined;
+export function workerConfiguration(
+	config: Pick<Config, "model">,
+	options: WorkerSession,
+): SessionConfig {
+	if (!Number.isFinite(options.maxAiCredits) || options.maxAiCredits <= 0) {
+		throw new Error("Background worker maxAiCredits must be finite and positive.");
+	}
+	let result = { ...options.result, skipPermission: false, isTerminal: true };
+	let worker: CustomAgentConfig = {
+		name: options.name,
+		displayName: "Background worker",
+		description: "Executes one registered background job and submits its structured result.",
+		prompt: options.prompt,
+		infer: false,
+	};
+	return {
+		...hardened(config, options.token),
+		streaming: false,
+		sessionLimits: { maxAiCredits: options.maxAiCredits },
+		availableTools: [`custom:${result.name}`],
+		tools: [result],
+		customAgents: [worker],
+		agent: worker.name,
+		mcpServers: {},
+		onPermissionRequest: terminalGate(result.name, options.authorize),
+	} as SessionConfig;
+}
 
-function connect(): CopilotClient {
-	if (client) return client;
+function connect() {
 	let cli = locate();
 	if (!cli.ok) throw new Error(cli.reason);
-	home = mkdtempSync(join(tmpdir(), "chopin-copilot-"));
-	return client = new CopilotClient({
-		mode: "empty",
-		workingDirectory: home,
-		baseDirectory: home,
-		connection: RuntimeConnection.forStdio({ path: cli.path }),
-		useLoggedInUser: false,
-		env: {},
-		logLevel: "info",
-	});
+	let home = mkdtempSync(join(tmpdir(), "chopin-copilot-"));
+	try {
+		let client = new CopilotClient({
+			mode: "empty",
+			workingDirectory: home,
+			baseDirectory: home,
+			connection: RuntimeConnection.forStdio({ path: cli.path }),
+			useLoggedInUser: false,
+			env: {},
+			logLevel: "info",
+		});
+		return { client, cleanup: () => rmSync(home, { recursive: true, force: true }) };
+	} catch (err) {
+		rmSync(home, { recursive: true, force: true });
+		throw err;
+	}
 }
+
+let runtime = new Runtime(connect);
 
 /**
  * Report what the planner can actually call.
@@ -156,29 +222,90 @@ async function audit(session: CopilotSession): Promise<void> {
 	}
 }
 
+export function assertWorkerTools(names: string[], expected: string): void {
+	let matches = names.length === 1 && names[0] === `custom:${expected}`;
+	if (!matches) {
+		throw new Error(
+			`Background worker capability audit failed: expected custom:${expected}, received ${
+				names.length > 0 ? names.join(", ") : "none"
+			}.`,
+		);
+	}
+}
+
+async function auditWorker(session: CopilotSession, expected: string): Promise<void> {
+	await session.rpc.tools.initializeAndValidate();
+	let { tools } = await session.rpc.tools.getCurrentMetadata();
+	let names = tools?.map(tool => tool.namespacedName || `unqualified:${tool.name}`).sort() ?? [];
+	assertWorkerTools(names, expected);
+}
+
 /** Create a disposable session authenticated and scoped to one owner and repository. */
-export async function open(
-	config: Pick<Config, "model">,
+export async function openPlanner(
+	config: Pick<Config, "agent" | "model">,
 	toolbox: Toolbox,
-	options: RepositorySession,
+	options: PlannerSession,
 ): Promise<Agent> {
-	let started = connect();
-	await started.start();
-	let session = await started.createSession(configuration(config, toolbox, options));
-	await session.rpc.agent.select({ name: NAME });
-	await audit(session);
-	return { session, id: session.sessionId };
+	if (!config.agent) throw new Error("The hosted agent is disabled.");
+	let session = await runtime.open(plannerConfiguration(config, toolbox, options));
+	try {
+		await session.rpc.agent.select({ name: NAME });
+		await audit(session);
+		return { session, id: session.sessionId };
+	} catch (err) {
+		await runtime.discard(session).catch(() => {});
+		throw err;
+	}
+}
+
+/** Create a disposable isolated session for one registered background attempt. */
+export async function openWorker(
+	config: Pick<Config, "agent" | "model">,
+	options: WorkerSession,
+): Promise<Agent> {
+	if (!config.agent) throw new Error("The hosted agent is disabled.");
+	let session = await runtime.open(workerConfiguration(config, options));
+	try {
+		await session.rpc.agent.select({ name: options.name });
+		await auditWorker(session, options.result.name);
+		return { session, id: session.sessionId };
+	} catch (err) {
+		await runtime.discard(session).catch(() => {});
+		throw err;
+	}
 }
 
 export async function discard(agent: Agent): Promise<void> {
-	await agent.session.disconnect().catch(() => {});
-	await client?.deleteSession(agent.id).catch(() => {});
+	let owned: boolean;
+	try {
+		owned = await runtime.discard(agent.session);
+	} catch {
+		return;
+	}
+	if (!owned) await agent.session.disconnect().catch(() => {});
 }
 
-/** Let go of the CLI process. Sessions are the caller's to close first. */
+/** Bound an SDK abort so runtime shutdown can still force a wedged session down. */
+export async function abort(agent: Agent): Promise<void> {
+	await bounded(
+		Promise.resolve().then(() => agent.session.abort()),
+		`Copilot session ${agent.id} abort timed out.`,
+	).catch(() => {});
+}
+
+/** Stop waiting for an opening session, and dispose it if it arrives later. */
+export async function settle(opening: Promise<Agent>): Promise<Agent | undefined> {
+	let expired = false;
+	let watched = opening.then(agent => {
+		if (expired) void discard(agent);
+		return agent;
+	}, () => undefined);
+	let opened = await bounded(watched, "Copilot session opening timed out.").catch(() => undefined);
+	expired = true;
+	return opened;
+}
+
+/** Close every remaining session and let go of the CLI process. */
 export async function shutdown(): Promise<void> {
-	await client?.stop().catch(() => {});
-	client = undefined;
-	if (home) rmSync(home, { recursive: true, force: true });
-	home = undefined;
+	await runtime.shutdown();
 }

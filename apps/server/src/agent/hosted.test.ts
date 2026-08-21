@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
-import { configuration } from "./client";
-import { gate } from "./permissions";
+import { assertWorkerTools, openWorker, plannerConfiguration, workerConfiguration } from "./client";
+import { gate, terminalGate } from "./permissions";
 import { repositoryTools } from "./repository";
 
 import type { PermissionRequest, Tool } from "@github/copilot-sdk";
@@ -14,7 +14,7 @@ describe("hosted Copilot configuration", () => {
 			parameters: {},
 			handler: () => "ok",
 		} as Tool;
-		let config = configuration(
+		let config = plannerConfiguration(
 			{ model: "model" },
 			{ tools: [tool] },
 			{
@@ -38,6 +38,97 @@ describe("hosted Copilot configuration", () => {
 		});
 		expect(config.customAgents?.[0]?.prompt).toContain("read_repository_file");
 		expect(config.customAgents?.[0]?.prompt).not.toContain("You have `view`, `grep` and `glob`");
+	});
+
+	it("gives a worker only its terminal result tool", async () => {
+		let result = {
+			name: "submit_job_result",
+			description: "submit",
+			parameters: {},
+			handler: () => "ok",
+		} as Tool;
+		let config = workerConfiguration(
+			{ model: "model" },
+			{
+				token: "ghu_owner",
+				name: "chopin-document-summary",
+				prompt: "Summarize the supplied document and submit one result.",
+				result,
+				maxAiCredits: 32,
+			},
+		);
+
+		expect(config.gitHubToken).toBe("ghu_owner");
+		expect(config.streaming).toBe(false);
+		expect(config.sessionLimits).toEqual({ maxAiCredits: 32 });
+		expect(config.availableTools).toEqual(["custom:submit_job_result"]);
+		expect(config.tools).toHaveLength(1);
+		expect(config.tools?.[0]).toMatchObject({
+			name: "submit_job_result",
+			skipPermission: false,
+			isTerminal: true,
+		});
+		expect(config.mcpServers).toEqual({});
+		expect(config.customAgents).toHaveLength(1);
+		expect(config.customAgents?.[0]).toMatchObject({
+			name: "chopin-document-summary",
+			prompt: "Summarize the supplied document and submit one result.",
+			infer: false,
+		});
+		expect(config.customAgents?.[0]?.tools).toBeUndefined();
+
+		let decide = terminalGate("submit_job_result");
+		expect(
+			await decide(
+				{ kind: "custom-tool", toolName: "submit_job_result" } as PermissionRequest,
+				{ sessionId: "worker" },
+			),
+		).toEqual({ kind: "approve-once" });
+		expect(
+			await decide(
+				{ kind: "custom-tool", toolName: "read_plan" } as PermissionRequest,
+				{ sessionId: "worker" },
+			),
+		).toMatchObject({ kind: "reject" });
+		expect(
+			await decide(
+				{ kind: "url", url: "https://example.com" } as PermissionRequest,
+				{ sessionId: "worker" },
+			),
+		).toMatchObject({ kind: "reject" });
+	});
+
+	it("fails worker capability audits closed", () => {
+		expect(() => assertWorkerTools(["custom:submit_job_result"], "submit_job_result"))
+			.not.toThrow();
+		expect(() => assertWorkerTools([], "submit_job_result")).toThrow("received none");
+		expect(() => assertWorkerTools(["submit_job_result"], "submit_job_result"))
+			.toThrow("submit_job_result");
+		expect(() =>
+			assertWorkerTools(
+				["custom:submit_job_result", "builtin:web_fetch"],
+				"submit_job_result",
+			)
+		).toThrow("builtin:web_fetch");
+	});
+
+	it("does not start a worker when the hosted agent is disabled", async () => {
+		let result = {
+			name: "submit_job_result",
+			description: "submit",
+			parameters: {},
+			handler: () => "ok",
+		} as Tool;
+		await expect(openWorker(
+			{ agent: false, model: "model" },
+			{
+				token: "ghu_owner",
+				name: "chopin-document-summary",
+				prompt: "Summarize the supplied document and submit one result.",
+				result,
+				maxAiCredits: 32,
+			},
+		)).rejects.toThrow("disabled");
 	});
 
 	it("confines MCP and denies every host capability", async () => {
