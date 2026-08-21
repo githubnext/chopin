@@ -66,6 +66,30 @@ export function terminalGate(
 	};
 }
 
+/** Public research receives no private tools and may only use exact web search. */
+export function publicResearchGate(
+	resultTool: string,
+	active?: () => Promise<boolean>,
+): PermissionHandler {
+	return async (request: PermissionRequest): Promise<PermissionRequestResult> => {
+		if (active && !(await active())) return deny("The Copilot owner is no longer active.");
+		if (request.kind === "custom-tool") {
+			return request.toolName === resultTool
+				? allow()
+				: deny("This worker may only submit its registered research result.");
+		}
+		if (request.kind === "mcp") {
+			return request.serverName === "github"
+					&& request.readOnly
+					&& request.toolName === "web_search"
+				? allow()
+				: deny("Only the exact read-only public web search tool is available.");
+		}
+		if (request.kind === "url") return deny("Public research has no direct URL fetch capability.");
+		return deny("Public research has no repository, filesystem, shell, or private document tools.");
+	};
+}
+
 function hasForeignScope(value: unknown, owner: string, repository: string): boolean {
 	if (typeof value === "string") return /\b(?:repo|org|user):/i.test(value);
 	if (Array.isArray(value)) return value.some(item => hasForeignScope(item, owner, repository));

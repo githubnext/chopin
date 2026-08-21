@@ -22,6 +22,7 @@ import { Router } from "./http/router";
 import { JobRegistry } from "./jobs/registry";
 import { documentSummaryDefinition } from "./jobs/document-summary";
 import { JobRunner } from "./jobs/runner";
+import { researchQuestionDefinition, researchQuestionSnapshot } from "./jobs/research-question";
 import { JobService } from "./jobs/service";
 import { DocumentSummaryCoordinator } from "./jobs/summary-coordinator";
 import { registerMcpRoutes } from "./mcp/routes";
@@ -612,6 +613,46 @@ async function commitCurrentSummary(
 	});
 }
 
+async function commitCurrentResearch(
+	channelId: string,
+	questionId: string,
+	questionHash: string,
+	documentRevision: number,
+	documentSourceHash: string,
+	commit: () => Promise<void>,
+): Promise<boolean> {
+	return withDocumentLock(channelId, async () => {
+		let active = Rooms.get(channelId);
+		let source: string;
+		if (active?.plan) {
+			let plan = active.plan;
+			return Service.exclusive(plan, async () => {
+				source = Service.source(plan);
+				let question = researchQuestionSnapshot(source, questionId);
+				if (
+					plan.revision !== documentRevision
+					|| Service.sourceHash(source) !== documentSourceHash
+					|| question?.questionHash !== questionHash
+				) return false;
+				await commit();
+				return true;
+			});
+		}
+		let stored = await storage.collaboration.load(channelId, new Date());
+		if (!stored) return false;
+		let projected = await Service.readStored(stored);
+		source = projected.source;
+		let question = researchQuestionSnapshot(source, questionId);
+		if (
+			projected.revision !== documentRevision
+			|| Service.sourceHash(source) !== documentSourceHash
+			|| question?.questionHash !== questionHash
+		) return false;
+		await commit();
+		return true;
+	});
+}
+
 async function sessionRevoked(sessionId: string): Promise<void> {
 	let jobs = jobRunner?.ownerRevoked(sessionId);
 	ownerBindings?.revokeSession(sessionId);
@@ -646,12 +687,19 @@ let hostedAuth = registerAuthRoutes(router, {
 	onCredentialsWillRotate: credentialsWillRotate,
 });
 ownerBindings = new ActiveOwnerBindings(hostedAuth);
-let jobRegistry = new JobRegistry([documentSummaryDefinition({
-	config,
-	current: currentDocumentTarget,
-	refresh: target => summaryCoordinator?.enqueueNow(target) ?? Promise.resolve(),
-	commitCurrent: commitCurrentSummary,
-})]);
+let jobRegistry = new JobRegistry([
+	documentSummaryDefinition({
+		config,
+		current: currentDocumentTarget,
+		refresh: target => summaryCoordinator?.enqueueNow(target) ?? Promise.resolve(),
+		commitCurrent: commitCurrentSummary,
+	}),
+	researchQuestionDefinition({
+		config,
+		current: currentDocumentTarget,
+		commitCurrent: commitCurrentResearch,
+	}),
+]);
 let jobService = new JobService({
 	storage,
 	registry: jobRegistry,
@@ -685,6 +733,7 @@ jobRunner = new JobRunner({
 				ownerGeneration: binding.ownerGeneration,
 				credentialRevision: binding.credentialRevision,
 				expiresAt: new Date(binding.expiresAt),
+				signal: binding.signal,
 				authorize: binding.revalidate,
 			},
 			ownerKey: binding.ownerSessionId,

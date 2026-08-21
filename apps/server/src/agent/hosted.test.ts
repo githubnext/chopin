@@ -1,7 +1,13 @@
 import { describe, expect, it } from "bun:test";
 
-import { assertWorkerTools, openWorker, plannerConfiguration, workerConfiguration } from "./client";
-import { gate, terminalGate } from "./permissions";
+import {
+	assertWorkerTools,
+	openWorker,
+	plannerConfiguration,
+	publicResearchConfiguration,
+	workerConfiguration,
+} from "./client";
+import { gate, publicResearchGate, terminalGate } from "./permissions";
 import { repositoryTools } from "./repository";
 
 import type { PermissionRequest, Tool } from "@github/copilot-sdk";
@@ -110,6 +116,53 @@ describe("hosted Copilot configuration", () => {
 				"submit_job_result",
 			)
 		).toThrow("builtin:web_fetch");
+	});
+
+	it("isolates public web research from private capabilities", async () => {
+		let result = {
+			name: "submit_research_result",
+			description: "submit",
+			parameters: {},
+			handler: () => "ok",
+		} as Tool;
+		let config = publicResearchConfiguration({ model: "model" }, {
+			token: "ghu_owner",
+			name: "chopin-public-research",
+			prompt: "Research only the disclosed public question.",
+			result,
+			maxAiCredits: 32,
+		});
+		expect(config.availableTools).toEqual([
+			"custom:submit_research_result",
+			"mcp:github-web_search",
+		]);
+		expect(config.mcpServers?.github).toMatchObject({
+			tools: ["web_search"],
+			headers: { "X-MCP-Tools": "web_search" },
+		});
+		expect(config.tools).toHaveLength(1);
+
+		let decide = publicResearchGate("submit_research_result");
+		expect(
+			await decide({
+				kind: "mcp",
+				serverName: "github",
+				readOnly: true,
+				toolName: "web_search",
+			} as PermissionRequest, { sessionId: "worker" }),
+		).toEqual({ kind: "approve-once" });
+		expect(
+			await decide({
+				kind: "url",
+				url: "https://example.com/evidence",
+			} as PermissionRequest, { sessionId: "worker" }),
+		).toMatchObject({ kind: "reject" });
+		expect(
+			await decide({
+				kind: "custom-tool",
+				toolName: "read_plan",
+			} as PermissionRequest, { sessionId: "worker" }),
+		).toMatchObject({ kind: "reject" });
 	});
 
 	it("does not start a worker when the hosted agent is disabled", async () => {
