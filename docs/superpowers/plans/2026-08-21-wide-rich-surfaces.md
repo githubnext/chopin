@@ -75,6 +75,7 @@ test("top-level rich surfaces use the document width while nested surfaces stay 
 		let image = root.querySelector<HTMLImageElement>(
 			':scope > [data-plan-src] > img[alt="Responsive workspace reference"]',
 		);
+		let imageRow = root.querySelector(":scope > [data-plan-src]");
 		let callout = root.querySelector('[data-plan-type="warning"]');
 		let nested = callout?.querySelector<HTMLImageElement>(
 			'img[alt="Contained callout reference"]',
@@ -86,6 +87,7 @@ test("top-level rich surfaces use the document width while nested surfaces stay 
 			document: rectangle(scroller),
 			gutter: Number.parseFloat(style.paddingInlineStart),
 			image: { ...rectangle(image), naturalWidth: image?.naturalWidth ?? 0 },
+			imageRow: rectangle(imageRow),
 			mermaid: rectangle(root.querySelector(':scope > [data-plan-language="mermaid"]')),
 			nested: rectangle(nested),
 			prose: rectangle(root.querySelector(":scope > p")),
@@ -95,12 +97,19 @@ test("top-level rich surfaces use the document width while nested surfaces stay 
 
 	let left = geometry.document.left + geometry.gutter;
 	let right = geometry.document.right - geometry.gutter;
-	for (let surface of [geometry.table, geometry.image, geometry.mermaid]) {
+	for (let surface of [geometry.table, geometry.imageRow, geometry.mermaid]) {
 		expect(Math.abs(surface.left - left)).toBeLessThan(2);
 		expect(Math.abs(surface.right - right)).toBeLessThan(2);
 		expect(surface.width).toBeGreaterThan(geometry.prose.width);
 	}
 	expect(geometry.image.width).toBeLessThanOrEqual(geometry.image.naturalWidth);
+	expect(geometry.image.width).toBeLessThanOrEqual(geometry.imageRow.width);
+	expect(
+		Math.abs(
+			(geometry.image.left + geometry.image.right) / 2
+				- (geometry.imageRow.left + geometry.imageRow.right) / 2,
+		),
+	).toBeLessThan(2);
 	expect(geometry.nested.left).toBeGreaterThanOrEqual(geometry.callout.left);
 	expect(geometry.nested.right).toBeLessThanOrEqual(geometry.callout.right);
 	await expectNoHorizontalOverflow(page);
