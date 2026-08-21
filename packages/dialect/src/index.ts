@@ -19,6 +19,8 @@ export {
 } from "./dialect";
 export type { Attribute, Component, Content, Kind } from "./dialect";
 
+export { topLevelChunks } from "./chunk";
+export type { MdxChunk } from "./chunk";
 export { parse, PlanParseError } from "./parse";
 export { serialize } from "./serialize";
 export { assert, PlanValidationError, validate } from "./validate";

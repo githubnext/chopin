@@ -45,6 +45,8 @@ async function hosted() {
 describe("hosted plan persistence", () => {
 	it("does not acknowledge a client update before its durable commit", async () => {
 		let context = await hosted();
+		let targets: Service.DocumentTarget[] = [];
+		context.backend.onDocumentPersisted = target => targets.push(target);
 		let plan = await Service.open(context.channel.id, context.backend, context.server);
 		let peer = await Room.restore(
 			plan.document.epoch,
@@ -96,6 +98,17 @@ describe("hosted plan persistence", () => {
 		expect(frames.some(frame => frame.kind === "plan:ack")).toBe(true);
 		expect((await context.storage.collaboration.load(context.channel.id, context.now))!.updates)
 			.toHaveLength(1);
+		expect(targets).toEqual([{
+			channelId: context.channel.id,
+			revision: 1,
+			source: Service.source(plan),
+			sourceHash: Service.sourceHash(Service.source(plan)),
+		}]);
+		Service.submit(plan, ws, { ...message, rid: "request-2", id: "update-2" });
+		await Bun.sleep(10);
+		await plan.flushing;
+		expect(plan.revision).toBe(1);
+		expect(targets).toHaveLength(1);
 		peer.doc.destroy();
 		await Service.close(plan);
 	});
@@ -136,6 +149,8 @@ describe("hosted plan persistence", () => {
 
 	it("restores sidecar-only transcript changes", async () => {
 		let context = await hosted();
+		let targets: Service.DocumentTarget[] = [];
+		context.backend.onDocumentPersisted = target => targets.push(target);
 		let plan = await Service.open(context.channel.id, context.backend, context.server);
 		plan.chat.entries.push({
 			id: ulid(),
@@ -144,6 +159,7 @@ describe("hosted plan persistence", () => {
 			ts: 1,
 		});
 		await Service.persist(plan);
+		expect(targets).toEqual([]);
 		await Service.close(plan);
 
 		let restored = await Service.open(context.channel.id, context.backend, context.server);

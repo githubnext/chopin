@@ -15,6 +15,10 @@
 			"types": "./src/dialect.ts",
 			"default": "./src/dialect.ts"
 		},
+		"./chunk": {
+			"types": "./src/chunk.ts",
+			"default": "./src/chunk.ts"
+		},
 		"./limits": {
 			"types": "./src/limits.ts",
 			"default": "./src/limits.ts"

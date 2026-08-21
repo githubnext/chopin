@@ -69,6 +69,14 @@ export type Backend = {
 	storage: StorageAdapter;
 	lease: () => Lease;
 	fatal: (error: unknown) => void;
+	onDocumentPersisted?: (target: DocumentTarget) => void;
+};
+
+export type DocumentTarget = {
+	channelId: string;
+	revision: number;
+	source: string;
+	sourceHash: string;
 };
 
 /** Durable MCP context for a document created through the hosted surface. */
@@ -91,8 +99,10 @@ type Persistence = Backend & {
 };
 
 type Captured = {
+	revision: number;
 	epoch: string;
 	source: string;
+	sourceHash: string;
 	document: Uint8Array;
 	sidecar: JsonValue;
 	sidecarText: string;
@@ -205,9 +215,12 @@ function jsonState(plan: Plan): { value: JsonValue; text: string } {
 
 function capture(plan: Plan): Captured {
 	let sidecar = jsonState(plan);
+	let source = room.project(plan.document);
 	return {
+		revision: plan.revision,
 		epoch: plan.document.epoch,
-		source: room.project(plan.document),
+		source,
+		sourceHash: sourceHash(source),
 		document: Y.encodeStateAsUpdate(plan.document.doc),
 		sidecar: sidecar.value,
 		sidecarText: sidecar.text,
@@ -427,7 +440,7 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 	};
 }
 
-function digest(source: string): string {
+export function sourceHash(source: string): string {
 	return `sha256:${createHash("sha256").update(source).digest("hex")}`;
 }
 
@@ -453,7 +466,7 @@ export async function initial(
 			generation: crypto.randomUUID(),
 			epoch: document.epoch,
 			source: canonical,
-			sourceHash: digest(canonical),
+			sourceHash: sourceHash(canonical),
 			document: Y.encodeStateAsUpdate(document.doc),
 			sidecar: JSON.parse(JSON.stringify(sidecar)) as JsonValue,
 		};
@@ -484,6 +497,7 @@ async function commitHosted(
 		return;
 	}
 	try {
+		let sourceChanged = captured.source !== durable.committedSource;
 		let result = await durable.storage.collaboration.commit({
 			channelId: durable.channelId,
 			lease: durable.lease(),
@@ -521,6 +535,18 @@ async function commitHosted(
 		if (plan.document.epoch === captured.epoch) {
 			plan.document.checkpoint = new Uint8Array(captured.document);
 		}
+		if (update && sourceChanged && durable.onDocumentPersisted) {
+			try {
+				durable.onDocumentPersisted({
+					channelId: durable.channelId,
+					revision: captured.revision,
+					source: captured.source,
+					sourceHash: captured.sourceHash,
+				});
+			} catch (err) {
+				console.warn(`[plan] could not schedule derived work for ${durable.channelId}:`, err);
+			}
+		}
 		scheduleCheckpoint(plan);
 	} catch (err) {
 		durable.fatal(err);
@@ -540,7 +566,7 @@ async function checkpointHosted(plan: Plan): Promise<void> {
 			throughSequence: durable.sequence,
 			epoch: durable.committedEpoch,
 			source: durable.committedSource,
-			sourceHash: digest(durable.committedSource),
+			sourceHash: sourceHash(durable.committedSource),
 			document: durable.committedDocument,
 			sidecar: durable.committedSidecar,
 			createdAt: new Date(),
@@ -563,7 +589,7 @@ async function replaceHosted(plan: Plan, operationId: string, captured: Captured
 			generation: crypto.randomUUID(),
 			epoch: captured.epoch,
 			source: captured.source,
-			sourceHash: digest(captured.source),
+			sourceHash: sourceHash(captured.source),
 			document: captured.document,
 			sidecar: captured.sidecar,
 			now: new Date(),
@@ -600,6 +626,19 @@ export function exclusive<T>(plan: Plan, action: () => Promise<T>): Promise<T> {
 	let operation = plan.flushing.then(action, action);
 	plan.flushing = operation.then(() => {}, () => {});
 	return operation;
+}
+
+/** Read one canonical document target in the same queue as live mutations. */
+export function readCurrentDocument(plan: Plan): Promise<DocumentTarget> {
+	return exclusive(plan, async () => {
+		let source = room.project(plan.document);
+		return {
+			channelId: plan.id,
+			revision: plan.revision,
+			source,
+			sourceHash: sourceHash(source),
+		};
+	});
 }
 
 /** Drain mutations already admitted before a claim closes the plan to new work. */
@@ -719,7 +758,7 @@ async function restoreHosted(id: string, loaded: StoredChannel): Promise<Restore
 			) throw new Error(`channel ${id} has an invalid update journal`);
 			previous = update.sequence;
 		}
-		if (digest(loaded.snapshot.source) !== loaded.snapshot.sourceHash) {
+		if (sourceHash(loaded.snapshot.source) !== loaded.snapshot.sourceHash) {
 			throw new Error(`channel ${id} has a corrupt source hash`);
 		}
 		document = await room.restore(
@@ -966,7 +1005,7 @@ async function commit(plan: Plan): Promise<void> {
 	} catch (err) {
 		console.error("[plan] could not carry anchors forward:", err);
 	}
-	plan.revision++;
+	if (room.project(plan.document) !== plan.persistence.committedSource) plan.revision++;
 	let merged = Y.mergeUpdates(batch.map(item => item.update));
 	let operationId = `plan:${plan.document.epoch}:${
 		createHash("sha256").update(merged).digest("hex")
@@ -1009,7 +1048,7 @@ export async function publish(
 ): Promise<void> {
 	if (implementationActive(plan)) throw new Error("implementation is active");
 	plan.document.seq++;
-	plan.revision++;
+	if (room.project(plan.document) !== plan.persistence.committedSource) plan.revision++;
 	let operationId = `server:${plan.document.epoch}:${
 		createHash("sha256").update(mutation.update).digest("hex")
 	}`;

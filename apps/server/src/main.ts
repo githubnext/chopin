@@ -20,8 +20,10 @@ import { describe, load } from "./config";
 import { GitHubError } from "./github/client";
 import { Router } from "./http/router";
 import { JobRegistry } from "./jobs/registry";
+import { documentSummaryDefinition } from "./jobs/document-summary";
 import { JobRunner } from "./jobs/runner";
 import { JobService } from "./jobs/service";
+import { DocumentSummaryCoordinator } from "./jobs/summary-coordinator";
 import { registerMcpRoutes } from "./mcp/routes";
 import { registerNavigationRoutes } from "./navigation/routes";
 import * as Service from "./plan/service";
@@ -36,6 +38,7 @@ import { broadcast, fail, relay, tell, topic } from "./wire";
 
 import type { Server } from "bun";
 import type { Incoming } from "@chopin/protocol";
+import type { DocumentSummaryInput } from "./jobs/document-summary";
 import type { ChannelRecord, Lease } from "./storage/model";
 import type { AuthorizationResult, Socket, SocketData } from "./wire";
 
@@ -68,6 +71,19 @@ let sessionCleanup: ReturnType<typeof setInterval> | undefined;
 let cleaningSessions: Promise<void> | undefined;
 let ownerBindings: ActiveOwnerBindings | undefined;
 let jobRunner: JobRunner | undefined;
+let summaryCoordinator: DocumentSummaryCoordinator | undefined;
+let documentLocks = new Map<string, Promise<void>>();
+
+function withDocumentLock<T>(channelId: string, action: () => Promise<T>): Promise<T> {
+	let previous = documentLocks.get(channelId) ?? Promise.resolve();
+	let operation = previous.then(action, action);
+	let settled = operation.then(() => {}, () => {});
+	documentLocks.set(channelId, settled);
+	void settled.finally(() => {
+		if (documentLocks.get(channelId) === settled) documentLocks.delete(channelId);
+	});
+	return operation;
+}
 
 function presence(server: Server<SocketData>, room: Rooms.Room): void {
 	broadcast(server, room.id, {
@@ -95,12 +111,13 @@ function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Service.Pla
 			console.error("chopin: plan persistence failed -", err);
 			signal();
 		},
+		onDocumentPersisted: target => summaryCoordinator?.schedule(target),
 	};
-	return room.opening ??= Service
-		.open(room.id, backend, server)
+	return room.opening ??= withDocumentLock(room.id, () => Service.open(room.id, backend, server))
 		.then(async opened => {
 			room.plan = opened;
 			room.opening = undefined;
+			if (summaryCoordinator) void summaryCoordinator.ensure(room.id).catch(() => {});
 			if (Inject.enabled()) Inject.ask(opened, server, room.id);
 			if (Marks.enabled()) await Marks.mark(opened);
 			return opened;
@@ -128,6 +145,7 @@ function conversation(room: Rooms.Room, ws: Socket): Chat.Room {
 			defaultBranch: ws.data.repositoryDefaultBranch,
 		},
 		persist: () => Service.persist(room.plan!),
+		ownerAvailable: () => jobRunner?.ownerAvailable(room.id) ?? Promise.resolve(),
 	};
 }
 
@@ -445,13 +463,17 @@ function drain(): Promise<void> {
 		for (let result of await Promise.allSettled([cleaningSessions])) {
 			if (result.status === "rejected") record(result.reason);
 		}
+		let rooms = await Promise.allSettled(
+			Rooms.all().map(room => room.plan && Service.close(room.plan)),
+		);
+		for (let result of rooms) {
+			if (result.status === "rejected") record(result.reason);
+		}
+		if (summaryCoordinator) await attempt(() => summaryCoordinator!.flush());
+		summaryCoordinator?.close();
 		let stoppingJobs = jobRunner?.shutdown();
 		ownerBindings?.revokeAll();
-		let [rooms, jobs] = await Promise.all([
-			Promise.allSettled(Rooms.all().map(room => room.plan && Service.close(room.plan))),
-			Promise.allSettled([stoppingJobs]),
-		]);
-		for (let result of [...rooms, ...jobs]) {
+		for (let result of await Promise.allSettled([stoppingJobs])) {
 			if (result.status === "rejected") record(result.reason);
 		}
 		await attempt(() => Agent.shutdown());
@@ -539,6 +561,57 @@ function announceChannelRename(channel: ChannelRecord): void {
 	});
 }
 
+async function currentDocumentTarget(
+	channelId: string,
+): Promise<Service.DocumentTarget | undefined> {
+	let active = Rooms.get(channelId);
+	if (active?.opening) await active.opening.catch(() => undefined);
+	if (active?.plan) return Service.readCurrentDocument(active.plan);
+	let stored = await storage.collaboration.load(channelId, new Date());
+	if (!stored) return undefined;
+	let projected = await Service.readStored(stored);
+	active = Rooms.get(channelId);
+	if (active?.opening) await active.opening.catch(() => undefined);
+	if (active?.plan) return Service.readCurrentDocument(active.plan);
+	return {
+		channelId,
+		revision: projected.revision,
+		source: projected.source,
+		sourceHash: Service.sourceHash(projected.source),
+	};
+}
+
+async function commitCurrentSummary(
+	channelId: string,
+	expected: DocumentSummaryInput,
+	commit: () => Promise<void>,
+): Promise<boolean> {
+	return withDocumentLock(channelId, async () => {
+		let active = Rooms.get(channelId);
+		if (active?.plan) {
+			let plan = active.plan;
+			return Service.exclusive(plan, async () => {
+				let source = Service.source(plan);
+				if (
+					plan.revision !== expected.revision
+					|| Service.sourceHash(source) !== expected.sourceHash
+				) return false;
+				await commit();
+				return true;
+			});
+		}
+		let stored = await storage.collaboration.load(channelId, new Date());
+		if (!stored) return false;
+		let projected = await Service.readStored(stored);
+		if (
+			projected.revision !== expected.revision
+			|| Service.sourceHash(projected.source) !== expected.sourceHash
+		) return false;
+		await commit();
+		return true;
+	});
+}
+
 async function sessionRevoked(sessionId: string): Promise<void> {
 	let jobs = jobRunner?.ownerRevoked(sessionId);
 	ownerBindings?.revokeSession(sessionId);
@@ -573,7 +646,12 @@ let hostedAuth = registerAuthRoutes(router, {
 	onCredentialsWillRotate: credentialsWillRotate,
 });
 ownerBindings = new ActiveOwnerBindings(hostedAuth);
-let jobRegistry = new JobRegistry();
+let jobRegistry = new JobRegistry([documentSummaryDefinition({
+	config,
+	current: currentDocumentTarget,
+	refresh: target => summaryCoordinator?.enqueueNow(target) ?? Promise.resolve(),
+	commitCurrent: commitCurrentSummary,
+})]);
 let jobService = new JobService({
 	storage,
 	registry: jobRegistry,
@@ -582,6 +660,11 @@ let jobService = new JobService({
 		return heldLease;
 	},
 	onChange: job => jobRunner?.notify(job),
+});
+summaryCoordinator = new DocumentSummaryCoordinator({
+	service: jobService,
+	current: currentDocumentTarget,
+	error: err => console.error("chopin: document summary scheduling failed -", err),
 });
 jobRunner = new JobRunner({
 	storage,
@@ -629,6 +712,9 @@ registerMcpRoutes(router, hostedAuth, {
 	},
 }, {
 	onChannelRenamed: announceChannelRename,
+	onDocumentPersisted: target => {
+		if (summaryCoordinator) void summaryCoordinator.enqueueNow(target).catch(() => {});
+	},
 });
 registerChannelRoutes(router, hostedAuth, {
 	onAgentReset: channelOwnerReset,
@@ -676,6 +762,7 @@ try {
 	if (leaseWatchdog) clearTimeout(leaseWatchdog);
 	await cleaningSessions;
 	await renewingLease;
+	summaryCoordinator.close();
 	let stoppingJobs = jobRunner.shutdown();
 	ownerBindings.revokeAll();
 	await stoppingJobs.catch(() => {});

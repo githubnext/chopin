@@ -53,7 +53,7 @@ export type JobDefinition<
 	readonly limits: Readonly<JobLimits>;
 	readonly input: Readonly<JobCodec<Input>>;
 	readonly artifact: Readonly<JobCodec<Artifact>>;
-	readonly execute: (execution: JobExecution<Input>) => Promise<Artifact>;
+	execute(execution: JobExecution<Input>): Promise<Artifact>;
 	readonly publish?: (publication: JobPublication) => Promise<void>;
 };
 

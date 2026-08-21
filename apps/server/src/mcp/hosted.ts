@@ -22,7 +22,10 @@ export type HostedCaller = {
 };
 
 export type ImplementationPersistence = { lease(): Lease };
-export type HostedCallbacks = { onChannelRenamed?: (channel: ChannelRecord) => void };
+export type HostedCallbacks = {
+	onChannelRenamed?: (channel: ChannelRecord) => void;
+	onDocumentPersisted?: (target: Plan.DocumentTarget) => void;
+};
 
 const BEARER = new RegExp("^Bearer ([A-Za-z0-9._~+/-]+=*)$", "i");
 
@@ -324,6 +327,12 @@ export function hosted(
 						|| restored.creation.origin.idempotencyKey !== input.idempotencyKey
 						|| restored.creation.origin.fingerprint !== input.fingerprint
 					) return { kind: "conflict" };
+					callbacks.onDocumentPersisted?.({
+						channelId: id,
+						revision: restored.revision,
+						source: restored.source,
+						sourceHash: Plan.sourceHash(restored.source),
+					});
 					return {
 						kind: "replayed",
 						document: document({
@@ -340,6 +349,12 @@ export function hosted(
 						}),
 					};
 				}
+				callbacks.onDocumentPersisted?.({
+					channelId: id,
+					revision: 0,
+					source: initial.source,
+					sourceHash: initial.sourceHash,
+				});
 				return {
 					kind: "created",
 					document: document({
