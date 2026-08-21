@@ -36,3 +36,6 @@ e2e/blob-report/
 **/dist/**
 *.tsbuildinfo
 vite.config.ts.timestamp-*
+
+# Personal local overrides (e.g. port conflicts with native services).
+compose.override.yaml
