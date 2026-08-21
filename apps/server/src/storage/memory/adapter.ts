@@ -198,6 +198,7 @@ export class MemoryStorage implements StorageAdapter {
 		clearAgentOwner: (channelId, expectedSessionId, expectedGeneration, now) =>
 			this.#clearAgentOwner(channelId, expectedSessionId, expectedGeneration, now),
 		updateAgentContext: context => this.#updateAgentContext(context),
+		readAgent: (channelId, now) => this.#readAgent(channelId, now),
 	};
 
 	readonly collaboration: CollaborationStore = {
@@ -475,6 +476,20 @@ export class MemoryStorage implements StorageAdapter {
 		};
 		this.#agents.set(input.channelId, saved);
 		return Promise.resolve(agent(saved));
+	}
+
+	#readAgent(channelId: string, now: Date) {
+		let found = this.#channels.get(channelId);
+		if (!found) return Promise.resolve(undefined);
+		let state = this.#agents.get(channelId);
+		let saved = state && agent(state);
+		if (saved?.ownerSessionId) {
+			let owner = this.#sessions.get(saved.ownerSessionId);
+			if (!owner || owner.expiresAt <= now) {
+				saved = { ...saved, ownerSessionId: undefined, status: "unavailable" };
+			}
+		}
+		return Promise.resolve({ channel: channel(found), agent: saved });
 	}
 
 	#load(channelId: string, now: Date): Promise<StoredChannel | undefined> {

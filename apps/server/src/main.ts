@@ -10,6 +10,7 @@
 import { join } from "node:path";
 
 import * as Agent from "./agent/client";
+import { ActiveOwnerBindings } from "./agent/active-owner";
 import { registerAuthRoutes } from "./auth/routes";
 import * as Chat from "./chat/service";
 import { registerChannelRoutes } from "./channels/routes";
@@ -18,6 +19,9 @@ import { proxy, serve } from "./client";
 import { describe, load } from "./config";
 import { GitHubError } from "./github/client";
 import { Router } from "./http/router";
+import { JobRegistry } from "./jobs/registry";
+import { JobRunner } from "./jobs/runner";
+import { JobService } from "./jobs/service";
 import { registerMcpRoutes } from "./mcp/routes";
 import { registerNavigationRoutes } from "./navigation/routes";
 import * as Service from "./plan/service";
@@ -62,6 +66,8 @@ let leaseWatchdog: ReturnType<typeof setTimeout> | undefined;
 let renewingLease: Promise<void> | undefined;
 let sessionCleanup: ReturnType<typeof setInterval> | undefined;
 let cleaningSessions: Promise<void> | undefined;
+let ownerBindings: ActiveOwnerBindings | undefined;
+let jobRunner: JobRunner | undefined;
 
 function presence(server: Server<SocketData>, room: Rooms.Room): void {
 	broadcast(server, room.id, {
@@ -435,17 +441,23 @@ function drain(): Promise<void> {
 			}
 		};
 		await attempt(() => server.stop(true));
-		let [rooms, agent] = await Promise.all([
-			Promise.allSettled(Rooms.all().map(room => room.plan && Service.close(room.plan))),
-			Promise.allSettled([Agent.shutdown()]),
-		]);
-		for (let result of [...rooms, ...agent]) {
+		if (sessionCleanup) clearInterval(sessionCleanup);
+		for (let result of await Promise.allSettled([cleaningSessions])) {
 			if (result.status === "rejected") record(result.reason);
 		}
-		if (sessionCleanup) clearInterval(sessionCleanup);
+		let stoppingJobs = jobRunner?.shutdown();
+		ownerBindings?.revokeAll();
+		let [rooms, jobs] = await Promise.all([
+			Promise.allSettled(Rooms.all().map(room => room.plan && Service.close(room.plan))),
+			Promise.allSettled([stoppingJobs]),
+		]);
+		for (let result of [...rooms, ...jobs]) {
+			if (result.status === "rejected") record(result.reason);
+		}
+		await attempt(() => Agent.shutdown());
 		if (leaseRenewal) clearInterval(leaseRenewal);
 		if (leaseWatchdog) clearTimeout(leaseWatchdog);
-		for (let result of await Promise.allSettled([cleaningSessions, renewingLease])) {
+		for (let result of await Promise.allSettled([renewingLease])) {
 			if (result.status === "rejected") record(result.reason);
 		}
 		let lease = heldLease;
@@ -527,18 +539,88 @@ function announceChannelRename(channel: ChannelRecord): void {
 	});
 }
 
-let hostedAuth = registerAuthRoutes(router, {
-	config: config.auth,
-	storage,
-	agent: config.agent,
-	onSessionRevoked: sessionId => resetOpenAgents(() => true, sessionId),
-	onCredentialsWillRotate: (sessionId, revision) =>
+async function sessionRevoked(sessionId: string): Promise<void> {
+	let jobs = jobRunner?.ownerRevoked(sessionId);
+	ownerBindings?.revokeSession(sessionId);
+	await Promise.all([resetOpenAgents(() => true, sessionId), jobs]);
+}
+
+async function credentialsWillRotate(sessionId: string, revision: number): Promise<void> {
+	let jobs = jobRunner?.credentialsWillRotate(sessionId, revision);
+	ownerBindings?.revokeCredential(sessionId, revision);
+	await Promise.all([
 		resetOpenAgents(
 			() => true,
 			sessionId,
 			revision,
 			"GitHub credentials refreshed, so the Planner session was restarted. Ask it to continue.",
 		),
+		jobs,
+	]);
+}
+
+async function channelOwnerReset(channelId: string): Promise<void> {
+	let jobs = jobRunner?.channelOwnerReset(channelId);
+	ownerBindings?.revokeChannel(channelId);
+	await Promise.all([resetOpenAgents(room => room.id === channelId), jobs]);
+}
+
+let hostedAuth = registerAuthRoutes(router, {
+	config: config.auth,
+	storage,
+	agent: config.agent,
+	onSessionRevoked: sessionRevoked,
+	onCredentialsWillRotate: credentialsWillRotate,
+});
+ownerBindings = new ActiveOwnerBindings(hostedAuth);
+let jobRegistry = new JobRegistry();
+let jobService = new JobService({
+	storage,
+	registry: jobRegistry,
+	lease() {
+		if (!heldLease) throw new Error("storage writer lease is unavailable");
+		return heldLease;
+	},
+	onChange: job => jobRunner?.notify(job),
+});
+jobRunner = new JobRunner({
+	storage,
+	service: jobService,
+	registry: jobRegistry,
+	lease() {
+		if (!heldLease) throw new Error("storage writer lease is unavailable");
+		return heldLease;
+	},
+	resolveActivePlanner: async job => {
+		let binding = await ownerBindings!.resolve(job.channelId);
+		if (!binding) return undefined;
+		return {
+			credential: {
+				kind: "active-planner",
+				token: binding.token,
+				ownerSessionId: binding.ownerSessionId,
+				ownerGeneration: binding.ownerGeneration,
+				credentialRevision: binding.credentialRevision,
+				expiresAt: new Date(binding.expiresAt),
+				authorize: binding.revalidate,
+			},
+			ownerKey: binding.ownerSessionId,
+			binding: {
+				kind: "active-planner",
+				ownerSessionId: binding.ownerSessionId,
+				ownerGeneration: binding.ownerGeneration,
+				credentialRevision: binding.credentialRevision,
+				repositoryId: binding.repository.id,
+			},
+			signal: binding.signal,
+			active: binding.revalidate,
+			release: binding.release,
+		};
+	},
+	enabled: config.agent,
+	globalConcurrency: 2,
+	ownerConcurrency: 1,
+	fatal: err => console.error("chopin: background job runner failed -", err),
 });
 registerMcpRoutes(router, hostedAuth, {
 	lease() {
@@ -549,7 +631,7 @@ registerMcpRoutes(router, hostedAuth, {
 	onChannelRenamed: announceChannelRename,
 });
 registerChannelRoutes(router, hostedAuth, {
-	onAgentReset: channelId => resetOpenAgents(room => room.id === channelId),
+	onAgentReset: channelOwnerReset,
 	onChannelRenamed: announceChannelRename,
 });
 registerNavigationRoutes(router, hostedAuth, { storage });
@@ -587,12 +669,16 @@ sessionCleanup = setInterval(cleanSessions, SESSION_CLEANUP_MS);
 
 try {
 	server = listen();
+	jobRunner.start();
 } catch (err) {
 	if (sessionCleanup) clearInterval(sessionCleanup);
 	if (leaseRenewal) clearInterval(leaseRenewal);
 	if (leaseWatchdog) clearTimeout(leaseWatchdog);
 	await cleaningSessions;
 	await renewingLease;
+	let stoppingJobs = jobRunner.shutdown();
+	ownerBindings.revokeAll();
+	await stoppingJobs.catch(() => {});
 	await Agent.shutdown();
 	if (heldLease) await storage.leases.release(heldLease).catch(() => {});
 	await storage.close().catch(() => {});

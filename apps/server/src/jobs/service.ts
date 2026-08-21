@@ -44,7 +44,10 @@ export type JobMutation = {
 	expectedRevision: number;
 };
 
-export type SettleJob = Omit<ClaimedBackgroundJob, "lease" | "now"> & { artifact: JsonValue };
+export type SettleJob = Omit<ClaimedBackgroundJob, "lease" | "now"> & {
+	artifact: JsonValue;
+	guard?: () => Promise<boolean>;
+};
 
 export type JobView = {
 	id: string;
@@ -57,6 +60,7 @@ export type JobView = {
 	state: BackgroundJobState;
 	revision: number;
 	attempts: number;
+	failures: number;
 	availableAt: Date;
 	reason: string | undefined;
 	createdAt: Date;
@@ -83,6 +87,7 @@ export type JobServiceOptions = {
 	now?: () => Date;
 	id?: () => string;
 	publish?: (channelId: string) => void | Promise<void>;
+	onChange?: (job: JobView) => void;
 	publishTimeoutMs?: number;
 	hookTimeoutMs?: number;
 };
@@ -222,6 +227,7 @@ function view(value: BackgroundJob): JobView {
 		state: value.state,
 		revision: value.revision,
 		attempts: value.attempts,
+		failures: value.failures,
 		availableAt: new Date(value.availableAt),
 		reason: value.reason,
 		createdAt: new Date(value.createdAt),
@@ -272,6 +278,7 @@ export class JobService {
 	#now: () => Date;
 	#id: () => string;
 	#publish?: (channelId: string) => void | Promise<void>;
+	#onChange?: (job: JobView) => void;
 	#publishTimeoutMs: number;
 	#hookTimeoutMs: number;
 
@@ -282,6 +289,7 @@ export class JobService {
 		this.#now = options.now ?? (() => new Date());
 		this.#id = options.id ?? (() => crypto.randomUUID());
 		this.#publish = options.publish;
+		this.#onChange = options.onChange;
 		this.#publishTimeoutMs = options.publishTimeoutMs ?? 5_000;
 		this.#hookTimeoutMs = options.hookTimeoutMs ?? 10_000;
 		if (!Number.isSafeInteger(this.#publishTimeoutMs) || this.#publishTimeoutMs < 1) {
@@ -311,6 +319,7 @@ export class JobService {
 			now: this.#time(),
 			lease: this.#lease(),
 		});
+		this.#didChange(saved);
 		await this.#changed(request.channelId);
 		return view(saved);
 	}
@@ -334,6 +343,7 @@ export class JobService {
 			now,
 			lease: this.#lease(),
 		});
+		this.#didChange(saved);
 		await this.#changed(request.channelId);
 		return view(saved);
 	}
@@ -344,16 +354,18 @@ export class JobService {
 			now: this.#time(),
 			lease: this.#lease(),
 		});
+		this.#didChange(saved);
 		await this.#changed(request.channelId);
 		return view(saved);
 	}
 
 	async settle(request: SettleJob): Promise<JobDetail> {
-		let persisted = await this.#storage.jobs.get(request.channelId, request.jobId);
+		let { artifact: requestedArtifact, guard, ...claim } = request;
+		let persisted = await this.#storage.jobs.get(claim.channelId, claim.jobId);
 		if (!persisted) {
 			throw new JobServiceError(
 				"invalid-request",
-				`Background job ${request.jobId} does not exist.`,
+				`Background job ${claim.jobId} does not exist.`,
 			);
 		}
 		let definition = this.#registry.get(persisted.job.type, persisted.job.version);
@@ -363,19 +375,27 @@ export class JobService {
 				`Background job ${persisted.job.type}@${persisted.job.version} is not registered.`,
 			);
 		}
-		let validated = this.#artifact(definition, request.artifact);
+		let validated = this.#artifact(definition, requestedArtifact);
 		let commitResult: Promise<BackgroundJobDetail> | undefined;
 		let acceptingCommit = true;
 		let commit = () => {
 			if (!acceptingCommit || commitResult) {
-				throw new Error(`Background job ${request.jobId} settlement was attempted twice.`);
+				throw new Error(`Background job ${claim.jobId} settlement was attempted twice.`);
 			}
-			commitResult = this.#storage.jobs.settle({
-				...request,
-				artifact: structuredClone(validated),
-				now: this.#time(),
-				lease: this.#lease(),
-			});
+			commitResult = (async () => {
+				if (guard && !await guard()) {
+					throw new JobServiceError(
+						"invalid-request",
+						`Background job ${claim.jobId} settlement was refused.`,
+					);
+				}
+				return this.#storage.jobs.settle({
+					...claim,
+					artifact: structuredClone(validated),
+					now: this.#time(),
+					lease: this.#lease(),
+				});
+			})();
 			let exposed = commitResult.then(() => {});
 			void exposed.catch(() => {});
 			return exposed;
@@ -403,16 +423,17 @@ export class JobService {
 		acceptingCommit = false;
 		if (!commitResult) {
 			if (hookError) throw hookError;
-			throw new Error(`Background job ${request.jobId} publication did not commit.`);
+			throw new Error(`Background job ${claim.jobId} publication did not commit.`);
 		}
 		let saved = await commitResult;
 		if (hookError) {
 			console.warn(
-				`[jobs] background job ${request.jobId} committed after a publication hook error:`,
+				`[jobs] background job ${claim.jobId} committed after a publication hook error:`,
 				hookError,
 			);
 		}
-		await this.#changed(request.channelId);
+		this.#didChange(saved.job);
+		await this.#changed(claim.channelId);
 		return detail(saved);
 	}
 
@@ -498,6 +519,7 @@ export class JobService {
 			now,
 			lease: this.#lease(),
 		});
+		if (!saved.repeated) this.#didChange(saved.job);
 		if (!saved.repeated) await this.#changed(request.channelId);
 		return { job: view(saved.job), repeated: saved.repeated };
 	}
@@ -541,6 +563,15 @@ export class JobService {
 				},
 			);
 		});
+	}
+
+	#didChange(job: BackgroundJob): void {
+		if (!this.#onChange) return;
+		try {
+			this.#onChange(view(job));
+		} catch (err) {
+			console.warn(`[jobs] could not notify local job observers for ${job.id}:`, err);
+		}
 	}
 
 	async #changed(channelId: string): Promise<void> {

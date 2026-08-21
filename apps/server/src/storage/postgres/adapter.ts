@@ -9,6 +9,7 @@ import { PostgresBackgroundJobStore } from "./jobs";
 import type { TransactionSQL } from "bun";
 import type {
 	AgentState,
+	ChannelAgent,
 	ChannelCursor,
 	ChannelPage,
 	ChannelRecord,
@@ -509,6 +510,7 @@ export class PostgresStorage implements StorageAdapter {
 		clearAgentOwner: (channelId, expectedSessionId, expectedGeneration, now) =>
 			this.#clearAgentOwner(channelId, expectedSessionId, expectedGeneration, now),
 		updateAgentContext: input => this.#updateAgentContext(input),
+		readAgent: (channelId, now) => this.#readAgent(channelId, now),
 	};
 
 	readonly collaboration: CollaborationStore = {
@@ -809,6 +811,34 @@ export class PostgresStorage implements StorageAdapter {
 			`;
 			return changed.length > 0;
 		});
+	}
+
+	#readAgent(channelId: string, now: Date): Promise<ChannelAgent | undefined> {
+		return this.#run(
+			"read agent owner",
+			() =>
+				this.#sql.begin("isolation level repeatable read read only", async transaction => {
+					let [channelRow] = await transaction<ChannelRow[]>`
+					SELECT ${transaction.unsafe(CHANNEL_COLUMNS)} FROM channels WHERE id = ${channelId}
+				`;
+					if (!channelRow) return undefined;
+					let [agentRow] = await transaction<AgentRow[]>`
+					SELECT ${transaction.unsafe(AGENT_COLUMNS)}
+					FROM agent_state WHERE channel_id = ${channelId}
+				`;
+					let storedAgent = agentRow ? agent(agentRow) : undefined;
+					if (storedAgent?.ownerSessionId) {
+						let [active] = await transaction<{ id: string }[]>`
+						SELECT id FROM web_sessions
+						WHERE id = ${storedAgent.ownerSessionId} AND expires_at > ${now}
+					`;
+						if (!active) {
+							storedAgent = { ...storedAgent, ownerSessionId: undefined, status: "unavailable" };
+						}
+					}
+					return { channel: channel(channelRow), agent: storedAgent };
+				}),
+		);
 	}
 
 	#updateAgentContext(input: UpdateAgentContext): Promise<AgentState> {
