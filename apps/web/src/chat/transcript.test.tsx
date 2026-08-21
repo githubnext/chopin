@@ -26,6 +26,7 @@ test("keeps a short transcript against the composer with compact message metadat
 	}));
 
 	expect(markup).toContain('data-chat-stack="true"');
-	expect(markup).toContain("min-h-full flex-col justify-end gap-6");
+	expect(markup).toContain("min-h-full flex-col justify-end gap-4");
 	expect(markup).toContain("-mt-0.5 flex min-w-0 flex-1 flex-col gap-1");
+	expect(markup).toContain("text-[13px] text-text-quaternary tabular-nums");
 });
