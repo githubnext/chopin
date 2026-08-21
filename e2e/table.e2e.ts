@@ -30,10 +30,28 @@ const TABLE = [
 	"",
 ].join("\n");
 
+const WIDE_TABLE_HEADERS = [
+	"Product",
+	"Constraint",
+	"Surface",
+	"Signal",
+	"Source",
+	"Preview",
+	"Scrollbar",
+	"Measure",
+	"Owner",
+	"Status",
+	"Priority",
+	"Target",
+	"Risk",
+	"Notes",
+];
+
 const WIDE_TABLE = [
-	"| Product | Constraint | Surface | Signal | Source | Preview | Scrollbar | Measure |",
-	"| ------- | ---------- | ------- | ------ | ------ | ------- | --------- | ------- |",
-	"| Chopin | Responsive | Document | Clear | Lexical | Rendered | Widget | Readable |",
+	`| ${WIDE_TABLE_HEADERS.join(" | ")} |`,
+	`| ${WIDE_TABLE_HEADERS.map(() => "---").join(" | ")} |`,
+	"| Chopin | Responsive | Document | Clear | Lexical | Rendered | Widget | Readable | "
+	+ "Editor | Active | High | Desktop | Low | Stable |",
 	"",
 ].join("\n");
 

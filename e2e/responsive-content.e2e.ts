@@ -484,12 +484,14 @@ test("compact tables and diagrams stay centered without stretching", async ({ jo
 			return { left: box.left, right: box.right, width: box.width };
 		};
 		let table = root.querySelector(":scope > table");
+		let row = table?.querySelector("tr") ?? null;
 		let preview = root.querySelector(":scope > [data-plan-language='mermaid'] .plan-diagram");
 		let svg = preview?.querySelector("svg") ?? null;
 		let scroller = root.closest("[data-plan-scroll]");
 		return {
 			document: rectangle(scroller),
 			preview: rectangle(preview),
+			row: rectangle(row),
 			svg: rectangle(svg),
 			table: {
 				...rectangle(table),
@@ -501,6 +503,7 @@ test("compact tables and diagrams stay centered without stretching", async ({ jo
 
 	expect(geometry.table.width).toBeLessThan(geometry.preview.width);
 	expect(geometry.table.scrollWidth).toBe(geometry.table.clientWidth);
+	expect(Math.abs(geometry.table.width - geometry.row.width)).toBeLessThan(2);
 	expect(Math.abs(center(geometry.table) - center(geometry.document))).toBeLessThan(2);
 	expect(geometry.svg.width).toBeLessThan(geometry.preview.width);
 	expect(Math.abs(center(geometry.svg) - center(geometry.preview))).toBeLessThan(2);
@@ -525,19 +528,18 @@ test("top-level rich surfaces use the document width while nested surfaces stay 
 			let box = element.getBoundingClientRect();
 			return { left: box.left, right: box.right, width: box.width };
 		};
-		let imageRow = root.querySelector(
-			":scope > p:has(> [data-plan-src]:first-child + br[data-lexical-managed-linebreak]:last-child)",
-		);
-		let image = imageRow?.querySelector<HTMLImageElement>(
+		let image = root.querySelector<HTMLImageElement>(
 			'img[alt="Responsive workspace reference"]',
-		) ?? null;
-		let mixed = root.querySelector(
-			":scope > p:has(> [data-plan-src] img[alt='Mixed prose reference'])",
 		);
-		let callout = root.querySelector('[data-plan-type="warning"]');
-		let nested = callout?.querySelector<HTMLImageElement>(
+		let imageRow = image?.closest("p") ?? null;
+		let mixedImage = root.querySelector<HTMLImageElement>('img[alt="Mixed prose reference"]');
+		let mixed = mixedImage?.closest("p") ?? null;
+		let nested = root.querySelector<HTMLImageElement>(
 			'img[alt="Contained callout reference"]',
-		) ?? null;
+		);
+		let callout = nested?.closest('[data-plan-type="warning"]') ?? null;
+		let mermaid = root.querySelector('[aria-label="Diagram preview"]')
+			?.closest('[data-plan-language="mermaid"]') ?? null;
 		let scroller = root.closest("[data-plan-scroll]");
 		let style = getComputedStyle(root);
 		return {
@@ -546,8 +548,9 @@ test("top-level rich surfaces use the document width while nested surfaces stay 
 			gutter: Number.parseFloat(style.paddingInlineStart),
 			image: { ...rectangle(image), naturalWidth: image?.naturalWidth ?? 0 },
 			imageRow: rectangle(imageRow),
-			mermaid: rectangle(root.querySelector(':scope > [data-plan-language="mermaid"]')),
+			mermaid: rectangle(mermaid),
 			mixed: rectangle(mixed),
+			mixedImage: rectangle(mixedImage),
 			nested: rectangle(nested),
 			prose: rectangle(root.querySelector(":scope > p")),
 			table: rectangle(root.querySelector(":scope > table")),
@@ -561,8 +564,9 @@ test("top-level rich surfaces use the document width while nested surfaces stay 
 		expect(Math.abs(surface.right - right)).toBeLessThan(2);
 		expect(surface.width).toBeGreaterThan(geometry.prose.width);
 	}
-	expect(geometry.image.width).toBeLessThanOrEqual(geometry.image.naturalWidth);
-	expect(geometry.image.width).toBeLessThanOrEqual(geometry.imageRow.width);
+	expect(
+		Math.abs(geometry.image.width - Math.min(geometry.image.naturalWidth, geometry.imageRow.width)),
+	).toBeLessThan(2);
 	expect(geometry.image.width).toBeGreaterThan(geometry.prose.width);
 	expect(
 		Math.abs(
@@ -571,6 +575,9 @@ test("top-level rich surfaces use the document width while nested surfaces stay 
 		),
 	).toBeLessThan(2);
 	expect(geometry.mixed.width).toBeCloseTo(geometry.prose.width, 0);
+	expect(geometry.mixedImage.left).toBeGreaterThanOrEqual(geometry.mixed.left);
+	expect(geometry.mixedImage.right).toBeLessThanOrEqual(geometry.mixed.right);
+	expect(geometry.callout.width).toBeCloseTo(geometry.prose.width, 0);
 	expect(geometry.nested.left).toBeGreaterThanOrEqual(geometry.callout.left);
 	expect(geometry.nested.right).toBeLessThanOrEqual(geometry.callout.right);
 	await expectNoHorizontalOverflow(page);
@@ -596,27 +603,34 @@ test("narrow documents keep equal inline gutters", async ({ join, page, seed }) 
 		expect(padding.left).toBeGreaterThanOrEqual(16);
 		expect(padding.left).toBeLessThanOrEqual(24);
 		expect(padding.right).toBe(padding.left);
-		let widths = await document.evaluate(root => {
+		let geometry = await document.evaluate(root => {
+			// oxlint-disable-next-line unicorn(consistent-function-scoping) -- The callback executes in the browser realm.
+			let rectangle = (element: Element | null) => {
+				if (!element) throw new Error("responsive surface is missing");
+				let box = element.getBoundingClientRect();
+				return { left: box.left, right: box.right, width: box.width };
+			};
 			let style = getComputedStyle(root);
-			let available = root.clientWidth
-				- Number.parseFloat(style.paddingInlineStart)
-				- Number.parseFloat(style.paddingInlineEnd);
-			let selectors = [
-				":scope > table",
-				":scope > p:has(> [data-plan-src]:first-child + br[data-lexical-managed-linebreak]:last-child)",
-				':scope > [data-plan-language="mermaid"]',
-			];
+			let image = root.querySelector<HTMLImageElement>(
+				'img[alt="Responsive workspace reference"]',
+			);
+			let mermaid = root.querySelector('[aria-label="Diagram preview"]')
+				?.closest('[data-plan-language="mermaid"]') ?? null;
 			return {
-				available,
-				surfaces: selectors.map(selector => ({
-					selector,
-					width: root.querySelector(selector)?.getBoundingClientRect().width,
-				})),
+				document: rectangle(root.closest("[data-plan-scroll]")),
+				gutter: Number.parseFloat(style.paddingInlineStart),
+				surfaces: [
+					rectangle(root.querySelector(":scope > table")),
+					rectangle(image?.closest("p") ?? null),
+					rectangle(mermaid),
+				],
 			};
 		});
-		for (let surface of widths.surfaces) {
-			expect(surface.width, `${surface.selector} must be rendered`).toBeDefined();
-			expect(Math.abs(surface.width! - widths.available)).toBeLessThan(2);
+		let left = geometry.document.left + geometry.gutter;
+		let right = geometry.document.right - geometry.gutter;
+		for (let surface of geometry.surfaces) {
+			expect(Math.abs(surface.left - left)).toBeLessThan(2);
+			expect(Math.abs(surface.right - right)).toBeLessThan(2);
 		}
 	}
 });
