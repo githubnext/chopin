@@ -14,13 +14,14 @@ import {
 	visibleDecisionView,
 } from "@chopin/editor";
 
+import bookBookmarkIcon from "./assets/figma/navigation/book-bookmark.svg";
+import chevronDownIcon from "./assets/icons/tool-chevron-down.svg";
 import { Chat } from "./chat/chat";
 import { rememberChannel } from "./channel-recovery";
 import { decisionAttention, DecisionViewControl } from "./decision-view-control";
-import { DocumentPicker } from "./document-picker";
-import * as Api from "./api";
+import { useNavigationDocument } from "./navigation-shell";
+import { NavigationIcon } from "./project-sidebar";
 import { peopleHere } from "./presence";
-import { RepositoryPicker } from "./repository-picker";
 import { Wire } from "./wire";
 import { HEADING, useWorkspaceMode, useWorkspaceState, Workspace } from "./workspace";
 import { presentWorkspace } from "./workspace-model";
@@ -30,40 +31,37 @@ import type { DecisionView, DecisionViewState } from "@chopin/editor";
 import type { HostedWorkspaceProps } from "./hosted";
 import type { Status } from "./wire";
 
-function Header(
+export function Header(
 	{
 		canEdit,
 		members,
 		label,
 		onRename,
-		repository,
-		room,
-		userId,
 	}: {
 		canEdit: boolean;
 		members: Session.Member[];
 		label: string;
-		onRename: (channel: Pick<Api.Channel, "title" | "slug" | "updatedAt">) => void;
-		repository: Api.Repository;
-		room: string;
-		userId: string;
+		onRename: () => void;
 	},
 ) {
 	let people = peopleHere(members);
 	return (
-		<header className="room-header hairline-b relative flex min-h-12 shrink-0 flex-nowrap items-center gap-2 px-2 py-2 sm:h-12 sm:gap-3 sm:px-4 sm:py-0">
-			<a className="hidden text-sm font-semibold sm:inline" href="/">chopin</a>
-			<span aria-hidden="true" className="hidden h-4 hairline-l sm:block" />
-			<RepositoryPicker compact current={repository} key={userId} userId={userId} />
-			<div className="flex min-w-0 flex-1 items-center gap-2">
-				<span aria-hidden="true" className="hidden text-sm text-text-tertiary sm:inline">/</span>
-				<DocumentPicker
-					canEdit={canEdit}
-					current={{ id: room, title: label }}
-					onRename={onRename}
-					repository={repository}
-					userId={userId}
-				/>
+		<header className="room-header relative flex min-h-12 shrink-0 flex-nowrap items-center px-2 py-2 sm:h-[calc(3rem+env(safe-area-inset-top))] sm:px-5 sm:py-0 lg:h-[calc(50px+env(safe-area-inset-top))]">
+			<div
+				aria-label={`Document: ${label}`}
+				className="flex min-w-0 flex-1 items-center gap-0.5"
+			>
+				<NavigationIcon className="opacity-50" src={bookBookmarkIcon} />
+				<button
+					aria-label={`Rename ${label}`}
+					className="document-title-trigger"
+					disabled={!canEdit}
+					onClick={onRename}
+					type="button"
+				>
+					<span className="truncate">{label}</span>
+					<img alt="" aria-hidden="true" className="size-3.5 opacity-50" src={chevronDownIcon} />
+				</button>
 			</div>
 			<div
 				aria-label={`People here: ${people.join(", ")}`}
@@ -102,6 +100,7 @@ export function RoomWorkspace(
 	}: HostedWorkspaceProps,
 ) {
 	let [wire, setWire] = useState<Wire>();
+	let { onDocumentChanged, onRenameDocument } = useNavigationDocument();
 	let [status, setStatus] = useState<Status>("connecting");
 	let [members, setMembers] = useState<Session.Member[]>([]);
 	let [effectiveCanEdit, setEffectiveCanEdit] = useState(canEdit);
@@ -146,11 +145,12 @@ export function RoomWorkspace(
 		metadataRef.current = next;
 		setMetadata(next);
 		rememberChannel(userId, { id: room, title: next.title, slug: next.slug }, repository);
+		onDocumentChanged(room, next);
 		let path = documentPath(repository.owner, repository.name, next.slug);
 		if (location.pathname !== path) {
 			history.replaceState(null, "", `${path}${location.search}${location.hash}`);
 		}
-	}, [repository, room, userId]);
+	}, [onDocumentChanged, repository, room, userId]);
 
 	useEffect(() => {
 		setDecisionView(state => advanceDecisionView(state, hasPlanContent, unanswered));
@@ -265,10 +265,7 @@ export function RoomWorkspace(
 					canEdit={effectiveCanEdit}
 					members={members}
 					label={metadata.title}
-					onRename={updateMetadata}
-					repository={repository}
-					room={room}
-					userId={userId}
+					onRename={onRenameDocument}
 				/>
 			}
 			controls={

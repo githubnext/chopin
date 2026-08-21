@@ -25,6 +25,7 @@ import { join } from "node:path";
 type Oklch = { l: number; c: number; h: number };
 
 const THEME = readFileSync(join(import.meta.dir, "theme.css"), "utf8");
+const NAVIGATION = readFileSync(join(import.meta.dir, "navigation.css"), "utf8");
 const STYLES = readFileSync(
 	join(import.meta.dir, "../../../packages/editor/src/styles.css"),
 	"utf8",
@@ -124,5 +125,20 @@ describe("marking prose", () => {
 				hex: hex(token(mark.token)),
 			});
 		}
+	});
+});
+
+describe("sidebar navigation", () => {
+	it("uses primary text for the selected document", () => {
+		expect(NAVIGATION).toMatch(
+			/\.project-sidebar-document-current\s*{[^}]*color:\s*var\(--color-text-primary\)/s,
+		);
+	});
+
+	it("keeps project and document rows on the compact spacing scale", () => {
+		expect(NAVIGATION).toMatch(/\.project-sidebar-project-row\s*{[^}]*gap:\s*10px/s);
+		expect(NAVIGATION).toMatch(
+			/\.project-sidebar-document\s*{[^}]*padding:\s*4px 12px 4px 32px/s,
+		);
 	});
 });

@@ -3,11 +3,9 @@ import { documentPath, documentsPath, parseDocumentPath } from "@chopin/protocol
 
 import * as Api from "./api";
 import { readChannelRecovery, readDocumentRecovery, rememberChannel } from "./channel-recovery";
-import { DocumentRename } from "./document-rename";
-import { RepositoryPicker } from "./repository-picker";
-import { clearRepositoryCache } from "./repository-cache";
+import { NavigationShell, useNavigationDocument } from "./navigation-shell";
 
-import type { ComponentType, FormEvent, ReactNode } from "react";
+import type { ComponentType } from "react";
 
 export type HostedWorkspaceProps = {
 	room: string;
@@ -64,48 +62,6 @@ export function retryableChannelFailure(error: unknown): boolean {
 		|| error.status === 408
 		|| error.status === 429
 		|| error.status >= 500;
-}
-
-function Frame(
-	{
-		children,
-		currentRepository,
-		openRepositoryPicker = false,
-		user,
-	}: {
-		children: ReactNode;
-		currentRepository?: Api.Repository | { owner: string; name: string; fullName: string };
-		openRepositoryPicker?: boolean;
-		user: Api.User;
-	},
-) {
-	async function signOut() {
-		await Api.logout();
-		clearRepositoryCache(user.id);
-		location.assign("/");
-	}
-
-	return (
-		<div className="min-h-full bg-ground text-text-primary" data-hosted="">
-			<header className="hosted-header hairline-b flex h-14 items-center bg-page px-3 sm:px-6">
-				<a className="text-sm font-semibold" href="/">chopin</a>
-				<span aria-hidden="true" className="mx-1 h-4 hairline-l sm:mx-2" />
-				<RepositoryPicker
-					current={currentRepository}
-					initialOpen={openRepositoryPicker}
-					key={user.id}
-					userId={user.id}
-				/>
-				<div className="ml-auto flex items-center gap-3">
-					<span className="hidden text-sm text-text-secondary sm:inline">{user.login}</span>
-					<button className="btn btn-sm btn-ghost" onClick={() => void signOut()} type="button">
-						Sign out
-					</button>
-				</div>
-			</header>
-			{children}
-		</div>
-	);
 }
 
 function Loading({ label = "Loading" }: { label?: string }) {
@@ -217,235 +173,6 @@ export function githubLoginHref(pathname: string, search = "", hash = ""): strin
 	return `/auth/github?${parameters}`;
 }
 
-function RepositoryHome({ user }: { user: Api.User }) {
-	return (
-		<Frame openRepositoryPicker user={user}>
-			<main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
-				<p className="text-sm text-text-tertiary">
-					Choose a repository from the menu to see its planning channels.
-				</p>
-			</main>
-		</Frame>
-	);
-}
-
-function RepositoryChannels(
-	{ owner, repository, user }: { owner: string; repository: string; user: Api.User },
-) {
-	let [page, setPage] = useState<Api.ChannelPage>();
-	let [error, setError] = useState<unknown>();
-	let [title, setTitle] = useState("");
-	let [creating, setCreating] = useState(false);
-	let [loadingMore, setLoadingMore] = useState(false);
-	let [renaming, setRenaming] = useState<string>();
-
-	useEffect(() => {
-		canonicalize(documentsPath(owner, repository));
-	}, [owner, repository]);
-
-	useEffect(() => {
-		let active = true;
-		Api.channels(owner, repository).then(value => {
-			if (active) {
-				canonicalize(documentsPath(value.repository.owner, value.repository.name));
-				setPage(value);
-			}
-		}, reason => {
-			if (active) setError(reason);
-		});
-		return () => {
-			active = false;
-		};
-	}, [owner, repository]);
-
-	async function create(event: FormEvent) {
-		event.preventDefault();
-		if (!title.trim() || creating) return;
-		setCreating(true);
-		try {
-			let result = await Api.createChannel(owner, repository, title.trim());
-			rememberChannel(user.id, result.channel, result.repository);
-			location.assign(documentPath(
-				result.repository.owner,
-				result.repository.name,
-				result.channel.slug,
-			));
-		} catch (reason) {
-			setError(reason);
-			setCreating(false);
-		}
-	}
-
-	async function more() {
-		let cursor = page?.nextCursor;
-		if (!cursor || loadingMore) return;
-		setLoadingMore(true);
-		try {
-			let next = await Api.channels(owner, repository, cursor);
-			setPage(current =>
-				current && {
-					...next,
-					channels: [
-						...current.channels,
-						...next.channels.filter(channel =>
-							!current.channels.some(known => known.id === channel.id)
-						),
-					],
-				}
-			);
-		} catch (reason) {
-			setError(reason);
-		} finally {
-			setLoadingMore(false);
-		}
-	}
-
-	function stopRenaming(id: string) {
-		setRenaming(undefined);
-		requestAnimationFrame(() => document.getElementById(`rename-channel-${id}`)?.focus());
-	}
-
-	function renamed(detail: Api.ChannelDetail) {
-		rememberChannel(user.id, detail.channel, detail.repository);
-		setPage(current => {
-			if (!current) return current;
-			let channels = current.channels
-				.map(channel => channel.id === detail.channel.id ? detail.channel : channel)
-				.sort((left, right) =>
-					new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
-					|| left.id.localeCompare(right.id)
-				);
-			return { ...current, channels };
-		});
-		stopRenaming(detail.channel.id);
-	}
-
-	if (error) return <Failure error={error} />;
-	return (
-		<Frame
-			currentRepository={page?.repository ?? {
-				owner,
-				name: repository,
-				fullName: `${owner}/${repository}`,
-			}}
-			user={user}
-		>
-			<main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
-				<div className="flex items-end justify-between gap-6">
-					<div>
-						<h1 className="text-2xl font-semibold">Planning channels</h1>
-						<p className="mt-1 text-sm text-text-secondary">
-							One shared plan and conversation per channel.
-						</p>
-					</div>
-				</div>
-				{page?.canEdit && (
-					<form
-						className="ring-hairline mt-6 flex flex-col gap-2 rounded-lg bg-page p-3 sm:flex-row"
-						onSubmit={create}
-					>
-						<label className="sr-only" htmlFor="channel-title">Channel title</label>
-						<input
-							className="channel-create-input field min-w-0 flex-1 px-3 text-sm"
-							id="channel-title"
-							maxLength={120}
-							onChange={event => setTitle(event.target.value)}
-							placeholder="Plan the next release"
-							value={title}
-						/>
-						<button
-							className="btn btn-md btn-primary"
-							disabled={!title.trim() || creating}
-							type="submit"
-						>
-							{creating ? "Creating..." : "New channel"}
-						</button>
-					</form>
-				)}
-				{!page
-					? <p className="mt-8 text-sm text-text-tertiary">Loading channels...</p>
-					: page.channels.length === 0
-					? (
-						<div className="ring-hairline mt-6 rounded-lg bg-page p-4 text-center sm:p-8">
-							<p className="text-sm font-medium">No planning channels yet</p>
-							<p className="mt-1 text-sm text-text-tertiary">
-								{page.canEdit
-									? "Create the first one above."
-									: "A repository editor can create one."}
-							</p>
-						</div>
-					)
-					: (
-						<div className="ring-hairline mt-6 rounded-lg bg-page">
-							{page.channels.map((channel, index) => {
-								let corners = `${index === 0 ? "rounded-t-lg" : ""} ${
-									index === page.channels.length - 1 ? "rounded-b-lg" : ""
-								}`;
-								return (
-									<div className={`${index ? "hairline-t" : ""} ${corners}`} key={channel.id}>
-										{renaming === channel.id
-											? (
-												<DocumentRename
-													channel={channel}
-													className={`${corners} px-4 py-4 sm:px-5`}
-													onCancel={() => stopRenaming(channel.id)}
-													onRenamed={renamed}
-												/>
-											)
-											: (
-												<div
-													className={`${corners} flex min-w-0 items-center gap-2 pr-3 hover:bg-hover sm:pr-4`}
-												>
-													<a
-														className="flex min-w-0 flex-1 flex-col items-start justify-between gap-1 px-4 py-4 sm:flex-row sm:items-center sm:gap-4 sm:px-5"
-														href={documentPath(
-															page.repository.owner,
-															page.repository.name,
-															channel.slug,
-														)}
-														onClick={() => rememberChannel(user.id, channel, page.repository)}
-													>
-														<span className="min-w-0 break-words text-sm font-medium">
-															{channel.title}
-														</span>
-														<span className="text-sm text-text-tertiary sm:shrink-0">
-															{new Date(channel.updatedAt).toLocaleDateString()}
-														</span>
-													</a>
-													{page.canEdit && (
-														<button
-															aria-label={`Rename ${channel.title}`}
-															className="btn btn-sm btn-ghost shrink-0"
-															disabled={renaming !== undefined}
-															id={`rename-channel-${channel.id}`}
-															onClick={() => setRenaming(channel.id)}
-															type="button"
-														>
-															Rename
-														</button>
-													)}
-												</div>
-											)}
-									</div>
-								);
-							})}
-						</div>
-					)}
-				{page?.nextCursor && (
-					<button
-						className="btn btn-md btn-secondary mt-6"
-						disabled={loadingMore}
-						onClick={() => void more()}
-						type="button"
-					>
-						{loadingMore ? "Loading..." : "More channels"}
-					</button>
-				)}
-			</main>
-		</Frame>
-	);
-}
-
 function ChannelWorkspace(
 	{ agent, id, owner, repository, slug, user }: {
 		agent: boolean;
@@ -462,6 +189,7 @@ function ChannelWorkspace(
 	}>();
 	let [error, setError] = useState<unknown>();
 	let [retry, setRetry] = useState(0);
+	let { channel: navigationChannel, onDocumentLoaded } = useNavigationDocument();
 	let recovery = id
 		? readChannelRecovery(user.id, id)
 		: owner && repository && slug
@@ -481,6 +209,7 @@ function ChannelWorkspace(
 					value.channel.slug,
 				));
 				rememberChannel(user.id, value.channel, value.repository);
+				onDocumentLoaded(value.channel);
 			}
 			return value;
 		});
@@ -492,7 +221,7 @@ function ChannelWorkspace(
 		return () => {
 			active = false;
 		};
-	}, [id, owner, repository, retry, slug, user.id]);
+	}, [id, onDocumentLoaded, owner, repository, retry, slug, user.id]);
 	if (error) {
 		let requestedRepository = owner && repository
 			? { owner, name: repository, fullName: `${owner}/${repository}` }
@@ -513,14 +242,17 @@ function ChannelWorkspace(
 	}
 	if (!loaded) return <Loading label="Opening channel..." />;
 	let { detail, Workspace } = loaded;
+	let channel = navigationChannel?.id === detail.channel.id
+		? navigationChannel
+		: detail.channel;
 	return (
 		<Workspace
 			agent={agent}
 			canEdit={detail.canEdit}
 			handle={user.login}
-			label={detail.channel.title}
-			slug={detail.channel.slug}
-			updatedAt={detail.channel.updatedAt}
+			label={channel.title}
+			slug={channel.slug}
+			updatedAt={channel.updatedAt}
 			repository={detail.repository}
 			room={detail.channel.id}
 			userId={user.id}
@@ -534,21 +266,26 @@ export function HostedApp(
 	let route = hostedRoute(location.pathname);
 	switch (route.page) {
 		case "repositories":
-			return <RepositoryHome user={user} />;
 		case "repository":
-			return <RepositoryChannels owner={route.owner} repository={route.repository} user={user} />;
+			return <NavigationShell route={route} user={user} />;
 		case "document":
 			return (
-				<ChannelWorkspace
-					agent={agent}
-					owner={route.owner}
-					repository={route.repository}
-					slug={route.slug}
-					user={user}
-				/>
+				<NavigationShell route={route} user={user}>
+					<ChannelWorkspace
+						agent={agent}
+						owner={route.owner}
+						repository={route.repository}
+						slug={route.slug}
+						user={user}
+					/>
+				</NavigationShell>
 			);
 		case "channel":
-			return <ChannelWorkspace agent={agent} id={route.id} user={user} />;
+			return (
+				<NavigationShell route={route} user={user}>
+					<ChannelWorkspace agent={agent} id={route.id} user={user} />
+				</NavigationShell>
+			);
 		case "missing":
 			return <Failure error={new Error("This page does not exist.")} />;
 	}
