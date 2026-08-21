@@ -21,3 +21,11 @@ test("the composer sends with a white arrow inside a petrol circle", () => {
 	expect(markup).toContain("conversation-send-icon size-[18px]");
 	expect(markup).toContain("send-arrow-up.svg");
 });
+
+test("the send action keeps an eight pixel inset from the composer edges", () => {
+	let markup = renderToStaticMarkup(
+		createElement(Chat, { connected: false, handle: "maggie", wire: undefined }),
+	);
+
+	expect(markup).toContain("flex items-center justify-end gap-1 px-2 pb-2");
+});

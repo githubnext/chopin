@@ -170,7 +170,7 @@ export function Chat(
 						value={text}
 					/>
 
-					<div className="flex items-center justify-end gap-1 px-1.5 pb-1.5">
+					<div className="flex items-center justify-end gap-1 px-2 pb-2">
 						{agent && busy && (
 							<button
 								aria-label="Stop Planner"
