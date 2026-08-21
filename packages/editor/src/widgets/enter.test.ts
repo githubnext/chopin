@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { createHeadlessEditor } from "@lexical/headless";
-import { $createTextNode, $getRoot, $isElementNode } from "lexical";
+import { $createParagraphNode, $createTextNode, $getRoot, $isElementNode } from "lexical";
 
-import { $createCalloutNode, registry } from "@chopin/dialect";
+import { $createCalloutNode, $createResearchQuestionNode, registry } from "@chopin/dialect";
 
 import { handleEnter } from "./enter";
 
@@ -61,6 +61,34 @@ test("enter repairs and leaves a callout stored with direct text", () => {
 		{
 			type: "plan-callout",
 			children: [{ type: "paragraph", text: "Legacy body." }],
+		},
+		{ type: "paragraph", children: [] },
+	]);
+});
+
+test("enter leaves a research question after its final empty paragraph", () => {
+	let editor = createHeadlessEditor({
+		nodes: REGISTRY.nodes,
+		onError(error) {
+			throw error;
+		},
+	});
+	editor.update(() => {
+		let empty = $createParagraphNode();
+		$getRoot().append(
+			$createResearchQuestionNode("01K0N4W3B7P27CBAEC7A8C8WEA").append(
+				$createParagraphNode().append($createTextNode("What changed?")),
+				empty,
+			),
+		);
+		empty.select();
+	}, { discrete: true });
+
+	expect(enter(editor)).toBe(true);
+	expect(tree(editor)).toEqual([
+		{
+			type: "plan-research-question",
+			children: [{ type: "paragraph", text: "What changed?" }],
 		},
 		{ type: "paragraph", children: [] },
 	]);

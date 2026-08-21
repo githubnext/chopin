@@ -19,7 +19,13 @@ import { QuestionnaireObserver } from "./questionnaires";
 import { TableChrome } from "./table/chrome";
 import { ThreadObserver } from "./threads";
 import { Toolbar } from "./toolbar";
-import { CalloutPlugin, EnterPlugin, PreviewPlugin, TabsPlugin } from "./widgets";
+import {
+	CalloutPlugin,
+	EnterPlugin,
+	PreviewPlugin,
+	ResearchQuestionPlugin,
+	TabsPlugin,
+} from "./widgets";
 import { widgets$ } from "./widget-options";
 
 import type { WidgetOptions } from "./widget-options";
@@ -49,6 +55,7 @@ export const widgetsPlugin = realmPlugin<WidgetOptions>({
 		realm.pub(addComposerChild$, PreviewPlugin);
 		realm.pub(addComposerChild$, CalloutPlugin);
 		realm.pub(addComposerChild$, EnterPlugin);
+		realm.pub(addComposerChild$, ResearchQuestionPlugin);
 		// Also where `@lexical/table`'s own plugins are registered, which the
 		// editor otherwise runs without.
 		realm.pub(addComposerChild$, TableChrome);

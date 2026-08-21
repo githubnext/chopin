@@ -8,6 +8,37 @@
 
 @import "./callout.css";
 
+.plan-content [data-plan-research-question] {
+	margin-block: 1.25rem;
+	padding: 1rem 1.125rem;
+	border: var(--edge-width) solid color-mix(in oklab, var(--color-brand) 30%, var(--color-edge));
+	border-radius: var(--radius-lg);
+	background: color-mix(in oklab, var(--color-brand) 4%, var(--color-page));
+}
+
+.plan-content [data-plan-research-question]::before {
+	content: "Research question";
+	display: block;
+	margin-block-end: 0.5rem;
+	font-size: 0.75rem;
+	font-weight: 650;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--color-text-secondary);
+}
+
+.plan-content [data-plan-research-question-body] > :first-child {
+	margin-block-start: 0;
+}
+
+.plan-content [data-plan-research-question-body] > :last-child {
+	margin-block-end: 0;
+}
+
+.plan-content [data-plan-research-question-derived]:empty {
+	display: none;
+}
+
 .plan,
 .plan-decisions {
 	--plan-gutter: 4rem;
