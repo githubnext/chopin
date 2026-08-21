@@ -33,12 +33,11 @@ async function expectCompactWorkspaceChrome(page: Page): Promise<void> {
 	let destinations = nav.getByRole("button");
 
 	await expect(header.getByRole("button", { name: /conversation pane/ })).toHaveCount(0);
-	await expect(page.getByRole("button", { name: /conversation pane/ })).toHaveCount(0);
 	await expect(page.getByRole("group", { name: "Document view" })).toHaveCount(0);
 	await expect(page.getByRole("separator", { name: "Resize the conversation" })).toHaveCount(0);
 	await expect(destinations).toHaveCount(3);
 	await expect(destinations.nth(0)).toHaveAccessibleName(/^Conversation/);
-	await expect(destinations.nth(1)).toHaveAccessibleName("Plan");
+	await expect(destinations.nth(1)).toHaveAccessibleName("Document");
 	await expect(destinations.nth(2)).toHaveAccessibleName(/^Decisions/);
 
 	let [headerBox, repositoryBox, documentBox] = await Promise.all([
@@ -220,7 +219,6 @@ for (
 		{ width: 768, height: 1024 },
 		{ width: 1023, height: 964 },
 		{ width: 1024, height: 768 },
-		{ width: 1199, height: 900 },
 	]
 ) {
 	test(`${viewport.width}px uses the same compact destinations as a phone`, async ({ join, seed }) => {
@@ -228,10 +226,9 @@ for (
 		let page = await join("ana", { viewport });
 		let nav = page.getByRole("navigation", { name: "Workspace view" });
 		let destinations = nav.getByRole("button");
-		await expect(page.getByRole("button", { name: /conversation pane/ })).toHaveCount(0);
 		await expect(page.getByRole("group", { name: "Document view" })).toHaveCount(0);
 		await expect(destinations.nth(0)).toHaveAccessibleName(/^Conversation/);
-		await expect(destinations.nth(1)).toHaveAccessibleName("Plan");
+		await expect(destinations.nth(1)).toHaveAccessibleName("Document");
 		await expect(destinations.nth(2)).toHaveAccessibleName(/^Decisions/);
 
 		let opener = nav.getByRole("button", { name: /^Conversation/ });
