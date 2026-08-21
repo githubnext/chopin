@@ -35,7 +35,8 @@ if (`bun@${Bun.version}` !== manifest.packageManager) {
 /** How long a child gets to leave politely before it is made to. */
 const GRACE_MS = 2_000;
 
-const WEB = "http://127.0.0.1:5173";
+const WEB_PORT = process.env.CHOPIN_DEV_WEB_PORT || "5173";
+const WEB = `http://127.0.0.1:${WEB_PORT}`;
 
 async function exeDevelopment() {
 	try {
@@ -52,7 +53,7 @@ let exe = await exeDevelopment();
 const APP = exe?.origin
 	?? `http://${process.env.SERVER_HOST || "127.0.0.1"}:${process.env.PORT || 8787}`;
 const READY = exe ? "http://127.0.0.1:8787" : APP;
-const HMR = exe ? `wss://${exe.host}:5173` : undefined;
+const HMR = exe ? `wss://${exe.host}:${WEB_PORT}` : undefined;
 
 const READY_MS = 30_000;
 
