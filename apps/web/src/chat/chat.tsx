@@ -153,10 +153,10 @@ export function Chat(
 					: undefined}
 			/>
 
-			<div className="conversation-composer shrink-0 px-4 pb-4">
+			<div className="conversation-composer shrink-0 px-2.5 pb-2">
 				<div className="field flex flex-col">
 					<textarea
-						className="h-18 w-full resize-none bg-transparent px-2.5 py-1.5 text-sm"
+						className="min-h-0 flex-1 w-full resize-none bg-transparent px-4 py-3 text-[14px]"
 						disabled={!connected}
 						onChange={event => setText(event.target.value)}
 						onKeyDown={event => {
@@ -165,7 +165,7 @@ export function Chat(
 							event.preventDefault();
 							submit();
 						}}
-						placeholder="Message the room — use @ai to ask Planner"
+						placeholder="Use @ai to ask the agent"
 						rows={3}
 						value={text}
 					/>

@@ -1,7 +1,7 @@
 .chat-markdown {
 	min-width: 0;
 	overflow-wrap: anywhere;
-	font-size: var(--text-sm);
+	font-size: 14px;
 	line-height: 1.4;
 }
 
