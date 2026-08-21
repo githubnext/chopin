@@ -183,7 +183,7 @@ describe("what an accepted thread still owes", () => {
 		expect(subject.snapshot().threads[0]?.applied).toBe(true);
 	});
 
-	it("asks Chopin to retry an unapplied accepted comment", () => {
+	it("asks the Planner to retry an unapplied accepted comment without composer syntax", () => {
 		let sent: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
 		let subject = store();
 		subject.listen({
@@ -200,8 +200,7 @@ describe("what an accepted thread still owes", () => {
 		expect(sent).toEqual([{
 			kind: "chat:send",
 			payload: {
-				text:
-					'@chopin apply the accepted comment on "shorten this" — it has not been actioned yet.',
+				text: 'apply the accepted comment on "shorten this" — it has not been actioned yet.',
 				to: "planner",
 			},
 		}]);

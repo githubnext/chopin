@@ -12,7 +12,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { addressed } from "@chopin/protocol/address";
+import { addressed, MENTION } from "@chopin/protocol/address";
 
 import { Transcript } from "./transcript";
 import plannerStop from "../assets/icons/planner-stop.svg";
@@ -165,7 +165,7 @@ export function Chat(
 							event.preventDefault();
 							submit();
 						}}
-						placeholder="Use @chopin to ask Chopin"
+						placeholder={`Use ${MENTION} to ask Chopin`}
 						rows={3}
 						value={text}
 					/>
