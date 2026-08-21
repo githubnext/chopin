@@ -1,0 +1,165 @@
+import { describe, expect, it } from "bun:test";
+
+import {
+	beginDocumentLoad,
+	completeDocumentPage,
+	failDocumentLoad,
+	projectDocuments,
+	replaceLoadedDocument,
+	searchAvailableDocuments,
+	updateLoadedDocument,
+} from "./document-actions";
+
+import type * as Api from "./api";
+import type { LoadedDocuments } from "./document-actions";
+
+function channel(id: string, title: string, repositoryId: string): Api.Channel {
+	return {
+		id,
+		repositoryId,
+		repositoryOwner: "acme",
+		repositoryName: repositoryId,
+		title,
+		slug: title.toLowerCase().replaceAll(" ", "-"),
+		createdBy: "user",
+		revision: 1,
+		createdAt: "2026-08-21T00:00:00.000Z",
+		updatedAt: "2026-08-21T00:00:00.000Z",
+	};
+}
+
+let projects = [
+	{
+		project: {
+			repositoryId: "R_one",
+			repositoryOwner: "acme",
+			repositoryName: "one",
+			position: 0,
+			available: true,
+		},
+		channels: [channel("doc-one", "Product brief", "R_one")],
+	},
+	{
+		project: {
+			repositoryId: "R_two",
+			repositoryOwner: "acme",
+			repositoryName: "two",
+			position: 1,
+			available: true,
+		},
+		channels: [channel("doc-two", "Architecture notes", "R_two")],
+	},
+	{
+		project: {
+			repositoryId: "R_unavailable",
+			repositoryOwner: "acme",
+			repositoryName: "unavailable",
+			position: 2,
+			available: false,
+		},
+		channels: [channel("hidden", "Product secret", "R_unavailable")],
+	},
+];
+
+describe("document actions", () => {
+	it("gives every Project one explicit document state", () => {
+		let entries = projectDocuments({
+			projects: projects.map(entry => entry.project),
+			lastDocumentId: "doc-one",
+		}, {});
+
+		expect(entries.map(entry => entry.documents.status)).toEqual([
+			"loading",
+			"loading",
+			"unavailable",
+		]);
+	});
+
+	it("keeps one explicit load state across pagination and failure", () => {
+		let loading = beginDocumentLoad();
+		let first = completeDocumentPage(
+			loading,
+			[channel("doc-one", "Product brief", "R_one")],
+			"next",
+		);
+		let more = beginDocumentLoad(first);
+		let complete = completeDocumentPage(
+			more,
+			[
+				channel("doc-one", "Product brief", "R_one"),
+				channel("doc-two", "Architecture", "R_one"),
+			],
+		);
+		let failed = failDocumentLoad(complete, new Error("offline"));
+
+		expect(loading).toEqual({ status: "loading", channels: [] });
+		expect(first).toMatchObject({ status: "ready", nextCursor: "next" });
+		expect(more).toMatchObject({ status: "loading", nextCursor: "next" });
+		expect(complete.channels.map(document => document.id)).toEqual(["doc-one", "doc-two"]);
+		expect(failed).toMatchObject({ status: "error", message: "offline" });
+		expect(failed.channels).toBe(complete.channels);
+	});
+
+	it("searches available Projects through every query-bound page", async () => {
+		let calls: string[] = [];
+		let load = async (owner: string, repository: string, cursor?: string, query?: string) => {
+			calls.push(`${owner}/${repository}:${cursor ?? "first"}:${query ?? ""}`);
+			let repositoryId = repository === "one" ? "R_one" : "R_two";
+			return {
+				repository: {
+					defaultBranch: "main",
+					fullName: `${owner}/${repository}`,
+					id: repositoryId,
+					name: repository,
+					owner,
+					permissions: { admin: false, pull: true, push: true },
+					private: false,
+					url: `https://github.com/${owner}/${repository}`,
+				},
+				canEdit: true,
+				channels: [channel(`${repository}-${cursor ?? "first"}`, "Product", repositoryId)],
+				nextCursor: repository === "one" && !cursor ? "next" : undefined,
+			};
+		};
+		let search = await searchAvailableDocuments(
+			projects.map(entry => entry.project),
+			"product",
+			load,
+		);
+
+		expect(search.results.map(result => result.channel.id)).toEqual([
+			"one-first",
+			"one-next",
+			"two-first",
+		]);
+		expect(search.failedProjectIds).toEqual([]);
+		expect(calls).toEqual([
+			"acme/one:first:product",
+			"acme/two:first:product",
+			"acme/one:next:product",
+		]);
+	});
+
+	it("replaces a renamed document in its loaded Project", () => {
+		let renamed = { ...projects[0]!.channels![0]!, title: "Team brief", revision: 2 };
+		let documents: LoadedDocuments = {
+			R_one: { status: "ready", channels: projects[0]!.channels! },
+			R_two: { status: "ready", channels: projects[1]!.channels! },
+		};
+		let next = replaceLoadedDocument(documents, renamed);
+		let inserted = replaceLoadedDocument({}, channel("doc-three", "New", "R_one"));
+		let updated = updateLoadedDocument(documents, "doc-one", {
+			title: "Socket title",
+			slug: "socket-title",
+			updatedAt: "2026-08-22T00:00:00.000Z",
+		});
+
+		expect(next.R_one!.channels![0]).toMatchObject({ id: "doc-one", title: "Team brief" });
+		expect(next.R_two).toBe(documents.R_two);
+		expect(inserted.R_one?.channels[0]?.id).toBe("doc-three");
+		expect(updated.R_one?.channels[0]).toMatchObject({
+			title: "Socket title",
+			slug: "socket-title",
+		});
+	});
+});

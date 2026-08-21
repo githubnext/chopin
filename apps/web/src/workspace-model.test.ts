@@ -15,7 +15,7 @@ function mediaAt(width: number): MatchMedia {
 
 describe("adaptive workspace", () => {
 	it("classifies the media queries production reads at each boundary", () => {
-		expect([1039, 1040].map(width => workspaceMode(mediaAt(width)))).toEqual([
+		expect([1023, 1024].map(width => workspaceMode(mediaAt(width)))).toEqual([
 			"compact",
 			"split",
 		]);

@@ -1,0 +1,29 @@
+<svg
+	preserveAspectRatio="none"
+	overflow="visible"
+	style="display: block"
+	width="13"
+	height="13"
+	viewBox="0 0 13 13"
+	fill="none"
+	xmlns="http://www.w3.org/2000/svg"
+>
+	<g id="Group">
+		<path
+			id="Vector"
+			d="M6.5 0.75V12.25"
+			stroke="#212121"
+			stroke-width="1.5"
+			stroke-linecap="round"
+			stroke-linejoin="round"
+		/>
+		<path
+			id="Vector_2"
+			d="M0.75 6.5H12.25"
+			stroke="#212121"
+			stroke-width="1.5"
+			stroke-linecap="round"
+			stroke-linejoin="round"
+		/>
+	</g>
+</svg>

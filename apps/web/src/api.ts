@@ -81,6 +81,25 @@ export type ChannelDetail = {
 	channel: Channel;
 };
 
+export type NavigationRepository = Pick<
+	Repository,
+	"id" | "owner" | "name" | "fullName" | "ownerAvatarUrl" | "permissions"
+>;
+
+export type NavigationProject = {
+	repositoryId: string;
+	repositoryOwner: string;
+	repositoryName: string;
+	position: number;
+	available: boolean;
+	repository?: NavigationRepository;
+};
+
+export type Navigation = {
+	projects: NavigationProject[];
+	lastDocumentId?: string;
+};
+
 export class ApiError extends Error {
 	readonly status: number;
 
@@ -126,6 +145,18 @@ export function session(): Promise<Session> {
 	return response("/api/session");
 }
 
+export function navigation(): Promise<Navigation> {
+	return response("/api/navigation");
+}
+
+export function addProject(owner: string, repository: string): Promise<NavigationProject> {
+	return response("/api/navigation/projects", {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ owner, repository }),
+	});
+}
+
 export function installations(
 	page = 1,
 	ifNoneMatch?: string,
@@ -149,6 +180,7 @@ export function channels(
 	repository: string,
 	cursor?: string,
 	query?: string,
+	signal?: AbortSignal,
 ): Promise<ChannelPage> {
 	let parameters = new URLSearchParams();
 	if (cursor) parameters.set("cursor", cursor);
@@ -158,6 +190,7 @@ export function channels(
 		`/api/repositories/${encodeURIComponent(owner)}/${
 			encodeURIComponent(repository)
 		}/channels${suffix}`,
+		{ signal },
 	);
 }
 
