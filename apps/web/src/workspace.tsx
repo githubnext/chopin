@@ -308,7 +308,7 @@ export function Workspace(
 				)}
 
 				{chat && mode === "split" && !presentation.conversationVisible && (
-					<div className="absolute right-5 top-0 z-20">
+					<div className="absolute right-5 top-5 z-20">
 						<ConversationToggle
 							activity={conversationActivity}
 							buttonRef={edgeTab}

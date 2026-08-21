@@ -48,3 +48,8 @@ test("resolved history starts collapsed and restores an explicit open preference
 	expect(markup()).toContain('aria-expanded="false"');
 	expect(markup("true")).toContain('aria-expanded="true"');
 });
+
+test("Decisions uses the document reading inset without a duplicate heading row", () => {
+	expect(markup()).not.toContain("<header");
+	expect(markup()).toContain("plan-decisions-content");
+});

@@ -9,7 +9,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CaretDownIcon, CaretRightIcon } from "@phosphor-icons/react";
 
-import { Count } from "./count";
 import { useQuestionnaires } from "./questionnaires";
 import { QuestionnaireCard } from "./widgets/questionnaire";
 
@@ -121,20 +120,10 @@ export function Decisions(
 
 	return (
 		<div className="plan-decisions">
-			<header className="flex shrink-0 items-center gap-2 px-3 py-2 hairline-b">
-				<h2
-					className="text-sm font-semibold tracking-wide text-text-tertiary uppercase"
-					id={headingId}
-					ref={heading}
-					tabIndex={-1}
-				>
-					Decisions
-				</h2>
-				{outstanding > 0 && <Count>{outstanding}</Count>}
-			</header>
+			<h2 className="sr-only" id={headingId} ref={heading} tabIndex={-1}>Decisions</h2>
 
 			<div
-				className="min-h-0 flex-1 overflow-auto p-3"
+				className="plan-decisions-content min-h-0 flex-1 overflow-auto"
 				data-plan-decisions-scroll=""
 				onBlurCapture={event => {
 					let next = event.relatedTarget;

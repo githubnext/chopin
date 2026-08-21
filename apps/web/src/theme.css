@@ -452,8 +452,9 @@ body {
 }
 
 @media (min-width: 1200px) {
-	/* The desktop composer reaches the device edge because there is no bottom navigation. */
+	/* The desktop composer keeps the same clearance on each exposed edge. */
 	.conversation-composer {
+		padding-inline: 1rem;
 		padding-bottom: calc(1rem + env(safe-area-inset-bottom));
 	}
 }
