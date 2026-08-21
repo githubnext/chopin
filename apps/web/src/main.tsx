@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { usePointerCapabilities } from "@chopin/editor/pointer";
 
 import { App } from "./app";
+import { useMotionInput } from "./motion-input";
 import { useVisualViewport } from "./viewport";
 
 import "@fontsource-variable/inter/opsz.css";
@@ -15,6 +16,7 @@ let root = document.getElementById("root");
 if (!root) throw new Error("missing #root");
 
 function Root() {
+	useMotionInput();
 	usePointerCapabilities();
 	useVisualViewport();
 	return <App />;
