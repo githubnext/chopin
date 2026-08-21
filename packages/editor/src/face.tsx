@@ -34,13 +34,13 @@ export type FaceProps = {
 	/** Unverified, so the photograph may not exist. */
 	handle: string;
 	size?: number;
-	/** True where faces overlap, so each edge stays readable against the one behind. */
-	ring?: boolean;
+	/** The surface behind overlapping faces, so their cover ring does not show. */
+	ring?: "ground" | "page";
 };
 
 export function Face({ handle, ring, size = 20 }: FaceProps) {
 	let [failed, setFailed] = useState(false);
-	let edge = `shrink-0 rounded-md ${ring ? "ring-2 ring-page" : ""}`;
+	let edge = `shrink-0 rounded-md ${ring ? `ring-2 ring-${ring}` : ""}`;
 	let box = { width: size, height: size };
 
 	if (failed) {

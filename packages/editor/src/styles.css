@@ -8,7 +8,8 @@
 
 @import "./callout.css";
 
-.plan {
+.plan,
+.plan-decisions {
 	--plan-gutter: 4rem;
 	/*
 	 * A comfortable measure. The panel is resizable and a plan is read far more
@@ -51,7 +52,8 @@
 
 /* A narrow document needs breathing room, but never a 32px tax on each side. */
 @container (max-width: 40rem) {
-	.plan-content {
+	.plan-content,
+	.plan-decisions-content {
 		--plan-gutter: 1rem;
 	}
 
@@ -193,8 +195,15 @@
 	min-height: 0;
 	flex-direction: column;
 	overflow: hidden;
+	container-type: inline-size;
 	/* The workspace ground shows through the rail. */
 	background: transparent;
+}
+
+.plan-decisions-content {
+	padding: 3rem var(--plan-gutter) 60vh;
+	margin-inline: auto;
+	max-width: calc(var(--plan-measure) + var(--plan-gutter) * 2);
 }
 
 /* Decorator hosts are block-level plan content, not zero-size anchors. */
