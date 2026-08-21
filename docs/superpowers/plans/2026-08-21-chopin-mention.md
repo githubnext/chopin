@@ -13,6 +13,7 @@
 ### Task 1: Addressing contract
 
 **Files:**
+
 - Modify: `apps/server/src/chat/address.test.ts`
 - Modify: `apps/web/src/chat/model.test.ts`
 - Modify: `packages/protocol/address.ts`
@@ -63,6 +64,7 @@ git commit -m "Replace AI mention with Chopin"
 ### Task 2: Generated messages and reader-facing copy
 
 **Files:**
+
 - Modify: `packages/editor/src/threads.test.ts`
 - Modify: `e2e/smoke.e2e.ts`
 - Modify: `apps/web/src/chat/chat.tsx`
@@ -120,7 +122,7 @@ Expected: FAIL because the composer still exposes the old placeholder.
 Set the composer placeholder to:
 
 ```tsx
-placeholder="Use @chopin to ask Chopin"
+<textarea placeholder="Use @chopin to ask Chopin" />;
 ```
 
 Change the accepted-comment retry message prefix in
@@ -151,6 +153,7 @@ git commit -m "Name Chopin in conversation copy"
 ### Task 3: Integration examples and documentation
 
 **Files:**
+
 - Modify: `apps/server/src/chat/queue.test.ts`
 - Modify: `apps/server/src/chat/service.ts`
 - Modify: `e2e/responsive-activity.e2e.ts`
@@ -201,6 +204,7 @@ git commit -m "Update Chopin mention examples"
 ### Task 4: Repository verification
 
 **Files:**
+
 - Modify: any touched files changed by the formatter
 
 - [ ] **Step 1: Format and apply safe lint fixes**
