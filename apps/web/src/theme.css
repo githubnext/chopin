@@ -428,6 +428,15 @@ body {
 	box-shadow: var(--shadow-resting);
 }
 
+.conversation-composer .field:focus-within {
+	outline: 2px solid var(--color-brand);
+	outline-offset: 2px;
+}
+
+.conversation-composer textarea:focus {
+	outline: none;
+}
+
 .conversation-header-control:hover:not(:disabled),
 .conversation-header-control:active:not(:disabled) {
 	background-color: transparent;
