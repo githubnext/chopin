@@ -423,16 +423,35 @@ let draining: Promise<void> | undefined;
 
 function drain(): Promise<void> {
 	return draining ??= (async () => {
-		await server.stop(true);
-		await Promise.all(Rooms.all().map(room => room.plan && Service.close(room.plan)));
-		await Agent.shutdown();
+		let errors: Error[] = [];
+		let record = (reason: unknown) => {
+			errors.push(reason instanceof Error ? reason : new Error(String(reason)));
+		};
+		let attempt = async (operation: () => Promise<unknown>) => {
+			try {
+				await operation();
+			} catch (err) {
+				record(err);
+			}
+		};
+		await attempt(() => server.stop(true));
+		let [rooms, agent] = await Promise.all([
+			Promise.allSettled(Rooms.all().map(room => room.plan && Service.close(room.plan))),
+			Promise.allSettled([Agent.shutdown()]),
+		]);
+		for (let result of [...rooms, ...agent]) {
+			if (result.status === "rejected") record(result.reason);
+		}
 		if (sessionCleanup) clearInterval(sessionCleanup);
-		await cleaningSessions;
 		if (leaseRenewal) clearInterval(leaseRenewal);
 		if (leaseWatchdog) clearTimeout(leaseWatchdog);
-		await renewingLease;
-		if (heldLease) await storage.leases.release(heldLease);
-		await storage.close();
+		for (let result of await Promise.allSettled([cleaningSessions, renewingLease])) {
+			if (result.status === "rejected") record(result.reason);
+		}
+		let lease = heldLease;
+		if (lease) await attempt(() => storage.leases.release(lease));
+		await attempt(() => storage.close());
+		if (errors.length > 0) throw new AggregateError(errors, "Chopin shutdown failed.");
 	})();
 }
 

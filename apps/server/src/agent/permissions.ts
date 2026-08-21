@@ -51,6 +51,21 @@ export function gate(options: GateOptions): PermissionHandler {
 	};
 }
 
+/** A worker may submit one terminal result and has no ambient capabilities. */
+export function terminalGate(
+	tool: string,
+	active?: () => Promise<boolean>,
+): PermissionHandler {
+	return async (request: PermissionRequest): Promise<PermissionRequestResult> => {
+		if (active && !(await active())) {
+			return deny("The Copilot owner is no longer active.");
+		}
+		return request.kind === "custom-tool" && request.toolName === tool
+			? allow()
+			: deny("This worker may only submit its registered result.");
+	};
+}
+
 function hasForeignScope(value: unknown, owner: string, repository: string): boolean {
 	if (typeof value === "string") return /\b(?:repo|org|user):/i.test(value);
 	if (Array.isArray(value)) return value.some(item => hasForeignScope(item, owner, repository));
