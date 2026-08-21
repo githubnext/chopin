@@ -465,11 +465,77 @@ test("a selected tab follows strip layout changes without moving the document", 
 	).toBeLessThanOrEqual(1);
 });
 
-test("narrow documents keep equal inline gutters", async ({ join, seed }) => {
+test("top-level rich surfaces use the document width while nested surfaces stay contained", async ({ join, page, seed }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await routeResponsiveImage(page);
 	await seed(RESPONSIVE_SOURCE);
+	page = await join("wide-surface-reader");
+	let document = content(page);
+	await expect(document.getByRole("img", { name: "Responsive workspace reference" })).toBeVisible();
+	await expect(document.getByRole("img", { name: "Contained callout reference" })).toBeVisible();
+	await expect(document.getByRole("region", { name: "Diagram preview" })).toBeVisible();
+	let geometry = await document.evaluate(root => {
+		let rectangle = (element: Element | null) => {
+			if (!element) throw new Error("responsive surface is missing");
+			let box = element.getBoundingClientRect();
+			return { left: box.left, right: box.right, width: box.width };
+		};
+		let image = root.querySelector<HTMLImageElement>(
+			':scope > p:has(> [data-plan-src] > img.plan-image:only-child) > [data-plan-src] > img[alt="Responsive workspace reference"]',
+		);
+		let imageRow = root.querySelector(
+			":scope > p:has(> [data-plan-src] > img.plan-image:only-child)",
+		);
+		let callout = root.querySelector('[data-plan-type="warning"]');
+		let nested = callout?.querySelector<HTMLImageElement>(
+			'img[alt="Contained callout reference"]',
+		) ?? null;
+		let scroller = root.closest("[data-plan-scroll]");
+		let style = getComputedStyle(root);
+		return {
+			callout: rectangle(callout),
+			document: rectangle(scroller),
+			gutter: Number.parseFloat(style.paddingInlineStart),
+			image: { ...rectangle(image), naturalWidth: image?.naturalWidth ?? 0 },
+			imageRow: rectangle(imageRow),
+			mermaid: rectangle(root.querySelector(':scope > [data-plan-language="mermaid"]')),
+			nested: rectangle(nested),
+			prose: rectangle(root.querySelector(":scope > p")),
+			table: rectangle(root.querySelector(":scope > table")),
+		};
+	});
+
+	let left = geometry.document.left + geometry.gutter;
+	let right = geometry.document.right - geometry.gutter;
+	for (let surface of [geometry.table, geometry.imageRow, geometry.mermaid]) {
+		expect(Math.abs(surface.left - left)).toBeLessThan(2);
+		expect(Math.abs(surface.right - right)).toBeLessThan(2);
+		expect(surface.width).toBeGreaterThan(geometry.prose.width);
+	}
+	expect(geometry.image.width).toBeLessThanOrEqual(geometry.image.naturalWidth);
+	expect(geometry.image.width).toBeLessThanOrEqual(geometry.imageRow.width);
+	expect(
+		Math.abs(
+			(geometry.image.left + geometry.image.right) / 2
+				- (geometry.imageRow.left + geometry.imageRow.right) / 2,
+		),
+	).toBeLessThan(2);
+	expect(geometry.nested.left).toBeGreaterThanOrEqual(geometry.callout.left);
+	expect(geometry.nested.right).toBeLessThanOrEqual(geometry.callout.right);
+	await expectNoHorizontalOverflow(page);
+});
+
+test("narrow documents keep equal inline gutters", async ({ join, page, seed }) => {
+	await routeResponsiveImage(page);
+	await seed(RESPONSIVE_SOURCE);
+	page = await join("narrow-gutter-reader");
 	for (let width of [390, 611]) {
-		let page = await join(`reader-${width}`, { viewport: { width, height: 844 } });
-		let padding = await content(page).evaluate(node => {
+		await page.setViewportSize({ width, height: 844 });
+		let document = content(page);
+		await expect(document.getByRole("img", { name: "Responsive workspace reference" }))
+			.toBeVisible();
+		await expect(document.getByRole("region", { name: "Diagram preview" })).toBeVisible();
+		let padding = await document.evaluate(node => {
 			let style = getComputedStyle(node);
 			return {
 				left: Number.parseFloat(style.paddingLeft),
@@ -479,6 +545,28 @@ test("narrow documents keep equal inline gutters", async ({ join, seed }) => {
 		expect(padding.left).toBeGreaterThanOrEqual(16);
 		expect(padding.left).toBeLessThanOrEqual(24);
 		expect(padding.right).toBe(padding.left);
+		let widths = await document.evaluate(root => {
+			let style = getComputedStyle(root);
+			let available = root.clientWidth
+				- Number.parseFloat(style.paddingInlineStart)
+				- Number.parseFloat(style.paddingInlineEnd);
+			let selectors = [
+				":scope > table",
+				":scope > p:has(> [data-plan-src] > img.plan-image:only-child)",
+				':scope > [data-plan-language="mermaid"]',
+			];
+			return {
+				available,
+				surfaces: selectors.map(selector => ({
+					selector,
+					width: root.querySelector(selector)?.getBoundingClientRect().width,
+				})),
+			};
+		});
+		for (let surface of widths.surfaces) {
+			expect(surface.width, `${surface.selector} must be rendered`).toBeDefined();
+			expect(Math.abs(surface.width! - widths.available)).toBeLessThan(2);
+		}
 	}
 });
 
