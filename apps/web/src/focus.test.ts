@@ -30,8 +30,9 @@ const FOCUS_OUTLINE =
 const FOCUS_UTILITY =
 	/\b(?:(?:group|peer)-)?focus(?:-visible|-within)?:!?(?:outline|ring)(?=[-:\s"'`}\]])/;
 const OUTLINE_SUPPRESSION =
-	/\boutline(?:-style|-width)?\s*:\s*(?:none\b|0(?:[a-z%]+)?(?:\s|[;}!]))/;
-const OUTLINE_SUPPRESSION_UTILITY = /\b(?:outline-none|outline-0|outline-hidden)\b/;
+	/\b(?:outline(?:-style|-width)?\s*:\s*(?:none\b|0(?:[a-z%]+)?(?:\s|[;}!]))|outline(?:-color)?\s*:[^;}\n]*\btransparent\b(?=\s*(?:!important\s*)?[;}]))/;
+const OUTLINE_SUPPRESSION_UTILITY =
+	/\b(?:outline-none|outline-0|outline-hidden|outline-transparent|outline-(?!offset-)[^\s"'`}\]]+\/0\b)/;
 const FOCUS_TOKEN_OVERRIDE = /--focus-ring-(?:color|width|offset)\s*:/;
 
 /** Files whose markup matches, reported by path so a failure names the offender. */
@@ -42,6 +43,13 @@ function offenders(files: string[], pattern: RegExp): string[] {
 }
 
 describe("focus", () => {
+	it("recognises invisible outline colours as suppression", () => {
+		expect(OUTLINE_SUPPRESSION.test("outline-color: transparent;")).toBe(true);
+		expect(OUTLINE_SUPPRESSION.test("outline: 2px solid transparent;")).toBe(true);
+		expect(OUTLINE_SUPPRESSION_UTILITY.test('className="outline-transparent"')).toBe(true);
+		expect(OUTLINE_SUPPRESSION_UTILITY.test('className="outline-brand/0"')).toBe(true);
+	});
+
 	it("leaves no component suppressing the outline it is meant to show", () => {
 		expect(offenders(COMPONENTS, OUTLINE_SUPPRESSION_UTILITY)).toEqual([]);
 		expect(offenders(STYLES, OUTLINE_SUPPRESSION)).toEqual([]);

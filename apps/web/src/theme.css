@@ -491,6 +491,11 @@ body {
 	outline-offset: var(--focus-ring-offset);
 }
 
+/* The editable plan has a live caret, so a second focus marker is redundant. */
+:where(.focus-caret):focus-visible {
+	outline: none;
+}
+
 @keyframes item-enter {
 	from {
 		opacity: 0;

@@ -1,5 +1,7 @@
 import { expect } from "@playwright/test";
 
+import { visibleOutlineColor } from "./focus-color";
+
 import type { Locator } from "@playwright/test";
 
 export async function expectFocusIndicator(target: Locator): Promise<void> {
@@ -35,9 +37,10 @@ export async function expectFocusIndicator(target: Locator): Promise<void> {
 		return {
 			clippedBy,
 			outline: style.outlineStyle !== "none" && width >= 2,
+			outlineColor: style.outlineColor,
 		};
 	});
 
-	expect(result.outline).toBe(true);
+	expect(result.outline && visibleOutlineColor(result.outlineColor)).toBe(true);
 	expect(result.clippedBy).toEqual([]);
 }

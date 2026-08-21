@@ -204,6 +204,7 @@ export function Transcript(
 	return (
 		<div
 			className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-auto p-4"
+			data-focus-boundary=""
 			onScroll={event => {
 				let element = event.currentTarget;
 				let distance = element.scrollHeight - element.scrollTop - element.clientHeight;
