@@ -18,7 +18,7 @@ test("the composer sends with a white arrow inside a petrol circle", () => {
 	);
 
 	expect(markup).toContain("conversation-send-button btn btn-icon btn-primary rounded-full");
-	expect(markup).toContain("conversation-send-icon size-[18px]");
+	expect(markup).toContain("conversation-send-icon size-[14px]");
 	expect(markup).toContain("send-arrow-up.svg");
 });
 

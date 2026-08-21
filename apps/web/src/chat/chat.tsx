@@ -190,7 +190,7 @@ export function Chat(
 							title="Send message"
 							type="button"
 						>
-							<img alt="" className="conversation-send-icon size-[18px]" src={send} />
+							<img alt="" className="conversation-send-icon size-[14px]" src={send} />
 						</button>
 					</div>
 				</div>
