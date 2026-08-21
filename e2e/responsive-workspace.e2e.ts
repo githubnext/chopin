@@ -290,7 +290,7 @@ test("Chromium visual viewport emulation keeps Conversation controls above the k
 		let nav = emulation.page.getByRole("navigation", { name: "Workspace view" });
 		await nav.getByRole("button", { name: /Conversation/ }).click();
 		let conversation = emulation.page.getByRole("complementary");
-		let textarea = conversation.getByPlaceholder("Use @ai to ask the agent");
+		let textarea = conversation.getByPlaceholder("Use @chopin to ask Chopin");
 		await textarea.focus();
 		await setVisualViewport(emulation.page, {
 			event: "scroll",

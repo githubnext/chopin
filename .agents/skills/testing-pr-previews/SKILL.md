@@ -177,7 +177,7 @@ the persistent profile unless the user explicitly asks.
    repository or change the GitHub App installation.
 
 Perform only the verification the user requested. Creating channels, editing a
-document, sending messages, accepting comments, and invoking `@ai` are persistent
+document, sending messages, accepting comments, and invoking `@chopin` are persistent
 actions and require explicit scope. Report the preview URL, authenticated user
 marker, sandbox marker, checks performed, page or interaction failures, and any
 manual authentication step that remains.

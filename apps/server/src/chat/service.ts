@@ -351,7 +351,7 @@ export function notice(context: Room, text: string): void | Promise<void> {
 /**
  * Start a turn from something other than a message.
  *
- * Accepting a comment is an instruction in a way prose is not — the `@ai` rule
+ * Accepting a comment is an instruction in a way prose is not — the `@chopin` rule
  * exists to separate conversation from instruction, and a button press is
  * already the latter. What it is not is a thing anybody said, so the transcript
  * gets a system entry explaining why the agent started moving; an agent that

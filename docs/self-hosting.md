@@ -240,7 +240,7 @@ After the first deployment:
 4. Confirm the picker lists only expected installations and repositories.
 5. Create a channel with a user who has push or administration access.
 6. Open the channel in a second browser and verify presence and live edits.
-7. Send one `@ai` request to verify the owner's Copilot entitlement and the
+7. Send one `@chopin` request to verify the owner's Copilot entitlement and the
    hosted agent runtime.
 8. Connect a local coding agent and call `list_documents` if MCP is part of the
    deployment's intended surface.

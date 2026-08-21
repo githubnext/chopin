@@ -19,7 +19,7 @@ context:
 
 - **Conversation** is shared by the team and the hosted agent. Ordinary messages
   do not start an agent turn, although they can enter its bounded context;
-  `@ai` asks the agent to act.
+  `@chopin` asks Chopin to act.
 - **Document** is a multiplayer rich-text artifact backed by readable, restricted
   MDX. The current interface labels this view **Plan**. People and the agent edit
   the same document, with presence, cursors, and transient markers for recent
@@ -112,13 +112,13 @@ disable the `/mcp` endpoint used by external coding agents.
 
 ## Collaborate with the Planner
 
-The web composer treats `@ai` as an instruction for the Planner:
+The web composer treats `@chopin` as an instruction for the Planner:
 
 ```text
 should we cover the export format?     -> channel conversation
 yes, Markdown for now                  -> channel conversation
-@ai                                    -> act on the recent conversation
-@ai draft the export section           -> act on that request
+@chopin                                -> act on the recent conversation
+@chopin draft the export section       -> act on that request
 ```
 
 Recent channel conversation is supplied as bounded context for the next turn,

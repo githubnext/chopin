@@ -78,19 +78,19 @@ describe("sending to a named destination", () => {
 	it("sends to the room even when the prose contains the typing shortcut", () => {
 		let { chat, context } = room({ busy: true });
 
-		Chat.send(context, sender(), message("ask @ai about this later", "room"));
+		Chat.send(context, sender(), message("ask @chopin about this later", "room"));
 
 		expect(chat.waiting).toHaveLength(0);
 		expect(chat.entries[0]).toMatchObject({
 			author: { kind: "member", handle: "ana" },
-			text: "ask @ai about this later",
+			text: "ask @chopin about this later",
 		});
 	});
 
 	it("removes the typing shortcut from a queued planner message", () => {
 		let { chat, context } = room({ busy: true });
 
-		Chat.send(context, sender(), message("@ai draft the migration", "planner"));
+		Chat.send(context, sender(), message("@chopin draft the migration", "planner"));
 
 		expect(chat.waiting[0]?.text).toBe("draft the migration");
 	});
