@@ -11,7 +11,7 @@ import { canEditProject } from "./navigation-model";
 import { useState } from "react";
 import type * as Api from "./api";
 import type { ProjectDocuments } from "./document-actions";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 
 export const SIDEBAR_MIN = 250;
 export const SIDEBAR_MAX = 400;
@@ -283,12 +283,21 @@ export function ProjectSidebar(
 	);
 }
 
-export function ProjectSidebarExpandButton({ onExpand }: { onExpand: () => void }) {
+export function ProjectSidebarExpandButton(
+	{
+		buttonRef,
+		onExpand,
+	}: {
+		buttonRef?: RefObject<HTMLButtonElement | null>;
+		onExpand: () => void;
+	},
+) {
 	return (
 		<button
 			aria-label="Open Projects sidebar"
 			className="project-sidebar-expand btn btn-icon btn-ghost shrink-0"
 			onClick={onExpand}
+			ref={buttonRef}
 			type="button"
 		>
 			<img alt="" height="18" src={sidebarOpenIcon} width="18" />

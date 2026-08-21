@@ -11,7 +11,12 @@ import {
 import { documentPath } from "@chopin/protocol/document-url";
 
 import * as Api from "./api";
-import { AddProjectDialog, DocumentSearchDialog, RenameDocumentDialog } from "./document-actions";
+import {
+	AddProjectDialog,
+	DocumentSearchDialog,
+	newestDocument,
+	RenameDocumentDialog,
+} from "./document-actions";
 import { NavigationFocusScope } from "./navigation-focus";
 import {
 	activeProject,
@@ -172,6 +177,7 @@ export function NavigationShell(
 		localStorage.getItem(`${SIDEBAR_STORAGE_KEY}:collapsed`) === "true"
 	);
 	let [drawerOpen, setDrawerOpen] = useState(false);
+	let drawerOpener = useRef<HTMLButtonElement>(null);
 	let [dialog, setDialog] = useState<"add" | "search" | { channel: Api.Channel; type: "rename" }>();
 	let [accountOpen, setAccountOpen] = useState(false);
 	let creatingProjectIds = useRef<Set<string>>(new Set());
@@ -210,7 +216,9 @@ export function NavigationShell(
 		}
 	}, []);
 	let documentLoaded = useCallback((channel: Api.Channel) => {
-		setResolvedDocument(channel);
+		setResolvedDocument(current =>
+			current?.id === channel.id ? newestDocument(current, channel) : channel
+		);
 		upsertDocument(channel);
 		void refresh();
 	}, [refresh, upsertDocument]);
@@ -220,7 +228,9 @@ export function NavigationShell(
 	) => {
 		updateDocument(documentId, update);
 		setResolvedDocument(current =>
-			current?.id === documentId ? { ...current, ...update } : current
+			current?.id === documentId && current.updatedAt <= update.updatedAt
+				? { ...current, ...update }
+				: current
 		);
 	}, [updateDocument]);
 
@@ -314,7 +324,9 @@ export function NavigationShell(
 
 	let renamed = (channel: Api.Channel) => {
 		upsertDocument(channel);
-		setResolvedDocument(current => current?.id === channel.id ? channel : current);
+		setResolvedDocument(current =>
+			current?.id === channel.id ? newestDocument(current, channel) : current
+		);
 	};
 
 	let showDialog = useCallback((next: NonNullable<typeof dialog>) => {
@@ -347,6 +359,10 @@ export function NavigationShell(
 		if (!error) return;
 		void refresh();
 	};
+	let dismissDrawer = () => {
+		setDrawerOpen(false);
+		requestAnimationFrame(() => drawerOpener.current?.focus({ preventScroll: true }));
+	};
 	let sidebar = (
 		<ProjectSidebar
 			accountMenu={accountOpen && (
@@ -362,7 +378,7 @@ export function NavigationShell(
 			onAddProject={() => showDialog("add")}
 			onCollapse={() => {
 				setCollapsed(true);
-				setDrawerOpen(false);
+				if (drawerOpen) dismissDrawer();
 			}}
 			onCreateDocument={project => void createDocument(project)}
 			onLoadMore={loadMore}
@@ -411,11 +427,12 @@ export function NavigationShell(
 				)}
 				{triggerVisible && (
 					<ProjectSidebarExpandButton
+						buttonRef={drawerOpener}
 						onExpand={() => mode === "drawer" ? setDrawerOpen(true) : setCollapsed(false)}
 					/>
 				)}
 				{mode === "drawer" && drawerOpen && (
-					<NavigationDrawer onDismiss={() => setDrawerOpen(false)}>
+					<NavigationDrawer onDismiss={dismissDrawer}>
 						{sidebar}
 					</NavigationDrawer>
 				)}

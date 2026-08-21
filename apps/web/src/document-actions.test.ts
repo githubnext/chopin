@@ -162,4 +162,29 @@ describe("document actions", () => {
 			slug: "socket-title",
 		});
 	});
+
+	it("keeps newer document metadata when an older response arrives later", () => {
+		let current = {
+			...projects[0]!.channels![0]!,
+			title: "Latest title",
+			updatedAt: "2026-08-22T00:00:00.000Z",
+		};
+		let stale = {
+			...current,
+			title: "Stale title",
+			updatedAt: "2026-08-21T00:00:00.000Z",
+		};
+		let documents: LoadedDocuments = {
+			R_one: { status: "ready", channels: [current] },
+		};
+
+		expect(replaceLoadedDocument(documents, stale).R_one?.channels[0]).toBe(current);
+		expect(
+			updateLoadedDocument(documents, current.id, {
+				title: stale.title,
+				slug: stale.slug,
+				updatedAt: stale.updatedAt,
+			}).R_one?.channels[0],
+		).toBe(current);
+	});
 });
