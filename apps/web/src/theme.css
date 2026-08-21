@@ -421,6 +421,10 @@ body {
 	box-shadow: none;
 }
 
+.workspace-frame #pane-chat {
+	border-color: rgb(0 0 0 / 9%);
+}
+
 .conversation-composer .field {
 	height: 98px;
 	border-color: var(--color-edge);

@@ -127,7 +127,7 @@ function ConversationToggle(
 				: (
 					<img
 						alt=""
-						className={`size-[18px] ${open ? "opacity-50" : ""}`}
+						className={`size-[14px] ${open ? "opacity-50" : ""}`}
 						src={open ? conversationCloseIcon : conversationIcon}
 					/>
 				)}
@@ -308,7 +308,7 @@ export function Workspace(
 				)}
 
 				{chat && mode === "split" && !presentation.conversationVisible && (
-					<div className="absolute right-5 top-5 z-20">
+					<div className="absolute right-2.5 top-2.5 z-20">
 						<ConversationToggle
 							activity={conversationActivity}
 							buttonRef={edgeTab}

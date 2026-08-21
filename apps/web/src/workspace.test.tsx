@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { Workspace } from "./workspace";
 
-test("the closed Conversation opener has matching top and right clearance", () => {
+test("the closed Conversation opener matches the tab bar inset", () => {
 	let markup = renderToStaticMarkup(
 		createElement(Workspace, {
 			chat: createElement("div"),
@@ -23,7 +23,8 @@ test("the closed Conversation opener has matching top and right clearance", () =
 		}),
 	);
 
-	expect(markup).toContain("absolute right-5 top-5 z-20");
+	expect(markup).toContain("absolute right-2.5 top-2.5 z-20");
+	expect(markup.match(/size-\[14px\]/g)).toHaveLength(3);
 });
 
 test("split pane bodies continue the workspace frame's inset edge", () => {
