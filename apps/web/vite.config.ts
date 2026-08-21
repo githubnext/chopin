@@ -7,7 +7,7 @@ import { initialJavaScriptBudget } from "./bundle-budget";
 
 import type { ServerOptions } from "vite";
 
-const PORT = 5173;
+const PORT = Number(process.env.CHOPIN_DEV_WEB_PORT ?? "5173");
 const EXE_HOST = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.exe\.xyz$/;
 
 type DevNetwork = Pick<ServerOptions, "host" | "allowedHosts" | "hmr">;
