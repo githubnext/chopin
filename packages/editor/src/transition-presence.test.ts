@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { closeDelay, presenceClass, transitionPresence } from "./transition-presence";
+import {
+	closeDelay,
+	presenceClass,
+	resolvedPresence,
+	transitionPresence,
+} from "./transition-presence";
 
 describe("transition presence", () => {
 	test("opens on a frame and closes after its exit", () => {
@@ -19,6 +24,15 @@ describe("transition presence", () => {
 
 	test("reopening cancels a close", () => {
 		expect(transitionPresence("closing", "open")).toBe("open");
+	});
+
+	test("presents a close before its reducer state updates", () => {
+		expect(resolvedPresence("open", false, false)).toBe("closing");
+	});
+
+	test("settles immediate paths without an intermediate phase", () => {
+		expect(resolvedPresence("closed", true, true)).toBe("open");
+		expect(resolvedPresence("open", false, true)).toBe("closed");
 	});
 });
 
