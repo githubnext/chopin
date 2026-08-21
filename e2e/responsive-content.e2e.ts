@@ -472,19 +472,24 @@ test("top-level rich surfaces use the document width while nested surfaces stay 
 	page = await join("wide-surface-reader");
 	let document = content(page);
 	await expect(document.getByRole("img", { name: "Responsive workspace reference" })).toBeVisible();
+	await expect(document.getByRole("img", { name: "Mixed prose reference" })).toBeVisible();
 	await expect(document.getByRole("img", { name: "Contained callout reference" })).toBeVisible();
 	await expect(document.getByRole("region", { name: "Diagram preview" })).toBeVisible();
 	let geometry = await document.evaluate(root => {
+		// oxlint-disable-next-line unicorn(consistent-function-scoping) -- The callback executes in the browser realm.
 		let rectangle = (element: Element | null) => {
 			if (!element) throw new Error("responsive surface is missing");
 			let box = element.getBoundingClientRect();
 			return { left: box.left, right: box.right, width: box.width };
 		};
-		let image = root.querySelector<HTMLImageElement>(
-			':scope > p:has(> [data-plan-src] > img.plan-image:only-child) > [data-plan-src] > img[alt="Responsive workspace reference"]',
-		);
 		let imageRow = root.querySelector(
-			":scope > p:has(> [data-plan-src] > img.plan-image:only-child)",
+			":scope > p:has(> [data-plan-src]:first-child + br[data-lexical-managed-linebreak]:last-child)",
+		);
+		let image = imageRow?.querySelector<HTMLImageElement>(
+			'img[alt="Responsive workspace reference"]',
+		) ?? null;
+		let mixed = root.querySelector(
+			":scope > p:has(> [data-plan-src] img[alt='Mixed prose reference'])",
 		);
 		let callout = root.querySelector('[data-plan-type="warning"]');
 		let nested = callout?.querySelector<HTMLImageElement>(
@@ -499,6 +504,7 @@ test("top-level rich surfaces use the document width while nested surfaces stay 
 			image: { ...rectangle(image), naturalWidth: image?.naturalWidth ?? 0 },
 			imageRow: rectangle(imageRow),
 			mermaid: rectangle(root.querySelector(':scope > [data-plan-language="mermaid"]')),
+			mixed: rectangle(mixed),
 			nested: rectangle(nested),
 			prose: rectangle(root.querySelector(":scope > p")),
 			table: rectangle(root.querySelector(":scope > table")),
@@ -514,12 +520,14 @@ test("top-level rich surfaces use the document width while nested surfaces stay 
 	}
 	expect(geometry.image.width).toBeLessThanOrEqual(geometry.image.naturalWidth);
 	expect(geometry.image.width).toBeLessThanOrEqual(geometry.imageRow.width);
+	expect(geometry.image.width).toBeGreaterThan(geometry.prose.width);
 	expect(
 		Math.abs(
 			(geometry.image.left + geometry.image.right) / 2
 				- (geometry.imageRow.left + geometry.imageRow.right) / 2,
 		),
 	).toBeLessThan(2);
+	expect(geometry.mixed.width).toBeCloseTo(geometry.prose.width, 0);
 	expect(geometry.nested.left).toBeGreaterThanOrEqual(geometry.callout.left);
 	expect(geometry.nested.right).toBeLessThanOrEqual(geometry.callout.right);
 	await expectNoHorizontalOverflow(page);
@@ -552,7 +560,7 @@ test("narrow documents keep equal inline gutters", async ({ join, page, seed }) 
 				- Number.parseFloat(style.paddingInlineEnd);
 			let selectors = [
 				":scope > table",
-				":scope > p:has(> [data-plan-src] > img.plan-image:only-child)",
+				":scope > p:has(> [data-plan-src]:first-child + br[data-lexical-managed-linebreak]:last-child)",
 				':scope > [data-plan-language="mermaid"]',
 			];
 			return {

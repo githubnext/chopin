@@ -70,7 +70,9 @@ test("top-level rich surfaces use the document width while nested surfaces stay 
 			let box = element.getBoundingClientRect();
 			return { left: box.left, right: box.right, width: box.width };
 		};
-		let imageRow = root.querySelector(":scope > p:has(> [data-plan-src]:only-child)");
+		let imageRow = root.querySelector(
+			":scope > p:has(> [data-plan-src]:first-child + br[data-lexical-managed-linebreak]:last-child)",
+		);
 		let image = imageRow?.querySelector<HTMLImageElement>(
 			'img[alt="Responsive workspace reference"]',
 		) ?? null;
@@ -127,7 +129,7 @@ let widths = await content(page).evaluate(root => {
 		- Number.parseFloat(style.paddingInlineEnd);
 	let selectors = [
 		":scope > table",
-		":scope > p:has(> [data-plan-src]:only-child)",
+		":scope > p:has(> [data-plan-src]:first-child + br[data-lexical-managed-linebreak]:last-child)",
 		':scope > [data-plan-language="mermaid"]',
 	];
 	return {
@@ -165,14 +167,17 @@ After the general image sizing rule, add the direct-child allowlist and image ce
 
 ```css
 /* Visual and data-heavy top-level blocks can use the document beyond the prose measure. */
-.plan-content > :is(table, p:has(> [data-plan-src]:only-child), [data-plan-language="mermaid"]) {
+.plan-content
+	> :is(table, p:has(> [data-plan-src]:first-child
+		+ br[data-lexical-managed-linebreak]:last-child), [data-plan-language="mermaid"]) {
 	inline-size: var(--plan-wide-inline-size);
 	max-inline-size: var(--plan-wide-inline-size);
 	margin-inline: var(--plan-wide-inline-offset);
 }
 
 /* The decorator owns the wide row; the image keeps its intrinsic size inside it. */
-.plan-content > p:has(> [data-plan-src]:only-child) {
+.plan-content
+	> p:has(> [data-plan-src]:first-child + br[data-lexical-managed-linebreak]:last-child) {
 	display: grid;
 	place-items: center;
 }

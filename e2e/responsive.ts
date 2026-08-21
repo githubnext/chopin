@@ -66,6 +66,8 @@ export const unbrokenPreviewLine = "ThisPreviewLineIsDeliberatelyLongEnoughToReq
 
 ![Responsive workspace reference](${RESPONSIVE_IMAGE_URL})
 
+A mixed prose paragraph keeps the ![Mixed prose reference](${RESPONSIVE_IMAGE_URL}) on the readable measure.
+
 \`\`\`mermaid
 flowchart LR
 	CompactDocumentMeasureThatReadersCanTrack --> IndependentWidgetScrollersThatPreserveTheDocumentWidth

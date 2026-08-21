@@ -513,15 +513,16 @@
 
 /* Visual and data-heavy top-level blocks can use the document beyond the prose measure. */
 .plan-content
-	> :is(table, p:has(> [data-plan-src]
-		> img.plan-image:only-child), [data-plan-language="mermaid"]) {
+	> :is(table, p:has(> [data-plan-src]:first-child
+		+ br[data-lexical-managed-linebreak]:last-child), [data-plan-language="mermaid"]) {
 	inline-size: var(--plan-wide-inline-size);
 	max-inline-size: var(--plan-wide-inline-size);
 	margin-inline: var(--plan-wide-inline-offset);
 }
 
 /* The paragraph owns the wide row; the image keeps its intrinsic size inside it. */
-.plan-content > p:has(> [data-plan-src] > img.plan-image:only-child) {
+.plan-content
+	> p:has(> [data-plan-src]:first-child + br[data-lexical-managed-linebreak]:last-child) {
 	display: grid;
 	place-items: center;
 }
