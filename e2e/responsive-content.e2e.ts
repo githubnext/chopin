@@ -506,6 +506,7 @@ test("compact tables and diagrams stay centered without stretching", async ({ jo
 	expect(geometry.table.scrollWidth).toBe(geometry.table.clientWidth);
 	expect(Math.abs(center(geometry.table) - center(geometry.document))).toBeLessThan(2);
 	expect(geometry.svg.width).toBeLessThan(geometry.preview.width);
+	expect(Math.abs(center(geometry.svg) - center(geometry.preview))).toBeLessThan(2);
 	expect(Math.abs(center(geometry.svg) - center(geometry.document))).toBeLessThan(2);
 	await expectNoHorizontalOverflow(page);
 });
