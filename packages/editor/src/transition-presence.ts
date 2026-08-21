@@ -32,6 +32,14 @@ export function resolvedPresence(
 	return immediately ? transitionPresence(next, "finish") : next;
 }
 
+export function presenceValue<T>(
+	value: T | undefined,
+	latest: T | undefined,
+	phase: PresencePhase,
+): T | undefined {
+	return phase === "closed" ? undefined : value ?? latest;
+}
+
 export function presenceClass(phase: PresencePhase): TransitionPresence<unknown>["className"] {
 	return phase === "open" ? "is-open" : phase === "closing" ? "is-closing" : "";
 }
@@ -59,19 +67,23 @@ export function useTransitionPresence<T>(
 	closeDuration: string,
 	fallback: number,
 ): TransitionPresence<T> {
-	let latest = useRef(value);
-	if (value !== undefined) latest.current = value;
+	let latest = useRef<T | undefined>(value);
+	let open = value !== undefined;
 	let [phase, dispatch] = useReducer(
 		transitionPresence,
-		value === undefined ? "closed" : "open",
+		open ? "open" : "closed",
 	);
 	let immediately = immediate();
-	let resolved = resolvedPresence(phase, value !== undefined, immediately);
+	let resolved = resolvedPresence(phase, open, immediately);
+	let presented = presenceValue(value, latest.current, resolved);
 
 	useEffect(() => {
-		dispatch(value === undefined ? "close" : "open");
+		if (value !== undefined) latest.current = value;
+	}, [value]);
+	useEffect(() => {
+		dispatch(open ? "open" : "close");
 		if (immediately) dispatch("finish");
-	}, [immediately, value]);
+	}, [immediately, open]);
 	useEffect(() => {
 		if (immediately) return;
 		if (resolved === "opening") {
@@ -86,11 +98,11 @@ export function useTransitionPresence<T>(
 
 	return {
 		className: presenceClass(resolved),
-		mounted: resolved !== "closed" && latest.current !== undefined,
+		mounted: presented !== undefined,
 		onTransitionEnd: event => {
 			if (resolved === "closing" && event.target === event.currentTarget) dispatch("finish");
 		},
 		phase: resolved,
-		value: resolved === "closed" ? undefined : latest.current,
+		value: presented,
 	};
 }
