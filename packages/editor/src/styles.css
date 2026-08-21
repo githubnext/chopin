@@ -511,13 +511,23 @@
 	block-size: auto;
 }
 
-/* Visual and data-heavy top-level blocks can use the document beyond the prose measure. */
+/* Visual top-level blocks can use the document beyond the prose measure. */
 .plan-content
-	> :is(table, p:has(> [data-plan-src]:first-child
+	> :is(p:has(> [data-plan-src]:first-child
 		+ br[data-lexical-managed-linebreak]:last-child), [data-plan-language="mermaid"]) {
 	inline-size: var(--plan-wide-inline-size);
 	max-inline-size: var(--plan-wide-inline-size);
 	margin-inline: var(--plan-wide-inline-offset);
+}
+
+/* A compact table shrink-wraps around its columns and stays on the document's centre line. */
+.plan-content > table {
+	inline-size: max-content;
+	max-inline-size: var(--plan-wide-inline-size);
+	margin-inline: 0;
+	position: relative;
+	inset-inline-start: 50%;
+	translate: -50% 0;
 }
 
 /* The paragraph owns the wide row; the image keeps its intrinsic size inside it. */
@@ -1031,6 +1041,7 @@
 .plan-content .plan-diagram svg {
 	display: block;
 	max-width: none;
+	margin-inline: auto;
 }
 
 .plan-content .plan-diagram:focus-visible {
