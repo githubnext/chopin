@@ -32,8 +32,10 @@ import {
 	$createCodeBlockNode,
 	$createImageNode,
 	$createMathNode,
+	$createResearchQuestionNode,
 	$createTabNode,
 	$createTabsNode,
+	$isResearchQuestionNode,
 	DIFF_LANGUAGE,
 	IMAGE_PROTOCOLS,
 	MERMAID_LANGUAGE,
@@ -54,7 +56,7 @@ import {
 	SHELL,
 } from "./surface";
 
-import type { ElementNode, LexicalEditor } from "lexical";
+import type { ElementNode, LexicalEditor, LexicalNode } from "lexical";
 import type { DOMRectLike, SurfacePlacement } from "./placement";
 
 export type SlashCommand = {
@@ -75,20 +77,25 @@ function replace(editor: LexicalEditor, build: () => ElementNode) {
 }
 
 /** Keep the replaced block as a block inside the new container. */
-function insertCallout(editor: LexicalEditor) {
+function insertContainer(
+	editor: LexicalEditor,
+	build: () => ElementNode,
+	allowed: (node: LexicalNode) => boolean = () => true,
+) {
 	editor.update(() => {
 		let selection = $getSelection();
 		if (!$isRangeSelection(selection)) return;
+		if (!allowed(selection.anchor.getNode())) return;
 		let body: ElementNode | undefined;
 
 		$setBlocksType(
 			selection,
-			() => $createCalloutNode(ulid()),
-			(previous, callout) => {
+			build,
+			(previous, container) => {
 				let paragraph = $createParagraphNode();
 				$copyBlockFormatIndent(previous, paragraph);
 				paragraph.append(...previous.getChildren());
-				callout.append(paragraph);
+				container.append(paragraph);
 				body = paragraph;
 			},
 		);
@@ -158,7 +165,26 @@ const COMMANDS: SlashCommand[] = [
 		label: "Callout",
 		group: "Layout",
 		keywords: ["note", "warning", "aside", "admonition"],
-		run: insertCallout,
+		run: editor => insertContainer(editor, () => $createCalloutNode(ulid())),
+	},
+	{
+		id: "research-question",
+		label: "Research question",
+		group: "Work",
+		keywords: ["research", "question", "investigate", "agent"],
+		run: editor =>
+			insertContainer(
+				editor,
+				() => $createResearchQuestionNode(ulid()),
+				node => {
+					let current: LexicalNode | null = node;
+					while (current) {
+						if ($isResearchQuestionNode(current)) return false;
+						current = current.getParent();
+					}
+					return true;
+				},
+			),
 	},
 	{
 		id: "table",

@@ -49,6 +49,7 @@ function label(node: Nodes): string {
 
 class Validator {
 	readonly #issues: Issue[] = [];
+	readonly #researchIds = new Set<string>();
 	#images = 0;
 
 	get issues(): Issue[] {
@@ -232,6 +233,11 @@ class Validator {
 				case "id":
 					if (!ULID.test(value)) {
 						this.add("bad-id", `\`${spec.name}.${name}\` must be a ULID`, path, node);
+					} else if (spec.name === "ResearchQuestion") {
+						if (this.#researchIds.has(value)) {
+							this.add("duplicate-id", "Research question ids must be unique", path, node);
+						}
+						this.#researchIds.add(value);
 					}
 					break;
 

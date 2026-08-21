@@ -32,7 +32,12 @@ import {
 	COMMAND_PRIORITY_LOW,
 	INSERT_PARAGRAPH_COMMAND,
 } from "lexical";
-import { $isCalloutNode, $isCodeBlockNode, $isMathNode } from "@chopin/dialect";
+import {
+	$isCalloutNode,
+	$isCodeBlockNode,
+	$isMathNode,
+	$isResearchQuestionNode,
+} from "@chopin/dialect";
 
 import type { ElementNode, LexicalNode } from "lexical";
 
@@ -53,13 +58,13 @@ function lines(node: LexicalNode | null): ElementNode | undefined {
 	return undefined;
 }
 
-/** The direct callout child that contains this node. */
-function calloutPosition(node: LexicalNode | null) {
+/** The direct editable-container child that contains this node. */
+function containerPosition(node: LexicalNode | null) {
 	let child = node;
 	while (child) {
 		let parent = child.getParent();
-		if ($isCalloutNode(parent)) {
-			return { callout: parent, child };
+		if ($isCalloutNode(parent) || $isResearchQuestionNode(parent)) {
+			return { container: parent, child };
 		}
 		child = parent;
 	}
@@ -98,8 +103,8 @@ export function handleEnter(): boolean {
 	if (!$isRangeSelection(selection)) return false;
 
 	if (selection.isCollapsed()) {
-		let position = calloutPosition(selection.anchor.getNode());
-		if (position?.child.isInline()) {
+		let position = containerPosition(selection.anchor.getNode());
+		if (position?.child.isInline() && $isCalloutNode(position.container)) {
 			/*
 			 * The old slash command stored callout prose as direct inline children.
 			 * Its canonical source is valid, so restoring the Yjs checkpoint keeps
@@ -121,8 +126,8 @@ export function handleEnter(): boolean {
 			}
 
 			let paragraph = $createParagraphNode()
-				.setFormat(position.callout.getFormatType())
-				.setIndent(position.callout.getIndent());
+				.setFormat(position.container.getFormatType())
+				.setIndent(position.container.getIndent());
 			first.insertBefore(paragraph);
 			paragraph.append(...inline);
 			selection.insertParagraph();
@@ -132,13 +137,13 @@ export function handleEnter(): boolean {
 		if (
 			position
 			&& $isParagraphNode(position.child)
-			&& position.child.getTextContentSize() === 0
+			&& position.child.getChildrenSize() === 0
 			&& position.child.getPreviousSibling() !== null
 			&& position.child.getNextSibling() === null
 		) {
 			position.child.remove();
 			let paragraph = $createParagraphNode();
-			position.callout.insertAfter(paragraph);
+			position.container.insertAfter(paragraph);
 			paragraph.select();
 			return true;
 		}
