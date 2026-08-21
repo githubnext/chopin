@@ -242,13 +242,21 @@ export function Workspace(
 		<div className="flex h-full flex-col overflow-hidden bg-ground">
 			{header}
 
-			<div className={`relative flex min-h-0 flex-1 ${mode === "split" ? "" : "pb-2"}`}>
+			<div
+				className={`workspace-frame relative flex min-h-0 flex-1 ${
+					mode === "split"
+						? "mx-3 mb-3 overflow-hidden rounded-[12px] bg-page shadow-raised ring-hairline"
+						: "pb-2"
+				}`}
+			>
 				{/* `hidden` preserves pane state and subscriptions while removing it from layout. */}
 				{chat && (
 					<aside
 						aria-hidden={conversationHidden || undefined}
 						aria-labelledby={HEADING.conversation}
-						className="order-2 relative flex min-w-0 flex-col overflow-hidden bg-ground"
+						className={`order-2 relative flex min-w-0 flex-col overflow-hidden bg-conversation-pane ${
+							mode === "split" ? "hairline-l" : ""
+						}`}
 						hidden={conversationHidden}
 						id={paneId("chat")}
 						inert={conversationHidden}
@@ -265,7 +273,7 @@ export function Workspace(
 					>
 						{mode === "split"
 							? (
-								<div className="group flex h-[46px] shrink-0 items-center justify-between px-3.5 hairline-b">
+								<div className="group flex h-[46px] shrink-0 items-center gap-2 px-3.5 hairline-b">
 									{presentation.separatorVisible && (
 										<ResizeHandle
 											label="Resize the conversation"
@@ -276,19 +284,20 @@ export function Workspace(
 											width={chatWidth}
 										/>
 									)}
+									<ConversationToggle
+										activity={conversationActivity}
+										className="conversation-header-control -ml-[5px] -mr-[5px]"
+										onToggle={dismissConversation}
+										open
+										swapOnHover
+									/>
 									<h2
-										className="text-sm font-medium text-text-tertiary"
+										className="text-[14px] font-medium text-text-tertiary"
 										id={HEADING.conversation}
 										tabIndex={-1}
 									>
 										Conversation
 									</h2>
-									<ConversationToggle
-										activity={conversationActivity}
-										onToggle={dismissConversation}
-										open
-										swapOnHover
-									/>
 								</div>
 							)
 							: <h2 className="sr-only" id={HEADING.conversation} tabIndex={-1}>Conversation</h2>}
@@ -312,25 +321,17 @@ export function Workspace(
 
 				<main
 					aria-hidden={!presentation.documentVisible || undefined}
-					className="order-1 relative min-w-0 w-full flex-1 px-3"
+					className="order-1 relative min-w-0 w-full flex-1"
 					hidden={!presentation.documentVisible}
 					inert={!presentation.documentVisible}
 				>
-					{/* Decoration extends below the viewport without moving the editor contents. */}
-					<div
-						aria-hidden="true"
-						className={`pointer-events-none absolute inset-x-3 top-0 rounded-t-xl bg-page shadow-raised ring-hairline ${
-							mode === "split" ? "-bottom-3" : "bottom-0"
-						}`}
-					/>
-
-					<div className="relative flex h-full flex-col overflow-hidden rounded-t-xl">
+					<div className="relative flex h-full flex-col overflow-hidden">
 						{mode === "split" && (
 							<div
-								className="grid h-[46px] shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center px-3 hairline-b"
+								className="flex h-[46px] shrink-0 items-center px-2.5 hairline-b"
 								data-document-toolbar
 							>
-								<div className="col-start-2 justify-self-center">{controls}</div>
+								{controls}
 							</div>
 						)}
 						<section

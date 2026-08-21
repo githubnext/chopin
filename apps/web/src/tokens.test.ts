@@ -127,6 +127,10 @@ describe("palette", () => {
 		expect(declared("--color-conversation-body")).toBe("#3e453b");
 	});
 
+	it("keeps the Conversation pane on its exact Figma ground", () => {
+		expect(declared("--color-conversation-pane")).toBe("#f5f4f1");
+	});
+
 	it("gives every text level at least AA contrast on the page", () => {
 		for (let level of ["primary", "secondary", "tertiary", "quaternary"]) {
 			let ratio = contrast(`--color-text-${level}`, "--color-page");

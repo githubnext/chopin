@@ -12,12 +12,12 @@ const EXE_HOST = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.exe\.xyz$/;
 
 type DevNetwork = Pick<ServerOptions, "host" | "allowedHosts" | "hmr">;
 
-export function devNetwork(exeHost: string | undefined): DevNetwork {
+export function devNetwork(exeHost: string | undefined, port = PORT): DevNetwork {
 	if (!exeHost) {
 		return {
 			host: "127.0.0.1",
 			allowedHosts: [],
-			hmr: { protocol: "ws", host: "127.0.0.1", clientPort: PORT },
+			hmr: { protocol: "ws", host: "127.0.0.1", clientPort: port },
 		};
 	}
 	if (!EXE_HOST.test(exeHost)) {
@@ -26,7 +26,7 @@ export function devNetwork(exeHost: string | undefined): DevNetwork {
 	return {
 		host: "0.0.0.0",
 		allowedHosts: [exeHost],
-		hmr: { protocol: "wss", host: exeHost, clientPort: PORT },
+		hmr: { protocol: "wss", host: exeHost, clientPort: port },
 	};
 }
 

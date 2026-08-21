@@ -86,7 +86,7 @@ function SystemEntry(
 			<div className="shrink-0">
 				<SignInIcon aria-hidden="true" size={20} />
 			</div>
-			<p className="m-0 min-w-0 break-words text-sm [overflow-wrap:anywhere]">
+			<p className="m-0 min-w-0 break-words text-[14px] [overflow-wrap:anywhere]">
 				{displayText(item.text)}
 			</p>
 		</div>
@@ -159,9 +159,9 @@ function MessageGroup(
 					: <Face handle={item.author.handle} size={24} />}
 			</div>
 			<div className={`flex min-w-0 flex-1 flex-col gap-1.5 ${item.queued ? "opacity-60" : ""}`}>
-				<div className="flex items-baseline gap-1.5 text-sm">
+				<div className="flex items-baseline gap-1.5 text-[14px]">
 					<span className="min-w-0 break-all font-semibold">{name}</span>
-					<span className="text-text-tertiary tabular-nums">
+					<span className="text-[13px] text-text-tertiary tabular-nums">
 						{item.queued ? "queued" : when(first.ts!)}
 					</span>
 				</div>
@@ -210,11 +210,6 @@ export function Transcript(
 				pinned.current = distance < 40;
 			}}
 		>
-			{groups.length === 0 && (
-				<p className="m-0 text-sm text-text-quaternary">
-					Ask the planner to draft something, or to read the repository first.
-				</p>
-			)}
 			{groups.map(item =>
 				item.kind === "system"
 					? <SystemEntry arrived={arrived.has(item.id)} item={item} key={item.id} />

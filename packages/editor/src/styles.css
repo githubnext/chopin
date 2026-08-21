@@ -9,14 +9,14 @@
 @import "./callout.css";
 
 .plan {
-	--plan-gutter: 2rem;
+	--plan-gutter: 4rem;
 	/*
 	 * A comfortable measure. The panel is resizable and a plan is read far more
 	 * often than it is written, so the text stops widening well before the pane
 	 * does. At the body size below this is roughly 85 characters a line, near
 	 * the top of the range a reader can track back from without losing the row.
 	 */
-	--plan-measure: 40rem;
+	--plan-measure: 43.75rem;
 	/*
 	 * Document body text, one step down from the old 17px so prose sits
 	 * closer to chrome and chat sizes. Resolved out here because MDXEditor
@@ -320,7 +320,7 @@
 	 * The trailing space is deliberate and large: the caret should never sit
 	 * against the bottom of the pane, and a plan is usually appended to.
 	 */
-	padding: 1.5rem var(--plan-gutter) 60vh;
+	padding: 3rem var(--plan-gutter) 60vh;
 	margin-inline: auto;
 	max-width: calc(var(--plan-measure) + var(--plan-gutter) * 2);
 	font-size: var(--plan-body);

@@ -48,6 +48,7 @@
 	--color-text-tertiary: var(--color-gray-600);
 	--color-text-quaternary: var(--color-gray-500);
 	--color-conversation-body: #3e453b;
+	--color-conversation-pane: #f5f4f1;
 
 	/* Petrol is the only accent: action, focus, presence and links all agree. */
 	--color-brand: oklch(0.50006 0.08514 210.06); /* #06707e */
@@ -413,6 +414,23 @@ body {
 	padding-right: calc(0.25rem + env(safe-area-inset-right));
 	padding-bottom: calc(0.25rem + env(safe-area-inset-bottom));
 	padding-left: calc(0.25rem + env(safe-area-inset-left));
+}
+
+/* The split workspace is one elevated surface; its panes only own the divider. */
+.workspace-frame .plan-document {
+	box-shadow: none;
+}
+
+.conversation-composer .field {
+	height: 98px;
+	border-color: var(--color-edge);
+	border-radius: var(--radius-lg);
+	box-shadow: var(--shadow-resting);
+}
+
+.conversation-header-control:hover:not(:disabled),
+.conversation-header-control:active:not(:disabled) {
+	background-color: transparent;
 }
 
 @media (min-width: 640px) {
