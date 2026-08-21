@@ -114,12 +114,12 @@ function ConversationToggle(
 					<>
 						<img
 							alt=""
-							className="size-[18px] group-hover:hidden group-focus-within:hidden"
+							className="size-[14px] group-hover:hidden group-focus-within:hidden"
 							src={conversationIcon}
 						/>
 						<img
 							alt=""
-							className="hidden size-[18px] opacity-50 group-hover:block group-focus-within:block"
+							className="hidden size-[14px] opacity-50 group-hover:block group-focus-within:block"
 							src={conversationCloseIcon}
 						/>
 					</>
@@ -255,7 +255,7 @@ export function Workspace(
 						aria-hidden={conversationHidden || undefined}
 						aria-labelledby={HEADING.conversation}
 						className={`order-2 relative flex min-w-0 flex-col overflow-hidden bg-conversation-pane ${
-							mode === "split" ? "hairline-l" : ""
+							mode === "split" ? "hairline-l hairline-r hairline-b" : ""
 						}`}
 						hidden={conversationHidden}
 						id={paneId("chat")}
@@ -321,7 +321,9 @@ export function Workspace(
 
 				<main
 					aria-hidden={!presentation.documentVisible || undefined}
-					className="order-1 relative min-w-0 w-full flex-1"
+					className={`order-1 relative min-w-0 w-full flex-1 ${
+						mode === "split" ? "hairline-l hairline-b" : ""
+					}`}
 					hidden={!presentation.documentVisible}
 					inert={!presentation.documentVisible}
 				>
