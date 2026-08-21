@@ -7,7 +7,7 @@
  * alongside the panels and toggles their DOM, leaving the model untouched.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $getRoot, $isElementNode } from "lexical";
@@ -20,6 +20,14 @@ type Group = {
 	key: string;
 	tabs: Array<{ id: string; key: string; label: string }>;
 };
+
+/** Reveal a tab without moving any scroll ancestor outside its own strip. */
+function revealInline(strip: HTMLElement, tab: HTMLElement): void {
+	let viewport = strip.getBoundingClientRect();
+	let item = tab.getBoundingClientRect();
+	if (item.left < viewport.left) strip.scrollLeft += item.left - viewport.left;
+	else if (item.right > viewport.right) strip.scrollLeft += item.right - viewport.right;
+}
 
 /** Read the tab structure out of the document. */
 function collect(editor: LexicalEditor): Group[] {
@@ -55,10 +63,32 @@ function Strip(
 		onSelect: (key: string) => void;
 	},
 ) {
-	let select = (index: number) => onSelect(group.tabs[index]!.key);
+	let strip = useRef<HTMLDivElement>(null);
+	let buttons = useRef<Array<HTMLButtonElement | null>>([]);
+	let activeIndex = group.tabs.findIndex(tab => tab.key === active);
+	let structure = group.tabs.map(tab => tab.key).join(" ");
+	let select = (index: number) => {
+		onSelect(group.tabs[index]!.key);
+		buttons.current[index]?.focus();
+	};
+
+	useLayoutEffect(() => {
+		let list = strip.current;
+		let activeButton = buttons.current[activeIndex];
+		if (!list || !activeButton) return;
+		let reveal = () => revealInline(list, activeButton);
+		reveal();
+		let observer = new ResizeObserver(reveal);
+		observer.observe(list);
+		for (let button of buttons.current) {
+			if (button) observer.observe(button);
+		}
+		return () => observer.disconnect();
+	}, [active, activeIndex, structure]);
 
 	return (
 		<div
+			ref={strip}
 			role="tablist"
 			// The strip is chrome, not content: keep it out of the editable tree.
 			contentEditable={false}
@@ -67,6 +97,9 @@ function Strip(
 			{group.tabs.map((tab, position) => (
 				<button
 					key={tab.key}
+					ref={element => {
+						buttons.current[position] = element;
+					}}
 					type="button"
 					role="tab"
 					id={`ace-tab-${tab.key}`}
@@ -83,7 +116,7 @@ function Strip(
 						else return;
 						event.preventDefault();
 					}}
-					className={`shrink-0 rounded-md px-2.5 py-1 text-sm font-medium transition ${
+					className={`max-w-full shrink-0 whitespace-normal break-words rounded-md px-2.5 py-1 text-left text-sm font-medium transition ${
 						tab.key === active
 							? "bg-selected text-text-primary"
 							: "text-text-quaternary hover:text-text-primary"

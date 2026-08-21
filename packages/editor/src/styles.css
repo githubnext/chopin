@@ -54,6 +54,25 @@
 	.plan-content {
 		--plan-gutter: 1rem;
 	}
+
+	/* Wide authored surfaces keep their own visible, keyboard-operable lane. */
+	.plan-content :is(pre, table, .plan-code-view, [role="tablist"]) {
+		overscroll-behavior-inline: contain;
+	}
+
+	.plan-content :is(pre, table, .plan-code-view, [role="tablist"])::-webkit-scrollbar {
+		block-size: 8px;
+	}
+
+	.plan-content :is(pre, table, .plan-code-view, [role="tablist"])::-webkit-scrollbar-track {
+		background: var(--color-inset);
+	}
+
+	.plan-content :is(pre, table, .plan-code-view, [role="tablist"])::-webkit-scrollbar-thumb {
+		border: 2px solid var(--color-inset);
+		border-radius: var(--radius-lg);
+		background: var(--color-text-quaternary);
+	}
 }
 
 /* Reader-local comment chrome must not move collaborative line boxes. */
@@ -717,7 +736,7 @@
 	pointer-events: none;
 }
 
-.plan-table-touch-toolbar {
+.plan-table-action-toolbar {
 	position: fixed;
 	z-index: 50;
 	display: block;
@@ -728,20 +747,20 @@
 	box-shadow: var(--shadow-overlay);
 }
 
-.plan-table-touch-groups,
-.plan-table-touch-panel {
+.plan-table-action-groups,
+.plan-table-action-panel {
 	display: grid;
 	grid-template-columns: repeat(4, minmax(0, 1fr));
 	gap: 0.25rem;
 }
 
-.plan-table-touch-panel {
+.plan-table-action-panel {
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	padding-block-start: 0.25rem;
 	border-block-start: var(--edge-width) solid var(--color-edge);
 }
 
-.plan-table-touch-action {
+.plan-table-action {
 	width: 100%;
 	min-width: 0;
 	min-height: 44px;
@@ -752,32 +771,24 @@
 	line-height: 1.15;
 }
 
-.plan-table-touch-action[aria-expanded="true"] {
+.plan-table-action[aria-expanded="true"] {
 	background: var(--color-selected);
 	color: var(--color-text-primary);
 }
 
-.plan-table-touch-action:hover,
-.plan-table-touch-action:focus-visible {
+.plan-table-action:hover,
+.plan-table-action:focus-visible {
 	background: var(--color-hover);
 	color: var(--color-text-primary);
 }
 
-.plan-table-touch-action:focus-visible {
+.plan-table-action:focus-visible {
 	outline: 2px solid var(--color-brand);
 	outline-offset: -2px;
 }
 
-.plan-table-touch-action:disabled {
+.plan-table-action:disabled {
 	opacity: 0.45;
-}
-
-:root[data-plan-primary-coarse-pointer] .plan-rail {
-	display: none;
-}
-
-:root:not([data-plan-coarse-pointer]) .plan-table-touch-toolbar {
-	display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

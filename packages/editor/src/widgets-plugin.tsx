@@ -11,15 +11,12 @@
  * only way a later value arrives.
  */
 
-import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { addComposerChild$, readOnly$, realmPlugin } from "@mdxeditor/editor";
-import { useCellValue } from "@mdxeditor/gurx";
+import { addComposerChild$, realmPlugin } from "@mdxeditor/editor";
 
 import { ChangeObserver } from "./changes-observer";
 import { CommentLayer } from "./comment-layer";
 import { QuestionnaireObserver } from "./questionnaires";
-import { TableRails } from "./table/rails";
-import { TableTouchToolbar } from "./table/touch-toolbar";
+import { TableChrome } from "./table/chrome";
 import { ThreadObserver } from "./threads";
 import { Toolbar } from "./toolbar";
 import { CalloutPlugin, EnterPlugin, PreviewPlugin, TabsPlugin } from "./widgets";
@@ -29,12 +26,6 @@ import type { WidgetOptions } from "./widget-options";
 
 export { widgets$ } from "./widget-options";
 export type { WidgetOptions } from "./widget-options";
-
-function TableTouchToolbarPlugin() {
-	let [editor] = useLexicalComposerContext();
-	let disabled = useCellValue(readOnly$);
-	return <TableTouchToolbar disabled={disabled} editor={editor} />;
-}
 
 export const widgetsPlugin = realmPlugin<WidgetOptions>({
 	init(realm, params) {
@@ -60,8 +51,7 @@ export const widgetsPlugin = realmPlugin<WidgetOptions>({
 		realm.pub(addComposerChild$, EnterPlugin);
 		// Also where `@lexical/table`'s own plugins are registered, which the
 		// editor otherwise runs without.
-		realm.pub(addComposerChild$, TableRails);
-		realm.pub(addComposerChild$, TableTouchToolbarPlugin);
+		realm.pub(addComposerChild$, TableChrome);
 		realm.pub(addComposerChild$, Toolbar);
 	},
 	update(realm, params) {

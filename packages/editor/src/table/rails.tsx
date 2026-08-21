@@ -24,23 +24,14 @@
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import {
-	$findTableNode,
-	$isTableNode,
-	registerTableCellUnmergeTransform,
-	registerTablePlugin,
-	registerTableSelectionObserver,
-} from "@lexical/table";
-import { readOnly$ } from "@mdxeditor/editor";
-import { useCellValue } from "@mdxeditor/gurx";
-import { $getRoot, $getSelection, $isElementNode, $isRangeSelection, mergeRegister } from "lexical";
+import { $findTableNode } from "@lexical/table";
+import { $getSelection, $isRangeSelection } from "lexical";
 
 import { alignmentLabel, nextAlign } from "./alignment";
 import { destination, dropSeam, gripBox, seamAt, seamBox, seams } from "./geometry";
 import {
 	$addColumn,
 	$addRow,
-	$describe,
 	$moveColumn,
 	$moveRow,
 	$removeColumn,
@@ -49,7 +40,7 @@ import {
 } from "./ops";
 import { canAddColumn, canAddRow, canRemoveColumn, canRemoveRow, HEADER } from "./shape";
 
-import type { ElementNode, LexicalEditor, NodeKey } from "lexical";
+import type { LexicalEditor, NodeKey } from "lexical";
 import type { Axis, Track } from "./geometry";
 import type { Table } from "./ops";
 
@@ -74,6 +65,8 @@ const SEAM = 16;
 const BUTTON = 15;
 const PAIR = 8;
 
+export type RailMode = "full" | "grips";
+
 /** Where a measured table is on the screen, and where its tracks are. */
 type Metrics = {
 	/**
@@ -95,24 +88,6 @@ type Metrics = {
 
 /** A drag in progress. */
 type Drag = { axis: Axis; from: number; seam: number };
-
-/** Read every table out of the document. */
-function collect(editor: LexicalEditor): Table[] {
-	let out: Table[] = [];
-	editor.getEditorState().read(() => {
-		let walk = (node: ElementNode) => {
-			for (let child of node.getChildren()) {
-				// A table cannot nest inside a table in this dialect, but a
-				// callout or a tab panel can hold one, so the walk cannot stop
-				// at the top level.
-				if ($isTableNode(child)) out.push($describe(child));
-				else if ($isElementNode(child)) walk(child);
-			}
-		};
-		walk($getRoot());
-	});
-	return out;
-}
 
 /**
  * Measure one table.
@@ -161,61 +136,18 @@ function measure(editor: LexicalEditor, table: Table): Metrics | undefined {
 	};
 }
 
-/**
- * Project each column's alignment onto its cells.
- *
- * The alignment is recorded on the header cell, because the `| :--- |` row is
- * the only place GFM has to put it, but it describes the whole column — and CSS
- * cannot cascade from one cell to the others beneath it. So it is written to
- * the elements rather than the document: the same arrangement as a tab panel's
- * visibility, for the same reason, which is that how a column is drawn should
- * not be an edit.
- *
- * Re-applied on every update, because Lexical rebuilds a block's element when
- * the block changes and a style set on the old one goes with it.
- */
-function paint(editor: LexicalEditor, tables: Table[]): void {
-	for (let table of tables) {
-		for (let row of table.cells) {
-			for (let column = 0; column < row.length; column++) {
-				let element = editor.getElementByKey(row[column]!);
-				if (!element) continue;
-				// Empty rather than "start", so clearing an alignment hands the
-				// column back to the stylesheet instead of pinning it to a
-				// value that would then win against any later change there.
-				element.style.textAlign = table.align[column] ?? "";
-			}
-		}
-	}
-}
-
-export function TableRails() {
+export function TableRails(
+	{ disabled, mode = "full", tables }: {
+		disabled?: boolean;
+		mode?: RailMode;
+		tables: Table[];
+	},
+) {
 	let [editor] = useLexicalComposerContext();
-	let disabled = useCellValue(readOnly$);
 
-	let [tables, setTables] = useState<Table[]>([]);
 	let [active, setActive] = useState<NodeKey>();
 	let [metrics, setMetrics] = useState<Metrics>();
 	let [drag, setDrag] = useState<Drag>();
-
-	/*
-	 * Everything `@lexical/table` assumes is installed, and was not.
-	 *
-	 * Without `registerTablePlugin` a table has no keyboard navigation and none
-	 * of the transforms that keep it rectangular. Without the unmerge transform
-	 * a table pasted from HTML keeps its spans, which the dialect has no way to
-	 * write — the export visitor ignores them, so the cells silently
-	 * redistribute themselves at the next save.
-	 */
-	useEffect(
-		() =>
-			mergeRegister(
-				registerTablePlugin(editor),
-				registerTableSelectionObserver(editor),
-				registerTableCellUnmergeTransform(editor),
-			),
-		[editor],
-	);
 
 	let table = tables.find(item => item.key === active);
 
@@ -236,53 +168,9 @@ export function TableRails() {
 
 	useEffect(() => () => cancelAnimationFrame(pending.current), []);
 
-	/*
-	 * Read the document, and only say so when it has actually changed shape.
-	 *
-	 * Every keystroke fires an update, and `collect` allocates as it walks — so
-	 * publishing unconditionally would re-render the rails and re-measure the
-	 * table once per character typed anywhere in the plan. The measurement
-	 * still has to happen on every update, because typing into a cell widens
-	 * its column, but that is a rectangle read behind a frame rather than a
-	 * pass over the whole tree.
-	 */
-	let last = useRef("");
 	useEffect(() => {
-		let refresh = () => {
-			// An update listener that throws takes every listener after it with
-			// it, including the one that syncs to Yjs. Losing the rails is the
-			// cheapest outcome available and the only acceptable one.
-			try {
-				let next = collect(editor);
-				let json = JSON.stringify(next);
-				if (json !== last.current) {
-					last.current = json;
-					setTables(next);
-					paint(editor, next);
-				}
-				schedule();
-			} catch (err) {
-				console.error("[plan] table rails could not read the document", err);
-			}
-		};
-		refresh();
-		return editor.registerUpdateListener(refresh);
+		return editor.registerUpdateListener(schedule);
 	}, [editor, schedule]);
-
-	/*
-	 * Repaint the alignment after any render that could have replaced an
-	 * element. Lexical rebuilds a block's element when the block changes, and
-	 * an inline style set on the old one goes with it — so this cannot be left
-	 * to the update above, which deliberately says nothing when the shape has
-	 * not moved.
-	 */
-	useEffect(() => {
-		try {
-			paint(editor, tables);
-		} catch (err) {
-			console.error("[plan] column alignment could not be painted", err);
-		}
-	}, [editor, tables]);
 
 	// Synchronously on a change of table, so switching between two never draws
 	// one frame of rails at the other's coordinates.
@@ -371,7 +259,7 @@ export function TableRails() {
 	 */
 	let caret = useRef<NodeKey | undefined>(undefined);
 	useEffect(() => {
-		return editor.registerUpdateListener(() => {
+		let sync = () => {
 			editor.getEditorState().read(() => {
 				let selection = $getSelection();
 				let found = $isRangeSelection(selection)
@@ -381,7 +269,9 @@ export function TableRails() {
 				caret.current = found;
 				if (found) setActive(found);
 			});
-		});
+		};
+		sync();
+		return editor.registerUpdateListener(sync);
 	}, [editor]);
 
 	let act = useCallback((op: () => void) => editor.update(op), [editor]);
@@ -389,6 +279,7 @@ export function TableRails() {
 	// Metrics lag the active table by a frame; drawing against the previous
 	// table's rectangles would put the rails somewhere they do not belong.
 	if (disabled || !table || !metrics || metrics.key !== table.key) return null;
+	let tools = mode === "full";
 
 	return (
 		<>
@@ -401,6 +292,7 @@ export function TableRails() {
 				onHover={hover}
 				table={table}
 				tracks={metrics.columns}
+				tools={tools}
 			/>
 			<Rail
 				axis="row"
@@ -411,6 +303,7 @@ export function TableRails() {
 				onHover={hover}
 				table={table}
 				tracks={metrics.rows}
+				tools={tools}
 			/>
 		</>
 	);
@@ -425,9 +318,10 @@ type RailProps = {
 	onHover: (key: NodeKey | undefined) => void;
 	table: Table;
 	tracks: Track[];
+	tools: boolean;
 };
 
-function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks }: RailProps) {
+function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks, tools }: RailProps) {
 	let column = axis === "column";
 	let key = table.key;
 	let count = tracks.length;
@@ -451,8 +345,8 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks }: Ra
 	 *
 	 * `overflow: hidden` so a column scrolled out of the table's own scroller
 	 * takes its grip with it rather than leaving one floating past the edge.
-	 * The grips lie against the table and the buttons in a lane beyond them, so
-	 * the rail is as deep as the two together.
+	 * The grips lie against the table. A full rail adds the button lane beyond
+	 * them; a compact rail measures only the grips it actually draws.
 	 *
 	 * Half a seam of slack at each end, because the first and last seams sit
 	 * exactly on the table's edges and what is drawn on a seam straddles it:
@@ -461,17 +355,19 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks }: Ra
 	 * be wanted.
 	 */
 	let pad = SEAM / 2;
+	let depth = tools ? DEPTH : GRIP;
+	let gripLane = tools ? TOOL : 0;
 	let frame = column
 		? {
 			left: metrics.left - pad,
-			top: metrics.top - DEPTH,
+			top: metrics.top - depth,
 			width: metrics.width + pad * 2,
-			height: DEPTH,
+			height: depth,
 		}
 		: {
-			left: metrics.left - DEPTH,
+			left: metrics.left - depth,
 			top: metrics.top - pad,
-			width: DEPTH,
+			width: depth,
 			height: metrics.height + pad * 2,
 		};
 
@@ -507,9 +403,7 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks }: Ra
 			}}
 		>
 			{tracks.map((track, index) => {
-				// `TOOL` is the lane offset: the grips are the lane against the
-				// table, the buttons the one beyond it.
-				let box = gripBox(axis, track, origin, GRIP, TOOL);
+				let box = gripBox(axis, track, origin, GRIP, gripLane);
 				if (!holdable(index)) {
 					// The header still gets a bar, so the rail does not have a
 					// gap in it where the row everybody can see plainly is.
@@ -584,7 +478,7 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks }: Ra
 				 * track it removes.
 				 */
 			}
-			{tracks.map((track, index) => {
+			{tools && tracks.map((track, index) => {
 				let middle = (track.start + track.end) / 2;
 				// A column carries two buttons, so they sit either side of the
 				// track's middle rather than both on it; a row has only the one.
@@ -632,7 +526,7 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks }: Ra
 				);
 			})}
 
-			{addable
+			{tools && addable
 				&& lines.map((line, seam) => {
 					// Nothing may be inserted above the header row.
 					if (!column && seam <= HEADER) return null;
@@ -656,7 +550,7 @@ function Rail({ axis, drag, metrics, onAct, onDrag, onHover, table, tracks }: Ra
 					<div
 						aria-hidden="true"
 						className="plan-drop"
-						style={seamBox(axis, lines[at] ?? 0, origin, GRIP, 2, TOOL)}
+						style={seamBox(axis, lines[at] ?? 0, origin, GRIP, 2, gripLane)}
 					/>
 				)
 				: null}

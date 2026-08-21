@@ -17,6 +17,8 @@ const TAB_FIRST = "01K0N4V4E7Y6P4MJ5WD8XZF3B2";
 const TAB_SECOND = "01K0N4W3B7P27CBAEC7A8C8WEA";
 const TAB_THIRD = "01K0N4X9ERK4P3R5AZBJ8Y0P6C";
 const TAB_FOURTH = "01K0N4Z7WH8C7H1P2Q9N4S6J3D";
+const TAB_FIFTH = "01K0N50CJW7B9ZQ4P6T8R2S5XM";
+const TAB_SIXTH = "01K0N51DNX8C0AR5Q7V9S3T6YP";
 const CALLOUT = "01K0N4Y9VG9DHBFZB6HC89E2AW";
 const LATEX_SLASH = "\\";
 
@@ -35,6 +37,10 @@ let paragraphs = Array.from(
 export const RESPONSIVE_SOURCE = `# Responsive architecture review
 
 This deliberately long opening paragraph gives the fixture comment injector enough ordinary prose to quote while a reader can still find its argument among the richer blocks below.
+
+## A deliberately detailed authored heading that must wrap at normal word boundaries inside a compact document
+
+## CompactDocumentMeasureMustRemainReadableWithoutForcingTheViewportWiderThanTheDocument
 
 The canonical reference is [TheCompleteArchitectureDecisionRecordForResponsiveWorkspaceContainmentMustWrapWithoutWideningTheDocument](https://example.com/architecture/decisions/responsive-workspace/viewport-safe-area-and-keyboard-avoidance-with-a-very-long-path-that-must-wrap-cleanly).
 
@@ -92,9 +98,19 @@ Temporary conversation still preserves the document's readable measure.
 Each wide widget owns its overflow without widening the collaborative source.
 
 </Tab>
+<Tab id="${TAB_FIFTH}" label="Focused authored destination remains visible">
+
+Keyboard focus follows the selected destination without losing the strip.
+
+</Tab>
+<Tab id="${TAB_SIXTH}" label="Reduced-motion native scrolling remains immediate">
+
+The final destination stays reachable without animated navigation.
+
+</Tab>
 </Tabs>
 
-<Callout id="${CALLOUT}" type="warning" title="EveryVisibleControlStaysInTheCompactViewportWhileItsOwnInputScrollsWithoutWideningTheDocument">
+<Callout id="${CALLOUT}" type="warning" title="Every visible control stays compact while authored content scrolls without widening the document">
 
 Every visible control and focused element stays inside the visual viewport.
 
