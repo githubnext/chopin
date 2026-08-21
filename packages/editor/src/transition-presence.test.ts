@@ -30,6 +30,13 @@ describe("transition presence", () => {
 		expect(resolvedPresence("open", false, false)).toBe("closing");
 	});
 
+	test("keeps an ordinary opening phase until the frame finishes it", () => {
+		let phase = transitionPresence("closed", "open");
+		expect(resolvedPresence(phase, true, false)).toBe("opening");
+		phase = transitionPresence(phase, "finish");
+		expect(resolvedPresence(phase, true, false)).toBe("open");
+	});
+
 	test("settles immediate paths without an intermediate phase", () => {
 		expect(resolvedPresence("closed", true, true)).toBe("open");
 		expect(resolvedPresence("open", false, true)).toBe("closed");
