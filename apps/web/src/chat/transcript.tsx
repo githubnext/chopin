@@ -163,7 +163,7 @@ function MessageGroup(
 			>
 				<div className="flex items-baseline gap-1.5 text-[14px]">
 					<span className="min-w-0 break-all font-semibold">{name}</span>
-					<span className="text-[13px] text-text-tertiary tabular-nums">
+					<span className="text-[13px] text-text-quaternary tabular-nums">
 						{item.queued ? "queued" : when(first.ts!)}
 					</span>
 				</div>
@@ -212,7 +212,7 @@ export function Transcript(
 				pinned.current = distance < 40;
 			}}
 		>
-			<div className="flex min-h-full flex-col justify-end gap-6" data-chat-stack>
+			<div className="flex min-h-full flex-col justify-end gap-4" data-chat-stack>
 				{groups.map(item =>
 					item.kind === "system"
 						? <SystemEntry arrived={arrived.has(item.id)} item={item} key={item.id} />
