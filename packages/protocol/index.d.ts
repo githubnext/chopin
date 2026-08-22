@@ -92,6 +92,7 @@ export declare namespace Session {
 
 export type { Chat } from "./chat";
 export type { Comment } from "./comment";
+export type { Job } from "./job";
 export type { Plan } from "./plan";
 export type { Question } from "./question";
 
@@ -100,6 +101,7 @@ export type Incoming =
 	| Session.Incoming
 	| import("./chat").Chat.Incoming
 	| import("./comment").Comment.Incoming
+	| import("./job").Job.Incoming
 	| import("./plan").Plan.Incoming
 	| import("./question").Question.Incoming;
 
@@ -108,5 +110,6 @@ export type Outgoing =
 	| Session.Outgoing
 	| import("./chat").Chat.Outgoing
 	| import("./comment").Comment.Outgoing
+	| import("./job").Job.Outgoing
 	| import("./plan").Plan.Outgoing
 	| import("./question").Question.Outgoing;

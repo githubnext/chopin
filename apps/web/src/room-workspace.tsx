@@ -2,14 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { documentPath } from "@chopin/protocol/document-url";
 import {
 	advanceDecisionView,
+	aggregateJobs,
 	countUnanswered,
+	currentJobs,
 	cursor,
 	Decisions,
 	Face,
+	JobStore,
 	PlanEditor,
 	QuestionnaireStore,
+	Tasks,
 	ThreadStore,
 	useHasPlanContent,
+	useJobs,
 	useQuestionnaires,
 	visibleDecisionView,
 } from "@chopin/editor";
@@ -111,16 +116,20 @@ export function RoomWorkspace(
 	let [workspace, dispatch] = useWorkspaceState();
 	let [questions] = useState(() => new QuestionnaireStore());
 	let [threads] = useState(() => new ThreadStore());
+	let [jobs] = useState(() => new JobStore());
 	let [reveal, setReveal] = useState<{ widget: string; token: number }>();
 	let [planScrollTop, setPlanScrollTop] = useState(0);
 	let entries = useQuestionnaires(questions);
 	let unanswered = countUnanswered(entries);
+	let jobSnapshot = useJobs(jobs);
+	let jobAggregate = aggregateJobs(jobSnapshot.jobs);
+	let currentJobCount = currentJobs(jobSnapshot.jobs).length;
 	let hasPlanContent = useHasPlanContent(questions);
 	let [decisionView, setDecisionView] = useState<DecisionViewState>(() => {
 		let stored = localStorage.getItem("chopin:view:document");
 		return {
 			phase: "initial",
-			preferred: stored === "decisions" ? "decisions" : "plan",
+			preferred: stored === "decisions" || stored === "tasks" ? stored : "plan",
 		};
 	});
 	let view = visibleDecisionView(decisionView, hasPlanContent, unanswered);
@@ -171,7 +180,11 @@ export function RoomWorkspace(
 	}, [unanswered]);
 
 	let selectView = (next: DecisionView, revealFirst = true) => {
-		setDecisionView(state => ({ ...state, preferred: next }));
+		setDecisionView(state => ({
+			...state,
+			...(next === "tasks" ? { phase: "complete" as const } : {}),
+			preferred: next,
+		}));
 		if (hasPlanContent) localStorage.setItem("chopin:view:document", next);
 		if (next === "decisions" && revealFirst) {
 			let first = entries.find(entry =>
@@ -181,7 +194,7 @@ export function RoomWorkspace(
 		}
 	};
 
-	let selectDestination = (destination: "plan" | "decisions") => {
+	let selectDestination = (destination: "plan" | "decisions" | "tasks") => {
 		selectView(destination, mode === "split");
 		dispatch({ type: "set-conversation", open: false });
 	};
@@ -238,6 +251,7 @@ export function RoomWorkspace(
 			socket.on<Session.Presence>("session:presence", frame => setMembers(frame.members)),
 			socket.on<Session.Access>("session:access", frame => setEffectiveCanEdit(frame.canEdit)),
 			threads.listen(socket),
+			jobs.listen(socket),
 		];
 
 		return () => {
@@ -245,7 +259,7 @@ export function RoomWorkspace(
 			socket.dispose();
 			setWire(undefined);
 		};
-	}, [room, handle, threads, updateMetadata]);
+	}, [room, handle, threads, jobs, updateMetadata]);
 
 	return (
 		<Workspace
@@ -260,6 +274,11 @@ export function RoomWorkspace(
 				/>
 			}
 			conversationActivity={conversationActivity}
+			taskActivity={{
+				active: jobAggregate.active,
+				paused: jobAggregate.paused,
+				failed: jobAggregate.failed,
+			}}
 			header={
 				<Header
 					canEdit={effectiveCanEdit}
@@ -272,6 +291,7 @@ export function RoomWorkspace(
 				<DecisionViewControl
 					attention={attention}
 					onView={selectDestination}
+					tasks={currentJobCount}
 					unanswered={unanswered}
 					view={view}
 				/>
@@ -294,6 +314,7 @@ export function RoomWorkspace(
 				<PlanEditor
 					commentPresentation={mode === "split" ? "popover" : "sheet"}
 					connection={status}
+					jobs={jobs}
 					onScrollTop={setPlanScrollTop}
 					questions={questions}
 					readOnly={!effectiveCanEdit}
@@ -301,6 +322,14 @@ export function RoomWorkspace(
 					threads={threads}
 					user={user}
 					wire={wire}
+				/>
+			}
+			tasks={
+				<Tasks
+					canEdit={effectiveCanEdit}
+					connected={status === "connected"}
+					headingId={HEADING.tasks}
+					store={jobs}
 				/>
 			}
 			state={workspace}

@@ -273,10 +273,12 @@ export type BackgroundJobArtifact = {
 	createdAt: Date;
 };
 
-export type BackgroundJobSummary = Omit<
-	BackgroundJob,
-	"claimBinding" | "fingerprint" | "idempotencyKey" | "input"
->;
+export type BackgroundJobSummary =
+	& Omit<
+		BackgroundJob,
+		"claimBinding" | "fingerprint" | "idempotencyKey" | "input"
+	>
+	& { subject?: string };
 
 export type BackgroundJobCursor = {
 	createdAt: Date;

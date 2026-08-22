@@ -33,14 +33,20 @@ test("the document tab uses the public Document name", () => {
 	expect(markup).toContain(">Document<");
 });
 
-test("the unavailable Tasks & Progress tab is disabled without a count", () => {
+test("the Tasks & Progress tab is active and names its count", () => {
 	let markup = renderToStaticMarkup(
-		createElement(DecisionViewControl, { onView: () => {}, unanswered: 0, view: "plan" }),
+		createElement(DecisionViewControl, {
+			onView: () => {},
+			tasks: 2,
+			unanswered: 0,
+			view: "tasks",
+		}),
 	);
 
-	expect(markup).toContain('disabled=""');
+	expect(markup).not.toContain('disabled=""');
 	expect(markup).toContain("task-progress-tab");
-	expect(markup).toContain(">Tasks &amp; Progress<");
+	expect(markup).toContain('aria-label="Tasks &amp; Progress, 2 current"');
+	expect(markup).toContain('aria-pressed="true"');
 });
 
 test("the Decisions control names its unanswered count", () => {

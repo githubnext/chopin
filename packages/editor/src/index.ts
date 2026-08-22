@@ -9,6 +9,8 @@ export { Decisions } from "./decisions";
 export type { DecisionsProps } from "./decisions";
 export { AgentFace, Face } from "./face";
 export type { FaceProps } from "./face";
+export { aggregateJobs, canCancelJob, currentJobs, JobStore, researchJob, useJobs } from "./jobs";
+export type { JobDetail, JobPage, JobSnapshot, JobView } from "./jobs";
 export { PlanEditor } from "./plan-editor";
 export type { PlanEditorProps, PlanState } from "./plan-editor";
 export { usePointerCapabilities } from "./pointer";
@@ -23,6 +25,8 @@ export {
 export type { PlanQuestionnaireState, QuestionnaireEntry } from "./questionnaires";
 export { PlanStatus } from "./status";
 export type { PlanStatusProps } from "./status";
+export { Tasks } from "./tasks";
+export type { TasksProps } from "./tasks";
 export { ThreadObserver, ThreadStore, useThreads } from "./threads";
 export type { Draft, ThreadState, ThreadView } from "./threads";
 export type { Connection, Transport, Unsubscribe } from "./transport";
