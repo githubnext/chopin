@@ -33,6 +33,7 @@ import type { Chat as Wire, Request } from "@chopin/protocol";
 import type { Config } from "../config";
 import type { HostedAuth } from "../auth/routes";
 import type { HostedRepository } from "../agent/repository";
+import type { JobService } from "../jobs/service";
 import type { Plan } from "../plan/service";
 import type { Said } from "./address";
 import type { Socket, SocketData } from "../wire";
@@ -228,6 +229,7 @@ export type Room = {
 	repository: HostedRepository;
 	persist: () => Promise<void>;
 	ownerAvailable?: () => Promise<void>;
+	jobs?: JobService;
 };
 
 /**
@@ -441,6 +443,7 @@ function planTools(context: Room) {
 		exclusive: action => Service.exclusive(plan, action),
 		anchors: () => Service.anchors(plan, server, room),
 		changes: found => Service.changes(plan, server, room, found),
+		jobs: context.jobs,
 	});
 }
 

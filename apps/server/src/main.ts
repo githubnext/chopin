@@ -20,6 +20,7 @@ import { describe, load } from "./config";
 import { GitHubError } from "./github/client";
 import { Router } from "./http/router";
 import { JobRegistry } from "./jobs/registry";
+import * as JobBrowser from "./jobs/browser";
 import { documentSummaryDefinition } from "./jobs/document-summary";
 import { JobRunner } from "./jobs/runner";
 import { researchQuestionDefinition, researchQuestionSnapshot } from "./jobs/research-question";
@@ -35,7 +36,7 @@ import * as Rooms from "./rooms";
 import { admit } from "./socket/admission";
 import { StorageError } from "./storage/errors";
 import { createStorage } from "./storage/registry";
-import { broadcast, fail, relay, tell, topic } from "./wire";
+import { broadcast, fail, relay, reply, tell, topic } from "./wire";
 
 import type { Server } from "bun";
 import type { Incoming } from "@chopin/protocol";
@@ -147,6 +148,7 @@ function conversation(room: Rooms.Room, ws: Socket): Chat.Room {
 		},
 		persist: () => Service.persist(room.plan!),
 		ownerAvailable: () => jobRunner?.ownerAvailable(room.id) ?? Promise.resolve(),
+		jobs: jobService,
 	};
 }
 
@@ -269,10 +271,61 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 		case "comment:dismiss":
 			if (room.plan) await Comments.dismiss(conversation(room, ws), ws, frame);
 			return;
+
+		case "job:list":
+			try {
+				reply(ws, frame.rid, await JobBrowser.listJobs(jobService, room.id));
+			} catch (err) {
+				fail(ws, frame.rid, err instanceof Error ? err.message : "cannot list jobs");
+			}
+			return;
+
+		case "job:get":
+			try {
+				reply(ws, frame.rid, await JobBrowser.getJob(jobService, room.id, frame.id));
+			} catch (err) {
+				fail(ws, frame.rid, err instanceof Error ? err.message : "cannot read job");
+			}
+			return;
+
+		case "job:assign":
+			try {
+				if (!room.plan) throw new Error("document is not open");
+				reply(
+					ws,
+					frame.rid,
+					await JobBrowser.assignResearchQuestion(
+						jobService,
+						room.plan,
+						frame.questionId,
+						frame.requestId,
+					),
+				);
+			} catch (err) {
+				fail(ws, frame.rid, err instanceof Error ? err.message : "cannot assign research");
+			}
+			return;
+
+		case "job:cancel":
+			try {
+				reply(
+					ws,
+					frame.rid,
+					await JobBrowser.cancelResearchJob(
+						jobService,
+						room.id,
+						frame.id,
+						frame.expectedRevision,
+					),
+				);
+			} catch (err) {
+				fail(ws, frame.rid, err instanceof Error ? err.message : "cannot cancel job");
+			}
+			return;
 	}
 }
 
-const VIEWER_ALLOWED = new Set(["session:ping", "plan:open", "plan:close"]);
+const VIEWER_ALLOWED = new Set(["session:ping", "plan:open", "plan:close", "job:list", "job:get"]);
 
 async function refreshAccess(ws: Socket, forceGitHub = false): Promise<AuthorizationResult> {
 	let data = ws.data;
@@ -562,6 +615,13 @@ function announceChannelRename(channel: ChannelRecord): void {
 	});
 }
 
+async function announceJobsChanged(channelId: string): Promise<void> {
+	if (draining) return;
+	let page = await jobService.list(channelId, 1);
+	if (!page) return;
+	broadcast(server, channelId, { kind: "job:changed", ts: 0, revision: page.revision });
+}
+
 async function currentDocumentTarget(
 	channelId: string,
 ): Promise<Service.DocumentTarget | undefined> {
@@ -708,6 +768,7 @@ let jobService = new JobService({
 		return heldLease;
 	},
 	onChange: job => jobRunner?.notify(job),
+	publish: announceJobsChanged,
 });
 summaryCoordinator = new DocumentSummaryCoordinator({
 	service: jobService,
@@ -752,6 +813,7 @@ jobRunner = new JobRunner({
 	enabled: config.agent,
 	globalConcurrency: 2,
 	ownerConcurrency: 1,
+	changed: announceJobsChanged,
 	fatal: err => console.error("chopin: background job runner failed -", err),
 });
 registerMcpRoutes(router, hostedAuth, {

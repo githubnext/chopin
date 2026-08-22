@@ -72,15 +72,17 @@ export type WorkspaceProps = {
 	chat?: ReactNode;
 	plan: ReactNode;
 	decisions: ReactNode;
+	tasks?: ReactNode;
 	controls: ReactNode;
 	mode: WorkspaceMode;
 	state: WorkspaceState;
-	view: "plan" | "decisions";
+	view: "plan" | "decisions" | "tasks";
 	onConversationOpen: (open: boolean) => void;
 	onDesktopConversationOpen: (open: boolean) => void;
-	onDestination: (destination: "plan" | "decisions") => void;
+	onDestination: (destination: "plan" | "decisions" | "tasks") => void;
 	unanswered: number;
 	conversationActivity: { unread: number; busy: boolean };
+	taskActivity?: { active: number; paused: number; failed: number };
 };
 
 function ConversationToggle(
@@ -151,6 +153,7 @@ function ConversationToggle(
 export const HEADING: Record<WorkspaceDestination, string> = {
 	plan: "workspace-plan-heading",
 	decisions: "workspace-decisions-heading",
+	tasks: "workspace-tasks-heading",
 	conversation: "workspace-conversation-heading",
 };
 
@@ -158,9 +161,13 @@ function destinationLabel(
 	destination: WorkspaceDestination,
 	unanswered: number,
 	activity: WorkspaceProps["conversationActivity"],
+	tasks: NonNullable<WorkspaceProps["taskActivity"]>,
 ): string {
 	if (destination === "decisions" && unanswered > 0) {
 		return `Decisions, ${unanswered} unanswered`;
+	}
+	if (destination === "tasks" && (tasks.active > 0 || tasks.paused > 0 || tasks.failed > 0)) {
+		return `Tasks & Progress, ${tasks.active} active, ${tasks.paused} waiting, ${tasks.failed} failed`;
 	}
 	if (destination === "conversation" && activity.busy && activity.unread > 0) {
 		return `Conversation, Planner working, ${activity.unread} unread`;
@@ -169,7 +176,9 @@ function destinationLabel(
 	if (destination === "conversation" && activity.unread > 0) {
 		return `Conversation, ${activity.unread} unread`;
 	}
-	return destination === "conversation" ? "Conversation" : destination === "decisions"
+	return destination === "conversation" ? "Conversation" : destination === "tasks"
+		? "Tasks & Progress"
+		: destination === "decisions"
 		? "Decisions"
 		: "Document";
 }
@@ -187,6 +196,8 @@ export function Workspace(
 		onDestination,
 		plan,
 		state,
+		taskActivity = { active: 0, paused: 0, failed: 0 },
+		tasks,
 		unanswered,
 		view,
 	}: WorkspaceProps,
@@ -200,7 +211,8 @@ export function Workspace(
 	let planHidden = !presentation.documentVisible || presentation.documentView !== "plan";
 	let decisionsHidden = !presentation.documentVisible
 		|| presentation.documentView !== "decisions";
-	let destinations: WorkspaceDestination[] = ["conversation", "plan", "decisions"];
+	let tasksHidden = !presentation.documentVisible || presentation.documentView !== "tasks";
+	let destinations: WorkspaceDestination[] = ["conversation", "plan", "decisions", "tasks"];
 
 	useLayoutEffect(() => {
 		if (!previousConversationOpen.current && state.conversationOpen) {
@@ -358,6 +370,16 @@ export function Workspace(
 						>
 							{decisions}
 						</section>
+						<section
+							aria-hidden={tasksHidden || undefined}
+							aria-labelledby={HEADING.tasks}
+							className="min-h-0 flex-1 overflow-auto"
+							data-document-view="tasks"
+							hidden={tasksHidden}
+							inert={tasksHidden}
+						>
+							{tasks}
+						</section>
 					</div>
 				</main>
 			</div>
@@ -365,13 +387,18 @@ export function Workspace(
 			{mode !== "split" && (
 				<nav
 					aria-label="Workspace view"
-					className="workspace-navigation hairline-t grid shrink-0 grid-cols-3 bg-ground p-1"
+					className="workspace-navigation hairline-t grid shrink-0 grid-cols-4 bg-ground p-1"
 				>
 					{destinations.map(destination => {
 						let active = destination === "conversation"
 							? presentation.conversationVisible
 							: !presentation.conversationVisible && view === destination;
-						let label = destinationLabel(destination, unanswered, conversationActivity);
+						let label = destinationLabel(
+							destination,
+							unanswered,
+							conversationActivity,
+							taskActivity,
+						);
 						return (
 							<button
 								aria-current={active ? "page" : undefined}
@@ -382,11 +409,19 @@ export function Workspace(
 								onClick={event => navigate(destination, event.currentTarget)}
 								type="button"
 							>
-								{destination === "conversation" ? "Conversation" : destination === "decisions"
+								{destination === "conversation" ? "Conversation" : destination === "tasks"
+									? "Tasks"
+									: destination === "decisions"
 									? "Decisions"
 									: "Document"}
 								{destination === "decisions" && unanswered > 0 && (
 									<span aria-hidden="true" className="ml-1">{unanswered}</span>
+								)}
+								{destination === "tasks"
+									&& taskActivity.active + taskActivity.paused + taskActivity.failed > 0 && (
+									<span aria-hidden="true" className="ml-1">
+										{taskActivity.active + taskActivity.paused + taskActivity.failed}
+									</span>
 								)}
 								{destination === "conversation" && conversationActivity.busy && (
 									<span aria-hidden="true" className="workspace-working-indicator ml-1 shrink-0" />

@@ -26,6 +26,7 @@ import type { MDXEditorMethods } from "@mdxeditor/editor";
 import type { Plan } from "@chopin/protocol";
 import type { PlanProvider } from "./provider";
 import type { QuestionnaireStore } from "./questionnaires";
+import type { JobStore } from "./jobs";
 import type { ThreadStore } from "./threads";
 import type { Connection, Transport } from "./transport";
 import type { CommentPresentation } from "./widget-options";
@@ -77,6 +78,7 @@ export type PlanEditorProps = {
 	questions?: QuestionnaireStore;
 	/** The same arrangement for comment threads. */
 	threads?: ThreadStore;
+	jobs?: JobStore;
 	/** Remembered by the document host while this surface is hidden. */
 	scrollTop?: number;
 	/** The document host owns persisted view position, not the editor. */
@@ -100,6 +102,7 @@ export function PlanEditor(
 		commentPresentation = "popover",
 		connection,
 		onScrollTop,
+		jobs,
 		questions,
 		readOnly,
 		scrollTop,
@@ -253,6 +256,8 @@ export function PlanEditor(
 						changes,
 						wire,
 						connected: !offline,
+						canEdit: !readOnly,
+						jobs,
 					}),
 				]
 				: [],
@@ -265,6 +270,7 @@ export function PlanEditor(
 			onAnchors,
 			onChanges,
 			questions,
+			jobs,
 			commentPresentation,
 			threads,
 			changes,

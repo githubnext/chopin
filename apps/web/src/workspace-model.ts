@@ -1,6 +1,6 @@
 export type WorkspaceMode = "compact" | "split";
 
-export type WorkspaceDestination = "plan" | "decisions" | "conversation";
+export type WorkspaceDestination = "plan" | "decisions" | "tasks" | "conversation";
 
 export type WorkspaceState = {
 	conversationOpen: boolean;
@@ -26,7 +26,7 @@ export function transitionWorkspace(state: WorkspaceState, event: WorkspaceEvent
 export function presentWorkspace(
 	state: WorkspaceState,
 	mode: WorkspaceMode,
-	documentView: "plan" | "decisions",
+	documentView: "plan" | "decisions" | "tasks",
 ) {
 	let conversationVisible = mode === "split"
 		? state.desktopConversationOpen || state.conversationOpen

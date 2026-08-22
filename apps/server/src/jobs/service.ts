@@ -5,6 +5,7 @@ import type {
 	BackgroundJobDetail,
 	BackgroundJobOrigin,
 	BackgroundJobState,
+	BackgroundJobSummary,
 	BackgroundJobTarget,
 	ClaimedBackgroundJob,
 	JsonValue,
@@ -65,6 +66,7 @@ export type JobView = {
 	reason: string | undefined;
 	createdAt: Date;
 	updatedAt: Date;
+	subject?: string;
 };
 
 export type JobPage = {
@@ -215,7 +217,17 @@ function reason(value: string): string {
 	return normalized;
 }
 
-function view(value: BackgroundJob): JobView {
+function view(value: BackgroundJob | BackgroundJobSummary): JobView {
+	let subject = "subject" in value ? value.subject : undefined;
+	if (value.type === "research-question" && "input" in value) {
+		let input = value.input;
+		if (
+			input && typeof input === "object" && !Array.isArray(input)
+			&& typeof input.question === "string"
+		) {
+			subject = [...input.question.trim()].slice(0, 200).join("");
+		}
+	}
 	return {
 		id: value.id,
 		channelId: value.channelId,
@@ -232,6 +244,7 @@ function view(value: BackgroundJob): JobView {
 		reason: value.reason,
 		createdAt: new Date(value.createdAt),
 		updatedAt: new Date(value.updatedAt),
+		...(subject ? { subject } : {}),
 	};
 }
 
@@ -445,7 +458,7 @@ export class JobService {
 		let page = await this.#storage.jobs.list(channelId, limit, after);
 		return page && {
 			revision: page.revision,
-			jobs: page.jobs.map(value => view(value as BackgroundJob)),
+			jobs: page.jobs.map(view),
 			next: page.next && { createdAt: new Date(page.next.createdAt), id: page.next.id },
 		};
 	}

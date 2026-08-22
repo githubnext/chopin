@@ -271,6 +271,9 @@ export class JobRunner {
 						lease: this.#options.lease(),
 					});
 					this.#pollFailures = 0;
+					for (let channelId of new Set(claimed.map(job => job.channelId))) {
+						await this.#changed(channelId);
+					}
 					if (this.#stopped) {
 						await Promise.all(claimed.map(job => this.#requeueClaim(job, "runner-shutdown")));
 					} else {

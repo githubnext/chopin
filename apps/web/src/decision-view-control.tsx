@@ -7,10 +7,11 @@ export function decisionAttention(previous: number, current: number): boolean {
 }
 
 export function DecisionViewControl(
-	{ attention, onView, unanswered, view }: {
+	{ attention, onView, tasks = 0, unanswered, view }: {
 		attention?: boolean;
 		onView: (view: DecisionView) => void;
 		unanswered: number;
+		tasks?: number;
 		view: DecisionView;
 	},
 ) {
@@ -55,11 +56,23 @@ export function DecisionViewControl(
 				)}
 			</button>
 			<button
-				className="task-progress-tab btn h-[26px] rounded-md px-2.5 text-[14px] text-text-tertiary opacity-50"
-				disabled
+				aria-current={view === "tasks" ? "page" : undefined}
+				aria-label={tasks > 0 ? `Tasks & Progress, ${tasks} current` : "Tasks & Progress"}
+				aria-pressed={view === "tasks"}
+				className={`task-progress-tab btn h-[26px] rounded-md px-2.5 text-[14px] ${
+					view === "tasks"
+						? "bg-ground font-medium text-gray-800"
+						: "text-text-tertiary hover:bg-hover"
+				}`}
+				onClick={() => onView("tasks")}
 				type="button"
 			>
 				Tasks &amp; Progress
+				{tasks > 0 && (
+					<span aria-hidden="true" className="ml-1">
+						<Count>{tasks}</Count>
+					</span>
+				)}
 			</button>
 		</div>
 	);
