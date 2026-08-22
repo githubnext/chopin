@@ -79,6 +79,7 @@ export type PlanEditorProps = {
 	/** The same arrangement for comment threads. */
 	threads?: ThreadStore;
 	jobs?: JobStore;
+	canAssignJobs?: boolean;
 	/** Remembered by the document host while this surface is hidden. */
 	scrollTop?: number;
 	/** The document host owns persisted view position, not the editor. */
@@ -103,6 +104,7 @@ export function PlanEditor(
 		connection,
 		onScrollTop,
 		jobs,
+		canAssignJobs = true,
 		questions,
 		readOnly,
 		scrollTop,
@@ -257,6 +259,7 @@ export function PlanEditor(
 						wire,
 						connected: !offline,
 						canEdit: !readOnly,
+						canAssignJobs,
 						jobs,
 					}),
 				]
@@ -271,6 +274,7 @@ export function PlanEditor(
 			onChanges,
 			questions,
 			jobs,
+			canAssignJobs,
 			commentPresentation,
 			threads,
 			changes,

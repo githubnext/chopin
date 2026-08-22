@@ -116,6 +116,35 @@ The runtime starts lazily on the first Planner turn. `AGENT=off` prevents those
 turns and avoids starting Copilot CLI. It does not disable `/mcp`, and the
 prototype UI may still contain Planner-oriented explanatory copy.
 
+## Background jobs
+
+Background jobs are durable Chopin requests, not child Planner turns. Registered
+definitions control their input and artifact codecs, enqueue origins, credential
+mode, capabilities, timeout, attempts, and AI-credit ceilings. Every model-backed
+attempt uses a fresh disposable SDK session. Its events, prompts, tools, and
+results never enter Conversation or recreated Planner context.
+
+The scheduler creates revision/hash-addressed document summaries after canonical
+document commits. Source snapshots are loaded into memory for an attempt but are
+not persisted with the job. Publication rechecks the exact current document while
+holding the same mutation gate used by room opening and live edits.
+
+A writer can insert an inert `ResearchQuestion` component and explicitly assign
+it. Assignment discloses that component's question text to the public GitHub
+Copilot web-search tool. Public search receives no private document or repository
+tools. A separate private stage receives canonical document context with no web
+capability, and a final no-tool stage synthesizes bounded findings and validated
+HTTPS citations. Reports never edit collaborative prose automatically.
+
+Jobs use the channel's active Planner owner's process-local credential and
+entitlement. No token is persisted. Logout, rotation, owner reset, expiry,
+cancellation, timeout, claim loss, and target supersession synchronously revoke
+local result acceptance; durable claim generations reject every late artifact.
+`BACKGROUND_JOBS=off` disables scheduling and status surfaces. `WEB_RESEARCH=off`
+disables new assignment and execution; older queued research pauses until the
+flag is restored and an owner returns. `AGENT=off` keeps persisted status and
+artifacts readable but schedules no new summaries and never starts Copilot CLI.
+
 ## Implementation graph status
 
 The Planner can draft and revise a graph with `read_implementation_graph` and

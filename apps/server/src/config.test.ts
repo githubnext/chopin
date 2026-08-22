@@ -15,6 +15,9 @@ const REQUIRED = {
 function configured(overrides: Record<string, string | undefined> = {}) {
 	let env: Record<string, string | undefined> = {
 		...REQUIRED,
+		AGENT: undefined,
+		BACKGROUND_JOBS: undefined,
+		WEB_RESEARCH: undefined,
 		GITHUB_ALLOWED_USERS: undefined,
 		GITHUB_ALLOWED_ORGANIZATIONS: undefined,
 		...overrides,
@@ -48,6 +51,25 @@ describe("configuration", () => {
 
 	it("defaults the built-in adapter to PostgreSQL", () => {
 		expect(configured({ STORAGE_DRIVER: undefined }).storage.driver).toBe("postgres");
+	});
+
+	it("gates background execution and web research behind the hosted agent", () => {
+		expect(configured()).toMatchObject({ agent: true, backgroundJobs: true, webResearch: true });
+		expect(configured({ WEB_RESEARCH: "off" })).toMatchObject({
+			agent: true,
+			backgroundJobs: true,
+			webResearch: false,
+		});
+		expect(configured({ BACKGROUND_JOBS: "off" })).toMatchObject({
+			agent: true,
+			backgroundJobs: false,
+			webResearch: false,
+		});
+		expect(configured({ AGENT: "off" })).toMatchObject({
+			agent: false,
+			backgroundJobs: true,
+			webResearch: false,
+		});
 	});
 
 	it("requires a valid PostgreSQL URL", () => {

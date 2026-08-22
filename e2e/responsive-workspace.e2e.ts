@@ -35,10 +35,11 @@ async function expectCompactWorkspaceChrome(page: Page): Promise<void> {
 	await expect(header.getByRole("button", { name: /conversation pane/ })).toHaveCount(0);
 	await expect(page.getByRole("group", { name: "Document view" })).toHaveCount(0);
 	await expect(page.getByRole("separator", { name: "Resize the conversation" })).toHaveCount(0);
-	await expect(destinations).toHaveCount(3);
+	await expect(destinations).toHaveCount(4);
 	await expect(destinations.nth(0)).toHaveAccessibleName(/^Conversation/);
 	await expect(destinations.nth(1)).toHaveAccessibleName("Document");
 	await expect(destinations.nth(2)).toHaveAccessibleName(/^Decisions/);
+	await expect(destinations.nth(3)).toHaveAccessibleName(/^Tasks/);
 
 	await expectInsideViewport(header);
 	await expectInsideViewport(projects);

@@ -51,7 +51,9 @@ export class JobStore {
 		let generation = ++this.#generation;
 		this.#wire = wire;
 		let off = [
-			wire.on<Session.Hello>("session:hello", () => void this.refresh()),
+			wire.on<Session.Hello>("session:hello", frame => {
+				if (frame.backgroundJobs) void this.refresh();
+			}),
 			wire.on<Job.Changed>("job:changed", frame => {
 				if (frame.revision <= this.#snapshot.revision && this.#snapshot.ready) return;
 				this.#dirty = true;

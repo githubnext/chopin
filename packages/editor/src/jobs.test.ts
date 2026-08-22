@@ -60,13 +60,23 @@ describe("background job store", () => {
 			{ kind: "job:list", revision: 2, jobs: [second], truncated: false },
 		);
 		let off = store.listen(wire);
-		wire.emit<Session.Hello>("session:hello", {} as Session.Hello);
+		wire.emit<Session.Hello>("session:hello", { backgroundJobs: true } as Session.Hello);
 		await waitFor(() => store.snapshot.revision === 1);
 		wire.emit<Job.Changed>("job:changed", { kind: "job:changed", ts: 0, revision: 2 });
 		await waitFor(() => store.snapshot.revision === 2);
 		expect(store.snapshot.jobs[0]?.state).toBe("running");
 		expect(wire.requests.map(request => request.kind)).toEqual(["job:list", "job:list"]);
 		off();
+	});
+
+	it("does not request hidden background state when jobs are disabled", async () => {
+		let store = new JobStore();
+		let wire = new FakeWire();
+		store.listen(wire);
+		wire.emit<Session.Hello>("session:hello", { backgroundJobs: false } as Session.Hello);
+		await Bun.sleep(1);
+		expect(wire.requests).toEqual([]);
+		expect(store.snapshot.ready).toBe(false);
 	});
 
 	it("uses correlated asks for assignment, cancellation, and detail", async () => {

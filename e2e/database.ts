@@ -119,6 +119,72 @@ export async function readSource(port: number, id: string): Promise<string> {
 	});
 }
 
+export async function seedCompletedResearchJob(
+	port: number,
+	channelId: string,
+	questionId: string,
+	question: string,
+): Promise<void> {
+	let now = new Date();
+	let jobId = crypto.randomUUID();
+	let targetKey = `research-question:${questionId}`;
+	await sql(port, async database => {
+		await database.begin(async transaction => {
+			await transaction`
+				INSERT INTO background_job_channels (channel_id, revision) VALUES (${channelId}, 1)
+			`;
+			await transaction`
+				INSERT INTO background_job_targets (channel_id, target_key, generation)
+				VALUES (${channelId}, ${targetKey}, 1)
+			`;
+			await transaction`
+				INSERT INTO background_jobs (
+					id, channel_id, type, version, origin, target_key, target_generation,
+					idempotency_key, fingerprint, input, state, revision, attempts, failures,
+					claim_generation, available_at, created_at, updated_at
+				) VALUES (
+					${jobId}, ${channelId}, 'research-question', 1, 'user', ${targetKey}, 1,
+					${`e2e-${jobId}`}, ${`fingerprint-${jobId}`},
+					${
+				JSON.stringify({
+					questionId,
+					question,
+					questionHash: `sha256:${"0".repeat(64)}`,
+					revision: 0,
+				})
+			}::jsonb,
+					'completed', 1, 1, 0, 1, ${now}, ${now}, ${now}
+				)
+			`;
+			await transaction`
+				INSERT INTO background_job_artifacts (job_id, revision, value, created_at)
+				VALUES (
+					${jobId}, 1,
+					${
+				JSON.stringify({
+					questionId,
+					question,
+					questionHash: `sha256:${"0".repeat(64)}`,
+					revision: 0,
+					report: {
+						title: "Preview research report",
+						summary: "The preview report is visible outside Conversation.",
+						findings: [{ text: "A cited finding", sourceUrls: ["https://example.com/source"] }],
+						caveats: ["Generated evidence should be reviewed."],
+					},
+					sources: [{ title: "Example source", url: "https://example.com/source" }],
+					documentRevision: 0,
+					documentSourceHash: `sha256:${"1".repeat(64)}`,
+					model: "e2e-model",
+				})
+			}::jsonb,
+					${now}
+				)
+			`;
+		});
+	});
+}
+
 /** The checkpoint that `plan:open` starts from, for protocol-level browser fixtures. */
 export async function readDocument(port: number, id: string): Promise<{
 	epoch: string;

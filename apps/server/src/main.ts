@@ -41,6 +41,7 @@ import { broadcast, fail, relay, reply, tell, topic } from "./wire";
 import type { Server } from "bun";
 import type { Incoming } from "@chopin/protocol";
 import type { DocumentSummaryInput } from "./jobs/document-summary";
+import type { JobDefinition } from "./jobs/registry";
 import type { ChannelRecord, Lease } from "./storage/model";
 import type { AuthorizationResult, Socket, SocketData } from "./wire";
 
@@ -148,7 +149,7 @@ function conversation(room: Rooms.Room, ws: Socket): Chat.Room {
 		},
 		persist: () => Service.persist(room.plan!),
 		ownerAvailable: () => jobRunner?.ownerAvailable(room.id) ?? Promise.resolve(),
-		jobs: jobService,
+		jobs: config.backgroundJobs ? jobService : undefined,
 	};
 }
 
@@ -274,6 +275,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 
 		case "job:list":
 			try {
+				if (!config.backgroundJobs) throw new Error("background jobs are disabled");
 				reply(ws, frame.rid, await JobBrowser.listJobs(jobService, room.id));
 			} catch (err) {
 				fail(ws, frame.rid, err instanceof Error ? err.message : "cannot list jobs");
@@ -282,6 +284,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 
 		case "job:get":
 			try {
+				if (!config.backgroundJobs) throw new Error("background jobs are disabled");
 				reply(ws, frame.rid, await JobBrowser.getJob(jobService, room.id, frame.id));
 			} catch (err) {
 				fail(ws, frame.rid, err instanceof Error ? err.message : "cannot read job");
@@ -290,6 +293,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 
 		case "job:assign":
 			try {
+				if (!config.webResearch) throw new Error("web research is disabled");
 				if (!room.plan) throw new Error("document is not open");
 				reply(
 					ws,
@@ -308,6 +312,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 
 		case "job:cancel":
 			try {
+				if (!config.backgroundJobs) throw new Error("background jobs are disabled");
 				reply(
 					ws,
 					frame.rid,
@@ -468,6 +473,8 @@ function listen(): Server<SocketData> {
 					you: { handle: ws.data.handle, client: ws.data.client },
 					members: Rooms.members(room),
 					canEdit: ws.data.canEdit,
+					backgroundJobs: config.backgroundJobs,
+					webResearch: config.webResearch,
 				});
 				void refreshChannelMetadata(ws, room);
 				relay(ws, { kind: "session:presence", ts: 0, members: Rooms.members(room) });
@@ -747,19 +754,23 @@ let hostedAuth = registerAuthRoutes(router, {
 	onCredentialsWillRotate: credentialsWillRotate,
 });
 ownerBindings = new ActiveOwnerBindings(hostedAuth);
-let jobRegistry = new JobRegistry([
-	documentSummaryDefinition({
+let definitions: JobDefinition[] = [];
+if (config.backgroundJobs) {
+	definitions.push(documentSummaryDefinition({
 		config,
 		current: currentDocumentTarget,
 		refresh: target => summaryCoordinator?.enqueueNow(target) ?? Promise.resolve(),
 		commitCurrent: commitCurrentSummary,
-	}),
-	researchQuestionDefinition({
+	}));
+}
+if (config.webResearch) {
+	definitions.push(researchQuestionDefinition({
 		config,
 		current: currentDocumentTarget,
 		commitCurrent: commitCurrentResearch,
-	}),
-]);
+	}));
+}
+let jobRegistry = new JobRegistry(definitions);
 let jobService = new JobService({
 	storage,
 	registry: jobRegistry,
@@ -770,11 +781,13 @@ let jobService = new JobService({
 	onChange: job => jobRunner?.notify(job),
 	publish: announceJobsChanged,
 });
-summaryCoordinator = new DocumentSummaryCoordinator({
-	service: jobService,
-	current: currentDocumentTarget,
-	error: err => console.error("chopin: document summary scheduling failed -", err),
-});
+if (config.agent && config.backgroundJobs) {
+	summaryCoordinator = new DocumentSummaryCoordinator({
+		service: jobService,
+		current: currentDocumentTarget,
+		error: err => console.error("chopin: document summary scheduling failed -", err),
+	});
+}
 jobRunner = new JobRunner({
 	storage,
 	service: jobService,
@@ -810,7 +823,7 @@ jobRunner = new JobRunner({
 			release: binding.release,
 		};
 	},
-	enabled: config.agent,
+	enabled: config.agent && config.backgroundJobs,
 	globalConcurrency: 2,
 	ownerConcurrency: 1,
 	changed: announceJobsChanged,
@@ -873,7 +886,7 @@ try {
 	if (leaseWatchdog) clearTimeout(leaseWatchdog);
 	await cleaningSessions;
 	await renewingLease;
-	summaryCoordinator.close();
+	summaryCoordinator?.close();
 	let stoppingJobs = jobRunner.shutdown();
 	ownerBindings.revokeAll();
 	await stoppingJobs.catch(() => {});

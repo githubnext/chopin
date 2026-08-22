@@ -255,6 +255,50 @@ describe("background job runner", () => {
 		}
 	});
 
+	it("revives registered active-planner work paused while its definition was disabled", async () => {
+		let value = await setup(
+			definition(async () => ({ report: "restored" }), "active-planner"),
+			async () => owner(),
+		);
+		try {
+			let now = new Date();
+			let queued = await value.storage.jobs.enqueue({
+				id: crypto.randomUUID(),
+				channelId: value.channelId,
+				type: "test-job",
+				version: 1,
+				origin: "user",
+				targetKey: "restored-target",
+				idempotencyKey: crypto.randomUUID(),
+				fingerprint: "restored-fingerprint",
+				input: { value: "restored" },
+				availableAt: now,
+				now,
+				lease: value.lease,
+			});
+			let paused = await value.storage.jobs.pause({
+				channelId: value.channelId,
+				jobId: queued.job.id,
+				expectedRevision: queued.job.revision,
+				reason: "unregistered-type",
+				now,
+				lease: value.lease,
+			});
+			value.runner.start();
+			await value.runner.ownerAvailable(value.channelId);
+			await waitFor(async () =>
+				(await value.service.get(value.channelId, paused.id))?.job.state === "completed"
+			);
+			expect(await value.service.get(value.channelId, paused.id)).toMatchObject({
+				job: { state: "completed", attempts: 1 },
+				artifact: { value: { report: "restored" } },
+			});
+		} finally {
+			await value.runner.shutdown();
+			await value.storage.close();
+		}
+	});
+
 	it("persists a token-free owner binding and limits execution per owner", async () => {
 		let releases = [deferred<JsonValue>(), deferred<JsonValue>()];
 		let active = 0;

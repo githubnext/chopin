@@ -108,6 +108,8 @@ the image.
 | `PORT`                         | `8787`              | Source-process HTTP and WebSocket port. The supplied image and health check expect internal port 8787.                             |
 | `MODEL`                        | `claude-sonnet-4.6` | Model requested for hosted agent sessions.                                                                                         |
 | `AGENT`                        | on                  | Set exactly `off` to prevent hosted agent turns and Copilot CLI startup.                                                           |
+| `BACKGROUND_JOBS`              | on                  | Set exactly `off` to disable background job scheduling and status surfaces. `AGENT=off` separately prevents model execution.       |
+| `WEB_RESEARCH`                 | on                  | Set exactly `off` to disable user-assigned public web research while retaining other background jobs.                              |
 | `COPILOT_CLI_PATH`             | automatic           | Advanced override for the Copilot CLI executable.                                                                                  |
 
 Generate the encryption key with:
@@ -146,6 +148,8 @@ GITHUB_ALLOWED_ORGANIZATIONS=
 SESSION_ENCRYPTION_KEY=<64-hex-character-key>
 AGENT=on
 MODEL=claude-sonnet-4.6
+BACKGROUND_JOBS=on
+WEB_RESEARCH=on
 ```
 
 Restrict that file to the deployment account, then start the image behind a

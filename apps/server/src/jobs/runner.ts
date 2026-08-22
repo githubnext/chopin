@@ -206,7 +206,7 @@ export class JobRunner {
 					let definition = this.#options.registry.get(job.type, job.version);
 					if (
 						job.state !== "paused"
-						|| job.reason !== "owner-unavailable"
+						|| (job.reason !== "owner-unavailable" && job.reason !== "unregistered-type")
 						|| definition?.credential !== "active-planner"
 					) continue;
 					try {

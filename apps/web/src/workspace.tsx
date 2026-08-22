@@ -212,7 +212,9 @@ export function Workspace(
 	let decisionsHidden = !presentation.documentVisible
 		|| presentation.documentView !== "decisions";
 	let tasksHidden = !presentation.documentVisible || presentation.documentView !== "tasks";
-	let destinations: WorkspaceDestination[] = ["conversation", "plan", "decisions", "tasks"];
+	let destinations: WorkspaceDestination[] = tasks
+		? ["conversation", "plan", "decisions", "tasks"]
+		: ["conversation", "plan", "decisions"];
 
 	useLayoutEffect(() => {
 		if (!previousConversationOpen.current && state.conversationOpen) {
@@ -387,7 +389,9 @@ export function Workspace(
 			{mode !== "split" && (
 				<nav
 					aria-label="Workspace view"
-					className="workspace-navigation hairline-t grid shrink-0 grid-cols-4 bg-ground p-1"
+					className={`workspace-navigation hairline-t grid shrink-0 bg-ground p-1 ${
+						tasks ? "grid-cols-4" : "grid-cols-3"
+					}`}
 				>
 					{destinations.map(destination => {
 						let active = destination === "conversation"

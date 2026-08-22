@@ -49,6 +49,20 @@ test("the Tasks & Progress tab is active and names its count", () => {
 	expect(markup).toContain('aria-pressed="true"');
 });
 
+test("disabling background jobs hides only Tasks & Progress", () => {
+	let markup = renderToStaticMarkup(
+		createElement(DecisionViewControl, {
+			onView: () => {},
+			tasksEnabled: false,
+			unanswered: 0,
+			view: "plan",
+		}),
+	);
+	expect(markup).toContain(">Document<");
+	expect(markup).toContain(">Decisions<");
+	expect(markup).not.toContain("Tasks &amp; Progress");
+});
+
 test("the Decisions control names its unanswered count", () => {
 	let markup = renderToStaticMarkup(
 		createElement(DecisionViewControl, { onView: () => {}, unanswered: 2, view: "plan" }),

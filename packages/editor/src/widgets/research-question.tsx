@@ -130,7 +130,8 @@ function report(value: unknown): {
 }
 
 function Chrome(
-	{ connected, editable, question, store }: {
+	{ assignable, connected, editable, question, store }: {
+		assignable: boolean;
 		connected: boolean;
 		editable: boolean;
 		question: ResearchQuestion;
@@ -174,7 +175,7 @@ function Chrome(
 				Public search receives this question text. Private document context is analyzed separately
 				without web access.
 			</p>
-			{canAssign && editable && (
+			{canAssign && editable && assignable && (
 				<button
 					data-press="wide"
 					disabled={unavailable || !question.question}
@@ -303,6 +304,7 @@ export function ResearchQuestionPlugin() {
 				return host
 					? createPortal(
 						<Chrome
+							assignable={!!options.canAssignJobs}
 							connected={!!options.connected}
 							editable={!!options.canEdit}
 							question={question}
