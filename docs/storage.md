@@ -69,19 +69,23 @@ recovery or acknowledgement behavior.
 The migration runner owns `chopin_migrations`, including a checksum for each
 applied migration. The application schema contains:
 
-| Table                | Purpose                                                                                                          |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `users`              | GitHub identity and attribution records.                                                                         |
-| `web_sessions`       | Token-free process-session IDs, user IDs, and expiry timestamps used by Planner ownership.                       |
-| `channels`           | Repository identity, title, creator, storage revision, next sequence, and timestamps.                            |
-| `channel_slugs`      | One canonical title-derived slug per channel plus permanent repository-scoped historical aliases.                |
-| `channel_state`      | Current sidecar JSON for a channel.                                                                              |
-| `channel_snapshots`  | Complete Yjs checkpoint, canonical source, source hash, epoch, counters, and checkpoint sidecar.                 |
-| `channel_operations` | Per-channel operation idempotency and the revision and sequence assigned to each operation.                      |
-| `channel_updates`    | Ordered post-checkpoint Yjs update journal.                                                                      |
-| `channel_events`     | Ordered event capability in the adapter contract. Current collaboration commits do not use it for domain replay. |
-| `agent_state`        | Reserved Planner summary and transcript cursor, status, owner session reference, and ownership generation.       |
-| `storage_leases`     | Renewable named leases and fencing tokens.                                                                       |
+| Table                      | Purpose                                                                                                          |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `users`                    | GitHub identity and attribution records.                                                                         |
+| `web_sessions`             | Token-free process-session IDs, user IDs, and expiry timestamps used by Planner ownership.                       |
+| `channels`                 | Repository identity, title, creator, storage revision, next sequence, and timestamps.                            |
+| `channel_slugs`            | One canonical title-derived slug per channel plus permanent repository-scoped historical aliases.                |
+| `channel_state`            | Current sidecar JSON for a channel.                                                                              |
+| `channel_snapshots`        | Complete Yjs checkpoint, canonical source, source hash, epoch, counters, and checkpoint sidecar.                 |
+| `channel_operations`       | Per-channel operation idempotency and the revision and sequence assigned to each operation.                      |
+| `channel_updates`          | Ordered post-checkpoint Yjs update journal.                                                                      |
+| `channel_events`           | Ordered event capability in the adapter contract. Current collaboration commits do not use it for domain replay. |
+| `agent_state`              | Reserved Planner summary and transcript cursor, status, owner session reference, and ownership generation.       |
+| `storage_leases`           | Renewable named leases and fencing tokens.                                                                       |
+| `background_job_channels`  | Job-state revision per channel, independent of collaboration counters.                                           |
+| `background_job_targets`   | Current generation for each registered channel job target.                                                       |
+| `background_jobs`          | Versioned requests, lifecycle, attempts, fenced claims, bounded inputs, and sanitized failures.                  |
+| `background_job_artifacts` | Immutable validated results committed atomically with job completion.                                            |
 
 Channel titles have a case-insensitive unique constraint within each repository.
 Slug values are also unique per repository, with one canonical slug per channel.

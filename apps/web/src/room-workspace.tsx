@@ -109,6 +109,7 @@ export function RoomWorkspace(
 	let [status, setStatus] = useState<Status>("connecting");
 	let [members, setMembers] = useState<Session.Member[]>([]);
 	let [effectiveCanEdit, setEffectiveCanEdit] = useState(canEdit);
+	let [capabilities, setCapabilities] = useState({ backgroundJobs: false, webResearch: false });
 	let [metadata, setMetadata] = useState({ title: label, slug, updatedAt });
 	let metadataRef = useRef(metadata);
 	let user = useMemo(() => cursor(handle), [handle]);
@@ -243,6 +244,14 @@ export function RoomWorkspace(
 			socket.on<Session.Hello>("session:hello", frame => {
 				setMembers(frame.members);
 				setEffectiveCanEdit(frame.canEdit);
+				setCapabilities({ backgroundJobs: frame.backgroundJobs, webResearch: frame.webResearch });
+				if (!frame.backgroundJobs) {
+					setDecisionView(state =>
+						state.preferred === "tasks"
+							? { phase: "complete", preferred: "plan" }
+							: state
+					);
+				}
 				updateMetadata(frame);
 			}),
 			socket.on<Session.Channel>("session:channel", frame => {
@@ -292,6 +301,7 @@ export function RoomWorkspace(
 					attention={attention}
 					onView={selectDestination}
 					tasks={currentJobCount}
+					tasksEnabled={capabilities.backgroundJobs}
 					unanswered={unanswered}
 					view={view}
 				/>
@@ -314,7 +324,8 @@ export function RoomWorkspace(
 				<PlanEditor
 					commentPresentation={mode === "split" ? "popover" : "sheet"}
 					connection={status}
-					jobs={jobs}
+					jobs={capabilities.backgroundJobs ? jobs : undefined}
+					canAssignJobs={capabilities.webResearch}
 					onScrollTop={setPlanScrollTop}
 					questions={questions}
 					readOnly={!effectiveCanEdit}
@@ -324,14 +335,16 @@ export function RoomWorkspace(
 					wire={wire}
 				/>
 			}
-			tasks={
-				<Tasks
-					canEdit={effectiveCanEdit}
-					connected={status === "connected"}
-					headingId={HEADING.tasks}
-					store={jobs}
-				/>
-			}
+			tasks={capabilities.backgroundJobs
+				? (
+					<Tasks
+						canEdit={effectiveCanEdit}
+						connected={status === "connected"}
+						headingId={HEADING.tasks}
+						store={jobs}
+					/>
+				)
+				: undefined}
 			state={workspace}
 			unanswered={unanswered}
 			view={view}

@@ -61,6 +61,8 @@ export declare namespace Session {
 		members: Member[];
 		/** Effective repository capability for this connection. */
 		canEdit: boolean;
+		backgroundJobs: boolean;
+		webResearch: boolean;
 	};
 
 	/** Durable channel metadata changed while this room was open. */

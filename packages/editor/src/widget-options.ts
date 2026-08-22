@@ -16,6 +16,7 @@ export type WidgetOptions = {
 	wire?: Transport;
 	connected?: boolean;
 	canEdit?: boolean;
+	canAssignJobs?: boolean;
 	jobs?: JobStore;
 };
 

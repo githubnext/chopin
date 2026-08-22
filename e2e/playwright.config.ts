@@ -38,6 +38,8 @@ function server(port: number, database: string, extra: Record<string, string>) {
 			PORT: String(port),
 			SERVER_HOST: HOST,
 			AGENT: "off",
+			BACKGROUND_JOBS: "on",
+			WEB_RESEARCH: "on",
 			STORAGE_DRIVER: "postgres",
 			DATABASE_URL: database,
 			APP_ORIGIN: `http://${HOST}:${port}`,

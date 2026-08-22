@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 const PREVIEW_CONFIGURATION = [
 	"AGENT",
+	"BACKGROUND_JOBS",
 	"APP_ORIGIN",
 	"GITHUB_APP_SLUG",
 	"GITHUB_APP_CLIENT_ID",
@@ -10,6 +11,7 @@ const PREVIEW_CONFIGURATION = [
 	"GITHUB_ALLOWED_ORGANIZATIONS",
 	"MODEL",
 	"SESSION_ENCRYPTION_KEY",
+	"WEB_RESEARCH",
 ] as const;
 
 describe("deployment compose", () => {

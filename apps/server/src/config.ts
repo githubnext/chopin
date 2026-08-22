@@ -26,6 +26,8 @@ export type Config = {
 	 * wants the editor on its own.
 	 */
 	agent: boolean;
+	backgroundJobs: boolean;
+	webResearch: boolean;
 	/**
 	 * Origin of a running Vite, when developing.
 	 *
@@ -72,11 +74,15 @@ function storage(): StorageConfig {
 }
 
 export function load(): Config {
+	let agent = process.env.AGENT !== "off";
+	let backgroundJobs = process.env.BACKGROUND_JOBS !== "off";
 	return {
 		host: process.env.SERVER_HOST || "127.0.0.1",
 		port: port(),
 		model: process.env.MODEL || DEFAULT_MODEL,
-		agent: process.env.AGENT !== "off",
+		agent,
+		backgroundJobs,
+		webResearch: agent && backgroundJobs && process.env.WEB_RESEARCH !== "off",
 		devClient: process.env.DEV_CLIENT || undefined,
 		storage: storage(),
 		auth: loadAuth(),
@@ -101,6 +107,8 @@ export function describe(config: Config): string {
 		`http://${config.host}:${config.port}`,
 		config.devClient ? `client: vite (${config.devClient})` : "client: built",
 		config.agent ? `agent: ${config.model} (on demand)` : "agent: off",
+		config.backgroundJobs ? "background jobs: on" : "background jobs: off",
+		config.webResearch ? "web research: on" : "web research: off",
 		admission,
 		`storage: ${config.storage.driver}`,
 	];
