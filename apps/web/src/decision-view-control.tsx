@@ -19,7 +19,7 @@ export function DecisionViewControl(
 	return (
 		<div
 			aria-label="Document view"
-			className="flex items-center gap-1.5"
+			className="flex shrink-0 items-center gap-1.5"
 			data-document-view-control
 			role="group"
 		>

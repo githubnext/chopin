@@ -349,7 +349,7 @@ export function Workspace(
 					<div className="relative flex h-full flex-col overflow-hidden">
 						{mode === "split" && (
 							<div
-								className="flex h-[46px] shrink-0 items-center px-2.5 hairline-b"
+								className="flex h-[46px] shrink-0 items-center overflow-x-auto overflow-y-hidden px-2.5 hairline-b"
 								data-document-toolbar
 							>
 								{controls}
@@ -420,7 +420,7 @@ export function Workspace(
 								{destination === "conversation"
 									? "Conversation"
 									: destination === "background-work"
-									? "Background Work"
+									? "Background"
 									: destination === "decisions"
 									? "Decisions"
 									: "Document"}
