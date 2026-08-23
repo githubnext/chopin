@@ -188,9 +188,10 @@ describe("what an accepted thread still owes", () => {
 		let subject = store();
 		subject.listen({
 			on: () => () => {},
-			send: (kind, payload) => sent.push({ kind, payload }),
-			ask: async () => {
-				throw new Error("not used");
+			send: () => {},
+			ask: async <T>(kind: string, payload?: Record<string, unknown>) => {
+				sent.push({ kind, payload });
+				return { kind: "chat:send", ts: 0, id: "entry", queued: false } as T;
 			},
 		});
 		subject.sync([thread({ id: "t1", status: "accepted", quote: "shorten this" })]);
@@ -200,6 +201,9 @@ describe("what an accepted thread still owes", () => {
 		expect(sent).toEqual([{
 			kind: "chat:send",
 			payload: {
+				requestId: expect.stringMatching(
+					/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+				),
 				text: 'apply the accepted comment on "shorten this" — it has not been actioned yet.',
 				to: "planner",
 			},

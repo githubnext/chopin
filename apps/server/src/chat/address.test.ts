@@ -10,9 +10,10 @@ import { describe, expect, it } from "bun:test";
 
 import { addressed, instruction } from "@chopin/protocol/address";
 
-import { compose, remember } from "./address";
+import { annotatedText, compose, referenceCatalog, remember } from "./address";
 
 import type { Said } from "./address";
+import type { Chat as Wire } from "@chopin/protocol";
 
 describe("addressing", () => {
 	it("recognises the mention wherever it appears", () => {
@@ -63,6 +64,21 @@ describe("the instruction", () => {
 
 function said(text: string, handle = "alice"): Said {
 	return { handle, text };
+}
+
+function duplicateLabelReference(id: string, start: number): Wire.DocumentReference {
+	return {
+		id,
+		kind: "document",
+		start,
+		end: start + "#Shared".length,
+		label: "#Shared",
+		href: `/documents/owner/repository/${id}`,
+		repositoryId: "R_test",
+		observedRevision: 1,
+		channelId: crypto.randomUUID(),
+		observedSourceHash: `sha256:${"0".repeat(64)}`,
+	};
 }
 
 describe("backscroll", () => {
@@ -133,5 +149,47 @@ describe("composing a turn", () => {
 
 		expect(prompt).toContain("@bob: let us go with OAuth");
 		expect(prompt).toContain("act on the conversation above");
+	});
+
+	it("annotates duplicate labels inline with their authoritative reference ids", () => {
+		let earlier = duplicateLabelReference("ref-earlier", "Use ".length);
+		let current = duplicateLabelReference("ref-current", "Compare ".length);
+		let prompt = compose(
+			[{ handle: "bob", text: "Use #Shared", references: [earlier] }],
+			"alice",
+			"Compare #Shared",
+			[current],
+		);
+		expect(prompt).toContain("@bob: Use #Shared [reference id: ref-earlier]");
+		expect(prompt).toContain("@alice: Compare #Shared [reference id: ref-current]");
+		expect(prompt).toContain("- ref-earlier:");
+		expect(prompt).toContain("- ref-current:");
+		expect(prompt).not.toContain(earlier.href);
+	});
+
+	it("does not interpret @chopin inside an annotated canonical label", () => {
+		let text = "Read #@chopin Notes";
+		let reference = {
+			id: "ref-notes",
+			start: "Read ".length,
+			end: text.length,
+			label: "#@chopin Notes",
+		} as Wire.Reference;
+		expect(annotatedText(text, [reference])).toBe(
+			"Read #@chopin Notes [reference id: ref-notes]",
+		);
+		expect(compose([], "ana", text, [reference])).toContain("#@chopin Notes");
+	});
+
+	it("bounds the model catalog independently of reference hrefs", () => {
+		let references = Array.from(
+			{ length: 60 },
+			(_, index) => duplicateLabelReference(`ref-${index}`, 0),
+		);
+		let catalog = referenceCatalog(references);
+		expect(catalog?.length).toBeLessThanOrEqual(16_000);
+		expect(catalog).toContain("ref-49");
+		expect(catalog).not.toContain("ref-50:");
+		expect(catalog).not.toContain("/documents/");
 	});
 });

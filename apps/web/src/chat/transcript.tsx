@@ -104,8 +104,9 @@ function MessageBody(
 		onWithdraw: (id: string) => void;
 	},
 ) {
-	let text = displayText(message.text)
-		|| (message.author.kind === "member" ? "Ask Planner" : "");
+	let text = displayText(message.text) ? message.text : message.author.kind === "member"
+		? "Ask Planner"
+		: "";
 
 	return (
 		<div data-chat-state={message.working ? "working" : undefined}>
@@ -116,6 +117,7 @@ function MessageBody(
 							className={`${
 								message.working ? "chat-working " : ""
 							}break-words text-conversation-body [overflow-wrap:anywhere]`}
+							references={message.references}
 							source={text}
 						/>
 						{message.streaming && <span className="ml-0.5 animate-pulse">▍</span>}

@@ -9,14 +9,22 @@
  */
 
 import { describe, expect, it } from "bun:test";
+import { ulid } from "@chopin/dialect";
 
-import { create, translate } from "./service";
+import {
+	consumeBootstrapBackscroll,
+	create,
+	retainReferences,
+	sessionBootstrap,
+	translate,
+} from "./service";
 
 import type { Server } from "bun";
 import type { SessionEvent } from "@github/copilot-sdk";
 import type { Chat } from "./service";
 import type { Room } from "./service";
 import type { SocketData } from "../wire";
+import type { Chat as Wire } from "@chopin/protocol";
 
 /** Captures what would have gone to the room. */
 function room(chat: Chat) {
@@ -291,6 +299,29 @@ describe("tool calls", () => {
 
 		expect(chat.entries[0]?.tools?.[0]?.result?.length).toBe(4_000);
 	});
+
+	it("keeps read_reference content private while showing a fixed completion", () => {
+		let chat = create();
+		let { context } = room(chat);
+		translate(
+			context,
+			tool("tool.execution_start", { toolCallId: "reference", toolName: "read_reference" }),
+		);
+		translate(
+			context,
+			tool("tool.execution_complete", {
+				toolCallId: "reference",
+				success: true,
+				result: { content: "PRIVATE REFERENCED SOURCE" },
+			}),
+		);
+		expect(chat.entries[0]?.tools?.[0]).toMatchObject({
+			name: "read_reference",
+			status: "done",
+			result: "Reference content was returned privately to the Planner.",
+		});
+		expect(JSON.stringify(chat.entries)).not.toContain("PRIVATE REFERENCED SOURCE");
+	});
 });
 
 describe("failure", () => {
@@ -310,5 +341,129 @@ describe("failure", () => {
 			author: { kind: "system" },
 			text: "model unavailable",
 		});
+	});
+});
+
+function chatReference(index: number): Wire.DocumentReference {
+	let text = `#reference-${index}`;
+	return {
+		id: ulid(1_700_000_000_000 + index),
+		kind: "document",
+		start: 0,
+		end: text.length,
+		label: text,
+		href: `/documents/owner/repository/reference-${index}`,
+		repositoryId: "R_test",
+		observedRevision: index,
+		channelId: crypto.randomUUID(),
+		observedSourceHash: `sha256:${index.toString(16).padStart(64, "0")}`,
+	};
+}
+
+describe("Planner reference context", () => {
+	it("rebuilds a bounded cache and catalog from the durable bootstrap slice", () => {
+		let chat = create();
+		let references = Array.from({ length: 60 }, (_, index) => chatReference(index));
+		chat.entries = references.map((reference, index) => ({
+			id: `entry-${index}`,
+			author: { kind: "member", handle: "ana" },
+			text: reference.label,
+			ts: index,
+			references: [reference],
+		}));
+
+		let prompt = sessionBootstrap(chat, 0, "", "a different current message");
+
+		expect(chat.referenceCache.size).toBe(50);
+		expect(chat.referenceCache.has(references[9]!.id)).toBe(false);
+		expect(chat.referenceCache.has(references[10]!.id)).toBe(true);
+		expect(chat.referenceCache.has(references[59]!.id)).toBe(true);
+		expect(prompt).toContain("Reference catalog");
+		expect(prompt).toContain(`[reference id: ${references[59]!.id}]`);
+		expect(prompt).not.toContain(references[9]!.id);
+		expect(prompt).toContain(references[59]!.id);
+	});
+
+	it("expires the oldest ids when current and backscroll references arrive", () => {
+		let chat = create();
+		let references = Array.from({ length: 51 }, (_, index) => chatReference(index));
+		retainReferences(chat, references.slice(0, 50));
+		retainReferences(chat, [references[50]!]);
+		expect(chat.referenceCache.size).toBe(50);
+		expect(chat.referenceCache.has(references[0]!.id)).toBe(false);
+		expect(chat.referenceCache.has(references[50]!.id)).toBe(true);
+	});
+
+	it("does not cache references from durable entries outside the transcript character bound", () => {
+		let chat = create();
+		let old = chatReference(1);
+		let recent = chatReference(2);
+		chat.entries = [{
+			id: "old",
+			author: { kind: "member", handle: "ana" },
+			text: `${old.label}${"x".repeat(50_000)}`,
+			ts: 1,
+			references: [old],
+		}, {
+			id: "recent",
+			author: { kind: "member", handle: "bob" },
+			text: recent.label,
+			ts: 2,
+			references: [recent],
+		}];
+
+		let prompt = sessionBootstrap(chat, 0, "", "different");
+		expect(chat.referenceCache.has(old.id)).toBe(false);
+		expect(chat.referenceCache.has(recent.id)).toBe(true);
+		expect(prompt).not.toContain(old.id);
+		expect(prompt).toContain(recent.id);
+	});
+
+	it("excludes only the authoritative current entry id and caches its references for the turn", () => {
+		let chat = create();
+		let earlier = chatReference(1);
+		let current = { ...chatReference(2), label: earlier.label, end: earlier.end };
+		chat.entries = [{
+			id: "earlier",
+			author: { kind: "member", handle: "ana" },
+			text: earlier.label,
+			ts: 1,
+			references: [earlier],
+		}, {
+			id: "current",
+			author: { kind: "member", handle: "ana" },
+			text: current.label,
+			ts: 2,
+			references: [current],
+		}];
+		let prompt = sessionBootstrap(chat, 0, "", "current", [current]);
+		expect(prompt).toContain(`@ana: ${earlier.label}`);
+		expect(prompt).toContain(earlier.id);
+		expect(prompt).not.toContain(current.id);
+		expect(chat.referenceCache.has(earlier.id)).toBe(true);
+		expect(chat.referenceCache.has(current.id)).toBe(true);
+	});
+
+	it("removes backscroll already delivered by a successful fresh-session bootstrap", () => {
+		let chat = create();
+		let reference = chatReference(1);
+		chat.entries = [{
+			id: "room-entry",
+			author: { kind: "member", handle: "ana" },
+			text: reference.label,
+			ts: 1,
+			references: [reference],
+		}];
+		chat.backscroll = [{
+			entryId: "room-entry",
+			handle: "ana",
+			text: reference.label,
+			references: [reference],
+		}];
+		let prompt = sessionBootstrap(chat, 0, "", "current-entry");
+		expect(prompt?.match(new RegExp(reference.label, "g"))).toHaveLength(2);
+		// Once in the annotated transcript and once in the catalog, never again as backscroll.
+		consumeBootstrapBackscroll(chat);
+		expect(chat.backscroll).toEqual([]);
 	});
 });

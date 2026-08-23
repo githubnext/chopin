@@ -160,11 +160,13 @@ describe("hosted Copilot ownership", () => {
 		chat.finishTurn = () => {
 			finished++;
 		};
+		chat.referenceCache.set("reference", {} as never);
 
 		await resetAgent(chat, "session", 3, "rotated");
 		expect(aborted).toBe(0);
 		expect(chat.agent).toBeDefined();
 		expect(chat.activeRequest).toBeDefined();
+		expect(chat.referenceCache.size).toBe(1);
 
 		await resetAgent(chat, "session", 4, "rotated");
 		expect(aborted).toBe(1);
@@ -175,6 +177,7 @@ describe("hosted Copilot ownership", () => {
 		expect(chat.interruption).toBe("rotated");
 		expect(chat.lifecycle).toBe(1);
 		expect(chat.activeRequest).toBeUndefined();
+		expect(chat.referenceCache.size).toBe(0);
 	});
 
 	it("does not mark a not-yet-started turn interrupted during refresh", async () => {
@@ -212,6 +215,7 @@ describe("hosted Copilot ownership", () => {
 			lifecycle: 0,
 		};
 		chat.waiting.push({ id: "queued", handle: "mona", text: "next" });
+		chat.referenceCache.set("reference", {} as never);
 		chat.running = finished.promise;
 		chat.finishTurn = finished.resolve;
 		chat.agent = {
@@ -230,5 +234,6 @@ describe("hosted Copilot ownership", () => {
 		expect(chat.waiting).toEqual([]);
 		expect(chat.agent).toBeUndefined();
 		expect(chat.activeRequest).toBeUndefined();
+		expect(chat.referenceCache.size).toBe(0);
 	});
 });

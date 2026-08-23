@@ -11,6 +11,7 @@ export type Message = {
 	ts?: number;
 	streaming?: boolean;
 	tools?: Chat.Activity[];
+	references?: Chat.Reference[];
 	queued: boolean;
 	working?: boolean;
 };
@@ -66,6 +67,7 @@ export function group(
 			id: item.id,
 			author: { kind: "member" as const, handle: item.handle },
 			text: item.text,
+			references: item.references,
 			queued: true,
 		})),
 	];

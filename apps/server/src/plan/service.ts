@@ -18,6 +18,7 @@ import { MENTION } from "@chopin/protocol/address";
 import * as presence from "./presence";
 import * as room from "./room";
 import * as Chat from "../chat/service";
+import { restoreReferences } from "../chat/references";
 import * as Comments from "../comments/service";
 import * as Questions from "../questions/service";
 import { claim, restore as restoreGraph, restoreRun } from "../tasks/graphs";
@@ -324,7 +325,11 @@ function legacyCreation(
 	return creation({ brief, origin });
 }
 
-function restoredState(value: JsonValue, pristine: boolean): Sidecar {
+function restoredState(
+	value: JsonValue,
+	pristine: boolean,
+	scope?: { channelId: string; repositoryId: string },
+): Sidecar {
 	if (value === null && pristine) {
 		return {
 			version: 1,
@@ -416,6 +421,7 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 		) throw new Error("hosted channel has an invalid comment thread");
 	}
 	let transcript = objects(item.transcript, "transcript entry");
+	let referenceIds = new Set<string>();
 	for (let entry of transcript) {
 		if (
 			typeof entry.text !== "string"
@@ -424,6 +430,27 @@ function restoredState(value: JsonValue, pristine: boolean): Sidecar {
 			|| typeof entry.author !== "object"
 			|| Array.isArray(entry.author)
 		) throw new Error("hosted channel has an invalid transcript entry");
+		if (Object.hasOwn(entry, "references")) {
+			let author = entry.author as Record<string, JsonValue>;
+			if (author.kind !== "member") {
+				throw new Error("hosted channel has a non-member transcript reference");
+			}
+			try {
+				entry.references = restoreReferences(
+					entry.references,
+					entry.text,
+					referenceIds,
+					scope,
+				) as never;
+			} catch (err) {
+				throw new Error("hosted channel has an invalid transcript reference", { cause: err });
+			}
+		}
+		try {
+			Chat.validateDelivery(entry as unknown as Chat.Chat["entries"][number]);
+		} catch (err) {
+			throw new Error("hosted channel has invalid chat delivery metadata", { cause: err });
+		}
 	}
 	return {
 		version: 1,
@@ -677,6 +704,7 @@ export function claimStored(
 			? loaded.snapshot.sidecar
 			: loaded.sidecar,
 		pristine,
+		{ channelId: loaded.channel.id, repositoryId: loaded.channel.repositoryId },
 	);
 	let version = sidecar.graph?.versions.at(-1);
 	let eligibility = version
@@ -711,6 +739,7 @@ export function lifecycleStored(
 			? loaded.snapshot.sidecar
 			: loaded.sidecar,
 		pristine,
+		{ channelId: loaded.channel.id, repositoryId: loaded.channel.repositoryId },
 	);
 	if (!sidecar.graph) return { result: { kind: "refused", reason: "inactive" } };
 	let result = transition({
@@ -742,6 +771,7 @@ async function restoreHosted(id: string, loaded: StoredChannel): Promise<Restore
 			? loaded.snapshot.sidecar
 			: loaded.sidecar,
 		pristine,
+		{ channelId: loaded.channel.id, repositoryId: loaded.channel.repositoryId },
 	);
 	if (loaded.snapshot) {
 		if (

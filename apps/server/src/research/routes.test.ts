@@ -323,4 +323,51 @@ describe("research workspace routes", () => {
 		expect(JSON.stringify(body)).not.toContain("Private to the other repository");
 		expect(JSON.stringify(body)).not.toContain("idempotencyKey");
 	});
+
+	it("lists only the current channel for authenticated pull readers", async () => {
+		let context = await setup();
+		let created = await create(context);
+		let sibling = await context.storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: REPOSITORY_ID,
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Sibling plan",
+			createdBy: USER_ID,
+			now: context.now,
+		});
+		let siblingWorkspace = await context.service.createDraft({
+			channelId: sibling.id,
+			question: "Sibling-only research",
+			requestId: requestId(10),
+			origin: "sidebar",
+			createdBy: USER_ID,
+		});
+		let path = `/api/channels/${context.channel.id}/research-workspaces`;
+		let anonymous = await context.router.handle(request(path));
+		expect(anonymous?.status).toBe(401);
+
+		context.access.repository = {
+			...context.access.repository,
+			permissions: { pull: true, push: false, admin: false },
+		};
+		let response = await context.router.handle(request(path, context.cookie));
+		expect(response?.status).toBe(200);
+		let body = await response!.json();
+		expect(body).toMatchObject({
+			workspaces: [{ id: created.body.workspace.id, channelId: context.channel.id }],
+			truncated: false,
+		});
+		let serialized = JSON.stringify(body);
+		expect(serialized).not.toContain(siblingWorkspace.workspace.id);
+		expect(serialized).not.toContain("Sibling-only research");
+		expect(serialized).not.toContain("idempotencyKey");
+		expect(serialized).not.toContain("fingerprint");
+
+		context.access.repository = {
+			...context.access.repository,
+			permissions: { pull: false, push: true, admin: false },
+		};
+		expect((await context.router.handle(request(path, context.cookie)))?.status).toBe(404);
+	});
 });

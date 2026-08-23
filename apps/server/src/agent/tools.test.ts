@@ -1,4 +1,5 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
+import { ulid } from "@chopin/dialect";
 
 import { toolbox } from "./tools";
 import { Admission } from "../auth/admission";
@@ -127,6 +128,47 @@ test("create_research_workspace validates one question and waits for the committ
 		error.mockRestore();
 	}
 	expect(questions).toEqual([question]);
+});
+
+test("read_reference accepts only ids made available by the active chat session", async () => {
+	let { plan, server } = await opened("Reference context.\n");
+	let available = ulid();
+	let reads: string[] = [];
+	let readReference = toolbox({
+		plan,
+		server,
+		room: "test",
+		persist: () => Service.persist(plan),
+		exclusive: action => Service.exclusive(plan, action),
+		async publish() {},
+		anchors() {},
+		changes() {},
+		readReference: async id => {
+			if (id !== available) throw new Error("reference is not available in this Planner session");
+			reads.push(id);
+			return { id, source: "untrusted" };
+		},
+	}).find(tool => tool.name === "read_reference");
+	if (!readReference?.handler) throw new Error("read_reference is missing");
+	let call = (raw: unknown) =>
+		readReference.handler!(raw as never, {
+			sessionId: "session",
+			toolCallId: "call",
+			toolName: "read_reference",
+			arguments: raw as never,
+		});
+	let error = spyOn(console, "error").mockImplementation(() => {});
+	try {
+		expect(await call({ id: available })).toContain("untrusted");
+		expect(await call({ id: ulid() })).toContain("Error: reference is not available");
+		expect(await call({ id: "arbitrary" })).toContain("Error: reference id is invalid");
+		expect(await call({ id: available, channelId: "another-room" })).toContain(
+			"Error: read_reference accepts only",
+		);
+	} finally {
+		error.mockRestore();
+	}
+	expect(reads).toEqual([available]);
 });
 
 test("anchor_plan publishes moving a decision beside the validated prose", async () => {
@@ -649,7 +691,14 @@ test("chat-started tools retain only the current member request provenance", asy
 	await Chat.send(
 		context,
 		{ data: { handle: "ana", principalId: "U_test" }, send() {} } as unknown as Socket,
-		{ kind: "chat:send", rid: "request", text: "prepare implementation", to: "planner", ts: 0 },
+		{
+			kind: "chat:send",
+			rid: "request",
+			requestId: crypto.randomUUID(),
+			text: "prepare implementation",
+			to: "planner",
+			ts: 0,
+		},
 	);
 	let running = plan.chat.running;
 	await firstStarted.promise;
@@ -660,6 +709,7 @@ test("chat-started tools retain only the current member request provenance", asy
 		{
 			kind: "chat:send",
 			rid: "queued",
+			requestId: crypto.randomUUID(),
 			text: "@chopin start research on version 3 adoption",
 			to: "planner",
 			ts: 0,

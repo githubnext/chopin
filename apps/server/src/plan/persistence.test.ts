@@ -5,10 +5,11 @@ import * as Y from "yjs";
 
 import * as Room from "./room";
 import * as Service from "./service";
+import * as Chat from "../chat/service";
 import { MemoryStorage } from "../storage/memory/adapter";
 
 import type { Server } from "bun";
-import type { Plan as Wire, Request } from "@chopin/protocol";
+import type { Chat as ChatWire, Plan as Wire, Request } from "@chopin/protocol";
 import type { Socket, SocketData } from "../wire";
 
 async function hosted() {
@@ -164,6 +165,84 @@ describe("hosted plan persistence", () => {
 
 		let restored = await Service.open(context.channel.id, context.backend, context.server);
 		expect(restored.chat.entries.map(entry => entry.text)).toEqual(["Keep this conversation"]);
+		await Service.close(restored);
+	});
+
+	it("restores typed chat references with their observed target state", async () => {
+		let context = await hosted();
+		let plan = await Service.open(context.channel.id, context.backend, context.server);
+		let reference = {
+			id: ulid(),
+			kind: "document" as const,
+			start: 0,
+			end: 8,
+			label: "#Release",
+			href: "/documents/octo-org/score/release-notes",
+			repositoryId: "R_score",
+			observedRevision: 4,
+			channelId: crypto.randomUUID(),
+			observedSourceHash: Service.sourceHash("Observed source.\n"),
+		};
+		plan.chat.entries.push({
+			id: ulid(),
+			author: { kind: "member", handle: "octocat" },
+			text: "#Release",
+			ts: 1,
+			references: [reference],
+		});
+		await Service.persist(plan);
+		await Service.close(plan);
+
+		let restored = await Service.open(context.channel.id, context.backend, context.server);
+		expect(restored.chat.entries[0]?.references).toEqual([reference]);
+		await Service.close(restored);
+	});
+
+	it("replays a persisted room send request without duplicating its member entry", async () => {
+		let context = await hosted();
+		let plan = await Service.open(context.channel.id, context.backend, context.server);
+		let replies: Array<Record<string, unknown>> = [];
+		let ws = {
+			data: { handle: "octocat", principalId: "U_octocat" },
+			send(value: string) {
+				replies.push(JSON.parse(value) as Record<string, unknown>);
+			},
+		} as unknown as Socket;
+		let room = (current: Service.Plan): Chat.Room => ({
+			chat: current.chat,
+			plan: current,
+			server: context.server,
+			room: context.channel.id,
+			config: {} as Chat.Room["config"],
+			auth: {} as Chat.Room["auth"],
+			claimantSessionId: "session",
+			repository: {
+				id: "R_score",
+				owner: "octo-org",
+				name: "score",
+				defaultBranch: "main",
+			},
+			persist: () => Service.persist(current),
+		});
+		let requestId = crypto.randomUUID();
+		let message: Request<ChatWire.Send> = {
+			kind: "chat:send",
+			ts: 0,
+			rid: "first",
+			requestId,
+			text: "Persist exactly once",
+			to: "room",
+		};
+		await Chat.send(room(plan), ws, message);
+		await Service.close(plan);
+
+		let restored = await Service.open(context.channel.id, context.backend, context.server);
+		await Chat.send(room(restored), ws, { ...message, rid: "retry" });
+		expect(restored.chat.entries.filter(entry => entry.id === requestId)).toHaveLength(1);
+		expect(replies.filter(frame => frame.kind === "chat:send")).toEqual([
+			expect.objectContaining({ rid: "first", id: requestId, queued: false }),
+			expect.objectContaining({ rid: "retry", id: requestId, queued: false }),
+		]);
 		await Service.close(restored);
 	});
 

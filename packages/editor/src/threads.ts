@@ -23,7 +23,7 @@ import { blockElement, scrollToKey } from "./scroll";
 
 import type { Binding } from "@lexical/yjs";
 import type { LexicalEditor } from "lexical";
-import type { Comment, Plan } from "@chopin/protocol";
+import type { Chat, Comment, Plan } from "@chopin/protocol";
 import type { Marked as Selected, Points } from "./passage";
 import type { Transport } from "./transport";
 
@@ -87,6 +87,7 @@ export class ThreadStore {
 	#threads = new Map<string, Comment.Thread>();
 	#anchors = new Map<string, Plan.ThreadAnchors>();
 	#writing = new Map<string, Map<string, string>>();
+	#retryRequests = new Map<string, string>();
 	#draft: Draft | undefined;
 	#focused: string | undefined;
 	#error: string | undefined;
@@ -195,10 +196,15 @@ export class ThreadStore {
 	retry(id: string): void {
 		let view = this.#state.threads.find(entry => entry.thread.id === id);
 		if (!view || !this.#wire) return;
-		this.#wire.send("chat:send", {
+		let requestId = this.#retryRequests.get(id) ?? crypto.randomUUID();
+		this.#retryRequests.set(id, requestId);
+		void this.#wire.ask<Chat.Sent>("chat:send", {
+			requestId,
 			text: `apply the accepted comment on "${view.quote}" — it has not been actioned yet.`,
 			to: "planner",
-		});
+		}).then(() => {
+			if (this.#retryRequests.get(id) === requestId) this.#retryRequests.delete(id);
+		}).catch(() => {});
 	}
 
 	announce(id: string, writing: boolean): void {

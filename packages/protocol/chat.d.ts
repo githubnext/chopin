@@ -16,7 +16,7 @@ export declare namespace Chat {
 		| Request<Abort>
 		| Request<Unqueue>;
 
-	export type Outgoing = History | Message | Delta | Tool | State | Queue;
+	export type Outgoing = History | Message | Delta | Tool | State | Queue | Sent;
 
 	/** Who said something. The agent is not a member, so it is named apart. */
 	export type Author =
@@ -25,6 +25,34 @@ export declare namespace Chat {
 		| { kind: "system" };
 
 	export type ToolStatus = "running" | "done" | "failed";
+
+	export type ReferenceRequest =
+		| { kind: "document"; channelId: string; start: number; end: number }
+		| { kind: "research"; workspaceId: string; start: number; end: number };
+
+	type ReferenceBase = {
+		id: string;
+		start: number;
+		end: number;
+		label: string;
+		href: string;
+		repositoryId: string;
+		observedRevision: number;
+	};
+
+	export type DocumentReference = ReferenceBase & {
+		kind: "document";
+		channelId: string;
+		observedSourceHash: string;
+	};
+
+	export type ResearchReference = ReferenceBase & {
+		kind: "research";
+		parentChannelId: string;
+		workspaceId: string;
+	};
+
+	export type Reference = DocumentReference | ResearchReference;
 
 	/** One tool call, as it appears beneath the message that made it. */
 	export type Activity = {
@@ -47,6 +75,7 @@ export declare namespace Chat {
 		/** True while the agent is still writing this one. */
 		streaming?: boolean;
 		tools?: Activity[];
+		references?: Reference[];
 	};
 
 	/** Transient Planner turn state. */
@@ -86,6 +115,7 @@ export declare namespace Chat {
 		id: string;
 		handle: string;
 		text: string;
+		references?: Reference[];
 	};
 
 	export type Queue = KIND<"chat:queue"> & { waiting: Waiting[] };
@@ -98,7 +128,15 @@ export declare namespace Chat {
 	 * queue and runs in order when the turn ends — nobody is made to wait in
 	 * silence because somebody else prompted first.
 	 */
-	export type Send = KIND<"chat:send"> & { text: string; to: Destination };
+	export type Send = KIND<"chat:send"> & {
+		requestId: string;
+		text: string;
+		to: Destination;
+		references?: ReferenceRequest[];
+	};
+
+	/** The member message or queue entry is accepted by the server. */
+	export type Sent = KIND<"chat:send"> & { id: string; queued: boolean };
 
 	/** Stop the running turn. Anyone may; the transcript records who did. */
 	export type Abort = KIND<"chat:abort">;
