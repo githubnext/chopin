@@ -113,7 +113,7 @@ async function body(request: Request): Promise<Record<string, unknown> | undefin
 async function accessible(
 	auth: HostedAuth,
 	session: AuthenticatedSession,
-	project: UserProject,
+	project: Pick<UserProject, "repositoryId" | "repositoryOwner" | "repositoryName">,
 ): Promise<Repository | undefined> {
 	let result = await auth.sessions.use(
 		session,
@@ -130,7 +130,8 @@ async function response(
 	storage: StorageAdapter,
 	session: AuthenticatedSession,
 ): Promise<NavigationResponse> {
-	let stored = await storage.navigation.projects(session.user.id);
+	let snapshot = await storage.navigation.snapshot(session.user.id);
+	let stored = snapshot.projects;
 	let available = new Map<string, Repository>();
 	let resolved = await Promise.all(stored.map(async project => ({
 		project,
@@ -141,24 +142,23 @@ async function response(
 		return serialized(project, repository);
 	});
 
-	let navigation = await storage.navigation.get(session.user.id);
-	let selected = navigation?.lastDocumentId;
-	if (selected) {
-		let channel = await storage.channels.get(selected);
-		if (!channel || !available.has(channel.repositoryId)) selected = undefined;
-	}
+	let selected = snapshot.navigation?.lastDocumentId;
+	if (selected && !available.has(snapshot.lastDocumentRepositoryId ?? "")) selected = undefined;
 	if (!selected) {
-		for (let project of stored) {
-			if (!available.has(project.repositoryId)) continue;
-			let first = await storage.channels.list(project.repositoryId, 1);
-			if (first.channels[0]) {
-				selected = first.channels[0].id;
-				break;
-			}
-		}
+		selected = await storage.navigation.firstDocument(
+			session.user.id,
+			stored.filter(project => available.has(project.repositoryId))
+				.map(project => project.repositoryId),
+		);
 	}
-	if (selected !== navigation?.lastDocumentId) {
-		await storage.navigation.setLastDocument(session.user.id, selected, auth.clock());
+	if (selected !== snapshot.navigation?.lastDocumentId) {
+		let saved = await storage.navigation.setLastDocumentIfCurrent(
+			session.user.id,
+			snapshot.navigation?.revision,
+			selected,
+			auth.clock(),
+		);
+		selected = saved.navigation.lastDocumentId;
 	}
 	return { projects, ...(selected ? { lastDocumentId: selected } : {}) };
 }
@@ -231,12 +231,21 @@ export function registerNavigationRoutes(
 			}
 			let channel = await storage.channels.get(documentId);
 			if (!channel) return json({ error: "document not found" }, 404);
-			let project = (await storage.navigation.projects(session.user.id))
-				.find(value => value.repositoryId === channel.repositoryId);
-			if (!project) return json({ error: "document not found" }, 404);
+			let project = {
+				repositoryId: channel.repositoryId,
+				repositoryOwner: channel.repositoryOwner,
+				repositoryName: channel.repositoryName,
+			};
 			let repository = await accessible(auth, session, project);
 			if (!repository) return json({ error: "document not found" }, 404);
-			await storage.navigation.setLastDocument(session.user.id, channel.id, auth.clock());
+			await storage.navigation.recordVisit({
+				userId: session.user.id,
+				repositoryId: repository.id,
+				repositoryOwner: repository.owner,
+				repositoryName: repository.name,
+				documentId: channel.id,
+				now: auth.clock(),
+			});
 			return empty(204);
 		} catch (err) {
 			return failure(err);

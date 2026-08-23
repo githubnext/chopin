@@ -1,4 +1,5 @@
 import {
+	Component,
 	createContext,
 	lazy,
 	Suspense,
@@ -13,12 +14,7 @@ import {
 import { documentPath, researchWorkspacePath } from "@chopin/protocol/document-url";
 
 import * as Api from "./api";
-import {
-	AddProjectDialog,
-	DocumentSearchDialog,
-	newestDocument,
-	RenameDocumentDialog,
-} from "./document-actions";
+import { newestDocument } from "./document-actions";
 import { NavigationFocusScope } from "./navigation-focus";
 import {
 	activeProject,
@@ -42,11 +38,46 @@ import { useProjectDocuments } from "./use-project-documents";
 import { useProjectResearch } from "./use-project-research";
 
 import type { Research } from "@chopin/protocol";
-import type { ReactNode } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import type { NavigationMode } from "./navigation-model";
+
+export type Navigate = (destination: string, options?: { replace?: boolean }) => void;
+
+class LazyDialogBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+	override state = { failed: false };
+
+	static getDerivedStateFromError() {
+		return { failed: true };
+	}
+
+	override render() {
+		if (!this.state.failed) return this.props.children;
+		return (
+			<div className="navigation-error" role="alert">
+				Could not load this dialog.
+				<button
+					className="btn btn-sm btn-secondary ml-2"
+					onClick={() => location.reload()}
+					type="button"
+				>
+					Reload
+				</button>
+			</div>
+		);
+	}
+}
 
 let NewResearchDialog = lazy(() =>
 	import("./research-actions").then(module => ({ default: module.NewResearchDialog }))
+);
+let AddProjectDialog = lazy(() =>
+	import("./add-project-dialog").then(module => ({ default: module.AddProjectDialog }))
+);
+let DocumentSearchDialog = lazy(() =>
+	import("./document-search-dialog").then(module => ({ default: module.DocumentSearchDialog }))
+);
+let RenameDocumentDialog = lazy(() =>
+	import("./rename-document-dialog").then(module => ({ default: module.RenameDocumentDialog }))
 );
 
 type Route =
@@ -62,7 +93,7 @@ type Route =
 	}
 	| { page: "channel"; id: string };
 
-type NavigationFailure = { reason: unknown };
+type NavigationFailure = { reason: unknown; retry: "refresh" | "visit" };
 
 let NavigationDocument = createContext<{
 	channel?: Api.Channel;
@@ -70,7 +101,7 @@ let NavigationDocument = createContext<{
 		documentId: string,
 		update: Pick<Api.Channel, "title" | "slug" | "updatedAt">,
 	) => void;
-	onDocumentLoaded: (channel: Api.Channel) => void;
+	onDocumentLoaded: (channel: Api.Channel) => Promise<void>;
 	onRepositoryAccessChanged: () => void;
 	onResearchWorkspaceChanged: (
 		channel: Api.ResearchParentChannel,
@@ -85,7 +116,7 @@ let NavigationDocument = createContext<{
 	onRenameDocument: () => void;
 }>({
 	onDocumentChanged() {},
-	onDocumentLoaded() {},
+	async onDocumentLoaded() {},
 	onRepositoryAccessChanged() {},
 	onResearchWorkspaceChanged() {},
 	onResearchWorkspaceLoaded() {},
@@ -191,18 +222,30 @@ function NavigationDrawer(
 export function NavigationShell(
 	{
 		children,
+		navigate,
 		route,
 		user,
 	}: {
 		children?: ReactNode;
+		navigate: Navigate;
 		route: Route;
 		user: Api.User;
 	},
 ) {
-	let generation = useRef(0);
 	let [navigation, setNavigation] = useState<Api.Navigation>();
+	let navigationRef = useRef<Api.Navigation | undefined>(undefined);
+	let navigationRequest = useRef<Promise<void> | undefined>(undefined);
+	let navigationRefreshQueued = useRef(false);
+	let pendingVisitedRepository = useRef<string | undefined>(undefined);
+	let visitTail = useRef<Promise<void>>(Promise.resolve());
+	let visitRevision = useRef(0);
+	let latestVisitedDocument = useRef<string | undefined>(undefined);
+	let catalogueRefreshes = useRef(new Map<string, number>([["navigation", Date.now()]]));
 	let [error, setError] = useState<NavigationFailure>();
-	let [resolvedDocument, setResolvedDocument] = useState<Api.Channel>();
+	let [resolvedDocument, setResolvedDocument] = useState<{
+		channel: Api.Channel;
+		routeKey: string;
+	}>();
 	let [collapsed, setCollapsed] = useState(() =>
 		localStorage.getItem(`${SIDEBAR_STORAGE_KEY}:collapsed`) === "true"
 	);
@@ -223,19 +266,15 @@ export function NavigationShell(
 	let mode = useNavigationMode();
 	let sidebarVisible = mode === "inline" && !collapsed;
 	let triggerVisible = !sidebarVisible && !drawerOpen;
-	let { loadMore, projects, updateDocument, upsertDocument } = useProjectDocuments(navigation);
+	let { loadMore, projects, refreshProject, updateDocument, upsertDocument } = useProjectDocuments(
+		navigation,
+	);
 	let {
 		groups: research,
 		refreshResearchChannel,
 		refreshResearchWorkspace,
 		upsertResearchWorkspace,
-	} = useProjectResearch(navigation);
-	let currentDocumentId = route.page === "channel"
-		? route.id
-		: route.page === "document" || route.page === "research"
-		? resolvedDocument?.id
-		: undefined;
-	let currentResearchWorkspaceId = route.page === "research" ? route.workspaceId : undefined;
+	} = useProjectResearch(navigation, projects);
 	let routeKey = route.page === "channel"
 		? `${route.page}:${route.id}`
 		: route.page === "research"
@@ -243,49 +282,120 @@ export function NavigationShell(
 		: route.page === "document"
 		? `${route.page}:${route.owner}/${route.repository}/${route.slug}`
 		: route.page;
-	useEffect(() => setResolvedDocument(undefined), [routeKey]);
+	let currentRouteKey = useRef(routeKey);
+	currentRouteKey.current = routeKey;
+	let resolvedChannel = resolvedDocument?.routeKey === routeKey
+		? resolvedDocument.channel
+		: undefined;
+	let routedChannel = route.page === "document" || route.page === "research"
+		? projects.flatMap(project => project.documents.channels).find(channel =>
+			channel.repositoryOwner.toLocaleLowerCase() === route.owner.toLocaleLowerCase()
+			&& channel.repositoryName.toLocaleLowerCase() === route.repository.toLocaleLowerCase()
+			&& channel.slug === route.slug
+		)
+		: undefined;
+	let currentDocumentId = route.page === "channel"
+		? route.id
+		: routedChannel?.id ?? resolvedChannel?.id;
+	let currentResearchWorkspaceId = route.page === "research" ? route.workspaceId : undefined;
 
-	let refresh = useCallback(async () => {
-		let request = ++generation.current;
-		setError(undefined);
-		try {
-			let next = await Api.navigation();
-			if (request !== generation.current) return;
-			setNavigation(next);
-		} catch (reason) {
-			if (request === generation.current) {
-				setError({ reason });
-			}
+	let refresh = useCallback((queue = true): Promise<void> => {
+		let active = navigationRequest.current;
+		if (active) {
+			if (queue) navigationRefreshQueued.current = true;
+			return active;
 		}
+		let request = (async () => {
+			do {
+				navigationRefreshQueued.current = false;
+				setError(current => current?.retry === "visit" ? current : undefined);
+				try {
+					let visitsBeforeRequest = visitRevision.current;
+					let next = await Api.navigation();
+					let firstNavigation = navigationRef.current === undefined;
+					if (visitRevision.current !== visitsBeforeRequest && latestVisitedDocument.current) {
+						next = { ...next, lastDocumentId: latestVisitedDocument.current };
+					}
+					let refreshedAt = Date.now();
+					catalogueRefreshes.current.set("navigation", refreshedAt);
+					if (firstNavigation) {
+						for (let project of next.projects) {
+							catalogueRefreshes.current.set(project.repositoryId, refreshedAt);
+						}
+					}
+					navigationRef.current = next;
+					setNavigation(next);
+					let visited = pendingVisitedRepository.current;
+					if (visited) {
+						pendingVisitedRepository.current = undefined;
+						if (!next.projects.some(project => project.repositoryId === visited)) {
+							navigationRefreshQueued.current = true;
+						}
+					}
+				} catch (reason) {
+					setError({ reason, retry: "refresh" });
+				}
+			} while (navigationRefreshQueued.current);
+		})();
+		navigationRequest.current = request;
+		void request.finally(() => {
+			if (navigationRequest.current === request) navigationRequest.current = undefined;
+		});
+		return request;
 	}, []);
-	let documentLoaded = useCallback((channel: Api.Channel) => {
-		setResolvedDocument(current =>
-			current?.id === channel.id ? newestDocument(current, channel) : channel
-		);
+	let documentLoaded = useCallback(async (channel: Api.Channel) => {
+		setResolvedDocument(current => ({
+			channel: current?.routeKey === routeKey && current.channel.id === channel.id
+				? newestDocument(current.channel, channel)
+				: channel,
+			routeKey,
+		}));
 		upsertDocument(channel);
-		void refresh();
-	}, [refresh, upsertDocument]);
+		let visited = visitTail.current.then(() => Api.visitDocument(channel.id));
+		visitTail.current = visited.catch(() => {});
+		try {
+			await visited;
+		} catch (reason) {
+			if (currentRouteKey.current === routeKey) setError({ reason, retry: "visit" });
+			return;
+		}
+		setError(current => current?.retry === "visit" ? undefined : current);
+		visitRevision.current++;
+		latestVisitedDocument.current = channel.id;
+		let current = navigationRef.current;
+		if (!current) {
+			pendingVisitedRepository.current = channel.repositoryId;
+			return;
+		}
+		let next = { ...current, lastDocumentId: channel.id };
+		navigationRef.current = next;
+		setNavigation(next);
+		if (!current.projects.some(project => project.repositoryId === channel.repositoryId)) {
+			pendingVisitedRepository.current = channel.repositoryId;
+			await refresh();
+		}
+	}, [refresh, routeKey, upsertDocument]);
 	let documentChanged = useCallback((
 		documentId: string,
 		update: Pick<Api.Channel, "title" | "slug" | "updatedAt">,
 	) => {
 		updateDocument(documentId, update);
 		setResolvedDocument(current =>
-			current?.id === documentId && current.updatedAt <= update.updatedAt
-				? { ...current, ...update }
+			current?.channel.id === documentId && current.channel.updatedAt <= update.updatedAt
+				? { ...current, channel: { ...current.channel, ...update } }
 				: current
 		);
 	}, [updateDocument]);
 
 	useEffect(() => {
-		void refresh();
+		void refresh(false);
 	}, [refresh]);
 
 	useEffect(() => {
 		if (route.page !== "repositories" || !navigation) return;
 		let destination = landingDocument(projects, navigation.lastDocumentId);
-		if (destination) location.replace(documentDestination(projects, destination));
-	}, [navigation, projects, route.page]);
+		if (destination) navigate(documentDestination(projects, destination), { replace: true });
+	}, [navigate, navigation, projects, route.page]);
 
 	useEffect(() => {
 		localStorage.setItem(`${SIDEBAR_STORAGE_KEY}:collapsed`, String(collapsed));
@@ -333,7 +443,9 @@ export function NavigationShell(
 
 	let navigateToDocument = (documentId: string, path?: string) => {
 		setError(undefined);
-		location.assign(documentDestination(projects, documentId, path));
+		setDialog(undefined);
+		setDrawerOpen(false);
+		navigate(documentDestination(projects, documentId, path));
 	};
 
 	let createDocument = async (project: Api.NavigationProject) => {
@@ -350,17 +462,49 @@ export function NavigationShell(
 				),
 			);
 		} catch (reason) {
-			setError({ reason });
+			setError({ reason, retry: "refresh" });
 		} finally {
 			completeProjectCreation(project.repositoryId);
 		}
 	};
 
-	let active = activeProject(projects, currentDocumentId, resolvedDocument?.repositoryId);
+	let active = activeProject(projects, currentDocumentId, resolvedChannel?.repositoryId);
 	let currentChannel = projects.flatMap(project => project.documents.channels)
-		.find(channel => channel.id === currentDocumentId) ?? resolvedDocument;
+		.find(channel => channel.id === currentDocumentId) ?? resolvedChannel;
 	let currentChannelRef = useRef<Api.Channel | undefined>(undefined);
 	currentChannelRef.current = currentChannel;
+	let revalidateCatalogues = useCallback(() => {
+		let now = Date.now();
+		let navigationRefreshedAt = catalogueRefreshes.current.get("navigation") ?? 0;
+		if (now - navigationRefreshedAt >= 30_000) {
+			catalogueRefreshes.current.set("navigation", now);
+			void refresh();
+		}
+		if (!active?.available) return;
+		let projectRefreshedAt = catalogueRefreshes.current.get(active.repositoryId)
+			?? navigationRefreshedAt;
+		if (now - projectRefreshedAt < 30_000) {
+			catalogueRefreshes.current.set(active.repositoryId, projectRefreshedAt);
+			return;
+		}
+		catalogueRefreshes.current.set(active.repositoryId, now);
+		refreshProject(active);
+		if (currentChannel) refreshResearchChannel(currentChannel);
+	}, [active, currentChannel, refresh, refreshProject, refreshResearchChannel]);
+	useEffect(() => {
+		revalidateCatalogues();
+	}, [revalidateCatalogues, routeKey]);
+	useEffect(() => {
+		let visible = () => {
+			if (document.visibilityState === "visible") revalidateCatalogues();
+		};
+		window.addEventListener("focus", revalidateCatalogues);
+		document.addEventListener("visibilitychange", visible);
+		return () => {
+			window.removeEventListener("focus", revalidateCatalogues);
+			document.removeEventListener("visibilitychange", visible);
+		};
+	}, [revalidateCatalogues]);
 	let newDocument = () => {
 		if (active && canEditProject(active)) void createDocument(active);
 		else showDialog("add");
@@ -369,7 +513,9 @@ export function NavigationShell(
 	let renamed = (channel: Api.Channel) => {
 		upsertDocument(channel);
 		setResolvedDocument(current =>
-			current?.id === channel.id ? newestDocument(current, channel) : current
+			current?.channel.id === channel.id
+				? { ...current, channel: newestDocument(current.channel, channel) }
+				: current
 		);
 	};
 
@@ -424,17 +570,38 @@ export function NavigationShell(
 			clearRepositoryCache(user.id);
 			location.assign("/");
 		} catch (reason) {
-			setError({ reason });
+			setError({ reason, retry: "refresh" });
 		}
 	};
 
 	let retryError = () => {
 		if (!error) return;
-		void refresh();
+		if (error.retry === "visit" && currentChannelRef.current) {
+			void documentLoaded(currentChannelRef.current);
+		} else void refresh();
 	};
 	let dismissDrawer = () => {
 		setDrawerOpen(false);
 		requestAnimationFrame(() => drawerOpener.current?.focus({ preventScroll: true }));
+	};
+	let navigateLink = (event: ReactMouseEvent<HTMLDivElement>) => {
+		if (
+			event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey
+			|| event.shiftKey || event.altKey
+		) return;
+		let target = event.target;
+		if (!(target instanceof Element)) return;
+		let link = target.closest<HTMLAnchorElement>("a[href]");
+		if (!link || link.hasAttribute("download") || (link.target && link.target !== "_self")) return;
+		let destination = new URL(link.href, location.href);
+		if (destination.origin !== location.origin) return;
+		if (
+			destination.pathname !== "/"
+			&& !/^\/(?:channels|documents|repositories)(?:\/|$)/.test(destination.pathname)
+		) return;
+		event.preventDefault();
+		setDrawerOpen(false);
+		navigate(`${destination.pathname}${destination.search}${destination.hash}`);
 	};
 	let sidebar = (
 		<ProjectSidebar
@@ -493,7 +660,11 @@ export function NavigationShell(
 
 	return (
 		<NavigationDocument.Provider value={navigationDocument}>
-			<div className="navigation-shell" data-navigation-mode={mode}>
+			<div
+				className="navigation-shell"
+				data-navigation-mode={mode}
+				onClickCapture={navigateLink}
+			>
 				{sidebarVisible && (
 					<div className="project-sidebar-frame" style={{ width }}>
 						{sidebar}
@@ -529,46 +700,62 @@ export function NavigationShell(
 						</div>
 					)}
 				{dialog === "add" && (
-					<AddProjectDialog
-						added={navigation?.projects ?? []}
-						onAdded={project => {
-							setFocusProjectId(project.repositoryId);
-							void refresh();
-						}}
-						onDismiss={() => setDialog(undefined)}
-						userId={user.id}
-					/>
+					<LazyDialogBoundary>
+						<Suspense fallback={null}>
+							<AddProjectDialog
+								added={navigation?.projects ?? []}
+								onAdded={project => {
+									catalogueRefreshes.current.set(project.repositoryId, Date.now());
+									setFocusProjectId(project.repositoryId);
+									void refresh();
+								}}
+								onDismiss={() => setDialog(undefined)}
+								userId={user.id}
+							/>
+						</Suspense>
+					</LazyDialogBoundary>
 				)}
 				{dialog === "search" && (
-					<DocumentSearchDialog
-						onDismiss={() => setDialog(undefined)}
-						onSelect={navigateToDocument}
-						projects={navigation?.projects ?? []}
-					/>
+					<LazyDialogBoundary>
+						<Suspense fallback={null}>
+							<DocumentSearchDialog
+								onDismiss={() => setDialog(undefined)}
+								onSelect={navigateToDocument}
+								projects={navigation?.projects ?? []}
+							/>
+						</Suspense>
+					</LazyDialogBoundary>
 				)}
 				{typeof dialog === "object" && dialog.type === "rename" && (
-					<RenameDocumentDialog
-						channel={dialog.channel}
-						onDismiss={() => setDialog(undefined)}
-						onRenamed={renamed}
-					/>
+					<LazyDialogBoundary>
+						<Suspense fallback={null}>
+							<RenameDocumentDialog
+								channel={dialog.channel}
+								onDismiss={() => setDialog(undefined)}
+								onRenamed={renamed}
+							/>
+						</Suspense>
+					</LazyDialogBoundary>
 				)}
 				{typeof dialog === "object" && dialog.type === "research" && (
-					<Suspense fallback={null}>
-						<NewResearchDialog
-							channel={dialog.channel}
-							onCreated={workspace => {
-								upsertResearchWorkspace(dialog.channel, workspace);
-								location.assign(researchWorkspacePath(
-									dialog.channel.repositoryOwner,
-									dialog.channel.repositoryName,
-									dialog.channel.slug,
-									workspace.id,
-								));
-							}}
-							onDismiss={() => setDialog(undefined)}
-						/>
-					</Suspense>
+					<LazyDialogBoundary>
+						<Suspense fallback={null}>
+							<NewResearchDialog
+								channel={dialog.channel}
+								onCreated={workspace => {
+									upsertResearchWorkspace(dialog.channel, workspace);
+									setDialog(undefined);
+									navigate(researchWorkspacePath(
+										dialog.channel.repositoryOwner,
+										dialog.channel.repositoryName,
+										dialog.channel.slug,
+										workspace.id,
+									));
+								}}
+								onDismiss={() => setDialog(undefined)}
+							/>
+						</Suspense>
+					</LazyDialogBoundary>
 				)}
 			</div>
 		</NavigationDocument.Provider>

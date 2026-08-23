@@ -20,6 +20,7 @@ import type {
 	ClaimBackgroundJobs,
 	CommitChannel,
 	CommitResult,
+	CompareNavigationResult,
 	ConfirmResearchWorkspace,
 	ConfirmResearchWorkspaceResult,
 	CreateChannel,
@@ -41,6 +42,7 @@ import type {
 	RequeueBackgroundJob,
 	ResearchTurn,
 	ResearchWorkspaceDetail,
+	ResearchWorkspaceRepositoryList,
 	ResearchWorkspaceSummary,
 	ResumeBackgroundJob,
 	SaveCheckpoint,
@@ -49,6 +51,7 @@ import type {
 	SupersedeBackgroundJob,
 	UpdateAgentContext,
 	UserNavigation,
+	UserNavigationSnapshot,
 	UserProject,
 	UserRecord,
 	WebSession,
@@ -72,7 +75,9 @@ export interface SessionStore {
 }
 
 export interface NavigationStore {
+	snapshot(userId: string): Promise<UserNavigationSnapshot>;
 	projects(userId: string): Promise<UserProject[]>;
+	firstDocument(userId: string, repositoryIds: string[]): Promise<string | undefined>;
 	addProject(input: AddUserProject): Promise<AddUserProjectResult>;
 	get(userId: string): Promise<UserNavigation | undefined>;
 	setLastDocument(
@@ -80,6 +85,12 @@ export interface NavigationStore {
 		documentId: string | undefined,
 		now: Date,
 	): Promise<UserNavigation>;
+	setLastDocumentIfCurrent(
+		userId: string,
+		expectedRevision: number | undefined,
+		documentId: string | undefined,
+		now: Date,
+	): Promise<CompareNavigationResult>;
 	recordVisit(input: RecordNavigationVisit): Promise<UserNavigation>;
 }
 
@@ -146,6 +157,7 @@ export interface ResearchWorkspaceStore {
 		input: AppendResearchAgentMessage,
 	): Promise<AppendResearchAgentMessageResult>;
 	list(channelId: string, limit: number): Promise<ResearchWorkspaceSummary[]>;
+	listRepository(repositoryId: string, limit: number): Promise<ResearchWorkspaceRepositoryList>;
 	get(channelId: string, workspaceId: string): Promise<ResearchWorkspaceDetail | undefined>;
 	findTurnByJob(channelId: string, jobId: string): Promise<ResearchTurn | undefined>;
 }

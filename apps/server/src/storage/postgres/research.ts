@@ -1,4 +1,9 @@
 import { conflict, corrupt, missing } from "../errors";
+import {
+	RESEARCH_REPOSITORY_CHANNEL_LIMIT,
+	RESEARCH_REPOSITORY_CHANNEL_WORKSPACE_LIMIT,
+	RESEARCH_REPOSITORY_WORKSPACE_LIMIT,
+} from "../model";
 
 import type { SQL, TransactionSQL } from "bun";
 import type {
@@ -20,6 +25,9 @@ import type {
 	ResearchWorkspace,
 	ResearchWorkspaceDetail,
 	ResearchWorkspaceOrigin,
+	ResearchWorkspaceRepositoryChannel,
+	ResearchWorkspaceRepositoryGroup,
+	ResearchWorkspaceRepositoryList,
 	ResearchWorkspaceSummary,
 } from "../model";
 import type { ResearchWorkspaceStore } from "../port";
@@ -46,6 +54,15 @@ type WorkspaceRow = {
 	updatedAt: unknown;
 	nextTurnOrdinal?: unknown;
 	nextMessageSequence?: unknown;
+};
+
+type RepositoryChannelRow = {
+	id: unknown;
+	repositoryId: unknown;
+	repositoryOwner: unknown;
+	repositoryName: unknown;
+	title: unknown;
+	slug: unknown;
 };
 
 type TurnRow = {
@@ -234,6 +251,17 @@ function workspace(row: WorkspaceRow): ResearchWorkspace {
 		fingerprint: text(row.fingerprint, "research workspace fingerprint"),
 		createdAt,
 		updatedAt,
+	};
+}
+
+function repositoryChannel(row: RepositoryChannelRow): ResearchWorkspaceRepositoryChannel {
+	return {
+		id: text(row.id, "research repository channel id"),
+		repositoryId: text(row.repositoryId, "research repository id"),
+		repositoryOwner: text(row.repositoryOwner, "research repository owner"),
+		repositoryName: text(row.repositoryName, "research repository name"),
+		title: text(row.title, "research repository channel title"),
+		slug: text(row.slug, "research repository channel slug"),
 	};
 }
 
@@ -681,6 +709,84 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 			`;
 			return rows.map(workspace);
 		});
+
+	readonly listRepository = (
+		repositoryId: string,
+		limit: number,
+	): Promise<ResearchWorkspaceRepositoryList> =>
+		this.#run(
+			"list repository research workspaces",
+			() =>
+				this.#sql.begin("isolation level repeatable read read only", async transaction => {
+					let count = Math.min(RESEARCH_REPOSITORY_WORKSPACE_LIMIT, Math.max(1, limit));
+					let channelRows = await transaction<RepositoryChannelRow[]>`
+						SELECT
+							channels.id,
+							channels.repository_id AS "repositoryId",
+							channels.repository_owner AS "repositoryOwner",
+							channels.repository_name AS "repositoryName",
+							channels.title,
+							(
+								SELECT channel_slugs.slug
+								FROM channel_slugs
+								WHERE channel_slugs.channel_id = channels.id AND channel_slugs.canonical
+							) AS slug
+						FROM channels
+						WHERE channels.repository_id = ${repositoryId}
+						ORDER BY channels.created_at DESC, channels.id ASC
+						LIMIT ${RESEARCH_REPOSITORY_CHANNEL_LIMIT + 1}
+					`;
+					let channels = channelRows.slice(0, RESEARCH_REPOSITORY_CHANNEL_LIMIT)
+						.map(repositoryChannel);
+					let channelsById = new Map(channels.map(channel => [channel.id, channel]));
+					let workspaceRows = await transaction<WorkspaceRow[]>`
+						WITH repository_channels AS MATERIALIZED (
+							SELECT channels.id, channels.created_at
+							FROM channels
+							WHERE channels.repository_id = ${repositoryId}
+							ORDER BY channels.created_at DESC, channels.id ASC
+							LIMIT ${RESEARCH_REPOSITORY_CHANNEL_LIMIT}
+						)
+						SELECT workspaces.*
+						FROM repository_channels
+						CROSS JOIN LATERAL (
+							SELECT ${transaction.unsafe(WORKSPACE_COLUMNS)}
+							FROM research_workspaces
+							WHERE research_workspaces.channel_id = repository_channels.id
+							ORDER BY research_workspaces.updated_at DESC, research_workspaces.id ASC
+							LIMIT ${RESEARCH_REPOSITORY_CHANNEL_WORKSPACE_LIMIT}
+						) AS workspaces
+						ORDER BY
+							repository_channels.created_at DESC,
+							repository_channels.id ASC,
+							workspaces."updatedAt" DESC,
+							workspaces.id ASC
+						LIMIT ${count}
+					`;
+					let groups: ResearchWorkspaceRepositoryGroup[] = [];
+					let groupsByChannel = new Map<string, ResearchWorkspaceRepositoryGroup>();
+					for (let row of workspaceRows) {
+						let saved = workspace(row);
+						let channel = channelsById.get(saved.channelId);
+						if (!channel) {
+							throw corrupt(`research workspace ${saved.id} has an invalid repository channel`);
+						}
+						let group = groupsByChannel.get(channel.id);
+						if (!group) {
+							group = { channel, workspaces: [] };
+							groupsByChannel.set(channel.id, group);
+							groups.push(group);
+						}
+						group.workspaces.push(saved);
+					}
+					let truncated = channelRows.length > RESEARCH_REPOSITORY_CHANNEL_LIMIT
+						|| workspaceRows.length === count
+						|| groups.some(group =>
+							group.workspaces.length === RESEARCH_REPOSITORY_CHANNEL_WORKSPACE_LIMIT
+						);
+					return { channels: groups, truncated };
+				}),
+		);
 
 	readonly get = (
 		channelId: string,

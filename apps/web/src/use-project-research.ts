@@ -11,9 +11,13 @@ import {
 } from "./research-navigation";
 
 import type { Research } from "@chopin/protocol";
+import type { ProjectDocuments } from "./document-actions";
 import type { LoadedResearch } from "./research-navigation";
 
-export function useProjectResearch(navigation?: Api.Navigation) {
+export function useProjectResearch(
+	navigation?: Api.Navigation,
+	documents: ProjectDocuments[] = [],
+) {
 	let [research, setResearch] = useState<LoadedResearch>({});
 	let loads = useRef(new Map<string, AbortController>());
 	let projects = useRef(new Map<string, Api.NavigationProject>());
@@ -75,14 +79,19 @@ export function useProjectResearch(navigation?: Api.Navigation) {
 				: Object.fromEntries(entries);
 		});
 		for (let project of navigation.projects) {
+			let loadedDocuments = documents.find(entry =>
+				entry.project.repositoryId === project.repositoryId
+			)?.documents;
 			if (
 				project.available && !research[project.repositoryId]
 				&& !loads.current.has(project.repositoryId)
+				&& loadedDocuments
+				&& (loadedDocuments.status !== "loading" || loadedDocuments.channels.length > 0)
 			) {
 				void load(project);
 			}
 		}
-	}, [load, navigation, research]);
+	}, [documents, load, navigation, research]);
 
 	useEffect(() => () => {
 		for (let controller of loads.current.values()) controller.abort();

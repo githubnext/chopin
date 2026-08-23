@@ -169,9 +169,38 @@ export class MemoryStorage implements StorageAdapter {
 	};
 
 	readonly navigation: NavigationStore = {
+		snapshot: userId => {
+			this.#requireUser(userId);
+			let found = this.#navigation.get(userId);
+			let selected = found?.lastDocumentId
+				? this.#channels.get(found.lastDocumentId)
+				: undefined;
+			return Promise.resolve({
+				projects: (this.#projects.get(userId) ?? []).map(project),
+				navigation: found ? navigation(found) : undefined,
+				lastDocumentRepositoryId: selected?.repositoryId,
+			});
+		},
 		projects: userId => {
 			this.#requireUser(userId);
 			return Promise.resolve((this.#projects.get(userId) ?? []).map(project));
+		},
+		firstDocument: (userId, repositoryIds) => {
+			this.#requireUser(userId);
+			let available = new Set(repositoryIds);
+			let projects = [...(this.#projects.get(userId) ?? [])]
+				.filter(value => available.has(value.repositoryId))
+				.sort((left, right) => left.position - right.position);
+			for (let stored of projects) {
+				let first = [...this.#channels.values()]
+					.filter(value => value.repositoryId === stored.repositoryId)
+					.sort((left, right) =>
+						right.updatedAt.getTime() - left.updatedAt.getTime()
+						|| left.id.localeCompare(right.id)
+					)[0];
+				if (first) return Promise.resolve(first.id);
+			}
+			return Promise.resolve(undefined);
 		},
 		addProject: input => this.#addProject(input),
 		get: userId => {
@@ -180,6 +209,18 @@ export class MemoryStorage implements StorageAdapter {
 			return Promise.resolve(found && navigation(found));
 		},
 		setLastDocument: (userId, documentId, now) => this.#setLastDocument(userId, documentId, now),
+		setLastDocumentIfCurrent: async (userId, expectedRevision, documentId, now) => {
+			this.#requireUser(userId);
+			let current = this.#navigation.get(userId);
+			if (current?.revision !== expectedRevision) {
+				if (!current) throw conflict(`navigation for user ${userId} changed`);
+				return { navigation: navigation(current), updated: false };
+			}
+			return {
+				navigation: await this.#setLastDocument(userId, documentId, now),
+				updated: true,
+			};
+		},
 		recordVisit: input => this.#recordVisit(input),
 	};
 
@@ -216,6 +257,10 @@ export class MemoryStorage implements StorageAdapter {
 	});
 	readonly research: ResearchWorkspaceStore = new MemoryResearchWorkspaceStore({
 		channelExists: channelId => this.#channels.has(channelId),
+		channels: repositoryId =>
+			[...this.#channels.values()]
+				.filter(value => value.repositoryId === repositoryId)
+				.map(channel),
 		userExists: userId => this.#users.has(userId),
 		job: (channelId, jobId) => this.jobs.get(channelId, jobId),
 		assertLease: held => this.#assertLease(held),
@@ -277,7 +322,12 @@ export class MemoryStorage implements StorageAdapter {
 		if (documentId && !this.#channels.has(documentId)) {
 			throw missing(`channel ${documentId} does not exist`);
 		}
-		let saved: UserNavigation = { userId, lastDocumentId: documentId, updatedAt: now };
+		let saved: UserNavigation = {
+			userId,
+			lastDocumentId: documentId,
+			revision: (this.#navigation.get(userId)?.revision ?? -1) + 1,
+			updatedAt: now,
+		};
 		this.#navigation.set(userId, saved);
 		return navigation(saved);
 	}

@@ -1,4 +1,9 @@
 import { conflict, missing } from "../errors";
+import {
+	RESEARCH_REPOSITORY_CHANNEL_LIMIT,
+	RESEARCH_REPOSITORY_CHANNEL_WORKSPACE_LIMIT,
+	RESEARCH_REPOSITORY_WORKSPACE_LIMIT,
+} from "../model";
 
 import type {
 	AppendResearchAgentMessage,
@@ -6,6 +11,7 @@ import type {
 	AppendResearchTurn,
 	AppendResearchTurnResult,
 	BackgroundJobDetail,
+	ChannelRecord,
 	ConfirmResearchWorkspace,
 	ConfirmResearchWorkspaceResult,
 	CreateResearchWorkspace,
@@ -18,12 +24,15 @@ import type {
 	ResearchTurn,
 	ResearchWorkspace,
 	ResearchWorkspaceDetail,
+	ResearchWorkspaceRepositoryGroup,
+	ResearchWorkspaceRepositoryList,
 	ResearchWorkspaceSummary,
 } from "../model";
 import type { ResearchWorkspaceStore } from "../port";
 
 type Options = {
 	channelExists: (channelId: string) => boolean;
+	channels: (repositoryId: string) => ChannelRecord[];
 	userExists: (userId: string) => boolean;
 	job: (channelId: string, jobId: string) => Promise<BackgroundJobDetail | undefined>;
 	assertLease: (lease: Lease) => void;
@@ -413,6 +422,54 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 			)
 			.slice(0, count)
 			.map(workspace);
+	};
+
+	readonly listRepository = async (
+		repositoryId: string,
+		limit: number,
+	): Promise<ResearchWorkspaceRepositoryList> => {
+		let count = Math.min(RESEARCH_REPOSITORY_WORKSPACE_LIMIT, Math.max(1, limit));
+		let orderedChannels = this.#options.channels(repositoryId).sort((left, right) =>
+			right.createdAt.getTime() - left.createdAt.getTime() || compareId(left.id, right.id)
+		);
+		let workspacesByChannel = new Map<string, ResearchWorkspace[]>();
+		for (let saved of this.#workspaces.values()) {
+			let values = workspacesByChannel.get(saved.channelId) ?? [];
+			values.push(saved);
+			workspacesByChannel.set(saved.channelId, values);
+		}
+		let truncated = orderedChannels.length > RESEARCH_REPOSITORY_CHANNEL_LIMIT;
+		let groups: ResearchWorkspaceRepositoryGroup[] = [];
+		let workspaceCount = 0;
+		for (let channel of orderedChannels.slice(0, RESEARCH_REPOSITORY_CHANNEL_LIMIT)) {
+			if (workspaceCount >= count) {
+				truncated = true;
+				break;
+			}
+			let workspaces = (workspacesByChannel.get(channel.id) ?? [])
+				.sort((left, right) =>
+					right.updatedAt.getTime() - left.updatedAt.getTime() || compareId(left.id, right.id)
+				)
+				.slice(0, RESEARCH_REPOSITORY_CHANNEL_WORKSPACE_LIMIT);
+			if (workspaces.length === RESEARCH_REPOSITORY_CHANNEL_WORKSPACE_LIMIT) truncated = true;
+			let selected = workspaces.slice(0, count - workspaceCount).map(workspace);
+			if (selected.length > 0) {
+				groups.push({
+					channel: {
+						id: channel.id,
+						repositoryId: channel.repositoryId,
+						repositoryOwner: channel.repositoryOwner,
+						repositoryName: channel.repositoryName,
+						title: channel.title,
+						slug: channel.slug,
+					},
+					workspaces: selected,
+				});
+			}
+			workspaceCount += selected.length;
+		}
+		if (workspaceCount === count) truncated = true;
+		return { channels: groups, truncated };
 	};
 
 	readonly get = async (

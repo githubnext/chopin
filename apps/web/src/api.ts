@@ -240,20 +240,31 @@ export function createChannel(
 	);
 }
 
-export function channel(id: string): Promise<ChannelDetail> {
-	return response(`/api/channels/${encodeURIComponent(id)}`);
+export function channel(id: string, signal?: AbortSignal): Promise<ChannelDetail> {
+	return response(`/api/channels/${encodeURIComponent(id)}`, { signal });
 }
 
 export function document(
 	owner: string,
 	repository: string,
 	slug: string,
+	signal?: AbortSignal,
 ): Promise<ChannelDetail> {
 	return response(
 		`/api/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/documents/${
 			encodeURIComponent(slug)
 		}`,
+		{ signal },
 	);
+}
+
+export function visitDocument(documentId: string): Promise<void> {
+	return response("/api/navigation", {
+		method: "PATCH",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ documentId }),
+		keepalive: true,
+	});
 }
 
 export function repositoryResearchWorkspaces(

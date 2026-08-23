@@ -208,6 +208,38 @@ describe("navigation routes", () => {
 		expect((await pending)!.status).toBe(200);
 	});
 
+	it("resolves remembered navigation without separate channel reads", async () => {
+		let { router, storage, github, cookie, now } = await setup();
+		await storage.navigation.addProject({
+			userId: "U_octocat",
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			now,
+		});
+		github.repositories.set("octo-org/score", repository("R_score", "octo-org", "score"));
+		let channel = await storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Remembered document",
+			createdBy: "U_octocat",
+			now,
+		});
+		await storage.navigation.setLastDocument("U_octocat", channel.id, now);
+		storage.channels.get = async () => {
+			throw new Error("navigation must use its joined snapshot");
+		};
+		storage.channels.list = async () => {
+			throw new Error("remembered navigation must not query fallback channels");
+		};
+
+		let response = await router.handle(request("/api/navigation", cookie));
+		expect(response!.status).toBe(200);
+		expect((await response!.json()).lastDocumentId).toBe(channel.id);
+	});
+
 	it("rejects inaccessible projects and returns an existing project when repeated", async () => {
 		let { router, github, cookie } = await setup();
 		github.repositories.set("octo-org/score", repository("R_score", "octo-org", "score", false));
@@ -251,7 +283,7 @@ describe("navigation routes", () => {
 		expect(document!.status).toBe(403);
 	});
 
-	it("rejects recording a document outside the user's projects", async () => {
+	it("records an authorized deep-linked document and adds its Project", async () => {
 		let { router, storage, github, cookie, now } = await setup();
 		github.repositories.set("octo-org/other", repository("R_other", "octo-org", "other"));
 		await storage.channels.create({
@@ -268,7 +300,10 @@ describe("navigation routes", () => {
 				headers: { "content-type": "application/json", origin: "https://chopin.test" },
 				body: JSON.stringify({ documentId: channel.id }),
 			}));
-			expect(response!.status).toBe(404);
+			expect(response!.status).toBe(204);
+			expect(await storage.navigation.projects("U_octocat"))
+				.toMatchObject([{ repositoryId: "R_other" }]);
+			expect((await storage.navigation.get("U_octocat"))!.lastDocumentId).toBe(channel.id);
 		});
 	});
 
@@ -320,5 +355,51 @@ describe("navigation routes", () => {
 		expect(response!.status).toBe(200);
 		expect((await response!.json()).lastDocumentId).toBe(fallback.id);
 		expect((await storage.navigation.get("U_octocat"))!.lastDocumentId).toBe(fallback.id);
+	});
+
+	it("does not overwrite a newer visit while resolving a fallback", async () => {
+		let { router, storage, github, cookie, now } = await setup();
+		await storage.navigation.addProject({
+			userId: "U_octocat",
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			now,
+		});
+		github.repositories.set("octo-org/score", repository("R_score", "octo-org", "score"));
+		let latest = await storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Latest visit",
+			createdBy: "U_octocat",
+			now: new Date(now.getTime() + 1),
+		});
+		await storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Fallback candidate",
+			createdBy: "U_octocat",
+			now: new Date(now.getTime() + 2),
+		});
+		let release = Promise.withResolvers<void>();
+		let accessed = Promise.withResolvers<void>();
+		github.accessGate = async () => {
+			accessed.resolve();
+			await release.promise;
+		};
+
+		let pending = router.handle(request("/api/navigation", cookie));
+		await accessed.promise;
+		await storage.navigation.setLastDocument("U_octocat", latest.id, new Date(now.getTime() + 3));
+		release.resolve();
+		let response = await pending;
+
+		expect(response!.status).toBe(200);
+		expect((await response!.json()).lastDocumentId).toBe(latest.id);
+		expect((await storage.navigation.get("U_octocat"))!.lastDocumentId).toBe(latest.id);
 	});
 });
