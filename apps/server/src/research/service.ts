@@ -125,6 +125,7 @@ export type RepositoryResearchWorkspaceList = {
 };
 
 const MAX_ID = 96;
+const MAX_OPAQUE_ID = 255;
 const MAX_ORIGIN_MESSAGE_ID = 128;
 const MAX_QUESTION = 4_096;
 const MAX_TITLE = 120;
@@ -184,6 +185,15 @@ function hasControlCharacter(value: string): boolean {
 		}
 	}
 	return false;
+}
+
+/** GitHub node IDs are opaque and may use padded Base64 characters such as `=`. */
+function opaqueId(value: unknown, field: string): string {
+	if (
+		typeof value !== "string" || value.length < 1 || value.length > MAX_OPAQUE_ID
+		|| hasControlCharacter(value)
+	) throw new ResearchWorkspaceError("invalid-request", `${field} is invalid.`);
+	return value;
 }
 
 export function normalizeResearchPrompt(value: unknown): string {
@@ -326,7 +336,7 @@ export class ResearchWorkspaceService {
 
 	async createDraft(input: CreateResearchDraft): Promise<CreateResearchDraftResult> {
 		let channelId = safeId(input.channelId, "Channel id");
-		let createdBy = safeId(input.createdBy, "Creating member id");
+		let createdBy = opaqueId(input.createdBy, "Creating member id");
 		let proposedQuestion = normalizeResearchPrompt(input.question);
 		let scope: string;
 		let originMessageId: string | undefined;
@@ -378,7 +388,7 @@ export class ResearchWorkspaceService {
 		let workspaceId = safeId(input.workspaceId, "Workspace id");
 		let query = normalizeResearchPrompt(input.query);
 		let durableRequestId = requestId(input.requestId);
-		let confirmedBy = safeId(input.confirmedBy, "Confirming member id");
+		let confirmedBy = opaqueId(input.confirmedBy, "Confirming member id");
 		let confirmedByHandle = handle(input.confirmedByHandle);
 		let requestFingerprint = fingerprint("research-confirm", {
 			workspaceId,
@@ -430,7 +440,7 @@ export class ResearchWorkspaceService {
 		}
 		let question = normalizeResearchPrompt(input.question);
 		let durableRequestId = requestId(input.requestId);
-		let requestedBy = safeId(input.requestedBy, "Requesting member id");
+		let requestedBy = opaqueId(input.requestedBy, "Requesting member id");
 		let requestedByHandle = handle(input.requestedByHandle);
 		let requestFingerprint = fingerprint("research-turn", {
 			workspaceId,
@@ -519,7 +529,7 @@ export class ResearchWorkspaceService {
 		repositoryId: string,
 		limit = MAX_REPOSITORY_WORKSPACES,
 	): Promise<RepositoryResearchWorkspaceList> {
-		safeId(repositoryId, "Repository id", 255);
+		opaqueId(repositoryId, "Repository id");
 		if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_REPOSITORY_WORKSPACES) {
 			throw new ResearchWorkspaceError("invalid-request", "Repository listing limit is invalid.");
 		}

@@ -16,6 +16,9 @@ import type { GitHub, GitHubTokenGrant, Repository } from "../github/client";
 
 const SOURCE = "# Release plan\n\nShip safely.\n";
 const SOURCE_HASH = `sha256:${createHash("sha256").update(SOURCE).digest("hex")}`;
+const USER_ID = "MDQ6VXNlcjU0MjcwODM=";
+const REPOSITORY_ID = "MDEwOlJlcG9zaXRvcnkxMjM=";
+const OTHER_REPOSITORY_ID = "MDEwOlJlcG9zaXRvcnk0NTY=";
 
 function requestId(value: number): string {
 	return `10000000-0000-4000-8000-${value.toString(16).padStart(12, "0")}`;
@@ -37,7 +40,7 @@ function pair(cookie: string): string {
 class RepositoryAccess {
 	affiliated = true;
 	repository: Repository = {
-		id: "R_score",
+		id: REPOSITORY_ID,
 		owner: "octo-org",
 		ownerAvatarUrl: "https://avatars.test/octo-org.png",
 		name: "score",
@@ -62,14 +65,14 @@ class RepositoryAccess {
 async function setup() {
 	let now = new Date("2026-08-23T12:00:00.000Z");
 	let storage = new MemoryStorage();
-	await storage.users.put({ id: "U_octocat", login: "octocat", avatarUrl: "avatar", now });
+	await storage.users.put({ id: USER_ID, login: "octocat", avatarUrl: "avatar", now });
 	let channel = await storage.channels.create({
 		id: crypto.randomUUID(),
-		repositoryId: "R_score",
+		repositoryId: REPOSITORY_ID,
 		repositoryOwner: "octo-org",
 		repositoryName: "score",
 		title: "Release plan",
-		createdBy: "U_octocat",
+		createdBy: USER_ID,
 		now,
 	});
 	let lease = await storage.leases.acquire("chopin:writer", "route-writer", 60_000);
@@ -84,7 +87,7 @@ async function setup() {
 		encryptionKey: new Uint8Array(32).fill(4),
 	};
 	let sessions = new Sessions(storage, true, () => now);
-	let issued = await sessions.issue("U_octocat", grant("ghu_user"));
+	let issued = await sessions.issue(USER_ID, grant("ghu_user"));
 	let auth: HostedAuth = {
 		config,
 		storage,
@@ -214,6 +217,7 @@ describe("research workspace routes", () => {
 		};
 		let created = await create(context);
 		expect(created.response.status).toBe(201);
+		expect(created.body.workspace.createdBy).toBe(USER_ID);
 		expect(created.response.headers.get("location"))
 			.toBe(`/documents/octo-org/score/release-plan/research/${created.body.workspace.id}`);
 		expect(context.owners).toEqual([]);
@@ -224,6 +228,7 @@ describe("research workspace routes", () => {
 			mutation({ query: "What changed?", requestId: requestId(2) }),
 		));
 		expect(confirmed?.status).toBe(200);
+		expect((await confirmed!.json()).workspace.confirmedBy).toBe(USER_ID);
 		expect(context.owners).toEqual([context.channel.id]);
 		let replayed = await context.router.handle(request(
 			`${path}/${created.body.workspace.id}/confirm`,
@@ -249,11 +254,11 @@ describe("research workspace routes", () => {
 		let created = await create(context);
 		let other = await context.storage.channels.create({
 			id: crypto.randomUUID(),
-			repositoryId: "R_score",
+			repositoryId: REPOSITORY_ID,
 			repositoryOwner: "octo-org",
 			repositoryName: "score",
 			title: "Other plan",
-			createdBy: "U_octocat",
+			createdBy: USER_ID,
 			now: context.now,
 		});
 		let crossChannel = await context.router.handle(request(
@@ -262,7 +267,10 @@ describe("research workspace routes", () => {
 		));
 		expect(crossChannel?.status).toBe(404);
 
-		context.access.repository = { ...context.access.repository, id: "R_recreated" };
+		context.access.repository = {
+			...context.access.repository,
+			id: "MDEwOlJlcG9zaXRvcnk3ODk=",
+		};
 		let recreated = await context.router.handle(request(
 			`/api/channels/${context.channel.id}/research-workspaces/${created.body.workspace.id}`,
 			context.cookie,
@@ -271,7 +279,7 @@ describe("research workspace routes", () => {
 
 		context.access.repository = {
 			...context.access.repository,
-			id: "R_score",
+			id: REPOSITORY_ID,
 			permissions: { pull: false, push: true, admin: false },
 		};
 		let noPull = await context.router.handle(request(
@@ -286,11 +294,11 @@ describe("research workspace routes", () => {
 		let created = await create(context);
 		let other = await context.storage.channels.create({
 			id: crypto.randomUUID(),
-			repositoryId: "R_other",
+			repositoryId: OTHER_REPOSITORY_ID,
 			repositoryOwner: "octo-org",
 			repositoryName: "other",
 			title: "Other repository plan",
-			createdBy: "U_octocat",
+			createdBy: USER_ID,
 			now: context.now,
 		});
 		await context.service.createDraft({
@@ -298,7 +306,7 @@ describe("research workspace routes", () => {
 			question: "Private to the other repository",
 			requestId: requestId(9),
 			origin: "sidebar",
-			createdBy: "U_octocat",
+			createdBy: USER_ID,
 		});
 
 		let response = await context.router.handle(request(

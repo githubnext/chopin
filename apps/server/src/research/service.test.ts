@@ -18,6 +18,8 @@ import type { ResearchReport } from "../jobs/research-workspace";
 
 const SOURCE = "# Parent document\n\nThe private compatibility plan is current.\n";
 const SOURCE_HASH = `sha256:${createHash("sha256").update(SOURCE).digest("hex")}`;
+const USER_ID = "MDQ6VXNlcjU0MjcwODM=";
+const REPOSITORY_ID = "MDEwOlJlcG9zaXRvcnkxMjM=";
 const PUBLIC_SOURCE = { title: "Release notes", url: "https://example.com/releases/v3" };
 const REPORT: ResearchReport = {
 	title: "Compatibility report",
@@ -33,12 +35,12 @@ function requestId(value: number): string {
 async function setup(options: { answer?: boolean; evidence?: boolean } = {}) {
 	let now = new Date("2026-08-23T12:00:00.000Z");
 	let storage = new MemoryStorage();
-	let userId = "U_octocat";
+	let userId = USER_ID;
 	let channelId = crypto.randomUUID();
 	await storage.users.put({ id: userId, login: "octocat", avatarUrl: "avatar", now });
 	await storage.channels.create({
 		id: channelId,
-		repositoryId: "R_score",
+		repositoryId: REPOSITORY_ID,
 		repositoryOwner: "octo-org",
 		repositoryName: "score",
 		title: "Release plan",
@@ -217,6 +219,7 @@ describe("research workspace service", () => {
 		expect(first.repeated).toBe(false);
 		expect(repeated).toEqual({ ...first, repeated: true });
 		expect(first.workspace.title.length).toBeLessThanOrEqual(120);
+		expect(first.workspace.createdBy).toBe(USER_ID);
 
 		await expect(context.service.createDraft({ ...input, question: "A different question" }))
 			.rejects.toBeInstanceOf(StorageError);
@@ -239,7 +242,15 @@ describe("research workspace service", () => {
 		expect(planner.workspace).toMatchObject({
 			origin: "planner",
 			originMessageId: "01K39QZG000000000000000001",
+			createdBy: USER_ID,
 		});
+		await expect(context.service.createDraft({
+			channelId: context.channelId,
+			question: "Invalid internal message identity",
+			origin: "planner",
+			originMessageId: "message=",
+			createdBy: context.userId,
+		})).rejects.toMatchObject({ code: "invalid-request" });
 		expect((await context.jobs.list(context.channelId, 100))!.jobs).toEqual([]);
 		expect(context.publications).toHaveLength(2);
 		let stored = await context.storage.research.get(context.channelId, first.workspace.id);
@@ -333,6 +344,34 @@ describe("research workspace service", () => {
 			turnId: confirmed.turns[0]!.id,
 		});
 		expect(repeated.turns[0]?.evidence?.job.state).toBe("cancelled");
+	});
+
+	it("preserves opaque GitHub actor and repository node ids", async () => {
+		let context = await setup();
+		let { created } = await finishInitial(context);
+		let followUp = await context.service.appendTurn({
+			channelId: context.channelId,
+			workspaceId: created.workspace.id,
+			kind: "follow-up",
+			question: "Which actor requested this?",
+			requestId: requestId(8),
+			requestedBy: context.userId,
+			requestedByHandle: "octocat",
+		});
+		let requested = followUp.turns.at(-1)!;
+		let member = followUp.messages.find(value => value.turnId === requested.id);
+		expect(followUp.workspace).toMatchObject({
+			createdBy: USER_ID,
+			confirmedBy: USER_ID,
+		});
+		expect(requested.requestedBy).toBe(USER_ID);
+		expect(member?.userId).toBe(USER_ID);
+		expect(await context.service.listRepository(REPOSITORY_ID)).toMatchObject({
+			channels: [{
+				channel: { id: context.channelId },
+				workspaces: [{ id: created.workspace.id }],
+			}],
+		});
 	});
 
 	it("keeps follow-ups private, searches only explicit turns, and freezes the original report", async () => {
