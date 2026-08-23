@@ -2,10 +2,12 @@ import type {
 	AddUserProject,
 	AddUserProjectResult,
 	AgentState,
+	AppendBackgroundJobProgress,
 	BackgroundJob,
 	BackgroundJobCursor,
 	BackgroundJobDetail,
 	BackgroundJobPage,
+	CancelBackgroundJob,
 	ChannelAgent,
 	ChannelPage,
 	ChannelRecord,
@@ -14,7 +16,6 @@ import type {
 	ClaimBackgroundJobs,
 	CommitChannel,
 	CommitResult,
-	ControlBackgroundJob,
 	CreateChannel,
 	CreateWebSession,
 	EnqueueBackgroundJob,
@@ -107,12 +108,13 @@ export interface BackgroundJobStore {
 	enqueue(input: EnqueueBackgroundJob): Promise<{ job: BackgroundJob; repeated: boolean }>;
 	claim(input: ClaimBackgroundJobs): Promise<BackgroundJob[]>;
 	renew(input: RenewBackgroundJob): Promise<BackgroundJob>;
+	appendProgress(input: AppendBackgroundJobProgress): Promise<BackgroundJob>;
 	requeue(input: RequeueBackgroundJob): Promise<BackgroundJob>;
 	settle(input: SettleBackgroundJob): Promise<BackgroundJobDetail>;
 	pause(input: PauseBackgroundJob): Promise<BackgroundJob>;
 	resume(input: ResumeBackgroundJob): Promise<BackgroundJob>;
 	fail(input: FailBackgroundJob): Promise<BackgroundJob>;
-	cancel(input: ControlBackgroundJob): Promise<BackgroundJob>;
+	cancel(input: CancelBackgroundJob): Promise<BackgroundJob>;
 	supersede(input: SupersedeBackgroundJob): Promise<BackgroundJob>;
 	list(
 		channelId: string,

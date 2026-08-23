@@ -43,6 +43,7 @@ function job(value: DocumentTarget): BackgroundJob {
 		claimExpiresAt: new Date(now.getTime() + 60_000),
 		availableAt: now,
 		reason: undefined,
+		progress: [],
 		createdAt: now,
 		updatedAt: now,
 	};
@@ -67,6 +68,7 @@ function execution(value: DocumentTarget): JobExecution<{
 		},
 		signal: new AbortController().signal,
 		deadline: new Date(Date.now() + 60_000),
+		progress: async () => {},
 	};
 }
 

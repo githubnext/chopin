@@ -1,7 +1,9 @@
 import { conflict, corrupt, missing } from "../errors";
+import { appendProgress, progress } from "../progress";
 
 import type { SQL, TransactionSQL } from "bun";
 import type {
+	AppendBackgroundJobProgress,
 	BackgroundJob,
 	BackgroundJobArtifact,
 	BackgroundJobCursor,
@@ -11,6 +13,7 @@ import type {
 	BackgroundJobState,
 	BackgroundJobSummary,
 	BackgroundJobTarget,
+	CancelBackgroundJob,
 	ClaimBackgroundJobs,
 	ClaimedBackgroundJob,
 	ControlBackgroundJob,
@@ -53,6 +56,7 @@ type JobRow = {
 	claimExpiresAt: Timestamp | null;
 	availableAt: Timestamp;
 	reason: string | null;
+	progress: unknown;
 	createdAt: Timestamp;
 	updatedAt: Timestamp;
 };
@@ -91,6 +95,7 @@ const JOB_COLUMNS = `
 	claim_expires_at AS "claimExpiresAt",
 	available_at AS "availableAt",
 	reason,
+	progress,
 	created_at AS "createdAt",
 	updated_at AS "updatedAt"
 `;
@@ -116,6 +121,7 @@ const QUALIFIED_JOB_COLUMNS = `
 	jobs.claim_expires_at AS "claimExpiresAt",
 	jobs.available_at AS "availableAt",
 	jobs.reason,
+	jobs.progress,
 	jobs.created_at AS "createdAt",
 	jobs.updated_at AS "updatedAt"
 `;
@@ -220,6 +226,7 @@ function job(row: JobRow): BackgroundJob {
 		claimExpiresAt,
 		availableAt: date(row.availableAt, "background job availability"),
 		reason: row.reason ?? undefined,
+		progress: progress(row.progress, row.id),
 		createdAt: date(row.createdAt, "background job creation time"),
 		updatedAt: date(row.updatedAt, "background job update time"),
 	};
@@ -441,6 +448,30 @@ export class PostgresBackgroundJobStore implements BackgroundJobStore {
 			input.countFailure,
 		);
 
+	readonly appendProgress = (input: AppendBackgroundJobProgress): Promise<BackgroundJob> =>
+		this.#run("append background job progress", () =>
+			this.#sql.begin(async transaction => {
+				await this.#fence(transaction, input.lease);
+				let found = await this.#lockClaim(transaction, input);
+				if (input.now < found.updatedAt) {
+					throw conflict(`background job ${found.id} changed before its progress update`);
+				}
+				let revision = await this.#bump(transaction, found.channelId);
+				let next = appendProgress(found.progress, input, revision, found.attempts);
+				let [saved] = await transaction<JobRow[]>`
+					UPDATE background_jobs SET
+						revision = ${revision},
+						progress = ${JSON.stringify(next)}::text::jsonb,
+						updated_at = ${input.now}
+					WHERE id = ${found.id}
+					RETURNING ${transaction.unsafe(JOB_COLUMNS)}
+				`;
+				if (!saved) {
+					throw corrupt(`appending background job progress for ${found.id} returned no record`);
+				}
+				return job(saved);
+			}));
+
 	readonly settle = (input: SettleBackgroundJob): Promise<BackgroundJobDetail> =>
 		this.#run("settle background job", () =>
 			this.#sql.begin(async transaction => {
@@ -499,7 +530,7 @@ export class PostgresBackgroundJobStore implements BackgroundJobStore {
 	readonly fail = (input: FailBackgroundJob): Promise<BackgroundJob> =>
 		this.#claimedTransition("fail background job", input, "failed", input.reason, undefined, true);
 
-	readonly cancel = (input: ControlBackgroundJob): Promise<BackgroundJob> =>
+	readonly cancel = (input: CancelBackgroundJob): Promise<BackgroundJob> =>
 		this.#controlTransition(
 			"cancel background job",
 			input,
@@ -626,7 +657,7 @@ export class PostgresBackgroundJobStore implements BackgroundJobStore {
 
 	#controlTransition(
 		action: string,
-		input: ControlBackgroundJob,
+		input: CancelBackgroundJob | ControlBackgroundJob,
 		allowed: BackgroundJobState[],
 		state: BackgroundJobState,
 		reason?: string,
@@ -681,7 +712,7 @@ export class PostgresBackgroundJobStore implements BackgroundJobStore {
 
 	async #lockControl(
 		transaction: TransactionSQL,
-		input: ControlBackgroundJob,
+		input: CancelBackgroundJob | ControlBackgroundJob,
 		allowed: BackgroundJobState[],
 	): Promise<BackgroundJob> {
 		let [row] = await transaction<JobRow[]>`
@@ -694,7 +725,7 @@ export class PostgresBackgroundJobStore implements BackgroundJobStore {
 		let found = job(row);
 		let current = await this.#readTarget(transaction, found.channelId, found.targetKey);
 		if (
-			found.revision !== input.expectedRevision
+			"expectedRevision" in input && found.revision !== input.expectedRevision
 			|| !allowed.includes(found.state)
 			|| current.generation !== found.targetGeneration
 		) throw conflict(`background job ${found.id} changed`);

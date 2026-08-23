@@ -124,6 +124,14 @@ mode, capabilities, timeout, attempts, and AI-credit ceilings. Every model-backe
 attempt uses a fresh disposable SDK session. Its events, prompts, tools, and
 results never enter Conversation or recreated Planner context.
 
+Running definitions can append fixed, code-owned progress stages to their fenced
+job claim. The capped log is durable and appears in Tasks & Progress after reload
+or reconnect. It never contains model prose, prompts, private document content,
+URLs, or credentials. Interrupted stages expose only bounded reason categories
+such as unavailable web search, timeout, lost heartbeat, or unavailable owner;
+raw provider errors are not published. Server diagnostics contain only stage,
+phase, call/result booleans and counts, and bounded machine error codes.
+
 The scheduler creates revision/hash-addressed document summaries after canonical
 document commits. Source snapshots are loaded into memory for an attempt but are
 not persisted with the job. Publication rechecks the exact current document while
@@ -135,6 +143,11 @@ Copilot web-search tool. Public search receives no private document or repositor
 tools. A separate private stage receives canonical document context with no web
 capability, and a final no-tool stage synthesizes bounded findings and validated
 HTTPS citations. Reports never edit collaborative prose automatically.
+
+Citation provenance comes only from successful web-search output: SDK citation
+metadata, rich citation annotations, or typed resource links. The
+server canonicalizes public HTTPS URLs but never follows, resolves, or fetches
+them, and rejects report URLs absent from the prior search output.
 
 Jobs use the channel's active Planner owner's process-local credential and
 entitlement. No token is persisted. Logout, rotation, owner reset, expiry,

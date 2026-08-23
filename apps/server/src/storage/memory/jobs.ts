@@ -1,6 +1,8 @@
 import { conflict, missing } from "../errors";
+import { appendProgress, progress } from "../progress";
 
 import type {
+	AppendBackgroundJobProgress,
 	BackgroundJob,
 	BackgroundJobArtifact,
 	BackgroundJobCursor,
@@ -9,6 +11,7 @@ import type {
 	BackgroundJobState,
 	BackgroundJobSummary,
 	BackgroundJobTarget,
+	CancelBackgroundJob,
 	ClaimBackgroundJobs,
 	ClaimedBackgroundJob,
 	ControlBackgroundJob,
@@ -40,6 +43,7 @@ function job(value: BackgroundJob): BackgroundJob {
 		input: json(value.input),
 		claimBinding: value.claimBinding === undefined ? undefined : json(value.claimBinding),
 		claimExpiresAt: value.claimExpiresAt && new Date(value.claimExpiresAt),
+		progress: progress(value.progress, value.id),
 		availableAt: new Date(value.availableAt),
 		createdAt: new Date(value.createdAt),
 		updatedAt: new Date(value.updatedAt),
@@ -157,6 +161,7 @@ export class MemoryBackgroundJobStore implements BackgroundJobStore {
 			claimExpiresAt: undefined,
 			availableAt: new Date(input.availableAt),
 			reason: undefined,
+			progress: [],
 			createdAt: new Date(input.now),
 			updatedAt: new Date(input.now),
 		};
@@ -250,6 +255,25 @@ export class MemoryBackgroundJobStore implements BackgroundJobStore {
 		);
 	};
 
+	readonly appendProgress = async (input: AppendBackgroundJobProgress): Promise<BackgroundJob> => {
+		this.#options.assertLease(input.lease);
+		let found = this.#claimed(input);
+		if (input.now < found.updatedAt) {
+			throw conflict(`background job ${found.id} changed before its progress update`);
+		}
+		let revision = (this.#revisions.get(found.channelId) ?? 0) + 1;
+		let nextProgress = appendProgress(found.progress, input, revision, found.attempts);
+		this.#revisions.set(found.channelId, revision);
+		let saved = {
+			...found,
+			revision,
+			progress: nextProgress,
+			updatedAt: new Date(input.now),
+		};
+		this.#jobs.set(saved.id, saved);
+		return job(saved);
+	};
+
 	readonly settle = async (input: SettleBackgroundJob): Promise<BackgroundJobDetail> => {
 		this.#options.assertLease(input.lease);
 		let found = this.#claimed(input);
@@ -291,7 +315,7 @@ export class MemoryBackgroundJobStore implements BackgroundJobStore {
 		return this.#claimTransition(found, "failed", input.now, input.reason, found.availableAt, true);
 	};
 
-	readonly cancel = async (input: ControlBackgroundJob): Promise<BackgroundJob> => {
+	readonly cancel = async (input: CancelBackgroundJob): Promise<BackgroundJob> => {
 		this.#options.assertLease(input.lease);
 		let found = this.#controlled(input, ["pending", "paused", "running"]);
 		return this.#controlTransition(found, "cancelled", input.now);
@@ -367,11 +391,14 @@ export class MemoryBackgroundJobStore implements BackgroundJobStore {
 		return found;
 	}
 
-	#controlled(input: ControlBackgroundJob, allowed: BackgroundJobState[]): BackgroundJob {
+	#controlled(
+		input: CancelBackgroundJob | ControlBackgroundJob,
+		allowed: BackgroundJobState[],
+	): BackgroundJob {
 		let found = this.#require(input.channelId, input.jobId);
 		let target = this.#targets.get(key(found.channelId, found.targetKey));
 		if (
-			found.revision !== input.expectedRevision
+			"expectedRevision" in input && found.revision !== input.expectedRevision
 			|| !allowed.includes(found.state)
 			|| target?.generation !== found.targetGeneration
 		) throw conflict(`background job ${found.id} changed`);

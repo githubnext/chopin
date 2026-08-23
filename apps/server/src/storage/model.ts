@@ -226,6 +226,21 @@ export type UpdateAgentContext = {
 
 export type BackgroundJobOrigin = "scheduler" | "planner" | "user";
 
+export const BACKGROUND_JOB_PROGRESS_LIMIT = 32;
+export const BACKGROUND_JOB_PROGRESS_LABEL_LIMIT = 160;
+
+export type BackgroundJobProgressState = "started" | "completed" | "interrupted";
+
+export type BackgroundJobProgress = {
+	revision: number;
+	attempt: number;
+	stage: string;
+	label: string;
+	state: BackgroundJobProgressState;
+	reason?: string;
+	createdAt: Date;
+};
+
 export type BackgroundJobState =
 	| "pending"
 	| "paused"
@@ -256,6 +271,7 @@ export type BackgroundJob = {
 	claimExpiresAt: Date | undefined;
 	availableAt: Date;
 	reason: string | undefined;
+	progress: BackgroundJobProgress[];
 	createdAt: Date;
 	updatedAt: Date;
 };
@@ -337,6 +353,13 @@ export type RenewBackgroundJob = ClaimedBackgroundJob & {
 	claimBinding: JsonValue | undefined;
 };
 
+export type AppendBackgroundJobProgress = ClaimedBackgroundJob & {
+	stage: string;
+	label: string;
+	state: BackgroundJobProgressState;
+	reason?: string;
+};
+
 export type SettleBackgroundJob = ClaimedBackgroundJob & {
 	artifact: JsonValue;
 };
@@ -358,6 +381,8 @@ export type ControlBackgroundJob = {
 	now: Date;
 	lease: Lease;
 };
+
+export type CancelBackgroundJob = Omit<ControlBackgroundJob, "expectedRevision">;
 
 export type PauseBackgroundJob = ControlBackgroundJob & { reason: string };
 export type ResumeBackgroundJob = ControlBackgroundJob & { availableAt: Date };

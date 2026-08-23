@@ -4,6 +4,7 @@ import type {
 	BackgroundJobCursor,
 	BackgroundJobDetail,
 	BackgroundJobOrigin,
+	BackgroundJobProgress,
 	BackgroundJobState,
 	BackgroundJobSummary,
 	BackgroundJobTarget,
@@ -45,6 +46,8 @@ export type JobMutation = {
 	expectedRevision: number;
 };
 
+export type JobIdentity = Pick<JobMutation, "channelId" | "jobId">;
+
 export type SettleJob = Omit<ClaimedBackgroundJob, "lease" | "now"> & {
 	artifact: JsonValue;
 	guard?: () => Promise<boolean>;
@@ -64,6 +67,7 @@ export type JobView = {
 	failures: number;
 	availableAt: Date;
 	reason: string | undefined;
+	progress: BackgroundJobProgress[];
 	createdAt: Date;
 	updatedAt: Date;
 	subject?: string;
@@ -242,6 +246,7 @@ function view(value: BackgroundJob | BackgroundJobSummary): JobView {
 		failures: value.failures,
 		availableAt: new Date(value.availableAt),
 		reason: value.reason,
+		progress: value.progress.map(entry => ({ ...entry, createdAt: new Date(entry.createdAt) })),
 		createdAt: new Date(value.createdAt),
 		updatedAt: new Date(value.updatedAt),
 		...(subject ? { subject } : {}),
@@ -361,7 +366,7 @@ export class JobService {
 		return view(saved);
 	}
 
-	async cancel(request: JobMutation): Promise<JobView> {
+	async cancel(request: JobIdentity): Promise<JobView> {
 		let saved = await this.#storage.jobs.cancel({
 			...request,
 			now: this.#time(),

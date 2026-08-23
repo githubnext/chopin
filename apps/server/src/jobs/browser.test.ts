@@ -61,12 +61,12 @@ describe("browser background jobs", () => {
 			expect(listed.jobs).toHaveLength(1);
 			expect("input" in listed.jobs[0]!).toBe(false);
 			expect(listed.jobs[0]!.subject).toBe("What changed?");
+			expect(listed.jobs[0]!.progress).toEqual([]);
 			expect((await getJob(service, context.channel.id, assigned.job.id)).detail).toBeDefined();
 			let cancelled = await cancelResearchJob(
 				service,
 				context.channel.id,
 				assigned.job.id,
-				assigned.job.revision,
 			);
 			expect(cancelled.job.state).toBe("cancelled");
 		} finally {
@@ -85,7 +85,24 @@ describe("browser background jobs", () => {
 			});
 			await expect(assignResearchQuestion(service, context.plan, "bad", crypto.randomUUID()))
 				.rejects.toThrow("invalid");
-			await expect(cancelResearchJob(service, context.channel.id, "missing", 1))
+			await expect(cancelResearchJob(service, context.channel.id, "missing"))
+				.rejects.toThrow("not cancellable");
+			let now = new Date();
+			let scheduler = await context.storage.jobs.enqueue({
+				id: crypto.randomUUID(),
+				channelId: context.channel.id,
+				type: "research-question",
+				version: 1,
+				origin: "scheduler",
+				targetKey: `research-question:${ID}`,
+				idempotencyKey: crypto.randomUUID(),
+				fingerprint: crypto.randomUUID(),
+				input: { questionId: ID },
+				availableAt: now,
+				now,
+				lease: context.lease,
+			});
+			await expect(cancelResearchJob(service, context.channel.id, scheduler.job.id))
 				.rejects.toThrow("not cancellable");
 		} finally {
 			await Plan.close(context.plan);

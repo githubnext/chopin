@@ -1,6 +1,6 @@
 import { describe, expect, it, spyOn } from "bun:test";
 
-import { JobRegistry } from "./registry";
+import { JobExecutionError, JobRegistry } from "./registry";
 import { JobService } from "./service";
 import { MemoryStorage } from "../storage/memory/adapter";
 
@@ -67,9 +67,26 @@ async function context(): Promise<{
 }
 
 describe("background job registry", () => {
+	it("bounds machine-readable execution diagnostics", () => {
+		let error = new JobExecutionError("public-session-failed", {
+			diagnostic: { stage: "public", phase: "waiting", webCalls: 1, resultSubmitted: false },
+		});
+		expect(error.diagnostic).toEqual({
+			stage: "public",
+			phase: "waiting",
+			webCalls: 1,
+			resultSubmitted: false,
+		});
+		expect(() =>
+			new JobExecutionError("public-session-failed", {
+				diagnostic: { detail: "https://private.example/path" },
+			})
+		).toThrow("diagnostic is invalid");
+	});
+
 	it("keeps one immutable contract per version and selects the newest", () => {
 		let first = definition(1);
-		let second = definition(2);
+		let second = { ...definition(2), progress: { work: "Doing bounded work" } };
 		let registry = new JobRegistry([second, first]);
 
 		expect(registry.current("test-report")?.version).toBe(2);
@@ -80,6 +97,11 @@ describe("background job registry", () => {
 			.toThrow();
 		expect(registry.current("test-report")?.version).toBe(2);
 		expect(() => registry.register(first)).toThrow("already registered");
+		expect(
+			() => ((registry.current("test-report")!.progress as Record<string, string>).work =
+				"changed"),
+		)
+			.toThrow();
 	});
 
 	it("rejects malformed or unbounded definitions", () => {
@@ -92,6 +114,10 @@ describe("background job registry", () => {
 		).toThrow("positive integer");
 		expect(() => new JobRegistry([{ ...definition(), origins: ["user", "user"] }]))
 			.toThrow("distinct");
+		expect(() => new JobRegistry([{ ...definition(), progress: { "Bad stage": "Work" } }]))
+			.toThrow("progress stage");
+		expect(() => new JobRegistry([{ ...definition(), progress: {} }]))
+			.toThrow("progress stages");
 	});
 });
 
@@ -228,7 +254,6 @@ describe("background job service", () => {
 			let cancelled = await service.cancel({
 				channelId,
 				jobId: resumed.id,
-				expectedRevision: resumed.revision,
 			});
 			expect(cancelled.state).toBe("cancelled");
 			expect(warning).toHaveBeenCalled();

@@ -6,6 +6,10 @@ import type {
 	PermissionRequestResult,
 } from "@github/copilot-sdk";
 
+export const PUBLIC_WEB_SEARCH_SERVER = "github-mcp-server";
+export const PUBLIC_WEB_SEARCH_TOOL = "web_search";
+export const PUBLIC_WEB_SEARCH_FILTER = `mcp:${PUBLIC_WEB_SEARCH_TOOL}`;
+
 function deny(feedback: string): PermissionRequestResult {
 	return { kind: "reject", feedback };
 }
@@ -70,6 +74,7 @@ export function terminalGate(
 export function publicResearchGate(
 	resultTool: string,
 	active?: () => Promise<boolean>,
+	onWebSearchDenied?: () => void,
 ): PermissionHandler {
 	return async (request: PermissionRequest): Promise<PermissionRequestResult> => {
 		if (active && !(await active())) return deny("The Copilot owner is no longer active.");
@@ -79,9 +84,11 @@ export function publicResearchGate(
 				: deny("This worker may only submit its registered research result.");
 		}
 		if (request.kind === "mcp") {
-			return request.serverName === "github"
-					&& request.readOnly
-					&& request.toolName === "web_search"
+			let allowed = request.serverName === PUBLIC_WEB_SEARCH_SERVER
+				&& request.readOnly
+				&& request.toolName === PUBLIC_WEB_SEARCH_TOOL;
+			if (!allowed && request.toolName === PUBLIC_WEB_SEARCH_TOOL) onWebSearchDenied?.();
+			return allowed
 				? allow()
 				: deny("Only the exact read-only public web search tool is available.");
 		}

@@ -14,6 +14,17 @@ export declare namespace Job {
 		| "superseded";
 
 	export type Origin = "scheduler" | "planner" | "user";
+	export type ProgressState = "started" | "completed" | "interrupted";
+
+	export type Progress = {
+		revision: number;
+		attempt: number;
+		stage: string;
+		label: string;
+		state: ProgressState;
+		reason?: string;
+		createdAt: string;
+	};
 
 	export type View = {
 		id: string;
@@ -28,6 +39,7 @@ export declare namespace Job {
 		failures: number;
 		availableAt: string;
 		reason?: string;
+		progress: Progress[];
 		createdAt: string;
 		updatedAt: string;
 		subject?: string;
@@ -80,7 +92,7 @@ export declare namespace Job {
 	}
 
 	export namespace Cancel {
-		export type Ask = KIND<"job:cancel"> & { id: string; expectedRevision: number };
+		export type Ask = KIND<"job:cancel"> & { id: string };
 		export type Reply = KIND<"job:cancel"> & { job: View };
 	}
 }

@@ -18,6 +18,7 @@ function job(over: Partial<Job.View> = {}): Job.View {
 		attempts: 0,
 		failures: 0,
 		availableAt: "2026-08-21T12:00:00.000Z",
+		progress: [],
 		createdAt: "2026-08-21T12:00:00.000Z",
 		updatedAt: "2026-08-21T12:00:00.000Z",
 		...over,
@@ -54,7 +55,20 @@ describe("background job store", () => {
 		let store = new JobStore();
 		let wire = new FakeWire();
 		let first = job();
-		let second = { ...first, state: "running" as const, revision: 2 };
+		let second = {
+			...first,
+			state: "running" as const,
+			revision: 2,
+			attempts: 1,
+			progress: [{
+				revision: 2,
+				attempt: 1,
+				stage: "public-web",
+				label: "Public web research",
+				state: "started" as const,
+				createdAt: "2026-08-21T12:00:01.000Z",
+			}],
+		};
 		wire.replies.push(
 			{ kind: "job:list", revision: 1, jobs: [first], truncated: false },
 			{ kind: "job:list", revision: 2, jobs: [second], truncated: false },
@@ -65,6 +79,7 @@ describe("background job store", () => {
 		wire.emit<Job.Changed>("job:changed", { kind: "job:changed", ts: 0, revision: 2 });
 		await waitFor(() => store.snapshot.revision === 2);
 		expect(store.snapshot.jobs[0]?.state).toBe("running");
+		expect(store.snapshot.jobs[0]?.progress[0]?.label).toBe("Public web research");
 		expect(wire.requests.map(request => request.kind)).toEqual(["job:list", "job:list"]);
 		off();
 	});
@@ -88,7 +103,6 @@ describe("background job store", () => {
 			{ kind: "job:assign", repeated: false, job: pending },
 			{ kind: "job:list", revision: 1, jobs: [pending], truncated: false },
 			{ kind: "job:get", detail: { revision: 1, currentTargetGeneration: 1, job: pending } },
-			{ kind: "job:get", detail: { revision: 1, currentTargetGeneration: 1, job: pending } },
 			{ kind: "job:cancel", job: cancelled },
 			{ kind: "job:list", revision: 2, jobs: [cancelled], truncated: false },
 		);
@@ -101,7 +115,6 @@ describe("background job store", () => {
 		expect(wire.requests.map(request => request.kind)).toEqual([
 			"job:assign",
 			"job:list",
-			"job:get",
 			"job:get",
 			"job:cancel",
 			"job:list",

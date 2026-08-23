@@ -84,7 +84,7 @@ applied migration. The application schema contains:
 | `storage_leases`           | Renewable named leases and fencing tokens.                                                                       |
 | `background_job_channels`  | Job-state revision per channel, independent of collaboration counters.                                           |
 | `background_job_targets`   | Current generation for each registered channel job target.                                                       |
-| `background_jobs`          | Versioned requests, lifecycle, attempts, fenced claims, bounded inputs, and sanitized failures.                  |
+| `background_jobs`          | Versioned requests, lifecycle, attempts, fenced claims, bounded progress, inputs, and sanitized failures.        |
 | `background_job_artifacts` | Immutable validated results committed atomically with job completion.                                            |
 
 Channel titles have a case-insensitive unique constraint within each repository.

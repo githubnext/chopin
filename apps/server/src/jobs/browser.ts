@@ -1,6 +1,5 @@
 import * as Plan from "../plan/service";
 import { researchQuestionSnapshot } from "./research-question";
-import { StorageError } from "../storage/errors";
 
 import type { Job } from "@chopin/protocol";
 import type { Plan as OpenPlan } from "../plan/service";
@@ -23,6 +22,10 @@ export function jobView(value: JobView): Job.View {
 		failures: value.failures,
 		availableAt: value.availableAt.toISOString(),
 		...(value.reason ? { reason: value.reason } : {}),
+		progress: value.progress.map(entry => ({
+			...entry,
+			createdAt: entry.createdAt.toISOString(),
+		})),
 		createdAt: value.createdAt.toISOString(),
 		updatedAt: value.updatedAt.toISOString(),
 		...(value.subject ? { subject: value.subject } : {}),
@@ -100,7 +103,6 @@ export async function cancelResearchJob(
 	service: JobService,
 	channelId: string,
 	id: string,
-	expectedRevision: number,
 ): Promise<Job.Cancel.Reply> {
 	let found = await service.get(channelId, id);
 	if (
@@ -109,14 +111,6 @@ export async function cancelResearchJob(
 		|| found.job.origin !== "user"
 		|| found.job.targetGeneration !== found.target.generation
 	) throw new Error("research job is not cancellable");
-	let saved: JobView;
-	try {
-		saved = await service.cancel({ channelId, jobId: id, expectedRevision });
-	} catch (err) {
-		if (!(err instanceof StorageError) || err.failure !== "conflict") throw err;
-		let latest = await service.get(channelId, id);
-		if (!latest || latest.job.state === "completed" || latest.job.state === "cancelled") throw err;
-		saved = await service.cancel({ channelId, jobId: id, expectedRevision: latest.job.revision });
-	}
+	let saved: JobView = await service.cancel({ channelId, jobId: id });
 	return { kind: "job:cancel", ts: 0, job: jobView(saved) };
 }

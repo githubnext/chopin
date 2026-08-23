@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { StorageError } from "./errors";
+import { BACKGROUND_JOB_PROGRESS_LIMIT } from "./model";
 
 import type { EnqueueBackgroundJob, JsonValue, Lease } from "./model";
 import type { StorageAdapter } from "./port";
@@ -1110,7 +1111,6 @@ export function storageContract(name: string, factory: Factory): void {
 				await expect(storage.jobs.cancel({
 					channelId,
 					jobId: completed.job.id,
-					expectedRevision: completed.job.revision,
 					now: new Date(now.getTime() + 11),
 					lease,
 				})).rejects.toMatchObject({ failure: "conflict" });
@@ -1171,6 +1171,146 @@ export function storageContract(name: string, factory: Factory): void {
 				expect(nextLease).toBeDefined();
 				await expect(storage.jobs.enqueue(backgroundJob(channelId, lease)))
 					.rejects.toMatchObject({ failure: "conflict" });
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("persists bounded progress only for the active background claim", async () => {
+			let storage = await opened(factory);
+			try {
+				let { channelId, lease } = await userAndChannel(storage);
+				let now = new Date("2026-01-06T03:04:05.000Z");
+				let queued = (await storage.jobs.enqueue(backgroundJob(channelId, lease, { now }))).job;
+				let [firstClaim] = await storage.jobs.claim({
+					channelId,
+					claimOwner: "progress-worker-1",
+					count: 1,
+					ttlMs: 60_000,
+					now: new Date(now.getTime() + 1),
+					lease,
+				});
+				expect(firstClaim!.progress).toEqual([]);
+				let beforeInvalid = (await storage.jobs.list(channelId, 10))!.revision;
+				await expect(storage.jobs.appendProgress({
+					channelId,
+					jobId: queued.id,
+					claimOwner: "progress-worker-1",
+					claimGeneration: firstClaim!.claimGeneration,
+					stage: "invalid stage",
+					label: "Invalid",
+					state: "started",
+					now: new Date(now.getTime() + 2),
+					lease,
+				})).rejects.toMatchObject({ failure: "conflict" });
+				expect((await storage.jobs.list(channelId, 10))!.revision).toBe(beforeInvalid);
+				await expect(storage.jobs.appendProgress({
+					channelId,
+					jobId: queued.id,
+					claimOwner: "progress-worker-1",
+					claimGeneration: firstClaim!.claimGeneration,
+					stage: "public-web",
+					label: "Public web research",
+					state: "interrupted",
+					now: new Date(now.getTime() + 2),
+					lease,
+				})).rejects.toMatchObject({ failure: "conflict" });
+				expect((await storage.jobs.list(channelId, 10))!.revision).toBe(beforeInvalid);
+				await expect(storage.jobs.appendProgress({
+					channelId,
+					jobId: queued.id,
+					claimOwner: "progress-worker-1",
+					claimGeneration: firstClaim!.claimGeneration + 1,
+					stage: "public-web",
+					label: "Public web research",
+					state: "started",
+					now: new Date(now.getTime() + 2),
+					lease,
+				})).rejects.toMatchObject({ failure: "conflict" });
+				let firstProgress = await storage.jobs.appendProgress({
+					channelId,
+					jobId: queued.id,
+					claimOwner: "progress-worker-1",
+					claimGeneration: firstClaim!.claimGeneration,
+					stage: "public-web",
+					label: "Public web research",
+					state: "started",
+					now: new Date(now.getTime() + 2),
+					lease,
+				});
+				expect(firstProgress.progress).toMatchObject([{
+					attempt: 1,
+					stage: "public-web",
+					label: "Public web research",
+					state: "started",
+				}]);
+				let interrupted = await storage.jobs.appendProgress({
+					channelId,
+					jobId: queued.id,
+					claimOwner: "progress-worker-1",
+					claimGeneration: firstClaim!.claimGeneration,
+					stage: "public-web",
+					label: "Public web research",
+					state: "interrupted",
+					reason: "attempt-error",
+					now: new Date(now.getTime() + 3),
+					lease,
+				});
+				expect(interrupted.progress.at(-1)).toMatchObject({
+					state: "interrupted",
+					reason: "attempt-error",
+				});
+				await storage.jobs.requeue({
+					channelId,
+					jobId: queued.id,
+					claimOwner: "progress-worker-1",
+					claimGeneration: firstClaim!.claimGeneration,
+					availableAt: new Date(now.getTime() + 3),
+					reason: "retry",
+					countFailure: true,
+					now: new Date(now.getTime() + 4),
+					lease,
+				});
+				let [secondClaim] = await storage.jobs.claim({
+					channelId,
+					claimOwner: "progress-worker-2",
+					count: 1,
+					ttlMs: 60_000,
+					now: new Date(now.getTime() + 5),
+					lease,
+				});
+				let current = await storage.jobs.appendProgress({
+					channelId,
+					jobId: queued.id,
+					claimOwner: "progress-worker-2",
+					claimGeneration: secondClaim!.claimGeneration,
+					stage: "public-web",
+					label: "Public web research",
+					state: "started",
+					now: new Date(now.getTime() + 6),
+					lease,
+				});
+				expect(current.progress.map(entry => entry.attempt)).toEqual([1, 1, 2]);
+				for (let index = 0; index < BACKGROUND_JOB_PROGRESS_LIMIT; index++) {
+					current = await storage.jobs.appendProgress({
+						channelId,
+						jobId: queued.id,
+						claimOwner: "progress-worker-2",
+						claimGeneration: secondClaim!.claimGeneration,
+						stage: `step-${index}`,
+						label: `Progress step ${index}`,
+						state: index % 2 === 0 ? "started" : "completed",
+						now: new Date(now.getTime() + 7 + index),
+						lease,
+					});
+				}
+				expect(current.progress).toHaveLength(BACKGROUND_JOB_PROGRESS_LIMIT);
+				expect(current.progress.at(-1)?.stage).toBe(`step-${BACKGROUND_JOB_PROGRESS_LIMIT - 1}`);
+				let page = await storage.jobs.list(channelId, 10);
+				expect(page!.jobs[0]!.progress).toEqual(current.progress);
+				page!.jobs[0]!.progress[0]!.label = "mutated";
+				expect((await storage.jobs.get(channelId, queued.id))!.job.progress[0]!.label)
+					.not.toBe("mutated");
 			} finally {
 				await storage.close();
 			}
