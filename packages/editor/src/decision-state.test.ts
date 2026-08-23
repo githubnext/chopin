@@ -39,7 +39,7 @@ describe("decision attention", () => {
 		);
 	});
 
-	it.each(["plan", "decisions"] as const)(
+	it.each(["plan", "decisions", "background-work"] as const)(
 		"keeps a saved %s preference out of an opening transition until prose exists",
 		preference => {
 			let state: DecisionViewState = { phase: "initial", preferred: preference };
@@ -54,7 +54,7 @@ describe("decision attention", () => {
 		},
 	);
 
-	it.each(["plan", "decisions"] as const)(
+	it.each(["plan", "decisions", "background-work"] as const)(
 		"does not re-enter forced Decisions after opening prose is removed with a saved %s preference",
 		preference => {
 			let state: DecisionViewState = { phase: "initial", preferred: preference };

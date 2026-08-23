@@ -3,6 +3,7 @@ import { documentPath } from "@chopin/protocol/document-url";
 import {
 	advanceDecisionView,
 	aggregateJobs,
+	BackgroundWork,
 	countUnanswered,
 	currentJobs,
 	cursor,
@@ -11,7 +12,6 @@ import {
 	JobStore,
 	PlanEditor,
 	QuestionnaireStore,
-	Tasks,
 	ThreadStore,
 	useHasPlanContent,
 	useJobs,
@@ -29,7 +29,7 @@ import { NavigationIcon } from "./project-sidebar";
 import { peopleHere } from "./presence";
 import { Wire } from "./wire";
 import { HEADING, useWorkspaceMode, useWorkspaceState, Workspace } from "./workspace";
-import { presentWorkspace } from "./workspace-model";
+import { availableDocumentView, presentWorkspace, storedDocumentView } from "./workspace-model";
 
 import type { Session } from "@chopin/protocol";
 import type { DecisionView, DecisionViewState } from "@chopin/editor";
@@ -123,17 +123,20 @@ export function RoomWorkspace(
 	let entries = useQuestionnaires(questions);
 	let unanswered = countUnanswered(entries);
 	let jobSnapshot = useJobs(jobs);
-	let jobAggregate = aggregateJobs(jobSnapshot.jobs);
-	let currentJobCount = currentJobs(jobSnapshot.jobs).length;
+	let backgroundAggregate = aggregateJobs(jobSnapshot.jobs);
+	let backgroundWorkCount = currentJobs(jobSnapshot.jobs).length;
 	let hasPlanContent = useHasPlanContent(questions);
 	let [decisionView, setDecisionView] = useState<DecisionViewState>(() => {
 		let stored = localStorage.getItem("chopin:view:document");
 		return {
 			phase: "initial",
-			preferred: stored === "decisions" || stored === "tasks" ? stored : "plan",
+			preferred: storedDocumentView(stored),
 		};
 	});
-	let view = visibleDecisionView(decisionView, hasPlanContent, unanswered);
+	let view = availableDocumentView(
+		visibleDecisionView(decisionView, hasPlanContent, unanswered),
+		capabilities.backgroundJobs,
+	);
 	let previousUnanswered = useRef(unanswered);
 	let [attention, setAttention] = useState(false);
 	let workspacePresentation = presentWorkspace(workspace, mode, view);
@@ -183,7 +186,7 @@ export function RoomWorkspace(
 	let selectView = (next: DecisionView, revealFirst = true) => {
 		setDecisionView(state => ({
 			...state,
-			...(next === "tasks" ? { phase: "complete" as const } : {}),
+			...(next === "background-work" ? { phase: "complete" as const } : {}),
 			preferred: next,
 		}));
 		if (hasPlanContent) localStorage.setItem("chopin:view:document", next);
@@ -195,7 +198,7 @@ export function RoomWorkspace(
 		}
 	};
 
-	let selectDestination = (destination: "plan" | "decisions" | "tasks") => {
+	let selectDestination = (destination: "plan" | "decisions" | "background-work") => {
 		selectView(destination, mode === "split");
 		dispatch({ type: "set-conversation", open: false });
 	};
@@ -247,7 +250,7 @@ export function RoomWorkspace(
 				setCapabilities({ backgroundJobs: frame.backgroundJobs, webResearch: frame.webResearch });
 				if (!frame.backgroundJobs) {
 					setDecisionView(state =>
-						state.preferred === "tasks"
+						state.preferred === "background-work"
 							? { phase: "complete", preferred: "plan" }
 							: state
 					);
@@ -283,10 +286,10 @@ export function RoomWorkspace(
 				/>
 			}
 			conversationActivity={conversationActivity}
-			taskActivity={{
-				active: jobAggregate.active,
-				paused: jobAggregate.paused,
-				failed: jobAggregate.failed,
+			backgroundActivity={{
+				active: backgroundAggregate.active,
+				paused: backgroundAggregate.paused,
+				failed: backgroundAggregate.failed,
 			}}
 			header={
 				<Header
@@ -299,9 +302,9 @@ export function RoomWorkspace(
 			controls={
 				<DecisionViewControl
 					attention={attention}
+					backgroundWork={backgroundWorkCount}
+					backgroundWorkEnabled={capabilities.backgroundJobs}
 					onView={selectDestination}
-					tasks={currentJobCount}
-					tasksEnabled={capabilities.backgroundJobs}
 					unanswered={unanswered}
 					view={view}
 				/>
@@ -335,12 +338,12 @@ export function RoomWorkspace(
 					wire={wire}
 				/>
 			}
-			tasks={capabilities.backgroundJobs
+			backgroundWork={capabilities.backgroundJobs
 				? (
-					<Tasks
+					<BackgroundWork
 						canEdit={effectiveCanEdit}
 						connected={status === "connected"}
-						headingId={HEADING.tasks}
+						headingId={HEADING["background-work"]}
 						store={jobs}
 					/>
 				)

@@ -56,6 +56,19 @@ describe("adaptive workspace", () => {
 		expect(presentWorkspace(state, "split", "plan").conversationVisible).toBe(true);
 	});
 
+	it("restores Background Work after compact Conversation closes", () => {
+		let state: WorkspaceState = {
+			conversationOpen: true,
+			desktopConversationOpen: false,
+		};
+		state = transitionWorkspace(state, { type: "set-conversation", open: false });
+		expect(presentWorkspace(state, "compact", "background-work")).toMatchObject({
+			documentView: "background-work",
+			documentVisible: true,
+			conversationVisible: false,
+		});
+	});
+
 	it("shows Conversation as the only compact destination on tablets", () => {
 		let state: WorkspaceState = {
 			conversationOpen: true,

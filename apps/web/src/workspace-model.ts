@@ -1,6 +1,8 @@
+import type { DecisionView } from "@chopin/editor";
+
 export type WorkspaceMode = "compact" | "split";
 
-export type WorkspaceDestination = "plan" | "decisions" | "tasks" | "conversation";
+export type WorkspaceDestination = "plan" | "decisions" | "background-work" | "conversation";
 
 export type WorkspaceState = {
 	conversationOpen: boolean;
@@ -12,6 +14,16 @@ export type WorkspaceEvent =
 	| { type: "set-desktop-conversation"; open: boolean };
 
 export const WORKSPACE_MEDIA = ["(max-width: 1023px)"] as const;
+
+export function storedDocumentView(value: string | null): DecisionView {
+	if (value === "decisions" || value === "background-work") return value;
+	if (value === "tasks") return "background-work";
+	return "plan";
+}
+
+export function availableDocumentView(view: DecisionView, backgroundJobs: boolean): DecisionView {
+	return view === "background-work" && !backgroundJobs ? "plan" : view;
+}
 
 /** Classify the same media queries the subscription observes. */
 export function workspaceMode(matchMedia: (query: string) => { matches: boolean }): WorkspaceMode {
@@ -26,7 +38,7 @@ export function transitionWorkspace(state: WorkspaceState, event: WorkspaceEvent
 export function presentWorkspace(
 	state: WorkspaceState,
 	mode: WorkspaceMode,
-	documentView: "plan" | "decisions" | "tasks",
+	documentView: "plan" | "decisions" | "background-work",
 ) {
 	let conversationVisible = mode === "split"
 		? state.desktopConversationOpen || state.conversationOpen

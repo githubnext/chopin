@@ -5,7 +5,7 @@ import { canCancelJob, currentJobs, useJobs } from "./jobs";
 import type { Job } from "@chopin/protocol";
 import type { JobStore } from "./jobs";
 
-export type TasksProps = {
+export type BackgroundWorkProps = {
 	store: JobStore;
 	connected: boolean;
 	canEdit: boolean;
@@ -81,7 +81,7 @@ function result(detail: Job.Detail | undefined): { title: string; summary: strin
 		: undefined;
 }
 
-function Task(
+function BackgroundJob(
 	{ canEdit, connected, job, store }: {
 		canEdit: boolean;
 		connected: boolean;
@@ -103,12 +103,12 @@ function Task(
 		if (!detail) void store.detail(job.id).catch(() => {});
 	};
 	return (
-		<article className="plan-task">
-			<div className="plan-task-heading">
+		<article className="plan-background-job">
+			<div className="plan-background-job-heading">
 				<strong>{subject}</strong>
 				<span>{job.state}{job.reason ? ` · ${job.reason}` : ""}</span>
 			</div>
-			<div className="plan-task-actions">
+			<div className="plan-background-job-actions">
 				{job.state === "completed" && (
 					<button
 						aria-expanded={open}
@@ -128,7 +128,7 @@ function Task(
 						onClick={() => {
 							setError(undefined);
 							void store.cancel(job).catch(err =>
-								setError(err instanceof Error ? err.message : "Could not cancel task.")
+								setError(err instanceof Error ? err.message : "Could not cancel background work.")
 							);
 						}}
 						type="button"
@@ -138,13 +138,13 @@ function Task(
 				)}
 			</div>
 			{progress.length > 0 && (
-				<div className="plan-task-progress-log">
+				<div className="plan-background-job-progress-log">
 					<strong>Progress</strong>
 					<ol aria-label={`Progress for ${subject}`}>
 						{progress.map(entry => (
 							<li key={`${entry.attempt}:${entry.stage}`}>
 								<span>{entry.label}</span>
-								<span className="plan-task-progress-state">
+								<span className="plan-background-job-progress-state">
 									{job.attempts > 1 ? `Attempt ${entry.attempt} · ` : ""}
 									{entry.status}
 									{entry.detail ? ` · ${entry.detail}` : ""}
@@ -155,7 +155,7 @@ function Task(
 				</div>
 			)}
 			{open && artifact && (
-				<div className="plan-task-result">
+				<div className="plan-background-job-result">
 					<h3>{artifact.title}</h3>
 					<p>{artifact.summary}</p>
 				</div>
@@ -166,17 +166,23 @@ function Task(
 	);
 }
 
-export function Tasks({ store, connected, canEdit, headingId }: TasksProps) {
+export function BackgroundWork({ store, connected, canEdit, headingId }: BackgroundWorkProps) {
 	let snapshot = useJobs(store);
 	let jobs = currentJobs(snapshot.jobs);
 	return (
-		<div className="plan-tasks">
-			<h2 id={headingId} tabIndex={-1}>Tasks &amp; Progress</h2>
+		<div className="plan-background-work">
+			<h2 id={headingId} tabIndex={-1}>Background Work</h2>
 			{!snapshot.ready && <p>Loading background work…</p>}
 			{snapshot.error && <p role="status">{snapshot.error}</p>}
 			{snapshot.ready && jobs.length === 0 && <p>No background work yet.</p>}
 			{jobs.map(job => (
-				<Task canEdit={canEdit} connected={connected} job={job} key={job.id} store={store} />
+				<BackgroundJob
+					canEdit={canEdit}
+					connected={connected}
+					job={job}
+					key={job.id}
+					store={store}
+				/>
 			))}
 			{snapshot.truncated && <p>Only the most recent background work is shown.</p>}
 		</div>

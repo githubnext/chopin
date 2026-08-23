@@ -39,7 +39,7 @@ async function expectCompactWorkspaceChrome(page: Page): Promise<void> {
 	await expect(destinations.nth(0)).toHaveAccessibleName(/^Conversation/);
 	await expect(destinations.nth(1)).toHaveAccessibleName("Document");
 	await expect(destinations.nth(2)).toHaveAccessibleName(/^Decisions/);
-	await expect(destinations.nth(3)).toHaveAccessibleName(/^Tasks/);
+	await expect(destinations.nth(3)).toHaveAccessibleName(/^Background Work/);
 
 	await expectInsideViewport(header);
 	await expectInsideViewport(projects);

@@ -125,7 +125,7 @@ attempt uses a fresh disposable SDK session. Its events, prompts, tools, and
 results never enter Conversation or recreated Planner context.
 
 Running definitions can append fixed, code-owned progress stages to their fenced
-job claim. The capped log is durable and appears in Tasks & Progress after reload
+job claim. The capped log is durable and appears in Background Work after reload
 or reconnect. It never contains model prose, prompts, private document content,
 URLs, or credentials. Interrupted stages expose only bounded reason categories
 such as unavailable web search, timeout, lost heartbeat, or unavailable owner;
