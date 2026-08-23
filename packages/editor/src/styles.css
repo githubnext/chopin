@@ -97,7 +97,7 @@
 
 .plan-background-work {
 	--plan-measure: 43.75rem;
-	--plan-gutter: 4rem;
+	--plan-gutter: clamp(1rem, 8%, 4rem);
 	width: min(100%, var(--plan-measure));
 	margin-inline: auto;
 	padding: 2rem var(--plan-gutter) 5rem;

@@ -256,7 +256,15 @@ test("the wide side of the Projects transition uses the inline sidebar", async (
 	await expect(page.getByRole("navigation", { name: "Workspace view" })).toHaveCount(0);
 	await expect(page.locator("#pane-chat")).toBeVisible();
 	await expect(page.getByRole("separator", { name: "Resize the conversation" })).toBeVisible();
-	await expect(page.getByRole("group", { name: "Document view" })).toBeVisible();
+	let documentView = page.getByRole("group", { name: "Document view" });
+	await expect(documentView).toBeVisible();
+	await expect(documentView.getByRole("button", { name: "Tasks & Progress" })).toBeDisabled();
+	let backgroundWork = documentView.getByRole("button", { name: "Background Work" });
+	await backgroundWork.scrollIntoViewIfNeeded();
+	await expectInsideViewport(backgroundWork);
+	await backgroundWork.click();
+	await expect(backgroundWork).toBeFocused();
+	await expect(page.getByRole("heading", { name: "Background Work" })).toBeVisible();
 	await expectNoHorizontalOverflow(page);
 });
 
