@@ -51,13 +51,17 @@ and tool vocabulary remain optimized for planning.
   make its Chopin channels public.
 - Pull access can view channels. Push or administration access is required to
   create or change them and to invoke the Planner.
-- The first person to invoke the Planner supplies the GitHub App user token and
-  Copilot entitlement used for that channel. A server restart signs everyone
-  out and releases that ownership.
+- The first eligible person to invoke the Planner or start a new model-backed
+  Research Workspace turn supplies the GitHub App user token and Copilot
+  entitlement used for that channel. A server restart signs everyone out and
+  releases that ownership.
 - Document and conversation context, along with repository material selected by
-  the Planner, is sent to GitHub Copilot during a turn. GitHub credentials remain
-  process-local; documents, transcripts, decisions, and token-free session
-  records are stored in PostgreSQL.
+  the Planner, is sent to GitHub Copilot during a turn. Model-backed background
+  jobs also send job-specific private material, including context loaded during
+  execution, to isolated Copilot workers; public research sends only the exact
+  confirmed query to web search. GitHub credentials remain process-local;
+  documents, transcripts, decisions, Research Workspaces, background-job inputs
+  and artifacts, and token-free session records are stored in PostgreSQL.
 - One Chopin process may write to a database at a time. Horizontal application
   scaling and zero-downtime rolling deployment are not supported.
 
@@ -107,8 +111,9 @@ channels. Opening the channel in a second browser profile shows the multiplayer
 path.
 
 Ctrl-C stops the development supervisor. `bun run db:down` tears down the local
-Compose project. Set `AGENT=off` to prevent Planner turns; this does not
-disable the `/mcp` endpoint used by external coding agents.
+Compose project. Set `AGENT=off` to prevent Planner turns and disable the
+background-job runner; this does not disable the `/mcp` endpoint used by external
+coding agents.
 
 ## Collaborate with the Planner
 
@@ -122,10 +127,11 @@ yes, Markdown for now                  -> channel conversation
 ```
 
 Recent channel conversation is supplied as bounded context for the next turn,
-even when those messages did not address the Planner. The first eligible editor
-to invoke it owns the channel's Copilot usage until their session ends or the
-server restarts. The current web interface has no control for transferring that
-ownership manually.
+even when those messages did not address the Planner. The first eligible
+model-backed action, either a Planner turn or Research Workspace turn, claims the
+channel's Copilot usage until that owner's session ends or the server restarts.
+The current web interface has no control for transferring that ownership
+manually.
 
 ## Connect a coding agent
 
@@ -153,6 +159,7 @@ a draft graph.
 | Understand channel identity and access     | [Repository channels](docs/channels.md)                      |
 | Understand persistence                     | [Storage](docs/storage.md)                                   |
 | Review the hosted agent boundary           | [Hosted agent](docs/hosted-agent.md)                         |
+| Register durable background jobs           | [Background jobs](docs/background-jobs.md)                   |
 | Review experimental implementation handoff | [Implementation lifecycle](docs/implementation-lifecycle.md) |
 | Develop on exe.dev                         | [exe.dev development](docs/exe-dev.md)                       |
 | Test an authenticated PR preview           | [PR preview testing](docs/preview-testing.md)                |

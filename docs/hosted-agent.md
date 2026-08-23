@@ -12,16 +12,17 @@ that is an implementation limitation, not the document model's boundary.
 
 ## Ownership
 
-The first eligible editor to invoke the Planner supplies the GitHub App user
-access token and Copilot entitlement for that channel. The user must pass
-instance admission and have repository push or administration access. Ownership
-is assigned atomically in storage and guarded by a generation token.
+The first eligible editor to invoke the Planner or start a new model-backed
+Research Workspace turn supplies the GitHub App user access token and Copilot
+entitlement for that channel. The user must pass instance admission and have
+repository push or administration access. Ownership is assigned atomically in
+storage and guarded by a generation token.
 
 That process-local login owns the channel's Copilot usage until it expires, logs
 out, the server restarts, or the authenticated reset API releases it. The
 current web application does not expose a reset control. A user without Copilot
-entitlement sees the provider failure on the first turn and remains owner until
-one of those release conditions occurs.
+entitlement sees the provider failure on the first model-backed action and
+remains owner until one of those release conditions occurs.
 
 PostgreSQL stores the owner session ID only so durable ownership can refer to an
 active process session. The cookie verifier and GitHub credential remain in
@@ -93,8 +94,9 @@ every turn.
   40 entries and normally 8,000 characters. One message is retained intact even
   when it alone exceeds that character budget.
 - A recreated Copilot session receives at most the last 100 transcript entries
-  and 50,000 characters. Summary and cursor fields exist in storage, but the
-  current runtime does not advance them or generate a durable summary.
+  and 50,000 characters. Reserved Planner transcript-summary and cursor fields
+  exist in storage, but the current runtime does not advance them. Durable
+  document-summary job artifacts are separate and are not bootstrap context.
 - The Planner reads the current document through the plan-named `read_plan` tool
   instead of receiving a stale embedded copy.
 
@@ -112,58 +114,31 @@ may already have made durable document or question changes. `session.send()` onl
 accepts a message; the conversation handler remains active until the SDK emits
 its idle event.
 
-The runtime starts lazily on the first Planner turn. `AGENT=off` prevents those
-turns and avoids starting Copilot CLI. It does not disable `/mcp`, and the
-prototype UI may still contain Planner-oriented explanatory copy.
+The runtime starts lazily on the first Planner turn or model-backed worker
+attempt. `AGENT=off` prevents those turns, disables the background-job runner,
+and avoids starting Copilot CLI. It does not disable `/mcp`, and the prototype UI
+may still contain Planner-oriented explanatory copy.
 
 ## Background jobs
 
 Background jobs are durable Chopin requests, not child Planner turns. Registered
 definitions control their input and artifact codecs, enqueue origins, credential
-mode, capabilities, timeout, attempts, and AI-credit ceilings. Every model-backed
-attempt uses a fresh disposable SDK session. Its events, prompts, tools, and
-results never enter Conversation or recreated Planner context.
+mode, timeout, failure budget, declared progress, and artifact settlement. Every
+model-backed stage uses a fresh disposable SDK session. Job output is not
+automatically injected into Conversation or recreated Planner context, although
+the Planner may explicitly read an artifact in a later turn.
 
-Running definitions can append fixed, code-owned progress stages to their fenced
-job claim. The capped log is durable and appears in Background Work after reload
-or reconnect. It never contains model prose, prompts, private document content,
-URLs, or credentials. Interrupted stages expose only bounded reason categories
-such as unavailable web search, timeout, lost heartbeat, or unavailable owner;
-raw provider errors are not published. Server diagnostics contain only stage,
-phase, call/result booleans and counts, and bounded machine error codes.
+Research Workspace drafts are durable and shared with authorized parent-channel
+readers. A sidebar draft starts no model. The Planner may instead propose a draft
+during an existing explicit turn, but that tool cannot confirm or enqueue
+research. Only the exact later browser-confirmed query reaches public web search;
+private document context goes to a separate no-web worker. Reports never edit
+collaborative prose automatically.
 
-The scheduler creates revision/hash-addressed document summaries after canonical
-document commits. Source snapshots are loaded into memory for an attempt but are
-not persisted with the job. Publication rechecks the exact current document while
-holding the same mutation gate used by room opening and live edits.
-
-A writer opens a dedicated Research Workspace attached to a document. Creating a
-workspace saves a private draft; no model or public search runs until a writer
-reviews and confirms the query. Confirmation discloses only that query to the
-public GitHub Copilot web-search tool. Public search receives no private document
-or repository tools. A separate answer job receives canonical document context
-with no web capability and synthesizes bounded findings with validated HTTPS
-citations. Follow-up questions stay private unless a writer explicitly chooses
-the search-more action. Reports never edit collaborative prose automatically.
-
-The Planner's `create_research_workspace` tool may refine an explicit current
-member request into a proposed question and create the same private draft. The
-tool cannot confirm, enqueue, or search. Its draft remains editable, and only
-the exact later browser-confirmed query crosses the public-search boundary.
-
-Citation provenance comes only from successful web-search output: SDK citation
-metadata, rich citation annotations, or typed resource links. The
-server canonicalizes public HTTPS URLs but never follows, resolves, or fetches
-them, and rejects report URLs absent from the prior search output.
-
-Jobs use the channel's active Planner owner's process-local credential and
-entitlement. No token is persisted. Logout, rotation, owner reset, expiry,
-cancellation, timeout, claim loss, and target supersession synchronously revoke
-local result acceptance; durable claim generations reject every late artifact.
-`BACKGROUND_JOBS=off` disables scheduling and status surfaces. `WEB_RESEARCH=off`
-disables new public-search turns; older queued research pauses until the flag is
-restored and an owner returns. `AGENT=off` keeps persisted status and artifacts
-readable but schedules no new summaries and never starts Copilot CLI.
+Jobs with `credential: "active-planner"` use the channel's process-local Planner
+owner and entitlement, while fenced claims store no token. Full definition
+registration, lifecycle, isolation, disclosure, retry, configuration, and
+testing guidance is in [Background jobs and workers](background-jobs.md).
 
 ## Implementation graph status
 
@@ -184,3 +159,5 @@ person approve the draft. See
 - Repository-fixed tools: `apps/server/src/agent/repository.ts`
 - Ownership and conversation lifecycle: `apps/server/src/chat/service.ts`
 - GitHub App session lifecycle: `apps/server/src/auth/session.ts`
+- Background job registry and runner: `apps/server/src/jobs/registry.ts` and
+  `apps/server/src/jobs/runner.ts`
