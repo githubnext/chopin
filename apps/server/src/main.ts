@@ -19,7 +19,7 @@ import { proxy, serve } from "./client";
 import { describe, load } from "./config";
 import { GitHubError } from "./github/client";
 import { Router } from "./http/router";
-import { JobRegistry } from "./jobs/registry";
+import { JobExecutionError, JobRegistry } from "./jobs/registry";
 import * as JobBrowser from "./jobs/browser";
 import { documentSummaryDefinition } from "./jobs/document-summary";
 import { JobRunner } from "./jobs/runner";
@@ -320,7 +320,6 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 						jobService,
 						room.id,
 						frame.id,
-						frame.expectedRevision,
 					),
 				);
 			} catch (err) {
@@ -827,6 +826,15 @@ jobRunner = new JobRunner({
 	globalConcurrency: 2,
 	ownerConcurrency: 1,
 	changed: announceJobsChanged,
+	attemptFailed(job, err) {
+		let reason = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+		let diagnostic = err instanceof JobExecutionError && err.diagnostic
+			? ` diagnostic=${JSON.stringify(err.diagnostic)}`
+			: "";
+		console.warn(
+			`chopin: background job ${job.type} ${job.id} attempt ${job.attempts} failed - ${reason}${diagnostic}`,
+		);
+	},
 	fatal: err => console.error("chopin: background job runner failed -", err),
 });
 registerMcpRoutes(router, hostedAuth, {

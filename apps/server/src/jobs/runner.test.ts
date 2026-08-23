@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
-import { JobRegistry } from "./registry";
+import { JobExecutionError, JobRegistry } from "./registry";
 import { JobRunner } from "./runner";
 import { JobService } from "./service";
 import { MemoryStorage } from "../storage/memory/adapter";
 
 import type { JobDefinition } from "./registry";
-import type { ResolvedJobCredential } from "./runner";
+import type { JobRunnerOptions, ResolvedJobCredential } from "./runner";
 import type { JsonValue } from "../storage/model";
 
 function deferred<T>() {
@@ -69,6 +69,7 @@ async function setup(
 	registered: JobDefinition,
 	resolve: () => Promise<ResolvedJobCredential | undefined> = async () => undefined,
 	enabled = true,
+	attemptFailed?: JobRunnerOptions["attemptFailed"],
 ) {
 	let storage = new MemoryStorage();
 	let now = new Date();
@@ -110,6 +111,7 @@ async function setup(
 		retryBaseMs: 5,
 		retryMaxMs: 20,
 		shutdownGraceMs: 50,
+		attemptFailed,
 		fatal: err => errors.push(err),
 	});
 	return { storage, channelId, lease, service, runner, errors };
@@ -173,6 +175,325 @@ describe("background job runner", () => {
 		}
 	});
 
+	it("persists definition-owned progress while an attempt is running", async () => {
+		let release = deferred<void>();
+		let reached = deferred<void>();
+		let registered = {
+			...definition(async execution => {
+				await execution.progress("work", "started");
+				reached.resolve();
+				await release.promise;
+				await execution.progress("work", "completed");
+				return { report: "complete" };
+			}),
+			progress: { work: "Researching public evidence" },
+		};
+		let value = await setup(registered);
+		try {
+			let queued = await enqueue(value.service, value.channelId);
+			value.runner.start();
+			await reached.promise;
+			await waitFor(async () =>
+				(await value.service.get(value.channelId, queued.job.id))?.job.progress.length === 1
+			);
+			expect((await value.service.get(value.channelId, queued.job.id))!.job.progress)
+				.toMatchObject([{
+					attempt: 1,
+					stage: "work",
+					label: "Researching public evidence",
+					state: "started",
+				}]);
+			release.resolve();
+			await waitFor(async () =>
+				(await value.service.get(value.channelId, queued.job.id))?.job.state === "completed"
+			);
+			expect((await value.service.get(value.channelId, queued.job.id))!.job.progress)
+				.toMatchObject([{ state: "started" }, { state: "completed" }]);
+		} finally {
+			release.resolve();
+			await value.runner.shutdown();
+			await value.storage.close();
+		}
+	});
+
+	it("renews a claim after delayed owner resolution without reclaiming the attempt", async () => {
+		let started = deferred<void>();
+		let release = deferred<JsonValue>();
+		let registered = {
+			...definition(
+				async execution => {
+					await execution.progress("work", "started");
+					started.resolve();
+					return release.promise;
+				},
+				"active-planner",
+				2,
+				1_000,
+			),
+			progress: { work: "Long-running work" },
+		};
+		let value = await setup(
+			registered,
+			async () => {
+				await Bun.sleep(150);
+				return owner();
+			},
+		);
+		try {
+			let queued = await enqueue(value.service, value.channelId);
+			value.runner.start();
+			await started.promise;
+			await Bun.sleep(350);
+			expect(await value.service.get(value.channelId, queued.job.id)).toMatchObject({
+				job: { state: "running", attempts: 1, failures: 0, progress: [{ state: "started" }] },
+			});
+			release.resolve({ report: "complete" });
+			await waitFor(async () =>
+				(await value.service.get(value.channelId, queued.job.id))?.job.state === "completed"
+			);
+		} finally {
+			release.resolve({ report: "complete" });
+			await value.runner.shutdown();
+			await value.storage.close();
+		}
+	});
+
+	it("turns heartbeat loss into a bounded durable failure", async () => {
+		let release = deferred<JsonValue>();
+		let executions = 0;
+		let registered = {
+			...definition(
+				async execution => {
+					executions++;
+					await execution.progress("work", "started");
+					return release.promise;
+				},
+				"active-planner",
+				2,
+				1_000,
+			),
+			progress: { work: "Public web research" },
+		};
+		let value = await setup(
+			registered,
+			async () => ({
+				...owner(),
+				active: async () => {
+					throw new Error("authorization unavailable");
+				},
+			}),
+		);
+		try {
+			let queued = await enqueue(value.service, value.channelId);
+			value.runner.start();
+			await waitFor(async () =>
+				(await value.service.get(value.channelId, queued.job.id))?.job.state === "failed"
+			);
+			expect(await value.service.get(value.channelId, queued.job.id)).toMatchObject({
+				job: {
+					state: "failed",
+					attempts: 1,
+					failures: 1,
+					reason: "attempts-exhausted:heartbeat-lost",
+					progress: [{ state: "started" }, {
+						state: "interrupted",
+						reason: "heartbeat-lost",
+					}],
+				},
+			});
+			expect(executions).toBe(1);
+		} finally {
+			release.resolve({ report: "late" });
+			await value.runner.shutdown();
+			await value.storage.close();
+		}
+	});
+
+	it("shutdown preserves an in-flight heartbeat-loss transition", async () => {
+		let release = deferred<JsonValue>();
+		let aborted = deferred<void>();
+		let value = await setup(
+			definition(
+				execution => {
+					execution.signal.addEventListener("abort", () => aborted.resolve(), { once: true });
+					return release.promise;
+				},
+				"active-planner",
+				2,
+				1_000,
+			),
+			async () => ({
+				...owner(),
+				active: async () => {
+					throw new Error("authorization unavailable");
+				},
+			}),
+		);
+		try {
+			let queued = await enqueue(value.service, value.channelId);
+			value.runner.start();
+			await aborted.promise;
+			await value.runner.shutdown();
+			expect(await value.service.get(value.channelId, queued.job.id)).toMatchObject({
+				job: {
+					state: "failed",
+					failures: 1,
+					reason: "attempts-exhausted:heartbeat-lost",
+				},
+			});
+		} finally {
+			release.resolve({ report: "late" });
+			await value.runner.shutdown();
+			await value.storage.close();
+		}
+	});
+
+	it("retries heartbeat loss only after the aborted execution settles", async () => {
+		let executions = 0;
+		let validations = 0;
+		let value = await setup(
+			definition(
+				async execution => {
+					executions++;
+					if (executions > 1) return { report: "complete" };
+					return await new Promise<JsonValue>((_resolve, reject) => {
+						execution.signal.addEventListener("abort", () => reject(execution.signal.reason), {
+							once: true,
+						});
+					});
+				},
+				"active-planner",
+				2,
+				1_000,
+			),
+			async () => ({
+				...owner(),
+				active: async () => {
+					if (++validations === 1) throw new Error("authorization unavailable");
+					return true;
+				},
+			}),
+		);
+		try {
+			let queued = await enqueue(value.service, value.channelId);
+			value.runner.start();
+			await waitFor(async () =>
+				(await value.service.get(value.channelId, queued.job.id))?.job.state === "completed"
+			);
+			expect(await value.service.get(value.channelId, queued.job.id)).toMatchObject({
+				job: { state: "completed", attempts: 2, failures: 1 },
+			});
+			expect(executions).toBe(2);
+		} finally {
+			await value.runner.shutdown();
+			await value.storage.close();
+		}
+	});
+
+	it("credential rotation wins its race with owner revocation", async () => {
+		let credential = new AbortController();
+		let executions = 0;
+		let resolutions = 0;
+		let started = deferred<void>();
+		let registered = {
+			...definition(
+				async execution => {
+					executions++;
+					await execution.progress("work", "started");
+					if (executions > 1) {
+						await execution.progress("work", "completed");
+						return { report: "complete" };
+					}
+					started.resolve();
+					return await new Promise<JsonValue>((_resolve, reject) => {
+						execution.signal.addEventListener("abort", () => reject(execution.signal.reason), {
+							once: true,
+						});
+					});
+				},
+				"active-planner",
+				2,
+				1_000,
+			),
+			progress: { work: "Public web research" },
+		};
+		let value = await setup(registered, async () => {
+			let resolved = owner();
+			if (++resolutions === 1 && resolved.credential.kind === "active-planner") {
+				resolved.credential = { ...resolved.credential, signal: credential.signal };
+			}
+			return resolved;
+		});
+		try {
+			let queued = await enqueue(value.service, value.channelId);
+			value.runner.start();
+			await started.promise;
+			let rotating = value.runner.credentialsWillRotate("owner-session", 4);
+			credential.abort(new Error("credential-rotated"));
+			await rotating;
+			await waitFor(async () =>
+				(await value.service.get(value.channelId, queued.job.id))?.job.state === "completed"
+			);
+			expect(await value.service.get(value.channelId, queued.job.id)).toMatchObject({
+				job: {
+					state: "completed",
+					progress: [
+						{ state: "started" },
+						{
+							state: "interrupted",
+							reason: "credential-rotated",
+						},
+						{ state: "started" },
+						{ state: "completed" },
+					],
+				},
+			});
+		} finally {
+			await value.runner.shutdown();
+			await value.storage.close();
+		}
+	});
+
+	it("owner revocation records why active work paused", async () => {
+		let started = deferred<void>();
+		let registered = {
+			...definition(
+				async execution => {
+					await execution.progress("work", "started");
+					started.resolve();
+					return await new Promise<JsonValue>((_resolve, reject) => {
+						execution.signal.addEventListener("abort", () => reject(execution.signal.reason), {
+							once: true,
+						});
+					});
+				},
+				"active-planner",
+				2,
+				1_000,
+			),
+			progress: { work: "Public web research" },
+		};
+		let value = await setup(registered, async () => owner());
+		try {
+			let queued = await enqueue(value.service, value.channelId);
+			value.runner.start();
+			await started.promise;
+			await value.runner.ownerRevoked("owner-session");
+			expect(await value.service.get(value.channelId, queued.job.id)).toMatchObject({
+				job: {
+					state: "paused",
+					progress: [{ state: "started" }, {
+						state: "interrupted",
+						reason: "owner-unavailable",
+					}],
+				},
+			});
+		} finally {
+			await value.runner.shutdown();
+			await value.storage.close();
+		}
+	});
+
 	it("requeues a failed attempt and succeeds within its attempt limit", async () => {
 		let attempts = 0;
 		let value = await setup(definition(async () => {
@@ -194,12 +515,19 @@ describe("background job runner", () => {
 	});
 
 	it("counts timeouts as durable failures and stops at the limit", async () => {
-		let value = await setup(definition(
-			() => new Promise<JsonValue>(() => {}),
-			"none",
-			2,
-			25,
-		));
+		let registered = {
+			...definition(
+				async execution => {
+					await execution.progress("work", "started");
+					return await new Promise<JsonValue>(() => {});
+				},
+				"none",
+				2,
+				25,
+			),
+			progress: { work: "Public web research" },
+		};
+		let value = await setup(registered);
 		try {
 			let queued = await enqueue(value.service, value.channelId);
 			value.runner.start();
@@ -207,7 +535,22 @@ describe("background job runner", () => {
 				(await value.service.get(value.channelId, queued.job.id))?.job.state === "failed"
 			);
 			expect(await value.service.get(value.channelId, queued.job.id)).toMatchObject({
-				job: { failures: 2, reason: "attempts-exhausted:attempt-timeout" },
+				job: {
+					failures: 2,
+					reason: "attempts-exhausted:attempt-timeout",
+					progress: [
+						{ state: "started" },
+						{
+							state: "interrupted",
+							reason: "attempt-timeout",
+						},
+						{ state: "started" },
+						{
+							state: "interrupted",
+							reason: "attempt-timeout",
+						},
+					],
+				},
 			});
 		} finally {
 			await value.runner.shutdown();
@@ -216,13 +559,22 @@ describe("background job runner", () => {
 	});
 
 	it("turns a synchronous executor throw into a bounded failure", async () => {
-		let value = await setup(definition(
-			() => {
-				throw new Error("synchronous failure");
+		let reported: Array<{ id: string; message: string }> = [];
+		let value = await setup(
+			definition(
+				() => {
+					throw new Error("synchronous failure");
+				},
+				"none",
+				1,
+			),
+			undefined,
+			true,
+			async (job, err) => {
+				reported.push({ id: job.id, message: err instanceof Error ? err.message : "unknown" });
+				throw new Error("diagnostic failure");
 			},
-			"none",
-			1,
-		));
+		);
 		try {
 			let queued = await enqueue(value.service, value.channelId);
 			value.runner.start();
@@ -231,6 +583,41 @@ describe("background job runner", () => {
 			);
 			expect(await value.service.get(value.channelId, queued.job.id)).toMatchObject({
 				job: { failures: 1, reason: "attempts-exhausted:attempt-error" },
+			});
+			expect(reported).toEqual([{ id: queued.job.id, message: "synchronous failure" }]);
+		} finally {
+			await value.runner.shutdown();
+			await value.storage.close();
+		}
+	});
+
+	it("persists a definition-owned interruption reason", async () => {
+		let registered = {
+			...definition(
+				async execution => {
+					await execution.progress("public-web", "started");
+					throw new JobExecutionError("web-search-unavailable");
+				},
+				"none",
+				1,
+			),
+			progress: { "public-web": "Public web research" },
+		};
+		let value = await setup(registered);
+		try {
+			let queued = await enqueue(value.service, value.channelId);
+			value.runner.start();
+			await waitFor(async () =>
+				(await value.service.get(value.channelId, queued.job.id))?.job.state === "failed"
+			);
+			expect(await value.service.get(value.channelId, queued.job.id)).toMatchObject({
+				job: {
+					reason: "attempts-exhausted:web-search-unavailable",
+					progress: [{ state: "started" }, {
+						state: "interrupted",
+						reason: "web-search-unavailable",
+					}],
+				},
 			});
 		} finally {
 			await value.runner.shutdown();
@@ -353,19 +740,22 @@ describe("background job runner", () => {
 	it("cancellation prevents a blocked handler from publishing late output", async () => {
 		let result = deferred<JsonValue>();
 		let started = false;
-		let value = await setup(definition(async () => {
-			started = true;
-			return result.promise;
-		}));
+		let registered = {
+			...definition(async execution => {
+				await execution.progress("work", "started");
+				started = true;
+				return result.promise;
+			}),
+			progress: { work: "Running cancellable work" },
+		};
+		let value = await setup(registered);
 		try {
 			let queued = await enqueue(value.service, value.channelId);
 			value.runner.start();
 			await waitFor(() => started);
-			let current = await value.storage.jobs.get(value.channelId, queued.job.id);
 			await value.service.cancel({
 				channelId: value.channelId,
 				jobId: queued.job.id,
-				expectedRevision: current!.job.revision,
 			});
 			result.resolve({ report: "too late" });
 			await Bun.sleep(20);

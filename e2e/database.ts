@@ -185,6 +185,86 @@ export async function seedCompletedResearchJob(
 	});
 }
 
+export async function seedRunningResearchJob(
+	port: number,
+	channelId: string,
+	questionId: string,
+	question: string,
+): Promise<void> {
+	let now = new Date();
+	let jobId = crypto.randomUUID();
+	let targetKey = `research-question:${questionId}`;
+	let progress = [{
+		revision: 2,
+		attempt: 1,
+		stage: "public-web",
+		label: "Public web research",
+		state: "started",
+		createdAt: now.toISOString(),
+	}, {
+		revision: 3,
+		attempt: 1,
+		stage: "public-web",
+		label: "Public web research",
+		state: "interrupted",
+		reason: "research-sources-unverifiable",
+		createdAt: new Date(now.getTime() + 1).toISOString(),
+	}, {
+		revision: 4,
+		attempt: 2,
+		stage: "public-web",
+		label: "Public web research",
+		state: "started",
+		createdAt: new Date(now.getTime() + 2).toISOString(),
+	}, {
+		revision: 5,
+		attempt: 2,
+		stage: "public-web",
+		label: "Public web research",
+		state: "completed",
+		createdAt: new Date(now.getTime() + 3).toISOString(),
+	}, {
+		revision: 6,
+		attempt: 2,
+		stage: "private-document",
+		label: "Private document analysis",
+		state: "started",
+		createdAt: new Date(now.getTime() + 4).toISOString(),
+	}];
+	await sql(port, async database => {
+		await database.begin(async transaction => {
+			await transaction`
+				INSERT INTO background_job_channels (channel_id, revision) VALUES (${channelId}, 6)
+			`;
+			await transaction`
+				INSERT INTO background_job_targets (channel_id, target_key, generation)
+				VALUES (${channelId}, ${targetKey}, 1)
+			`;
+			await transaction`
+				INSERT INTO background_jobs (
+					id, channel_id, type, version, origin, target_key, target_generation,
+					idempotency_key, fingerprint, input, state, revision, attempts, failures,
+					claim_generation, claim_owner, claim_expires_at, available_at, progress,
+					created_at, updated_at
+				) VALUES (
+					${jobId}, ${channelId}, 'research-question', 1, 'user', ${targetKey}, 1,
+					${`e2e-${jobId}`}, ${`fingerprint-${jobId}`},
+					${
+				JSON.stringify({
+					questionId,
+					question,
+					questionHash: `sha256:${"0".repeat(64)}`,
+					revision: 0,
+				})
+			}::jsonb,
+					'running', 6, 2, 1, 2, 'e2e-worker', ${new Date(now.getTime() + 60_000)},
+					${now}, ${JSON.stringify(progress)}::text::jsonb, ${now}, ${new Date(now.getTime() + 4)}
+				)
+			`;
+		});
+	});
+}
+
 /** The checkpoint that `plan:open` starts from, for protocol-level browser fixtures. */
 export async function readDocument(port: number, id: string): Promise<{
 	epoch: string;

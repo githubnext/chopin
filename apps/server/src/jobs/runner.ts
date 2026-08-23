@@ -1,8 +1,9 @@
 import { StorageError } from "../storage/errors";
+import { JobExecutionError } from "./registry";
 
 import type { BackgroundJob, BackgroundJobCursor, JsonValue, Lease } from "../storage/model";
 import type { StorageAdapter } from "../storage/port";
-import type { JobExecutionCredential, JobRegistry } from "./registry";
+import type { JobDefinition, JobExecutionCredential, JobRegistry } from "./registry";
 import type { JobService, JobView } from "./service";
 
 export type ResolvedJobCredential = {
@@ -40,6 +41,7 @@ export type JobRunnerOptions = {
 	id?: () => string;
 	scheduler?: RunnerScheduler;
 	changed?: (channelId: string) => void | Promise<void>;
+	attemptFailed?: (job: Readonly<BackgroundJob>, err: unknown) => void | Promise<void>;
 	fatal?: (err: unknown) => void;
 };
 
@@ -51,6 +53,8 @@ type Attempt = {
 	heartbeat?: () => void;
 	credential?: ResolvedJobCredential;
 	releaseOwner?: () => void;
+	execution?: Promise<JsonValue>;
+	recovery?: Promise<void>;
 	done: Promise<void>;
 };
 
@@ -132,6 +136,11 @@ export class JobRunner {
 		positive(values.shutdownGraceMs, "shutdown grace");
 		if (values.heartbeatMs * 2 >= values.claimTtlMs) {
 			throw new Error("Background job runner heartbeat must be less than half the claim ttl.");
+		}
+		if (values.shutdownGraceMs + values.heartbeatMs >= values.claimTtlMs) {
+			throw new Error(
+				"Background job runner shutdown grace plus heartbeat must be less than the claim ttl.",
+			);
 		}
 		this.#options = { ...options, ...values };
 		this.#scheduler = options.scheduler ?? defaultScheduler();
@@ -243,6 +252,7 @@ export class JobRunner {
 		for (let cancel of this.#ownerRecovery.values()) cancel();
 		this.#ownerRecovery.clear();
 		let attempts = [...this.#attempts];
+		let requeue = attempts.filter(attempt => attempt.accepting);
 		for (let attempt of attempts) {
 			attempt.accepting = false;
 			attempt.heartbeat?.();
@@ -250,7 +260,10 @@ export class JobRunner {
 		}
 		return this.#shutdown = (async () => {
 			await this.#pump?.catch(() => {});
-			await Promise.all(attempts.map(attempt => this.#requeueStopped(attempt, "runner-shutdown")));
+			await Promise.all(requeue.map(attempt => this.#requeueStopped(attempt, "runner-shutdown")));
+			await Promise.allSettled(
+				attempts.flatMap(attempt => attempt.recovery ? [attempt.recovery] : []),
+			);
 			await this.#withinGrace(Promise.allSettled(attempts.map(attempt => attempt.done)));
 		})();
 	}
@@ -319,6 +332,7 @@ export class JobRunner {
 		attempt.done = this.#execute(attempt).catch(err => {
 			this.#options.fatal?.(err);
 		}).finally(async () => {
+			await attempt.recovery;
 			await attempt.mutation;
 			attempt.heartbeat?.();
 			attempt.credential?.release();
@@ -372,8 +386,8 @@ export class JobRunner {
 					void this.#pause(attempt, "owner-unavailable");
 				}, { once: true });
 			}
-			attempt.job = await this.#serial(attempt, () =>
-				this.#options.storage.jobs.renew({
+			await this.#serial(attempt, async () => {
+				attempt.job = await this.#options.storage.jobs.renew({
 					channelId: attempt.job.channelId,
 					jobId: attempt.job.id,
 					claimOwner: this.#claimOwner,
@@ -383,7 +397,9 @@ export class JobRunner {
 					ttlMs: this.#options.claimTtlMs + this.#options.heartbeatMs + 1,
 					now: this.#scheduler.now(),
 					lease: this.#options.lease(),
-				}));
+				});
+			});
+			this.#heartbeat(attempt);
 			if (!this.#accepted(attempt, credential)) return;
 			attempt.releaseOwner = await this.#owner(credential.ownerKey);
 			if (!attempt.releaseOwner) {
@@ -406,8 +422,10 @@ export class JobRunner {
 					credential: credential.credential,
 					signal: attempt.controller.signal,
 					deadline,
+					progress: (stage, state) => this.#progress(attempt, definition, stage, state),
 				})
 			);
+			attempt.execution = running;
 			void running.catch(() => {});
 			let artifact = await Promise.race([running, timedOut]).finally(timeout);
 			if (!this.#accepted(attempt, credential)) return;
@@ -448,8 +466,47 @@ export class JobRunner {
 				await this.#pause(attempt, "owner-unavailable");
 				return;
 			}
-			await this.#retry(attempt, timeout ? "attempt-timeout" : "attempt-error", true);
+			try {
+				let diagnostic = this.#options.attemptFailed?.(structuredClone(attempt.job), err);
+				void Promise.resolve(diagnostic).catch(noop);
+			} catch {
+				// Diagnostics must not change durable retry behavior.
+			}
+			let reason = err instanceof JobExecutionError ? err.progressReason : "attempt-error";
+			await this.#retry(attempt, timeout ? "attempt-timeout" : reason, true);
 		}
+	}
+
+	async #progress(
+		attempt: Attempt,
+		definition: JobDefinition,
+		stage: string,
+		state: "started" | "completed",
+	): Promise<void> {
+		let label = definition.progress?.[stage];
+		if (!label) {
+			throw new Error(`Background job ${definition.type} reported an unknown progress stage.`);
+		}
+		if (!attempt.accepting || attempt.controller.signal.aborted) {
+			throw new Error("Background job progress is no longer accepted.");
+		}
+		await this.#serial(attempt, async () => {
+			if (!attempt.accepting || attempt.controller.signal.aborted) {
+				throw new Error("Background job progress is no longer accepted.");
+			}
+			attempt.job = await this.#options.storage.jobs.appendProgress({
+				channelId: attempt.job.channelId,
+				jobId: attempt.job.id,
+				claimOwner: this.#claimOwner,
+				claimGeneration: attempt.job.claimGeneration,
+				stage,
+				label,
+				state,
+				now: this.#scheduler.now(),
+				lease: this.#options.lease(),
+			});
+		});
+		await this.#changed(attempt.job.channelId);
 	}
 
 	#heartbeat(attempt: Attempt): void {
@@ -458,29 +515,83 @@ export class JobRunner {
 			attempt.heartbeat = undefined;
 			if (!attempt.accepting || this.#stopped) return;
 			void this.#serial(attempt, async () => {
-				if (attempt.credential && !await attempt.credential.active()) {
-					throw new Error("owner-unavailable");
-				}
-				return this.#options.storage.jobs.renew({
+				attempt.job = await this.#options.storage.jobs.renew({
 					channelId: attempt.job.channelId,
 					jobId: attempt.job.id,
 					claimOwner: this.#claimOwner,
 					claimGeneration: attempt.job.claimGeneration,
 					expectedRevision: attempt.job.revision,
 					claimBinding: attempt.credential?.binding,
-					ttlMs: this.#options.claimTtlMs + 1,
+					ttlMs: this.#options.claimTtlMs + this.#options.heartbeatMs + 1,
 					now: this.#scheduler.now(),
 					lease: this.#options.lease(),
 				});
-			}).then(saved => {
-				attempt.job = saved;
+			}).then(async () => {
+				if (!attempt.accepting) return;
+				try {
+					if (
+						attempt.credential
+						&& !await this.#withinHeartbeat(attempt.credential.active())
+					) {
+						await this.#pause(attempt, "owner-unavailable");
+						return;
+					}
+				} catch {
+					this.#recoverHeartbeat(attempt);
+					return;
+				}
 				if (attempt.accepting) this.#heartbeat(attempt);
-			}, err => {
-				if (err instanceof Error && err.message === "owner-unavailable") {
-					void this.#pause(attempt, "owner-unavailable");
-				} else this.#detach(attempt, "heartbeat-lost");
+			}, () => {
+				this.#recoverHeartbeat(attempt);
 			});
 		});
+	}
+
+	async #heartbeatLost(attempt: Attempt): Promise<void> {
+		if (!attempt.accepting) return;
+		attempt.accepting = false;
+		attempt.heartbeat?.();
+		attempt.controller.abort(new Error("heartbeat-lost"));
+		let settled = !attempt.execution || await this.#settledWithinGrace(attempt.execution);
+		await this.#interrupt(attempt, "heartbeat-lost");
+		let definition = this.#options.registry.get(attempt.job.type, attempt.job.version);
+		if (!settled || !definition || attempt.job.failures + 1 >= definition.limits.maxAttempts) {
+			await this.#failStopped(attempt, "attempts-exhausted:heartbeat-lost");
+		} else await this.#requeueStopped(attempt, "heartbeat-lost", true);
+	}
+
+	#recoverHeartbeat(attempt: Attempt): void {
+		if (attempt.recovery) return;
+		attempt.recovery = this.#heartbeatLost(attempt).catch(err => {
+			this.#options.fatal?.(err);
+		});
+	}
+
+	async #interrupt(attempt: Attempt, reason: string): Promise<void> {
+		let latest = new Map<string, BackgroundJob["progress"][number]>();
+		for (let entry of attempt.job.progress) {
+			if (entry.attempt === attempt.job.attempts) latest.set(entry.stage, entry);
+		}
+		let active = [...latest.values()].findLast(entry => entry.state === "started");
+		if (!active) return;
+		try {
+			await this.#serial(attempt, async () => {
+				attempt.job = await this.#options.storage.jobs.appendProgress({
+					channelId: attempt.job.channelId,
+					jobId: attempt.job.id,
+					claimOwner: this.#claimOwner,
+					claimGeneration: attempt.job.claimGeneration,
+					stage: active.stage,
+					label: active.label,
+					state: "interrupted",
+					reason,
+					now: this.#scheduler.now(),
+					lease: this.#options.lease(),
+				});
+			});
+		} catch (err) {
+			if (!expected(err)) this.#options.fatal?.(err);
+		}
 	}
 
 	#serial<T>(attempt: Attempt, action: () => Promise<T>): Promise<T> {
@@ -500,6 +611,8 @@ export class JobRunner {
 		if (!attempt.accepting) return;
 		attempt.accepting = false;
 		attempt.heartbeat?.();
+		attempt.controller.abort(new Error(reason));
+		await this.#interrupt(attempt, reason);
 		try {
 			attempt.job = await this.#serial(attempt, () =>
 				this.#options.storage.jobs.pause({
@@ -513,8 +626,6 @@ export class JobRunner {
 			await this.#changed(attempt.job.channelId);
 		} catch (err) {
 			if (!expected(err)) this.#options.fatal?.(err);
-		} finally {
-			attempt.controller.abort(new Error(reason));
 		}
 	}
 
@@ -545,12 +656,14 @@ export class JobRunner {
 		if (!attempt.accepting) return;
 		let definition = this.#options.registry.get(attempt.job.type, attempt.job.version);
 		let failures = attempt.job.failures + (countFailure ? 1 : 0);
-		if (countFailure && definition && failures >= definition.limits.maxAttempts) {
-			await this.#fail(attempt, `attempts-exhausted:${reason}`);
-			return;
-		}
 		attempt.accepting = false;
 		attempt.heartbeat?.();
+		attempt.controller.abort(new Error(reason));
+		await this.#interrupt(attempt, reason);
+		if (countFailure && definition && failures >= definition.limits.maxAttempts) {
+			await this.#failStopped(attempt, `attempts-exhausted:${reason}`);
+			return;
+		}
 		try {
 			let availableAt = new Date(
 				this.#scheduler.now().getTime()
@@ -573,8 +686,6 @@ export class JobRunner {
 			await this.#changed(attempt.job.channelId);
 		} catch (err) {
 			if (!expected(err)) this.#options.fatal?.(err);
-		} finally {
-			attempt.controller.abort(new Error(reason));
 		}
 	}
 
@@ -626,6 +737,7 @@ export class JobRunner {
 		attempt.heartbeat?.();
 		attempt.controller.abort(new Error("attempt-timeout"));
 		let cleanup = this.#withinGrace(execution.then(() => {}, () => {}));
+		await this.#interrupt(attempt, "attempt-timeout");
 		if (attempt.job.failures + 1 >= maxAttempts) {
 			await this.#failStopped(attempt, "attempts-exhausted:attempt-timeout");
 		} else {
@@ -671,6 +783,34 @@ export class JobRunner {
 				() => {
 					cancel();
 					resolve();
+				},
+			);
+		});
+	}
+
+	async #settledWithinGrace(operation: Promise<unknown>): Promise<boolean> {
+		let settled = false;
+		let observed = operation.then(
+			() => settled = true,
+			() => settled = true,
+		);
+		await this.#withinGrace(observed);
+		return settled;
+	}
+
+	#withinHeartbeat<T>(operation: Promise<T>): Promise<T> {
+		return new Promise<T>((resolve, reject) => {
+			let cancel = this.#scheduler.after(this.#options.heartbeatMs, () => {
+				reject(new Error("owner revalidation timed out"));
+			});
+			operation.then(
+				value => {
+					cancel();
+					resolve(value);
+				},
+				err => {
+					cancel();
+					reject(err);
 				},
 			);
 		});

@@ -138,11 +138,8 @@ export class JobStore {
 		let wire = this.#required();
 		this.#pending(job.id, "cancel");
 		try {
-			let current = (await this.detail(job.id, true, false))?.job ?? job;
-			this.#pending(job.id, "cancel");
 			let reply = await wire.ask<Job.Cancel.Reply>("job:cancel", {
 				id: job.id,
-				expectedRevision: current.revision,
 			});
 			this.#upsert(reply.job);
 			return reply.job;
