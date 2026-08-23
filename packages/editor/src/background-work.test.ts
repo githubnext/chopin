@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { visibleProgress } from "./tasks";
+import { visibleProgress } from "./background-work";
 
 import type { Job } from "@chopin/protocol";
 

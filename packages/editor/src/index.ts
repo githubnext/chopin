@@ -1,3 +1,5 @@
+export { BackgroundWork } from "./background-work";
+export type { BackgroundWorkProps } from "./background-work";
 export { collaborationPlugin } from "./collaboration";
 export type { CollaborationOptions } from "./collaboration";
 export { Count } from "./count";
@@ -25,8 +27,6 @@ export {
 export type { PlanQuestionnaireState, QuestionnaireEntry } from "./questionnaires";
 export { PlanStatus } from "./status";
 export type { PlanStatusProps } from "./status";
-export { Tasks } from "./tasks";
-export type { TasksProps } from "./tasks";
 export { ThreadObserver, ThreadStore, useThreads } from "./threads";
 export type { Draft, ThreadState, ThreadView } from "./threads";
 export type { Connection, Transport, Unsubscribe } from "./transport";

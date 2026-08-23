@@ -460,6 +460,10 @@ body {
 	filter: brightness(0) invert(1);
 }
 
+.task-progress-tab:disabled {
+	background-color: transparent;
+}
+
 @media (min-width: 640px) {
 	.room-header {
 		padding-right: calc(1.25rem + env(safe-area-inset-right));
