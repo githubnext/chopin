@@ -50,6 +50,17 @@
 	text-underline-offset: 0.125rem;
 }
 
+.chat-markdown .chat-reference {
+	display: inline-block;
+	max-width: 100%;
+	border-radius: var(--radius-sm);
+	background: var(--color-brand-wash);
+	padding-inline: 0.25rem;
+	font-weight: 500;
+	text-decoration: none;
+	vertical-align: baseline;
+}
+
 .chat-markdown :not(pre) > code {
 	border-radius: var(--radius-sm);
 	background: var(--color-inset);

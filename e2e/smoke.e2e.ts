@@ -79,27 +79,31 @@ async function scriptPlanner(page: Page) {
 			try {
 				let frame = JSON.parse(message) as {
 					kind?: string;
+					rid?: string;
 					text?: string;
 					to?: Chat.Destination;
 				};
 				if (frame.kind === "chat:send") {
 					sends.push({ text: frame.text ?? "", to: frame.to! });
+					let id = `accepted-${sends.length}`;
+					let waiting = frame.to === "planner" && busy;
+					send?.({ kind: "chat:send", ts: 0, rid: frame.rid, id, queued: waiting });
 					if (frame.to === "planner") {
 						if (busy) {
 							queued = [...queued, {
-								id: `queued-${queued.length + 1}`,
+								id,
 								handle: "ana",
 								text: frame.text ?? "",
 							}];
 							send?.({ kind: "chat:queue", ts: 0, waiting: queued });
 							return;
 						}
-						announce("prompt", frame.text ?? "");
+						announce(id, frame.text ?? "");
 						start();
 						started.resolve();
 						return;
 					}
-					announce("prompt", frame.text ?? "");
+					announce(id, frame.text ?? "");
 					return;
 				}
 				if (frame.kind === "chat:abort") {
@@ -247,7 +251,7 @@ test("clicking an empty plan puts the caret at its first writing position", asyn
 test("chat uses one room-message composer when the planner is off", async ({ join }) => {
 	let page = await join("ana");
 	let chat = page.locator("#pane-chat");
-	let draft = chat.getByRole("textbox");
+	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
 	let send = chat.getByRole("button", { name: "Send message" });
 
 	await expect(chat.locator("header")).toHaveCount(0);
@@ -291,7 +295,7 @@ test("chat disables Send when its socket disconnects", async ({ join, page }) =>
 test("chat routes one Send action by @chopin without blocking room messages or its queue", async ({ join, page }) => {
 	let planner = await scriptPlanner(page);
 	let chat = (await join("ana")).locator("#pane-chat");
-	let draft = chat.getByRole("textbox");
+	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
 	let send = chat.getByRole("button", { name: "Send message" });
 
 	await draft.fill("@chopin Start the migration.");

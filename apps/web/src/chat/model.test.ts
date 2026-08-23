@@ -12,6 +12,21 @@ function working() {
 	return { id: "turn-1", started: 1_700_000_001 };
 }
 
+function reference(): Chat.Reference {
+	return {
+		id: "reference-one",
+		kind: "document",
+		channelId: "channel-one",
+		start: 4,
+		end: 9,
+		label: "#Plan",
+		href: "/documents/octo-org/score/plan",
+		repositoryId: "repository-one",
+		observedRevision: 3,
+		observedSourceHash: "sha256:plan",
+	};
+}
+
 describe("transcript groups", () => {
 	it("adds one temporary Planner message while a turn has no response", () => {
 		expect(group([], [], working())).toEqual([{
@@ -91,6 +106,19 @@ describe("transcript groups", () => {
 
 		expect(result).toHaveLength(2);
 		expect(result[1]).toMatchObject({ queued: true, messages: [{ id: "q1" }, { id: "q2" }] });
+	});
+
+	it("carries persisted references through entries and queued messages", () => {
+		let sent = { ...entry("m1", { kind: "member", handle: "ana" }), references: [reference()] };
+		let result = group(
+			[sent],
+			[{ id: "q1", handle: "ana", text: "See #Plan", references: [reference()] }],
+		);
+
+		expect(result).toMatchObject([
+			{ kind: "messages", messages: [{ id: "m1", references: [{ id: "reference-one" }] }] },
+			{ kind: "messages", messages: [{ id: "q1", references: [{ id: "reference-one" }] }] },
+		]);
 	});
 });
 

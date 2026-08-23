@@ -25,6 +25,7 @@ export type ResearchWorkspaceRouteOptions = {
 const OWNER = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
 const REPOSITORY = /^[A-Za-z0-9._-]{1,100}$/;
 const BODY_LIMIT = 32 * 1024;
+const WORKSPACE_LIST_LIMIT = 100;
 
 function json(
 	value: unknown,
@@ -227,6 +228,26 @@ export function registerResearchWorkspaceRoutes(
 					canEdit: canWrite(resolved.repository),
 					channels: listed.channels,
 					truncated: listed.truncated,
+				});
+			} catch (err) {
+				return failure(err, auth);
+			}
+		},
+	);
+
+	router.on(
+		"GET",
+		"/api/channels/:channelId/research-workspaces",
+		async (request, _url, params) => {
+			try {
+				let session = await auth.sessions.authenticate(request);
+				if (!session) return json({ error: "authentication required" }, 401);
+				let access = await channelAccess(auth, session, params.channelId!);
+				if (!access) return json({ error: "channel not found" }, 404);
+				let workspaces = await service.list(access.channel.id, WORKSPACE_LIST_LIMIT);
+				return json({
+					workspaces,
+					truncated: workspaces.length === WORKSPACE_LIST_LIMIT,
 				});
 			} catch (err) {
 				return failure(err, auth);

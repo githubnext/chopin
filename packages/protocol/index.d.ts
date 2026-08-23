@@ -63,6 +63,8 @@ export declare namespace Session {
 		canEdit: boolean;
 		backgroundJobs: boolean;
 		webResearch: boolean;
+		chatReferences: boolean;
+		chatSendAcks: boolean;
 	};
 
 	/** Durable channel metadata changed while this room was open. */

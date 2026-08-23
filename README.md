@@ -124,6 +124,8 @@ should we cover the export format?     -> channel conversation
 yes, Markdown for now                  -> channel conversation
 @chopin                                -> act on the recent conversation
 @chopin draft the export section       -> act on that request
+@chopin compare #Release plan          -> read another document, then respond here
+@chopin use %OAuth evidence             -> read this document's Research Workspace
 ```
 
 Recent channel conversation is supplied as bounded context for the next turn,
@@ -132,6 +134,12 @@ model-backed action, either a Planner turn or Research Workspace turn, claims th
 channel's Copilot usage until that owner's session ends or the server restarts.
 The current web interface has no control for transferring that ownership
 manually.
+
+Typing `#` in Conversation opens a picker for other documents in the current
+repository. Typing `%` opens Research Workspaces attached to the current
+document. Selected references retain stable identities even when their titles
+change. The Planner reads referenced documents at their latest revision and
+references never change which document its editing tools target.
 
 ## Connect a coding agent
 

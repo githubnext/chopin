@@ -98,6 +98,11 @@ export type RepositoryResearchPage = {
 	truncated: boolean;
 };
 
+export type ChannelResearchPage = {
+	workspaces: Research.WorkspaceSummary[];
+	truncated: boolean;
+};
+
 export type ResearchWorkspaceTurn = Research.Turn & {
 	evidence?: Job.Detail;
 	answer?: Job.Detail;
@@ -262,6 +267,13 @@ export function repositoryResearchWorkspaces(
 		}/research-workspaces`,
 		{ signal },
 	);
+}
+
+export function channelResearchWorkspaces(
+	channelId: string,
+	signal?: AbortSignal,
+): Promise<ChannelResearchPage> {
+	return response(`/api/channels/${encodeURIComponent(channelId)}/research-workspaces`, { signal });
 }
 
 export function createResearchWorkspace(

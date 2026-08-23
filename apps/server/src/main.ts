@@ -8,12 +8,15 @@
  */
 
 import { join } from "node:path";
+import { ulid } from "@chopin/dialect";
 import { researchWorkspacePath } from "@chopin/protocol/document-url";
 
 import * as Agent from "./agent/client";
 import { ActiveOwnerBindings } from "./agent/active-owner";
 import { registerAuthRoutes } from "./auth/routes";
 import * as Chat from "./chat/service";
+import { CHAT_CAPABILITIES, incomingFrame } from "./chat/incoming";
+import { ReferenceService } from "./chat/references";
 import { registerChannelRoutes } from "./channels/routes";
 import * as Comments from "./comments/service";
 import { proxy, serve } from "./client";
@@ -42,7 +45,6 @@ import { createStorage } from "./storage/registry";
 import { broadcast, fail, relay, reply, tell, topic } from "./wire";
 
 import type { Server } from "bun";
-import type { Incoming } from "@chopin/protocol";
 import type { DocumentSummaryInput } from "./jobs/document-summary";
 import type { JobDefinition } from "./jobs/registry";
 import type { ChannelRecord, Lease } from "./storage/model";
@@ -78,6 +80,7 @@ let cleaningSessions: Promise<void> | undefined;
 let ownerBindings: ActiveOwnerBindings | undefined;
 let jobRunner: JobRunner | undefined;
 let researchService: ResearchWorkspaceService | undefined;
+let referenceService: ReferenceService | undefined;
 let summaryCoordinator: DocumentSummaryCoordinator | undefined;
 let documentLocks = new Map<string, Promise<void>>();
 
@@ -154,6 +157,7 @@ function conversation(room: Rooms.Room, ws: Socket): Chat.Room {
 		persist: () => Service.persist(room.plan!),
 		ownerAvailable: () => jobRunner?.ownerAvailable(room.id) ?? Promise.resolve(),
 		jobs: config.backgroundJobs ? jobService : undefined,
+		references: referenceService,
 		createResearch: config.agent
 			? async request => {
 				let service = researchService;
@@ -194,12 +198,8 @@ function evict(room: Rooms.Room): void {
 }
 
 async function receive(ws: Socket, raw: string): Promise<void> {
-	let frame: Incoming;
-	try {
-		frame = JSON.parse(raw) as Incoming;
-	} catch {
-		return;
-	}
+	let frame = incomingFrame(raw);
+	if (!frame) return;
 
 	let room = Rooms.get(ws.data.room);
 	if (!room) return;
@@ -485,6 +485,7 @@ function listen(): Server<SocketData> {
 					canEdit: ws.data.canEdit,
 					backgroundJobs: config.backgroundJobs,
 					webResearch: config.webResearch,
+					...CHAT_CAPABILITIES,
 				});
 				void refreshChannelMetadata(ws, room);
 				relay(ws, { kind: "session:presence", ts: 0, members: Rooms.members(room) });
@@ -492,7 +493,10 @@ function listen(): Server<SocketData> {
 			},
 
 			message(ws: Socket, raw) {
-				if (typeof raw === "string") void receive(ws, raw);
+				if (typeof raw !== "string") return;
+				void receive(ws, raw).catch(err => {
+					console.error("chopin: WebSocket receive failed -", err);
+				});
 			},
 
 			close(ws: Socket) {
@@ -776,6 +780,12 @@ researchService = new ResearchWorkspaceService({
 	},
 	current: currentDocumentTarget,
 	publish: announceResearchChanged,
+});
+referenceService = new ReferenceService({
+	storage,
+	current: currentDocumentTarget,
+	research: researchService,
+	id: ulid,
 });
 if (config.agent && config.backgroundJobs) {
 	summaryCoordinator = new DocumentSummaryCoordinator({

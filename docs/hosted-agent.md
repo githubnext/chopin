@@ -51,6 +51,8 @@ Available capabilities are:
 - bounded file and tree reads plus commit history fixed to the default branch
   captured when the SDK session is created;
 - repository-scoped code search, post-filtered by repository node ID; and
+- bounded reads of document and Research Workspace references attached to the
+  current conversation context; and
 - repository-bound, read-only pull-request MCP calls.
 
 Issue and general search MCP tools are refused because linked objects and
@@ -99,6 +101,16 @@ every turn.
   document-summary job artifacts are separate and are not bootstrap context.
 - The Planner reads the current document through the plan-named `read_plan` tool
   instead of receiving a stale embedded copy.
+
+Conversation references are typed server-side resources, not URLs the model can
+follow. `#` selects another document in the current repository; `%` selects a
+Research Workspace attached to the current document. References persist with
+their message, but `read_reference` accepts only the bounded set retained by the
+active Planner session. A document reference reads latest canonical source and
+reports whether it changed since selection. A Research Workspace reference
+returns a bounded report, result, and thread projection. Both are untrusted
+evidence, and neither changes the room-fixed target of `read_plan` or editing
+tools.
 
 Messages from people retain their GitHub handles so disagreement is not merged
 into one anonymous user voice.

@@ -116,6 +116,12 @@ export function RoomWorkspace(
 	let [members, setMembers] = useState<Session.Member[]>([]);
 	let [effectiveCanEdit, setEffectiveCanEdit] = useState(canEdit);
 	let [capabilities, setCapabilities] = useState({ backgroundJobs: false });
+	let [chatReferences, setChatReferences] = useState<{ wire?: Wire; enabled: boolean }>({
+		enabled: false,
+	});
+	let [chatSendAcks, setChatSendAcks] = useState<{ wire?: Wire; enabled: boolean }>({
+		enabled: false,
+	});
 	let [metadata, setMetadata] = useState({ title: label, slug, updatedAt });
 	let metadataRef = useRef(metadata);
 	let user = useMemo(() => cursor(handle), [handle]);
@@ -254,6 +260,8 @@ export function RoomWorkspace(
 				setMembers(frame.members);
 				setEffectiveCanEdit(frame.canEdit);
 				setCapabilities({ backgroundJobs: frame.backgroundJobs });
+				setChatReferences({ wire: socket, enabled: frame.chatReferences === true });
+				setChatSendAcks({ wire: socket, enabled: frame.chatSendAcks === true });
 				if (!frame.backgroundJobs) {
 					setDecisionView(state =>
 						state.preferred === "background-work"
@@ -324,6 +332,10 @@ export function RoomWorkspace(
 					connected={status === "connected" && effectiveCanEdit}
 					handle={handle}
 					onActivity={onConversationActivity}
+					referencesEnabled={chatReferences.wire === wire && chatReferences.enabled}
+					repository={repository}
+					room={room}
+					sendAcknowledgements={chatSendAcks.wire === wire && chatSendAcks.enabled}
 					wire={wire}
 				/>
 			}

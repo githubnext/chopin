@@ -16,6 +16,8 @@
  * the kind of thing it has to be able to say back.
  */
 
+import { createHash } from "node:crypto";
+
 import { ulid } from "@chopin/dialect";
 
 import * as Agent from "../agent/client";
@@ -24,8 +26,8 @@ import { type ResearchWorkspaceDraft, toolbox } from "../agent/tools";
 import * as Service from "../plan/service";
 import { instruction } from "@chopin/protocol/address";
 
-import { compose, remember } from "./address";
-import { broadcast, fail, tell } from "../wire";
+import { annotatedText, compose, referenceCatalog, remember } from "./address";
+import { broadcast, fail, reply, tell } from "../wire";
 
 import type { Server } from "bun";
 import type { SessionEvent } from "@github/copilot-sdk";
@@ -36,10 +38,24 @@ import type { HostedRepository } from "../agent/repository";
 import type { JobService } from "../jobs/service";
 import type { Plan } from "../plan/service";
 import type { Said } from "./address";
+import type { ReferenceService } from "./references";
 import type { Socket, SocketData } from "../wire";
 
 /** Beyond this the queue is a backlog nobody is going to read. */
 const MAX_QUEUE = 20;
+const MAX_PENDING_SENDS = 20;
+const MAX_MESSAGE_BYTES = 64 * 1024;
+const MAX_SESSION_REFERENCES = 50;
+const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const FINGERPRINT = /^sha256:[0-9a-f]{64}$/;
+
+type Delivery = {
+	destination: Wire.Destination;
+	requestFingerprint: string;
+	canonicalFingerprint: string;
+};
+
+type MemberEntry = Wire.Entry & { delivery?: Delivery };
 
 /** How long the agent's cursor stays where it finished, after a turn ends. */
 const LINGER_MS = 5_000;
@@ -54,6 +70,7 @@ const CREDENTIAL_EXPIRY_SKEW_MS = 60_000;
  * shape stays exactly `Wire.Waiting`.
  */
 type Waiting = Wire.Waiting & {
+	delivery?: Delivery;
 	spent?: () => boolean;
 	/** True when this came from the composer rather than another instruction. */
 	message?: boolean;
@@ -86,6 +103,10 @@ export type Instruction = {
 export type Chat = {
 	entries: Wire.Entry[];
 	waiting: Waiting[];
+	/** Serializes complete member send acceptance, including asynchronous resolution and persistence. */
+	sending: Promise<void>;
+	/** Work admitted to the send FIFO, including the operation currently resolving. */
+	pendingSends: number;
 	/** The Copilot session, once somebody has prompted. */
 	agent?: Agent.Agent;
 	/** In flight while the session is being opened, so a second prompt waits. */
@@ -128,6 +149,10 @@ export type Chat = {
 	interruption?: string;
 	/** Durable context prepended once after recreating a hosted SDK session. */
 	bootstrap?: string;
+	/** Backscroll entries already represented by an opening session's bootstrap. */
+	bootstrapEntries?: Set<string>;
+	/** References available to `read_reference` in the active SDK session. */
+	referenceCache: Map<string, Wire.Reference>;
 	/**
 	 * What the room has said since the agent last ran.
 	 *
@@ -142,10 +167,13 @@ export function create(): Chat {
 	return {
 		entries: [],
 		waiting: [],
+		sending: Promise.resolve(),
+		pendingSends: 0,
 		busy: false,
 		lifecycle: 0,
 		closed: false,
 		timings: new Map(),
+		referenceCache: new Map(),
 		backscroll: [],
 	};
 }
@@ -164,16 +192,149 @@ export function restore(entries: Wire.Entry[]): Chat {
 			return rest;
 		}),
 		waiting: [],
+		sending: Promise.resolve(),
+		pendingSends: 0,
 		busy: false,
 		lifecycle: 0,
 		closed: false,
 		timings: new Map(),
+		referenceCache: new Map(),
 		backscroll: [],
 	};
 }
 
 function now(): number {
 	return Math.floor(Date.now() / 1000);
+}
+
+function digest(value: string): string {
+	return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+function requestFingerprint(msg: Request<Wire.Send>, principalId: string): string {
+	let references = Array.isArray(msg.references)
+		? msg.references.map(value => {
+			if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+			let item = value as unknown as Record<string, unknown>;
+			return Object.keys(item).sort().map(key => [key, item[key]]);
+		})
+		: msg.references ?? [];
+	return digest(JSON.stringify([principalId, msg.to, msg.text, references]));
+}
+
+function canonicalFingerprint(
+	destination: Wire.Destination,
+	text: string,
+	references: Wire.Reference[] = [],
+): string {
+	let targets = references.map(reference =>
+		reference.kind === "document"
+			? [
+				reference.kind,
+				reference.id,
+				reference.start,
+				reference.end,
+				reference.label,
+				reference.href,
+				reference.repositoryId,
+				reference.observedRevision,
+				reference.channelId,
+				reference.observedSourceHash,
+			]
+			: [
+				reference.kind,
+				reference.id,
+				reference.start,
+				reference.end,
+				reference.label,
+				reference.href,
+				reference.repositoryId,
+				reference.observedRevision,
+				reference.parentChannelId,
+				reference.workspaceId,
+			]
+	);
+	return digest(JSON.stringify([destination, text, targets]));
+}
+
+function delivery(
+	destination: Wire.Destination,
+	request: string,
+	text: string,
+	references: Wire.Reference[] = [],
+): Delivery {
+	return {
+		destination,
+		requestFingerprint: request,
+		canonicalFingerprint: canonicalFingerprint(destination, text, references),
+	};
+}
+
+function publicEntry(value: Wire.Entry): Wire.Entry {
+	let { delivery: _delivery, ...entry } = value as MemberEntry;
+	return entry;
+}
+
+export function validateDelivery(entry: Wire.Entry): void {
+	let saved = (entry as MemberEntry).delivery;
+	if (saved === undefined) return;
+	let keys = saved && typeof saved === "object" && !Array.isArray(saved)
+		? Object.keys(saved).sort()
+		: [];
+	if (
+		entry.author.kind !== "member" || !REQUEST_ID.test(entry.id)
+		|| keys.length !== 3
+		|| keys[0] !== "canonicalFingerprint"
+		|| keys[1] !== "destination"
+		|| keys[2] !== "requestFingerprint"
+		|| (saved.destination !== "room" && saved.destination !== "planner")
+		|| typeof saved.requestFingerprint !== "string" || !FINGERPRINT.test(saved.requestFingerprint)
+		|| typeof saved.canonicalFingerprint !== "string"
+		|| !FINGERPRINT.test(saved.canonicalFingerprint)
+		|| saved.canonicalFingerprint
+			!== canonicalFingerprint(saved.destination, entry.text, entry.references)
+	) throw new Error("hosted channel has invalid chat delivery metadata");
+}
+
+function replay(
+	chat: Chat,
+	ws: Socket,
+	msg: Request<Wire.Send>,
+	requestId: string,
+	fingerprint: string,
+): boolean {
+	let entries = chat.entries.filter(entry => entry.id === requestId);
+	let waiting = chat.waiting.filter(item => item.id === requestId);
+	if (entries.length === 0 && waiting.length === 0) return false;
+	if (entries.length + waiting.length !== 1) {
+		fail(ws, msg.rid, "chat request id conflicts with existing state");
+		return true;
+	}
+	let entry = entries[0];
+	let queued = waiting[0];
+	let saved = entry ? (entry as MemberEntry).delivery : queued?.delivery;
+	try {
+		if (entry) validateDelivery(entry);
+		else if (
+			!queued || !saved || !REQUEST_ID.test(queued.id)
+			|| saved.canonicalFingerprint
+				!== canonicalFingerprint(saved.destination, queued.text, queued.references)
+		) throw new Error("invalid queued delivery metadata");
+	} catch {
+		fail(ws, msg.rid, "chat request id conflicts with existing state");
+		return true;
+	}
+	if (!saved || saved.destination !== msg.to || saved.requestFingerprint !== fingerprint) {
+		fail(ws, msg.rid, "chat request id was reused with different content");
+		return true;
+	}
+	reply(ws, msg.rid, {
+		kind: "chat:send",
+		ts: 0,
+		id: (entry ?? queued)!.id,
+		queued: waiting.length === 1,
+	});
+	return true;
 }
 
 function state(chat: Chat, server: Server<SocketData>, room: string): void {
@@ -199,7 +360,12 @@ function responded(chat: Chat, server: Server<SocketData>, room: string, text: s
  * None of it belongs in the wire projection.
  */
 function visible(chat: Chat): Wire.Waiting[] {
-	return chat.waiting.map(({ handle, id, text }) => ({ handle, id, text }));
+	return chat.waiting.map(({ handle, id, text, references }) => ({
+		handle,
+		id,
+		text,
+		...(references?.length ? { references } : {}),
+	}));
 }
 
 function queued(chat: Chat, server: Server<SocketData>, room: string): void {
@@ -218,7 +384,7 @@ function say(
 }
 
 function announce(server: Server<SocketData>, room: string, entry: Wire.Entry): void {
-	broadcast(server, room, { kind: "chat:message", ts: 0, entry });
+	broadcast(server, room, { kind: "chat:message", ts: 0, entry: publicEntry(entry) });
 }
 
 /** Everything said so far, for somebody who has just arrived. */
@@ -226,7 +392,7 @@ export function greet(chat: Chat, ws: Socket): void {
 	tell(ws, {
 		kind: "chat:history",
 		ts: 0,
-		entries: chat.entries,
+		entries: chat.entries.map(publicEntry),
 		busy: chat.busy,
 		...(chat.turn ? { turn: chat.turn } : {}),
 		queued: visible(chat),
@@ -245,6 +411,7 @@ export type Room = {
 	persist: () => Promise<void>;
 	ownerAvailable?: () => Promise<void>;
 	jobs?: JobService;
+	references?: ReferenceService;
 	createResearch?: (request: {
 		entryId: string;
 		userId: string;
@@ -262,23 +429,79 @@ export type Room = {
  * the transcript exactly once. The destination, rather than its prose, decides
  * which lifecycle it takes.
  */
-export async function send(context: Room, ws: Socket, msg: Request<Wire.Send>): Promise<void> {
-	let text = msg.text.trim();
-	if (!text) return;
+export function send(context: Room, ws: Socket, msg: Request<Wire.Send>): Promise<void> {
+	if (context.chat.pendingSends >= MAX_PENDING_SENDS) {
+		fail(ws, msg.rid, "too many chat messages are waiting to be processed");
+		return Promise.resolve();
+	}
+	context.chat.pendingSends++;
+	let process = () => processSend(context, ws, msg);
+	let accepted = context.chat.sending.then(process, process);
+	let completed = accepted.finally(() => context.chat.pendingSends--);
+	context.chat.sending = completed.then(() => {}, () => {});
+	return completed;
+}
 
+async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): Promise<void> {
 	let { chat, room, server } = context;
-	if (chat.closed) return;
+	let suppliedRequestId = (msg as Request<Wire.Send> & { requestId?: unknown }).requestId;
+	if (
+		suppliedRequestId !== undefined && (
+			typeof suppliedRequestId !== "string" || !REQUEST_ID.test(suppliedRequestId)
+		)
+	) {
+		return fail(ws, msg.rid, "chat request id must be a UUIDv4");
+	}
+	// Pre-deploy browser tabs did not send request IDs. They keep legacy at-most-once behavior.
+	let requestId = suppliedRequestId ?? crypto.randomUUID();
 	let handle = ws.data.handle;
 	let destination = msg.to;
-	if (destination !== "room" && destination !== "planner") return;
-	let visible = destination === "planner" ? instruction(text) : text;
+	if (destination !== "room" && destination !== "planner") {
+		return fail(ws, msg.rid, "invalid message destination");
+	}
+	if (typeof msg.text !== "string") return fail(ws, msg.rid, "invalid message text");
+	if (Buffer.byteLength(msg.text) > MAX_MESSAGE_BYTES) {
+		return fail(ws, msg.rid, "chat message exceeds the 64 KiB limit");
+	}
+	let request = requestFingerprint(msg, ws.data.principalId);
+	if (replay(chat, ws, msg, requestId, request)) return;
+	if (chat.closed) return fail(ws, msg.rid, "conversation is closed");
+	let projected: { text: string; references?: Wire.Reference[] };
+	try {
+		if (context.references) {
+			projected = await context.references.resolve({
+				channelId: room,
+				repositoryId: context.repository.id,
+				text: msg.text,
+				destination,
+				requests: msg.references,
+			});
+		} else {
+			if (
+				msg.references !== undefined && (!Array.isArray(msg.references) || msg.references.length)
+			) {
+				return fail(ws, msg.rid, "chat references are unavailable");
+			}
+			let text = msg.text.trim();
+			projected = { text: destination === "planner" ? instruction(text) : text };
+		}
+	} catch {
+		return fail(ws, msg.rid, "invalid or unavailable chat reference");
+	}
+	let text = projected.text;
+	let references = projected.references;
+	if (!text) return fail(ws, msg.rid, "message text is empty");
+	if (chat.closed) return fail(ws, msg.rid, "conversation is closed");
+	let savedDelivery = delivery(destination, request, text, references);
 
 	if (destination === "room") {
-		let entry: Wire.Entry = {
-			id: ulid(),
+		let entry: MemberEntry = {
+			id: requestId,
 			author: { kind: "member", handle },
-			text: visible,
+			text,
 			ts: now(),
+			...(references?.length ? { references } : {}),
+			delivery: savedDelivery,
 		};
 		chat.entries.push(entry);
 		try {
@@ -287,16 +510,24 @@ export async function send(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 			chat.entries = chat.entries.filter(value => value.id !== entry.id);
 			return fail(ws, msg.rid, "could not save message");
 		}
+		reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: entry.id, queued: false });
 		announce(server, room, entry);
-		chat.backscroll = remember(chat.backscroll, { handle, text: visible });
+		chat.backscroll = remember(chat.backscroll, {
+			entryId: entry.id,
+			handle,
+			text,
+			...(references?.length ? { references } : {}),
+		});
 		return;
 	}
 	if (!context.config.agent) {
-		let entries: Wire.Entry[] = [{
-			id: ulid(),
+		let entries: MemberEntry[] = [{
+			id: requestId,
 			author: { kind: "member", handle },
-			text: visible,
+			text,
 			ts: now(),
+			...(references?.length ? { references } : {}),
+			delivery: savedDelivery,
 		}, {
 			id: ulid(),
 			author: { kind: "system" },
@@ -311,35 +542,43 @@ export async function send(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 			chat.entries = chat.entries.filter(entry => !ids.has(entry.id));
 			return fail(ws, msg.rid, "could not save message");
 		}
+		reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: entries[0]!.id, queued: false });
 		for (let entry of entries) announce(server, room, entry);
 		return;
 	}
 
 	if (chat.busy) {
 		if (chat.waiting.length >= MAX_QUEUE) {
-			return void say(chat, server, room, {
+			say(chat, server, room, {
 				id: ulid(),
 				author: { kind: "system" },
 				text: "The queue is full. Wait for the current turn to finish.",
 				ts: now(),
 			});
+			return fail(ws, msg.rid, "the Planner queue is full");
 		}
-		chat.waiting.push({
-			id: ulid(),
+		let waiting: Waiting = {
+			id: requestId,
 			handle,
-			text: visible,
+			text,
+			...(references?.length ? { references } : {}),
+			delivery: savedDelivery,
 			message: true,
 			sessionId: context.claimantSessionId,
 			userId: ws.data.principalId,
-		});
+		};
+		chat.waiting.push(waiting);
+		reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: waiting.id, queued: true });
 		return queued(chat, server, room);
 	}
 
-	let entry: Wire.Entry = {
-		id: ulid(),
+	let entry: MemberEntry = {
+		id: requestId,
 		author: { kind: "member", handle },
-		text: visible,
+		text,
 		ts: now(),
+		...(references?.length ? { references } : {}),
+		delivery: savedDelivery,
 	};
 	chat.busy = true;
 	chat.turn = { id: ulid(), handle, started: now(), responded: false };
@@ -354,16 +593,18 @@ export async function send(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		state(chat, server, room);
 		return fail(ws, msg.rid, "could not save message");
 	}
+	reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: entry.id, queued: false });
 	if (chat.closed) return;
 	announce(server, room, entry);
 	startRun(
 		context,
 		handle,
-		visible,
+		text,
 		undefined,
 		context.claimantSessionId,
 		true,
 		{ entryId: entry.id, userId: ws.data.principalId },
+		references,
 	);
 }
 
@@ -482,6 +723,16 @@ export function planTools(context: Room) {
 		anchors: () => Service.anchors(plan, server, room),
 		changes: found => Service.changes(plan, server, room, found),
 		jobs: context.jobs,
+		readReference: async id => {
+			let reference = chat.referenceCache.get(id);
+			if (!reference) throw new Error("reference is not available in this Planner session");
+			if (!context.references) throw new Error("chat references are unavailable");
+			return context.references.read({
+				channelId: room,
+				repositoryId: context.repository.id,
+				reference,
+			});
+		},
 		createResearch: async question => {
 			let active = currentMemberRequest(chat);
 			if (!active) {
@@ -502,39 +753,100 @@ export function planTools(context: Room) {
 	});
 }
 
-function bootstrap(
+export function retainReferences(chat: Chat, references: Wire.Reference[]): void {
+	for (let reference of references) {
+		chat.referenceCache.delete(reference.id);
+		chat.referenceCache.set(reference.id, reference);
+		while (chat.referenceCache.size > MAX_SESSION_REFERENCES) {
+			let oldest = chat.referenceCache.keys().next().value;
+			if (typeof oldest !== "string") break;
+			chat.referenceCache.delete(oldest);
+		}
+	}
+}
+
+export function sessionBootstrap(
 	chat: Chat,
 	cursor: number,
 	summary: string,
-	currentText: string,
+	currentEntryId?: string,
+	currentReferences: Wire.Reference[] = [],
 ): string | undefined {
 	let start = Number.isSafeInteger(cursor) && cursor >= 0 && cursor <= chat.entries.length
 		? cursor
 		: 0;
-	let entries = chat.entries.slice(start);
-	let last = entries.at(-1);
-	if (last?.author.kind === "member" && last.text === currentText) entries = entries.slice(0, -1);
-	entries = entries.slice(-100);
-	if (entries.length === 0 && !summary) return undefined;
-	let transcript = entries.map(entry => {
+	let candidates = chat.entries.slice(start)
+		.filter(entry => entry.id !== currentEntryId)
+		.slice(-100);
+	let allReferenceIds = new Set(
+		candidates.flatMap(entry => entry.references?.map(reference => reference.id) ?? []),
+	);
+	let line = (entry: Wire.Entry, readable: Set<string>) => {
 		let speaker = entry.author.kind === "member"
 			? `@${entry.author.handle}`
 			: entry.author.kind === "agent"
 			? "Planner"
 			: "System";
-		return `${speaker}: ${entry.text}`;
-	}).join("\n").slice(-50_000);
+		return `${speaker}: ${annotatedText(entry.text, entry.references, readable)}`;
+	};
+	let selected: Wire.Entry[] = [];
+	let used = 0;
+	let partial = false;
+	for (let entry of candidates.toReversed()) {
+		let rendered = line(entry, allReferenceIds);
+		let separator = selected.length > 0 ? 1 : 0;
+		if (used + separator + rendered.length > 50_000) {
+			if (selected.length === 0) {
+				selected.unshift(entry);
+				partial = true;
+			}
+			break;
+		}
+		selected.unshift(entry);
+		used += separator + rendered.length;
+	}
+	let selectedIds = new Set(selected.map(entry => entry.id));
+	let remainingBackscroll = chat.backscroll.filter(said =>
+		!said.entryId || !selectedIds.has(said.entryId)
+	);
+	chat.referenceCache.clear();
+	retainReferences(chat, selected.flatMap(entry => entry.references ?? []));
+	retainReferences(chat, [
+		...remainingBackscroll.flatMap(said => said.references ?? []),
+		...currentReferences,
+	]);
+	let readable = new Set(chat.referenceCache.keys());
+	let lines = selected.map(entry => line(entry, readable));
+	if (partial && lines[0]) lines[0] = lines[0].slice(-50_000);
+	chat.bootstrapEntries = new Set(selected.map(entry => entry.id));
+	let transcript = lines.join("\n");
+	if (!transcript && !summary) return undefined;
+	let durableIds = new Set(
+		selected.flatMap(entry => entry.references?.map(reference => reference.id) ?? []),
+	);
+	let catalog = referenceCatalog(
+		[...chat.referenceCache.values()].filter(reference => durableIds.has(reference.id)),
+	);
 	return [
 		"This Copilot session was recreated.",
 		summary ? `Earlier durable summary:\n${summary}` : "",
 		transcript ? `Durable conversation context follows:\n${transcript}` : "",
+		catalog ?? "",
 	].filter(Boolean).join("\n\n");
+}
+
+export function consumeBootstrapBackscroll(chat: Chat): void {
+	let entries = chat.bootstrapEntries;
+	chat.bootstrapEntries = undefined;
+	if (!entries?.size) return;
+	chat.backscroll = chat.backscroll.filter(said => !said.entryId || !entries.has(said.entryId));
 }
 
 async function repositorySession(
 	context: Room,
 	claimantSessionId: string,
-	currentText: string,
+	currentEntryId?: string,
+	currentReferences: Wire.Reference[] = [],
 ): Promise<Agent.Agent> {
 	let { ownership, owner, repository } = await resolveOwner(
 		context.auth,
@@ -578,6 +890,7 @@ async function repositorySession(
 		) throw new Error("The Planner session changed while it was being reused. Try again.");
 		return reusable;
 	}
+	chat.referenceCache.clear();
 	if (chat.agent) await Agent.discard(chat.agent);
 	chat.agent = undefined;
 	chat.owner = undefined;
@@ -623,7 +936,13 @@ async function repositorySession(
 		opening = Agent.openPlanner(context.config, { tools }, {
 			token: owner.access.token,
 			repository,
-			bootstrap: bootstrap(chat, ownership.transcriptCursor, ownership.summary, currentText),
+			bootstrap: sessionBootstrap(
+				chat,
+				ownership.transcriptCursor,
+				ownership.summary,
+				currentEntryId,
+				currentReferences,
+			),
 			authorize: async () => {
 				if (!bound()) return false;
 				let activeOwner = await auth.sessions.inspect(ownerSessionId);
@@ -685,6 +1004,7 @@ async function repositorySession(
 			revision: owner.access.revision,
 			expiresAt: credentialExpiresAt,
 		};
+		consumeBootstrapBackscroll(chat);
 		chat.credentialTimer = setTimeout(() => {
 			void resetAgent(
 				chat,
@@ -696,6 +1016,8 @@ async function repositorySession(
 		return agent;
 	} catch (err) {
 		if (opened && chat.agent !== opened) await Agent.discard(opened);
+		if (!chat.agent) chat.referenceCache.clear();
+		chat.bootstrapEntries = undefined;
 		await auth.storage.channels.updateAgentContext({
 			channelId: context.room,
 			ownerSessionId,
@@ -746,9 +1068,10 @@ export async function resolveOwner(
 async function session(
 	context: Room,
 	claimantSessionId: string,
-	currentText: string,
+	currentEntryId?: string,
+	currentReferences: Wire.Reference[] = [],
 ): Promise<Agent.Agent> {
-	return repositorySession(context, claimantSessionId, currentText);
+	return repositorySession(context, claimantSessionId, currentEntryId, currentReferences);
 }
 
 /**
@@ -763,7 +1086,7 @@ function settle(chat: Chat, server: Server<SocketData>, room: string): void {
 	for (let entry of chat.entries) {
 		if (!entry.streaming) continue;
 		delete entry.streaming;
-		broadcast(server, room, { kind: "chat:message", ts: 0, entry });
+		announce(server, room, entry);
 	}
 }
 
@@ -776,6 +1099,7 @@ async function run(
 	claimantSessionId: string,
 	reserved = false,
 	member?: MemberRequest,
+	references: Wire.Reference[] = [],
 ): Promise<void> {
 	let { chat, plan, room, server } = context;
 	if (chat.closed) return;
@@ -800,7 +1124,7 @@ async function run(
 		: undefined;
 
 	try {
-		let agent = await session(context, claimantSessionId, text);
+		let agent = await session(context, claimantSessionId, member?.entryId, references);
 		if (chat.agent !== agent) {
 			throw new Error("The Planner session changed before the turn started. Try again.");
 		}
@@ -825,8 +1149,15 @@ async function run(
 
 		// Drained rather than copied: what the agent has been told once should
 		// not arrive again on the next turn.
-		let prompt = compose(chat.backscroll, handle, text);
+		let backscroll = chat.backscroll;
 		chat.backscroll = [];
+		let promptReferences = [
+			...backscroll.flatMap(said => said.references ?? []),
+			...references,
+		];
+		retainReferences(chat, promptReferences);
+		let available = promptReferences.filter(reference => chat.referenceCache.has(reference.id));
+		let prompt = compose(backscroll, handle, text, references, available);
 
 		// The handle travels to the model, because a position belongs to
 		// whoever holds it.
@@ -888,6 +1219,7 @@ async function run(
 			next.sessionId ?? context.claimantSessionId,
 			false,
 			next.message && next.userId ? { entryId: next.id, userId: next.userId } : undefined,
+			next.references,
 		);
 	} else {
 		chat.busy = false;
@@ -905,9 +1237,10 @@ function startRun(
 	claimantSessionId: string,
 	reserved = false,
 	member?: MemberRequest,
+	references?: Wire.Reference[],
 ): void {
 	if (context.chat.closed) return;
-	let running = run(context, handle, text, thread, claimantSessionId, reserved, member);
+	let running = run(context, handle, text, thread, claimantSessionId, reserved, member, references);
 	context.chat.running = running;
 	void running.finally(() => {
 		if (context.chat.running === running) context.chat.running = undefined;
@@ -926,12 +1259,15 @@ export function pending(chat: Chat): Waiting | undefined {
 	let next = chat.waiting.shift();
 	while (next?.spent?.()) next = chat.waiting.shift();
 	if (next?.message) {
-		chat.entries.push({
+		let entry: MemberEntry = {
 			id: next.id,
 			author: { kind: "member", handle: next.handle },
 			text: next.text,
 			ts: now(),
-		});
+			...(next.references?.length ? { references: next.references } : {}),
+			...(next.delivery ? { delivery: next.delivery } : {}),
+		};
+		chat.entries.push(entry);
 	}
 	return next;
 }
@@ -989,7 +1325,7 @@ export function translate(context: Room, event: SessionEvent): void {
 			if (entry) {
 				entry.text = content || entry.text;
 				delete entry.streaming;
-				broadcast(server, room, { kind: "chat:message", ts: 0, entry });
+				announce(server, room, entry);
 				responded(chat, server, room, content);
 			} else if (content.trim()) {
 				// No deltas arrived — a short reply the model did not stream.
@@ -1029,12 +1365,17 @@ export function translate(context: Room, event: SessionEvent): void {
 			let started = chat.timings.get(toolCallId);
 			chat.timings.delete(toolCallId);
 
-			let detail = result?.content ?? (error ? JSON.stringify(error) : undefined);
 			// The completion does not repeat the tool's name; the start did, and
 			// the entry it was filed under still has it.
+			let name = named(chat, toolCallId);
+			let detail = name === "read_reference"
+				? success
+					? "Reference content was returned privately to the Planner."
+					: "The reference could not be read."
+				: result?.content ?? (error ? JSON.stringify(error) : undefined);
 			let activity: Wire.Activity = {
 				id: toolCallId,
-				name: named(chat, toolCallId),
+				name,
 				status: success ? "done" : "failed",
 				...(started ? { took: Date.now() - started } : {}),
 				// Bounded: a `grep` across a repository is not a thing anybody
@@ -1151,6 +1492,8 @@ export async function resetAgent(
 	let opening = chat.opening;
 	chat.agent = undefined;
 	chat.owner = undefined;
+	chat.referenceCache.clear();
+	chat.bootstrapEntries = undefined;
 	chat.opening = undefined;
 	chat.openingOwner = undefined;
 	if (agent) await Agent.abort(agent);
@@ -1171,11 +1514,14 @@ export async function close(chat: Chat): Promise<void> {
 	chat.lifecycle++;
 	chat.activeRequest = undefined;
 	chat.waiting = [];
+	let sending = chat.sending;
 	let running = chat.running;
 	let agent = chat.agent;
 	let opening = chat.opening;
 	chat.agent = undefined;
 	chat.owner = undefined;
+	chat.referenceCache.clear();
+	chat.bootstrapEntries = undefined;
 	chat.opening = undefined;
 	chat.openingOwner = undefined;
 	if (agent) await Agent.abort(agent);
@@ -1194,5 +1540,5 @@ export async function close(chat: Chat): Promise<void> {
 		let opened = await Agent.settle(opening);
 		if (opened && opened !== agent) await Agent.discard(opened);
 	}
-	await running;
+	await Promise.all([sending, running]);
 }

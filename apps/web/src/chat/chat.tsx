@@ -10,21 +10,46 @@
  * message's own signal rather than asking its author to select a destination.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
-import { addressed, MENTION } from "@chopin/protocol/address";
+import { MENTION } from "@chopin/protocol/address";
 
+import {
+	referenceOptionId,
+	ReferencePicker,
+	referencePickerKeyAction,
+	useReferencePicker,
+} from "./reference-picker";
+import {
+	acknowledgeDraft,
+	beforeInputSelection,
+	boundedChatError,
+	chatSendPayload,
+	insertReference,
+	MAX_REFERENCES,
+	prepareDraftSubmission,
+	reconcileReferenceDrafts,
+	referenceTrigger,
+	referenceTriggerKey,
+	reviseComposerDraft,
+} from "./references";
 import { Transcript } from "./transcript";
 import plannerStop from "../assets/icons/planner-stop.svg";
 import send from "../assets/icons/send-arrow-up.svg";
 
 import type { Chat as Wire } from "@chopin/protocol";
+import type { Repository } from "../api";
+import type { ComposerDraft, ReferenceTarget } from "./references";
 import type { Wire as Socket } from "../wire";
 
 export type ChatProps = {
 	wire: Socket | undefined;
 	handle: string;
 	connected: boolean;
+	referencesEnabled: boolean;
+	repository: Pick<Repository, "id" | "name" | "owner">;
+	room: string;
+	sendAcknowledgements: boolean;
 	/** Hosted mode keeps the shared conversation while repository-scoped agent work is disabled. */
 	agent?: boolean;
 	active?: boolean;
@@ -32,22 +57,68 @@ export type ChatProps = {
 };
 
 export function Chat(
-	{ active = true, agent = true, connected, handle, onActivity, wire }: ChatProps,
+	{
+		active = true,
+		agent = true,
+		connected,
+		handle,
+		onActivity,
+		referencesEnabled,
+		repository,
+		room,
+		sendAcknowledgements,
+		wire,
+	}: ChatProps,
 ) {
 	let [entries, setEntries] = useState<Wire.Entry[]>([]);
 	let [arrived, setArrived] = useState<ReadonlySet<string>>(new Set());
 	let [queue, setQueue] = useState<Wire.Waiting[]>([]);
 	let [busy, setBusy] = useState(false);
 	let [turn, setTurn] = useState<Wire.Turn>();
-	let [text, setText] = useState("");
+	let [draft, setDraft] = useState<ComposerDraft>({
+		text: "",
+		references: [],
+	});
+	let [submitting, setSubmitting] = useState(false);
+	let [sendError, setSendError] = useState<string>();
+	let [selection, setSelection] = useState({ start: 0, end: 0 });
+	let [dismissedPicker, setDismissedPicker] = useState<string>();
+	let textarea = useRef<HTMLTextAreaElement>(null);
+	let pendingCaret = useRef<number | undefined>(undefined);
+	let pendingEdit = useRef<{ start: number; end: number } | undefined>(undefined);
+	let submission = useRef<object | undefined>(undefined);
+	let draftRef = useRef(draft);
+	draftRef.current = draft;
+	let pickerId = useId();
+	let instructionsId = useId();
 	let synchronized = useRef<Socket | undefined>(undefined);
 	let activity = useRef(onActivity);
 	let reportedBusy = useRef(false);
 	activity.current = onActivity;
-
-	// A socket is connected before its fresh history arrives. Do not let a
-	// previous socket's transient turn project into that gap.
+	// A socket opens before its fresh transcript arrives, and reconnects reuse
+	// the same Wire. Only that transcript makes this composer current.
 	if (!connected) synchronized.current = undefined;
+	let composerReady = connected && synchronized.current === wire;
+	let detected = referencesEnabled && composerReady && !submitting
+		? referenceTrigger(draft.text, selection.start, selection.end)
+		: undefined;
+	let trigger = detected
+			&& !draft.references.some(reference =>
+				reference.start < detected.end && reference.end > detected.start
+			)
+		? detected
+		: undefined;
+	let triggerKey = trigger ? referenceTriggerKey(trigger) : undefined;
+	let pickerOpen = !submitting && trigger !== undefined && triggerKey !== dismissedPicker;
+	let atReferenceLimit = draft.references.length >= MAX_REFERENCES;
+	let picker = useReferencePicker(
+		pickerOpen && !atReferenceLimit && referencesEnabled ? trigger : undefined,
+		repository,
+		room,
+	);
+	let activeOption = picker.options.length === 0
+		? undefined
+		: picker.options[Math.min(picker.active, picker.options.length - 1)];
 
 	useEffect(() => {
 		if (!wire) return;
@@ -132,11 +203,74 @@ export function Chat(
 		};
 	}, [wire]);
 
+	useLayoutEffect(() => {
+		if (pendingCaret.current === undefined) return;
+		let caret = pendingCaret.current;
+		pendingCaret.current = undefined;
+		textarea.current?.focus();
+		textarea.current?.setSelectionRange(caret, caret);
+	});
+
+	let restoreComposerFocus = () => {
+		requestAnimationFrame(() => textarea.current?.focus());
+	};
+	let clearSubmittedDraft = (submitted: ComposerDraft) => {
+		if (draftRef.current !== submitted) return;
+		let cleared = acknowledgeDraft(submitted, submitted);
+		draftRef.current = cleared;
+		setDraft(cleared);
+		setSelection({ start: 0, end: 0 });
+		setDismissedPicker(undefined);
+	};
+
 	let submit = () => {
-		let value = text.trim();
-		if (!value || !wire || !connected) return;
-		wire.send("chat:send", { text: value, to: agent && addressed(text) ? "planner" : "room" });
-		setText("");
+		if (submission.current || !composerReady || !wire) return;
+		let current = draftRef.current;
+		if (!current.text.trim()) return;
+		let submitted = prepareDraftSubmission(current);
+		let payload = chatSendPayload(
+			submitted.text,
+			submitted.references,
+			agent,
+			submitted.requestId,
+			referencesEnabled,
+		);
+		if (!payload) return;
+		let token = {};
+		submission.current = token;
+		draftRef.current = submitted;
+		setDraft(submitted);
+		setSubmitting(true);
+		setSendError(undefined);
+		if (!sendAcknowledgements) {
+			wire.send("chat:send", payload);
+			clearSubmittedDraft(submitted);
+			submission.current = undefined;
+			setSubmitting(false);
+			restoreComposerFocus();
+			return;
+		}
+		void wire.ask<Wire.Sent>("chat:send", payload).then(() => {
+			clearSubmittedDraft(submitted);
+		}, error => {
+			setSendError(boundedChatError(error));
+		}).finally(() => {
+			if (submission.current !== token) return;
+			submission.current = undefined;
+			setSubmitting(false);
+			restoreComposerFocus();
+		});
+	};
+
+	let chooseReference = (target: ReferenceTarget) => {
+		if (!trigger) return;
+		let next = insertReference(draft.text, draft.references, trigger, target);
+		setDraft(current => reviseComposerDraft(current, next.text, next.references));
+		setSelection({ start: next.caret, end: next.caret });
+		setSendError(undefined);
+		setDismissedPicker(undefined);
+		pendingEdit.current = undefined;
+		pendingCaret.current = next.caret;
 	};
 
 	return (
@@ -153,24 +287,135 @@ export function Chat(
 					: undefined}
 			/>
 
-			<div className="conversation-composer shrink-0 px-2.5 pb-2.5">
-				<div className="field flex flex-col">
+			<div className="conversation-composer relative shrink-0 px-2.5 pb-2.5">
+				{pickerOpen && trigger && (
+					<ReferencePicker
+						active={picker.active}
+						id={pickerId}
+						kind={trigger.kind}
+						onActive={picker.setActive}
+						onSelect={chooseReference}
+						state={atReferenceLimit
+							? { status: "limit", options: [] }
+							: picker}
+					/>
+				)}
+				{referencesEnabled && (
+					<p className="sr-only" id={instructionsId}>
+						Type # to reference a document or % to reference a Research Workspace.
+					</p>
+				)}
+				<div aria-busy={submitting} className="field flex flex-col">
 					<textarea
+						aria-activedescendant={pickerOpen && activeOption
+							? referenceOptionId(pickerId, picker.options.indexOf(activeOption))
+							: undefined}
+						aria-autocomplete={referencesEnabled ? "list" : undefined}
+						aria-controls={pickerOpen ? pickerId : undefined}
+						aria-describedby={referencesEnabled ? instructionsId : undefined}
+						aria-disabled={!composerReady || submitting}
+						aria-expanded={referencesEnabled ? pickerOpen : undefined}
+						aria-haspopup={referencesEnabled ? "listbox" : undefined}
 						className="min-h-0 flex-1 w-full resize-none bg-transparent px-4 py-3 text-[14px]"
-						disabled={!connected}
-						onChange={event => setText(event.target.value)}
+						readOnly={!composerReady || submitting}
+						role={referencesEnabled ? "combobox" : undefined}
+						onBeforeInput={event => {
+							let input = event.nativeEvent as InputEvent;
+							pendingEdit.current = beforeInputSelection(
+								event.currentTarget.selectionStart,
+								event.currentTarget.selectionEnd,
+								input.inputType ?? "",
+								draft.text.length,
+							);
+						}}
+						onChange={event => {
+							let next = event.currentTarget.value;
+							let edit = pendingEdit.current;
+							pendingEdit.current = undefined;
+							setDraft(current =>
+								reviseComposerDraft(
+									current,
+									next,
+									reconcileReferenceDrafts(
+										current.text,
+										next,
+										current.references,
+										edit,
+									),
+								)
+							);
+							setSendError(undefined);
+							setDismissedPicker(undefined);
+							setSelection({
+								start: event.currentTarget.selectionStart,
+								end: event.currentTarget.selectionEnd,
+							});
+						}}
 						onKeyDown={event => {
+							let composing = event.nativeEvent.isComposing || event.keyCode === 229;
+							let action = pickerOpen
+								? referencePickerKeyAction({
+									key: event.key,
+									keyCode: event.keyCode,
+									isComposing: event.nativeEvent.isComposing,
+									shiftKey: event.shiftKey,
+								}, activeOption !== undefined)
+								: undefined;
+							if (action === "next") {
+								picker.setActive(value =>
+									picker.options.length === 0 ? 0 : (value + 1) % picker.options.length
+								);
+								event.preventDefault();
+								return;
+							}
+							if (action === "previous") {
+								picker.setActive(value =>
+									picker.options.length === 0
+										? 0
+										: (value - 1 + picker.options.length) % picker.options.length
+								);
+								event.preventDefault();
+								return;
+							}
+							if (action === "dismiss") {
+								setDismissedPicker(triggerKey);
+								event.preventDefault();
+								event.stopPropagation();
+								return;
+							}
+							if (action === "select" && activeOption) {
+								chooseReference(activeOption);
+								event.preventDefault();
+								return;
+							}
+							if (composing) return;
 							// Enter sends; a newline needs a modifier, as everywhere else.
 							if (event.key !== "Enter" || event.shiftKey) return;
 							event.preventDefault();
 							submit();
 						}}
+						onKeyUp={event =>
+							setSelection({
+								start: event.currentTarget.selectionStart,
+								end: event.currentTarget.selectionEnd,
+							})}
+						onSelect={event =>
+							setSelection({
+								start: event.currentTarget.selectionStart,
+								end: event.currentTarget.selectionEnd,
+							})}
 						placeholder={`Use ${MENTION} to ask Chopin`}
+						ref={textarea}
 						rows={3}
-						value={text}
+						value={draft.text}
 					/>
 
 					<div className="flex items-center justify-end gap-1 px-2 pb-2">
+						{sendError && (
+							<p className="mr-auto min-w-0 truncate text-sm text-destructive-ink" role="alert">
+								{sendError}
+							</p>
+						)}
 						{agent && busy && (
 							<button
 								aria-label="Stop Planner"
@@ -185,7 +430,7 @@ export function Chat(
 						<button
 							aria-label="Send message"
 							className="conversation-send-button btn btn-icon btn-primary rounded-full"
-							disabled={!connected || !text.trim()}
+							disabled={!composerReady || submitting || !draft.text.trim()}
 							onClick={submit}
 							title="Send message"
 							type="button"
