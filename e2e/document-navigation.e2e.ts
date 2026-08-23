@@ -85,9 +85,9 @@ test("the sidebar paginates documents and global search queries beyond the loade
 
 	page = await join("ana");
 	let projects = sidebar(page);
-	await expect(projects.getByRole("button", { name: "Note 2", exact: true })).toBeVisible();
+	await expect(projects.getByRole("link", { name: "Note 2", exact: true })).toBeVisible();
 	await projects.getByRole("button", { name: "Load more documents in score" }).click();
-	await expect(projects.getByRole("button", { name: "Continued document", exact: true }))
+	await expect(projects.getByRole("link", { name: "Continued document", exact: true }))
 		.toBeVisible();
 	await projects.getByRole("button", { name: "Search", exact: true }).click();
 	let dialog = page.getByRole("dialog", { name: "Search documents" });

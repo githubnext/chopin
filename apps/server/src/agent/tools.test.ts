@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
 
 import { toolbox } from "./tools";
 import { Admission } from "../auth/admission";
@@ -54,6 +54,80 @@ async function opened(source: string, state: SeedState = {}) {
 	plans.push(context.plan);
 	return context;
 }
+
+test("create_research_workspace validates one question and waits for the committed draft", async () => {
+	let { plan, server } = await opened("Research context.\n");
+	let committed = Promise.withResolvers<{
+		workspaceId: string;
+		state: "draft";
+		url: string;
+	}>();
+	let questions: string[] = [];
+	let createResearch = toolbox({
+		plan,
+		server,
+		room: "test",
+		persist: () => Service.persist(plan),
+		exclusive: action => Service.exclusive(plan, action),
+		async publish() {},
+		anchors() {},
+		changes() {},
+		createResearch: question => {
+			questions.push(question);
+			return committed.promise;
+		},
+	}).find(tool => tool.name === "create_research_workspace");
+	if (!createResearch?.handler) throw new Error("create_research_workspace is missing");
+	expect(createResearch.parameters).toEqual({
+		type: "object",
+		properties: { question: { type: "string", minLength: 1, maxLength: 4_096 } },
+		required: ["question"],
+		additionalProperties: false,
+	});
+	let call = async (raw: unknown): Promise<string> => {
+		let response = await createResearch.handler!(raw as never, {
+			sessionId: "session",
+			toolCallId: "call",
+			toolName: "create_research_workspace",
+			arguments: raw as never,
+		});
+		if (typeof response !== "string") throw new Error("research tool returned no text");
+		return response;
+	};
+
+	let question = "Which public release evidence supports adopting version 3?";
+	let response = call({ question });
+	let settled = false;
+	void response.then(() => settled = true);
+	await Promise.resolve();
+	expect(questions).toEqual([question]);
+	expect(settled).toBe(false);
+	let result = {
+		workspaceId: "workspace-1",
+		state: "draft" as const,
+		url: "/documents/owner/repo/plan/research/workspace-1",
+	};
+	committed.resolve(result);
+	expect(JSON.parse(await response)).toEqual(result);
+
+	let error = spyOn(console, "error").mockImplementation(() => {});
+	try {
+		for (
+			let invalid of [
+				{},
+				{ question: "" },
+				{ question: 1 },
+				{ question: "valid", extra: true },
+				{ question: "x".repeat(4_097) },
+			]
+		) {
+			expect(await call(invalid)).toStartWith("Error:");
+		}
+	} finally {
+		error.mockRestore();
+	}
+	expect(questions).toEqual([question]);
+});
 
 test("anchor_plan publishes moving a decision beside the validated prose", async () => {
 	let { plan, server } = await opened(SOURCE, {
@@ -417,7 +491,7 @@ test("planner graph edits draft a revision without changing plan prose", async (
 	expect(room.project(plan.document)).toBe(before);
 });
 
-test("a chat-started planner turn can draft an implementation graph", async () => {
+test("chat-started tools retain only the current member request provenance", async () => {
 	let { plan, server, storage, channel } = await opened("Prepare the implementation.\n");
 	let now = new Date();
 	let tools = toolbox({
@@ -449,7 +523,13 @@ test("a chat-started planner turn can draft an implementation graph", async () =
 	};
 	let response: string | undefined;
 	let event: ((value: { type: string }) => void) | undefined;
+	let firstStarted = Promise.withResolvers<void>();
+	let continueFirst = Promise.withResolvers<void>();
 	let sent = Promise.withResolvers<void>();
+	let activeRequests: Array<Chat.ActiveMemberRequest | undefined> = [];
+	let researchRequests: Array<Parameters<NonNullable<Chat.Room["createResearch"]>>[0]> = [];
+	let researchResponses: string[] = [];
+	let researchTool: ReturnType<typeof Chat.planTools>[number] | undefined;
 	plan.chat.agent = {
 		id: "session",
 		session: {
@@ -458,16 +538,37 @@ test("a chat-started planner turn can draft an implementation graph", async () =
 				return () => {};
 			},
 			async send() {
-				let result = await graph.handler!(args, {
-					sessionId: "session",
-					toolCallId: "call",
-					toolName: "edit_implementation_graph",
-					arguments: args,
-				});
-				if (typeof result !== "string") throw new Error("graph tool returned no text");
-				response = result;
+				let active = plan.chat.activeRequest;
+				activeRequests.push(active ? { ...active } : undefined);
+				let turn = activeRequests.length;
+				if (turn === 1) {
+					firstStarted.resolve();
+					await continueFirst.promise;
+					let result = await graph.handler!(args, {
+						sessionId: "session",
+						toolCallId: "call",
+						toolName: "edit_implementation_graph",
+						arguments: args,
+					});
+					if (typeof result !== "string") throw new Error("graph tool returned no text");
+					response = result;
+				} else {
+					if (!researchTool?.handler) throw new Error("research tool is missing");
+					let question = "Which public release evidence supports adopting version 3?";
+					let attempts = turn === 2 ? 2 : 1;
+					for (let attempt = 0; attempt < attempts; attempt++) {
+						let result = await researchTool.handler({ question }, {
+							sessionId: "session",
+							toolCallId: `research-${turn}-${attempt}`,
+							toolName: "create_research_workspace",
+							arguments: { question },
+						});
+						if (typeof result !== "string") throw new Error("research tool returned no text");
+						researchResponses.push(result);
+					}
+				}
 				event?.({ type: "session.idle" });
-				sent.resolve();
+				if (turn === 3) sent.resolve();
 			},
 			async abort() {},
 			async disconnect() {},
@@ -479,6 +580,12 @@ test("a chat-started planner turn can draft an implementation graph", async () =
 		accessToken: "gho_test",
 		accessExpiresIn: 28_800,
 		refreshToken: "ghr_test",
+		refreshExpiresIn: 15_897_600,
+	});
+	let queuedClaimant = await sessions.issue("U_test", {
+		accessToken: "gho_queued",
+		accessExpiresIn: 28_800,
+		refreshToken: "ghr_queued",
 		refreshExpiresIn: 15_897_600,
 	});
 	let repository = { id: "R_test", owner: "owner", name: "repository", defaultBranch: "main" };
@@ -528,20 +635,109 @@ test("a chat-started planner turn can draft an implementation graph", async () =
 		claimantSessionId: claimant.id,
 		repository,
 		persist: () => Service.persist(plan),
+		createResearch: async request => {
+			researchRequests.push(request);
+			return {
+				workspaceId: "workspace-1",
+				state: "draft",
+				url: "/documents/owner/repository/plan/research/workspace-1",
+			};
+		},
 	};
+	researchTool = Chat.planTools(context).find(tool => tool.name === "create_research_workspace");
 
 	await Chat.send(
 		context,
-		{ data: { handle: "ana" }, send() {} } as unknown as Socket,
+		{ data: { handle: "ana", principalId: "U_test" }, send() {} } as unknown as Socket,
 		{ kind: "chat:send", rid: "request", text: "prepare implementation", to: "planner", ts: 0 },
 	);
+	let running = plan.chat.running;
+	await firstStarted.promise;
+	let queuedContext = { ...context, claimantSessionId: queuedClaimant.id };
+	await Chat.send(
+		queuedContext,
+		{ data: { handle: "bob", principalId: "U_bob" }, send() {} } as unknown as Socket,
+		{
+			kind: "chat:send",
+			rid: "queued",
+			text: "@chopin start research on version 3 adoption",
+			to: "planner",
+			ts: 0,
+		},
+	);
+	let queuedEntryId = plan.chat.waiting[0]!.id;
+	await Chat.instruct(
+		context,
+		"ana",
+		"Act on the accepted comment.",
+		"@ana accepted a comment.",
+	);
+	let error = spyOn(console, "error").mockImplementation(() => {});
+	continueFirst.resolve();
 	await sent.promise;
+	await running;
+	if (!researchTool?.handler) throw new Error("research tool is missing");
+	let stale = await researchTool.handler({ question: "Search again" }, {
+		sessionId: "session",
+		toolCallId: "research-stale",
+		toolName: "create_research_workspace",
+		arguments: { question: "Search again" },
+	});
+	if (typeof stale !== "string") throw new Error("research tool returned no text");
+	researchResponses.push(stale);
+	error.mockRestore();
 
 	expect(JSON.parse(response ?? "")).toMatchObject({
 		ok: true,
 		graph: { versions: [{ state: "draft", planRevision: 0 }] },
 	});
 	expect(plan.graph?.versions[0]?.definition.tasks.map(task => task.id)).toEqual(["chat-graph"]);
+	expect(activeRequests).toHaveLength(3);
+	expect(activeRequests[0]).toMatchObject({
+		entryId: plan.chat.entries.find(entry => entry.text === "prepare implementation")?.id,
+		userId: "U_test",
+		handle: "ana",
+		text: "prepare implementation",
+		claimantSessionId: claimant.id,
+		lifecycle: 0,
+	});
+	expect(activeRequests[1]).toMatchObject({
+		entryId: queuedEntryId,
+		userId: "U_bob",
+		handle: "bob",
+		text: "start research on version 3 adoption",
+		claimantSessionId: queuedClaimant.id,
+		lifecycle: 0,
+	});
+	expect(activeRequests[0]?.turnId).not.toBe(activeRequests[1]?.turnId);
+	expect(activeRequests[2]).toBeUndefined();
+	expect(researchRequests).toEqual([
+		{
+			entryId: queuedEntryId,
+			userId: "U_bob",
+			handle: "bob",
+			text: "start research on version 3 adoption",
+			question: "Which public release evidence supports adopting version 3?",
+		},
+		{
+			entryId: queuedEntryId,
+			userId: "U_bob",
+			handle: "bob",
+			text: "start research on version 3 adoption",
+			question: "Which public release evidence supports adopting version 3?",
+		},
+	]);
+	expect(researchResponses.slice(0, 2).map(value => JSON.parse(value))).toEqual([
+		expect.objectContaining({ workspaceId: "workspace-1", state: "draft" }),
+		expect.objectContaining({ workspaceId: "workspace-1", state: "draft" }),
+	]);
+	expect(researchResponses[2]).toContain(
+		"Error: research workspaces require the explicit member message",
+	);
+	expect(researchResponses[3]).toContain(
+		"Error: research workspaces require the explicit member message",
+	);
+	expect(plan.chat.activeRequest).toBeUndefined();
 });
 
 test("planner graph edits name readiness blockers before changing a graph", async () => {

@@ -1,14 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import { createHeadlessEditor } from "@lexical/headless";
 import { createYjsBinding, syncLexicalUpdateToYjs, syncYjsChangesToLexical } from "@lexical/yjs";
-import { $copyNode, $getRoot, $isElementNode } from "lexical";
+import { $getRoot, $isElementNode } from "lexical";
 import * as Y from "yjs";
 
 import { exportPlan, importPlan } from "../convert";
-import { parse } from "../parse";
 import { registry } from "../registry";
-import { assert } from "../validate";
-import { $isCalloutNode, $isResearchQuestionNode, $isTabNode, $isTabsNode } from "./containers";
+import { $isCalloutNode, $isTabNode, $isTabsNode } from "./containers";
 
 import type { Binding, Provider } from "@lexical/yjs";
 import type { LexicalEditor, TextNode } from "lexical";
@@ -67,9 +65,6 @@ const TABS = `<Tabs id="${ID}">\n`
 	+ `<Tab id="${ID3}" label="Web">\n\n- a\n- b\n\n</Tab>\n`
 	+ `</Tabs>\n`;
 
-const RESEARCH =
-	`<ResearchQuestion id="${ID}">\n\nWhat changed in the API?\n\n</ResearchQuestion>\n`;
-
 describe("structural components", () => {
 	it("round-trips a callout with its attributes", () => {
 		let out = canonical(CALLOUT);
@@ -98,41 +93,6 @@ describe("structural components", () => {
 	it("omits optional attributes that are unset", () => {
 		let out = canonical(`<Callout id="${ID}" type="note">\n\nx\n\n</Callout>\n`);
 		expect(out).not.toContain("title=");
-	});
-
-	it("round-trips editable research question prose and identity", () => {
-		let out = canonical(RESEARCH);
-		expect(out).toContain(`ResearchQuestion id="${ID}"`);
-		expect(out).toContain("What changed in the API?");
-		let instance = editor();
-		importPlan(instance, out, { registry: REGISTRY });
-		instance.getEditorState().read(() => {
-			let research = $getRoot().getFirstChild();
-			expect($isResearchQuestionNode(research)).toBe(true);
-			if (!$isResearchQuestionNode(research)) return;
-			expect(research.getId()).toBe(ID);
-			expect(research.getFirstChild()?.getType()).toBe("paragraph");
-		});
-	});
-
-	it("mints a fresh research identity for an explicit node copy", () => {
-		let instance = editor();
-		importPlan(instance, RESEARCH, { registry: REGISTRY });
-		instance.update(() => {
-			let research = $getRoot().getFirstChild();
-			if ($isResearchQuestionNode(research)) $getRoot().append($copyNode(research));
-		}, { discrete: true });
-		instance.getEditorState().read(() => {
-			let questions = $getRoot().getChildren().filter($isResearchQuestionNode);
-			expect(questions).toHaveLength(2);
-			expect(questions[0]!.getId()).toBe(ID);
-			expect(questions[1]!.getId()).not.toBe(ID);
-			expect(questions[1]!.getId()).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
-		});
-	});
-
-	it("rejects duplicate research identities authoritatively", () => {
-		expect(() => assert(parse(RESEARCH + RESEARCH))).toThrow("unique");
 	});
 
 	it("builds element nodes with ordinary children, not decorators", () => {

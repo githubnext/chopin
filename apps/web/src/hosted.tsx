@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import { documentPath, documentsPath, parseDocumentPath } from "@chopin/protocol/document-url";
+import {
+	documentPath,
+	documentsPath,
+	parseDocumentPath,
+	parseResearchWorkspacePath,
+	researchWorkspacePath,
+} from "@chopin/protocol/document-url";
 
 import * as Api from "./api";
 import { readChannelRecovery, readDocumentRecovery, rememberChannel } from "./channel-recovery";
@@ -23,6 +29,13 @@ export type HostedRoute =
 	| { page: "repositories" }
 	| { page: "repository"; owner: string; repository: string }
 	| { page: "document"; owner: string; repository: string; slug: string }
+	| {
+		page: "research";
+		owner: string;
+		repository: string;
+		slug: string;
+		workspaceId: string;
+	}
 	| { page: "channel"; id: string }
 	| { page: "missing" };
 
@@ -36,6 +49,8 @@ function decoded(value: string): string | undefined {
 
 export function hostedRoute(pathname: string): HostedRoute {
 	if (pathname === "/" || pathname === "") return { page: "repositories" };
+	let research = parseResearchWorkspacePath(pathname);
+	if (research) return { page: "research", ...research };
 	let document = parseDocumentPath(pathname);
 	if (document?.slug) {
 		return {
@@ -174,19 +189,28 @@ export function githubLoginHref(pathname: string, search = "", hash = ""): strin
 }
 
 function ChannelWorkspace(
-	{ agent, id, owner, repository, slug, user }: {
+	{ agent, id, owner, repository, researchWorkspaceId, slug, user }: {
 		agent: boolean;
 		id?: string;
 		owner?: string;
 		repository?: string;
+		researchWorkspaceId?: string;
 		slug?: string;
 		user: Api.User;
 	},
 ) {
-	let [loaded, setLoaded] = useState<{
-		detail: Api.ChannelDetail;
-		Workspace: ComponentType<HostedWorkspaceProps>;
-	}>();
+	type LoadedWorkspace =
+		| {
+			kind: "document";
+			detail: Api.ChannelDetail;
+			Workspace: ComponentType<HostedWorkspaceProps>;
+		}
+		| {
+			kind: "research";
+			detail: Api.ChannelDetail;
+			Workspace: ComponentType<HostedWorkspaceProps & { workspaceId: string }>;
+		};
+	let [loaded, setLoaded] = useState<LoadedWorkspace>();
 	let [error, setError] = useState<unknown>();
 	let [retry, setRetry] = useState(0);
 	let { channel: navigationChannel, onDocumentLoaded } = useNavigationDocument();
@@ -198,30 +222,59 @@ function ChannelWorkspace(
 
 	useEffect(() => {
 		let active = true;
+		setLoaded(undefined);
+		setError(undefined);
 		let detail = id
 			? Api.channel(id)
 			: Api.document(owner!, repository!, slug!);
 		let prepared = detail.then(value => {
 			if (active) {
-				canonicalize(documentPath(
-					value.repository.owner,
-					value.repository.name,
-					value.channel.slug,
-				));
+				canonicalize(
+					researchWorkspaceId
+						? researchWorkspacePath(
+							value.repository.owner,
+							value.repository.name,
+							value.channel.slug,
+							researchWorkspaceId,
+						)
+						: documentPath(
+							value.repository.owner,
+							value.repository.name,
+							value.channel.slug,
+						),
+				);
 				rememberChannel(user.id, value.channel, value.repository);
 				onDocumentLoaded(value.channel);
 			}
 			return value;
 		});
-		Promise.all([prepared, import("./room-workspace")]).then(([detail, module]) => {
-			if (active) setLoaded({ detail, Workspace: module.RoomWorkspace });
+		let workspace = researchWorkspaceId
+			? import("./research-workspace").then(module => ({
+				kind: "research" as const,
+				Workspace: module.ResearchWorkspace,
+			}))
+			: import("./room-workspace").then(module => ({
+				kind: "document" as const,
+				Workspace: module.RoomWorkspace,
+			}));
+		Promise.all([prepared, workspace]).then(([detail, selected]) => {
+			if (active) setLoaded({ detail, ...selected } as LoadedWorkspace);
 		}, reason => {
 			if (active) setError(reason);
 		});
 		return () => {
 			active = false;
 		};
-	}, [id, onDocumentLoaded, owner, repository, retry, slug, user.id]);
+	}, [
+		id,
+		onDocumentLoaded,
+		owner,
+		repository,
+		researchWorkspaceId,
+		retry,
+		slug,
+		user.id,
+	]);
 	if (error) {
 		let requestedRepository = owner && repository
 			? { owner, name: repository, fullName: `${owner}/${repository}` }
@@ -241,23 +294,27 @@ function ChannelWorkspace(
 		);
 	}
 	if (!loaded) return <Loading label="Opening channel..." />;
-	let { detail, Workspace } = loaded;
+	let { detail } = loaded;
 	let channel = navigationChannel?.id === detail.channel.id
 		? navigationChannel
 		: detail.channel;
-	return (
-		<Workspace
-			agent={agent}
-			canEdit={detail.canEdit}
-			handle={user.login}
-			label={channel.title}
-			slug={channel.slug}
-			updatedAt={channel.updatedAt}
-			repository={detail.repository}
-			room={detail.channel.id}
-			userId={user.id}
-		/>
-	);
+	let props: HostedWorkspaceProps = {
+		agent,
+		canEdit: detail.canEdit,
+		handle: user.login,
+		label: channel.title,
+		slug: channel.slug,
+		updatedAt: channel.updatedAt,
+		repository: detail.repository,
+		room: detail.channel.id,
+		userId: user.id,
+	};
+	if (loaded.kind === "research") {
+		let Research = loaded.Workspace;
+		return <Research {...props} workspaceId={researchWorkspaceId!} />;
+	}
+	let Document = loaded.Workspace;
+	return <Document {...props} />;
 }
 
 export function HostedApp(
@@ -275,6 +332,19 @@ export function HostedApp(
 						agent={agent}
 						owner={route.owner}
 						repository={route.repository}
+						slug={route.slug}
+						user={user}
+					/>
+				</NavigationShell>
+			);
+		case "research":
+			return (
+				<NavigationShell route={route} user={user}>
+					<ChannelWorkspace
+						agent={agent}
+						owner={route.owner}
+						repository={route.repository}
+						researchWorkspaceId={route.workspaceId}
 						slug={route.slug}
 						user={user}
 					/>

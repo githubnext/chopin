@@ -388,6 +388,159 @@ export type PauseBackgroundJob = ControlBackgroundJob & { reason: string };
 export type ResumeBackgroundJob = ControlBackgroundJob & { availableAt: Date };
 export type SupersedeBackgroundJob = ControlBackgroundJob & { reason?: string };
 
+export type ResearchWorkspaceOrigin = "sidebar" | "planner";
+
+export type ResearchWorkspace = {
+	id: string;
+	channelId: string;
+	title: string;
+	proposedQuestion: string;
+	confirmedQuery: string | undefined;
+	origin: ResearchWorkspaceOrigin;
+	originMessageId: string | undefined;
+	createdBy: string;
+	confirmedBy: string | undefined;
+	revision: number;
+	idempotencyKey: string;
+	fingerprint: string;
+	createdAt: Date;
+	updatedAt: Date;
+};
+
+export type ResearchWorkspaceSummary = ResearchWorkspace;
+
+export type ResearchTurnKind = "initial" | "follow-up" | "search-more";
+
+export type ResearchTurn = {
+	id: string;
+	workspaceId: string;
+	ordinal: number;
+	kind: ResearchTurnKind;
+	requestId: string;
+	fingerprint: string;
+	question: string;
+	requestedBy: string;
+	evidenceJobId: string | undefined;
+	answerJobId: string | undefined;
+	createdAt: Date;
+	updatedAt: Date;
+};
+
+export type ResearchMessageAuthorKind = "member" | "agent" | "system";
+
+export type ResearchMessage = {
+	id: string;
+	workspaceId: string;
+	sequence: number;
+	turnId: string | undefined;
+	authorKind: ResearchMessageAuthorKind;
+	userId: string | undefined;
+	userHandle: string | undefined;
+	text: string;
+	sourceJobId: string | undefined;
+	createdAt: Date;
+};
+
+export type ResearchWorkspaceDetail = {
+	workspace: ResearchWorkspace;
+	turns: ResearchTurn[];
+	messages: ResearchMessage[];
+};
+
+export type CreateResearchWorkspace = {
+	id: string;
+	channelId: string;
+	title: string;
+	proposedQuestion: string;
+	origin: ResearchWorkspaceOrigin;
+	originMessageId?: string;
+	createdBy: string;
+	idempotencyKey: string;
+	fingerprint: string;
+	now: Date;
+	lease: Lease;
+};
+
+export type CreateResearchWorkspaceResult = {
+	workspace: ResearchWorkspace;
+	repeated: boolean;
+};
+
+export type ConfirmResearchWorkspace = {
+	channelId: string;
+	workspaceId: string;
+	turnId: string;
+	messageId: string;
+	requestId: string;
+	fingerprint: string;
+	confirmedQuery: string;
+	confirmedBy: string;
+	confirmedByHandle?: string;
+	now: Date;
+	lease: Lease;
+};
+
+export type ConfirmResearchWorkspaceResult = {
+	workspace: ResearchWorkspace;
+	turn: ResearchTurn;
+	message: ResearchMessage;
+	repeated: boolean;
+};
+
+export type AppendResearchTurn = {
+	channelId: string;
+	workspaceId: string;
+	turnId: string;
+	messageId: string;
+	kind: Exclude<ResearchTurnKind, "initial">;
+	requestId: string;
+	fingerprint: string;
+	question: string;
+	requestedBy: string;
+	requestedByHandle?: string;
+	now: Date;
+	lease: Lease;
+};
+
+export type AppendResearchTurnResult = ConfirmResearchWorkspaceResult;
+
+export type ResearchJobRole = "evidence" | "answer";
+
+export type LinkResearchTurnJob = {
+	channelId: string;
+	workspaceId: string;
+	turnId: string;
+	role: ResearchJobRole;
+	jobId: string;
+	now: Date;
+	lease: Lease;
+};
+
+export type LinkResearchTurnJobResult = {
+	workspace: ResearchWorkspace;
+	turn: ResearchTurn;
+	repeated: boolean;
+};
+
+export type AppendResearchAgentMessage = {
+	channelId: string;
+	workspaceId: string;
+	id: string;
+	turnId: string;
+	userId?: string;
+	userHandle?: string;
+	text: string;
+	sourceJobId: string;
+	now: Date;
+	lease: Lease;
+};
+
+export type AppendResearchAgentMessageResult = {
+	workspace: ResearchWorkspace;
+	message: ResearchMessage;
+	repeated: boolean;
+};
+
 export type Lease = {
 	name: string;
 	owner: string;

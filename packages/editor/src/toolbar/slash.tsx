@@ -32,10 +32,8 @@ import {
 	$createCodeBlockNode,
 	$createImageNode,
 	$createMathNode,
-	$createResearchQuestionNode,
 	$createTabNode,
 	$createTabsNode,
-	$isResearchQuestionNode,
 	DIFF_LANGUAGE,
 	IMAGE_PROTOCOLS,
 	MERMAID_LANGUAGE,
@@ -166,25 +164,6 @@ const COMMANDS: SlashCommand[] = [
 		group: "Layout",
 		keywords: ["note", "warning", "aside", "admonition"],
 		run: editor => insertContainer(editor, () => $createCalloutNode(ulid())),
-	},
-	{
-		id: "research-question",
-		label: "Research question",
-		group: "Work",
-		keywords: ["research", "question", "investigate", "agent"],
-		run: editor =>
-			insertContainer(
-				editor,
-				() => $createResearchQuestionNode(ulid()),
-				node => {
-					let current: LexicalNode | null = node;
-					while (current) {
-						if ($isResearchQuestionNode(current)) return false;
-						current = current.getParent();
-					}
-					return true;
-				},
-			),
 	},
 	{
 		id: "table",

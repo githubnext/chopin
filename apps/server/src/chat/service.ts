@@ -20,7 +20,7 @@ import { ulid } from "@chopin/dialect";
 
 import * as Agent from "../agent/client";
 import { repositoryTools } from "../agent/repository";
-import { toolbox } from "../agent/tools";
+import { type ResearchWorkspaceDraft, toolbox } from "../agent/tools";
 import * as Service from "../plan/service";
 import { instruction } from "@chopin/protocol/address";
 
@@ -61,7 +61,21 @@ type Waiting = Wire.Waiting & {
 	thread?: string;
 	/** Login session whose Copilot entitlement owns this queued turn. */
 	sessionId?: string;
+	/** Verified member identity, retained only for a queued composer message. */
+	userId?: string;
 };
+
+export type ActiveMemberRequest = {
+	entryId: string;
+	userId: string;
+	handle: string;
+	text: string;
+	claimantSessionId: string;
+	turnId: string;
+	lifecycle: number;
+};
+
+type MemberRequest = Pick<ActiveMemberRequest, "entryId" | "userId">;
 
 /** What a turn other than a message needs to say about itself. */
 export type Instruction = {
@@ -85,6 +99,8 @@ export type Chat = {
 	busy: boolean;
 	/** The transient lifecycle of the running Planner turn. */
 	turn?: Wire.Turn;
+	/** Private provenance for the member message driving only the current turn. */
+	activeRequest?: ActiveMemberRequest;
 	/**
 	 * The comment thread the running turn is acting on.
 	 *
@@ -179,9 +195,8 @@ function responded(chat: Chat, server: Server<SocketData>, room: string, text: s
 /**
  * The queue as clients see it.
  *
- * `spent` is a function and disappears on its own; `thread` is a string and
- * would not. Both are how the queue decides what to do, not anything a reader
- * of the transcript has business knowing.
+ * Internal queue metadata decides how and under whose authority a turn runs.
+ * None of it belongs in the wire projection.
  */
 function visible(chat: Chat): Wire.Waiting[] {
 	return chat.waiting.map(({ handle, id, text }) => ({ handle, id, text }));
@@ -230,6 +245,13 @@ export type Room = {
 	persist: () => Promise<void>;
 	ownerAvailable?: () => Promise<void>;
 	jobs?: JobService;
+	createResearch?: (request: {
+		entryId: string;
+		userId: string;
+		handle: string;
+		text: string;
+		question: string;
+	}) => Promise<ResearchWorkspaceDraft>;
 };
 
 /**
@@ -308,6 +330,7 @@ export async function send(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 			text: visible,
 			message: true,
 			sessionId: context.claimantSessionId,
+			userId: ws.data.principalId,
 		});
 		return queued(chat, server, room);
 	}
@@ -340,6 +363,7 @@ export async function send(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		undefined,
 		context.claimantSessionId,
 		true,
+		{ entryId: entry.id, userId: ws.data.principalId },
 	);
 }
 
@@ -432,8 +456,22 @@ export async function abort(context: Room, ws: Socket): Promise<void> {
 	});
 }
 
-function planTools(context: Room) {
-	let { plan, room, server } = context;
+function currentMemberRequest(chat: Chat): ActiveMemberRequest | undefined {
+	let active = chat.activeRequest;
+	if (
+		!active || chat.closed || !chat.busy || chat.lifecycle !== active.lifecycle
+		|| chat.turn?.id !== active.turnId || !active.userId || !active.claimantSessionId
+	) return undefined;
+	let entry = chat.entries.find(value => value.id === active.entryId);
+	if (
+		entry?.author.kind !== "member" || entry.author.handle !== active.handle
+		|| entry.text !== active.text
+	) return undefined;
+	return active;
+}
+
+export function planTools(context: Room) {
+	let { chat, plan, room, server } = context;
 	return toolbox({
 		plan,
 		server,
@@ -444,6 +482,23 @@ function planTools(context: Room) {
 		anchors: () => Service.anchors(plan, server, room),
 		changes: found => Service.changes(plan, server, room, found),
 		jobs: context.jobs,
+		createResearch: async question => {
+			let active = currentMemberRequest(chat);
+			if (!active) {
+				throw new Error(
+					"research workspaces require the explicit member message driving the current turn",
+				);
+			}
+			let createResearch = context.createResearch;
+			if (!createResearch) throw new Error("research workspaces are unavailable");
+			return createResearch({
+				entryId: active.entryId,
+				userId: active.userId,
+				handle: active.handle,
+				text: active.text,
+				question,
+			});
+		},
 	});
 }
 
@@ -720,6 +775,7 @@ async function run(
 	thread: string | undefined,
 	claimantSessionId: string,
 	reserved = false,
+	member?: MemberRequest,
 ): Promise<void> {
 	let { chat, plan, room, server } = context;
 	if (chat.closed) return;
@@ -730,6 +786,18 @@ async function run(
 		chat.acting = thread;
 		state(chat, server, room);
 	} else chat.acting = thread;
+
+	chat.activeRequest = member && chat.turn
+		? {
+			entryId: member.entryId,
+			userId: member.userId,
+			handle,
+			text,
+			claimantSessionId,
+			turnId: chat.turn.id,
+			lifecycle: chat.lifecycle,
+		}
+		: undefined;
 
 	try {
 		let agent = await session(context, claimantSessionId, text);
@@ -777,6 +845,7 @@ async function run(
 		}
 		chat.interruption = undefined;
 	} finally {
+		chat.activeRequest = undefined;
 		chat.release?.();
 		chat.release = undefined;
 		chat.finishTurn = undefined;
@@ -817,6 +886,8 @@ async function run(
 			next.text,
 			next.thread,
 			next.sessionId ?? context.claimantSessionId,
+			false,
+			next.message && next.userId ? { entryId: next.id, userId: next.userId } : undefined,
 		);
 	} else {
 		chat.busy = false;
@@ -833,9 +904,10 @@ function startRun(
 	thread: string | undefined,
 	claimantSessionId: string,
 	reserved = false,
+	member?: MemberRequest,
 ): void {
 	if (context.chat.closed) return;
-	let running = run(context, handle, text, thread, claimantSessionId, reserved);
+	let running = run(context, handle, text, thread, claimantSessionId, reserved, member);
 	context.chat.running = running;
 	void running.finally(() => {
 		if (context.chat.running === running) context.chat.running = undefined;
@@ -1071,6 +1143,7 @@ export async function resetAgent(
 		|| (revision !== undefined && binding.revision !== revision)
 	) return;
 	chat.lifecycle++;
+	chat.activeRequest = undefined;
 	clearTimeout(chat.credentialTimer);
 	chat.credentialTimer = undefined;
 	if (reason && chat.finishTurn) chat.interruption = reason;
@@ -1096,6 +1169,7 @@ export async function resetAgent(
 export async function close(chat: Chat): Promise<void> {
 	chat.closed = true;
 	chat.lifecycle++;
+	chat.activeRequest = undefined;
 	chat.waiting = [];
 	let running = chat.running;
 	let agent = chat.agent;

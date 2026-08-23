@@ -61,10 +61,9 @@ export declare namespace Job {
 	export type Incoming =
 		| Request<List.Ask>
 		| Request<Get.Ask>
-		| Request<Assign.Ask>
 		| Request<Cancel.Ask>;
 
-	export type Outgoing = Changed | List.Reply | Get.Reply | Assign.Reply | Cancel.Reply;
+	export type Outgoing = Changed | List.Reply | Get.Reply | Cancel.Reply;
 
 	export type Changed = KIND<"job:changed"> & { revision: number };
 
@@ -80,15 +79,6 @@ export declare namespace Job {
 	export namespace Get {
 		export type Ask = KIND<"job:get"> & { id: string };
 		export type Reply = KIND<"job:get"> & { detail?: Detail };
-	}
-
-	export namespace Assign {
-		export type Ask = KIND<"job:assign"> & {
-			type: "research-question";
-			questionId: string;
-			requestId: string;
-		};
-		export type Reply = KIND<"job:assign"> & { repeated: boolean; job: View };
 	}
 
 	export namespace Cancel {

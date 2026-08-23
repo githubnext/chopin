@@ -3,6 +3,10 @@ import type {
 	AddUserProjectResult,
 	AgentState,
 	AppendBackgroundJobProgress,
+	AppendResearchAgentMessage,
+	AppendResearchAgentMessageResult,
+	AppendResearchTurn,
+	AppendResearchTurnResult,
 	BackgroundJob,
 	BackgroundJobCursor,
 	BackgroundJobDetail,
@@ -16,11 +20,17 @@ import type {
 	ClaimBackgroundJobs,
 	CommitChannel,
 	CommitResult,
+	ConfirmResearchWorkspace,
+	ConfirmResearchWorkspaceResult,
 	CreateChannel,
+	CreateResearchWorkspace,
+	CreateResearchWorkspaceResult,
 	CreateWebSession,
 	EnqueueBackgroundJob,
 	FailBackgroundJob,
 	Lease,
+	LinkResearchTurnJob,
+	LinkResearchTurnJobResult,
 	PauseBackgroundJob,
 	PutUser,
 	RecordNavigationVisit,
@@ -29,6 +39,9 @@ import type {
 	RenewBackgroundJob,
 	ReplaceChannel,
 	RequeueBackgroundJob,
+	ResearchTurn,
+	ResearchWorkspaceDetail,
+	ResearchWorkspaceSummary,
 	ResumeBackgroundJob,
 	SaveCheckpoint,
 	SettleBackgroundJob,
@@ -124,6 +137,19 @@ export interface BackgroundJobStore {
 	get(channelId: string, jobId: string): Promise<BackgroundJobDetail | undefined>;
 }
 
+export interface ResearchWorkspaceStore {
+	create(input: CreateResearchWorkspace): Promise<CreateResearchWorkspaceResult>;
+	confirm(input: ConfirmResearchWorkspace): Promise<ConfirmResearchWorkspaceResult>;
+	appendTurn(input: AppendResearchTurn): Promise<AppendResearchTurnResult>;
+	linkJob(input: LinkResearchTurnJob): Promise<LinkResearchTurnJobResult>;
+	appendAgentMessage(
+		input: AppendResearchAgentMessage,
+	): Promise<AppendResearchAgentMessageResult>;
+	list(channelId: string, limit: number): Promise<ResearchWorkspaceSummary[]>;
+	get(channelId: string, workspaceId: string): Promise<ResearchWorkspaceDetail | undefined>;
+	findTurnByJob(channelId: string, jobId: string): Promise<ResearchTurn | undefined>;
+}
+
 /** The complete durable boundary. No provider-specific primitive crosses it. */
 export interface StorageAdapter {
 	readonly driver: string;
@@ -134,6 +160,7 @@ export interface StorageAdapter {
 	readonly collaboration: CollaborationStore;
 	readonly leases: LeaseStore;
 	readonly jobs: BackgroundJobStore;
+	readonly research: ResearchWorkspaceStore;
 
 	migrate(): Promise<void>;
 	health(): Promise<void>;

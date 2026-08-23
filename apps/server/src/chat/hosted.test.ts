@@ -148,6 +148,15 @@ describe("hosted Copilot ownership", () => {
 			expiresAt: Date.now() + 10_000,
 		};
 		chat.busy = true;
+		chat.activeRequest = {
+			entryId: "entry",
+			userId: "U_ana",
+			handle: "ana",
+			text: "research this",
+			claimantSessionId: "session",
+			turnId: "turn",
+			lifecycle: 0,
+		};
 		chat.finishTurn = () => {
 			finished++;
 		};
@@ -155,6 +164,7 @@ describe("hosted Copilot ownership", () => {
 		await resetAgent(chat, "session", 3, "rotated");
 		expect(aborted).toBe(0);
 		expect(chat.agent).toBeDefined();
+		expect(chat.activeRequest).toBeDefined();
 
 		await resetAgent(chat, "session", 4, "rotated");
 		expect(aborted).toBe(1);
@@ -164,16 +174,27 @@ describe("hosted Copilot ownership", () => {
 		expect(chat.owner).toBeUndefined();
 		expect(chat.interruption).toBe("rotated");
 		expect(chat.lifecycle).toBe(1);
+		expect(chat.activeRequest).toBeUndefined();
 	});
 
 	it("does not mark a not-yet-started turn interrupted during refresh", async () => {
 		let chat = create();
 		chat.busy = true;
+		chat.activeRequest = {
+			entryId: "entry",
+			userId: "U_mona",
+			handle: "mona",
+			text: "research this",
+			claimantSessionId: "session",
+			turnId: "turn",
+			lifecycle: 0,
+		};
 		chat.openingOwner = { sessionId: "session", generation: 1, revision: 2 };
 
 		await resetAgent(chat, "session", 2, "rotated");
 		expect(chat.interruption).toBeUndefined();
 		expect(chat.lifecycle).toBe(1);
+		expect(chat.activeRequest).toBeUndefined();
 	});
 
 	it("closes an active turn before releasing the conversation", async () => {
@@ -181,6 +202,15 @@ describe("hosted Copilot ownership", () => {
 		let finished = Promise.withResolvers<void>();
 		let aborted = 0;
 		chat.busy = true;
+		chat.activeRequest = {
+			entryId: "entry",
+			userId: "U_mona",
+			handle: "mona",
+			text: "research this",
+			claimantSessionId: "session",
+			turnId: "turn",
+			lifecycle: 0,
+		};
 		chat.waiting.push({ id: "queued", handle: "mona", text: "next" });
 		chat.running = finished.promise;
 		chat.finishTurn = finished.resolve;
@@ -199,5 +229,6 @@ describe("hosted Copilot ownership", () => {
 		expect(chat.closed).toBe(true);
 		expect(chat.waiting).toEqual([]);
 		expect(chat.agent).toBeUndefined();
+		expect(chat.activeRequest).toBeUndefined();
 	});
 });

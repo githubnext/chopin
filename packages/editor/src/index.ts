@@ -11,7 +11,7 @@ export { Decisions } from "./decisions";
 export type { DecisionsProps } from "./decisions";
 export { AgentFace, Face } from "./face";
 export type { FaceProps } from "./face";
-export { aggregateJobs, canCancelJob, currentJobs, JobStore, researchJob, useJobs } from "./jobs";
+export { aggregateJobs, canCancelJob, currentJobs, JobStore, useJobs } from "./jobs";
 export type { JobDetail, JobPage, JobSnapshot, JobView } from "./jobs";
 export { PlanEditor } from "./plan-editor";
 export type { PlanEditorProps, PlanState } from "./plan-editor";

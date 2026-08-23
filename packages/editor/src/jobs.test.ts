@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { aggregateJobs, currentJobs, JobStore, researchJob } from "./jobs";
+import { aggregateJobs, canCancelJob, currentJobs, JobStore } from "./jobs";
 
 import type { Job, Session } from "@chopin/protocol";
 import type { Transport } from "./transport";
@@ -8,10 +8,10 @@ import type { Transport } from "./transport";
 function job(over: Partial<Job.View> = {}): Job.View {
 	return {
 		id: crypto.randomUUID(),
-		type: "research-question",
+		type: "research-answer",
 		version: 1,
 		origin: "user",
-		targetKey: "research-question:question",
+		targetKey: "research-answer:workspace:one:turn:one:answer",
 		targetGeneration: 1,
 		state: "pending",
 		revision: 1,
@@ -94,26 +94,23 @@ describe("background job store", () => {
 		expect(store.snapshot.ready).toBe(false);
 	});
 
-	it("uses correlated asks for assignment, cancellation, and detail", async () => {
+	it("uses correlated asks for list, detail, and cancellation", async () => {
 		let store = new JobStore();
 		let wire = new FakeWire();
 		let pending = job();
 		let cancelled = { ...pending, state: "cancelled" as const, revision: 2 };
 		wire.replies.push(
-			{ kind: "job:assign", repeated: false, job: pending },
 			{ kind: "job:list", revision: 1, jobs: [pending], truncated: false },
 			{ kind: "job:get", detail: { revision: 1, currentTargetGeneration: 1, job: pending } },
 			{ kind: "job:cancel", job: cancelled },
 			{ kind: "job:list", revision: 2, jobs: [cancelled], truncated: false },
 		);
 		store.listen(wire);
-		await store.assignResearch("question");
-		await waitFor(() => !store.snapshot.refreshing);
+		await store.refresh();
 		expect((await store.detail(pending.id))?.job.id).toBe(pending.id);
 		await store.cancel(pending);
 		await waitFor(() => store.snapshot.jobs[0]?.state === "cancelled");
 		expect(wire.requests.map(request => request.kind)).toEqual([
-			"job:assign",
 			"job:list",
 			"job:get",
 			"job:cancel",
@@ -121,7 +118,7 @@ describe("background job store", () => {
 		]);
 	});
 
-	it("selects only the newest generation for aggregate and inline state", () => {
+	it("selects only the newest generation for aggregate state", () => {
 		let old = job({ id: "old", targetGeneration: 1, state: "failed" });
 		let current = job({ id: "new", targetGeneration: 2, state: "running" });
 		let summary = job({
@@ -132,13 +129,20 @@ describe("background job store", () => {
 			updatedAt: "2026-08-21T13:00:00.000Z",
 		});
 		expect(currentJobs([old, current, summary]).map(value => value.id)).toEqual(["summary", "new"]);
-		expect(researchJob([old, current], "question")?.id).toBe("new");
 		expect(aggregateJobs([old, current, summary])).toEqual({
 			active: 1,
 			paused: 0,
 			failed: 0,
 			ready: 1,
 		});
+	});
+
+	it("cancels only active user-origin research workspace jobs", () => {
+		expect(canCancelJob(job({ type: "research-evidence" }))).toBe(true);
+		expect(canCancelJob(job({ type: "research-answer", state: "paused" }))).toBe(true);
+		expect(canCancelJob(job({ type: "research-answer", state: "completed" }))).toBe(false);
+		expect(canCancelJob(job({ type: "research-answer", origin: "planner" }))).toBe(false);
+		expect(canCancelJob(job({ type: "document-summary" }))).toBe(false);
 	});
 });
 

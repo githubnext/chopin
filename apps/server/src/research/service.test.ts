@@ -1,0 +1,406 @@
+import { createHash } from "node:crypto";
+import { describe, expect, it } from "bun:test";
+
+import { JobRegistry } from "../jobs/registry";
+import {
+	parseResearchAnswerInput,
+	parseResearchEvidenceInput,
+	researchAnswerDefinition,
+	researchEvidenceDefinition,
+} from "../jobs/research-workspace";
+import { JobService } from "../jobs/service";
+import { StorageError } from "../storage/errors";
+import { MemoryStorage } from "../storage/memory/adapter";
+import { boundedResearchEvidence, ResearchWorkspaceService } from "./service";
+
+import type { BackgroundJob, JsonValue } from "../storage/model";
+import type { ResearchReport } from "../jobs/research-workspace";
+
+const SOURCE = "# Parent document\n\nThe private compatibility plan is current.\n";
+const SOURCE_HASH = `sha256:${createHash("sha256").update(SOURCE).digest("hex")}`;
+const PUBLIC_SOURCE = { title: "Release notes", url: "https://example.com/releases/v3" };
+const REPORT: ResearchReport = {
+	title: "Compatibility report",
+	summary: "The public and private evidence indicate compatibility.",
+	findings: [{ text: "Compatibility was retained.", sourceUrls: [PUBLIC_SOURCE.url] }],
+	caveats: ["Only the supplied release notes were reviewed."],
+};
+
+function requestId(value: number): string {
+	return `00000000-0000-4000-8000-${value.toString(16).padStart(12, "0")}`;
+}
+
+async function setup(options: { answer?: boolean; evidence?: boolean } = {}) {
+	let now = new Date("2026-08-23T12:00:00.000Z");
+	let storage = new MemoryStorage();
+	let userId = "U_octocat";
+	let channelId = crypto.randomUUID();
+	await storage.users.put({ id: userId, login: "octocat", avatarUrl: "avatar", now });
+	await storage.channels.create({
+		id: channelId,
+		repositoryId: "R_score",
+		repositoryOwner: "octo-org",
+		repositoryName: "score",
+		title: "Release plan",
+		createdBy: userId,
+		now,
+	});
+	let lease = await storage.leases.acquire("chopin:writer", "test-writer", 60_000);
+	if (!lease) throw new Error("writer lease unavailable");
+	let definitions = [];
+	if (options.evidence !== false) {
+		definitions.push(researchEvidenceDefinition({
+			config: { agent: true, model: "research-model" },
+			engine: async () => ({ findings: [], sources: [] }),
+		}));
+	}
+	if (options.answer !== false) {
+		definitions.push(researchAnswerDefinition({
+			config: { agent: true, model: "research-model" },
+			engines: {
+				private: async () => ({ findings: [] }),
+				synthesize: async () => REPORT,
+				answer: async () => ({ text: "Answer", sourceUrls: [] }),
+			},
+		}));
+	}
+	let registry = new JobRegistry(definitions);
+	let jobSequence = 0;
+	let jobs = new JobService({
+		storage,
+		registry,
+		lease: () => lease,
+		now: () => now,
+		id: () => `job-${++jobSequence}`,
+	});
+	let entitySequence = 0;
+	let publications: Array<{ workspaceId: string; revision: number }> = [];
+	let service = new ResearchWorkspaceService({
+		storage,
+		jobs,
+		lease: () => lease,
+		clock: () => now,
+		id: () => `entity-${++entitySequence}`,
+		current: async requestedChannelId => ({
+			channelId: requestedChannelId,
+			revision: 7,
+			source: SOURCE,
+			sourceHash: SOURCE_HASH,
+		}),
+		publish: async (publishedChannelId, workspaceId, revision) => {
+			let durable = await storage.research.get(publishedChannelId, workspaceId);
+			expect(durable?.workspace.revision).toBe(revision);
+			publications.push({ workspaceId, revision });
+		},
+	});
+	let advance = () => {
+		now = new Date(now.getTime() + 1);
+		return now;
+	};
+	return { storage, service, jobs, lease, channelId, userId, publications, advance };
+}
+
+async function settle(
+	context: Awaited<ReturnType<typeof setup>>,
+	type: "research-evidence" | "research-answer",
+	artifact: (job: BackgroundJob) => JsonValue,
+) {
+	let claimed = await context.storage.jobs.claim({
+		channelId: context.channelId,
+		claimOwner: `worker-${type}`,
+		count: 100,
+		ttlMs: 30_000,
+		now: context.advance(),
+		lease: context.lease,
+	});
+	let job = claimed.find(value => value.type === type);
+	if (!job) throw new Error(`no pending ${type} job`);
+	return context.jobs.settle({
+		channelId: job.channelId,
+		jobId: job.id,
+		claimOwner: job.claimOwner!,
+		claimGeneration: job.claimGeneration,
+		artifact: artifact(job),
+	});
+}
+
+function evidenceArtifact(job: BackgroundJob): JsonValue {
+	let input = parseResearchEvidenceInput(job.input);
+	return {
+		...input,
+		findings: ["The public release notes retain compatibility."],
+		sources: [PUBLIC_SOURCE],
+		model: "research-model",
+	};
+}
+
+function answerArtifact(job: BackgroundJob, text = "The old client was tested."): JsonValue {
+	let input = parseResearchAnswerInput(job.input);
+	let basis = {
+		workspaceId: input.workspaceId,
+		turnId: input.turnId,
+		kind: input.kind,
+		documentRevision: input.document.revision,
+		documentSourceHash: input.document.sourceHash,
+		model: "research-model",
+	};
+	return input.kind === "initial"
+		? {
+			...basis,
+			report: REPORT,
+			sources: [PUBLIC_SOURCE],
+			publicFindings: ["The public release notes retain compatibility."],
+			privateFindings: ["The private plan is current."],
+		}
+		: {
+			...basis,
+			answer: { text, sourceUrls: [PUBLIC_SOURCE.url] },
+			sources: [PUBLIC_SOURCE],
+		};
+}
+
+async function createAndConfirm(context: Awaited<ReturnType<typeof setup>>) {
+	let created = await context.service.createDraft({
+		channelId: context.channelId,
+		question: "  Which API contracts changed?  ",
+		requestId: requestId(1),
+		origin: "sidebar",
+		createdBy: context.userId,
+	});
+	let confirmed = await context.service.confirm({
+		channelId: context.channelId,
+		workspaceId: created.workspace.id,
+		query: " Which API contracts changed? ",
+		requestId: requestId(2),
+		confirmedBy: context.userId,
+		confirmedByHandle: "octocat",
+	});
+	return { created, confirmed };
+}
+
+async function finishInitial(context: Awaited<ReturnType<typeof setup>>) {
+	let created = await createAndConfirm(context);
+	let evidence = await settle(context, "research-evidence", evidenceArtifact);
+	await context.service.jobChanged(evidence.job);
+	let answer = await settle(context, "research-answer", answerArtifact);
+	await context.service.jobChanged(answer.job);
+	return created;
+}
+
+describe("research workspace service", () => {
+	it("bounds long evidence history while retaining the initial and newest batches", () => {
+		let evidence = Array.from({ length: 10 }, (_, batch) => ({
+			findings: Array.from({ length: 10 }, (_, item) => `finding-${batch}-${item}`),
+			sources: Array.from({ length: 10 }, (_, item) => ({
+				title: `source-${batch}-${item}`,
+				url: `https://source-${batch}-${item}.example/item`,
+			})),
+		}));
+		let bounded = boundedResearchEvidence(evidence);
+		expect(bounded.reduce((total, batch) => total + batch.findings.length, 0)).toBe(64);
+		expect(bounded.reduce((total, batch) => total + batch.sources.length, 0)).toBe(64);
+		expect(bounded[0]).toEqual(evidence[0]);
+		expect(bounded[1]).toEqual(evidence[9]);
+	});
+
+	it("creates bounded idempotent drafts without scheduling model work", async () => {
+		let context = await setup();
+		let input = {
+			channelId: context.channelId,
+			question: `  ${"Question ".repeat(30)}  `,
+			requestId: requestId(1),
+			origin: "sidebar" as const,
+			createdBy: context.userId,
+		};
+		let first = await context.service.createDraft(input);
+		let repeated = await context.service.createDraft(input);
+		expect(first.repeated).toBe(false);
+		expect(repeated).toEqual({ ...first, repeated: true });
+		expect(first.workspace.title.length).toBeLessThanOrEqual(120);
+
+		await expect(context.service.createDraft({ ...input, question: "A different question" }))
+			.rejects.toBeInstanceOf(StorageError);
+		let planner = await context.service.createDraft({
+			channelId: context.channelId,
+			question: "Review public release evidence",
+			origin: "planner",
+			originMessageId: "01K39QZG000000000000000001",
+			createdBy: context.userId,
+		});
+		let repeatedPlanner = await context.service.createDraft({
+			channelId: context.channelId,
+			question: "Review public release evidence",
+			origin: "planner",
+			originMessageId: "01K39QZG000000000000000001",
+			createdBy: context.userId,
+			requestId: requestId(9),
+		});
+		expect(repeatedPlanner).toEqual({ ...planner, repeated: true });
+		expect(planner.workspace).toMatchObject({
+			origin: "planner",
+			originMessageId: "01K39QZG000000000000000001",
+		});
+		expect((await context.jobs.list(context.channelId, 100))!.jobs).toEqual([]);
+		expect(context.publications).toHaveLength(2);
+		let stored = await context.storage.research.get(context.channelId, first.workspace.id);
+		expect(stored?.turns).toEqual([]);
+	});
+
+	it("rejects unavailable execution before confirmation and claims an owner only for new work", async () => {
+		let unavailable = await setup({ evidence: false });
+		let draft = await unavailable.service.createDraft({
+			channelId: unavailable.channelId,
+			question: "What changed?",
+			requestId: requestId(1),
+			origin: "sidebar",
+			createdBy: unavailable.userId,
+		});
+		let started = 0;
+		await expect(unavailable.service.confirm({
+			channelId: unavailable.channelId,
+			workspaceId: draft.workspace.id,
+			query: "What changed?",
+			requestId: requestId(2),
+			confirmedBy: unavailable.userId,
+			beforeStart: () => {
+				started++;
+			},
+		})).rejects.toMatchObject({ code: "not-ready" });
+		expect(started).toBe(0);
+		expect(await unavailable.storage.research.get(unavailable.channelId, draft.workspace.id))
+			.toMatchObject({ workspace: { confirmedQuery: undefined }, turns: [], messages: [] });
+
+		let context = await setup();
+		let created = await context.service.createDraft({
+			channelId: context.channelId,
+			question: "What changed?",
+			requestId: requestId(1),
+			origin: "sidebar",
+			createdBy: context.userId,
+		});
+		let confirmation = {
+			channelId: context.channelId,
+			workspaceId: created.workspace.id,
+			query: "What changed?",
+			requestId: requestId(2),
+			confirmedBy: context.userId,
+			beforeStart: () => {
+				started++;
+			},
+		};
+		await context.service.confirm(confirmation);
+		await context.service.confirm({
+			...confirmation,
+			beforeStart: () => {
+				throw new Error("a durable replay must not reacquire an owner");
+			},
+		});
+		expect(started).toBe(1);
+	});
+
+	it("reconciles completed evidence and never exposes durable request fingerprints", async () => {
+		let context = await setup();
+		let { created } = await createAndConfirm(context);
+		await settle(context, "research-evidence", evidenceArtifact);
+
+		let recovered = await context.service.get(context.channelId, created.workspace.id);
+		expect(recovered?.turns[0]).toMatchObject({
+			kind: "initial",
+			evidence: { job: { state: "completed" } },
+			answer: { job: { state: "pending", type: "research-answer" } },
+		});
+		let source = JSON.stringify(recovered);
+		expect(source).not.toContain("idempotencyKey");
+		expect(source).not.toContain("fingerprint");
+		expect(source).not.toContain("requestId");
+
+		let stored = await context.storage.research.get(context.channelId, created.workspace.id);
+		expect(stored?.turns[0]?.answerJobId).toBeDefined();
+	});
+
+	it("cancels the active job linked to a turn", async () => {
+		let context = await setup();
+		let { created, confirmed } = await createAndConfirm(context);
+		let cancelled = await context.service.cancelTurn({
+			channelId: context.channelId,
+			workspaceId: created.workspace.id,
+			turnId: confirmed.turns[0]!.id,
+		});
+		expect(cancelled.turns[0]?.evidence?.job.state).toBe("cancelled");
+		let repeated = await context.service.cancelTurn({
+			channelId: context.channelId,
+			workspaceId: created.workspace.id,
+			turnId: confirmed.turns[0]!.id,
+		});
+		expect(repeated.turns[0]?.evidence?.job.state).toBe("cancelled");
+	});
+
+	it("keeps follow-ups private, searches only explicit turns, and freezes the original report", async () => {
+		let context = await setup();
+		let { created } = await finishInitial(context);
+		let followUp = await context.service.appendTurn({
+			channelId: context.channelId,
+			workspaceId: created.workspace.id,
+			kind: "follow-up",
+			question: " Was the old client tested? ",
+			requestId: requestId(3),
+			requestedBy: context.userId,
+			requestedByHandle: "octocat",
+		});
+		let followUpTurn = followUp.turns.at(-1)!;
+		expect(followUpTurn.evidenceJobId).toBeUndefined();
+		expect(followUpTurn.answer?.job.type).toBe("research-answer");
+		let followUpJob = await context.storage.jobs.get(
+			context.channelId,
+			followUpTurn.answerJobId!,
+		);
+		let followUpInput = parseResearchAnswerInput(followUpJob!.job.input);
+		expect(followUpInput.kind).toBe("follow-up");
+		if (followUpInput.kind === "initial") throw new Error("expected continuation");
+		expect(followUpInput.originalReport).toEqual(REPORT);
+
+		await expect(context.service.appendTurn({
+			channelId: context.channelId,
+			workspaceId: created.workspace.id,
+			kind: "search-more",
+			question: "Search while the answer is active",
+			requestId: requestId(4),
+			requestedBy: context.userId,
+		})).rejects.toMatchObject({ code: "active-turn" });
+
+		let completedFollowUp = await settle(
+			context,
+			"research-answer",
+			job => answerArtifact(job, "The old client was tested."),
+		);
+		await context.service.jobChanged(completedFollowUp.job);
+		let search = await context.service.appendTurn({
+			channelId: context.channelId,
+			workspaceId: created.workspace.id,
+			kind: "search-more",
+			question: " Find newer compatibility evidence. ",
+			requestId: requestId(5),
+			requestedBy: context.userId,
+			requestedByHandle: "octocat",
+		});
+		let searchTurn = search.turns.at(-1)!;
+		expect(searchTurn.evidence?.job.type).toBe("research-evidence");
+		expect(searchTurn.answerJobId).toBeUndefined();
+		let evidenceJob = await context.storage.jobs.get(
+			context.channelId,
+			searchTurn.evidenceJobId!,
+		);
+		expect(parseResearchEvidenceInput(evidenceJob!.job.input).query)
+			.toBe("Find newer compatibility evidence.");
+
+		await settle(context, "research-evidence", evidenceArtifact);
+		let reconciled = await context.service.get(context.channelId, created.workspace.id);
+		let answerJobId = reconciled!.turns.at(-1)!.answerJobId!;
+		let storedAnswer = await context.storage.jobs.get(context.channelId, answerJobId);
+		let searchInput = parseResearchAnswerInput(storedAnswer!.job.input);
+		expect(searchInput.kind).toBe("search-more");
+		if (searchInput.kind === "initial") throw new Error("expected continuation");
+		expect(searchInput.originalReport).toEqual(REPORT);
+		expect(searchInput.evidence).toHaveLength(2);
+	});
+});

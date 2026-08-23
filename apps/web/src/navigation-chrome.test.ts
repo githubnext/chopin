@@ -36,7 +36,6 @@ describe("the Figma navigation chrome", () => {
 			onCreateDocument: () => {},
 			onLoadMore: () => {},
 			onNewDocument: () => {},
-			onOpenDocument: () => {},
 			onRenameDocument: () => {},
 			onSearch: () => {},
 			projects: [{
@@ -96,7 +95,6 @@ describe("the Figma navigation chrome", () => {
 			onCreateDocument: () => {},
 			onLoadMore: () => {},
 			onNewDocument: () => {},
-			onOpenDocument: () => {},
 			onRenameDocument: () => {},
 			onSearch: () => {},
 			projects: [],
@@ -123,7 +121,6 @@ describe("the Figma navigation chrome", () => {
 			onCreateDocument: () => {},
 			onLoadMore: () => {},
 			onNewDocument: () => {},
-			onOpenDocument: () => {},
 			onRenameDocument: () => {},
 			onSearch: () => {},
 			projects: [{

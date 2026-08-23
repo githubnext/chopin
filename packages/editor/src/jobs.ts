@@ -15,7 +15,7 @@ export type JobSnapshot = {
 	refreshing: boolean;
 	truncated: boolean;
 	error?: string;
-	pending: Readonly<Record<string, "assign" | "cancel" | "detail">>;
+	pending: Readonly<Record<string, "cancel" | "detail">>;
 };
 
 const EMPTY: JobSnapshot = {
@@ -36,7 +36,6 @@ export class JobStore {
 	#refresh?: Promise<void>;
 	#dirty = false;
 	#details = new Map<string, Promise<Job.Detail | undefined>>();
-	#assignmentIds = new Map<string, { key: string; id: string }>();
 
 	get snapshot(): JobSnapshot {
 		return this.#snapshot;
@@ -112,26 +111,6 @@ export class JobStore {
 			this.#refresh = undefined;
 			if (this.#dirty && this.#wire?.connected !== false) void this.refresh();
 		});
-	}
-
-	async assignResearch(questionId: string, requestKey = "initial"): Promise<Job.View> {
-		let wire = this.#required();
-		let remembered = this.#assignmentIds.get(questionId);
-		let requestId = remembered?.key === requestKey ? remembered.id : crypto.randomUUID();
-		this.#assignmentIds.set(questionId, { key: requestKey, id: requestId });
-		this.#pending(questionId, "assign");
-		try {
-			let reply = await wire.ask<Job.Assign.Reply>("job:assign", {
-				type: "research-question",
-				questionId,
-				requestId,
-			});
-			this.#upsert(reply.job);
-			void this.refresh();
-			return reply.job;
-		} finally {
-			this.#pending(questionId, undefined);
-		}
 	}
 
 	async cancel(job: Job.View): Promise<Job.View> {
@@ -214,12 +193,6 @@ export function currentJobs(jobs: Job.View[]): Job.View[] {
 	return [...current.values()].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 
-export function researchJob(jobs: Job.View[], questionId: string): Job.View | undefined {
-	return currentJobs(jobs).find(job =>
-		job.type === "research-question" && job.targetKey === `research-question:${questionId}`
-	);
-}
-
 export function aggregateJobs(jobs: Job.View[]) {
 	let current = currentJobs(jobs);
 	return {
@@ -231,7 +204,7 @@ export function aggregateJobs(jobs: Job.View[]) {
 }
 
 export function canCancelJob(job: Job.View): boolean {
-	return job.type === "research-question"
+	return (job.type === "research-evidence" || job.type === "research-answer")
 		&& job.origin === "user"
 		&& (job.state === "pending" || job.state === "paused" || job.state === "running");
 }

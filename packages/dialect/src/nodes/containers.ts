@@ -21,13 +21,10 @@ import {
 } from "lexical";
 
 import { CALLOUT_TYPES } from "../dialect";
-import { ulid } from "../ulid";
 
 import type {
-	DOMExportOutput,
 	EditorConfig,
 	ElementDOMSlot,
-	LexicalEditor,
 	LexicalNode,
 	LexicalUpdateJSON,
 	NodeKey,
@@ -297,67 +294,6 @@ export function $isCalloutNode(node: LexicalNode | null | undefined): node is Ca
 	return node instanceof CalloutNode;
 }
 
-// -- Research question ------------------------------------------------------
-
-export class ResearchQuestionNode extends ContainerNode {
-	static override getType(): string {
-		return "plan-research-question";
-	}
-
-	static override clone(node: ResearchQuestionNode): ResearchQuestionNode {
-		return new ResearchQuestionNode(node.__key);
-	}
-
-	static override importJSON(serialized: SerializedContainer): ResearchQuestionNode {
-		return $createResearchQuestionNode().updateFromJSON(serialized);
-	}
-
-	override resetOnCopyNodeFrom(originalNode: this): void {
-		super.resetOnCopyNodeFrom(originalNode);
-		this.setId(ulid());
-	}
-
-	override createDOM(config: EditorConfig): HTMLElement {
-		let dom = this.element(config, "section", "planResearchQuestion");
-		dom.dataset.planResearchQuestion = "";
-		dom.setAttribute("aria-label", "Research question");
-
-		let body = document.createElement("div");
-		body.dataset.planResearchQuestionBody = "";
-		dom.append(body);
-
-		let derived = document.createElement("div");
-		derived.dataset.planResearchQuestionDerived = "";
-		derived.contentEditable = "false";
-		setDOMUnmanaged(derived);
-		dom.append(derived);
-		return dom;
-	}
-
-	override exportDOM(_editor: LexicalEditor): DOMExportOutput {
-		let element = document.createElement("section");
-		element.dataset.planResearchQuestion = "";
-		element.dataset.planId = this.getId();
-		element.setAttribute("aria-label", "Research question");
-		return { element };
-	}
-
-	override getDOMSlot(element: HTMLElement): ElementDOMSlot {
-		let body = element.querySelector<HTMLElement>("[data-plan-research-question-body]");
-		return super.getDOMSlot(element).withElement(body ?? element);
-	}
-}
-
-export function $createResearchQuestionNode(id = ""): ResearchQuestionNode {
-	return $applyNodeReplacement(new ResearchQuestionNode().setId(id));
-}
-
-export function $isResearchQuestionNode(
-	node: LexicalNode | null | undefined,
-): node is ResearchQuestionNode {
-	return node instanceof ResearchQuestionNode;
-}
-
-export const CONTAINER_NODES = [TabsNode, TabNode, CalloutNode, ResearchQuestionNode];
+export const CONTAINER_NODES = [TabsNode, TabNode, CalloutNode];
 
 export type { CalloutType, NodeKey, SerializedCallout, SerializedContainer, SerializedTab };

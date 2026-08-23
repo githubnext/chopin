@@ -1,108 +1,151 @@
 import { describe, expect, it } from "bun:test";
 
-import { assignResearchQuestion, cancelResearchJob, getJob, listJobs } from "./browser";
-import { JobRegistry } from "./registry";
-import { researchQuestionDefinition } from "./research-question";
-import { JobService } from "./service";
 import * as Plan from "../plan/service";
 import { openPlan } from "../testing/plan";
+import { cancelResearchWorkspaceJob, getJob, listJobs } from "./browser";
+import { JobRegistry } from "./registry";
+import { researchAnswerDefinition, researchEvidenceDefinition } from "./research-workspace";
+import { JobService } from "./service";
 
-const ID = "01K0N4TR8K7JGM4R1J7PW4R8YJ";
-const SOURCE = `<ResearchQuestion id="${ID}">\n\nWhat changed?\n\n</ResearchQuestion>\n`;
+function registry(): JobRegistry {
+	return new JobRegistry([
+		researchEvidenceDefinition({
+			config: { agent: true, model: "model" },
+			engine: async () => ({ findings: [], sources: [] }),
+		}),
+		researchAnswerDefinition({
+			config: { agent: true, model: "model" },
+			engines: {
+				private: async () => ({ findings: [] }),
+				synthesize: async () => ({
+					title: "Report",
+					summary: "Summary",
+					findings: [],
+					caveats: [],
+				}),
+				answer: async () => ({ text: "Answer", sourceUrls: [] }),
+			},
+		}),
+	]);
+}
+
+function answerInput(workspaceId: string, turnId: string, question: string) {
+	let source = "# Document\n";
+	return {
+		workspaceId,
+		turnId,
+		kind: "initial" as const,
+		question,
+		document: {
+			source,
+			revision: 1,
+			sourceHash: `sha256:${new Bun.CryptoHasher("sha256").update(source).digest("hex")}`,
+		},
+		evidence: [],
+		history: [],
+	};
+}
 
 describe("browser background jobs", () => {
-	it("derives a research assignment from canonical document state", async () => {
-		let context = await openPlan(SOURCE);
+	it("lists safe workspace subjects and cancels active user research jobs", async () => {
+		let context = await openPlan("# Document\n");
 		try {
-			let definition = researchQuestionDefinition({
-				config: { agent: true, model: "model" },
-				current: async () => {
-					let source = Plan.source(context.plan);
-					return {
-						channelId: context.channel.id,
-						revision: context.plan.revision,
-						source,
-						sourceHash: Plan.sourceHash(source),
-					};
-				},
-				commitCurrent: async () => false,
-				engines: {
-					public: async () => ({ findings: [], sources: [] }),
-					private: async () => ({ findings: [] }),
-					synthesize: async () => ({
-						title: "Report",
-						summary: "Summary",
-						findings: [],
-						caveats: [],
-					}),
-				},
-			});
 			let service = new JobService({
 				storage: context.storage,
-				registry: new JobRegistry([definition]),
+				registry: registry(),
 				lease: () => context.lease,
 			});
-			let requestId = crypto.randomUUID();
-			let assigned = await assignResearchQuestion(service, context.plan, ID, requestId);
-			expect(assigned).toMatchObject({
-				repeated: false,
-				job: { type: "research-question", origin: "user", targetKey: `research-question:${ID}` },
+			let workspaceId = "workspace-one";
+			let turnId = "turn-one";
+			let evidence = await service.enqueueUser({
+				channelId: context.channel.id,
+				type: "research-evidence",
+				targetKey: `workspace:${workspaceId}:turn:${turnId}:evidence`,
+				idempotencyKey: "evidence-one",
+				input: { workspaceId, turnId, query: "What changed?" },
 			});
-			let repeated = await assignResearchQuestion(service, context.plan, ID, requestId);
-			expect(repeated.repeated).toBe(true);
-			let stored = await context.storage.jobs.get(context.channel.id, assigned.job.id);
-			expect(stored!.job.input).toMatchObject({
-				questionId: ID,
-				question: "What changed?",
-				revision: 0,
+			let answer = await service.enqueueUser({
+				channelId: context.channel.id,
+				type: "research-answer",
+				targetKey: `workspace:${workspaceId}:turn:${turnId}:answer`,
+				idempotencyKey: "answer-one",
+				input: answerInput(workspaceId, turnId, "Which clients were tested?"),
 			});
 
 			let listed = await listJobs(service, context.channel.id);
-			expect(listed.jobs).toHaveLength(1);
-			expect("input" in listed.jobs[0]!).toBe(false);
-			expect(listed.jobs[0]!.subject).toBe("What changed?");
-			expect(listed.jobs[0]!.progress).toEqual([]);
-			expect((await getJob(service, context.channel.id, assigned.job.id)).detail).toBeDefined();
-			let cancelled = await cancelResearchJob(
-				service,
-				context.channel.id,
-				assigned.job.id,
-			);
-			expect(cancelled.job.state).toBe("cancelled");
+			expect(Object.fromEntries(listed.jobs.map(job => [job.type, job.subject]))).toEqual({
+				"research-answer": "Which clients were tested?",
+				"research-evidence": "What changed?",
+			});
+			expect((await getJob(service, context.channel.id, answer.job.id)).detail?.job.subject)
+				.toBe("Which clients were tested?");
+			expect(
+				(await cancelResearchWorkspaceJob(service, context.channel.id, evidence.job.id)).job.state,
+			).toBe("cancelled");
+			expect(
+				(await cancelResearchWorkspaceJob(service, context.channel.id, evidence.job.id)).job.state,
+			).toBe("cancelled");
+			expect(
+				(await cancelResearchWorkspaceJob(service, context.channel.id, answer.job.id)).job.state,
+			).toBe("cancelled");
 		} finally {
 			await Plan.close(context.plan);
 			await context.storage.close();
 		}
 	});
 
-	it("rejects arbitrary, missing, or non-user cancellation targets", async () => {
-		let context = await openPlan(SOURCE);
+	it("replays cancelled jobs and rejects missing, stale, planner, and arbitrary targets", async () => {
+		let context = await openPlan("# Document\n");
 		try {
 			let service = new JobService({
 				storage: context.storage,
-				registry: new JobRegistry(),
+				registry: registry(),
 				lease: () => context.lease,
 			});
-			await expect(assignResearchQuestion(service, context.plan, "bad", crypto.randomUUID()))
-				.rejects.toThrow("invalid");
-			await expect(cancelResearchJob(service, context.channel.id, "missing"))
+			let evidence = (targetKey: string, idempotencyKey: string) => ({
+				channelId: context.channel.id,
+				type: "research-evidence",
+				targetKey,
+				idempotencyKey,
+				input: { workspaceId: "workspace", turnId: idempotencyKey, query: "What changed?" },
+			});
+			await expect(cancelResearchWorkspaceJob(service, context.channel.id, "missing"))
 				.rejects.toThrow("not cancellable");
+
+			let planner = await service.enqueuePlanner(evidence("workspace:planner", "planner"));
+			await expect(cancelResearchWorkspaceJob(service, context.channel.id, planner.job.id))
+				.rejects.toThrow("not cancellable");
+
+			let inactive = await service.enqueueUser(evidence("workspace:inactive", "inactive"));
+			await service.cancel({ channelId: context.channel.id, jobId: inactive.job.id });
+			expect(
+				(await cancelResearchWorkspaceJob(service, context.channel.id, inactive.job.id)).job.state,
+			).toBe("cancelled");
+
+			let old = await service.enqueueUser(evidence("workspace:current", "old"));
+			let current = await service.enqueueUser(evidence("workspace:current", "current"));
+			await expect(cancelResearchWorkspaceJob(service, context.channel.id, old.job.id))
+				.rejects.toThrow("not cancellable");
+			expect(
+				(await cancelResearchWorkspaceJob(service, context.channel.id, current.job.id)).job.state,
+			).toBe("cancelled");
+
 			let now = new Date();
-			let scheduler = await context.storage.jobs.enqueue({
+			let arbitrary = await context.storage.jobs.enqueue({
 				id: crypto.randomUUID(),
 				channelId: context.channel.id,
-				type: "research-question",
+				type: "document-summary",
 				version: 1,
-				origin: "scheduler",
-				targetKey: `research-question:${ID}`,
+				origin: "user",
+				targetKey: "document-summary:document",
 				idempotencyKey: crypto.randomUUID(),
 				fingerprint: crypto.randomUUID(),
-				input: { questionId: ID },
+				input: { revision: 1 },
 				availableAt: now,
 				now,
 				lease: context.lease,
 			});
-			await expect(cancelResearchJob(service, context.channel.id, scheduler.job.id))
+			await expect(cancelResearchWorkspaceJob(service, context.channel.id, arbitrary.job.id))
 				.rejects.toThrow("not cancellable");
 		} finally {
 			await Plan.close(context.plan);

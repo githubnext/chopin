@@ -18,6 +18,15 @@ describe("hosted routes", () => {
 				repository: "score",
 				slug: "résumé-計画",
 			});
+		expect(hostedRoute(
+			"/documents/octo-org/score/r%C3%A9sum%C3%A9-%E8%A8%88%E7%94%BB/research/workspace%3A1",
+		)).toEqual({
+			page: "research",
+			owner: "octo-org",
+			repository: "score",
+			slug: "résumé-計画",
+			workspaceId: "workspace:1",
+		});
 		expect(hostedRoute("/repositories/octo-org/score")).toEqual({
 			page: "repository",
 			owner: "octo-org",
@@ -38,6 +47,8 @@ describe("hosted routes", () => {
 		});
 		expect(hostedRoute("/plans/main")).toEqual({ page: "missing" });
 		expect(hostedRoute("/documents/octo-org/score/plan/extra"))
+			.toEqual({ page: "missing" });
+		expect(hostedRoute("/documents/octo-org/score/plan/research"))
 			.toEqual({ page: "missing" });
 	});
 });

@@ -9,11 +9,9 @@
 
 import {
 	$createCalloutNode,
-	$createResearchQuestionNode,
 	$createTabNode,
 	$createTabsNode,
 	$isCalloutNode,
-	$isResearchQuestionNode,
 	$isTabNode,
 	$isTabsNode,
 } from "./containers";
@@ -22,13 +20,7 @@ import { attribute, identity, isFlow, PRIORITY } from "./shared";
 import type { LexicalExportVisitor, MdastImportVisitor } from "@mdxeditor/editor";
 import type { LexicalNode } from "lexical";
 import type { MdxJsxFlowElement } from "mdast-util-mdx-jsx";
-import type {
-	CalloutNode,
-	CalloutType,
-	ResearchQuestionNode,
-	TabNode,
-	TabsNode,
-} from "./containers";
+import type { CalloutNode, CalloutType, TabNode, TabsNode } from "./containers";
 
 type Importer = MdastImportVisitor<MdxJsxFlowElement>;
 type Exporter<T extends LexicalNode> = LexicalExportVisitor<T, MdxJsxFlowElement>;
@@ -76,11 +68,6 @@ export const MdastCalloutVisitor = importer("Callout", node =>
 		attribute(node, "title") ?? "",
 	));
 
-export const MdastResearchQuestionVisitor = importer(
-	"ResearchQuestion",
-	node => $createResearchQuestionNode(attribute(node, "id") ?? ""),
-);
-
 export const LexicalTabsVisitor: Exporter<TabsNode> = exporter(
 	"Tabs",
 	$isTabsNode,
@@ -99,22 +86,14 @@ export const LexicalCalloutVisitor: Exporter<CalloutNode> = exporter(
 	node => identity(node.getId(), { type: node.getCalloutType(), title: node.getTitle() }),
 );
 
-export const LexicalResearchQuestionVisitor: Exporter<ResearchQuestionNode> = exporter(
-	"ResearchQuestion",
-	$isResearchQuestionNode,
-	node => identity(node.getId()),
-);
-
 export const CONTAINER_IMPORT_VISITORS = [
 	MdastTabsVisitor,
 	MdastTabVisitor,
 	MdastCalloutVisitor,
-	MdastResearchQuestionVisitor,
 ];
 
 export const CONTAINER_EXPORT_VISITORS = [
 	LexicalTabsVisitor,
 	LexicalTabVisitor,
 	LexicalCalloutVisitor,
-	LexicalResearchQuestionVisitor,
 ];

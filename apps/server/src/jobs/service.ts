@@ -223,13 +223,17 @@ function reason(value: string): string {
 
 function view(value: BackgroundJob | BackgroundJobSummary): JobView {
 	let subject = "subject" in value ? value.subject : undefined;
-	if (value.type === "research-question" && "input" in value) {
+	if (
+		(value.type === "research-evidence" || value.type === "research-answer")
+		&& "input" in value
+	) {
 		let input = value.input;
+		let field = value.type === "research-evidence" ? "query" : "question";
 		if (
 			input && typeof input === "object" && !Array.isArray(input)
-			&& typeof input.question === "string"
+			&& typeof input[field] === "string"
 		) {
-			subject = [...input.question.trim()].slice(0, 200).join("");
+			subject = [...input[field].trim()].slice(0, 200).join("");
 		}
 	}
 	return {
