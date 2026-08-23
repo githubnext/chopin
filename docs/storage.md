@@ -65,7 +65,9 @@ revision used by document block operations or the WebSocket document sequence.
   cannot be combined.
 
 See the counter glossary in [Architecture](architecture.md) before changing
-recovery or acknowledgement behavior.
+recovery or acknowledgement behavior. See
+[Background jobs](background-jobs.md) for target and claim generations,
+attempts, failures, and background-job channel revisions.
 
 ## PostgreSQL schema
 
@@ -116,7 +118,9 @@ Research Workspace mutations also commit before their parent-channel
 `research:changed` invalidation. Background artifacts remain the lifecycle
 authority for execution; workspace turns link those jobs rather than copying
 their state. A completed evidence job can be reconciled idempotently into its
-private answer job after interruption or the next workspace read.
+private answer job after interruption or the next workspace read. The complete
+job lifecycle and extension contract are documented in
+[Background jobs and workers](background-jobs.md).
 
 ## Checkpoints and retention
 

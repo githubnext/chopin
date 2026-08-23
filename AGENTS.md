@@ -12,6 +12,7 @@ The most useful technical references are:
 - [Repository channels](docs/channels.md)
 - [Storage and persistence](docs/storage.md)
 - [Hosted agent (Planner)](docs/hosted-agent.md)
+- [Background jobs and workers](docs/background-jobs.md)
 - [Experimental implementation lifecycle](docs/implementation-lifecycle.md)
 - [Self-hosting](docs/self-hosting.md)
 
@@ -104,9 +105,10 @@ external implementation runs are durable.
 - **MCP has a different credential boundary.** `/mcp` checks its caller-supplied
   GitHub bearer directly, does not require the App installation, and can mutate
   data for callers with push or administration access.
-- **Planner ownership is process-bound.** The first eligible invoker supplies
-  their GitHub App token and Copilot entitlement. The database stores only a
-  token-free owner reference and durable context.
+- **Planner ownership is process-bound.** The first eligible Planner or
+  model-backed Research Workspace invocation supplies its GitHub App token and
+  Copilot entitlement. The database stores only a token-free owner reference and
+  durable context.
 - **Planner tools are repository-fixed.** The hosted runtime has no shell,
   checkout, host filesystem, skills, plugins, or arbitrary GitHub access.
 - **Repository node IDs are authoritative.** Owner and repository names resolve

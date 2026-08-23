@@ -20,7 +20,8 @@ that origin.
   versions are not covered by the project test suite.
 - Database migrations are forward-only. There is no automated schema rollback.
 - Restarting the application signs every browser out and releases hosted agent
-  ownership. Documents, transcripts, decisions, and implementation state remain.
+  ownership. Documents, transcripts, decisions, background jobs and artifacts,
+  Research Workspaces, and implementation state remain.
 
 ## Choose the access policy first
 
@@ -43,7 +44,7 @@ GitHub bearer token, applies the instance admission policy, and authorizes
 repositories directly from that token. It does not require a GitHub App
 installation and can create documents or advance implementation lifecycle
 state for callers with push or administration access. `AGENT=off` disables
-hosted agent turns; it does not disable MCP.
+hosted agent turns and the background-job runner; it does not disable MCP.
 
 Use restricted admission for any internet-facing evaluation unless unrestricted
 access is a deliberate choice. Protect the entire origin with TLS because MCP
@@ -107,10 +108,13 @@ the image.
 | `SERVER_HOST`                  | `127.0.0.1`         | Source-process bind address. The image sets `0.0.0.0`.                                                                             |
 | `PORT`                         | `8787`              | Source-process HTTP and WebSocket port. The supplied image and health check expect internal port 8787.                             |
 | `MODEL`                        | `claude-sonnet-4.6` | Model requested for hosted agent sessions.                                                                                         |
-| `AGENT`                        | on                  | Set exactly `off` to prevent hosted agent turns and Copilot CLI startup.                                                           |
-| `BACKGROUND_JOBS`              | on                  | Set exactly `off` to disable background job scheduling and status surfaces. `AGENT=off` separately prevents model execution.       |
+| `AGENT`                        | on                  | Set exactly `off` to prevent hosted agent turns, disable the entire background-job runner, and avoid Copilot CLI startup.          |
+| `BACKGROUND_JOBS`              | on                  | Set exactly `off` to disable background job scheduling and status surfaces. `AGENT=off` disables the entire runner.                |
 | `WEB_RESEARCH`                 | on                  | Set exactly `off` to disable confirmed public-search turns while retaining private drafts, readable artifacts, and other jobs.     |
 | `COPILOT_CLI_PATH`             | automatic           | Advanced override for the Copilot CLI executable.                                                                                  |
+
+See [Background jobs and workers](background-jobs.md) for the combined
+`AGENT`, `BACKGROUND_JOBS`, and `WEB_RESEARCH` behavior and recovery model.
 
 Generate the encryption key with:
 
@@ -307,9 +311,10 @@ lease. Do not run two application instances against one database.
 **The UI returns 404 while APIs respond.** The source deployment did not build
 `apps/web/dist`, or the runtime image was assembled incorrectly.
 
-**The first Planner turn fails.** Check the invoking user's Copilot entitlement,
-the model, App permissions, repository write access, and Copilot CLI startup
-logs. These dependencies are validated lazily.
+**The first model-backed action fails.** Check the invoking user's Copilot
+entitlement, the model, App permissions, repository write access, and Copilot
+CLI startup logs. Planner and Research Workspace execution validate these
+dependencies lazily.
 
 **MCP returns 401 or 403.** A 401 indicates an invalid or expired bearer. A 403
 indicates failed instance admission or a supplied Origin that differs from

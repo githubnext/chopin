@@ -9,7 +9,8 @@ currently named Planner.
 This document describes the system boundaries and collaborative document model.
 See [Repository channels](channels.md) for channel creation and access,
 [Authentication](authentication.md) for identity, [Storage](storage.md) for the
-durable model, and [Self-hosting](self-hosting.md) for deployment.
+durable model, [Background jobs](background-jobs.md) for isolated durable work,
+and [Self-hosting](self-hosting.md) for deployment.
 
 ## Vocabulary
 
@@ -22,9 +23,9 @@ durable model, and [Self-hosting](self-hosting.md) for deployment.
 - A **plan** is a document being used for planning. It is not the product noun
   for every document.
 - A **room** is the server's live in-memory representation of an open channel.
-- A **Research Workspace** is a durable, read-only generated report and
-  append-only research thread attached to one parent channel. It is not a
-  channel or collaboratively edited document.
+- A **Research Workspace** is a durable parent-scoped resource with a private
+  draft, immutable generated report, and append-only research thread. It is not
+  a channel or collaboratively edited document.
 - The **Planner** is the current name of Chopin's hosted Copilot-backed document
   agent.
 - A **coding agent** is an external MCP client that creates or implements a
@@ -62,15 +63,15 @@ the lease. This is a single-writer design, not an application cluster.
 
 ## Workspace packages
 
-| Area                | Responsibility                                                                       | Internal dependencies                         |
-| ------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------- |
-| `packages/dialect`  | Restricted MDX dialect, parsing, serialization, and Lexical schema                   | none                                          |
-| `packages/protocol` | WebSocket types and shared addressing helper                                         | none                                          |
-| `packages/question` | Questionnaire definitions, shared drafts, and answer derivation                      | `protocol`                                    |
-| `packages/viewport` | Browser viewport geometry and subscriptions                                          | none                                          |
-| `packages/editor`   | Collaborative editor, cursors, decisions, comments, and widgets                      | `dialect`, `question`, `protocol`, `viewport` |
-| `apps/server`       | Authentication, channels, rooms, storage, Planner, MCP, and implementation lifecycle | `dialect`, `question`, `protocol`             |
-| `apps/web`          | Repository picker, channel navigation, conversation, and workspace shell             | `dialect`, `editor`, `protocol`, `viewport`   |
+| Area                | Responsibility                                                                             | Internal dependencies                         |
+| ------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------- |
+| `packages/dialect`  | Restricted MDX dialect, parsing, serialization, and Lexical schema                         | none                                          |
+| `packages/protocol` | WebSocket types and shared addressing helper                                               | none                                          |
+| `packages/question` | Questionnaire definitions, shared drafts, and answer derivation                            | `protocol`                                    |
+| `packages/viewport` | Browser viewport geometry and subscriptions                                                | none                                          |
+| `packages/editor`   | Collaborative editor, cursors, decisions, comments, and widgets                            | `dialect`, `question`, `protocol`, `viewport` |
+| `apps/server`       | Authentication, channels, rooms, storage, Planner, jobs, MCP, and implementation lifecycle | `dialect`, `question`, `protocol`             |
+| `apps/web`          | Repository picker, channel navigation, conversation, and workspace shell                   | `dialect`, `editor`, `protocol`, `viewport`   |
 
 Runtime workspace packages do not depend on either application. The E2E suite
 and skill contract tests deliberately import server internals as test harnesses;
@@ -102,11 +103,15 @@ lifecycle mutations.
 
 ### Hosted agent
 
-The first eligible editor to invoke the Planner becomes that channel's Planner
-owner for the lifetime of the process session. Permission callbacks recheck
-admission, session identity, credential revision, ownership generation,
-repository role, and App installation before execution. The Planner has bounded,
-repository-fixed read tools and no ambient checkout, shell, or host filesystem.
+The first eligible editor to invoke the Planner or start a new model-backed
+Research Workspace turn becomes that channel's Planner owner for the lifetime of
+the process session.
+Permission callbacks recheck admission, session identity, credential revision,
+ownership generation, repository role, and App installation before execution.
+The Planner has bounded, repository-fixed read tools and no ambient checkout,
+shell, or host filesystem. Model-backed `active-planner` workers use the same
+owner credential but fresh isolated sessions; see
+[Background jobs](background-jobs.md).
 
 ## State ownership
 
@@ -116,6 +121,8 @@ repository-fixed read tools and no ambient checkout, shell, or host filesystem.
 - channel metadata and repository identity;
 - complete Yjs checkpoints and the accepted update journal after each
   checkpoint;
+- background-job requests, normalized inputs, lifecycle and progress state, and
+  immutable completed artifacts;
 - parent-scoped Research Workspaces, turns, messages, and links to immutable
   background-job artifacts;
 - canonical MDX and a versioned sidecar containing questions, shared drafts,
@@ -134,8 +141,9 @@ repository-fixed read tools and no ambient checkout, shell, or host filesystem.
 
 Startup deliberately clears every process-session registry row and Planner
 owner reference. Transcripts, document state, reserved context fields, and
-implementation runs remain. The current runtime does not generate a durable
-summary or advance its transcript cursor.
+implementation runs remain. The current runtime does not generate the reserved
+Planner transcript summary or advance its transcript cursor; document-summary
+background artifacts are a separate feature.
 
 ### Ephemeral state
 
@@ -158,7 +166,7 @@ not interchangeable:
 | Storage channel revision   | Advances for every durable channel commit, including sidecar-only transcript, graph, draft, or relationship changes. It fences adapter writes.                |
 | Storage sequence           | Orders committed updates and events. Sidecar-only commits can create gaps in the Yjs update journal because they still consume a sequence.                    |
 | Graph version and revision | Identify one implementation graph generation and the edits within its current draft. A claim also binds the exact plan revision.                              |
-| Research revision          | Orders durable workspace, turn, job-link, and transcript changes independently from the parent document and background-job revisions.                         |
+| Research revision          | Orders durable workspace, turn, job-link, and transcript changes independently from the parent document, background-job channel revision, and job revisions.  |
 
 Channel IDs, update IDs, operation IDs, component IDs, and lifecycle idempotency
 keys solve separate identity problems. See [Repository channels](channels.md) for
