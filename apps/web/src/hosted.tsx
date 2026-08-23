@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
 	documentPath,
 	documentsPath,
@@ -11,7 +11,7 @@ import * as Api from "./api";
 import { readChannelRecovery, readDocumentRecovery, rememberChannel } from "./channel-recovery";
 import { NavigationShell, useNavigationDocument } from "./navigation-shell";
 
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 
 export type HostedWorkspaceProps = {
 	room: string;
@@ -222,11 +222,12 @@ function ChannelWorkspace(
 
 	useEffect(() => {
 		let active = true;
+		let controller = new AbortController();
 		setLoaded(undefined);
 		setError(undefined);
 		let detail = id
-			? Api.channel(id)
-			: Api.document(owner!, repository!, slug!);
+			? Api.channel(id, controller.signal)
+			: Api.document(owner!, repository!, slug!, controller.signal);
 		let prepared = detail.then(value => {
 			if (active) {
 				canonicalize(
@@ -244,7 +245,7 @@ function ChannelWorkspace(
 						),
 				);
 				rememberChannel(user.id, value.channel, value.repository);
-				onDocumentLoaded(value.channel);
+				void onDocumentLoaded(value.channel);
 			}
 			return value;
 		});
@@ -264,6 +265,7 @@ function ChannelWorkspace(
 		});
 		return () => {
 			active = false;
+			controller.abort();
 		};
 	}, [
 		id,
@@ -320,45 +322,71 @@ function ChannelWorkspace(
 export function HostedApp(
 	{ agent, user }: { agent: boolean; user: Api.User },
 ) {
-	let route = hostedRoute(location.pathname);
+	let [route, setRoute] = useState(() => hostedRoute(location.pathname));
+	let navigate = useCallback((destination: string, options: { replace?: boolean } = {}) => {
+		let target = new URL(destination, location.href);
+		if (target.origin !== location.origin) {
+			location.assign(target.href);
+			return;
+		}
+		let next = `${target.pathname}${target.search}${target.hash}`;
+		let current = `${location.pathname}${location.search}${location.hash}`;
+		if (next === current) return;
+		if (options.replace) history.replaceState(null, "", next);
+		else history.pushState(null, "", next);
+		setRoute(hostedRoute(target.pathname));
+	}, []);
+
+	useEffect(() => {
+		let changed = () => setRoute(hostedRoute(location.pathname));
+		window.addEventListener("popstate", changed);
+		return () => window.removeEventListener("popstate", changed);
+	}, []);
+
+	if (route.page === "missing") {
+		return <Failure error={new Error("This page does not exist.")} />;
+	}
+	let workspace: ReactNode;
 	switch (route.page) {
 		case "repositories":
 		case "repository":
-			return <NavigationShell route={route} user={user} />;
+			break;
 		case "document":
-			return (
-				<NavigationShell route={route} user={user}>
-					<ChannelWorkspace
-						agent={agent}
-						owner={route.owner}
-						repository={route.repository}
-						slug={route.slug}
-						user={user}
-					/>
-				</NavigationShell>
+			workspace = (
+				<ChannelWorkspace
+					agent={agent}
+					key={`document:${route.owner}/${route.repository}/${route.slug}`}
+					owner={route.owner}
+					repository={route.repository}
+					slug={route.slug}
+					user={user}
+				/>
 			);
+			break;
 		case "research":
-			return (
-				<NavigationShell route={route} user={user}>
-					<ChannelWorkspace
-						agent={agent}
-						owner={route.owner}
-						repository={route.repository}
-						researchWorkspaceId={route.workspaceId}
-						slug={route.slug}
-						user={user}
-					/>
-				</NavigationShell>
+			workspace = (
+				<ChannelWorkspace
+					agent={agent}
+					key={`research:${route.owner}/${route.repository}/${route.slug}/${route.workspaceId}`}
+					owner={route.owner}
+					repository={route.repository}
+					researchWorkspaceId={route.workspaceId}
+					slug={route.slug}
+					user={user}
+				/>
 			);
+			break;
 		case "channel":
-			return (
-				<NavigationShell route={route} user={user}>
-					<ChannelWorkspace agent={agent} id={route.id} user={user} />
-				</NavigationShell>
+			workspace = (
+				<ChannelWorkspace agent={agent} id={route.id} key={`channel:${route.id}`} user={user} />
 			);
-		case "missing":
-			return <Failure error={new Error("This page does not exist.")} />;
+			break;
 	}
+	return (
+		<NavigationShell navigate={navigate} route={route} user={user}>
+			{workspace}
+		</NavigationShell>
+	);
 }
 
 export { Failure as HostedFailure, Loading as HostedLoading };

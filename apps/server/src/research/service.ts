@@ -6,6 +6,7 @@ import {
 	parseResearchAnswerInput,
 	parseResearchEvidenceArtifact,
 } from "../jobs/research-workspace";
+import { RESEARCH_REPOSITORY_WORKSPACE_LIMIT } from "../storage/model";
 
 import type { Job, Research } from "@chopin/protocol";
 import type {
@@ -16,7 +17,6 @@ import type {
 import type { JobDetail, JobService, JobView } from "../jobs/service";
 import type { DocumentTarget } from "../plan/service";
 import type {
-	ChannelRecord,
 	JsonValue,
 	Lease,
 	ResearchMessage,
@@ -25,6 +25,7 @@ import type {
 	ResearchWorkspace,
 	ResearchWorkspaceDetail,
 	ResearchWorkspaceOrigin,
+	ResearchWorkspaceRepositoryChannel,
 } from "../storage/model";
 import type { StorageAdapter } from "../storage/port";
 
@@ -109,10 +110,7 @@ export type ResearchWorkspaceView = Omit<Research.WorkspaceDetail, "turns"> & {
 	readonly turns: readonly ResearchWorkspaceTurnView[];
 };
 
-export type ResearchWorkspaceParent = Pick<
-	ChannelRecord,
-	"id" | "repositoryId" | "repositoryOwner" | "repositoryName" | "title" | "slug"
->;
+export type ResearchWorkspaceParent = ResearchWorkspaceRepositoryChannel;
 
 export type RepositoryResearchWorkspaceGroup = {
 	channel: ResearchWorkspaceParent;
@@ -136,8 +134,6 @@ const MAX_HISTORY_BYTES = 256 * 1024;
 const MAX_EVIDENCE_BATCHES = 32;
 const MAX_EVIDENCE_FINDINGS = 64;
 const MAX_EVIDENCE_SOURCES = 64;
-const MAX_REPOSITORY_CHANNELS = 1_000;
-const MAX_REPOSITORY_WORKSPACES = 500;
 const MAX_TARGET_SCAN = 1_000;
 const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
@@ -261,17 +257,6 @@ function turn(value: ResearchTurn): Research.Turn {
 		...(value.answerJobId !== undefined ? { answerJobId: value.answerJobId } : {}),
 		createdAt: value.createdAt.toISOString(),
 		updatedAt: value.updatedAt.toISOString(),
-	};
-}
-
-function parent(value: ChannelRecord): ResearchWorkspaceParent {
-	return {
-		id: value.id,
-		repositoryId: value.repositoryId,
-		repositoryOwner: value.repositoryOwner,
-		repositoryName: value.repositoryName,
-		title: value.title,
-		slug: value.slug,
 	};
 }
 
@@ -527,55 +512,23 @@ export class ResearchWorkspaceService {
 
 	async listRepository(
 		repositoryId: string,
-		limit = MAX_REPOSITORY_WORKSPACES,
+		limit = RESEARCH_REPOSITORY_WORKSPACE_LIMIT,
 	): Promise<RepositoryResearchWorkspaceList> {
 		opaqueId(repositoryId, "Repository id");
-		if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_REPOSITORY_WORKSPACES) {
+		if (
+			!Number.isSafeInteger(limit) || limit < 1
+			|| limit > RESEARCH_REPOSITORY_WORKSPACE_LIMIT
+		) {
 			throw new ResearchWorkspaceError("invalid-request", "Repository listing limit is invalid.");
 		}
-		let channels: RepositoryResearchWorkspaceGroup[] = [];
-		let cursor;
-		let scanned = 0;
-		let workspaceCount = 0;
-		let truncated = false;
-		let stopped = false;
-		do {
-			let page = await this.#storage.channels.scan(repositoryId, 100, cursor);
-			for (let [index, channel] of page.channels.entries()) {
-				scanned++;
-				if (scanned > MAX_REPOSITORY_CHANNELS) {
-					truncated = true;
-					stopped = true;
-					break;
-				}
-				let remaining = limit - workspaceCount;
-				if (remaining <= 0) {
-					truncated = true;
-					stopped = true;
-					break;
-				}
-				let requested = Math.min(100, remaining);
-				let workspaces = await this.#storage.research.list(channel.id, requested);
-				if (requested === 100 && workspaces.length === 100) truncated = true;
-				if (workspaces.length > 0) {
-					channels.push({ channel: parent(channel), workspaces: workspaces.map(summary) });
-					workspaceCount += workspaces.length;
-				}
-				if (workspaceCount >= limit) {
-					truncated = truncated || workspaces.length === requested
-						|| index < page.channels.length - 1 || !!page.next;
-					stopped = true;
-					break;
-				}
-			}
-			if (stopped) break;
-			if (scanned >= MAX_REPOSITORY_CHANNELS) {
-				if (page.next) truncated = true;
-				break;
-			}
-			cursor = page.next;
-		} while (cursor);
-		return { channels, truncated };
+		let listed = await this.#storage.research.listRepository(repositoryId, limit);
+		return {
+			channels: listed.channels.map(group => ({
+				channel: group.channel,
+				workspaces: group.workspaces.map(summary),
+			})),
+			truncated: listed.truncated,
+		};
 	}
 
 	async cancelTurn(input: CancelResearchWorkspaceTurn): Promise<ResearchWorkspaceView> {

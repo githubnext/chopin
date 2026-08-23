@@ -212,12 +212,17 @@ export function storageContract(name: string, factory: Factory): void {
 				expect(repeated).toEqual({ project: first.project, added: false });
 				expect((await storage.navigation.projects(userId)).map(project => project.repositoryId))
 					.toEqual(["R_first", "R_second"]);
+				expect(await storage.navigation.snapshot(userId)).toMatchObject({
+					projects: [{ repositoryId: "R_first" }, { repositoryId: "R_second" }],
+					navigation: undefined,
+					lastDocumentRepositoryId: undefined,
+				});
 			} finally {
 				await storage.close();
 			}
 		});
 
-		it("stores the last document idempotently", async () => {
+		it("stores the last document with a monotonic navigation revision", async () => {
 			let storage = await opened(factory);
 			try {
 				let now = new Date("2026-01-02T03:04:05.000Z");
@@ -225,8 +230,29 @@ export function storageContract(name: string, factory: Factory): void {
 				let first = await storage.navigation.setLastDocument(userId, channelId, now);
 				let repeated = await storage.navigation.setLastDocument(userId, channelId, now);
 
-				expect(repeated).toEqual(first);
-				expect(await storage.navigation.get(userId)).toEqual(first);
+				expect(first.revision).toBe(0);
+				expect(repeated).toEqual({ ...first, revision: 1 });
+				expect(await storage.navigation.get(userId)).toEqual(repeated);
+				expect(await storage.navigation.snapshot(userId)).toMatchObject({
+					navigation: repeated,
+					lastDocumentRepositoryId: expect.any(String),
+				});
+				expect(
+					await storage.navigation.setLastDocumentIfCurrent(
+						userId,
+						repeated.revision + 1,
+						undefined,
+						new Date(now.getTime() + 1),
+					),
+				).toEqual({ navigation: repeated, updated: false });
+				expect(
+					await storage.navigation.setLastDocumentIfCurrent(
+						userId,
+						repeated.revision,
+						undefined,
+						new Date(now.getTime() + 2),
+					),
+				).toMatchObject({ navigation: { lastDocumentId: undefined }, updated: true });
 			} finally {
 				await storage.close();
 			}
@@ -299,6 +325,9 @@ export function storageContract(name: string, factory: Factory): void {
 				});
 				expect(saved.lastDocumentId).toBe(channelId);
 				expect(await storage.navigation.projects(userId)).toMatchObject([{ repositoryId }]);
+				expect(await storage.navigation.firstDocument(userId, [repositoryId])).toBe(channelId);
+				expect(await storage.navigation.firstDocument(userId, ["R_unavailable"]))
+					.toBeUndefined();
 			} finally {
 				await storage.close();
 			}
@@ -980,6 +1009,111 @@ export function storageContract(name: string, factory: Factory): void {
 				expect(await storage.leases.release(lease)).toBe(true);
 				await expect(storage.research.create(researchWorkspace(channelId, userId, lease)))
 					.rejects.toMatchObject({ failure: "conflict" });
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("lists repository research in channel order with grouped bounded workspaces", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, channelId, repositoryId, lease } = await userAndChannel(storage);
+				let suffix = crypto.randomUUID();
+				let channelA = `repository-channel-a-${suffix}`;
+				let channelB = `repository-channel-b-${suffix}`;
+				let emptyChannel = `repository-channel-0-empty-${suffix}`;
+				let foreignChannel = `repository-channel-foreign-${suffix}`;
+				let common = {
+					repositoryId,
+					repositoryOwner: "octo-org",
+					repositoryName: "score",
+					createdBy: userId,
+				};
+				await storage.channels.create({
+					...common,
+					id: emptyChannel,
+					title: `Empty research parent ${suffix}`,
+					now: new Date("2026-01-09T03:04:05.000Z"),
+				});
+				for (let [id, title] of [[channelB, "B"], [channelA, "A"]] as const) {
+					await storage.channels.create({
+						...common,
+						id,
+						title: `Research parent ${title} ${suffix}`,
+						now: new Date("2026-01-08T03:04:05.000Z"),
+					});
+				}
+				await storage.channels.create({
+					...common,
+					id: foreignChannel,
+					repositoryId: `foreign-${repositoryId}`,
+					repositoryName: "other",
+					title: `Foreign research parent ${suffix}`,
+					now: new Date("2026-01-10T03:04:05.000Z"),
+				});
+
+				let create = async (parentId: string, workspaceId: string, now: Date) =>
+					storage.research.create(researchWorkspace(parentId, userId, lease, {
+						id: workspaceId,
+						title: workspaceId,
+						idempotencyKey: `create-${workspaceId}`,
+						fingerprint: `fingerprint-${workspaceId}`,
+						now,
+					}));
+				let newest = `workspace-newest-${suffix}`;
+				let tiedA = `workspace-tied-a-${suffix}`;
+				let tiedB = `workspace-tied-b-${suffix}`;
+				await create(channelA, tiedB, new Date("2026-01-11T03:04:05.000Z"));
+				await create(channelA, tiedA, new Date("2026-01-11T03:04:05.000Z"));
+				await create(channelA, newest, new Date("2026-01-12T03:04:05.000Z"));
+				let channelBWorkspace = `workspace-channel-b-${suffix}`;
+				let oldChannelWorkspace = `workspace-old-channel-${suffix}`;
+				await create(channelB, channelBWorkspace, new Date("2026-01-13T03:04:05.000Z"));
+				await create(channelId, oldChannelWorkspace, new Date("2026-01-14T03:04:05.000Z"));
+				await create(
+					foreignChannel,
+					`workspace-foreign-${suffix}`,
+					new Date("2026-01-15T03:04:05.000Z"),
+				);
+
+				let listed = await storage.research.listRepository(repositoryId, 10);
+				expect(listed.truncated).toBe(false);
+				expect(listed.channels.map(group => group.channel.id)).toEqual([
+					channelA,
+					channelB,
+					channelId,
+				]);
+				expect(listed.channels[0]!.workspaces.map(value => value.id)).toEqual([
+					newest,
+					tiedA,
+					tiedB,
+				]);
+				expect(listed.channels[1]!.workspaces.map(value => value.id))
+					.toEqual([channelBWorkspace]);
+				expect(listed.channels[2]!.workspaces.map(value => value.id))
+					.toEqual([oldChannelWorkspace]);
+
+				let bounded = await storage.research.listRepository(repositoryId, 2);
+				expect(bounded.truncated).toBe(true);
+				expect(bounded.channels.map(group => ({
+					channelId: group.channel.id,
+					workspaceIds: group.workspaces.map(value => value.id),
+				}))).toEqual([{ channelId: channelA, workspaceIds: [newest, tiedA] }]);
+
+				for (let index = 0; index < 98; index++) {
+					let workspaceId = `workspace-bounded-${String(index).padStart(3, "0")}-${suffix}`;
+					await create(
+						channelA,
+						workspaceId,
+						new Date(`2026-01-10T03:${String(index % 60).padStart(2, "0")}:00.000Z`),
+					);
+				}
+				let perChannelBounded = await storage.research.listRepository(repositoryId, 500);
+				expect(perChannelBounded.truncated).toBe(true);
+				expect(perChannelBounded.channels[0]).toMatchObject({
+					channel: { id: channelA },
+				});
+				expect(perChannelBounded.channels[0]!.workspaces).toHaveLength(100);
 			} finally {
 				await storage.close();
 			}

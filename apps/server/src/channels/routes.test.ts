@@ -232,10 +232,8 @@ describe("channel routes", () => {
 		));
 		expect(alias!.status).toBe(200);
 		expect((await alias!.json()).channel.slug).toBe("résumé-計画");
-		expect(await storage.navigation.projects("U_octocat")).toMatchObject([
-			{ repositoryId: "R_score", repositoryOwner: "octo-org", repositoryName: "score" },
-		]);
-		expect((await storage.navigation.get("U_octocat"))!.lastDocumentId).toBe(channel.id);
+		expect(await storage.navigation.projects("U_octocat")).toEqual([]);
+		expect(await storage.navigation.get("U_octocat")).toBeUndefined();
 		let remembered = await storage.channels.create({
 			id: crypto.randomUUID(),
 			repositoryId: "R_score",
@@ -286,7 +284,7 @@ describe("channel routes", () => {
 		expect((await response!.json()).channel.id).toBe(id);
 	});
 
-	it("adds an authorized deep-linked document's repository to navigation", async () => {
+	it("does not mutate navigation while resolving authorized metadata", async () => {
 		let { router, storage, cookie, now } = await setup();
 		let channel = await storage.channels.create({
 			id: crypto.randomUUID(),
@@ -306,18 +304,9 @@ describe("channel routes", () => {
 
 		let response = await router.handle(request(`/api/channels/${channel.id}`, cookie));
 		expect(response!.status).toBe(200);
-		expect(recorded).toEqual([{
-			userId: "U_octocat",
-			repositoryId: "R_score",
-			repositoryOwner: "octo-org",
-			repositoryName: "score",
-			documentId: channel.id,
-			now,
-		}]);
-		expect(await storage.navigation.projects("U_octocat")).toMatchObject([
-			{ repositoryId: "R_score", repositoryOwner: "octo-org", repositoryName: "score" },
-		]);
-		expect((await storage.navigation.get("U_octocat"))!.lastDocumentId).toBe(channel.id);
+		expect(recorded).toEqual([]);
+		expect(await storage.navigation.projects("U_octocat")).toEqual([]);
+		expect(await storage.navigation.get("U_octocat")).toBeUndefined();
 	});
 
 	it("lets an editor rename a document without changing its plan revision", async () => {

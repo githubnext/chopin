@@ -59,6 +59,74 @@ test("the room header renames the current document and the sidebar creates one i
 	await expect(headerDocument(page)).toHaveAccessibleName(/^Document: [a-z]+-[a-z]+$/);
 });
 
+test("document switches preserve navigation state and avoid catalogue reloads", async ({ join, page }) => {
+	let requested: Array<{ method: string; path: string }> = [];
+	page.on("request", request =>
+		requested.push({
+			method: request.method(),
+			path: new URL(request.url()).pathname,
+		}));
+	page = await join("ana");
+	let projects = sidebar(page);
+	let original = projects.locator('a[aria-current="page"]');
+	let originalTitle = (await original.textContent())!.trim();
+	let originalPath = await original.getAttribute("href");
+	expect(originalPath).toBeTruthy();
+
+	await projects.getByRole("button", { name: "New document", exact: true }).click();
+	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
+	let created = projects.locator('a[aria-current="page"]');
+	let createdTitle = (await created.textContent())!.trim();
+	await expect(projects.getByRole("link", { name: originalTitle, exact: true })).toBeVisible();
+	expect(
+		requested.filter(request => request.method === "GET" && request.path === "/api/navigation"),
+	).toHaveLength(1);
+
+	let release = Promise.withResolvers<void>();
+	await page.route("**/api/repositories/octo-org/score/documents/*", async route => {
+		await release.promise;
+		await route.continue();
+	});
+	requested.length = 0;
+	await page.evaluate(() => {
+		(window as Window & { __chopinNavigationSentinel?: string }).__chopinNavigationSentinel =
+			"preserved";
+	});
+	await projects.getByRole("link", { name: originalTitle, exact: true }).click();
+
+	await expect(page.getByText("Opening channel...", { exact: true })).toBeVisible();
+	await expect(projects.getByRole("link", { name: createdTitle, exact: true })).toBeVisible();
+	expect(
+		await page.evaluate(() =>
+			(window as Window & { __chopinNavigationSentinel?: string }).__chopinNavigationSentinel
+		),
+	).toBe("preserved");
+	release.resolve();
+	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${originalTitle}`);
+	await expect(page).toHaveURL(originalPath!);
+
+	expect(requested.filter(request => request.path === "/api/session")).toHaveLength(0);
+	expect(
+		requested.filter(request => request.method === "GET" && request.path === "/api/navigation"),
+	).toHaveLength(0);
+	await expect.poll(() =>
+		requested.filter(request => request.method === "PATCH" && request.path === "/api/navigation")
+			.length
+	).toBe(1);
+	expect(requested.filter(request => request.path === "/api/repositories/octo-org/score/channels"))
+		.toHaveLength(0);
+	await expect.poll(() =>
+		requested.filter(request =>
+			request.path === "/api/repositories/octo-org/score/research-workspaces"
+		).length
+	).toBe(1);
+
+	await page.evaluate(() => history.back());
+	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${createdTitle}`);
+	await page.evaluate(() => history.forward());
+	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${originalTitle}`);
+});
+
 test("the sidebar paginates documents and global search queries beyond the loaded page", async ({ join, page }) => {
 	let requests: URL[] = [];
 	let first = Array.from(

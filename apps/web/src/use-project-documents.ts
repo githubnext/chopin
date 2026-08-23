@@ -90,6 +90,9 @@ export function useProjectDocuments(navigation?: Api.Navigation) {
 		if (entry.documents.status !== "ready" || !entry.documents.nextCursor) return;
 		void load(entry.project, entry.documents.nextCursor);
 	}, [load]);
+	let refreshProject = useCallback((project: Api.NavigationProject) => {
+		void load(project);
+	}, [load]);
 	let upsertDocument = useCallback((channel: Api.Channel) => {
 		setDocuments(current => replaceLoadedDocument(current, channel));
 	}, []);
@@ -100,5 +103,5 @@ export function useProjectDocuments(navigation?: Api.Navigation) {
 		setDocuments(current => updateLoadedDocument(current, documentId, update));
 	}, []);
 
-	return { loadMore, projects, updateDocument, upsertDocument };
+	return { loadMore, projects, refreshProject, updateDocument, upsertDocument };
 }

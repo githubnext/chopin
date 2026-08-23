@@ -374,6 +374,41 @@ describe("research workspace service", () => {
 		});
 	});
 
+	it("uses one repository store operation without scanning or listing each channel", async () => {
+		let context = await setup();
+		let created = await context.service.createDraft({
+			channelId: context.channelId,
+			question: "Which API contracts changed?",
+			requestId: requestId(1),
+			origin: "sidebar",
+			createdBy: context.userId,
+		});
+		let listRepository = context.storage.research.listRepository;
+		let calls: Array<{ repositoryId: string; limit: number }> = [];
+		context.storage.research.listRepository = async (repositoryId, limit) => {
+			calls.push({ repositoryId, limit });
+			let listed = await listRepository(repositoryId, limit);
+			return { ...listed, truncated: true };
+		};
+		context.storage.research.list = async () => {
+			throw new Error("repository listing must not list one channel at a time");
+		};
+		context.storage.channels.scan = async () => {
+			throw new Error("repository listing must not scan channels in the service");
+		};
+
+		let listed = await context.service.listRepository(REPOSITORY_ID);
+		expect(calls).toEqual([{ repositoryId: REPOSITORY_ID, limit: 500 }]);
+		expect(listed).toMatchObject({
+			channels: [{
+				channel: { id: context.channelId },
+				workspaces: [{ id: created.workspace.id }],
+			}],
+			truncated: true,
+		});
+		expect(listed.channels[0]!.workspaces[0]!.createdAt).toBe("2026-08-23T12:00:00.000Z");
+	});
+
 	it("keeps follow-ups private, searches only explicit turns, and freezes the original report", async () => {
 		let context = await setup();
 		let { created } = await finishInitial(context);

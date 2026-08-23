@@ -6,9 +6,9 @@ import {
 	failDocumentLoad,
 	projectDocuments,
 	replaceLoadedDocument,
-	searchAvailableDocuments,
 	updateLoadedDocument,
 } from "./document-actions";
+import { searchAvailableDocuments } from "./document-search-dialog";
 
 import type * as Api from "./api";
 import type { LoadedDocuments } from "./document-actions";

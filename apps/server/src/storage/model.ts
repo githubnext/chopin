@@ -42,7 +42,19 @@ export type RecordNavigationVisit = AddUserProject & {
 export type UserNavigation = {
 	userId: string;
 	lastDocumentId: string | undefined;
+	revision: number;
 	updatedAt: Date;
+};
+
+export type UserNavigationSnapshot = {
+	projects: UserProject[];
+	navigation: UserNavigation | undefined;
+	lastDocumentRepositoryId: string | undefined;
+};
+
+export type CompareNavigationResult = {
+	navigation: UserNavigation;
+	updated: boolean;
 };
 
 /** Process-lifetime registry row used only by durable agent ownership. */
@@ -408,6 +420,25 @@ export type ResearchWorkspace = {
 };
 
 export type ResearchWorkspaceSummary = ResearchWorkspace;
+
+export const RESEARCH_REPOSITORY_CHANNEL_LIMIT = 1_000;
+export const RESEARCH_REPOSITORY_WORKSPACE_LIMIT = 500;
+export const RESEARCH_REPOSITORY_CHANNEL_WORKSPACE_LIMIT = 100;
+
+export type ResearchWorkspaceRepositoryChannel = Pick<
+	ChannelRecord,
+	"id" | "repositoryId" | "repositoryOwner" | "repositoryName" | "title" | "slug"
+>;
+
+export type ResearchWorkspaceRepositoryGroup = {
+	channel: ResearchWorkspaceRepositoryChannel;
+	workspaces: ResearchWorkspaceSummary[];
+};
+
+export type ResearchWorkspaceRepositoryList = {
+	channels: ResearchWorkspaceRepositoryGroup[];
+	truncated: boolean;
+};
 
 export type ResearchTurnKind = "initial" | "follow-up" | "search-more";
 

@@ -201,6 +201,33 @@ test("the Add Project dialog traps focus, dismisses, and filters repositories", 
 	await expect(repositoryOption(page, "score")).toHaveCount(0);
 });
 
+test("the Add Project dialog reuses a fresh tab cache", async ({ baseURL, page }) => {
+	await authenticate(page, "paged", baseURL!);
+	await page.goto("/");
+	await expect(repositoryOption(page, "archive-12")).toBeVisible();
+	await expect.poll(() =>
+		page.evaluate(() => {
+			let user = sessionStorage.getItem("chopin:repositories:active-user")!;
+			let key = `chopin:repositories:${encodeURIComponent(user)}`;
+			return (JSON.parse(sessionStorage.getItem(key)!) as { validatedAt: number }).validatedAt;
+		})
+	).toBeGreaterThan(0);
+	await page.keyboard.press("Escape");
+
+	let requests = 0;
+	page.on("request", request => {
+		if (request.url().includes("/api/github/installations")) requests++;
+	});
+	await page.getByRole("button", { name: "Add Project" }).click();
+	await expect(repositoryOption(page, "archive-12")).toBeVisible();
+	await page.evaluate(() =>
+		new Promise<void>(resolve =>
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+		)
+	);
+	expect(requests).toBe(0);
+});
+
 test("Add Project search stays reachable in a narrow visual viewport", async ({ baseURL, page }) => {
 	await page.setViewportSize({ width: 320, height: 568 });
 	await installVisualViewport(page, {

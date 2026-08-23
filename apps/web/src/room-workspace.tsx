@@ -150,6 +150,7 @@ export function RoomWorkspace(
 		capabilities.backgroundJobs,
 	);
 	let previousUnanswered = useRef(unanswered);
+	let latestCanEdit = useRef(canEdit);
 	let [attention, setAttention] = useState(false);
 	let workspacePresentation = presentWorkspace(workspace, mode, view);
 	let conversationActive = workspacePresentation.conversationVisible;
@@ -236,6 +237,7 @@ export function RoomWorkspace(
 	};
 
 	useEffect(() => {
+		latestCanEdit.current = canEdit;
 		setEffectiveCanEdit(canEdit);
 	}, [canEdit, room]);
 
@@ -257,6 +259,8 @@ export function RoomWorkspace(
 
 		let off = [
 			socket.on<Session.Hello>("session:hello", frame => {
+				let accessChanged = latestCanEdit.current !== frame.canEdit;
+				latestCanEdit.current = frame.canEdit;
 				setMembers(frame.members);
 				setEffectiveCanEdit(frame.canEdit);
 				setCapabilities({ backgroundJobs: frame.backgroundJobs });
@@ -270,7 +274,7 @@ export function RoomWorkspace(
 					);
 				}
 				updateMetadata(frame);
-				onRepositoryAccessChanged();
+				if (accessChanged) onRepositoryAccessChanged();
 				onResearchWorkspacesRefresh({
 					id: room,
 					repositoryId: repository.id,
@@ -285,6 +289,7 @@ export function RoomWorkspace(
 			}),
 			socket.on<Session.Presence>("session:presence", frame => setMembers(frame.members)),
 			socket.on<Session.Access>("session:access", frame => {
+				latestCanEdit.current = frame.canEdit;
 				setEffectiveCanEdit(frame.canEdit);
 				onRepositoryAccessChanged();
 			}),
