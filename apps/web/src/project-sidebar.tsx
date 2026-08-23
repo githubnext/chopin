@@ -7,11 +7,13 @@ import newDocumentIcon from "./assets/figma/navigation/new-document.svg";
 import searchIcon from "./assets/figma/navigation/search.svg";
 import sidebarOpenIcon from "./assets/figma/navigation/sidebar-right-3-hide.svg";
 import { canEditProject } from "./navigation-model";
+import { documentPath, researchWorkspacePath } from "@chopin/protocol/document-url";
 
 import { useState } from "react";
 import type * as Api from "./api";
 import type { ProjectDocuments } from "./document-actions";
 import type { ReactNode, RefObject } from "react";
+import type { ResearchChannelGroup } from "./research-navigation";
 
 export const SIDEBAR_MIN = 250;
 export const SIDEBAR_MAX = 400;
@@ -33,26 +35,38 @@ export function toggleCollapsedProjectIds(
 	return next;
 }
 
+export function newestResearchFirst(
+	workspaces: ResearchChannelGroup["workspaces"],
+): ResearchChannelGroup["workspaces"] {
+	return [...workspaces].sort((first, second) =>
+		second.createdAt.localeCompare(first.createdAt) || second.id.localeCompare(first.id)
+	);
+}
+
 function Project(
 	{
 		creatingProjectIds,
 		currentDocumentId,
+		currentResearchWorkspaceId,
 		entry,
 		expanded,
 		onCreateDocument,
 		onLoadMore,
-		onOpenDocument,
+		onNewResearch,
 		onRenameDocument,
+		research,
 		onToggle,
 	}: {
 		creatingProjectIds: ReadonlySet<string>;
 		currentDocumentId?: string;
+		currentResearchWorkspaceId?: string;
 		entry: ProjectDocuments;
 		expanded: boolean;
 		onCreateDocument: (project: Api.NavigationProject) => void;
 		onLoadMore: (entry: ProjectDocuments) => void;
-		onOpenDocument: (documentId: string) => void;
+		onNewResearch?: (channel: Api.Channel) => void;
 		onRenameDocument: (channel: Api.Channel) => void;
+		research: ReadonlyMap<string, ResearchChannelGroup>;
 		onToggle: () => void;
 	},
 ) {
@@ -100,36 +114,86 @@ function Project(
 			)}
 			{expanded && channels.length > 0 && (
 				<ul className="project-sidebar-documents">
-					{channels.map(channel => (
-						<li className="group/document" key={channel.id}>
-							<div
-								className={`project-sidebar-document ${
-									currentDocumentId === channel.id
-										? "project-sidebar-document-current"
-										: ""
-								}`}
-							>
-								<button
-									aria-current={currentDocumentId === channel.id ? "page" : undefined}
-									className="min-w-0 flex-1 truncate text-left text-sm font-medium"
-									onClick={() => onOpenDocument(channel.id)}
-									type="button"
+					{channels.map(channel => {
+						let children = newestResearchFirst(research.get(channel.id)?.workspaces ?? []);
+						let parentCurrent = currentDocumentId === channel.id;
+						let researchCurrent = parentCurrent && currentResearchWorkspaceId !== undefined;
+						let parentHref = documentPath(
+							channel.repositoryOwner,
+							channel.repositoryName,
+							channel.slug,
+						);
+						return (
+							<li className="group/document" key={channel.id}>
+								<div
+									className={`project-sidebar-document ${
+										parentCurrent && !researchCurrent
+											? "project-sidebar-document-current"
+											: researchCurrent
+											? "project-sidebar-document-ancestor"
+											: ""
+									}`}
 								>
-									{channel.title}
-								</button>
-								{canEdit && (
-									<button
-										aria-label={`Rename ${channel.title}`}
-										className="project-sidebar-document-action"
-										onClick={() => onRenameDocument(channel)}
-										type="button"
+									<a
+										aria-current={parentCurrent && !researchCurrent ? "page" : undefined}
+										className="min-w-0 flex-1 truncate text-left text-sm font-medium"
+										href={parentHref}
 									>
-										<NavigationIcon className="h-auto w-3.5" src={documentActionsIcon} />
-									</button>
+										{channel.title}
+									</a>
+									{canEdit && (
+										<div className="project-sidebar-document-actions">
+											{onNewResearch && (
+												<button
+													aria-label={`New research in ${channel.title}`}
+													className="project-sidebar-document-action"
+													onClick={() => onNewResearch(channel)}
+													type="button"
+												>
+													<NavigationIcon className="h-auto w-3.5" src={searchIcon} />
+												</button>
+											)}
+											<button
+												aria-label={`Rename ${channel.title}`}
+												className="project-sidebar-document-action"
+												onClick={() => onRenameDocument(channel)}
+												type="button"
+											>
+												<NavigationIcon className="h-auto w-3.5" src={documentActionsIcon} />
+											</button>
+										</div>
+									)}
+								</div>
+								{children.length > 0 && (
+									<ul className="project-sidebar-research">
+										{children.map(workspace => (
+											<li key={workspace.id}>
+												<a
+													aria-current={parentCurrent
+															&& currentResearchWorkspaceId === workspace.id
+														? "page"
+														: undefined}
+													className={`project-sidebar-research-link ${
+														parentCurrent && currentResearchWorkspaceId === workspace.id
+															? "project-sidebar-research-current"
+															: ""
+													}`}
+													href={researchWorkspacePath(
+														channel.repositoryOwner,
+														channel.repositoryName,
+														channel.slug,
+														workspace.id,
+													)}
+												>
+													{workspace.title}
+												</a>
+											</li>
+										))}
+									</ul>
 								)}
-							</div>
-						</li>
-					))}
+							</li>
+						);
+					})}
 				</ul>
 			)}
 			{expanded && documents.status === "loading" && channels.length > 0 && (
@@ -156,16 +220,18 @@ export function ProjectSidebar(
 		creatingNewDocument,
 		creatingProjectIds,
 		currentDocumentId,
+		currentResearchWorkspaceId,
 		onAccount,
 		onAddProject,
 		onCollapse,
 		onCreateDocument,
 		onLoadMore,
+		onNewResearch,
 		onNewDocument,
-		onOpenDocument,
 		onRenameDocument,
 		onSearch,
 		projects,
+		research = new Map(),
 		user,
 	}: {
 		accountMenu?: ReactNode;
@@ -173,16 +239,18 @@ export function ProjectSidebar(
 		creatingNewDocument: boolean;
 		creatingProjectIds: ReadonlySet<string>;
 		currentDocumentId?: string;
+		currentResearchWorkspaceId?: string;
 		onAccount: () => void;
 		onAddProject: () => void;
 		onCollapse: () => void;
 		onCreateDocument: (project: Api.NavigationProject) => void;
 		onLoadMore: (entry: ProjectDocuments) => void;
+		onNewResearch?: (channel: Api.Channel) => void;
 		onNewDocument: () => void;
-		onOpenDocument: (documentId: string) => void;
 		onRenameDocument: (channel: Api.Channel) => void;
 		onSearch: () => void;
 		projects: ProjectDocuments[];
+		research?: ReadonlyMap<string, ResearchChannelGroup>;
 		user: Api.User;
 	},
 ) {
@@ -241,13 +309,15 @@ export function ProjectSidebar(
 								<Project
 									creatingProjectIds={creatingProjectIds}
 									currentDocumentId={currentDocumentId}
+									currentResearchWorkspaceId={currentResearchWorkspaceId}
 									entry={entry}
 									expanded={!collapsedProjectIds.has(entry.project.repositoryId)}
 									key={entry.project.repositoryId}
 									onCreateDocument={onCreateDocument}
 									onLoadMore={onLoadMore}
-									onOpenDocument={onOpenDocument}
+									onNewResearch={onNewResearch}
 									onRenameDocument={onRenameDocument}
+									research={research}
 									onToggle={() =>
 										setCollapsedProjectIds(current =>
 											toggleCollapsedProjectIds(current, entry.project.repositoryId)

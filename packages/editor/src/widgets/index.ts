@@ -31,5 +31,4 @@ export { EnterPlugin } from "./enter";
 export { QuestionnaireCard } from "./questionnaire";
 export type { QuestionnaireCardProps } from "./questionnaire";
 export { PreviewPlugin } from "./render-blocks";
-export { ResearchQuestionPlugin } from "./research-question";
 export { TabsPlugin } from "./tabs";

@@ -109,7 +109,7 @@ the image.
 | `MODEL`                        | `claude-sonnet-4.6` | Model requested for hosted agent sessions.                                                                                         |
 | `AGENT`                        | on                  | Set exactly `off` to prevent hosted agent turns and Copilot CLI startup.                                                           |
 | `BACKGROUND_JOBS`              | on                  | Set exactly `off` to disable background job scheduling and status surfaces. `AGENT=off` separately prevents model execution.       |
-| `WEB_RESEARCH`                 | on                  | Set exactly `off` to disable user-assigned public web research while retaining other background jobs.                              |
+| `WEB_RESEARCH`                 | on                  | Set exactly `off` to disable confirmed public-search turns while retaining private drafts, readable artifacts, and other jobs.     |
 | `COPILOT_CLI_PATH`             | automatic           | Advanced override for the Copilot CLI executable.                                                                                  |
 
 Generate the encryption key with:

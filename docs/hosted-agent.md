@@ -137,12 +137,19 @@ document commits. Source snapshots are loaded into memory for an attempt but are
 not persisted with the job. Publication rechecks the exact current document while
 holding the same mutation gate used by room opening and live edits.
 
-A writer can insert an inert `ResearchQuestion` component and explicitly assign
-it. Assignment discloses that component's question text to the public GitHub
-Copilot web-search tool. Public search receives no private document or repository
-tools. A separate private stage receives canonical document context with no web
-capability, and a final no-tool stage synthesizes bounded findings and validated
-HTTPS citations. Reports never edit collaborative prose automatically.
+A writer opens a dedicated Research Workspace attached to a document. Creating a
+workspace saves a private draft; no model or public search runs until a writer
+reviews and confirms the query. Confirmation discloses only that query to the
+public GitHub Copilot web-search tool. Public search receives no private document
+or repository tools. A separate answer job receives canonical document context
+with no web capability and synthesizes bounded findings with validated HTTPS
+citations. Follow-up questions stay private unless a writer explicitly chooses
+the search-more action. Reports never edit collaborative prose automatically.
+
+The Planner's `create_research_workspace` tool may refine an explicit current
+member request into a proposed question and create the same private draft. The
+tool cannot confirm, enqueue, or search. Its draft remains editable, and only
+the exact later browser-confirmed query crosses the public-search boundary.
 
 Citation provenance comes only from successful web-search output: SDK citation
 metadata, rich citation annotations, or typed resource links. The
@@ -154,9 +161,9 @@ entitlement. No token is persisted. Logout, rotation, owner reset, expiry,
 cancellation, timeout, claim loss, and target supersession synchronously revoke
 local result acceptance; durable claim generations reject every late artifact.
 `BACKGROUND_JOBS=off` disables scheduling and status surfaces. `WEB_RESEARCH=off`
-disables new assignment and execution; older queued research pauses until the
-flag is restored and an owner returns. `AGENT=off` keeps persisted status and
-artifacts readable but schedules no new summaries and never starts Copilot CLI.
+disables new public-search turns; older queued research pauses until the flag is
+restored and an owner returns. `AGENT=off` keeps persisted status and artifacts
+readable but schedules no new summaries and never starts Copilot CLI.
 
 ## Implementation graph status
 

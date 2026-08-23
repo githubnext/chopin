@@ -5,6 +5,7 @@ import { conflict, corrupt, missing, StorageError, unavailable } from "../errors
 import { migrate, verifyMigrations } from "./migrations";
 import { PostgresNavigationStore } from "./navigation";
 import { PostgresBackgroundJobStore } from "./jobs";
+import { PostgresResearchWorkspaceStore } from "./research";
 
 import type { TransactionSQL } from "bun";
 import type {
@@ -38,6 +39,7 @@ import type {
 	CollaborationStore,
 	LeaseStore,
 	NavigationStore,
+	ResearchWorkspaceStore,
 	SessionStore,
 	StorageAdapter,
 	UserStore,
@@ -377,6 +379,15 @@ export class PostgresStorage implements StorageAdapter {
 				await this.#assertLease(transaction, lease);
 			},
 		);
+		this.research = new PostgresResearchWorkspaceStore(
+			this.#sql,
+			(action, execute) => this.#run(action, execute),
+			async (transaction, lease) => {
+				await this.#assertLease(transaction, lease);
+				await transaction`SELECT pg_advisory_xact_lock(2043237432)`;
+				await this.#assertLease(transaction, lease);
+			},
+		);
 	}
 
 	readonly users: UserStore = {
@@ -478,6 +489,7 @@ export class PostgresStorage implements StorageAdapter {
 
 	readonly navigation: NavigationStore;
 	readonly jobs: BackgroundJobStore;
+	readonly research: ResearchWorkspaceStore;
 
 	readonly channels: ChannelStore = {
 		create: input => this.#createChannel(input),

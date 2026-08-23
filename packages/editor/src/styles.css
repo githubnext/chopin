@@ -8,56 +8,6 @@
 
 @import "./callout.css";
 
-.plan-content [data-plan-research-question] {
-	margin-block: 1.25rem;
-	padding: 1rem 1.125rem;
-	border: var(--edge-width) solid color-mix(in oklab, var(--color-brand) 30%, var(--color-edge));
-	border-radius: var(--radius-lg);
-	background: color-mix(in oklab, var(--color-brand) 4%, var(--color-page));
-}
-
-.plan-content [data-plan-research-question]::before {
-	content: "Research question";
-	display: block;
-	margin-block-end: 0.5rem;
-	font-size: 0.75rem;
-	font-weight: 650;
-	letter-spacing: 0.04em;
-	text-transform: uppercase;
-	color: var(--color-text-secondary);
-}
-
-.plan-content [data-plan-research-question-body] > :first-child {
-	margin-block-start: 0;
-}
-
-.plan-content [data-plan-research-question-body] > :last-child {
-	margin-block-end: 0;
-}
-
-.plan-content [data-plan-research-question-derived]:empty {
-	display: none;
-}
-
-.plan-research-derived {
-	display: grid;
-	gap: 0.625rem;
-	margin-block-start: 0.875rem;
-	padding-block-start: 0.75rem;
-	border-block-start: var(--edge-width) solid var(--color-edge);
-	font-size: var(--text-sm);
-	color: var(--color-text-secondary);
-}
-
-.plan-research-disclosure,
-.plan-research-status,
-.plan-research-error,
-.plan-research-report p {
-	margin: 0;
-}
-
-.plan-research-status,
-.plan-research-derived button,
 .plan-background-job-actions {
 	display: flex;
 	flex-wrap: wrap;
@@ -65,7 +15,6 @@
 	gap: 0.5rem;
 }
 
-.plan-research-derived button,
 .plan-background-job button {
 	padding: 0.375rem 0.625rem;
 	border: var(--edge-width) solid var(--color-control-edge);
@@ -74,25 +23,8 @@
 	color: var(--color-text-primary);
 }
 
-.plan-research-error {
-	color: var(--color-destructive);
-}
-
-.plan-research-report {
-	display: grid;
-	gap: 0.625rem;
-	padding: 0.875rem;
-	border-radius: var(--radius-md);
-	background: var(--color-page);
-}
-
-.plan-research-report h4,
 .plan-background-job-result h3 {
 	margin: 0;
-}
-
-.plan-research-report a {
-	overflow-wrap: anywhere;
 }
 
 .plan-background-work {

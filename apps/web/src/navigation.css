@@ -80,6 +80,8 @@
 .project-sidebar-project-row:focus-within,
 .project-sidebar-document:hover,
 .project-sidebar-document:focus-within,
+.project-sidebar-research-link:hover,
+.project-sidebar-research-link:focus-visible,
 .project-sidebar-account:hover,
 .project-sidebar-account:focus-visible {
 	background: var(--project-sidebar-hover);
@@ -103,7 +105,8 @@
 }
 
 .project-sidebar-projects,
-.project-sidebar-documents {
+.project-sidebar-documents,
+.project-sidebar-research {
 	display: flex;
 	flex-direction: column;
 }
@@ -124,6 +127,36 @@
 }
 
 .project-sidebar-document-current {
+	background: var(--project-sidebar-selected);
+	color: var(--color-text-primary);
+}
+
+.project-sidebar-document-ancestor {
+	color: var(--color-text-primary);
+}
+
+.project-sidebar-document-actions {
+	display: flex;
+	flex: 0 0 auto;
+	align-items: center;
+}
+
+.project-sidebar-research-link {
+	display: block;
+	min-height: 30px;
+	margin-left: 32px;
+	border-left: var(--edge-width) solid var(--color-gray-300);
+	border-radius: 0 6px 6px 0;
+	padding: 5px 10px 5px 14px;
+	overflow: hidden;
+	font-size: 0.75rem;
+	line-height: 1.25rem;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.project-sidebar-research-current {
+	border-left-color: var(--color-brand);
 	background: var(--project-sidebar-selected);
 	color: var(--color-text-primary);
 }
@@ -353,6 +386,25 @@
 .navigation-account-menu button:hover,
 .navigation-account-menu button:focus-visible {
 	background: var(--color-hover);
+}
+
+:root[data-plan-coarse-pointer]
+	.project-sidebar
+	:where(.project-sidebar-action, .project-sidebar-document-action, .project-sidebar-research-link) {
+	min-width: 44px;
+	min-height: 44px;
+}
+
+:root[data-plan-coarse-pointer]
+	.project-sidebar
+	:where(.project-sidebar-action, .project-sidebar-document-action) {
+	opacity: 1;
+}
+
+:root[data-plan-coarse-pointer]
+	.project-sidebar
+	:where(.project-sidebar-primary-action, .project-sidebar-project-row, .project-sidebar-document, .project-sidebar-account) {
+	min-height: 44px;
 }
 
 .document-title-trigger {

@@ -206,13 +206,6 @@ export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
 		},
 	}),
 
-	ResearchQuestion: component({
-		name: "ResearchQuestion",
-		kind: "flow",
-		content: { type: "blocks" },
-		forbids: ["ResearchQuestion"],
-	}),
-
 	/** Markdown has no underline; this keeps it out of raw HTML. */
 	Underline: plain({
 		name: "Underline",

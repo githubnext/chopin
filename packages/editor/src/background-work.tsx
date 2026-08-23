@@ -20,6 +20,7 @@ const INTERRUPTION_REASONS: Record<string, string> = {
 	"hosted-search-sources-unverifiable": "Hosted web search returned unverifiable sources",
 	"owner-unavailable": "Planner owner became unavailable",
 	"private-analysis-failed": "Private document analysis failed",
+	"private-answer-failed": "Private research answer failed",
 	"public-research-failed": "Public web research failed",
 	"public-session-failed": "Copilot research session failed",
 	"research-result-invalid": "Research returned an invalid result",
@@ -34,9 +35,12 @@ const INTERRUPTION_REASONS: Record<string, string> = {
 	"web-search-unavailable": "Copilot web search is unavailable",
 };
 
-function interruptionReason(reason: string | undefined): string {
-	return reason && Object.hasOwn(INTERRUPTION_REASONS, reason)
-		? INTERRUPTION_REASONS[reason]!
+export function safeInterruptionReason(reason: string | undefined): string {
+	let code = reason?.startsWith("attempts-exhausted:")
+		? reason.slice("attempts-exhausted:".length)
+		: reason;
+	return code && Object.hasOwn(INTERRUPTION_REASONS, code)
+		? INTERRUPTION_REASONS[code]!
 		: "Worker stopped unexpectedly";
 }
 
@@ -61,24 +65,64 @@ export function visibleProgress(
 			? "In progress"
 			: "Interrupted",
 		...(entry.state === "interrupted"
-			? { detail: interruptionReason(entry.reason) }
+			? { detail: safeInterruptionReason(entry.reason) }
 			: {}),
 	}));
 }
 
-function result(detail: Job.Detail | undefined): { title: string; summary: string } | undefined {
+function record(value: unknown): Record<string, unknown> | undefined {
+	return value && typeof value === "object" && !Array.isArray(value)
+		? value as Record<string, unknown>
+		: undefined;
+}
+
+export function backgroundJobResult(
+	detail: Job.Detail | undefined,
+): { title: string; summary: string } | undefined {
+	if (
+		!detail || detail.job.state !== "completed"
+		|| detail.job.targetGeneration !== detail.currentTargetGeneration
+	) return undefined;
 	let value = detail?.artifact?.value;
-	if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-	let artifact = value as Record<string, unknown>;
-	if (typeof artifact.summary === "string") {
+	let artifact = record(value);
+	if (!artifact) return undefined;
+	if (detail?.job.type === "document-summary" && typeof artifact.summary === "string") {
 		return { title: "Document summary", summary: artifact.summary };
 	}
-	let report = artifact.report;
-	if (!report || typeof report !== "object" || Array.isArray(report)) return undefined;
-	let body = report as Record<string, unknown>;
-	return typeof body.title === "string" && typeof body.summary === "string"
-		? { title: body.title, summary: body.summary }
-		: undefined;
+	if (detail?.job.type !== "research-answer") return undefined;
+	if (artifact.kind === "initial") {
+		let report = record(artifact.report);
+		return typeof report?.title === "string" && typeof report.summary === "string"
+			? { title: report.title, summary: report.summary }
+			: undefined;
+	}
+	if (artifact.kind === "follow-up" || artifact.kind === "search-more") {
+		let answer = record(artifact.answer);
+		return typeof answer?.text === "string"
+			? {
+				title: artifact.kind === "search-more" ? "Research update" : "Research answer",
+				summary: answer.text,
+			}
+			: undefined;
+	}
+	return undefined;
+}
+
+function safeSubject(value: string | undefined): string | undefined {
+	if (!value) return undefined;
+	let normalized = value.replace(/\s+/g, " ").trim();
+	return normalized ? [...normalized].slice(0, 200).join("") : undefined;
+}
+
+export function backgroundJobLabel(job: Job.View): string {
+	let subject = safeSubject(job.subject);
+	if (job.type === "research-evidence") {
+		return subject ? `Research evidence: ${subject}` : "Research evidence";
+	}
+	if (job.type === "research-answer") {
+		return subject ? `Research answer: ${subject}` : "Research answer";
+	}
+	return job.type === "document-summary" ? "Document summary" : "Background work";
 }
 
 function BackgroundJob(
@@ -93,11 +137,11 @@ function BackgroundJob(
 	let [open, setOpen] = useState(false);
 	let [error, setError] = useState<string>();
 	let detail = snapshot.details[job.id];
-	let artifact = result(detail);
+	let artifact = backgroundJobResult(detail);
 	let progress = visibleProgress(job);
-	let subject = job.type === "research-question"
-		? `Research question: ${job.subject ?? job.targetKey.split(":").at(-1)}`
-		: "Document summary";
+	let subject = backgroundJobLabel(job);
+	let reason = job.reason ? safeInterruptionReason(job.reason) : undefined;
+	let readable = job.type === "document-summary" || job.type === "research-answer";
 	let toggle = () => {
 		setOpen(value => !value);
 		if (!detail) void store.detail(job.id).catch(() => {});
@@ -106,10 +150,10 @@ function BackgroundJob(
 		<article className="plan-background-job">
 			<div className="plan-background-job-heading">
 				<strong>{subject}</strong>
-				<span>{job.state}{job.reason ? ` · ${job.reason}` : ""}</span>
+				<span>{job.state}{reason ? ` · ${reason}` : ""}</span>
 			</div>
 			<div className="plan-background-job-actions">
-				{job.state === "completed" && (
+				{job.state === "completed" && readable && (
 					<button
 						aria-expanded={open}
 						aria-label={`${open ? "Hide" : "Read"} result for ${subject}`}

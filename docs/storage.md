@@ -10,7 +10,8 @@ runtime `STORAGE_DRIVER`.
 
 The database stores channel metadata, repository-scoped document slug aliases,
 collaboration recovery state, domain sidecars, token-free ownership references,
-and the writer lease. GitHub tokens, browser-cookie verifiers, open rooms,
+Research Workspaces, durable background work, and the writer lease. GitHub
+tokens, browser-cookie verifiers, open rooms,
 Awareness presence, and Copilot SDK sessions never cross the storage boundary.
 
 The versioned sidecar is the atomic domain snapshot associated with a channel.
@@ -39,7 +40,9 @@ Every adapter must provide:
 - expiring, token-free process-session registry rows;
 - startup removal of every registry row and Planner owner reference;
 - renewable leases whose fencing token protects commits, epoch replacements,
-  and checkpoints; and
+  checkpoints, jobs, and Research Workspace mutations;
+- idempotent, ordered Research Workspace turns and messages with channel-local
+  job links; and
 - distinct conflict, missing, corrupt, and unavailable failures.
 
 `collaboration.commit` can append a Yjs update, replace sidecar state, append
@@ -86,6 +89,9 @@ applied migration. The application schema contains:
 | `background_job_targets`   | Current generation for each registered channel job target.                                                       |
 | `background_jobs`          | Versioned requests, lifecycle, attempts, fenced claims, bounded progress, inputs, and sanitized failures.        |
 | `background_job_artifacts` | Immutable validated results committed atomically with job completion.                                            |
+| `research_workspaces`      | Parent channel, private draft, confirmed query, attribution, revision, idempotency, and transcript counters.     |
+| `research_turns`           | Ordered initial, private follow-up, and explicit search-more requests plus evidence and answer job links.        |
+| `research_messages`        | Ordered append-only member and validated agent messages for one workspace.                                       |
 
 Channel titles have a case-insensitive unique constraint within each repository.
 Slug values are also unique per repository, with one canonical slug per channel.
@@ -105,6 +111,12 @@ Only then does the service acknowledge or broadcast the mutation.
 Server-authored document edits, decisions, transcript entries, implementation graph
 changes, and lifecycle reports follow the same persistence-before-publication
 rule.
+
+Research Workspace mutations also commit before their parent-channel
+`research:changed` invalidation. Background artifacts remain the lifecycle
+authority for execution; workspace turns link those jobs rather than copying
+their state. A completed evidence job can be reconciled idempotently into its
+private answer job after interruption or the next workspace read.
 
 ## Checkpoints and retention
 

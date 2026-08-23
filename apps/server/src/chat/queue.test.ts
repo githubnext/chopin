@@ -54,8 +54,8 @@ function said(sent: Sent[]): string[] {
 		.map(frame => (frame.entry as { text: string }).text);
 }
 
-function sender(handle = "ana"): Socket {
-	return { data: { handle } } as unknown as Socket;
+function sender(handle = "ana", userId = `U_${handle}`): Socket {
+	return { data: { handle, principalId: userId } } as unknown as Socket;
 }
 
 function message(text: string, to: Wire.Destination): Request<Wire.Send> {
@@ -72,6 +72,7 @@ describe("sending to a named destination", () => {
 		expect(chat.waiting).toMatchObject([{
 			handle: "ana",
 			text: "draft the migration",
+			userId: "U_ana",
 		}]);
 	});
 
@@ -95,6 +96,18 @@ describe("sending to a named destination", () => {
 		expect(chat.waiting[0]?.text).toBe("draft the migration");
 	});
 
+	it("keeps queued member identity and session provenance off the wire", async () => {
+		let { context, sent } = room({ busy: true });
+		await Chat.send(context, sender("ana", "U_private"), message("research this", "planner"));
+
+		let queue = sent.findLast(frame => frame.kind === "chat:queue");
+		expect(queue?.waiting).toEqual([{
+			id: expect.any(String),
+			handle: "ana",
+			text: "research this",
+		}]);
+	});
+
 	it("moves a queued message into the transcript when it becomes pending", () => {
 		let { chat } = room();
 		chat.waiting.push({
@@ -102,10 +115,12 @@ describe("sending to a named destination", () => {
 			handle: "ana",
 			text: "draft the migration",
 			message: true,
+			userId: "U_ana",
 		});
 
-		Chat.pending(chat);
+		let pending = Chat.pending(chat);
 
+		expect(pending?.userId).toBe("U_ana");
 		expect(chat.entries).toMatchObject([{
 			id: "w1",
 			author: { kind: "member", handle: "ana" },

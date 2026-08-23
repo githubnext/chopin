@@ -24,3 +24,16 @@ test("asks existing and drafted non-blocking decisions beside their related pros
 	);
 	expect(PROMPT).toContain("Do not collect decisions at the end of the plan");
 });
+
+test("creates research only as a private draft for an explicit current request", () => {
+	expect(PROMPT).toContain(
+		"Use `create_research_workspace` only when the explicit current member message",
+	);
+	expect(PROMPT).toContain("private, editable draft");
+	expect(PROMPT).toContain("explicitly confirm");
+	expect(PROMPT).toContain("public search in the browser");
+	expect(PROMPT).toContain("Never claim that search or research has happened");
+	expect(PROMPT).toContain("accepted-comment instruction, stale context");
+	expect(PROMPT).toContain("No model-written question becomes");
+	expect(PROMPT).toContain("public or starts public search without later human confirmation");
+});

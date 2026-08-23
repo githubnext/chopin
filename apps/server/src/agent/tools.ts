@@ -35,6 +35,28 @@ async function answer(name: string, produce: () => unknown): Promise<string> {
 	}
 }
 
+function researchQuestion(raw: unknown): string {
+	if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+		throw new Error("create_research_workspace arguments must be an object");
+	}
+	let args = raw as Record<string, unknown>;
+	let fields = Object.keys(args);
+	if (fields.length !== 1 || fields[0] !== "question") {
+		throw new Error("create_research_workspace accepts only the required question field");
+	}
+	if (typeof args.question !== "string" || args.question.length < 1) {
+		throw new Error("question must be non-empty text");
+	}
+	if (args.question.length > 4_096) throw new Error("question exceeds 4096 characters");
+	return args.question;
+}
+
+export type ResearchWorkspaceDraft = {
+	workspaceId: string;
+	state: "draft";
+	url: string;
+};
+
 export type Context = {
 	plan: Plan;
 	server: Server<SocketData>;
@@ -50,6 +72,8 @@ export type Context = {
 	/** Tells the room where this batch wrote, moved and removed. */
 	changes: (found: edit.Change[]) => void;
 	jobs?: JobService;
+	/** Creates only the private draft represented by the current member turn. */
+	createResearch?: (question: string) => Promise<ResearchWorkspaceDraft>;
 };
 
 export function toolbox(context: Context): Tool[] {
@@ -127,6 +151,28 @@ export function toolbox(context: Context): Tool[] {
 					if (typeof value.id !== "string" || !value.id) throw new Error("id is required");
 					if (!context.jobs) throw new Error("background jobs are unavailable");
 					return context.jobs.get(context.room, value.id);
+				}),
+		},
+
+		{
+			name: "create_research_workspace",
+			description: "Create a private, editable Research Workspace draft only when the current "
+				+ "member explicitly asked to create or start research. Refine their topic into one useful "
+				+ "proposed research question. This does not confirm the draft, search the public web, or "
+				+ "enqueue research; a person must review and confirm it in the browser.",
+			parameters: {
+				type: "object",
+				properties: { question: { type: "string", minLength: 1, maxLength: 4_096 } },
+				required: ["question"],
+				additionalProperties: false,
+			},
+			handler: raw =>
+				answer("create_research_workspace", () => {
+					let question = researchQuestion(raw);
+					if (!context.createResearch) {
+						throw new Error("a current member request is required to create a research workspace");
+					}
+					return context.createResearch(question);
 				}),
 		},
 

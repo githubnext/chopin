@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { StorageError } from "./errors";
 import { BACKGROUND_JOB_PROGRESS_LIMIT } from "./model";
 
-import type { EnqueueBackgroundJob, JsonValue, Lease } from "./model";
+import type { CreateResearchWorkspace, EnqueueBackgroundJob, JsonValue, Lease } from "./model";
 import type { StorageAdapter } from "./port";
 
 type Factory = () => StorageAdapter | Promise<StorageAdapter>;
@@ -78,6 +78,27 @@ function backgroundJob(
 		input: { revision: 1 },
 		availableAt: now,
 		now,
+		lease,
+		...overrides,
+	};
+}
+
+function researchWorkspace(
+	channelId: string,
+	createdBy: string,
+	lease: Lease,
+	overrides: Partial<CreateResearchWorkspace> = {},
+): CreateResearchWorkspace {
+	return {
+		id: id("research-workspace"),
+		channelId,
+		title: "API compatibility research",
+		proposedQuestion: "Which API contracts changed?",
+		origin: "sidebar",
+		createdBy,
+		idempotencyKey: id("create-research"),
+		fingerprint: id("research-fingerprint"),
+		now: new Date("2026-01-07T03:04:05.000Z"),
 		lease,
 		...overrides,
 	};
@@ -905,6 +926,308 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
+		it("creates channel-scoped research drafts idempotently and lists recent updates", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, channelId, lease } = await userAndChannel(storage);
+				let input = researchWorkspace(channelId, userId, lease, {
+					idempotencyKey: id("stable-create"),
+					fingerprint: "sha256:create-research",
+					origin: "planner",
+					originMessageId: id("origin-message"),
+				});
+				await expect(storage.research.create({
+					...input,
+					id: id("missing-parent-workspace"),
+					channelId: id("missing-channel"),
+					idempotencyKey: id("missing-parent-request"),
+				})).rejects.toMatchObject({ failure: "missing" });
+
+				let first = await storage.research.create(input);
+				expect(first).toMatchObject({
+					repeated: false,
+					workspace: {
+						id: input.id,
+						channelId,
+						confirmedQuery: undefined,
+						revision: 0,
+						origin: "planner",
+					},
+				});
+				let repeated = await storage.research.create({
+					...input,
+					id: id("ignored-workspace-id"),
+					title: "Ignored retry title",
+				});
+				expect(repeated).toEqual({ workspace: first.workspace, repeated: true });
+				await expect(storage.research.create({
+					...input,
+					id: id("conflicting-workspace"),
+					fingerprint: "sha256:changed",
+				})).rejects.toMatchObject({ failure: "conflict" });
+
+				let newer = await storage.research.create(researchWorkspace(channelId, userId, lease, {
+					title: "Recent research",
+					now: new Date(input.now.getTime() + 1_000),
+				}));
+				expect((await storage.research.list(channelId, 1)).map(value => value.id))
+					.toEqual([newer.workspace.id]);
+				expect(await storage.research.get(id("other-channel"), input.id)).toBeUndefined();
+				first.workspace.createdAt.setUTCFullYear(1999);
+				expect((await storage.research.get(channelId, input.id))!.workspace.createdAt)
+					.toEqual(input.now);
+
+				expect(await storage.leases.release(lease)).toBe(true);
+				await expect(storage.research.create(researchWorkspace(channelId, userId, lease)))
+					.rejects.toMatchObject({ failure: "conflict" });
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("confirms research and appends ordered turn-message pairs exactly once", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, channelId, lease } = await userAndChannel(storage);
+				let draft = await storage.research.create(researchWorkspace(channelId, userId, lease));
+				let followUp = {
+					channelId,
+					workspaceId: draft.workspace.id,
+					turnId: id("follow-up-turn"),
+					messageId: id("follow-up-message"),
+					kind: "follow-up" as const,
+					requestId: id("follow-up-request"),
+					fingerprint: "sha256:follow-up",
+					question: "What changed for existing clients?",
+					requestedBy: userId,
+					requestedByHandle: "octocat",
+					now: new Date("2026-01-07T03:06:05.000Z"),
+					lease,
+				};
+				await expect(storage.research.appendTurn(followUp))
+					.rejects.toMatchObject({ failure: "conflict" });
+
+				let confirmation = {
+					channelId,
+					workspaceId: draft.workspace.id,
+					turnId: id("initial-turn"),
+					messageId: id("initial-message"),
+					requestId: id("confirmation-request"),
+					fingerprint: "sha256:confirmation",
+					confirmedQuery: "Which API contracts changed in version 3?",
+					confirmedBy: userId,
+					confirmedByHandle: "octocat",
+					now: new Date("2026-01-07T03:05:05.000Z"),
+					lease,
+				};
+				let confirmed = await storage.research.confirm(confirmation);
+				expect(confirmed).toMatchObject({
+					repeated: false,
+					workspace: { revision: 1, confirmedQuery: confirmation.confirmedQuery },
+					turn: { ordinal: 1, kind: "initial", question: confirmation.confirmedQuery },
+					message: { sequence: 1, authorKind: "member", text: confirmation.confirmedQuery },
+				});
+				let confirmationReplay = await storage.research.confirm({
+					...confirmation,
+					turnId: id("ignored-turn"),
+					messageId: id("ignored-message"),
+					now: new Date(confirmation.now.getTime() + 1),
+				});
+				expect(confirmationReplay).toEqual({ ...confirmed, repeated: true });
+				await expect(storage.research.confirm({
+					...confirmation,
+					requestId: id("second-confirmation"),
+					fingerprint: "sha256:second-confirmation",
+				})).rejects.toMatchObject({ failure: "conflict" });
+
+				let appended = await storage.research.appendTurn(followUp);
+				expect(appended).toMatchObject({
+					workspace: { revision: 2 },
+					turn: { ordinal: 2, kind: "follow-up" },
+					message: { sequence: 2, authorKind: "member" },
+				});
+				let appendReplay = await storage.research.appendTurn({
+					...followUp,
+					turnId: id("ignored-follow-up-turn"),
+					messageId: id("ignored-follow-up-message"),
+					now: new Date(followUp.now.getTime() + 1),
+				});
+				expect(appendReplay).toEqual({ ...appended, repeated: true });
+				await expect(storage.research.appendTurn({
+					...followUp,
+					fingerprint: "sha256:changed-follow-up",
+				})).rejects.toMatchObject({ failure: "conflict" });
+
+				let searchMore = {
+					...followUp,
+					turnId: id("search-more-turn"),
+					messageId: id("search-more-message"),
+					kind: "search-more" as const,
+					requestId: id("search-more-request"),
+					fingerprint: "sha256:search-more",
+					question: "Search for more migration reports.",
+					now: new Date(followUp.now.getTime() + 1_000),
+				};
+				let parallelFollowUp = {
+					...followUp,
+					turnId: id("parallel-turn"),
+					messageId: id("parallel-message"),
+					requestId: id("parallel-request"),
+					fingerprint: "sha256:parallel-follow-up",
+					question: "Which clients were tested?",
+					now: new Date(followUp.now.getTime() + 1_001),
+				};
+				let parallel = await Promise.all([
+					storage.research.appendTurn(searchMore),
+					storage.research.appendTurn(parallelFollowUp),
+				]);
+				expect(parallel.map(value => value.turn.ordinal).sort()).toEqual([3, 4]);
+				expect(parallel.map(value => value.message.sequence).sort()).toEqual([3, 4]);
+				let detail = await storage.research.get(channelId, draft.workspace.id);
+				expect(detail!.turns.map(value => value.ordinal)).toEqual([1, 2, 3, 4]);
+				expect(detail!.messages.map(value => value.sequence)).toEqual([1, 2, 3, 4]);
+				detail!.turns[0]!.createdAt.setUTCFullYear(1999);
+				expect((await storage.research.get(channelId, draft.workspace.id))!.turns[0]!.createdAt)
+					.toEqual(confirmation.now);
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("links channel jobs once and appends answer messages idempotently", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, channelId, lease } = await userAndChannel(storage);
+				let draft = await storage.research.create(researchWorkspace(channelId, userId, lease));
+				let confirmed = await storage.research.confirm({
+					channelId,
+					workspaceId: draft.workspace.id,
+					turnId: id("initial-turn"),
+					messageId: id("initial-message"),
+					requestId: id("confirmation-request"),
+					fingerprint: "sha256:confirmation",
+					confirmedQuery: "What changed?",
+					confirmedBy: userId,
+					now: new Date("2026-01-07T03:05:05.000Z"),
+					lease,
+				});
+				let evidence = await storage.jobs.enqueue(backgroundJob(channelId, lease, {
+					type: "research-evidence",
+					targetKey:
+						`research-evidence:workspace:${draft.workspace.id}:turn:${confirmed.turn.id}:evidence`,
+				}));
+				let answer = await storage.jobs.enqueue(backgroundJob(channelId, lease, {
+					type: "research-answer",
+					targetKey:
+						`research-answer:workspace:${draft.workspace.id}:turn:${confirmed.turn.id}:answer`,
+				}));
+				let otherChannel = id("other-channel");
+				await storage.channels.create({
+					id: otherChannel,
+					repositoryId: id("other-repository"),
+					repositoryOwner: "octo-org",
+					repositoryName: "other",
+					title: "Other research parent",
+					createdBy: userId,
+					now: new Date("2026-01-07T03:05:05.000Z"),
+				});
+				let foreign = await storage.jobs.enqueue(backgroundJob(otherChannel, lease, {
+					type: "research-answer",
+					targetKey: id("foreign-target"),
+				}));
+				let linkBase = {
+					channelId,
+					workspaceId: draft.workspace.id,
+					turnId: confirmed.turn.id,
+					now: new Date("2026-01-07T03:06:05.000Z"),
+					lease,
+				};
+				await expect(storage.research.linkJob({
+					...linkBase,
+					role: "answer",
+					jobId: foreign.job.id,
+				})).rejects.toMatchObject({ failure: "missing" });
+
+				let evidenceLink = await storage.research.linkJob({
+					...linkBase,
+					role: "evidence",
+					jobId: evidence.job.id,
+				});
+				expect(evidenceLink).toMatchObject({
+					repeated: false,
+					workspace: { revision: 2 },
+					turn: { evidenceJobId: evidence.job.id },
+				});
+				expect(
+					await storage.research.linkJob({
+						...linkBase,
+						role: "evidence",
+						jobId: evidence.job.id,
+					}),
+				).toEqual({ ...evidenceLink, repeated: true });
+				await expect(storage.research.linkJob({
+					...linkBase,
+					role: "evidence",
+					jobId: answer.job.id,
+				})).rejects.toMatchObject({ failure: "conflict" });
+				let answerLink = await storage.research.linkJob({
+					...linkBase,
+					role: "answer",
+					jobId: answer.job.id,
+					now: new Date(linkBase.now.getTime() + 1),
+				});
+				expect(answerLink.workspace.revision).toBe(3);
+				expect((await storage.research.findTurnByJob(channelId, evidence.job.id))?.id)
+					.toBe(confirmed.turn.id);
+				expect((await storage.research.findTurnByJob(channelId, answer.job.id))?.id)
+					.toBe(confirmed.turn.id);
+				expect(await storage.research.findTurnByJob(otherChannel, answer.job.id)).toBeUndefined();
+
+				let agentMessage = {
+					channelId,
+					workspaceId: draft.workspace.id,
+					id: id("agent-message"),
+					turnId: confirmed.turn.id,
+					userHandle: "chopin",
+					text: "The API retained wire compatibility.",
+					sourceJobId: answer.job.id,
+					now: new Date("2026-01-07T03:07:05.000Z"),
+					lease,
+				};
+				await expect(storage.research.appendAgentMessage({
+					...agentMessage,
+					id: id("wrong-source-message"),
+					sourceJobId: evidence.job.id,
+				})).rejects.toMatchObject({ failure: "conflict" });
+				let appended = await storage.research.appendAgentMessage(agentMessage);
+				expect(appended).toMatchObject({
+					repeated: false,
+					workspace: { revision: 4 },
+					message: {
+						sequence: 2,
+						authorKind: "agent",
+						sourceJobId: answer.job.id,
+					},
+				});
+				expect(
+					await storage.research.appendAgentMessage({
+						...agentMessage,
+						id: id("replayed-agent-message"),
+						now: new Date(agentMessage.now.getTime() + 1),
+					}),
+				).toEqual({ ...appended, repeated: true });
+				await expect(storage.research.appendAgentMessage({
+					...agentMessage,
+					text: "Changed retry payload",
+				})).rejects.toMatchObject({ failure: "conflict" });
+				expect((await storage.jobs.get(channelId, answer.job.id))!.job.state).toBe("pending");
+				expect((await storage.research.get(channelId, draft.workspace.id))!.messages)
+					.toHaveLength(2);
+			} finally {
+				await storage.close();
+			}
+		});
+
 		it("enqueues background targets idempotently without collaboration side effects", async () => {
 			let storage = await opened(factory);
 			try {
@@ -940,20 +1263,26 @@ export function storageContract(name: string, factory: Factory): void {
 
 				let second = await storage.jobs.enqueue(backgroundJob(channelId, lease, {
 					fingerprint: "sha256:second",
-					input: { revision: 2 },
+					type: "research-answer",
+					input: { revision: 2, question: "Which clients were tested?" },
 					now: new Date(input.now.getTime() + 1),
 				}));
 				expect(second.job).toMatchObject({ targetGeneration: 2, revision: 2 });
 				expect((await storage.jobs.get(channelId, first.job.id))!.job.state).toBe("superseded");
 				let independent = await storage.jobs.enqueue(backgroundJob(channelId, lease, {
-					targetKey: "research:question-1",
-					type: "research-question",
+					targetKey: "research:evidence-1",
+					type: "research-evidence",
 					origin: "user",
+					input: { query: "What changed in the API?" },
 					now: new Date(input.now.getTime() + 2),
 				}));
 				expect(independent.job).toMatchObject({ targetGeneration: 1, revision: 3 });
 				let page = await storage.jobs.list(channelId, 2);
 				expect(page!.jobs.map(job => job.id)).toEqual([independent.job.id, second.job.id]);
+				expect(page!.jobs.map(job => job.subject)).toEqual([
+					"What changed in the API?",
+					"Which clients were tested?",
+				]);
 				expect(page!.next).toBeDefined();
 				expect("input" in page!.jobs[0]!).toBe(false);
 				let remainder = await storage.jobs.list(channelId, 2, page!.next);
@@ -962,7 +1291,7 @@ export function storageContract(name: string, factory: Factory): void {
 				let detail = await storage.jobs.get(channelId, second.job.id);
 				(detail!.job.input as { revision: number }).revision = 99;
 				expect((await storage.jobs.get(channelId, second.job.id))!.job.input)
-					.toEqual({ revision: 2 });
+					.toEqual({ question: "Which clients were tested?", revision: 2 });
 				expect(await storage.channels.get(channelId)).toEqual(beforeChannel);
 				expect(await storage.collaboration.load(channelId, new Date())).toEqual(
 					beforeCollaboration,

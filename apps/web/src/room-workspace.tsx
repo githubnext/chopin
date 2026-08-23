@@ -31,7 +31,7 @@ import { Wire } from "./wire";
 import { HEADING, useWorkspaceMode, useWorkspaceState, Workspace } from "./workspace";
 import { availableDocumentView, presentWorkspace, storedDocumentView } from "./workspace-model";
 
-import type { Session } from "@chopin/protocol";
+import type { Research, Session } from "@chopin/protocol";
 import type { DecisionView, DecisionViewState } from "@chopin/editor";
 import type { HostedWorkspaceProps } from "./hosted";
 import type { Status } from "./wire";
@@ -105,11 +105,17 @@ export function RoomWorkspace(
 	}: HostedWorkspaceProps,
 ) {
 	let [wire, setWire] = useState<Wire>();
-	let { onDocumentChanged, onRenameDocument } = useNavigationDocument();
+	let {
+		onDocumentChanged,
+		onRenameDocument,
+		onRepositoryAccessChanged,
+		onResearchWorkspaceChanged,
+		onResearchWorkspacesRefresh,
+	} = useNavigationDocument();
 	let [status, setStatus] = useState<Status>("connecting");
 	let [members, setMembers] = useState<Session.Member[]>([]);
 	let [effectiveCanEdit, setEffectiveCanEdit] = useState(canEdit);
-	let [capabilities, setCapabilities] = useState({ backgroundJobs: false, webResearch: false });
+	let [capabilities, setCapabilities] = useState({ backgroundJobs: false });
 	let [metadata, setMetadata] = useState({ title: label, slug, updatedAt });
 	let metadataRef = useRef(metadata);
 	let user = useMemo(() => cursor(handle), [handle]);
@@ -247,7 +253,7 @@ export function RoomWorkspace(
 			socket.on<Session.Hello>("session:hello", frame => {
 				setMembers(frame.members);
 				setEffectiveCanEdit(frame.canEdit);
-				setCapabilities({ backgroundJobs: frame.backgroundJobs, webResearch: frame.webResearch });
+				setCapabilities({ backgroundJobs: frame.backgroundJobs });
 				if (!frame.backgroundJobs) {
 					setDecisionView(state =>
 						state.preferred === "background-work"
@@ -256,12 +262,38 @@ export function RoomWorkspace(
 					);
 				}
 				updateMetadata(frame);
+				onRepositoryAccessChanged();
+				onResearchWorkspacesRefresh({
+					id: room,
+					repositoryId: repository.id,
+					repositoryOwner: repository.owner,
+					repositoryName: repository.name,
+					title: metadataRef.current.title,
+					slug: metadataRef.current.slug,
+				});
 			}),
 			socket.on<Session.Channel>("session:channel", frame => {
 				if (frame.channelId === room) updateMetadata(frame);
 			}),
 			socket.on<Session.Presence>("session:presence", frame => setMembers(frame.members)),
-			socket.on<Session.Access>("session:access", frame => setEffectiveCanEdit(frame.canEdit)),
+			socket.on<Session.Access>("session:access", frame => {
+				setEffectiveCanEdit(frame.canEdit);
+				onRepositoryAccessChanged();
+			}),
+			socket.on<Research.Changed>("research:changed", frame => {
+				onResearchWorkspaceChanged(
+					{
+						id: room,
+						repositoryId: repository.id,
+						repositoryOwner: repository.owner,
+						repositoryName: repository.name,
+						title: metadataRef.current.title,
+						slug: metadataRef.current.slug,
+					},
+					frame.workspaceId,
+					frame.revision,
+				);
+			}),
 			threads.listen(socket),
 			jobs.listen(socket),
 		];
@@ -271,7 +303,17 @@ export function RoomWorkspace(
 			socket.dispose();
 			setWire(undefined);
 		};
-	}, [room, handle, threads, jobs, updateMetadata]);
+	}, [
+		handle,
+		jobs,
+		onResearchWorkspaceChanged,
+		onResearchWorkspacesRefresh,
+		onRepositoryAccessChanged,
+		repository,
+		room,
+		threads,
+		updateMetadata,
+	]);
 
 	return (
 		<Workspace
@@ -327,8 +369,6 @@ export function RoomWorkspace(
 				<PlanEditor
 					commentPresentation={mode === "split" ? "popover" : "sheet"}
 					connection={status}
-					jobs={capabilities.backgroundJobs ? jobs : undefined}
-					canAssignJobs={capabilities.webResearch}
 					onScrollTop={setPlanScrollTop}
 					questions={questions}
 					readOnly={!effectiveCanEdit}

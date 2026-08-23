@@ -22,6 +22,9 @@ durable model, and [Self-hosting](self-hosting.md) for deployment.
 - A **plan** is a document being used for planning. It is not the product noun
   for every document.
 - A **room** is the server's live in-memory representation of an open channel.
+- A **Research Workspace** is a durable, read-only generated report and
+  append-only research thread attached to one parent channel. It is not a
+  channel or collaboratively edited document.
 - The **Planner** is the current name of Chopin's hosted Copilot-backed document
   agent.
 - A **coding agent** is an external MCP client that creates or implements a
@@ -113,6 +116,8 @@ repository-fixed read tools and no ambient checkout, shell, or host filesystem.
 - channel metadata and repository identity;
 - complete Yjs checkpoints and the accepted update journal after each
   checkpoint;
+- parent-scoped Research Workspaces, turns, messages, and links to immutable
+  background-job artifacts;
 - canonical MDX and a versioned sidecar containing questions, shared drafts,
   comments, decisions, transcript, relationships, creation metadata,
   implementation graphs, active execution, and run history;
@@ -153,6 +158,7 @@ not interchangeable:
 | Storage channel revision   | Advances for every durable channel commit, including sidecar-only transcript, graph, draft, or relationship changes. It fences adapter writes.                |
 | Storage sequence           | Orders committed updates and events. Sidecar-only commits can create gaps in the Yjs update journal because they still consume a sequence.                    |
 | Graph version and revision | Identify one implementation graph generation and the edits within its current draft. A claim also binds the exact plan revision.                              |
+| Research revision          | Orders durable workspace, turn, job-link, and transcript changes independently from the parent document and background-job revisions.                         |
 
 Channel IDs, update IDs, operation IDs, component IDs, and lifecycle idempotency
 keys solve separate identity problems. See [Repository channels](channels.md) for

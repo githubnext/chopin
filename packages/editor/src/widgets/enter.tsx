@@ -32,12 +32,7 @@ import {
 	COMMAND_PRIORITY_LOW,
 	INSERT_PARAGRAPH_COMMAND,
 } from "lexical";
-import {
-	$isCalloutNode,
-	$isCodeBlockNode,
-	$isMathNode,
-	$isResearchQuestionNode,
-} from "@chopin/dialect";
+import { $isCalloutNode, $isCodeBlockNode, $isMathNode } from "@chopin/dialect";
 
 import type { ElementNode, LexicalNode } from "lexical";
 
@@ -63,7 +58,7 @@ function containerPosition(node: LexicalNode | null) {
 	let child = node;
 	while (child) {
 		let parent = child.getParent();
-		if ($isCalloutNode(parent) || $isResearchQuestionNode(parent)) {
+		if ($isCalloutNode(parent)) {
 			return { container: parent, child };
 		}
 		child = parent;

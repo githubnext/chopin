@@ -40,7 +40,7 @@ if (url) {
 		}
 	});
 
-	it("cascades background jobs and artifacts with their channel", async () => {
+	it("cascades background jobs, artifacts, and research workspaces with their channel", async () => {
 		let storage = new PostgresStorage(url);
 		let suffix = crypto.randomUUID();
 		let channelId = `job-channel-${suffix}`;
@@ -62,10 +62,10 @@ if (url) {
 			let queued = await storage.jobs.enqueue({
 				id: `job-${suffix}`,
 				channelId,
-				type: "document-summary",
+				type: "research-answer",
 				version: 1,
-				origin: "scheduler",
-				targetKey: "document-summary",
+				origin: "user",
+				targetKey: `research-answer:workspace:workspace-${suffix}:turn:turn-${suffix}:answer`,
 				idempotencyKey: `enqueue-${suffix}`,
 				fingerprint: `fingerprint-${suffix}`,
 				input: { revision: 1 },
@@ -90,6 +90,49 @@ if (url) {
 				now: new Date(now.getTime() + 2),
 				lease: lease!,
 			});
+			let draft = await storage.research.create({
+				id: `workspace-${suffix}`,
+				channelId,
+				title: "Cascade research",
+				proposedQuestion: "What should be deleted?",
+				origin: "sidebar",
+				createdBy: userId,
+				idempotencyKey: `workspace-create-${suffix}`,
+				fingerprint: `workspace-fingerprint-${suffix}`,
+				now: new Date(now.getTime() + 3),
+				lease: lease!,
+			});
+			let confirmed = await storage.research.confirm({
+				channelId,
+				workspaceId: draft.workspace.id,
+				turnId: `turn-${suffix}`,
+				messageId: `member-message-${suffix}`,
+				requestId: `confirm-${suffix}`,
+				fingerprint: `confirm-fingerprint-${suffix}`,
+				confirmedQuery: "Delete the complete workspace.",
+				confirmedBy: userId,
+				now: new Date(now.getTime() + 4),
+				lease: lease!,
+			});
+			await storage.research.linkJob({
+				channelId,
+				workspaceId: draft.workspace.id,
+				turnId: confirmed.turn.id,
+				role: "answer",
+				jobId: queued.job.id,
+				now: new Date(now.getTime() + 5),
+				lease: lease!,
+			});
+			await storage.research.appendAgentMessage({
+				channelId,
+				workspaceId: draft.workspace.id,
+				id: `agent-message-${suffix}`,
+				turnId: confirmed.turn.id,
+				text: "Everything is scoped to the parent.",
+				sourceJobId: queued.job.id,
+				now: new Date(now.getTime() + 6),
+				lease: lease!,
+			});
 		} finally {
 			await storage.close();
 		}
@@ -102,14 +145,28 @@ if (url) {
 				targets: number;
 				jobs: number;
 				artifacts: number;
+				workspaces: number;
+				turns: number;
+				messages: number;
 			}[]>`
 				SELECT
 					(SELECT count(*)::int FROM background_job_channels WHERE channel_id = ${channelId}) AS channels,
 					(SELECT count(*)::int FROM background_job_targets WHERE channel_id = ${channelId}) AS targets,
 					(SELECT count(*)::int FROM background_jobs WHERE channel_id = ${channelId}) AS jobs,
-					(SELECT count(*)::int FROM background_job_artifacts WHERE job_id = ${`job-${suffix}`}) AS artifacts
+					(SELECT count(*)::int FROM background_job_artifacts WHERE job_id = ${`job-${suffix}`}) AS artifacts,
+					(SELECT count(*)::int FROM research_workspaces WHERE channel_id = ${channelId}) AS workspaces,
+					(SELECT count(*)::int FROM research_turns WHERE workspace_id = ${`workspace-${suffix}`}) AS turns,
+					(SELECT count(*)::int FROM research_messages WHERE workspace_id = ${`workspace-${suffix}`}) AS messages
 			`;
-			expect(counts).toEqual({ channels: 0, targets: 0, jobs: 0, artifacts: 0 });
+			expect(counts).toEqual({
+				channels: 0,
+				targets: 0,
+				jobs: 0,
+				artifacts: 0,
+				workspaces: 0,
+				turns: 0,
+				messages: 0,
+			});
 		} finally {
 			await sql.close();
 		}
@@ -385,6 +442,7 @@ if (url) {
 				"004_background_jobs",
 				"005_background_job_failures",
 				"006_background_job_progress",
+				"007_research_workspaces",
 			]);
 			expect(await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`)
 				.toEqual([
@@ -394,6 +452,9 @@ if (url) {
 				.toEqual([
 					{ table: "user_navigation" },
 				]);
+			expect(
+				await sql<{ table: string | null }[]>`SELECT to_regclass('research_workspaces') AS table`,
+			).toEqual([{ table: "research_workspaces" }]);
 		} finally {
 			await sql.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).simple();
 			await sql.close();

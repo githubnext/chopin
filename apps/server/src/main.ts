@@ -8,6 +8,7 @@
  */
 
 import { join } from "node:path";
+import { researchWorkspacePath } from "@chopin/protocol/document-url";
 
 import * as Agent from "./agent/client";
 import { ActiveOwnerBindings } from "./agent/active-owner";
@@ -23,7 +24,7 @@ import { JobExecutionError, JobRegistry } from "./jobs/registry";
 import * as JobBrowser from "./jobs/browser";
 import { documentSummaryDefinition } from "./jobs/document-summary";
 import { JobRunner } from "./jobs/runner";
-import { researchQuestionDefinition, researchQuestionSnapshot } from "./jobs/research-question";
+import { researchAnswerDefinition, researchEvidenceDefinition } from "./jobs/research-workspace";
 import { JobService } from "./jobs/service";
 import { DocumentSummaryCoordinator } from "./jobs/summary-coordinator";
 import { registerMcpRoutes } from "./mcp/routes";
@@ -32,6 +33,8 @@ import * as Service from "./plan/service";
 import * as Inject from "./questions/inject";
 import * as Marks from "./comments/inject";
 import * as Questions from "./questions/service";
+import { registerResearchWorkspaceRoutes } from "./research/routes";
+import { ResearchWorkspaceService } from "./research/service";
 import * as Rooms from "./rooms";
 import { admit } from "./socket/admission";
 import { StorageError } from "./storage/errors";
@@ -74,6 +77,7 @@ let sessionCleanup: ReturnType<typeof setInterval> | undefined;
 let cleaningSessions: Promise<void> | undefined;
 let ownerBindings: ActiveOwnerBindings | undefined;
 let jobRunner: JobRunner | undefined;
+let researchService: ResearchWorkspaceService | undefined;
 let summaryCoordinator: DocumentSummaryCoordinator | undefined;
 let documentLocks = new Map<string, Promise<void>>();
 
@@ -150,6 +154,32 @@ function conversation(room: Rooms.Room, ws: Socket): Chat.Room {
 		persist: () => Service.persist(room.plan!),
 		ownerAvailable: () => jobRunner?.ownerAvailable(room.id) ?? Promise.resolve(),
 		jobs: config.backgroundJobs ? jobService : undefined,
+		createResearch: config.agent
+			? async request => {
+				let service = researchService;
+				if (!service) throw new Error("research workspaces are unavailable");
+				let created = await service.createDraft({
+					channelId: room.id,
+					question: request.question,
+					origin: "planner",
+					originMessageId: request.entryId,
+					createdBy: request.userId,
+				});
+				let channel = await storage.channels.get(room.id);
+				if (!channel) throw new Error("research workspace parent is unavailable");
+				let path = researchWorkspacePath(
+					channel.repositoryOwner,
+					channel.repositoryName,
+					channel.slug,
+					created.workspace.id,
+				);
+				return {
+					workspaceId: created.workspace.id,
+					state: "draft" as const,
+					url: new URL(path, config.auth.origin).href,
+				};
+			}
+			: undefined,
 	};
 }
 
@@ -291,32 +321,13 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			}
 			return;
 
-		case "job:assign":
-			try {
-				if (!config.webResearch) throw new Error("web research is disabled");
-				if (!room.plan) throw new Error("document is not open");
-				reply(
-					ws,
-					frame.rid,
-					await JobBrowser.assignResearchQuestion(
-						jobService,
-						room.plan,
-						frame.questionId,
-						frame.requestId,
-					),
-				);
-			} catch (err) {
-				fail(ws, frame.rid, err instanceof Error ? err.message : "cannot assign research");
-			}
-			return;
-
 		case "job:cancel":
 			try {
 				if (!config.backgroundJobs) throw new Error("background jobs are disabled");
 				reply(
 					ws,
 					frame.rid,
-					await JobBrowser.cancelResearchJob(
+					await JobBrowser.cancelResearchWorkspaceJob(
 						jobService,
 						room.id,
 						frame.id,
@@ -628,6 +639,16 @@ async function announceJobsChanged(channelId: string): Promise<void> {
 	broadcast(server, channelId, { kind: "job:changed", ts: 0, revision: page.revision });
 }
 
+function announceResearchChanged(channelId: string, workspaceId: string, revision: number): void {
+	if (draining) return;
+	broadcast(server, channelId, {
+		kind: "research:changed",
+		ts: 0,
+		workspaceId,
+		revision,
+	});
+}
+
 async function currentDocumentTarget(
 	channelId: string,
 ): Promise<Service.DocumentTarget | undefined> {
@@ -679,46 +700,6 @@ async function commitCurrentSummary(
 	});
 }
 
-async function commitCurrentResearch(
-	channelId: string,
-	questionId: string,
-	questionHash: string,
-	documentRevision: number,
-	documentSourceHash: string,
-	commit: () => Promise<void>,
-): Promise<boolean> {
-	return withDocumentLock(channelId, async () => {
-		let active = Rooms.get(channelId);
-		let source: string;
-		if (active?.plan) {
-			let plan = active.plan;
-			return Service.exclusive(plan, async () => {
-				source = Service.source(plan);
-				let question = researchQuestionSnapshot(source, questionId);
-				if (
-					plan.revision !== documentRevision
-					|| Service.sourceHash(source) !== documentSourceHash
-					|| question?.questionHash !== questionHash
-				) return false;
-				await commit();
-				return true;
-			});
-		}
-		let stored = await storage.collaboration.load(channelId, new Date());
-		if (!stored) return false;
-		let projected = await Service.readStored(stored);
-		source = projected.source;
-		let question = researchQuestionSnapshot(source, questionId);
-		if (
-			projected.revision !== documentRevision
-			|| Service.sourceHash(source) !== documentSourceHash
-			|| question?.questionHash !== questionHash
-		) return false;
-		await commit();
-		return true;
-	});
-}
-
 async function sessionRevoked(sessionId: string): Promise<void> {
 	let jobs = jobRunner?.ownerRevoked(sessionId);
 	ownerBindings?.revokeSession(sessionId);
@@ -762,12 +743,11 @@ if (config.backgroundJobs) {
 		commitCurrent: commitCurrentSummary,
 	}));
 }
+if (config.backgroundJobs && config.agent) {
+	definitions.push(researchAnswerDefinition({ config }));
+}
 if (config.webResearch) {
-	definitions.push(researchQuestionDefinition({
-		config,
-		current: currentDocumentTarget,
-		commitCurrent: commitCurrentResearch,
-	}));
+	definitions.push(researchEvidenceDefinition({ config }));
 }
 let jobRegistry = new JobRegistry(definitions);
 let jobService = new JobService({
@@ -777,8 +757,25 @@ let jobService = new JobService({
 		if (!heldLease) throw new Error("storage writer lease is unavailable");
 		return heldLease;
 	},
-	onChange: job => jobRunner?.notify(job),
+	onChange: job => {
+		jobRunner?.notify(job);
+		if (job.state === "completed") {
+			void researchService?.jobChanged(job).catch(err => {
+				console.error("chopin: research workspace reconciliation failed -", err);
+			});
+		}
+	},
 	publish: announceJobsChanged,
+});
+researchService = new ResearchWorkspaceService({
+	storage,
+	jobs: jobService,
+	lease() {
+		if (!heldLease) throw new Error("storage writer lease is unavailable");
+		return heldLease;
+	},
+	current: currentDocumentTarget,
+	publish: announceResearchChanged,
 });
 if (config.agent && config.backgroundJobs) {
 	summaryCoordinator = new DocumentSummaryCoordinator({
@@ -851,6 +848,23 @@ registerMcpRoutes(router, hostedAuth, {
 registerChannelRoutes(router, hostedAuth, {
 	onAgentReset: channelOwnerReset,
 	onChannelRenamed: announceChannelRename,
+});
+registerResearchWorkspaceRoutes(router, hostedAuth, {
+	service: researchService,
+	async ensureOwner(channel, session, repository) {
+		await Chat.resolveOwner(
+			hostedAuth,
+			{
+				id: channel.repositoryId,
+				owner: channel.repositoryOwner,
+				name: channel.repositoryName,
+				defaultBranch: repository.defaultBranch,
+			},
+			channel.id,
+			session.session.id,
+		);
+		await jobRunner?.ownerAvailable(channel.id);
+	},
 });
 registerNavigationRoutes(router, hostedAuth, { storage });
 

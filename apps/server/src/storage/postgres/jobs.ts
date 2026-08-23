@@ -235,11 +235,16 @@ function job(row: JobRow): BackgroundJob {
 function summary(value: BackgroundJob): BackgroundJobSummary {
 	let { claimBinding: _, fingerprint: _fingerprint, idempotencyKey: _key, input: _input, ...rest } =
 		value;
-	let subject = value.type === "research-question"
-			&& value.input && typeof value.input === "object" && !Array.isArray(value.input)
-			&& typeof value.input.question === "string"
-		? [...value.input.question.trim()].slice(0, 200).join("")
+	let field = value.type === "research-evidence"
+		? "query"
+		: value.type === "research-answer"
+		? "question"
 		: undefined;
+	let subject =
+		field && value.input && typeof value.input === "object" && !Array.isArray(value.input)
+			&& typeof value.input[field] === "string"
+			? [...value.input[field].trim()].slice(0, 200).join("")
+			: undefined;
 	return { ...rest, ...(subject ? { subject } : {}) };
 }
 

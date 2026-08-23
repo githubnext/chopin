@@ -97,6 +97,7 @@ export type { Comment } from "./comment";
 export type { Job } from "./job";
 export type { Plan } from "./plan";
 export type { Question } from "./question";
+export type { Research } from "./research";
 
 /** Everything a client may send. */
 export type Incoming =
@@ -114,4 +115,5 @@ export type Outgoing =
 	| import("./comment").Comment.Outgoing
 	| import("./job").Job.Outgoing
 	| import("./plan").Plan.Outgoing
-	| import("./question").Question.Outgoing;
+	| import("./question").Question.Outgoing
+	| import("./research").Research.Outgoing;

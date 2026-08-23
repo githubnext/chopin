@@ -1,5 +1,7 @@
 import {
 	createContext,
+	lazy,
+	Suspense,
 	useCallback,
 	useContext,
 	useEffect,
@@ -8,7 +10,7 @@ import {
 	useState,
 	useSyncExternalStore,
 } from "react";
-import { documentPath } from "@chopin/protocol/document-url";
+import { documentPath, researchWorkspacePath } from "@chopin/protocol/document-url";
 
 import * as Api from "./api";
 import {
@@ -37,14 +39,27 @@ import {
 } from "./project-sidebar";
 import { clearRepositoryCache } from "./repository-cache";
 import { useProjectDocuments } from "./use-project-documents";
+import { useProjectResearch } from "./use-project-research";
 
+import type { Research } from "@chopin/protocol";
 import type { ReactNode } from "react";
 import type { NavigationMode } from "./navigation-model";
+
+let NewResearchDialog = lazy(() =>
+	import("./research-actions").then(module => ({ default: module.NewResearchDialog }))
+);
 
 type Route =
 	| { page: "repositories" }
 	| { page: "repository"; owner: string; repository: string }
 	| { page: "document"; owner: string; repository: string; slug: string }
+	| {
+		page: "research";
+		owner: string;
+		repository: string;
+		slug: string;
+		workspaceId: string;
+	}
 	| { page: "channel"; id: string };
 
 type NavigationFailure = { reason: unknown };
@@ -56,10 +71,25 @@ let NavigationDocument = createContext<{
 		update: Pick<Api.Channel, "title" | "slug" | "updatedAt">,
 	) => void;
 	onDocumentLoaded: (channel: Api.Channel) => void;
+	onRepositoryAccessChanged: () => void;
+	onResearchWorkspaceChanged: (
+		channel: Api.ResearchParentChannel,
+		workspaceId: string,
+		revision: number,
+	) => void;
+	onResearchWorkspaceLoaded: (
+		channel: Api.ResearchParentChannel,
+		workspace: Research.WorkspaceSummary,
+	) => void;
+	onResearchWorkspacesRefresh: (channel: Api.ResearchParentChannel) => void;
 	onRenameDocument: () => void;
 }>({
 	onDocumentChanged() {},
 	onDocumentLoaded() {},
+	onRepositoryAccessChanged() {},
+	onResearchWorkspaceChanged() {},
+	onResearchWorkspaceLoaded() {},
+	onResearchWorkspacesRefresh() {},
 	onRenameDocument() {},
 });
 
@@ -178,7 +208,11 @@ export function NavigationShell(
 	);
 	let [drawerOpen, setDrawerOpen] = useState(false);
 	let drawerOpener = useRef<HTMLButtonElement>(null);
-	let [dialog, setDialog] = useState<"add" | "search" | { channel: Api.Channel; type: "rename" }>();
+	let [dialog, setDialog] = useState<
+		| "add"
+		| "search"
+		| { channel: Api.Channel; type: "rename" | "research" }
+	>();
 	let [accountOpen, setAccountOpen] = useState(false);
 	let creatingProjectIds = useRef<Set<string>>(new Set());
 	let [creatingProjectIdsForView, setCreatingProjectIdsForView] = useState<ReadonlySet<string>>(
@@ -190,13 +224,22 @@ export function NavigationShell(
 	let sidebarVisible = mode === "inline" && !collapsed;
 	let triggerVisible = !sidebarVisible && !drawerOpen;
 	let { loadMore, projects, updateDocument, upsertDocument } = useProjectDocuments(navigation);
+	let {
+		groups: research,
+		refreshResearchChannel,
+		refreshResearchWorkspace,
+		upsertResearchWorkspace,
+	} = useProjectResearch(navigation);
 	let currentDocumentId = route.page === "channel"
 		? route.id
-		: route.page === "document"
+		: route.page === "document" || route.page === "research"
 		? resolvedDocument?.id
 		: undefined;
+	let currentResearchWorkspaceId = route.page === "research" ? route.workspaceId : undefined;
 	let routeKey = route.page === "channel"
 		? `${route.page}:${route.id}`
+		: route.page === "research"
+		? `${route.page}:${route.owner}/${route.repository}/${route.slug}/${route.workspaceId}`
 		: route.page === "document"
 		? `${route.page}:${route.owner}/${route.repository}/${route.slug}`
 		: route.page;
@@ -254,7 +297,8 @@ export function NavigationShell(
 
 	useEffect(() => {
 		if (
-			route.page !== "channel" && route.page !== "document" && navigation?.projects.length === 0
+			route.page !== "channel" && route.page !== "document" && route.page !== "research"
+			&& navigation?.projects.length === 0
 		) {
 			showDialog("add");
 		}
@@ -338,12 +382,41 @@ export function NavigationShell(
 		let channel = currentChannelRef.current;
 		if (channel) showDialog({ type: "rename", channel });
 	}, [showDialog]);
+	let researchWorkspaceChanged = useCallback((
+		channel: Api.ResearchParentChannel,
+		workspaceId: string,
+		revision: number,
+	) => {
+		refreshResearchWorkspace(channel, workspaceId, revision);
+	}, [refreshResearchWorkspace]);
+	let researchWorkspaceLoaded = useCallback((
+		channel: Api.ResearchParentChannel,
+		workspace: Research.WorkspaceSummary,
+	) => {
+		upsertResearchWorkspace(channel, workspace);
+	}, [upsertResearchWorkspace]);
+	let repositoryAccessChanged = useCallback(() => {
+		void refresh();
+	}, [refresh]);
 	let navigationDocument = useMemo(() => ({
 		channel: currentChannel,
 		onDocumentChanged: documentChanged,
 		onDocumentLoaded: documentLoaded,
+		onRepositoryAccessChanged: repositoryAccessChanged,
+		onResearchWorkspaceChanged: researchWorkspaceChanged,
+		onResearchWorkspaceLoaded: researchWorkspaceLoaded,
+		onResearchWorkspacesRefresh: refreshResearchChannel,
 		onRenameDocument: renameCurrentDocument,
-	}), [currentChannel, documentChanged, documentLoaded, renameCurrentDocument]);
+	}), [
+		currentChannel,
+		documentChanged,
+		documentLoaded,
+		renameCurrentDocument,
+		repositoryAccessChanged,
+		researchWorkspaceChanged,
+		researchWorkspaceLoaded,
+		refreshResearchChannel,
+	]);
 
 	let signOut = async () => {
 		try {
@@ -374,6 +447,7 @@ export function NavigationShell(
 			creatingProjectIds={creatingProjectIdsForView}
 			creatingNewDocument={!!active && creatingProjectIdsForView.has(active.repositoryId)}
 			currentDocumentId={currentDocumentId}
+			currentResearchWorkspaceId={currentResearchWorkspaceId}
 			onAccount={() => setAccountOpen(open => !open)}
 			onAddProject={() => showDialog("add")}
 			onCollapse={() => {
@@ -382,11 +456,12 @@ export function NavigationShell(
 			}}
 			onCreateDocument={project => void createDocument(project)}
 			onLoadMore={loadMore}
+			onNewResearch={channel => showDialog({ type: "research", channel })}
 			onNewDocument={newDocument}
-			onOpenDocument={navigateToDocument}
 			onRenameDocument={channel => showDialog({ type: "rename", channel })}
 			onSearch={() => showDialog("search")}
 			projects={projects}
+			research={research}
 			user={user}
 		/>
 	);
@@ -477,6 +552,23 @@ export function NavigationShell(
 						onDismiss={() => setDialog(undefined)}
 						onRenamed={renamed}
 					/>
+				)}
+				{typeof dialog === "object" && dialog.type === "research" && (
+					<Suspense fallback={null}>
+						<NewResearchDialog
+							channel={dialog.channel}
+							onCreated={workspace => {
+								upsertResearchWorkspace(dialog.channel, workspace);
+								location.assign(researchWorkspacePath(
+									dialog.channel.repositoryOwner,
+									dialog.channel.repositoryName,
+									dialog.channel.slug,
+									workspace.id,
+								));
+							}}
+							onDismiss={() => setDialog(undefined)}
+						/>
+					</Suspense>
 				)}
 			</div>
 		</NavigationDocument.Provider>

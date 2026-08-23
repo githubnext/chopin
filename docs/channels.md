@@ -18,7 +18,10 @@ authorization then depends on the surface:
 
 Pull access may list and open documents. Push or administration access may create
 a document, edit it, change decisions, invoke the hosted agent, and
-mutate an implementation lifecycle. A public repository is not sufficient to
+mutate an implementation lifecycle. The same roles apply to document-attached
+Research Workspaces: pull may read, while push or administration may create a
+draft, confirm public search, ask follow-ups, search more, or cancel work. A
+public repository is not sufficient to
 expose its documents through the browser.
 
 An MCP-created document outside the App installation remains unavailable to
@@ -34,6 +37,9 @@ GET  /api/repositories/:owner/:repository/documents/:slug
 GET  /api/channels/:channelId
 PATCH /api/channels/:channelId
 POST /api/channels/:channelId/agent/reset
+GET  /api/repositories/:owner/:repository/research-workspaces
+POST /api/channels/:channelId/research-workspaces
+GET  /api/channels/:channelId/research-workspaces/:workspaceId
 ```
 
 The `channels` and UUID paths are internal API names retained by the current
@@ -115,8 +121,16 @@ differs.
 ```text
 /documents/:owner/:repository         document list and creation
 /documents/:owner/:repository/:slug   conversation plus Plan or Decisions view
+/documents/:owner/:repository/:slug/research/:workspaceId
+                                       document-attached Research Workspace
 /                                     repository picker
 ```
+
+Research Workspaces appear as children of their parent document in navigation.
+They reuse the parent channel's repository authorization, Planner owner, and
+WebSocket only for invalidation. Their report and thread are stored separately
+from Yjs and remain reachable across parent renames because historical document
+slugs continue to resolve.
 
 Historical slug URLs continue to open the document. The legacy
 `/repositories/:owner/:repository` and `/channels/:channelId` browser routes are
@@ -167,6 +181,8 @@ A channel persists:
 - implementation graph versions, active execution, task progress,
   verification, and archived runs; and
 - token-free Planner ownership references and generation state.
+- Research Workspace drafts, append-only turns and messages, and links to
+  immutable background-job artifacts.
 
 A client document update is acknowledged only after its fenced durable commit.
 Checkpointing removes Yjs journal entries through the checkpoint sequence; the
