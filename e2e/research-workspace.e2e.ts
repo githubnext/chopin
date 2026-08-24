@@ -45,7 +45,9 @@ async function createPrivateDraft(
 	researchQuestion: string,
 ): Promise<{ workspaceId: string; path: string }> {
 	let title = parentTitle(room);
-	await projects(page).getByRole("button", {
+	let sidebar = projects(page);
+	await sidebar.getByRole("link", { name: title, exact: true }).hover();
+	await sidebar.getByRole("button", {
 		name: `New research in ${title}`,
 		exact: true,
 	}).click();
