@@ -466,6 +466,7 @@ export class PostgresStorage implements StorageAdapter {
 				await transaction`SELECT pg_advisory_xact_lock(2043237432)`;
 				await this.#assertLease(transaction, lease);
 			},
+			(transaction, input) => this.#createChannelInTransaction(transaction, input),
 		);
 	}
 
@@ -653,70 +654,77 @@ export class PostgresStorage implements StorageAdapter {
 	}
 
 	#createChannel(input: CreateChannel): Promise<ChannelRecord> {
-		return this.#run("create channel", () =>
-			this.#sql.begin(async transaction => {
-				if (input.parentChannelId) {
-					let [parent] = await transaction<{
-						parentChannelId: string | null;
-						repositoryId: string;
-					}[]>`
-						SELECT
-							parent_channel_id AS "parentChannelId",
-							repository_id AS "repositoryId"
-						FROM channels
-						WHERE id = ${input.parentChannelId}
-						FOR KEY SHARE
-					`;
-					if (!parent) throw missing(`channel ${input.parentChannelId} does not exist`);
-					if (parent.repositoryId !== input.repositoryId) {
-						throw conflict(`channel ${input.id} must share its parent's repository`);
-					}
-					if (parent.parentChannelId !== null) {
-						throw conflict(`channel ${input.parentChannelId} cannot parent another child`);
-					}
-				}
-				let [saved] = await transaction<ChannelRow[]>`
-				INSERT INTO channels (
-					id, repository_id, repository_owner, repository_name, parent_channel_id, title,
-					created_by, revision, next_sequence, created_at, updated_at
+		return this.#run(
+			"create channel",
+			() => this.#sql.begin(transaction => this.#createChannelInTransaction(transaction, input)),
+		);
+	}
+
+	async #createChannelInTransaction(
+		transaction: TransactionSQL,
+		input: CreateChannel,
+	): Promise<ChannelRecord> {
+		if (input.parentChannelId) {
+			let [parent] = await transaction<{
+				parentChannelId: string | null;
+				repositoryId: string;
+			}[]>`
+				SELECT
+					parent_channel_id AS "parentChannelId",
+					repository_id AS "repositoryId"
+				FROM channels
+				WHERE id = ${input.parentChannelId}
+				FOR KEY SHARE
+			`;
+			if (!parent) throw missing(`channel ${input.parentChannelId} does not exist`);
+			if (parent.repositoryId !== input.repositoryId) {
+				throw conflict(`channel ${input.id} must share its parent's repository`);
+			}
+			if (parent.parentChannelId !== null) {
+				throw conflict(`channel ${input.parentChannelId} cannot parent another child`);
+			}
+		}
+		let [saved] = await transaction<ChannelRow[]>`
+			INSERT INTO channels (
+				id, repository_id, repository_owner, repository_name, parent_channel_id, title,
+				created_by, revision, next_sequence, created_at, updated_at
+			) VALUES (
+				${input.id}, ${input.repositoryId}, ${input.repositoryOwner},
+				${input.repositoryName}, ${input.parentChannelId ?? null}, ${input.title},
+				${input.createdBy}, 0, 1,
+				${input.now}, ${input.now}
+			)
+			RETURNING ${transaction.unsafe(CHANNEL_RETURNING)}
+		`;
+		if (!saved) throw corrupt("creating a channel returned no record");
+		let slug = await this.#reserveSlug(
+			transaction,
+			input.repositoryId,
+			input.id,
+			input.title,
+			input.now,
+		);
+		await transaction`
+			INSERT INTO channel_state (channel_id, sidecar)
+			VALUES (
+				${input.id},
+				${input.initial ? JSON.stringify(input.initial.sidecar) : "null"}::jsonb
+			)
+		`;
+		if (input.initial) {
+			await transaction`
+				INSERT INTO channel_snapshots (
+					channel_id, generation, revision, through_sequence, epoch, source,
+					source_hash, document, sidecar, created_at
 				) VALUES (
-					${input.id}, ${input.repositoryId}, ${input.repositoryOwner},
-					${input.repositoryName}, ${input.parentChannelId ?? null}, ${input.title},
-					${input.createdBy}, 0, 1,
-					${input.now}, ${input.now}
-				)
-				RETURNING ${transaction.unsafe(CHANNEL_RETURNING)}
-			`;
-				if (!saved) throw corrupt("creating a channel returned no record");
-				let slug = await this.#reserveSlug(
-					transaction,
-					input.repositoryId,
-					input.id,
-					input.title,
-					input.now,
-				);
-				await transaction`
-				INSERT INTO channel_state (channel_id, sidecar)
-				VALUES (
-					${input.id},
-					${input.initial ? JSON.stringify(input.initial.sidecar) : "null"}::jsonb
+					${input.id}, ${input.initial.generation}, 0, 0, ${input.initial.epoch},
+					${input.initial.source}, ${input.initial.sourceHash},
+					${input.initial.document}, ${JSON.stringify(input.initial.sidecar)}::jsonb,
+					${input.now}
 				)
 			`;
-				if (input.initial) {
-					await transaction`
-						INSERT INTO channel_snapshots (
-							channel_id, generation, revision, through_sequence, epoch, source,
-							source_hash, document, sidecar, created_at
-						) VALUES (
-							${input.id}, ${input.initial.generation}, 0, 0, ${input.initial.epoch},
-							${input.initial.source}, ${input.initial.sourceHash},
-							${input.initial.document}, ${JSON.stringify(input.initial.sidecar)}::jsonb,
-							${input.now}
-						)
-					`;
-				}
-				return channel({ ...saved, slug });
-			}));
+		}
+		return channel({ ...saved, slug });
 	}
 
 	#renameChannel(input: RenameChannel): Promise<RenameResult> {
@@ -807,6 +815,12 @@ export class PostgresStorage implements StorageAdapter {
 					SELECT id FROM channels WHERE parent_channel_id = ${id} LIMIT 1
 				`;
 				if (child) throw conflict(`channel ${id} still has child channels`);
+				let [publication] = await transaction<{ id: string }[]>`
+					SELECT id FROM research_workspaces WHERE published_channel_id = ${id} LIMIT 1
+				`;
+				if (publication) {
+					throw conflict(`channel ${id} is still published by a research workspace`);
+				}
 				let deleted = await transaction<{ id: string }[]>`
 					DELETE FROM channels WHERE id = ${id} RETURNING id
 				`;

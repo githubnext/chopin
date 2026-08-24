@@ -92,6 +92,22 @@ it("restores an MCP-created plan with its creation metadata", async () => {
 	});
 });
 
+it("builds a neutral revision-zero checkpoint for an ordinary document", async () => {
+	let initial = await Service.initial("# Research report\n");
+
+	expect(initial.source).toBe("# Research report\n");
+	expect(initial.sourceHash).toBe(Service.sourceHash("# Research report\n"));
+	expect(initial.sidecar).toEqual({
+		version: 1,
+		revision: 0,
+		documentSeq: 0,
+		questions: [],
+		openQuestions: [],
+		threads: [],
+		transcript: [],
+	});
+});
+
 it("normalizes legacy paired creation metadata when restoring a plan", async () => {
 	let storage = await legacyCreated();
 	let stored = await storage.collaboration.load("legacy-created-plan", now);

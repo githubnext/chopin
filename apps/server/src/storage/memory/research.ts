@@ -1,4 +1,5 @@
 import { conflict, missing } from "../errors";
+import { deterministicChannelId } from "../../channels/id";
 import {
 	RESEARCH_REPOSITORY_CHANNEL_LIMIT,
 	RESEARCH_REPOSITORY_CHANNEL_WORKSPACE_LIMIT,
@@ -14,11 +15,14 @@ import type {
 	ChannelRecord,
 	ConfirmResearchWorkspace,
 	ConfirmResearchWorkspaceResult,
+	CreateChannel,
 	CreateResearchWorkspace,
 	CreateResearchWorkspaceResult,
 	Lease,
 	LinkResearchTurnJob,
 	LinkResearchTurnJobResult,
+	PublishInitialResearchReport,
+	PublishInitialResearchReportResult,
 	ResearchJobRole,
 	ResearchMessage,
 	ResearchTurn,
@@ -33,6 +37,8 @@ import type { ResearchWorkspaceStore } from "../port";
 type Options = {
 	channelExists: (channelId: string) => boolean;
 	channelActive: (channelId: string) => boolean;
+	channel: (channelId: string) => ChannelRecord | undefined;
+	createChannel: (input: CreateChannel) => Promise<ChannelRecord>;
 	channels: (repositoryId: string) => ChannelRecord[];
 	userExists: (userId: string) => boolean;
 	job: (channelId: string, jobId: string) => Promise<BackgroundJobDetail | undefined>;
@@ -138,6 +144,7 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 			let saved: ResearchWorkspace = {
 				id: input.id,
 				channelId: input.channelId,
+				publishedChannelId: undefined,
 				title: input.title,
 				proposedQuestion: input.proposedQuestion,
 				confirmedQuery: undefined,
@@ -413,6 +420,74 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 				repeated: false,
 			};
 		});
+
+	readonly publishInitialReport = (
+		input: PublishInitialResearchReport,
+	): Promise<PublishInitialResearchReportResult> =>
+		this.#mutate(async () => {
+			this.#assertChannel(input.channelId, input.lease);
+			let found = this.#requireWorkspace(input.channelId, input.workspaceId);
+			required(input.answerJobId, "publication answer job id");
+			required(input.title, "publication title");
+			let initialTurn = (this.#turns.get(found.id) ?? [])[0];
+			if (
+				!initialTurn
+				|| initialTurn.kind !== "initial"
+				|| initialTurn.answerJobId !== input.answerJobId
+			) {
+				throw conflict(
+					`research workspace ${found.id} is not linked to initial answer job ${input.answerJobId}`,
+				);
+			}
+			if (found.publishedChannelId) {
+				let published = this.#options.channel(found.publishedChannelId);
+				if (!published) {
+					throw missing(`published channel ${found.publishedChannelId} does not exist`);
+				}
+				return { workspace: workspace(found), channel: published, repeated: true };
+			}
+			this.#assertActiveChannel(input.channelId, input.lease);
+			let parent = this.#options.channel(input.channelId);
+			if (!parent) throw missing(`channel ${input.channelId} does not exist`);
+			if (parent.parentChannelId) {
+				throw conflict(`channel ${parent.id} cannot parent another child`);
+			}
+			let answer = await this.#options.job(input.channelId, input.answerJobId);
+			let target = `research-answer:workspace:${found.id}:turn:${initialTurn.id}:answer`;
+			if (
+				!answer
+				|| answer.job.channelId !== input.channelId
+				|| answer.job.type !== "research-answer"
+				|| answer.job.targetKey !== target
+				|| answer.job.targetGeneration !== answer.target.generation
+				|| answer.job.state !== "completed"
+				|| !answer.artifact
+			) {
+				throw conflict(`background job ${input.answerJobId} is not current completed answer work`);
+			}
+			this.#options.assertLease(input.lease);
+			let now = timestamp(input.now, "publication time");
+			let child = await this.#options.createChannel({
+				id: deterministicChannelId(parent.repositoryId, found.id),
+				repositoryId: parent.repositoryId,
+				repositoryOwner: parent.repositoryOwner,
+				repositoryName: parent.repositoryName,
+				parentChannelId: parent.id,
+				title: input.title,
+				createdBy: found.createdBy,
+				now,
+				initial: input.initial,
+			});
+			let saved = this.#saveWorkspace({
+				...found,
+				publishedChannelId: child.id,
+			}, now);
+			return { workspace: workspace(saved), channel: child, repeated: false };
+		});
+
+	referencesChannel(channelId: string): boolean {
+		return [...this.#workspaces.values()].some(value => value.publishedChannelId === channelId);
+	}
 
 	readonly list = async (
 		channelId: string,

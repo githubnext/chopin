@@ -462,6 +462,7 @@ if (url) {
 				"010_document_archival",
 				"011_document_descriptions",
 				"012_child_channels",
+				"013_research_child_publication",
 			]);
 			expect(await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`)
 				.toEqual([
