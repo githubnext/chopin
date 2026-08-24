@@ -99,7 +99,8 @@ export interface NavigationStore {
 }
 
 export interface ChannelStore {
-	create(channel: CreateChannel): Promise<ChannelRecord>;
+	/** Creates a top-level channel or one repository-local, non-recursive child. */
+	create(input: CreateChannel): Promise<ChannelRecord>;
 	get(id: string): Promise<ChannelRecord | undefined>;
 	resolve(repositoryId: string, slug: string): Promise<ChannelRecord | undefined>;
 	rename(channel: RenameChannel): Promise<RenameResult>;

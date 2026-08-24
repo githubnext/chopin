@@ -361,6 +361,74 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
+		it("stores only one level of repository-local child channels", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, channelId: parentChannelId, repositoryId } = await userAndChannel(storage);
+				let childId = id("child-channel");
+				let child = await storage.channels.create({
+					id: childId,
+					repositoryId,
+					repositoryOwner: "octo-org",
+					repositoryName: "score",
+					title: "Research report",
+					createdBy: userId,
+					parentChannelId,
+					now: new Date("2026-01-03T03:04:05.000Z"),
+					initial: {
+						generation: id("generation"),
+						epoch: "epoch-child",
+						source: "# Research report\n",
+						sourceHash: "sha256:child",
+						document: new Uint8Array([1, 2, 3]),
+						sidecar: { version: 1, revision: 0 },
+					},
+				});
+
+				expect(child.parentChannelId).toBe(parentChannelId);
+				expect((await storage.channels.get(childId))?.parentChannelId).toBe(parentChannelId);
+				expect((await storage.channels.list(repositoryId, 20)).channels)
+					.toContainEqual(child);
+				let stored = await storage.collaboration.load(childId, child.createdAt);
+				expect(stored?.channel.parentChannelId).toBe(parentChannelId);
+				expect(stored?.snapshot).toMatchObject({
+					channelId: childId,
+					epoch: "epoch-child",
+					source: "# Research report\n",
+				});
+
+				await expect(storage.channels.create({
+					id: id("cross-repository-child"),
+					repositoryId: id("other-repository"),
+					repositoryOwner: "githubnext",
+					repositoryName: "other",
+					title: "Cross-repository child",
+					createdBy: userId,
+					parentChannelId,
+					now: new Date("2026-01-04T03:04:05.000Z"),
+				})).rejects.toMatchObject({ failure: "conflict" });
+				await expect(storage.channels.create({
+					id: id("grandchild-channel"),
+					repositoryId,
+					repositoryOwner: "octo-org",
+					repositoryName: "score",
+					title: "Nested child",
+					createdBy: userId,
+					parentChannelId: childId,
+					now: new Date("2026-01-04T03:04:05.000Z"),
+				})).rejects.toMatchObject({ failure: "conflict" });
+
+				await storage.channels.archive({
+					id: parentChannelId,
+					now: new Date("2026-01-05T03:04:05.000Z"),
+				});
+				await expect(storage.channels.delete(parentChannelId))
+					.rejects.toMatchObject({ failure: "conflict" });
+			} finally {
+				await storage.close();
+			}
+		});
+
 		it("archives and restores channels without hiding direct reads", async () => {
 			let storage = await opened(factory);
 			try {

@@ -34,6 +34,7 @@ function serialized(channel: ChannelRecord) {
 		repositoryId: channel.repositoryId,
 		repositoryOwner: channel.repositoryOwner,
 		repositoryName: channel.repositoryName,
+		...(channel.parentChannelId ? { parentChannelId: channel.parentChannelId } : {}),
 		title: channel.title,
 		slug: channel.slug,
 		createdBy: channel.createdBy,
