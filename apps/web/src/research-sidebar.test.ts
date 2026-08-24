@@ -52,7 +52,7 @@ let props = {
 	onNewDocument: () => {},
 	onNewResearch: () => {},
 	onSearch: () => {},
-	onShowArchivedChange: () => {},
+	onCatalogueModeChange: () => {},
 	projects: [{
 		documents: { status: "ready" as const, channels: [channel] },
 		project: {
@@ -74,7 +74,7 @@ let props = {
 		channel,
 		workspaces: [older, newer],
 	}]]),
-	showArchived: false,
+	catalogueMode: "active",
 	user: { avatarUrl: "", id: "user-one", login: "octocat" },
 } satisfies ComponentProps<typeof ProjectSidebar>;
 
@@ -113,7 +113,7 @@ describe("research sidebar hierarchy", () => {
 				...props.projects[0]!,
 				documents: { status: "ready", channels: [archived] },
 			}],
-			showArchived: true,
+			catalogueMode: "archived",
 		}));
 		let viewer = renderToStaticMarkup(createElement(ProjectSidebar, {
 			...props,
@@ -128,14 +128,13 @@ describe("research sidebar hierarchy", () => {
 					},
 				},
 			}],
-			showArchived: true,
+			catalogueMode: "archived",
 		}));
 
-		expect(writer).toContain("Archived");
+		expect(writer).toContain("Back to active docs");
 		expect(writer).toContain('aria-label="Actions for Release plan"');
 		expect(writer).not.toContain('aria-label="New research in Release plan"');
-		expect(writer).toContain('checked=""');
-		expect(viewer).toContain("Archived");
+		expect(viewer).toContain("Back to active docs");
 		expect(viewer).not.toContain('aria-label="Actions for Release plan"');
 	});
 });

@@ -262,7 +262,7 @@ export function NavigationShell(
 	);
 	let [drawerOpen, setDrawerOpen] = useState(false);
 	let drawerOpener = useRef<HTMLButtonElement>(null);
-	let [showArchived, setShowArchived] = useState(false);
+	let [catalogueMode, setCatalogueMode] = useState<"active" | "archived">("active");
 	let [dialog, setDialog] = useState<
 		| "add"
 		| "search"
@@ -285,14 +285,14 @@ export function NavigationShell(
 		removeDocument,
 		updateDocument,
 		upsertDocument,
-	} = useProjectDocuments(navigation, showArchived);
+	} = useProjectDocuments(navigation, catalogueMode === "archived");
 	let {
 		groups: research,
 		refreshResearchChannel,
 		refreshResearchWorkspace,
 		removeResearchChannel,
 		upsertResearchWorkspace,
-	} = useProjectResearch(navigation, projects, showArchived);
+	} = useProjectResearch(navigation, projects, catalogueMode === "archived");
 	let routeKey = route.page === "channel"
 		? `${route.page}:${route.id}`
 		: route.page === "research"
@@ -731,10 +731,10 @@ export function NavigationShell(
 				}}
 				onNewDocument={newDocument}
 				onSearch={() => showDialog("search")}
-				onShowArchivedChange={setShowArchived}
+				onCatalogueModeChange={setCatalogueMode}
 				projects={projects}
 				research={research}
-				showArchived={showArchived}
+				catalogueMode={catalogueMode}
 				user={user}
 			/>
 		</Suspense>
@@ -828,7 +828,7 @@ export function NavigationShell(
 					<LazyDialogBoundary>
 						<Suspense fallback={null}>
 							<DocumentSearchDialog
-								includeArchived={showArchived}
+								includeArchived={catalogueMode === "archived"}
 								onDismiss={() => setDialog(undefined)}
 								onSelect={navigateToDocument}
 								projects={navigation?.projects ?? []}
