@@ -1,5 +1,3 @@
-import { researchWorkspacePath } from "@chopin/protocol/document-url";
-
 import { isChannelId } from "../channels/id";
 import { GitHubError } from "../github/client";
 import { JobServiceError } from "../jobs/service";
@@ -120,15 +118,6 @@ async function channelAccess(
 
 function canWrite(value: Repository): boolean {
 	return value.permissions.push || value.permissions.admin;
-}
-
-function location(channel: ChannelRecord, repository: Repository, workspaceId: string): string {
-	return researchWorkspacePath(
-		repository.owner,
-		repository.name,
-		channel.slug,
-		workspaceId,
-	);
 }
 
 function origin(request: Request, auth: HostedAuth): Response | undefined {
@@ -276,18 +265,15 @@ export function registerResearchWorkspaceRoutes(
 				}
 				let input = await body(request, ["question", "requestId"]);
 				if (!input) return json({ error: "question and requestId are required" }, 400);
-				let created = await service.createDraft({
+				let created = await service.start({
 					channelId: access.channel.id,
 					question: input.question as string,
 					requestId: input.requestId as string,
-					origin: "sidebar",
-					createdBy: session.user.id,
+					requestedBy: session.user.id,
+					requestedByHandle: session.user.login,
+					beforeStart: () => options.ensureOwner(access.channel, access.session, access.repository),
 				});
-				return json(
-					created,
-					created.repeated ? 200 : 201,
-					{ location: location(access.channel, access.repository, created.workspace.id) },
-				);
+				return json(created, created.repeated ? 200 : 201);
 			} catch (err) {
 				return failure(err, auth);
 			}
@@ -303,9 +289,9 @@ export function registerResearchWorkspaceRoutes(
 				if (!session) return json({ error: "authentication required" }, 401);
 				let access = await channelAccess(auth, session, params.channelId!);
 				if (!access) return json({ error: "research workspace not found" }, 404);
-				let workspace = await service.get(access.channel.id, params.workspaceId!);
-				return workspace
-					? json(workspace)
+				let researchRequest = await service.request(access.channel.id, params.workspaceId!);
+				return researchRequest
+					? json(researchRequest)
 					: json({ error: "research workspace not found" }, 404);
 			} catch (err) {
 				return failure(err, auth);
@@ -315,82 +301,7 @@ export function registerResearchWorkspaceRoutes(
 
 	router.on(
 		"POST",
-		"/api/channels/:channelId/research-workspaces/:workspaceId/confirm",
-		async (request, _url, params) => {
-			let denied = origin(request, auth);
-			if (denied) return denied;
-			try {
-				let session = await auth.sessions.authenticate(request);
-				if (!session) return json({ error: "authentication required" }, 401);
-				let access = await channelAccess(auth, session, params.channelId!);
-				if (!access) return json({ error: "research workspace not found" }, 404);
-				if (!canWrite(access.repository)) {
-					return json({ error: "repository write access is required" }, 403);
-				}
-				let input = await body(request, ["query", "requestId"]);
-				if (!input) return json({ error: "query and requestId are required" }, 400);
-				let existing = await service.get(access.channel.id, params.workspaceId!);
-				if (!existing) return json({ error: "research workspace not found" }, 404);
-				let workspace = await service.confirm({
-					channelId: access.channel.id,
-					workspaceId: existing.workspace.id,
-					query: input.query as string,
-					requestId: input.requestId as string,
-					confirmedBy: session.user.id,
-					confirmedByHandle: session.user.login,
-					beforeStart: () => options.ensureOwner(access.channel, access.session, access.repository),
-				});
-				return json(workspace, 200, {
-					location: location(access.channel, access.repository, workspace.workspace.id),
-				});
-			} catch (err) {
-				return failure(err, auth);
-			}
-		},
-	);
-
-	router.on(
-		"POST",
-		"/api/channels/:channelId/research-workspaces/:workspaceId/turns",
-		async (request, _url, params) => {
-			let denied = origin(request, auth);
-			if (denied) return denied;
-			try {
-				let session = await auth.sessions.authenticate(request);
-				if (!session) return json({ error: "authentication required" }, 401);
-				let access = await channelAccess(auth, session, params.channelId!);
-				if (!access) return json({ error: "research workspace not found" }, 404);
-				if (!canWrite(access.repository)) {
-					return json({ error: "repository write access is required" }, 403);
-				}
-				let input = await body(request, ["kind", "question", "requestId"]);
-				if (
-					!input || (input.kind !== "follow-up" && input.kind !== "search-more")
-				) return json({ error: "kind, question and requestId are required" }, 400);
-				let existing = await service.get(access.channel.id, params.workspaceId!);
-				if (!existing) return json({ error: "research workspace not found" }, 404);
-				let workspace = await service.appendTurn({
-					channelId: access.channel.id,
-					workspaceId: existing.workspace.id,
-					kind: input.kind,
-					question: input.question as string,
-					requestId: input.requestId as string,
-					requestedBy: session.user.id,
-					requestedByHandle: session.user.login,
-					beforeStart: () => options.ensureOwner(access.channel, access.session, access.repository),
-				});
-				return json(workspace, 200, {
-					location: location(access.channel, access.repository, workspace.workspace.id),
-				});
-			} catch (err) {
-				return failure(err, auth);
-			}
-		},
-	);
-
-	router.on(
-		"POST",
-		"/api/channels/:channelId/research-workspaces/:workspaceId/turns/:turnId/cancel",
+		"/api/channels/:channelId/research-workspaces/:workspaceId/cancel",
 		async (request, _url, params) => {
 			let denied = origin(request, auth);
 			if (denied) return denied;
@@ -405,14 +316,11 @@ export function registerResearchWorkspaceRoutes(
 				if (access.channel.archivedAt) {
 					return json({ error: "document is archived" }, 409);
 				}
-				let workspace = await service.cancelTurn({
+				let researchRequest = await service.cancelRequest({
 					channelId: access.channel.id,
 					workspaceId: params.workspaceId!,
-					turnId: params.turnId!,
 				});
-				return json(workspace, 200, {
-					location: location(access.channel, access.repository, workspace.workspace.id),
-				});
+				return json(researchRequest);
 			} catch (err) {
 				return failure(err, auth);
 			}

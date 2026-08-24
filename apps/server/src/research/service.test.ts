@@ -11,6 +11,7 @@ import {
 import { JobService } from "../jobs/service";
 import { StorageError } from "../storage/errors";
 import { MemoryStorage } from "../storage/memory/adapter";
+import * as Plan from "../plan/service";
 import { boundedResearchEvidence, ResearchWorkspaceService } from "./service";
 
 import type { BackgroundJob, JsonValue } from "../storage/model";
@@ -77,29 +78,40 @@ async function setup(options: { answer?: boolean; evidence?: boolean } = {}) {
 	});
 	let entitySequence = 0;
 	let publications: Array<{ workspaceId: string; revision: number }> = [];
-	let service = new ResearchWorkspaceService({
-		storage,
-		jobs,
-		lease: () => lease,
-		clock: () => now,
-		id: () => `entity-${++entitySequence}`,
-		current: async requestedChannelId => ({
-			channelId: requestedChannelId,
-			revision: 7,
-			source: SOURCE,
-			sourceHash: SOURCE_HASH,
-		}),
-		publish: async (publishedChannelId, workspaceId, revision) => {
-			let durable = await storage.research.get(publishedChannelId, workspaceId);
-			expect(durable?.workspace.revision).toBe(revision);
-			publications.push({ workspaceId, revision });
-		},
-	});
+	let service = () =>
+		new ResearchWorkspaceService({
+			storage,
+			jobs,
+			lease: () => lease,
+			clock: () => now,
+			id: () => `entity-${++entitySequence}`,
+			current: async requestedChannelId => ({
+				channelId: requestedChannelId,
+				revision: 7,
+				source: SOURCE,
+				sourceHash: SOURCE_HASH,
+			}),
+			publish: async (publishedChannelId, workspaceId, revision) => {
+				let durable = await storage.research.get(publishedChannelId, workspaceId);
+				expect(durable?.workspace.revision).toBe(revision);
+				publications.push({ workspaceId, revision });
+			},
+		});
 	let advance = () => {
 		now = new Date(now.getTime() + 1);
 		return now;
 	};
-	return { storage, service, jobs, lease, channelId, userId, publications, advance };
+	return {
+		storage,
+		service: service(),
+		restart: service,
+		jobs,
+		lease,
+		channelId,
+		userId,
+		publications,
+		advance,
+	};
 }
 
 async function settle(
@@ -190,6 +202,196 @@ async function finishInitial(context: Awaited<ReturnType<typeof setup>>) {
 }
 
 describe("research workspace service", () => {
+	it("starts one inline request and schedules its initial turn immediately", async () => {
+		let context = await setup();
+		let brief = "  Compare API v2 with v3.\nExplain  migration risks.  ";
+		let started = await context.service.start({
+			channelId: context.channelId,
+			question: brief,
+			requestId: requestId(1),
+			requestedBy: context.userId,
+			requestedByHandle: "octocat",
+		});
+
+		expect(started).toMatchObject({
+			repeated: false,
+			request: {
+				question: brief,
+				state: "pending",
+				stage: "queued",
+				sources: [],
+			},
+		});
+		let stored = await context.storage.research.get(
+			context.channelId,
+			started.request.id,
+		);
+		expect(stored).toMatchObject({
+			workspace: {
+				origin: "inline",
+				proposedQuestion: brief,
+				confirmedQuery: brief,
+				createdBy: USER_ID,
+				confirmedBy: USER_ID,
+			},
+			turns: [{ kind: "initial", question: brief, requestedBy: USER_ID }],
+			messages: [{ authorKind: "member", text: brief, userHandle: "octocat" }],
+		});
+		expect(stored?.turns[0]?.evidenceJobId).toBeDefined();
+
+		let repeated = await context.service.start({
+			channelId: context.channelId,
+			question: brief,
+			requestId: requestId(1),
+			requestedBy: context.userId,
+			requestedByHandle: "octocat",
+		});
+		expect(repeated).toEqual({ ...started, repeated: true });
+		await expect(context.service.start({
+			channelId: context.channelId,
+			question: "A different brief",
+			requestId: requestId(1),
+			requestedBy: context.userId,
+			requestedByHandle: "octocat",
+		})).rejects.toBeInstanceOf(StorageError);
+	});
+
+	it("publishes one canonical child while reconciling a completed initial answer after restart", async () => {
+		let context = await setup();
+		let started = await context.service.start({
+			channelId: context.channelId,
+			question: "Which API contracts changed?",
+			requestId: requestId(1),
+			requestedBy: context.userId,
+		});
+		await settle(context, "research-evidence", evidenceArtifact);
+		await context.restart().request(context.channelId, started.request.id);
+		await settle(context, "research-answer", answerArtifact);
+
+		let recovered = await context.restart().request(context.channelId, started.request.id);
+		expect(recovered).toMatchObject({
+			id: started.request.id,
+			question: "Which API contracts changed?",
+			state: "completed",
+			stage: "ready",
+			sources: [PUBLIC_SOURCE],
+			child: {
+				title: REPORT.title,
+				summary: REPORT.summary,
+				sourceCount: 1,
+			},
+		});
+		let childId = recovered?.child?.id;
+		if (!childId) throw new Error("research child was not published");
+		let child = await context.storage.channels.get(childId);
+		expect(child).toMatchObject({ parentChannelId: context.channelId, title: REPORT.title });
+		let stored = await context.storage.collaboration.load(childId, context.advance());
+		if (!stored) throw new Error("research child document was not initialized");
+		let document = await Plan.readStored(stored);
+		expect(document.source).toContain("# Compatibility report");
+		expect(document.source).toContain(REPORT.summary);
+		expect(document.source).toContain(PUBLIC_SOURCE.url);
+
+		let replayed = await context.restart().request(context.channelId, started.request.id);
+		expect(replayed?.child?.id).toBe(childId);
+		let listed = await context.storage.channels.list(REPOSITORY_ID, 100);
+		expect(listed.channels.filter(value => value.parentChannelId === context.channelId))
+			.toHaveLength(1);
+	});
+
+	it("does not publish children for failed or cancelled initial work", async () => {
+		let failed = await setup();
+		let failedRequest = await failed.service.start({
+			channelId: failed.channelId,
+			question: "Research a failing source",
+			requestId: requestId(1),
+			requestedBy: failed.userId,
+		});
+		let claimed = await failed.storage.jobs.claim({
+			channelId: failed.channelId,
+			claimOwner: "failing-worker",
+			count: 1,
+			ttlMs: 30_000,
+			now: failed.advance(),
+			lease: failed.lease,
+		});
+		await failed.storage.jobs.fail({
+			channelId: failed.channelId,
+			jobId: claimed[0]!.id,
+			claimOwner: "failing-worker",
+			claimGeneration: claimed[0]!.claimGeneration,
+			reason: "internal-provider-detail",
+			now: failed.advance(),
+			lease: failed.lease,
+		});
+		let failure = await failed.restart().request(failed.channelId, failedRequest.request.id);
+		expect(failure).toMatchObject({
+			state: "failed",
+			stage: "failed",
+			error: "Research could not be completed.",
+		});
+		expect(JSON.stringify(failure)).not.toContain("internal-provider-detail");
+		expect(
+			(await failed.storage.research.get(failed.channelId, failedRequest.request.id))
+				?.workspace.publishedChannelId,
+		).toBeUndefined();
+
+		let cancelled = await setup();
+		let cancelledRequest = await cancelled.service.start({
+			channelId: cancelled.channelId,
+			question: "Research a cancelled source",
+			requestId: requestId(2),
+			requestedBy: cancelled.userId,
+		});
+		let stored = await cancelled.storage.research.get(
+			cancelled.channelId,
+			cancelledRequest.request.id,
+		);
+		let cancelledView = await cancelled.service.cancelTurn({
+			channelId: cancelled.channelId,
+			workspaceId: cancelledRequest.request.id,
+			turnId: stored!.turns[0]!.id,
+		});
+		expect(cancelledView.turns[0]?.evidence?.job.state).toBe("cancelled");
+		let cancellation = await cancelled.restart().request(
+			cancelled.channelId,
+			cancelledRequest.request.id,
+		);
+		expect(cancellation).toMatchObject({ state: "cancelled", stage: "cancelled" });
+		expect(
+			(await cancelled.storage.research.get(
+				cancelled.channelId,
+				cancelledRequest.request.id,
+			))?.workspace.publishedChannelId,
+		).toBeUndefined();
+	});
+
+	it("publishes a deterministic available child title when the report title already exists", async () => {
+		let context = await setup();
+		await context.storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: REPOSITORY_ID,
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: REPORT.title,
+			createdBy: context.userId,
+			now: context.advance(),
+		});
+		let started = await context.service.start({
+			channelId: context.channelId,
+			question: "Which API contracts changed?",
+			requestId: requestId(1),
+			requestedBy: context.userId,
+		});
+		await settle(context, "research-evidence", evidenceArtifact);
+		await context.service.request(context.channelId, started.request.id);
+		let answer = await settle(context, "research-answer", answerArtifact);
+		await context.service.jobChanged(answer.job);
+
+		let ready = await context.service.request(context.channelId, started.request.id);
+		expect(ready?.child?.title).toBe(`${REPORT.title} (2)`);
+	});
+
 	it("bounds long evidence history while retaining the initial and newest batches", () => {
 		let evidence = Array.from({ length: 10 }, (_, batch) => ({
 			findings: Array.from({ length: 10 }, (_, item) => `finding-${batch}-${item}`),

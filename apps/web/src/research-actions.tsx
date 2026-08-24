@@ -18,7 +18,7 @@ export function NewResearchDialog(
 	}: {
 		channel: Api.Channel;
 		motion: NavigationDialogMotion;
-		onCreated: (workspace: Research.WorkspaceSummary) => void;
+		onCreated: (request: Research.RequestView) => void;
 		onDismiss: () => void;
 	},
 ) {
@@ -39,7 +39,7 @@ export function NewResearchDialog(
 				next.submittedText,
 				next.requestId,
 			);
-			onCreated(created.workspace);
+			onCreated(created.request);
 		} catch (reason) {
 			setError(reason);
 			setCreating(false);
@@ -73,8 +73,8 @@ export function NewResearchDialog(
 					value={submission.text}
 				/>
 				<p className="mt-2 text-sm text-text-secondary">
-					This creates a private draft attached to this document. No public web search occurs until
-					you review and confirm the question.
+					Research starts immediately using this exact brief for public web search while the parent
+					document is analyzed separately.
 				</p>
 				{error !== undefined && (
 					<TerminalAlert className="mt-3 text-sm text-destructive-ink">
@@ -95,7 +95,7 @@ export function NewResearchDialog(
 						disabled={creating || !submission.text.trim()}
 						type="submit"
 					>
-						{creating ? "Creating..." : "Create private draft"}
+						{creating ? "Starting..." : "Start research"}
 					</button>
 				</div>
 			</form>

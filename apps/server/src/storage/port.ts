@@ -53,6 +53,8 @@ import type {
 	ResumeBackgroundJob,
 	SaveCheckpoint,
 	SettleBackgroundJob,
+	StartResearchWorkspace,
+	StartResearchWorkspaceResult,
 	StoredChannel,
 	SupersedeBackgroundJob,
 	UpdateAgentContext,
@@ -172,6 +174,7 @@ export interface BackgroundJobStore {
 
 export interface ResearchWorkspaceStore {
 	create(input: CreateResearchWorkspace): Promise<CreateResearchWorkspaceResult>;
+	start(input: StartResearchWorkspace): Promise<StartResearchWorkspaceResult>;
 	confirm(input: ConfirmResearchWorkspace): Promise<ConfirmResearchWorkspaceResult>;
 	appendTurn(input: AppendResearchTurn): Promise<AppendResearchTurnResult>;
 	linkJob(input: LinkResearchTurnJob): Promise<LinkResearchTurnJobResult>;

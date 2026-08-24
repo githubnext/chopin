@@ -1,4 +1,5 @@
 import type { Frame } from "./index";
+import type { Job } from "./job";
 
 type KIND<K extends string> = Frame & { kind: K };
 
@@ -11,9 +12,45 @@ type KIND<K extends string> = Frame & { kind: K };
 export declare namespace Research {
 	export type Outgoing = Changed;
 
-	export type Origin = "sidebar" | "planner";
+	export type Origin = "inline" | "sidebar" | "planner";
 	export type TurnKind = "initial" | "follow-up" | "search-more";
 	export type MessageAuthorKind = "member" | "agent" | "system";
+	export type RequestState = Job.State;
+	export type RequestStage =
+		| "queued"
+		| "searching"
+		| "analyzing"
+		| "writing"
+		| "publishing"
+		| "ready"
+		| "failed"
+		| "cancelled";
+
+	export type Source = {
+		readonly title: string;
+		readonly url: string;
+	};
+
+	export type ReadyChild = {
+		readonly id: string;
+		readonly title: string;
+		readonly slug: string;
+		readonly summary: string;
+		readonly sourceCount: number;
+	};
+
+	export type RequestView = {
+		readonly id: string;
+		readonly channelId: string;
+		readonly question: string;
+		readonly state: RequestState;
+		readonly stage: RequestStage;
+		readonly error?: string;
+		readonly sources: readonly Source[];
+		readonly child?: ReadyChild;
+		readonly createdAt: string;
+		readonly updatedAt: string;
+	};
 
 	export type JobLinkIds = {
 		readonly evidenceJobId?: string;

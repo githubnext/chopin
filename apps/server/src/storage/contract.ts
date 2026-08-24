@@ -1691,6 +1691,74 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
+		it("atomically starts one inline research request with its initial turn", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, channelId, lease } = await userAndChannel(storage);
+				let input = {
+					id: id("inline-workspace"),
+					channelId,
+					title: "API compatibility research",
+					question: "Which API contracts changed?",
+					createdBy: userId,
+					createdByHandle: "octocat",
+					turnId: id("inline-turn"),
+					messageId: id("inline-message"),
+					requestId: id("inline-request"),
+					idempotencyKey: id("inline-start"),
+					fingerprint: "sha256:inline-start",
+					now: new Date("2026-01-07T03:04:05.000Z"),
+					lease,
+				};
+				let started = await storage.research.start(input);
+				expect(started).toMatchObject({
+					repeated: false,
+					workspace: {
+						origin: "inline",
+						proposedQuestion: input.question,
+						confirmedQuery: input.question,
+						createdBy: userId,
+						confirmedBy: userId,
+						revision: 0,
+					},
+					turn: {
+						ordinal: 1,
+						kind: "initial",
+						requestId: input.requestId,
+						question: input.question,
+						requestedBy: userId,
+					},
+					message: {
+						sequence: 1,
+						authorKind: "member",
+						text: input.question,
+						userHandle: "octocat",
+					},
+				});
+				let detail = await storage.research.get(channelId, input.id);
+				expect(detail).toMatchObject({
+					workspace: { confirmedQuery: input.question },
+					turns: [{ id: input.turnId }],
+					messages: [{ id: input.messageId }],
+				});
+
+				let repeated = await storage.research.start({
+					...input,
+					id: id("ignored-inline-workspace"),
+					turnId: id("ignored-inline-turn"),
+					messageId: id("ignored-inline-message"),
+				});
+				expect(repeated).toEqual({ ...started, repeated: true });
+				await expect(storage.research.start({
+					...input,
+					question: "A different brief",
+					fingerprint: "sha256:different-inline-start",
+				})).rejects.toMatchObject({ failure: "conflict" });
+			} finally {
+				await storage.close();
+			}
+		});
+
 		it("lists repository research in channel order with grouped bounded workspaces", async () => {
 			let storage = await opened(factory);
 			try {
