@@ -3,6 +3,7 @@ import { documentPath, researchWorkspacePath } from "@chopin/protocol/document-u
 
 import * as Api from "./api";
 import { rememberChannel } from "./channel-recovery";
+import { newestDocumentMetadata } from "./document-actions";
 import { DocumentActionsMenu } from "./document-actions-menu";
 import { useNavigationDocument } from "./navigation-shell";
 import {
@@ -20,6 +21,7 @@ import "./research-workspace.css";
 
 import type { Job, Research, Session } from "@chopin/protocol";
 import type { HostedWorkspaceProps } from "./hosted";
+import type { DocumentMetadata } from "./document-actions";
 import type {
 	ResearchAnswerArtifact,
 	ResearchContinuationArtifact,
@@ -33,7 +35,7 @@ type ResearchWorkspaceProps = HostedWorkspaceProps & { workspaceId: string };
 type ManagedHello = Session.Hello & { archivedAt?: string; canManage: boolean };
 type ManagedChannel = Session.Channel & { archivedAt?: string; canManage: boolean };
 type ManagedAccess = Session.Access & { canManage: boolean };
-type WorkspaceMetadata = Pick<Api.Channel, "title" | "slug" | "updatedAt" | "archivedAt">;
+type WorkspaceMetadata = DocumentMetadata;
 
 function timestamp(value: string): string {
 	let date = new Date(value);
@@ -587,6 +589,8 @@ export function ResearchWorkspace(
 		archivedAt,
 		canEdit,
 		canManage,
+		description,
+		descriptionRevision,
 		label,
 		repository,
 		room,
@@ -616,6 +620,8 @@ export function ResearchWorkspace(
 	let [capabilities, setCapabilities] = useState({ backgroundJobs: false, webResearch: false });
 	let [metadata, setMetadata] = useState<WorkspaceMetadata>({
 		archivedAt,
+		description,
+		descriptionRevision,
 		title: label,
 		slug,
 		updatedAt,
@@ -673,13 +679,7 @@ export function ResearchWorkspace(
 	}, [accept, refresh]);
 
 	let updateMetadata = useCallback((next: WorkspaceMetadata) => {
-		if (Date.parse(next.updatedAt) < Date.parse(metadataRef.current.updatedAt)) return;
-		let metadata = {
-			archivedAt: next.archivedAt,
-			title: next.title,
-			slug: next.slug,
-			updatedAt: next.updatedAt,
-		};
+		let metadata = newestDocumentMetadata(metadataRef.current, next);
 		metadataRef.current = metadata;
 		setMetadata(metadata);
 		rememberChannel(userId, { id: room, title: metadata.title, slug: metadata.slug }, repository);
@@ -696,12 +696,30 @@ export function ResearchWorkspace(
 	}, [onDocumentChanged, repository, room, userId, workspaceId]);
 
 	useEffect(() => {
-		let next = { archivedAt, title: label, slug, updatedAt };
+		let next: WorkspaceMetadata = {
+			archivedAt,
+			description,
+			descriptionRevision,
+			title: label,
+			slug,
+			updatedAt,
+		};
+		next = newestDocumentMetadata(metadataRef.current, next);
 		metadataRef.current = next;
 		setMetadata(next);
 		setEffectiveCanEdit(canEdit && !archivedAt);
 		setEffectiveCanManage(canManage);
-	}, [archivedAt, canEdit, canManage, label, room, slug, updatedAt]);
+	}, [
+		archivedAt,
+		canEdit,
+		canManage,
+		description,
+		descriptionRevision,
+		label,
+		room,
+		slug,
+		updatedAt,
+	]);
 
 	useEffect(() => {
 		void refresh();

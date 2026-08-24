@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
+import { DocumentDescriptionProjector } from "./document-description";
 import { documentSummaryDefinition, StaleDocumentSummaryError } from "./document-summary";
 import { JobRegistry } from "./registry";
 import { JobService } from "./service";
@@ -7,6 +8,7 @@ import { DocumentSummaryCoordinator } from "./summary-coordinator";
 import { sourceHash } from "../plan/service";
 import { MemoryStorage } from "../storage/memory/adapter";
 
+import type { DocumentSummaryInput } from "./document-summary";
 import type { JobExecution } from "./registry";
 import type { DocumentTarget } from "../plan/service";
 import type { BackgroundJob, Lease } from "../storage/model";
@@ -30,9 +32,14 @@ function job(value: DocumentTarget): BackgroundJob {
 		origin: "scheduler",
 		targetKey: "document-summary:document",
 		targetGeneration: 1,
-		idempotencyKey: "request",
+		idempotencyKey: `description-v1:${value.revision}:${value.sourceHash}`,
 		fingerprint: "fingerprint",
-		input: { revision: value.revision, sourceHash: value.sourceHash, generatorVersion: 1 },
+		input: {
+			revision: value.revision,
+			sourceHash: value.sourceHash,
+			generatorVersion: 1,
+			output: "description",
+		},
 		state: "running",
 		revision: 2,
 		attempts: 1,
@@ -49,14 +56,15 @@ function job(value: DocumentTarget): BackgroundJob {
 	};
 }
 
-function execution(value: DocumentTarget): JobExecution<{
-	revision: number;
-	sourceHash: string;
-	generatorVersion: 1;
-}> {
+function execution(value: DocumentTarget): JobExecution<DocumentSummaryInput> {
 	return {
 		job: job(value),
-		input: { revision: value.revision, sourceHash: value.sourceHash, generatorVersion: 1 },
+		input: {
+			revision: value.revision,
+			sourceHash: value.sourceHash,
+			generatorVersion: 1,
+			output: "description",
+		},
 		credential: {
 			kind: "active-planner",
 			token: "ghu_owner",
@@ -74,7 +82,7 @@ function execution(value: DocumentTarget): JobExecution<{
 
 async function commitCurrent(
 	_channelId: string,
-	_expected: { revision: number; sourceHash: string; generatorVersion: 1 },
+	_expected: DocumentSummaryInput,
 	commit: () => Promise<void>,
 ): Promise<boolean> {
 	await commit();
@@ -112,7 +120,7 @@ async function serviceContext(definition: ReturnType<typeof documentSummaryDefin
 }
 
 describe("document summary definition", () => {
-	it("summarizes the exact canonical target without persisting source", async () => {
+	it("describes the exact canonical target without persisting source", async () => {
 		let current = target();
 		let received = "";
 		let definition = documentSummaryDefinition({
@@ -122,7 +130,7 @@ describe("document summary definition", () => {
 			commitCurrent,
 			engine: async (_execution, source) => {
 				received = source;
-				return { summary: "  A release plan.  ", model: "summary-model" };
+				return { description: "  Plan for the release  ", model: "summary-model" };
 			},
 		});
 
@@ -132,17 +140,81 @@ describe("document summary definition", () => {
 			revision: current.revision,
 			sourceHash: current.sourceHash,
 			generatorVersion: 1,
-			summary: "A release plan.",
+			output: "description",
+			description: "Plan for the release",
 			model: "summary-model",
 		});
 		let storedInput = definition.input.parse({
 			revision: current.revision,
 			sourceHash: current.sourceHash,
 			generatorVersion: 1,
+			output: "description",
 		});
 		expect("source" in storedInput).toBe(false);
 		expect(() => definition.input.parse({ ...storedInput, source: current.source }))
 			.toThrow("unexpected fields");
+	});
+
+	it("reads legacy V1 summary artifacts without treating them as descriptions", () => {
+		let current = target();
+		let definition = documentSummaryDefinition({
+			config: { agent: true, model: "summary-model" },
+			current: async () => current,
+			refresh: async () => {},
+			commitCurrent,
+			engine: async () => ({ description: "unused", model: "summary-model" }),
+		});
+		expect(definition.artifact.parse({
+			revision: current.revision,
+			sourceHash: current.sourceHash,
+			generatorVersion: 1,
+			summary: "A legacy executive summary.\n\nIt may span lines.",
+			model: "summary-model",
+		})).toMatchObject({
+			summary: "A legacy executive summary.\n\nIt may span lines.",
+		});
+	});
+
+	it("runs a persisted markerless V1 request with the new description behavior", async () => {
+		let current = target();
+		let definition = documentSummaryDefinition({
+			config: { agent: true, model: "summary-model" },
+			current: async () => current,
+			refresh: async () => {},
+			commitCurrent,
+			engine: async () => ({ description: "Plan for the release", model: "summary-model" }),
+		});
+		let legacyInput = {
+			revision: current.revision,
+			sourceHash: current.sourceHash,
+			generatorVersion: 1 as const,
+		};
+		let legacyExecution = {
+			...execution(current),
+			job: { ...job(current), input: legacyInput },
+			input: legacyInput,
+		};
+		expect(await definition.execute(legacyExecution)).toMatchObject({
+			output: "description",
+			description: "Plan for the release",
+		});
+	});
+
+	it("rejects descriptions containing more than one physical line", async () => {
+		let current = target();
+		let definition = documentSummaryDefinition({
+			config: { agent: true, model: "summary-model" },
+			current: async () => current,
+			refresh: async () => {},
+			commitCurrent,
+			engine: async () => ({
+				description: "Plan for the release\nWith implementation details",
+				model: "summary-model",
+			}),
+		});
+		await expect(definition.execute(execution(current))).rejects.toThrow(
+			"description must contain exactly one line",
+		);
 	});
 
 	it("avoids model spend for an empty document", async () => {
@@ -155,11 +227,11 @@ describe("document summary definition", () => {
 			commitCurrent,
 			engine: async () => {
 				called = true;
-				return { summary: "unexpected", model: "summary-model" };
+				return { description: "unexpected", model: "summary-model" };
 			},
 		});
 		expect(await definition.execute(execution(current))).toMatchObject({
-			summary: "The document is empty.",
+			description: "Empty document",
 		});
 		expect(called).toBe(false);
 	});
@@ -175,7 +247,7 @@ describe("document summary definition", () => {
 				refreshed.push(value);
 			},
 			commitCurrent: async () => false,
-			engine: async () => ({ summary: "unused", model: "summary-model" }),
+			engine: async () => ({ description: "unused", model: "summary-model" }),
 		});
 		await expect(definition.execute(execution(original))).rejects.toBeInstanceOf(
 			StaleDocumentSummaryError,
@@ -194,6 +266,83 @@ describe("document summary definition", () => {
 });
 
 describe("document summary coordinator", () => {
+	it("recovers a completed description projection through an idempotent enqueue", async () => {
+		let current = target();
+		let definition = documentSummaryDefinition({
+			config: { agent: true, model: "summary-model" },
+			current: async () => current,
+			refresh: async () => {},
+			commitCurrent,
+			engine: async () => ({ description: "Plan for testing", model: "summary-model" }),
+		});
+		let value = await serviceContext(definition);
+		let projected: string[] = [];
+		try {
+			let requested = { ...current, channelId: value.channelId };
+			let queued = await value.service.enqueueScheduler({
+				channelId: value.channelId,
+				type: "document-summary",
+				targetKey: "document",
+				idempotencyKey: `description-v1:${current.revision}:${current.sourceHash}`,
+				input: {
+					revision: current.revision,
+					sourceHash: current.sourceHash,
+					generatorVersion: 1,
+					output: "description",
+				},
+			});
+			let [claimed] = await value.storage.jobs.claim({
+				channelId: value.channelId,
+				claimOwner: "worker",
+				count: 1,
+				ttlMs: 60_000,
+				now: new Date(),
+				lease: value.lease,
+			});
+			let completed = await value.service.settle({
+				channelId: value.channelId,
+				jobId: queued.job.id,
+				claimOwner: "worker",
+				claimGeneration: claimed!.claimGeneration,
+				artifact: {
+					revision: current.revision,
+					sourceHash: current.sourceHash,
+					generatorVersion: 1,
+					output: "description",
+					description: "Plan for testing",
+					model: "summary-model",
+				},
+			});
+			expect(completed.job.state).toBe("completed");
+
+			let projector = new DocumentDescriptionProjector({
+				storage: value.storage,
+				lease: () => value.lease,
+				now: () => new Date("2026-01-02T03:04:05.000Z"),
+				publish: channel => {
+					projected.push(channel.description!.value);
+				},
+			});
+			let coordinator = new DocumentSummaryCoordinator({
+				service: value.service,
+				current: async channelId => ({ ...requested, channelId }),
+				completed: job => projector.jobChanged(job),
+			});
+			await coordinator.ensure(value.channelId);
+			await coordinator.ensure(value.channelId);
+			expect((await value.storage.channels.get(value.channelId))?.description).toMatchObject({
+				value: "Plan for testing",
+				revision: 1,
+				planRevision: current.revision,
+				jobId: queued.job.id,
+			});
+			expect(projected).toEqual(["Plan for testing"]);
+			coordinator.close();
+		} finally {
+			await value.storage.close();
+		}
+	});
+
 	it("debounces to the newest target and replays idempotently", async () => {
 		let current = target();
 		let definition = documentSummaryDefinition({
@@ -201,7 +350,7 @@ describe("document summary coordinator", () => {
 			current: async () => current,
 			refresh: async () => {},
 			commitCurrent,
-			engine: async () => ({ summary: "summary", model: "summary-model" }),
+			engine: async () => ({ description: "Plan for testing", model: "summary-model" }),
 		});
 		let value = await serviceContext(definition);
 		let timers: Array<{ cancelled: boolean; action: () => void }> = [];
@@ -231,8 +380,14 @@ describe("document summary coordinator", () => {
 			);
 			let page = await value.storage.jobs.list(value.channelId, 10);
 			expect(page!.jobs[0]).toMatchObject({ targetGeneration: 1, state: "pending" });
-			expect((await value.storage.jobs.get(value.channelId, page!.jobs[0]!.id))!.job.input)
-				.toEqual({ revision: 4, sourceHash: second.sourceHash, generatorVersion: 1 });
+			let stored = (await value.storage.jobs.get(value.channelId, page!.jobs[0]!.id))!.job;
+			expect(stored.input).toEqual({
+				revision: 4,
+				sourceHash: second.sourceHash,
+				generatorVersion: 1,
+				output: "description",
+			});
+			expect(stored.idempotencyKey).toBe(`description-v1:4:${second.sourceHash}`);
 			await coordinator.ensure(value.channelId);
 			expect((await value.storage.jobs.list(value.channelId, 10))!.jobs).toHaveLength(1);
 			coordinator.close();
@@ -248,7 +403,7 @@ describe("document summary coordinator", () => {
 			current: async () => current,
 			refresh: async () => {},
 			commitCurrent,
-			engine: async () => ({ summary: "summary", model: "summary-model" }),
+			engine: async () => ({ description: "Plan for testing", model: "summary-model" }),
 		});
 		let value = await serviceContext(definition);
 		let timers: Array<{ cancelled: boolean; action: () => void }> = [];

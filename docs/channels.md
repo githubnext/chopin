@@ -52,11 +52,13 @@ current document slug and its historical aliases. Browser creation returns the
 readable canonical document route in `Location`, not a UUID route.
 
 The listing route accepts a case-insensitive `query`, an opaque `cursor`, a
-`limit` from 1 through 100, and `includeArchived=true`. The default limit is 50,
-and archived documents are excluded by default. Results sort by most recent
-update, with channel ID as the stable tie-breaker. A cursor is bound to its
-original query and archive-inclusion mode and cannot be reused with another
-search.
+`limit` from 1 through 100, and `includeArchived=true`. The query matches title
+or the current generated description. The default limit is 50, and archived
+documents are excluded by default. Results include `descriptionRevision` and an
+optional `description`, then sort by most recent channel update with channel ID
+as the stable tie-breaker. Description projection does not change `updatedAt`,
+so it does not alter list recency. A cursor is bound to its original query and
+archive-inclusion mode and cannot be reused with another search.
 
 A title is optional during browser creation. Chopin generates one when omitted,
 or accepts a trimmed title from 1 through 120 characters. Titles are unique per
@@ -102,14 +104,15 @@ The browser management routes are `POST /api/channels/:channelId/archive`,
 `POST /api/channels/:channelId/restore`, and `DELETE /api/channels/:channelId`.
 They require push or administration access and an exact browser Origin. Delete
 returns a conflict unless the document is archived. Before deletion, the server
-suspends summary scheduling, cancels and aborts the channel's background work,
-and closes the live plan. It then atomically deletes the channel and all
+suspends description scheduling, cancels and aborts the channel's background
+work, and closes the live plan. It then atomically deletes the channel and all
 dependent data, notifies connected clients with `session:deleted`, and closes
 them terminally. See [Storage](storage.md) for the deletion and backup boundary.
 
 MCP exposes `archive_document` and `restore_document`, and `list_documents`
-accepts `includeArchived`; direct MCP reads also remain available. MCP does not
-expose document deletion. See [Local agent MCP](local-agent-mcp.md).
+accepts `includeArchived`; direct MCP reads also remain available. These and
+other common MCP document summaries expose the optional description. MCP does
+not expose document deletion. See [Local agent MCP](local-agent-mcp.md).
 
 The reset endpoint releases Planner ownership and aborts its disposable runtime
 session. The current web application does not expose a control that calls it.
@@ -158,6 +161,28 @@ sidecar creation metadata, and the deterministic ID. A repeated idempotency key
 either returns that same document or reports a conflict when its original input
 differs.
 
+## Generated descriptions
+
+The optional channel description is generated catalogue metadata, not authored
+document content. New requests use the existing durable `document-summary@1`
+definition with `output:"description"`; no `@2` exists. Completed marked
+artifacts project idempotently with source plan revision and hash, generator
+version, source job ID, projection timestamp, and an independent description
+revision. Markerless legacy V1 summaries remain readable as job artifacts but do
+not populate the catalogue.
+
+The latest completed description stays visible and searchable while newer work
+is pending or failed. Projection does not advance collaboration revision or
+channel `updatedAt`. Descriptions are untrusted model output; the MCP creation
+`brief` and reserved Planner transcript `summary` remain separate.
+
+Canonical edits schedule generation after persistence. Opening and restoring a
+document ensure a request for the current source, and MCP creation or replay
+schedules immediately. These paths lazily regenerate an unchanged document that
+has only a legacy summary because the new idempotency key is
+`description-v1:<plan revision>:<source hash>`. Workers require an active Planner
+owner, so there is no unattended all-document backfill.
+
 ## Browser routes
 
 ```text
@@ -173,6 +198,11 @@ They reuse the parent channel's repository authorization, Planner owner, and
 WebSocket only for invalidation. Their report and thread are stored separately
 from Yjs and remain reachable across parent renames because historical document
 slugs continue to resolve.
+
+Project lists, the repository document picker, cross-project document search,
+and conversation document-reference pickers show generated descriptions when
+present. Search uses the server's title-or-description matching rather than
+filtering only the currently loaded page.
 
 Historical slug URLs continue to open the document. The legacy
 `/repositories/:owner/:repository` and `/channels/:channelId` browser routes are
@@ -214,6 +244,7 @@ A channel persists:
 
 - metadata and repository identity;
 - archive metadata;
+- generated description metadata with source and background-job provenance;
 - canonical MDX, a complete Yjs checkpoint, and the accepted update journal
   after that checkpoint;
 - document sequence and plan revision counters plus a versioned sidecar;

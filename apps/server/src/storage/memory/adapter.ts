@@ -21,6 +21,8 @@ import type {
 	CreateChannel,
 	JsonValue,
 	Lease,
+	PublishChannelDescription,
+	PublishChannelDescriptionResult,
 	RecordNavigationVisit,
 	RenameChannel,
 	RenameResult,
@@ -75,12 +77,15 @@ function navigation(value: UserNavigation): UserNavigation {
 }
 
 function channel(value: ChannelRecord): ChannelRecord {
-	let { archivedAt, ...record } = value;
+	let { archivedAt, description, ...record } = value;
 	return {
 		...record,
 		createdAt: new Date(value.createdAt),
 		updatedAt: new Date(value.updatedAt),
 		...(archivedAt ? { archivedAt: new Date(archivedAt) } : {}),
+		...(description
+			? { description: { ...description, updatedAt: new Date(description.updatedAt) } }
+			: {}),
 	};
 }
 
@@ -245,6 +250,7 @@ export class MemoryStorage implements StorageAdapter {
 		archive: input => this.#setChannelArchived(input, true),
 		restore: input => this.#setChannelArchived(input, false),
 		delete: id => this.#deleteChannel(id),
+		publishDescription: input => this.#publishChannelDescription(input),
 		list: (repositoryId, limit, after, query, includeArchived) =>
 			this.#listChannels(repositoryId, limit, after, query, includeArchived),
 		scan: (repositoryId, limit, after, includeArchived) =>
@@ -473,6 +479,34 @@ export class MemoryStorage implements StorageAdapter {
 		return true;
 	}
 
+	#publishChannelDescription(
+		input: PublishChannelDescription,
+	): Promise<PublishChannelDescriptionResult> {
+		this.#assertLease(input.lease);
+		let found = this.#channels.get(input.channelId);
+		if (!found) throw missing(`channel ${input.channelId} does not exist`);
+		let previous = found.description;
+		if (
+			previous?.jobId === input.jobId || previous && previous.planRevision >= input.planRevision
+		) {
+			return Promise.resolve({ channel: channel(found), changed: false });
+		}
+		let saved: ChannelRecord = {
+			...found,
+			description: {
+				value: input.description,
+				revision: (previous?.revision ?? 0) + 1,
+				planRevision: input.planRevision,
+				sourceHash: input.sourceHash,
+				generatorVersion: input.generatorVersion,
+				jobId: input.jobId,
+				updatedAt: new Date(input.now),
+			},
+		};
+		this.#channels.set(input.channelId, saved);
+		return Promise.resolve({ channel: channel(saved), changed: true });
+	}
+
 	#reserveSlug(repositoryId: string, channelId: string, title: string): string {
 		let aliases = this.#channelSlugs.get(repositoryId);
 		if (!aliases) {
@@ -500,7 +534,11 @@ export class MemoryStorage implements StorageAdapter {
 		let ordered = [...this.#channels.values()]
 			.filter(value => value.repositoryId === repositoryId)
 			.filter(value => includeArchived || !value.archivedAt)
-			.filter(value => !query || value.title.toLowerCase().includes(query.toLowerCase()))
+			.filter(value =>
+				!query
+				|| value.title.toLowerCase().includes(query.toLowerCase())
+				|| value.description?.value.toLowerCase().includes(query.toLowerCase())
+			)
 			.sort((left, right) =>
 				right.updatedAt.getTime() - left.updatedAt.getTime() || left.id.localeCompare(right.id)
 			);

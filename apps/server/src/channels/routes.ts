@@ -40,6 +40,8 @@ function serialized(channel: ChannelRecord) {
 		revision: channel.revision,
 		createdAt: channel.createdAt.toISOString(),
 		updatedAt: channel.updatedAt.toISOString(),
+		descriptionRevision: channel.description?.revision ?? 0,
+		...(channel.description ? { description: channel.description.value } : {}),
 		...(channel.archivedAt ? { archivedAt: channel.archivedAt.toISOString() } : {}),
 	};
 }

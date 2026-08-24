@@ -8,12 +8,12 @@ runtime `STORAGE_DRIVER`.
 
 ## State model
 
-The database stores channel metadata, including `channels.archived_at`,
-repository-scoped document slug aliases, collaboration recovery state, domain
-sidecars, token-free ownership references, Research Workspaces, durable
-background work, and the writer lease. GitHub tokens, browser-cookie verifiers,
-open rooms, Awareness presence, and Copilot SDK sessions never cross the storage
-boundary.
+The database stores channel metadata, including archive state and generated
+description provenance, repository-scoped document slug aliases, collaboration
+recovery state, domain sidecars, token-free ownership references, Research
+Workspaces, durable background work, and the writer lease. GitHub tokens,
+browser-cookie verifiers, open rooms, Awareness presence, and Copilot SDK
+sessions never cross the storage boundary.
 
 The versioned sidecar is the atomic domain snapshot associated with a channel.
 It includes document sequence and plan revision counters, question and comment
@@ -45,6 +45,8 @@ Every adapter must provide:
 - startup removal of every registry row and Planner owner reference;
 - renewable leases whose fencing token protects commits, epoch replacements,
   checkpoints, jobs, and Research Workspace mutations;
+- idempotent, independently revisioned publication of generated channel
+  descriptions without changing collaboration revision or channel activity;
 - idempotent, ordered Research Workspace turns and messages with channel-local
   job links; and
 - distinct conflict, missing, corrupt, and unavailable failures.
@@ -68,6 +70,12 @@ revision used by document block operations or the WebSocket document sequence.
 - The Yjs epoch is retained separately so incompatible collaborative histories
   cannot be combined.
 
+The generated-description revision is a separate channel metadata counter. It
+advances when a newer marked `document-summary@1` artifact is projected, without
+advancing collaboration storage revision, storage sequence, Yjs epoch, document
+sequence, or plan revision. Projection also leaves `channels.updated_at`
+unchanged, so catalogue ordering and pagination recency do not move.
+
 Archive and restore update only channel metadata (`archived_at` and
 `updated_at`). They do not advance the collaboration storage revision or
 sequence, Yjs epoch, document sequence, plan revision, or implementation graph
@@ -83,26 +91,32 @@ attempts, failures, and background-job channel revisions.
 The migration runner owns `chopin_migrations`, including a checksum for each
 applied migration. The application schema contains:
 
-| Table                      | Purpose                                                                                                          |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `users`                    | GitHub identity and attribution records.                                                                         |
-| `web_sessions`             | Token-free process-session IDs, user IDs, and expiry timestamps used by Planner ownership.                       |
-| `channels`                 | Repository identity, title, creator, archive metadata, storage revision, next sequence, and timestamps.          |
-| `channel_slugs`            | One canonical title-derived slug per channel plus retained repository-scoped historical aliases.                 |
-| `channel_state`            | Current sidecar JSON for a channel.                                                                              |
-| `channel_snapshots`        | Complete Yjs checkpoint, canonical source, source hash, epoch, counters, and checkpoint sidecar.                 |
-| `channel_operations`       | Per-channel operation idempotency and the revision and sequence assigned to each operation.                      |
-| `channel_updates`          | Ordered post-checkpoint Yjs update journal.                                                                      |
-| `channel_events`           | Ordered event capability in the adapter contract. Current collaboration commits do not use it for domain replay. |
-| `agent_state`              | Reserved Planner summary and transcript cursor, status, owner session reference, and ownership generation.       |
-| `storage_leases`           | Renewable named leases and fencing tokens.                                                                       |
-| `background_job_channels`  | Job-state revision per channel, independent of collaboration counters.                                           |
-| `background_job_targets`   | Current generation for each registered channel job target.                                                       |
-| `background_jobs`          | Versioned requests, lifecycle, attempts, fenced claims, bounded progress, inputs, and sanitized failures.        |
-| `background_job_artifacts` | Immutable validated results committed atomically with job completion.                                            |
-| `research_workspaces`      | Parent channel, private draft, confirmed query, attribution, revision, idempotency, and transcript counters.     |
-| `research_turns`           | Ordered initial, private follow-up, and explicit search-more requests plus evidence and answer job links.        |
-| `research_messages`        | Ordered append-only member and validated agent messages for one workspace.                                       |
+| Table                      | Purpose                                                                                                                                    |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `users`                    | GitHub identity and attribution records.                                                                                                   |
+| `web_sessions`             | Token-free process-session IDs, user IDs, and expiry timestamps used by Planner ownership.                                                 |
+| `channels`                 | Repository identity, title, creator, archive and generated-description metadata, storage revision, next sequence, and activity timestamps. |
+| `channel_slugs`            | One canonical title-derived slug per channel plus retained repository-scoped historical aliases.                                           |
+| `channel_state`            | Current sidecar JSON for a channel.                                                                                                        |
+| `channel_snapshots`        | Complete Yjs checkpoint, canonical source, source hash, epoch, counters, and checkpoint sidecar.                                           |
+| `channel_operations`       | Per-channel operation idempotency and the revision and sequence assigned to each operation.                                                |
+| `channel_updates`          | Ordered post-checkpoint Yjs update journal.                                                                                                |
+| `channel_events`           | Ordered event capability in the adapter contract. Current collaboration commits do not use it for domain replay.                           |
+| `agent_state`              | Reserved Planner summary and transcript cursor, status, owner session reference, and ownership generation.                                 |
+| `storage_leases`           | Renewable named leases and fencing tokens.                                                                                                 |
+| `background_job_channels`  | Job-state revision per channel, independent of collaboration counters.                                                                     |
+| `background_job_targets`   | Current generation for each registered channel job target.                                                                                 |
+| `background_jobs`          | Versioned requests, lifecycle, attempts, fenced claims, bounded progress, inputs, and sanitized failures.                                  |
+| `background_job_artifacts` | Immutable validated results committed atomically with job completion.                                                                      |
+| `research_workspaces`      | Parent channel, private draft, confirmed query, attribution, revision, idempotency, and transcript counters.                               |
+| `research_turns`           | Ordered initial, private follow-up, and explicit search-more requests plus evidence and answer job links.                                  |
+| `research_messages`        | Ordered append-only member and validated agent messages for one workspace.                                                                 |
+
+Generated-description columns on `channels` are all absent or form one complete
+projection: value, independent description revision, source plan revision and
+hash, generator version, source job ID, and projection timestamp. A newer job
+does not clear the current projection when it is enqueued or fails, so the last
+completed description remains visible and searchable.
 
 Channel titles have a case-insensitive unique constraint within each repository.
 Slug values are also unique per repository, with one canonical slug per channel.
@@ -150,6 +164,12 @@ their state. A completed evidence job can be reconciled idempotently into its
 private answer job after interruption or the next workspace read. The complete
 job lifecycle and extension contract are documented in
 [Background jobs and workers](background-jobs.md).
+
+A completed marked document-description artifact is likewise reconciled
+idempotently after job settlement. Only `output:"description"` V1 artifacts are
+eligible; readable markerless legacy summaries never populate channel metadata.
+The projection records source and job provenance under the writer fence but is
+not a collaboration commit. Generated text is untrusted model output.
 
 ## Checkpoints and retention
 

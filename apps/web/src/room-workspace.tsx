@@ -24,6 +24,7 @@ import chevronDownIcon from "./assets/icons/tool-chevron-down.svg";
 import { Chat } from "./chat/chat";
 import { rememberChannel } from "./channel-recovery";
 import { decisionAttention, DecisionViewControl } from "./decision-view-control";
+import { newestDocumentMetadata } from "./document-actions";
 import { DocumentActionsMenu } from "./document-actions-menu";
 import { motionImmediately } from "./motion-input";
 import { useNavigationDocument } from "./navigation-shell";
@@ -35,7 +36,7 @@ import { availableDocumentView, presentWorkspace, storedDocumentView } from "./w
 
 import type { Research, Session } from "@chopin/protocol";
 import type { DecisionView, DecisionViewState } from "@chopin/editor";
-import type * as Api from "./api";
+import type { DocumentMetadata } from "./document-actions";
 import type { DocumentAction } from "./document-actions-menu";
 import type { HostedWorkspaceProps } from "./hosted";
 import type { Status } from "./wire";
@@ -43,7 +44,7 @@ import type { Status } from "./wire";
 type ManagedHello = Session.Hello & { archivedAt?: string; canManage: boolean };
 type ManagedChannel = Session.Channel & { archivedAt?: string; canManage: boolean };
 type ManagedAccess = Session.Access & { canManage: boolean };
-type WorkspaceMetadata = Pick<Api.Channel, "title" | "slug" | "updatedAt" | "archivedAt">;
+type WorkspaceMetadata = DocumentMetadata;
 
 function settleMotionImmediately(): boolean {
 	return motionImmediately();
@@ -127,6 +128,8 @@ export function RoomWorkspace(
 		archivedAt,
 		canEdit = true,
 		canManage,
+		description,
+		descriptionRevision,
 		handle,
 		label,
 		repository,
@@ -159,6 +162,8 @@ export function RoomWorkspace(
 	});
 	let [metadata, setMetadata] = useState<WorkspaceMetadata>({
 		archivedAt,
+		description,
+		descriptionRevision,
 		title: label,
 		slug,
 		updatedAt,
@@ -208,13 +213,7 @@ export function RoomWorkspace(
 		[conversationActive],
 	);
 	let updateMetadata = useCallback((next: WorkspaceMetadata) => {
-		if (Date.parse(next.updatedAt) < Date.parse(metadataRef.current.updatedAt)) return;
-		let metadata = {
-			archivedAt: next.archivedAt,
-			title: next.title,
-			slug: next.slug,
-			updatedAt: next.updatedAt,
-		};
+		let metadata = newestDocumentMetadata(metadataRef.current, next);
 		metadataRef.current = metadata;
 		setMetadata(metadata);
 		rememberChannel(userId, { id: room, title: metadata.title, slug: metadata.slug }, repository);
@@ -292,10 +291,18 @@ export function RoomWorkspace(
 	}, [archivedAt, canEdit, canManage, room]);
 
 	useEffect(() => {
-		let next = { archivedAt, title: label, slug, updatedAt };
+		let next: WorkspaceMetadata = {
+			archivedAt,
+			description,
+			descriptionRevision,
+			title: label,
+			slug,
+			updatedAt,
+		};
+		next = newestDocumentMetadata(metadataRef.current, next);
 		metadataRef.current = next;
 		setMetadata(next);
-	}, [archivedAt, label, room, slug, updatedAt]);
+	}, [archivedAt, description, descriptionRevision, label, room, slug, updatedAt]);
 
 	useEffect(() => {
 		let socket = new Wire({

@@ -102,6 +102,7 @@ export async function searchReferenceTargets(
 				channelId: channel.id,
 				title: channel.title,
 				slug: channel.slug,
+				...(channel.description ? { description: channel.description } : {}),
 			})),
 			truncated: omitted || !!cursor,
 		};
@@ -282,12 +283,17 @@ export function ReferencePicker(
 					</p>
 				)}
 				{state.options.map((option, index) => {
-					let description = option.kind === "document" && option.slug
+					let generatedDescription = option.kind === "document" && option.description
 						? `${referenceOptionId(id, index)}-description`
 						: undefined;
+					let slugDescription = option.kind === "document" && option.slug
+						? `${referenceOptionId(id, index)}-slug`
+						: undefined;
+					let describedBy = [generatedDescription, slugDescription].filter(Boolean).join(" ")
+						|| undefined;
 					return (
 						<button
-							aria-describedby={description}
+							aria-describedby={describedBy}
 							aria-label={option.kind === "research"
 								? `${option.title}, workspace ${option.workspaceId}`
 								: option.title}
@@ -305,14 +311,27 @@ export function ReferencePicker(
 							type="button"
 						>
 							<span aria-hidden="true" className="shrink-0 text-text-quaternary">{marker}</span>
-							<span className="min-w-0 flex-1 truncate text-sm font-medium">{option.title}</span>
+							<span className="min-w-0 flex-1 text-sm">
+								<span className="block truncate font-medium">{option.title}</span>
+								{option.kind === "document" && option.description && (
+									<span
+										className="block truncate text-text-tertiary"
+										id={generatedDescription}
+									>
+										{option.description}
+									</span>
+								)}
+							</span>
 							{option.kind === "research" && (
 								<span className="shrink-0 font-mono text-sm text-text-quaternary">
 									...{option.discriminator}
 								</span>
 							)}
 							{option.kind === "document" && option.slug && (
-								<span className="shrink-0 font-mono text-sm text-text-quaternary" id={description}>
+								<span
+									className="shrink-0 font-mono text-sm text-text-quaternary"
+									id={slugDescription}
+								>
 									{option.slug}
 								</span>
 							)}

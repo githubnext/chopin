@@ -733,6 +733,79 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
+		it("publishes searchable document descriptions without changing document recency", async () => {
+			let storage = await opened(factory);
+			try {
+				let { channelId, lease, repositoryId } = await userAndChannel(storage);
+				let before = (await storage.channels.get(channelId))!;
+				let first = await storage.channels.publishDescription({
+					channelId,
+					description: "RFC about payment migration",
+					planRevision: 3,
+					sourceHash: `sha256:${"a".repeat(64)}`,
+					generatorVersion: 1,
+					jobId: id("description-job"),
+					now: new Date("2026-01-03T03:04:05.000Z"),
+					lease,
+				});
+				expect(first).toMatchObject({
+					changed: true,
+					channel: {
+						description: {
+							value: "RFC about payment migration",
+							revision: 1,
+							planRevision: 3,
+							generatorVersion: 1,
+						},
+					},
+				});
+				expect(first.channel.revision).toBe(before.revision);
+				expect(first.channel.updatedAt).toEqual(before.updatedAt);
+				expect((await storage.channels.get(channelId))?.description).toEqual(
+					first.channel.description,
+				);
+				expect((await storage.channels.resolve(repositoryId, before.slug))?.description)
+					.toEqual(first.channel.description);
+				expect((await storage.channels.list(repositoryId, 20, undefined, "PAYMENT")).channels)
+					.toHaveLength(1);
+				expect((await storage.channels.scan(repositoryId, 20)).channels[0]?.description)
+					.toEqual(first.channel.description);
+				expect((await storage.collaboration.load(channelId, new Date()))?.channel.description)
+					.toEqual(first.channel.description);
+
+				let repeated = await storage.channels.publishDescription({
+					channelId,
+					description: "RFC about payment migration",
+					planRevision: 3,
+					sourceHash: `sha256:${"a".repeat(64)}`,
+					generatorVersion: 1,
+					jobId: first.channel.description!.jobId,
+					now: new Date("2026-01-04T03:04:05.000Z"),
+					lease,
+				});
+				expect(repeated).toEqual({ channel: first.channel, changed: false });
+
+				let newer = await storage.channels.publishDescription({
+					channelId,
+					description: "Plan for payment migration",
+					planRevision: 4,
+					sourceHash: `sha256:${"b".repeat(64)}`,
+					generatorVersion: 1,
+					jobId: id("description-job"),
+					now: new Date("2026-01-05T03:04:05.000Z"),
+					lease,
+				});
+				expect(newer.channel.description).toMatchObject({
+					value: "Plan for payment migration",
+					revision: 2,
+					planRevision: 4,
+				});
+				expect(newer.channel.updatedAt).toEqual(before.updatedAt);
+			} finally {
+				await storage.close();
+			}
+		});
+
 		it("keeps renamed document titles unique within their repository", async () => {
 			let storage = await opened(factory);
 			try {

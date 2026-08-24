@@ -67,6 +67,16 @@ export type WebSession = {
 
 export type CreateWebSession = WebSession;
 
+export type ChannelDescription = {
+	value: string;
+	revision: number;
+	planRevision: number;
+	sourceHash: string;
+	generatorVersion: 1;
+	jobId: string;
+	updatedAt: Date;
+};
+
 export type ChannelRecord = {
 	id: string;
 	repositoryId: string;
@@ -79,6 +89,7 @@ export type ChannelRecord = {
 	createdAt: Date;
 	updatedAt: Date;
 	archivedAt?: Date;
+	description?: ChannelDescription;
 };
 
 export type InitialChannel = Omit<
@@ -89,7 +100,7 @@ export type InitialChannel = Omit<
 export type CreateChannel =
 	& Omit<
 		ChannelRecord,
-		"slug" | "revision" | "createdAt" | "updatedAt" | "archivedAt"
+		"slug" | "revision" | "createdAt" | "updatedAt" | "archivedAt" | "description"
 	>
 	& {
 		now: Date;
@@ -114,6 +125,22 @@ export type ChannelArchiveInput = {
 };
 
 export type ChannelArchiveResult = {
+	channel: ChannelRecord;
+	changed: boolean;
+};
+
+export type PublishChannelDescription = {
+	channelId: string;
+	description: string;
+	planRevision: number;
+	sourceHash: string;
+	generatorVersion: 1;
+	jobId: string;
+	now: Date;
+	lease: Lease;
+};
+
+export type PublishChannelDescriptionResult = {
 	channel: ChannelRecord;
 	changed: boolean;
 };

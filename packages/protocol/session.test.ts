@@ -11,6 +11,8 @@ describe("session archive frames", () => {
 			title: "Archived plan",
 			slug: "archived-plan",
 			updatedAt: "2026-08-24T12:00:00.000Z",
+			descriptionRevision: 1,
+			description: "Plan for archival behavior",
 			you: { handle: "mona", client: "first" },
 			members: [{ handle: "mona", client: "first" }],
 			canEdit: false,
@@ -28,6 +30,8 @@ describe("session archive frames", () => {
 			title: "Archived plan",
 			slug: "archived-plan",
 			updatedAt: "2026-08-24T12:00:00.000Z",
+			descriptionRevision: 1,
+			description: "Plan for archival behavior",
 			canManage: true,
 			archivedAt: "2026-08-24T12:00:00.000Z",
 		};

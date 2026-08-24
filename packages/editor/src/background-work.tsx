@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { canCancelJob, currentJobs, useJobs } from "./jobs";
 
@@ -13,7 +13,7 @@ export type BackgroundWorkProps = {
 };
 
 const INTERRUPTION_REASONS: Record<string, string> = {
-	"attempt-error": "Research worker failed unexpectedly",
+	"attempt-error": "Worker failed unexpectedly",
 	"attempt-timeout": "Attempt timed out",
 	"credential-rotated": "Planner credentials changed",
 	"heartbeat-lost": "Runner heartbeat was lost",
@@ -86,8 +86,14 @@ export function backgroundJobResult(
 	let value = detail?.artifact?.value;
 	let artifact = record(value);
 	if (!artifact) return undefined;
-	if (detail?.job.type === "document-summary" && typeof artifact.summary === "string") {
-		return { title: "Document summary", summary: artifact.summary };
+	if (detail?.job.type === "document-summary") {
+		if (artifact.output === "description" && typeof artifact.description === "string") {
+			return { title: "Document description", summary: artifact.description };
+		}
+		if (artifact.output === undefined && typeof artifact.summary === "string") {
+			return { title: "Document summary", summary: artifact.summary };
+		}
+		return undefined;
 	}
 	if (detail?.job.type !== "research-answer") return undefined;
 	if (artifact.kind === "initial") {
@@ -114,7 +120,7 @@ function safeSubject(value: string | undefined): string | undefined {
 	return normalized ? [...normalized].slice(0, 200).join("") : undefined;
 }
 
-export function backgroundJobLabel(job: Job.View): string {
+export function backgroundJobLabel(job: Job.View, detail?: Job.Detail): string {
 	let subject = safeSubject(job.subject);
 	if (job.type === "research-evidence") {
 		return subject ? `Research evidence: ${subject}` : "Research evidence";
@@ -122,7 +128,10 @@ export function backgroundJobLabel(job: Job.View): string {
 	if (job.type === "research-answer") {
 		return subject ? `Research answer: ${subject}` : "Research answer";
 	}
-	return job.type === "document-summary" ? "Document summary" : "Background work";
+	if (job.type === "document-summary") {
+		return backgroundJobResult(detail)?.title ?? "Document description";
+	}
+	return "Background work";
 }
 
 function BackgroundJob(
@@ -139,9 +148,15 @@ function BackgroundJob(
 	let detail = snapshot.details[job.id];
 	let artifact = backgroundJobResult(detail);
 	let progress = visibleProgress(job);
-	let subject = backgroundJobLabel(job);
+	let subject = backgroundJobLabel(job, detail);
 	let reason = job.reason ? safeInterruptionReason(job.reason) : undefined;
 	let readable = job.type === "document-summary" || job.type === "research-answer";
+	useEffect(() => {
+		if (!connected || detail || job.type !== "document-summary" || job.state !== "completed") {
+			return;
+		}
+		void store.detail(job.id).catch(() => {});
+	}, [connected, detail, job.id, job.state, job.type, store]);
 	let toggle = () => {
 		setOpen(value => !value);
 		if (!detail) void store.detail(job.id).catch(() => {});

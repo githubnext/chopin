@@ -446,8 +446,9 @@ describe("channel routes", () => {
 
 	it("lists matching documents with a query-bound cursor and repository avatar", async () => {
 		let { router, storage, cookie, now } = await setup();
+		let roadmap;
 		for (let title of ["Launch notes", "Launch checklist", "Roadmap"]) {
-			await storage.channels.create({
+			let channel = await storage.channels.create({
 				id: crypto.randomUUID(),
 				repositoryId: "R_score",
 				repositoryOwner: "octo-org",
@@ -456,7 +457,19 @@ describe("channel routes", () => {
 				createdBy: "U_octocat",
 				now,
 			});
+			if (title === "Roadmap") roadmap = channel;
 		}
+		let lease = await storage.leases.acquire("description-writer", "routes", 60_000);
+		await storage.channels.publishDescription({
+			channelId: roadmap!.id,
+			description: "RFC about payment migration",
+			planRevision: 2,
+			sourceHash: `sha256:${"a".repeat(64)}`,
+			generatorVersion: 1,
+			jobId: "description-job",
+			now,
+			lease: lease!,
+		});
 		let response = await router.handle(request(
 			"/api/repositories/octo-org/score/channels?query=launch&limit=1",
 			cookie,
@@ -471,6 +484,15 @@ describe("channel routes", () => {
 			cookie,
 		));
 		expect((await next!.json()).channels[0].title).toMatch(/launch/i);
+		let described = await router.handle(request(
+			"/api/repositories/octo-org/score/channels?query=payment",
+			cookie,
+		));
+		expect((await described!.json()).channels).toMatchObject([{
+			id: roadmap!.id,
+			description: "RFC about payment migration",
+			descriptionRevision: 1,
+		}]);
 		let mismatch = await router.handle(request(
 			`/api/repositories/octo-org/score/channels?query=road&cursor=${page.nextCursor}`,
 			cookie,

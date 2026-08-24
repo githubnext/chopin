@@ -26,6 +26,7 @@ export type { Brief, CreateDocumentInput, CreationOrigin } from "./mcp/create";
 export type DocumentSummary = {
 	id: string;
 	title: string;
+	description?: string;
 	archivedAt?: string;
 };
 
@@ -161,6 +162,7 @@ const MAX_DOCUMENT_LOCATOR_LENGTH = 2_048;
 const DOCUMENT_IDENTITY = {
 	id: { type: "string" },
 	title: { type: "string" },
+	description: { type: "string" },
 };
 
 const ACTIVE_DOCUMENT = {

@@ -79,6 +79,7 @@ describe("reference draft tokens", () => {
 			kind: "document",
 			channelId: "channel-release",
 			title: "Release: v2 (API)",
+			description: "Coordinates the release without identifying it.",
 		});
 
 		expect(result.text).toBe("😀 compare #Release: v2 (API) later");

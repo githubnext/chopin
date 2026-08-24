@@ -97,8 +97,9 @@ every turn.
   when it alone exceeds that character budget.
 - A recreated Copilot session receives at most the last 100 transcript entries
   and 50,000 characters. Reserved Planner transcript-summary and cursor fields
-  exist in storage, but the current runtime does not advance them. Durable
-  document-summary job artifacts are separate and are not bootstrap context.
+  exist in storage, but the current runtime does not advance them. Generated
+  descriptions and legacy summaries under durable `document-summary@1` are
+  separate and are not bootstrap context.
 - The Planner reads the current document through the plan-named `read_plan` tool
   instead of receiving a stale embedded copy.
 
@@ -151,6 +152,18 @@ Jobs with `credential: "active-planner"` use the channel's process-local Planner
 owner and entitlement, while fenced claims store no token. Full definition
 registration, lifecycle, isolation, disclosure, retry, configuration, and
 testing guidance is in [Background jobs and workers](background-jobs.md).
+
+Generated document descriptions use this active owner in a private disposable
+worker. The durable definition remains `document-summary@1`; marked V1 requests
+produce one-line type, purpose, and subject metadata, while markerless legacy V1
+artifacts remain readable only as summaries. The generated value is untrusted
+model output and is neither the structured MCP creation `brief` nor the reserved
+Planner transcript `summary`.
+
+Open, edit, restore, and MCP creation paths schedule descriptions lazily. They do
+not establish Planner ownership, and there is no unattended scan of every
+document. Without an active owner, model-backed work cannot run; the last
+completed description, if any, remains visible while work is pending or failed.
 
 ## Implementation graph status
 

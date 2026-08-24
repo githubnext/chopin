@@ -42,6 +42,7 @@ const BEARER = new RegExp("^Bearer ([A-Za-z0-9._~+/-]+=*)$", "i");
 type Document = {
 	id: string;
 	title: string;
+	description?: string;
 	creation?: Plan.CreationMetadata;
 	source: string;
 	revision: number;
@@ -58,6 +59,7 @@ function summary(channel: ChannelRecord): DocumentSummary {
 	return {
 		id: channel.id,
 		title: channel.title,
+		...(channel.description ? { description: channel.description.value } : {}),
 		...(channel.archivedAt ? { archivedAt: channel.archivedAt.toISOString() } : {}),
 	};
 }
@@ -69,6 +71,7 @@ function document(value: Document): PublicDocument & { url?: string } {
 	return {
 		id: value.id,
 		title: value.title,
+		...(value.description ? { description: value.description } : {}),
 		...(value.creation ? { brief: value.creation.brief } : {}),
 		source: value.source,
 		revision: value.revision,
@@ -100,6 +103,7 @@ function exposed(
 		document: document({
 			id: channel.id,
 			title: channel.title,
+			...(channel.description ? { description: channel.description.value } : {}),
 			creation: state.creation,
 			source: state.source,
 			revision: state.revision,
@@ -255,6 +259,7 @@ export function hosted(
 						return document({
 							id: channel.id,
 							title: channel.title,
+							...(channel.description ? { description: channel.description.value } : {}),
 							creation: live.creation,
 							source: Plan.source(live),
 							revision: live.revision,
@@ -278,6 +283,7 @@ export function hosted(
 					return document({
 						id: channel.id,
 						title: channel.title,
+						...(channel.description ? { description: channel.description.value } : {}),
 						creation: projected.creation,
 						source: projected.source,
 						revision: projected.revision,
@@ -426,6 +432,9 @@ export function hosted(
 						document: document({
 							id,
 							title: stored.channel.title,
+							...(stored.channel.description
+								? { description: stored.channel.description.value }
+								: {}),
 							creation: restored.creation,
 							source: restored.source,
 							revision: restored.revision,
@@ -449,6 +458,7 @@ export function hosted(
 					document: document({
 						id,
 						title: created.title,
+						...(created.description ? { description: created.description.value } : {}),
 						creation,
 						source: initial.source,
 						revision: 0,

@@ -27,6 +27,8 @@ export type SocketData = Identity & {
 	channelTitle: string;
 	channelSlug: string;
 	channelUpdatedAt: string;
+	channelDescriptionRevision: number;
+	channelDescription?: string;
 	channelArchivedAt?: string;
 	canEdit: boolean;
 	canManage: boolean;

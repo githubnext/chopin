@@ -141,7 +141,14 @@ function Project(
 										className="project-sidebar-document-link min-w-0 flex-1 text-left text-sm font-medium"
 										href={parentHref}
 									>
-										<span className="truncate">{channel.title}</span>
+										<span className="min-w-0 flex-1">
+											<span className="block truncate">{channel.title}</span>
+											{channel.description && (
+												<span className="block truncate font-normal text-text-quaternary">
+													{channel.description}
+												</span>
+											)}
+										</span>
 									</a>
 									{canManage && (
 										<div className="project-sidebar-document-actions">

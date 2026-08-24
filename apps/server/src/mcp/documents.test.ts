@@ -7,6 +7,7 @@ import type { Document, DocumentReader } from "../mcp";
 const document: Document = {
 	id: "f401c8d6-3717-4f1d-8473-cfdd0af894e4",
 	title: "Release readiness",
+	description: "Plan for release readiness",
 	source: "# Release readiness\n",
 	revision: 4,
 };
@@ -26,7 +27,7 @@ function reader(): DocumentReader<string> {
 	return {
 		async list(caller, repository) {
 			return caller === "octocat" && repository === "githubnext/chopin"
-				? [{ id: document.id, title: document.title }]
+				? [{ id: document.id, title: document.title, description: document.description }]
 				: [];
 		},
 		async read(caller, id) {
@@ -90,7 +91,11 @@ describe("the MCP document protocol", () => {
 			})),
 		);
 		expect((listed.result as { structuredContent: unknown }).structuredContent).toEqual({
-			documents: [{ id: document.id, title: document.title }],
+			documents: [{
+				id: document.id,
+				title: document.title,
+				description: document.description,
+			}],
 		});
 
 		let read = await json(
@@ -135,7 +140,14 @@ describe("the MCP document protocol", () => {
 		let mcp = endpoint({
 			async list(_caller, _repository, include = false) {
 				includeArchived.push(include);
-				return include ? [{ id: document.id, title: document.title, archivedAt }] : [];
+				return include
+					? [{
+						id: document.id,
+						title: document.title,
+						description: document.description,
+						archivedAt,
+					}]
+					: [];
 			},
 			async read() {
 				return archived;
@@ -160,7 +172,12 @@ describe("the MCP document protocol", () => {
 
 		expect(includeArchived).toEqual([false, true]);
 		expect(listed).toEqual([{ documents: [] }, {
-			documents: [{ id: document.id, title: document.title, archivedAt }],
+			documents: [{
+				id: document.id,
+				title: document.title,
+				description: document.description,
+				archivedAt,
+			}],
 		}]);
 
 		let read = await json(

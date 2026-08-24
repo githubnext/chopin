@@ -25,6 +25,7 @@ import { GitHubError } from "./github/client";
 import { Router } from "./http/router";
 import { JobExecutionError, JobRegistry } from "./jobs/registry";
 import * as JobBrowser from "./jobs/browser";
+import { DocumentDescriptionProjector } from "./jobs/document-description";
 import { documentSummaryDefinition } from "./jobs/document-summary";
 import { JobRunner } from "./jobs/runner";
 import { researchAnswerDefinition, researchEvidenceDefinition } from "./jobs/research-workspace";
@@ -82,6 +83,7 @@ let jobRunner: JobRunner | undefined;
 let researchService: ResearchWorkspaceService | undefined;
 let referenceService: ReferenceService | undefined;
 let summaryCoordinator: DocumentSummaryCoordinator | undefined;
+let descriptionProjector: DocumentDescriptionProjector | undefined;
 let documentLocks = new Map<string, Promise<void>>();
 let documentTransitions = new Map<string, Promise<void>>();
 let archivingChannels = new Set<string>();
@@ -415,10 +417,13 @@ function applyChannelAccess(
 ): void {
 	let data = ws.data;
 	let archivedAt = channel.archivedAt?.toISOString();
+	let description = channel.description?.value;
+	let descriptionRevision = channel.description?.revision ?? 0;
 	let canEdit = canManage && !archivedAt && !archivingChannels.has(data.room);
 	if (
 		(channel.updatedAt.toISOString() !== data.channelUpdatedAt
-			|| archivedAt !== data.channelArchivedAt)
+			|| archivedAt !== data.channelArchivedAt
+			|| descriptionRevision !== data.channelDescriptionRevision)
 		&& !data.closed && publish
 	) {
 		tell(ws, {
@@ -428,6 +433,8 @@ function applyChannelAccess(
 			title: channel.title,
 			slug: channel.slug,
 			updatedAt: channel.updatedAt.toISOString(),
+			descriptionRevision,
+			...(description ? { description } : {}),
 			canManage,
 			...(archivedAt ? { archivedAt } : {}),
 		});
@@ -438,6 +445,8 @@ function applyChannelAccess(
 	data.channelTitle = channel.title;
 	data.channelSlug = channel.slug;
 	data.channelUpdatedAt = channel.updatedAt.toISOString();
+	data.channelDescription = description;
+	data.channelDescriptionRevision = descriptionRevision;
 	data.channelArchivedAt = archivedAt;
 	data.canEdit = canEdit;
 	data.canManage = canManage;
@@ -566,6 +575,10 @@ function listen(): Server<SocketData> {
 					title: ws.data.channelTitle,
 					slug: ws.data.channelSlug,
 					updatedAt: ws.data.channelUpdatedAt,
+					descriptionRevision: ws.data.channelDescriptionRevision,
+					...(ws.data.channelDescription
+						? { description: ws.data.channelDescription }
+						: {}),
 					you: { handle: ws.data.handle, client: ws.data.client },
 					members: Rooms.members(room),
 					canEdit: ws.data.canEdit,
@@ -723,6 +736,8 @@ function announceChannel(channel: ChannelRecord): void {
 		ws.data.channelTitle = channel.title;
 		ws.data.channelSlug = channel.slug;
 		ws.data.channelUpdatedAt = channel.updatedAt.toISOString();
+		ws.data.channelDescription = channel.description?.value;
+		ws.data.channelDescriptionRevision = channel.description?.revision ?? 0;
 		ws.data.channelArchivedAt = channel.archivedAt?.toISOString();
 		ws.data.canEdit = ws.data.canManage && !channel.archivedAt;
 		tell(ws, {
@@ -732,6 +747,8 @@ function announceChannel(channel: ChannelRecord): void {
 			title: channel.title,
 			slug: channel.slug,
 			updatedAt: channel.updatedAt.toISOString(),
+			descriptionRevision: channel.description?.revision ?? 0,
+			...(channel.description ? { description: channel.description.value } : {}),
 			canManage: ws.data.canManage,
 			...(channel.archivedAt ? { archivedAt: channel.archivedAt.toISOString() } : {}),
 		});
@@ -995,6 +1012,9 @@ let jobService = new JobService({
 	onChange: job => {
 		jobRunner?.notify(job);
 		if (job.state === "completed") {
+			void descriptionProjector?.jobChanged(job).catch(err => {
+				console.error("chopin: document description reconciliation failed -", err);
+			});
 			void researchService?.jobChanged(job).catch(err => {
 				console.error("chopin: research workspace reconciliation failed -", err);
 			});
@@ -1002,6 +1022,16 @@ let jobService = new JobService({
 	},
 	publish: announceJobsChanged,
 });
+if (config.backgroundJobs) {
+	descriptionProjector = new DocumentDescriptionProjector({
+		storage,
+		lease() {
+			if (!heldLease) throw new Error("storage writer lease is unavailable");
+			return heldLease;
+		},
+		publish: announceChannel,
+	});
+}
 researchService = new ResearchWorkspaceService({
 	storage,
 	jobs: jobService,
@@ -1022,7 +1052,8 @@ if (config.agent && config.backgroundJobs) {
 	summaryCoordinator = new DocumentSummaryCoordinator({
 		service: jobService,
 		current: currentDocumentTarget,
-		error: err => console.error("chopin: document summary scheduling failed -", err),
+		completed: job => descriptionProjector?.jobChanged(job) ?? Promise.resolve(),
+		error: err => console.error("chopin: document description scheduling failed -", err),
 	});
 }
 jobRunner = new JobRunner({

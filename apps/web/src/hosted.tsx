@@ -20,6 +20,8 @@ export type HostedWorkspaceProps = {
 	label: string;
 	slug: string;
 	updatedAt: string;
+	descriptionRevision: number;
+	description?: string;
 	repository: Api.Repository;
 	canEdit: boolean;
 	canManage: boolean;
@@ -308,6 +310,8 @@ function ChannelWorkspace(
 		archivedAt: channel.archivedAt,
 		canEdit: !channel.archivedAt && (detail.canEdit || detail.canManage),
 		canManage: detail.canManage,
+		description: channel.description,
+		descriptionRevision: channel.descriptionRevision,
 		handle: user.login,
 		label: channel.title,
 		slug: channel.slug,

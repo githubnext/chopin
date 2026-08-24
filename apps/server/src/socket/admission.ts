@@ -52,6 +52,8 @@ export async function admit(
 				channelTitle: channel.title,
 				channelSlug: channel.slug,
 				channelUpdatedAt: channel.updatedAt.toISOString(),
+				channelDescriptionRevision: channel.description?.revision ?? 0,
+				...(channel.description ? { channelDescription: channel.description.value } : {}),
 				...(channel.archivedAt
 					? { channelArchivedAt: channel.archivedAt.toISOString() }
 					: {}),

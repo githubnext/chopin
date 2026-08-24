@@ -57,6 +57,8 @@ export declare namespace Session {
 		title: string;
 		slug: string;
 		updatedAt: string;
+		descriptionRevision: number;
+		description?: string;
 		you: Member;
 		members: Member[];
 		/** Effective repository capability for this connection. */
@@ -76,6 +78,8 @@ export declare namespace Session {
 		title: string;
 		slug: string;
 		updatedAt: string;
+		descriptionRevision: number;
+		description?: string;
 		canManage: boolean;
 		archivedAt?: string;
 	};
