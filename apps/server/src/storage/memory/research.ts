@@ -182,13 +182,21 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 			this.#assertChannel(input.channelId, input.lease);
 			required(input.idempotencyKey, "workspace idempotency key");
 			required(input.fingerprint, "workspace fingerprint");
+			if (input.origin !== "inline" && input.origin !== "planner") {
+				throw conflict("research workspace start origin is invalid");
+			}
+			if (
+				input.origin === "inline" && input.originMessageId !== undefined
+				|| input.origin === "planner" && !input.originMessageId
+			) throw conflict("research workspace start origin message is invalid");
 			let repeatedId = this.#idempotency.get(key(input.channelId, input.idempotencyKey));
 			if (repeatedId) {
 				let repeated = this.#workspaces.get(repeatedId)!;
 				let repeatedTurn = (this.#turns.get(repeated.id) ?? [])[0];
 				if (
 					repeated.fingerprint !== input.fingerprint
-					|| repeated.origin !== "inline"
+					|| repeated.origin !== input.origin
+					|| repeated.originMessageId !== input.originMessageId
 					|| !repeatedTurn
 					|| repeatedTurn.kind !== "initial"
 				) {
@@ -224,8 +232,8 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 				title: input.title,
 				proposedQuestion: input.question,
 				confirmedQuery: input.question,
-				origin: "inline",
-				originMessageId: undefined,
+				origin: input.origin,
+				originMessageId: input.originMessageId,
 				createdBy: input.createdBy,
 				confirmedBy: input.createdBy,
 				revision: 0,

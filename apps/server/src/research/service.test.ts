@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 
+import { parse } from "@chopin/dialect";
 import { JobRegistry } from "../jobs/registry";
 import {
 	parseResearchAnswerInput,
@@ -256,6 +257,145 @@ describe("research workspace service", () => {
 		})).rejects.toBeInstanceOf(StorageError);
 	});
 
+	it("starts Planner research immediately and replays its member message identity", async () => {
+		let context = await setup();
+		let owners = 0;
+		let input = {
+			channelId: context.channelId,
+			question: "Which public evidence supports version 3?",
+			originMessageId: "01K39QZG000000000000000001",
+			requestedBy: context.userId,
+			requestedByHandle: "octocat",
+			beforeStart: () => {
+				owners++;
+			},
+		};
+		let started = await context.service.startPlanner(input);
+		expect(started).toMatchObject({
+			repeated: false,
+			request: { state: "pending", stage: "queued" },
+		});
+		let stored = await context.storage.research.get(context.channelId, started.request.id);
+		expect(stored).toMatchObject({
+			workspace: {
+				origin: "planner",
+				originMessageId: input.originMessageId,
+				confirmedQuery: input.question,
+			},
+			turns: [{ kind: "initial", question: input.question }],
+		});
+		expect(stored?.turns[0]?.evidenceJobId).toBeDefined();
+
+		let repeated = await context.service.startPlanner({
+			...input,
+			beforeStart: () => {
+				throw new Error("an active replay must not reacquire an owner");
+			},
+		});
+		expect(repeated.repeated).toBe(true);
+		expect(repeated.request.id).toBe(started.request.id);
+		expect(owners).toBe(1);
+	});
+
+	it("checks durable work before owner setup and recovers setup failure before enqueue", async () => {
+		let context = await setup();
+		let brief = "Which API contracts changed?";
+		let input = {
+			channelId: context.channelId,
+			question: brief,
+			requestId: requestId(1),
+			requestedBy: context.userId,
+		};
+		let owners = 0;
+		let active = await context.service.start({
+			...input,
+			beforeStart: () => {
+				owners++;
+			},
+		});
+		await context.service.start({
+			...input,
+			beforeStart: () => {
+				throw new Error("an active replay must not reacquire an owner");
+			},
+		});
+		await settle(context, "research-evidence", evidenceArtifact);
+		await context.service.request(context.channelId, active.request.id);
+		await settle(context, "research-answer", answerArtifact);
+		await context.service.request(context.channelId, active.request.id);
+		await context.service.start({
+			...input,
+			beforeStart: () => {
+				throw new Error("a completed replay must not reacquire an owner");
+			},
+		});
+		expect(owners).toBe(1);
+
+		let recovery = await setup();
+		let attempts = 0;
+		let recoveryInput = {
+			channelId: recovery.channelId,
+			question: brief,
+			requestId: requestId(2),
+			requestedBy: recovery.userId,
+		};
+		await expect(recovery.service.start({
+			...recoveryInput,
+			beforeStart: () => {
+				attempts++;
+				throw new Error("owner setup failed");
+			},
+		})).rejects.toThrow("owner setup failed");
+		let durable = await recovery.storage.research.list(recovery.channelId, 100);
+		expect(durable).toHaveLength(1);
+		expect((await recovery.storage.research.get(recovery.channelId, durable[0]!.id))?.turns[0])
+			.toMatchObject({ kind: "initial", evidenceJobId: undefined });
+		let recovered = await recovery.service.start({
+			...recoveryInput,
+			beforeStart: () => {
+				attempts++;
+			},
+		});
+		expect(recovered.repeated).toBe(true);
+		expect(recovered.request.stage).toBe("queued");
+		expect(attempts).toBe(2);
+	});
+
+	it("runs owner setup once across concurrent exact starts", async () => {
+		let context = await setup();
+		let ownerStarted = Promise.withResolvers<void>();
+		let releaseOwner = Promise.withResolvers<void>();
+		let owners = 0;
+		let input = {
+			channelId: context.channelId,
+			question: "Which API contracts changed?",
+			requestId: requestId(1),
+			requestedBy: context.userId,
+		};
+		let first = context.service.start({
+			...input,
+			beforeStart: async () => {
+				owners++;
+				ownerStarted.resolve();
+				await releaseOwner.promise;
+			},
+		});
+		await ownerStarted.promise;
+		let second = context.service.start({
+			...input,
+			beforeStart: () => {
+				owners++;
+			},
+		});
+		await Promise.resolve();
+		releaseOwner.resolve();
+		let [created, repeated] = await Promise.all([first, second]);
+		expect(created.repeated).toBe(false);
+		expect(repeated.repeated).toBe(true);
+		expect(repeated.request.id).toBe(created.request.id);
+		expect(owners).toBe(1);
+	});
+
 	it("publishes one canonical child while reconciling a completed initial answer after restart", async () => {
 		let context = await setup();
 		let started = await context.service.start({
@@ -297,6 +437,196 @@ describe("research workspace service", () => {
 		let listed = await context.storage.channels.list(REPOSITORY_ID, 100);
 		expect(listed.channels.filter(value => value.parentChannelId === context.channelId))
 			.toHaveLength(1);
+	});
+
+	it("keeps transient publication failure readable and retries once on later reconciliation", async () => {
+		let context = await setup();
+		let started = await context.service.start({
+			channelId: context.channelId,
+			question: "Which API contracts changed?",
+			requestId: requestId(1),
+			requestedBy: context.userId,
+		});
+		await settle(context, "research-evidence", evidenceArtifact);
+		await context.service.request(context.channelId, started.request.id);
+		let answer = await settle(context, "research-answer", answerArtifact);
+		let available = false;
+		let attempts = 0;
+		let publish = context.storage.research.publishInitialReport.bind(context.storage.research);
+		let publication = spyOn(context.storage.research, "publishInitialReport")
+			.mockImplementation(input => {
+				attempts++;
+				if (!available) {
+					throw new StorageError("unavailable", "temporary publication outage");
+				}
+				return publish(input);
+			});
+		try {
+			await context.service.jobChanged(answer.job);
+			let retrying = await context.service.request(context.channelId, started.request.id);
+			expect(retrying).toMatchObject({ state: "completed", stage: "publishing" });
+			expect(retrying?.child).toBeUndefined();
+			expect(attempts).toBe(2);
+			available = true;
+			let ready = await context.service.request(context.channelId, started.request.id);
+			expect(ready).toMatchObject({ state: "completed", stage: "ready" });
+			expect(attempts).toBe(3);
+		} finally {
+			publication.mockRestore();
+		}
+	});
+
+	it("recovers a concurrent child-title conflict on the next reconciliation", async () => {
+		let context = await setup();
+		let started = await context.service.start({
+			channelId: context.channelId,
+			question: "Which API contracts changed?",
+			requestId: requestId(1),
+			requestedBy: context.userId,
+		});
+		await settle(context, "research-evidence", evidenceArtifact);
+		await context.service.request(context.channelId, started.request.id);
+		let answer = await settle(context, "research-answer", answerArtifact);
+		let publish = context.storage.research.publishInitialReport.bind(context.storage.research);
+		let raced = false;
+		let publication = spyOn(context.storage.research, "publishInitialReport")
+			.mockImplementation(async input => {
+				if (!raced) {
+					raced = true;
+					await context.storage.channels.create({
+						id: crypto.randomUUID(),
+						repositoryId: REPOSITORY_ID,
+						repositoryOwner: "octo-org",
+						repositoryName: "score",
+						title: input.title,
+						createdBy: context.userId,
+						now: context.advance(),
+					});
+				}
+				return publish(input);
+			});
+		try {
+			await expect(context.service.jobChanged(answer.job)).resolves.toBeUndefined();
+			let ready = await context.service.request(context.channelId, started.request.id);
+			expect(ready?.child?.title).toBe(`${REPORT.title} (2)`);
+		} finally {
+			publication.mockRestore();
+		}
+	});
+
+	it("does not classify corrupt publication state as retryable", async () => {
+		let context = await setup();
+		let started = await context.service.start({
+			channelId: context.channelId,
+			question: "Which API contracts changed?",
+			requestId: requestId(1),
+			requestedBy: context.userId,
+		});
+		await settle(context, "research-evidence", evidenceArtifact);
+		await context.service.request(context.channelId, started.request.id);
+		let answer = await settle(context, "research-answer", answerArtifact);
+		let publication = spyOn(context.storage.research, "publishInitialReport")
+			.mockRejectedValue(new StorageError("corrupt", "invalid publication state"));
+		try {
+			await expect(context.service.jobChanged(answer.job)).rejects.toMatchObject({
+				failure: "corrupt",
+			});
+		} finally {
+			publication.mockRestore();
+		}
+	});
+
+	it("rejects a superseded answer instead of retrying publication indefinitely", async () => {
+		let context = await setup();
+		let started = await context.service.start({
+			channelId: context.channelId,
+			question: "Which API contracts changed?",
+			requestId: requestId(1),
+			requestedBy: context.userId,
+		});
+		await settle(context, "research-evidence", evidenceArtifact);
+		await context.service.request(context.channelId, started.request.id);
+		let answer = await settle(context, "research-answer", answerArtifact);
+		let storedAnswer = await context.storage.jobs.get(context.channelId, answer.job.id);
+		if (!storedAnswer) throw new Error("completed answer job is unavailable");
+		let replacement = await context.jobs.enqueueUser({
+			channelId: context.channelId,
+			type: "research-answer",
+			targetKey: answer.job.targetKey.replace(/^research-answer:/, ""),
+			idempotencyKey: "superseding-answer",
+			input: { ...(storedAnswer.job.input as Record<string, JsonValue>), question: "Superseded" },
+		});
+		expect(replacement.repeated).toBe(false);
+		expect(replacement.job.targetGeneration).toBeGreaterThan(answer.job.targetGeneration);
+
+		await expect(context.service.jobChanged(answer.job)).rejects.toMatchObject({
+			code: "invalid-state",
+		});
+	});
+
+	it("publishes hostile report text as plain prose with explicit HTTPS links", async () => {
+		let context = await setup();
+		let started = await context.service.start({
+			channelId: context.channelId,
+			question: "Which API contracts changed?",
+			requestId: requestId(1),
+			requestedBy: context.userId,
+		});
+		await settle(context, "research-evidence", evidenceArtifact);
+		await context.service.request(context.channelId, started.request.id);
+		let hostileSource = {
+			title: "[Release] > # notes",
+			url: "https://example.com/releases/v3?view=full",
+		};
+		let hostileReport: ResearchReport = {
+			title: "# Heading > [not a link]",
+			summary: "> quoted\n- listed # not heading",
+			findings: [{
+				text: "# finding [fake](https://evil.example) <Widget /> {expression}",
+				sourceUrls: [hostileSource.url],
+			}],
+			caveats: ["1. caveat > quote - item [label]"],
+		};
+		await settle(context, "research-answer", job => {
+			let artifact = answerArtifact(job) as Record<string, JsonValue>;
+			return { ...artifact, report: hostileReport, sources: [hostileSource] };
+		});
+		let ready = await context.service.request(context.channelId, started.request.id);
+		let stored = await context.storage.collaboration.load(ready!.child!.id, context.advance());
+		if (!stored) throw new Error("research child document was not initialized");
+		let document = await Plan.readStored(stored);
+		let tree = parse(document.source);
+		expect(tree.children.map(node => node.type)).toEqual([
+			"heading",
+			"paragraph",
+			"heading",
+			"list",
+			"heading",
+			"list",
+			"heading",
+			"list",
+		]);
+		let nodes: Array<Record<string, unknown>> = [];
+		let visit = (value: unknown): void => {
+			if (!value || typeof value !== "object") return;
+			let node = value as Record<string, unknown>;
+			nodes.push(node);
+			for (let child of Array.isArray(node.children) ? node.children : []) visit(child);
+		};
+		visit(tree);
+		let links = nodes.filter(node => node.type === "link");
+		expect(links.map(node => node.url)).toEqual([
+			hostileSource.url,
+			hostileSource.url,
+		]);
+		expect(links.map(node => (node.children as Array<{ value: string }>)[0]?.value)).toEqual([
+			"1",
+			hostileSource.title,
+		]);
+		expect(nodes.filter(node => node.type === "blockquote")).toEqual([]);
+		expect(nodes.filter(node => node.type === "mdxJsxTextElement")).toEqual([]);
+		expect(nodes.filter(node => node.type === "mdxTextExpression")).toEqual([]);
+		expect(document.source).not.toContain("[fake](https://evil.example)");
 	});
 
 	it("does not publish children for failed or cancelled initial work", async () => {

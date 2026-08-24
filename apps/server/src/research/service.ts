@@ -7,6 +7,7 @@ import {
 	parseResearchEvidenceArtifact,
 } from "../jobs/research-workspace";
 import { RESEARCH_REPOSITORY_WORKSPACE_LIMIT } from "../storage/model";
+import { StorageError } from "../storage/errors";
 import * as Plan from "../plan/service";
 
 import type { Job, Research } from "@chopin/protocol";
@@ -89,6 +90,26 @@ export type StartResearchRequestResult = {
 	repeated: boolean;
 };
 
+export type StartPlannerResearchRequest = {
+	channelId: string;
+	question: string;
+	originMessageId: string;
+	requestedBy: string;
+	requestedByHandle?: string;
+	beforeStart?: () => void | Promise<void>;
+};
+
+type ValidatedStartResearchRequest = {
+	channelId: string;
+	question: string;
+	scope: string;
+	origin: "inline" | "planner";
+	originMessageId?: string;
+	requestedBy: string;
+	requestedByHandle?: string;
+	beforeStart?: () => void | Promise<void>;
+};
+
 export type ConfirmResearchDraft = {
 	channelId: string;
 	workspaceId: string;
@@ -159,6 +180,7 @@ const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 const HANDLE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const ACTIVE_JOB_STATES = new Set(["pending", "paused", "running"]);
+const MARKDOWN_PUNCTUATION = new Set(`!"#$%&'()*+,-./:;<=>?@[\\]^_\`{|}~`);
 
 function digest(value: string): string {
 	return createHash("sha256").update(value).digest("hex");
@@ -253,7 +275,13 @@ function suffixedResearchTitle(title: string, suffix: string): string {
 }
 
 function researchReportText(value: string): string {
-	return value.trim().replace(/\s+/g, " ").replace(/[\\`*_[\]{}<>]/g, "\\$&");
+	return [...value.trim().replace(/\s+/g, " ")]
+		.map(point => MARKDOWN_PUNCTUATION.has(point) ? `\\${point}` : point)
+		.join("");
+}
+
+function researchReportLink(label: string, url: string): string {
+	return `[${researchReportText(label)}](<${url}>)`;
 }
 
 function researchReportSource(
@@ -265,7 +293,11 @@ function researchReportSource(
 		blocks.push("## Findings");
 		for (let finding of report.findings) {
 			let sourceText = finding.sourceUrls.length > 0
-				? ` Sources: ${finding.sourceUrls.join(", ")}`
+				? ` Sources: ${
+					finding.sourceUrls.map((url, index) => researchReportLink(String(index + 1), url)).join(
+						", ",
+					)
+				}`
 				: "";
 			blocks.push(`- ${researchReportText(finding.text)}${sourceText}`);
 		}
@@ -277,7 +309,7 @@ function researchReportSource(
 	if (sources.length > 0) {
 		blocks.push("## Sources");
 		for (let source of sources) {
-			blocks.push(`- ${researchReportText(source.title)}: ${source.url}`);
+			blocks.push(`- ${researchReportLink(source.title, source.url)}`);
 		}
 	}
 	return `${blocks.join("\n\n")}\n`;
@@ -395,33 +427,94 @@ export class ResearchWorkspaceService {
 		let durableRequestId = requestId(input.requestId);
 		let requestedBy = opaqueId(input.requestedBy, "Requesting member id");
 		let requestedByHandle = handle(input.requestedByHandle);
+		return this.#start({
+			channelId,
+			question,
+			scope: durableRequestId,
+			origin: "inline",
+			requestedBy,
+			...(requestedByHandle ? { requestedByHandle } : {}),
+			...(input.beforeStart ? { beforeStart: input.beforeStart } : {}),
+		});
+	}
+
+	async startPlanner(input: StartPlannerResearchRequest): Promise<StartResearchRequestResult> {
+		let channelId = safeId(input.channelId, "Channel id");
+		let question = researchBrief(input.question);
+		let originMessageId = safeId(
+			input.originMessageId,
+			"Origin message id",
+			MAX_ORIGIN_MESSAGE_ID,
+		);
+		let requestedBy = opaqueId(input.requestedBy, "Requesting member id");
+		let requestedByHandle = handle(input.requestedByHandle);
+		return this.#start({
+			channelId,
+			question,
+			scope: originMessageId,
+			origin: "planner",
+			originMessageId,
+			requestedBy,
+			...(requestedByHandle ? { requestedByHandle } : {}),
+			...(input.beforeStart ? { beforeStart: input.beforeStart } : {}),
+		});
+	}
+
+	async #start(input: ValidatedStartResearchRequest): Promise<StartResearchRequestResult> {
 		this.#requireDefinition("research-evidence");
 		this.#requireDefinition("research-answer");
-		await input.beforeStart?.();
-		let requestFingerprint = fingerprint("research-inline", {
-			channelId,
-			question,
-			requestedBy,
-			requestedByHandle: requestedByHandle ?? null,
-		});
+		let requestFingerprint = fingerprint(
+			`research-${input.origin}`,
+			input.origin === "inline"
+				? {
+					channelId: input.channelId,
+					question: input.question,
+					requestedBy: input.requestedBy,
+					requestedByHandle: input.requestedByHandle ?? null,
+				}
+				: {
+					channelId: input.channelId,
+					question: input.question,
+					originMessageId: input.originMessageId!,
+					requestedBy: input.requestedBy,
+					requestedByHandle: input.requestedByHandle ?? null,
+				},
+		);
 		let stored = await this.#storage.research.start({
 			id: this.#newId("Workspace id"),
-			channelId,
-			title: researchWorkspaceTitle(question),
-			question,
-			createdBy: requestedBy,
-			...(requestedByHandle ? { createdByHandle: requestedByHandle } : {}),
+			channelId: input.channelId,
+			title: researchWorkspaceTitle(input.question),
+			question: input.question,
+			origin: input.origin,
+			...(input.originMessageId ? { originMessageId: input.originMessageId } : {}),
+			createdBy: input.requestedBy,
+			...(input.requestedByHandle ? { createdByHandle: input.requestedByHandle } : {}),
 			turnId: this.#newId("Turn id"),
 			messageId: this.#newId("Message id"),
-			requestId: durableRequestId,
-			idempotencyKey: `research-inline:${digest(durableRequestId).slice(0, 48)}`,
+			requestId: input.scope,
+			idempotencyKey: `research-${input.origin}:${digest(input.scope).slice(0, 48)}`,
 			fingerprint: requestFingerprint,
 			now: this.#time(),
 			lease: this.#lease(),
 		});
 		if (!stored.repeated) await this.#published(stored.workspace);
-		await this.#ensureEvidence(stored.workspace, stored.turn);
-		let request = await this.request(channelId, stored.workspace.id);
+		await this.#exclusive(input.channelId, stored.workspace.id, async () => {
+			let current = await this.#stored(input.channelId, stored.workspace.id);
+			let initial = current.turns.find(value => value.kind === "initial");
+			if (!initial) {
+				throw new ResearchWorkspaceError("invalid-state", "Research request has no initial work.");
+			}
+			if (initial.evidenceJobId === undefined) {
+				let existing = await this.#targetJob(
+					current.workspace.channelId,
+					"research-evidence",
+					this.#target(current.workspace.id, initial.id, "evidence"),
+				);
+				if (!existing) await input.beforeStart?.();
+			}
+			await this.#ensureEvidence(current.workspace, initial);
+		});
+		let request = await this.request(input.channelId, stored.workspace.id);
 		if (!request) throw new ResearchWorkspaceError("not-found", "Research request not found.");
 		return { request, repeated: stored.repeated };
 	}
@@ -773,8 +866,10 @@ export class ResearchWorkspaceService {
 						savedTurn.kind === "initial" && answer?.job.state === "completed"
 						&& detail.workspace.publishedChannelId === undefined
 					) {
-						changed = await this.#publishInitialReport(detail, savedTurn, answer);
-						if (changed) break;
+						let publication = await this.#publishInitialReport(detail, savedTurn, answer);
+						if (publication === "pending") return detail;
+						changed = true;
+						break;
 					}
 					let alreadyAppended = detail.messages.some(value =>
 						value.authorKind === "agent"
@@ -796,32 +891,48 @@ export class ResearchWorkspaceService {
 		detail: ResearchWorkspaceDetail,
 		savedTurn: ResearchTurn,
 		job: JobDetail,
-	): Promise<boolean> {
+	): Promise<"published" | "pending"> {
+		this.#assertPublishableAnswer(job, detail.workspace, savedTurn);
 		let artifact = this.#answerArtifact(job, detail.workspace, savedTurn);
 		if (artifact.kind !== "initial") {
 			throw new ResearchWorkspaceError("invalid-state", "Initial research report is invalid.");
 		}
 		let initial = await Plan.initial(researchReportSource(artifact.report, artifact.sources));
-		let published = await this.#storage.research.publishInitialReport({
-			channelId: detail.workspace.channelId,
-			workspaceId: detail.workspace.id,
-			answerJobId: job.job.id,
-			title: await this.#publicationTitle(
-				detail.workspace.channelId,
-				researchWorkspaceTitle(artifact.report.title),
-			),
-			initial,
-			now: this.#time(),
-			lease: this.#lease(),
-		});
+		let published;
+		try {
+			published = await this.#storage.research.publishInitialReport({
+				channelId: detail.workspace.channelId,
+				workspaceId: detail.workspace.id,
+				answerJobId: job.job.id,
+				title: await this.#publicationTitle(
+					detail.workspace.channelId,
+					researchWorkspaceTitle(artifact.report.title),
+				),
+				initial,
+				now: this.#time(),
+				lease: this.#lease(),
+			});
+		} catch (err) {
+			if (
+				err instanceof StorageError
+				&& (err.failure === "conflict" || err.failure === "unavailable")
+			) return "pending";
+			throw err;
+		}
 		if (!published.repeated) await this.#published(published.workspace);
-		return true;
+		return "published";
 	}
 
 	async #publicationTitle(channelId: string, requested: string): Promise<string> {
 		let parent = await this.#storage.channels.get(channelId);
 		if (!parent) {
 			throw new ResearchWorkspaceError("not-ready", "The parent document is unavailable.");
+		}
+		if (parent.parentChannelId) {
+			throw new ResearchWorkspaceError(
+				"invalid-state",
+				"A research child cannot publish another child.",
+			);
 		}
 		let titles = new Set<string>();
 		let after: { updatedAt: Date; id: string } | undefined;
@@ -1229,6 +1340,24 @@ export class ResearchWorkspaceService {
 			|| job.job.targetKey !== `${type}:${this.#target(workspace.id, savedTurn.id, role)}`
 		) {
 			throw new ResearchWorkspaceError("invalid-state", `Linked research ${role} is invalid.`);
+		}
+	}
+
+	#assertPublishableAnswer(
+		job: JobDetail,
+		workspace: ResearchWorkspace,
+		savedTurn: ResearchTurn,
+	): void {
+		this.#assertLinkedJob(job, workspace, savedTurn, "answer");
+		if (
+			job.job.targetGeneration !== job.target.generation
+			|| job.job.state !== "completed"
+			|| job.artifact?.jobId !== job.job.id
+		) {
+			throw new ResearchWorkspaceError(
+				"invalid-state",
+				"Initial research answer is not current completed work.",
+			);
 		}
 	}
 

@@ -21,6 +21,7 @@ import { implementationActive } from "../plan/service";
 
 import type { Server } from "bun";
 import type { Tool } from "@github/copilot-sdk";
+import type { Research } from "@chopin/protocol";
 import type { Plan } from "../plan/service";
 import type { JobService } from "../jobs/service";
 import type { SocketData } from "../wire";
@@ -64,10 +65,10 @@ function referenceId(raw: unknown): string {
 	return args.id;
 }
 
-export type ResearchWorkspaceDraft = {
+export type ResearchWorkspaceRequest = {
 	workspaceId: string;
-	state: "draft";
-	url: string;
+	state: Research.RequestState;
+	stage: Research.RequestStage;
 };
 
 export type Context = {
@@ -85,8 +86,8 @@ export type Context = {
 	/** Tells the room where this batch wrote, moved and removed. */
 	changes: (found: edit.Change[]) => void;
 	jobs?: JobService;
-	/** Creates only the private draft represented by the current member turn. */
-	createResearch?: (question: string) => Promise<ResearchWorkspaceDraft>;
+	/** Starts the exact research request represented by the current member turn. */
+	createResearch?: (question: string) => Promise<ResearchWorkspaceRequest>;
 	/** Reads one reference retained by this room's active Planner session. */
 	readReference?: (id: string) => Promise<unknown>;
 };
@@ -191,10 +192,9 @@ export function toolbox(context: Context): Tool[] {
 
 		{
 			name: "create_research_workspace",
-			description: "Create a private, editable Research Workspace draft only when the current "
-				+ "member explicitly asked to create or start research. Refine their topic into one useful "
-				+ "proposed research question. This does not confirm the draft, search the public web, or "
-				+ "enqueue research; a person must review and confirm it in the browser.",
+			description: "Start a Research Workspace only when the current member explicitly asked "
+				+ "to create or start research. Pass their exact brief without refining, rewriting, or "
+				+ "broadening it. This immediately enqueues public research in the background.",
 			parameters: {
 				type: "object",
 				properties: { question: { type: "string", minLength: 1, maxLength: 4_096 } },

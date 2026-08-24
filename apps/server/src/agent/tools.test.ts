@@ -56,12 +56,12 @@ async function opened(source: string, state: SeedState = {}) {
 	return context;
 }
 
-test("create_research_workspace validates one question and waits for the committed draft", async () => {
+test("create_research_workspace validates one question and waits for immediate research start", async () => {
 	let { plan, server } = await opened("Research context.\n");
 	let committed = Promise.withResolvers<{
 		workspaceId: string;
-		state: "draft";
-		url: string;
+		state: "pending";
+		stage: "queued";
 	}>();
 	let questions: string[] = [];
 	let createResearch = toolbox({
@@ -105,8 +105,8 @@ test("create_research_workspace validates one question and waits for the committ
 	expect(settled).toBe(false);
 	let result = {
 		workspaceId: "workspace-1",
-		state: "draft" as const,
-		url: "/documents/owner/repo/plan/research/workspace-1",
+		state: "pending" as const,
+		stage: "queued" as const,
 	};
 	committed.resolve(result);
 	expect(JSON.parse(await response)).toEqual(result);
@@ -681,8 +681,8 @@ test("chat-started tools retain only the current member request provenance", asy
 			researchRequests.push(request);
 			return {
 				workspaceId: "workspace-1",
-				state: "draft",
-				url: "/documents/owner/repository/plan/research/workspace-1",
+				state: "pending",
+				stage: "queued",
 			};
 		},
 	};
@@ -767,19 +767,19 @@ test("chat-started tools retain only the current member request provenance", asy
 			userId: "U_bob",
 			handle: "bob",
 			text: "start research on version 3 adoption",
-			question: "Which public release evidence supports adopting version 3?",
+			question: "start research on version 3 adoption",
 		},
 		{
 			entryId: queuedEntryId,
 			userId: "U_bob",
 			handle: "bob",
 			text: "start research on version 3 adoption",
-			question: "Which public release evidence supports adopting version 3?",
+			question: "start research on version 3 adoption",
 		},
 	]);
 	expect(researchResponses.slice(0, 2).map(value => JSON.parse(value))).toEqual([
-		expect.objectContaining({ workspaceId: "workspace-1", state: "draft" }),
-		expect.objectContaining({ workspaceId: "workspace-1", state: "draft" }),
+		expect.objectContaining({ workspaceId: "workspace-1", state: "pending", stage: "queued" }),
+		expect.objectContaining({ workspaceId: "workspace-1", state: "pending", stage: "queued" }),
 	]);
 	expect(researchResponses[2]).toContain(
 		"Error: research workspaces require the explicit member message",

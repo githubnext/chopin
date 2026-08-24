@@ -505,6 +505,17 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 				let channelId = required(input.channelId, "channel id");
 				let idempotencyKey = required(input.idempotencyKey, "workspace idempotency key");
 				let fingerprint = required(input.fingerprint, "workspace fingerprint");
+				if (input.origin !== "inline" && input.origin !== "planner") {
+					throw conflict("research workspace start origin is invalid");
+				}
+				let originMessageId = optionalInput(
+					input.originMessageId,
+					"workspace origin message id",
+				);
+				if (
+					input.origin === "inline" && originMessageId !== undefined
+					|| input.origin === "planner" && originMessageId === undefined
+				) throw conflict("research workspace start origin message is invalid");
 				let archived = await this.#lockChannelArchiveState(transaction, channelId);
 				let [existing] = await transaction<WorkspaceRow[]>`
 					SELECT ${transaction.unsafe(WORKSPACE_COLUMNS)}
@@ -522,7 +533,8 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 					let repeatedTurn = turnRow ? turn(turnRow) : undefined;
 					if (
 						repeated.fingerprint !== fingerprint
-						|| repeated.origin !== "inline"
+						|| repeated.origin !== input.origin
+						|| repeated.originMessageId !== originMessageId
 						|| !repeatedTurn
 						|| repeatedTurn.kind !== "initial"
 					) {
@@ -551,10 +563,12 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 				let [savedWorkspaceRow] = await transaction<WorkspaceRow[]>`
 					INSERT INTO research_workspaces (
 						id, channel_id, title, proposed_question, confirmed_query, origin,
+						origin_message_id,
 						created_by, confirmed_by, revision, next_turn_ordinal,
 						next_message_sequence, idempotency_key, fingerprint, created_at, updated_at
 					) VALUES (
-						${workspaceId}, ${channelId}, ${title}, ${question}, ${question}, 'inline',
+						${workspaceId}, ${channelId}, ${title}, ${question}, ${question},
+						${input.origin}, ${originMessageId ?? null},
 						${createdBy}, ${createdBy}, 0, 2, 2, ${idempotencyKey}, ${fingerprint},
 						${now}, ${now}
 					)

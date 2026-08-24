@@ -1700,6 +1700,7 @@ export function storageContract(name: string, factory: Factory): void {
 					channelId,
 					title: "API compatibility research",
 					question: "Which API contracts changed?",
+					origin: "inline" as const,
 					createdBy: userId,
 					createdByHandle: "octocat",
 					turnId: id("inline-turn"),
@@ -1754,6 +1755,38 @@ export function storageContract(name: string, factory: Factory): void {
 					question: "A different brief",
 					fingerprint: "sha256:different-inline-start",
 				})).rejects.toMatchObject({ failure: "conflict" });
+
+				let plannerInput = {
+					...input,
+					id: id("planner-workspace"),
+					title: "Planner research",
+					question: "Research the requested release",
+					origin: "planner" as const,
+					originMessageId: id("planner-message-origin"),
+					turnId: id("planner-turn"),
+					messageId: id("planner-message"),
+					requestId: id("planner-request"),
+					idempotencyKey: id("planner-start"),
+					fingerprint: "sha256:planner-start",
+				};
+				let planner = await storage.research.start(plannerInput);
+				expect(planner).toMatchObject({
+					repeated: false,
+					workspace: {
+						origin: "planner",
+						originMessageId: plannerInput.originMessageId,
+						confirmedQuery: plannerInput.question,
+					},
+					turn: { kind: "initial", question: plannerInput.question },
+				});
+				expect(
+					await storage.research.start({
+						...plannerInput,
+						id: id("ignored-planner-workspace"),
+						turnId: id("ignored-planner-turn"),
+						messageId: id("ignored-planner-message"),
+					}),
+				).toEqual({ ...planner, repeated: true });
 			} finally {
 				await storage.close();
 			}
