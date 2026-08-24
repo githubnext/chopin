@@ -25,6 +25,7 @@ import { Chat } from "./chat/chat";
 import { rememberChannel } from "./channel-recovery";
 import { decisionAttention, DecisionViewControl } from "./decision-view-control";
 import { DocumentActionsMenu } from "./document-actions-menu";
+import { motionImmediately } from "./motion-input";
 import { useNavigationDocument } from "./navigation-shell";
 import { NavigationIcon } from "./project-sidebar";
 import { peopleHere } from "./presence";
@@ -43,6 +44,10 @@ type ManagedHello = Session.Hello & { archivedAt?: string; canManage: boolean };
 type ManagedChannel = Session.Channel & { archivedAt?: string; canManage: boolean };
 type ManagedAccess = Session.Access & { canManage: boolean };
 type WorkspaceMetadata = Pick<Api.Channel, "title" | "slug" | "updatedAt" | "archivedAt">;
+
+function settleMotionImmediately(): boolean {
+	return motionImmediately();
+}
 
 export function Header(
 	{
@@ -463,6 +468,7 @@ export function RoomWorkspace(
 					commentPresentation={mode === "split" ? "popover" : "sheet"}
 					connection={status === "deleted" ? "closed" : status}
 					key={workspaceArchivedAt ? "archived" : "active"}
+					motionImmediately={settleMotionImmediately}
 					onScrollTop={setPlanScrollTop}
 					questions={questions}
 					readOnly={!workspaceCanEdit}

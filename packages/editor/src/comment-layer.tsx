@@ -14,9 +14,10 @@ import { $rangeOf } from "./marks";
 import { blockElement } from "./scroll";
 import { COARSE_POINTER_QUERY, hasCoarsePointer } from "./pointer";
 import { useThreads } from "./threads";
+import { useTransitionPresence } from "./transition-presence";
 import { widgets$ } from "./widget-options";
 
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { Point, Rect } from "./comment-geometry";
 import type { PassageHit } from "./comment-hits";
 import type { ThreadStore, ThreadView } from "./threads";
@@ -67,6 +68,52 @@ function Preview({
 	);
 }
 
+type CommentSurfaceValue = {
+	ariaLabel: string;
+	children: ReactNode;
+	className: string;
+	id?: string;
+	onMeasure?: (element: HTMLDivElement | null) => void;
+	onMouseEnter?: () => void;
+	onMouseLeave?: () => void;
+	style?: CSSProperties;
+};
+
+function CommentSurface(
+	{
+		compact,
+		immediately,
+		value,
+	}: {
+		compact: boolean;
+		immediately: boolean;
+		value?: CommentSurfaceValue;
+	},
+) {
+	let presence = useTransitionPresence(value, compact ? 180 : 150, immediately);
+	if (presence.phase === "closed") return null;
+	let surface = presence.value;
+	let active = presence.phase !== "closing";
+	return (
+		<div
+			aria-hidden={active ? undefined : "true"}
+			aria-label={surface.ariaLabel}
+			aria-modal={active && compact ? true : undefined}
+			className={`${surface.className} motion-comment-surface ${presence.className}`}
+			data-motion-presentation={compact ? "sheet" : "popover"}
+			id={surface.id}
+			inert={!active}
+			onMouseEnter={surface.onMouseEnter}
+			onMouseLeave={surface.onMouseLeave}
+			ref={surface.onMeasure}
+			role="dialog"
+			style={surface.style}
+		>
+			{surface.children}
+		</div>
+	);
+}
+
 function replyState(view: ThreadView): string {
 	let replies = Math.max(0, view.thread.notes.length - 1);
 	return replies === 0
@@ -110,6 +157,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let options = useCellValue(widgets$);
 	let canEdit = options.canEdit !== false;
 	let compact = options.commentPresentation === "sheet";
+	let immediately = options.motionImmediately?.() ?? false;
 	let draft = canEdit ? state.draft : undefined;
 
 	useEffect(() => {
@@ -518,47 +566,51 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 								view={view}
 							/>
 						)}
-						{shown && (
-							<div
-								aria-label="Comment thread"
-								aria-modal={compact || undefined}
-								className="plan-comment-card"
-								id={`plan-comment-thread-${view.thread.id}`}
-								ref={element => rememberHeight(view.thread.id, element)}
-								onMouseEnter={() => hover(view.thread.id)}
-								onMouseLeave={() => unhover(view.thread.id)}
-								role="dialog"
-								style={cardPoint}
-							>
-								{card(view)}
-							</div>
-						)}
+						<CommentSurface
+							compact={compact}
+							immediately={immediately}
+							value={shown
+								? {
+									ariaLabel: "Comment thread",
+									children: card(view),
+									className: "plan-comment-card",
+									id: `plan-comment-thread-${view.thread.id}`,
+									onMeasure: element => rememberHeight(view.thread.id, element),
+									onMouseEnter: () => hover(view.thread.id),
+									onMouseLeave: () => unhover(view.thread.id),
+									style: cardPoint,
+								}
+								: undefined}
+						/>
 					</div>
 				);
 			})}
 
-			{draft?.placement && (
-				<div
-					aria-label="New comment"
-					aria-modal={compact || undefined}
-					className="plan-comment-card"
-					role="dialog"
-					ref={element => rememberHeight("draft", element)}
-					style={popoverPoint(
-						draft.placement,
-						page,
-						cardWidth,
-						cardHeights.draft ?? 0,
-					)}
-				>
-					<DraftCard
-						busy={false}
-						onCancel={cancelDraft}
-						onSend={text => store.start(text)}
-						quote={draft.quote}
-					/>
-				</div>
-			)}
+			<CommentSurface
+				compact={compact}
+				immediately={immediately}
+				value={draft?.placement
+					? {
+						ariaLabel: "New comment",
+						children: (
+							<DraftCard
+								busy={false}
+								onCancel={cancelDraft}
+								onSend={text => store.start(text)}
+								quote={draft.quote}
+							/>
+						),
+						className: "plan-comment-card",
+						onMeasure: element => rememberHeight("draft", element),
+						style: popoverPoint(
+							draft.placement,
+							page,
+							cardWidth,
+							cardHeights.draft ?? 0,
+						),
+					}
+					: undefined}
+			/>
 
 			{orphaned.length > 0 && (
 				<div className="plan-comment-orphans">
@@ -575,17 +627,18 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 					>
 						{orphaned.length} comments without prose
 					</button>
-					{pinned === "orphans" && (
-						<div
-							aria-label="Orphaned comments"
-							aria-modal={compact || undefined}
-							className="plan-comment-card plan-comment-orphan-card"
-							id="plan-comment-thread-orphans"
-							role="dialog"
-						>
-							{orphaned.map(card)}
-						</div>
-					)}
+					<CommentSurface
+						compact={compact}
+						immediately={immediately}
+						value={pinned === "orphans"
+							? {
+								ariaLabel: "Orphaned comments",
+								children: orphaned.map(card),
+								className: "plan-comment-card plan-comment-orphan-card",
+								id: "plan-comment-thread-orphans",
+							}
+							: undefined}
+					/>
 				</div>
 			)}
 		</div>,

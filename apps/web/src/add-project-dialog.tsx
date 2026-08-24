@@ -11,6 +11,7 @@ import {
 } from "./repository-cache";
 
 import type { RepositorySnapshot } from "./repository-cache";
+import type { NavigationDialogMotion } from "./navigation-dialog";
 
 function message(error: unknown): string {
 	return error instanceof Error ? error.message : "Could not load repositories.";
@@ -19,11 +20,13 @@ function message(error: unknown): string {
 export function AddProjectDialog(
 	{
 		added,
+		motion,
 		onAdded,
 		onDismiss,
 		userId,
 	}: {
 		added: Api.NavigationProject[];
+		motion: NavigationDialogMotion;
 		onAdded: (project: Api.NavigationProject) => void;
 		onDismiss: () => void;
 		userId: string;
@@ -82,7 +85,12 @@ export function AddProjectDialog(
 	}
 
 	return (
-		<NavigationDialog initialFocus={input} onDismiss={onDismiss} title="Add Project">
+		<NavigationDialog
+			initialFocus={input}
+			motion={motion}
+			onDismiss={onDismiss}
+			title="Add Project"
+		>
 			<div className="mt-4">
 				<label className="sr-only" htmlFor="add-project-search">Search repositories</label>
 				<input

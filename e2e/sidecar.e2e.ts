@@ -662,6 +662,14 @@ test("a touch comment opens as a modal sheet and restores its marker", async ({ 
 	await expect(sheet).toBeVisible();
 	await expect(sheet.getByRole("button", { name: "Close comment" })).toBeFocused();
 	await expect(content(page)).toHaveAttribute("inert", "");
+	await expect.poll(async () => {
+		let sheetBox = await sheet.boundingBox();
+		let documentBox = await page.locator("[data-plan-scroll]").boundingBox();
+		if (!sheetBox || !documentBox) return Number.POSITIVE_INFINITY;
+		return Math.abs(
+			sheetBox.y + sheetBox.height - documentBox.y - documentBox.height,
+		);
+	}).toBeLessThan(0.5);
 	await page.keyboard.press("Escape");
 	await expect(sheet).toHaveCount(0);
 	await expect(marker).toBeFocused();

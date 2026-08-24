@@ -87,6 +87,37 @@ test("a representative compact phone exposes one mounted destination at a time",
 	await expectNoHorizontalOverflow(page);
 });
 
+test("a pointer-dismissed Projects drawer becomes inert while it exits", async ({ join, seed }) => {
+	await seed(RESPONSIVE_SOURCE);
+	let page = await join("ana", { hasTouch: true, viewport: { width: 390, height: 844 } });
+	let opener = page.getByRole("button", { name: "Open Projects sidebar" });
+	await opener.click();
+	let drawer = page.locator(".navigation-drawer");
+	await page.getByRole("button", { name: "Close Projects sidebar" }).click({
+		position: { x: 382, y: 422 },
+	});
+
+	await expect(drawer).toHaveAttribute("aria-hidden", "true");
+	await expect(drawer).toHaveAttribute("inert", "");
+	await expect(opener).toBeFocused();
+	await expect(drawer).toHaveCount(0);
+});
+
+test("enabling reduced motion settles an active drawer exit", async ({ join, seed }) => {
+	await seed(RESPONSIVE_SOURCE);
+	let page = await join("ana", { hasTouch: true, viewport: { width: 390, height: 844 } });
+	await page.emulateMedia({ reducedMotion: "no-preference" });
+	await page.getByRole("button", { name: "Open Projects sidebar" }).click();
+	let drawer = page.locator(".navigation-drawer");
+	await page.getByRole("button", { name: "Close Projects sidebar" }).click({
+		position: { x: 382, y: 422 },
+	});
+	await expect(drawer).toHaveAttribute("aria-hidden", "true");
+
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	await expect(drawer).toHaveCount(0, { timeout: 100 });
+});
+
 test("a shifted visual viewport keeps workspace controls in the exposed rectangle", async ({ browser, baseURL, room, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	let context = await browser.newContext({

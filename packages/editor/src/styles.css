@@ -238,6 +238,39 @@
 	box-shadow: var(--shadow-overlay);
 }
 
+.motion-comment-surface {
+	opacity: 0;
+	transform: scale(var(--dropdown-pre-scale));
+	transform-origin: top right;
+	transition:
+		opacity var(--dropdown-open-dur) var(--dropdown-ease),
+		transform var(--dropdown-open-dur) var(--dropdown-ease);
+	will-change: opacity, transform;
+}
+
+.motion-comment-surface[data-motion-presentation="sheet"] {
+	transform: translateY(var(--drawer-distance));
+	transform-origin: bottom center;
+	transition-duration: var(--drawer-open-dur);
+}
+
+.motion-comment-surface.is-open {
+	opacity: 1;
+	transform: none;
+}
+
+.motion-comment-surface.is-closing {
+	pointer-events: none;
+	opacity: 0;
+	transform: scale(var(--dropdown-closing-scale));
+	transition-duration: var(--dropdown-close-dur);
+}
+
+.motion-comment-surface[data-motion-presentation="sheet"].is-closing {
+	transform: translateY(var(--drawer-distance));
+	transition-duration: var(--drawer-close-dur);
+}
+
 .plan-comment-orphans {
 	pointer-events: auto;
 	position: absolute;
@@ -265,6 +298,12 @@
 	max-height: calc(100% - 0.5rem);
 	padding-bottom: env(safe-area-inset-bottom, 0px);
 	border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.motion-comment-surface {
+		transition: none;
+	}
 }
 
 .plan-decisions {

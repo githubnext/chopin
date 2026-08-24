@@ -64,6 +64,22 @@ test("the room header renames the current document and the sidebar creates one i
 	await expect(headerDocument(page)).toHaveAccessibleName(/^Document: [a-z]+-[a-z]+$/);
 });
 
+test("a pointer-dismissed navigation dialog releases focus while it exits", async ({ join }) => {
+	let page = await join("ana");
+	let trigger = sidebar(page).getByRole("button", { name: "Search", exact: true });
+	await trigger.click();
+	await expect(page.getByRole("textbox", { name: "Search documents" })).toBeFocused();
+	let modal = page.locator(".navigation-modal");
+	await page.getByRole("button", { name: "Close Search documents" }).click({
+		position: { x: 8, y: 8 },
+	});
+
+	await expect(modal).toHaveAttribute("aria-hidden", "true");
+	await expect(modal).toHaveAttribute("inert", "");
+	await expect(trigger).toBeFocused();
+	await expect(modal).toHaveCount(0);
+});
+
 test("a stale catalogue response cannot remove a newly created document", async ({ join, page }) => {
 	let captured = Promise.withResolvers<void>();
 	let release = Promise.withResolvers<void>();

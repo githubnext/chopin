@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import * as Api from "./api";
 import { NavigationDialog } from "./navigation-dialog";
 
+import type { NavigationDialogMotion } from "./navigation-dialog";
+
 export type DocumentSearchResult = {
 	project: Api.NavigationProject;
 	channel: Api.Channel;
@@ -55,11 +57,13 @@ export async function searchAvailableDocuments(
 export function DocumentSearchDialog(
 	{
 		includeArchived,
+		motion,
 		onDismiss,
 		onSelect,
 		projects,
 	}: {
 		includeArchived: boolean;
+		motion: NavigationDialogMotion;
 		onDismiss: () => void;
 		onSelect: (documentId: string) => void;
 		projects: Api.NavigationProject[];
@@ -105,7 +109,12 @@ export function DocumentSearchDialog(
 
 	let results = search.status === "ready" ? search.results : [];
 	return (
-		<NavigationDialog initialFocus={input} onDismiss={onDismiss} title="Search documents">
+		<NavigationDialog
+			initialFocus={input}
+			motion={motion}
+			onDismiss={onDismiss}
+			title="Search documents"
+		>
 			<div className="mt-4">
 				<label className="sr-only" htmlFor="document-search">Search documents</label>
 				<input

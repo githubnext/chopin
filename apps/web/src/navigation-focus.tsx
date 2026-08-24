@@ -10,10 +10,12 @@ function focusable(node: HTMLElement): HTMLElement[] {
 
 export function NavigationFocusScope(
 	{
+		active = true,
 		children,
 		initialFocus,
 		onDismiss,
 	}: {
+		active?: boolean;
 		children: ReactNode;
 		initialFocus?: RefObject<HTMLElement | null>;
 		onDismiss: () => void;
@@ -25,6 +27,7 @@ export function NavigationFocusScope(
 	);
 
 	useEffect(() => {
+		if (!active) return;
 		let frame = requestAnimationFrame(() => {
 			(initialFocus?.current ?? focusable(scope.current!)[0] ?? scope.current)?.focus();
 		});
@@ -32,9 +35,10 @@ export function NavigationFocusScope(
 			cancelAnimationFrame(frame);
 			if (previous.current?.isConnected) previous.current.focus();
 		};
-	}, [initialFocus]);
+	}, [active, initialFocus]);
 
 	function keyDown(event: KeyboardEvent<HTMLDivElement>) {
+		if (!active) return;
 		if (event.key === "Escape") {
 			event.preventDefault();
 			onDismiss();
@@ -59,7 +63,13 @@ export function NavigationFocusScope(
 	}
 
 	return (
-		<div className="navigation-focus-scope" onKeyDown={keyDown} ref={scope} tabIndex={-1}>
+		<div
+			className="navigation-focus-scope"
+			inert={!active}
+			onKeyDown={keyDown}
+			ref={scope}
+			tabIndex={active ? -1 : undefined}
+		>
 			{children}
 		</div>
 	);

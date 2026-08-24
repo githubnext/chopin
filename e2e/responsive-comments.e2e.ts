@@ -53,8 +53,11 @@ test("a representative compact viewport keeps a passage above the sheet and rest
 		let passageBox = await passage.boundingBox();
 		return sheetBox!.y >= passageBox!.y + passageBox!.height;
 	}).toBe(true);
-	await page.keyboard.press("Escape");
-	await expect(sheet).toHaveCount(0);
+	await sheet.getByRole("button", { name: "Close comment" }).click();
+	let closing = page.locator(".motion-comment-surface.is-closing");
+	await expect(closing).toHaveAttribute("aria-hidden", "true");
+	await expect(closing).toHaveAttribute("inert", "");
+	await expect(closing).toHaveCount(0);
 	await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBeCloseTo(
 		originalScroll,
 		0,

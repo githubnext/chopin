@@ -3,13 +3,17 @@ import { useRef, useState } from "react";
 import * as Api from "./api";
 import { NavigationDialog } from "./navigation-dialog";
 
+import type { NavigationDialogMotion } from "./navigation-dialog";
+
 export function DeleteDocumentDialog(
 	{
 		channel,
+		motion,
 		onDeleted,
 		onDismiss,
 	}: {
 		channel: Api.Channel;
+		motion: NavigationDialogMotion;
 		onDeleted: () => void;
 		onDismiss: () => void;
 	},
@@ -36,6 +40,7 @@ export function DeleteDocumentDialog(
 	return (
 		<NavigationDialog
 			initialFocus={cancel}
+			motion={motion}
 			onDismiss={dismiss}
 			title="Delete document permanently?"
 		>

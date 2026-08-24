@@ -1,5 +1,11 @@
 import { useEffect } from "react";
 
+export function motionImmediately(dataset?: { motionInput?: string }): boolean {
+	let source = dataset
+		?? (typeof document === "undefined" ? undefined : document.documentElement.dataset);
+	return source?.motionInput === "keyboard";
+}
+
 export function useMotionInput(): void {
 	useEffect(() => {
 		let recordKeyboard = () => {

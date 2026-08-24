@@ -1,4 +1,5 @@
 import { CaretDownIcon, CheckIcon, PlusIcon } from "@phosphor-icons/react";
+import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { documentPath } from "@chopin/protocol/document-url";
 import { createPortal } from "react-dom";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
@@ -7,6 +8,7 @@ import { useAnchoredPicker } from "./anchored-picker";
 import * as Api from "./api";
 import { rememberChannel } from "./channel-recovery";
 import { DocumentRename } from "./document-rename";
+import { motionImmediately } from "./motion-input";
 
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
@@ -71,6 +73,11 @@ export function DocumentPicker(
 		setOpen(next);
 	};
 	let { panel, position, search, trigger } = useAnchoredPicker(open, setPickerOpen, pickerContent);
+	let popupPresence = useTransitionPresence(
+		open ? true : undefined,
+		150,
+		motionImmediately(),
+	);
 
 	useEffect(() => {
 		if (!open) return;
@@ -179,10 +186,12 @@ export function DocumentPicker(
 		requestAnimationFrame(() => search.current?.focus());
 	}
 
-	let popup = open && createPortal(
+	let popup = popupPresence.phase !== "closed" && createPortal(
 		<div
-			className="fixed z-50 flex flex-col rounded-lg bg-page ring-hairline shadow-overlay"
+			aria-hidden={popupPresence.phase === "closing" ? "true" : undefined}
+			className={`motion-dropdown ${popupPresence.className} fixed z-50 flex flex-col rounded-lg bg-page ring-hairline shadow-overlay`}
 			id={panelId}
+			inert={popupPresence.phase === "closing"}
 			ref={panel}
 			style={position}
 		>
@@ -192,7 +201,7 @@ export function DocumentPicker(
 					aria-activedescendant={activeChannel ? optionId(listId, activeChannel) : undefined}
 					aria-autocomplete="list"
 					aria-controls={listId}
-					aria-expanded="true"
+					aria-expanded={open}
 					className="document-picker-search field h-8 w-full px-2 text-sm"
 					id={`${listId}-search`}
 					onChange={event => {

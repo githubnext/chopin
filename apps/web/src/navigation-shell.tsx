@@ -11,6 +11,7 @@ import {
 	useState,
 	useSyncExternalStore,
 } from "react";
+import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { documentPath, researchWorkspacePath } from "@chopin/protocol/document-url";
 
 import * as Api from "./api";
@@ -18,6 +19,7 @@ import { forgetChannel } from "./channel-recovery";
 import { newestDocument } from "./document-actions";
 import type { DocumentAction } from "./document-actions-menu";
 import { NavigationFocusScope } from "./navigation-focus";
+import { motionImmediately } from "./motion-input";
 import {
 	activeProject,
 	beginProjectCreation,
@@ -39,6 +41,7 @@ import { useProjectDocuments } from "./use-project-documents";
 import { useProjectResearch } from "./use-project-research";
 
 import type { Research } from "@chopin/protocol";
+import type { TransitionPresence } from "@chopin/editor/transition-presence";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import type { NavigationMode } from "./navigation-model";
 
@@ -203,17 +206,31 @@ function SidebarResizeHandle(
 }
 
 function NavigationDrawer(
-	{ children, onDismiss }: { children: ReactNode; onDismiss: () => void },
+	{
+		children,
+		motion,
+		onDismiss,
+	}: {
+		children: ReactNode;
+		motion: Exclude<TransitionPresence<boolean>, { phase: "closed" }>;
+		onDismiss: () => void;
+	},
 ) {
+	let active = motion.phase !== "closing";
 	return (
-		<div className="navigation-drawer" role="presentation">
+		<div
+			aria-hidden={active ? undefined : "true"}
+			className={`navigation-drawer motion-drawer ${motion.className}`}
+			inert={!active}
+			role="presentation"
+		>
 			<button
 				aria-label="Close Projects sidebar"
 				className="navigation-drawer-backdrop"
 				onClick={onDismiss}
 				type="button"
 			/>
-			<NavigationFocusScope onDismiss={onDismiss}>
+			<NavigationFocusScope active={active} onDismiss={onDismiss}>
 				<div
 					aria-label="Projects"
 					aria-modal="true"
@@ -276,6 +293,20 @@ export function NavigationShell(
 	let [focusProjectId, setFocusProjectId] = useState<string>();
 	let [width, resize] = useSidebarWidth();
 	let mode = useNavigationMode();
+	let immediateMotion = motionImmediately();
+	let drawerPresence = useTransitionPresence(
+		mode === "drawer" && drawerOpen ? true : undefined,
+		180,
+		immediateMotion,
+	);
+	let dialogPresence = useTransitionPresence(dialog, 150, immediateMotion);
+	let accountPresence = useTransitionPresence(
+		accountOpen ? true : undefined,
+		150,
+		immediateMotion,
+	);
+	let dialogMotion = dialogPresence.phase === "closed" ? undefined : dialogPresence;
+	let presentedDialog = dialogMotion?.value;
 	let sidebarVisible = mode === "inline" && !collapsed;
 	let triggerVisible = !sidebarVisible && !drawerOpen;
 	let {
@@ -710,11 +741,17 @@ export function NavigationShell(
 	let sidebar = (
 		<Suspense fallback={null}>
 			<ProjectSidebar
-				accountMenu={accountOpen && (
-					<div className="navigation-account-menu" role="menu">
+				accountMenu={accountPresence.phase !== "closed" && (
+					<div
+						aria-hidden={accountPresence.phase === "closing" ? "true" : undefined}
+						className={`navigation-account-menu motion-dropdown ${accountPresence.className}`}
+						inert={accountPresence.phase === "closing"}
+						role="menu"
+					>
 						<button onClick={() => void signOut()} role="menuitem" type="button">Sign out</button>
 					</div>
 				)}
+				accountMenuOpen={accountOpen}
 				canCreateDocument={!active || canManageProject(active)}
 				creatingProjectIds={creatingProjectIdsForView}
 				creatingNewDocument={!!active && creatingProjectIdsForView.has(active.repositoryId)}
@@ -789,8 +826,8 @@ export function NavigationShell(
 						onExpand={() => mode === "drawer" ? setDrawerOpen(true) : setCollapsed(false)}
 					/>
 				)}
-				{mode === "drawer" && drawerOpen && (
-					<NavigationDrawer onDismiss={dismissDrawer}>
+				{drawerPresence.phase !== "closed" && (
+					<NavigationDrawer motion={drawerPresence} onDismiss={dismissDrawer}>
 						{sidebar}
 					</NavigationDrawer>
 				)}
@@ -811,11 +848,12 @@ export function NavigationShell(
 							{content}
 						</div>
 					)}
-				{dialog === "add" && (
+				{dialogMotion && presentedDialog === "add" && (
 					<LazyDialogBoundary>
 						<Suspense fallback={null}>
 							<AddProjectDialog
 								added={navigation?.projects ?? []}
+								motion={dialogMotion}
 								onAdded={project => {
 									catalogueRefreshes.current.set(project.repositoryId, Date.now());
 									setFocusProjectId(project.repositoryId);
@@ -827,11 +865,12 @@ export function NavigationShell(
 						</Suspense>
 					</LazyDialogBoundary>
 				)}
-				{dialog === "search" && (
+				{dialogMotion && presentedDialog === "search" && (
 					<LazyDialogBoundary>
 						<Suspense fallback={null}>
 							<DocumentSearchDialog
 								includeArchived={catalogueMode === "archived"}
+								motion={dialogMotion}
 								onDismiss={() => setDialog(undefined)}
 								onSelect={navigateToDocument}
 								projects={navigation?.projects ?? []}
@@ -839,40 +878,46 @@ export function NavigationShell(
 						</Suspense>
 					</LazyDialogBoundary>
 				)}
-				{typeof dialog === "object" && dialog.type === "rename" && (
+				{dialogMotion && typeof presentedDialog === "object"
+					&& presentedDialog.type === "rename" && (
 					<LazyDialogBoundary>
 						<Suspense fallback={null}>
 							<RenameDocumentDialog
-								channel={dialog.channel}
+								channel={presentedDialog.channel}
+								motion={dialogMotion}
 								onDismiss={() => setDialog(undefined)}
 								onRenamed={acceptChannel}
 							/>
 						</Suspense>
 					</LazyDialogBoundary>
 				)}
-				{typeof dialog === "object" && dialog.type === "delete" && (
+				{dialogMotion && typeof presentedDialog === "object"
+					&& presentedDialog.type === "delete" && (
 					<LazyDialogBoundary>
 						<Suspense fallback={null}>
 							<DeleteDocumentDialog
-								channel={dialog.channel}
-								onDeleted={() => documentDeleted(dialog.channel.id)}
+								channel={presentedDialog.channel}
+								motion={dialogMotion}
+								onDeleted={() => documentDeleted(presentedDialog.channel.id)}
 								onDismiss={() => setDialog(undefined)}
 							/>
 						</Suspense>
 					</LazyDialogBoundary>
 				)}
-				{typeof dialog === "object" && dialog.type === "research" && (
+				{dialogMotion && typeof presentedDialog === "object"
+					&& presentedDialog.type === "research" && (
 					<LazyDialogBoundary>
 						<Suspense fallback={null}>
 							<NewResearchDialog
-								channel={dialog.channel}
+								channel={presentedDialog.channel}
+								motion={dialogMotion}
 								onCreated={workspace => {
-									upsertResearchWorkspace(dialog.channel, workspace);
+									upsertResearchWorkspace(presentedDialog.channel, workspace);
 									setDialog(undefined);
 									navigate(researchWorkspacePath(
-										dialog.channel.repositoryOwner,
-										dialog.channel.repositoryName,
-										dialog.channel.slug,
+										presentedDialog.channel.repositoryOwner,
+										presentedDialog.channel.repositoryName,
+										presentedDialog.channel.slug,
 										workspace.id,
 									));
 								}}
