@@ -168,6 +168,43 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${originalTitle}`);
 });
 
+test("the archive filter refreshes catalogues without reopening the document", async ({ join, page }) => {
+	let sockets = 0;
+	await page.routeWebSocket("**/ws?**", route => {
+		sockets++;
+		route.connectToServer();
+	});
+	page = await join("ana");
+	let initialSockets = sockets;
+	let path = page.url();
+	let catalogue = (endpoint: string, includeArchived: boolean) =>
+		page.waitForResponse(response => {
+			let url = new URL(response.url());
+			return response.request().method() === "GET"
+				&& url.pathname === `/api/repositories/octo-org/score/${endpoint}`
+				&& (url.searchParams.get("includeArchived") === "true") === includeArchived;
+		});
+	let toggle = sidebar(page).getByRole("checkbox", { name: "Show archived documents" });
+
+	let archived = Promise.all([
+		catalogue("channels", true),
+		catalogue("research-workspaces", true),
+	]);
+	await toggle.check();
+	await archived;
+	expect(page.url()).toBe(path);
+	expect(sockets).toBe(initialSockets);
+
+	let active = Promise.all([
+		catalogue("channels", false),
+		catalogue("research-workspaces", false),
+	]);
+	await toggle.uncheck();
+	await active;
+	expect(page.url()).toBe(path);
+	expect(sockets).toBe(initialSockets);
+});
+
 test("the sidebar paginates documents and global search queries beyond the loaded page", async ({ join, page }) => {
 	let requests: URL[] = [];
 	let first = Array.from(

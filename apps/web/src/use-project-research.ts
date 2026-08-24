@@ -25,6 +25,8 @@ export function useProjectResearch(
 	let projects = useRef(new Map<string, Api.NavigationProject>());
 	let invalidations = useRef(new Map<string, number>());
 	let retryTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+	let includeArchivedRef = useRef(includeArchived);
+	includeArchivedRef.current = includeArchived;
 
 	projects.current = new Map(
 		(navigation?.projects ?? []).map(project => [project.repositoryId, project]),
@@ -32,6 +34,7 @@ export function useProjectResearch(
 
 	let load = useCallback(async (project: Api.NavigationProject, replace = false) => {
 		let id = project.repositoryId;
+		let requestIncludesArchived = includeArchivedRef.current;
 		let pending = loads.current.get(id);
 		if (pending && !replace) return false;
 		pending?.abort();
@@ -46,16 +49,22 @@ export function useProjectResearch(
 				project.repositoryOwner,
 				project.repositoryName,
 				controller.signal,
-				includeArchived,
+				requestIncludesArchived,
 			);
-			if (!currentResearchRequest(loads.current, id, controller)) return false;
+			if (
+				requestIncludesArchived !== includeArchivedRef.current
+				|| !currentResearchRequest(loads.current, id, controller)
+			) return false;
 			setResearch(current => ({
 				...current,
 				[id]: completeResearchLoad(current[id] ?? beginResearchLoad(), page, !replace),
 			}));
 			return true;
 		} catch (error) {
-			if (!currentResearchRequest(loads.current, id, controller)) return false;
+			if (
+				requestIncludesArchived !== includeArchivedRef.current
+				|| !currentResearchRequest(loads.current, id, controller)
+			) return false;
 			setResearch(current => ({
 				...current,
 				[id]: failResearchLoad(current[id] ?? beginResearchLoad(), error),
@@ -64,7 +73,7 @@ export function useProjectResearch(
 		} finally {
 			if (loads.current.get(id) === controller) loads.current.delete(id);
 		}
-	}, [includeArchived]);
+	}, []);
 
 	useEffect(() => {
 		for (let controller of loads.current.values()) controller.abort();
@@ -100,7 +109,7 @@ export function useProjectResearch(
 				void load(project);
 			}
 		}
-	}, [documents, load, navigation, research]);
+	}, [documents, includeArchived, load, navigation, research]);
 
 	useEffect(() => () => {
 		for (let controller of loads.current.values()) controller.abort();
