@@ -22,7 +22,7 @@ import { ulid } from "@chopin/dialect";
 
 import * as Agent from "../agent/client";
 import { repositoryTools } from "../agent/repository";
-import { type ResearchWorkspaceDraft, toolbox } from "../agent/tools";
+import { type ResearchWorkspaceRequest, toolbox } from "../agent/tools";
 import * as Service from "../plan/service";
 import { instruction } from "@chopin/protocol/address";
 
@@ -418,7 +418,7 @@ export type Room = {
 		handle: string;
 		text: string;
 		question: string;
-	}) => Promise<ResearchWorkspaceDraft>;
+	}) => Promise<ResearchWorkspaceRequest>;
 };
 
 /**
@@ -733,7 +733,7 @@ export function planTools(context: Room) {
 				reference,
 			});
 		},
-		createResearch: async question => {
+		createResearch: async _question => {
 			let active = currentMemberRequest(chat);
 			if (!active) {
 				throw new Error(
@@ -747,7 +747,7 @@ export function planTools(context: Room) {
 				userId: active.userId,
 				handle: active.handle,
 				text: active.text,
-				question,
+				question: active.text,
 			});
 		},
 	});

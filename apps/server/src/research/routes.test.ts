@@ -62,7 +62,7 @@ class RepositoryAccess {
 	}
 }
 
-async function setup() {
+async function setup(options: { failOwnerOnce?: boolean } = {}) {
 	let now = new Date("2026-08-23T12:00:00.000Z");
 	let storage = new MemoryStorage();
 	await storage.users.put({ id: USER_ID, login: "octocat", avatarUrl: "avatar", now });
@@ -139,11 +139,13 @@ async function setup() {
 		publish: () => {},
 	});
 	let owners: string[] = [];
+	let ownerFailures = options.failOwnerOnce ? 1 : 0;
 	let router = new Router();
 	registerResearchWorkspaceRoutes(router, auth, {
 		service,
 		ensureOwner: async ensured => {
 			owners.push(ensured.id);
+			if (ownerFailures-- > 0) throw new Error("owner setup failed");
 		},
 	});
 	return {
@@ -235,7 +237,7 @@ describe("research workspace routes", () => {
 			mutation({ question: "What changed?", requestId: requestId(1) }),
 		));
 		expect(replayed?.status).toBe(200);
-		expect(context.owners).toEqual([context.channel.id, context.channel.id]);
+		expect(context.owners).toEqual([context.channel.id]);
 		let legacyConfirm = await context.router.handle(request(
 			`${path}/${created.body.request.id}/confirm`,
 			context.cookie,
@@ -273,6 +275,21 @@ describe("research workspace routes", () => {
 			id: created.body.request.id,
 			question: "What changed?",
 		});
+	});
+
+	it("recovers an exact request after initial owner setup fails before enqueue", async () => {
+		let context = await setup({ failOwnerOnce: true });
+		let first = await create(context);
+		expect(first.response.status).toBe(500);
+		expect(await context.storage.research.list(context.channel.id, 100)).toHaveLength(1);
+
+		let recovered = await create(context);
+		expect(recovered.response.status).toBe(200);
+		expect(recovered.body).toMatchObject({
+			repeated: true,
+			request: { state: "pending", stage: "queued" },
+		});
+		expect(context.owners).toEqual([context.channel.id, context.channel.id]);
 	});
 
 	it("returns inaccessible and cross-channel children as not found", async () => {

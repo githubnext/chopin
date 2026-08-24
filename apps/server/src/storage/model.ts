@@ -546,6 +546,8 @@ export type StartResearchWorkspace = {
 	channelId: string;
 	title: string;
 	question: string;
+	origin: Extract<ResearchWorkspaceOrigin, "inline" | "planner">;
+	originMessageId?: string;
 	createdBy: string;
 	createdByHandle?: string;
 	turnId: string;

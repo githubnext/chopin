@@ -9,7 +9,6 @@
 
 import { join } from "node:path";
 import { ulid } from "@chopin/dialect";
-import { researchWorkspacePath } from "@chopin/protocol/document-url";
 
 import * as Agent from "./agent/client";
 import { ActiveOwnerBindings } from "./agent/active-owner";
@@ -185,25 +184,18 @@ function conversation(room: Rooms.Room, ws: Socket): Chat.Room {
 			? async request => {
 				let service = researchService;
 				if (!service) throw new Error("research workspaces are unavailable");
-				let created = await service.createDraft({
+				let created = await service.startPlanner({
 					channelId: room.id,
 					question: request.question,
-					origin: "planner",
 					originMessageId: request.entryId,
-					createdBy: request.userId,
+					requestedBy: request.userId,
+					requestedByHandle: request.handle,
+					beforeStart: () => jobRunner?.ownerAvailable(room.id) ?? Promise.resolve(),
 				});
-				let channel = await storage.channels.get(room.id);
-				if (!channel) throw new Error("research workspace parent is unavailable");
-				let path = researchWorkspacePath(
-					channel.repositoryOwner,
-					channel.repositoryName,
-					channel.slug,
-					created.workspace.id,
-				);
 				return {
-					workspaceId: created.workspace.id,
-					state: "draft" as const,
-					url: new URL(path, config.auth.origin).href,
+					workspaceId: created.request.id,
+					state: created.request.state,
+					stage: created.request.stage,
 				};
 			}
 			: undefined,
