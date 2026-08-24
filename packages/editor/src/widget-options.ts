@@ -1,5 +1,6 @@
 import { Cell } from "@mdxeditor/gurx";
 
+import type { Binding } from "@lexical/yjs";
 import type { ChangeStore } from "./changes";
 import type { ContentSwapMotion } from "./content-swap";
 import type { Research } from "@chopin/protocol";
@@ -26,6 +27,7 @@ export type ResearchStore = {
 };
 
 export type WidgetOptions = {
+	binding?: Binding;
 	commentPresentation?: CommentPresentation;
 	motionImmediately?: () => boolean;
 	questionMotion?: QuestionStepMotion;

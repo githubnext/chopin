@@ -1,19 +1,82 @@
 import { describe, expect, it } from "bun:test";
 import { createHeadlessEditor } from "@lexical/headless";
+import { createYjsBinding, syncLexicalUpdateToYjs, syncYjsChangesToLexical } from "@lexical/yjs";
 import {
 	$createParagraphNode,
 	$createTextNode,
 	$getRoot,
 	$getSelection,
+	$isElementNode,
 	$isRangeSelection,
+	$isTextNode,
 } from "lexical";
 
-import { exportPlan, registry } from "@chopin/dialect";
+import * as Y from "yjs";
 
-import type { LexicalEditor, RangeSelection } from "lexical";
+import { exportPlan, importPlan, registry } from "@chopin/dialect";
+
+import type { Binding, Provider } from "@lexical/yjs";
+import type { LexicalEditor } from "lexical";
 import type { Research } from "@chopin/protocol";
 
 import { decide, trigger } from "./slash";
+
+const PROVIDER = {
+	awareness: {
+		getLocalState: () => null,
+		getStates: () => new Map(),
+		off() {},
+		on() {},
+		setLocalState() {},
+		setLocalStateField() {},
+	},
+	connect() {},
+	disconnect() {},
+	off() {},
+	on() {},
+} as unknown as Provider;
+
+function peer(): { editor: LexicalEditor; doc: Y.Doc; binding: Binding } {
+	let editor = createHeadlessEditor({
+		nodes: registry().nodes,
+		onError: error => {
+			throw error;
+		},
+	});
+	let doc = new Y.Doc();
+	let binding = createYjsBinding({ editor, id: "plan", doc, docMap: new Map([["plan", doc]]) });
+	editor.registerUpdateListener(
+		({ dirtyElements, dirtyLeaves, editorState, normalizedNodes, prevEditorState, tags }) => {
+			syncLexicalUpdateToYjs(
+				binding,
+				PROVIDER,
+				prevEditorState,
+				editorState,
+				dirtyElements,
+				dirtyLeaves,
+				normalizedNodes,
+				tags,
+			);
+		},
+	);
+	binding.root.getSharedType().observeDeep((events, transaction) => {
+		if (transaction.origin !== binding) syncYjsChangesToLexical(binding, PROVIDER, events, false);
+	});
+	return { editor, doc, binding };
+}
+
+function connect(a: Y.Doc, b: Y.Doc) {
+	a.on("update", (update, origin) => {
+		if (origin !== b) Y.applyUpdate(b, update, a);
+	});
+	b.on("update", (update, origin) => {
+		if (origin !== a) Y.applyUpdate(a, update, b);
+	});
+}
+
+async function settle(): Promise<void> {
+	for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0));
+}
 
 /** Defaults to a local, armed, settled keystroke; each case varies one thing. */
 function when(over: Partial<Parameters<typeof decide>[0]> = {}) {
@@ -57,6 +120,13 @@ describe("slash menu trigger", () => {
 		expect(at("/ |")).toBeUndefined();
 	});
 
+	it("keeps the multi-word web search alias reachable", () => {
+		expect(at("/web |")).toBe("web ");
+		expect(at("/web s|")).toBe("web s");
+		expect(at("/web search|")).toBe("web search");
+		expect(at("/web search more|")).toBeUndefined();
+	});
+
 	it("ignores slashes the caret has moved away from", () => {
 		// Editing earlier in a line that happens to contain a trigger.
 		expect(at("Deploy| /table")).toBeUndefined();
@@ -94,82 +164,133 @@ describe("slash menu commands", () => {
 		expect(opened).toBe(1);
 	});
 
-	it("inserts a durable reference at the selection saved before the request", async () => {
-		let schema = registry();
-		let editor = createHeadlessEditor({
-			nodes: schema.nodes,
-			onError: error => {
-				throw error;
-			},
-		});
-		let saved: RangeSelection | undefined;
-		editor.update(() => {
-			let text = $createTextNode("Before after");
-			$getRoot().append($createParagraphNode().append(text));
-			text.select(7, 7);
-			let selection = $getSelection();
-			if ($isRangeSelection(selection)) saved = selection.clone();
-		}, { discrete: true });
-		editor.update(() => $getRoot().selectEnd(), { discrete: true });
+	it("rebases the saved insertion point across preceding collaborative edits", async () => {
+		let a = peer();
+		let b = peer();
+		connect(a.doc, b.doc);
+		importPlan(a.editor, "Before after\n");
+		await settle();
 
-		let module = await import("./slash");
-		let insert = (module as unknown as {
+		let module = await import("./slash") as unknown as {
+			captureResearchPosition?: (binding: Binding) => Y.RelativePosition | undefined;
 			insertResearchReference?: (
 				editor: LexicalEditor,
-				selection: RangeSelection,
+				binding: Binding,
+				position: Y.RelativePosition,
 				id: string,
 			) => boolean;
-		}).insertResearchReference;
-		expect(typeof insert).toBe("function");
-		if (!insert || !saved) return;
-		expect(insert(editor, saved, "workspace-one")).toBe(true);
+		};
+		expect(typeof module.captureResearchPosition).toBe("function");
+		expect(typeof module.insertResearchReference).toBe("function");
+		if (!module.captureResearchPosition || !module.insertResearchReference) return;
+		let saved: Y.RelativePosition | undefined;
+		a.editor.update(() => {
+			let paragraph = $getRoot().getFirstChild();
+			let text = $isElementNode(paragraph) ? paragraph.getFirstChild() : undefined;
+			if (!$isTextNode(text)) return;
+			text.select(7, 7);
+			saved = module.captureResearchPosition?.(a.binding);
+		}, { discrete: true });
+		expect(saved).toBeDefined();
 
-		let source = exportPlan(editor, { registry: schema });
-		expect(source).toContain("Before");
-		expect(source).toContain('<Research id="workspace-one" />');
-		expect(source).toContain("after");
-		expect(source.indexOf("Before")).toBeLessThan(source.indexOf("<Research"));
-		expect(source.indexOf("<Research")).toBeLessThan(source.indexOf("after"));
+		b.editor.update(() => {
+			let paragraph = $getRoot().getFirstChild();
+			let text = $isElementNode(paragraph) ? paragraph.getFirstChild() : undefined;
+			if ($isRangeSelection($getSelection())) $getRoot().selectEnd();
+			if ($isTextNode(text)) text.setTextContent(`Earlier ${text.getTextContent()}`);
+			paragraph?.insertBefore($createParagraphNode().append($createTextNode("New block")));
+		}, { discrete: true });
+		await settle();
+
+		expect(module.insertResearchReference(
+			a.editor,
+			a.binding,
+			saved!,
+			"8f4d193b-2018-4977-b404-0092bb911676",
+		)).toBe(true);
+		await settle();
+		let source = exportPlan(a.editor);
+		expect(source).toBe(
+			'New block\n\nEarlier Before&#x20;\n\n<Research id="8f4d193b-2018-4977-b404-0092bb911676" />\n\nafter\n',
+		);
+		expect(exportPlan(b.editor)).toBe(source);
 	});
 
-	it("does not insert a dead reference when durable creation fails", async () => {
-		let schema = registry();
-		let editor = createHeadlessEditor({
-			nodes: schema.nodes,
-			onError: error => {
-				throw error;
-			},
-		});
-		let saved: RangeSelection | undefined;
-		editor.update(() => {
-			let text = $createTextNode("Keep this");
-			$getRoot().append($createParagraphNode().append(text));
-			text.selectEnd();
-			let selection = $getSelection();
-			if ($isRangeSelection(selection)) saved = selection.clone();
-		}, { discrete: true });
+	it("reports an insertion failure and reuses the created request at a new cursor", async () => {
+		let target = peer();
+		importPlan(target.editor, "Keep this\n");
+		await settle();
 		let module = await import("./slash");
 		let create = (module as unknown as {
 			createResearchReference?: (
 				editor: LexicalEditor,
-				selection: RangeSelection,
+				binding: Binding,
+				position: Y.RelativePosition,
 				question: string,
 				requestId: string,
 				persist: (question: string, requestId: string) => Promise<Research.RequestView>,
-			) => Promise<Research.RequestView>;
+			) => Promise<{ inserted: boolean; request: Research.RequestView }>;
 		}).createResearchReference;
 		expect(typeof create).toBe("function");
-		if (!create || !saved) return;
-		await expect(create(
-			editor,
-			saved,
+		if (!create) return;
+		let foreign = new Y.Doc();
+		let invalid = Y.createRelativePositionFromTypeIndex(foreign.getText("gone"), 0);
+		let calls = 0;
+		let request: Research.RequestView = {
+			id: "07aeae6d-073d-4560-a9f4-bb8e4d954a46",
+			channelId: "document-one",
+			question: "  Keep this brief exactly.  ",
+			state: "running",
+			stage: "queued",
+			sources: [],
+			createdAt: "2026-08-24T09:00:00.000Z",
+			updatedAt: "2026-08-24T09:00:00.000Z",
+		};
+		let result = await create(
+			target.editor,
+			target.binding,
+			invalid,
 			"  Keep this brief exactly.  ",
 			"request-one",
 			async () => {
-				throw new Error("offline");
+				calls++;
+				return request;
 			},
-		)).rejects.toThrow("offline");
-		expect(exportPlan(editor, { registry: schema })).toBe("Keep this\n");
+		);
+		expect(result).toEqual({ inserted: false, request });
+		expect(exportPlan(target.editor)).toBe("Keep this\n");
+
+		let saved: Y.RelativePosition | undefined;
+		target.editor.update(() => {
+			$getRoot().selectEnd();
+			saved = (module as unknown as {
+				captureResearchPosition(binding: Binding): Y.RelativePosition | undefined;
+			}).captureResearchPosition(target.binding);
+		}, { discrete: true });
+		expect((module as unknown as {
+			insertResearchReference(
+				editor: LexicalEditor,
+				binding: Binding,
+				position: Y.RelativePosition,
+				id: string,
+			): boolean;
+		}).insertResearchReference(target.editor, target.binding, saved!, request.id)).toBe(true);
+		expect(calls).toBe(1);
+		expect(exportPlan(target.editor)).toContain(`<Research id="${request.id}" />`);
+	});
+
+	it("restores editor focus when the research composer is dismissed", async () => {
+		let module = await import("./slash") as unknown as {
+			dismissResearchComposer?: (editor: Pick<LexicalEditor, "focus">, dismiss: () => void) => void;
+		};
+		expect(typeof module.dismissResearchComposer).toBe("function");
+		if (!module.dismissResearchComposer) return;
+		let calls: string[] = [];
+		module.dismissResearchComposer(
+			{ focus: () => calls.push("focus") },
+			() => calls.push("dismiss"),
+		);
+		expect(calls).toEqual(["dismiss", "focus"]);
 	});
 });
 

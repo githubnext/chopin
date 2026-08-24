@@ -25,16 +25,19 @@ type CardProps = {
 	request: Research.RequestView;
 	onCancel?: () => void;
 	onOpen?: () => void;
-	onRemove: () => void;
+	onRemove?: () => void;
 	onRetry?: () => void;
 };
 
 type ComposerProps = {
+	blocked?: string;
 	error?: string;
 	onCancel: () => void;
 	onChange: (value: string) => void;
+	onEscape?: () => void;
 	onSubmit: () => void;
 	question: string;
+	submitLabel?: string;
 	submitting?: boolean;
 };
 
@@ -76,6 +79,39 @@ describe("research composer", () => {
 		expect(markup).toContain("Cancel");
 		expect((markup.match(/textarea/g) ?? []).length).toBe(2);
 	});
+
+	it("explains why submission is unavailable without a collaboration anchor", async () => {
+		let { composer: Composer } = await components();
+		if (!Composer) return;
+		let markup = renderToStaticMarkup(createElement(Composer, {
+			question: BASE.question,
+			blocked: "Connect to the document before starting research.",
+			onCancel() {},
+			onChange() {},
+			onSubmit() {},
+		}));
+
+		expect(markup).toContain("Connect to the document before starting research.");
+		expect(markup).toMatch(/<button[^>]*disabled=""[^>]*type="submit"/);
+	});
+
+	it("turns Escape into a composer dismissal", async () => {
+		let module = await import("./research") as unknown as {
+			handleResearchComposerKey?: (
+				event: { key: string; preventDefault(): void; stopPropagation(): void },
+				onEscape: () => void,
+			) => void;
+		};
+		expect(typeof module.handleResearchComposerKey).toBe("function");
+		if (!module.handleResearchComposerKey) return;
+		let calls: string[] = [];
+		module.handleResearchComposerKey({
+			key: "Escape",
+			preventDefault: () => calls.push("prevent"),
+			stopPropagation: () => calls.push("stop"),
+		}, () => calls.push("escape"));
+		expect(calls).toEqual(["prevent", "stop", "escape"]);
+	});
 });
 
 describe("research card", () => {
@@ -93,7 +129,7 @@ describe("research card", () => {
 		expect(markup).toContain("Release notes");
 		expect(markup).toContain("https://example.com/releases");
 		expect(markup).toContain("Cancel research");
-		expect(markup).toContain("Remove research reference");
+		expect(markup).not.toContain("Remove research reference");
 		expect(markup).not.toContain("summary");
 	});
 
@@ -145,6 +181,48 @@ describe("research card", () => {
 });
 
 describe("research reference", () => {
+	it("defines one explicit state-to-actions policy", async () => {
+		let module = await import("./research");
+		let actions = (module as unknown as {
+			researchActions?: (
+				request: Research.RequestView | undefined,
+				canEdit: boolean,
+			) => { cancel: boolean; open: boolean; remove: boolean; retry: boolean };
+		}).researchActions;
+		expect(typeof actions).toBe("function");
+		if (!actions) return;
+		let expected: Array<[
+			Research.RequestStage | "loading",
+			{ cancel: boolean; open: boolean; remove: boolean; retry: boolean },
+		]> = [
+			["loading", { cancel: false, open: false, remove: false, retry: false }],
+			["queued", { cancel: true, open: false, remove: false, retry: false }],
+			["searching", { cancel: true, open: false, remove: false, retry: false }],
+			["analyzing", { cancel: true, open: false, remove: false, retry: false }],
+			["writing", { cancel: true, open: false, remove: false, retry: false }],
+			["publishing", { cancel: false, open: false, remove: false, retry: false }],
+			["failed", { cancel: false, open: false, remove: true, retry: true }],
+			["cancelled", { cancel: false, open: false, remove: true, retry: true }],
+			["ready", { cancel: false, open: true, remove: true, retry: false }],
+		];
+		for (let [stage, want] of expected) {
+			let request = stage === "loading" ? undefined : { ...BASE, stage };
+			expect(actions(request, true)).toEqual(want);
+		}
+		expect(actions({ ...BASE, stage: "ready" }, false)).toEqual({
+			cancel: false,
+			open: true,
+			remove: false,
+			retry: false,
+		});
+		expect(actions({ ...BASE, stage: "failed" }, false)).toEqual({
+			cancel: false,
+			open: false,
+			remove: false,
+			retry: false,
+		});
+	});
+
 	it("registers the dialect node renderer", async () => {
 		register();
 		let schema = registry();
@@ -186,6 +264,51 @@ describe("research reference", () => {
 		}));
 		expect(markup).toContain(BASE.question);
 		expect(markup).toContain("Searching");
+	});
+
+	it("subscribes safely to a class store whose method depends on this", async () => {
+		let module = await import("./research");
+		let subscribe = (module as unknown as {
+			subscribeResearch?: (store: Store, listener: () => void) => () => void;
+		}).subscribeResearch;
+		let Reference = (module as unknown as {
+			ResearchReference?: ComponentType<{ id: string; onRemove: () => void; store: Store }>;
+		}).ResearchReference;
+		expect(typeof subscribe).toBe("function");
+		expect(typeof Reference).toBe("function");
+		if (!Reference || !subscribe) return;
+		class ClassStore implements Store {
+			listeners = new Set<() => void>();
+			subscribe(listener: () => void) {
+				this.listeners.add(listener);
+				return () => this.listeners.delete(listener);
+			}
+			get() {
+				return BASE;
+			}
+			refresh() {}
+			async create() {
+				return BASE;
+			}
+			async cancel() {
+				return BASE;
+			}
+			async retry() {
+				return BASE;
+			}
+			open() {}
+		}
+		let store = new ClassStore();
+		let off = subscribe(store, () => {});
+		expect(store.listeners.size).toBe(1);
+		off();
+		expect(store.listeners.size).toBe(0);
+		let markup = renderToStaticMarkup(createElement(Reference, {
+			id: BASE.id,
+			onRemove() {},
+			store,
+		}));
+		expect(markup).toContain(BASE.question);
 	});
 
 	it("retries the same authoritative request with its exact question", async () => {

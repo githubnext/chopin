@@ -18,8 +18,12 @@ import {
 } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $copyBlockFormatIndent, $setBlocksType } from "@lexical/selection";
+import { $getAnchorAndFocusForUserState } from "@lexical/yjs";
 import {
+	$createRangeSelection,
+	$getNodeByKey,
 	$getSelection,
+	$isElementNode,
 	$isRangeSelection,
 	$isTextNode,
 	$setSelection,
@@ -36,6 +40,7 @@ import {
 	$createResearchNode,
 	$createTabNode,
 	$createTabsNode,
+	$isResearchNode,
 	DIFF_LANGUAGE,
 	IMAGE_PROTOCOLS,
 	MERMAID_LANGUAGE,
@@ -44,6 +49,7 @@ import {
 
 import { $createTableNodeWithDimensions } from "@lexical/table";
 import { $createParagraphNode, $createTextNode, $insertNodes } from "lexical";
+import * as Y from "yjs";
 
 import { askForUrl } from "./url";
 import { ResearchComposer } from "../widgets/research";
@@ -57,10 +63,13 @@ import {
 	SHELL,
 } from "./surface";
 
-import type { ElementNode, LexicalEditor, LexicalNode, RangeSelection } from "lexical";
+import type { Binding } from "@lexical/yjs";
+import type { ElementNode, LexicalEditor, LexicalNode } from "lexical";
 import type { Research } from "@chopin/protocol";
 import type { ResearchStore } from "../widget-options";
 import type { DOMRectLike, SurfacePlacement } from "./placement";
+
+const MULTI_WORD_COMMANDS = ["web search"];
 
 export type SlashCommand = {
 	id: string;
@@ -227,31 +236,101 @@ export function availableCommands(query: string): SlashCommand[] {
 	return COMMANDS.filter(command => match(command, query));
 }
 
-/** Insert after an async request using the document selection captured before it began. */
+/** Capture a document-safe insertion point before an asynchronous request begins. */
+export function captureResearchPosition(binding: Binding): Y.RelativePosition | undefined {
+	let selection = $getSelection();
+	if (!$isRangeSelection(selection) || !selection.isCollapsed()) return;
+	let point = selection.anchor;
+	let node = point.getNode();
+	let collab = binding.collabNodeMap.get(point.key);
+	if (!collab) return;
+
+	let shared = collab.getSharedType();
+	let offset = point.offset;
+	if ($isTextNode(node)) {
+		let parent = node.getParent();
+		let parentCollab = parent && binding.collabNodeMap.get(parent.getKey());
+		let currentOffset = collab.getOffset();
+		if (!parentCollab || currentOffset < 0) return;
+		shared = parentCollab.getSharedType();
+		offset = currentOffset + 1 + point.offset;
+	} else if ($isElementNode(node) && point.type === "element") {
+		offset = 0;
+		for (let child of node.getChildren().slice(0, point.offset)) {
+			offset += $isTextNode(child) ? child.getTextContentSize() + 1 : 1;
+		}
+	}
+	return Y.createRelativePositionFromTypeIndex(shared, offset);
+}
+
+/** Insert only when the saved collaborative position still resolves, and verify the result. */
 export function insertResearchReference(
 	editor: LexicalEditor,
-	selection: RangeSelection,
+	binding: Binding,
+	position: Y.RelativePosition,
 	id: string,
 ): boolean {
+	let key: string | undefined;
+	try {
+		editor.update(() => {
+			let resolved = $getAnchorAndFocusForUserState(binding, {
+				anchorPos: position,
+				focusPos: position,
+				color: "",
+				focusing: false,
+				name: "",
+				awarenessData: {},
+			});
+			if (!resolved.anchorKey || !resolved.focusKey) return;
+			let anchor = $getNodeByKey(resolved.anchorKey);
+			let focus = $getNodeByKey(resolved.focusKey);
+			if (!anchor || !focus) return;
+			let selection = $createRangeSelection();
+			selection.anchor.set(
+				resolved.anchorKey,
+				resolved.anchorOffset,
+				$isElementNode(anchor) ? "element" : "text",
+			);
+			selection.focus.set(
+				resolved.focusKey,
+				resolved.focusOffset,
+				$isElementNode(focus) ? "element" : "text",
+			);
+			$setSelection(selection);
+			let reference = $createResearchNode(id);
+			$insertNodes([reference]);
+			key = reference.getKey();
+		}, { discrete: true });
+	} catch {
+		return false;
+	}
+	if (!key) return false;
 	let inserted = false;
-	editor.update(() => {
-		$setSelection(selection.clone());
-		$insertNodes([$createResearchNode(id)]);
-		inserted = true;
-	}, { discrete: true });
+	editor.getEditorState().read(() => {
+		let reference = $getNodeByKey(key!);
+		inserted = $isResearchNode(reference) && reference.getId() === id && reference.isAttached();
+	});
 	return inserted;
 }
 
 export async function createResearchReference(
 	editor: LexicalEditor,
-	selection: RangeSelection,
+	binding: Binding,
+	position: Y.RelativePosition,
 	question: string,
 	requestId: string,
 	persist: (question: string, requestId: string) => Promise<Research.RequestView>,
-): Promise<Research.RequestView> {
+): Promise<{ inserted: boolean; request: Research.RequestView }> {
 	let request = await persist(question, requestId);
-	insertResearchReference(editor, selection, request.id);
-	return request;
+	return { inserted: insertResearchReference(editor, binding, position, request.id), request };
+}
+
+export function dismissResearchComposer(
+	editor: Pick<LexicalEditor, "focus">,
+	dismiss: () => void,
+) {
+	dismiss();
+	editor.focus();
 }
 
 /**
@@ -275,8 +354,12 @@ export function trigger(text: string, offset: number): string | undefined {
 	if (preceding !== undefined && !/\s/.test(preceding)) return undefined;
 
 	let query = before.slice(slash + 1);
-	// A space ends the trigger: the user moved on and is writing prose.
-	if (/\s/.test(query)) return undefined;
+	// Spaces continue only a known multi-word command. Ordinary prose still
+	// closes immediately, rather than leaving a menu over the sentence.
+	if (
+		/\s/.test(query)
+		&& !MULTI_WORD_COMMANDS.some(command => command.startsWith(query.toLowerCase()))
+	) return undefined;
 
 	return query;
 }
@@ -316,20 +399,22 @@ export function decide(
 }
 
 export type SlashMenuProps = {
+	binding?: Binding;
 	disabled?: boolean;
 	research?: ResearchStore;
 };
 
 type ResearchDraft = {
 	anchor: DOMRectLike;
-	selection: RangeSelection;
+	position?: Y.RelativePosition;
 	question: string;
+	created?: Research.RequestView;
 	submitted?: { question: string; requestId: string };
 	submitting?: boolean;
 	error?: string;
 };
 
-export function SlashMenu({ disabled, research }: SlashMenuProps) {
+export function SlashMenu({ binding, disabled, research }: SlashMenuProps) {
 	let [editor] = useLexicalComposerContext();
 	let [query, setQuery] = useState<string>();
 	let [anchor, setAnchor] = useState<DOMRectLike>();
@@ -382,8 +467,8 @@ export function SlashMenu({ disabled, research }: SlashMenuProps) {
 	 * Only that span: anything the user had already written after the caret
 	 * belongs to them, and truncating the line to the slash would eat it.
 	 */
-	let consume = useCallback((): RangeSelection | undefined => {
-		let saved: RangeSelection | undefined;
+	let consume = useCallback((): { position?: Y.RelativePosition } | undefined => {
+		let consumed: { position?: Y.RelativePosition } | undefined;
 		editor.update(() => {
 			let selection = $getSelection();
 			if (!$isRangeSelection(selection)) return;
@@ -398,20 +483,21 @@ export function SlashMenu({ disabled, research }: SlashMenuProps) {
 
 			let start = offset - typed.length - 1;
 			node.setTextContent(text.slice(0, start) + text.slice(offset));
-			saved = node.select(start, start).clone();
+			node.select(start, start);
+			consumed = { position: binding ? captureResearchPosition(binding) : undefined };
 		}, { discrete: true });
-		return saved;
-	}, [editor]);
+		return consumed;
+	}, [binding, editor]);
 
 	let choose = useCallback((command: SlashCommand) => {
-		let selection = consume();
+		let consumed = consume();
 		let placement = anchor;
 		close();
 		command.run(editor, {
-			research: research && selection && placement
+			research: research && consumed && placement
 				? () => {
 					setPosition(undefined);
-					setDraft({ anchor: placement, selection, question: "" });
+					setDraft({ anchor: placement, position: consumed.position, question: "" });
 				}
 				: undefined,
 		});
@@ -436,7 +522,7 @@ export function SlashMenu({ disabled, research }: SlashMenuProps) {
 		// Clears any query left behind by the lock, which would otherwise spring
 		// the menu open the moment an agent turn ends.
 		if (disabled) {
-			setDraft(undefined);
+			setDraft(current => current?.created ? current : undefined);
 			close();
 			return;
 		}
@@ -532,8 +618,42 @@ export function SlashMenu({ disabled, research }: SlashMenuProps) {
 	}, [editor, open, matches.length, close, choose]);
 
 	if (draft && research) {
+		let dismiss = () => dismissResearchComposer(editor, () => setDraft(undefined));
+		let currentPosition = () => {
+			if (!binding) return;
+			let found: Y.RelativePosition | undefined;
+			editor.getEditorState().read(() => {
+				found = captureResearchPosition(binding);
+			});
+			return found;
+		};
 		let submit = () => {
 			if (draft.submitting || !draft.question.trim()) return;
+			if (!binding) return;
+			if (draft.created) {
+				let position = currentPosition();
+				if (position && insertResearchReference(editor, binding, position, draft.created.id)) {
+					setDraft(undefined);
+					return;
+				}
+				setDraft(current =>
+					current && {
+						...current,
+						error: "Choose a new insertion point in the document, then place the research again.",
+					}
+				);
+				return;
+			}
+			let saved = draft.position ?? currentPosition();
+			if (!saved) {
+				setDraft(current =>
+					current && {
+						...current,
+						error: "Choose an insertion point in the document before starting research.",
+					}
+				);
+				return;
+			}
 			let submitted = draft.submitted?.question === draft.question
 				? draft.submitted
 				: { question: draft.question, requestId: crypto.randomUUID() };
@@ -547,11 +667,26 @@ export function SlashMenu({ disabled, research }: SlashMenuProps) {
 			);
 			void createResearchReference(
 				editor,
-				draft.selection,
+				binding,
+				saved,
 				submitted.question,
 				submitted.requestId,
 				(question, requestId) => research.create(question, requestId),
-			).then(() => setDraft(undefined)).catch(() =>
+			).then(result => {
+				if (result.inserted) {
+					setDraft(undefined);
+					return;
+				}
+				setDraft(current =>
+					current && {
+						...current,
+						created: result.request,
+						submitting: false,
+						error:
+							"Research started, but its reference could not be placed. Choose a new insertion point in the document.",
+					}
+				);
+			}).catch(() =>
 				setDraft(current =>
 					current && {
 						...current,
@@ -578,8 +713,13 @@ export function SlashMenu({ disabled, research }: SlashMenuProps) {
 					}}
 			>
 				<ResearchComposer
+					blocked={disabled
+						? "Wait until the document is editable before placing research."
+						: binding
+						? undefined
+						: "Connect to the document before starting research."}
 					error={draft.error}
-					onCancel={() => setDraft(undefined)}
+					onCancel={dismiss}
 					onChange={question =>
 						setDraft(current =>
 							current && {
@@ -589,8 +729,11 @@ export function SlashMenu({ disabled, research }: SlashMenuProps) {
 								submitted: current.question === question ? current.submitted : undefined,
 							}
 						)}
+					onEscape={dismiss}
 					onSubmit={submit}
 					question={draft.question}
+					questionLocked={!!draft.created}
+					submitLabel={draft.created ? "Place research here" : undefined}
 					submitting={draft.submitting}
 				/>
 			</div>
