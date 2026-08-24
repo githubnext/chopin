@@ -34,10 +34,11 @@ describe("the Figma navigation chrome", () => {
 			onAddProject: () => {},
 			onCollapse: () => {},
 			onCreateDocument: () => {},
+			onDocumentAction: () => {},
 			onLoadMore: () => {},
 			onNewDocument: () => {},
-			onRenameDocument: () => {},
 			onSearch: () => {},
+			onShowArchivedChange: () => {},
 			projects: [{
 				documents: { status: "ready", channels: [] },
 				project: {
@@ -56,6 +57,7 @@ describe("the Figma navigation chrome", () => {
 					},
 				},
 			}],
+			showArchived: false,
 			user: { avatarUrl: "/user.png", id: "user-one", login: "MaggieAppleton" },
 		}));
 
@@ -93,11 +95,13 @@ describe("the Figma navigation chrome", () => {
 			onAddProject: () => {},
 			onCollapse: () => {},
 			onCreateDocument: () => {},
+			onDocumentAction: () => {},
 			onLoadMore: () => {},
 			onNewDocument: () => {},
-			onRenameDocument: () => {},
 			onSearch: () => {},
+			onShowArchivedChange: () => {},
 			projects: [],
+			showArchived: false,
 			user: { avatarUrl: "", id: "user-one", login: "MaggieAppleton" },
 		} satisfies ComponentProps<typeof ProjectSidebar>;
 		let closed = renderToStaticMarkup(createElement(ProjectSidebar, props));
@@ -119,10 +123,11 @@ describe("the Figma navigation chrome", () => {
 			onAddProject: () => {},
 			onCollapse: () => {},
 			onCreateDocument: () => {},
+			onDocumentAction: () => {},
 			onLoadMore: () => {},
 			onNewDocument: () => {},
-			onRenameDocument: () => {},
 			onSearch: () => {},
+			onShowArchivedChange: () => {},
 			projects: [{
 				documents: { status: "ready", channels: [], nextCursor: "next-page" },
 				project: {
@@ -133,6 +138,7 @@ describe("the Figma navigation chrome", () => {
 					repositoryOwner: "MaggieAppleton",
 				},
 			}],
+			showArchived: false,
 			user: { avatarUrl: "", id: "user-one", login: "MaggieAppleton" },
 		}));
 
@@ -141,17 +147,17 @@ describe("the Figma navigation chrome", () => {
 
 	test("keeps the document header to one project icon and document trigger", () => {
 		let props = {
-			canEdit: true,
+			canManage: true,
 			label: "Hushed mountain",
 			members: [{ handle: "MaggieAppleton", client: "tab-one" }],
-			onRename: () => {},
+			onAction: () => {},
 		};
 		let markup = renderToStaticMarkup(createElement(Header, props));
 
 		expect(markup).toMatch(/class="opacity-50"[^>]*src="[^"]*book-bookmark\.svg"/);
 		expect(markup).not.toContain('src="/repository.png"');
 		expect(markup).toContain('aria-label="Document: Hushed mountain"');
-		expect(markup).toContain('aria-label="Rename Hushed mountain"');
+		expect(markup).toContain('aria-label="Actions for Hushed mountain"');
 		expect(markup).toContain("gap-0.5");
 		expect(markup).toContain("lg:h-[calc(50px+env(safe-area-inset-top))]");
 		expect(markup).toContain('style="width:24px;height:24px"');
@@ -159,5 +165,21 @@ describe("the Figma navigation chrome", () => {
 		expect(markup).not.toContain('aria-label="Repository:');
 		expect(markup).not.toContain('href="/"');
 		expect(markup).not.toContain("hairline-b");
+	});
+
+	test("labels archived headers while keeping management actions from viewers", () => {
+		let props = {
+			archivedAt: "2026-08-23T00:00:00.000Z",
+			label: "Archived brief",
+			members: [],
+			onAction: () => {},
+		};
+		let manager = renderToStaticMarkup(createElement(Header, { ...props, canManage: true }));
+		let viewer = renderToStaticMarkup(createElement(Header, { ...props, canManage: false }));
+
+		expect(manager).toContain("Archived, read-only");
+		expect(manager).toContain('aria-label="Actions for Archived brief"');
+		expect(viewer).toContain("Archived, read-only");
+		expect(viewer).not.toContain('aria-label="Actions for Archived brief"');
 	});
 });

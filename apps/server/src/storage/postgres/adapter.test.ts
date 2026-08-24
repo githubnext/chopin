@@ -44,10 +44,10 @@ if (url) {
 		let storage = new PostgresStorage(url);
 		let suffix = crypto.randomUUID();
 		let channelId = `job-channel-${suffix}`;
+		let userId = `job-user-${suffix}`;
 		try {
 			await storage.migrate();
 			let now = new Date();
-			let userId = `job-user-${suffix}`;
 			await storage.users.put({ id: userId, login: "jobs", avatarUrl: "", now });
 			await storage.channels.create({
 				id: channelId,
@@ -133,14 +133,19 @@ if (url) {
 				now: new Date(now.getTime() + 6),
 				lease: lease!,
 			});
+			await storage.navigation.setLastDocument(userId, channelId, new Date(now.getTime() + 7));
+			await storage.channels.archive({ id: channelId, now: new Date(now.getTime() + 8) });
+			expect(await storage.channels.delete(channelId)).toBe(true);
 		} finally {
 			await storage.close();
 		}
 
 		let sql = new SQL(url);
 		try {
-			await sql`DELETE FROM channels WHERE id = ${channelId}`;
 			let [counts] = await sql<{
+				documents: number;
+				slugs: number;
+				state: number;
 				channels: number;
 				targets: number;
 				jobs: number;
@@ -148,17 +153,25 @@ if (url) {
 				workspaces: number;
 				turns: number;
 				messages: number;
+				navigationRows: number;
 			}[]>`
 				SELECT
+					(SELECT count(*)::int FROM channels WHERE id = ${channelId}) AS documents,
+					(SELECT count(*)::int FROM channel_slugs WHERE channel_id = ${channelId}) AS slugs,
+					(SELECT count(*)::int FROM channel_state WHERE channel_id = ${channelId}) AS state,
 					(SELECT count(*)::int FROM background_job_channels WHERE channel_id = ${channelId}) AS channels,
 					(SELECT count(*)::int FROM background_job_targets WHERE channel_id = ${channelId}) AS targets,
 					(SELECT count(*)::int FROM background_jobs WHERE channel_id = ${channelId}) AS jobs,
 					(SELECT count(*)::int FROM background_job_artifacts WHERE job_id = ${`job-${suffix}`}) AS artifacts,
 					(SELECT count(*)::int FROM research_workspaces WHERE channel_id = ${channelId}) AS workspaces,
 					(SELECT count(*)::int FROM research_turns WHERE workspace_id = ${`workspace-${suffix}`}) AS turns,
-					(SELECT count(*)::int FROM research_messages WHERE workspace_id = ${`workspace-${suffix}`}) AS messages
+					(SELECT count(*)::int FROM research_messages WHERE workspace_id = ${`workspace-${suffix}`}) AS messages,
+					(SELECT count(*)::int FROM user_navigation WHERE user_id = ${userId} AND last_document_id IS NULL) AS "navigationRows"
 			`;
 			expect(counts).toEqual({
+				documents: 0,
+				slugs: 0,
+				state: 0,
 				channels: 0,
 				targets: 0,
 				jobs: 0,
@@ -166,6 +179,7 @@ if (url) {
 				workspaces: 0,
 				turns: 0,
 				messages: 0,
+				navigationRows: 1,
 			});
 		} finally {
 			await sql.close();
@@ -445,6 +459,7 @@ if (url) {
 				"007_research_workspaces",
 				"008_research_repository_listing",
 				"009_navigation_revision",
+				"010_document_archival",
 			]);
 			expect(await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`)
 				.toEqual([

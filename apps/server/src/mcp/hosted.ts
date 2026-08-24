@@ -11,9 +11,15 @@ import { implementationLifecycle } from "../tasks/lifecycle";
 
 import type { HostedAuth } from "../auth/routes";
 import type { GitHubUser } from "../github/client";
-import type { Implementation, ImplementationInput, McpOptions, RenameDocumentInput } from "../mcp";
+import type {
+	DocumentSummary,
+	Implementation,
+	ImplementationInput,
+	McpOptions,
+	RenameDocumentInput,
+} from "../mcp";
 import type { LifecycleArguments } from "./lifecycle";
-import type { ChannelRecord, Lease } from "../storage/model";
+import type { ChannelArchiveResult, ChannelRecord, Lease } from "../storage/model";
 import type { ClaimResult, Run } from "../tasks/graphs";
 
 export type HostedCaller = {
@@ -23,6 +29,10 @@ export type HostedCaller = {
 
 export type ImplementationPersistence = { lease(): Lease };
 export type HostedCallbacks = {
+	archiveChannel?: (channelId: string, now: Date) => Promise<ChannelArchiveResult>;
+	restoreChannel?: (channelId: string, now: Date) => Promise<ChannelArchiveResult>;
+	isChannelDeleting?: (channelId: string) => boolean;
+	serializeDocument?: <T>(channelId: string, action: () => Promise<T>) => Promise<T>;
 	onChannelRenamed?: (channel: ChannelRecord) => void;
 	onDocumentPersisted?: (target: Plan.DocumentTarget) => void;
 };
@@ -35,12 +45,22 @@ type Document = {
 	creation?: Plan.CreationMetadata;
 	source: string;
 	revision: number;
+	archivedAt?: Date;
 	url?: string;
 };
 
-type PublicDocument = Omit<Document, "creation" | "url"> & {
+type PublicDocument = Omit<Document, "archivedAt" | "creation" | "url"> & {
 	brief?: Plan.CreationMetadata["brief"];
+	archivedAt?: string;
 };
+
+function summary(channel: ChannelRecord): DocumentSummary {
+	return {
+		id: channel.id,
+		title: channel.title,
+		...(channel.archivedAt ? { archivedAt: channel.archivedAt.toISOString() } : {}),
+	};
+}
 
 /** Strip durable idempotency and repository provenance from MCP responses. */
 function document(value: Document & { url: string }): PublicDocument & { url: string };
@@ -52,6 +72,7 @@ function document(value: Document): PublicDocument & { url?: string } {
 		...(value.creation ? { brief: value.creation.brief } : {}),
 		source: value.source,
 		revision: value.revision,
+		...(value.archivedAt ? { archivedAt: value.archivedAt.toISOString() } : {}),
 		...(value.url ? { url: value.url } : {}),
 	};
 }
@@ -82,6 +103,7 @@ function exposed(
 			creation: state.creation,
 			source: state.source,
 			revision: state.revision,
+			archivedAt: channel.archivedAt,
 		}),
 		repository: {
 			name: state.creation.origin.repository,
@@ -157,6 +179,18 @@ export function hosted(
 		return { channel, repository };
 	}
 
+	async function writableChannel(caller: HostedCaller, locator: string) {
+		let located = await locatedChannel(caller, locator);
+		if (!located || located === "forbidden") return { kind: "unavailable" as const };
+		if (callbacks.isChannelDeleting?.(located.channel.id)) {
+			return { kind: "unavailable" as const };
+		}
+		if (!located.repository.permissions.push && !located.repository.permissions.admin) {
+			return { kind: "forbidden" as const };
+		}
+		return { kind: "allowed" as const, ...located };
+	}
+
 	function run(caller: HostedCaller, input: ImplementationInput): Run {
 		return {
 			id: crypto.randomUUID(),
@@ -173,6 +207,10 @@ export function hosted(
 		};
 	}
 
+	function serializeDocument<T>(channelId: string, action: () => Promise<T>): Promise<T> {
+		return callbacks.serializeDocument?.(channelId, action) ?? action();
+	}
+
 	return {
 		async caller(request) {
 			let match = request.headers.get("authorization")?.match(BEARER);
@@ -186,7 +224,7 @@ export function hosted(
 			}
 		},
 		documents: {
-			async list(caller, repository) {
+			async list(caller, repository, includeArchived = false) {
 				let parts = repository.split("/");
 				if (parts.length !== 2 || !parts[0] || !parts[1]) return "forbidden";
 				let resolved = await directRepository(caller, parts[0], parts[1]);
@@ -195,11 +233,13 @@ export function hosted(
 				let documents = [];
 				let cursor;
 				do {
-					let page = await auth.storage.channels.scan(resolved.id, 100, cursor);
-					documents.push(...page.channels.map(channel => ({
-						id: channel.id,
-						title: channel.title,
-					})));
+					let page = await auth.storage.channels.scan(
+						resolved.id,
+						100,
+						cursor,
+						includeArchived,
+					);
+					documents.push(...page.channels.map(summary));
 					cursor = page.next;
 				} while (cursor);
 				return documents;
@@ -218,6 +258,7 @@ export function hosted(
 							creation: live.creation,
 							source: Plan.source(live),
 							revision: live.revision,
+							archivedAt: channel.archivedAt,
 						});
 					} catch {
 						return undefined;
@@ -240,6 +281,7 @@ export function hosted(
 						creation: projected.creation,
 						source: projected.source,
 						revision: projected.revision,
+						archivedAt: channel.archivedAt,
 					});
 				} catch {
 					return undefined;
@@ -248,38 +290,82 @@ export function hosted(
 		},
 		rename: {
 			async rename(caller, input: RenameDocumentInput) {
-				let channel = await auth.storage.channels.get(input.id);
-				if (!channel) return { kind: "missing" as const };
-				let repository = await directRepository(
-					caller,
-					channel.repositoryOwner,
-					channel.repositoryName,
-				);
-				if (
-					!repository
-					|| repository.id !== channel.repositoryId
-					|| !repository.permissions.pull
-				) return { kind: "missing" as const };
-				if (!repository.permissions.push && !repository.permissions.admin) {
+				let access = await writableChannel(caller, input.id);
+				if (access.kind === "unavailable") return access;
+				if (access.kind === "forbidden") {
 					return { kind: "forbidden" as const };
 				}
+				if (access.channel.archivedAt) return { kind: "archived" as const };
 				try {
 					let result = await auth.storage.channels.rename({
-						id: channel.id,
+						id: access.channel.id,
 						title: input.title,
 						now: auth.clock(),
 					});
 					if (result.changed) callbacks.onChannelRenamed?.(result.channel);
 					return {
 						kind: result.changed ? "renamed" as const : "unchanged" as const,
-						document: { id: result.channel.id, title: result.channel.title },
+						document: summary(result.channel),
 					};
 				} catch (err) {
 					if (err instanceof StorageError && err.failure === "conflict") {
+						let current = await auth.storage.channels.get(input.id);
+						if (!current || callbacks.isChannelDeleting?.(input.id)) {
+							return { kind: "unavailable" as const };
+						}
+						if (current.archivedAt) return { kind: "archived" as const };
 						return { kind: "conflict" as const };
 					}
 					if (err instanceof StorageError && err.failure === "missing") {
-						return { kind: "missing" as const };
+						return { kind: "unavailable" as const };
+					}
+					throw err;
+				}
+			},
+		},
+		archive: {
+			async archive(caller, id) {
+				let access = await writableChannel(caller, id);
+				if (access.kind !== "allowed") return access;
+				try {
+					let now = auth.clock();
+					let result = callbacks.archiveChannel
+						? await callbacks.archiveChannel(access.channel.id, now)
+						: await auth.storage.channels.archive({ id: access.channel.id, now });
+					if (!result.channel.archivedAt) {
+						throw new Error("archiving a document returned active metadata");
+					}
+					return {
+						kind: result.changed ? "archived" as const : "unchanged" as const,
+						document: summary(result.channel),
+					};
+				} catch (err) {
+					if (err instanceof StorageError && err.failure === "missing") {
+						return { kind: "unavailable" as const };
+					}
+					throw err;
+				}
+			},
+		},
+		restore: {
+			async restore(caller, id) {
+				let access = await writableChannel(caller, id);
+				if (access.kind !== "allowed") return access;
+				try {
+					let now = auth.clock();
+					let result = callbacks.restoreChannel
+						? await callbacks.restoreChannel(access.channel.id, now)
+						: await auth.storage.channels.restore({ id: access.channel.id, now });
+					if (result.channel.archivedAt) {
+						throw new Error("restoring a document returned archived metadata");
+					}
+					return {
+						kind: result.changed ? "restored" as const : "unchanged" as const,
+						document: summary(result.channel),
+					};
+				} catch (err) {
+					if (err instanceof StorageError && err.failure === "missing") {
+						return { kind: "unavailable" as const };
 					}
 					throw err;
 				}
@@ -293,6 +379,8 @@ export function hosted(
 				if (!repository || (!repository.permissions.push && !repository.permissions.admin)) {
 					return { kind: "forbidden" };
 				}
+				let id = deterministicChannelId(repository.id, input.idempotencyKey);
+				if (callbacks.isChannelDeleting?.(id)) return { kind: "unavailable" };
 				await auth.storage.users.put({
 					id: caller.user.id,
 					login: caller.user.login,
@@ -302,7 +390,6 @@ export function hosted(
 				let { brief, plan, ...origin } = input;
 				let creation: Plan.CreationMetadata = { brief, origin };
 				let initial = await Plan.initial(plan, creation);
-				let id = deterministicChannelId(repository.id, input.idempotencyKey);
 				let created: ChannelRecord;
 				try {
 					created = await auth.storage.channels.create({
@@ -317,6 +404,7 @@ export function hosted(
 					});
 				} catch (err) {
 					if (!(err instanceof StorageError) || err.failure !== "conflict") throw err;
+					if (callbacks.isChannelDeleting?.(id)) return { kind: "unavailable" };
 					let stored = await auth.storage.collaboration.load(id, auth.clock());
 					if (!stored || stored.channel.repositoryId !== repository.id) {
 						return { kind: "conflict" };
@@ -341,6 +429,7 @@ export function hosted(
 							creation: restored.creation,
 							source: restored.source,
 							revision: restored.revision,
+							archivedAt: stored.channel.archivedAt,
 							url: documentPath(
 								repository.owner,
 								repository.name,
@@ -391,130 +480,134 @@ export function hosted(
 						return stored ? exposed(channel, await Plan.readStored(stored)) : undefined;
 					},
 					async startImplementation(caller: HostedCaller, input: ImplementationInput) {
-						let channel = await auth.storage.channels.get(input.id);
-						if (
-							!channel
-							|| `${channel.repositoryOwner}/${channel.repositoryName}` !== input.repository
-						) {
-							return { kind: "forbidden" as const };
-						}
-						let repository = await directRepository(
-							caller,
-							channel.repositoryOwner,
-							channel.repositoryName,
-						);
-						if (
-							!repository
-							|| repository.id !== channel.repositoryId
-							|| (!repository.permissions.push && !repository.permissions.admin)
-						) return { kind: "forbidden" as const };
-						let claimRun = run(caller, input);
-						let live = Rooms.get(input.id)?.plan;
-						if (live) {
-							return claimResult(
-								await claimImplementation(live, {
+						return serializeDocument(input.id, async () => {
+							let access = await writableChannel(caller, input.id);
+							if (access.kind !== "allowed") return access;
+							let channel = access.channel;
+							if (`${channel.repositoryOwner}/${channel.repositoryName}` !== input.repository) {
+								return { kind: "forbidden" as const };
+							}
+							if (channel.archivedAt) {
+								return { kind: "refused" as const, reason: "document-archived" };
+							}
+							let claimRun = run(caller, input);
+							let live = Rooms.get(input.id)?.plan;
+							if (live) {
+								return claimResult(
+									await claimImplementation(live, {
+										planRevision: input.planRevision,
+										graphRevision: input.graphRevision,
+										run: claimRun,
+									}),
+								);
+							}
+							for (let attempt = 0; attempt < 2; attempt++) {
+								if (callbacks.isChannelDeleting?.(input.id)) {
+									return { kind: "unavailable" as const };
+								}
+								let stored = await auth.storage.collaboration.load(input.id, auth.clock());
+								if (!stored) return { kind: "unavailable" as const };
+								if (stored.channel.archivedAt) {
+									return { kind: "refused" as const, reason: "document-archived" };
+								}
+								if (!stored.snapshot) return { kind: "refused" as const, reason: "missing" };
+								let prepared = Plan.claimStored(stored, {
 									planRevision: input.planRevision,
 									graphRevision: input.graphRevision,
 									run: claimRun,
-								}),
-							);
-						}
-						for (let attempt = 0; attempt < 2; attempt++) {
-							let stored = await auth.storage.collaboration.load(input.id, auth.clock());
-							if (!stored?.snapshot) return { kind: "refused" as const, reason: "missing" };
-							let prepared = Plan.claimStored(stored, {
-								planRevision: input.planRevision,
-								graphRevision: input.graphRevision,
-								run: claimRun,
-							});
-							if (prepared.result.kind !== "started" || !prepared.sidecar) {
-								return claimResult(prepared.result);
-							}
-							try {
-								await auth.storage.collaboration.commit({
-									channelId: input.id,
-									lease: persistence.lease(),
-									expectedRevision: stored.channel.revision,
-									operationId: `implementation:${claimRun.id}`,
-									epoch: stored.snapshot.epoch,
-									sidecar: prepared.sidecar,
-									events: [],
-									now: auth.clock(),
 								});
-								return claimResult(prepared.result);
-							} catch (err) {
-								if (!(err instanceof StorageError) || err.failure !== "conflict") throw err;
+								if (prepared.result.kind !== "started" || !prepared.sidecar) {
+									return claimResult(prepared.result);
+								}
+								try {
+									await auth.storage.collaboration.commit({
+										channelId: input.id,
+										lease: persistence.lease(),
+										expectedRevision: stored.channel.revision,
+										operationId: `implementation:${claimRun.id}`,
+										epoch: stored.snapshot.epoch,
+										sidecar: prepared.sidecar,
+										events: [],
+										now: auth.clock(),
+									});
+									return claimResult(prepared.result);
+								} catch (err) {
+									if (err instanceof StorageError && err.failure === "missing") {
+										return { kind: "unavailable" as const };
+									}
+									if (!(err instanceof StorageError) || err.failure !== "conflict") throw err;
+								}
 							}
-						}
-						return { kind: "refused" as const, reason: "conflict" };
+							return { kind: "refused" as const, reason: "conflict" };
+						});
 					},
 					async reportLifecycle(caller: HostedCaller, input: LifecycleArguments) {
-						let channel = await auth.storage.channels.get(input.id);
-						if (!channel) return { kind: "forbidden" as const };
-						let repository = await directRepository(
-							caller,
-							channel.repositoryOwner,
-							channel.repositoryName,
-						);
-						if (
-							!repository
-							|| repository.id !== channel.repositoryId
-							|| (!repository.permissions.push && !repository.permissions.admin)
-						) return { kind: "forbidden" as const };
-						let { id: _id, ...event } = input;
-						let live = Rooms.get(input.id)?.plan;
-						if (live) {
-							let result = await reportImplementationLifecycle(live, event);
-							if (result.kind === "refused") return result;
-							return {
-								kind: result.kind,
-								lifecycle: implementationLifecycle({
-									graph: result.state.graph,
-									execution: result.state.execution,
-									lifecycle: result.state.lifecycle,
-								}),
-							};
-						}
-						for (let attempt = 0; attempt < 2; attempt++) {
-							let stored = await auth.storage.collaboration.load(input.id, auth.clock());
-							if (!stored?.snapshot) return { kind: "refused" as const, reason: "inactive" };
-							let prepared = Plan.lifecycleStored(stored, event);
-							if (prepared.result.kind === "refused") return prepared.result;
-							if (prepared.result.kind === "replayed") {
+						return serializeDocument(input.id, async () => {
+							let access = await writableChannel(caller, input.id);
+							if (access.kind !== "allowed") return access;
+							let { id: _id, ...event } = input;
+							let live = Rooms.get(input.id)?.plan;
+							if (live) {
+								let result = await reportImplementationLifecycle(live, event);
+								if (result.kind === "refused") return result;
 								return {
-									kind: "replayed" as const,
+									kind: result.kind,
 									lifecycle: implementationLifecycle({
-										graph: prepared.result.state.graph,
-										execution: prepared.result.state.execution,
-										lifecycle: prepared.result.state.lifecycle,
+										graph: result.state.graph,
+										execution: result.state.execution,
+										lifecycle: result.state.lifecycle,
 									}),
 								};
 							}
-							if (!prepared.sidecar) return { kind: "refused" as const, reason: "inactive" };
-							try {
-								await auth.storage.collaboration.commit({
-									channelId: input.id,
-									lease: persistence.lease(),
-									expectedRevision: stored.channel.revision,
-									operationId: `lifecycle:${input.idempotencyKey}`,
-									epoch: stored.snapshot.epoch,
-									sidecar: prepared.sidecar,
-									events: [],
-									now: auth.clock(),
-								});
-								return {
-									kind: "accepted" as const,
-									lifecycle: implementationLifecycle({
-										graph: prepared.result.state.graph,
-										execution: prepared.result.state.execution,
-										lifecycle: prepared.result.state.lifecycle,
-									}),
-								};
-							} catch (err) {
-								if (!(err instanceof StorageError) || err.failure !== "conflict") throw err;
+							for (let attempt = 0; attempt < 2; attempt++) {
+								if (callbacks.isChannelDeleting?.(input.id)) {
+									return { kind: "unavailable" as const };
+								}
+								let stored = await auth.storage.collaboration.load(input.id, auth.clock());
+								if (!stored) return { kind: "unavailable" as const };
+								if (!stored.snapshot) return { kind: "refused" as const, reason: "inactive" };
+								let prepared = Plan.lifecycleStored(stored, event);
+								if (prepared.result.kind === "refused") return prepared.result;
+								if (prepared.result.kind === "replayed") {
+									return {
+										kind: "replayed" as const,
+										lifecycle: implementationLifecycle({
+											graph: prepared.result.state.graph,
+											execution: prepared.result.state.execution,
+											lifecycle: prepared.result.state.lifecycle,
+										}),
+									};
+								}
+								if (!prepared.sidecar) return { kind: "refused" as const, reason: "inactive" };
+								try {
+									await auth.storage.collaboration.commit({
+										channelId: input.id,
+										lease: persistence.lease(),
+										expectedRevision: stored.channel.revision,
+										operationId: `lifecycle:${input.idempotencyKey}`,
+										epoch: stored.snapshot.epoch,
+										sidecar: prepared.sidecar,
+										events: [],
+										now: auth.clock(),
+										allowArchived: true,
+									});
+									return {
+										kind: "accepted" as const,
+										lifecycle: implementationLifecycle({
+											graph: prepared.result.state.graph,
+											execution: prepared.result.state.execution,
+											lifecycle: prepared.result.state.lifecycle,
+										}),
+									};
+								} catch (err) {
+									if (err instanceof StorageError && err.failure === "missing") {
+										return { kind: "unavailable" as const };
+									}
+									if (!(err instanceof StorageError) || err.failure !== "conflict") throw err;
+								}
 							}
-						}
-						return { kind: "refused" as const, reason: "conflict" };
+							return { kind: "refused" as const, reason: "conflict" };
+						});
 					},
 				},
 			}

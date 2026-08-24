@@ -29,7 +29,7 @@ function protectedResponse(response: Response): Response {
 	});
 }
 
-/** Register the hosted, read-only MCP endpoint. */
+/** Register the hosted MCP endpoint. */
 export function registerMcpRoutes(
 	router: Router,
 	auth: HostedAuth,

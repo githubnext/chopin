@@ -122,7 +122,9 @@ export class PostgresNavigationStore implements NavigationStore {
 				FROM users
 				LEFT JOIN user_projects ON user_projects.user_id = users.id
 				LEFT JOIN user_navigation ON user_navigation.user_id = users.id
-				LEFT JOIN channels AS selected ON selected.id = user_navigation.last_document_id
+				LEFT JOIN channels AS selected
+					ON selected.id = user_navigation.last_document_id
+					AND selected.archived_at IS NULL
 				WHERE users.id = ${userId}
 				ORDER BY user_projects.position ASC
 			`;
@@ -187,6 +189,7 @@ export class PostgresNavigationStore implements NavigationStore {
 					SELECT channels.id
 					FROM channels
 					WHERE channels.repository_id = user_projects.repository_id
+						AND channels.archived_at IS NULL
 					ORDER BY channels.updated_at DESC, channels.id ASC
 					LIMIT 1
 				) AS selected
@@ -222,7 +225,11 @@ export class PostgresNavigationStore implements NavigationStore {
 		documentId: string | undefined,
 		now: Date,
 	): Promise<UserNavigation> =>
-		this.#run("save navigation", () => this.#saveNavigation(this.#sql, userId, documentId, now));
+		this.#run("save navigation", () =>
+			this.#sql.begin(async transaction => {
+				if (documentId) await this.#requireActiveDocument(transaction, documentId);
+				return this.#saveNavigation(transaction, userId, documentId, now);
+			}));
 
 	readonly setLastDocumentIfCurrent = (
 		userId: string,
@@ -232,6 +239,7 @@ export class PostgresNavigationStore implements NavigationStore {
 	): Promise<CompareNavigationResult> =>
 		this.#run("compare and save navigation", () =>
 			this.#sql.begin(async transaction => {
+				if (documentId) await this.#requireActiveDocument(transaction, documentId);
 				let saved: NavigationRow | undefined;
 				if (expectedRevision === undefined) {
 					[saved] = await transaction<NavigationRow[]>`
@@ -280,6 +288,7 @@ export class PostgresNavigationStore implements NavigationStore {
 			JOIN channels
 				ON channels.id = ${input.documentId}
 				AND channels.repository_id = user_projects.repository_id
+				AND channels.archived_at IS NULL
 			WHERE user_projects.user_id = ${input.userId}
 				AND user_projects.repository_id = ${input.repositoryId}
 			ON CONFLICT (user_id) DO UPDATE SET
@@ -355,11 +364,24 @@ export class PostgresNavigationStore implements NavigationStore {
 		documentId: string,
 		repositoryId: string,
 	): Promise<void> {
-		let [found] = await transaction<{ id: string }[]>`
-			SELECT id FROM channels
-			WHERE id = ${documentId} AND repository_id = ${repositoryId}
+		await this.#requireActiveDocument(transaction, documentId, repositoryId);
+	}
+
+	async #requireActiveDocument(
+		transaction: TransactionSQL,
+		documentId: string,
+		repositoryId?: string,
+	): Promise<void> {
+		let [found] = await transaction<{ archivedAt: Timestamp | null }[]>`
+			SELECT archived_at AS "archivedAt" FROM channels
+			WHERE id = ${documentId}
+				AND (${repositoryId === undefined} OR repository_id = ${repositoryId ?? ""})
 			FOR KEY SHARE
 		`;
-		if (!found) throw missing(`channel ${documentId} does not exist in repository ${repositoryId}`);
+		if (!found) {
+			let suffix = repositoryId ? ` in repository ${repositoryId}` : "";
+			throw missing(`channel ${documentId} does not exist${suffix}`);
+		}
+		if (found.archivedAt !== null) throw conflict(`channel ${documentId} is archived`);
 	}
 }

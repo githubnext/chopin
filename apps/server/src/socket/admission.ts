@@ -12,6 +12,10 @@ export async function admit(
 	request: Request,
 	url: URL,
 	auth: HostedAuth,
+	options: {
+		deleting?: (channelId: string) => boolean;
+		readOnly?: (channelId: string) => boolean;
+	} = {},
 ): Promise<Admission> {
 	try {
 		let probe = request.headers.get("x-chopin-socket-probe") === "1"
@@ -23,6 +27,7 @@ export async function admit(
 		if (!session) return { status: 401, reason: "authentication required" };
 		let id = (url.searchParams.get("channel") || "").toLowerCase();
 		if (!isChannelId(id)) return { status: 400, reason: "bad channel" };
+		if (options.deleting?.(id)) return { status: 404, reason: "channel not found" };
 		let channel = await auth.storage.channels.get(id);
 		if (!channel) return { status: 404, reason: "channel not found" };
 		let access = await auth.sessions.use(
@@ -40,15 +45,20 @@ export async function admit(
 		}
 		let credential = auth.sessions.credential(request);
 		if (!credential) return { status: 401, reason: "authentication required" };
+		let canManage = repository.permissions.push || repository.permissions.admin;
 		return {
 			data: {
 				room: channel.id,
 				channelTitle: channel.title,
 				channelSlug: channel.slug,
 				channelUpdatedAt: channel.updatedAt.toISOString(),
+				...(channel.archivedAt
+					? { channelArchivedAt: channel.archivedAt.toISOString() }
+					: {}),
 				handle: session.user.login,
 				client: uid(),
-				canEdit: repository.permissions.push || repository.permissions.admin,
+				canEdit: canManage && !channel.archivedAt && !options.readOnly?.(channel.id),
+				canManage,
 				principalId: session.user.id,
 				sessionId: session.session.id,
 				authorizedUntil: session.session.expiresAt.getTime(),

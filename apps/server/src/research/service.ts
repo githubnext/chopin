@@ -513,6 +513,7 @@ export class ResearchWorkspaceService {
 	async listRepository(
 		repositoryId: string,
 		limit = RESEARCH_REPOSITORY_WORKSPACE_LIMIT,
+		includeArchived = false,
 	): Promise<RepositoryResearchWorkspaceList> {
 		opaqueId(repositoryId, "Repository id");
 		if (
@@ -521,7 +522,11 @@ export class ResearchWorkspaceService {
 		) {
 			throw new ResearchWorkspaceError("invalid-request", "Repository listing limit is invalid.");
 		}
-		let listed = await this.#storage.research.listRepository(repositoryId, limit);
+		let listed = await this.#storage.research.listRepository(
+			repositoryId,
+			limit,
+			includeArchived,
+		);
 		return {
 			channels: listed.channels.map(group => ({
 				channel: group.channel,

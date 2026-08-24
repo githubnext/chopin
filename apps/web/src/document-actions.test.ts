@@ -5,6 +5,7 @@ import {
 	completeDocumentPage,
 	failDocumentLoad,
 	projectDocuments,
+	removeLoadedDocument,
 	replaceLoadedDocument,
 	updateLoadedDocument,
 } from "./document-actions";
@@ -102,8 +103,12 @@ describe("document actions", () => {
 
 	it("searches available Projects through every query-bound page", async () => {
 		let calls: string[] = [];
-		let load = async (owner: string, repository: string, cursor?: string, query?: string) => {
-			calls.push(`${owner}/${repository}:${cursor ?? "first"}:${query ?? ""}`);
+		let load: typeof Api.channels = async (owner, repository, options = {}) => {
+			calls.push(
+				`${owner}/${repository}:${options.cursor ?? "first"}:${options.query ?? ""}:${
+					options.includeArchived ?? false
+				}`,
+			);
 			let repositoryId = repository === "one" ? "R_one" : "R_two";
 			return {
 				repository: {
@@ -117,13 +122,16 @@ describe("document actions", () => {
 					url: `https://github.com/${owner}/${repository}`,
 				},
 				canEdit: true,
-				channels: [channel(`${repository}-${cursor ?? "first"}`, "Product", repositoryId)],
-				nextCursor: repository === "one" && !cursor ? "next" : undefined,
+				channels: [
+					channel(`${repository}-${options.cursor ?? "first"}`, "Product", repositoryId),
+				],
+				nextCursor: repository === "one" && !options.cursor ? "next" : undefined,
 			};
 		};
 		let search = await searchAvailableDocuments(
 			projects.map(entry => entry.project),
 			"product",
+			false,
 			load,
 		);
 
@@ -134,10 +142,30 @@ describe("document actions", () => {
 		]);
 		expect(search.failedProjectIds).toEqual([]);
 		expect(calls).toEqual([
-			"acme/one:first:product",
-			"acme/two:first:product",
-			"acme/one:next:product",
+			"acme/one:first:product:false",
+			"acme/two:first:product:false",
+			"acme/one:next:product:false",
 		]);
+	});
+
+	it("binds archived search pagination to the selected catalogue mode", async () => {
+		let modes: boolean[] = [];
+		await searchAvailableDocuments(
+			[projects[0]!.project],
+			"",
+			true,
+			async (_owner, _repository, options = {}) => {
+				modes.push(options.includeArchived === true);
+				return {
+					repository: {} as Api.Repository,
+					canEdit: true,
+					channels: [],
+					...(options.cursor ? {} : { nextCursor: "next" }),
+				};
+			},
+		);
+
+		expect(modes).toEqual([true, true]);
 	});
 
 	it("replaces a renamed document in its loaded Project", () => {
@@ -161,6 +189,18 @@ describe("document actions", () => {
 			title: "Socket title",
 			slug: "socket-title",
 		});
+	});
+
+	it("replaces an authoritative first page and removes deleted documents explicitly", () => {
+		let first = channel("first", "First", "R_one");
+		let stale = channel("stale", "Stale", "R_one");
+		let current = { status: "ready" as const, channels: [stale], nextCursor: "old" };
+		let refreshed = completeDocumentPage(current, [first], "next", true);
+		let loaded: LoadedDocuments = { R_one: refreshed };
+
+		expect(refreshed.channels.map(document => document.id)).toEqual(["first"]);
+		expect(removeLoadedDocument(loaded, first.id).R_one?.channels).toEqual([]);
+		expect(removeLoadedDocument(loaded, "missing")).toBe(loaded);
 	});
 
 	it("keeps newer document metadata when an older response arrives later", () => {

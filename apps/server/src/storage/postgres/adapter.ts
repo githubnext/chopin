@@ -11,6 +11,8 @@ import type { TransactionSQL } from "bun";
 import type {
 	AgentState,
 	ChannelAgent,
+	ChannelArchiveInput,
+	ChannelArchiveResult,
 	ChannelCursor,
 	ChannelPage,
 	ChannelRecord,
@@ -75,6 +77,7 @@ type ChannelRow = {
 	nextSequence?: Integer;
 	createdAt: Timestamp;
 	updatedAt: Timestamp;
+	archivedAt: Timestamp | null;
 };
 
 type SnapshotRow = {
@@ -133,6 +136,7 @@ type OperationRow = {
 type ChannelLockRow = {
 	revision: Integer;
 	nextSequence: Integer;
+	archivedAt: Timestamp | null;
 };
 
 function date(value: Timestamp, field: string): Date {
@@ -194,12 +198,14 @@ function session(row: SessionRow): WebSession {
 
 function channel(row: ChannelRow): ChannelRecord {
 	if (!row.slug) throw corrupt(`channel ${row.id} has no canonical slug`);
+	let { archivedAt, ...record } = row;
 	return {
-		...row,
+		...record,
 		slug: row.slug,
 		revision: integer(row.revision, "channel revision"),
 		createdAt: date(row.createdAt, "channel creation time"),
 		updatedAt: date(row.updatedAt, "channel update time"),
+		...(archivedAt === null ? {} : { archivedAt: date(archivedAt, "channel archive time") }),
 	};
 }
 
@@ -294,7 +300,8 @@ const CHANNEL_COLUMNS = `
 	channels.created_by AS "createdBy",
 	channels.revision,
 	channels.created_at AS "createdAt",
-	channels.updated_at AS "updatedAt"
+	channels.updated_at AS "updatedAt",
+	channels.archived_at AS "archivedAt"
 `;
 
 const CHANNEL_RETURNING = `
@@ -306,7 +313,8 @@ const CHANNEL_RETURNING = `
 	created_by AS "createdBy",
 	revision,
 	created_at AS "createdAt",
-	updated_at AS "updatedAt"
+	updated_at AS "updatedAt",
+	archived_at AS "archivedAt"
 `;
 
 const SNAPSHOT_COLUMNS = `
@@ -514,9 +522,13 @@ export class PostgresStorage implements StorageAdapter {
 				return found ? channel(found) : undefined;
 			}),
 		rename: input => this.#renameChannel(input),
-		list: (repositoryId, limit, after, query) =>
-			this.#listChannels(repositoryId, limit, after, query),
-		scan: (repositoryId, limit, after) => this.#scanChannels(repositoryId, limit, after),
+		archive: input => this.#setChannelArchived(input, true),
+		restore: input => this.#setChannelArchived(input, false),
+		delete: id => this.#deleteChannel(id),
+		list: (repositoryId, limit, after, query, includeArchived) =>
+			this.#listChannels(repositoryId, limit, after, query, includeArchived),
+		scan: (repositoryId, limit, after, includeArchived) =>
+			this.#scanChannels(repositoryId, limit, after, includeArchived),
 		claimAgentOwner: (channelId, sessionId, now) =>
 			this.#claimAgentOwner(channelId, sessionId, now),
 		clearAgentOwner: (channelId, expectedSessionId, expectedGeneration, now) =>
@@ -625,6 +637,7 @@ export class PostgresStorage implements StorageAdapter {
 				`;
 				if (!current) throw missing(`channel ${input.id} does not exist`);
 				let existing = channel(current);
+				if (existing.archivedAt) throw conflict(`channel ${input.id} is archived`);
 				if (existing.title === input.title) {
 					return { channel: existing, changed: false };
 				}
@@ -646,6 +659,62 @@ export class PostgresStorage implements StorageAdapter {
 					input.now,
 				);
 				return { channel: channel({ ...saved, slug }), changed: true };
+			}));
+	}
+
+	#setChannelArchived(
+		input: ChannelArchiveInput,
+		archived: boolean,
+	): Promise<ChannelArchiveResult> {
+		return this.#run(
+			archived ? "archive channel" : "restore channel",
+			() =>
+				this.#sql.begin(async transaction => {
+					let [current] = await transaction<ChannelRow[]>`
+					SELECT ${transaction.unsafe(CHANNEL_COLUMNS)}
+					FROM channels
+					WHERE id = ${input.id}
+					FOR UPDATE
+				`;
+					if (!current) throw missing(`channel ${input.id} does not exist`);
+					let existing = channel(current);
+					if ((existing.archivedAt !== undefined) === archived) {
+						return { channel: existing, changed: false };
+					}
+					let updatedAt = input.now > existing.updatedAt
+						? input.now
+						: new Date(existing.updatedAt.getTime() + 1);
+					let archivedAt = archived ? updatedAt : null;
+					let [saved] = await transaction<ChannelRow[]>`
+					UPDATE channels
+					SET archived_at = ${archivedAt}, updated_at = ${updatedAt}
+					WHERE id = ${input.id}
+					RETURNING ${transaction.unsafe(CHANNEL_RETURNING)}
+				`;
+					if (!saved) throw corrupt("changing channel archival returned no record");
+					return { channel: channel({ ...saved, slug: existing.slug }), changed: true };
+				}),
+		);
+	}
+
+	#deleteChannel(id: string): Promise<boolean> {
+		return this.#run("delete archived channel", () =>
+			this.#sql.begin(async transaction => {
+				let [current] = await transaction<{ archivedAt: Timestamp | null }[]>`
+					SELECT archived_at AS "archivedAt"
+					FROM channels
+					WHERE id = ${id}
+					FOR UPDATE
+				`;
+				if (!current) return false;
+				if (current.archivedAt === null) {
+					throw conflict(`channel ${id} must be archived before deletion`);
+				}
+				let deleted = await transaction<{ id: string }[]>`
+					DELETE FROM channels WHERE id = ${id} RETURNING id
+				`;
+				if (deleted.length !== 1) throw corrupt("deleting a channel returned no record");
+				return true;
 			}));
 	}
 
@@ -696,6 +765,7 @@ export class PostgresStorage implements StorageAdapter {
 		limit: number,
 		after?: ChannelCursor,
 		query?: string,
+		includeArchived = false,
 	): Promise<ChannelPage> {
 		return this.#run("list channels", async () => {
 			let count = Math.min(100, Math.max(1, limit));
@@ -705,6 +775,7 @@ export class PostgresStorage implements StorageAdapter {
 					SELECT ${this.#sql.unsafe(CHANNEL_COLUMNS)}
 					FROM channels
 					WHERE repository_id = ${repositoryId}
+						AND (${includeArchived} OR archived_at IS NULL)
 						AND (${!query} OR title ILIKE ${pattern} ESCAPE '\\')
 						AND (
 							updated_at < ${after.updatedAt}
@@ -717,6 +788,7 @@ export class PostgresStorage implements StorageAdapter {
 					SELECT ${this.#sql.unsafe(CHANNEL_COLUMNS)}
 					FROM channels
 					WHERE repository_id = ${repositoryId}
+						AND (${includeArchived} OR archived_at IS NULL)
 						AND (${!query} OR title ILIKE ${pattern} ESCAPE '\\')
 					ORDER BY updated_at DESC, id ASC
 					LIMIT ${count + 1}
@@ -735,6 +807,7 @@ export class PostgresStorage implements StorageAdapter {
 		repositoryId: string,
 		limit: number,
 		after?: ChannelScanCursor,
+		includeArchived = false,
 	): Promise<ChannelScanPage> {
 		return this.#run("scan channels", async () => {
 			let count = Math.min(100, Math.max(1, limit));
@@ -743,6 +816,7 @@ export class PostgresStorage implements StorageAdapter {
 					SELECT ${this.#sql.unsafe(CHANNEL_COLUMNS)}
 					FROM channels
 					WHERE repository_id = ${repositoryId}
+						AND (${includeArchived} OR archived_at IS NULL)
 						AND (
 							created_at < ${after.createdAt}
 							OR (created_at = ${after.createdAt} AND id > ${after.id})
@@ -754,6 +828,7 @@ export class PostgresStorage implements StorageAdapter {
 					SELECT ${this.#sql.unsafe(CHANNEL_COLUMNS)}
 					FROM channels
 					WHERE repository_id = ${repositoryId}
+						AND (${includeArchived} OR archived_at IS NULL)
 					ORDER BY created_at DESC, id ASC
 					LIMIT ${count + 1}
 				`;
@@ -946,7 +1021,7 @@ export class PostgresStorage implements StorageAdapter {
 			this.#sql.begin(async transaction => {
 				await this.#assertLease(transaction, input.lease);
 				let [locked] = await transaction<ChannelLockRow[]>`
-				SELECT revision, next_sequence AS "nextSequence"
+				SELECT revision, next_sequence AS "nextSequence", archived_at AS "archivedAt"
 				FROM channels
 				WHERE id = ${input.channelId}
 				FOR UPDATE
@@ -963,6 +1038,12 @@ export class PostgresStorage implements StorageAdapter {
 						sequence: integer(previous.sequence, "operation sequence"),
 						repeated: true,
 					};
+				}
+				if (locked.archivedAt !== null && !input.allowArchived) {
+					throw conflict(`channel ${input.channelId} is archived`);
+				}
+				if (input.allowArchived && (input.update || input.events.length > 0)) {
+					throw conflict("archived channel maintenance must be sidecar-only");
 				}
 				let current = integer(locked.revision, "channel revision");
 				if (current !== input.expectedRevision) {
@@ -1072,7 +1153,7 @@ export class PostgresStorage implements StorageAdapter {
 			this.#sql.begin(async transaction => {
 				await this.#assertLease(transaction, input.lease);
 				let [locked] = await transaction<ChannelLockRow[]>`
-					SELECT revision, next_sequence AS "nextSequence"
+					SELECT revision, next_sequence AS "nextSequence", archived_at AS "archivedAt"
 					FROM channels
 					WHERE id = ${input.channelId}
 					FOR UPDATE
@@ -1089,6 +1170,9 @@ export class PostgresStorage implements StorageAdapter {
 						sequence: integer(previous.sequence, "operation sequence"),
 						repeated: true,
 					};
+				}
+				if (locked.archivedAt !== null) {
+					throw conflict(`channel ${input.channelId} is archived`);
 				}
 				let current = integer(locked.revision, "channel revision");
 				if (current !== input.expectedRevision) {

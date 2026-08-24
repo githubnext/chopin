@@ -11,6 +11,7 @@ export type DocumentSearchResult = {
 export async function searchAvailableDocuments(
 	projects: Api.NavigationProject[],
 	query: string,
+	includeArchived: boolean,
 	load: typeof Api.channels = Api.channels,
 	signal?: AbortSignal,
 ): Promise<{ results: DocumentSearchResult[]; failedProjectIds: string[] }> {
@@ -24,9 +25,12 @@ export async function searchAvailableDocuments(
 						let page = await load(
 							project.repositoryOwner,
 							project.repositoryName,
-							cursor,
-							query.trim() || undefined,
-							signal,
+							{
+								cursor,
+								includeArchived,
+								query: query.trim() || undefined,
+								signal,
+							},
 						);
 						channels.push(...page.channels);
 						cursor = page.nextCursor;
@@ -50,10 +54,12 @@ export async function searchAvailableDocuments(
 
 export function DocumentSearchDialog(
 	{
+		includeArchived,
 		onDismiss,
 		onSelect,
 		projects,
 	}: {
+		includeArchived: boolean;
 		onDismiss: () => void;
 		onSelect: (documentId: string) => void;
 		projects: Api.NavigationProject[];
@@ -73,7 +79,13 @@ export function DocumentSearchDialog(
 		let controller = new AbortController();
 		let timer = window.setTimeout(() => {
 			setSearch({ status: "loading" });
-			searchAvailableDocuments(projects, query, Api.channels, controller.signal).then(result => {
+			searchAvailableDocuments(
+				projects,
+				query,
+				includeArchived,
+				Api.channels,
+				controller.signal,
+			).then(result => {
 				if (active) setSearch({ status: "ready", ...result });
 			}, error => {
 				if (active && !controller.signal.aborted) {
@@ -89,7 +101,7 @@ export function DocumentSearchDialog(
 			window.clearTimeout(timer);
 			controller.abort();
 		};
-	}, [projects, query, retry]);
+	}, [includeArchived, projects, query, retry]);
 
 	let results = search.status === "ready" ? search.results : [];
 	return (
@@ -140,7 +152,10 @@ export function DocumentSearchDialog(
 						type="button"
 					>
 						<span className="min-w-0">
-							<span className="block truncate text-sm font-medium">{channel.title}</span>
+							<span className="flex min-w-0 items-center gap-2 text-sm font-medium">
+								<span className="truncate">{channel.title}</span>
+								{channel.archivedAt && <span className="document-status-badge">Archived</span>}
+							</span>
 							<span className="block truncate text-sm text-text-tertiary">
 								{project.repositoryOwner}/{project.repositoryName}
 							</span>

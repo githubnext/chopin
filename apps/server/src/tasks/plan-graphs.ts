@@ -96,7 +96,7 @@ export function reportImplementationLifecycle(
 		plan.execution = result.state.execution;
 		plan.lifecycle = result.state.lifecycle;
 		try {
-			await persistExclusive(plan);
+			await persistExclusive(plan, true);
 		} catch {
 			plan.graph = previous.graph;
 			plan.execution = previous.execution;

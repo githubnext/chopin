@@ -111,12 +111,29 @@ async function setup(random?: () => number) {
 	let router = new Router();
 	let reset: string[] = [];
 	let renamed: string[] = [];
+	let archived: Array<{ id: string; changed: boolean }> = [];
+	let restored: Array<{ id: string; changed: boolean }> = [];
+	let deleted: string[] = [];
 	registerChannelRoutes(router, auth, {
 		onAgentReset: async id => {
 			reset.push(id);
 		},
+		onChannelArchived: async (id, at) => {
+			let result = await storage.channels.archive({ id, now: at });
+			archived.push({ id, changed: result.changed });
+			return result;
+		},
+		onChannelDeleted: async id => {
+			deleted.push(id);
+			return storage.channels.delete(id);
+		},
 		onChannelRenamed: channel => {
 			renamed.push(channel.title);
+		},
+		onChannelRestored: async (id, at) => {
+			let result = await storage.channels.restore({ id, now: at });
+			restored.push({ id, changed: result.changed });
+			return result;
 		},
 		random,
 	});
@@ -128,6 +145,9 @@ async function setup(random?: () => number) {
 		sessionId: issued.id,
 		reset,
 		renamed,
+		archived,
+		restored,
+		deleted,
 		now,
 	};
 }
@@ -136,6 +156,18 @@ function request(path: string, cookie?: string, init: RequestInit = {}): Request
 	let headers = new Headers(init.headers);
 	if (cookie) headers.set("cookie", cookie);
 	return new Request(`https://chopin.test${path}`, { ...init, headers });
+}
+
+function createChannel(storage: MemoryStorage, now: Date, title: string) {
+	return storage.channels.create({
+		id: crypto.randomUUID(),
+		repositoryId: "R_score",
+		repositoryOwner: "octo-org",
+		repositoryName: "score",
+		title,
+		createdBy: "U_octocat",
+		now,
+	});
 }
 
 describe("channel routes", () => {
@@ -444,6 +476,209 @@ describe("channel routes", () => {
 			cookie,
 		));
 		expect(mismatch!.status).toBe(400);
+	});
+
+	it("excludes archived documents by default and binds cursors to archive mode", async () => {
+		let { router, storage, cookie, now } = await setup();
+		let first = await createChannel(storage, now, "First active");
+		let second = await createChannel(storage, now, "Second active");
+		let archived = await createChannel(storage, now, "Archived plan");
+		let archivedAt = new Date(now.getTime() + 1_000);
+		await storage.channels.archive({ id: archived.id, now: archivedAt });
+
+		let defaultResponse = await router.handle(request(
+			"/api/repositories/octo-org/score/channels",
+			cookie,
+		));
+		expect(defaultResponse!.status).toBe(200);
+		let defaultPage = await defaultResponse!.json();
+		expect(defaultPage.channels.map((channel: { id: string }) => channel.id).sort()).toEqual(
+			[first.id, second.id].sort(),
+		);
+		expect(defaultPage.channels.every((channel: object) => !("archivedAt" in channel))).toBe(true);
+
+		let includedResponse = await router.handle(request(
+			"/api/repositories/octo-org/score/channels?includeArchived=true",
+			cookie,
+		));
+		expect(includedResponse!.status).toBe(200);
+		let includedPage = await includedResponse!.json();
+		expect(includedPage.channels).toHaveLength(3);
+		expect(
+			includedPage.channels.find((channel: { id: string }) => channel.id === archived.id),
+		).toMatchObject({ id: archived.id, archivedAt: archivedAt.toISOString() });
+
+		let activeFirst = await router.handle(request(
+			"/api/repositories/octo-org/score/channels?limit=1",
+			cookie,
+		));
+		let activeCursor = (await activeFirst!.json()).nextCursor;
+		expect(activeCursor).toBeString();
+		let activeCursorInArchiveMode = await router.handle(request(
+			`/api/repositories/octo-org/score/channels?limit=1&includeArchived=true&cursor=${activeCursor}`,
+			cookie,
+		));
+		expect(activeCursorInArchiveMode!.status).toBe(400);
+
+		let includedFirst = await router.handle(request(
+			"/api/repositories/octo-org/score/channels?limit=1&includeArchived=true",
+			cookie,
+		));
+		let includedCursor = (await includedFirst!.json()).nextCursor;
+		expect(includedCursor).toBeString();
+		let includedCursorInActiveMode = await router.handle(request(
+			`/api/repositories/octo-org/score/channels?limit=1&cursor=${includedCursor}`,
+			cookie,
+		));
+		expect(includedCursorInActiveMode!.status).toBe(400);
+	});
+
+	it("opens archived documents by slug and UUID as manageable but read-only", async () => {
+		let { router, storage, cookie, now } = await setup();
+		let channel = await createChannel(storage, now, "Archived direct read");
+		let archivedAt = new Date(now.getTime() + 1_000);
+		await storage.channels.archive({ id: channel.id, now: archivedAt });
+
+		for (
+			let path of [
+				`/api/repositories/octo-org/score/documents/${channel.slug}`,
+				`/api/channels/${channel.id}`,
+			]
+		) {
+			let response = await router.handle(request(path, cookie));
+			expect(response!.status).toBe(200);
+			expect(await response!.json()).toMatchObject({
+				canEdit: false,
+				canManage: true,
+				channel: { id: channel.id, archivedAt: archivedAt.toISOString() },
+			});
+		}
+	});
+
+	it("lets viewers read archived documents but not archive, restore or delete", async () => {
+		let { router, storage, github, cookie, archived, restored, deleted, now } = await setup();
+		let active = await createChannel(storage, now, "Viewer active");
+		let inactive = await createChannel(storage, now, "Viewer archived");
+		await storage.channels.archive({
+			id: inactive.id,
+			now: new Date(now.getTime() + 1_000),
+		});
+		github.repo = { ...github.repo, permissions: { pull: true, push: false, admin: false } };
+
+		let read = await router.handle(request(`/api/channels/${inactive.id}`, cookie));
+		expect(read!.status).toBe(200);
+		expect(await read!.json()).toMatchObject({ canEdit: false, canManage: false });
+
+		for (
+			let [method, path] of [
+				["POST", `/api/channels/${active.id}/archive`],
+				["POST", `/api/channels/${inactive.id}/restore`],
+				["DELETE", `/api/channels/${inactive.id}`],
+			] as const
+		) {
+			let response = await router.handle(request(path, cookie, {
+				method,
+				headers: { origin: "https://chopin.test" },
+			}));
+			expect(response!.status).toBe(403);
+		}
+		expect(archived).toEqual([]);
+		expect(restored).toEqual([]);
+		expect(deleted).toEqual([]);
+		expect((await storage.channels.get(active.id))!.archivedAt).toBeUndefined();
+		expect((await storage.channels.get(inactive.id))!.archivedAt).toBeDate();
+	});
+
+	it("archives and restores idempotently for a writer", async () => {
+		let { router, storage, cookie, archived, restored, now } = await setup();
+		let channel = await createChannel(storage, now, "Lifecycle");
+		let transition = (action: "archive" | "restore") =>
+			router.handle(request(`/api/channels/${channel.id}/${action}`, cookie, {
+				method: "POST",
+				headers: { origin: "https://chopin.test" },
+			}));
+
+		let firstArchive = await transition("archive");
+		expect(firstArchive!.status).toBe(200);
+		let archivedBody = await firstArchive!.json();
+		expect(archivedBody).toMatchObject({ canEdit: false, canManage: true });
+		expect(archivedBody.channel.archivedAt).toBeString();
+		let repeatedArchive = await transition("archive");
+		expect(repeatedArchive!.status).toBe(200);
+		expect((await repeatedArchive!.json()).channel.archivedAt)
+			.toBe(archivedBody.channel.archivedAt);
+		expect(archived).toEqual([
+			{ id: channel.id, changed: true },
+			{ id: channel.id, changed: false },
+		]);
+
+		let firstRestore = await transition("restore");
+		expect(firstRestore!.status).toBe(200);
+		let restoredBody = await firstRestore!.json();
+		expect(restoredBody).toMatchObject({ canEdit: true, canManage: true });
+		expect(restoredBody.channel).not.toHaveProperty("archivedAt");
+		let repeatedRestore = await transition("restore");
+		expect(repeatedRestore!.status).toBe(200);
+		expect((await repeatedRestore!.json()).channel).not.toHaveProperty("archivedAt");
+		expect(restored).toEqual([
+			{ id: channel.id, changed: true },
+			{ id: channel.id, changed: false },
+		]);
+	});
+
+	it("requires the exact configured Origin for lifecycle mutations", async () => {
+		let { router, storage, cookie, archived, restored, deleted, now } = await setup();
+		let active = await createChannel(storage, now, "Origin active");
+		let inactive = await createChannel(storage, now, "Origin archived");
+		await storage.channels.archive({
+			id: inactive.id,
+			now: new Date(now.getTime() + 1_000),
+		});
+
+		for (
+			let [method, path] of [
+				["POST", `/api/channels/${active.id}/archive`],
+				["POST", `/api/channels/${inactive.id}/restore`],
+				["DELETE", `/api/channels/${inactive.id}`],
+			] as const
+		) {
+			for (let origin of [undefined, "https://chopin.test/", "https://chopin.test.evil"]) {
+				let response = await router.handle(request(path, cookie, {
+					method,
+					headers: origin ? { origin } : undefined,
+				}));
+				expect(response!.status).toBe(403);
+			}
+		}
+		expect(archived).toEqual([]);
+		expect(restored).toEqual([]);
+		expect(deleted).toEqual([]);
+	});
+
+	it("requires archival before deletion and delegates archived deletion", async () => {
+		let { router, storage, cookie, deleted, now } = await setup();
+		let channel = await createChannel(storage, now, "Delete lifecycle");
+		let remove = () =>
+			router.handle(request(`/api/channels/${channel.id}`, cookie, {
+				method: "DELETE",
+				headers: { origin: "https://chopin.test" },
+			}));
+
+		let active = await remove();
+		expect(active!.status).toBe(409);
+		expect(deleted).toEqual([]);
+		expect(await storage.channels.get(channel.id)).toBeDefined();
+
+		await storage.channels.archive({
+			id: channel.id,
+			now: new Date(now.getTime() + 1_000),
+		});
+		let archived = await remove();
+		expect(archived!.status).toBe(204);
+		expect(archived!.headers.get("cache-control")).toBe("no-store");
+		expect(await archived!.text()).toBe("");
+		expect(deleted).toEqual([channel.id]);
+		expect(await storage.channels.get(channel.id)).toBeUndefined();
 	});
 
 	it("creates a unique generated document when a title is omitted", async () => {

@@ -3,6 +3,7 @@ import { documentPath, researchWorkspacePath } from "@chopin/protocol/document-u
 
 import * as Api from "./api";
 import { rememberChannel } from "./channel-recovery";
+import { DocumentActionsMenu } from "./document-actions-menu";
 import { useNavigationDocument } from "./navigation-shell";
 import {
 	activeResearchJob,
@@ -29,6 +30,10 @@ import type {
 import type { Status } from "./wire";
 
 type ResearchWorkspaceProps = HostedWorkspaceProps & { workspaceId: string };
+type ManagedHello = Session.Hello & { archivedAt?: string; canManage: boolean };
+type ManagedChannel = Session.Channel & { archivedAt?: string; canManage: boolean };
+type ManagedAccess = Session.Access & { canManage: boolean };
+type WorkspaceMetadata = Pick<Api.Channel, "title" | "slug" | "updatedAt" | "archivedAt">;
 
 function timestamp(value: string): string {
 	let date = new Date(value);
@@ -569,6 +574,8 @@ function connectionLabel(status: Status): string {
 			return "Reconnecting";
 		case "denied":
 			return "Access changed";
+		case "deleted":
+			return "Document deleted";
 		case "closed":
 			return "Disconnected";
 	}
@@ -577,7 +584,9 @@ function connectionLabel(status: Status): string {
 export function ResearchWorkspace(
 	{
 		agent = true,
+		archivedAt,
 		canEdit,
+		canManage,
 		label,
 		repository,
 		room,
@@ -588,7 +597,9 @@ export function ResearchWorkspace(
 	}: ResearchWorkspaceProps,
 ) {
 	let {
+		onDocumentAction,
 		onDocumentChanged,
+		onDocumentDeleted,
 		onRepositoryAccessChanged,
 		onResearchWorkspaceChanged,
 		onResearchWorkspaceLoaded,
@@ -599,9 +610,16 @@ export function ResearchWorkspace(
 	let [error, setError] = useState<unknown>();
 	let [refreshing, setRefreshing] = useState(false);
 	let [status, setStatus] = useState<Status>("connecting");
-	let [effectiveCanEdit, setEffectiveCanEdit] = useState(canEdit);
+	let [effectiveCanEdit, setEffectiveCanEdit] = useState(canEdit && !archivedAt);
+	let [effectiveCanManage, setEffectiveCanManage] = useState(canManage);
+	let [deleted, setDeleted] = useState(false);
 	let [capabilities, setCapabilities] = useState({ backgroundJobs: false, webResearch: false });
-	let [metadata, setMetadata] = useState({ title: label, slug, updatedAt });
+	let [metadata, setMetadata] = useState<WorkspaceMetadata>({
+		archivedAt,
+		title: label,
+		slug,
+		updatedAt,
+	});
 	let metadataRef = useRef(metadata);
 	let requestGeneration = useRef(0);
 	let requestController = useRef<AbortController | undefined>(undefined);
@@ -654,16 +672,22 @@ export function ResearchWorkspace(
 		) void refresh();
 	}, [accept, refresh]);
 
-	let updateMetadata = useCallback((next: { title: string; slug: string; updatedAt: string }) => {
+	let updateMetadata = useCallback((next: WorkspaceMetadata) => {
 		if (Date.parse(next.updatedAt) < Date.parse(metadataRef.current.updatedAt)) return;
-		metadataRef.current = next;
-		setMetadata(next);
-		rememberChannel(userId, { id: room, title: next.title, slug: next.slug }, repository);
-		onDocumentChanged(room, next);
+		let metadata = {
+			archivedAt: next.archivedAt,
+			title: next.title,
+			slug: next.slug,
+			updatedAt: next.updatedAt,
+		};
+		metadataRef.current = metadata;
+		setMetadata(metadata);
+		rememberChannel(userId, { id: room, title: metadata.title, slug: metadata.slug }, repository);
+		onDocumentChanged(room, metadata);
 		let path = researchWorkspacePath(
 			repository.owner,
 			repository.name,
-			next.slug,
+			metadata.slug,
 			workspaceId,
 		);
 		if (location.pathname !== path) {
@@ -672,11 +696,12 @@ export function ResearchWorkspace(
 	}, [onDocumentChanged, repository, room, userId, workspaceId]);
 
 	useEffect(() => {
-		let next = { title: label, slug, updatedAt };
+		let next = { archivedAt, title: label, slug, updatedAt };
 		metadataRef.current = next;
 		setMetadata(next);
-		setEffectiveCanEdit(canEdit);
-	}, [canEdit, label, room, slug, updatedAt]);
+		setEffectiveCanEdit(canEdit && !archivedAt);
+		setEffectiveCanManage(canManage);
+	}, [archivedAt, canEdit, canManage, label, room, slug, updatedAt]);
 
 	useEffect(() => {
 		void refresh();
@@ -690,14 +715,19 @@ export function ResearchWorkspace(
 		let socket = new Wire({
 			channelId: room,
 			onAuthenticationRequired: () => location.reload(),
+			onDeleted: () => {
+				setDeleted(true);
+				onDocumentDeleted(room);
+			},
 			onStatus: next => {
 				setStatus(next);
 				if (next === "connected") void refresh();
 			},
 		});
 		let off = [
-			socket.on<Session.Hello>("session:hello", frame => {
-				setEffectiveCanEdit(frame.canEdit);
+			socket.on<ManagedHello>("session:hello", frame => {
+				setEffectiveCanEdit(frame.canEdit && !frame.archivedAt);
+				setEffectiveCanManage(frame.canManage);
 				setCapabilities({
 					backgroundJobs: frame.backgroundJobs,
 					webResearch: frame.webResearch,
@@ -707,13 +737,16 @@ export function ResearchWorkspace(
 				onResearchWorkspacesRefresh(parentChannel(room, repository, metadataRef.current));
 				void refresh();
 			}),
-			socket.on<Session.Access>("session:access", frame => {
+			socket.on<ManagedAccess>("session:access", frame => {
 				setEffectiveCanEdit(frame.canEdit);
+				setEffectiveCanManage(frame.canManage);
 				onRepositoryAccessChanged();
 				void refresh();
 			}),
-			socket.on<Session.Channel>("session:channel", frame => {
+			socket.on<ManagedChannel>("session:channel", frame => {
 				if (frame.channelId !== room) return;
+				setEffectiveCanEdit(!frame.archivedAt && frame.canManage);
+				setEffectiveCanManage(frame.canManage);
 				updateMetadata(frame);
 				void refresh();
 			}),
@@ -738,6 +771,7 @@ export function ResearchWorkspace(
 			socket.dispose();
 		};
 	}, [
+		onDocumentDeleted,
 		onResearchWorkspaceChanged,
 		onResearchWorkspacesRefresh,
 		onRepositoryAccessChanged,
@@ -748,8 +782,10 @@ export function ResearchWorkspace(
 		workspaceId,
 	]);
 
+	let workspaceArchivedAt = archivedAt ?? metadata.archivedAt;
+	let workspaceCanEdit = effectiveCanEdit && !workspaceArchivedAt;
 	let cancel = async (turnId: string) => {
-		if (cancelling || status !== "connected" || !effectiveCanEdit) return;
+		if (cancelling || status !== "connected" || !workspaceCanEdit) return;
 		setCancelling(turnId);
 		setCancellationError(undefined);
 		try {
@@ -760,6 +796,13 @@ export function ResearchWorkspace(
 			setCancelling(undefined);
 		}
 	};
+	if (deleted) {
+		return (
+			<div className="research-route-state">
+				<p role="status">This document was deleted.</p>
+			</div>
+		);
+	}
 
 	let parentHref = documentPath(repository.owner, repository.name, metadata.slug);
 	let connected = status === "connected";
@@ -805,17 +848,34 @@ export function ResearchWorkspace(
 		: initial
 		? jobLabel(currentJob(initial))
 		: "Preparing research";
-	let canCancel = connected && effectiveCanEdit && !cancelling;
+	let canCancel = connected && workspaceCanEdit && !cancelling;
 
 	return (
 		<div className="research-workspace">
 			<header className="research-header room-header">
-				<a className="research-back-link research-control" href={parentHref}>
-					Back to {metadata.title}
-				</a>
-				<div className="research-connection" data-status={status} role="status">
-					<span aria-hidden="true" />
-					{refreshing && connected ? "Refreshing" : connection}
+				<div className="flex min-w-0 items-center">
+					<a className="research-back-link research-control" href={parentHref}>
+						Back to {metadata.title}
+					</a>
+					{workspaceArchivedAt && (
+						<span className="document-status-badge document-read-only-status">
+							Archived, read-only
+						</span>
+					)}
+				</div>
+				<div className="flex shrink-0 items-center gap-2">
+					{effectiveCanManage && (
+						<DocumentActionsMenu
+							channel={{ archivedAt: workspaceArchivedAt, title: metadata.title }}
+							className="btn btn-sm btn-ghost"
+							onAction={onDocumentAction}
+							trigger={<span>Actions</span>}
+						/>
+					)}
+					<div className="research-connection" data-status={status} role="status">
+						<span aria-hidden="true" />
+						{refreshing && connected ? "Refreshing" : connection}
+					</div>
 				</div>
 			</header>
 			<div className="research-scroll">
@@ -846,7 +906,7 @@ export function ResearchWorkspace(
 								<DraftConfirmation
 									agent={agent}
 									backgroundJobs={capabilities.backgroundJobs}
-									canEdit={effectiveCanEdit}
+									canEdit={workspaceCanEdit}
 									connected={connected}
 									onSaved={acceptMutation}
 									webResearch={capabilities.webResearch}
@@ -902,7 +962,7 @@ export function ResearchWorkspace(
 							agent={agent}
 							backgroundJobs={capabilities.backgroundJobs}
 							canCancel={canCancel}
-							canEdit={effectiveCanEdit}
+							canEdit={workspaceCanEdit}
 							connected={connected}
 							detail={detail}
 							onCancel={turnId => void cancel(turnId)}

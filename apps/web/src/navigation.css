@@ -104,6 +104,23 @@
 	color: color-mix(in srgb, var(--color-text-tertiary) 60%, transparent);
 }
 
+.project-sidebar-archived-toggle {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding: 3px 8px 8px;
+	font-size: 0.75rem;
+	color: var(--color-text-quaternary);
+	cursor: pointer;
+}
+
+.project-sidebar-archived-toggle input {
+	width: 14px;
+	height: 14px;
+	flex: 0 0 auto;
+	accent-color: var(--color-brand);
+}
+
 .project-sidebar-projects,
 .project-sidebar-documents,
 .project-sidebar-research {
@@ -124,6 +141,13 @@
 	border-radius: 8px;
 	padding: 4px 12px 4px 32px;
 	font-size: var(--text-sm);
+}
+
+.project-sidebar-document-link {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	overflow: hidden;
 }
 
 .project-sidebar-document-current {
@@ -388,6 +412,59 @@
 	background: var(--color-hover);
 }
 
+.document-actions-menu {
+	position: fixed;
+	z-index: 60;
+	display: flex;
+	flex-direction: column;
+	border-radius: var(--radius-md);
+	background: var(--color-page);
+	padding: 4px;
+	box-shadow: var(--shadow-overlay);
+}
+
+.document-actions-menu button {
+	min-height: 34px;
+	border-radius: var(--radius-sm);
+	padding: 7px 10px;
+	font-size: var(--text-sm);
+	text-align: left;
+	color: var(--color-text-secondary);
+}
+
+.document-actions-menu button:hover,
+.document-actions-menu button:focus-visible {
+	background: var(--color-hover);
+	color: var(--color-text-primary);
+}
+
+.document-actions-menu .document-actions-menu-destructive {
+	color: var(--color-destructive-ink);
+}
+
+.document-actions-menu .document-actions-menu-destructive:hover,
+.document-actions-menu .document-actions-menu-destructive:focus-visible {
+	color: var(--color-destructive-ink);
+}
+
+.document-status-badge {
+	display: inline-flex;
+	min-width: 0;
+	flex: 0 0 auto;
+	align-items: center;
+	border-radius: 9999px;
+	background: var(--color-warning-wash);
+	padding: 1px 6px;
+	font-size: 0.625rem;
+	font-weight: 600;
+	line-height: 1rem;
+	color: var(--color-warning-ink);
+}
+
+.document-read-only-status {
+	margin-left: 6px;
+}
+
 :root[data-plan-coarse-pointer]
 	.project-sidebar
 	:where(.project-sidebar-action, .project-sidebar-document-action, .project-sidebar-research-link) {
@@ -407,7 +484,12 @@
 	min-height: 44px;
 }
 
-.document-title-trigger {
+:root[data-plan-coarse-pointer] .document-actions-menu button {
+	min-height: 44px;
+}
+
+.document-title-trigger,
+.document-title-label {
 	display: flex;
 	min-width: 0;
 	align-items: center;

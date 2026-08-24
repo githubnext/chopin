@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import {
 	activeProject,
 	beginProjectCreation,
-	canEditProject,
+	canManageProject,
 	documentDestination,
 	finishProjectCreation,
 	landingDocument,
@@ -85,6 +85,26 @@ describe("navigation model", () => {
 		expect(landingDocument(projects, "channel-two")).toBe("channel-two");
 	});
 
+	it("never chooses an archived document for the active landing", () => {
+		let archived: ProjectDocuments[] = projects.map(entry =>
+			entry.project.repositoryId === "R_one" && entry.documents.status !== "unavailable"
+				? {
+					...entry,
+					documents: {
+						...entry.documents,
+						channels: entry.documents.channels.map(channel => ({
+							...channel,
+							archivedAt: "2026-08-23T00:00:00.000Z",
+						})),
+					},
+				}
+				: entry
+		);
+
+		expect(landingDocument(archived, "channel-one")).toBe("channel-two");
+		expect(landingDocument(archived)).toBe("channel-two");
+	});
+
 	it("has no landing document until an accessible Project has one", () => {
 		expect(landingDocument(projects.slice(0, 1))).toBeUndefined();
 		expect(landingDocument([])).toBeUndefined();
@@ -142,8 +162,8 @@ describe("navigation model", () => {
 			},
 		};
 
-		expect(canEditProject(viewerProject)).toBe(false);
-		expect(canEditProject(editorProject)).toBe(true);
-		expect(canEditProject(adminProject)).toBe(true);
+		expect(canManageProject(viewerProject)).toBe(false);
+		expect(canManageProject(editorProject)).toBe(true);
+		expect(canManageProject(adminProject)).toBe(true);
 	});
 });

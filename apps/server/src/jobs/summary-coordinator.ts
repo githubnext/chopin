@@ -21,6 +21,7 @@ export class DocumentSummaryCoordinator {
 	#pending = new Map<string, Pending>();
 	#chains = new Map<string, Promise<void>>();
 	#inflight = new Set<Promise<void>>();
+	#suspended = new Set<string>();
 	#closed = false;
 
 	constructor(options: SummaryCoordinatorOptions) {
@@ -32,7 +33,7 @@ export class DocumentSummaryCoordinator {
 	}
 
 	schedule(target: DocumentTarget): void {
-		if (this.#closed) return;
+		if (this.#closed || this.#suspended.has(target.channelId)) return;
 		let previous = this.#pending.get(target.channelId);
 		if (
 			previous?.target.revision === target.revision
@@ -65,15 +66,16 @@ export class DocumentSummaryCoordinator {
 	}
 
 	async ensure(channelId: string): Promise<void> {
-		if (this.#closed) return;
+		if (this.#closed || this.#suspended.has(channelId)) return;
 		let target = await this.#options.current(channelId);
 		if (target) await this.enqueueNow(target);
 	}
 
 	async enqueueNow(target: DocumentTarget): Promise<void> {
-		if (this.#closed) return;
+		if (this.#closed || this.#suspended.has(target.channelId)) return;
 		let previous = this.#chains.get(target.channelId) ?? Promise.resolve();
 		let operation = previous.then(async () => {
+			if (this.#suspended.has(target.channelId)) return;
 			let current = await this.#options.current(target.channelId);
 			if (!current) return;
 			await this.#options.service.enqueueScheduler({
@@ -94,12 +96,28 @@ export class DocumentSummaryCoordinator {
 		try {
 			await operation;
 		} catch (err) {
-			if (!this.#closed && !this.#pending.has(target.channelId)) this.#arm(target);
+			if (
+				!this.#closed && !this.#suspended.has(target.channelId)
+				&& !this.#pending.has(target.channelId)
+			) this.#arm(target);
 			throw err;
 		} finally {
 			this.#inflight.delete(operation);
 			if (this.#chains.get(target.channelId) === settled) this.#chains.delete(target.channelId);
 		}
+	}
+
+	/** Stop new summary work and wait for scheduling already admitted for one document. */
+	async suspend(channelId: string): Promise<void> {
+		this.#suspended.add(channelId);
+		let pending = this.#pending.get(channelId);
+		pending?.cancel();
+		this.#pending.delete(channelId);
+		await this.#chains.get(channelId);
+	}
+
+	resume(channelId: string): void {
+		this.#suspended.delete(channelId);
 	}
 
 	async flush(): Promise<void> {
@@ -124,6 +142,7 @@ export class DocumentSummaryCoordinator {
 
 	close(): void {
 		this.#closed = true;
+		this.#suspended.clear();
 		for (let pending of this.#pending.values()) pending.cancel();
 		this.#pending.clear();
 	}

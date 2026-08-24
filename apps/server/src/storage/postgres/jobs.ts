@@ -671,6 +671,16 @@ export class PostgresBackgroundJobStore implements BackgroundJobStore {
 		return this.#run(action, () =>
 			this.#sql.begin(async transaction => {
 				await this.#fence(transaction, input.lease);
+				if (action === "cancel background job" && !(input as CancelBackgroundJob).allowArchived) {
+					let [channel] = await transaction<{ archived: boolean }[]>`
+						SELECT archived_at IS NOT NULL AS archived
+						FROM channels
+						WHERE id = ${input.channelId}
+						FOR UPDATE
+					`;
+					if (!channel) throw missing(`channel ${input.channelId} does not exist`);
+					if (channel.archived) throw conflict(`channel ${input.channelId} is archived`);
+				}
 				let found = await this.#lockControl(transaction, input, allowed);
 				let revision = await this.#bump(transaction, found.channelId);
 				let [saved] = await transaction<JobRow[]>`

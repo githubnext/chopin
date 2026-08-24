@@ -95,13 +95,44 @@ function restartable(): { port: number; deny: () => void; drop: () => void } {
 	};
 }
 
-function connect(port: number, seen: Status[], onAuthenticationRequired?: () => void): Wire {
+function deleted(mode: "frame" | "close"): { port: number; connections: () => number } {
+	let connections = 0;
+	let server = Bun.serve({
+		port: 0,
+		hostname: "127.0.0.1",
+		fetch(req, self) {
+			if (req.headers.get("x-chopin-socket-probe") === "1") {
+				return new Response(null, { status: 204 });
+			}
+			return self.upgrade(req) ? undefined : new Response("no", { status: 400 });
+		},
+		websocket: {
+			open(socket) {
+				connections++;
+				if (mode === "frame") {
+					socket.send(JSON.stringify({ kind: "session:deleted", ts: 1 }));
+				} else socket.close(4404, "deleted");
+			},
+			message() {},
+		},
+	});
+	servers.push(server);
+	return { port: server.port!, connections: () => connections };
+}
+
+function connect(
+	port: number,
+	seen: Status[],
+	onAuthenticationRequired?: () => void,
+	onDeleted?: () => void,
+): Wire {
 	// `location` is what the client derives its URL from, and there is none in
 	// a test runtime.
 	globalThis.location = { href: `http://127.0.0.1:${port}/`, protocol: "http:" } as Location;
 	let wire = new Wire({
 		channelId: "019c1234-1234-4123-8123-123456789abc",
 		onAuthenticationRequired,
+		onDeleted,
 		onStatus: status => seen.push(status),
 	});
 	wires.push(wire);
@@ -195,6 +226,22 @@ describe("status", () => {
 		);
 		expect(wire.status).toBe("connected");
 	});
+
+	for (let mode of ["frame", "close"] as const) {
+		it(`treats a deleted ${mode} as terminal`, async () => {
+			let service = deleted(mode);
+			let seen: Status[] = [];
+			let notifications = 0;
+			let wire = connect(service.port, seen, undefined, () => notifications++);
+
+			await until(() => wire.status === "deleted", "deleted");
+			await Bun.sleep(800);
+
+			expect(notifications).toBe(1);
+			expect(service.connections()).toBe(1);
+			expect(seen.at(-1)).toBe("deleted");
+		});
+	}
 
 	it("rejects a pending request when the connection goes away", async () => {
 		let port = endpoint(true);

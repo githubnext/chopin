@@ -275,6 +275,114 @@ describe("the hosted MCP adapter", () => {
 		expect(await adapter.documents.list(caller, "octo-org/score")).toBe("forbidden");
 	});
 
+	it("archives, lists, reads, and restores documents through storage fallback", async () => {
+		let context = setup();
+		context.github.repositoryValue = {
+			...context.github.repositoryValue,
+			permissions: { pull: true, push: true, admin: false },
+		};
+		let opened = await plan(context);
+		await Service.close(opened.plan);
+		let adapter = hosted(context.auth);
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller || !adapter.archive || !adapter.restore) {
+			throw new Error("hosted archive adapter is unavailable");
+		}
+		let locator = "/documents/octo-org/score/release-readiness";
+
+		let archived = await adapter.archive.archive(caller, locator);
+		expect(archived).toMatchObject({
+			kind: "archived",
+			document: { id: opened.channel.id, title: "Release readiness" },
+		});
+		if (archived.kind !== "archived") throw new Error("test document was not archived");
+		expect(archived.document.archivedAt).toBeString();
+		expect(await adapter.archive.archive(caller, opened.channel.id)).toEqual({
+			kind: "unchanged",
+			document: archived.document,
+		});
+		expect(await adapter.documents.list(caller, "octo-org/score")).toEqual([]);
+		expect(await adapter.documents.list(caller, "octo-org/score", true)).toEqual([
+			archived.document,
+		]);
+		expect(await adapter.documents.read(caller, opened.channel.id)).toMatchObject({
+			id: opened.channel.id,
+			archivedAt: archived.document.archivedAt,
+		});
+
+		let restored = await adapter.restore.restore(caller, locator);
+		expect(restored).toEqual({
+			kind: "restored",
+			document: { id: opened.channel.id, title: "Release readiness" },
+		});
+		expect(await adapter.restore.restore(caller, opened.channel.id)).toEqual({
+			kind: "unchanged",
+			document: { id: opened.channel.id, title: "Release readiness" },
+		});
+	});
+
+	it("coordinates archive callbacks after direct GitHub authorization", async () => {
+		let context = setup();
+		let opened = await plan(context);
+		await Service.close(opened.plan);
+		let deleting = false;
+		let transitions: string[] = [];
+		let adapter = hosted(context.auth, undefined, {
+			archiveChannel: async (channelId, now) => {
+				transitions.push(`archive:${channelId}`);
+				return context.storage.channels.archive({ id: channelId, now });
+			},
+			isChannelDeleting: channelId => deleting && channelId === opened.channel.id,
+			restoreChannel: async (channelId, now) => {
+				transitions.push(`restore:${channelId}`);
+				return context.storage.channels.restore({ id: channelId, now });
+			},
+		});
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller || !adapter.archive || !adapter.rename || !adapter.restore) {
+			throw new Error("hosted archive adapter is unavailable");
+		}
+
+		expect(await adapter.archive.archive(caller, opened.channel.id)).toEqual({
+			kind: "forbidden",
+		});
+		context.github.repositoryValue = {
+			...context.github.repositoryValue,
+			permissions: { pull: false, push: true, admin: false },
+		};
+		expect(await adapter.archive.archive(caller, opened.channel.id)).toEqual({
+			kind: "unavailable",
+		});
+		context.github.repositoryValue = {
+			...context.github.repositoryValue,
+			permissions: { pull: true, push: true, admin: false },
+		};
+		expect(await adapter.archive.archive(caller, crypto.randomUUID())).toEqual({
+			kind: "unavailable",
+		});
+		deleting = true;
+		expect(await adapter.archive.archive(caller, opened.channel.id)).toEqual({
+			kind: "unavailable",
+		});
+		expect(
+			await adapter.rename.rename(caller, {
+				id: opened.channel.id,
+				title: "Unavailable rename",
+			}),
+		).toEqual({ kind: "unavailable" });
+		deleting = false;
+		expect(await adapter.archive.archive(caller, opened.channel.id)).toMatchObject({
+			kind: "archived",
+		});
+		expect(await adapter.restore.restore(caller, opened.channel.id)).toMatchObject({
+			kind: "restored",
+		});
+		expect(transitions).toEqual([
+			`archive:${opened.channel.id}`,
+			`restore:${opened.channel.id}`,
+		]);
+	});
+
 	it("creates a durable repository channel for a caller with write access", async () => {
 		let context = setup();
 		context.github.repositoryValue = {
@@ -354,6 +462,11 @@ describe("the hosted MCP adapter", () => {
 		let repeated = await adapter.rename.rename(caller, { id: channel.id, title: "Launch plan" });
 		expect(repeated.kind).toBe("unchanged");
 		expect(announcements).toEqual(["Launch plan"]);
+
+		await context.storage.channels.archive({ id: channel.id, now: context.now });
+		expect(await adapter.rename.rename(caller, { id: channel.id, title: "Archived plan" }))
+			.toEqual({ kind: "archived" });
+		expect(announcements).toEqual(["Launch plan"]);
 	});
 
 	it("refuses MCP renames without write access or a unique repository title", async () => {
@@ -395,7 +508,7 @@ describe("the hosted MCP adapter", () => {
 		});
 		context.github.accessible = false;
 		expect(await adapter.rename.rename(caller, { id: first.id, title: "Hidden" })).toEqual({
-			kind: "missing",
+			kind: "unavailable",
 		});
 	});
 
@@ -424,13 +537,20 @@ describe("the hosted MCP adapter", () => {
 		let first = await adapter.create.create(caller, creation);
 		expect(first.kind).toBe("created");
 		if (first.kind !== "created") return;
+		let archived = await context.storage.channels.archive({
+			id: first.document.id,
+			now: context.now,
+		});
 		expect(await adapter.create.create(caller, creation)).toEqual({
 			kind: "replayed",
 			document: {
 				...createdDocument(first.document.id),
+				archivedAt: archived.channel.archivedAt?.toISOString(),
 				url: "/documents/octo-org/score/created-plan",
 			},
 		});
+		expect((await context.storage.channels.get(first.document.id))?.archivedAt)
+			.toEqual(archived.channel.archivedAt);
 	});
 
 	it("rejects changed content under an accepted idempotency key", async () => {
@@ -585,7 +705,13 @@ describe("the hosted MCP adapter", () => {
 		} as unknown as Socket;
 		let live = Rooms.join(socket);
 		live.plan = opened.plan;
-		let adapter = hosted(context.auth, { lease: () => opened.lease });
+		let serialized: string[] = [];
+		let adapter = hosted(context.auth, { lease: () => opened.lease }, {
+			serializeDocument: async (channelId, action) => {
+				serialized.push(channelId);
+				return action();
+			},
+		});
 		let caller = await adapter.caller(request("Bearer allowed"));
 		if (!caller || !adapter.implementations) throw new Error("implementation adapter unavailable");
 
@@ -675,6 +801,7 @@ describe("the hosted MCP adapter", () => {
 					execution: { state: "idle" },
 					history: [{ outcome: { kind: "delivered" } }],
 				});
+			expect(serialized).toEqual(Array.from({ length: 6 }, () => opened.channel.id));
 		} finally {
 			Rooms.forget(live);
 			await Service.close(opened.plan);
@@ -768,6 +895,19 @@ describe("the hosted MCP adapter", () => {
 			kind: "active",
 			run: { session: "session-1" },
 		});
+		let archived = await context.storage.channels.archive({
+			id: opened.channel.id,
+			now: context.now,
+		});
+		expect(await adapter.implementations.readImplementation(caller, opened.channel.id))
+			.toMatchObject({
+				document: { archivedAt: archived.channel.archivedAt?.toISOString() },
+				execution: { state: "active" },
+			});
+		expect(await adapter.implementations.startImplementation(caller, input)).toEqual({
+			kind: "refused",
+			reason: "document-archived",
+		});
 		let report = adapter.implementations.reportLifecycle;
 		expect(report).toBeTypeOf("function");
 		if (!report) return;
@@ -817,6 +957,64 @@ describe("the hosted MCP adapter", () => {
 		});
 		expect(durable.lifecycle?.history[0]).not.toHaveProperty("outcome");
 		expect(durable.execution).toBeUndefined();
+	});
+
+	it("reports deleting, missing, and inaccessible implementation documents as unavailable", async () => {
+		let context = setup();
+		context.github.repositoryValue = {
+			...context.github.repositoryValue,
+			permissions: { pull: true, push: true, admin: false },
+		};
+		let opened = await plan(context);
+		await Service.close(opened.plan);
+		let deleting = true;
+		let adapter = hosted(context.auth, { lease: () => opened.lease }, {
+			isChannelDeleting: channelId => deleting && channelId === opened.channel.id,
+		});
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller || !adapter.implementations?.reportLifecycle) {
+			throw new Error("implementation adapter unavailable");
+		}
+		let input = {
+			id: opened.channel.id,
+			planRevision: 0,
+			graphVersion: 1,
+			graphRevision: 1,
+			repository: "octo-org/score",
+			branch: "tq/017",
+			commit: "deadbeef",
+			client: { name: "Codex", version: "1.2.3", session: "session-1" },
+		};
+		let report = {
+			id: opened.channel.id,
+			kind: "start" as const,
+			runId: "run-1",
+			taskId: "claim",
+			idempotencyKey: "start-claim",
+		};
+
+		expect(await adapter.implementations.startImplementation(caller, input)).toEqual({
+			kind: "unavailable",
+		});
+		expect(await adapter.implementations.reportLifecycle(caller, report)).toEqual({
+			kind: "unavailable",
+		});
+		deleting = false;
+		let missingId = crypto.randomUUID();
+		expect(
+			await adapter.implementations.startImplementation(caller, { ...input, id: missingId }),
+		).toEqual({ kind: "unavailable" });
+		expect(
+			await adapter.implementations.reportLifecycle(caller, { ...report, id: missingId }),
+		).toEqual({ kind: "unavailable" });
+
+		context.github.accessible = false;
+		expect(await adapter.implementations.startImplementation(caller, input)).toEqual({
+			kind: "unavailable",
+		});
+		expect(await adapter.implementations.reportLifecycle(caller, report)).toEqual({
+			kind: "unavailable",
+		});
 	});
 
 	it("refuses a verified graph but claims a new version for a closed hosted plan", async () => {

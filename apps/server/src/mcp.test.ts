@@ -165,6 +165,67 @@ describe("the MCP read protocol", () => {
 		});
 	});
 
+	it("maps unavailable implementation documents without reporting repository denial", async () => {
+		let mcp = handler({
+			caller: () => "octocat",
+			documents: reader(),
+			implementations: {
+				async readImplementation() {
+					return undefined;
+				},
+				async startImplementation() {
+					return { kind: "unavailable" };
+				},
+				async reportLifecycle() {
+					return { kind: "unavailable" };
+				},
+			},
+		});
+		let initialized = await mcp(request({
+			jsonrpc: "2.0",
+			id: 1,
+			method: "initialize",
+			params: {},
+		}));
+		let session = initialized.headers.get("mcp-session-id")!;
+		let calls = [
+			{
+				name: "start_implementation",
+				arguments: {
+					id: document.id,
+					planRevision: 4,
+					graphVersion: 1,
+					graphRevision: 4,
+					repository: "githubnext/chopin",
+					branch: "tq/017",
+					commit: "deadbeef",
+				},
+			},
+			{
+				name: "start_task",
+				arguments: {
+					id: document.id,
+					runId: "run-1",
+					taskId: "model",
+					idempotencyKey: "start-model",
+				},
+			},
+		];
+		for (let [index, tool] of calls.entries()) {
+			let response = await json(
+				await mcp(request({
+					jsonrpc: "2.0",
+					id: index + 2,
+					method: "tools/call",
+					params: tool,
+				}, { headers: { "mcp-session-id": session } })),
+			);
+			expect((response.result as { structuredContent: unknown }).structuredContent).toEqual({
+				code: "document-unavailable",
+			});
+		}
+	});
+
 	it("advertises and dispatches lifecycle tools from one implementation capability", async () => {
 		let received: unknown;
 		type LifecycleReport = Awaited<
@@ -469,6 +530,12 @@ describe("the MCP read protocol", () => {
 			let [id, name, arguments_, error] of [
 				[5, "list_documents", { repository: "./chopin" }, "list_documents requires a repository"],
 				[6, "list_documents", { repository: "owner/.." }, "list_documents requires a repository"],
+				[
+					11,
+					"list_documents",
+					{ repository: "githubnext/chopin", extra: true },
+					"list_documents requires a repository",
+				],
 				[7, "read_document", { id: " \t" }, "read_document requires an id or URL"],
 				[
 					9,

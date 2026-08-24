@@ -36,8 +36,9 @@ export function completeDocumentPage(
 	current: DocumentLoadState,
 	channels: Api.Channel[],
 	nextCursor?: string,
+	replace = false,
 ): DocumentLoadState {
-	let byId = new Map(current.channels.map(channel => [channel.id, channel]));
+	let byId = new Map(replace ? [] : current.channels.map(channel => [channel.id, channel]));
 	for (let channel of channels) byId.set(channel.id, channel);
 	return {
 		status: "ready",
@@ -89,10 +90,27 @@ export function replaceLoadedDocument(
 	};
 }
 
+export function removeLoadedDocument(
+	documents: LoadedDocuments,
+	documentId: string,
+): LoadedDocuments {
+	for (let [repositoryId, state] of Object.entries(documents)) {
+		if (!state.channels.some(channel => channel.id === documentId)) continue;
+		return {
+			...documents,
+			[repositoryId]: {
+				...state,
+				channels: state.channels.filter(channel => channel.id !== documentId),
+			},
+		};
+	}
+	return documents;
+}
+
 export function updateLoadedDocument(
 	documents: LoadedDocuments,
 	documentId: string,
-	update: Pick<Api.Channel, "title" | "slug" | "updatedAt">,
+	update: Pick<Api.Channel, "title" | "slug" | "updatedAt" | "archivedAt">,
 ): LoadedDocuments {
 	for (let [repositoryId, state] of Object.entries(documents)) {
 		if (!state.channels.some(channel => channel.id === documentId)) continue;

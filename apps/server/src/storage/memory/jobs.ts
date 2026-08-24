@@ -30,6 +30,7 @@ import type { BackgroundJobStore } from "../port";
 
 type Options = {
 	channelExists: (channelId: string) => boolean;
+	channelActive: (channelId: string) => boolean;
 	assertLease: (lease: Lease) => void;
 };
 
@@ -322,6 +323,9 @@ export class MemoryBackgroundJobStore implements BackgroundJobStore {
 
 	readonly cancel = async (input: CancelBackgroundJob): Promise<BackgroundJob> => {
 		this.#options.assertLease(input.lease);
+		if (!input.allowArchived && !this.#options.channelActive(input.channelId)) {
+			throw conflict(`channel ${input.channelId} is archived`);
+		}
 		let found = this.#controlled(input, ["pending", "paused", "running"]);
 		return this.#controlTransition(found, "cancelled", input.now);
 	};
@@ -368,6 +372,24 @@ export class MemoryBackgroundJobStore implements BackgroundJobStore {
 		let found = this.#jobs.get(jobId);
 		return found?.channelId === channelId ? this.#detail(found) : undefined;
 	};
+
+	deleteChannel(channelId: string): void {
+		this.#revisions.delete(channelId);
+		for (let [targetKey, target] of this.#targets) {
+			if (target.channelId === channelId) this.#targets.delete(targetKey);
+		}
+		let jobIds = new Set<string>();
+		for (let [jobId, saved] of this.#jobs) {
+			if (saved.channelId === channelId) {
+				jobIds.add(jobId);
+				this.#jobs.delete(jobId);
+			}
+		}
+		for (let [idempotencyKey, jobId] of this.#idempotency) {
+			if (jobIds.has(jobId)) this.#idempotency.delete(idempotencyKey);
+		}
+		for (let jobId of jobIds) this.#artifacts.delete(jobId);
+	}
 
 	#write(channelId: string, held: Lease): void {
 		this.#options.assertLease(held);

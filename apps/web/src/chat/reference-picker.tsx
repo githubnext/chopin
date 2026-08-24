@@ -79,9 +79,12 @@ export async function searchReferenceTargets(
 			let page = await api.channels(
 				repository.owner,
 				repository.name,
-				cursor,
-				trigger.query || undefined,
-				signal,
+				{
+					cursor,
+					includeArchived: false,
+					query: trigger.query || undefined,
+					signal,
+				},
 			);
 			for (let [index, channel] of page.channels.entries()) {
 				if (channel.id !== room) channels.set(channel.id, channel);

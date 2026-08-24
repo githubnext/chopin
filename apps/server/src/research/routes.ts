@@ -208,7 +208,7 @@ export function registerResearchWorkspaceRoutes(
 	router.on(
 		"GET",
 		"/api/repositories/:owner/:repository/research-workspaces",
-		async (request, _url, params) => {
+		async (request, url, params) => {
 			try {
 				let session = await auth.sessions.authenticate(request);
 				if (!session) return json({ error: "authentication required" }, 401);
@@ -222,7 +222,12 @@ export function registerResearchWorkspaceRoutes(
 				if (!resolved.repository.permissions.pull) {
 					return json({ error: "repository read access is required" }, 403);
 				}
-				let listed = await service.listRepository(resolved.repository.id);
+				let includeArchived = url.searchParams.get("includeArchived") === "true";
+				let listed = await service.listRepository(
+					resolved.repository.id,
+					undefined,
+					includeArchived,
+				);
 				return json({
 					repository: repository(resolved.repository),
 					canEdit: canWrite(resolved.repository),
@@ -396,6 +401,9 @@ export function registerResearchWorkspaceRoutes(
 				if (!access) return json({ error: "research workspace not found" }, 404);
 				if (!canWrite(access.repository)) {
 					return json({ error: "repository write access is required" }, 403);
+				}
+				if (access.channel.archivedAt) {
+					return json({ error: "document is archived" }, 409);
 				}
 				let workspace = await service.cancelTurn({
 					channelId: access.channel.id,

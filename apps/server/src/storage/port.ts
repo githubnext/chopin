@@ -13,6 +13,8 @@ import type {
 	BackgroundJobPage,
 	CancelBackgroundJob,
 	ChannelAgent,
+	ChannelArchiveInput,
+	ChannelArchiveResult,
 	ChannelPage,
 	ChannelRecord,
 	ChannelScanCursor,
@@ -99,11 +101,25 @@ export interface ChannelStore {
 	get(id: string): Promise<ChannelRecord | undefined>;
 	resolve(repositoryId: string, slug: string): Promise<ChannelRecord | undefined>;
 	rename(channel: RenameChannel): Promise<RenameResult>;
-	list(repositoryId: string, limit: number, after?: {
-		updatedAt: Date;
-		id: string;
-	}, query?: string): Promise<ChannelPage>;
-	scan(repositoryId: string, limit: number, after?: ChannelScanCursor): Promise<ChannelScanPage>;
+	archive(input: ChannelArchiveInput): Promise<ChannelArchiveResult>;
+	restore(input: ChannelArchiveInput): Promise<ChannelArchiveResult>;
+	delete(id: string): Promise<boolean>;
+	list(
+		repositoryId: string,
+		limit: number,
+		after?: {
+			updatedAt: Date;
+			id: string;
+		},
+		query?: string,
+		includeArchived?: boolean,
+	): Promise<ChannelPage>;
+	scan(
+		repositoryId: string,
+		limit: number,
+		after?: ChannelScanCursor,
+		includeArchived?: boolean,
+	): Promise<ChannelScanPage>;
 	claimAgentOwner(channelId: string, sessionId: string, now: Date): Promise<AgentState>;
 	clearAgentOwner(
 		channelId: string,
@@ -157,7 +173,11 @@ export interface ResearchWorkspaceStore {
 		input: AppendResearchAgentMessage,
 	): Promise<AppendResearchAgentMessageResult>;
 	list(channelId: string, limit: number): Promise<ResearchWorkspaceSummary[]>;
-	listRepository(repositoryId: string, limit: number): Promise<ResearchWorkspaceRepositoryList>;
+	listRepository(
+		repositoryId: string,
+		limit: number,
+		includeArchived?: boolean,
+	): Promise<ResearchWorkspaceRepositoryList>;
 	get(channelId: string, workspaceId: string): Promise<ResearchWorkspaceDetail | undefined>;
 	findTurnByJob(channelId: string, jobId: string): Promise<ResearchTurn | undefined>;
 }

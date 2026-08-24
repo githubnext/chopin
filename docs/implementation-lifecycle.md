@@ -57,7 +57,9 @@ without immediately superseding the prior approved version. The prior version
 is superseded only when the replacement is approved.
 
 These counters are separate from the Yjs epoch, document update sequence, and
-storage commit revision described in [Architecture](architecture.md).
+storage commit revision described in [Architecture](architecture.md). Archiving
+or restoring the document does not advance any collaboration, document, or
+graph counter.
 
 ## Intended workflow
 
@@ -108,6 +110,11 @@ identity. `read_implementation` returns the stable UUID as `document.id`, and
 `start_implementation` plus every task, pull-request, blocker, revision, and
 verification call continues using that UUID.
 
+Direct `read_implementation` remains available for an archived document.
+`start_implementation` refuses it with `document-archived`, while reports for a
+run that started before archival remain accepted under the normal run and graph
+checks.
+
 ## Lock behavior
 
 An active implementation locks the graph and prevents plan changes that would
@@ -117,6 +124,12 @@ revision. Progress and archived runs remain durable sidecar state.
 
 The protocol defines a `plan:lifecycle` projection for active progress and run
 history. The current web client does not yet render that projection.
+
+Archiving does not release an active graph lock or terminate its run. A coding
+agent can continue reporting task, pull-request, blocker, revision, and
+verification transitions while the document is archived. Permanent deletion is
+terminal instead: it cascades the graph, execution, and lifecycle sidecar with
+the channel, and later lifecycle reports return `document-unavailable`.
 
 ## Authorization
 

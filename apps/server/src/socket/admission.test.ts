@@ -134,6 +134,7 @@ describe("socket admission", () => {
 			handle: "octocat",
 			principalId: "U_octocat",
 			canEdit: false,
+			canManage: false,
 		});
 		let probe = await admit(
 			new Request(url, {
@@ -162,7 +163,25 @@ describe("socket admission", () => {
 
 		github.push = true;
 		let editor = await admit(request, url, auth);
-		expect("data" in editor && editor.data.canEdit).toBe(true);
+		expect("data" in editor && editor.data).toMatchObject({
+			canEdit: true,
+			canManage: true,
+		});
+		if ("data" in editor) expect(editor.data).not.toHaveProperty("channelArchivedAt");
+
+		let archivedAt = new Date(now.getTime() + 1_000);
+		await storage.channels.archive({ id: channel.id, now: archivedAt });
+		let archived = await admit(request, url, auth);
+		expect("data" in archived && archived.data).toMatchObject({
+			canEdit: false,
+			canManage: true,
+			channelArchivedAt: archivedAt.toISOString(),
+		});
+		expect(await admit(request, url, auth, { deleting: id => id === channel.id })).toEqual({
+			status: 404,
+			reason: "channel not found",
+		});
+
 		github.repositoryId = "R_other";
 		let denied = await admit(request, url, auth);
 		expect(denied).toEqual({ status: 404, reason: "channel not found" });

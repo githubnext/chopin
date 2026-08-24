@@ -258,6 +258,8 @@ export type ThreadCardProps = {
 	writing?: string[];
 	focused?: boolean;
 	busy?: boolean;
+	/** Whether durable thread actions are available to this viewer. */
+	canEdit?: boolean;
 	/** True once the agent has said what an accepted thread produced. */
 	applied?: boolean;
 	onReply: (text: string) => void;
@@ -278,6 +280,7 @@ export type ThreadCardProps = {
 export function ThreadCard({
 	applied,
 	busy,
+	canEdit = true,
 	focused,
 	onAccept,
 	onBlur,
@@ -305,14 +308,16 @@ export function ThreadCard({
 			footer={!open && !applied && (
 				<>
 					<span className="text-sm text-warning-ink">Not yet applied</span>
-					<button
-						className="btn btn-sm btn-ghost"
-						disabled={busy}
-						onClick={onRetry}
-						type="button"
-					>
-						Ask again
-					</button>
+					{canEdit && (
+						<button
+							className="btn btn-sm btn-ghost"
+							disabled={busy}
+							onClick={onRetry}
+							type="button"
+						>
+							Ask again
+						</button>
+					)}
 				</>
 			)}
 			label="Comment"
@@ -353,7 +358,7 @@ export function ThreadCard({
 				</p>
 			)}
 
-			{open && (
+			{open && canEdit && (
 				<>
 					<Composer
 						busy={busy}

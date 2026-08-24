@@ -27,6 +27,8 @@ export type Room = {
 	plan?: Plan;
 	/** In flight while the first opener is building it, so the second waits. */
 	opening?: Promise<Plan>;
+	/** Final persistence is in flight; reopening waits for it to finish. */
+	closing?: Promise<void>;
 	/** Pending eviction, cancelled if somebody comes back. */
 	eviction?: ReturnType<typeof setTimeout>;
 };
@@ -60,7 +62,7 @@ export function join(ws: Socket): Room {
 export function leave(ws: Socket): Room | undefined {
 	let room = rooms.get(ws.data.room);
 	if (!room) return undefined;
-	room.members.delete(ws.data.client);
+	if (room.members.get(ws.data.client) === ws) room.members.delete(ws.data.client);
 	return room;
 }
 
@@ -71,7 +73,7 @@ export function all(): Room[] {
 
 export function forget(room: Room): void {
 	if (room.eviction) clearTimeout(room.eviction);
-	rooms.delete(room.id);
+	if (rooms.get(room.id) === room) rooms.delete(room.id);
 }
 
 export function members(room: Room): Identity[] {

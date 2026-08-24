@@ -517,6 +517,7 @@ async function commitHosted(
 	update: Uint8Array | undefined,
 	operationId: string,
 	captured: Captured,
+	allowArchived = false,
 ): Promise<void> {
 	let durable = plan.persistence;
 	if (!update && captured.sidecarText === durable.lastSidecar) {
@@ -535,6 +536,7 @@ async function commitHosted(
 			sidecar: captured.sidecar,
 			events: [],
 			now: new Date(),
+			...(allowArchived ? { allowArchived: true } : {}),
 		});
 		if (!result.repeated) {
 			durable.revision = result.revision;
@@ -550,6 +552,7 @@ async function commitHosted(
 				sidecar: captured.sidecar,
 				events: [],
 				now: new Date(),
+				...(allowArchived ? { allowArchived: true } : {}),
 			});
 			durable.revision = stateResult.revision;
 			durable.sequence = stateResult.sequence;
@@ -683,8 +686,14 @@ export function implementationActive(plan: Plan): boolean {
 }
 
 /** Sidecar-only commit for a caller already holding `exclusive`. */
-export function persistExclusive(plan: Plan): Promise<void> {
-	return commitHosted(plan, undefined, `state:${crypto.randomUUID()}`, capture(plan));
+export function persistExclusive(plan: Plan, allowArchived = false): Promise<void> {
+	return commitHosted(
+		plan,
+		undefined,
+		`state:${crypto.randomUUID()}`,
+		capture(plan),
+		allowArchived,
+	);
 }
 
 type RestoredHosted = {
@@ -1313,7 +1322,7 @@ export async function close(plan: Plan): Promise<void> {
 	persistence.checkpointTimer = undefined;
 	await Chat.close(plan.chat);
 	await plan.flushing;
-	await commitHosted(plan, undefined, `state:${crypto.randomUUID()}`, capture(plan));
+	await commitHosted(plan, undefined, `state:${crypto.randomUUID()}`, capture(plan), true);
 	await checkpointHosted(plan);
 	Questions.shutdown(plan.questions);
 	presence.destroy(plan.presence);

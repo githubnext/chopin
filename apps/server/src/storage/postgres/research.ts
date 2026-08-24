@@ -361,10 +361,7 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 				let channelId = required(input.channelId, "channel id");
 				let idempotencyKey = required(input.idempotencyKey, "workspace idempotency key");
 				let fingerprint = required(input.fingerprint, "workspace fingerprint");
-				let [parent] = await transaction<{ id: string }[]>`
-					SELECT id FROM channels WHERE id = ${channelId} FOR UPDATE
-				`;
-				if (!parent) throw missing(`channel ${channelId} does not exist`);
+				let archived = await this.#lockChannelArchiveState(transaction, channelId);
 				let [existing] = await transaction<WorkspaceRow[]>`
 					SELECT ${transaction.unsafe(WORKSPACE_COLUMNS)}
 					FROM research_workspaces
@@ -378,6 +375,7 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 					}
 					return { workspace: repeated, repeated: true };
 				}
+				if (archived) throw conflict(`channel ${channelId} is archived`);
 
 				let id = required(input.id, "workspace id");
 				let title = required(input.title, "workspace title");
@@ -421,6 +419,7 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 					input.confirmedByHandle,
 					"confirming member handle",
 				);
+				let archived = await this.#lockChannelArchiveState(transaction, channelId);
 				let locked = await this.#lockWorkspace(transaction, channelId, workspaceId);
 				let repeated = await this.#turnForRequest(transaction, workspaceId, requestId);
 				if (repeated) {
@@ -439,6 +438,7 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 						repeated: true,
 					};
 				}
+				if (archived) throw conflict(`channel ${channelId} is archived`);
 				if (locked.workspace.confirmedQuery !== undefined) {
 					throw conflict(`research workspace ${workspaceId} is already confirmed`);
 				}
@@ -502,6 +502,7 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 				if (input.kind !== "follow-up" && input.kind !== "search-more") {
 					throw conflict("research appended turn kind is invalid");
 				}
+				let archived = await this.#lockChannelArchiveState(transaction, channelId);
 				let locked = await this.#lockWorkspace(transaction, channelId, workspaceId);
 				let repeated = await this.#turnForRequest(transaction, workspaceId, requestId);
 				if (repeated) {
@@ -520,6 +521,7 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 						repeated: true,
 					};
 				}
+				if (archived) throw conflict(`channel ${channelId} is archived`);
 				if (locked.workspace.confirmedQuery === undefined) {
 					throw conflict(`research workspace ${workspaceId} is not confirmed`);
 				}
@@ -713,6 +715,7 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 	readonly listRepository = (
 		repositoryId: string,
 		limit: number,
+		includeArchived = false,
 	): Promise<ResearchWorkspaceRepositoryList> =>
 		this.#run(
 			"list repository research workspaces",
@@ -733,6 +736,7 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 							) AS slug
 						FROM channels
 						WHERE channels.repository_id = ${repositoryId}
+							AND (${includeArchived} OR channels.archived_at IS NULL)
 						ORDER BY channels.created_at DESC, channels.id ASC
 						LIMIT ${RESEARCH_REPOSITORY_CHANNEL_LIMIT + 1}
 					`;
@@ -744,6 +748,7 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 							SELECT channels.id, channels.created_at
 							FROM channels
 							WHERE channels.repository_id = ${repositoryId}
+								AND (${includeArchived} OR channels.archived_at IS NULL)
 							ORDER BY channels.created_at DESC, channels.id ASC
 							LIMIT ${RESEARCH_REPOSITORY_CHANNEL_LIMIT}
 						)
@@ -872,6 +877,20 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 			throw missing(`research workspace ${workspaceId} does not exist in channel ${channelId}`);
 		}
 		return lockedWorkspace(row);
+	}
+
+	async #lockChannelArchiveState(
+		transaction: TransactionSQL,
+		channelId: string,
+	): Promise<boolean> {
+		let [row] = await transaction<{ archivedAt: Timestamp | null }[]>`
+			SELECT archived_at AS "archivedAt"
+			FROM channels
+			WHERE id = ${channelId}
+			FOR UPDATE
+		`;
+		if (!row) throw missing(`channel ${channelId} does not exist`);
+		return row.archivedAt !== null;
 	}
 
 	async #lockTurn(

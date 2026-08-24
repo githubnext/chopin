@@ -58,6 +58,7 @@
 }
 
 .research-connection[data-status="denied"] > span,
+.research-connection[data-status="deleted"] > span,
 .research-connection[data-status="closed"] > span {
 	background: var(--color-destructive);
 }

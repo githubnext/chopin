@@ -1,4 +1,4 @@
-import { authenticate, expect, roomPath, test } from "./room";
+import { authenticate, content, expect, roomPath, test } from "./room";
 
 function channel(id: string, title: string) {
 	return {
@@ -35,20 +35,25 @@ function headerDocument(page: import("@playwright/test").Page) {
 	return page.getByRole("banner").locator('[aria-label^="Document:"]');
 }
 
-function headerRename(page: import("@playwright/test").Page) {
-	return page.getByRole("banner").getByRole("button", { name: /^Rename / });
+function headerActions(page: import("@playwright/test").Page) {
+	return page.getByRole("banner").getByRole("button", { name: /^Actions for / });
+}
+
+async function headerAction(page: import("@playwright/test").Page, action: string) {
+	await headerActions(page).click();
+	await page.getByRole("menuitem", { name: action, exact: true }).click();
 }
 
 test("the room header renames the current document and the sidebar creates one immediately", async ({ join }) => {
 	let page = await join("ana");
 	let header = page.getByRole("banner");
-	let trigger = headerRename(page);
+	let trigger = headerActions(page);
 	let projects = sidebar(page);
 
 	await expect(headerDocument(page)).toBeVisible();
 	await expect(projects.locator('[aria-current="page"]')).toHaveCount(1);
 	await expect(header.getByRole("button", { name: /planner session/i })).toHaveCount(0);
-	await trigger.click();
+	await headerAction(page, "Rename");
 	let title = page.getByRole("textbox", { name: "Document title" });
 	await expect(title).toBeFocused();
 	await title.press("Escape");
@@ -67,6 +72,9 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 			path: new URL(request.url()).pathname,
 		}));
 	page = await join("ana");
+	let initialNavigationRequests =
+		requested.filter(request => request.method === "GET" && request.path === "/api/navigation")
+			.length;
 	let projects = sidebar(page);
 	let original = projects.locator('a[aria-current="page"]');
 	let originalTitle = (await original.textContent())!.trim();
@@ -80,7 +88,7 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 	await expect(projects.getByRole("link", { name: originalTitle, exact: true })).toBeVisible();
 	expect(
 		requested.filter(request => request.method === "GET" && request.path === "/api/navigation"),
-	).toHaveLength(1);
+	).toHaveLength(initialNavigationRequests);
 
 	let release = Promise.withResolvers<void>();
 	await page.route("**/api/repositories/octo-org/score/documents/*", async route => {
@@ -172,10 +180,9 @@ test("renaming the current document updates collaborators and survives reload", 
 	let title = `Launch plan ${room.slice(0, 8)}`;
 	let previousPath = roomPath(room);
 	let renamedPath = `/documents/octo-org/score/${title.toLowerCase().replaceAll(" ", "-")}`;
-	let anaTrigger = headerRename(ana);
 
 	await ana.setViewportSize({ width: 320, height: 568 });
-	await anaTrigger.click();
+	await headerAction(ana, "Rename");
 	let input = ana.getByRole("textbox", { name: "Document title" });
 	await expect(input).toBeFocused();
 	await input.fill(title);
@@ -206,15 +213,13 @@ test("a delayed rename response cannot overwrite a newer collaborator rename", a
 	});
 	let first = `First rename ${room.slice(0, 8)}`;
 	let latest = `Latest rename ${room.slice(0, 8)}`;
-	let anaTrigger = headerRename(ana);
-	let boTrigger = headerRename(bo);
 
-	await anaTrigger.click();
+	await headerAction(ana, "Rename");
 	await ana.getByRole("textbox", { name: "Document title" }).fill(first);
 	await ana.getByRole("button", { name: "Save" }).click();
 	await expect(headerDocument(bo)).toHaveAccessibleName(`Document: ${first}`);
 
-	await boTrigger.click();
+	await headerAction(bo, "Rename");
 	await bo.getByRole("textbox", { name: "Document title" }).fill(latest);
 	await bo.getByRole("button", { name: "Save" }).click();
 	await expect(headerDocument(ana)).toHaveAccessibleName(`Document: ${latest}`);
@@ -231,7 +236,7 @@ test("read-only visitors can browse documents while mutation actions stay disabl
 		"contenteditable",
 		"false",
 	);
-	await expect(headerRename(page)).toBeDisabled();
+	await expect(headerActions(page)).toHaveCount(0);
 	await expect(sidebar(page).getByRole("button", { name: "New document", exact: true }))
 		.toBeDisabled();
 	await sidebar(page).getByRole("button", { name: "Search", exact: true }).click();
@@ -250,8 +255,7 @@ test("document rename failures preserve the draft and can be retried", async ({ 
 		await route.continue();
 	});
 	let title = `Retry rename ${room.slice(0, 8)}`;
-	let trigger = headerRename(page);
-	await trigger.click();
+	await headerAction(page, "Rename");
 	let input = page.getByRole("textbox", { name: "Document title" });
 	await input.fill(title);
 	await page.getByRole("button", { name: "Save" }).click();
@@ -260,6 +264,51 @@ test("document rename failures preserve the draft and can be retried", async ({ 
 
 	await page.getByRole("button", { name: "Save" }).click();
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${title}`);
+});
+
+test("writers can archive, restore, and permanently delete a document", async ({ join, room }) => {
+	let ana = await join("ana");
+	let bo = await join("bo");
+	let title = `Test ${room.slice(0, 8)}`;
+	let path = roomPath(room);
+	let projects = sidebar(ana);
+
+	await headerAction(ana, "Archive");
+	await expect(ana.getByText("Archived, read-only", { exact: true })).toBeVisible();
+	await expect(bo.getByText("Archived, read-only", { exact: true })).toBeVisible();
+	await expect(content(ana)).toHaveAttribute("contenteditable", "false");
+	await expect(content(bo)).toHaveAttribute("contenteditable", "false");
+	await expect(projects.getByRole("link", { name: title, exact: true })).toHaveCount(0);
+
+	await bo.reload();
+	await expect(bo).toHaveURL(path);
+	await expect(content(bo)).toHaveAttribute("contenteditable", "false");
+
+	await projects.getByRole("checkbox", { name: "Show archived documents" }).check();
+	await expect(projects.getByRole("link", { name: `${title} Archived`, exact: true }))
+		.toBeVisible();
+	await projects.getByRole("button", { name: "Search", exact: true }).click();
+	let search = ana.getByRole("dialog", { name: "Search documents" });
+	let searchInput = search.getByRole("textbox", { name: "Search documents" });
+	await searchInput.fill(title);
+	await expect(search.getByRole("button", { name: new RegExp(`${title}.*Archived`) }))
+		.toBeVisible();
+	await searchInput.press("Escape");
+
+	await headerAction(ana, "Restore");
+	await expect(content(ana)).toHaveAttribute("contenteditable", "true");
+	await expect(content(bo)).toHaveAttribute("contenteditable", "true");
+	await expect(ana.getByText("Archived, read-only", { exact: true })).toHaveCount(0);
+
+	await headerAction(ana, "Archive");
+	await expect(content(ana)).toHaveAttribute("contenteditable", "false");
+	await headerAction(ana, "Delete permanently");
+	let confirmation = ana.getByRole("dialog", { name: "Delete document permanently?" });
+	await confirmation.getByRole("button", { name: "Delete permanently", exact: true }).click();
+	await expect(ana).not.toHaveURL(path);
+	await expect(bo).not.toHaveURL(path);
+	let unavailable = await ana.request.get(`/api/channels/${room}`);
+	expect(unavailable.status()).toBe(404);
 });
 
 test("sidebar creation failures remain retryable", async ({ join, page }) => {

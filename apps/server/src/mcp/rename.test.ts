@@ -75,7 +75,7 @@ describe("the MCP rename protocol", () => {
 		let rename: RenameDocument<string> = {
 			async rename() {
 				called = true;
-				return { kind: "missing" };
+				return { kind: "unavailable" };
 			},
 		};
 		let mcp = handler({ caller: () => "octocat", documents: reader(), rename });
@@ -108,9 +108,10 @@ describe("the MCP rename protocol", () => {
 		}));
 		for (
 			let [kind, code] of [
+				["archived", "document-archived"],
 				["conflict", "title-conflict"],
 				["forbidden", "repository-forbidden"],
-				["missing", "document-unavailable"],
+				["unavailable", "document-unavailable"],
 			] as const
 		) {
 			let mcp = handler({

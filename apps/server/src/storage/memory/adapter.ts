@@ -7,6 +7,8 @@ import type {
 	AddUserProject,
 	AddUserProjectResult,
 	AgentState,
+	ChannelArchiveInput,
+	ChannelArchiveResult,
 	ChannelCursor,
 	ChannelPage,
 	ChannelRecord,
@@ -73,7 +75,13 @@ function navigation(value: UserNavigation): UserNavigation {
 }
 
 function channel(value: ChannelRecord): ChannelRecord {
-	return { ...value, createdAt: new Date(value.createdAt), updatedAt: new Date(value.updatedAt) };
+	let { archivedAt, ...record } = value;
+	return {
+		...record,
+		createdAt: new Date(value.createdAt),
+		updatedAt: new Date(value.updatedAt),
+		...(archivedAt ? { archivedAt: new Date(archivedAt) } : {}),
+	};
 }
 
 function snapshot(value: ChannelSnapshot): ChannelSnapshot {
@@ -175,6 +183,7 @@ export class MemoryStorage implements StorageAdapter {
 			let selected = found?.lastDocumentId
 				? this.#channels.get(found.lastDocumentId)
 				: undefined;
+			if (selected?.archivedAt) selected = undefined;
 			return Promise.resolve({
 				projects: (this.#projects.get(userId) ?? []).map(project),
 				navigation: found ? navigation(found) : undefined,
@@ -193,7 +202,7 @@ export class MemoryStorage implements StorageAdapter {
 				.sort((left, right) => left.position - right.position);
 			for (let stored of projects) {
 				let first = [...this.#channels.values()]
-					.filter(value => value.repositoryId === stored.repositoryId)
+					.filter(value => value.repositoryId === stored.repositoryId && !value.archivedAt)
 					.sort((left, right) =>
 						right.updatedAt.getTime() - left.updatedAt.getTime()
 						|| left.id.localeCompare(right.id)
@@ -233,9 +242,13 @@ export class MemoryStorage implements StorageAdapter {
 			return Promise.resolve(found && channel(found));
 		},
 		rename: input => this.#renameChannel(input),
-		list: (repositoryId, limit, after, query) =>
-			this.#listChannels(repositoryId, limit, after, query),
-		scan: (repositoryId, limit, after) => this.#scanChannels(repositoryId, limit, after),
+		archive: input => this.#setChannelArchived(input, true),
+		restore: input => this.#setChannelArchived(input, false),
+		delete: id => this.#deleteChannel(id),
+		list: (repositoryId, limit, after, query, includeArchived) =>
+			this.#listChannels(repositoryId, limit, after, query, includeArchived),
+		scan: (repositoryId, limit, after, includeArchived) =>
+			this.#scanChannels(repositoryId, limit, after, includeArchived),
 		claimAgentOwner: (channelId, sessionId, now) =>
 			this.#claimAgentOwner(channelId, sessionId, now),
 		clearAgentOwner: (channelId, expectedSessionId, expectedGeneration, now) =>
@@ -251,12 +264,15 @@ export class MemoryStorage implements StorageAdapter {
 		checkpoint: input => this.#checkpoint(input),
 	};
 
-	readonly jobs: BackgroundJobStore = new MemoryBackgroundJobStore({
+	readonly #jobs = new MemoryBackgroundJobStore({
 		channelExists: channelId => this.#channels.has(channelId),
+		channelActive: channelId => !this.#channels.get(channelId)?.archivedAt,
 		assertLease: held => this.#assertLease(held),
 	});
-	readonly research: ResearchWorkspaceStore = new MemoryResearchWorkspaceStore({
+	readonly jobs: BackgroundJobStore = this.#jobs;
+	readonly #research = new MemoryResearchWorkspaceStore({
 		channelExists: channelId => this.#channels.has(channelId),
+		channelActive: channelId => !this.#channels.get(channelId)?.archivedAt,
 		channels: repositoryId =>
 			[...this.#channels.values()]
 				.filter(value => value.repositoryId === repositoryId)
@@ -265,6 +281,7 @@ export class MemoryStorage implements StorageAdapter {
 		job: (channelId, jobId) => this.jobs.get(channelId, jobId),
 		assertLease: held => this.#assertLease(held),
 	});
+	readonly research: ResearchWorkspaceStore = this.#research;
 
 	readonly leases: LeaseStore = {
 		acquire: (name, owner, ttlMs) => this.#acquire(name, owner, ttlMs),
@@ -319,8 +336,10 @@ export class MemoryStorage implements StorageAdapter {
 		now: Date,
 	): Promise<UserNavigation> {
 		this.#requireUser(userId);
-		if (documentId && !this.#channels.has(documentId)) {
-			throw missing(`channel ${documentId} does not exist`);
+		if (documentId) {
+			let document = this.#channels.get(documentId);
+			if (!document) throw missing(`channel ${documentId} does not exist`);
+			if (document.archivedAt) throw conflict(`channel ${documentId} is archived`);
 		}
 		let saved: UserNavigation = {
 			userId,
@@ -340,6 +359,7 @@ export class MemoryStorage implements StorageAdapter {
 				`channel ${input.documentId} does not exist in repository ${input.repositoryId}`,
 			);
 		}
+		if (document.archivedAt) throw conflict(`channel ${input.documentId} is archived`);
 		await this.#addProject(input);
 		return this.#setLastDocument(input.userId, input.documentId, input.now);
 	}
@@ -382,6 +402,7 @@ export class MemoryStorage implements StorageAdapter {
 	async #renameChannel(input: RenameChannel): Promise<RenameResult> {
 		let found = this.#channels.get(input.id);
 		if (!found) throw missing(`channel ${input.id} does not exist`);
+		if (found.archivedAt) throw conflict(`channel ${input.id} is archived`);
 		if (found.title === input.title) return { channel: channel(found), changed: false };
 		if (
 			[...this.#channels.values()].some(value =>
@@ -397,6 +418,59 @@ export class MemoryStorage implements StorageAdapter {
 		let saved = { ...found, title: input.title, slug, updatedAt };
 		this.#channels.set(saved.id, saved);
 		return { channel: channel(saved), changed: true };
+	}
+
+	async #setChannelArchived(
+		input: ChannelArchiveInput,
+		archived: boolean,
+	): Promise<ChannelArchiveResult> {
+		let found = this.#channels.get(input.id);
+		if (!found) throw missing(`channel ${input.id} does not exist`);
+		if ((found.archivedAt !== undefined) === archived) {
+			return { channel: channel(found), changed: false };
+		}
+		let updatedAt = input.now > found.updatedAt
+			? new Date(input.now)
+			: new Date(found.updatedAt.getTime() + 1);
+		let saved: ChannelRecord;
+		if (archived) {
+			saved = { ...found, updatedAt, archivedAt: new Date(updatedAt) };
+		} else {
+			let { archivedAt: _, ...active } = found;
+			saved = { ...active, updatedAt };
+		}
+		this.#channels.set(saved.id, saved);
+		return { channel: channel(saved), changed: true };
+	}
+
+	async #deleteChannel(id: string): Promise<boolean> {
+		let found = this.#channels.get(id);
+		if (!found) return false;
+		if (!found.archivedAt) throw conflict(`channel ${id} must be archived before deletion`);
+
+		this.#channels.delete(id);
+		await this.#research.deleteChannel(id);
+		this.#jobs.deleteChannel(id);
+		this.#snapshots.delete(id);
+		this.#sequences.delete(id);
+		this.#updates.delete(id);
+		this.#events.delete(id);
+		this.#sidecars.delete(id);
+		this.#operations.delete(id);
+		this.#agents.delete(id);
+		let aliases = this.#channelSlugs.get(found.repositoryId);
+		if (aliases) {
+			for (let [slug, owner] of aliases) {
+				if (owner === id) aliases.delete(slug);
+			}
+			if (aliases.size === 0) this.#channelSlugs.delete(found.repositoryId);
+		}
+		for (let [userId, saved] of this.#navigation) {
+			if (saved.lastDocumentId === id) {
+				this.#navigation.set(userId, { ...saved, lastDocumentId: undefined });
+			}
+		}
+		return true;
 	}
 
 	#reserveSlug(repositoryId: string, channelId: string, title: string): string {
@@ -420,10 +494,12 @@ export class MemoryStorage implements StorageAdapter {
 		limit: number,
 		after?: ChannelCursor,
 		query?: string,
+		includeArchived = false,
 	): Promise<ChannelPage> {
 		let count = Math.min(100, Math.max(1, limit));
 		let ordered = [...this.#channels.values()]
 			.filter(value => value.repositoryId === repositoryId)
+			.filter(value => includeArchived || !value.archivedAt)
 			.filter(value => !query || value.title.toLowerCase().includes(query.toLowerCase()))
 			.sort((left, right) =>
 				right.updatedAt.getTime() - left.updatedAt.getTime() || left.id.localeCompare(right.id)
@@ -448,10 +524,12 @@ export class MemoryStorage implements StorageAdapter {
 		repositoryId: string,
 		limit: number,
 		after?: ChannelScanCursor,
+		includeArchived = false,
 	): Promise<ChannelScanPage> {
 		let count = Math.min(100, Math.max(1, limit));
 		let ordered = [...this.#channels.values()]
 			.filter(value => value.repositoryId === repositoryId)
+			.filter(value => includeArchived || !value.archivedAt)
 			.sort((left, right) =>
 				right.createdAt.getTime() - left.createdAt.getTime() || left.id.localeCompare(right.id)
 			);
@@ -588,6 +666,12 @@ export class MemoryStorage implements StorageAdapter {
 		this.#operations.set(input.channelId, operations);
 		let repeated = operations.get(input.operationId);
 		if (repeated) return Promise.resolve({ ...repeated, repeated: true });
+		if (found.archivedAt && !input.allowArchived) {
+			throw conflict(`channel ${input.channelId} is archived`);
+		}
+		if (input.allowArchived && (input.update || input.events.length > 0)) {
+			throw conflict("archived channel maintenance must be sidecar-only");
+		}
 		if (found.revision !== input.expectedRevision) {
 			throw conflict(
 				`channel ${input.channelId} is at revision ${found.revision}, expected ${input.expectedRevision}`,
@@ -671,6 +755,7 @@ export class MemoryStorage implements StorageAdapter {
 		this.#operations.set(input.channelId, operations);
 		let repeated = operations.get(input.operationId);
 		if (repeated) return Promise.resolve({ ...repeated, repeated: true });
+		if (found.archivedAt) throw conflict(`channel ${input.channelId} is archived`);
 		if (found.revision !== input.expectedRevision) {
 			throw conflict(
 				`channel ${input.channelId} is at revision ${found.revision}, expected ${input.expectedRevision}`,

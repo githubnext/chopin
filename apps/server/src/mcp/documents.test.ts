@@ -127,4 +127,56 @@ describe("the MCP document protocol", () => {
 			structuredContent: { code: "repository-forbidden" },
 		});
 	});
+
+	it("defaults archived listing off and exposes archival metadata when requested", async () => {
+		let archivedAt = "2026-08-23T12:34:56.000Z";
+		let includeArchived: boolean[] = [];
+		let archived = { ...document, archivedAt };
+		let mcp = endpoint({
+			async list(_caller, _repository, include = false) {
+				includeArchived.push(include);
+				return include ? [{ id: document.id, title: document.title, archivedAt }] : [];
+			},
+			async read() {
+				return archived;
+			},
+		});
+		let calls = [
+			{ repository: "githubnext/chopin" },
+			{ repository: "githubnext/chopin", includeArchived: true },
+		];
+		let listed = [];
+		for (let [index, arguments_] of calls.entries()) {
+			let response = await json(
+				await mcp(request({
+					jsonrpc: "2.0",
+					id: index + 10,
+					method: "tools/call",
+					params: { name: "list_documents", arguments: arguments_ },
+				})),
+			);
+			listed.push((response.result as { structuredContent: unknown }).structuredContent);
+		}
+
+		expect(includeArchived).toEqual([false, true]);
+		expect(listed).toEqual([{ documents: [] }, {
+			documents: [{ id: document.id, title: document.title, archivedAt }],
+		}]);
+
+		let read = await json(
+			await mcp(request({
+				jsonrpc: "2.0",
+				id: 12,
+				method: "tools/call",
+				params: { name: "read_document", arguments: { id: document.id } },
+			})),
+		);
+		expect((read.result as { structuredContent: unknown }).structuredContent).toEqual(archived);
+		expect(
+			((TOOLS.find(tool => tool.name === "list_documents")!.inputSchema.properties) as Record<
+				string,
+				unknown
+			>).includeArchived,
+		).toEqual({ type: "boolean", default: false });
+	});
 });

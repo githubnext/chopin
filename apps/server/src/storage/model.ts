@@ -78,6 +78,7 @@ export type ChannelRecord = {
 	revision: number;
 	createdAt: Date;
 	updatedAt: Date;
+	archivedAt?: Date;
 };
 
 export type InitialChannel = Omit<
@@ -88,7 +89,7 @@ export type InitialChannel = Omit<
 export type CreateChannel =
 	& Omit<
 		ChannelRecord,
-		"slug" | "revision" | "createdAt" | "updatedAt"
+		"slug" | "revision" | "createdAt" | "updatedAt" | "archivedAt"
 	>
 	& {
 		now: Date;
@@ -103,6 +104,16 @@ export type RenameChannel = {
 };
 
 export type RenameResult = {
+	channel: ChannelRecord;
+	changed: boolean;
+};
+
+export type ChannelArchiveInput = {
+	id: string;
+	now: Date;
+};
+
+export type ChannelArchiveResult = {
 	channel: ChannelRecord;
 	changed: boolean;
 };
@@ -197,6 +208,8 @@ export type CommitChannel = {
 	sidecar?: JsonValue;
 	events: EventInput[];
 	now: Date;
+	/** Lifecycle and shutdown maintenance may persist after document archival. */
+	allowArchived?: boolean;
 };
 
 export type CommitResult = {
@@ -394,7 +407,9 @@ export type ControlBackgroundJob = {
 	lease: Lease;
 };
 
-export type CancelBackgroundJob = Omit<ControlBackgroundJob, "expectedRevision">;
+export type CancelBackgroundJob = Omit<ControlBackgroundJob, "expectedRevision"> & {
+	allowArchived?: boolean;
+};
 
 export type PauseBackgroundJob = ControlBackgroundJob & { reason: string };
 export type ResumeBackgroundJob = ControlBackgroundJob & { availableAt: Date };

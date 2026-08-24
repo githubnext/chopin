@@ -29,7 +29,7 @@ async function expectCompactWorkspaceChrome(page: Page): Promise<void> {
 	let header = page.getByRole("banner");
 	let nav = page.getByRole("navigation", { name: "Workspace view" });
 	let projects = page.getByRole("button", { name: "Open Projects sidebar" });
-	let document = header.getByRole("button", { name: /^Rename / });
+	let document = header.getByRole("button", { name: /^Actions for / });
 	let destinations = nav.getByRole("button");
 
 	await expect(header.getByRole("button", { name: /conversation pane/ })).toHaveCount(0);

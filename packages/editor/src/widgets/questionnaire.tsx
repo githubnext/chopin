@@ -47,6 +47,8 @@ export type QuestionnaireCardProps = {
 	value: Questionnaire;
 	wire?: Transport;
 	connected?: boolean;
+	/** Whether this viewer may change or resolve the shared draft. */
+	canEdit?: boolean;
 	/** How much prose each decision lives in. */
 	places?: { [question: string]: number };
 	onQuestionEnter?: (question: string) => void;
@@ -57,6 +59,7 @@ export type QuestionnaireCardProps = {
 
 export function QuestionnaireCard(
 	{
+		canEdit = true,
 		connected = false,
 		onQuestionEnter,
 		onQuestionLeave,
@@ -71,7 +74,15 @@ export function QuestionnaireCard(
 
 	return resolved
 		? <Decided resolved={resolved} value={value} {...pointing} />
-		: <Undecided connected={connected} value={value} wire={wire} {...pointing} />;
+		: (
+			<Undecided
+				canEdit={canEdit}
+				connected={connected}
+				value={value}
+				wire={wire}
+				{...pointing}
+			/>
+		);
 }
 
 type Pointing = {
@@ -82,8 +93,8 @@ type Pointing = {
 };
 
 function Undecided(
-	{ connected, value, wire, ...pointing }:
-		& { connected: boolean; value: Questionnaire; wire?: Transport }
+	{ canEdit, connected, value, wire, ...pointing }:
+		& { canEdit: boolean; connected: boolean; value: Questionnaire; wire?: Transport }
 		& Pointing,
 ) {
 	let state = useQuestionnaire({
@@ -94,6 +105,7 @@ function Undecided(
 	});
 
 	let answerable = connected && !!state.definition;
+	let editable = canEdit && answerable;
 
 	return (
 		<SidecarCard
@@ -106,12 +118,12 @@ function Undecided(
 				definition={state.definition ?? definition(value)}
 				// A draft that has not synced cannot be edited without discarding
 				// what other people have already put into it.
-				disabled={!answerable || state.syncing || state.submitting}
+				disabled={!editable || state.syncing || state.submitting}
 				drafts={state.drafts}
 				error={state.error}
-				onCancel={answerable ? state.cancel : undefined}
-				onChange={answerable ? state.change : undefined}
-				onSubmit={answerable ? state.submit : undefined}
+				onCancel={editable ? state.cancel : undefined}
+				onChange={editable ? state.change : undefined}
+				onSubmit={editable ? state.submit : undefined}
 				status="open"
 				submitting={state.submitting}
 				{...pointing}
@@ -149,6 +161,7 @@ function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 
 	return (
 		<QuestionnaireCard
+			canEdit={options.canEdit}
 			connected={options.connected}
 			onQuestionEnter={question => options.questions?.highlight(value.id, question)}
 			onQuestionLeave={() => options.questions?.clear()}

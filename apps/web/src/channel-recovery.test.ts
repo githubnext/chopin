@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
-import { readChannelRecovery, readDocumentRecovery, rememberChannel } from "./channel-recovery";
+import {
+	forgetChannel,
+	readChannelRecovery,
+	readDocumentRecovery,
+	rememberChannel,
+} from "./channel-recovery";
 
 class MemoryStorage implements Storage {
 	readonly #values = new Map<string, string>();
@@ -67,6 +72,27 @@ describe("channel recovery context", () => {
 		expect(readChannelRecovery("U_octocat", channel.id, storage)?.channel.title).toBe(
 			"Launch plan",
 		);
+	});
+
+	it("forgets both recovery addresses after deletion", () => {
+		let storage = new MemoryStorage();
+		rememberChannel("U_octocat", channel, repository, storage);
+		forgetChannel("U_octocat", {
+			...channel,
+			repositoryOwner: repository.owner,
+			repositoryName: repository.name,
+		}, storage);
+
+		expect(readChannelRecovery("U_octocat", channel.id, storage)).toBeUndefined();
+		expect(
+			readDocumentRecovery(
+				"U_octocat",
+				repository.owner,
+				repository.name,
+				channel.slug,
+				storage,
+			),
+		).toBeUndefined();
 	});
 
 	it("does not return another channel's context", () => {

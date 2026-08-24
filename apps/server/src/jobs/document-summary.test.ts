@@ -240,6 +240,56 @@ describe("document summary coordinator", () => {
 			await value.storage.close();
 		}
 	});
+
+	it("suspends pending and admitted scheduling until resumed", async () => {
+		let current = target();
+		let definition = documentSummaryDefinition({
+			config: { agent: true, model: "summary-model" },
+			current: async () => current,
+			refresh: async () => {},
+			commitCurrent,
+			engine: async () => ({ summary: "summary", model: "summary-model" }),
+		});
+		let value = await serviceContext(definition);
+		let timers: Array<{ cancelled: boolean; action: () => void }> = [];
+		let currentCalls = 0;
+		let coordinator = new DocumentSummaryCoordinator({
+			service: value.service,
+			current: async channelId => {
+				currentCalls++;
+				return { ...current, channelId };
+			},
+			debounceMs: 10,
+			after: (_delay, action) => {
+				let timer = { cancelled: false, action };
+				timers.push(timer);
+				return () => timer.cancelled = true;
+			},
+		});
+		try {
+			let scheduled = { ...current, channelId: value.channelId };
+			coordinator.schedule(scheduled);
+			let admitted = coordinator.enqueueNow(scheduled);
+			await coordinator.suspend(value.channelId);
+			await admitted;
+			expect(timers[0]!.cancelled).toBe(true);
+			timers[0]!.action();
+
+			coordinator.schedule(scheduled);
+			await coordinator.ensure(value.channelId);
+			await coordinator.enqueueNow(scheduled);
+			expect(currentCalls).toBe(0);
+			expect((await value.storage.jobs.list(value.channelId, 10))!.jobs).toEqual([]);
+
+			coordinator.resume(value.channelId);
+			await coordinator.ensure(value.channelId);
+			expect(currentCalls).toBe(2);
+			expect((await value.storage.jobs.list(value.channelId, 10))!.jobs).toHaveLength(1);
+		} finally {
+			coordinator.close();
+			await value.storage.close();
+		}
+	});
 });
 
 async function waitFor(check: () => boolean | Promise<boolean>): Promise<void> {
