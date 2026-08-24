@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { ContentSwapLayer } from "@chopin/editor/content-swap";
 import {
+	childDocumentPath,
 	documentPath,
 	documentsPath,
+	parseChildDocumentPath,
 	parseDocumentPath,
 	parseResearchWorkspacePath,
 	researchWorkspacePath,
@@ -82,6 +84,8 @@ export function hostedRoute(pathname: string): HostedRoute {
 	if (pathname === "/" || pathname === "") return { page: "repositories" };
 	let research = parseResearchWorkspacePath(pathname);
 	if (research) return { page: "research", ...research };
+	let child = parseChildDocumentPath(pathname);
+	if (child) return { page: "child", ...child };
 	let document = parseDocumentPath(pathname);
 	if (document?.slug) {
 		return {
@@ -108,6 +112,31 @@ export function retryableChannelFailure(error: unknown): boolean {
 		|| error.status === 408
 		|| error.status === 429
 		|| error.status >= 500;
+}
+
+export function validatedChildPath(
+	child: Api.ChannelDetail,
+	parent: Api.ChannelDetail,
+): string {
+	let sameRepository = child.repository.id === parent.repository.id
+		&& child.channel.repositoryId === child.repository.id
+		&& parent.channel.repositoryId === parent.repository.id;
+	if (
+		!child.channel.parentChannelId
+		|| child.channel.parentChannelId !== parent.channel.id
+		|| parent.channel.parentChannelId
+		|| !sameRepository
+		|| !parent.channel.slug
+		|| !child.channel.slug
+	) {
+		throw new Api.ApiError("Child document not found", 404);
+	}
+	return childDocumentPath(
+		child.repository.owner,
+		child.repository.name,
+		parent.channel.slug,
+		child.channel.slug,
+	);
 }
 
 function Loading({ label = "Loading" }: { label?: string }) {
@@ -249,6 +278,14 @@ function ChannelWorkspace(
 		case "channel":
 			recovery = readChannelRecovery(user.id, source.id);
 			break;
+		case "child":
+			recovery = readDocumentRecovery(
+				user.id,
+				source.owner,
+				source.repository,
+				source.childSlug,
+			);
+			break;
 		case "document":
 		case "research":
 			recovery = readDocumentRecovery(
@@ -265,49 +302,79 @@ function ChannelWorkspace(
 		let controller = new AbortController();
 		setLoaded(undefined);
 		setError(undefined);
-		let detail: Promise<Api.ChannelDetail>;
+		let prepared: Promise<{ canonicalPath: string; detail: Api.ChannelDetail }>;
 		switch (source.page) {
 			case "channel":
-				detail = Api.channel(source.id, controller.signal);
+				prepared = Api.channel(source.id, controller.signal).then(detail => ({
+					canonicalPath: documentPath(
+						detail.repository.owner,
+						detail.repository.name,
+						detail.channel.slug,
+					),
+					detail,
+				}));
 				break;
 			case "document":
-			case "research":
-				detail = Api.document(
+				prepared = Api.document(
 					source.owner,
 					source.repository,
 					source.slug,
 					controller.signal,
-				);
+				).then(detail => ({
+					canonicalPath: documentPath(
+						detail.repository.owner,
+						detail.repository.name,
+						detail.channel.slug,
+					),
+					detail,
+				}));
+				break;
+			case "research":
+				prepared = Api.document(
+					source.owner,
+					source.repository,
+					source.slug,
+					controller.signal,
+				).then(detail => ({
+					canonicalPath: researchWorkspacePath(
+						detail.repository.owner,
+						detail.repository.name,
+						detail.channel.slug,
+						source.workspaceId,
+					),
+					detail,
+				}));
+				break;
+			case "child":
+				prepared = Promise.all([
+					Api.document(
+						source.owner,
+						source.repository,
+						source.childSlug,
+						controller.signal,
+					),
+					Api.document(
+						source.owner,
+						source.repository,
+						source.parentSlug,
+						controller.signal,
+					),
+				]).then(([detail, parent]) => ({
+					canonicalPath: validatedChildPath(detail, parent),
+					detail,
+				}));
 				break;
 		}
-		let prepared = detail.then(value => {
-			let canonicalPath: string;
-			switch (source.page) {
-				case "channel":
-				case "document":
-					canonicalPath = documentPath(
-						value.repository.owner,
-						value.repository.name,
-						value.channel.slug,
-					);
-					break;
-				case "research":
-					canonicalPath = researchWorkspacePath(
-						value.repository.owner,
-						value.repository.name,
-						value.channel.slug,
-						source.workspaceId,
-					);
-					break;
-			}
+		prepared = prepared.then(resolved => {
 			if (active) {
-				rememberChannel(user.id, value.channel, value.repository);
+				rememberChannel(user.id, resolved.detail.channel, resolved.detail.repository);
 			}
-			return { canonicalPath, detail: value };
+			return resolved;
 		});
 		let workspace;
 		switch (source.page) {
 			case "channel":
+			case "child":
 			case "document":
 				workspace = import("./room-workspace").then(module => ({
 					kind: "document" as const,
@@ -341,12 +408,19 @@ function ChannelWorkspace(
 			controller.abort();
 		};
 	}, [onReady, retry, routeKey, source, user.id]);
-
 	if (error) {
 		let requestedRepository;
 		let requestedSlug;
 		switch (source.page) {
 			case "channel":
+				break;
+			case "child":
+				requestedRepository = {
+					fullName: `${source.owner}/${source.repository}`,
+					name: source.repository,
+					owner: source.owner,
+				};
+				requestedSlug = source.childSlug;
 				break;
 			case "document":
 			case "research":
@@ -502,6 +576,7 @@ export function HostedApp(
 		case "repository":
 			break;
 		case "document":
+		case "child":
 		case "channel":
 			workspace = <DocumentRouteSwap agent={agent} route={route} user={user} />;
 			break;

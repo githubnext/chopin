@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ProjectSidebar } from "./project-sidebar";
+import { documentGroups, ProjectSidebar } from "./project-sidebar";
 
 import type { ComponentProps } from "react";
 import type { Research } from "@chopin/protocol";
@@ -81,6 +81,89 @@ let props = {
 } satisfies ComponentProps<typeof ProjectSidebar>;
 
 describe("research sidebar hierarchy", () => {
+	it("groups children beneath present parents without disturbing either order", () => {
+		let secondParent = { ...channel, id: "channel-two", slug: "second", title: "Second" };
+		let firstChild = {
+			...channel,
+			id: "child-one",
+			parentChannelId: channel.id,
+			slug: "child-one",
+			title: "First child",
+		};
+		let secondChild = {
+			...firstChild,
+			id: "child-two",
+			slug: "child-two",
+			title: "Second child",
+		};
+		let orphan = {
+			...firstChild,
+			id: "orphan",
+			parentChannelId: "parent-on-another-page",
+		};
+
+		expect(
+			documentGroups(
+				[secondParent, firstChild, channel, orphan, secondChild],
+				false,
+			).map(group => ({
+				parent: group.parent.id,
+				children: group.children.map(child => child.id),
+			})),
+		).toEqual([
+			{ parent: secondParent.id, children: [] },
+			{ parent: channel.id, children: [firstChild.id, secondChild.id] },
+		]);
+	});
+
+	it("filters archived parents and children before grouping", () => {
+		let archivedParent = {
+			...channel,
+			id: "archived-parent",
+			archivedAt: "2026-08-24T00:00:00.000Z",
+		};
+		let archivedChild = {
+			...channel,
+			id: "archived-child",
+			parentChannelId: archivedParent.id,
+			archivedAt: "2026-08-24T00:00:00.000Z",
+		};
+		let activeChild = { ...archivedChild, id: "active-child", archivedAt: undefined };
+
+		expect(documentGroups([channel, archivedParent, archivedChild, activeChild], false))
+			.toEqual([{ parent: channel, children: [] }]);
+		expect(documentGroups([channel, archivedParent, archivedChild, activeChild], true))
+			.toEqual([{ parent: archivedParent, children: [archivedChild] }]);
+	});
+
+	it("renders an ordinary child row with the same durable route as its ready card", () => {
+		let child = {
+			...channel,
+			id: "child-one",
+			parentChannelId: channel.id,
+			title: "Source review",
+			slug: "source-review",
+		};
+		let markup = renderToStaticMarkup(createElement(ProjectSidebar, {
+			...props,
+			currentDocumentId: child.id,
+			currentParentDocumentId: channel.id,
+			projects: [{
+				...props.projects[0]!,
+				documents: { status: "ready", channels: [channel, child] },
+			}],
+		}));
+
+		expect(markup.match(/aria-current="page"/g)).toHaveLength(1);
+		expect(markup).toContain("project-sidebar-document-ancestor");
+		expect(markup).toContain("project-sidebar-child group/document project-sidebar-child-current");
+		expect(markup).toContain(
+			'aria-current="page" class="project-sidebar-child-link" href="/documents/acme/one/release-plan/children/source-review"',
+		);
+		expect(markup).toContain("Source review");
+		expect(markup).toContain('aria-label="Actions for Source review"');
+	});
+
 	it("uses one real current-page link for the document route", () => {
 		let markup = renderToStaticMarkup(createElement(ProjectSidebar, props));
 

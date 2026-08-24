@@ -11,7 +11,11 @@ import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
 import { canManageProject } from "./navigation-model";
 import { MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
-import { documentPath, researchWorkspacePath } from "@chopin/protocol/document-url";
+import {
+	childDocumentPath,
+	documentPath,
+	researchWorkspacePath,
+} from "@chopin/protocol/document-url";
 
 import { useId, useRef, useState } from "react";
 import { CaretDownIcon, CaretRightIcon } from "@phosphor-icons/react";
@@ -45,11 +49,31 @@ export function newestResearchFirst(
 	);
 }
 
+export function documentGroups(
+	channels: Api.Channel[],
+	archiveMode: boolean,
+): Array<{ parent: Api.Channel; children: Api.Channel[] }> {
+	let visible = channels.filter(channel =>
+		archiveMode ? channel.archivedAt !== undefined : channel.archivedAt === undefined
+	);
+	let parents = visible.filter(channel => channel.parentChannelId === undefined);
+	let parentIds = new Set(parents.map(channel => channel.id));
+	let children = new Map<string, Api.Channel[]>();
+	for (let channel of visible) {
+		if (!channel.parentChannelId || !parentIds.has(channel.parentChannelId)) continue;
+		let nested = children.get(channel.parentChannelId) ?? [];
+		nested.push(channel);
+		children.set(channel.parentChannelId, nested);
+	}
+	return parents.map(parent => ({ parent, children: children.get(parent.id) ?? [] }));
+}
+
 function Project(
 	{
 		archiveMode,
 		creatingProjectIds,
 		currentDocumentId,
+		currentParentDocumentId,
 		currentResearchWorkspaceId,
 		entry,
 		expanded,
@@ -63,6 +87,7 @@ function Project(
 		archiveMode: boolean;
 		creatingProjectIds: ReadonlySet<string>;
 		currentDocumentId?: string;
+		currentParentDocumentId?: string;
 		currentResearchWorkspaceId?: string;
 		entry: ProjectDocuments;
 		expanded: boolean;
@@ -75,9 +100,7 @@ function Project(
 	},
 ) {
 	let { documents, project } = entry;
-	let channels = documents.channels.filter(channel =>
-		archiveMode ? channel.archivedAt !== undefined : channel.archivedAt === undefined
-	);
+	let groups = documentGroups(documents.channels, archiveMode);
 	let label = project.repository?.name ?? project.repositoryName;
 	let canManage = canManageProject(project);
 	let creating = creatingProjectIds.has(project.repositoryId);
@@ -91,14 +114,18 @@ function Project(
 			{documents.status === "error" && (
 				<p className="project-sidebar-status" role="status">{documents.message}</p>
 			)}
-			{documents.status === "loading" && channels.length === 0 && (
+			{documents.status === "loading" && groups.length === 0 && (
 				<p className="project-sidebar-status" role="status">Loading documents…</p>
 			)}
-			{channels.length > 0 && (
+			{groups.length > 0 && (
 				<ul className="project-sidebar-documents">
-					{channels.map(channel => {
-						let children = newestResearchFirst(research.get(channel.id)?.workspaces ?? []);
+					{groups.map(({ children, parent: channel }) => {
+						let researchWorkspaces = newestResearchFirst(
+							research.get(channel.id)?.workspaces ?? [],
+						);
 						let parentCurrent = currentDocumentId === channel.id;
+						let childCurrent = currentParentDocumentId === channel.id
+							&& children.some(child => child.id === currentDocumentId);
 						let researchCurrent = parentCurrent && currentResearchWorkspaceId !== undefined;
 						let parentHref = documentPath(
 							channel.repositoryOwner,
@@ -111,7 +138,7 @@ function Project(
 									className={`project-sidebar-document ${
 										parentCurrent && !researchCurrent
 											? "project-sidebar-document-current"
-											: researchCurrent
+											: researchCurrent || childCurrent
 											? "project-sidebar-document-ancestor"
 											: ""
 									}`}
@@ -154,8 +181,51 @@ function Project(
 									)}
 								</div>
 								{children.length > 0 && (
+									<ul className="project-sidebar-children">
+										{children.map(child => {
+											let current = child.id === currentDocumentId;
+											return (
+												<li
+													className={`project-sidebar-child group/document ${
+														current ? "project-sidebar-child-current" : ""
+													}`}
+													key={child.id}
+												>
+													<a
+														aria-current={current ? "page" : undefined}
+														className="project-sidebar-child-link"
+														href={childDocumentPath(
+															channel.repositoryOwner,
+															channel.repositoryName,
+															channel.slug,
+															child.slug,
+														)}
+													>
+														<span className="truncate">{child.title}</span>
+													</a>
+													{canManage && (
+														<div className="project-sidebar-document-actions">
+															<DocumentActionsMenu
+																channel={child}
+																className="project-sidebar-document-action"
+																onAction={action => onDocumentAction(child, action)}
+																trigger={
+																	<NavigationIcon
+																		className="h-auto w-3.5"
+																		src={documentActionsIcon}
+																	/>
+																}
+															/>
+														</div>
+													)}
+												</li>
+											);
+										})}
+									</ul>
+								)}
+								{researchWorkspaces.length > 0 && (
 									<ul className="project-sidebar-research">
-										{children.map(workspace => (
+										{researchWorkspaces.map(workspace => (
 											<li key={workspace.id}>
 												<a
 													aria-current={parentCurrent
@@ -185,7 +255,7 @@ function Project(
 					})}
 				</ul>
 			)}
-			{documents.status === "loading" && channels.length > 0 && (
+			{documents.status === "loading" && groups.length > 0 && (
 				<p className="project-sidebar-status" role="status">Loading more…</p>
 			)}
 			{documents.status === "ready" && documents.nextCursor && (
@@ -256,6 +326,7 @@ export function ProjectSidebar(
 		creatingNewDocument,
 		creatingProjectIds,
 		currentDocumentId,
+		currentParentDocumentId,
 		currentResearchWorkspaceId,
 		onAccount,
 		onAddProject,
@@ -279,6 +350,7 @@ export function ProjectSidebar(
 		creatingNewDocument: boolean;
 		creatingProjectIds: ReadonlySet<string>;
 		currentDocumentId?: string;
+		currentParentDocumentId?: string;
 		currentResearchWorkspaceId?: string;
 		onAccount: () => void;
 		onAddProject: () => void;
@@ -400,6 +472,7 @@ export function ProjectSidebar(
 									archiveMode={archiveMode}
 									creatingProjectIds={creatingProjectIds}
 									currentDocumentId={currentDocumentId}
+									currentParentDocumentId={currentParentDocumentId}
 									currentResearchWorkspaceId={currentResearchWorkspaceId}
 									entry={entry}
 									expanded={!collapsedProjectIds.has(entry.project.repositoryId)}

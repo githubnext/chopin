@@ -1,7 +1,49 @@
 import { describe, expect, it } from "bun:test";
 
 import { ApiError } from "./api";
-import { githubLoginHref, hostedRoute, retryableChannelFailure } from "./hosted";
+import {
+	githubLoginHref,
+	hostedRoute,
+	retryableChannelFailure,
+	validatedChildPath,
+} from "./hosted";
+
+import type { ChannelDetail } from "./api";
+
+function detail(
+	id: string,
+	slug: string,
+	parentChannelId?: string,
+	repositoryId = "R_score",
+): ChannelDetail {
+	return {
+		repository: {
+			id: repositoryId,
+			owner: "octo-org",
+			name: "score",
+			fullName: "octo-org/score",
+			private: false,
+			url: "https://github.com/octo-org/score",
+			defaultBranch: "main",
+			permissions: { pull: true, push: true, admin: false },
+		},
+		canEdit: true,
+		canManage: true,
+		channel: {
+			id,
+			repositoryId,
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			...(parentChannelId ? { parentChannelId } : {}),
+			title: slug,
+			slug,
+			createdBy: "user-one",
+			revision: 0,
+			createdAt: "2026-08-24T00:00:00.000Z",
+			updatedAt: "2026-08-24T00:00:00.000Z",
+		},
+	};
+}
 
 describe("hosted routes", () => {
 	it("recognizes canonical document and legacy routes", () => {
@@ -50,6 +92,41 @@ describe("hosted routes", () => {
 			.toEqual({ page: "missing" });
 		expect(hostedRoute("/documents/octo-org/score/plan/research"))
 			.toEqual({ page: "missing" });
+	});
+
+	it("recognizes a child route before the ordinary document route", () => {
+		expect(hostedRoute(
+			"/documents/octo-org/score/release-plan/children/source%20review",
+		)).toEqual({
+			page: "child",
+			owner: "octo-org",
+			repository: "score",
+			parentSlug: "release-plan",
+			childSlug: "source review",
+		});
+	});
+
+	it("accepts direct child entry only for its recorded parent and repository", () => {
+		let parent = detail("parent-one", "canonical-parent");
+		let child = detail("child-one", "canonical-child", parent.channel.id);
+
+		expect(validatedChildPath(child, parent)).toBe(
+			"/documents/octo-org/score/canonical-parent/children/canonical-child",
+		);
+		for (
+			let invalid of [
+				detail("child-one", "canonical-child"),
+				detail("child-one", "canonical-child", "different-parent"),
+				detail("child-one", "canonical-child", parent.channel.id, "R_other"),
+			]
+		) {
+			expect(() => validatedChildPath(invalid, parent)).toThrow(ApiError);
+			try {
+				validatedChildPath(invalid, parent);
+			} catch (error) {
+				expect((error as ApiError).status).toBe(404);
+			}
+		}
 	});
 });
 
