@@ -5,6 +5,7 @@ import { ContentSwapLayer } from "@chopin/editor/content-swap";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 
 import {
+	initialWorkspaceState,
 	presentWorkspace,
 	transitionWorkspace,
 	WORKSPACE_MEDIA,
@@ -22,6 +23,7 @@ import type {
 	WorkspaceEvent,
 	WorkspaceMode,
 	WorkspaceState,
+	WorkspaceSurface,
 } from "./workspace-model";
 
 export type Pane = "chat";
@@ -69,18 +71,26 @@ export function useWorkspaceMode(): WorkspaceMode {
 }
 
 /** Only the desktop Conversation preference crosses a page load. */
-export function useWorkspaceState(): [WorkspaceState, Dispatch<WorkspaceEvent>] {
-	let [state, dispatch] = useReducer(transitionWorkspace, undefined, (): WorkspaceState => ({
-		conversationOpen: false,
-		desktopConversationOpen: localStorage.getItem("chopin:pane:chat:open") !== "false",
-	}));
+export function useWorkspaceState(
+	surface: WorkspaceSurface = "document",
+): [WorkspaceState, Dispatch<WorkspaceEvent>] {
+	let [state, dispatch] = useReducer(
+		transitionWorkspace,
+		undefined,
+		() =>
+			initialWorkspaceState(
+				surface,
+				localStorage.getItem("chopin:pane:chat:open") !== "false",
+			),
+	);
 
 	useEffect(() => {
+		if (surface === "child") return;
 		localStorage.setItem(
 			"chopin:pane:chat:open",
 			String(state.desktopConversationOpen),
 		);
-	}, [state.desktopConversationOpen]);
+	}, [state.desktopConversationOpen, surface]);
 
 	return [state, dispatch];
 }
@@ -102,6 +112,8 @@ export type WorkspaceProps = {
 	unanswered: number;
 	conversationActivity: { unread: number; busy: boolean };
 	backgroundActivity?: { active: number; paused: number; failed: number };
+	identity?: string;
+	surface?: WorkspaceSurface;
 };
 
 export function ConversationToggle(
@@ -219,12 +231,14 @@ export function Workspace(
 		conversationActivity,
 		decisions,
 		header,
+		identity,
 		mode,
 		onConversationOpen,
 		onDesktopConversationOpen,
 		onDestination,
 		plan,
 		state,
+		surface = "document",
 		unanswered,
 		view,
 	}: WorkspaceProps,
@@ -292,6 +306,8 @@ export function Workspace(
 		<div
 			className="workspace-root flex h-full flex-col overflow-hidden bg-ground"
 			data-workspace-mode={mode}
+			data-workspace-room={identity}
+			data-workspace-surface={surface}
 			ref={root}
 		>
 			{header}

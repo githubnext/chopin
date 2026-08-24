@@ -81,6 +81,22 @@ test("disabling background jobs hides only Background Work", () => {
 	expect(markup).not.toContain("Background Work");
 });
 
+test("child mode renders only Document and Decisions destinations", () => {
+	let markup = renderToStaticMarkup(
+		createElement(DecisionViewControl, {
+			backgroundWorkEnabled: false,
+			implementationEnabled: false,
+			onView: () => {},
+			unanswered: 0,
+			view: "plan",
+		}),
+	);
+	expect(markup).toContain(">Document<");
+	expect(markup).toContain(">Decisions<");
+	expect(markup).not.toContain("Tasks &amp; Progress");
+	expect(markup).not.toContain("Background Work");
+});
+
 test("new unanswered decisions expose an accessible actionable count", () => {
 	let markup = renderToStaticMarkup(
 		createElement(DecisionViewControl, {

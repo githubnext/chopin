@@ -1,6 +1,14 @@
 import { describe, expect, it } from "bun:test";
 
-import { presentWorkspace, transitionWorkspace, workspaceMode } from "./workspace-model";
+import {
+	initialWorkspaceState,
+	presentWorkspace,
+	transitionWorkspace,
+	workspaceCapabilities,
+	workspaceDestinations,
+	workspaceHeadingId,
+	workspaceMode,
+} from "./workspace-model";
 
 import type { WorkspaceState } from "./workspace-model";
 
@@ -14,6 +22,43 @@ function mediaAt(width: number): MatchMedia {
 }
 
 describe("adaptive workspace", () => {
+	it("starts a child with Conversation collapsed without inheriting the desktop preference", () => {
+		expect(initialWorkspaceState("child", true)).toEqual({
+			conversationOpen: false,
+			desktopConversationOpen: false,
+		});
+	});
+
+	it("limits a child to Document, Decisions, and Conversation", () => {
+		let capabilities = workspaceCapabilities("child", true);
+
+		expect(capabilities).toEqual({
+			backgroundJobs: false,
+			implementation: false,
+			research: false,
+		});
+		expect(workspaceDestinations(capabilities.backgroundJobs)).toEqual([
+			"conversation",
+			"plan",
+			"decisions",
+		]);
+	});
+
+	it("keeps the parent's legacy implementation surface without background jobs", () => {
+		expect(workspaceCapabilities("document", false)).toEqual({
+			backgroundJobs: false,
+			implementation: true,
+			research: true,
+		});
+	});
+
+	it("keeps child pane ids distinct from the mounted parent", () => {
+		expect(workspaceHeadingId("plan")).toBe("workspace-plan-heading");
+		expect(workspaceHeadingId("plan", "child-room")).toBe(
+			"workspace-child-room-plan-heading",
+		);
+	});
+
 	it("classifies the media queries production reads at each boundary", () => {
 		expect([1023, 1024].map(width => workspaceMode(mediaAt(width)))).toEqual([
 			"compact",

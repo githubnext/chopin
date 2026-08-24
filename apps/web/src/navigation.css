@@ -19,6 +19,124 @@
 	padding-left: 44px;
 }
 
+.anchored-child-host,
+.anchored-child-parent {
+	position: relative;
+	height: 100%;
+	min-height: 0;
+}
+
+.anchored-child-parent {
+	transition:
+		transform 240ms cubic-bezier(0.16, 1, 0.3, 1),
+		opacity 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.anchored-child-host[data-child-visible] .anchored-child-parent {
+	transform: translateY(3px) scale(0.985);
+	opacity: 0.58;
+}
+
+.anchored-child-host[data-child-presentation="closing"] .anchored-child-parent {
+	transform: none;
+	opacity: 1;
+	transition-duration: 170ms;
+	transition-timing-function: cubic-bezier(0.55, 0, 1, 0.45);
+}
+
+.anchored-child-surface {
+	position: absolute;
+	z-index: 40;
+	inset: 10px 12px 12px;
+	overflow: hidden;
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-xl);
+	background: var(--color-ground);
+	box-shadow: var(--shadow-raised);
+	transform-origin: 50% 75%;
+	animation: anchored-child-enter 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.anchored-child-host[data-child-presentation="closing"] .anchored-child-surface {
+	animation: anchored-child-exit 170ms cubic-bezier(0.55, 0, 1, 0.45) both;
+}
+
+.anchored-child-back {
+	position: absolute;
+	z-index: 50;
+	top: calc(0.5rem + env(safe-area-inset-top));
+	left: 10px;
+}
+
+.anchored-child-surface .room-header {
+	padding-left: 48px;
+}
+
+@keyframes anchored-child-enter {
+	from {
+		opacity: 0;
+		transform: translateY(10px) scale(0.975);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@keyframes anchored-child-exit {
+	from {
+		opacity: 1;
+		transform: none;
+	}
+	to {
+		opacity: 0;
+		transform: translateY(6px) scale(0.985);
+	}
+}
+
+@media (max-width: 1023px) {
+	.anchored-child-surface {
+		inset: 0;
+		border: 0;
+		border-radius: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.anchored-child-parent,
+	.anchored-child-host[data-child-visible] .anchored-child-parent {
+		transform: none;
+		transition-duration: 120ms;
+	}
+
+	.anchored-child-surface {
+		animation-name: anchored-child-fade;
+		animation-duration: 120ms;
+	}
+
+	.anchored-child-host[data-child-presentation="closing"] .anchored-child-surface {
+		animation-name: anchored-child-fade-out;
+	}
+
+	@keyframes anchored-child-fade {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
+	}
+
+	@keyframes anchored-child-fade-out {
+		from {
+			opacity: 1;
+		}
+		to {
+			opacity: 0;
+		}
+	}
+}
+
 .project-sidebar-frame {
 	position: relative;
 	display: flex;

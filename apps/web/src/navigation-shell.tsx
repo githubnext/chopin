@@ -110,11 +110,11 @@ let NavigationDocument = createContext<{
 		documentId: string,
 		update: DocumentMetadata,
 	) => void;
-	onDocumentAction: (action: DocumentAction) => void;
+	onDocumentAction: (documentId: string, action: DocumentAction) => void;
 	onDocumentDeleted: (documentId: string) => void;
 	onDocumentLoaded: (channel: Api.Channel, routeKey: DocumentRouteIdentity) => Promise<void>;
 	onRepositoryAccessChanged: () => void;
-	onResearchChildOpen: (child: Research.ReadyChild) => void;
+	onResearchChildOpen: (parentId: string, child: Research.ReadyChild) => void;
 	onResearchWorkspaceChanged: (
 		channel: Api.ResearchParentChannel,
 		workspaceId: string,
@@ -701,12 +701,12 @@ export function NavigationShell(
 			setError({ reason });
 		});
 	}, [acceptChannel, showDialog]);
-	let currentDocumentAction = useCallback((action: DocumentAction) => {
-		let channel = currentChannelRef.current;
+	let workspaceDocumentAction = useCallback((documentId: string, action: DocumentAction) => {
+		let channel = knownChannelsRef.current.get(documentId);
 		if (channel) documentAction(channel, action);
 	}, [documentAction]);
-	let researchChildOpen = useCallback((child: Research.ReadyChild) => {
-		let channel = currentChannelRef.current;
+	let researchChildOpen = useCallback((parentId: string, child: Research.ReadyChild) => {
+		let channel = knownChannelsRef.current.get(parentId);
 		if (!channel) return;
 		setError(undefined);
 		setDialog(undefined);
@@ -731,7 +731,7 @@ export function NavigationShell(
 	}, [refresh]);
 	let navigationDocument = useMemo(() => ({
 		channel: currentChannel,
-		onDocumentAction: currentDocumentAction,
+		onDocumentAction: workspaceDocumentAction,
 		onDocumentChanged: documentChanged,
 		onDocumentDeleted: documentDeleted,
 		onDocumentLoaded: documentLoaded,
@@ -742,7 +742,6 @@ export function NavigationShell(
 		onResearchWorkspacesRefresh: refreshResearchChannel,
 	}), [
 		currentChannel,
-		currentDocumentAction,
 		documentChanged,
 		documentDeleted,
 		documentLoaded,
@@ -751,6 +750,7 @@ export function NavigationShell(
 		researchWorkspaceChanged,
 		researchWorkspaceLoaded,
 		refreshResearchChannel,
+		workspaceDocumentAction,
 	]);
 
 	let signOut = async () => {

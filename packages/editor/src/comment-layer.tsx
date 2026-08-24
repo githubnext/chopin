@@ -535,6 +535,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		};
 		let escape = (event: KeyboardEvent) => {
 			if (event.key !== "Escape") return;
+			event.preventDefault();
 			if (pinned) dismiss();
 			else setPreview(undefined);
 		};

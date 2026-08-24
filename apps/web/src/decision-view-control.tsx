@@ -7,10 +7,19 @@ export function decisionAttention(previous: number, current: number): boolean {
 }
 
 export function DecisionViewControl(
-	{ attention, backgroundWork = 0, backgroundWorkEnabled = true, onView, unanswered, view }: {
+	{
+		attention,
+		backgroundWork = 0,
+		backgroundWorkEnabled = true,
+		implementationEnabled = true,
+		onView,
+		unanswered,
+		view,
+	}: {
 		attention?: boolean;
 		backgroundWork?: number;
 		backgroundWorkEnabled?: boolean;
+		implementationEnabled?: boolean;
 		onView: (view: DecisionView) => void;
 		unanswered: number;
 		view: DecisionView;
@@ -62,13 +71,15 @@ export function DecisionViewControl(
 					</span>
 				)}
 			</button>
-			<button
-				className="task-progress-tab btn h-[26px] rounded-md px-2.5 text-[14px] text-text-tertiary opacity-50"
-				disabled
-				type="button"
-			>
-				Tasks &amp; Progress
-			</button>
+			{implementationEnabled && (
+				<button
+					className="task-progress-tab btn h-[26px] rounded-md px-2.5 text-[14px] text-text-tertiary opacity-50"
+					disabled
+					type="button"
+				>
+					Tasks &amp; Progress
+				</button>
+			)}
 			{backgroundWorkEnabled && (
 				<button
 					aria-current={view === "background-work" ? "page" : undefined}
