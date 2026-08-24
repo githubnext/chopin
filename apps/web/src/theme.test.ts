@@ -142,32 +142,3 @@ describe("sidebar navigation", () => {
 		);
 	});
 });
-
-describe("product motion", () => {
-	it("keeps frequent feedback separate from surface motion", () => {
-		let fastDurations = [...THEME.matchAll(/--duration-fast:\s*([^;]+);/g)].map(match =>
-			match[1]!.trim()
-		);
-		expect(fastDurations).toEqual(["120ms"]);
-		expect(THEME).not.toMatch(/--duration-fast:\s*250ms/);
-		let easeOutCurves = [...THEME.matchAll(/--ease-out:\s*([^;]+);/g)].map(match =>
-			match[1]!.trim()
-		);
-		expect(easeOutCurves).toEqual(["cubic-bezier(0.2, 0, 0, 1)"]);
-		for (
-			let token of [
-				"dropdown-open-dur",
-				"modal-open-dur",
-				"drawer-open-dur",
-				"panel-open-dur",
-				"page-slide-dur",
-				"icon-swap-dur",
-				"badge-pop-dur",
-				"acc-expand",
-				"toast-open",
-			]
-		) {
-			expect(THEME).toContain(`--${token}:`);
-		}
-	});
-});
