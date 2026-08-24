@@ -29,7 +29,7 @@ import type { PlanProvider } from "./provider";
 import type { QuestionnaireStore } from "./questionnaires";
 import type { ThreadStore } from "./threads";
 import type { Connection, Transport } from "./transport";
-import type { CommentPresentation, QuestionStepMotion } from "./widget-options";
+import type { CommentPresentation, QuestionStepMotion, ResearchStore } from "./widget-options";
 
 /**
  * Lexical paints remote cursors with inline styles unless the theme names a
@@ -80,6 +80,8 @@ export type PlanEditorProps = {
 	 * editor, while the observer that finds them has to run inside it.
 	 */
 	questions?: QuestionnaireStore;
+	/** Durable Research Workspace state and actions supplied by the host app. */
+	research?: ResearchStore;
 	/** The same arrangement for comment threads. */
 	threads?: ThreadStore;
 	/** Remembered by the document host while this surface is hidden. */
@@ -109,6 +111,7 @@ export function PlanEditor(
 		questionMotion,
 		questions,
 		readOnly,
+		research,
 		scrollTop,
 		threads,
 		user,
@@ -258,6 +261,7 @@ export function PlanEditor(
 						motionImmediately,
 						questionMotion,
 						questions,
+						research,
 						threads,
 						changes,
 						wire,
@@ -275,6 +279,7 @@ export function PlanEditor(
 			onAnchors,
 			onChanges,
 			questions,
+			research,
 			commentPresentation,
 			motionImmediately,
 			questionMotion,

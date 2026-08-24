@@ -9,18 +9,20 @@
 
 import {
 	$createCalloutNode,
+	$createResearchNode,
 	$createTabNode,
 	$createTabsNode,
 	$isCalloutNode,
+	$isResearchNode,
 	$isTabNode,
 	$isTabsNode,
 } from "./containers";
 import { attribute, identity, isFlow, PRIORITY } from "./shared";
 
 import type { LexicalExportVisitor, MdastImportVisitor } from "@mdxeditor/editor";
-import type { LexicalNode } from "lexical";
+import type { ElementNode, LexicalNode } from "lexical";
 import type { MdxJsxFlowElement } from "mdast-util-mdx-jsx";
-import type { CalloutNode, CalloutType, TabNode, TabsNode } from "./containers";
+import type { CalloutNode, CalloutType, ResearchNode, TabNode, TabsNode } from "./containers";
 
 type Importer = MdastImportVisitor<MdxJsxFlowElement>;
 type Exporter<T extends LexicalNode> = LexicalExportVisitor<T, MdxJsxFlowElement>;
@@ -68,6 +70,16 @@ export const MdastCalloutVisitor = importer("Callout", node =>
 		attribute(node, "title") ?? "",
 	));
 
+export const MdastResearchVisitor: Importer = {
+	testNode: isFlow("Research"),
+	visitNode({ mdastNode, lexicalParent }) {
+		(lexicalParent as ElementNode).append(
+			$createResearchNode(attribute(mdastNode, "id") ?? ""),
+		);
+	},
+	priority: PRIORITY,
+};
+
 export const LexicalTabsVisitor: Exporter<TabsNode> = exporter(
 	"Tabs",
 	$isTabsNode,
@@ -86,14 +98,29 @@ export const LexicalCalloutVisitor: Exporter<CalloutNode> = exporter(
 	node => identity(node.getId(), { type: node.getCalloutType(), title: node.getTitle() }),
 );
 
+export const LexicalResearchVisitor: Exporter<ResearchNode> = {
+	testLexicalNode: $isResearchNode,
+	visitLexicalNode({ lexicalNode, mdastParent, actions }) {
+		actions.appendToParent(mdastParent, {
+			type: "mdxJsxFlowElement",
+			name: "Research",
+			attributes: identity(lexicalNode.getId()),
+			children: [],
+		});
+	},
+	priority: PRIORITY,
+};
+
 export const CONTAINER_IMPORT_VISITORS = [
 	MdastTabsVisitor,
 	MdastTabVisitor,
 	MdastCalloutVisitor,
+	MdastResearchVisitor,
 ];
 
 export const CONTAINER_EXPORT_VISITORS = [
 	LexicalTabsVisitor,
 	LexicalTabVisitor,
 	LexicalCalloutVisitor,
+	LexicalResearchVisitor,
 ];

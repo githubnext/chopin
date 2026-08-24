@@ -16,6 +16,8 @@ import { ULID } from "./ulid";
 import type { Nodes, Parent, Root } from "mdast";
 import type { MdxJsxAttribute, MdxJsxFlowElement, MdxJsxTextElement } from "mdast-util-mdx-jsx";
 
+const REFERENCE = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
+
 export type Issue = {
 	/** Machine-readable, stable across releases. */
 	code: string;
@@ -232,6 +234,17 @@ class Validator {
 				case "id":
 					if (!ULID.test(value)) {
 						this.add("bad-id", `\`${spec.name}.${name}\` must be a ULID`, path, node);
+					}
+					break;
+
+				case "reference":
+					if (value.length > attribute.max || !REFERENCE.test(value)) {
+						this.add(
+							"bad-reference",
+							`\`${spec.name}.${name}\` must be a safe external reference`,
+							path,
+							node,
+						);
 					}
 					break;
 

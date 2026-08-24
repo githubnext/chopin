@@ -62,7 +62,7 @@ export function Toolbar() {
 	return (
 		<>
 			<SelectionBubble disabled={disabled} onComment={comment} />
-			<SlashMenu disabled={disabled} />
+			<SlashMenu disabled={disabled} research={options.research} />
 		</>
 	);
 }

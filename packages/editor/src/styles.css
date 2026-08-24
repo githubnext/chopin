@@ -8,6 +8,72 @@
 
 @import "./callout.css";
 
+.plan-research-composer-surface {
+	width: min(22rem, calc(100vw - 1rem));
+	padding: 0.75rem;
+}
+
+.plan-research-composer {
+	display: grid;
+	gap: 0.625rem;
+}
+
+.plan-research-composer label,
+.plan-research-heading strong {
+	font-size: var(--text-sm);
+	font-weight: 600;
+	color: var(--color-text-primary);
+}
+
+.plan-research-composer textarea {
+	width: 100%;
+	min-height: 5rem;
+	resize: vertical;
+	border: var(--edge-width) solid var(--color-control-edge);
+	border-radius: var(--radius-md);
+	background: var(--color-control);
+	padding: 0.625rem;
+	color: var(--color-text-primary);
+	font: inherit;
+}
+
+.plan-research-heading {
+	display: grid;
+	gap: 0.25rem;
+}
+
+.plan-research-heading span,
+.plan-research-error,
+.plan-research-sources {
+	font-size: var(--text-sm);
+	color: var(--color-text-secondary);
+}
+
+.plan-research-error {
+	margin: 0;
+	color: var(--color-destructive-ink);
+}
+
+.plan-research-sources {
+	display: grid;
+	gap: 0.25rem;
+	margin: 0;
+	padding-inline-start: 1.125rem;
+}
+
+.plan-research-sources a {
+	color: var(--color-text-primary);
+	text-decoration: underline;
+	text-underline-offset: 0.125rem;
+}
+
+.plan-research-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 0.5rem;
+}
+
 .plan-background-job-actions {
 	display: flex;
 	flex-wrap: wrap;

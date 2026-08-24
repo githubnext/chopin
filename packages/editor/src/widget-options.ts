@@ -2,6 +2,7 @@ import { Cell } from "@mdxeditor/gurx";
 
 import type { ChangeStore } from "./changes";
 import type { ContentSwapMotion } from "./content-swap";
+import type { Research } from "@chopin/protocol";
 import type { QuestionnaireStore } from "./questionnaires";
 import type { ThreadStore } from "./threads";
 import type { Transport } from "./transport";
@@ -13,11 +14,23 @@ export type QuestionStepMotion = {
 	immediately: () => boolean;
 };
 
+/** App-owned HTTP state and actions for durable Research Workspace references. */
+export type ResearchStore = {
+	subscribe(listener: () => void): () => void;
+	get(id: string): Research.RequestView | undefined;
+	refresh(id: string): void;
+	create(question: string, requestId: string): Promise<Research.RequestView>;
+	cancel(id: string): Promise<Research.RequestView>;
+	retry(id: string, question: string): Promise<Research.RequestView>;
+	open(child: Research.ReadyChild): void;
+};
+
 export type WidgetOptions = {
 	commentPresentation?: CommentPresentation;
 	motionImmediately?: () => boolean;
 	questionMotion?: QuestionStepMotion;
 	questions?: QuestionnaireStore;
+	research?: ResearchStore;
 	threads?: ThreadStore;
 	changes?: ChangeStore;
 	wire?: Transport;

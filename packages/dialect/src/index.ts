@@ -40,12 +40,15 @@ export type { Registry } from "./registry";
 
 export {
 	$createCalloutNode,
+	$createResearchNode,
 	$createTabNode,
 	$createTabsNode,
 	$isCalloutNode,
+	$isResearchNode,
 	$isTabNode,
 	$isTabsNode,
 	CalloutNode,
+	ResearchNode,
 	TabNode,
 	TabsNode,
 } from "./nodes/containers";
