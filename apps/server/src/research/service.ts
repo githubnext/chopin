@@ -456,14 +456,7 @@ export class ResearchWorkspaceService {
 			if (!initial) {
 				throw new ResearchWorkspaceError("invalid-state", "Research request has no initial work.");
 			}
-			if (initial.evidenceJobId === undefined) {
-				let existing = await this.#targetJob(
-					current.workspace.channelId,
-					"research-evidence",
-					this.#target(current.workspace.id, initial.id, "evidence"),
-				);
-				if (!existing) await input.beforeStart?.();
-			}
+			if (initial.evidenceJobId === undefined) await input.beforeStart?.();
 			await this.#ensureEvidence(current.workspace, initial);
 		});
 		let request = await this.request(input.channelId, stored.workspace.id);
@@ -797,14 +790,6 @@ export class ResearchWorkspaceService {
 			}
 			let changed = false;
 			for (let savedTurn of detail.turns) {
-				if (
-					(savedTurn.kind === "initial" || savedTurn.kind === "search-more")
-					&& savedTurn.evidenceJobId === undefined
-					&& this.#hasDefinition("research-evidence")
-				) {
-					changed = await this.#ensureEvidence(detail.workspace, savedTurn, false);
-					if (changed) break;
-				}
 				if (savedTurn.evidenceJobId && savedTurn.answerJobId === undefined) {
 					let evidence = await this.#jobs.get(channelId, savedTurn.evidenceJobId);
 					if (evidence?.job.state === "completed" && this.#hasDefinition("research-answer")) {
@@ -871,16 +856,11 @@ export class ResearchWorkspaceService {
 		});
 	}
 
-	async #ensureEvidence(
-		workspace: ResearchWorkspace,
-		savedTurn: ResearchTurn,
-		enqueue = true,
-	): Promise<boolean> {
+	async #ensureEvidence(workspace: ResearchWorkspace, savedTurn: ResearchTurn): Promise<boolean> {
 		if (savedTurn.evidenceJobId !== undefined) return false;
 		this.#requireDefinition("research-evidence");
 		let targetKey = this.#target(workspace.id, savedTurn.id, "evidence");
 		let existing = await this.#targetJob(workspace.channelId, "research-evidence", targetKey);
-		if (!existing && !enqueue) return false;
 		let job = existing ?? (await this.#jobs.enqueueUser({
 			channelId: workspace.channelId,
 			type: "research-evidence",
