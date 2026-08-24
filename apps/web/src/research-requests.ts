@@ -56,7 +56,7 @@ export class ResearchRequestStore implements ResearchStore {
 	#listeners = new Set<() => void>();
 	#onOpen: (child: Research.ReadyChild) => void;
 	#reads = new Map<string, Read>();
-	#referenced = new Set<string>();
+	#references = new Map<string, number>();
 	#schedule: ResearchRequestSchedule;
 	#snapshots = new Map<string, Research.RequestView>();
 
@@ -70,13 +70,32 @@ export class ResearchRequestStore implements ResearchStore {
 	subscribe(listener: () => void): () => void {
 		if (this.#disposed) return () => {};
 		this.#listeners.add(listener);
+		this.#schedulePolling();
 		return () => {
 			this.#listeners.delete(listener);
-			if (this.#listeners.size > 0) return;
-			this.#referenced.clear();
-			this.#stopPolling();
-			for (let read of this.#reads.values()) read.controller.abort();
-			this.#reads.clear();
+			this.#schedulePolling();
+		};
+	}
+
+	retain(id: string): () => void {
+		if (this.#disposed) return () => {};
+		this.#references.set(id, (this.#references.get(id) ?? 0) + 1);
+		void this.#load(id);
+		let retained = true;
+		return () => {
+			if (!retained) return;
+			retained = false;
+			let remaining = (this.#references.get(id) ?? 1) - 1;
+			if (remaining > 0) {
+				this.#references.set(id, remaining);
+				return;
+			}
+			this.#references.delete(id);
+			this.#snapshots.delete(id);
+			this.#generations.delete(id);
+			this.#reads.get(id)?.controller.abort();
+			this.#reads.delete(id);
+			this.#schedulePolling();
 		};
 	}
 
@@ -86,7 +105,6 @@ export class ResearchRequestStore implements ResearchStore {
 
 	refresh(id: string): void {
 		if (this.#disposed) return;
-		this.#referenced.add(id);
 		void this.#load(id);
 	}
 
@@ -110,7 +128,7 @@ export class ResearchRequestStore implements ResearchStore {
 	}
 
 	invalidate(id: string): void {
-		if (this.#disposed || !this.#referenced.has(id)) return;
+		if (this.#disposed || !this.#references.has(id)) return;
 		void this.#load(id, true);
 	}
 
@@ -120,7 +138,7 @@ export class ResearchRequestStore implements ResearchStore {
 		this.#stopPolling();
 		for (let read of this.#reads.values()) read.controller.abort();
 		this.#reads.clear();
-		this.#referenced.clear();
+		this.#references.clear();
 		this.#listeners.clear();
 	}
 
@@ -163,7 +181,7 @@ export class ResearchRequestStore implements ResearchStore {
 	#schedulePolling(): void {
 		this.#stopPolling();
 		if (this.#disposed || this.#listeners.size === 0) return;
-		let pending = [...this.#referenced].filter(id => {
+		let pending = [...this.#references.keys()].filter(id => {
 			let snapshot = this.#snapshots.get(id);
 			return !snapshot || !["ready", "failed", "cancelled"].includes(snapshot.stage);
 		});
@@ -171,7 +189,7 @@ export class ResearchRequestStore implements ResearchStore {
 		this.#cancelPoll = this.#schedule(() => {
 			this.#cancelPoll = undefined;
 			for (let id of pending) {
-				if (this.#referenced.has(id)) void this.#load(id);
+				if (this.#references.has(id)) void this.#load(id);
 			}
 		}, POLL_INTERVAL);
 	}

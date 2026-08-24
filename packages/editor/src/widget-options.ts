@@ -19,6 +19,7 @@ export type QuestionStepMotion = {
 /** App-owned HTTP state and actions for durable Research Workspace references. */
 export type ResearchStore = {
 	subscribe(listener: () => void): () => void;
+	retain(id: string): () => void;
 	get(id: string): Research.RequestView | undefined;
 	refresh(id: string): void;
 	create(question: string, requestId: string): Promise<Research.RequestView>;

@@ -228,6 +228,10 @@ export function subscribeResearch(store: ResearchStore, listener: () => void): (
 	return store.subscribe(listener);
 }
 
+export function retainResearch(store: ResearchStore, id: string): () => void {
+	return store.retain(id);
+}
+
 export type ResearchReferenceProps = {
 	canEdit?: boolean;
 	id: string;
@@ -248,7 +252,7 @@ export function ResearchReference({ canEdit = true, id, onRemove, store }: Resea
 	let [busy, setBusy] = useState(false);
 	let [actionError, setActionError] = useState<string>();
 
-	useEffect(() => store.refresh(id), [id, store]);
+	useEffect(() => retainResearch(store, id), [id, store]);
 
 	if (!request) {
 		return (

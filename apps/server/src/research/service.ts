@@ -453,7 +453,6 @@ export class ResearchWorkspaceService {
 			now: this.#time(),
 			lease: this.#lease(),
 		});
-		if (!stored.repeated) await this.#published(stored.workspace);
 		await this.#exclusive(input.channelId, stored.workspace.id, async () => {
 			let current = await this.#stored(input.channelId, stored.workspace.id);
 			let initial = current.turns.find(value => value.kind === "initial");
@@ -953,7 +952,8 @@ export class ResearchWorkspaceService {
 		this.#requireDefinition("research-answer");
 		let workspace = detail.workspace;
 		let targetKey = this.#target(workspace.id, savedTurn.id, "answer");
-		let existing = await this.#targetJob(workspace.channelId, "research-answer", targetKey);
+		let found = await this.#targetJob(workspace.channelId, "research-answer", targetKey);
+		let existing = found && ACTIVE_JOB_STATES.has(found.state) ? found : undefined;
 		let job: JobView;
 		if (existing) job = existing;
 		else {
@@ -962,7 +962,7 @@ export class ResearchWorkspaceService {
 				channelId: workspace.channelId,
 				type: "research-answer",
 				targetKey,
-				idempotencyKey: `research-answer:${savedTurn.id}`,
+				idempotencyKey: `research-answer:${savedTurn.id}:${workspace.revision}`,
 				input: input as JsonValue,
 			});
 			job = enqueued.job;

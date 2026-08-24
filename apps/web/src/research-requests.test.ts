@@ -123,13 +123,14 @@ describe("research request store", () => {
 		let unsubscribe = store.subscribe(() => {});
 
 		expect(store.get("restored")).toBeUndefined();
-		store.refresh("restored");
+		let release = store.retain("restored");
 		store.refresh("restored");
 		expect(calls).toBe(1);
 
 		load.resolve(request("restored", "searching"));
 		await settle();
 		expect(store.get("restored")?.stage).toBe("searching");
+		release();
 		unsubscribe();
 		store.dispose();
 	});
@@ -147,7 +148,7 @@ describe("research request store", () => {
 			onOpen() {},
 		});
 		let unsubscribe = store.subscribe(() => {});
-		store.refresh("mounted");
+		let release = store.retain("mounted");
 		await settle();
 
 		store.invalidate("not-mounted");
@@ -155,6 +156,7 @@ describe("research request store", () => {
 		await settle();
 
 		expect(calls).toEqual(["mounted", "mounted"]);
+		release();
 		unsubscribe();
 		store.dispose();
 	});
@@ -171,7 +173,7 @@ describe("research request store", () => {
 			onOpen() {},
 		});
 		let unsubscribe = store.subscribe(() => {});
-		store.refresh("request-one");
+		let release = store.retain("request-one");
 		store.invalidate("request-one");
 
 		second.resolve(request("request-one", "writing", {
@@ -183,6 +185,7 @@ describe("research request store", () => {
 
 		expect(calls).toBe(2);
 		expect(store.get("request-one")?.stage).toBe("writing");
+		release();
 		unsubscribe();
 		store.dispose();
 	});
@@ -200,7 +203,7 @@ describe("research request store", () => {
 		});
 		let unsubscribe = store.subscribe(() => {});
 
-		store.refresh("request-one");
+		let release = store.retain("request-one");
 		await settle();
 		expect(clock.pending).toBe(1);
 		clock.run();
@@ -212,11 +215,12 @@ describe("research request store", () => {
 		expect(store.get("request-one")?.stage).toBe("ready");
 		expect(clock.pending).toBe(0);
 
+		release();
 		unsubscribe();
 		store.dispose();
 	});
 
-	it("removing the final mounted reference cancels fallback polling", async () => {
+	it("releasing the final mounted reference cancels fallback polling", async () => {
 		let clock = scheduler();
 		let store = new ResearchRequestStore({
 			api: api(),
@@ -225,13 +229,55 @@ describe("research request store", () => {
 			schedule: clock.schedule,
 		});
 		let unsubscribe = store.subscribe(() => {});
-		store.refresh("request-one");
+		let release = store.retain("request-one");
 		await settle();
 		expect(clock.pending).toBe(1);
 
-		unsubscribe();
+		release();
 
 		expect(clock.pending).toBe(0);
+		unsubscribe();
+		store.dispose();
+	});
+
+	it("releases one unmounted request while another card keeps polling", async () => {
+		let clock = scheduler();
+		let calls: string[] = [];
+		let first = deferred<Research.RequestView>();
+		let firstSignal: AbortSignal | undefined;
+		let store = new ResearchRequestStore({
+			api: api({
+				get: async (_channelId, id, signal) => {
+					calls.push(id);
+					if (id === "request-one") {
+						firstSignal = signal;
+						return first.promise;
+					}
+					return request(id, "searching");
+				},
+			}),
+			channelId: "channel-one",
+			onOpen() {},
+			schedule: clock.schedule,
+		});
+		let unsubscribe = store.subscribe(() => {});
+		let releaseOne = store.retain("request-one");
+		let releaseTwo = store.retain("request-two");
+		await settle();
+
+		releaseOne();
+		expect(firstSignal?.aborted).toBe(true);
+		store.invalidate("request-one");
+		expect(store.get("request-one")).toBeUndefined();
+		clock.run();
+		await settle();
+
+		expect(calls.filter(id => id === "request-one")).toHaveLength(1);
+		expect(calls.filter(id => id === "request-two")).toHaveLength(2);
+		expect(clock.pending).toBe(1);
+		releaseTwo();
+		expect(clock.pending).toBe(0);
+		unsubscribe();
 		store.dispose();
 	});
 
@@ -258,7 +304,7 @@ describe("research request store", () => {
 		store.dispose();
 	});
 
-	it("publishes a successful cancellation and retries the same exact request", async () => {
+	it("restores a failed request and retries it by durable identity", async () => {
 		let retries: string[] = [];
 		let initial = request("request-one", "failed", {
 			error: "Research could not be completed.",
@@ -267,7 +313,6 @@ describe("research request store", () => {
 		});
 		let store = new ResearchRequestStore({
 			api: api({
-				cancel: async () => request("request-one", "cancelled", { state: "cancelled" }),
 				retry: async (_channelId, requestId) => {
 					retries.push(requestId);
 					return request(requestId, "queued", { question: initial.question });
@@ -278,16 +323,33 @@ describe("research request store", () => {
 			onOpen() {},
 		});
 		let unsubscribe = store.subscribe(() => {});
-		store.refresh("request-one");
+		let release = store.retain("request-one");
 		await settle();
 
 		let retried = await store.retry("request-one", "  Exact stored question.  ");
 		expect(retries).toEqual(["request-one"]);
 		expect(store.get("request-one")).toBe(retried);
+
+		release();
+		unsubscribe();
+		store.dispose();
+	});
+
+	it("publishes a successful cancellation", async () => {
+		let store = new ResearchRequestStore({
+			api: api(),
+			channelId: "channel-one",
+			onOpen() {},
+		});
+		let unsubscribe = store.subscribe(() => {});
+		let release = store.retain("request-one");
+		await settle();
+
 		let cancelled = await store.cancel("request-one");
+
 		expect(cancelled.stage).toBe("cancelled");
 		expect(store.get("request-one")).toBe(cancelled);
-
+		release();
 		unsubscribe();
 		store.dispose();
 	});
@@ -310,12 +372,13 @@ describe("research request store", () => {
 			onOpen() {},
 		});
 		let unsubscribe = store.subscribe(() => {});
-		store.refresh("request-one");
+		let release = store.retain("request-one");
 		await settle();
 
 		expect(store.get("request-one")).toBe(ready);
 		expect("summary" in store.get("request-one")!).toBe(false);
 
+		release();
 		unsubscribe();
 		store.dispose();
 	});

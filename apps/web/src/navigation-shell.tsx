@@ -32,6 +32,7 @@ import {
 	landingDocument,
 	NAVIGATION_MEDIA,
 	navigationMode,
+	researchChildDestination,
 } from "./navigation-model";
 import {
 	ProjectSidebarExpandButton,
@@ -707,7 +708,7 @@ export function NavigationShell(
 		setError(undefined);
 		setDialog(undefined);
 		setDrawerOpen(false);
-		navigate(documentPath(channel.repositoryOwner, channel.repositoryName, child.slug));
+		navigate(researchChildDestination(channel, child));
 	}, [navigate]);
 	let researchWorkspaceChanged = useCallback((
 		channel: Api.ResearchParentChannel,
