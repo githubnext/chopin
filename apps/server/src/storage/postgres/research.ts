@@ -1,4 +1,5 @@
 import { conflict, corrupt, missing } from "../errors";
+import { deterministicChannelId } from "../../channels/id";
 import {
 	RESEARCH_REPOSITORY_CHANNEL_LIMIT,
 	RESEARCH_REPOSITORY_CHANNEL_WORKSPACE_LIMIT,
@@ -11,13 +12,17 @@ import type {
 	AppendResearchAgentMessageResult,
 	AppendResearchTurn,
 	AppendResearchTurnResult,
+	ChannelRecord,
 	ConfirmResearchWorkspace,
 	ConfirmResearchWorkspaceResult,
+	CreateChannel,
 	CreateResearchWorkspace,
 	CreateResearchWorkspaceResult,
 	Lease,
 	LinkResearchTurnJob,
 	LinkResearchTurnJobResult,
+	PublishInitialResearchReport,
+	PublishInitialResearchReportResult,
 	ResearchMessage,
 	ResearchMessageAuthorKind,
 	ResearchTurn,
@@ -36,10 +41,15 @@ type Timestamp = Date | string;
 type Integer = bigint | number | string;
 type Run = <T>(action: string, execute: () => Promise<T>) => Promise<T>;
 type Fence = (transaction: TransactionSQL, lease: Lease) => Promise<void>;
+type CreateStoredChannel = (
+	transaction: TransactionSQL,
+	input: CreateChannel,
+) => Promise<ChannelRecord>;
 
 type WorkspaceRow = {
 	id: unknown;
 	channelId: unknown;
+	publishedChannelId: unknown;
 	title: unknown;
 	proposedQuestion: unknown;
 	confirmedQuery: unknown;
@@ -54,6 +64,40 @@ type WorkspaceRow = {
 	updatedAt: unknown;
 	nextTurnOrdinal?: unknown;
 	nextMessageSequence?: unknown;
+};
+
+type PublicationParentRow = {
+	id: unknown;
+	repositoryId: unknown;
+	repositoryOwner: unknown;
+	repositoryName: unknown;
+	parentChannelId: unknown;
+	archivedAt: unknown;
+};
+
+type PublicationChannelRow = {
+	id: unknown;
+	repositoryId: unknown;
+	repositoryOwner: unknown;
+	repositoryName: unknown;
+	parentChannelId: unknown;
+	title: unknown;
+	slug: unknown;
+	createdBy: unknown;
+	revision: unknown;
+	createdAt: unknown;
+	updatedAt: unknown;
+	archivedAt: unknown;
+};
+
+type PublicationJobRow = {
+	id: unknown;
+	type: unknown;
+	targetKey: unknown;
+	targetGeneration: unknown;
+	currentGeneration: unknown;
+	state: unknown;
+	artifactJobId: unknown;
 };
 
 type RepositoryChannelRow = {
@@ -110,6 +154,7 @@ type LockedWorkspace = {
 const WORKSPACE_COLUMNS = `
 	id,
 	channel_id AS "channelId",
+	published_channel_id AS "publishedChannelId",
 	title,
 	proposed_question AS "proposedQuestion",
 	confirmed_query AS "confirmedQuery",
@@ -171,6 +216,25 @@ const MESSAGE_COLUMNS = `
 	text,
 	source_job_id AS "sourceJobId",
 	created_at AS "createdAt"
+`;
+
+const PUBLICATION_CHANNEL_COLUMNS = `
+	channels.id,
+	channels.repository_id AS "repositoryId",
+	channels.repository_owner AS "repositoryOwner",
+	channels.repository_name AS "repositoryName",
+	channels.parent_channel_id AS "parentChannelId",
+	channels.title,
+	(
+		SELECT channel_slugs.slug
+		FROM channel_slugs
+		WHERE channel_slugs.channel_id = channels.id AND channel_slugs.canonical
+	) AS slug,
+	channels.created_by AS "createdBy",
+	channels.revision,
+	channels.created_at AS "createdAt",
+	channels.updated_at AS "updatedAt",
+	channels.archived_at AS "archivedAt"
 `;
 
 const ORIGINS = new Set<ResearchWorkspaceOrigin>(["sidebar", "planner"]);
@@ -239,6 +303,10 @@ function workspace(row: WorkspaceRow): ResearchWorkspace {
 	return {
 		id,
 		channelId: text(row.channelId, "research workspace channel id"),
+		publishedChannelId: optionalText(
+			row.publishedChannelId,
+			"research workspace published channel id",
+		),
 		title: text(row.title, "research workspace title"),
 		proposedQuestion: text(row.proposedQuestion, "research workspace proposed question"),
 		confirmedQuery,
@@ -251,6 +319,27 @@ function workspace(row: WorkspaceRow): ResearchWorkspace {
 		fingerprint: text(row.fingerprint, "research workspace fingerprint"),
 		createdAt,
 		updatedAt,
+	};
+}
+
+function publicationChannel(row: PublicationChannelRow): ChannelRecord {
+	let archivedAt = row.archivedAt === null
+		? undefined
+		: date(row.archivedAt, "published channel archive time");
+	let parentChannelId = optionalText(row.parentChannelId, "published channel parent id");
+	return {
+		id: text(row.id, "published channel id"),
+		repositoryId: text(row.repositoryId, "published channel repository id"),
+		repositoryOwner: text(row.repositoryOwner, "published channel repository owner"),
+		repositoryName: text(row.repositoryName, "published channel repository name"),
+		...(parentChannelId ? { parentChannelId } : {}),
+		title: text(row.title, "published channel title"),
+		slug: text(row.slug, "published channel slug"),
+		createdBy: text(row.createdBy, "published channel creator"),
+		revision: integer(row.revision, "published channel revision"),
+		createdAt: date(row.createdAt, "published channel creation time"),
+		updatedAt: date(row.updatedAt, "published channel update time"),
+		...(archivedAt ? { archivedAt } : {}),
 	};
 }
 
@@ -347,11 +436,13 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 	#sql: SQL;
 	#run: Run;
 	#fence: Fence;
+	#createChannel: CreateStoredChannel;
 
-	constructor(sql: SQL, run: Run, fence: Fence) {
+	constructor(sql: SQL, run: Run, fence: Fence, createChannel: CreateStoredChannel) {
 		this.#sql = sql;
 		this.#run = run;
 		this.#fence = fence;
+		this.#createChannel = createChannel;
 	}
 
 	readonly create = (input: CreateResearchWorkspace): Promise<CreateResearchWorkspaceResult> =>
@@ -692,6 +783,139 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 				return {
 					workspace: savedWorkspace,
 					message: message(saved),
+					repeated: false,
+				};
+			}));
+
+	readonly publishInitialReport = (
+		input: PublishInitialResearchReport,
+	): Promise<PublishInitialResearchReportResult> =>
+		this.#run("publish initial research report", () =>
+			this.#sql.begin(async transaction => {
+				await this.#fence(transaction, input.lease);
+				let channelId = required(input.channelId, "channel id");
+				let workspaceId = required(input.workspaceId, "workspace id");
+				let answerJobId = required(input.answerJobId, "publication answer job id");
+				let title = required(input.title, "publication title");
+				let now = inputDate(input.now, "publication time");
+				let [parentRow] = await transaction<PublicationParentRow[]>`
+					SELECT
+						id,
+						repository_id AS "repositoryId",
+						repository_owner AS "repositoryOwner",
+						repository_name AS "repositoryName",
+						parent_channel_id AS "parentChannelId",
+						archived_at AS "archivedAt"
+					FROM channels
+					WHERE id = ${channelId}
+					FOR UPDATE
+				`;
+				if (!parentRow) throw missing(`channel ${channelId} does not exist`);
+				let parentId = text(parentRow.id, "publication parent channel id");
+				let repositoryId = text(parentRow.repositoryId, "publication repository id");
+				let locked = await this.#lockWorkspace(transaction, channelId, workspaceId);
+				let [initialTurnRow] = await transaction<TurnRow[]>`
+					SELECT ${transaction.unsafe(TURN_COLUMNS)}
+					FROM research_turns
+					WHERE workspace_id = ${workspaceId} AND ordinal = 1
+					FOR UPDATE
+				`;
+				let initialTurn = initialTurnRow ? turn(initialTurnRow) : undefined;
+				if (
+					!initialTurn
+					|| initialTurn.kind !== "initial"
+					|| initialTurn.answerJobId !== answerJobId
+				) {
+					throw conflict(
+						`research workspace ${workspaceId} is not linked to initial answer job ${answerJobId}`,
+					);
+				}
+				if (locked.workspace.publishedChannelId) {
+					let [publishedRow] = await transaction<PublicationChannelRow[]>`
+						SELECT ${transaction.unsafe(PUBLICATION_CHANNEL_COLUMNS)}
+						FROM channels
+						WHERE channels.id = ${locked.workspace.publishedChannelId}
+					`;
+					if (!publishedRow) {
+						throw corrupt(
+							`research workspace ${workspaceId} has a missing published channel`,
+						);
+					}
+					return {
+						workspace: locked.workspace,
+						channel: publicationChannel(publishedRow),
+						repeated: true,
+					};
+				}
+				if (parentRow.archivedAt !== null) throw conflict(`channel ${channelId} is archived`);
+				if (parentRow.parentChannelId !== null) {
+					throw conflict(`channel ${channelId} cannot parent another child`);
+				}
+				let [answer] = await transaction<PublicationJobRow[]>`
+					SELECT
+						jobs.id,
+						jobs.type,
+						jobs.target_key AS "targetKey",
+						jobs.target_generation AS "targetGeneration",
+						targets.generation AS "currentGeneration",
+						jobs.state,
+						artifacts.job_id AS "artifactJobId"
+					FROM background_jobs AS jobs
+					JOIN background_job_targets AS targets
+						ON targets.channel_id = jobs.channel_id
+						AND targets.target_key = jobs.target_key
+					LEFT JOIN background_job_artifacts AS artifacts ON artifacts.job_id = jobs.id
+					WHERE jobs.id = ${answerJobId} AND jobs.channel_id = ${channelId}
+					FOR UPDATE OF jobs
+				`;
+				let target = `research-answer:workspace:${workspaceId}:turn:${initialTurn.id}:answer`;
+				if (
+					!answer
+					|| text(answer.type, "publication answer job type") !== "research-answer"
+					|| text(answer.targetKey, "publication answer job target") !== target
+					|| integer(answer.targetGeneration, "publication answer job generation")
+						!== integer(answer.currentGeneration, "publication current job generation")
+					|| text(answer.state, "publication answer job state") !== "completed"
+					|| optionalText(answer.artifactJobId, "publication answer artifact") !== answerJobId
+				) {
+					throw conflict(`background job ${answerJobId} is not current completed answer work`);
+				}
+
+				let childId = deterministicChannelId(repositoryId, workspaceId);
+				let savedChannel = await this.#createChannel(
+					transaction,
+					{
+						id: childId,
+						repositoryId,
+						repositoryOwner: text(
+							parentRow.repositoryOwner,
+							"publication repository owner",
+						),
+						repositoryName: text(
+							parentRow.repositoryName,
+							"publication repository name",
+						),
+						parentChannelId: parentId,
+						title,
+						createdBy: locked.workspace.createdBy,
+						now,
+						initial: input.initial,
+					},
+				);
+				let [savedWorkspaceRow] = await transaction<WorkspaceRow[]>`
+					UPDATE research_workspaces SET
+						published_channel_id = ${childId},
+						revision = revision + 1,
+						updated_at = GREATEST(updated_at, ${now})
+					WHERE id = ${workspaceId} AND channel_id = ${channelId}
+					RETURNING ${transaction.unsafe(WORKSPACE_COLUMNS)}
+				`;
+				if (!savedWorkspaceRow) {
+					throw corrupt("publishing an initial research report returned no workspace");
+				}
+				return {
+					workspace: workspace(savedWorkspaceRow),
+					channel: savedChannel,
 					repeated: false,
 				};
 			}));

@@ -474,7 +474,7 @@ export function sourceHash(source: string): string {
 /** Build the complete revision-zero state published with a newly created channel. */
 export async function initial(
 	source: string,
-	creation: CreationMetadata,
+	creation?: CreationMetadata,
 ): Promise<InitialChannel> {
 	let document = await room.create(source);
 	try {
@@ -483,7 +483,7 @@ export async function initial(
 			version: 1,
 			revision: 0,
 			documentSeq: document.seq,
-			creation,
+			...(creation ? { creation } : {}),
 			questions: [],
 			openQuestions: [],
 			threads: [],

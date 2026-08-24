@@ -279,6 +279,11 @@ export class MemoryStorage implements StorageAdapter {
 	readonly #research = new MemoryResearchWorkspaceStore({
 		channelExists: channelId => this.#channels.has(channelId),
 		channelActive: channelId => !this.#channels.get(channelId)?.archivedAt,
+		channel: channelId => {
+			let found = this.#channels.get(channelId);
+			return found ? channel(found) : undefined;
+		},
+		createChannel: input => this.#createChannel(input),
 		channels: repositoryId =>
 			[...this.#channels.values()]
 				.filter(value => value.repositoryId === repositoryId)
@@ -465,6 +470,9 @@ export class MemoryStorage implements StorageAdapter {
 		if (!found.archivedAt) throw conflict(`channel ${id} must be archived before deletion`);
 		if ([...this.#channels.values()].some(channel => channel.parentChannelId === id)) {
 			throw conflict(`channel ${id} still has child channels`);
+		}
+		if (this.#research.referencesChannel(id)) {
+			throw conflict(`channel ${id} is still published by a research workspace`);
 		}
 
 		this.#channels.delete(id);

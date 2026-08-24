@@ -448,6 +448,7 @@ export type ResearchWorkspaceOrigin = "sidebar" | "planner";
 export type ResearchWorkspace = {
 	id: string;
 	channelId: string;
+	publishedChannelId: string | undefined;
 	title: string;
 	proposedQuestion: string;
 	confirmedQuery: string | undefined;
@@ -612,6 +613,22 @@ export type AppendResearchAgentMessage = {
 export type AppendResearchAgentMessageResult = {
 	workspace: ResearchWorkspace;
 	message: ResearchMessage;
+	repeated: boolean;
+};
+
+export type PublishInitialResearchReport = {
+	channelId: string;
+	workspaceId: string;
+	answerJobId: string;
+	title: string;
+	initial: InitialChannel;
+	now: Date;
+	lease: Lease;
+};
+
+export type PublishInitialResearchReportResult = {
+	workspace: ResearchWorkspace;
+	channel: ChannelRecord;
 	repeated: boolean;
 };
 

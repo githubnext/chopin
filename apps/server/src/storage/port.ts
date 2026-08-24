@@ -37,6 +37,8 @@ import type {
 	PauseBackgroundJob,
 	PublishChannelDescription,
 	PublishChannelDescriptionResult,
+	PublishInitialResearchReport,
+	PublishInitialResearchReportResult,
 	PutUser,
 	RecordNavigationVisit,
 	RenameChannel,
@@ -176,6 +178,9 @@ export interface ResearchWorkspaceStore {
 	appendAgentMessage(
 		input: AppendResearchAgentMessage,
 	): Promise<AppendResearchAgentMessageResult>;
+	publishInitialReport(
+		input: PublishInitialResearchReport,
+	): Promise<PublishInitialResearchReportResult>;
 	list(channelId: string, limit: number): Promise<ResearchWorkspaceSummary[]>;
 	listRepository(
 		repositoryId: string,
