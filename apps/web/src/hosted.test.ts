@@ -4,6 +4,7 @@ import { ApiError } from "./api";
 import {
 	githubLoginHref,
 	hostedRoute,
+	prepareDocumentLoad,
 	retryableChannelFailure,
 	validatedChildPath,
 } from "./hosted";
@@ -149,5 +150,123 @@ describe("channel recovery", () => {
 		expect(retryableChannelFailure(new ApiError("channel not found", 404))).toBe(false);
 		expect(retryableChannelFailure(new ApiError("repository access is required", 403)))
 			.toBe(false);
+	});
+
+	it("converges restored IDs and flat child slugs on the canonical child URL", async () => {
+		let parent = detail("parent-one", "release-plan");
+		let child = detail("child-one", "source-review", parent.channel.id);
+		let readers = {
+			async channel(id: string) {
+				if (id === child.channel.id) return child;
+				if (id === parent.channel.id) return parent;
+				throw new ApiError("channel not found", 404);
+			},
+			async document(_owner: string, _repository: string, slug: string) {
+				if (slug === child.channel.slug) return child;
+				throw new ApiError("channel not found", 404);
+			},
+		};
+		let signal = new AbortController().signal;
+
+		expect(await prepareDocumentLoad({ id: child.channel.id }, signal, readers)).toEqual({
+			detail: child,
+			pathname: "/documents/octo-org/score/release-plan/children/source-review",
+		});
+		expect(
+			await prepareDocumentLoad(
+				{
+					owner: "octo-org",
+					repository: "score",
+					slug: child.channel.slug,
+				},
+				signal,
+				readers,
+			),
+		).toEqual({
+			detail: child,
+			pathname: "/documents/octo-org/score/release-plan/children/source-review",
+		});
+	});
+
+	it("keeps top-level ID and slug loads on their ordinary canonical URL", async () => {
+		let topLevel = detail("document-one", "release-plan");
+		let readers = {
+			async channel() {
+				return topLevel;
+			},
+			async document() {
+				return topLevel;
+			},
+		};
+		let signal = new AbortController().signal;
+		let expected = {
+			detail: topLevel,
+			pathname: "/documents/octo-org/score/release-plan",
+		};
+
+		expect(await prepareDocumentLoad({ id: topLevel.channel.id }, signal, readers))
+			.toEqual(expected);
+		expect(
+			await prepareDocumentLoad(
+				{
+					owner: "octo-org",
+					repository: "score",
+					slug: topLevel.channel.slug,
+				},
+				signal,
+				readers,
+			),
+		).toEqual(expected);
+	});
+
+	it("fails conservatively when authoritative parent resolution is missing or mismatched", async () => {
+		let parent = detail("parent-one", "release-plan");
+		let child = detail("child-one", "source-review", parent.channel.id);
+		let signal = new AbortController().signal;
+		let document = async () => child;
+
+		await expect(prepareDocumentLoad(
+			{ owner: "octo-org", repository: "score", slug: child.channel.slug },
+			signal,
+			{
+				channel: async () => {
+					throw new ApiError("channel not found", 404);
+				},
+				document,
+			},
+		)).rejects.toMatchObject({ status: 404 });
+		await expect(prepareDocumentLoad(
+			{ owner: "octo-org", repository: "score", slug: child.channel.slug },
+			signal,
+			{
+				channel: async () => detail("different-parent", "release-plan"),
+				document,
+			},
+		)).rejects.toMatchObject({ status: 404 });
+	});
+
+	it("aborts authoritative parent resolution for a stale document load", async () => {
+		let parent = detail("parent-one", "release-plan");
+		let child = detail("child-one", "source-review", parent.channel.id);
+		let controller = new AbortController();
+		let readers = {
+			async channel(_id: string, signal?: AbortSignal): Promise<ChannelDetail> {
+				if (signal?.aborted) throw new Error("stale load aborted");
+				return new Promise((_resolve, reject) => {
+					signal?.addEventListener("abort", () => reject(new Error("stale load aborted")));
+				});
+			},
+			async document() {
+				return child;
+			},
+		};
+		let pending = prepareDocumentLoad(
+			{ owner: "octo-org", repository: "score", slug: child.channel.slug },
+			controller.signal,
+			readers,
+		);
+
+		controller.abort();
+		await expect(pending).rejects.toThrow("stale load aborted");
 	});
 });

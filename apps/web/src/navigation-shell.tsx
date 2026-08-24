@@ -360,9 +360,6 @@ export function NavigationShell(
 	let currentDocumentId = route.page === "channel"
 		? route.id
 		: routedChannel?.id ?? resolvedChannel?.id;
-	let currentParentDocumentId = route.page === "child"
-		? routedChannel?.parentChannelId ?? resolvedChannel?.parentChannelId
-		: undefined;
 	let currentResearchWorkspaceId = route.page === "research" ? route.workspaceId : undefined;
 
 	let refresh = useCallback((queue = true): Promise<void> => {
@@ -817,7 +814,6 @@ export function NavigationShell(
 				creatingProjectIds={creatingProjectIdsForView}
 				creatingNewDocument={!!active && creatingProjectIdsForView.has(active.repositoryId)}
 				currentDocumentId={currentDocumentId}
-				currentParentDocumentId={currentParentDocumentId}
 				currentResearchWorkspaceId={currentResearchWorkspaceId}
 				onAccount={() => setAccountOpen(open => !open)}
 				onAddProject={() => showDialog("add")}
