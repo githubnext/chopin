@@ -38,10 +38,16 @@ type Options = {
 	channelExists: (channelId: string) => boolean;
 	channelActive: (channelId: string) => boolean;
 	channel: (channelId: string) => ChannelRecord | undefined;
-	createChannel: (input: CreateChannel) => Promise<ChannelRecord>;
 	channels: (repositoryId: string) => ChannelRecord[];
 	userExists: (userId: string) => boolean;
 	job: (channelId: string, jobId: string) => Promise<BackgroundJobDetail | undefined>;
+	publication: <T>(
+		execute: (access: {
+			channel: (channelId: string) => ChannelRecord | undefined;
+			job: (channelId: string, jobId: string) => BackgroundJobDetail | undefined;
+			createChannel: (input: CreateChannel) => ChannelRecord;
+		}) => T,
+	) => T;
 	assertLease: (lease: Lease) => void;
 };
 
@@ -465,24 +471,46 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 			) {
 				throw conflict(`background job ${input.answerJobId} is not current completed answer work`);
 			}
-			this.#options.assertLease(input.lease);
-			let now = timestamp(input.now, "publication time");
-			let child = await this.#options.createChannel({
-				id: deterministicChannelId(parent.repositoryId, found.id),
-				repositoryId: parent.repositoryId,
-				repositoryOwner: parent.repositoryOwner,
-				repositoryName: parent.repositoryName,
-				parentChannelId: parent.id,
-				title: input.title,
-				createdBy: found.createdBy,
-				now,
-				initial: input.initial,
+			return this.#options.publication(access => {
+				this.#options.assertLease(input.lease);
+				let currentParent = access.channel(input.channelId);
+				if (!currentParent) throw missing(`channel ${input.channelId} does not exist`);
+				if (currentParent.archivedAt) throw conflict(`channel ${input.channelId} is archived`);
+				if (currentParent.parentChannelId) {
+					throw conflict(`channel ${input.channelId} cannot parent another child`);
+				}
+				let current = access.job(input.channelId, input.answerJobId);
+				if (
+					!current
+					|| current.job.channelId !== input.channelId
+					|| current.job.type !== "research-answer"
+					|| current.job.targetKey !== target
+					|| current.job.targetGeneration !== current.target.generation
+					|| current.job.state !== "completed"
+					|| !current.artifact
+				) {
+					throw conflict(
+						`background job ${input.answerJobId} is not current completed answer work`,
+					);
+				}
+				let now = timestamp(input.now, "publication time");
+				let child = access.createChannel({
+					id: deterministicChannelId(currentParent.repositoryId, found.id),
+					repositoryId: currentParent.repositoryId,
+					repositoryOwner: currentParent.repositoryOwner,
+					repositoryName: currentParent.repositoryName,
+					parentChannelId: currentParent.id,
+					title: input.title,
+					createdBy: found.createdBy,
+					now,
+					initial: input.initial,
+				});
+				let saved = this.#saveWorkspace({
+					...found,
+					publishedChannelId: child.id,
+				}, now);
+				return { workspace: workspace(saved), channel: child, repeated: false };
 			});
-			let saved = this.#saveWorkspace({
-				...found,
-				publishedChannelId: child.id,
-			}, now);
-			return { workspace: workspace(saved), channel: child, repeated: false };
 		});
 
 	referencesChannel(channelId: string): boolean {

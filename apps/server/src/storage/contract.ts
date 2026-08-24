@@ -23,6 +23,25 @@ function attempt<T>(action: () => Promise<T>): Promise<T> {
 	return Promise.resolve().then(action);
 }
 
+function deferred<T>(): PromiseWithResolvers<T> {
+	return Promise.withResolvers<T>();
+}
+
+async function pauseJobRead(storage: StorageAdapter, channelId: string, jobId: string) {
+	let entered = deferred<void>();
+	let originalGet = storage.jobs.get;
+	let answer = await originalGet(channelId, jobId);
+	let release = deferred<typeof answer>();
+	storage.jobs.get = () => {
+		entered.resolve();
+		return release.promise;
+	};
+	return {
+		entered: entered.promise,
+		release: () => release.resolve(answer),
+	};
+}
+
 async function userAndChannel(storage: StorageAdapter): Promise<{
 	userId: string;
 	sessionId: string;
@@ -1973,6 +1992,118 @@ export function storageContract(name: string, factory: Factory): void {
 				await expect(storage.channels.delete(childId))
 					.rejects.toMatchObject({ failure: "conflict" });
 				expect(await storage.channels.get(childId)).toBeDefined();
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("never exposes a published child before its workspace link", async () => {
+			let storage = await opened(factory);
+			try {
+				if (storage.driver !== "memory") return;
+				let { userId, channelId, repositoryId, lease } = await userAndChannel(storage);
+				let ready = await completedInitialResearch(storage, channelId, userId, lease);
+				let paused = await pauseJobRead(storage, channelId, ready.answerJobId);
+				let childId = deterministicChannelId(repositoryId, ready.workspaceId);
+				let publishing = storage.research.publishInitialReport({
+					channelId,
+					workspaceId: ready.workspaceId,
+					answerJobId: ready.answerJobId,
+					title: "Atomic visibility report",
+					initial: ready.initial,
+					now: new Date("2026-01-07T03:07:05.000Z"),
+					lease,
+				});
+				await paused.entered;
+				paused.release();
+				await Promise.resolve();
+				let childRead = storage.channels.get(childId);
+				let workspaceRead = storage.research.get(channelId, ready.workspaceId);
+				let [child, detail] = await Promise.all([childRead, workspaceRead]);
+				await publishing;
+				expect(child && detail?.workspace.publishedChannelId !== child.id).toBe(false);
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("rejects publication when its answer is superseded during validation", async () => {
+			let storage = await opened(factory);
+			try {
+				if (storage.driver !== "memory") return;
+				let { userId, channelId, repositoryId, lease } = await userAndChannel(storage);
+				let ready = await completedInitialResearch(storage, channelId, userId, lease);
+				let detail = (await storage.research.get(channelId, ready.workspaceId))!;
+				let initialTurn = detail.turns[0]!;
+				let paused = await pauseJobRead(storage, channelId, ready.answerJobId);
+				let publishing = storage.research.publishInitialReport({
+					channelId,
+					workspaceId: ready.workspaceId,
+					answerJobId: ready.answerJobId,
+					title: "Superseded report",
+					initial: ready.initial,
+					now: new Date("2026-01-07T03:07:05.000Z"),
+					lease,
+				});
+				await paused.entered;
+				await storage.jobs.enqueue(backgroundJob(channelId, lease, {
+					type: "research-answer",
+					targetKey: `research-answer:workspace:${ready.workspaceId}:turn:${initialTurn.id}:answer`,
+					idempotencyKey: id("concurrent-replacement-answer-request"),
+					fingerprint: "sha256:concurrent-replacement-answer",
+					now: new Date("2026-01-07T03:06:09.000Z"),
+					availableAt: new Date("2026-01-07T03:06:09.000Z"),
+				}));
+				paused.release();
+
+				await expect(publishing).rejects.toMatchObject({ failure: "conflict" });
+				expect(
+					await storage.channels.get(
+						deterministicChannelId(repositoryId, ready.workspaceId),
+					),
+				).toBeUndefined();
+				expect(
+					(await storage.research.get(channelId, ready.workspaceId))!.workspace
+						.publishedChannelId,
+				).toBeUndefined();
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("rejects publication when its parent is archived during validation", async () => {
+			let storage = await opened(factory);
+			try {
+				if (storage.driver !== "memory") return;
+				let { userId, channelId, repositoryId, lease } = await userAndChannel(storage);
+				let ready = await completedInitialResearch(storage, channelId, userId, lease);
+				let paused = await pauseJobRead(storage, channelId, ready.answerJobId);
+				let publishing = storage.research.publishInitialReport({
+					channelId,
+					workspaceId: ready.workspaceId,
+					answerJobId: ready.answerJobId,
+					title: "Archived during publication",
+					initial: ready.initial,
+					now: new Date("2026-01-07T03:07:05.000Z"),
+					lease,
+				});
+				await paused.entered;
+				await storage.channels.archive({
+					id: channelId,
+					now: new Date("2026-01-07T03:07:04.000Z"),
+				});
+				paused.release();
+
+				await expect(publishing).rejects.toMatchObject({ failure: "conflict" });
+				expect(
+					await storage.channels.get(
+						deterministicChannelId(repositoryId, ready.workspaceId),
+					),
+				).toBeUndefined();
+				expect(
+					(await storage.research.get(channelId, ready.workspaceId))!.workspace
+						.publishedChannelId,
+				).toBeUndefined();
 			} finally {
 				await storage.close();
 			}

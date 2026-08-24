@@ -367,11 +367,13 @@ export class MemoryBackgroundJobStore implements BackgroundJobStore {
 	readonly get = async (
 		channelId: string,
 		jobId: string,
-	): Promise<BackgroundJobDetail | undefined> => {
+	): Promise<BackgroundJobDetail | undefined> => this.detail(channelId, jobId);
+
+	detail(channelId: string, jobId: string): BackgroundJobDetail | undefined {
 		if (!this.#options.channelExists(channelId)) return undefined;
 		let found = this.#jobs.get(jobId);
 		return found?.channelId === channelId ? this.#detail(found) : undefined;
-	};
+	}
 
 	deleteChannel(channelId: string): void {
 		this.#revisions.delete(channelId);

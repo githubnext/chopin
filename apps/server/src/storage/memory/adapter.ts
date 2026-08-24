@@ -239,7 +239,7 @@ export class MemoryStorage implements StorageAdapter {
 	};
 
 	readonly channels: ChannelStore = {
-		create: input => this.#createChannel(input),
+		create: async input => this.#createChannel(input),
 		get: id => Promise.resolve(this.#channels.get(id)).then(value => value && channel(value)),
 		resolve: (repositoryId, slug) => {
 			let id = this.#channelSlugs.get(repositoryId)?.get(slug);
@@ -283,13 +283,21 @@ export class MemoryStorage implements StorageAdapter {
 			let found = this.#channels.get(channelId);
 			return found ? channel(found) : undefined;
 		},
-		createChannel: input => this.#createChannel(input),
 		channels: repositoryId =>
 			[...this.#channels.values()]
 				.filter(value => value.repositoryId === repositoryId)
 				.map(channel),
 		userExists: userId => this.#users.has(userId),
 		job: (channelId, jobId) => this.jobs.get(channelId, jobId),
+		publication: execute =>
+			execute({
+				channel: channelId => {
+					let found = this.#channels.get(channelId);
+					return found ? channel(found) : undefined;
+				},
+				job: (channelId, jobId) => this.#jobs.detail(channelId, jobId),
+				createChannel: input => this.#createChannel(input),
+			}),
 		assertLease: held => this.#assertLease(held),
 	});
 	readonly research: ResearchWorkspaceStore = this.#research;
@@ -375,7 +383,7 @@ export class MemoryStorage implements StorageAdapter {
 		return this.#setLastDocument(input.userId, input.documentId, input.now);
 	}
 
-	async #createChannel(input: CreateChannel): Promise<ChannelRecord> {
+	#createChannel(input: CreateChannel): ChannelRecord {
 		if (!this.#users.has(input.createdBy)) throw missing(`user ${input.createdBy} does not exist`);
 		if (this.#channels.has(input.id)) throw conflict(`channel ${input.id} already exists`);
 		if (input.parentChannelId) {
