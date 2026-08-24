@@ -127,7 +127,7 @@
 .project-sidebar-document {
 	min-height: 33px;
 	border-radius: 8px;
-	padding: 4px 12px 4px 32px;
+	padding: 4px 4px 4px 32px;
 	font-size: var(--text-sm);
 }
 
@@ -149,8 +149,19 @@
 
 .project-sidebar-document-actions {
 	display: flex;
+	width: 0;
 	flex: 0 0 auto;
 	align-items: center;
+	overflow: hidden;
+	visibility: hidden;
+}
+
+.group\/document:hover .project-sidebar-document-actions,
+.group\/document:focus-within .project-sidebar-document-actions,
+:root[data-plan-coarse-pointer] .project-sidebar .project-sidebar-document-actions {
+	width: auto;
+	overflow: visible;
+	visibility: visible;
 }
 
 .project-sidebar-research-link {
