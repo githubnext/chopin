@@ -126,6 +126,7 @@ export function PlanEditor(
 	// Presence renders, so it needs the provider as state; edits need it
 	// synchronously during an event, so they keep reading the ref.
 	let [presence, setPresence] = useState<PlanProvider>();
+	let [binding, setBinding] = useState<Binding>();
 	let previousWire = useRef(wire);
 	// Nothing outside the editor reads this one, unlike the questionnaires,
 	// so it is owned here rather than being handed down from the room.
@@ -143,6 +144,7 @@ export function PlanEditor(
 	// The store resolves anchors itself, because a Lexical key is per-editor:
 	// the server's key for a block means nothing in this browser.
 	let onBinding = useCallback((value: Binding | undefined) => {
+		setBinding(value);
 		questions?.bind(value);
 		threads?.bind(value);
 		changes.bind(value);
@@ -257,6 +259,7 @@ export function PlanEditor(
 						onChanges,
 					}),
 					widgetsPlugin({
+						binding,
 						commentPresentation,
 						motionImmediately,
 						questionMotion,
@@ -278,6 +281,7 @@ export function PlanEditor(
 			onBinding,
 			onAnchors,
 			onChanges,
+			binding,
 			questions,
 			research,
 			commentPresentation,

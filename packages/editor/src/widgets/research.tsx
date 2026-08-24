@@ -1,11 +1,11 @@
-import { useEffect, useId, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useId, useState, useSyncExternalStore } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { useCellValue } from "@mdxeditor/gurx";
 
 import { SidecarCard } from "../card";
 import { widgets$ } from "../widget-options";
 
-import type { FormEvent } from "react";
+import type { FormEvent, KeyboardEvent } from "react";
 import type { Research } from "@chopin/protocol";
 import type { ResearchNode } from "@chopin/dialect";
 import type { ResearchStore } from "../widget-options";
@@ -22,16 +22,41 @@ const STAGES: Record<Research.RequestStage, string> = {
 };
 
 export type ResearchComposerProps = {
+	blocked?: string;
 	error?: string;
 	onCancel: () => void;
 	onChange: (value: string) => void;
+	onEscape?: () => void;
 	onSubmit: () => void;
 	question: string;
+	questionLocked?: boolean;
+	submitLabel?: string;
 	submitting?: boolean;
 };
 
+export function handleResearchComposerKey(
+	event: Pick<KeyboardEvent, "key" | "preventDefault" | "stopPropagation">,
+	onEscape: () => void,
+) {
+	if (event.key !== "Escape") return;
+	event.preventDefault();
+	event.stopPropagation();
+	onEscape();
+}
+
 export function ResearchComposer(
-	{ error, onCancel, onChange, onSubmit, question, submitting }: ResearchComposerProps,
+	{
+		blocked,
+		error,
+		onCancel,
+		onChange,
+		onEscape,
+		onSubmit,
+		question,
+		questionLocked,
+		submitLabel = "Start research",
+		submitting,
+	}: ResearchComposerProps,
 ) {
 	let id = useId();
 	let submit = (event: FormEvent) => {
@@ -39,7 +64,11 @@ export function ResearchComposer(
 		onSubmit();
 	};
 	return (
-		<form className="plan-research-composer" onSubmit={submit}>
+		<form
+			className="plan-research-composer"
+			onKeyDown={onEscape ? event => handleResearchComposerKey(event, onEscape) : undefined}
+			onSubmit={submit}
+		>
 			<label htmlFor={id}>Research question</label>
 			<textarea
 				autoFocus
@@ -47,9 +76,11 @@ export function ResearchComposer(
 				id={id}
 				maxLength={4096}
 				onChange={event => onChange(event.target.value)}
+				readOnly={questionLocked}
 				rows={3}
 				value={question}
 			/>
+			{blocked && <p role="status">{blocked}</p>}
 			{error && <p role="alert">{error}</p>}
 			<div className="plan-research-actions">
 				<button
@@ -62,10 +93,10 @@ export function ResearchComposer(
 				</button>
 				<button
 					className="btn btn-sm btn-primary"
-					disabled={submitting || !question.trim()}
+					disabled={submitting || !!blocked || !question.trim()}
 					type="submit"
 				>
-					{submitting ? "Starting…" : "Start research"}
+					{submitting ? "Starting…" : submitLabel}
 				</button>
 			</div>
 		</form>
@@ -79,7 +110,7 @@ export type ResearchCardProps = {
 	request: Research.RequestView;
 	onCancel?: () => void;
 	onOpen?: () => void;
-	onRemove: () => void;
+	onRemove?: () => void;
 	onRetry?: () => void;
 };
 
@@ -88,6 +119,7 @@ export function ResearchCard(
 		ResearchCardProps,
 ) {
 	let ready = request.stage === "ready" && request.child;
+	let actions = researchActions(request, canEdit);
 	return (
 		<SidecarCard label="Research">
 			<div className="plan-research-heading">
@@ -106,7 +138,7 @@ export function ResearchCard(
 			)}
 			{actionError && <p className="plan-research-error" role="status">{actionError}</p>}
 			<div className="plan-research-actions">
-				{onCancel && (
+				{actions.cancel && onCancel && (
 					<button
 						aria-label="Cancel research"
 						className="btn btn-sm btn-secondary"
@@ -117,7 +149,7 @@ export function ResearchCard(
 						Cancel
 					</button>
 				)}
-				{onRetry && (
+				{actions.retry && onRetry && (
 					<button
 						aria-label="Retry research"
 						className="btn btn-sm btn-secondary"
@@ -128,20 +160,22 @@ export function ResearchCard(
 						Retry
 					</button>
 				)}
-				{ready && onOpen && (
+				{actions.open && ready && onOpen && (
 					<button className="btn btn-sm btn-primary" disabled={busy} onClick={onOpen} type="button">
 						Open {ready.title}
 					</button>
 				)}
-				<button
-					aria-label="Remove research reference"
-					className="btn btn-sm btn-ghost"
-					disabled={busy || !canEdit}
-					onClick={onRemove}
-					type="button"
-				>
-					Remove
-				</button>
+				{actions.remove && onRemove && (
+					<button
+						aria-label="Remove research reference"
+						className="btn btn-sm btn-ghost"
+						disabled={busy || !canEdit}
+						onClick={onRemove}
+						type="button"
+					>
+						Remove
+					</button>
+				)}
 			</div>
 		</SidecarCard>
 	);
@@ -154,6 +188,35 @@ export function retryResearch(
 	return store.retry(request.id, request.question);
 }
 
+export type ResearchActions = {
+	cancel: boolean;
+	open: boolean;
+	remove: boolean;
+	retry: boolean;
+};
+
+const NONE: ResearchActions = { cancel: false, open: false, remove: false, retry: false };
+
+export function researchActions(
+	request: Research.RequestView | undefined,
+	canEdit: boolean,
+): ResearchActions {
+	if (!request) return NONE;
+	if (request.stage === "ready") return { ...NONE, open: true, remove: canEdit };
+	if (!canEdit) return NONE;
+	if (["queued", "searching", "analyzing", "writing"].includes(request.stage)) {
+		return { ...NONE, cancel: true };
+	}
+	if (request.stage === "failed" || request.stage === "cancelled") {
+		return { ...NONE, remove: true, retry: true };
+	}
+	return NONE;
+}
+
+export function subscribeResearch(store: ResearchStore, listener: () => void): () => void {
+	return store.subscribe(listener);
+}
+
 export type ResearchReferenceProps = {
 	canEdit?: boolean;
 	id: string;
@@ -162,8 +225,12 @@ export type ResearchReferenceProps = {
 };
 
 export function ResearchReference({ canEdit = true, id, onRemove, store }: ResearchReferenceProps) {
+	let subscribe = useCallback(
+		(listener: () => void) => subscribeResearch(store, listener),
+		[store],
+	);
 	let request = useSyncExternalStore(
-		store.subscribe,
+		subscribe,
 		() => store.get(id),
 		() => store.get(id),
 	);
@@ -176,17 +243,6 @@ export function ResearchReference({ canEdit = true, id, onRemove, store }: Resea
 		return (
 			<SidecarCard label="Research">
 				<strong>Loading research…</strong>
-				<div className="plan-research-actions">
-					<button
-						aria-label="Remove research reference"
-						className="btn btn-sm btn-ghost"
-						disabled={!canEdit}
-						onClick={onRemove}
-						type="button"
-					>
-						Remove
-					</button>
-				</div>
 			</SidecarCard>
 		);
 	}
@@ -198,9 +254,7 @@ export function ResearchReference({ canEdit = true, id, onRemove, store }: Resea
 			setBusy(false)
 		);
 	};
-	let active = request.stage !== "ready" && request.stage !== "failed"
-		&& request.stage !== "cancelled";
-	let retryable = request.stage === "failed" || request.stage === "cancelled";
+	let actions = researchActions(request, canEdit);
 
 	return (
 		<ResearchCard
@@ -208,10 +262,10 @@ export function ResearchReference({ canEdit = true, id, onRemove, store }: Resea
 			busy={busy}
 			canEdit={canEdit}
 			request={request}
-			onCancel={canEdit && active ? () => action(() => store.cancel(request.id)) : undefined}
-			onOpen={request.child ? () => store.open(request.child!) : undefined}
-			onRemove={onRemove}
-			onRetry={canEdit && retryable ? () => action(() => retryResearch(store, request)) : undefined}
+			onCancel={actions.cancel ? () => action(() => store.cancel(request.id)) : undefined}
+			onOpen={actions.open && request.child ? () => store.open(request.child!) : undefined}
+			onRemove={actions.remove ? onRemove : undefined}
+			onRetry={actions.retry ? () => action(() => retryResearch(store, request)) : undefined}
 		/>
 	);
 }
@@ -233,17 +287,6 @@ function InlineResearch({ id, node }: { id: string; node: ResearchNode }) {
 		: (
 			<SidecarCard label="Research">
 				<strong>Research unavailable</strong>
-				<div className="plan-research-actions">
-					<button
-						aria-label="Remove research reference"
-						className="btn btn-sm btn-ghost"
-						disabled={!options.canEdit}
-						onClick={remove}
-						type="button"
-					>
-						Remove
-					</button>
-				</div>
 			</SidecarCard>
 		);
 }

@@ -320,4 +320,24 @@ describe("container collaboration", () => {
 			expect(callout.getTitle()).toBe("Careful");
 		});
 	});
+
+	it("keeps an atomic research reference through a sync and export", async () => {
+		let a = peer();
+		let b = peer();
+		a.doc.on("update", (update: Uint8Array, origin: unknown) => {
+			if (origin !== "relay") Y.applyUpdate(b.doc, update, "relay");
+		});
+
+		importPlan(a.editor, `<Research id="${RESEARCH_ID}" />\n`, { registry: REGISTRY });
+		await settle();
+
+		b.editor.getEditorState().read(() => {
+			let research = $getRoot().getFirstChild();
+			expect(Containers.$isResearchNode(research)).toBe(true);
+			if (Containers.$isResearchNode(research)) expect(research.getId()).toBe(RESEARCH_ID);
+		});
+		expect(exportPlan(b.editor, { registry: REGISTRY })).toBe(
+			`<Research id="${RESEARCH_ID}" />\n`,
+		);
+	});
 });
