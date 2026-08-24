@@ -38,7 +38,7 @@ describe("the Figma navigation chrome", () => {
 			onLoadMore: () => {},
 			onNewDocument: () => {},
 			onSearch: () => {},
-			onShowArchivedChange: () => {},
+			onCatalogueModeChange: () => {},
 			projects: [{
 				documents: { status: "ready", channels: [] },
 				project: {
@@ -57,7 +57,7 @@ describe("the Figma navigation chrome", () => {
 					},
 				},
 			}],
-			showArchived: false,
+			catalogueMode: "active",
 			user: { avatarUrl: "/user.png", id: "user-one", login: "MaggieAppleton" },
 		}));
 
@@ -99,9 +99,9 @@ describe("the Figma navigation chrome", () => {
 			onLoadMore: () => {},
 			onNewDocument: () => {},
 			onSearch: () => {},
-			onShowArchivedChange: () => {},
+			onCatalogueModeChange: () => {},
 			projects: [],
-			showArchived: false,
+			catalogueMode: "active",
 			user: { avatarUrl: "", id: "user-one", login: "MaggieAppleton" },
 		} satisfies ComponentProps<typeof ProjectSidebar>;
 		let closed = renderToStaticMarkup(createElement(ProjectSidebar, props));
@@ -127,7 +127,7 @@ describe("the Figma navigation chrome", () => {
 			onLoadMore: () => {},
 			onNewDocument: () => {},
 			onSearch: () => {},
-			onShowArchivedChange: () => {},
+			onCatalogueModeChange: () => {},
 			projects: [{
 				documents: { status: "ready", channels: [], nextCursor: "next-page" },
 				project: {
@@ -138,11 +138,86 @@ describe("the Figma navigation chrome", () => {
 					repositoryOwner: "MaggieAppleton",
 				},
 			}],
-			showArchived: false,
+			catalogueMode: "active",
 			user: { avatarUrl: "", id: "user-one", login: "MaggieAppleton" },
 		}));
 
 		expect(markup).toContain('aria-label="Load more documents in testing-sql-transcripts"');
+	});
+
+	test("separates active and archived documents into sidebar modes", () => {
+		let active = {
+			createdAt: "2026-08-24T10:00:00.000Z",
+			createdBy: "U_test",
+			id: "active-document",
+			repositoryId: "R_test",
+			repositoryName: "testing-sql-transcripts",
+			repositoryOwner: "MaggieAppleton",
+			revision: 0,
+			slug: "active-document",
+			title: "Active document",
+			updatedAt: "2026-08-24T10:00:00.000Z",
+		};
+		let archived = {
+			...active,
+			archivedAt: "2026-08-24T11:00:00.000Z",
+			id: "archived-document",
+			slug: "archived-document",
+			title: "Archived document",
+			updatedAt: "2026-08-24T11:00:00.000Z",
+		};
+		let props = {
+			canCreateDocument: true,
+			creatingNewDocument: false,
+			creatingProjectIds: new Set<string>(),
+			onAccount: () => {},
+			onAddProject: () => {},
+			onCatalogueModeChange: () => {},
+			onCollapse: () => {},
+			onCreateDocument: () => {},
+			onDocumentAction: () => {},
+			onLoadMore: () => {},
+			onNewDocument: () => {},
+			onSearch: () => {},
+			projects: [{
+				documents: { status: "ready" as const, channels: [active, archived] },
+				project: {
+					available: true,
+					position: 0,
+					repositoryId: "R_test",
+					repositoryName: "testing-sql-transcripts",
+					repositoryOwner: "MaggieAppleton",
+				},
+			}],
+			user: { avatarUrl: "", id: "user-one", login: "MaggieAppleton" },
+		};
+		let activeMarkup = renderToStaticMarkup(createElement(ProjectSidebar, {
+			...props,
+			catalogueMode: "active",
+		}));
+		let archivedMarkup = renderToStaticMarkup(createElement(ProjectSidebar, {
+			...props,
+			catalogueMode: "archived",
+		}));
+
+		expect(activeMarkup).toContain("Archived chats");
+		expect(activeMarkup).toContain("box-archive.svg");
+		expect(activeMarkup).toMatch(/height="14" src="[^"]*box-archive\.svg" width="14"/);
+		expect(activeMarkup).toContain("Active document");
+		expect(activeMarkup).not.toContain("Archived document");
+		expect(activeMarkup).not.toContain("Show archived documents");
+		expect(activeMarkup.indexOf("Archived chats")).toBeLessThan(
+			activeMarkup.lastIndexOf("MaggieAppleton"),
+		);
+
+		expect(archivedMarkup).toContain("Back to active docs");
+		expect(archivedMarkup).toContain("Archived document");
+		expect(archivedMarkup).not.toContain("Active document");
+		expect(archivedMarkup).not.toContain("Archived chats");
+		expect(archivedMarkup).not.toContain("New document");
+		expect(archivedMarkup).not.toContain(">Search<");
+		expect(archivedMarkup).not.toContain("Add Project");
+		expect(archivedMarkup).not.toContain(">Archived</span>");
 	});
 
 	test("keeps the document header to one project icon and document trigger", () => {

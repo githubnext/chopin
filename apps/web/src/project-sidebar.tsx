@@ -1,5 +1,6 @@
 import addProjectIcon from "./assets/figma/navigation/add-project.svg";
 import bookBookmarkIcon from "./assets/figma/navigation/book-bookmark.svg";
+import boxArchiveIcon from "./assets/figma/navigation/box-archive.svg";
 import chopinIcon from "./assets/figma/navigation/chopin.svg";
 import collapseIcon from "./assets/figma/navigation/collapse.svg";
 import documentActionsIcon from "./assets/figma/navigation/document-actions.svg";
@@ -42,6 +43,7 @@ export function newestResearchFirst(
 
 function Project(
 	{
+		archiveMode,
 		creatingProjectIds,
 		currentDocumentId,
 		currentResearchWorkspaceId,
@@ -54,6 +56,7 @@ function Project(
 		research,
 		onToggle,
 	}: {
+		archiveMode: boolean;
 		creatingProjectIds: ReadonlySet<string>;
 		currentDocumentId?: string;
 		currentResearchWorkspaceId?: string;
@@ -68,7 +71,9 @@ function Project(
 	},
 ) {
 	let { documents, project } = entry;
-	let { channels } = documents;
+	let channels = documents.channels.filter(channel =>
+		archiveMode ? channel.archivedAt !== undefined : channel.archivedAt === undefined
+	);
 	let label = project.repository?.name ?? project.repositoryName;
 	let canManage = canManageProject(project);
 	let creating = creatingProjectIds.has(project.repositoryId);
@@ -88,7 +93,7 @@ function Project(
 					<NavigationIcon className="opacity-50" src={bookBookmarkIcon} />
 					<span className="truncate text-sm font-bold">{label}</span>
 				</button>
-				{project.available && canManage && (
+				{!archiveMode && project.available && canManage && (
 					<button
 						aria-label={`New document in ${label}`}
 						className="project-sidebar-action"
@@ -137,7 +142,6 @@ function Project(
 										href={parentHref}
 									>
 										<span className="truncate">{channel.title}</span>
-										{channel.archivedAt && <span className="document-status-badge">Archived</span>}
 									</a>
 									{canManage && (
 										<div className="project-sidebar-document-actions">
@@ -228,14 +232,15 @@ export function ProjectSidebar(
 		onNewResearch,
 		onNewDocument,
 		onSearch,
-		onShowArchivedChange,
+		onCatalogueModeChange,
 		projects,
 		research = new Map(),
-		showArchived,
+		catalogueMode,
 		user,
 	}: {
 		accountMenu?: ReactNode;
 		canCreateDocument: boolean;
+		catalogueMode: "active" | "archived";
 		creatingNewDocument: boolean;
 		creatingProjectIds: ReadonlySet<string>;
 		currentDocumentId?: string;
@@ -249,16 +254,66 @@ export function ProjectSidebar(
 		onNewResearch?: (channel: Api.Channel) => void;
 		onNewDocument: () => void;
 		onSearch: () => void;
-		onShowArchivedChange: (show: boolean) => void;
+		onCatalogueModeChange: (mode: "active" | "archived") => void;
 		projects: ProjectDocuments[];
 		research?: ReadonlyMap<string, ResearchChannelGroup>;
-		showArchived: boolean;
 		user: Api.User;
 	},
 ) {
 	let [collapsedProjectIds, setCollapsedProjectIds] = useState<ReadonlySet<string>>(
 		() => new Set(),
 	);
+	let archiveMode = catalogueMode === "archived";
+	let primaryActions = (
+		<div className="project-sidebar-primary-actions">
+			{archiveMode
+				? (
+					<button
+						className="project-sidebar-primary-action"
+						onClick={() => onCatalogueModeChange("active")}
+						type="button"
+					>
+						<span aria-hidden="true">←</span>
+						<span>Back to active docs</span>
+					</button>
+				)
+				: (
+					<>
+						<button
+							className="project-sidebar-primary-action"
+							disabled={!canCreateDocument || creatingNewDocument}
+							onClick={onNewDocument}
+							type="button"
+						>
+							<NavigationIcon src={newDocumentIcon} />
+							<span>New document</span>
+						</button>
+						<button
+							className="project-sidebar-primary-action"
+							onClick={onSearch}
+							type="button"
+						>
+							<NavigationIcon src={searchIcon} />
+							<span>Search</span>
+						</button>
+					</>
+				)}
+		</div>
+	);
+	let archiveFooter = !archiveMode
+		? (
+			<div className="project-sidebar-footer-actions">
+				<button
+					className="project-sidebar-primary-action"
+					onClick={() => onCatalogueModeChange("archived")}
+					type="button"
+				>
+					<NavigationIcon src={boxArchiveIcon} />
+					<span>Archived chats</span>
+				</button>
+			</div>
+		)
+		: null;
 	return (
 		<aside className="project-sidebar" data-project-sidebar="" aria-label="Projects">
 			<div className="min-h-0 flex-1 overflow-y-auto">
@@ -277,46 +332,27 @@ export function ProjectSidebar(
 					</button>
 				</header>
 
-				<div className="project-sidebar-primary-actions">
-					<button
-						className="project-sidebar-primary-action"
-						disabled={!canCreateDocument || creatingNewDocument}
-						onClick={onNewDocument}
-						type="button"
-					>
-						<NavigationIcon src={newDocumentIcon} />
-						<span>New document</span>
-					</button>
-					<button className="project-sidebar-primary-action" onClick={onSearch} type="button">
-						<NavigationIcon src={searchIcon} />
-						<span>Search</span>
-					</button>
-				</div>
+				{primaryActions}
 
 				<nav className="px-2 py-2" aria-label="Projects">
 					<div className="project-sidebar-projects-heading group/projects-heading">
 						<span>Projects</span>
-						<button
-							aria-label="Add Project"
-							className="project-sidebar-action"
-							onClick={onAddProject}
-							type="button"
-						>
-							<NavigationIcon className="size-3.5" src={addProjectIcon} />
-						</button>
+						{!archiveMode && (
+							<button
+								aria-label="Add Project"
+								className="project-sidebar-action"
+								onClick={onAddProject}
+								type="button"
+							>
+								<NavigationIcon className="size-3.5" src={addProjectIcon} />
+							</button>
+						)}
 					</div>
-					<label className="project-sidebar-archived-toggle">
-						<input
-							checked={showArchived}
-							onChange={event => onShowArchivedChange(event.target.checked)}
-							type="checkbox"
-						/>
-						<span>Show archived documents</span>
-					</label>
 					<ul className="project-sidebar-projects gap-2">
 						{[...projects].sort((first, second) => first.project.position - second.project.position)
 							.map(entry => (
 								<Project
+									archiveMode={archiveMode}
 									creatingProjectIds={creatingProjectIds}
 									currentDocumentId={currentDocumentId}
 									currentResearchWorkspaceId={currentResearchWorkspaceId}
@@ -326,7 +362,7 @@ export function ProjectSidebar(
 									onCreateDocument={onCreateDocument}
 									onDocumentAction={onDocumentAction}
 									onLoadMore={onLoadMore}
-									onNewResearch={onNewResearch}
+									onNewResearch={archiveMode ? undefined : onNewResearch}
 									research={research}
 									onToggle={() =>
 										setCollapsedProjectIds(current =>
@@ -337,6 +373,7 @@ export function ProjectSidebar(
 					</ul>
 				</nav>
 			</div>
+			{archiveFooter}
 			<div className="project-sidebar-account-wrap">
 				{accountMenu}
 				<button
