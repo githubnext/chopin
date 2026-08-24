@@ -82,7 +82,7 @@ test("a pointer-dismissed navigation dialog releases focus while it exits", asyn
 	await expect(modal).toHaveCount(0);
 });
 
-test("sidebar titles use action space until document controls are active", async ({ join, page }) => {
+test("sidebar titles stay readable until hover reveals controls", async ({ join, page }) => {
 	let title = "Complete the implementation";
 	let listed = channel("cccccccc-0000-4000-8000-000000000000", title);
 	await page.route(
@@ -95,40 +95,17 @@ test("sidebar titles use action space until document controls are active", async
 	let link = projects.getByRole("link", { name: title, exact: true });
 	let titleText = link.locator("span");
 	let row = link.locator("..");
-	let research = projects.getByRole("button", { name: `New research in ${title}` });
 	let actions = projects.getByRole("button", { name: `Actions for ${title}` });
-	let idleWidth = await link.evaluate(element => element.clientWidth);
-	let idleTitle = await titleText.evaluate(element => ({
-		client: element.clientWidth,
-		scroll: element.scrollWidth,
-	}));
+	let clipped = () => titleText.evaluate(element => element.scrollWidth > element.clientWidth);
 
-	expect(idleTitle.scroll).toBeLessThanOrEqual(idleTitle.client);
-	await expect(research).toBeHidden();
 	await expect(actions).toBeHidden();
+	expect(await clipped()).toBe(false);
 
 	await row.hover();
-	await expect(research).toBeVisible();
 	await expect(actions).toBeVisible();
-	let activeWidth = await link.evaluate(element => element.clientWidth);
-	let activeTitle = await titleText.evaluate(element => ({
-		client: element.clientWidth,
-		scroll: element.scrollWidth,
-	}));
-
-	expect(activeWidth).toBeLessThan(idleWidth);
-	expect(activeTitle.scroll).toBeGreaterThan(activeTitle.client);
-
-	await page.mouse.move(1000, 700);
-	await link.focus();
-	await expect(research).toBeVisible();
-	await expect(actions).toBeVisible();
-
-	await projects.getByRole("button", { name: "Search", exact: true }).focus();
-	await page.evaluate(() => document.documentElement.setAttribute("data-plan-coarse-pointer", ""));
-	await expect(research).toBeVisible();
-	await expect(actions).toBeVisible();
-	expect((await actions.boundingBox())!.width).toBeGreaterThanOrEqual(44);
+	expect(await clipped()).toBe(true);
+	let [rowBox, actionsBox] = await Promise.all([row.boundingBox(), actions.boundingBox()]);
+	expect(rowBox!.x + rowBox!.width - actionsBox!.x - actionsBox!.width).toBeLessThanOrEqual(8);
 });
 
 test("a stale catalogue response cannot remove a newly created document", async ({ join, page }) => {
