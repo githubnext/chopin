@@ -31,6 +31,7 @@ import { motionImmediately } from "./motion-input";
 import { useNavigationDocument } from "./navigation-shell";
 import { NavigationIcon } from "./project-sidebar";
 import { peopleHere } from "./presence";
+import { ResearchRequestStore } from "./research-requests";
 import { Wire } from "./wire";
 import { useWorkspaceIds, useWorkspaceMode, useWorkspaceState, Workspace } from "./workspace";
 import { availableDocumentView, presentWorkspace, storedDocumentView } from "./workspace-model";
@@ -151,7 +152,7 @@ export function RoomWorkspace(
 		onDocumentChanged,
 		onDocumentDeleted,
 		onRepositoryAccessChanged,
-		onResearchWorkspaceChanged,
+		onResearchChildOpen,
 		onResearchWorkspacesRefresh,
 	} = useNavigationDocument();
 	let [status, setStatus] = useState<Status>("connecting");
@@ -182,6 +183,14 @@ export function RoomWorkspace(
 	let [questions] = useState(() => new QuestionnaireStore());
 	let [threads] = useState(() => new ThreadStore());
 	let [jobs] = useState(() => new JobStore());
+	let research = useMemo(
+		() =>
+			new ResearchRequestStore({
+				channelId: room,
+				onOpen: onResearchChildOpen,
+			}),
+		[onResearchChildOpen, room],
+	);
 	let [reveal, setReveal] = useState<{ widget: string; token: number }>();
 	let [planScrollTop, setPlanScrollTop] = useState(0);
 	let entries = useQuestionnaires(questions);
@@ -303,6 +312,8 @@ export function RoomWorkspace(
 		setMetadata(next);
 	}, [archivedAt, description, descriptionRevision, label, room, slug, updatedAt]);
 
+	useEffect(() => () => research.dispose(), [research]);
+
 	useEffect(() => {
 		let socket = new Wire({
 			channelId: room,
@@ -369,18 +380,7 @@ export function RoomWorkspace(
 				onRepositoryAccessChanged();
 			}),
 			socket.on<Research.Changed>("research:changed", frame => {
-				onResearchWorkspaceChanged(
-					{
-						id: room,
-						repositoryId: repository.id,
-						repositoryOwner: repository.owner,
-						repositoryName: repository.name,
-						title: metadataRef.current.title,
-						slug: metadataRef.current.slug,
-					},
-					frame.workspaceId,
-					frame.revision,
-				);
+				research.invalidate(frame.workspaceId);
 			}),
 			threads.listen(socket),
 			jobs.listen(socket),
@@ -395,9 +395,9 @@ export function RoomWorkspace(
 		handle,
 		jobs,
 		onDocumentDeleted,
-		onResearchWorkspaceChanged,
 		onResearchWorkspacesRefresh,
 		onRepositoryAccessChanged,
+		research,
 		repository,
 		room,
 		threads,
@@ -483,6 +483,7 @@ export function RoomWorkspace(
 					questionMotion={QUESTION_MOTION}
 					questions={questions}
 					readOnly={!workspaceCanEdit}
+					research={research}
 					scrollTop={planScrollTop}
 					threads={threads}
 					user={user}

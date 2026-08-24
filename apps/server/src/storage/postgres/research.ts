@@ -34,6 +34,8 @@ import type {
 	ResearchWorkspaceRepositoryGroup,
 	ResearchWorkspaceRepositoryList,
 	ResearchWorkspaceSummary,
+	ResetInitialResearchAttempt,
+	ResetInitialResearchAttemptResult,
 	StartResearchWorkspace,
 	StartResearchWorkspaceResult,
 } from "../model";
@@ -145,6 +147,11 @@ type LinkedJobRow = {
 	targetKey: unknown;
 	targetGeneration: unknown;
 	currentGeneration: unknown;
+};
+
+type RetryJobRow = {
+	id: unknown;
+	state: unknown;
 };
 
 type LockedWorkspace = {
@@ -824,6 +831,77 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 					`;
 				let savedTurnRow = rows[0];
 				if (!savedTurnRow) throw corrupt("linking a research job returned no turn");
+				let savedWorkspace = await this.#bumpWorkspace(transaction, workspaceId, now, 0, 0);
+				return {
+					workspace: savedWorkspace,
+					turn: turn(savedTurnRow),
+					repeated: false,
+				};
+			}));
+
+	readonly resetInitialAttempt = (
+		input: ResetInitialResearchAttempt,
+	): Promise<ResetInitialResearchAttemptResult> =>
+		this.#run("reset initial research attempt", () =>
+			this.#sql.begin(async transaction => {
+				await this.#fence(transaction, input.lease);
+				let channelId = required(input.channelId, "channel id");
+				let workspaceId = required(input.workspaceId, "workspace id");
+				let archived = await this.#lockChannelArchiveState(transaction, channelId);
+				let locked = await this.#lockWorkspace(transaction, channelId, workspaceId);
+				if (archived) throw conflict(`channel ${channelId} is archived`);
+				if (locked.workspace.publishedChannelId) {
+					throw conflict(`research workspace ${workspaceId} is already published`);
+				}
+				let [foundTurnRow] = await transaction<TurnRow[]>`
+					SELECT ${transaction.unsafe(TURN_COLUMNS)}
+					FROM research_turns
+					WHERE workspace_id = ${workspaceId} AND ordinal = 1
+					FOR UPDATE
+				`;
+				let foundTurn = foundTurnRow ? turn(foundTurnRow) : undefined;
+				if (!foundTurn || foundTurn.kind !== "initial") {
+					throw conflict(`research workspace ${workspaceId} has no initial turn`);
+				}
+				if (
+					foundTurn.evidenceJobId !== input.expectedEvidenceJobId
+					|| foundTurn.answerJobId !== input.expectedAnswerJobId
+				) throw conflict(`research workspace ${workspaceId} changed before retry`);
+				if (!foundTurn.evidenceJobId && !foundTurn.answerJobId) {
+					return { workspace: locked.workspace, turn: foundTurn, repeated: true };
+				}
+				let terminal = false;
+				for (let jobId of [foundTurn.evidenceJobId, foundTurn.answerJobId]) {
+					if (!jobId) continue;
+					let [job] = await transaction<RetryJobRow[]>`
+						SELECT id, state FROM background_jobs
+						WHERE id = ${jobId} AND channel_id = ${channelId}
+						FOR UPDATE
+					`;
+					if (!job) {
+						throw missing(`background job ${jobId} does not exist in channel ${channelId}`);
+					}
+					let state = text(job.state, "retry job state");
+					if (["pending", "paused", "running"].includes(state)) {
+						throw conflict(`research workspace ${workspaceId} still has active initial work`);
+					}
+					if (["failed", "cancelled", "superseded"].includes(state)) {
+						terminal = true;
+					}
+				}
+				if (!terminal) {
+					throw conflict(`research workspace ${workspaceId} has no terminal initial work`);
+				}
+				let now = inputDate(input.now, "retry time");
+				let [savedTurnRow] = await transaction<TurnRow[]>`
+					UPDATE research_turns SET
+						evidence_job_id = NULL,
+						answer_job_id = NULL,
+						updated_at = GREATEST(updated_at, ${now})
+					WHERE id = ${foundTurn.id} AND workspace_id = ${workspaceId}
+					RETURNING ${transaction.unsafe(TURN_COLUMNS)}
+				`;
+				if (!savedTurnRow) throw corrupt("resetting research work returned no turn");
 				let savedWorkspace = await this.#bumpWorkspace(transaction, workspaceId, now, 0, 0);
 				return {
 					workspace: savedWorkspace,

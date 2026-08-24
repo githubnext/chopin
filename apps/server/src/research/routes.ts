@@ -295,6 +295,37 @@ export function registerResearchWorkspaceRoutes(
 	);
 
 	router.on(
+		"POST",
+		"/api/channels/:channelId/research-requests",
+		async (request, _url, params) => {
+			let denied = origin(request, auth);
+			if (denied) return denied;
+			try {
+				let session = await auth.sessions.authenticate(request);
+				if (!session) return json({ error: "authentication required" }, 401);
+				let access = await channelAccess(auth, session, params.channelId!);
+				if (!access) return json({ error: "channel not found" }, 404);
+				if (!canWrite(access.repository)) {
+					return json({ error: "repository write access is required" }, 403);
+				}
+				let input = await body(request, ["question", "requestId"]);
+				if (!input) return json({ error: "question and requestId are required" }, 400);
+				let created = await service.start({
+					channelId: access.channel.id,
+					question: input.question as string,
+					requestId: input.requestId as string,
+					requestedBy: session.user.id,
+					requestedByHandle: session.user.login,
+					beforeStart: () => options.ensureOwner(access.channel, access.session, access.repository),
+				});
+				return json(created, created.repeated ? 200 : 201);
+			} catch (err) {
+				return failure(err, auth);
+			}
+		},
+	);
+
+	router.on(
 		"GET",
 		"/api/channels/:channelId/research-workspaces/:workspaceId",
 		async (request, _url, params) => {
@@ -414,6 +445,82 @@ export function registerResearchWorkspaceRoutes(
 				return json(workspace, 200, {
 					location: location(access.channel, access.repository, workspace.workspace.id),
 				});
+			} catch (err) {
+				return failure(err, auth);
+			}
+		},
+	);
+
+	router.on(
+		"GET",
+		"/api/channels/:channelId/research-requests/:workspaceId",
+		async (request, _url, params) => {
+			try {
+				let session = await auth.sessions.authenticate(request);
+				if (!session) return json({ error: "authentication required" }, 401);
+				let access = await channelAccess(auth, session, params.channelId!);
+				if (!access) return json({ error: "research request not found" }, 404);
+				let researchRequest = await service.request(access.channel.id, params.workspaceId!);
+				return researchRequest
+					? json(researchRequest)
+					: json({ error: "research request not found" }, 404);
+			} catch (err) {
+				return failure(err, auth);
+			}
+		},
+	);
+
+	router.on(
+		"POST",
+		"/api/channels/:channelId/research-requests/:workspaceId/retry",
+		async (request, _url, params) => {
+			let denied = origin(request, auth);
+			if (denied) return denied;
+			try {
+				let session = await auth.sessions.authenticate(request);
+				if (!session) return json({ error: "authentication required" }, 401);
+				let access = await channelAccess(auth, session, params.channelId!);
+				if (!access) return json({ error: "research request not found" }, 404);
+				if (!canWrite(access.repository)) {
+					return json({ error: "repository write access is required" }, 403);
+				}
+				if (access.channel.archivedAt) {
+					return json({ error: "document is archived" }, 409);
+				}
+				let researchRequest = await service.retryRequest({
+					channelId: access.channel.id,
+					workspaceId: params.workspaceId!,
+					beforeStart: () => options.ensureOwner(access.channel, access.session, access.repository),
+				});
+				return json(researchRequest);
+			} catch (err) {
+				return failure(err, auth);
+			}
+		},
+	);
+
+	router.on(
+		"POST",
+		"/api/channels/:channelId/research-requests/:workspaceId/cancel",
+		async (request, _url, params) => {
+			let denied = origin(request, auth);
+			if (denied) return denied;
+			try {
+				let session = await auth.sessions.authenticate(request);
+				if (!session) return json({ error: "authentication required" }, 401);
+				let access = await channelAccess(auth, session, params.channelId!);
+				if (!access) return json({ error: "research request not found" }, 404);
+				if (!canWrite(access.repository)) {
+					return json({ error: "repository write access is required" }, 403);
+				}
+				if (access.channel.archivedAt) {
+					return json({ error: "document is archived" }, 409);
+				}
+				let researchRequest = await service.cancelRequest({
+					channelId: access.channel.id,
+					workspaceId: params.workspaceId!,
+				});
+				return json(researchRequest);
 			} catch (err) {
 				return failure(err, auth);
 			}

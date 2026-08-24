@@ -2089,6 +2089,155 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
+		it("clears only terminal initial research links with concurrency guards", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, channelId, lease } = await userAndChannel(storage);
+				let started = await storage.research.start({
+					id: id("retry-workspace"),
+					channelId,
+					title: "Retry research",
+					question: "Which contract failed?",
+					origin: "inline",
+					createdBy: userId,
+					turnId: id("retry-turn"),
+					messageId: id("retry-message"),
+					requestId: id("retry-request"),
+					idempotencyKey: id("retry-start"),
+					fingerprint: "sha256:retry-start",
+					now: new Date("2026-01-07T03:04:05.000Z"),
+					lease,
+				});
+				let targetKey =
+					`research-evidence:workspace:${started.workspace.id}:turn:${started.turn.id}:evidence`;
+				let evidence = await storage.jobs.enqueue(backgroundJob(channelId, lease, {
+					id: id("retry-evidence"),
+					idempotencyKey: id("retry-evidence-enqueue"),
+					type: "research-evidence",
+					targetKey,
+					now: new Date("2026-01-07T03:04:06.000Z"),
+				}));
+				await storage.research.linkJob({
+					channelId,
+					workspaceId: started.workspace.id,
+					turnId: started.turn.id,
+					role: "evidence",
+					jobId: evidence.job.id,
+					now: new Date("2026-01-07T03:04:06.000Z"),
+					lease,
+				});
+				await expect(storage.research.resetInitialAttempt({
+					channelId,
+					workspaceId: started.workspace.id,
+					expectedEvidenceJobId: evidence.job.id,
+					expectedAnswerJobId: undefined,
+					now: new Date("2026-01-07T03:04:07.000Z"),
+					lease,
+				})).rejects.toMatchObject({ failure: "conflict" });
+
+				let [claimed] = await storage.jobs.claim({
+					channelId,
+					claimOwner: "retry-worker",
+					count: 1,
+					ttlMs: 10_000,
+					now: new Date("2026-01-07T03:04:08.000Z"),
+					lease,
+				});
+				await storage.jobs.fail({
+					channelId,
+					jobId: claimed!.id,
+					claimOwner: "retry-worker",
+					claimGeneration: claimed!.claimGeneration,
+					reason: "safe-retry",
+					now: new Date("2026-01-07T03:04:09.000Z"),
+					lease,
+				});
+				let answer = await storage.jobs.enqueue(backgroundJob(channelId, lease, {
+					id: id("retry-answer"),
+					idempotencyKey: id("retry-answer-enqueue"),
+					type: "research-answer",
+					targetKey:
+						`research-answer:workspace:${started.workspace.id}:turn:${started.turn.id}:answer`,
+					now: new Date("2026-01-07T03:04:09.000Z"),
+				}));
+				await storage.research.linkJob({
+					channelId,
+					workspaceId: started.workspace.id,
+					turnId: started.turn.id,
+					role: "answer",
+					jobId: answer.job.id,
+					now: new Date("2026-01-07T03:04:09.000Z"),
+					lease,
+				});
+				await expect(storage.research.resetInitialAttempt({
+					channelId,
+					workspaceId: started.workspace.id,
+					expectedEvidenceJobId: evidence.job.id,
+					expectedAnswerJobId: answer.job.id,
+					now: new Date("2026-01-07T03:04:09.000Z"),
+					lease,
+				})).rejects.toMatchObject({ failure: "conflict" });
+				let [claimedAnswer] = await storage.jobs.claim({
+					channelId,
+					claimOwner: "retry-worker",
+					count: 1,
+					ttlMs: 10_000,
+					now: new Date("2026-01-07T03:04:09.000Z"),
+					lease,
+				});
+				await storage.jobs.fail({
+					channelId,
+					jobId: claimedAnswer!.id,
+					claimOwner: "retry-worker",
+					claimGeneration: claimedAnswer!.claimGeneration,
+					reason: "safe-retry",
+					now: new Date("2026-01-07T03:04:10.000Z"),
+					lease,
+				});
+				let reset = await storage.research.resetInitialAttempt({
+					channelId,
+					workspaceId: started.workspace.id,
+					expectedEvidenceJobId: evidence.job.id,
+					expectedAnswerJobId: answer.job.id,
+					now: new Date("2026-01-07T03:04:11.000Z"),
+					lease,
+				});
+
+				expect(reset).toMatchObject({
+					repeated: false,
+					turn: {
+						id: started.turn.id,
+						question: "Which contract failed?",
+						evidenceJobId: undefined,
+						answerJobId: undefined,
+					},
+				});
+				expect(await storage.research.findTurnByJob(channelId, evidence.job.id))
+					.toBeUndefined();
+				expect(await storage.research.findTurnByJob(channelId, answer.job.id))
+					.toBeUndefined();
+				let replay = await storage.research.resetInitialAttempt({
+					channelId,
+					workspaceId: started.workspace.id,
+					expectedEvidenceJobId: undefined,
+					expectedAnswerJobId: undefined,
+					now: new Date("2026-01-07T03:04:12.000Z"),
+					lease,
+				});
+				expect(replay).toMatchObject({ repeated: true, turn: { id: started.turn.id } });
+				await expect(storage.research.resetInitialAttempt({
+					channelId,
+					workspaceId: started.workspace.id,
+					expectedEvidenceJobId: evidence.job.id,
+					expectedAnswerJobId: undefined,
+					now: new Date("2026-01-07T03:04:13.000Z"),
+					lease,
+				})).rejects.toMatchObject({ failure: "conflict" });
+			} finally {
+				await storage.close();
+			}
+		});
+
 		it("enqueues background targets idempotently without collaboration side effects", async () => {
 			let storage = await opened(factory);
 			try {

@@ -113,6 +113,7 @@ let NavigationDocument = createContext<{
 	onDocumentDeleted: (documentId: string) => void;
 	onDocumentLoaded: (channel: Api.Channel, routeKey: DocumentRouteIdentity) => Promise<void>;
 	onRepositoryAccessChanged: () => void;
+	onResearchChildOpen: (child: Research.ReadyChild) => void;
 	onResearchWorkspaceChanged: (
 		channel: Api.ResearchParentChannel,
 		workspaceId: string,
@@ -129,6 +130,7 @@ let NavigationDocument = createContext<{
 	onDocumentDeleted() {},
 	async onDocumentLoaded() {},
 	onRepositoryAccessChanged() {},
+	onResearchChildOpen() {},
 	onResearchWorkspaceChanged() {},
 	onResearchWorkspaceLoaded() {},
 	onResearchWorkspacesRefresh() {},
@@ -699,6 +701,14 @@ export function NavigationShell(
 		let channel = currentChannelRef.current;
 		if (channel) documentAction(channel, action);
 	}, [documentAction]);
+	let researchChildOpen = useCallback((child: Research.ReadyChild) => {
+		let channel = currentChannelRef.current;
+		if (!channel) return;
+		setError(undefined);
+		setDialog(undefined);
+		setDrawerOpen(false);
+		navigate(documentPath(channel.repositoryOwner, channel.repositoryName, child.slug));
+	}, [navigate]);
 	let researchWorkspaceChanged = useCallback((
 		channel: Api.ResearchParentChannel,
 		workspaceId: string,
@@ -722,6 +732,7 @@ export function NavigationShell(
 		onDocumentDeleted: documentDeleted,
 		onDocumentLoaded: documentLoaded,
 		onRepositoryAccessChanged: repositoryAccessChanged,
+		onResearchChildOpen: researchChildOpen,
 		onResearchWorkspaceChanged: researchWorkspaceChanged,
 		onResearchWorkspaceLoaded: researchWorkspaceLoaded,
 		onResearchWorkspacesRefresh: refreshResearchChannel,
@@ -732,6 +743,7 @@ export function NavigationShell(
 		documentDeleted,
 		documentLoaded,
 		repositoryAccessChanged,
+		researchChildOpen,
 		researchWorkspaceChanged,
 		researchWorkspaceLoaded,
 		refreshResearchChannel,

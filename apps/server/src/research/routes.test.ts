@@ -155,6 +155,7 @@ async function setup() {
 		cookie: pair(issued.cookie),
 		owners,
 		now,
+		lease,
 	};
 }
 
@@ -180,6 +181,41 @@ async function create(context: Awaited<ReturnType<typeof setup>>) {
 	));
 	if (!response) throw new Error("research create route was not registered");
 	return { response, body: await response.json() };
+}
+
+async function createInline(context: Awaited<ReturnType<typeof setup>>) {
+	let response = await context.router.handle(request(
+		`/api/channels/${context.channel.id}/research-requests`,
+		context.cookie,
+		mutation({ question: "What changed?", requestId: requestId(11) }),
+	));
+	if (!response) throw new Error("inline research create route was not registered");
+	return { response, body: await response.json() };
+}
+
+async function failInitial(context: Awaited<ReturnType<typeof setup>>) {
+	let [claimed] = await context.storage.jobs.claim({
+		channelId: context.channel.id,
+		claimOwner: "route-failing-worker",
+		count: 1,
+		ttlMs: 30_000,
+		now: new Date(context.now.getTime() + 1),
+		lease: context.lease,
+	});
+	if (!claimed) throw new Error("route evidence job was not claimable");
+	await context.storage.jobs.fail({
+		channelId: context.channel.id,
+		jobId: claimed.id,
+		claimOwner: "route-failing-worker",
+		claimGeneration: claimed.claimGeneration,
+		reason: "private failure",
+		now: new Date(context.now.getTime() + 2),
+		lease: context.lease,
+	});
+}
+
+function retryMutation(origin = "https://chopin.test"): RequestInit {
+	return { method: "POST", headers: { origin } };
 }
 
 describe("research workspace routes", () => {
@@ -247,6 +283,111 @@ describe("research workspace routes", () => {
 			context.cookie,
 		));
 		expect(read?.status).toBe(200);
+	});
+
+	it("starts inline research without replacing private workspace creation", async () => {
+		let context = await setup();
+		let draft = await create(context);
+		expect(draft.body.workspace.origin).toBe("sidebar");
+		expect(context.owners).toEqual([]);
+
+		let inline = await createInline(context);
+		expect(inline.response.status).toBe(201);
+		expect(inline.body).toMatchObject({
+			repeated: false,
+			request: { question: "What changed?", stage: "queued" },
+		});
+		expect(context.owners).toEqual([context.channel.id]);
+		expect(await context.storage.research.list(context.channel.id, 100)).toHaveLength(2);
+
+		let path =
+			`/api/channels/${context.channel.id}/research-requests/${inline.body.request.id}`;
+		let observed = await context.router.handle(request(path, context.cookie));
+		expect(observed?.status).toBe(200);
+		expect(await observed!.json()).toMatchObject({ id: inline.body.request.id });
+
+		let cancelled = await context.router.handle(request(
+			`${path}/cancel`,
+			context.cookie,
+			mutation({}),
+		));
+		expect(cancelled?.status).toBe(200);
+		expect(await cancelled!.json()).toMatchObject({ stage: "cancelled" });
+	});
+
+	it("retries a failed request without minting another workspace", async () => {
+		let context = await setup();
+		let created = await createInline(context);
+		await failInitial(context);
+		let path =
+			`/api/channels/${context.channel.id}/research-requests/${created.body.request.id}/retry`;
+
+		let retried = await context.router.handle(request(
+			path,
+			context.cookie,
+			retryMutation(),
+		));
+
+		expect(retried?.status).toBe(200);
+		expect(await retried!.json()).toMatchObject({
+			id: created.body.request.id,
+			question: created.body.request.question,
+			stage: "queued",
+		});
+		expect(await context.storage.research.list(context.channel.id, 100)).toHaveLength(1);
+		expect(context.owners).toEqual([context.channel.id, context.channel.id]);
+		expect(
+			(await context.router.handle(request(
+				path,
+				context.cookie,
+				retryMutation(),
+			)))?.status,
+		).toBe(409);
+	});
+
+	it("enforces retry origin, authentication, write access, and archive state", async () => {
+		let context = await setup();
+		let created = await createInline(context);
+		await failInitial(context);
+		let path =
+			`/api/channels/${context.channel.id}/research-requests/${created.body.request.id}/retry`;
+
+		expect((await context.router.handle(request(path, undefined, retryMutation())))?.status)
+			.toBe(401);
+		expect(
+			(await context.router.handle(request(
+				path,
+				context.cookie,
+				retryMutation("https://evil.test"),
+			)))?.status,
+		).toBe(403);
+		context.access.repository = {
+			...context.access.repository,
+			permissions: { pull: true, push: false, admin: false },
+		};
+		expect(
+			(await context.router.handle(request(
+				path,
+				context.cookie,
+				retryMutation(),
+			)))?.status,
+		).toBe(403);
+		context.access.repository = {
+			...context.access.repository,
+			permissions: { pull: true, push: true, admin: false },
+		};
+		await context.storage.channels.archive({
+			id: context.channel.id,
+			now: new Date(context.now.getTime() + 3),
+		});
+		expect(
+			(await context.router.handle(request(
+				path,
+				context.cookie,
+				retryMutation(),
+			)))?.status,
+		).toBe(409);
+		expect(context.owners).toEqual([context.channel.id]);
 	});
 
 	it("returns inaccessible and cross-channel children as not found", async () => {

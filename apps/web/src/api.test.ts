@@ -1,6 +1,16 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
-import { archiveChannel, channels, deleteChannel, restoreChannel } from "./api";
+import {
+	archiveChannel,
+	cancelResearchRequest,
+	channels,
+	createResearchRequest,
+	createResearchWorkspace,
+	deleteChannel,
+	researchRequest,
+	restoreChannel,
+	retryResearchRequest,
+} from "./api";
 
 let originalFetch = globalThis.fetch;
 
@@ -30,6 +40,11 @@ describe("document lifecycle API", () => {
 		await archiveChannel("channel/one");
 		await restoreChannel("channel/one");
 		await deleteChannel("channel/one");
+		await createResearchWorkspace("channel/one", "Private draft", "workspace/one");
+		await createResearchRequest("channel/one", "Inline request", "request/one");
+		await researchRequest("channel/one", "request/one");
+		await cancelResearchRequest("channel/one", "request/one");
+		await retryResearchRequest("channel/one", "request/one");
 
 		expect(requests).toEqual([{
 			method: "GET",
@@ -47,6 +62,21 @@ describe("document lifecycle API", () => {
 		}, {
 			method: "DELETE",
 			path: "/api/channels/channel%2Fone",
+		}, {
+			method: "POST",
+			path: "/api/channels/channel%2Fone/research-workspaces",
+		}, {
+			method: "POST",
+			path: "/api/channels/channel%2Fone/research-requests",
+		}, {
+			method: "GET",
+			path: "/api/channels/channel%2Fone/research-requests/request%2Fone",
+		}, {
+			method: "POST",
+			path: "/api/channels/channel%2Fone/research-requests/request%2Fone/cancel",
+		}, {
+			method: "POST",
+			path: "/api/channels/channel%2Fone/research-requests/request%2Fone/retry",
 		}]);
 	});
 });

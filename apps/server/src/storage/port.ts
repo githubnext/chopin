@@ -50,6 +50,8 @@ import type {
 	ResearchWorkspaceDetail,
 	ResearchWorkspaceRepositoryList,
 	ResearchWorkspaceSummary,
+	ResetInitialResearchAttempt,
+	ResetInitialResearchAttemptResult,
 	ResumeBackgroundJob,
 	SaveCheckpoint,
 	SettleBackgroundJob,
@@ -178,6 +180,9 @@ export interface ResearchWorkspaceStore {
 	confirm(input: ConfirmResearchWorkspace): Promise<ConfirmResearchWorkspaceResult>;
 	appendTurn(input: AppendResearchTurn): Promise<AppendResearchTurnResult>;
 	linkJob(input: LinkResearchTurnJob): Promise<LinkResearchTurnJobResult>;
+	resetInitialAttempt(
+		input: ResetInitialResearchAttempt,
+	): Promise<ResetInitialResearchAttemptResult>;
 	appendAgentMessage(
 		input: AppendResearchAgentMessage,
 	): Promise<AppendResearchAgentMessageResult>;

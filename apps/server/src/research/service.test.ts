@@ -24,6 +24,28 @@ import {
 import type { ResearchReport } from "../jobs/research-workspace";
 import type { JsonValue } from "../storage/model";
 
+async function failInitialEvidence(context: Awaited<ReturnType<typeof setup>>) {
+	let [claimed] = await context.storage.jobs.claim({
+		channelId: context.channelId,
+		claimOwner: "failing-worker",
+		count: 1,
+		ttlMs: 30_000,
+		now: context.advance(),
+		lease: context.lease,
+	});
+	if (!claimed) throw new Error("initial evidence job was not claimable");
+	await context.storage.jobs.fail({
+		channelId: context.channelId,
+		jobId: claimed.id,
+		claimOwner: "failing-worker",
+		claimGeneration: claimed.claimGeneration,
+		reason: "internal-provider-detail",
+		now: context.advance(),
+		lease: context.lease,
+	});
+	return claimed.id;
+}
+
 describe("research workspace service", () => {
 	it("starts one inline request and schedules its initial turn immediately", async () => {
 		let context = await setup();
@@ -636,6 +658,141 @@ describe("research workspace service", () => {
 				cancelledRequest.request.id,
 			))?.workspace.publishedChannelId,
 		).toBeUndefined();
+	});
+
+	it("retries failed and cancelled work on the same immutable request", async () => {
+		for (let terminal of ["failed", "cancelled"] as const) {
+			let context = await setup();
+			let started = await context.service.start({
+				channelId: context.channelId,
+				question: `  Preserve the ${terminal} brief exactly.  `,
+				requestId: requestId(31),
+				requestedBy: context.userId,
+			});
+			let before = await context.storage.research.get(context.channelId, started.request.id);
+			let oldJobId = before!.turns[0]!.evidenceJobId!;
+			if (terminal === "failed") await failInitialEvidence(context);
+			else {
+				await context.service.cancelRequest({
+					channelId: context.channelId,
+					workspaceId: started.request.id,
+				});
+			}
+			let owners = 0;
+
+			let retried = await context.service.retryRequest({
+				channelId: context.channelId,
+				workspaceId: started.request.id,
+				beforeStart: () => {
+					owners++;
+				},
+			});
+
+			expect(retried).toMatchObject({
+				id: started.request.id,
+				question: started.request.question,
+				stage: "queued",
+			});
+			let after = await context.storage.research.get(context.channelId, started.request.id);
+			expect(after!.turns).toHaveLength(1);
+			expect(after!.turns[0]!.evidenceJobId).not.toBe(oldJobId);
+			expect(await context.storage.research.findTurnByJob(context.channelId, oldJobId))
+				.toBeUndefined();
+			expect(owners).toBe(1);
+		}
+	});
+
+	it("rejects retry for active and ready requests", async () => {
+		let active = await setup();
+		let activeRequest = await active.service.start({
+			channelId: active.channelId,
+			question: "Active request",
+			requestId: requestId(32),
+			requestedBy: active.userId,
+		});
+		await expect(active.service.retryRequest({
+			channelId: active.channelId,
+			workspaceId: activeRequest.request.id,
+		})).rejects.toMatchObject({ code: "active-turn" });
+
+		let ready = await setup();
+		let readyRequest = await ready.service.start({
+			channelId: ready.channelId,
+			question: "Ready request",
+			requestId: requestId(33),
+			requestedBy: ready.userId,
+		});
+		let evidence = await settle(ready, "research-evidence", evidenceArtifact);
+		await ready.service.jobChanged(evidence.job);
+		let answer = await settle(ready, "research-answer", answerArtifact);
+		await ready.service.jobChanged(answer.job);
+		expect((await ready.service.request(ready.channelId, readyRequest.request.id))?.stage)
+			.toBe("ready");
+		await expect(ready.service.retryRequest({
+			channelId: ready.channelId,
+			workspaceId: readyRequest.request.id,
+		})).rejects.toMatchObject({ code: "not-ready" });
+	});
+
+	it("creates at most one new evidence job across concurrent retries", async () => {
+		let context = await setup();
+		let started = await context.service.start({
+			channelId: context.channelId,
+			question: "Retry concurrently",
+			requestId: requestId(34),
+			requestedBy: context.userId,
+		});
+		await failInitialEvidence(context);
+		let owners = 0;
+		let retry = () =>
+			context.service.retryRequest({
+				channelId: context.channelId,
+				workspaceId: started.request.id,
+				beforeStart: () => {
+					owners++;
+				},
+			});
+
+		let results = await Promise.allSettled([retry(), retry()]);
+
+		expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
+		expect(results.filter(result => result.status === "rejected")).toHaveLength(1);
+		let jobs = await context.storage.jobs.list(context.channelId, 100);
+		expect(jobs!.jobs.filter(job => job.type === "research-evidence")).toHaveLength(2);
+		expect(owners).toBe(1);
+	});
+
+	it("requires an explicit retry to recover after links were durably cleared", async () => {
+		let context = await setup();
+		let started = await context.service.start({
+			channelId: context.channelId,
+			question: "Recover a cleared retry",
+			requestId: requestId(35),
+			requestedBy: context.userId,
+		});
+		let oldJobId = await failInitialEvidence(context);
+		await context.storage.research.resetInitialAttempt({
+			channelId: context.channelId,
+			workspaceId: started.request.id,
+			expectedEvidenceJobId: oldJobId,
+			expectedAnswerJobId: undefined,
+			now: context.advance(),
+			lease: context.lease,
+		});
+		let beforeRead = await context.storage.jobs.list(context.channelId, 100);
+
+		let observed = await context.restart().request(context.channelId, started.request.id);
+
+		expect(observed).toMatchObject({ stage: "queued", question: started.request.question });
+		expect((await context.storage.jobs.list(context.channelId, 100))!.jobs)
+			.toHaveLength(beforeRead!.jobs.length);
+		await context.restart().retryRequest({
+			channelId: context.channelId,
+			workspaceId: started.request.id,
+		});
+		let recovered = await context.storage.research.get(context.channelId, started.request.id);
+		expect(recovered!.turns[0]!.evidenceJobId).toBeDefined();
+		expect(recovered!.turns[0]!.evidenceJobId).not.toBe(oldJobId);
 	});
 
 	it("publishes a deterministic available child title when the report title already exists", async () => {

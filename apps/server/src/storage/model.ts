@@ -622,6 +622,17 @@ export type LinkResearchTurnJobResult = {
 	repeated: boolean;
 };
 
+export type ResetInitialResearchAttempt = {
+	channelId: string;
+	workspaceId: string;
+	expectedEvidenceJobId: string | undefined;
+	expectedAnswerJobId: string | undefined;
+	now: Date;
+	lease: Lease;
+};
+
+export type ResetInitialResearchAttemptResult = LinkResearchTurnJobResult;
+
 export type AppendResearchAgentMessage = {
 	channelId: string;
 	workspaceId: string;
