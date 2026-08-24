@@ -24,6 +24,7 @@ const STAGES: Record<Research.RequestStage, string> = {
 export type ResearchComposerProps = {
 	blocked?: string;
 	busyLabel?: string;
+	cancelDisabled?: boolean;
 	cancelLabel?: string;
 	dismissible?: boolean;
 	error?: string;
@@ -52,6 +53,7 @@ export function ResearchComposer(
 	{
 		blocked,
 		busyLabel = "Starting…",
+		cancelDisabled,
 		cancelLabel = "Cancel",
 		dismissible = true,
 		error,
@@ -94,7 +96,7 @@ export function ResearchComposer(
 			<div className="plan-research-actions">
 				<button
 					className="btn btn-sm btn-secondary"
-					disabled={submitting}
+					disabled={submitting || cancelDisabled}
 					onClick={onCancel}
 					type="button"
 				>

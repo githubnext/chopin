@@ -322,6 +322,15 @@ export function dismissResearchComposer(
 	editor.focus();
 }
 
+export function beginResearchDraft(
+	drafts: ResearchDraftStore,
+	consume: () => { anchor: DOMRectLike; position?: Y.RelativePosition } | undefined,
+): boolean {
+	if (!drafts.canOpen()) return false;
+	let next = consume();
+	return next ? drafts.open(next.anchor, next.position) : false;
+}
+
 /**
  * What the caret is asking to insert, if anything.
  *
@@ -412,9 +421,9 @@ export function SlashMenu({ binding, disabled, drafts, research }: SlashMenuProp
 	let matches = useMemo(
 		() =>
 			availableCommands(query ?? "").filter(command =>
-				command.id !== "research" || (research && drafts)
+				command.id !== "research" || (research && drafts?.canOpen())
 			),
-		[query, research, drafts],
+		[query, research, drafts, draft],
 	);
 	// Groups now place dividers while options remain direct listbox children.
 	let grouped = useMemo(() => {
@@ -478,17 +487,25 @@ export function SlashMenu({ binding, disabled, drafts, research }: SlashMenuProp
 	}, [binding, editor]);
 
 	let choose = useCallback((command: SlashCommand) => {
-		let consumed = consume();
 		let placement = anchor;
+		if (command.id === "research") {
+			command.run(editor, {
+				research: research && drafts && placement
+					? () => {
+						beginResearchDraft(drafts, () => {
+							let consumed = consume();
+							return consumed ? { anchor: placement, position: consumed.position } : undefined;
+						});
+						setPosition(undefined);
+					}
+					: undefined,
+			});
+			close();
+			return;
+		}
+		consume();
 		close();
-		command.run(editor, {
-			research: research && drafts && consumed && placement
-				? () => {
-					setPosition(undefined);
-					drafts.open(placement, consumed.position);
-				}
-				: undefined,
-		});
+		command.run(editor);
 	}, [anchor, consume, close, drafts, editor, research]);
 
 	// Arming is what separates a slash the author typed from one that arrived
@@ -623,10 +640,10 @@ export function SlashMenu({ binding, disabled, drafts, research }: SlashMenuProp
 		};
 		let submit = () => {
 			if (draft.submitting || draft.cancelling || !draft.question.trim()) return;
-			if (!binding) return;
+			if (!binding || disabled) return;
 			if (draft.created) {
 				let position = currentPosition();
-				if (position) drafts.place(position);
+				if (position) drafts.place(position, !disabled);
 				return;
 			}
 			void drafts.start(
@@ -636,7 +653,8 @@ export function SlashMenu({ binding, disabled, drafts, research }: SlashMenuProp
 		};
 		let cancel = () => {
 			if (!draft.created) return dismiss();
-			void drafts.cancelCreated(id => research.cancel(id)).then(cancelled => {
+			if (disabled) return;
+			void drafts.cancelCreated(id => research.cancel(id), !disabled).then(cancelled => {
 				if (cancelled) editor.focus();
 			});
 		};
@@ -665,6 +683,7 @@ export function SlashMenu({ binding, disabled, drafts, research }: SlashMenuProp
 						? undefined
 						: "Connect to the document before starting research."}
 					busyLabel={draft.cancelling ? "Cancelling…" : undefined}
+					cancelDisabled={!!draft.created && !!disabled}
 					cancelLabel={draft.created ? "Cancel research" : undefined}
 					dismissible={dismissible}
 					error={draft.error}
