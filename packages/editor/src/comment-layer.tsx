@@ -107,7 +107,10 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let failures = useRef(new Set<string>());
 	let origin = useRef<HTMLElement | undefined>(undefined);
 	let draftOpen = useRef(false);
-	let compact = useCellValue(widgets$).commentPresentation === "sheet";
+	let options = useCellValue(widgets$);
+	let canEdit = options.canEdit !== false;
+	let compact = options.commentPresentation === "sheet";
+	let draft = canEdit ? state.draft : undefined;
 
 	useEffect(() => {
 		setHost(document.querySelector<HTMLElement>(".plan-document") ?? undefined);
@@ -215,6 +218,10 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	useEffect(() => () => clearTimeout(close.current), []);
 
 	useEffect(() => {
+		if (!canEdit && state.draft) store.draft(undefined);
+	}, [canEdit, state.draft, store]);
+
+	useEffect(() => {
 		if (!host) return;
 		let over = (event: MouseEvent | PointerEvent): PlacedThread | undefined => {
 			let page = host.getBoundingClientRect();
@@ -307,14 +314,14 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	}, [restoreOrigin, store]);
 
 	useLayoutEffect(() => {
-		let draft = !!state.draft;
-		if (draft && !draftOpen.current) {
+		let open = !!draft;
+		if (open && !draftOpen.current) {
 			let active = document.activeElement;
 			origin.current = active instanceof HTMLElement
 				? active
 				: editor.getRootElement() ?? undefined;
-		} else if (!draft && draftOpen.current) restoreOrigin();
-		draftOpen.current = draft;
+		} else if (!open && draftOpen.current) restoreOrigin();
+		draftOpen.current = open;
 
 		if (!pinned) return;
 		let available = pinned === "orphans"
@@ -327,7 +334,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		setPreview(undefined);
 		store.focus(undefined);
 		restoreOrigin();
-	}, [editor, pinned, restoreOrigin, state.draft, state.threads, store]);
+	}, [draft, editor, pinned, restoreOrigin, state.threads, store]);
 
 	let sheetId = compact && pinned !== "orphans" ? pinned : undefined;
 	let sheet = placed.find(entry => entry.view.thread.id === sheetId);
@@ -362,7 +369,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	}, [dismiss, pinned, preview]);
 
 	useLayoutEffect(() => {
-		if (!compact || (!pinned && !state.draft)) return;
+		if (!compact || (!pinned && !draft)) return;
 		let editorHost = editor.getRootElement();
 		let dialog = pinned
 			? document.getElementById(`plan-comment-thread-${pinned}`)
@@ -402,7 +409,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			editorHost?.removeAttribute("inert");
 			document.removeEventListener("keydown", trap);
 		};
-	}, [cancelDraft, compact, dismiss, editor, pinned, state.draft]);
+	}, [cancelDraft, compact, dismiss, draft, editor, pinned]);
 
 	if (!host) return null;
 
@@ -410,6 +417,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let card = (view: ThreadView) => (
 		<ThreadCard
 			busy={false}
+			canEdit={canEdit}
 			focused={state.focused === view.thread.id}
 			inDocument
 			key={view.thread.id}
@@ -529,7 +537,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 				);
 			})}
 
-			{state.draft?.placement && (
+			{draft?.placement && (
 				<div
 					aria-label="New comment"
 					aria-modal={compact || undefined}
@@ -537,7 +545,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 					role="dialog"
 					ref={element => rememberHeight("draft", element)}
 					style={popoverPoint(
-						state.draft.placement,
+						draft.placement,
 						page,
 						cardWidth,
 						cardHeights.draft ?? 0,
@@ -547,7 +555,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 						busy={false}
 						onCancel={cancelDraft}
 						onSend={text => store.start(text)}
-						quote={state.draft.quote}
+						quote={draft.quote}
 					/>
 				</div>
 			)}

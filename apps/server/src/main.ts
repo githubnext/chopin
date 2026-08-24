@@ -83,6 +83,9 @@ let researchService: ResearchWorkspaceService | undefined;
 let referenceService: ReferenceService | undefined;
 let summaryCoordinator: DocumentSummaryCoordinator | undefined;
 let documentLocks = new Map<string, Promise<void>>();
+let documentTransitions = new Map<string, Promise<void>>();
+let archivingChannels = new Set<string>();
+let deletingChannels = new Set<string>();
 
 function withDocumentLock<T>(channelId: string, action: () => Promise<T>): Promise<T> {
 	let previous = documentLocks.get(channelId) ?? Promise.resolve();
@@ -91,6 +94,17 @@ function withDocumentLock<T>(channelId: string, action: () => Promise<T>): Promi
 	documentLocks.set(channelId, settled);
 	void settled.finally(() => {
 		if (documentLocks.get(channelId) === settled) documentLocks.delete(channelId);
+	});
+	return operation;
+}
+
+function withDocumentTransition<T>(channelId: string, action: () => Promise<T>): Promise<T> {
+	let previous = documentTransitions.get(channelId) ?? Promise.resolve();
+	let operation = previous.then(action, action);
+	let settled = operation.then(() => {}, () => {});
+	documentTransitions.set(channelId, settled);
+	void settled.finally(() => {
+		if (documentTransitions.get(channelId) === settled) documentTransitions.delete(channelId);
 	});
 	return operation;
 }
@@ -109,8 +123,10 @@ function presence(server: Server<SocketData>, room: Rooms.Room): void {
  * Two clients opening at the same moment must not build two documents, so the
  * first stores its promise and the second waits on it.
  */
-function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Service.Plan> {
-	if (room.plan) return Promise.resolve(room.plan);
+async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Service.Plan> {
+	if (room.closing) await room.closing;
+	if (deletingChannels.has(room.id)) throw new Error("document is unavailable");
+	if (room.plan) return room.plan;
 	let backend: Service.Backend = {
 		storage,
 		lease: () => {
@@ -123,19 +139,24 @@ function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Service.Pla
 		},
 		onDocumentPersisted: target => summaryCoordinator?.schedule(target),
 	};
-	return room.opening ??= withDocumentLock(room.id, () => Service.open(room.id, backend, server))
-		.then(async opened => {
-			room.plan = opened;
-			room.opening = undefined;
+	let opening = room.opening ??= withDocumentLock(room.id, async () => {
+		if (deletingChannels.has(room.id)) throw new Error("document is unavailable");
+		if (room.plan) return room.plan;
+		let opened = await Service.open(room.id, backend, server);
+		room.plan = opened;
+		let channel = await storage.channels.get(room.id);
+		if (!channel?.archivedAt) {
 			if (summaryCoordinator) void summaryCoordinator.ensure(room.id).catch(() => {});
 			if (Inject.enabled()) Inject.ask(opened, server, room.id);
 			if (Marks.enabled()) await Marks.mark(opened);
-			return opened;
-		})
-		.catch(err => {
-			room.opening = undefined;
-			throw err;
-		});
+		}
+		return opened;
+	});
+	try {
+		return await opening;
+	} finally {
+		if (room.opening === opening) room.opening = undefined;
+	}
 }
 
 /** A room's conversation, with everything it needs to run a turn. */
@@ -187,13 +208,31 @@ function conversation(room: Rooms.Room, ws: Socket): Chat.Room {
 	};
 }
 
+async function closeRoom(room: Rooms.Room, force = false): Promise<void> {
+	if (room.closing) return room.closing;
+	let closing = withDocumentLock(room.id, async () => {
+		if (!force && room.members.size > 0) return;
+		let held = room.plan;
+		room.plan = undefined;
+		if (held) await Service.close(held);
+		if (force || room.members.size === 0) Rooms.forget(room);
+	});
+	room.closing = closing;
+	try {
+		await closing;
+	} finally {
+		if (room.closing === closing) room.closing = undefined;
+	}
+}
+
 function evict(room: Rooms.Room): void {
 	if (room.eviction || room.members.size > 0) return;
 	room.eviction = setTimeout(() => {
+		room.eviction = undefined;
 		if (room.members.size > 0) return;
-		let held = room.plan;
-		Rooms.forget(room);
-		if (held) void Service.close(held);
+		void closeRoom(room).catch(err => {
+			console.error("chopin: room close failed -", err);
+		});
 	}, EVICT_MS);
 }
 
@@ -203,6 +242,10 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 
 	let room = Rooms.get(ws.data.room);
 	if (!room) return;
+	if (deletingChannels.has(room.id)) {
+		if (frame.rid) fail(ws, frame.rid, "document is unavailable");
+		return;
+	}
 	if (!VIEWER_ALLOWED.has(frame.kind)) {
 		let access = await refreshAccess(ws);
 		if (access === "unavailable") {
@@ -364,6 +407,42 @@ async function refreshAccess(ws: Socket, forceGitHub = false): Promise<Authoriza
 	}
 }
 
+function applyChannelAccess(
+	ws: Socket,
+	channel: ChannelRecord,
+	canManage: boolean,
+	publish = true,
+): void {
+	let data = ws.data;
+	let archivedAt = channel.archivedAt?.toISOString();
+	let canEdit = canManage && !archivedAt && !archivingChannels.has(data.room);
+	if (
+		(channel.updatedAt.toISOString() !== data.channelUpdatedAt
+			|| archivedAt !== data.channelArchivedAt)
+		&& !data.closed && publish
+	) {
+		tell(ws, {
+			kind: "session:channel",
+			ts: 0,
+			channelId: channel.id,
+			title: channel.title,
+			slug: channel.slug,
+			updatedAt: channel.updatedAt.toISOString(),
+			canManage,
+			...(archivedAt ? { archivedAt } : {}),
+		});
+	}
+	if ((canEdit !== data.canEdit || canManage !== data.canManage) && !data.closed && publish) {
+		tell(ws, { kind: "session:access", ts: 0, canEdit, canManage });
+	}
+	data.channelTitle = channel.title;
+	data.channelSlug = channel.slug;
+	data.channelUpdatedAt = channel.updatedAt.toISOString();
+	data.channelArchivedAt = archivedAt;
+	data.canEdit = canEdit;
+	data.canManage = canManage;
+}
+
 async function checkAccess(ws: Socket, forceGitHub: boolean): Promise<AuthorizationResult> {
 	if (ws.data.closed) return "denied";
 	let data = ws.data;
@@ -379,7 +458,12 @@ async function checkAccess(ws: Socket, forceGitHub: boolean): Promise<Authorizat
 		let request = new Request(hostedAuth.config.origin, { headers: { cookie: data.credential } });
 		let session = await hostedAuth.sessions.authenticate(request);
 		if (!session || session.user.id !== data.principalId) return "denied";
+		let channel = deletingChannels.has(data.room)
+			? undefined
+			: await storage.channels.get(data.room);
+		if (!channel || channel.repositoryId !== data.repositoryId) return "denied";
 		if (!forceGitHub && Date.now() - (data.accessCheckedAt ?? 0) < ACCESS_RECHECK_MS) {
+			applyChannelAccess(ws, channel, data.canManage);
 			return "allowed";
 		}
 		let access = await hostedAuth.sessions.use(
@@ -395,11 +479,9 @@ async function checkAccess(ws: Socket, forceGitHub: boolean): Promise<Authorizat
 		if (!repository || repository.id !== data.repositoryId || !repository.permissions.pull) {
 			return "denied";
 		}
-		let canEdit = repository.permissions.push || repository.permissions.admin;
-		if (canEdit !== data.canEdit && !data.closed) {
-			tell(ws, { kind: "session:access", ts: 0, canEdit });
-		}
-		data.canEdit = canEdit;
+		if (channel.repositoryId !== repository.id) return "denied";
+		let canManage = repository.permissions.push || repository.permissions.admin;
+		applyChannelAccess(ws, channel, canManage);
 		data.accessCheckedAt = Date.now();
 		data.authorizedUntil = access.authenticated.session.expiresAt.getTime();
 		data.repositoryDefaultBranch = repository.defaultBranch;
@@ -425,22 +507,19 @@ function scheduleAuthorization(ws: Socket): void {
 	}, ACCESS_RECHECK_MS);
 }
 
-async function refreshChannelMetadata(ws: Socket, room: Rooms.Room): Promise<void> {
-	try {
-		let channel = await storage.channels.get(room.id);
-		if (!channel || channel.updatedAt <= new Date(ws.data.channelUpdatedAt)) return;
-		if (ws.data.closed) return;
-		tell(ws, {
-			kind: "session:channel",
-			ts: 0,
-			channelId: channel.id,
-			title: channel.title,
-			slug: channel.slug,
-			updatedAt: channel.updatedAt.toISOString(),
-		});
-	} catch {
-		// Hello already carried the admission snapshot; a later rename event can supersede it.
+async function validateOpenedSocket(ws: Socket): Promise<void> {
+	let channel = deletingChannels.has(ws.data.room)
+		? undefined
+		: await storage.channels.get(ws.data.room);
+	if (
+		!channel || channel.repositoryId !== ws.data.repositoryId || deletingChannels.has(channel.id)
+	) {
+		tell(ws, { kind: "session:deleted", ts: 0, channelId: ws.data.room });
+		ws.close(4404, "document deleted");
+		return;
 	}
+	if (ws.data.closed) return;
+	applyChannelAccess(ws, channel, ws.data.canManage);
 }
 
 function listen(): Server<SocketData> {
@@ -452,7 +531,10 @@ function listen(): Server<SocketData> {
 			let url = new URL(req.url);
 
 			if (url.pathname === "/ws") {
-				let outcome = await admit(req, url, hostedAuth);
+				let outcome = await admit(req, url, hostedAuth, {
+					deleting: channelId => deletingChannels.has(channelId),
+					readOnly: channelId => archivingChannels.has(channelId),
+				});
 				if ("status" in outcome) {
 					return new Response(outcome.reason, { status: outcome.status });
 				}
@@ -471,6 +553,10 @@ function listen(): Server<SocketData> {
 
 		websocket: {
 			open(ws: Socket) {
+				// Every mutation revalidates document state; the admission snapshot keeps startup stable.
+				ws.data.canEdit = ws.data.canEdit
+					&& !archivingChannels.has(ws.data.room)
+					&& !deletingChannels.has(ws.data.room);
 				ws.subscribe(topic(ws.data.room));
 				let room = Rooms.join(ws);
 				tell(ws, {
@@ -483,13 +569,18 @@ function listen(): Server<SocketData> {
 					you: { handle: ws.data.handle, client: ws.data.client },
 					members: Rooms.members(room),
 					canEdit: ws.data.canEdit,
+					canManage: ws.data.canManage,
+					...(ws.data.channelArchivedAt ? { archivedAt: ws.data.channelArchivedAt } : {}),
 					backgroundJobs: config.backgroundJobs,
 					webResearch: config.webResearch,
 					...CHAT_CAPABILITIES,
 				});
-				void refreshChannelMetadata(ws, room);
 				relay(ws, { kind: "session:presence", ts: 0, members: Rooms.members(room) });
 				scheduleAuthorization(ws);
+				void validateOpenedSocket(ws).catch(err => {
+					console.error("chopin: WebSocket open failed -", err);
+					ws.close(1011, "cannot open document");
+				});
 			},
 
 			message(ws: Socket, raw) {
@@ -625,15 +716,155 @@ async function resetOpenAgents(
 	);
 }
 
-function announceChannelRename(channel: ChannelRecord): void {
-	broadcast(server, channel.id, {
-		kind: "session:channel",
-		ts: 0,
-		channelId: channel.id,
-		title: channel.title,
-		slug: channel.slug,
-		updatedAt: channel.updatedAt.toISOString(),
-	});
+function announceChannel(channel: ChannelRecord): void {
+	let room = Rooms.get(channel.id);
+	if (!room) return;
+	for (let ws of room.members.values()) {
+		ws.data.channelTitle = channel.title;
+		ws.data.channelSlug = channel.slug;
+		ws.data.channelUpdatedAt = channel.updatedAt.toISOString();
+		ws.data.channelArchivedAt = channel.archivedAt?.toISOString();
+		ws.data.canEdit = ws.data.canManage && !channel.archivedAt;
+		tell(ws, {
+			kind: "session:channel",
+			ts: 0,
+			channelId: channel.id,
+			title: channel.title,
+			slug: channel.slug,
+			updatedAt: channel.updatedAt.toISOString(),
+			canManage: ws.data.canManage,
+			...(channel.archivedAt ? { archivedAt: channel.archivedAt.toISOString() } : {}),
+		});
+		tell(ws, {
+			kind: "session:access",
+			ts: 0,
+			canEdit: ws.data.canEdit,
+			canManage: ws.data.canManage,
+		});
+	}
+}
+
+async function archiveChannelLocked(channelId: string, now: Date) {
+	if (deletingChannels.has(channelId)) {
+		throw new StorageError("missing", `channel ${channelId} is being deleted`);
+	}
+	archivingChannels.add(channelId);
+	let room = Rooms.get(channelId);
+	for (let ws of room?.members.values() ?? []) ws.data.canEdit = false;
+	try {
+		await summaryCoordinator?.suspend(channelId);
+		let result = await withDocumentLock(channelId, async () => {
+			let active = Rooms.get(channelId)?.plan;
+			if (active) {
+				await Chat.resetAgent(active.chat, undefined, undefined, "This document was archived.");
+				await Service.drain(active);
+				await Service.persist(active);
+			}
+			return storage.channels.archive({ id: channelId, now });
+		});
+		announceChannel(result.channel);
+		return result;
+	} catch (err) {
+		summaryCoordinator?.resume(channelId);
+		for (let ws of room?.members.values() ?? []) ws.data.canEdit = ws.data.canManage;
+		throw err;
+	} finally {
+		archivingChannels.delete(channelId);
+	}
+}
+
+function archiveChannel(channelId: string, now: Date) {
+	return withDocumentTransition(channelId, () => archiveChannelLocked(channelId, now));
+}
+
+async function restoreChannelLocked(channelId: string, now: Date) {
+	if (deletingChannels.has(channelId)) {
+		throw new StorageError("missing", `channel ${channelId} is being deleted`);
+	}
+	let result = await withDocumentLock(
+		channelId,
+		() => storage.channels.restore({ id: channelId, now }),
+	);
+	summaryCoordinator?.resume(channelId);
+	announceChannel(result.channel);
+	if (summaryCoordinator) void summaryCoordinator.ensure(channelId).catch(() => {});
+	return result;
+}
+
+function restoreChannel(channelId: string, now: Date) {
+	return withDocumentTransition(channelId, () => restoreChannelLocked(channelId, now));
+}
+
+async function deleteChannelLocked(channelId: string): Promise<boolean> {
+	if (deletingChannels.has(channelId)) return false;
+	let channel = await storage.channels.get(channelId);
+	if (!channel) return false;
+	if (!channel.archivedAt) {
+		throw new StorageError("conflict", `channel ${channelId} must be archived before deletion`);
+	}
+	deletingChannels.add(channelId);
+	let room = Rooms.get(channelId);
+	for (let ws of room?.members.values() ?? []) ws.data.canEdit = false;
+	try {
+		await summaryCoordinator?.suspend(channelId);
+		await jobRunner?.cancelChannel(channelId);
+		ownerBindings?.revokeChannel(channelId);
+		let deleted = await withDocumentLock(channelId, async () => {
+			let activeRoom = Rooms.get(channelId);
+			let active = activeRoom?.plan;
+			if (activeRoom) activeRoom.plan = undefined;
+			if (active) await Service.close(active);
+			return storage.channels.delete(channelId);
+		});
+		if (!deleted) throw new StorageError("missing", `channel ${channelId} does not exist`);
+		for (let ws of room?.members.values() ?? []) {
+			tell(ws, { kind: "session:deleted", ts: 0, channelId });
+			ws.close(4404, "document deleted");
+		}
+		if (room) Rooms.forget(room);
+		summaryCoordinator?.resume(channelId);
+		return true;
+	} catch (err) {
+		deletingChannels.delete(channelId);
+		summaryCoordinator?.resume(channelId);
+		jobRunner?.unblockChannel(channelId);
+		let channel: ChannelRecord | undefined;
+		try {
+			channel = await storage.channels.get(channelId);
+		} catch {
+			for (let ws of room?.members.values() ?? []) {
+				ws.close(1012, "document state is temporarily unavailable");
+			}
+			throw err;
+		}
+		if (channel) {
+			let survivingRoom = Rooms.get(channelId);
+			if (survivingRoom?.members.size) {
+				try {
+					await plan(survivingRoom, server);
+				} catch {
+					for (let ws of survivingRoom.members.values()) {
+						ws.close(1012, "document reload required");
+					}
+				}
+			}
+			announceChannel(channel);
+		} else {
+			for (let ws of room?.members.values() ?? []) {
+				tell(ws, { kind: "session:deleted", ts: 0, channelId });
+				ws.close(4404, "document deleted");
+			}
+			if (room) Rooms.forget(room);
+		}
+		throw err;
+	} finally {
+		deletingChannels.delete(channelId);
+		jobRunner?.unblockChannel(channelId);
+	}
+}
+
+function deleteChannel(channelId: string): Promise<boolean> {
+	return withDocumentTransition(channelId, () => deleteChannelLocked(channelId));
 }
 
 async function announceJobsChanged(channelId: string): Promise<void> {
@@ -850,14 +1081,22 @@ registerMcpRoutes(router, hostedAuth, {
 		return heldLease;
 	},
 }, {
-	onChannelRenamed: announceChannelRename,
+	archiveChannel,
+	isChannelDeleting: channelId => deletingChannels.has(channelId),
+	onChannelRenamed: announceChannel,
 	onDocumentPersisted: target => {
 		if (summaryCoordinator) void summaryCoordinator.enqueueNow(target).catch(() => {});
 	},
+	restoreChannel,
+	serializeDocument: (channelId, action) =>
+		withDocumentTransition(channelId, () => withDocumentLock(channelId, action)),
 });
 registerChannelRoutes(router, hostedAuth, {
 	onAgentReset: channelOwnerReset,
-	onChannelRenamed: announceChannelRename,
+	onChannelArchived: archiveChannel,
+	onChannelDeleted: deleteChannel,
+	onChannelRenamed: announceChannel,
+	onChannelRestored: restoreChannel,
 });
 registerResearchWorkspaceRoutes(router, hostedAuth, {
 	service: researchService,

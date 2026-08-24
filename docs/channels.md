@@ -16,13 +16,14 @@ authorization then depends on the surface:
 | Hosted agent (Planner)     | The owning browser user's GitHub App token | The installation, ownership generation, session, credential revision, and role are rechecked before tools run. |
 | Local MCP                  | Caller-supplied GitHub bearer              | GitHub is queried directly; no App installation is required.                                                   |
 
-Pull access may list and open documents. Push or administration access may create
-a document, edit it, change decisions, invoke the hosted agent, and
-mutate an implementation lifecycle. The same roles apply to document-attached
+Pull access may list and open active or archived documents. Push or
+administration access may create, edit, rename, archive, restore, and delete
+documents and mutate an implementation lifecycle. Deletion additionally
+requires the document to be archived. The same roles apply to document-attached
 Research Workspaces: pull may read, while push or administration may create a
-draft, confirm public search, ask follow-ups, search more, or cancel work. A
-public repository is not sufficient to
-expose its documents through the browser.
+draft, confirm public search, ask follow-ups, search more, or cancel work on an
+active document. A public repository is not sufficient to expose its documents
+through the browser.
 
 An MCP-created document outside the App installation remains unavailable to
 browser routes, WebSockets, and the hosted agent until an account owner adds
@@ -36,6 +37,9 @@ POST /api/repositories/:owner/:repository/channels
 GET  /api/repositories/:owner/:repository/documents/:slug
 GET  /api/channels/:channelId
 PATCH /api/channels/:channelId
+POST /api/channels/:channelId/archive
+POST /api/channels/:channelId/restore
+DELETE /api/channels/:channelId
 POST /api/channels/:channelId/agent/reset
 GET  /api/repositories/:owner/:repository/research-workspaces
 POST /api/channels/:channelId/research-workspaces
@@ -47,10 +51,12 @@ implementation. The repository-scoped `documents/:slug` route resolves both the
 current document slug and its historical aliases. Browser creation returns the
 readable canonical document route in `Location`, not a UUID route.
 
-The listing route accepts a case-insensitive `query`, an opaque `cursor`, and a
-`limit` from 1 through 100. The default limit is 50. Results sort by most recent
+The listing route accepts a case-insensitive `query`, an opaque `cursor`, a
+`limit` from 1 through 100, and `includeArchived=true`. The default limit is 50,
+and archived documents are excluded by default. Results sort by most recent
 update, with channel ID as the stable tie-breaker. A cursor is bound to its
-original query and cannot be reused with another search.
+original query and archive-inclusion mode and cannot be reused with another
+search.
 
 A title is optional during browser creation. Chopin generates one when omitted,
 or accepts a trimmed title from 1 through 120 characters. Titles are unique per
@@ -66,8 +72,44 @@ Slugs are derived from Unicode-normalized, lowercased titles. Unicode letters,
 numbers, and combining marks remain readable while punctuation and spacing
 collapse to hyphens. Slugs are scoped to a repository and receive numbered
 suffixes such as `-2` when they collide. Every former canonical slug remains a
-permanent alias for the same document and cannot be rebound to another one, so a
-rename changes the canonical route without breaking an old link.
+historical alias for the document's lifetime and cannot be rebound while it
+exists, so a rename changes the canonical route without breaking an old link.
+
+## Archive, restore, and delete
+
+Archive and restore are idempotent metadata transitions. An archived channel
+has an `archivedAt` timestamp; restore removes it. Both transitions update the
+channel activity timestamp without advancing the collaboration revision or
+sequence, Yjs epoch, document sequence, plan revision, or implementation graph
+counters.
+
+Repository lists, searches, storage scans, and repository-level Research
+Workspace listings consider only active documents by default; their explicit
+`includeArchived` option includes archived parents. Browser landing selection
+and saved navigation remain active-only. Direct slug and UUID reads still
+resolve an archived document, including historical slug aliases.
+
+An archived browser session is read-only, including for a repository writer,
+but retains `canManage` for writers so they can restore or delete the document.
+Archival blocks metadata and document edits, chat, question and comment
+mutations, new Planner and Research Workspace work, and
+`start_implementation`. An already active implementation may still accept
+lifecycle reports, and already-started background or research work may continue
+and persist. Archiving also ends the current Planner runtime; restoring does not
+replay an interrupted turn.
+
+The browser management routes are `POST /api/channels/:channelId/archive`,
+`POST /api/channels/:channelId/restore`, and `DELETE /api/channels/:channelId`.
+They require push or administration access and an exact browser Origin. Delete
+returns a conflict unless the document is archived. Before deletion, the server
+suspends summary scheduling, cancels and aborts the channel's background work,
+and closes the live plan. It then atomically deletes the channel and all
+dependent data, notifies connected clients with `session:deleted`, and closes
+them terminally. See [Storage](storage.md) for the deletion and backup boundary.
+
+MCP exposes `archive_document` and `restore_document`, and `list_documents`
+accepts `includeArchived`; direct MCP reads also remain available. MCP does not
+expose document deletion. See [Local agent MCP](local-agent-mcp.md).
 
 The reset endpoint releases Planner ownership and aborts its disposable runtime
 session. The current web application does not expose a control that calls it.
@@ -155,9 +197,9 @@ than simultaneous document panes.
    server can return only missing state when histories are compatible.
 5. Unacknowledged browser updates remain in an outbox and replay after a
    reconnect.
-6. The server rechecks the session, admission, installation, and repository role
-   while the socket remains open. A lost mutation role makes the connection
-   read-only; lost read access closes it.
+6. The server rechecks the session, admission, installation, repository role,
+   and archive state while the socket remains open. A lost mutation role or
+   archival makes the connection read-only; lost read access closes it.
 7. When a room becomes empty, the server removes its registry entry and starts
    an asynchronous final close and checkpoint. That close is not yet serialized
    against opening a replacement room for the same channel.
@@ -171,6 +213,7 @@ replay the outbox.
 A channel persists:
 
 - metadata and repository identity;
+- archive metadata;
 - canonical MDX, a complete Yjs checkpoint, and the accepted update journal
   after that checkpoint;
 - document sequence and plan revision counters plus a versioned sidecar;
@@ -179,8 +222,8 @@ A channel persists:
 - durable transcript and reserved hosted agent context fields;
 - MCP creation metadata and repository provenance when created through MCP;
 - implementation graph versions, active execution, task progress,
-  verification, and archived runs; and
-- token-free Planner ownership references and generation state.
+  verification, and archived runs;
+- token-free Planner ownership references and generation state; and
 - Research Workspace drafts, append-only turns and messages, and links to
   immutable background-job artifacts.
 

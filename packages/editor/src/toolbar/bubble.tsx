@@ -299,7 +299,7 @@ export function SelectionBubble(
 		return listenToEditorGeometry(editor, place);
 	}, [anchor, editor, place]);
 
-	if (!anchor) return null;
+	if (!anchor || disabled) return null;
 
 	return (
 		<div

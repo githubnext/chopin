@@ -43,9 +43,10 @@ the configured Chopin origin.
 
 The current MCP contract can:
 
-- list and read Chopin documents for the current repository;
+- list and read active or archived Chopin documents for the current repository;
 - create one document from a structured brief, canonical source supplied through
   the current `plan` input, and caller-supplied repository provenance;
+- rename, archive, and restore documents without deleting their durable state;
 - read an approved implementation graph and its document source; and
 - claim a graph and report task, pull-request, blocker, revision, and
   verification lifecycle transitions.
@@ -73,16 +74,22 @@ The `url` returned by `create_document` is the readable canonical route:
 /documents/:owner/:repository/:slug
 ```
 
-`read_document` and `read_implementation` accept either a document UUID or that
-canonical URL in their `id` input. The URL may be passed back exactly as
-returned; an absolute URL must use the configured Chopin origin. Both reads
-return the stable UUID as the document `id`.
+`read_document`, `read_implementation`, `archive_document`, and
+`restore_document` accept either a document UUID or that canonical URL in their
+`id` input. The URL may be passed back exactly as returned; an absolute URL must
+use the configured Chopin origin. Both reads return the stable UUID as the
+document `id`.
 
 The UUID remains the internal storage, API, WebSocket, and MCP identity. Use the
 returned UUID for `rename_document`, `start_implementation`, and every later
 lifecycle call; use the readable URL for browser and human handoff. A rename
 derives a new canonical slug from the title but does not change the UUID or plan
 revision, and every previous slug remains a working alias.
+
+`list_documents` excludes archived documents by default. Set
+`includeArchived: true` to include them; archived summaries and direct reads
+carry an `archivedAt` timestamp. Archiving and restoring are idempotent. MCP does
+not expose document deletion.
 
 ## Claude Code
 
@@ -150,10 +157,11 @@ token's `read:org` or Members access, SSO authorization, and GitHub availability
 
 `repository-forbidden` means the supplied token cannot expose the repository or
 lacks the operation's repository permission; it does not mean the GitHub App for
-Chopin must be installed. Pull access is enough for
-`list_documents`, `read_document`, and `read_implementation`. Push or admin
-access is required for create, rename, start, and report lifecycle operations.
-Use an account with the required access or ask a repository owner to grant it.
+Chopin must be installed. Pull access is enough for `list_documents`,
+`read_document`, and `read_implementation`. Pull plus push or admin access is
+required for create, rename, archive, restore, start, and report lifecycle
+operations. Use an account with the required access or ask a repository owner to
+grant it.
 
 Use the optional
 [creating-chopin-plans skill](../skills/creating-chopin-plans/SKILL.md) to turn a

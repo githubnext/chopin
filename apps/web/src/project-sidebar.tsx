@@ -5,19 +5,16 @@ import collapseIcon from "./assets/figma/navigation/collapse.svg";
 import documentActionsIcon from "./assets/figma/navigation/document-actions.svg";
 import newDocumentIcon from "./assets/figma/navigation/new-document.svg";
 import searchIcon from "./assets/figma/navigation/search.svg";
-import sidebarOpenIcon from "./assets/figma/navigation/sidebar-right-3-hide.svg";
-import { canEditProject } from "./navigation-model";
+import { DocumentActionsMenu } from "./document-actions-menu";
+import { canManageProject } from "./navigation-model";
 import { documentPath, researchWorkspacePath } from "@chopin/protocol/document-url";
 
 import { useState } from "react";
 import type * as Api from "./api";
+import type { DocumentAction } from "./document-actions-menu";
 import type { ProjectDocuments } from "./document-actions";
-import type { ReactNode, RefObject } from "react";
+import type { ReactNode } from "react";
 import type { ResearchChannelGroup } from "./research-navigation";
-
-export const SIDEBAR_MIN = 250;
-export const SIDEBAR_MAX = 400;
-export const SIDEBAR_STORAGE_KEY = "chopin:pane:projects";
 
 export function NavigationIcon(
 	{ alt = "", className, src }: { alt?: string; className?: string; src: string },
@@ -51,9 +48,9 @@ function Project(
 		entry,
 		expanded,
 		onCreateDocument,
+		onDocumentAction,
 		onLoadMore,
 		onNewResearch,
-		onRenameDocument,
 		research,
 		onToggle,
 	}: {
@@ -63,9 +60,9 @@ function Project(
 		entry: ProjectDocuments;
 		expanded: boolean;
 		onCreateDocument: (project: Api.NavigationProject) => void;
+		onDocumentAction: (channel: Api.Channel, action: DocumentAction) => void;
 		onLoadMore: (entry: ProjectDocuments) => void;
 		onNewResearch?: (channel: Api.Channel) => void;
-		onRenameDocument: (channel: Api.Channel) => void;
 		research: ReadonlyMap<string, ResearchChannelGroup>;
 		onToggle: () => void;
 	},
@@ -73,7 +70,7 @@ function Project(
 	let { documents, project } = entry;
 	let { channels } = documents;
 	let label = project.repository?.name ?? project.repositoryName;
-	let canEdit = canEditProject(project);
+	let canManage = canManageProject(project);
 	let creating = creatingProjectIds.has(project.repositoryId);
 	return (
 		<li
@@ -91,7 +88,7 @@ function Project(
 					<NavigationIcon className="opacity-50" src={bookBookmarkIcon} />
 					<span className="truncate text-sm font-bold">{label}</span>
 				</button>
-				{project.available && canEdit && (
+				{project.available && canManage && (
 					<button
 						aria-label={`New document in ${label}`}
 						className="project-sidebar-action"
@@ -136,14 +133,15 @@ function Project(
 								>
 									<a
 										aria-current={parentCurrent && !researchCurrent ? "page" : undefined}
-										className="min-w-0 flex-1 truncate text-left text-sm font-medium"
+										className="project-sidebar-document-link min-w-0 flex-1 text-left text-sm font-medium"
 										href={parentHref}
 									>
-										{channel.title}
+										<span className="truncate">{channel.title}</span>
+										{channel.archivedAt && <span className="document-status-badge">Archived</span>}
 									</a>
-									{canEdit && (
+									{canManage && (
 										<div className="project-sidebar-document-actions">
-											{onNewResearch && (
+											{onNewResearch && !channel.archivedAt && (
 												<button
 													aria-label={`New research in ${channel.title}`}
 													className="project-sidebar-document-action"
@@ -153,14 +151,14 @@ function Project(
 													<NavigationIcon className="h-auto w-3.5" src={searchIcon} />
 												</button>
 											)}
-											<button
-												aria-label={`Rename ${channel.title}`}
+											<DocumentActionsMenu
+												channel={channel}
 												className="project-sidebar-document-action"
-												onClick={() => onRenameDocument(channel)}
-												type="button"
-											>
-												<NavigationIcon className="h-auto w-3.5" src={documentActionsIcon} />
-											</button>
+												onAction={action => onDocumentAction(channel, action)}
+												trigger={
+													<NavigationIcon className="h-auto w-3.5" src={documentActionsIcon} />
+												}
+											/>
 										</div>
 									)}
 								</div>
@@ -225,13 +223,15 @@ export function ProjectSidebar(
 		onAddProject,
 		onCollapse,
 		onCreateDocument,
+		onDocumentAction,
 		onLoadMore,
 		onNewResearch,
 		onNewDocument,
-		onRenameDocument,
 		onSearch,
+		onShowArchivedChange,
 		projects,
 		research = new Map(),
+		showArchived,
 		user,
 	}: {
 		accountMenu?: ReactNode;
@@ -244,13 +244,15 @@ export function ProjectSidebar(
 		onAddProject: () => void;
 		onCollapse: () => void;
 		onCreateDocument: (project: Api.NavigationProject) => void;
+		onDocumentAction: (channel: Api.Channel, action: DocumentAction) => void;
 		onLoadMore: (entry: ProjectDocuments) => void;
 		onNewResearch?: (channel: Api.Channel) => void;
 		onNewDocument: () => void;
-		onRenameDocument: (channel: Api.Channel) => void;
 		onSearch: () => void;
+		onShowArchivedChange: (show: boolean) => void;
 		projects: ProjectDocuments[];
 		research?: ReadonlyMap<string, ResearchChannelGroup>;
+		showArchived: boolean;
 		user: Api.User;
 	},
 ) {
@@ -303,6 +305,14 @@ export function ProjectSidebar(
 							<NavigationIcon className="size-3.5" src={addProjectIcon} />
 						</button>
 					</div>
+					<label className="project-sidebar-archived-toggle">
+						<input
+							checked={showArchived}
+							onChange={event => onShowArchivedChange(event.target.checked)}
+							type="checkbox"
+						/>
+						<span>Show archived documents</span>
+					</label>
 					<ul className="project-sidebar-projects gap-2">
 						{[...projects].sort((first, second) => first.project.position - second.project.position)
 							.map(entry => (
@@ -314,9 +324,9 @@ export function ProjectSidebar(
 									expanded={!collapsedProjectIds.has(entry.project.repositoryId)}
 									key={entry.project.repositoryId}
 									onCreateDocument={onCreateDocument}
+									onDocumentAction={onDocumentAction}
 									onLoadMore={onLoadMore}
 									onNewResearch={onNewResearch}
-									onRenameDocument={onRenameDocument}
 									research={research}
 									onToggle={() =>
 										setCollapsedProjectIds(current =>
@@ -350,27 +360,5 @@ export function ProjectSidebar(
 				</button>
 			</div>
 		</aside>
-	);
-}
-
-export function ProjectSidebarExpandButton(
-	{
-		buttonRef,
-		onExpand,
-	}: {
-		buttonRef?: RefObject<HTMLButtonElement | null>;
-		onExpand: () => void;
-	},
-) {
-	return (
-		<button
-			aria-label="Open Projects sidebar"
-			className="project-sidebar-expand btn btn-icon btn-ghost shrink-0"
-			onClick={onExpand}
-			ref={buttonRef}
-			type="button"
-		>
-			<img alt="" height="18" src={sidebarOpenIcon} width="18" />
-		</button>
 	);
 }

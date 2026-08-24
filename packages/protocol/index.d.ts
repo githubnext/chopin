@@ -41,7 +41,7 @@ export type Request<T> = T & { rid: string };
 export declare namespace Session {
 	export type Incoming = Request<Ping>;
 
-	export type Outgoing = Hello | Presence | Access | Channel | Failure | Ping;
+	export type Outgoing = Hello | Presence | Access | Channel | Deleted | Failure | Ping;
 
 	/** A member, as everyone else sees them. */
 	export type Member = {
@@ -61,6 +61,9 @@ export declare namespace Session {
 		members: Member[];
 		/** Effective repository capability for this connection. */
 		canEdit: boolean;
+		/** Repository mutation capability, independent of document archival. */
+		canManage: boolean;
+		archivedAt?: string;
 		backgroundJobs: boolean;
 		webResearch: boolean;
 		chatReferences: boolean;
@@ -73,11 +76,19 @@ export declare namespace Session {
 		title: string;
 		slug: string;
 		updatedAt: string;
+		canManage: boolean;
+		archivedAt?: string;
 	};
 
-	/** Repository permission changed while the socket was open. */
+	/** Repository or document permission changed while the socket was open. */
 	export type Access = KIND<"session:access"> & {
 		canEdit: boolean;
+		canManage: boolean;
+	};
+
+	/** The durable document was permanently deleted. This connection is terminal. */
+	export type Deleted = KIND<"session:deleted"> & {
+		channelId: string;
 	};
 
 	/** Broadcast whenever the membership of the room changes. */

@@ -8,11 +8,12 @@ runtime `STORAGE_DRIVER`.
 
 ## State model
 
-The database stores channel metadata, repository-scoped document slug aliases,
-collaboration recovery state, domain sidecars, token-free ownership references,
-Research Workspaces, durable background work, and the writer lease. GitHub
-tokens, browser-cookie verifiers, open rooms,
-Awareness presence, and Copilot SDK sessions never cross the storage boundary.
+The database stores channel metadata, including `channels.archived_at`,
+repository-scoped document slug aliases, collaboration recovery state, domain
+sidecars, token-free ownership references, Research Workspaces, durable
+background work, and the writer lease. GitHub tokens, browser-cookie verifiers,
+open rooms, Awareness presence, and Copilot SDK sessions never cross the storage
+boundary.
 
 The versioned sidecar is the atomic domain snapshot associated with a channel.
 It includes document sequence and plan revision counters, question and comment
@@ -35,6 +36,9 @@ Every adapter must provide:
 - monotonic storage sequences across checkpoints;
 - atomic checkpoint and epoch replacement;
 - atomic first-Planner ownership with a generation token;
+- active-only channel lists and scans by default, with explicit archived
+  inclusion and direct archived reads;
+- idempotent archive and restore transitions and archived-only atomic deletion;
 - repository-scoped canonical and historical slug resolution without rebinding
   aliases;
 - expiring, token-free process-session registry rows;
@@ -64,6 +68,11 @@ revision used by document block operations or the WebSocket document sequence.
 - The Yjs epoch is retained separately so incompatible collaborative histories
   cannot be combined.
 
+Archive and restore update only channel metadata (`archived_at` and
+`updated_at`). They do not advance the collaboration storage revision or
+sequence, Yjs epoch, document sequence, plan revision, or implementation graph
+version and revision.
+
 See the counter glossary in [Architecture](architecture.md) before changing
 recovery or acknowledgement behavior. See
 [Background jobs](background-jobs.md) for target and claim generations,
@@ -78,8 +87,8 @@ applied migration. The application schema contains:
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `users`                    | GitHub identity and attribution records.                                                                         |
 | `web_sessions`             | Token-free process-session IDs, user IDs, and expiry timestamps used by Planner ownership.                       |
-| `channels`                 | Repository identity, title, creator, storage revision, next sequence, and timestamps.                            |
-| `channel_slugs`            | One canonical title-derived slug per channel plus permanent repository-scoped historical aliases.                |
+| `channels`                 | Repository identity, title, creator, archive metadata, storage revision, next sequence, and timestamps.          |
+| `channel_slugs`            | One canonical title-derived slug per channel plus retained repository-scoped historical aliases.                 |
 | `channel_state`            | Current sidecar JSON for a channel.                                                                              |
 | `channel_snapshots`        | Complete Yjs checkpoint, canonical source, source hash, epoch, counters, and checkpoint sidecar.                 |
 | `channel_operations`       | Per-channel operation idempotency and the revision and sequence assigned to each operation.                      |
@@ -98,9 +107,29 @@ applied migration. The application schema contains:
 Channel titles have a case-insensitive unique constraint within each repository.
 Slug values are also unique per repository, with one canonical slug per channel.
 A rename promotes a new collision-suffixed slug but retains all former slugs as
-aliases that cannot be assigned to another channel. Foreign keys remove slug
-aliases and dependent collaboration state when a channel is deleted, although
-the current product has no channel-deletion route.
+aliases that cannot be assigned to another channel while it exists. Archived
+channels continue to reserve their titles and aliases.
+
+## Archival and deletion
+
+Channel `list` and `scan` operations exclude archived rows unless
+`includeArchived` is true. Direct UUID lookup and repository-scoped slug
+resolution do not apply that filter, so an archived document and its historical
+aliases remain readable. Navigation selection and repository-level Research
+Workspace listing apply the same active-only default.
+
+Archive and restore lock and update the channel row and are no-ops when it is
+already in the requested state. Deletion also locks the row and refuses an
+active channel. Deleting the archived parent row is one transaction: foreign
+keys cascade every channel-owned sidecar, snapshot, journal, event, operation,
+Planner state, implementation state, slug, background job and artifact, and
+Research Workspace record. A saved navigation reference is set to null.
+
+Full deletion leaves no live tombstone. It removes historical aliases and the
+MCP creation idempotency identity, so former slugs can be reused and the same
+MCP idempotency key can create a fresh document at its deterministic UUID. Reads
+and implementation lifecycle reports for the deleted document return
+unavailable.
 
 ## Commit and acknowledgement
 
@@ -133,6 +162,9 @@ Checkpointing does not prune `channel_operations` or `channel_events`. The
 current schema therefore retains operation idempotency records and any stored
 events until a separate retention policy or channel deletion removes them.
 Operators should account for that behavior in database monitoring and backups.
+Deleting a document removes it from the live database, not from backups already
+captured by an operator. Those copies remain governed by the operator's backup
+retention and restoration policy.
 
 The database is a recovery store, not a user-visible edit history. Canonical MDX
 and current domain records are durable, but the compacted Yjs journal is not an

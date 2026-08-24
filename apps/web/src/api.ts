@@ -36,6 +36,7 @@ export type Channel = {
 	revision: number;
 	createdAt: string;
 	updatedAt: string;
+	archivedAt?: string;
 };
 
 export type RepositoryPage = {
@@ -80,7 +81,15 @@ export type ChannelPage = {
 export type ChannelDetail = {
 	repository: Repository;
 	canEdit: boolean;
+	canManage: boolean;
 	channel: Channel;
+};
+
+export type ChannelListOptions = {
+	cursor?: string;
+	query?: string;
+	includeArchived?: boolean;
+	signal?: AbortSignal;
 };
 
 export type ResearchParentChannel = Pick<
@@ -209,19 +218,18 @@ export function installationRepositories(
 export function channels(
 	owner: string,
 	repository: string,
-	cursor?: string,
-	query?: string,
-	signal?: AbortSignal,
+	options: ChannelListOptions = {},
 ): Promise<ChannelPage> {
 	let parameters = new URLSearchParams();
-	if (cursor) parameters.set("cursor", cursor);
-	if (query) parameters.set("query", query);
+	if (options.cursor) parameters.set("cursor", options.cursor);
+	if (options.query) parameters.set("query", options.query);
+	if (options.includeArchived) parameters.set("includeArchived", "true");
 	let suffix = parameters.size ? `?${parameters}` : "";
 	return response(
 		`/api/repositories/${encodeURIComponent(owner)}/${
 			encodeURIComponent(repository)
 		}/channels${suffix}`,
-		{ signal },
+		{ signal: options.signal },
 	);
 }
 
@@ -271,11 +279,13 @@ export function repositoryResearchWorkspaces(
 	owner: string,
 	repository: string,
 	signal?: AbortSignal,
+	includeArchived = false,
 ): Promise<RepositoryResearchPage> {
+	let suffix = includeArchived ? "?includeArchived=true" : "";
 	return response(
 		`/api/repositories/${encodeURIComponent(owner)}/${
 			encodeURIComponent(repository)
-		}/research-workspaces`,
+		}/research-workspaces${suffix}`,
 		{ signal },
 	);
 }
@@ -368,6 +378,18 @@ export function renameChannel(id: string, title: string): Promise<ChannelDetail>
 		headers: { "content-type": "application/json" },
 		body: JSON.stringify({ title }),
 	});
+}
+
+export function archiveChannel(id: string): Promise<ChannelDetail> {
+	return response(`/api/channels/${encodeURIComponent(id)}/archive`, { method: "POST" });
+}
+
+export function restoreChannel(id: string): Promise<ChannelDetail> {
+	return response(`/api/channels/${encodeURIComponent(id)}/restore`, { method: "POST" });
+}
+
+export function deleteChannel(id: string): Promise<void> {
+	return response(`/api/channels/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 export async function resetAgent(id: string): Promise<void> {

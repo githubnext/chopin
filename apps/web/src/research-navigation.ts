@@ -45,6 +45,7 @@ export function newestResearchWorkspace(
 export function completeResearchLoad(
 	current: ResearchRepositoryState,
 	page: Api.RepositoryResearchPage,
+	preserveMissing = true,
 ): ResearchRepositoryState {
 	let groups = new Map<string, ResearchChannelGroup>();
 	for (let group of page.channels) {
@@ -55,17 +56,17 @@ export function completeResearchLoad(
 	}
 	for (let currentGroup of current.channels) {
 		let loaded = groups.get(currentGroup.channel.id);
-		if (!loaded) {
+		if (!loaded && (preserveMissing || page.truncated)) {
 			groups.set(currentGroup.channel.id, currentGroup);
 			continue;
 		}
+		if (!loaded) continue;
 		let workspaces = new Map(loaded.workspaces.map(workspace => [workspace.id, workspace]));
 		for (let workspace of currentGroup.workspaces) {
 			let replacement = workspaces.get(workspace.id);
-			workspaces.set(
-				workspace.id,
-				replacement ? newestResearchWorkspace(workspace, replacement) : workspace,
-			);
+			if (replacement) {
+				workspaces.set(workspace.id, newestResearchWorkspace(workspace, replacement));
+			} else if (preserveMissing || page.truncated) workspaces.set(workspace.id, workspace);
 		}
 		groups.set(currentGroup.channel.id, {
 			channel: loaded.channel,
@@ -115,6 +116,22 @@ export function upsertLoadedResearch(
 		})
 		: [...current.channels, { channel, workspaces: [workspace] }];
 	return { ...loaded, [repositoryId]: { ...current, channels } };
+}
+
+export function removeLoadedResearchChannel(
+	loaded: LoadedResearch,
+	channelId: string,
+): LoadedResearch {
+	let next = loaded;
+	for (let [repositoryId, state] of Object.entries(loaded)) {
+		if (!state.channels.some(group => group.channel.id === channelId)) continue;
+		if (next === loaded) next = { ...loaded };
+		next[repositoryId] = {
+			...state,
+			channels: state.channels.filter(group => group.channel.id !== channelId),
+		};
+	}
+	return next;
 }
 
 export function researchByChannel(

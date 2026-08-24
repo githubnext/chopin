@@ -4,6 +4,7 @@ import {
 	beginResearchLoad,
 	completeResearchLoad,
 	currentResearchRequest,
+	removeLoadedResearchChannel,
 	upsertLoadedResearch,
 } from "./research-navigation";
 
@@ -83,5 +84,34 @@ describe("repository research state", () => {
 		});
 
 		expect(next.channels[0]?.workspaces[0]).toBe(created);
+	});
+
+	it("removes omitted groups from an authoritative repository refresh", () => {
+		let loaded = upsertLoadedResearch(
+			{},
+			"R_one",
+			channel,
+			workspace("research-old", 0, "2026-08-23T10:00:00.000Z"),
+		);
+		let next = completeResearchLoad(loaded.R_one!, {
+			repository,
+			canEdit: true,
+			channels: [],
+			truncated: false,
+		}, false);
+
+		expect(next.channels).toEqual([]);
+	});
+
+	it("removes every cached research workspace for a deleted document", () => {
+		let loaded = upsertLoadedResearch(
+			{},
+			"R_one",
+			channel,
+			workspace("research-one", 0, "2026-08-23T10:00:00.000Z"),
+		);
+
+		expect(removeLoadedResearchChannel(loaded, channel.id).R_one?.channels).toEqual([]);
+		expect(removeLoadedResearchChannel(loaded, "missing")).toBe(loaded);
 	});
 });

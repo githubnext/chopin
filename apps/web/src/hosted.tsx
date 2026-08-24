@@ -9,6 +9,7 @@ import {
 
 import * as Api from "./api";
 import { readChannelRecovery, readDocumentRecovery, rememberChannel } from "./channel-recovery";
+import { newestDocument } from "./document-actions";
 import { NavigationShell, useNavigationDocument } from "./navigation-shell";
 
 import type { ComponentType, ReactNode } from "react";
@@ -21,6 +22,8 @@ export type HostedWorkspaceProps = {
 	updatedAt: string;
 	repository: Api.Repository;
 	canEdit: boolean;
+	canManage: boolean;
+	archivedAt?: string;
 	agent?: boolean;
 	userId: string;
 };
@@ -298,11 +301,13 @@ function ChannelWorkspace(
 	if (!loaded) return <Loading label="Opening channel..." />;
 	let { detail } = loaded;
 	let channel = navigationChannel?.id === detail.channel.id
-		? navigationChannel
+		? newestDocument(detail.channel, navigationChannel)
 		: detail.channel;
 	let props: HostedWorkspaceProps = {
 		agent,
-		canEdit: detail.canEdit,
+		archivedAt: channel.archivedAt,
+		canEdit: !channel.archivedAt && (detail.canEdit || detail.canManage),
+		canManage: detail.canManage,
 		handle: user.login,
 		label: channel.title,
 		slug: channel.slug,

@@ -18,6 +18,10 @@ async function opened(factory: Factory): Promise<StorageAdapter> {
 	return storage;
 }
 
+function attempt<T>(action: () => Promise<T>): Promise<T> {
+	return Promise.resolve().then(action);
+}
+
 async function userAndChannel(storage: StorageAdapter): Promise<{
 	userId: string;
 	sessionId: string;
@@ -352,6 +356,336 @@ export function storageContract(name: string, factory: Factory): void {
 				expect(page.channels).toHaveLength(1);
 				expect(page.channels[0]!.repositoryId).toBe(repositoryId);
 				expect(page.next).toBeUndefined();
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("archives and restores channels without hiding direct reads", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, channelId, repositoryId } = await userAndChannel(storage);
+				let original = (await storage.channels.get(channelId))!;
+				let fallback = await storage.channels.create({
+					id: id("fallback-channel"),
+					repositoryId,
+					repositoryOwner: "octo-org",
+					repositoryName: "score",
+					title: "Fallback plan",
+					createdBy: userId,
+					now: new Date("2026-01-01T03:04:05.000Z"),
+				});
+				await storage.navigation.recordVisit({
+					userId,
+					repositoryId,
+					repositoryOwner: "octo-org",
+					repositoryName: "score",
+					documentId: channelId,
+					now: original.updatedAt,
+				});
+
+				let archived = await storage.channels.archive({ id: channelId, now: original.updatedAt });
+				expect(archived).toMatchObject({
+					changed: true,
+					channel: {
+						id: channelId,
+						title: original.title,
+						slug: original.slug,
+						revision: original.revision,
+					},
+				});
+				expect(archived.channel.updatedAt.getTime()).toBeGreaterThan(original.updatedAt.getTime());
+				expect(archived.channel.archivedAt).toEqual(archived.channel.updatedAt);
+				expect(
+					await storage.channels.archive({
+						id: channelId,
+						now: new Date("2026-01-05T03:04:05.000Z"),
+					}),
+				).toEqual({ channel: archived.channel, changed: false });
+
+				expect((await storage.channels.list(repositoryId, 1)).channels.map(value => value.id))
+					.toEqual([fallback.id]);
+				expect(
+					(await storage.channels.list(repositoryId, 1, undefined, undefined, true)).channels
+						.map(value => value.id),
+				).toEqual([channelId]);
+				expect((await storage.channels.scan(repositoryId, 1)).channels.map(value => value.id))
+					.toEqual([fallback.id]);
+				expect(
+					(await storage.channels.scan(repositoryId, 1, undefined, true)).channels
+						.map(value => value.id),
+				).toEqual([channelId]);
+				expect((await storage.channels.get(channelId))?.archivedAt)
+					.toEqual(archived.channel.archivedAt);
+				expect((await storage.channels.resolve(repositoryId, original.slug))?.id).toBe(channelId);
+				await expect(storage.channels.rename({
+					id: channelId,
+					title: original.title,
+					now: new Date("2026-01-06T03:04:05.000Z"),
+				})).rejects.toMatchObject({ failure: "conflict" });
+				await expect(storage.navigation.setLastDocument(
+					userId,
+					channelId,
+					new Date("2026-01-06T03:04:05.000Z"),
+				)).rejects.toMatchObject({ failure: "conflict" });
+				await expect(storage.navigation.recordVisit({
+					userId,
+					repositoryId,
+					repositoryOwner: "octo-org",
+					repositoryName: "score",
+					documentId: channelId,
+					now: new Date("2026-01-06T03:04:05.000Z"),
+				})).rejects.toMatchObject({ failure: "conflict" });
+
+				let snapshot = await storage.navigation.snapshot(userId);
+				expect(snapshot.navigation?.lastDocumentId).toBe(channelId);
+				expect(snapshot.lastDocumentRepositoryId).toBeUndefined();
+				expect(await storage.navigation.firstDocument(userId, [repositoryId])).toBe(fallback.id);
+				expect(
+					await storage.navigation.setLastDocumentIfCurrent(
+						userId,
+						snapshot.navigation?.revision,
+						fallback.id,
+						new Date("2026-01-06T03:04:05.000Z"),
+					),
+				).toMatchObject({ navigation: { lastDocumentId: fallback.id }, updated: true });
+
+				let restored = await storage.channels.restore({
+					id: channelId,
+					now: archived.channel.updatedAt,
+				});
+				expect(restored.changed).toBe(true);
+				expect(restored.channel.archivedAt).toBeUndefined();
+				expect(restored.channel.revision).toBe(original.revision);
+				expect(restored.channel.updatedAt.getTime())
+					.toBeGreaterThan(archived.channel.updatedAt.getTime());
+				expect((await storage.channels.list(repositoryId, 1)).channels[0]?.id).toBe(channelId);
+				expect(
+					await storage.channels.restore({
+						id: channelId,
+						now: new Date("2026-01-07T03:04:05.000Z"),
+					}),
+				).toEqual({ channel: restored.channel, changed: false });
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("deletes only archived channels and permits clean identity reuse", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, sessionId, channelId, repositoryId, lease } = await userAndChannel(storage);
+				let operationId = id("delete-operation");
+				let workspaceInput = researchWorkspace(channelId, userId, lease, {
+					id: id("delete-workspace"),
+					idempotencyKey: id("delete-workspace-request"),
+					fingerprint: "sha256:delete-workspace",
+				});
+				let createdWorkspace = await storage.research.create(workspaceInput);
+				let confirmation = {
+					channelId,
+					workspaceId: createdWorkspace.workspace.id,
+					turnId: id("delete-turn"),
+					messageId: id("delete-member-message"),
+					requestId: id("delete-confirmation"),
+					fingerprint: "sha256:delete-confirmation",
+					confirmedQuery: "Which state must be deleted?",
+					confirmedBy: userId,
+					now: new Date("2026-01-07T03:05:05.000Z"),
+					lease,
+				};
+				let confirmed = await storage.research.confirm(confirmation);
+				let jobInput = backgroundJob(channelId, lease, {
+					id: id("delete-job"),
+					type: "research-answer",
+					targetKey:
+						`research-answer:workspace:${workspaceInput.id}:turn:${confirmation.turnId}:answer`,
+					idempotencyKey: id("delete-job-request"),
+					fingerprint: "sha256:delete-job",
+					now: new Date("2026-01-07T03:06:05.000Z"),
+					availableAt: new Date("2026-01-07T03:06:05.000Z"),
+				});
+				let queued = await storage.jobs.enqueue(jobInput);
+				let [claimed] = await storage.jobs.claim({
+					channelId,
+					claimOwner: "delete-worker",
+					count: 1,
+					ttlMs: 60_000,
+					now: new Date("2026-01-07T03:06:06.000Z"),
+					lease,
+				});
+				await storage.jobs.settle({
+					channelId,
+					jobId: queued.job.id,
+					claimOwner: "delete-worker",
+					claimGeneration: claimed!.claimGeneration,
+					artifact: { answer: "all channel-owned state" },
+					now: new Date("2026-01-07T03:06:07.000Z"),
+					lease,
+				});
+				await storage.research.linkJob({
+					channelId,
+					workspaceId: workspaceInput.id,
+					turnId: confirmed.turn.id,
+					role: "answer",
+					jobId: jobInput.id,
+					now: new Date("2026-01-07T03:06:08.000Z"),
+					lease,
+				});
+				let agentMessage = {
+					channelId,
+					workspaceId: workspaceInput.id,
+					id: id("delete-agent-message"),
+					turnId: confirmed.turn.id,
+					text: "Delete this transcript with its document.",
+					sourceJobId: jobInput.id,
+					now: new Date("2026-01-07T03:06:09.000Z"),
+					lease,
+				};
+				await storage.research.appendAgentMessage(agentMessage);
+				await storage.collaboration.commit({
+					channelId,
+					lease,
+					expectedRevision: 0,
+					operationId,
+					epoch: "delete-epoch",
+					update: new Uint8Array([1, 2, 3]),
+					sidecar: { deletion: "seeded" },
+					events: [{
+						id: id("delete-event"),
+						kind: "delete:test",
+						payload: { seeded: true },
+						createdAt: new Date("2026-01-07T03:07:05.000Z"),
+					}],
+					now: new Date("2026-01-07T03:07:05.000Z"),
+				});
+				await storage.collaboration.checkpoint({
+					channelId,
+					lease,
+					expectedRevision: 1,
+					generation: id("delete-generation"),
+					revision: 1,
+					throughSequence: 1,
+					epoch: "delete-epoch",
+					source: "# Delete me\n",
+					sourceHash: "sha256:delete-me",
+					document: new Uint8Array([4, 5, 6]),
+					sidecar: { deletion: "seeded" },
+					createdAt: new Date("2026-01-07T03:08:05.000Z"),
+				});
+				await storage.channels.claimAgentOwner(
+					channelId,
+					sessionId,
+					new Date("2026-01-07T03:09:05.000Z"),
+				);
+				await storage.navigation.setLastDocument(
+					userId,
+					channelId,
+					new Date("2026-01-07T03:09:05.000Z"),
+				);
+				let renamed = await storage.channels.rename({
+					id: channelId,
+					title: "Launch plan",
+					now: new Date("2026-01-08T03:04:05.000Z"),
+				});
+				await expect(storage.channels.delete(channelId))
+					.rejects.toMatchObject({ failure: "conflict" });
+				await storage.channels.archive({
+					id: channelId,
+					now: new Date("2026-01-09T03:04:05.000Z"),
+				});
+				expect(await storage.channels.delete(channelId)).toBe(true);
+				expect(await storage.channels.delete(channelId)).toBe(false);
+
+				expect(await storage.channels.get(channelId)).toBeUndefined();
+				expect(await storage.channels.resolve(repositoryId, "release-plan")).toBeUndefined();
+				expect(await storage.channels.resolve(repositoryId, renamed.channel.slug)).toBeUndefined();
+				expect(await storage.collaboration.load(channelId, new Date())).toBeUndefined();
+				expect(await storage.channels.readAgent(channelId, new Date())).toBeUndefined();
+				expect(await storage.jobs.list(channelId, 10)).toBeUndefined();
+				expect(await storage.jobs.get(channelId, jobInput.id)).toBeUndefined();
+				expect(await storage.research.list(channelId, 10)).toEqual([]);
+				expect(await storage.research.get(channelId, workspaceInput.id)).toBeUndefined();
+				expect((await storage.navigation.get(userId))?.lastDocumentId).toBeUndefined();
+				expect((await storage.navigation.snapshot(userId)).lastDocumentRepositoryId)
+					.toBeUndefined();
+
+				let recreated = await storage.channels.create({
+					id: channelId,
+					repositoryId,
+					repositoryOwner: "octo-org",
+					repositoryName: "score",
+					title: "Release plan",
+					createdBy: userId,
+					now: new Date("2026-01-10T03:04:05.000Z"),
+				});
+				expect(recreated).toMatchObject({ id: channelId, slug: "release-plan", revision: 0 });
+				expect(recreated.archivedAt).toBeUndefined();
+				let aliasReuse = await storage.channels.create({
+					id: id("alias-reuse-channel"),
+					repositoryId,
+					repositoryOwner: "octo-org",
+					repositoryName: "score",
+					title: "Launch plan",
+					createdBy: userId,
+					now: new Date("2026-01-10T03:04:06.000Z"),
+				});
+				expect(aliasReuse.slug).toBe("launch-plan");
+				let clean = (await storage.collaboration.load(channelId, new Date()))!;
+				expect(clean).toMatchObject({
+					latestSequence: 0,
+					snapshot: undefined,
+					updates: [],
+					events: [],
+					sidecar: null,
+					agent: undefined,
+				});
+				expect(
+					await storage.collaboration.commit({
+						channelId,
+						lease,
+						expectedRevision: 0,
+						operationId,
+						epoch: "recreated-epoch",
+						events: [],
+						now: new Date("2026-01-10T03:05:05.000Z"),
+					}),
+				).toEqual({ revision: 1, sequence: 1, repeated: false });
+
+				let recreatedWorkspace = await storage.research.create({
+					...workspaceInput,
+					now: new Date("2026-01-10T03:06:05.000Z"),
+				});
+				expect(recreatedWorkspace.repeated).toBe(false);
+				let recreatedConfirmation = await storage.research.confirm({
+					...confirmation,
+					now: new Date("2026-01-10T03:06:06.000Z"),
+				});
+				expect(recreatedConfirmation.repeated).toBe(false);
+				let recreatedJob = await storage.jobs.enqueue({
+					...jobInput,
+					availableAt: new Date("2026-01-10T03:06:07.000Z"),
+					now: new Date("2026-01-10T03:06:07.000Z"),
+				});
+				expect(recreatedJob.repeated).toBe(false);
+				expect((await storage.jobs.get(channelId, jobInput.id))?.artifact).toBeUndefined();
+				expect(
+					(await storage.research.linkJob({
+						channelId,
+						workspaceId: workspaceInput.id,
+						turnId: confirmation.turnId,
+						role: "answer",
+						jobId: jobInput.id,
+						now: new Date("2026-01-10T03:06:08.000Z"),
+						lease,
+					})).repeated,
+				).toBe(false);
+				expect(
+					(await storage.research.appendAgentMessage({
+						...agentMessage,
+						now: new Date("2026-01-10T03:06:09.000Z"),
+					})).repeated,
+				).toBe(false);
 			} finally {
 				await storage.close();
 			}
@@ -859,6 +1193,99 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
+		it("fences archived collaboration writes except sidecar-only maintenance", async () => {
+			let storage = await opened(factory);
+			try {
+				let { channelId, lease } = await userAndChannel(storage);
+				let archivedAt = new Date("2026-01-04T03:04:05.000Z");
+				await storage.channels.archive({ id: channelId, now: archivedAt });
+
+				await expect(attempt(() =>
+					storage.collaboration.commit({
+						channelId,
+						lease,
+						expectedRevision: 0,
+						operationId: id("archived-normal-commit"),
+						epoch: "archived-epoch",
+						sidecar: { maintenance: false },
+						events: [],
+						now: archivedAt,
+					})
+				)).rejects.toMatchObject({ failure: "conflict" });
+
+				let maintenance = await storage.collaboration.commit({
+					channelId,
+					lease,
+					expectedRevision: 0,
+					operationId: id("archived-sidecar-commit"),
+					epoch: "archived-epoch",
+					sidecar: { maintenance: true },
+					events: [],
+					now: new Date(archivedAt.getTime() + 1),
+					allowArchived: true,
+				});
+				expect(maintenance).toEqual({ revision: 1, sequence: 1, repeated: false });
+
+				await expect(attempt(() =>
+					storage.collaboration.commit({
+						channelId,
+						lease,
+						expectedRevision: 1,
+						operationId: id("archived-update-commit"),
+						epoch: "archived-epoch",
+						update: new Uint8Array([1]),
+						events: [],
+						now: new Date(archivedAt.getTime() + 2),
+						allowArchived: true,
+					})
+				)).rejects.toMatchObject({ failure: "conflict" });
+				await expect(attempt(() =>
+					storage.collaboration.commit({
+						channelId,
+						lease,
+						expectedRevision: 1,
+						operationId: id("archived-event-commit"),
+						epoch: "archived-epoch",
+						events: [{
+							id: id("archived-event"),
+							kind: "archive:test",
+							payload: { rejected: true },
+							createdAt: new Date(archivedAt.getTime() + 3),
+						}],
+						now: new Date(archivedAt.getTime() + 3),
+						allowArchived: true,
+					})
+				)).rejects.toMatchObject({ failure: "conflict" });
+
+				await expect(attempt(() =>
+					storage.collaboration.replace({
+						channelId,
+						lease,
+						expectedRevision: 1,
+						operationId: id("archived-replacement"),
+						generation: id("archived-generation"),
+						epoch: "replacement-epoch",
+						source: "# Rejected replacement\n",
+						sourceHash: "sha256:archived-replacement",
+						document: new Uint8Array([2]),
+						sidecar: { maintenance: false },
+						now: new Date(archivedAt.getTime() + 4),
+					})
+				)).rejects.toMatchObject({ failure: "conflict" });
+
+				let stored = await storage.collaboration.load(channelId, new Date());
+				expect(stored).toMatchObject({
+					channel: { revision: 1, archivedAt },
+					latestSequence: 1,
+					sidecar: { maintenance: true },
+					updates: [],
+					events: [],
+				});
+			} finally {
+				await storage.close();
+			}
+		});
+
 		it("replays only updates newer than the checkpoint", async () => {
 			let storage = await opened(factory);
 			try {
@@ -1092,6 +1519,25 @@ export function storageContract(name: string, factory: Factory): void {
 					.toEqual([channelBWorkspace]);
 				expect(listed.channels[2]!.workspaces.map(value => value.id))
 					.toEqual([oldChannelWorkspace]);
+				await storage.channels.archive({
+					id: channelB,
+					now: new Date("2026-01-16T03:04:05.000Z"),
+				});
+				expect(
+					(await storage.research.listRepository(repositoryId, 10)).channels
+						.map(group => group.channel.id),
+				).toEqual([channelA, channelId]);
+				expect(
+					(await storage.research.listRepository(repositoryId, 10, true)).channels
+						.map(group => group.channel.id),
+				).toEqual([channelA, channelB, channelId]);
+				expect((await storage.research.list(channelB, 10)).map(value => value.id))
+					.toEqual([channelBWorkspace]);
+				expect(await storage.research.get(channelB, channelBWorkspace)).toBeDefined();
+				await storage.channels.restore({
+					id: channelB,
+					now: new Date("2026-01-16T03:04:06.000Z"),
+				});
 
 				let bounded = await storage.research.listRepository(repositoryId, 2);
 				expect(bounded.truncated).toBe(true);
@@ -1223,6 +1669,113 @@ export function storageContract(name: string, factory: Factory): void {
 				detail!.turns[0]!.createdAt.setUTCFullYear(1999);
 				expect((await storage.research.get(channelId, draft.workspace.id))!.turns[0]!.createdAt)
 					.toEqual(confirmation.now);
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("rejects new archived research mutations but preserves exact replays", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, channelId, lease } = await userAndChannel(storage);
+				let create = researchWorkspace(channelId, userId, lease, {
+					id: id("archive-replay-workspace"),
+					idempotencyKey: id("archive-replay-create"),
+					fingerprint: "sha256:archive-replay-create",
+				});
+				let created = await storage.research.create(create);
+				let unconfirmed = await storage.research.create(researchWorkspace(
+					channelId,
+					userId,
+					lease,
+					{
+						id: id("archive-unconfirmed-workspace"),
+						idempotencyKey: id("archive-unconfirmed-create"),
+						fingerprint: "sha256:archive-unconfirmed-create",
+					},
+				));
+				let confirmation = {
+					channelId,
+					workspaceId: created.workspace.id,
+					turnId: id("archive-initial-turn"),
+					messageId: id("archive-initial-message"),
+					requestId: id("archive-confirmation"),
+					fingerprint: "sha256:archive-confirmation",
+					confirmedQuery: "Which archive fences are durable?",
+					confirmedBy: userId,
+					confirmedByHandle: "octocat",
+					now: new Date("2026-01-07T03:05:05.000Z"),
+					lease,
+				};
+				let confirmed = await storage.research.confirm(confirmation);
+				let append = {
+					channelId,
+					workspaceId: created.workspace.id,
+					turnId: id("archive-follow-up-turn"),
+					messageId: id("archive-follow-up-message"),
+					kind: "follow-up" as const,
+					requestId: id("archive-follow-up"),
+					fingerprint: "sha256:archive-follow-up",
+					question: "Do exact retries remain available?",
+					requestedBy: userId,
+					requestedByHandle: "octocat",
+					now: new Date("2026-01-07T03:06:05.000Z"),
+					lease,
+				};
+				let appended = await storage.research.appendTurn(append);
+				await storage.channels.archive({
+					id: channelId,
+					now: new Date("2026-01-08T03:04:05.000Z"),
+				});
+
+				expect(await storage.research.create(create)).toMatchObject({
+					repeated: true,
+					workspace: { id: created.workspace.id },
+				});
+				expect(await storage.research.confirm(confirmation)).toMatchObject({
+					repeated: true,
+					turn: { id: confirmed.turn.id },
+					message: { id: confirmed.message.id },
+				});
+				expect(await storage.research.appendTurn(append)).toMatchObject({
+					repeated: true,
+					turn: { id: appended.turn.id },
+					message: { id: appended.message.id },
+				});
+
+				await expect(storage.research.create(researchWorkspace(
+					channelId,
+					userId,
+					lease,
+					{
+						id: id("archived-new-workspace"),
+						idempotencyKey: id("archived-new-create"),
+						fingerprint: "sha256:archived-new-create",
+					},
+				))).rejects.toMatchObject({ failure: "conflict" });
+				await expect(storage.research.confirm({
+					...confirmation,
+					workspaceId: unconfirmed.workspace.id,
+					turnId: id("archived-new-initial-turn"),
+					messageId: id("archived-new-initial-message"),
+					requestId: id("archived-new-confirmation"),
+					fingerprint: "sha256:archived-new-confirmation",
+				})).rejects.toMatchObject({ failure: "conflict" });
+				await expect(storage.research.appendTurn({
+					...append,
+					turnId: id("archived-new-follow-up-turn"),
+					messageId: id("archived-new-follow-up-message"),
+					requestId: id("archived-new-follow-up"),
+					fingerprint: "sha256:archived-new-follow-up",
+					question: "This new request must be fenced.",
+				})).rejects.toMatchObject({ failure: "conflict" });
+
+				expect((await storage.research.get(channelId, created.workspace.id))!.turns)
+					.toHaveLength(2);
+				expect(
+					(await storage.research.get(channelId, unconfirmed.workspace.id))!.workspace
+						.confirmedQuery,
+				).toBeUndefined();
 			} finally {
 				await storage.close();
 			}
@@ -1430,6 +1983,34 @@ export function storageContract(name: string, factory: Factory): void {
 				expect(await storage.collaboration.load(channelId, new Date())).toEqual(
 					beforeCollaboration,
 				);
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("requires an archive allowance to cancel background work", async () => {
+			let storage = await opened(factory);
+			try {
+				let { channelId, lease } = await userAndChannel(storage);
+				let now = new Date("2026-01-07T03:04:05.000Z");
+				let queued = await storage.jobs.enqueue(backgroundJob(channelId, lease, { now }));
+				await storage.channels.archive({
+					id: channelId,
+					now: new Date(now.getTime() + 1),
+				});
+
+				let cancellation = {
+					channelId,
+					jobId: queued.job.id,
+					now: new Date(now.getTime() + 2),
+					lease,
+				};
+				await expect(storage.jobs.cancel(cancellation))
+					.rejects.toMatchObject({ failure: "conflict" });
+				expect((await storage.jobs.get(channelId, queued.job.id))!.job.state).toBe("pending");
+
+				let cancelled = await storage.jobs.cancel({ ...cancellation, allowArchived: true });
+				expect(cancelled.state).toBe("cancelled");
 			} finally {
 				await storage.close();
 			}

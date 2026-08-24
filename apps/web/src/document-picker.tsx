@@ -78,7 +78,10 @@ export function DocumentPicker(
 		let timer = window.setTimeout(() => {
 			setPage(undefined);
 			setListError(undefined);
-			Api.channels(repository.owner, repository.name, undefined, normalized).then(value => {
+			Api.channels(repository.owner, repository.name, {
+				includeArchived: false,
+				query: normalized || undefined,
+			}).then(value => {
 				if (request.current !== id) return;
 				setPage(value);
 				setActive(0);
@@ -118,7 +121,11 @@ export function DocumentPicker(
 		let id = request.current;
 		setLoadingMore(true);
 		try {
-			let next = await Api.channels(repository.owner, repository.name, page.nextCursor, normalized);
+			let next = await Api.channels(repository.owner, repository.name, {
+				cursor: page.nextCursor,
+				includeArchived: false,
+				query: normalized || undefined,
+			});
 			if (request.current !== id) return;
 			setPage(current =>
 				current && {

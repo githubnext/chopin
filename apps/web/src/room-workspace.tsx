@@ -24,6 +24,7 @@ import chevronDownIcon from "./assets/icons/tool-chevron-down.svg";
 import { Chat } from "./chat/chat";
 import { rememberChannel } from "./channel-recovery";
 import { decisionAttention, DecisionViewControl } from "./decision-view-control";
+import { DocumentActionsMenu } from "./document-actions-menu";
 import { useNavigationDocument } from "./navigation-shell";
 import { NavigationIcon } from "./project-sidebar";
 import { peopleHere } from "./presence";
@@ -33,20 +34,29 @@ import { availableDocumentView, presentWorkspace, storedDocumentView } from "./w
 
 import type { Research, Session } from "@chopin/protocol";
 import type { DecisionView, DecisionViewState } from "@chopin/editor";
+import type * as Api from "./api";
+import type { DocumentAction } from "./document-actions-menu";
 import type { HostedWorkspaceProps } from "./hosted";
 import type { Status } from "./wire";
 
+type ManagedHello = Session.Hello & { archivedAt?: string; canManage: boolean };
+type ManagedChannel = Session.Channel & { archivedAt?: string; canManage: boolean };
+type ManagedAccess = Session.Access & { canManage: boolean };
+type WorkspaceMetadata = Pick<Api.Channel, "title" | "slug" | "updatedAt" | "archivedAt">;
+
 export function Header(
 	{
-		canEdit,
+		archivedAt,
+		canManage,
 		members,
 		label,
-		onRename,
+		onAction,
 	}: {
-		canEdit: boolean;
+		archivedAt?: string;
+		canManage: boolean;
 		members: Session.Member[];
 		label: string;
-		onRename: () => void;
+		onAction: (action: DocumentAction) => void;
 	},
 ) {
 	let people = peopleHere(members);
@@ -57,16 +67,31 @@ export function Header(
 				className="flex min-w-0 flex-1 items-center gap-0.5"
 			>
 				<NavigationIcon className="opacity-50" src={bookBookmarkIcon} />
-				<button
-					aria-label={`Rename ${label}`}
-					className="document-title-trigger"
-					disabled={!canEdit}
-					onClick={onRename}
-					type="button"
-				>
-					<span className="truncate">{label}</span>
-					<img alt="" aria-hidden="true" className="size-3.5 opacity-50" src={chevronDownIcon} />
-				</button>
+				{canManage
+					? (
+						<DocumentActionsMenu
+							channel={{ archivedAt, title: label }}
+							className="document-title-trigger"
+							onAction={onAction}
+							trigger={
+								<>
+									<span className="truncate">{label}</span>
+									<img
+										alt=""
+										aria-hidden="true"
+										className="size-3.5 opacity-50"
+										src={chevronDownIcon}
+									/>
+								</>
+							}
+						/>
+					)
+					: <span className="document-title-label truncate">{label}</span>}
+				{archivedAt && (
+					<span className="document-status-badge document-read-only-status">
+						Archived, read-only
+					</span>
+				)}
 			</div>
 			<div
 				aria-label={`People here: ${people.join(", ")}`}
@@ -94,7 +119,9 @@ export function Header(
 export function RoomWorkspace(
 	{
 		agent = true,
+		archivedAt,
 		canEdit = true,
+		canManage,
 		handle,
 		label,
 		repository,
@@ -106,15 +133,18 @@ export function RoomWorkspace(
 ) {
 	let [wire, setWire] = useState<Wire>();
 	let {
+		onDocumentAction,
 		onDocumentChanged,
-		onRenameDocument,
+		onDocumentDeleted,
 		onRepositoryAccessChanged,
 		onResearchWorkspaceChanged,
 		onResearchWorkspacesRefresh,
 	} = useNavigationDocument();
 	let [status, setStatus] = useState<Status>("connecting");
 	let [members, setMembers] = useState<Session.Member[]>([]);
-	let [effectiveCanEdit, setEffectiveCanEdit] = useState(canEdit);
+	let [effectiveCanEdit, setEffectiveCanEdit] = useState(canEdit && !archivedAt);
+	let [effectiveCanManage, setEffectiveCanManage] = useState(canManage);
+	let [deleted, setDeleted] = useState(false);
 	let [capabilities, setCapabilities] = useState({ backgroundJobs: false });
 	let [chatReferences, setChatReferences] = useState<{ wire?: Wire; enabled: boolean }>({
 		enabled: false,
@@ -122,7 +152,12 @@ export function RoomWorkspace(
 	let [chatSendAcks, setChatSendAcks] = useState<{ wire?: Wire; enabled: boolean }>({
 		enabled: false,
 	});
-	let [metadata, setMetadata] = useState({ title: label, slug, updatedAt });
+	let [metadata, setMetadata] = useState<WorkspaceMetadata>({
+		archivedAt,
+		title: label,
+		slug,
+		updatedAt,
+	});
 	let metadataRef = useRef(metadata);
 	let user = useMemo(() => cursor(handle), [handle]);
 	let mode = useWorkspaceMode();
@@ -151,6 +186,7 @@ export function RoomWorkspace(
 	);
 	let previousUnanswered = useRef(unanswered);
 	let latestCanEdit = useRef(canEdit);
+	let latestCanManage = useRef(canManage);
 	let [attention, setAttention] = useState(false);
 	let workspacePresentation = presentWorkspace(workspace, mode, view);
 	let conversationActive = workspacePresentation.conversationVisible;
@@ -166,13 +202,19 @@ export function RoomWorkspace(
 		},
 		[conversationActive],
 	);
-	let updateMetadata = useCallback((next: { title: string; slug: string; updatedAt: string }) => {
-		if (Date.parse(next.updatedAt) <= Date.parse(metadataRef.current.updatedAt)) return;
-		metadataRef.current = next;
-		setMetadata(next);
-		rememberChannel(userId, { id: room, title: next.title, slug: next.slug }, repository);
-		onDocumentChanged(room, next);
-		let path = documentPath(repository.owner, repository.name, next.slug);
+	let updateMetadata = useCallback((next: WorkspaceMetadata) => {
+		if (Date.parse(next.updatedAt) < Date.parse(metadataRef.current.updatedAt)) return;
+		let metadata = {
+			archivedAt: next.archivedAt,
+			title: next.title,
+			slug: next.slug,
+			updatedAt: next.updatedAt,
+		};
+		metadataRef.current = metadata;
+		setMetadata(metadata);
+		rememberChannel(userId, { id: room, title: metadata.title, slug: metadata.slug }, repository);
+		onDocumentChanged(room, metadata);
+		let path = documentPath(repository.owner, repository.name, metadata.slug);
 		if (location.pathname !== path) {
 			history.replaceState(null, "", `${path}${location.search}${location.hash}`);
 		}
@@ -237,20 +279,27 @@ export function RoomWorkspace(
 	};
 
 	useEffect(() => {
-		latestCanEdit.current = canEdit;
-		setEffectiveCanEdit(canEdit);
-	}, [canEdit, room]);
+		let editable = canEdit && !archivedAt;
+		latestCanEdit.current = editable;
+		latestCanManage.current = canManage;
+		setEffectiveCanEdit(editable);
+		setEffectiveCanManage(canManage);
+	}, [archivedAt, canEdit, canManage, room]);
 
 	useEffect(() => {
-		let next = { title: label, slug, updatedAt };
+		let next = { archivedAt, title: label, slug, updatedAt };
 		metadataRef.current = next;
 		setMetadata(next);
-	}, [label, room, slug, updatedAt]);
+	}, [archivedAt, label, room, slug, updatedAt]);
 
 	useEffect(() => {
 		let socket = new Wire({
 			channelId: room,
 			onAuthenticationRequired: () => location.reload(),
+			onDeleted: () => {
+				setDeleted(true);
+				onDocumentDeleted(room);
+			},
 			onStatus: next => {
 				setStatus(next);
 			},
@@ -258,11 +307,15 @@ export function RoomWorkspace(
 		setWire(socket);
 
 		let off = [
-			socket.on<Session.Hello>("session:hello", frame => {
-				let accessChanged = latestCanEdit.current !== frame.canEdit;
-				latestCanEdit.current = frame.canEdit;
+			socket.on<ManagedHello>("session:hello", frame => {
+				let editable = frame.canEdit && !frame.archivedAt;
+				let accessChanged = latestCanEdit.current !== editable
+					|| latestCanManage.current !== frame.canManage;
+				latestCanEdit.current = editable;
+				latestCanManage.current = frame.canManage;
 				setMembers(frame.members);
-				setEffectiveCanEdit(frame.canEdit);
+				setEffectiveCanEdit(editable);
+				setEffectiveCanManage(frame.canManage);
 				setCapabilities({ backgroundJobs: frame.backgroundJobs });
 				setChatReferences({ wire: socket, enabled: frame.chatReferences === true });
 				setChatSendAcks({ wire: socket, enabled: frame.chatSendAcks === true });
@@ -284,13 +337,24 @@ export function RoomWorkspace(
 					slug: metadataRef.current.slug,
 				});
 			}),
-			socket.on<Session.Channel>("session:channel", frame => {
-				if (frame.channelId === room) updateMetadata(frame);
+			socket.on<ManagedChannel>("session:channel", frame => {
+				if (frame.channelId !== room) return;
+				let editable = !frame.archivedAt && frame.canManage;
+				let accessChanged = latestCanEdit.current !== editable
+					|| latestCanManage.current !== frame.canManage;
+				latestCanEdit.current = editable;
+				latestCanManage.current = frame.canManage;
+				setEffectiveCanEdit(editable);
+				setEffectiveCanManage(frame.canManage);
+				updateMetadata(frame);
+				if (accessChanged) onRepositoryAccessChanged();
 			}),
 			socket.on<Session.Presence>("session:presence", frame => setMembers(frame.members)),
-			socket.on<Session.Access>("session:access", frame => {
+			socket.on<ManagedAccess>("session:access", frame => {
 				latestCanEdit.current = frame.canEdit;
+				latestCanManage.current = frame.canManage;
 				setEffectiveCanEdit(frame.canEdit);
+				setEffectiveCanManage(frame.canManage);
 				onRepositoryAccessChanged();
 			}),
 			socket.on<Research.Changed>("research:changed", frame => {
@@ -319,6 +383,7 @@ export function RoomWorkspace(
 	}, [
 		handle,
 		jobs,
+		onDocumentDeleted,
 		onResearchWorkspaceChanged,
 		onResearchWorkspacesRefresh,
 		onRepositoryAccessChanged,
@@ -328,13 +393,23 @@ export function RoomWorkspace(
 		updateMetadata,
 	]);
 
+	let workspaceArchivedAt = archivedAt ?? metadata.archivedAt;
+	let workspaceCanEdit = effectiveCanEdit && !workspaceArchivedAt;
+	if (deleted) {
+		return (
+			<div className="flex h-full items-center justify-center bg-ground p-4 text-sm text-text-secondary">
+				<p role="status">This document was deleted.</p>
+			</div>
+		);
+	}
+
 	return (
 		<Workspace
 			chat={
 				<Chat
 					active={conversationActive}
 					agent={agent}
-					connected={status === "connected" && effectiveCanEdit}
+					connected={status === "connected" && workspaceCanEdit}
 					handle={handle}
 					onActivity={onConversationActivity}
 					referencesEnabled={chatReferences.wire === wire && chatReferences.enabled}
@@ -352,10 +427,11 @@ export function RoomWorkspace(
 			}}
 			header={
 				<Header
-					canEdit={effectiveCanEdit}
+					archivedAt={workspaceArchivedAt}
+					canManage={effectiveCanManage}
 					members={members}
 					label={metadata.title}
-					onRename={onRenameDocument}
+					onAction={onDocumentAction}
 				/>
 			}
 			controls={
@@ -374,7 +450,7 @@ export function RoomWorkspace(
 			onDestination={selectDestination}
 			decisions={
 				<Decisions
-					connected={status === "connected" && effectiveCanEdit}
+					connected={status === "connected" && workspaceCanEdit}
 					headingId={HEADING.decisions}
 					onShowPlan={showPlan}
 					reveal={reveal}
@@ -385,10 +461,11 @@ export function RoomWorkspace(
 			plan={
 				<PlanEditor
 					commentPresentation={mode === "split" ? "popover" : "sheet"}
-					connection={status}
+					connection={status === "deleted" ? "closed" : status}
+					key={workspaceArchivedAt ? "archived" : "active"}
 					onScrollTop={setPlanScrollTop}
 					questions={questions}
-					readOnly={!effectiveCanEdit}
+					readOnly={!workspaceCanEdit}
 					scrollTop={planScrollTop}
 					threads={threads}
 					user={user}
@@ -398,7 +475,7 @@ export function RoomWorkspace(
 			backgroundWork={capabilities.backgroundJobs
 				? (
 					<BackgroundWork
-						canEdit={effectiveCanEdit}
+						canEdit={workspaceCanEdit}
 						connected={status === "connected"}
 						headingId={HEADING["background-work"]}
 						store={jobs}

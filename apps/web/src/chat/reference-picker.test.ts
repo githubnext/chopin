@@ -145,8 +145,9 @@ describe("reference picker requests", () => {
 			"current",
 			new AbortController().signal,
 			{
-				channels: async (_owner, _repository, cursor) => {
-					calls.push(cursor);
+				channels: async (_owner, _repository, options) => {
+					calls.push(options?.cursor);
+					expect(options?.includeArchived).toBe(false);
 					let page = pages[calls.length - 1]!;
 					return { repository: REPOSITORY, canEdit: true, ...page };
 				},

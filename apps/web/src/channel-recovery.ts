@@ -61,6 +61,29 @@ export function rememberChannel(
 	}
 }
 
+export function forgetChannel(
+	userId: string,
+	channel: Pick<Api.Channel, "id" | "repositoryOwner" | "repositoryName" | "slug">,
+	storage: Storage = sessionStorage,
+): void {
+	try {
+		let userPathPrefix = `${PATH_KEY}${encodeURIComponent(userId)}:`;
+		let keys = Array.from({ length: storage.length }, (_, index) => storage.key(index))
+			.filter((key): key is string => !!key);
+		for (let key of keys) {
+			if (key === `${KEY}${encodeURIComponent(userId)}:${channel.id}`) {
+				storage.removeItem(key);
+				continue;
+			}
+			if (!key.startsWith(userPathPrefix)) continue;
+			let value = JSON.parse(storage.getItem(key) ?? "null") as unknown;
+			if (recovery(value, channel.id)) storage.removeItem(key);
+		}
+	} catch {
+		// Recovery cleanup must not prevent deletion from completing locally.
+	}
+}
+
 export function readDocumentRecovery(
 	userId: string,
 	owner: string,

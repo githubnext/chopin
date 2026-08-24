@@ -58,6 +58,8 @@ test("a stored multi-question questionnaire keeps its tabbed compatibility view"
 test("a stored unanswered questionnaire keeps its compatibility view without a live record", () => {
 	let markup = renderToStaticMarkup(
 		createElement(QuestionnaireCard, {
+			canEdit: false,
+			connected: true,
 			value: {
 				id: "01K0N4TR8K7JGM4R1J7PW4R8YJ",
 				questions: [
@@ -81,5 +83,34 @@ test("a stored unanswered questionnaire keeps its compatibility view without a l
 	);
 
 	expect(markup).toContain('role="tablist"');
+	expect(markup).toContain("disabled");
+	expect(markup).toContain("Next");
 	expect(markup).not.toContain("Save answer");
+	expect(markup).not.toContain("Cancel");
+});
+
+test("a read-only decision remains linked but has no answer actions", () => {
+	let markup = renderToStaticMarkup(
+		createElement(QuestionnaireCard, {
+			canEdit: false,
+			connected: true,
+			onQuestionSelect() {},
+			places: { storage: 1 },
+			value: {
+				id: "01K0N4TR8K7JGM4R1J7PW4R8YJ",
+				questions: [{
+					id: "storage",
+					header: "Storage",
+					prompt: "Where should room state live?",
+					multiple: false,
+					options: [{ id: "mdx", label: "MDX on disk" }],
+				}],
+			},
+		}),
+	);
+
+	expect(markup).toContain("show in plan");
+	expect(markup).toContain("disabled");
+	expect(markup).not.toContain("Save answer");
+	expect(markup).not.toContain("Cancel");
 });

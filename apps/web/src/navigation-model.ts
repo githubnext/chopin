@@ -27,7 +27,7 @@ export function activeProject(
 	)?.project;
 }
 
-export function canEditProject(project: NavigationProject): boolean {
+export function canManageProject(project: NavigationProject): boolean {
 	return !!project.repository
 		&& (project.repository.permissions.push || project.repository.permissions.admin);
 }
@@ -67,8 +67,15 @@ export function landingDocument(
 	projects: ProjectDocuments[],
 	lastDocumentId?: string,
 ): string | undefined {
-	if (lastDocumentId) return lastDocumentId;
 	let available = projects.filter(({ documents }) => documents.status !== "unavailable");
+	let channels = available.flatMap(({ documents }) => documents.channels);
+	if (lastDocumentId) {
+		let last = channels.find(channel => channel.id === lastDocumentId);
+		if (last && !last.archivedAt) return last.id;
+		if (!last && available.some(({ documents }) => documents.status === "loading")) {
+			return lastDocumentId;
+		}
+	}
 	if (available.some(({ documents }) => documents.status === "loading")) return undefined;
-	return available.flatMap(({ documents }) => documents.channels)[0]?.id;
+	return channels.find(channel => !channel.archivedAt)?.id;
 }

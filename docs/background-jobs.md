@@ -544,6 +544,23 @@ authorized parent-channel readers. Normalized job input is persisted but omitted
 from browser and Planner job projections. Private worker material is still sent
 to the hosted Copilot inference service under the active owner's credential.
 
+## Archive and deletion
+
+Archiving a document suspends its summary coordinator, cancels any pending
+summary debounce, and prevents new summary scheduling. It does not blanket-cancel
+background jobs already admitted for that channel. New Research Workspace
+drafts, confirmations, follow-ups, and searches are blocked while archived, but
+already-started evidence and answer jobs may settle, and their idempotent
+workspace reconciliation may still persist.
+
+Permanent deletion has a stronger boundary. The runner first blocks new claims
+for the channel while summary scheduling remains suspended, aborts its active
+attempts, cancels every pending, paused, or running job, and waits a bounded
+grace period. The server then closes the live plan before atomically deleting
+the archived channel. Claim fencing rejects any late worker progress or
+artifact, and the channel delete cascades job targets, jobs, artifacts, Research
+Workspaces, turns, and messages.
+
 ## Storage and retention
 
 The generic schema supports a new standalone job type without a migration:
@@ -569,8 +586,9 @@ deliberately persists the captured source snapshot. Store only material the
 workflow needs and document its retention boundary.
 
 There is no current pruning policy for jobs, artifacts, Research Workspaces, or
-their transcripts. Cancellation prevents publication; it does not erase input
-or history.
+their transcripts while their document remains stored. Cancellation prevents
+publication; it does not erase input or history. Full document deletion is the
+exception and removes all of that channel-owned state.
 
 ## Browser and Planner integration
 

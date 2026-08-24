@@ -370,11 +370,12 @@ export class JobService {
 		return view(saved);
 	}
 
-	async cancel(request: JobIdentity): Promise<JobView> {
+	async cancel(request: JobIdentity, allowArchived = false): Promise<JobView> {
 		let saved = await this.#storage.jobs.cancel({
 			...request,
 			now: this.#time(),
 			lease: this.#lease(),
+			...(allowArchived ? { allowArchived: true } : {}),
 		});
 		this.#didChange(saved);
 		await this.#changed(request.channelId);

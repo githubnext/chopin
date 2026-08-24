@@ -6,6 +6,7 @@ import {
 	completeResearchLoad,
 	currentResearchRequest,
 	failResearchLoad,
+	removeLoadedResearchChannel,
 	researchByChannel,
 	upsertLoadedResearch,
 } from "./research-navigation";
@@ -17,6 +18,7 @@ import type { LoadedResearch } from "./research-navigation";
 export function useProjectResearch(
 	navigation?: Api.Navigation,
 	documents: ProjectDocuments[] = [],
+	includeArchived = false,
 ) {
 	let [research, setResearch] = useState<LoadedResearch>({});
 	let loads = useRef(new Map<string, AbortController>());
@@ -44,11 +46,12 @@ export function useProjectResearch(
 				project.repositoryOwner,
 				project.repositoryName,
 				controller.signal,
+				includeArchived,
 			);
 			if (!currentResearchRequest(loads.current, id, controller)) return false;
 			setResearch(current => ({
 				...current,
-				[id]: completeResearchLoad(current[id] ?? beginResearchLoad(), page),
+				[id]: completeResearchLoad(current[id] ?? beginResearchLoad(), page, !replace),
 			}));
 			return true;
 		} catch (error) {
@@ -61,7 +64,13 @@ export function useProjectResearch(
 		} finally {
 			if (loads.current.get(id) === controller) loads.current.delete(id);
 		}
-	}, []);
+	}, [includeArchived]);
+
+	useEffect(() => {
+		for (let controller of loads.current.values()) controller.abort();
+		loads.current.clear();
+		setResearch({});
+	}, [includeArchived]);
 
 	useEffect(() => {
 		if (!navigation) return;
@@ -137,12 +146,18 @@ export function useProjectResearch(
 		let project = projects.current.get(channel.repositoryId);
 		if (project?.available) void load(project, true);
 	}, [load]);
+	let removeResearchChannel = useCallback((channelId: string) => {
+		for (let controller of loads.current.values()) controller.abort();
+		loads.current.clear();
+		setResearch(current => removeLoadedResearchChannel(current, channelId));
+	}, []);
 
 	let groups = useMemo(() => researchByChannel(research), [research]);
 	return {
 		groups,
 		refreshResearchChannel,
 		refreshResearchWorkspace,
+		removeResearchChannel,
 		research,
 		upsertResearchWorkspace,
 	};

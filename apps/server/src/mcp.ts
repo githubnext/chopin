@@ -26,6 +26,7 @@ export type { Brief, CreateDocumentInput, CreationOrigin } from "./mcp/create";
 export type DocumentSummary = {
 	id: string;
 	title: string;
+	archivedAt?: string;
 };
 
 export type Document = DocumentSummary & {
@@ -35,7 +36,11 @@ export type Document = DocumentSummary & {
 };
 
 export type DocumentReader<Caller> = {
-	list(caller: Caller, repository: string): Promise<DocumentSummary[] | "forbidden">;
+	list(
+		caller: Caller,
+		repository: string,
+		includeArchived?: boolean,
+	): Promise<DocumentSummary[] | "forbidden">;
 	read(caller: Caller, id: string): Promise<Document | undefined>;
 };
 
@@ -70,6 +75,7 @@ export type Implementations<Caller> = {
 		| { kind: "started"; run: Run }
 		| { kind: "active"; run: Run }
 		| { kind: "forbidden" }
+		| { kind: "unavailable" }
 		| { kind: "refused"; reason: string }
 	>;
 	reportLifecycle?(
@@ -78,6 +84,7 @@ export type Implementations<Caller> = {
 	): Promise<
 		| { kind: "accepted" | "replayed"; lifecycle: ImplementationLifecycle }
 		| { kind: "forbidden" }
+		| { kind: "unavailable" }
 		| { kind: "refused"; reason: string }
 	>;
 };
@@ -91,6 +98,7 @@ export type CreateDocument<Caller> = {
 		| { kind: "replayed"; document: CreatedDocument }
 		| { kind: "conflict" }
 		| { kind: "forbidden" }
+		| { kind: "unavailable" }
 	>;
 };
 
@@ -105,7 +113,27 @@ export type RenameDocument<Caller> = {
 		input: RenameDocumentInput,
 	): Promise<
 		| { kind: "renamed" | "unchanged"; document: DocumentSummary }
-		| { kind: "conflict" | "forbidden" | "missing" }
+		| { kind: "archived" | "conflict" | "forbidden" | "unavailable" }
+	>;
+};
+
+export type ArchiveDocument<Caller> = {
+	archive(
+		caller: Caller,
+		id: string,
+	): Promise<
+		| { kind: "archived" | "unchanged"; document: DocumentSummary }
+		| { kind: "forbidden" | "unavailable" }
+	>;
+};
+
+export type RestoreDocument<Caller> = {
+	restore(
+		caller: Caller,
+		id: string,
+	): Promise<
+		| { kind: "restored" | "unchanged"; document: DocumentSummary }
+		| { kind: "forbidden" | "unavailable" }
 	>;
 };
 
@@ -115,6 +143,8 @@ export type McpOptions<Caller> = {
 	documents: DocumentReader<Caller>;
 	create?: CreateDocument<Caller>;
 	rename?: RenameDocument<Caller>;
+	archive?: ArchiveDocument<Caller>;
+	restore?: RestoreDocument<Caller>;
 	implementations?: Implementations<Caller>;
 };
 
@@ -128,15 +158,41 @@ type Tool = {
 const MAX_DOCUMENT_ID_LENGTH = 128;
 const MAX_DOCUMENT_LOCATOR_LENGTH = 2_048;
 
+const DOCUMENT_IDENTITY = {
+	id: { type: "string" },
+	title: { type: "string" },
+};
+
+const ACTIVE_DOCUMENT = {
+	type: "object",
+	properties: DOCUMENT_IDENTITY,
+	required: ["id", "title"],
+	additionalProperties: false,
+};
+
 const DOCUMENT = {
 	type: "object",
 	properties: {
-		id: { type: "string" },
-		title: { type: "string" },
+		...DOCUMENT_IDENTITY,
+		archivedAt: { type: "string", format: "date-time" },
 	},
 	required: ["id", "title"],
 	additionalProperties: false,
 };
+
+const ARCHIVED_DOCUMENT = {
+	...DOCUMENT,
+	required: ["id", "title", "archivedAt"],
+};
+
+function outcome(codes: string[]) {
+	return {
+		type: "object",
+		properties: { code: { type: "string", enum: codes } },
+		required: ["code"],
+		additionalProperties: false,
+	};
+}
 
 const IMPLEMENTATION = {
 	type: "object",
@@ -170,6 +226,7 @@ export const TOOLS: Tool[] = [
 			type: "object",
 			properties: {
 				repository: { type: "string", pattern: REPOSITORY_PATH_PATTERN },
+				includeArchived: { type: "boolean", default: false },
 			},
 			required: ["repository"],
 			additionalProperties: false,
@@ -266,18 +323,59 @@ export const TOOLS: Tool[] = [
 		},
 		outputSchema: {
 			oneOf: [
-				DOCUMENT,
-				{
-					type: "object",
-					properties: {
-						code: {
-							type: "string",
-							enum: ["title-conflict", "repository-forbidden", "document-unavailable"],
-						},
-					},
-					required: ["code"],
-					additionalProperties: false,
+				ACTIVE_DOCUMENT,
+				outcome([
+					"document-archived",
+					"title-conflict",
+					"repository-forbidden",
+					"document-unavailable",
+				]),
+			],
+		},
+	},
+	{
+		name: "archive_document",
+		description: "Archive a Chopin document by ID or canonical URL.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				id: {
+					type: "string",
+					minLength: 1,
+					maxLength: MAX_DOCUMENT_LOCATOR_LENGTH,
+					pattern: "\\S",
 				},
+			},
+			required: ["id"],
+			additionalProperties: false,
+		},
+		outputSchema: {
+			oneOf: [
+				ARCHIVED_DOCUMENT,
+				outcome(["repository-forbidden", "document-unavailable"]),
+			],
+		},
+	},
+	{
+		name: "restore_document",
+		description: "Restore an archived Chopin document by ID or canonical URL.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				id: {
+					type: "string",
+					minLength: 1,
+					maxLength: MAX_DOCUMENT_LOCATOR_LENGTH,
+					pattern: "\\S",
+				},
+			},
+			required: ["id"],
+			additionalProperties: false,
+		},
+		outputSchema: {
+			oneOf: [
+				ACTIVE_DOCUMENT,
+				outcome(["repository-forbidden", "document-unavailable"]),
 			],
 		},
 	},
@@ -409,6 +507,24 @@ function isLocator(value: unknown): value is string {
 		&& value.trim().length > 0;
 }
 
+function listArguments(
+	value: Record<string, unknown>,
+): { repository: string; includeArchived: boolean } | undefined {
+	let keys = Object.keys(value);
+	if (
+		(keys.length !== 1 && keys.length !== 2)
+		|| !Object.hasOwn(value, "repository")
+		|| keys.some(key => key !== "repository" && key !== "includeArchived")
+		|| !isRepository(value.repository)
+		|| (Object.hasOwn(value, "includeArchived")
+			&& typeof value.includeArchived !== "boolean")
+	) return undefined;
+	return {
+		repository: value.repository,
+		includeArchived: value.includeArchived === true,
+	};
+}
+
 function renameArguments(value: Record<string, unknown>): RenameDocumentInput | undefined {
 	if (
 		Object.keys(value).length !== 2
@@ -459,7 +575,10 @@ function acceptsEvents(request: Request): boolean {
 
 function serviceInstructions(tools: Tool[]): string | undefined {
 	let documentMutations = tools.filter(tool =>
-		tool.name === "create_document" || tool.name === "rename_document"
+		tool.name === "create_document"
+		|| tool.name === "rename_document"
+		|| tool.name === "archive_document"
+		|| tool.name === "restore_document"
 	);
 	let implementation = tools
 		.filter(tool =>
@@ -514,16 +633,20 @@ async function requestBody(request: Request): Promise<{ body?: unknown; tooLarge
 	return { body: JSON.parse(new TextDecoder().decode(bytes)), tooLarge: false };
 }
 
-/** A stateless JSON-response Streamable HTTP MCP handler for read-only tools. */
+/** A stateless JSON-response Streamable HTTP MCP handler. */
 export function handler<Caller>(
 	options: McpOptions<Caller>,
 ): (request: Request) => Promise<Response> {
 	let creation = options.create;
 	let renaming = options.rename;
+	let archiving = options.archive;
+	let restoring = options.restore;
 	let sessions = new Map<string, { name: string; version: string }>();
 	let tools = TOOLS.filter(tool =>
 		(tool.name !== "create_document" || creation)
 		&& (tool.name !== "rename_document" || renaming)
+		&& (tool.name !== "archive_document" || archiving)
+		&& (tool.name !== "restore_document" || restoring)
 		&& (!["read_implementation", "start_implementation"].includes(tool.name)
 			|| options.implementations)
 		&& (!isLifecycleTool(tool.name) || options.implementations?.reportLifecycle)
@@ -574,14 +697,17 @@ export function handler<Caller>(
 						: error(call.id, -32602, "invalid tool arguments");
 				}
 				if (tool.name === "list_documents") {
-					if (
-						Object.keys(tool.arguments).length !== 1 || !isRepository(tool.arguments.repository)
-					) {
+					let input = listArguments(tool.arguments);
+					if (!input) {
 						return notification
 							? undefined
 							: error(call.id, -32602, "list_documents requires a repository");
 					}
-					let documents = await options.documents.list(caller, tool.arguments.repository);
+					let documents = await options.documents.list(
+						caller,
+						input.repository,
+						input.includeArchived,
+					);
 					return documents === "forbidden"
 						? respond(text({ code: "repository-forbidden" }, true))
 						: respond(text({ documents }));
@@ -610,6 +736,9 @@ export function handler<Caller>(
 					if (outcome.kind === "conflict") {
 						return respond(text({ code: "idempotency-conflict" }, true));
 					}
+					if (outcome.kind === "unavailable") {
+						return respond(text({ code: "document-unavailable" }, true));
+					}
 					return respond({ content: [], isError: true });
 				}
 				if (tool.name === "rename_document" && renaming) {
@@ -623,12 +752,46 @@ export function handler<Caller>(
 					if (outcome.kind === "renamed" || outcome.kind === "unchanged") {
 						return respond(text(outcome.document));
 					}
-					let code = outcome.kind === "conflict"
+					let code = outcome.kind === "archived"
+						? "document-archived"
+						: outcome.kind === "conflict"
 						? "title-conflict"
 						: outcome.kind === "forbidden"
 						? "repository-forbidden"
 						: "document-unavailable";
 					return respond(text({ code }, true));
+				}
+				if (tool.name === "archive_document" && archiving) {
+					if (Object.keys(tool.arguments).length !== 1 || !isLocator(tool.arguments.id)) {
+						return notification
+							? undefined
+							: error(call.id, -32602, "archive_document requires an id or URL");
+					}
+					let outcome = await archiving.archive(caller, tool.arguments.id);
+					if (outcome.kind === "archived" || outcome.kind === "unchanged") {
+						return respond(text(outcome.document));
+					}
+					return respond(text({
+						code: outcome.kind === "forbidden"
+							? "repository-forbidden"
+							: "document-unavailable",
+					}, true));
+				}
+				if (tool.name === "restore_document" && restoring) {
+					if (Object.keys(tool.arguments).length !== 1 || !isLocator(tool.arguments.id)) {
+						return notification
+							? undefined
+							: error(call.id, -32602, "restore_document requires an id or URL");
+					}
+					let outcome = await restoring.restore(caller, tool.arguments.id);
+					if (outcome.kind === "restored" || outcome.kind === "unchanged") {
+						return respond(text(outcome.document));
+					}
+					return respond(text({
+						code: outcome.kind === "forbidden"
+							? "repository-forbidden"
+							: "document-unavailable",
+					}, true));
 				}
 				if (tool.name === "read_implementation") {
 					if (Object.keys(tool.arguments).length !== 1 || !isLocator(tool.arguments.id)) {
@@ -673,6 +836,9 @@ export function handler<Caller>(
 					if (outcome.kind === "forbidden") {
 						return respond(text({ code: "repository-forbidden" }, true));
 					}
+					if (outcome.kind === "unavailable") {
+						return respond(text({ code: "document-unavailable" }, true));
+					}
 					return respond(text({ code: outcome.reason }, true));
 				}
 				let lifecycle = lifecycleCall(tool.name, tool.arguments);
@@ -693,6 +859,9 @@ export function handler<Caller>(
 					}
 					if (outcome.kind === "forbidden") {
 						return respond(text({ code: "repository-forbidden" }, true));
+					}
+					if (outcome.kind === "unavailable") {
+						return respond(text({ code: "document-unavailable" }, true));
 					}
 					return outcome.kind === "refused"
 						? respond(text({ code: outcome.reason }, true))

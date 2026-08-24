@@ -769,6 +769,61 @@ describe("background job runner", () => {
 		}
 	});
 
+	it("cancelChannel cancels pending work and fences later claims", async () => {
+		let executions = 0;
+		let value = await setup(definition(async () => {
+			executions++;
+			return { report: "unexpected" };
+		}));
+		try {
+			let pending = await enqueue(value.service, value.channelId, "pending");
+			await value.runner.cancelChannel(value.channelId);
+			expect(await value.service.get(value.channelId, pending.job.id)).toMatchObject({
+				job: { state: "cancelled", attempts: 0 },
+			});
+
+			let blocked = await enqueue(value.service, value.channelId, "blocked");
+			value.runner.start();
+			await waitFor(async () =>
+				(await value.service.get(value.channelId, blocked.job.id))?.job.state === "cancelled"
+			);
+			expect(executions).toBe(0);
+			expect(value.errors).toEqual([]);
+		} finally {
+			await value.runner.shutdown();
+			await value.storage.close();
+		}
+	});
+
+	it("cancelChannel aborts and cancels running work", async () => {
+		let started = deferred<void>();
+		let aborted = deferred<void>();
+		let value = await setup(definition(async execution => {
+			started.resolve();
+			return await new Promise<JsonValue>((_resolve, reject) => {
+				execution.signal.addEventListener("abort", () => {
+					aborted.resolve();
+					reject(execution.signal.reason);
+				}, { once: true });
+			});
+		}));
+		try {
+			let running = await enqueue(value.service, value.channelId);
+			value.runner.start();
+			await started.promise;
+			await value.runner.cancelChannel(value.channelId);
+			await aborted.promise;
+			expect(await value.service.get(value.channelId, running.job.id)).toMatchObject({
+				job: { state: "cancelled", attempts: 1 },
+				artifact: undefined,
+			});
+			expect(value.errors).toEqual([]);
+		} finally {
+			await value.runner.shutdown();
+			await value.storage.close();
+		}
+	});
+
 	it("requeues active work before shutdown returns", async () => {
 		let result = deferred<JsonValue>();
 		let started = false;

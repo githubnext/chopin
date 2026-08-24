@@ -112,6 +112,7 @@ export class JobRunner {
 	#pump?: Promise<void>;
 	#poll?: () => void;
 	#ownerRecovery = new Map<string, () => void>();
+	#blockedChannels = new Set<string>();
 	#shutdown?: Promise<void>;
 	#pollFailures = 0;
 
@@ -201,6 +202,37 @@ export class JobRunner {
 				&& attempt.credential?.credential.kind === "active-planner"
 			).map(attempt => this.#pause(attempt, "owner-unavailable")),
 		);
+	}
+
+	/** Fence and cancel every job owned by a document before that document is deleted. */
+	async cancelChannel(channelId: string): Promise<void> {
+		this.#blockedChannels.add(channelId);
+		this.#ownerRecovery.get(channelId)?.();
+		this.#ownerRecovery.delete(channelId);
+		let attempts = [...this.#attempts].filter(attempt => attempt.job.channelId === channelId);
+		for (let attempt of attempts) this.#detach(attempt, "document-deleted");
+
+		let cursor: BackgroundJobCursor | undefined;
+		do {
+			let page = await this.#options.service.list(channelId, 100, cursor);
+			if (!page) break;
+			for (let job of page.jobs) {
+				if (job.state !== "pending" && job.state !== "paused" && job.state !== "running") continue;
+				try {
+					await this.#options.service.cancel({ channelId, jobId: job.id }, true);
+				} catch (err) {
+					if (!expected(err)) throw err;
+				}
+			}
+			cursor = page.next;
+		} while (cursor);
+		await this.#withinGrace(Promise.allSettled(attempts.map(attempt => attempt.done)));
+	}
+
+	/** Used only when deletion failed before the channel row was removed. */
+	unblockChannel(channelId: string): void {
+		this.#blockedChannels.delete(channelId);
+		this.wake();
 	}
 
 	async ownerAvailable(channelId: string): Promise<void> {
@@ -315,6 +347,12 @@ export class JobRunner {
 	}
 
 	#start(job: BackgroundJob): Promise<void> | undefined {
+		if (this.#blockedChannels.has(job.channelId)) {
+			return this.#options.service.cancel({ channelId: job.channelId, jobId: job.id }, true)
+				.then(() => {}, err => {
+					if (!expected(err)) this.#options.fatal?.(err);
+				});
+		}
 		let previous = this.#active.get(job.id);
 		if (previous) {
 			this.#detach(previous, "claim-reclaimed");

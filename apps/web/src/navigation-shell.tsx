@@ -14,12 +14,14 @@ import {
 import { documentPath, researchWorkspacePath } from "@chopin/protocol/document-url";
 
 import * as Api from "./api";
+import { forgetChannel } from "./channel-recovery";
 import { newestDocument } from "./document-actions";
+import type { DocumentAction } from "./document-actions-menu";
 import { NavigationFocusScope } from "./navigation-focus";
 import {
 	activeProject,
 	beginProjectCreation,
-	canEditProject,
+	canManageProject,
 	documentDestination,
 	finishProjectCreation,
 	landingDocument,
@@ -27,12 +29,11 @@ import {
 	navigationMode,
 } from "./navigation-model";
 import {
-	ProjectSidebar,
 	ProjectSidebarExpandButton,
 	SIDEBAR_MAX,
 	SIDEBAR_MIN,
 	SIDEBAR_STORAGE_KEY,
-} from "./project-sidebar";
+} from "./project-sidebar-chrome";
 import { clearRepositoryCache } from "./repository-cache";
 import { useProjectDocuments } from "./use-project-documents";
 import { useProjectResearch } from "./use-project-research";
@@ -70,6 +71,9 @@ class LazyDialogBoundary extends Component<{ children: ReactNode }, { failed: bo
 let NewResearchDialog = lazy(() =>
 	import("./research-actions").then(module => ({ default: module.NewResearchDialog }))
 );
+let ProjectSidebar = lazy(() =>
+	import("./project-sidebar").then(module => ({ default: module.ProjectSidebar }))
+);
 let AddProjectDialog = lazy(() =>
 	import("./add-project-dialog").then(module => ({ default: module.AddProjectDialog }))
 );
@@ -78,6 +82,9 @@ let DocumentSearchDialog = lazy(() =>
 );
 let RenameDocumentDialog = lazy(() =>
 	import("./rename-document-dialog").then(module => ({ default: module.RenameDocumentDialog }))
+);
+let DeleteDocumentDialog = lazy(() =>
+	import("./delete-document-dialog").then(module => ({ default: module.DeleteDocumentDialog }))
 );
 
 type Route =
@@ -93,14 +100,16 @@ type Route =
 	}
 	| { page: "channel"; id: string };
 
-type NavigationFailure = { reason: unknown; retry: "refresh" | "visit" };
+type NavigationFailure = { reason: unknown; retry?: "refresh" | "visit" };
 
 let NavigationDocument = createContext<{
 	channel?: Api.Channel;
 	onDocumentChanged: (
 		documentId: string,
-		update: Pick<Api.Channel, "title" | "slug" | "updatedAt">,
+		update: Pick<Api.Channel, "title" | "slug" | "updatedAt" | "archivedAt">,
 	) => void;
+	onDocumentAction: (action: DocumentAction) => void;
+	onDocumentDeleted: (documentId: string) => void;
 	onDocumentLoaded: (channel: Api.Channel) => Promise<void>;
 	onRepositoryAccessChanged: () => void;
 	onResearchWorkspaceChanged: (
@@ -113,15 +122,15 @@ let NavigationDocument = createContext<{
 		workspace: Research.WorkspaceSummary,
 	) => void;
 	onResearchWorkspacesRefresh: (channel: Api.ResearchParentChannel) => void;
-	onRenameDocument: () => void;
 }>({
 	onDocumentChanged() {},
+	onDocumentAction() {},
+	onDocumentDeleted() {},
 	async onDocumentLoaded() {},
 	onRepositoryAccessChanged() {},
 	onResearchWorkspaceChanged() {},
 	onResearchWorkspaceLoaded() {},
 	onResearchWorkspacesRefresh() {},
-	onRenameDocument() {},
 });
 
 export function useNavigationDocument() {
@@ -246,15 +255,18 @@ export function NavigationShell(
 		channel: Api.Channel;
 		routeKey: string;
 	}>();
+	let resolvedDocumentRef = useRef(resolvedDocument);
+	resolvedDocumentRef.current = resolvedDocument;
 	let [collapsed, setCollapsed] = useState(() =>
 		localStorage.getItem(`${SIDEBAR_STORAGE_KEY}:collapsed`) === "true"
 	);
 	let [drawerOpen, setDrawerOpen] = useState(false);
 	let drawerOpener = useRef<HTMLButtonElement>(null);
+	let [showArchived, setShowArchived] = useState(false);
 	let [dialog, setDialog] = useState<
 		| "add"
 		| "search"
-		| { channel: Api.Channel; type: "rename" | "research" }
+		| { channel: Api.Channel; type: "delete" | "rename" | "research" }
 	>();
 	let [accountOpen, setAccountOpen] = useState(false);
 	let creatingProjectIds = useRef<Set<string>>(new Set());
@@ -266,15 +278,21 @@ export function NavigationShell(
 	let mode = useNavigationMode();
 	let sidebarVisible = mode === "inline" && !collapsed;
 	let triggerVisible = !sidebarVisible && !drawerOpen;
-	let { loadMore, projects, refreshProject, updateDocument, upsertDocument } = useProjectDocuments(
-		navigation,
-	);
+	let {
+		loadMore,
+		projects,
+		refreshProject,
+		removeDocument,
+		updateDocument,
+		upsertDocument,
+	} = useProjectDocuments(navigation, showArchived);
 	let {
 		groups: research,
 		refreshResearchChannel,
 		refreshResearchWorkspace,
+		removeResearchChannel,
 		upsertResearchWorkspace,
-	} = useProjectResearch(navigation, projects);
+	} = useProjectResearch(navigation, projects, showArchived);
 	let routeKey = route.page === "channel"
 		? `${route.page}:${route.id}`
 		: route.page === "research"
@@ -343,14 +361,31 @@ export function NavigationShell(
 		});
 		return request;
 	}, []);
+	let clearLastDocument = useCallback((documentId: string) => {
+		if (latestVisitedDocument.current === documentId) latestVisitedDocument.current = undefined;
+		let current = navigationRef.current;
+		if (current?.lastDocumentId !== documentId) return;
+		let next = { ...current };
+		delete next.lastDocumentId;
+		visitRevision.current++;
+		navigationRef.current = next;
+		setNavigation(next);
+	}, []);
 	let documentLoaded = useCallback(async (channel: Api.Channel) => {
-		setResolvedDocument(current => ({
-			channel: current?.routeKey === routeKey && current.channel.id === channel.id
-				? newestDocument(current.channel, channel)
+		let resolved = resolvedDocumentRef.current;
+		let loaded = {
+			channel: resolved?.routeKey === routeKey && resolved.channel.id === channel.id
+				? newestDocument(resolved.channel, channel)
 				: channel,
 			routeKey,
-		}));
-		upsertDocument(channel);
+		};
+		resolvedDocumentRef.current = loaded;
+		setResolvedDocument(loaded);
+		upsertDocument(loaded.channel);
+		if (loaded.channel.archivedAt) {
+			clearLastDocument(channel.id);
+			return;
+		}
 		let visited = visitTail.current.then(() => Api.visitDocument(channel.id));
 		visitTail.current = visited.catch(() => {});
 		try {
@@ -360,6 +395,10 @@ export function NavigationShell(
 			return;
 		}
 		setError(current => current?.retry === "visit" ? undefined : current);
+		if (
+			resolvedDocumentRef.current?.channel.id === channel.id
+			&& resolvedDocumentRef.current.channel.archivedAt
+		) return;
 		visitRevision.current++;
 		latestVisitedDocument.current = channel.id;
 		let current = navigationRef.current;
@@ -374,18 +413,30 @@ export function NavigationShell(
 			pendingVisitedRepository.current = channel.repositoryId;
 			await refresh();
 		}
-	}, [refresh, routeKey, upsertDocument]);
+	}, [clearLastDocument, refresh, routeKey, upsertDocument]);
 	let documentChanged = useCallback((
 		documentId: string,
-		update: Pick<Api.Channel, "title" | "slug" | "updatedAt">,
+		update: Pick<Api.Channel, "title" | "slug" | "updatedAt" | "archivedAt">,
 	) => {
-		updateDocument(documentId, update);
-		setResolvedDocument(current =>
-			current?.channel.id === documentId && current.channel.updatedAt <= update.updatedAt
-				? { ...current, channel: { ...current.channel, ...update } }
-				: current
-		);
-	}, [updateDocument]);
+		let current = resolvedDocumentRef.current;
+		if (current?.channel.id === documentId && current.channel.updatedAt <= update.updatedAt) {
+			let next = { ...current, channel: { ...current.channel, ...update } };
+			resolvedDocumentRef.current = next;
+			setResolvedDocument(next);
+			upsertDocument(next.channel);
+		} else updateDocument(documentId, update);
+		if (Object.hasOwn(update, "archivedAt")) {
+			if (update.archivedAt) {
+				clearLastDocument(documentId);
+				setDialog(current =>
+					typeof current === "object" && current.type === "research"
+						&& current.channel.id === documentId
+						? undefined
+						: current
+				);
+			}
+		}
+	}, [clearLastDocument, updateDocument, upsertDocument]);
 
 	useEffect(() => {
 		void refresh(false);
@@ -449,7 +500,7 @@ export function NavigationShell(
 	};
 
 	let createDocument = async (project: Api.NavigationProject) => {
-		if (!canEditProject(project) || !startProjectCreation(project.repositoryId)) return;
+		if (!canManageProject(project) || !startProjectCreation(project.repositoryId)) return;
 		try {
 			let created = await Api.createChannel(project.repositoryOwner, project.repositoryName);
 			upsertDocument(created.channel);
@@ -473,6 +524,15 @@ export function NavigationShell(
 		.find(channel => channel.id === currentDocumentId) ?? resolvedChannel;
 	let currentChannelRef = useRef<Api.Channel | undefined>(undefined);
 	currentChannelRef.current = currentChannel;
+	let knownChannelsRef = useRef(new Map<string, Api.Channel>());
+	knownChannelsRef.current = new Map(
+		[
+			...projects.flatMap(project => project.documents.channels),
+			...(resolvedChannel ? [resolvedChannel] : []),
+		].map(channel => [channel.id, channel]),
+	);
+	let currentDocumentIdRef = useRef(currentDocumentId);
+	currentDocumentIdRef.current = currentDocumentId;
 	let revalidateCatalogues = useCallback(() => {
 		let now = Date.now();
 		let navigationRefreshedAt = catalogueRefreshes.current.get("navigation") ?? 0;
@@ -506,17 +566,8 @@ export function NavigationShell(
 		};
 	}, [revalidateCatalogues]);
 	let newDocument = () => {
-		if (active && canEditProject(active)) void createDocument(active);
+		if (active && canManageProject(active)) void createDocument(active);
 		else showDialog("add");
-	};
-
-	let renamed = (channel: Api.Channel) => {
-		upsertDocument(channel);
-		setResolvedDocument(current =>
-			current?.channel.id === channel.id
-				? { ...current, channel: newestDocument(current.channel, channel) }
-				: current
-		);
 	};
 
 	let showDialog = useCallback((next: NonNullable<typeof dialog>) => {
@@ -524,10 +575,58 @@ export function NavigationShell(
 		setAccountOpen(false);
 		setDialog(next);
 	}, []);
-	let renameCurrentDocument = useCallback(() => {
+	let acceptChannel = useCallback((channel: Api.Channel) => {
+		if (channel.archivedAt) {
+			clearLastDocument(channel.id);
+		}
+		upsertDocument(channel);
+		let current = resolvedDocumentRef.current;
+		if (current?.channel.id !== channel.id) return;
+		let next = { ...current, channel: newestDocument(current.channel, channel) };
+		resolvedDocumentRef.current = next;
+		setResolvedDocument(next);
+	}, [clearLastDocument, upsertDocument]);
+	let documentDeleted = useCallback((documentId: string) => {
+		let channel = knownChannelsRef.current.get(documentId);
+		if (channel) forgetChannel(user.id, channel);
+		removeDocument(documentId);
+		removeResearchChannel(documentId);
+		clearLastDocument(documentId);
+		let current = resolvedDocumentRef.current;
+		if (current?.channel.id === documentId) {
+			resolvedDocumentRef.current = undefined;
+			setResolvedDocument(undefined);
+		}
+		setDialog(currentDialog =>
+			typeof currentDialog === "object" && currentDialog.channel.id === documentId
+				? undefined
+				: currentDialog
+		);
+		if (currentDocumentIdRef.current === documentId) navigate("/", { replace: true });
+	}, [clearLastDocument, navigate, removeDocument, removeResearchChannel, user.id]);
+	let documentAction = useCallback((channel: Api.Channel, action: DocumentAction) => {
+		setDrawerOpen(false);
+		setAccountOpen(false);
+		if (action === "rename") {
+			showDialog({ type: "rename", channel });
+			return;
+		}
+		if (action === "delete") {
+			showDialog({ type: "delete", channel });
+			return;
+		}
+		setError(undefined);
+		let mutation = action === "archive"
+			? Api.archiveChannel(channel.id)
+			: Api.restoreChannel(channel.id);
+		void mutation.then(detail => acceptChannel(detail.channel), reason => {
+			setError({ reason });
+		});
+	}, [acceptChannel, showDialog]);
+	let currentDocumentAction = useCallback((action: DocumentAction) => {
 		let channel = currentChannelRef.current;
-		if (channel) showDialog({ type: "rename", channel });
-	}, [showDialog]);
+		if (channel) documentAction(channel, action);
+	}, [documentAction]);
 	let researchWorkspaceChanged = useCallback((
 		channel: Api.ResearchParentChannel,
 		workspaceId: string,
@@ -546,18 +645,20 @@ export function NavigationShell(
 	}, [refresh]);
 	let navigationDocument = useMemo(() => ({
 		channel: currentChannel,
+		onDocumentAction: currentDocumentAction,
 		onDocumentChanged: documentChanged,
+		onDocumentDeleted: documentDeleted,
 		onDocumentLoaded: documentLoaded,
 		onRepositoryAccessChanged: repositoryAccessChanged,
 		onResearchWorkspaceChanged: researchWorkspaceChanged,
 		onResearchWorkspaceLoaded: researchWorkspaceLoaded,
 		onResearchWorkspacesRefresh: refreshResearchChannel,
-		onRenameDocument: renameCurrentDocument,
 	}), [
 		currentChannel,
+		currentDocumentAction,
 		documentChanged,
+		documentDeleted,
 		documentLoaded,
-		renameCurrentDocument,
 		repositoryAccessChanged,
 		researchWorkspaceChanged,
 		researchWorkspaceLoaded,
@@ -604,33 +705,39 @@ export function NavigationShell(
 		navigate(`${destination.pathname}${destination.search}${destination.hash}`);
 	};
 	let sidebar = (
-		<ProjectSidebar
-			accountMenu={accountOpen && (
-				<div className="navigation-account-menu" role="menu">
-					<button onClick={() => void signOut()} role="menuitem" type="button">Sign out</button>
-				</div>
-			)}
-			canCreateDocument={!active || canEditProject(active)}
-			creatingProjectIds={creatingProjectIdsForView}
-			creatingNewDocument={!!active && creatingProjectIdsForView.has(active.repositoryId)}
-			currentDocumentId={currentDocumentId}
-			currentResearchWorkspaceId={currentResearchWorkspaceId}
-			onAccount={() => setAccountOpen(open => !open)}
-			onAddProject={() => showDialog("add")}
-			onCollapse={() => {
-				setCollapsed(true);
-				if (drawerOpen) dismissDrawer();
-			}}
-			onCreateDocument={project => void createDocument(project)}
-			onLoadMore={loadMore}
-			onNewResearch={channel => showDialog({ type: "research", channel })}
-			onNewDocument={newDocument}
-			onRenameDocument={channel => showDialog({ type: "rename", channel })}
-			onSearch={() => showDialog("search")}
-			projects={projects}
-			research={research}
-			user={user}
-		/>
+		<Suspense fallback={null}>
+			<ProjectSidebar
+				accountMenu={accountOpen && (
+					<div className="navigation-account-menu" role="menu">
+						<button onClick={() => void signOut()} role="menuitem" type="button">Sign out</button>
+					</div>
+				)}
+				canCreateDocument={!active || canManageProject(active)}
+				creatingProjectIds={creatingProjectIdsForView}
+				creatingNewDocument={!!active && creatingProjectIdsForView.has(active.repositoryId)}
+				currentDocumentId={currentDocumentId}
+				currentResearchWorkspaceId={currentResearchWorkspaceId}
+				onAccount={() => setAccountOpen(open => !open)}
+				onAddProject={() => showDialog("add")}
+				onCollapse={() => {
+					setCollapsed(true);
+					if (drawerOpen) dismissDrawer();
+				}}
+				onCreateDocument={project => void createDocument(project)}
+				onDocumentAction={documentAction}
+				onLoadMore={loadMore}
+				onNewResearch={channel => {
+					if (!channel.archivedAt) showDialog({ type: "research", channel });
+				}}
+				onNewDocument={newDocument}
+				onSearch={() => showDialog("search")}
+				onShowArchivedChange={setShowArchived}
+				projects={projects}
+				research={research}
+				showArchived={showArchived}
+				user={user}
+			/>
+		</Suspense>
 	);
 	let content = (
 		<>
@@ -639,13 +746,15 @@ export function NavigationShell(
 					{error.reason instanceof Error
 						? error.reason.message
 						: "Could not update navigation."}
-					<button
-						className="btn btn-sm btn-secondary ml-2"
-						onClick={retryError}
-						type="button"
-					>
-						Try again
-					</button>
+					{error.retry && (
+						<button
+							className="btn btn-sm btn-secondary ml-2"
+							onClick={retryError}
+							type="button"
+						>
+							Try again
+						</button>
+					)}
 				</div>
 			)}
 			{children ?? (
@@ -719,6 +828,7 @@ export function NavigationShell(
 					<LazyDialogBoundary>
 						<Suspense fallback={null}>
 							<DocumentSearchDialog
+								includeArchived={showArchived}
 								onDismiss={() => setDialog(undefined)}
 								onSelect={navigateToDocument}
 								projects={navigation?.projects ?? []}
@@ -732,7 +842,18 @@ export function NavigationShell(
 							<RenameDocumentDialog
 								channel={dialog.channel}
 								onDismiss={() => setDialog(undefined)}
-								onRenamed={renamed}
+								onRenamed={acceptChannel}
+							/>
+						</Suspense>
+					</LazyDialogBoundary>
+				)}
+				{typeof dialog === "object" && dialog.type === "delete" && (
+					<LazyDialogBoundary>
+						<Suspense fallback={null}>
+							<DeleteDocumentDialog
+								channel={dialog.channel}
+								onDeleted={() => documentDeleted(dialog.channel.id)}
+								onDismiss={() => setDialog(undefined)}
 							/>
 						</Suspense>
 					</LazyDialogBoundary>

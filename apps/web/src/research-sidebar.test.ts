@@ -47,11 +47,12 @@ let props = {
 	onAddProject: () => {},
 	onCollapse: () => {},
 	onCreateDocument: () => {},
+	onDocumentAction: () => {},
 	onLoadMore: () => {},
 	onNewDocument: () => {},
 	onNewResearch: () => {},
-	onRenameDocument: () => {},
 	onSearch: () => {},
+	onShowArchivedChange: () => {},
 	projects: [{
 		documents: { status: "ready" as const, channels: [channel] },
 		project: {
@@ -73,6 +74,7 @@ let props = {
 		channel,
 		workspaces: [older, newer],
 	}]]),
+	showArchived: false,
 	user: { avatarUrl: "", id: "user-one", login: "octocat" },
 } satisfies ComponentProps<typeof ProjectSidebar>;
 
@@ -82,7 +84,7 @@ describe("research sidebar hierarchy", () => {
 
 		expect(markup.match(/aria-current="page"/g)).toHaveLength(1);
 		expect(markup).toContain(
-			'<a aria-current="page" class="min-w-0 flex-1 truncate text-left text-sm font-medium" href="/documents/acme/one/release-plan">',
+			'<a aria-current="page" class="project-sidebar-document-link min-w-0 flex-1 text-left text-sm font-medium" href="/documents/acme/one/release-plan">',
 		);
 		expect(markup).not.toContain('role="tree"');
 	});
@@ -100,6 +102,40 @@ describe("research sidebar hierarchy", () => {
 		);
 		expect(markup.indexOf(newer.title)).toBeLessThan(markup.indexOf(older.title));
 		expect(markup).toContain('aria-label="New research in Release plan"');
-		expect(markup).toContain('aria-label="Rename Release plan"');
+		expect(markup).toContain('aria-label="Actions for Release plan"');
+	});
+
+	it("labels archived rows without exposing research or management to viewers", () => {
+		let archived = { ...channel, archivedAt: "2026-08-23T00:00:00.000Z" };
+		let writer = renderToStaticMarkup(createElement(ProjectSidebar, {
+			...props,
+			projects: [{
+				...props.projects[0]!,
+				documents: { status: "ready", channels: [archived] },
+			}],
+			showArchived: true,
+		}));
+		let viewer = renderToStaticMarkup(createElement(ProjectSidebar, {
+			...props,
+			projects: [{
+				...props.projects[0]!,
+				documents: { status: "ready", channels: [archived] },
+				project: {
+					...props.projects[0]!.project,
+					repository: {
+						...props.projects[0]!.project.repository!,
+						permissions: { pull: true, push: false, admin: false },
+					},
+				},
+			}],
+			showArchived: true,
+		}));
+
+		expect(writer).toContain("Archived");
+		expect(writer).toContain('aria-label="Actions for Release plan"');
+		expect(writer).not.toContain('aria-label="New research in Release plan"');
+		expect(writer).toContain('checked=""');
+		expect(viewer).toContain("Archived");
+		expect(viewer).not.toContain('aria-label="Actions for Release plan"');
 	});
 });

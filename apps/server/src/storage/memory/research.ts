@@ -32,6 +32,7 @@ import type { ResearchWorkspaceStore } from "../port";
 
 type Options = {
 	channelExists: (channelId: string) => boolean;
+	channelActive: (channelId: string) => boolean;
 	channels: (repositoryId: string) => ChannelRecord[];
 	userExists: (userId: string) => boolean;
 	job: (channelId: string, jobId: string) => Promise<BackgroundJobDetail | undefined>;
@@ -120,6 +121,7 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 				}
 				return { workspace: workspace(repeated), repeated: true };
 			}
+			this.#assertActiveChannel(input.channelId, input.lease);
 
 			this.#requireUser(input.createdBy);
 			required(input.id, "workspace id");
@@ -188,6 +190,7 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 					repeated: true,
 				};
 			}
+			this.#assertActiveChannel(input.channelId, input.lease);
 			if (found.confirmedQuery !== undefined) {
 				throw conflict(`research workspace ${found.id} is already confirmed`);
 			}
@@ -256,6 +259,7 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 					repeated: true,
 				};
 			}
+			this.#assertActiveChannel(input.channelId, input.lease);
 			if (found.confirmedQuery === undefined) {
 				throw conflict(`research workspace ${found.id} is not confirmed`);
 			}
@@ -427,11 +431,14 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 	readonly listRepository = async (
 		repositoryId: string,
 		limit: number,
+		includeArchived = false,
 	): Promise<ResearchWorkspaceRepositoryList> => {
 		let count = Math.min(RESEARCH_REPOSITORY_WORKSPACE_LIMIT, Math.max(1, limit));
-		let orderedChannels = this.#options.channels(repositoryId).sort((left, right) =>
-			right.createdAt.getTime() - left.createdAt.getTime() || compareId(left.id, right.id)
-		);
+		let orderedChannels = this.#options.channels(repositoryId)
+			.filter(channel => includeArchived || !channel.archivedAt)
+			.sort((left, right) =>
+				right.createdAt.getTime() - left.createdAt.getTime() || compareId(left.id, right.id)
+			);
 		let workspacesByChannel = new Map<string, ResearchWorkspace[]>();
 		for (let saved of this.#workspaces.values()) {
 			let values = workspacesByChannel.get(saved.channelId) ?? [];
@@ -495,6 +502,40 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 		return foundTurn && foundWorkspace?.channelId === channelId ? turn(foundTurn) : undefined;
 	};
 
+	deleteChannel(channelId: string): Promise<void> {
+		return this.#mutate(async () => {
+			let workspaceIds = new Set<string>();
+			for (let [workspaceId, saved] of this.#workspaces) {
+				if (saved.channelId === channelId) workspaceIds.add(workspaceId);
+			}
+			let turnIds = new Set<string>();
+			let messageIds = new Set<string>();
+			for (let workspaceId of workspaceIds) {
+				this.#workspaces.delete(workspaceId);
+				for (let saved of this.#turns.get(workspaceId) ?? []) turnIds.add(saved.id);
+				for (let saved of this.#messages.get(workspaceId) ?? []) messageIds.add(saved.id);
+				this.#turns.delete(workspaceId);
+				this.#messages.delete(workspaceId);
+				this.#nextOrdinals.delete(workspaceId);
+				this.#nextSequences.delete(workspaceId);
+			}
+			for (let [idempotencyKey, workspaceId] of this.#idempotency) {
+				if (workspaceIds.has(workspaceId)) this.#idempotency.delete(idempotencyKey);
+			}
+			for (let turnId of turnIds) this.#turnIds.delete(turnId);
+			for (let [requestKey, turnId] of this.#turnRequests) {
+				if (turnIds.has(turnId)) this.#turnRequests.delete(requestKey);
+			}
+			for (let messageId of messageIds) this.#messageIds.delete(messageId);
+			for (let [jobId, saved] of this.#agentMessagesByJob) {
+				if (workspaceIds.has(saved.workspaceId)) this.#agentMessagesByJob.delete(jobId);
+			}
+			for (let [jobId, linked] of this.#linkedJobs) {
+				if (turnIds.has(linked.turnId)) this.#linkedJobs.delete(jobId);
+			}
+		});
+	}
+
 	async #mutate<T>(execute: () => Promise<T>): Promise<T> {
 		let previous = this.#writeTail;
 		let next = Promise.withResolvers<void>();
@@ -512,6 +553,13 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 		required(channelId, "channel id");
 		if (!this.#options.channelExists(channelId)) {
 			throw missing(`channel ${channelId} does not exist`);
+		}
+	}
+
+	#assertActiveChannel(channelId: string, held: Lease): void {
+		this.#assertChannel(channelId, held);
+		if (!this.#options.channelActive(channelId)) {
+			throw conflict(`channel ${channelId} is archived`);
 		}
 	}
 

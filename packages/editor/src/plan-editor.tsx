@@ -270,6 +270,7 @@ export function PlanEditor(
 			threads,
 			changes,
 			offline,
+			readOnly,
 		],
 	);
 
