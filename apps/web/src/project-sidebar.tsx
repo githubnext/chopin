@@ -10,7 +10,7 @@ import { DocumentActionsMenu } from "./document-actions-menu";
 import { canManageProject } from "./navigation-model";
 import { documentPath, researchWorkspacePath } from "@chopin/protocol/document-url";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type * as Api from "./api";
 import type { DocumentAction } from "./document-actions-menu";
 import type { ProjectDocuments } from "./document-actions";
@@ -263,6 +263,8 @@ export function ProjectSidebar(
 	let [collapsedProjectIds, setCollapsedProjectIds] = useState<ReadonlySet<string>>(
 		() => new Set(),
 	);
+	let archivedChats = useRef<HTMLButtonElement>(null);
+	let backToActiveDocs = useRef<HTMLButtonElement>(null);
 	let archiveMode = catalogueMode === "archived";
 	let primaryActions = (
 		<div className="project-sidebar-primary-actions">
@@ -270,7 +272,11 @@ export function ProjectSidebar(
 				? (
 					<button
 						className="project-sidebar-primary-action"
-						onClick={() => onCatalogueModeChange("active")}
+						onClick={() => {
+							onCatalogueModeChange("active");
+							requestAnimationFrame(() => archivedChats.current?.focus({ preventScroll: true }));
+						}}
+						ref={backToActiveDocs}
 						type="button"
 					>
 						<span aria-hidden="true">←</span>
@@ -305,7 +311,11 @@ export function ProjectSidebar(
 			<div className="project-sidebar-footer-actions">
 				<button
 					className="project-sidebar-primary-action"
-					onClick={() => onCatalogueModeChange("archived")}
+					onClick={() => {
+						onCatalogueModeChange("archived");
+						requestAnimationFrame(() => backToActiveDocs.current?.focus({ preventScroll: true }));
+					}}
+					ref={archivedChats}
 					type="button"
 				>
 					<NavigationIcon src={boxArchiveIcon} />

@@ -343,6 +343,11 @@ test("writers can archive, restore, and permanently delete a document", async ({
 	let path = roomPath(room);
 	let projects = sidebar(ana);
 
+	await projects.getByRole("button", { name: "New document", exact: true }).click();
+	let activeTitle = (await projects.locator('a[aria-current="page"]').textContent())!.trim();
+	await projects.getByRole("link", { name: title, exact: true }).click();
+	await expect(ana).toHaveURL(path);
+
 	await headerAction(ana, "Archive");
 	await expect(ana.getByText("Archived, read-only", { exact: true })).toBeVisible();
 	await expect(bo.getByText("Archived, read-only", { exact: true })).toBeVisible();
@@ -355,11 +360,17 @@ test("writers can archive, restore, and permanently delete a document", async ({
 	await expect(content(bo)).toHaveAttribute("contenteditable", "false");
 
 	await projects.getByRole("button", { name: "Archived chats", exact: true }).click();
-	await expect(projects.getByRole("button", { name: "Back to active docs", exact: false }))
-		.toBeVisible();
+	let back = projects.getByRole("button", { name: "Back to active docs", exact: true });
+	await expect(back).toBeFocused();
 	await expect(projects.getByRole("link", { name: title, exact: true })).toBeVisible();
+	await expect(projects.getByRole("link", { name: activeTitle, exact: true })).toHaveCount(0);
 	await expect(projects.getByRole("button", { name: "New document", exact: true })).toHaveCount(0);
 	await expect(projects.getByRole("button", { name: "Search", exact: true })).toHaveCount(0);
+	await back.click();
+	let archivedChats = projects.getByRole("button", { name: "Archived chats", exact: true });
+	await expect(archivedChats).toBeFocused();
+	await archivedChats.click();
+	await expect(back).toBeVisible();
 
 	await headerAction(ana, "Restore");
 	await expect(content(ana)).toHaveAttribute("contenteditable", "true");
