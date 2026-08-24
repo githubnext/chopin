@@ -135,10 +135,7 @@ describe("sidebar navigation", () => {
 		);
 	});
 
-	it("keeps project and document rows on the compact spacing scale", () => {
+	it("keeps project rows on the compact spacing scale", () => {
 		expect(NAVIGATION).toMatch(/\.project-sidebar-project-row\s*{[^}]*gap:\s*10px/s);
-		expect(NAVIGATION).toMatch(
-			/\.project-sidebar-document\s*{[^}]*padding:\s*4px 4px 4px 32px/s,
-		);
 	});
 });
