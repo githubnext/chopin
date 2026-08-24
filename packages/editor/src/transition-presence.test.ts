@@ -4,7 +4,6 @@ import {
 	closeDelay,
 	presenceClass,
 	presenceState,
-	presenceValue,
 	resolvedPresence,
 	transitionPresence,
 } from "./transition-presence";
@@ -60,31 +59,44 @@ describe("transition presence", () => {
 		expect(resolvedPresence("open", false, true)).toBe("closed");
 	});
 
-	test("synchronizes authoritative inputs before external timing settles the phase", () => {
-		let state: PresenceState = {
+	test("retains committed content through closing and clears it when closed", () => {
+		let content = { version: 1 };
+		let state: PresenceState<typeof content> = {
 			immediately: false,
-			open: false,
+			input: undefined,
 			phase: "closed",
+			value: undefined,
 		};
-		state = presenceState(state, { immediately: false, open: true, type: "sync" });
-		expect(state).toEqual({ immediately: false, open: true, phase: "opening" });
+		state = presenceState(state, { immediately: false, type: "sync", value: content });
+		expect(state).toEqual({ immediately: false, input: content, phase: "opening", value: content });
 		state = presenceState(state, { type: "finish" });
-		expect(state).toEqual({ immediately: false, open: true, phase: "open" });
-		state = presenceState(state, { immediately: true, open: false, type: "sync" });
-		expect(state).toEqual({ immediately: true, open: false, phase: "closed" });
-	});
-
-	test("presents current content before retaining it for a close", () => {
-		let committed = { version: 1 };
-		let current = { version: 2 };
-		expect(presenceValue(current, committed, "opening")).toBe(current);
-		expect(presenceValue(undefined, committed, "closing")).toBe(committed);
-		expect(presenceValue(undefined, committed, "closed")).toBeUndefined();
+		expect(state.phase).toBe("open");
+		state = presenceState(state, { immediately: false, type: "sync", value: undefined });
+		expect(state).toEqual({
+			immediately: false,
+			input: undefined,
+			phase: "closing",
+			value: content,
+		});
+		state = presenceState(state, { type: "finish" });
+		expect(state).toEqual({
+			immediately: false,
+			input: undefined,
+			phase: "closed",
+			value: undefined,
+		});
 	});
 
 	test("treats null as present content when undefined is the absence sentinel", () => {
-		let committed = { version: 1 };
-		expect(presenceValue(null, committed, "open")).toBeNull();
+		let state: PresenceState<null> = {
+			immediately: false,
+			input: undefined,
+			phase: "closed",
+			value: undefined,
+		};
+		state = presenceState(state, { immediately: false, type: "sync", value: null });
+		expect(state.phase).toBe("opening");
+		expect(state.value).toBeNull();
 	});
 
 	test("narrows active content from the presence phase", () => {

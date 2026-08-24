@@ -1,14 +1,15 @@
-import { useEffect, useReducer, useRef } from "react";
+import { useEffect, useReducer, useSyncExternalStore } from "react";
 
 export type PresencePhase = "closed" | "opening" | "open" | "closing";
 export type PresenceAction = "open" | "close" | "finish";
-export type PresenceState = {
+export type PresenceState<T> = {
 	immediately: boolean;
-	open: boolean;
+	input: T | undefined;
 	phase: PresencePhase;
+	value: T | undefined;
 };
-export type PresenceStateAction =
-	| { immediately: boolean; open: boolean; type: "sync" }
+export type PresenceStateAction<T> =
+	| { immediately: boolean; type: "sync"; value: T | undefined }
 	| { type: "finish" };
 
 type PresenceClass = "" | "is-open" | "is-closing";
@@ -39,23 +40,22 @@ export function resolvedPresence(
 	return immediately ? transitionPresence(next, "finish") : next;
 }
 
-export function presenceState(state: PresenceState, action: PresenceStateAction): PresenceState {
+export function presenceState<T>(
+	state: PresenceState<T>,
+	action: PresenceStateAction<T>,
+): PresenceState<T> {
 	if (action.type === "finish") {
-		return { ...state, phase: transitionPresence(state.phase, "finish") };
+		let phase = transitionPresence(state.phase, "finish");
+		return { ...state, phase, value: phase === "closed" ? undefined : state.value };
 	}
+	let open = action.value !== undefined;
+	let phase = resolvedPresence(state.phase, open, action.immediately);
 	return {
 		immediately: action.immediately,
-		open: action.open,
-		phase: resolvedPresence(state.phase, action.open, action.immediately),
+		input: action.value,
+		phase,
+		value: phase === "closed" ? undefined : open ? action.value : state.value,
 	};
-}
-
-export function presenceValue<T>(
-	value: T | undefined,
-	latest: T | undefined,
-	phase: PresencePhase,
-): T | undefined {
-	return phase === "closed" ? undefined : value !== undefined ? value : latest;
 }
 
 export function presenceClass(phase: PresencePhase): TransitionPresence<unknown>["className"] {
@@ -66,9 +66,18 @@ export function closeDelay(duration: number, immediately: boolean): number {
 	return immediately ? 0 : duration + 50;
 }
 
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
 function reducedMotion(): boolean {
 	return typeof window !== "undefined"
-		&& window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+		&& window.matchMedia(REDUCED_MOTION_QUERY).matches;
+}
+
+function subscribeReducedMotion(update: () => void): () => void {
+	if (typeof window === "undefined") return () => {};
+	let query = window.matchMedia(REDUCED_MOTION_QUERY);
+	query.addEventListener("change", update);
+	return () => query.removeEventListener("change", update);
 }
 
 export function useTransitionPresence<T>(
@@ -76,23 +85,24 @@ export function useTransitionPresence<T>(
 	closeDuration: number,
 	immediately: boolean,
 ): TransitionPresence<T> {
-	let latest = useRef<T | undefined>(value);
 	let open = value !== undefined;
-	let settleImmediately = immediately || reducedMotion();
-	let [state, dispatch] = useReducer(presenceState, {
+	let prefersReducedMotion = useSyncExternalStore(
+		subscribeReducedMotion,
+		reducedMotion,
+		() => false,
+	);
+	let settleImmediately = immediately || prefersReducedMotion;
+	let [state, dispatch] = useReducer(presenceState<T>, {
 		immediately: settleImmediately,
-		open,
+		input: value,
 		phase: open ? "open" : "closed",
+		value,
 	});
-	if (state.open !== open || state.immediately !== settleImmediately) {
-		dispatch({ immediately: settleImmediately, open, type: "sync" });
+	if (state.input !== value || state.immediately !== settleImmediately) {
+		dispatch({ immediately: settleImmediately, type: "sync", value });
 	}
 	let resolved = state.phase;
-	let presented = presenceValue(value, latest.current, resolved);
-
-	useEffect(() => {
-		if (value !== undefined) latest.current = value;
-	}, [value]);
+	let presented = state.value;
 	useEffect(() => {
 		if (settleImmediately) return;
 		if (resolved === "opening") {
