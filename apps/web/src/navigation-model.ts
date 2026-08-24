@@ -1,4 +1,4 @@
-import { documentPath } from "@chopin/protocol/document-url";
+import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
 
 import type { NavigationProject, ResearchParentChannel } from "./api";
 import type { Research } from "@chopin/protocol";
@@ -42,6 +42,17 @@ export function documentDestination(
 	for (let { documents, project } of projects) {
 		let channel = documents.channels.find(candidate => candidate.id === documentId);
 		if (channel) {
+			if (channel.parentChannelId) {
+				let parent = documents.channels.find(candidate => candidate.id === channel.parentChannelId);
+				return parent
+					? childDocumentPath(
+						project.repositoryOwner,
+						project.repositoryName,
+						parent.slug,
+						channel.slug,
+					)
+					: `/channels/${encodeURIComponent(documentId)}`;
+			}
 			return documentPath(project.repositoryOwner, project.repositoryName, channel.slug);
 		}
 	}
@@ -49,10 +60,15 @@ export function documentDestination(
 }
 
 export function researchChildDestination(
-	parent: Pick<ResearchParentChannel, "repositoryOwner" | "repositoryName">,
+	parent: Pick<ResearchParentChannel, "repositoryOwner" | "repositoryName" | "slug">,
 	child: Pick<Research.ReadyChild, "slug">,
 ): string {
-	return documentPath(parent.repositoryOwner, parent.repositoryName, child.slug);
+	return childDocumentPath(
+		parent.repositoryOwner,
+		parent.repositoryName,
+		parent.slug,
+		child.slug,
+	);
 }
 
 export function beginProjectCreation(
@@ -85,5 +101,5 @@ export function landingDocument(
 		}
 	}
 	if (available.some(({ documents }) => documents.status === "loading")) return undefined;
-	return channels.find(channel => !channel.archivedAt)?.id;
+	return channels.find(channel => !channel.archivedAt && !channel.parentChannelId)?.id;
 }

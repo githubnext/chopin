@@ -338,6 +338,7 @@ export function NavigationShell(
 	} = useProjectResearch(navigation, projects, catalogueMode === "archived");
 	let routeKey = route.page === "channel"
 			|| route.page === "document"
+			|| route.page === "child"
 			|| route.page === "research"
 		? documentRouteIdentity(route)
 		: route.page;
@@ -348,16 +349,20 @@ export function NavigationShell(
 	let resolvedChannel = resolvedDocument?.routeKey === routeKey
 		? resolvedDocument.channel
 		: undefined;
-	let routedChannel = route.page === "document" || route.page === "research"
-		? projects.flatMap(project => project.documents.channels).find(channel =>
-			channel.repositoryOwner.toLocaleLowerCase() === route.owner.toLocaleLowerCase()
-			&& channel.repositoryName.toLocaleLowerCase() === route.repository.toLocaleLowerCase()
-			&& channel.slug === route.slug
-		)
-		: undefined;
+	let routedChannel =
+		route.page === "document" || route.page === "research" || route.page === "child"
+			? projects.flatMap(project => project.documents.channels).find(channel =>
+				channel.repositoryOwner.toLocaleLowerCase() === route.owner.toLocaleLowerCase()
+				&& channel.repositoryName.toLocaleLowerCase() === route.repository.toLocaleLowerCase()
+				&& channel.slug === (route.page === "child" ? route.childSlug : route.slug)
+			)
+			: undefined;
 	let currentDocumentId = route.page === "channel"
 		? route.id
 		: routedChannel?.id ?? resolvedChannel?.id;
+	let currentParentDocumentId = route.page === "child"
+		? routedChannel?.parentChannelId ?? resolvedChannel?.parentChannelId
+		: undefined;
 	let currentResearchWorkspaceId = route.page === "research" ? route.workspaceId : undefined;
 
 	let refresh = useCallback((queue = true): Promise<void> => {
@@ -531,6 +536,7 @@ export function NavigationShell(
 	useEffect(() => {
 		if (
 			route.page !== "channel" && route.page !== "document" && route.page !== "research"
+			&& route.page !== "child"
 			&& navigation?.projects.length === 0
 		) {
 			showDialog("add");
@@ -811,6 +817,7 @@ export function NavigationShell(
 				creatingProjectIds={creatingProjectIdsForView}
 				creatingNewDocument={!!active && creatingProjectIdsForView.has(active.repositoryId)}
 				currentDocumentId={currentDocumentId}
+				currentParentDocumentId={currentParentDocumentId}
 				currentResearchWorkspaceId={currentResearchWorkspaceId}
 				onAccount={() => setAccountOpen(open => !open)}
 				onAddProject={() => showDialog("add")}

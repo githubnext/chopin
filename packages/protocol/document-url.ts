@@ -11,7 +11,16 @@ export type ParsedResearchWorkspacePath = {
 	workspaceId: string;
 };
 
+export type ParsedChildDocumentPath = {
+	owner: string;
+	repository: string;
+	parentSlug: string;
+	childSlug: string;
+};
+
 const DOCUMENT_PATH = /^\/documents\/([^/]+)\/([^/]+)(?:\/([^/]+))?\/?$/;
+const CHILD_DOCUMENT_PATH =
+	/^\/documents\/([^/?#]+)\/([^/?#]+)\/([^/?#]+)\/children\/([^/?#]+)\/?$/;
 const RESEARCH_WORKSPACE_PATH =
 	/^\/documents\/([^/?#]+)\/([^/?#]+)\/([^/?#]+)\/research\/([^/?#]+)\/?$/;
 
@@ -26,6 +35,15 @@ export function documentsPath(owner: string, repository: string): string {
 
 export function documentPath(owner: string, repository: string, slug: string): string {
 	return `${documentsPath(owner, repository)}/${encodedSegment(slug)}`;
+}
+
+export function childDocumentPath(
+	owner: string,
+	repository: string,
+	parentSlug: string,
+	childSlug: string,
+): string {
+	return `${documentPath(owner, repository, parentSlug)}/children/${encodedSegment(childSlug)}`;
 }
 
 export function researchWorkspacePath(
@@ -47,6 +65,24 @@ export function parseDocumentPath(pathname: string): ParsedDocumentPath | undefi
 		if (match[3] === undefined) return { owner, repository };
 		let slug = decodeURIComponent(match[3]);
 		return slug ? { owner, repository, slug } : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+export function parseChildDocumentPath(
+	pathname: string,
+): ParsedChildDocumentPath | undefined {
+	let match = CHILD_DOCUMENT_PATH.exec(pathname);
+	if (!match) return undefined;
+	try {
+		let owner = decodeURIComponent(match[1]!);
+		let repository = decodeURIComponent(match[2]!);
+		let parentSlug = decodeURIComponent(match[3]!);
+		let childSlug = decodeURIComponent(match[4]!);
+		return owner && repository && parentSlug && childSlug
+			? { owner, repository, parentSlug, childSlug }
+			: undefined;
 	} catch {
 		return undefined;
 	}

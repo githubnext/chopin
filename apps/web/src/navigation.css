@@ -150,6 +150,7 @@
 
 .project-sidebar-projects,
 .project-sidebar-documents,
+.project-sidebar-children,
 .project-sidebar-research {
 	display: flex;
 	flex-direction: column;
@@ -183,6 +184,38 @@
 }
 
 .project-sidebar-document-ancestor {
+	color: var(--color-text-primary);
+}
+
+.project-sidebar-child {
+	display: flex;
+	min-height: 30px;
+	align-items: center;
+	margin-left: 32px;
+	border-left: var(--edge-width) solid var(--color-gray-300);
+	border-radius: 0 6px 6px 0;
+}
+
+.project-sidebar-child:hover,
+.project-sidebar-child:focus-within {
+	background: var(--project-sidebar-hover);
+}
+
+.project-sidebar-child-link {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	align-items: center;
+	padding: 5px 4px 5px 14px;
+	overflow: hidden;
+	font-size: 0.75rem;
+	font-weight: 500;
+	line-height: 1.25rem;
+}
+
+.project-sidebar-child-current {
+	border-left-color: var(--color-brand);
+	background: var(--project-sidebar-selected);
 	color: var(--color-text-primary);
 }
 
@@ -252,8 +285,10 @@
 	.project-sidebar-action,
 :is(.group\/sidebar-header, .group\/projects-heading, .group\/project):focus-within
 	.project-sidebar-action,
-.group\/document:hover .project-sidebar-document-action,
-.group\/document:focus-within .project-sidebar-document-action {
+.project-sidebar-document:hover .project-sidebar-document-action,
+.project-sidebar-document:focus-within .project-sidebar-document-action,
+.project-sidebar-child:hover .project-sidebar-document-action,
+.project-sidebar-child:focus-within .project-sidebar-document-action {
 	opacity: 1;
 }
 

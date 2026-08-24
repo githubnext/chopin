@@ -130,11 +130,46 @@ describe("navigation model", () => {
 		expect(documentDestination(projects, "channel-two", "/explicit")).toBe("/explicit");
 	});
 
+	it("resolves a loaded child only through its parent route", () => {
+		let parentEntry = projects[1]!;
+		if (parentEntry.documents.status === "unavailable") throw new Error("fixture is unavailable");
+		let parent = parentEntry.documents.channels[1]!;
+		let child = {
+			...parent,
+			id: "channel-child",
+			parentChannelId: parent.id,
+			slug: "channel-child",
+		};
+		let nested: ProjectDocuments[] = [{
+			...parentEntry,
+			documents: {
+				...parentEntry.documents,
+				channels: [child, parent],
+			},
+		}];
+
+		expect(documentDestination(nested, child.id)).toBe(
+			"/documents/acme/one/channel-one/children/channel-child",
+		);
+		expect(documentDestination([{
+			...parentEntry,
+			documents: { ...parentEntry.documents, channels: [child] },
+		}], child.id)).toBe("/channels/channel-child");
+		expect(landingDocument(nested)).toBe(parent.id);
+		expect(landingDocument(nested, child.id)).toBe(child.id);
+	});
+
 	it("opens a ready research child in its parent repository", () => {
 		expect(researchChildDestination(
-			{ repositoryOwner: "acme space", repositoryName: "docs/tools" },
+			{
+				repositoryOwner: "acme space",
+				repositoryName: "docs/tools",
+				slug: "release plan",
+			},
 			{ slug: "rollout evidence" },
-		)).toBe("/documents/acme%20space/docs%2Ftools/rollout%20evidence");
+		)).toBe(
+			"/documents/acme%20space/docs%2Ftools/release%20plan/children/rollout%20evidence",
+		);
 	});
 
 	it("keeps one Project creating while another creation settles", () => {

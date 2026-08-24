@@ -13,6 +13,13 @@ export type DocumentRouteIdentitySource =
 	| { id: string; page: "channel" }
 	| { owner: string; page: "document"; repository: string; slug: string }
 	| {
+		childSlug: string;
+		owner: string;
+		page: "child";
+		parentSlug: string;
+		repository: string;
+	}
+	| {
 		owner: string;
 		page: "research";
 		repository: string;
@@ -26,6 +33,10 @@ export function documentRouteIdentity(source: DocumentRouteIdentitySource): Docu
 			return `channel:${source.id}` as DocumentRouteIdentity;
 		case "document":
 			return `document:${source.owner}/${source.repository}/${source.slug}` as DocumentRouteIdentity;
+		case "child":
+			return (
+				`child:${source.owner}/${source.repository}/${source.parentSlug}/${source.childSlug}`
+			) as DocumentRouteIdentity;
 		case "research":
 			return (
 				`research:${source.owner}/${source.repository}/${source.slug}/${source.workspaceId}`
