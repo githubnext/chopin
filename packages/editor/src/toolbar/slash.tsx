@@ -22,6 +22,7 @@ import {
 	$getSelection,
 	$isRangeSelection,
 	$isTextNode,
+	$setSelection,
 	COLLABORATION_TAG,
 	COMMAND_PRIORITY_LOW,
 	HISTORIC_TAG,
@@ -32,6 +33,7 @@ import {
 	$createCodeBlockNode,
 	$createImageNode,
 	$createMathNode,
+	$createResearchNode,
 	$createTabNode,
 	$createTabsNode,
 	DIFF_LANGUAGE,
@@ -44,6 +46,7 @@ import { $createTableNodeWithDimensions } from "@lexical/table";
 import { $createParagraphNode, $createTextNode, $insertNodes } from "lexical";
 
 import { askForUrl } from "./url";
+import { ResearchComposer } from "../widgets/research";
 import { placeSurface } from "./placement";
 import {
 	DIVIDER,
@@ -54,7 +57,9 @@ import {
 	SHELL,
 } from "./surface";
 
-import type { ElementNode, LexicalEditor, LexicalNode } from "lexical";
+import type { ElementNode, LexicalEditor, LexicalNode, RangeSelection } from "lexical";
+import type { Research } from "@chopin/protocol";
+import type { ResearchStore } from "../widget-options";
 import type { DOMRectLike, SurfacePlacement } from "./placement";
 
 export type SlashCommand = {
@@ -62,7 +67,7 @@ export type SlashCommand = {
 	label: string;
 	group: string;
 	keywords: string[];
-	run: (editor: LexicalEditor) => void;
+	run: (editor: LexicalEditor, actions?: { research?: () => void }) => void;
 };
 
 /** Replace the current block, dropping the `/query` the user typed. */
@@ -117,6 +122,13 @@ function insertContainer(
  * MDXEditor's transformer builds its own code node rather than the dialect's.
  */
 const COMMANDS: SlashCommand[] = [
+	{
+		id: "research",
+		label: "Research",
+		group: "Research",
+		keywords: ["research", "web search"],
+		run: (_editor, actions) => actions?.research?.(),
+	},
 	{
 		id: "code",
 		label: "Code block",
@@ -211,6 +223,37 @@ function match(command: SlashCommand, query: string): boolean {
 		|| command.keywords.some(word => word.includes(needle));
 }
 
+export function availableCommands(query: string): SlashCommand[] {
+	return COMMANDS.filter(command => match(command, query));
+}
+
+/** Insert after an async request using the document selection captured before it began. */
+export function insertResearchReference(
+	editor: LexicalEditor,
+	selection: RangeSelection,
+	id: string,
+): boolean {
+	let inserted = false;
+	editor.update(() => {
+		$setSelection(selection.clone());
+		$insertNodes([$createResearchNode(id)]);
+		inserted = true;
+	}, { discrete: true });
+	return inserted;
+}
+
+export async function createResearchReference(
+	editor: LexicalEditor,
+	selection: RangeSelection,
+	question: string,
+	requestId: string,
+	persist: (question: string, requestId: string) => Promise<Research.RequestView>,
+): Promise<Research.RequestView> {
+	let request = await persist(question, requestId);
+	insertResearchReference(editor, selection, request.id);
+	return request;
+}
+
 /**
  * What the caret is asking to insert, if anything.
  *
@@ -274,18 +317,32 @@ export function decide(
 
 export type SlashMenuProps = {
 	disabled?: boolean;
+	research?: ResearchStore;
 };
 
-export function SlashMenu({ disabled }: SlashMenuProps) {
+type ResearchDraft = {
+	anchor: DOMRectLike;
+	selection: RangeSelection;
+	question: string;
+	submitted?: { question: string; requestId: string };
+	submitting?: boolean;
+	error?: string;
+};
+
+export function SlashMenu({ disabled, research }: SlashMenuProps) {
 	let [editor] = useLexicalComposerContext();
 	let [query, setQuery] = useState<string>();
 	let [anchor, setAnchor] = useState<DOMRectLike>();
 	let [position, setPosition] = useState<SurfacePlacement>();
 	let [index, setIndex] = useState(0);
+	let [draft, setDraft] = useState<ResearchDraft>();
 	let surface = useRef<HTMLDivElement>(null);
 	let open = query !== undefined && !disabled;
 
-	let matches = useMemo(() => COMMANDS.filter(item => match(item, query ?? "")), [query]);
+	let matches = useMemo(
+		() => availableCommands(query ?? "").filter(command => command.id !== "research" || research),
+		[query, research],
+	);
 	// Groups now place dividers while options remain direct listbox children.
 	let grouped = useMemo(() => {
 		let out = new Map<string, SlashCommand[]>();
@@ -325,7 +382,8 @@ export function SlashMenu({ disabled }: SlashMenuProps) {
 	 * Only that span: anything the user had already written after the caret
 	 * belongs to them, and truncating the line to the slash would eat it.
 	 */
-	let consume = useCallback(() => {
+	let consume = useCallback((): RangeSelection | undefined => {
+		let saved: RangeSelection | undefined;
 		editor.update(() => {
 			let selection = $getSelection();
 			if (!$isRangeSelection(selection)) return;
@@ -340,15 +398,24 @@ export function SlashMenu({ disabled }: SlashMenuProps) {
 
 			let start = offset - typed.length - 1;
 			node.setTextContent(text.slice(0, start) + text.slice(offset));
-			node.select(start, start);
-		});
+			saved = node.select(start, start).clone();
+		}, { discrete: true });
+		return saved;
 	}, [editor]);
 
 	let choose = useCallback((command: SlashCommand) => {
-		consume();
+		let selection = consume();
+		let placement = anchor;
 		close();
-		command.run(editor);
-	}, [consume, close, editor]);
+		command.run(editor, {
+			research: research && selection && placement
+				? () => {
+					setPosition(undefined);
+					setDraft({ anchor: placement, selection, question: "" });
+				}
+				: undefined,
+		});
+	}, [anchor, consume, close, editor, research]);
 
 	// Arming is what separates a slash the author typed from one that arrived
 	// with someone else's edit. Registered whether or not the menu is showing,
@@ -369,6 +436,7 @@ export function SlashMenu({ disabled }: SlashMenuProps) {
 		// Clears any query left behind by the lock, which would otherwise spring
 		// the menu open the moment an agent turn ends.
 		if (disabled) {
+			setDraft(undefined);
 			close();
 			return;
 		}
@@ -405,8 +473,9 @@ export function SlashMenu({ disabled }: SlashMenuProps) {
 
 	let place = useCallback(() => {
 		let element = surface.current;
-		if (!element || !anchor) return;
-		let liveAnchor = nativeSelectionRect();
+		let placement = draft?.anchor ?? anchor;
+		if (!element || !placement) return;
+		let liveAnchor = draft ? draft.anchor : nativeSelectionRect();
 		if (!liveAnchor) {
 			setPosition(undefined);
 			return;
@@ -424,15 +493,15 @@ export function SlashMenu({ disabled }: SlashMenuProps) {
 				? current
 				: next
 		);
-	}, [anchor]);
+	}, [anchor, draft]);
 	useLayoutEffect(() => {
-		if (open) place();
-	}, [open, grouped, place]);
+		if (open || draft) place();
+	}, [open, draft, grouped, place]);
 
 	useEffect(() => {
-		if (!open) return;
+		if (!open && !draft) return;
 		return listenToEditorGeometry(editor, place);
-	}, [editor, open, place]);
+	}, [editor, open, draft, place]);
 
 	let selected = useRef(matches[0]);
 	selected.current = matches[index];
@@ -461,6 +530,72 @@ export function SlashMenu({ disabled }: SlashMenuProps) {
 			COMMAND_PRIORITY_LOW,
 		);
 	}, [editor, open, matches.length, close, choose]);
+
+	if (draft && research) {
+		let submit = () => {
+			if (draft.submitting || !draft.question.trim()) return;
+			let submitted = draft.submitted?.question === draft.question
+				? draft.submitted
+				: { question: draft.question, requestId: crypto.randomUUID() };
+			setDraft(current =>
+				current && {
+					...current,
+					submitted,
+					submitting: true,
+					error: undefined,
+				}
+			);
+			void createResearchReference(
+				editor,
+				draft.selection,
+				submitted.question,
+				submitted.requestId,
+				(question, requestId) => research.create(question, requestId),
+			).then(() => setDraft(undefined)).catch(() =>
+				setDraft(current =>
+					current && {
+						...current,
+						submitting: false,
+						error: "Research could not be started.",
+					}
+				)
+			);
+		};
+		return (
+			<div
+				ref={surface}
+				aria-label="Start research"
+				role="dialog"
+				data-focus-boundary=""
+				contentEditable={false}
+				className={`${SHELL} plan-research-composer-surface`}
+				style={position
+					? { top: position.top, left: position.left, maxHeight: position.maxHeight }
+					: {
+						top: draft.anchor.bottom + 8,
+						left: draft.anchor.left,
+						visibility: "hidden",
+					}}
+			>
+				<ResearchComposer
+					error={draft.error}
+					onCancel={() => setDraft(undefined)}
+					onChange={question =>
+						setDraft(current =>
+							current && {
+								...current,
+								question,
+								error: undefined,
+								submitted: current.question === question ? current.submitted : undefined,
+							}
+						)}
+					onSubmit={submit}
+					question={draft.question}
+					submitting={draft.submitting}
+				/>
+			</div>
+		);
+	}
 
 	if (!open || !anchor || matches.length === 0) return null;
 

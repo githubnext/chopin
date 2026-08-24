@@ -1,4 +1,17 @@
 import { describe, expect, it } from "bun:test";
+import { createHeadlessEditor } from "@lexical/headless";
+import {
+	$createParagraphNode,
+	$createTextNode,
+	$getRoot,
+	$getSelection,
+	$isRangeSelection,
+} from "lexical";
+
+import { exportPlan, registry } from "@chopin/dialect";
+
+import type { LexicalEditor, RangeSelection } from "lexical";
+import type { Research } from "@chopin/protocol";
 
 import { decide, trigger } from "./slash";
 
@@ -58,6 +71,105 @@ describe("slash menu trigger", () => {
 	it("has nothing to offer without a slash", () => {
 		expect(at("Rollout plan|")).toBeUndefined();
 		expect(at("|")).toBeUndefined();
+	});
+});
+
+describe("slash menu commands", () => {
+	it("discovers the research composer by research and web search", async () => {
+		let module = await import("./slash");
+		let available = (module as unknown as {
+			availableCommands?: (query: string) => Array<{ id: string }>;
+		}).availableCommands;
+		expect(available?.("research").map(command => command.id)).toEqual(["research"]);
+		expect(available?.("web search").map(command => command.id)).toEqual(["research"]);
+	});
+
+	it("opens the local composer instead of inserting a document node immediately", async () => {
+		let module = await import("./slash");
+		let command = module.availableCommands("research")[0] as unknown as {
+			run(editor: LexicalEditor, actions: { research(): void }): void;
+		};
+		let opened = 0;
+		command.run({} as LexicalEditor, { research: () => opened++ });
+		expect(opened).toBe(1);
+	});
+
+	it("inserts a durable reference at the selection saved before the request", async () => {
+		let schema = registry();
+		let editor = createHeadlessEditor({
+			nodes: schema.nodes,
+			onError: error => {
+				throw error;
+			},
+		});
+		let saved: RangeSelection | undefined;
+		editor.update(() => {
+			let text = $createTextNode("Before after");
+			$getRoot().append($createParagraphNode().append(text));
+			text.select(7, 7);
+			let selection = $getSelection();
+			if ($isRangeSelection(selection)) saved = selection.clone();
+		}, { discrete: true });
+		editor.update(() => $getRoot().selectEnd(), { discrete: true });
+
+		let module = await import("./slash");
+		let insert = (module as unknown as {
+			insertResearchReference?: (
+				editor: LexicalEditor,
+				selection: RangeSelection,
+				id: string,
+			) => boolean;
+		}).insertResearchReference;
+		expect(typeof insert).toBe("function");
+		if (!insert || !saved) return;
+		expect(insert(editor, saved, "workspace-one")).toBe(true);
+
+		let source = exportPlan(editor, { registry: schema });
+		expect(source).toContain("Before");
+		expect(source).toContain('<Research id="workspace-one" />');
+		expect(source).toContain("after");
+		expect(source.indexOf("Before")).toBeLessThan(source.indexOf("<Research"));
+		expect(source.indexOf("<Research")).toBeLessThan(source.indexOf("after"));
+	});
+
+	it("does not insert a dead reference when durable creation fails", async () => {
+		let schema = registry();
+		let editor = createHeadlessEditor({
+			nodes: schema.nodes,
+			onError: error => {
+				throw error;
+			},
+		});
+		let saved: RangeSelection | undefined;
+		editor.update(() => {
+			let text = $createTextNode("Keep this");
+			$getRoot().append($createParagraphNode().append(text));
+			text.selectEnd();
+			let selection = $getSelection();
+			if ($isRangeSelection(selection)) saved = selection.clone();
+		}, { discrete: true });
+		let module = await import("./slash");
+		let create = (module as unknown as {
+			createResearchReference?: (
+				editor: LexicalEditor,
+				selection: RangeSelection,
+				question: string,
+				requestId: string,
+				persist: (question: string, requestId: string) => Promise<Research.RequestView>,
+			) => Promise<Research.RequestView>;
+		}).createResearchReference;
+		expect(typeof create).toBe("function");
+		if (!create || !saved) return;
+		await expect(create(
+			editor,
+			saved,
+			"  Keep this brief exactly.  ",
+			"request-one",
+			async () => {
+				throw new Error("offline");
+			},
+		)).rejects.toThrow("offline");
+		expect(exportPlan(editor, { registry: schema })).toBe("Keep this\n");
 	});
 });
 

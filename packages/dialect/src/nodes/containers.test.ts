@@ -5,8 +5,10 @@ import { $getRoot, $isElementNode } from "lexical";
 import * as Y from "yjs";
 
 import { exportPlan, importPlan } from "../convert";
+import { parse } from "../parse";
 import { registry } from "../registry";
-import { $isCalloutNode, $isTabNode, $isTabsNode } from "./containers";
+import { validate } from "../validate";
+import * as Containers from "./containers";
 
 import type { Binding, Provider } from "@lexical/yjs";
 import type { LexicalEditor, TextNode } from "lexical";
@@ -16,6 +18,7 @@ const REGISTRY = registry();
 const ID = "01K0N4TR8K7JGM4R1J7PW4R8YJ";
 const ID2 = "01K0N4V4E7Y6P4MJ5WD8XZF3B2";
 const ID3 = "01K0N4W3B7P27CBAEC7A8C8WEA";
+const RESEARCH_ID = "8f4d193b-2018-4977-b404-0092bb911676";
 
 function editor(): LexicalEditor {
 	return createHeadlessEditor({
@@ -66,6 +69,28 @@ const TABS = `<Tabs id="${ID}">\n`
 	+ `</Tabs>\n`;
 
 describe("structural components", () => {
+	it("round-trips one externally owned research reference", () => {
+		let isResearch = (Containers as unknown as {
+			$isResearchNode?: (node: unknown) => boolean;
+		}).$isResearchNode;
+		expect(typeof isResearch).toBe("function");
+		if (!isResearch) return;
+		let source = `<Research id="${RESEARCH_ID}" />\n`;
+		expect(validate(parse(source))).toEqual({ ok: true });
+		expect(canonical(source)).toBe(source);
+
+		let instance = editor();
+		importPlan(instance, source, { registry: REGISTRY });
+		instance.getEditorState().read(() => {
+			let research = $getRoot().getFirstChild();
+			expect(isResearch(research)).toBe(true);
+			if (!isResearch(research)) return;
+			let reference = research as unknown as { getId(): string; exportJSON(): unknown };
+			expect(reference.getId()).toBe(RESEARCH_ID);
+			expect(reference.exportJSON()).toMatchObject({ planId: RESEARCH_ID });
+		});
+	});
+
 	it("round-trips a callout with its attributes", () => {
 		let out = canonical(CALLOUT);
 		expect(out).toContain(`id="${ID}"`);
@@ -101,12 +126,12 @@ describe("structural components", () => {
 
 		instance.getEditorState().read(() => {
 			let tabs = $getRoot().getFirstChild();
-			expect($isTabsNode(tabs)).toBe(true);
+			expect(Containers.$isTabsNode(tabs)).toBe(true);
 			if (!$isElementNode(tabs)) return;
 
 			let children = tabs.getChildren();
 			expect(children).toHaveLength(2);
-			expect(children.every($isTabNode)).toBe(true);
+			expect(children.every(Containers.$isTabNode)).toBe(true);
 
 			let first = children[0];
 			expect($isElementNode(first) && first.getChildren()[0]?.getType()).toBe("paragraph");
@@ -122,8 +147,8 @@ describe("structural components", () => {
 			let tab = $isElementNode(tabs) ? tabs.getFirstChild() : null;
 			let callout = $getRoot().getLastChild();
 			return {
-				callout: $isCalloutNode(callout) ? callout : null,
-				tab: $isTabNode(tab) ? tab : null,
+				callout: Containers.$isCalloutNode(callout) ? callout : null,
+				tab: Containers.$isTabNode(tab) ? tab : null,
 			};
 		});
 		let tabDOM = attributes({ "aria-label": "macOS" });
@@ -134,8 +159,8 @@ describe("structural components", () => {
 				let tabs = $getRoot().getFirstChild();
 				let tab = $isElementNode(tabs) ? tabs.getFirstChild() : null;
 				let callout = $getRoot().getLastChild();
-				if ($isTabNode(tab)) tab.setLabel("Linux");
-				if ($isCalloutNode(callout)) callout.setCalloutType("tip").setTitle("");
+				if (Containers.$isTabNode(tab)) tab.setLabel("Linux");
+				if (Containers.$isCalloutNode(callout)) callout.setCalloutType("tip").setTitle("");
 			},
 			{ discrete: true },
 		);
@@ -144,10 +169,10 @@ describe("structural components", () => {
 			let tabs = $getRoot().getFirstChild();
 			let tab = $isElementNode(tabs) ? tabs.getFirstChild() : null;
 			let callout = $getRoot().getLastChild();
-			expect($isTabNode(tab)).toBe(true);
-			expect($isCalloutNode(callout)).toBe(true);
-			if (!$isTabNode(tab) || !previous.tab) return;
-			if (!$isCalloutNode(callout) || !previous.callout) return;
+			expect(Containers.$isTabNode(tab)).toBe(true);
+			expect(Containers.$isCalloutNode(callout)).toBe(true);
+			if (!Containers.$isTabNode(tab) || !previous.tab) return;
+			if (!Containers.$isCalloutNode(callout) || !previous.callout) return;
 
 			tab.updateDOM(previous.tab, tabDOM);
 			callout.updateDOM(previous.callout, calloutDOM);
@@ -288,8 +313,8 @@ describe("container collaboration", () => {
 
 		b.editor.getEditorState().read(() => {
 			let callout = $getRoot().getFirstChild();
-			expect($isCalloutNode(callout)).toBe(true);
-			if (!$isCalloutNode(callout)) return;
+			expect(Containers.$isCalloutNode(callout)).toBe(true);
+			if (!Containers.$isCalloutNode(callout)) return;
 			expect(callout.getId()).toBe(ID);
 			expect(callout.getCalloutType()).toBe("warning");
 			expect(callout.getTitle()).toBe("Careful");

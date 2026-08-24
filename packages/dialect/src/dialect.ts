@@ -25,6 +25,8 @@ export type Content =
 export type Attribute =
 	/** ULID, minted when the component is created. */
 	| { type: "id"; required: true }
+	/** Safe opaque identifier owned by a record outside the document. */
+	| { type: "reference"; required: true; max: number }
 	/** Plain text, length-bounded. */
 	| { type: "text"; required: boolean; max: number }
 	/** One of a fixed set. */
@@ -203,6 +205,16 @@ export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
 		attributes: {
 			type: { type: "enum", required: true, values: CALLOUT_TYPES },
 			title: { type: "text", required: false, max: limits.MAX_CALLOUT_TITLE },
+		},
+	}),
+
+	/** A reference to authoritative Research Workspace state. */
+	Research: plain({
+		name: "Research",
+		kind: "flow",
+		content: { type: "empty" },
+		attributes: {
+			id: { type: "reference", required: true, max: 96 },
 		},
 	}),
 

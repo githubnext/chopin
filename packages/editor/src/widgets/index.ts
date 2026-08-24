@@ -11,8 +11,9 @@ import { setRenderer } from "@chopin/dialect";
 import { renderDecision } from "./decision";
 import { renderImage } from "./image";
 import { renderQuestionnaire } from "./questionnaire";
+import { renderResearch } from "./research";
 
-import type { DecisionNode, ImageNode, QuestionnaireNode } from "@chopin/dialect";
+import type { DecisionNode, ImageNode, QuestionnaireNode, ResearchNode } from "@chopin/dialect";
 
 let registered = false;
 
@@ -24,6 +25,7 @@ export function register(): void {
 	setRenderer<ImageNode>("plan-image", renderImage);
 	setRenderer<QuestionnaireNode>("plan-questionnaire", renderQuestionnaire);
 	setRenderer<DecisionNode>("plan-decision", renderDecision);
+	setRenderer<ResearchNode>("plan-research", renderResearch);
 }
 
 export { CalloutPlugin } from "./callout";
@@ -31,4 +33,5 @@ export { EnterPlugin } from "./enter";
 export { QuestionnaireCard } from "./questionnaire";
 export type { QuestionnaireCardProps } from "./questionnaire";
 export { PreviewPlugin } from "./render-blocks";
+export { ResearchCard, ResearchComposer, ResearchReference } from "./research";
 export { TabsPlugin } from "./tabs";
