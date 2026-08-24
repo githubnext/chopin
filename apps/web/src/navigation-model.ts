@@ -1,6 +1,7 @@
 import { documentPath } from "@chopin/protocol/document-url";
 
-import type { NavigationProject } from "./api";
+import type { NavigationProject, ResearchParentChannel } from "./api";
+import type { Research } from "@chopin/protocol";
 import type { ProjectDocuments } from "./document-actions";
 
 export type NavigationMode = "drawer" | "inline";
@@ -45,6 +46,13 @@ export function documentDestination(
 		}
 	}
 	return `/channels/${encodeURIComponent(documentId)}`;
+}
+
+export function researchChildDestination(
+	parent: Pick<ResearchParentChannel, "repositoryOwner" | "repositoryName">,
+	child: Pick<Research.ReadyChild, "slug">,
+): string {
+	return documentPath(parent.repositoryOwner, parent.repositoryName, child.slug);
 }
 
 export function beginProjectCreation(

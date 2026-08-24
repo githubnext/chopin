@@ -8,6 +8,7 @@ import {
 	finishProjectCreation,
 	landingDocument,
 	navigationMode,
+	researchChildDestination,
 } from "./navigation-model";
 
 import type { ProjectDocuments } from "./document-actions";
@@ -127,6 +128,13 @@ describe("navigation model", () => {
 		);
 		expect(documentDestination(projects, "missing")).toBe("/channels/missing");
 		expect(documentDestination(projects, "channel-two", "/explicit")).toBe("/explicit");
+	});
+
+	it("opens a ready research child in its parent repository", () => {
+		expect(researchChildDestination(
+			{ repositoryOwner: "acme space", repositoryName: "docs/tools" },
+			{ slug: "rollout evidence" },
+		)).toBe("/documents/acme%20space/docs%2Ftools/rollout%20evidence");
 	});
 
 	it("keeps one Project creating while another creation settles", () => {

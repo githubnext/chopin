@@ -44,6 +44,7 @@ type ComposerProps = {
 
 type Store = {
 	subscribe(listener: () => void): () => void;
+	retain(id: string): () => void;
 	get(id: string): Research.RequestView | undefined;
 	refresh(id: string): void;
 	create(question: string, requestId: string): Promise<Research.RequestView>;
@@ -291,6 +292,7 @@ describe("research reference", () => {
 		if (!Reference) return;
 		let store: Store = {
 			subscribe: () => () => {},
+			retain: () => () => {},
 			get: id => id === BASE.id ? BASE : undefined,
 			refresh() {},
 			create: async () => BASE,
@@ -320,12 +322,17 @@ describe("research reference", () => {
 		if (!Reference || !subscribe) return;
 		class ClassStore implements Store {
 			listeners = new Set<() => void>();
+			retained: string[] = [];
 			subscribe(listener: () => void) {
 				this.listeners.add(listener);
 				return () => this.listeners.delete(listener);
 			}
 			get() {
 				return BASE;
+			}
+			retain(id: string) {
+				this.retained.push(id);
+				return () => this.retained.splice(this.retained.indexOf(id), 1);
 			}
 			refresh() {}
 			async create() {
@@ -352,6 +359,34 @@ describe("research reference", () => {
 		expect(markup).toContain(BASE.question);
 	});
 
+	it("retains and releases the reference id through the store contract", async () => {
+		let module = await import("./research");
+		let retain = (module as unknown as {
+			retainResearch?: (store: Store, id: string) => () => void;
+		}).retainResearch;
+		expect(typeof retain).toBe("function");
+		if (!retain) return;
+		let retained = new Set<string>();
+		let store = {
+			subscribe: () => () => {},
+			retain: (id: string) => {
+				retained.add(id);
+				return () => retained.delete(id);
+			},
+			get: () => BASE,
+			refresh() {},
+			create: async () => BASE,
+			cancel: async () => BASE,
+			retry: async () => BASE,
+			open() {},
+		};
+
+		let release = retain(store, BASE.id);
+		expect(retained).toEqual(new Set([BASE.id]));
+		release();
+		expect(retained).toEqual(new Set());
+	});
+
 	it("retries the same authoritative request with its exact question", async () => {
 		let module = await import("./research");
 		let retry = (module as unknown as {
@@ -365,6 +400,7 @@ describe("research reference", () => {
 		let received: [string, string] | undefined;
 		let store: Store = {
 			subscribe: () => () => {},
+			retain: () => () => {},
 			get: () => BASE,
 			refresh() {},
 			create: async () => BASE,

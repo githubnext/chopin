@@ -345,6 +345,42 @@ describe("research workspace routes", () => {
 		).toBe(409);
 	});
 
+	it("exposes a durably cleared request as retryable after reload", async () => {
+		let context = await setup();
+		let created = await create(context);
+		await failInitial(context);
+		let detail = await context.storage.research.get(context.channel.id, created.body.request.id);
+		let initial = detail!.turns[0]!;
+		await context.storage.research.resetInitialAttempt({
+			channelId: context.channel.id,
+			workspaceId: created.body.request.id,
+			expectedEvidenceJobId: initial.evidenceJobId,
+			expectedAnswerJobId: initial.answerJobId,
+			now: new Date(context.now.getTime() + 3),
+			lease: context.lease,
+		});
+		let path = `/api/channels/${context.channel.id}/research-workspaces/${created.body.request.id}`;
+
+		let observed = await context.router.handle(request(path, context.cookie));
+		expect(observed?.status).toBe(200);
+		expect(await observed!.json()).toMatchObject({
+			id: created.body.request.id,
+			state: "failed",
+			stage: "failed",
+			error: "Research could not be completed.",
+		});
+		let retried = await context.router.handle(request(
+			`${path}/retry`,
+			context.cookie,
+			retryMutation(),
+		));
+		expect(retried?.status).toBe(200);
+		expect(await retried!.json()).toMatchObject({
+			id: created.body.request.id,
+			stage: "queued",
+		});
+	});
+
 	it("enforces retry origin, authentication, write access, and archive state", async () => {
 		let context = await setup();
 		let created = await createInline(context);

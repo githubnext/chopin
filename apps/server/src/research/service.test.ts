@@ -194,6 +194,7 @@ describe("research workspace service", () => {
 		expect(durable).toHaveLength(1);
 		expect((await recovery.storage.research.get(recovery.channelId, durable[0]!.id))?.turns[0])
 			.toMatchObject({ kind: "initial", evidenceJobId: undefined });
+		expect(recovery.publications).toEqual([]);
 		let recovered = await recovery.service.start({
 			...recoveryInput,
 			beforeStart: () => {
@@ -240,7 +241,7 @@ describe("research workspace service", () => {
 		expect(owners).toBe(1);
 	});
 
-	it("keeps reads observational until owner setup succeeds on an exact retry", async () => {
+	it("exposes owner setup recovery without starting work on read", async () => {
 		let context = await setup();
 		let owners = 0;
 		let input = {
@@ -702,6 +703,65 @@ describe("research workspace service", () => {
 		}
 	});
 
+	it("replaces terminal answer attempts before publishing the retried request", async () => {
+		for (let terminal of ["failed", "cancelled"] as const) {
+			let context = await setup();
+			let started = await context.service.start({
+				channelId: context.channelId,
+				question: `Retry a ${terminal} answer`,
+				requestId: requestId(36),
+				requestedBy: context.userId,
+			});
+			let firstEvidence = await settle(context, "research-evidence", evidenceArtifact);
+			await context.service.jobChanged(firstEvidence.job);
+			let before = await context.storage.research.get(context.channelId, started.request.id);
+			let oldAnswerId = before!.turns[0]!.answerJobId!;
+			if (terminal === "failed") {
+				let [answer] = await context.storage.jobs.claim({
+					channelId: context.channelId,
+					claimOwner: "failing-answer-worker",
+					count: 100,
+					ttlMs: 30_000,
+					now: context.advance(),
+					lease: context.lease,
+				});
+				await context.storage.jobs.fail({
+					channelId: context.channelId,
+					jobId: answer!.id,
+					claimOwner: "failing-answer-worker",
+					claimGeneration: answer!.claimGeneration,
+					reason: "answer failed",
+					now: context.advance(),
+					lease: context.lease,
+				});
+			} else {
+				await context.service.cancelRequest({
+					channelId: context.channelId,
+					workspaceId: started.request.id,
+				});
+			}
+
+			await context.service.retryRequest({
+				channelId: context.channelId,
+				workspaceId: started.request.id,
+			});
+			expect(await context.storage.research.findTurnByJob(context.channelId, oldAnswerId))
+				.toBeUndefined();
+			let nextEvidence = await settle(context, "research-evidence", evidenceArtifact);
+			await context.service.jobChanged(nextEvidence.job);
+			let retried = await context.storage.research.get(context.channelId, started.request.id);
+			let nextAnswerId = retried!.turns[0]!.answerJobId;
+			expect(nextAnswerId).toBeDefined();
+			if (!nextAnswerId) throw new Error("retried answer was not linked");
+			expect(nextAnswerId).not.toBe(oldAnswerId);
+			let nextAnswer = await settle(context, "research-answer", answerArtifact);
+			expect(nextAnswer.job.id).toBe(nextAnswerId);
+			await context.service.jobChanged(nextAnswer.job);
+			expect(await context.service.request(context.channelId, started.request.id))
+				.toMatchObject({ id: started.request.id, stage: "ready" });
+		}
+	});
+
 	it("rejects retry for active and ready requests", async () => {
 		let active = await setup();
 		let activeRequest = await active.service.start({
@@ -783,7 +843,12 @@ describe("research workspace service", () => {
 
 		let observed = await context.restart().request(context.channelId, started.request.id);
 
-		expect(observed).toMatchObject({ stage: "queued", question: started.request.question });
+		expect(observed).toMatchObject({
+			state: "failed",
+			stage: "failed",
+			error: "Research could not be completed.",
+			question: started.request.question,
+		});
 		expect((await context.storage.jobs.list(context.channelId, 100))!.jobs)
 			.toHaveLength(beforeRead!.jobs.length);
 		await context.restart().retryRequest({
