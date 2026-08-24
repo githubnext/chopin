@@ -230,6 +230,50 @@ describe("channel routes", () => {
 		);
 	});
 
+	it("exposes child parents without accepting them on top-level creation", async () => {
+		let { router, storage, cookie, now } = await setup();
+		let parent = await createChannel(storage, now, "Research parent");
+		let child = await storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Research child",
+			createdBy: "U_octocat",
+			parentChannelId: parent.id,
+			now,
+		});
+
+		let detail = await router.handle(request(`/api/channels/${child.id}`, cookie));
+		expect(detail!.status).toBe(200);
+		expect((await detail!.json()).channel.parentChannelId).toBe(parent.id);
+
+		let listed = await router.handle(request(
+			"/api/repositories/octo-org/score/channels",
+			cookie,
+		));
+		let page = await listed!.json();
+		expect(page.channels.find((channel: { id: string }) => channel.id === child.id))
+			.toMatchObject({ parentChannelId: parent.id });
+
+		let forged = await router.handle(request(
+			"/api/repositories/octo-org/score/channels",
+			cookie,
+			{
+				method: "POST",
+				headers: { "content-type": "application/json", origin: "https://chopin.test" },
+				body: JSON.stringify({
+					title: "Forged nested child",
+					parentChannelId: child.id,
+				}),
+			},
+		));
+		expect(forged!.status).toBe(201);
+		let forgedChannel = (await forged!.json()).channel;
+		expect(forgedChannel.parentChannelId).toBeUndefined();
+		expect((await storage.channels.get(forgedChannel.id))?.parentChannelId).toBeUndefined();
+	});
+
 	it("resolves canonical and historical document paths within the authorized repository", async () => {
 		let { router, storage, github, cookie, now } = await setup();
 		let channel = await storage.channels.create({

@@ -373,6 +373,16 @@ export class MemoryStorage implements StorageAdapter {
 	async #createChannel(input: CreateChannel): Promise<ChannelRecord> {
 		if (!this.#users.has(input.createdBy)) throw missing(`user ${input.createdBy} does not exist`);
 		if (this.#channels.has(input.id)) throw conflict(`channel ${input.id} already exists`);
+		if (input.parentChannelId) {
+			let parent = this.#channels.get(input.parentChannelId);
+			if (!parent) throw missing(`channel ${input.parentChannelId} does not exist`);
+			if (parent.repositoryId !== input.repositoryId) {
+				throw conflict(`channel ${input.id} must share its parent's repository`);
+			}
+			if (parent.parentChannelId) {
+				throw conflict(`channel ${input.parentChannelId} cannot parent another child`);
+			}
+		}
 		if (
 			[...this.#channels.values()].some(channel =>
 				channel.repositoryId === input.repositoryId
@@ -453,6 +463,9 @@ export class MemoryStorage implements StorageAdapter {
 		let found = this.#channels.get(id);
 		if (!found) return false;
 		if (!found.archivedAt) throw conflict(`channel ${id} must be archived before deletion`);
+		if ([...this.#channels.values()].some(channel => channel.parentChannelId === id)) {
+			throw conflict(`channel ${id} still has child channels`);
+		}
 
 		this.#channels.delete(id);
 		await this.#research.deleteChannel(id);

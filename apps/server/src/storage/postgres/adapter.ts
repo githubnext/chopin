@@ -72,6 +72,7 @@ type ChannelRow = {
 	repositoryId: string;
 	repositoryOwner: string;
 	repositoryName: string;
+	parentChannelId: string | null;
 	title: string;
 	slug?: string;
 	createdBy: string;
@@ -209,6 +210,7 @@ function channel(row: ChannelRow): ChannelRecord {
 	if (!row.slug) throw corrupt(`channel ${row.id} has no canonical slug`);
 	let {
 		archivedAt,
+		parentChannelId,
 		description,
 		descriptionRevision,
 		descriptionPlanRevision,
@@ -252,6 +254,7 @@ function channel(row: ChannelRow): ChannelRecord {
 	) throw corrupt(`channel ${row.id} has invalid generated description metadata`);
 	return {
 		...record,
+		...(parentChannelId === null ? {} : { parentChannelId }),
 		slug: row.slug,
 		revision: integer(row.revision, "channel revision"),
 		createdAt: date(row.createdAt, "channel creation time"),
@@ -343,6 +346,7 @@ const CHANNEL_COLUMNS = `
 	channels.repository_id AS "repositoryId",
 	channels.repository_owner AS "repositoryOwner",
 	channels.repository_name AS "repositoryName",
+	channels.parent_channel_id AS "parentChannelId",
 	channels.title,
 	(
 		SELECT channel_slugs.slug
@@ -368,6 +372,7 @@ const CHANNEL_RETURNING = `
 	repository_id AS "repositoryId",
 	repository_owner AS "repositoryOwner",
 	repository_name AS "repositoryName",
+	parent_channel_id AS "parentChannelId",
 	title,
 	created_by AS "createdBy",
 	revision,
@@ -650,13 +655,34 @@ export class PostgresStorage implements StorageAdapter {
 	#createChannel(input: CreateChannel): Promise<ChannelRecord> {
 		return this.#run("create channel", () =>
 			this.#sql.begin(async transaction => {
+				if (input.parentChannelId) {
+					let [parent] = await transaction<{
+						parentChannelId: string | null;
+						repositoryId: string;
+					}[]>`
+						SELECT
+							parent_channel_id AS "parentChannelId",
+							repository_id AS "repositoryId"
+						FROM channels
+						WHERE id = ${input.parentChannelId}
+						FOR KEY SHARE
+					`;
+					if (!parent) throw missing(`channel ${input.parentChannelId} does not exist`);
+					if (parent.repositoryId !== input.repositoryId) {
+						throw conflict(`channel ${input.id} must share its parent's repository`);
+					}
+					if (parent.parentChannelId !== null) {
+						throw conflict(`channel ${input.parentChannelId} cannot parent another child`);
+					}
+				}
 				let [saved] = await transaction<ChannelRow[]>`
 				INSERT INTO channels (
-					id, repository_id, repository_owner, repository_name, title,
+					id, repository_id, repository_owner, repository_name, parent_channel_id, title,
 					created_by, revision, next_sequence, created_at, updated_at
 				) VALUES (
 					${input.id}, ${input.repositoryId}, ${input.repositoryOwner},
-					${input.repositoryName}, ${input.title}, ${input.createdBy}, 0, 1,
+					${input.repositoryName}, ${input.parentChannelId ?? null}, ${input.title},
+					${input.createdBy}, 0, 1,
 					${input.now}, ${input.now}
 				)
 				RETURNING ${transaction.unsafe(CHANNEL_RETURNING)}
@@ -777,6 +803,10 @@ export class PostgresStorage implements StorageAdapter {
 				if (current.archivedAt === null) {
 					throw conflict(`channel ${id} must be archived before deletion`);
 				}
+				let [child] = await transaction<{ id: string }[]>`
+					SELECT id FROM channels WHERE parent_channel_id = ${id} LIMIT 1
+				`;
+				if (child) throw conflict(`channel ${id} still has child channels`);
 				let deleted = await transaction<{ id: string }[]>`
 					DELETE FROM channels WHERE id = ${id} RETURNING id
 				`;

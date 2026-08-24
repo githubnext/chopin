@@ -82,6 +82,7 @@ export type ChannelRecord = {
 	repositoryId: string;
 	repositoryOwner: string;
 	repositoryName: string;
+	parentChannelId?: string;
 	title: string;
 	slug: string;
 	createdBy: string;
