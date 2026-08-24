@@ -373,6 +373,39 @@ describe("research request store", () => {
 		store.dispose();
 	});
 
+	it("keeps an immediate re-retain read after the aborted read settles", async () => {
+		let first = deferred<Research.RequestView>();
+		let second = deferred<Research.RequestView>();
+		let calls = 0;
+		let store = new ResearchRequestStore({
+			api: api({
+				get: async () => (++calls === 1 ? first.promise : second.promise),
+			}),
+			channelId: "channel-one",
+			onOpen() {},
+		});
+		let unsubscribe = store.subscribe(() => {});
+		let releaseFirst = store.retain("request-one");
+		releaseFirst();
+		let releaseSecond = store.retain("request-one");
+		expect(calls).toBe(2);
+
+		first.resolve(request("request-one", "searching"));
+		await settle();
+		second.resolve(request("request-one", "writing", {
+			updatedAt: "2026-08-24T09:03:00.000Z",
+		}));
+		await settle();
+
+		expect(store.get("request-one")).toMatchObject({
+			stage: "writing",
+			updatedAt: "2026-08-24T09:03:00.000Z",
+		});
+		releaseSecond();
+		unsubscribe();
+		store.dispose();
+	});
+
 	it("keeps the durable snapshot visible when cancellation fails", async () => {
 		let failure = new Error("Try cancellation again.");
 		let store = new ResearchRequestStore({

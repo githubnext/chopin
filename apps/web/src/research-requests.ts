@@ -92,7 +92,6 @@ export class ResearchRequestStore implements ResearchStore {
 			}
 			this.#references.delete(id);
 			this.#snapshots.delete(id);
-			this.#generations.delete(id);
 			this.#reads.get(id)?.controller.abort();
 			this.#reads.delete(id);
 			this.#schedulePolling();
@@ -168,15 +167,17 @@ export class ResearchRequestStore implements ResearchStore {
 		this.#reads.set(id, read);
 		try {
 			let snapshot = await this.#api.get(this.#channelId, id, controller.signal);
+			let current = this.#reads.get(id);
 			if (
-				controller.signal.aborted || this.#reads.get(id)?.generation !== generation
+				this.#disposed || controller.signal.aborted
+				|| current !== read || current.generation !== generation
 			) return;
 			this.#accept(id, snapshot);
 		} catch {
 			// Refresh failures leave the last durable snapshot visible. Polling or
 			// the next socket invalidation can retry the observational read.
 		} finally {
-			if (this.#reads.get(id)?.generation === generation) this.#reads.delete(id);
+			if (this.#reads.get(id) === read) this.#reads.delete(id);
 			this.#schedulePolling();
 		}
 	}
