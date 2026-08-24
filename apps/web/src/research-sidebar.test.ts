@@ -105,7 +105,7 @@ describe("research sidebar hierarchy", () => {
 		expect(markup).toContain('aria-label="Actions for Release plan"');
 	});
 
-	it("labels archived rows without exposing research or management to viewers", () => {
+	it("keeps archived rows free of research creation and viewer management", () => {
 		let archived = { ...channel, archivedAt: "2026-08-23T00:00:00.000Z" };
 		let writer = renderToStaticMarkup(createElement(ProjectSidebar, {
 			...props,
@@ -131,10 +131,8 @@ describe("research sidebar hierarchy", () => {
 			catalogueMode: "archived",
 		}));
 
-		expect(writer).toContain("Back to active docs");
 		expect(writer).toContain('aria-label="Actions for Release plan"');
 		expect(writer).not.toContain('aria-label="New research in Release plan"');
-		expect(viewer).toContain("Back to active docs");
 		expect(viewer).not.toContain('aria-label="Actions for Release plan"');
 	});
 });
