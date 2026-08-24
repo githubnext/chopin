@@ -30,6 +30,9 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 		let key = `${includeArchived ? "all" : "active"}:${id}`;
 		if (loads.current.has(key)) return;
 		let controller = new AbortController();
+		let knownDocuments = cursor === undefined
+			? new Set(latestDocuments.current.keys())
+			: undefined;
 		loads.current.set(key, controller);
 		setCatalogue(current => {
 			let catalogueDocuments = current.includeArchived === includeArchived
@@ -56,22 +59,29 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 				latestDocuments.current.set(channel.id, accepted);
 				return accepted;
 			}).filter(channel => includeArchived || !channel.archivedAt);
-			setCatalogue(current =>
-				current.includeArchived !== includeArchived
-					? current
-					: {
-						...current,
-						documents: {
-							...current.documents,
-							[id]: completeDocumentPage(
-								current.documents[id] ?? beginDocumentLoad(),
-								channels,
-								page.nextCursor,
-								cursor === undefined,
-							),
-						},
-					}
-			);
+			setCatalogue(current => {
+				if (current.includeArchived !== includeArchived) return current;
+				let loaded = current.documents[id] ?? beginDocumentLoad();
+				let preserveMissing = knownDocuments
+					? new Set(
+						loaded.channels.filter(channel => !knownDocuments.has(channel.id))
+							.map(channel => channel.id),
+					)
+					: undefined;
+				return {
+					...current,
+					documents: {
+						...current.documents,
+						[id]: completeDocumentPage(
+							loaded,
+							channels,
+							page.nextCursor,
+							cursor === undefined,
+							preserveMissing,
+						),
+					},
+				};
+			});
 		} catch (error) {
 			if (controller.signal.aborted || loads.current.get(key) !== controller) return;
 			setCatalogue(current =>

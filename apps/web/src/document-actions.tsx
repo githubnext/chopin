@@ -37,8 +37,12 @@ export function completeDocumentPage(
 	channels: Api.Channel[],
 	nextCursor?: string,
 	replace = false,
+	preserveMissing?: ReadonlySet<string>,
 ): DocumentLoadState {
-	let byId = new Map(replace ? [] : current.channels.map(channel => [channel.id, channel]));
+	let retained = replace
+		? current.channels.filter(channel => preserveMissing?.has(channel.id))
+		: current.channels;
+	let byId = new Map(retained.map(channel => [channel.id, channel]));
 	for (let channel of channels) byId.set(channel.id, channel);
 	return {
 		status: "ready",

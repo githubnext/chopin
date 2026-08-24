@@ -203,6 +203,21 @@ describe("document actions", () => {
 		expect(removeLoadedDocument(loaded, "missing")).toBe(loaded);
 	});
 
+	it("retains a document inserted after a first-page request began", () => {
+		let existing = channel("existing", "Existing", "R_one");
+		let created = channel("created", "Created", "R_one");
+		let current = { status: "loading" as const, channels: [existing, created] };
+		let refreshed = completeDocumentPage(
+			current,
+			[existing],
+			undefined,
+			true,
+			new Set([created.id]),
+		);
+
+		expect(refreshed.channels.map(document => document.id)).toEqual(["created", "existing"]);
+	});
+
 	it("keeps newer document metadata when an older response arrives later", () => {
 		let current = {
 			...projects[0]!.channels![0]!,
