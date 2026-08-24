@@ -258,14 +258,19 @@ describe("research workspace service", () => {
 		expect((await context.jobs.list(context.channelId, 100))?.jobs).toHaveLength(1);
 	});
 
-	it("relinks existing first evidence work during restart reconciliation", async () => {
+	it("adopts orphan first evidence only after an owner-checked exact retry", async () => {
 		let context = await setup();
-		await expect(context.service.start({
+		let owners = 0;
+		let input = {
 			channelId: context.channelId,
 			question: "Which API contracts changed?",
 			requestId: requestId(1),
 			requestedBy: context.userId,
+		};
+		await expect(context.service.start({
+			...input,
 			beforeStart: () => {
+				owners++;
 				throw new Error("simulate a crash before first enqueue");
 			},
 		})).rejects.toThrow("simulate a crash before first enqueue");
@@ -303,7 +308,21 @@ describe("research workspace service", () => {
 		expect(
 			(await context.storage.research.get(context.channelId, workspace.id))?.turns[0]
 				?.evidenceJobId,
+		).toBeUndefined();
+		expect((await context.jobs.list(context.channelId, 100))?.jobs).toHaveLength(1);
+
+		let recovered = await context.restart().start({
+			...input,
+			beforeStart: () => {
+				owners++;
+			},
+		});
+		expect(recovered.repeated).toBe(true);
+		expect(
+			(await context.storage.research.get(context.channelId, workspace.id))?.turns[0]
+				?.evidenceJobId,
 		).toBe(existing.job.id);
+		expect(owners).toBe(2);
 		expect((await context.jobs.list(context.channelId, 100))?.jobs).toHaveLength(1);
 	});
 
