@@ -36,6 +36,8 @@ export type Channel = {
 	revision: number;
 	createdAt: string;
 	updatedAt: string;
+	descriptionRevision: number;
+	description?: string;
 	archivedAt?: string;
 };
 

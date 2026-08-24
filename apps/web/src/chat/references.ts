@@ -16,7 +16,7 @@ export type ReferenceTrigger = {
 };
 
 export type ReferenceTarget =
-	| { kind: "document"; channelId: string; title: string; slug?: string }
+	| { kind: "document"; channelId: string; title: string; slug?: string; description?: string }
 	| { kind: "research"; workspaceId: string; title: string; discriminator: string };
 
 export type ReferenceDraft =

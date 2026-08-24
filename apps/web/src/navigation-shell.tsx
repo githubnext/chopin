@@ -16,7 +16,7 @@ import { documentPath, researchWorkspacePath } from "@chopin/protocol/document-u
 
 import * as Api from "./api";
 import { forgetChannel } from "./channel-recovery";
-import { newestDocument } from "./document-actions";
+import { newestDocument, updateDocumentMetadata } from "./document-actions";
 import type { DocumentAction } from "./document-actions-menu";
 import { NavigationFocusScope } from "./navigation-focus";
 import { motionImmediately } from "./motion-input";
@@ -43,6 +43,7 @@ import { useProjectResearch } from "./use-project-research";
 import type { Research } from "@chopin/protocol";
 import type { TransitionPresence } from "@chopin/editor/transition-presence";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import type { DocumentMetadata } from "./document-actions";
 import type { NavigationMode } from "./navigation-model";
 
 export type Navigate = (destination: string, options?: { replace?: boolean }) => void;
@@ -109,7 +110,7 @@ let NavigationDocument = createContext<{
 	channel?: Api.Channel;
 	onDocumentChanged: (
 		documentId: string,
-		update: Pick<Api.Channel, "title" | "slug" | "updatedAt" | "archivedAt">,
+		update: DocumentMetadata,
 	) => void;
 	onDocumentAction: (action: DocumentAction) => void;
 	onDocumentDeleted: (documentId: string) => void;
@@ -447,17 +448,20 @@ export function NavigationShell(
 	}, [clearLastDocument, refresh, routeKey, upsertDocument]);
 	let documentChanged = useCallback((
 		documentId: string,
-		update: Pick<Api.Channel, "title" | "slug" | "updatedAt" | "archivedAt">,
+		update: DocumentMetadata,
 	) => {
 		let current = resolvedDocumentRef.current;
-		if (current?.channel.id === documentId && current.channel.updatedAt <= update.updatedAt) {
-			let next = { ...current, channel: { ...current.channel, ...update } };
+		let accepted: Api.Channel | undefined;
+		if (current?.channel.id === documentId) {
+			accepted = updateDocumentMetadata(current.channel, update);
+			let next = accepted === current.channel ? current : { ...current, channel: accepted };
 			resolvedDocumentRef.current = next;
 			setResolvedDocument(next);
 			upsertDocument(next.channel);
 		} else updateDocument(documentId, update);
 		if (Object.hasOwn(update, "archivedAt")) {
-			if (update.archivedAt) {
+			let archived = accepted ? accepted.archivedAt : update.archivedAt;
+			if (archived) {
 				clearLastDocument(documentId);
 				setDialog(current =>
 					typeof current === "object" && current.type === "research"

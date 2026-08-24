@@ -256,8 +256,13 @@ export function DocumentPicker(
 				>
 					{channels.map((channel, index) => {
 						let selected = channel.id === current.id;
+						let descriptionId = channel.description
+							? `${optionId(listId, channel)}-description`
+							: undefined;
 						return (
 							<button
+								aria-describedby={descriptionId}
+								aria-label={channel.title}
 								aria-selected={selected}
 								className={`flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left transition ${
 									index === activeIndex ? "bg-selected" : "hover:bg-hover"
@@ -270,7 +275,17 @@ export function DocumentPicker(
 								tabIndex={-1}
 								type="button"
 							>
-								<span className="min-w-0 flex-1 truncate text-sm font-medium">{channel.title}</span>
+								<span className="min-w-0 flex-1 text-sm">
+									<span className="block truncate font-medium">{channel.title}</span>
+									{channel.description && (
+										<span
+											className="block truncate text-text-tertiary"
+											id={descriptionId}
+										>
+											{channel.description}
+										</span>
+									)}
+								</span>
 								{selected && (
 									<CheckIcon aria-hidden="true" className="shrink-0 text-brand-ink" size={16} />
 								)}

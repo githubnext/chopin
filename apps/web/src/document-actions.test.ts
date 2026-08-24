@@ -4,6 +4,7 @@ import {
 	beginDocumentLoad,
 	completeDocumentPage,
 	failDocumentLoad,
+	newestDocument,
 	projectDocuments,
 	removeLoadedDocument,
 	replaceLoadedDocument,
@@ -26,6 +27,7 @@ function channel(id: string, title: string, repositoryId: string): Api.Channel {
 		revision: 1,
 		createdAt: "2026-08-21T00:00:00.000Z",
 		updatedAt: "2026-08-21T00:00:00.000Z",
+		descriptionRevision: 0,
 	};
 }
 
@@ -110,6 +112,18 @@ describe("document actions", () => {
 				}`,
 			);
 			let repositoryId = repository === "one" ? "R_one" : "R_two";
+			let loaded = channel(
+				`${repository}-${options.cursor ?? "first"}`,
+				"Product",
+				repositoryId,
+			);
+			if (repository === "one" && !options.cursor) {
+				loaded = {
+					...loaded,
+					descriptionRevision: 1,
+					description: "Defines the product launch.",
+				};
+			}
 			return {
 				repository: {
 					defaultBranch: "main",
@@ -122,9 +136,7 @@ describe("document actions", () => {
 					url: `https://github.com/${owner}/${repository}`,
 				},
 				canEdit: true,
-				channels: [
-					channel(`${repository}-${options.cursor ?? "first"}`, "Product", repositoryId),
-				],
+				channels: [loaded],
 				nextCursor: repository === "one" && !options.cursor ? "next" : undefined,
 			};
 		};
@@ -141,6 +153,10 @@ describe("document actions", () => {
 			"two-first",
 		]);
 		expect(search.failedProjectIds).toEqual([]);
+		expect(search.results[0]).toMatchObject({
+			project: { repositoryOwner: "acme", repositoryName: "one" },
+			channel: { description: "Defines the product launch." },
+		});
 		expect(calls).toEqual([
 			"acme/one:first:product:false",
 			"acme/two:first:product:false",
@@ -180,6 +196,7 @@ describe("document actions", () => {
 			title: "Socket title",
 			slug: "socket-title",
 			updatedAt: "2026-08-22T00:00:00.000Z",
+			descriptionRevision: 0,
 		});
 
 		expect(next.R_one!.channels![0]).toMatchObject({ id: "doc-one", title: "Team brief" });
@@ -239,7 +256,58 @@ describe("document actions", () => {
 				title: stale.title,
 				slug: stale.slug,
 				updatedAt: stale.updatedAt,
+				descriptionRevision: stale.descriptionRevision,
 			}).R_one?.channels[0],
 		).toBe(current);
+	});
+
+	it("merges generated descriptions independently from core metadata", () => {
+		let current = {
+			...channel("doc-one", "Current title", "R_one"),
+			updatedAt: "2026-08-23T00:00:00.000Z",
+			descriptionRevision: 1,
+			description: "Earlier generated description",
+		};
+		let staleHttpWithNewDescription = {
+			...current,
+			title: "Stale title",
+			updatedAt: "2026-08-22T00:00:00.000Z",
+			descriptionRevision: 2,
+			description: "Latest generated description",
+		};
+		let newerSocketWithOldDescription = {
+			...current,
+			title: "Renamed title",
+			slug: "renamed-title",
+			updatedAt: "2026-08-24T00:00:00.000Z",
+			descriptionRevision: 1,
+			description: "Earlier generated description",
+		};
+
+		let described = newestDocument(current, staleHttpWithNewDescription);
+		expect(described).toMatchObject({
+			title: "Current title",
+			descriptionRevision: 2,
+			description: "Latest generated description",
+		});
+		let renamed = newestDocument(described, newerSocketWithOldDescription);
+		expect(renamed).toMatchObject({
+			title: "Renamed title",
+			slug: "renamed-title",
+			descriptionRevision: 2,
+			description: "Latest generated description",
+		});
+
+		let refreshed = completeDocumentPage(
+			{ status: "loading", channels: [current] },
+			[staleHttpWithNewDescription],
+			undefined,
+			true,
+		);
+		expect(refreshed.channels[0]).toMatchObject({
+			title: "Current title",
+			descriptionRevision: 2,
+			description: "Latest generated description",
+		});
 	});
 });

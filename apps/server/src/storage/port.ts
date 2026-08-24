@@ -35,6 +35,8 @@ import type {
 	LinkResearchTurnJob,
 	LinkResearchTurnJobResult,
 	PauseBackgroundJob,
+	PublishChannelDescription,
+	PublishChannelDescriptionResult,
 	PutUser,
 	RecordNavigationVisit,
 	RenameChannel,
@@ -104,6 +106,7 @@ export interface ChannelStore {
 	archive(input: ChannelArchiveInput): Promise<ChannelArchiveResult>;
 	restore(input: ChannelArchiveInput): Promise<ChannelArchiveResult>;
 	delete(id: string): Promise<boolean>;
+	publishDescription(input: PublishChannelDescription): Promise<PublishChannelDescriptionResult>;
 	list(
 		repositoryId: string,
 		limit: number,

@@ -71,6 +71,26 @@ export async function seedChannel(
 	return seed(port, id, source, state, storedDocument);
 }
 
+export async function seedChannelDescription(
+	port: number,
+	id: string,
+	description: string,
+): Promise<void> {
+	await sql(port, async database => {
+		await database`
+			UPDATE channels
+			SET generated_description = ${description},
+				generated_description_revision = 1,
+				generated_description_plan_revision = 0,
+				generated_description_source_hash = ${`sha256:${"a".repeat(64)}`},
+				generated_description_generator_version = 1,
+				generated_description_job_id = ${`e2e-description-${id}`},
+				generated_description_updated_at = ${new Date()}
+			WHERE id = ${id}
+		`;
+	});
+}
+
 export async function seedLegacyCalloutChannel(
 	port: number,
 	id: string,

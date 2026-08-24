@@ -131,6 +131,7 @@ describe("socket admission", () => {
 			channelTitle: "Plan",
 			channelSlug: "plan",
 			channelUpdatedAt: now.toISOString(),
+			channelDescriptionRevision: 0,
 			handle: "octocat",
 			principalId: "U_octocat",
 			canEdit: false,

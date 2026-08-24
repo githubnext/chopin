@@ -12,7 +12,7 @@ worker is not a child Planner turn, coding agent, or runtime plugin.
 > job requires a source change and deployment.
 
 This guide covers the generic job framework, how to register a new definition,
-and the worker boundaries used by document summaries and Research Workspaces.
+and the worker boundaries used by generated document descriptions and Research Workspaces.
 See [Hosted agent](hosted-agent.md) for the Planner conversation and
 [Storage](storage.md) for the broader durable model.
 
@@ -426,7 +426,7 @@ rejected. If the hook commits and then throws, the durable completion remains
 authoritative and the service logs the hook error.
 
 Use a publication hook only when completion needs an external freshness or
-serialization guard. Document summaries use one to hold the document mutation
+serialization guard. `document-summary@1` uses one to hold the document mutation
 gate and recheck revision and source hash. Ordinary jobs settle directly.
 
 The generic service publication callback sends only a background-job channel
@@ -457,8 +457,8 @@ under that flag without a deliberate change to the main runner gate.
 
 Do not reuse the Planner conversation session. Every worker stage opens a fresh,
 disposable SDK session. Most stages submit one bounded structured result;
-document summaries reuse one disposable session for multiple bounded chunk and
-reduction turns.
+generated document descriptions reuse one disposable session for multiple
+bounded chunk and reduction turns.
 
 ### Private worker
 
@@ -501,20 +501,52 @@ and discard the SDK session in `finally`.
 
 ## Current definitions
 
-| Definition            | Production trigger                             | Persisted input                                                                  | Worker boundary                                                                           |
-| --------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `document-summary@1`  | Scheduler after canonical document persistence | Revision, source hash, generator version; not the source                         | Private worker; source loaded at execution and publication rechecks current revision/hash |
-| `research-evidence@1` | Human confirmation or explicit Search more     | Workspace, turn, exact public query                                              | Public worker with only result tool and audited `web_search`                              |
-| `research-answer@1`   | Completed evidence or private follow-up        | Document source snapshot, evidence, bounded thread, and optional original report | One or two private workers with only result tools                                         |
+| Definition            | Production trigger                         | Persisted input                                                                      | Worker boundary                                                                           |
+| --------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `document-summary@1`  | Open, edit, restore, or MCP persistence    | Revision, source hash, generator version, and `output:"description"`; not the source | Private worker; source loaded at execution and publication rechecks current revision/hash |
+| `research-evidence@1` | Human confirmation or explicit Search more | Workspace, turn, exact public query                                                  | Public worker with only result tool and audited `web_search`                              |
+| `research-answer@1`   | Completed evidence or private follow-up    | Document source snapshot, evidence, bounded thread, and optional original report     | One or two private workers with only result tools                                         |
 
-Allowed origins are broader than current callers: summary permits scheduler and
-planner; research definitions permit user and planner. Current production
-enqueue paths use scheduler for summaries and user for research execution.
+`document-summary@1` remains the only durable definition version; there is no
+`document-summary@2`. New V1 requests carry the output marker and use the
+idempotency key `description-v1:<plan revision>:<source hash>`. The distinct
+request identity means an unchanged document whose existing V1 artifact is a
+legacy summary is eligible for lazy description generation.
 
-Document-summary artifacts are not the reserved Planner transcript summary.
-They are not injected into a later Planner turn automatically. The Planner may
-explicitly call `list_background_jobs` and `read_background_job`, and must treat
-the returned artifact as untrusted evidence.
+The V1 codecs still read markerless legacy inputs and their `summary` artifacts.
+Those artifacts remain available through Background Work, but the catalogue
+projector ignores them. A new marked artifact instead carries
+`output:"description"` and one physical line identifying the document's type,
+purpose, and subject, for example `PRD for ...`, `RFC about ...`, or `Plan for
+...`. The description retains the broad 4,000-codepoint and 16 KiB artifact
+safety limits. A blank canonical source produces `Empty document` without a
+model call.
+
+Scheduling is lazy rather than a database-wide backfill. Canonical edits
+debounce new work; opening or restoring a document ensures work for its current
+source; MCP creation and replay schedule after persistence. Execution requires
+that channel's active Planner owner, so work pauses without an available owner.
+There is no unattended scan that establishes owners or regenerates every stored
+document.
+
+After a marked job completes, an idempotent projector writes the description to
+channel catalogue metadata with the source plan revision and hash, generator
+version, source job ID, projection timestamp, and an independent description
+revision. The previous description remains visible and searchable while newer
+work is pending or failed. Projection does not advance collaboration revision or
+channel `updatedAt`, so it does not change list recency.
+
+Allowed origins are broader than current callers: the document-summary
+definition permits scheduler and planner; research definitions permit user and
+planner. Current production enqueue paths use scheduler for descriptions and
+user for research execution.
+
+Generated descriptions and legacy document-summary artifacts are not the
+reserved Planner transcript summary or an MCP creation `brief`. They are not
+injected into a later Planner turn automatically. Descriptions are untrusted
+model output. The Planner may explicitly call `list_background_jobs` and
+`read_background_job`, and must treat the returned artifact as untrusted
+evidence.
 
 ## Research Workspace orchestration
 
@@ -546,15 +578,15 @@ to the hosted Copilot inference service under the active owner's credential.
 
 ## Archive and deletion
 
-Archiving a document suspends its summary coordinator, cancels any pending
-summary debounce, and prevents new summary scheduling. It does not blanket-cancel
-background jobs already admitted for that channel. New Research Workspace
-drafts, confirmations, follow-ups, and searches are blocked while archived, but
-already-started evidence and answer jobs may settle, and their idempotent
-workspace reconciliation may still persist.
+Archiving a document suspends its description coordinator, cancels any pending
+description debounce, and prevents new description scheduling. It does not
+blanket-cancel background jobs already admitted for that channel. New Research
+Workspace drafts, confirmations, follow-ups, and searches are blocked while
+archived, but already-started evidence and answer jobs may settle, and their
+idempotent workspace reconciliation may still persist.
 
 Permanent deletion has a stronger boundary. The runner first blocks new claims
-for the channel while summary scheduling remains suspended, aborts its active
+for the channel while description scheduling remains suspended, aborts its active
 attempts, cancels every pending, paused, or running job, and waits a bounded
 grace period. The server then closes the live plan before atomically deleting
 the archived channel. Claim fencing rejects any late worker progress or
@@ -581,9 +613,9 @@ startup error. See [Storage](storage.md#postgresql-schema) for the table map.
 
 Job summaries omit input, fingerprint, idempotency key, and claim binding. This
 does not make input ephemeral: normalized input is stored in PostgreSQL. For
-example, summary input omits document source, while research-answer input
-deliberately persists the captured source snapshot. Store only material the
-workflow needs and document its retention boundary.
+example, document-description input omits document source, while research-answer
+input deliberately persists the captured source snapshot. Store only material
+the workflow needs and document its retention boundary.
 
 There is no current pruning policy for jobs, artifacts, Research Workspaces, or
 their transcripts while their document remains stored. Cancellation prevents
@@ -621,12 +653,12 @@ respect the job origin, authorization, disclosure, and persistence boundaries.
 
 Only the exact value `off` disables these flags:
 
-| `AGENT` | `BACKGROUND_JOBS` | `WEB_RESEARCH` | Result                                                                                             |
-| ------- | ----------------- | -------------- | -------------------------------------------------------------------------------------------------- |
-| on      | on                | on             | Summary, research evidence, and research answer definitions; runner and summary coordinator active |
-| on      | on                | off            | Summary and private research answer definitions; no new public evidence                            |
-| off     | on                | forced off     | Persisted Background Work remains readable; the entire runner and summary coordinator are off      |
-| any     | off               | forced off     | No definitions execute and generic Background Work is hidden                                       |
+| `AGENT` | `BACKGROUND_JOBS` | `WEB_RESEARCH` | Result                                                                                                            |
+| ------- | ----------------- | -------------- | ----------------------------------------------------------------------------------------------------------------- |
+| on      | on                | on             | Document description, research evidence, and research answer definitions; runner and coordinator active           |
+| on      | on                | off            | Document description and private research answer definitions; no new public evidence                              |
+| off     | on                | forced off     | Persisted Background Work and descriptions remain readable; the entire runner and description coordinator are off |
+| any     | off               | forced off     | No definitions execute and generic Background Work is hidden                                                      |
 
 Configuration is read at startup. Restoring a disabled capability requires a
 restart. Existing durable rows and artifacts are not deleted by a flag.
@@ -703,6 +735,7 @@ PostgreSQL run the same cases.
 - Claims, execution, retries, and shutdown: `apps/server/src/jobs/runner.ts`
 - Current definitions: `apps/server/src/jobs/document-summary.ts` and
   `apps/server/src/jobs/research-workspace.ts`
+- Document-description projection: `apps/server/src/jobs/document-description.ts`
 - Definition registration and runtime wiring: `apps/server/src/main.ts`
 - Active owner resolution: `apps/server/src/agent/active-owner.ts`
 - Private and public worker construction: `apps/server/src/agent/client.ts`

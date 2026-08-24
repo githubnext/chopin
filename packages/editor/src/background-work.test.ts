@@ -102,6 +102,7 @@ test("an interruption explains its safe failure reason", () => {
 });
 
 test("terminal reasons are mapped without exposing raw values", () => {
+	expect(safeInterruptionReason("attempt-error")).toBe("Worker failed unexpectedly");
 	expect(safeInterruptionReason("attempts-exhausted:private-answer-failed"))
 		.toBe("Private research answer failed");
 	expect(safeInterruptionReason("provider-secret:https://private.example"))
@@ -152,5 +153,42 @@ test("decodes initial reports and continuation answers only for answer jobs", ()
 	expect(backgroundJobResult({
 		...initial,
 		job: job({ state: "superseded" }),
+	})).toBeUndefined();
+});
+
+test("distinguishes marked descriptions from markerless legacy summaries", () => {
+	let descriptionJob = job({ type: "document-summary", state: "completed" });
+	let marked = {
+		revision: 1,
+		currentTargetGeneration: 1,
+		job: descriptionJob,
+		artifact: {
+			revision: 1,
+			value: { output: "description", description: "Coordinates release readiness." },
+			createdAt: "2026-08-22T12:00:06.000Z",
+		},
+	} satisfies Job.Detail;
+	let legacy = {
+		...marked,
+		artifact: {
+			...marked.artifact,
+			value: { summary: "A longer legacy document summary." },
+		},
+	} satisfies Job.Detail;
+
+	expect(backgroundJobResult(marked)).toEqual({
+		title: "Document description",
+		summary: "Coordinates release readiness.",
+	});
+	expect(backgroundJobLabel(descriptionJob)).toBe("Document description");
+	expect(backgroundJobLabel(descriptionJob, marked)).toBe("Document description");
+	expect(backgroundJobResult(legacy)).toEqual({
+		title: "Document summary",
+		summary: "A longer legacy document summary.",
+	});
+	expect(backgroundJobLabel(descriptionJob, legacy)).toBe("Document summary");
+	expect(backgroundJobResult({
+		...marked,
+		artifact: { ...marked.artifact, value: { description: "Missing marker" } },
 	})).toBeUndefined();
 });

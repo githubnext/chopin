@@ -1,6 +1,7 @@
 import {
 	createChannel,
 	seedChannel,
+	seedChannelDescription,
 	seedCompletedResearchWorkspace,
 	testChannelPath,
 } from "./database";
@@ -27,6 +28,7 @@ test("typed references survive Planner send, reload, navigation, and a mobile co
 	let targetRoom = crypto.randomUUID();
 	await createChannel(port(baseURL!), targetRoom);
 	await seedChannel(port(baseURL!), targetRoom, "# Referenced release\n");
+	await seedChannelDescription(port(baseURL!), targetRoom, "RFC about referenced releases");
 	let targetTitle = `Test ${targetRoom.slice(0, 8)}`;
 	let targetPath = testChannelPath(targetRoom);
 	let researchTitle = `OAuth evidence ${room.slice(0, 8)}`;
@@ -99,6 +101,7 @@ test("typed references survive Planner send, reload, navigation, and a mobile co
 	await draft.press("Backspace");
 	expect(await documents.getByRole("option", { name: targetTitle, exact: true }).count()).toBe(0);
 	await expect(documents.getByRole("option", { name: targetTitle, exact: true })).toBeVisible();
+	await expect(documents.getByText("RFC about referenced releases", { exact: true })).toBeVisible();
 	await draft.press("ArrowDown");
 	await draft.press("ArrowUp");
 	await draft.press("Enter");

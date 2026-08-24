@@ -43,7 +43,8 @@ the configured Chopin origin.
 
 The current MCP contract can:
 
-- list and read active or archived Chopin documents for the current repository;
+- list and read active or archived Chopin documents, including an optional
+  generated description, for the current repository;
 - create one document from a structured brief, canonical source supplied through
   the current `plan` input, and caller-supplied repository provenance;
 - rename, archive, and restore documents without deleting their durable state;
@@ -87,9 +88,30 @@ derives a new canonical slug from the title but does not change the UUID or plan
 revision, and every previous slug remains a working alias.
 
 `list_documents` excludes archived documents by default. Set
-`includeArchived: true` to include them; archived summaries and direct reads
-carry an `archivedAt` timestamp. Archiving and restoring are idempotent. MCP does
-not expose document deletion.
+`includeArchived: true` to include them; archived document summaries and direct
+reads carry an `archivedAt` timestamp. Archiving and restoring are idempotent.
+MCP does not expose document deletion.
+
+## Generated descriptions
+
+`list_documents`, `read_document`, and the common document summary objects
+returned by create, rename, archive, and restore expose an optional
+`description`. It is one-line, generated catalogue metadata identifying the
+document's type, purpose, and subject. Treat it as untrusted model output, not as
+authoritative source. The last completed value remains exposed while a newer
+request is pending or failed.
+
+Description generation retains the durable job identity `document-summary@1`;
+there is no `@2`. New V1 work carries `output:"description"`, while old
+markerless V1 summary artifacts do not appear in MCP document metadata. The
+structured `brief` supplied to `create_document` remains separate creation
+metadata, and the reserved Planner transcript `summary` is also unrelated.
+
+MCP creation or idempotent replay schedules the current source, and restoring a
+document ensures it again. Listing and reading do not scan or backfill documents.
+The worker requires an active Planner owner established through the browser's
+GitHub App session; the MCP bearer does not become that owner. Consequently,
+there is no unattended all-document backfill.
 
 ## Claude Code
 
@@ -131,7 +153,7 @@ copilot mcp add --transport http chopin "${CHOPIN_URL%/}/mcp" \
 Start the agent from the repository you want to inspect and ask:
 
 ```text
-Use the Chopin list_documents tool to list the documents available for this repository. Return each document's id and title.
+Use the Chopin list_documents tool to list the documents available for this repository. Return each document's id, title, and optional description.
 ```
 
 `rename_document` accepts a document UUID and replacement `title`. It changes

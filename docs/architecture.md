@@ -19,7 +19,8 @@ and [Self-hosting](self-hosting.md) for deployment.
 - A **channel** is the durable collaboration container for one document, its
   conversation, decisions, repository identity, and sidecar state.
 - An **MCP document** is the public API projection of a channel and document,
-  including its ID, title, source, revision, and optional brief.
+  including its ID, title, source, revision, optional generated description, and
+  optional creation brief.
 - A **plan** is a document being used for planning. It is not the product noun
   for every document.
 - A **room** is the server's live in-memory representation of an open channel.
@@ -118,7 +119,8 @@ owner credential but fresh isolated sessions; see
 ### Durable PostgreSQL state
 
 - user identity records and token-free process-session registry rows;
-- channel metadata and repository identity;
+- channel metadata and repository identity, including an optional generated
+  description with source and job provenance;
 - complete Yjs checkpoints and the accepted update journal after each
   checkpoint;
 - background-job requests, normalized inputs, lifecycle and progress state, and
@@ -140,10 +142,11 @@ owner credential but fresh isolated sessions; see
 - repository and admission caches.
 
 Startup deliberately clears every process-session registry row and Planner
-owner reference. Transcripts, document state, reserved context fields, and
-implementation runs remain. The current runtime does not generate the reserved
-Planner transcript summary or advance its transcript cursor; document-summary
-background artifacts are a separate feature.
+owner reference. Transcripts, document state, reserved context fields, generated
+descriptions, and implementation runs remain. The current runtime does not
+generate the reserved Planner transcript summary or advance its transcript
+cursor; `document-summary@1` artifacts and their catalogue projection are a
+separate feature.
 
 ### Ephemeral state
 
@@ -165,6 +168,7 @@ not interchangeable:
 | Plan revision              | Plan-named optimistic-concurrency token for document reads and Planner block operations. One accepted document batch or server-authored mutation advances it. |
 | Storage channel revision   | Advances for every durable channel commit, including sidecar-only transcript, graph, draft, or relationship changes. It fences adapter writes.                |
 | Storage sequence           | Orders committed updates and events. Sidecar-only commits can create gaps in the Yjs update journal because they still consume a sequence.                    |
+| Description revision       | Orders generated catalogue-description projections. It advances independently and does not change collaboration counters or channel activity time.            |
 | Graph version and revision | Identify one implementation graph generation and the edits within its current draft. A claim also binds the exact plan revision.                              |
 | Research revision          | Orders durable workspace, turn, job-link, and transcript changes independently from the parent document, background-job channel revision, and job revisions.  |
 
@@ -331,6 +335,32 @@ MDX, replays ordered updates, restores sidecar state, and preserves the epoch.
 Checkpointing prunes only the Yjs update journal. Operation idempotency and event
 tables have separate retention behavior. See [Storage](storage.md) for the table
 model and adapter contract.
+
+## Generated document descriptions
+
+Chopin can derive optional catalogue metadata from canonical document source.
+The durable job remains `document-summary@1`; `document-summary@2` does not
+exist. New V1 requests carry `output:"description"` and use
+`description-v1:<plan revision>:<source hash>` as their idempotency key. This
+lets an unchanged document with only a legacy markerless summary regenerate
+lazily when it next follows an open, edit, restore, or MCP creation/replay
+scheduling path and an active Planner owner is available. There is no unattended
+all-document backfill.
+
+The private worker returns one physical line identifying document type, purpose,
+and subject, such as a PRD, RFC, or Plan. Blank source yields `Empty document`.
+Markerless V1 summary artifacts remain readable background results but are not
+projected. Marked completions are idempotently stored in channel metadata with
+source plan revision and hash, generator version, job ID, projection time, and
+an independent description revision. Existing metadata remains in place while
+newer work is pending or failed, and projection changes neither collaboration
+revision nor channel `updatedAt`.
+
+Browser lists, document and reference pickers, and title-or-description search
+show the optional value. MCP document reads, lists, and common document summaries
+also expose it. A description is untrusted model output, not authoritative
+document content. The structured MCP creation `brief` and reserved Planner
+transcript `summary` remain separate fields with separate purposes.
 
 ## Implementation graphs
 

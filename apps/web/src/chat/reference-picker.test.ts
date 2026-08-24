@@ -38,6 +38,7 @@ function channel(id: string, title = id): Api.Channel {
 		revision: 0,
 		createdAt: "2026-08-23T00:00:00.000Z",
 		updatedAt: "2026-08-23T00:00:00.000Z",
+		descriptionRevision: 0,
 	};
 }
 
@@ -127,6 +128,29 @@ describe("reference picker requests", () => {
 			}],
 			truncated: false,
 		});
+	});
+
+	test("maps generated descriptions without changing document reference identity", async () => {
+		let described = {
+			...channel("release", "Release plan"),
+			descriptionRevision: 3,
+			description: "Coordinates launch readiness across the repository.",
+		};
+		let result = await searchReferenceTargets(
+			trigger("document"),
+			REPOSITORY,
+			"current",
+			new AbortController().signal,
+			api([described]),
+		);
+
+		expect(result.options).toEqual([{
+			kind: "document",
+			channelId: "release",
+			title: "Release plan",
+			slug: "release",
+			description: "Coordinates launch readiness across the repository.",
+		}]);
 	});
 
 	test("paginates documents until ten non-current matches are available", async () => {
@@ -231,7 +255,7 @@ describe("reference picker accessibility", () => {
 		expect(markup).toContain("Release plan");
 	});
 
-	test("shows a document slug as a description without changing its exact name", () => {
+	test("describes a document with generated text and slug without changing its exact name", () => {
 		let markup = renderToStaticMarkup(createElement(ReferencePicker, {
 			active: 0,
 			id: "reference-list",
@@ -245,12 +269,16 @@ describe("reference picker accessibility", () => {
 					channelId: "release",
 					title: "Release plan",
 					slug: "release-plan",
+					description: "Coordinates launch readiness.",
 				}],
 			},
 		}));
 
 		expect(markup).toContain('aria-label="Release plan"');
-		expect(markup).toContain('aria-describedby="reference-list-option-0-description"');
+		expect(markup).toContain(
+			'aria-describedby="reference-list-option-0-description reference-list-option-0-slug"',
+		);
+		expect(markup).toContain("Coordinates launch readiness.");
 		expect(markup).toContain(">release-plan</span>");
 	});
 

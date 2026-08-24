@@ -160,11 +160,16 @@ export function DocumentSearchDialog(
 						}}
 						type="button"
 					>
-						<span className="min-w-0">
+						<span className="min-w-0 flex-1">
 							<span className="flex min-w-0 items-center gap-2 text-sm font-medium">
 								<span className="truncate">{channel.title}</span>
 								{channel.archivedAt && <span className="document-status-badge">Archived</span>}
 							</span>
+							{channel.description && (
+								<span className="block truncate text-sm text-text-tertiary">
+									{channel.description}
+								</span>
+							)}
 							<span className="block truncate text-sm text-text-tertiary">
 								{project.repositoryOwner}/{project.repositoryName}
 							</span>

@@ -9,10 +9,11 @@ import {
 	projectDocuments,
 	removeLoadedDocument,
 	replaceLoadedDocument,
+	updateDocumentMetadata,
 	updateLoadedDocument,
 } from "./document-actions";
 
-import type { LoadedDocuments, ProjectDocuments } from "./document-actions";
+import type { DocumentMetadata, LoadedDocuments, ProjectDocuments } from "./document-actions";
 
 export function useProjectDocuments(navigation?: Api.Navigation, includeArchived = false) {
 	let [catalogue, setCatalogue] = useState<{
@@ -182,20 +183,22 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 	}, []);
 	let updateDocument = useCallback((
 		documentId: string,
-		update: Pick<Api.Channel, "title" | "slug" | "updatedAt" | "archivedAt">,
+		update: DocumentMetadata,
 	) => {
 		let latest = latestDocuments.current.get(documentId);
-		if (!latest || latest.updatedAt <= update.updatedAt) {
-			if (latest) latestDocuments.current.set(documentId, { ...latest, ...update });
-		}
+		if (latest) latestDocuments.current.set(documentId, updateDocumentMetadata(latest, update));
 		setCatalogue(current => {
 			if (current.includeArchived !== includeArchivedRef.current) return current;
 			let existing = Object.values(current.documents).flatMap(state => state.channels)
 				.find(value => value.id === documentId);
-			if (existing && existing.updatedAt > update.updatedAt) return current;
-			let documents = update.archivedAt && !includeArchivedRef.current
+			if (!existing) return current;
+			let accepted = updateDocumentMetadata(existing, update);
+			let known = latestDocuments.current.get(documentId);
+			if (known) accepted = newestDocument(known, accepted);
+			latestDocuments.current.set(documentId, accepted);
+			let documents = accepted.archivedAt && !includeArchivedRef.current
 				? removeLoadedDocument(current.documents, documentId)
-				: updateLoadedDocument(current.documents, documentId, update);
+				: updateLoadedDocument(current.documents, documentId, accepted);
 			return documents === current.documents ? current : { ...current, documents };
 		});
 	}, []);

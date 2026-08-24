@@ -460,6 +460,7 @@ if (url) {
 				"008_research_repository_listing",
 				"009_navigation_revision",
 				"010_document_archival",
+				"011_document_descriptions",
 			]);
 			expect(await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`)
 				.toEqual([

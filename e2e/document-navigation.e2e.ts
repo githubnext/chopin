@@ -1,6 +1,6 @@
 import { authenticate, content, expect, roomPath, test } from "./room";
 
-function channel(id: string, title: string) {
+function channel(id: string, title: string, description?: string) {
 	return {
 		createdAt: "2026-08-19T12:00:00.000Z",
 		createdBy: "U_ana",
@@ -9,6 +9,8 @@ function channel(id: string, title: string) {
 		repositoryName: "score",
 		repositoryOwner: "octo-org",
 		revision: 0,
+		descriptionRevision: description ? 1 : 0,
+		...(description ? { description } : {}),
 		slug: title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
 		title,
 		updatedAt: "2026-08-19T12:00:00.000Z",
@@ -229,9 +231,14 @@ test("the sidebar paginates documents and global search queries beyond the loade
 			channel(
 				`${String(index + 1).padStart(8, "0")}-0000-4000-8000-000000000000`,
 				`Note ${index + 1}`,
+				index === 0 ? "Plan for note taking" : undefined,
 			),
 	);
-	let searched = channel("aaaaaaaa-0000-4000-8000-000000000000", "Search needle");
+	let searched = channel(
+		"aaaaaaaa-0000-4000-8000-000000000000",
+		"Search needle",
+		"RFC about catalogue search",
+	);
 	let continued = channel("bbbbbbbb-0000-4000-8000-000000000000", "Continued document");
 	await page.route("**/api/repositories/octo-org/score/channels*", async route => {
 		let url = new URL(route.request().url());
@@ -248,6 +255,7 @@ test("the sidebar paginates documents and global search queries beyond the loade
 	page = await join("ana");
 	let projects = sidebar(page);
 	await expect(projects.getByRole("link", { name: "Note 2", exact: true })).toBeVisible();
+	await expect(projects.getByText("Plan for note taking", { exact: true })).toBeVisible();
 	await projects.getByRole("button", { name: "Load more documents in score" }).click();
 	await expect(projects.getByRole("link", { name: "Continued document", exact: true }))
 		.toBeVisible();
@@ -257,6 +265,7 @@ test("the sidebar paginates documents and global search queries beyond the loade
 	await expect(search).toBeFocused();
 	await search.fill("needle");
 	await expect(dialog.getByRole("button", { name: /Search needle/ })).toBeVisible();
+	await expect(dialog.getByText("RFC about catalogue search", { exact: true })).toBeVisible();
 	expect(requests.some(url => url.searchParams.get("query") === "needle")).toBe(true);
 });
 

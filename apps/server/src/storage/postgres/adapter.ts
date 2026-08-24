@@ -25,6 +25,8 @@ import type {
 	CreateChannel,
 	JsonValue,
 	Lease,
+	PublishChannelDescription,
+	PublishChannelDescriptionResult,
 	RenameChannel,
 	RenameResult,
 	ReplaceChannel,
@@ -78,6 +80,13 @@ type ChannelRow = {
 	createdAt: Timestamp;
 	updatedAt: Timestamp;
 	archivedAt: Timestamp | null;
+	description: string | null;
+	descriptionRevision: Integer;
+	descriptionPlanRevision: Integer | null;
+	descriptionSourceHash: string | null;
+	descriptionGeneratorVersion: Integer | null;
+	descriptionJobId: string | null;
+	descriptionUpdatedAt: Timestamp | null;
 };
 
 type SnapshotRow = {
@@ -198,7 +207,49 @@ function session(row: SessionRow): WebSession {
 
 function channel(row: ChannelRow): ChannelRecord {
 	if (!row.slug) throw corrupt(`channel ${row.id} has no canonical slug`);
-	let { archivedAt, ...record } = row;
+	let {
+		archivedAt,
+		description,
+		descriptionRevision,
+		descriptionPlanRevision,
+		descriptionSourceHash,
+		descriptionGeneratorVersion,
+		descriptionJobId,
+		descriptionUpdatedAt,
+		...record
+	} = row;
+	let projectionRevision = integer(descriptionRevision, "channel description revision");
+	let projected = description === null
+		? undefined
+		: {
+			value: description,
+			revision: projectionRevision,
+			planRevision: integer(descriptionPlanRevision!, "channel description plan revision"),
+			sourceHash: descriptionSourceHash!,
+			generatorVersion: integer(
+				descriptionGeneratorVersion!,
+				"channel description generator version",
+			) as 1,
+			jobId: descriptionJobId!,
+			updatedAt: date(descriptionUpdatedAt!, "channel description update time"),
+		};
+	if (
+		description === null
+			? projectionRevision !== 0
+				|| descriptionPlanRevision !== null
+				|| descriptionSourceHash !== null
+				|| descriptionGeneratorVersion !== null
+				|| descriptionJobId !== null
+				|| descriptionUpdatedAt !== null
+			: !description
+				|| projectionRevision < 1
+				|| descriptionPlanRevision === null
+				|| !descriptionSourceHash
+				|| descriptionGeneratorVersion === null
+				|| integer(descriptionGeneratorVersion, "channel description generator version") !== 1
+				|| !descriptionJobId
+				|| descriptionUpdatedAt === null
+	) throw corrupt(`channel ${row.id} has invalid generated description metadata`);
 	return {
 		...record,
 		slug: row.slug,
@@ -206,6 +257,7 @@ function channel(row: ChannelRow): ChannelRecord {
 		createdAt: date(row.createdAt, "channel creation time"),
 		updatedAt: date(row.updatedAt, "channel update time"),
 		...(archivedAt === null ? {} : { archivedAt: date(archivedAt, "channel archive time") }),
+		...(projected ? { description: projected } : {}),
 	};
 }
 
@@ -301,7 +353,14 @@ const CHANNEL_COLUMNS = `
 	channels.revision,
 	channels.created_at AS "createdAt",
 	channels.updated_at AS "updatedAt",
-	channels.archived_at AS "archivedAt"
+	channels.archived_at AS "archivedAt",
+	channels.generated_description AS description,
+	channels.generated_description_revision AS "descriptionRevision",
+	channels.generated_description_plan_revision AS "descriptionPlanRevision",
+	channels.generated_description_source_hash AS "descriptionSourceHash",
+	channels.generated_description_generator_version AS "descriptionGeneratorVersion",
+	channels.generated_description_job_id AS "descriptionJobId",
+	channels.generated_description_updated_at AS "descriptionUpdatedAt"
 `;
 
 const CHANNEL_RETURNING = `
@@ -314,7 +373,14 @@ const CHANNEL_RETURNING = `
 	revision,
 	created_at AS "createdAt",
 	updated_at AS "updatedAt",
-	archived_at AS "archivedAt"
+	archived_at AS "archivedAt",
+	generated_description AS description,
+	generated_description_revision AS "descriptionRevision",
+	generated_description_plan_revision AS "descriptionPlanRevision",
+	generated_description_source_hash AS "descriptionSourceHash",
+	generated_description_generator_version AS "descriptionGeneratorVersion",
+	generated_description_job_id AS "descriptionJobId",
+	generated_description_updated_at AS "descriptionUpdatedAt"
 `;
 
 const SNAPSHOT_COLUMNS = `
@@ -525,6 +591,7 @@ export class PostgresStorage implements StorageAdapter {
 		archive: input => this.#setChannelArchived(input, true),
 		restore: input => this.#setChannelArchived(input, false),
 		delete: id => this.#deleteChannel(id),
+		publishDescription: input => this.#publishChannelDescription(input),
 		list: (repositoryId, limit, after, query, includeArchived) =>
 			this.#listChannels(repositoryId, limit, after, query, includeArchived),
 		scan: (repositoryId, limit, after, includeArchived) =>
@@ -718,6 +785,45 @@ export class PostgresStorage implements StorageAdapter {
 			}));
 	}
 
+	#publishChannelDescription(
+		input: PublishChannelDescription,
+	): Promise<PublishChannelDescriptionResult> {
+		return this.#run("publish channel description", () =>
+			this.#sql.begin(async transaction => {
+				await this.#assertLease(transaction, input.lease);
+				let [current] = await transaction<ChannelRow[]>`
+					SELECT ${transaction.unsafe(CHANNEL_COLUMNS)}
+					FROM channels
+					WHERE id = ${input.channelId}
+					FOR UPDATE
+				`;
+				if (!current) throw missing(`channel ${input.channelId} does not exist`);
+				let existing = channel(current);
+				if (
+					existing.description?.jobId === input.jobId
+					|| existing.description && existing.description.planRevision >= input.planRevision
+				) return { channel: existing, changed: false };
+
+				let [saved] = await transaction<ChannelRow[]>`
+					UPDATE channels
+					SET generated_description = ${input.description},
+						generated_description_revision = generated_description_revision + 1,
+						generated_description_plan_revision = ${input.planRevision},
+						generated_description_source_hash = ${input.sourceHash},
+						generated_description_generator_version = ${input.generatorVersion},
+						generated_description_job_id = ${input.jobId},
+						generated_description_updated_at = ${input.now}
+					WHERE id = ${input.channelId}
+					RETURNING ${transaction.unsafe(CHANNEL_RETURNING)}
+				`;
+				if (!saved) throw corrupt("publishing a channel description returned no record");
+				return {
+					channel: channel({ ...saved, slug: existing.slug }),
+					changed: true,
+				};
+			}));
+	}
+
 	async #reserveSlug(
 		transaction: TransactionSQL,
 		repositoryId: string,
@@ -776,7 +882,11 @@ export class PostgresStorage implements StorageAdapter {
 					FROM channels
 					WHERE repository_id = ${repositoryId}
 						AND (${includeArchived} OR archived_at IS NULL)
-						AND (${!query} OR title ILIKE ${pattern} ESCAPE '\\')
+						AND (
+							${!query}
+							OR title ILIKE ${pattern} ESCAPE '\\'
+							OR generated_description ILIKE ${pattern} ESCAPE '\\'
+						)
 						AND (
 							updated_at < ${after.updatedAt}
 							OR (updated_at = ${after.updatedAt} AND id > ${after.id})
@@ -789,7 +899,11 @@ export class PostgresStorage implements StorageAdapter {
 					FROM channels
 					WHERE repository_id = ${repositoryId}
 						AND (${includeArchived} OR archived_at IS NULL)
-						AND (${!query} OR title ILIKE ${pattern} ESCAPE '\\')
+						AND (
+							${!query}
+							OR title ILIKE ${pattern} ESCAPE '\\'
+							OR generated_description ILIKE ${pattern} ESCAPE '\\'
+						)
 					ORDER BY updated_at DESC, id ASC
 					LIMIT ${count + 1}
 				`;

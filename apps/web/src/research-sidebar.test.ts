@@ -19,6 +19,8 @@ let channel: Api.Channel = {
 	revision: 1,
 	createdAt: "2026-08-20T00:00:00.000Z",
 	updatedAt: "2026-08-23T00:00:00.000Z",
+	descriptionRevision: 1,
+	description: "Coordinates the release readiness work.",
 };
 
 function workspace(id: string, title: string, createdAt: string): Research.WorkspaceSummary {
@@ -87,6 +89,8 @@ describe("research sidebar hierarchy", () => {
 			'<a aria-current="page" class="project-sidebar-document-link min-w-0 flex-1 text-left text-sm font-medium" href="/documents/acme/one/release-plan">',
 		);
 		expect(markup).not.toContain('role="tree"');
+		expect(markup).toContain("Coordinates the release readiness work.");
+		expect(markup).toContain("block truncate font-normal text-text-quaternary");
 	});
 
 	it("marks the parent as an active ancestor and only the child as current", () => {

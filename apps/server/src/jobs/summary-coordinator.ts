@@ -1,5 +1,5 @@
 import type { DocumentTarget } from "../plan/service";
-import type { JobService } from "./service";
+import type { JobService, JobView } from "./service";
 
 export type SummaryCoordinatorOptions = {
 	service: JobService;
@@ -7,6 +7,7 @@ export type SummaryCoordinatorOptions = {
 	debounceMs?: number;
 	after?: (delayMs: number, action: () => void) => () => void;
 	error?: (err: unknown) => void;
+	completed?: (job: JobView) => Promise<void>;
 };
 
 type Pending = {
@@ -28,7 +29,7 @@ export class DocumentSummaryCoordinator {
 		this.#options = options;
 		this.#debounceMs = options.debounceMs ?? 30_000;
 		if (!Number.isSafeInteger(this.#debounceMs) || this.#debounceMs < 0) {
-			throw new Error("Document summary debounce must be a non-negative integer.");
+			throw new Error("Document description debounce must be a non-negative integer.");
 		}
 	}
 
@@ -78,17 +79,19 @@ export class DocumentSummaryCoordinator {
 			if (this.#suspended.has(target.channelId)) return;
 			let current = await this.#options.current(target.channelId);
 			if (!current) return;
-			await this.#options.service.enqueueScheduler({
+			let result = await this.#options.service.enqueueScheduler({
 				channelId: current.channelId,
 				type: "document-summary",
 				targetKey: "document",
-				idempotencyKey: `v1:${current.revision}:${current.sourceHash}`,
+				idempotencyKey: `description-v1:${current.revision}:${current.sourceHash}`,
 				input: {
 					revision: current.revision,
 					sourceHash: current.sourceHash,
 					generatorVersion: 1,
+					output: "description",
 				},
 			});
+			if (result.job.state === "completed") await this.#options.completed?.(result.job);
 		});
 		let settled = operation.catch(() => {});
 		this.#chains.set(target.channelId, settled);
@@ -107,7 +110,7 @@ export class DocumentSummaryCoordinator {
 		}
 	}
 
-	/** Stop new summary work and wait for scheduling already admitted for one document. */
+	/** Stop new description work and wait for scheduling already admitted for one document. */
 	async suspend(channelId: string): Promise<void> {
 		this.#suspended.add(channelId);
 		let pending = this.#pending.get(channelId);
@@ -135,7 +138,7 @@ export class DocumentSummaryCoordinator {
 		if (errors.length > 0) {
 			throw new AggregateError(
 				errors.map(result => result.reason),
-				"Document summary flush failed.",
+				"Document description flush failed.",
 			);
 		}
 	}
