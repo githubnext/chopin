@@ -15,6 +15,7 @@ import {
 	useMemo,
 	useRef,
 	useState,
+	useSyncExternalStore,
 } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $copyBlockFormatIndent, $setBlocksType } from "@lexical/selection";
@@ -52,6 +53,7 @@ import { $createParagraphNode, $createTextNode, $insertNodes } from "lexical";
 import * as Y from "yjs";
 
 import { askForUrl } from "./url";
+import { ResearchDraftStore } from "../research-draft";
 import { ResearchComposer } from "../widgets/research";
 import { placeSurface } from "./placement";
 import {
@@ -65,7 +67,6 @@ import {
 
 import type { Binding } from "@lexical/yjs";
 import type { ElementNode, LexicalEditor, LexicalNode } from "lexical";
-import type { Research } from "@chopin/protocol";
 import type { ResearchStore } from "../widget-options";
 import type { DOMRectLike, SurfacePlacement } from "./placement";
 
@@ -313,18 +314,6 @@ export function insertResearchReference(
 	return inserted;
 }
 
-export async function createResearchReference(
-	editor: LexicalEditor,
-	binding: Binding,
-	position: Y.RelativePosition,
-	question: string,
-	requestId: string,
-	persist: (question: string, requestId: string) => Promise<Research.RequestView>,
-): Promise<{ inserted: boolean; request: Research.RequestView }> {
-	let request = await persist(question, requestId);
-	return { inserted: insertResearchReference(editor, binding, position, request.id), request };
-}
-
 export function dismissResearchComposer(
 	editor: Pick<LexicalEditor, "focus">,
 	dismiss: () => void,
@@ -401,32 +390,31 @@ export function decide(
 export type SlashMenuProps = {
 	binding?: Binding;
 	disabled?: boolean;
+	drafts?: ResearchDraftStore;
 	research?: ResearchStore;
 };
 
-type ResearchDraft = {
-	anchor: DOMRectLike;
-	position?: Y.RelativePosition;
-	question: string;
-	created?: Research.RequestView;
-	submitted?: { question: string; requestId: string };
-	submitting?: boolean;
-	error?: string;
-};
-
-export function SlashMenu({ binding, disabled, research }: SlashMenuProps) {
+export function SlashMenu({ binding, disabled, drafts, research }: SlashMenuProps) {
 	let [editor] = useLexicalComposerContext();
 	let [query, setQuery] = useState<string>();
 	let [anchor, setAnchor] = useState<DOMRectLike>();
 	let [position, setPosition] = useState<SurfacePlacement>();
 	let [index, setIndex] = useState(0);
-	let [draft, setDraft] = useState<ResearchDraft>();
+	let subscribeDraft = useCallback(
+		(listener: () => void) => drafts?.subscribe(listener) ?? (() => {}),
+		[drafts],
+	);
+	let readDraft = useCallback(() => drafts?.get(), [drafts]);
+	let draft = useSyncExternalStore(subscribeDraft, readDraft, readDraft);
 	let surface = useRef<HTMLDivElement>(null);
 	let open = query !== undefined && !disabled;
 
 	let matches = useMemo(
-		() => availableCommands(query ?? "").filter(command => command.id !== "research" || research),
-		[query, research],
+		() =>
+			availableCommands(query ?? "").filter(command =>
+				command.id !== "research" || (research && drafts)
+			),
+		[query, research, drafts],
 	);
 	// Groups now place dividers while options remain direct listbox children.
 	let grouped = useMemo(() => {
@@ -494,14 +482,14 @@ export function SlashMenu({ binding, disabled, research }: SlashMenuProps) {
 		let placement = anchor;
 		close();
 		command.run(editor, {
-			research: research && consumed && placement
+			research: research && drafts && consumed && placement
 				? () => {
 					setPosition(undefined);
-					setDraft({ anchor: placement, position: consumed.position, question: "" });
+					drafts.open(placement, consumed.position);
 				}
 				: undefined,
 		});
-	}, [anchor, consume, close, editor, research]);
+	}, [anchor, consume, close, drafts, editor, research]);
 
 	// Arming is what separates a slash the author typed from one that arrived
 	// with someone else's edit. Registered whether or not the menu is showing,
@@ -522,7 +510,6 @@ export function SlashMenu({ binding, disabled, research }: SlashMenuProps) {
 		// Clears any query left behind by the lock, which would otherwise spring
 		// the menu open the moment an agent turn ends.
 		if (disabled) {
-			setDraft(current => current?.created ? current : undefined);
 			close();
 			return;
 		}
@@ -589,6 +576,13 @@ export function SlashMenu({ binding, disabled, research }: SlashMenuProps) {
 		return listenToEditorGeometry(editor, place);
 	}, [editor, open, draft, place]);
 
+	useLayoutEffect(() => {
+		if (!drafts || !binding || disabled) return;
+		return drafts.attachPlacement((saved, id) =>
+			insertResearchReference(editor, binding, saved, id)
+		);
+	}, [binding, disabled, drafts, editor]);
+
 	let selected = useRef(matches[0]);
 	selected.current = matches[index];
 
@@ -617,8 +611,8 @@ export function SlashMenu({ binding, disabled, research }: SlashMenuProps) {
 		);
 	}, [editor, open, matches.length, close, choose]);
 
-	if (draft && research) {
-		let dismiss = () => dismissResearchComposer(editor, () => setDraft(undefined));
+	if (draft && drafts && research) {
+		let dismiss = () => dismissResearchComposer(editor, () => drafts.dismiss());
 		let currentPosition = () => {
 			if (!binding) return;
 			let found: Y.RelativePosition | undefined;
@@ -628,74 +622,26 @@ export function SlashMenu({ binding, disabled, research }: SlashMenuProps) {
 			return found;
 		};
 		let submit = () => {
-			if (draft.submitting || !draft.question.trim()) return;
+			if (draft.submitting || draft.cancelling || !draft.question.trim()) return;
 			if (!binding) return;
 			if (draft.created) {
 				let position = currentPosition();
-				if (position && insertResearchReference(editor, binding, position, draft.created.id)) {
-					setDraft(undefined);
-					return;
-				}
-				setDraft(current =>
-					current && {
-						...current,
-						error: "Choose a new insertion point in the document, then place the research again.",
-					}
-				);
+				if (position) drafts.place(position);
 				return;
 			}
-			let saved = draft.position ?? currentPosition();
-			if (!saved) {
-				setDraft(current =>
-					current && {
-						...current,
-						error: "Choose an insertion point in the document before starting research.",
-					}
-				);
-				return;
-			}
-			let submitted = draft.submitted?.question === draft.question
-				? draft.submitted
-				: { question: draft.question, requestId: crypto.randomUUID() };
-			setDraft(current =>
-				current && {
-					...current,
-					submitted,
-					submitting: true,
-					error: undefined,
-				}
-			);
-			void createResearchReference(
-				editor,
-				binding,
-				saved,
-				submitted.question,
-				submitted.requestId,
+			void drafts.start(
 				(question, requestId) => research.create(question, requestId),
-			).then(result => {
-				if (result.inserted) {
-					setDraft(undefined);
-					return;
-				}
-				setDraft(current =>
-					current && {
-						...current,
-						created: result.request,
-						submitting: false,
-						error:
-							"Research started, but its reference could not be placed. Choose a new insertion point in the document.",
-					}
-				);
-			}).catch(() =>
-				setDraft(current =>
-					current && {
-						...current,
-						submitting: false,
-						error: "Research could not be started.",
-					}
-				)
+				currentPosition(),
 			);
 		};
+		let cancel = () => {
+			if (!draft.created) return dismiss();
+			void drafts.cancelCreated(id => research.cancel(id)).then(cancelled => {
+				if (cancelled) editor.focus();
+			});
+		};
+		let busy = !!draft.submitting || !!draft.cancelling;
+		let dismissible = !busy && !draft.created;
 		return (
 			<div
 				ref={surface}
@@ -718,23 +664,18 @@ export function SlashMenu({ binding, disabled, research }: SlashMenuProps) {
 						: binding
 						? undefined
 						: "Connect to the document before starting research."}
+					busyLabel={draft.cancelling ? "Cancelling…" : undefined}
+					cancelLabel={draft.created ? "Cancel research" : undefined}
+					dismissible={dismissible}
 					error={draft.error}
-					onCancel={dismiss}
-					onChange={question =>
-						setDraft(current =>
-							current && {
-								...current,
-								question,
-								error: undefined,
-								submitted: current.question === question ? current.submitted : undefined,
-							}
-						)}
+					onCancel={cancel}
+					onChange={question => drafts.change(question)}
 					onEscape={dismiss}
 					onSubmit={submit}
 					question={draft.question}
 					questionLocked={!!draft.created}
 					submitLabel={draft.created ? "Place research here" : undefined}
-					submitting={draft.submitting}
+					submitting={busy}
 				/>
 			</div>
 		);

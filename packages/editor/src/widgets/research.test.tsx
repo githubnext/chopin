@@ -112,6 +112,29 @@ describe("research composer", () => {
 		}, () => calls.push("escape"));
 		expect(calls).toEqual(["prevent", "stop", "escape"]);
 	});
+
+	it("does not dismiss an in-flight composer on Escape", async () => {
+		let module = await import("./research") as unknown as {
+			handleResearchComposerKey?: (
+				event: { key: string; preventDefault(): void; stopPropagation(): void },
+				onEscape: () => void,
+				dismissible?: boolean,
+			) => void;
+		};
+		expect(typeof module.handleResearchComposerKey).toBe("function");
+		if (!module.handleResearchComposerKey) return;
+		let calls: string[] = [];
+		module.handleResearchComposerKey(
+			{
+				key: "Escape",
+				preventDefault: () => calls.push("prevent"),
+				stopPropagation: () => calls.push("stop"),
+			},
+			() => calls.push("escape"),
+			false,
+		);
+		expect(calls).toEqual(["prevent", "stop"]);
+	});
 });
 
 describe("research card", () => {
