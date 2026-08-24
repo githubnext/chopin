@@ -64,6 +64,39 @@ test("the room header renames the current document and the sidebar creates one i
 	await expect(headerDocument(page)).toHaveAccessibleName(/^Document: [a-z]+-[a-z]+$/);
 });
 
+test("a stale catalogue response cannot remove a newly created document", async ({ join, page }) => {
+	let captured = Promise.withResolvers<void>();
+	let release = Promise.withResolvers<void>();
+	let intercepted = false;
+	await page.route("**/api/repositories/octo-org/score/channels*", async route => {
+		if (intercepted || route.request().method() !== "GET") {
+			await route.continue();
+			return;
+		}
+		intercepted = true;
+		let response = await route.fetch();
+		captured.resolve();
+		await release.promise;
+		await route.fulfill({ response });
+	});
+
+	page = await join("ana");
+	await captured.promise;
+	let projects = sidebar(page);
+	await projects.getByRole("button", { name: "New document", exact: true }).click();
+	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
+	let created = projects.locator('a[aria-current="page"]');
+	await expect(created).toBeVisible();
+	let createdTitle = (await created.textContent())!.trim();
+	await expect(projects.getByText("Loading more…", { exact: true })).toBeVisible();
+
+	release.resolve();
+	await expect(projects.getByText("Loading more…", { exact: true })).toHaveCount(0);
+	await expect(projects.getByRole("link", { name: createdTitle, exact: true }))
+		.toHaveAttribute("aria-current", "page");
+	await expect(projects.locator('a[aria-current="page"]')).toHaveCount(1);
+});
+
 test("document switches preserve navigation state and avoid catalogue reloads", async ({ join, page }) => {
 	let requested: Array<{ method: string; path: string }> = [];
 	page.on("request", request =>
