@@ -1,20 +1,18 @@
 import { useEffect } from "react";
 
-export function motionInput(type: string): "keyboard" | "pointer" | undefined {
-	return type === "keydown" ? "keyboard" : type === "pointerdown" ? "pointer" : undefined;
-}
-
 export function useMotionInput(): void {
 	useEffect(() => {
-		let record = (event: Event) => {
-			let input = motionInput(event.type);
-			if (input) document.documentElement.dataset.motionInput = input;
+		let recordKeyboard = () => {
+			document.documentElement.dataset.motionInput = "keyboard";
 		};
-		window.addEventListener("keydown", record, true);
-		window.addEventListener("pointerdown", record, true);
+		let recordPointer = () => {
+			document.documentElement.dataset.motionInput = "pointer";
+		};
+		window.addEventListener("keydown", recordKeyboard, true);
+		window.addEventListener("pointerdown", recordPointer, true);
 		return () => {
-			window.removeEventListener("keydown", record, true);
-			window.removeEventListener("pointerdown", record, true);
+			window.removeEventListener("keydown", recordKeyboard, true);
+			window.removeEventListener("pointerdown", recordPointer, true);
 		};
 	}, []);
 }

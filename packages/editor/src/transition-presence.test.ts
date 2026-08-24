@@ -9,7 +9,13 @@ import {
 	transitionPresence,
 } from "./transition-presence";
 
-import type { PresenceState } from "./transition-presence";
+import type { PresenceState, TransitionPresence } from "./transition-presence";
+
+function activeValue<T>(
+	presence: Exclude<TransitionPresence<T>, { phase: "closed" }>,
+): T {
+	return presence.value;
+}
 
 describe("transition presence", () => {
 	test("opens on a frame and closes after its exit", () => {
@@ -80,19 +86,23 @@ describe("transition presence", () => {
 		let committed = { version: 1 };
 		expect(presenceValue(null, committed, "open")).toBeNull();
 	});
+
+	test("narrows active content from the presence phase", () => {
+		let presence = {
+			className: "is-open",
+			phase: "open",
+			value: "Document",
+		} satisfies TransitionPresence<string>;
+		expect(activeValue(presence)).toBe("Document");
+	});
 });
 
 describe("close delay", () => {
-	test.each(
-		[
-			["180ms", 230],
-			["0.2s", 250],
-		] as const,
-	)("adds cleanup time to a %s duration", (duration, expected) => {
-		expect(closeDelay(duration, 300, false)).toBe(expected);
+	test("adds cleanup time to the authoritative duration", () => {
+		expect(closeDelay(180, false)).toBe(230);
 	});
 
 	test("finishes immediately when motion is disabled", () => {
-		expect(closeDelay("0.2s", 300, true)).toBe(0);
+		expect(closeDelay(180, true)).toBe(0);
 	});
 });
