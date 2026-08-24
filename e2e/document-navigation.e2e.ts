@@ -354,21 +354,21 @@ test("writers can archive, restore, and permanently delete a document", async ({
 	await expect(bo).toHaveURL(path);
 	await expect(content(bo)).toHaveAttribute("contenteditable", "false");
 
-	await projects.getByRole("checkbox", { name: "Show archived documents" }).check();
-	await expect(projects.getByRole("link", { name: `${title} Archived`, exact: true }))
+	await projects.getByRole("button", { name: "Archived chats", exact: true }).click();
+	await expect(projects.getByRole("button", { name: "Back to active docs", exact: false }))
 		.toBeVisible();
-	await projects.getByRole("button", { name: "Search", exact: true }).click();
-	let search = ana.getByRole("dialog", { name: "Search documents" });
-	let searchInput = search.getByRole("textbox", { name: "Search documents" });
-	await searchInput.fill(title);
-	await expect(search.getByRole("button", { name: new RegExp(`${title}.*Archived`) }))
-		.toBeVisible();
-	await searchInput.press("Escape");
+	await expect(projects.getByRole("link", { name: title, exact: true })).toBeVisible();
+	await expect(projects.getByRole("button", { name: "New document", exact: true })).toHaveCount(0);
+	await expect(projects.getByRole("button", { name: "Search", exact: true })).toHaveCount(0);
 
 	await headerAction(ana, "Restore");
 	await expect(content(ana)).toHaveAttribute("contenteditable", "true");
 	await expect(content(bo)).toHaveAttribute("contenteditable", "true");
 	await expect(ana.getByText("Archived, read-only", { exact: true })).toHaveCount(0);
+	await expect(projects.getByRole("button", { name: "Archived chats", exact: true })).toBeVisible();
+	await expect(projects.getByRole("link", { name: title, exact: true })).toBeVisible();
+	await expect(projects.getByRole("button", { name: "Back to active docs", exact: false }))
+		.toHaveCount(0);
 
 	await headerAction(ana, "Archive");
 	await expect(content(ana)).toHaveAttribute("contenteditable", "false");

@@ -619,7 +619,10 @@ export function NavigationShell(
 		let mutation = action === "archive"
 			? Api.archiveChannel(channel.id)
 			: Api.restoreChannel(channel.id);
-		void mutation.then(detail => acceptChannel(detail.channel), reason => {
+		void mutation.then(detail => {
+			acceptChannel(detail.channel);
+			if (action === "restore") setCatalogueMode("active");
+		}, reason => {
 			setError({ reason });
 		});
 	}, [acceptChannel, showDialog]);
