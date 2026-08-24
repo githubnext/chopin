@@ -93,7 +93,7 @@ test("sidebar titles stay readable until hover reveals controls", async ({ join,
 	page = await join("ana");
 	let projects = sidebar(page);
 	let link = projects.getByRole("link", { name: title, exact: true });
-	let titleText = link.locator("span");
+	let titleText = link.locator("span").last();
 	let row = link.locator("..");
 	let actions = projects.getByRole("button", { name: `Actions for ${title}` });
 	let clipped = () => titleText.evaluate(element => element.scrollWidth > element.clientWidth);
