@@ -62,6 +62,32 @@ export async function createChannel(port: number, id: string): Promise<void> {
 	});
 }
 
+export async function seedChildChannel(
+	port: number,
+	parentId: string,
+	id: string,
+	title: string,
+	source: string,
+	state: SeedState = {},
+): Promise<{ id: string; path: string; slug: string }> {
+	await createChannel(port, id);
+	let slug = `child-${id.slice(0, 8)}`;
+	await sql(port, async database => {
+		await database.begin(async transaction => {
+			await transaction`
+				UPDATE channels
+				SET parent_channel_id = ${parentId}, title = ${title}, updated_at = ${new Date()}
+				WHERE id = ${id}
+			`;
+			await transaction`
+				UPDATE channel_slugs SET slug = ${slug} WHERE channel_id = ${id} AND canonical = true
+			`;
+		});
+	});
+	await seedChannel(port, id, source, state);
+	return { id, path: `${testChannelPath(parentId)}/children/${slug}`, slug };
+}
+
 export async function seedChannel(
 	port: number,
 	id: string,

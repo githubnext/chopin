@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { documentPath } from "@chopin/protocol/document-url";
 import {
 	advanceDecisionView,
 	aggregateJobs,
@@ -34,7 +35,12 @@ import { peopleHere } from "./presence";
 import { ResearchRequestStore } from "./research-requests";
 import { Wire } from "./wire";
 import { useWorkspaceIds, useWorkspaceMode, useWorkspaceState, Workspace } from "./workspace";
-import { availableDocumentView, presentWorkspace, storedDocumentView } from "./workspace-model";
+import {
+	availableDocumentView,
+	presentWorkspace,
+	storedDocumentView,
+	workspaceCapabilities,
+} from "./workspace-model";
 
 import type { Research, Session } from "@chopin/protocol";
 import type { DecisionView, DecisionViewState } from "@chopin/editor";
@@ -139,9 +145,11 @@ export function RoomWorkspace(
 		descriptionRevision,
 		handle,
 		label,
+		onMetadataChanged,
 		repository,
 		room,
 		slug,
+		surface = "document",
 		updatedAt,
 		userId,
 	}: HostedWorkspaceProps,
@@ -180,7 +188,7 @@ export function RoomWorkspace(
 	let user = useMemo(() => cursor(handle), [handle]);
 	let mode = useWorkspaceMode();
 	let workspaceIds = useWorkspaceIds();
-	let [workspace, dispatch] = useWorkspaceState();
+	let [workspace, dispatch] = useWorkspaceState(surface);
 	let [questions] = useState(() => new QuestionnaireStore());
 	let [threads] = useState(() => new ThreadStore());
 	let [jobs] = useState(() => new JobStore());
@@ -188,7 +196,7 @@ export function RoomWorkspace(
 		() =>
 			new ResearchRequestStore({
 				channelId: room,
-				onOpen: onResearchChildOpen,
+				onOpen: child => onResearchChildOpen(room, child),
 			}),
 		[onResearchChildOpen, room],
 	);
@@ -207,9 +215,10 @@ export function RoomWorkspace(
 			preferred: storedDocumentView(stored),
 		};
 	});
+	let policy = workspaceCapabilities(surface, capabilities.backgroundJobs);
 	let view = availableDocumentView(
 		visibleDecisionView(decisionView, hasPlanContent, unanswered),
-		capabilities.backgroundJobs,
+		policy.backgroundJobs,
 	);
 	let previousUnanswered = useRef(unanswered);
 	let latestCanEdit = useRef(canEdit);
@@ -235,7 +244,15 @@ export function RoomWorkspace(
 		setMetadata(metadata);
 		rememberChannel(userId, { id: room, title: metadata.title, slug: metadata.slug }, repository);
 		onDocumentChanged(room, metadata);
-	}, [onDocumentChanged, repository, room, userId]);
+		if (onMetadataChanged) {
+			onMetadataChanged(metadata);
+			return;
+		}
+		let path = documentPath(repository.owner, repository.name, metadata.slug);
+		if (location.pathname !== path) {
+			history.replaceState(history.state, "", `${path}${location.search}${location.hash}`);
+		}
+	}, [onDocumentChanged, onMetadataChanged, repository, room, userId]);
 
 	useEffect(() => {
 		setDecisionView(state => advanceDecisionView(state, hasPlanContent, unanswered));
@@ -257,7 +274,9 @@ export function RoomWorkspace(
 
 	let selectView = (next: DecisionView, revealFirst = true) => {
 		setDecisionView(state => selectDecisionView(state, next));
-		if (hasPlanContent) localStorage.setItem("chopin:view:document", next);
+		if (hasPlanContent && surface === "document") {
+			localStorage.setItem("chopin:view:document", next);
+		}
 		if (next === "decisions" && revealFirst) {
 			let first = entries.find(entry =>
 				entry.value.questions.some(question => question.answer === undefined)
@@ -281,7 +300,9 @@ export function RoomWorkspace(
 		requestAnimationFrame(() => {
 			questions.reveal(widget, question);
 			let card = document.querySelector<HTMLElement>(
-				`[data-document-view="plan"] article[data-plan-sidecar-questionnaire="${
+				`[data-workspace-room="${
+					CSS.escape(room)
+				}"] [data-document-view="plan"] article[data-plan-sidecar-questionnaire="${
 					CSS.escape(widget)
 				}"]`,
 			);
@@ -342,7 +363,7 @@ export function RoomWorkspace(
 				setCapabilities({ backgroundJobs: frame.backgroundJobs });
 				setChatReferences({ wire: socket, enabled: frame.chatReferences === true });
 				setChatSendAcks({ wire: socket, enabled: frame.chatSendAcks === true });
-				if (!frame.backgroundJobs) {
+				if (!workspaceCapabilities(surface, frame.backgroundJobs).backgroundJobs) {
 					setDecisionView(state =>
 						state.preferred === "background-work"
 							? { phase: "complete", preferred: "plan" }
@@ -351,14 +372,16 @@ export function RoomWorkspace(
 				}
 				updateMetadata(frame);
 				if (accessChanged) onRepositoryAccessChanged();
-				onResearchWorkspacesRefresh({
-					id: room,
-					repositoryId: repository.id,
-					repositoryOwner: repository.owner,
-					repositoryName: repository.name,
-					title: metadataRef.current.title,
-					slug: metadataRef.current.slug,
-				});
+				if (surface === "document") {
+					onResearchWorkspacesRefresh({
+						id: room,
+						repositoryId: repository.id,
+						repositoryOwner: repository.owner,
+						repositoryName: repository.name,
+						title: metadataRef.current.title,
+						slug: metadataRef.current.slug,
+					});
+				}
 			}),
 			socket.on<ManagedChannel>("session:channel", frame => {
 				if (frame.channelId !== room) return;
@@ -381,19 +404,21 @@ export function RoomWorkspace(
 				onRepositoryAccessChanged();
 			}),
 			socket.on<Research.Changed>("research:changed", frame => {
-				onResearchWorkspaceChanged(
-					{
-						id: room,
-						repositoryId: repository.id,
-						repositoryOwner: repository.owner,
-						repositoryName: repository.name,
-						title: metadataRef.current.title,
-						slug: metadataRef.current.slug,
-					},
-					frame.workspaceId,
-					frame.revision,
-				);
-				research.invalidate(frame.workspaceId);
+				if (surface === "document") {
+					onResearchWorkspaceChanged(
+						{
+							id: room,
+							repositoryId: repository.id,
+							repositoryOwner: repository.owner,
+							repositoryName: repository.name,
+							title: metadataRef.current.title,
+							slug: metadataRef.current.slug,
+						},
+						frame.workspaceId,
+						frame.revision,
+					);
+					research.invalidate(frame.workspaceId);
+				}
 			}),
 			threads.listen(socket),
 			jobs.listen(socket),
@@ -414,6 +439,7 @@ export function RoomWorkspace(
 		research,
 		repository,
 		room,
+		surface,
 		threads,
 		updateMetadata,
 	]);
@@ -456,20 +482,22 @@ export function RoomWorkspace(
 					canManage={effectiveCanManage}
 					members={members}
 					label={metadata.title}
-					onAction={onDocumentAction}
+					onAction={action => onDocumentAction(room, action)}
 				/>
 			}
 			controls={
 				<DecisionViewControl
 					attention={attention}
-					backgroundWork={backgroundWorkCount}
-					backgroundWorkEnabled={capabilities.backgroundJobs}
+					backgroundWork={policy.backgroundJobs ? backgroundWorkCount : 0}
+					backgroundWorkEnabled={policy.backgroundJobs}
+					implementationEnabled={policy.implementation}
 					onView={selectDestination}
 					unanswered={unanswered}
 					view={view}
 				/>
 			}
 			ids={workspaceIds}
+			identity={room}
 			mode={mode}
 			onDesktopConversationOpen={setDesktopConversationOpen}
 			onConversationOpen={open => dispatch({ type: "set-conversation", open })}
@@ -497,14 +525,14 @@ export function RoomWorkspace(
 					questionMotion={QUESTION_MOTION}
 					questions={questions}
 					readOnly={!workspaceCanEdit}
-					research={research}
+					research={policy.research ? research : undefined}
 					scrollTop={planScrollTop}
 					threads={threads}
 					user={user}
 					wire={wire}
 				/>
 			}
-			backgroundWork={capabilities.backgroundJobs
+			backgroundWork={policy.backgroundJobs
 				? (
 					<BackgroundWork
 						canEdit={workspaceCanEdit}
@@ -517,6 +545,7 @@ export function RoomWorkspace(
 				)
 				: undefined}
 			state={workspace}
+			surface={surface}
 			unanswered={unanswered}
 			view={view}
 		/>

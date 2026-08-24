@@ -2,6 +2,8 @@ import type { DecisionView } from "@chopin/editor";
 
 export type WorkspaceMode = "compact" | "split";
 
+export type WorkspaceSurface = "document" | "child";
+
 export type WorkspaceDestination = "plan" | "decisions" | "background-work" | "conversation";
 
 export type WorkspaceState = {
@@ -14,6 +16,35 @@ export type WorkspaceEvent =
 	| { type: "set-desktop-conversation"; open: boolean };
 
 export const WORKSPACE_MEDIA = ["(max-width: 1023px)"] as const;
+
+export function initialWorkspaceState(
+	surface: WorkspaceSurface,
+	desktopConversationOpen: boolean,
+): WorkspaceState {
+	return {
+		conversationOpen: false,
+		desktopConversationOpen: surface === "document" && desktopConversationOpen,
+	};
+}
+
+export function workspaceCapabilities(surface: WorkspaceSurface, backgroundJobs: boolean) {
+	let child = surface === "child";
+	return {
+		backgroundJobs: !child && backgroundJobs,
+		implementation: !child,
+		research: !child,
+	};
+}
+
+export function workspaceDestinations(backgroundWork: boolean): WorkspaceDestination[] {
+	return backgroundWork
+		? ["conversation", "plan", "decisions", "background-work"]
+		: ["conversation", "plan", "decisions"];
+}
+
+export function workspaceHeadingId(destination: WorkspaceDestination, scope?: string): string {
+	return `workspace-${scope ? `${scope}-` : ""}${destination}-heading`;
+}
 
 export function storedDocumentView(value: string | null): DecisionView {
 	if (value === "decisions" || value === "background-work") return value;

@@ -878,7 +878,7 @@ export function ResearchWorkspace(
 						<DocumentActionsMenu
 							channel={{ archivedAt: workspaceArchivedAt, title: metadata.title }}
 							className="btn btn-sm btn-ghost"
-							onAction={onDocumentAction}
+							onAction={action => onDocumentAction(room, action)}
 							trigger={<span>Actions</span>}
 						/>
 					)}

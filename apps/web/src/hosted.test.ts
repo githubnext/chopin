@@ -1,6 +1,16 @@
 import { describe, expect, it } from "bun:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import { ApiError } from "./api";
+import {
+	anchoredChildPaths,
+	AnchoredChildSurface,
+	childCloseAction,
+	childHistoryState,
+	childPresentation,
+	rebaseChildHistoryState,
+} from "./anchored-child-surface";
 import {
 	githubLoginHref,
 	hostedRoute,
@@ -31,6 +41,7 @@ function detail(
 		canEdit: true,
 		canManage: true,
 		channel: {
+			descriptionRevision: 0,
 			id,
 			repositoryId,
 			repositoryOwner: "octo-org",
@@ -131,6 +142,76 @@ describe("hosted routes", () => {
 	});
 });
 
+describe("anchored child lifecycle", () => {
+	it("renders one parent-aware close control over an inert parent with separate rooms", () => {
+		let markup = renderToStaticMarkup(createElement(AnchoredChildSurface, {
+			child: createElement("div", { "data-workspace-room": "child-room" }),
+			childLabel: "Source review",
+			onClose() {},
+			parent: createElement("div", { "data-workspace-room": "parent-room" }),
+			parentLabel: "Release plan",
+			presentation: "open",
+		}));
+
+		expect(markup).toContain('aria-hidden="true"');
+		expect(markup).toContain('inert=""');
+		expect(markup).toContain('aria-label="Back to Release plan"');
+		expect(markup.match(/<button/g)).toHaveLength(1);
+		expect(markup).toContain('data-workspace-room="parent-room"');
+		expect(markup).toContain('data-workspace-room="child-room"');
+		expect(markup).not.toContain("Expand");
+	});
+
+	it("marks an in-app child push without discarding existing history state", () => {
+		expect(childHistoryState({ navigation: 4 }, "/documents/octo-org/score/parent?view=plan#note"))
+			.toEqual({
+				navigation: 4,
+				chopinChildParent: "/documents/octo-org/score/parent?view=plan#note",
+			});
+	});
+
+	it("backs out of an in-app child but replaces a direct child with its parent", () => {
+		let parent = "/documents/octo-org/score/parent";
+		expect(childCloseAction(
+			{ chopinChildParent: `${parent}?view=decisions#question` },
+			parent,
+		)).toEqual({ type: "back" });
+		expect(childCloseAction(null, parent)).toEqual({
+			type: "replace",
+			destination: parent,
+		});
+	});
+
+	it("keeps the child briefly only while returning to its own parent", () => {
+		expect(childPresentation("open", "parent", true)).toBe("closing");
+		expect(childPresentation("closing", "parent", true)).toBe("closing");
+		expect(childPresentation("open", "parent", false)).toBe("closed");
+		expect(childPresentation("closing", "child", true)).toBe("open");
+		expect(childPresentation("open", "child", false)).toBe("closed");
+	});
+
+	it("builds a nested canonical path from both workspaces' current metadata", () => {
+		expect(
+			anchoredChildPaths(
+				{ owner: "octo-org", repository: "score", slug: "renamed parent" },
+				"renamed child",
+			).child,
+		).toBe(
+			"/documents/octo-org/score/renamed%20parent/children/renamed%20child",
+		);
+	});
+
+	it("rebases the marked parent after a rename without losing its search or hash", () => {
+		expect(rebaseChildHistoryState(
+			{ chopinChildParent: "/documents/octo-org/score/old?view=plan#note", navigation: 4 },
+			"/documents/octo-org/score/new",
+		)).toEqual({
+			chopinChildParent: "/documents/octo-org/score/new?view=plan#note",
+			navigation: 4,
+		});
+	});
+});
+
 describe("hosted login", () => {
 	it("binds the current product location to the OAuth attempt", () => {
 		expect(githubLoginHref("/documents/octo-org/score/release-plan", "?view=plan", "#item"))
@@ -170,6 +251,7 @@ describe("channel recovery", () => {
 
 		expect(await prepareDocumentLoad({ id: child.channel.id }, signal, readers)).toEqual({
 			detail: child,
+			parent,
 			pathname: "/documents/octo-org/score/release-plan/children/source-review",
 		});
 		expect(
@@ -184,6 +266,7 @@ describe("channel recovery", () => {
 			),
 		).toEqual({
 			detail: child,
+			parent,
 			pathname: "/documents/octo-org/score/release-plan/children/source-review",
 		});
 	});

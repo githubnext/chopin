@@ -162,7 +162,10 @@ function Composer({
 	};
 
 	let key = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-		if (event.key === "Escape" && onCancel) return onCancel();
+		if (event.key === "Escape" && onCancel) {
+			event.preventDefault();
+			return onCancel();
+		}
 		if (event.key !== "Enter" || event.shiftKey) return;
 		event.preventDefault();
 		send();
