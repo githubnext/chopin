@@ -841,7 +841,7 @@ export class ResearchWorkspaceService {
 					&& savedTurn.evidenceJobId === undefined
 					&& this.#hasDefinition("research-evidence")
 				) {
-					changed = await this.#ensureEvidence(detail.workspace, savedTurn);
+					changed = await this.#ensureEvidence(detail.workspace, savedTurn, false);
 					if (changed) break;
 				}
 				if (savedTurn.evidenceJobId && savedTurn.answerJobId === undefined) {
@@ -955,11 +955,16 @@ export class ResearchWorkspaceService {
 		throw new ResearchWorkspaceError("invalid-state", "A research child title is unavailable.");
 	}
 
-	async #ensureEvidence(workspace: ResearchWorkspace, savedTurn: ResearchTurn): Promise<boolean> {
+	async #ensureEvidence(
+		workspace: ResearchWorkspace,
+		savedTurn: ResearchTurn,
+		enqueue = true,
+	): Promise<boolean> {
 		if (savedTurn.evidenceJobId !== undefined) return false;
 		this.#requireDefinition("research-evidence");
 		let targetKey = this.#target(workspace.id, savedTurn.id, "evidence");
 		let existing = await this.#targetJob(workspace.channelId, "research-evidence", targetKey);
+		if (!existing && !enqueue) return false;
 		let job = existing ?? (await this.#jobs.enqueueUser({
 			channelId: workspace.channelId,
 			type: "research-evidence",
