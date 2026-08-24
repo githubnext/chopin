@@ -23,6 +23,6 @@ No React state, markup, protocol, or data changes are needed.
 
 ## Testing
 
-Extend the navigation CSS contract test to cover the smaller right padding and the idle versus
-hover/focus action-container layout. Run the focused test, formatter/linter, and TypeScript checks.
-
+Extend the navigation CSS contract test to cover the smaller right padding. Add a focused browser
+test for the idle, hover, and keyboard-focus layouts. Run the focused test, formatter/linter, and
+TypeScript checks.
