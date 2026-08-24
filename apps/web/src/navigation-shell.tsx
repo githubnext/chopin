@@ -959,15 +959,8 @@ export function NavigationShell(
 							<NewResearchDialog
 								channel={presentedDialog.channel}
 								motion={dialogMotion}
-								onCreated={workspace => {
-									upsertResearchWorkspace(presentedDialog.channel, workspace);
+								onCreated={() => {
 									setDialog(undefined);
-									navigate(researchWorkspacePath(
-										presentedDialog.channel.repositoryOwner,
-										presentedDialog.channel.repositoryName,
-										presentedDialog.channel.slug,
-										workspace.id,
-									));
 								}}
 								onDismiss={() => setDialog(undefined)}
 							/>

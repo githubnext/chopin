@@ -34,6 +34,8 @@ import type {
 	ResearchWorkspaceRepositoryGroup,
 	ResearchWorkspaceRepositoryList,
 	ResearchWorkspaceSummary,
+	StartResearchWorkspace,
+	StartResearchWorkspaceResult,
 } from "../model";
 import type { ResearchWorkspaceStore } from "../port";
 
@@ -237,7 +239,7 @@ const PUBLICATION_CHANNEL_COLUMNS = `
 	channels.archived_at AS "archivedAt"
 `;
 
-const ORIGINS = new Set<ResearchWorkspaceOrigin>(["sidebar", "planner"]);
+const ORIGINS = new Set<ResearchWorkspaceOrigin>(["inline", "sidebar", "planner"]);
 const TURN_KINDS = new Set<ResearchTurnKind>(["initial", "follow-up", "search-more"]);
 const AUTHOR_KINDS = new Set<ResearchMessageAuthorKind>(["member", "agent", "system"]);
 
@@ -492,6 +494,101 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 				`;
 				if (!saved) throw corrupt("creating a research workspace returned no record");
 				return { workspace: workspace(saved), repeated: false };
+			}));
+
+	readonly start = (
+		input: StartResearchWorkspace,
+	): Promise<StartResearchWorkspaceResult> =>
+		this.#run("start research workspace", () =>
+			this.#sql.begin(async transaction => {
+				await this.#fence(transaction, input.lease);
+				let channelId = required(input.channelId, "channel id");
+				let idempotencyKey = required(input.idempotencyKey, "workspace idempotency key");
+				let fingerprint = required(input.fingerprint, "workspace fingerprint");
+				let archived = await this.#lockChannelArchiveState(transaction, channelId);
+				let [existing] = await transaction<WorkspaceRow[]>`
+					SELECT ${transaction.unsafe(WORKSPACE_COLUMNS)}
+					FROM research_workspaces
+					WHERE channel_id = ${channelId} AND idempotency_key = ${idempotencyKey}
+					FOR UPDATE
+				`;
+				if (existing) {
+					let repeated = workspace(existing);
+					let [turnRow] = await transaction<TurnRow[]>`
+						SELECT ${transaction.unsafe(TURN_COLUMNS)}
+						FROM research_turns
+						WHERE workspace_id = ${repeated.id} AND ordinal = 1
+					`;
+					let repeatedTurn = turnRow ? turn(turnRow) : undefined;
+					if (
+						repeated.fingerprint !== fingerprint
+						|| repeated.origin !== "inline"
+						|| !repeatedTurn
+						|| repeatedTurn.kind !== "initial"
+					) {
+						throw conflict(
+							`research workspace idempotency key ${idempotencyKey} was reused`,
+						);
+					}
+					return {
+						workspace: repeated,
+						turn: repeatedTurn,
+						message: await this.#memberMessage(transaction, repeatedTurn),
+						repeated: true,
+					};
+				}
+				if (archived) throw conflict(`channel ${channelId} is archived`);
+				let workspaceId = required(input.id, "workspace id");
+				let title = required(input.title, "workspace title");
+				let question = required(input.question, "workspace question");
+				let createdBy = required(input.createdBy, "creating member id");
+				let createdByHandle = optionalInput(
+					input.createdByHandle,
+					"creating member handle",
+				);
+				let requestId = required(input.requestId, "request id");
+				let now = inputDate(input.now, "workspace start time");
+				let [savedWorkspaceRow] = await transaction<WorkspaceRow[]>`
+					INSERT INTO research_workspaces (
+						id, channel_id, title, proposed_question, confirmed_query, origin,
+						created_by, confirmed_by, revision, next_turn_ordinal,
+						next_message_sequence, idempotency_key, fingerprint, created_at, updated_at
+					) VALUES (
+						${workspaceId}, ${channelId}, ${title}, ${question}, ${question}, 'inline',
+						${createdBy}, ${createdBy}, 0, 2, 2, ${idempotencyKey}, ${fingerprint},
+						${now}, ${now}
+					)
+					RETURNING ${transaction.unsafe(WORKSPACE_COLUMNS)}
+				`;
+				if (!savedWorkspaceRow) {
+					throw corrupt("starting a research workspace returned no record");
+				}
+				let savedTurn = await this.#insertTurn(transaction, {
+					id: required(input.turnId, "turn id"),
+					workspaceId,
+					ordinal: 1,
+					kind: "initial",
+					requestId,
+					fingerprint,
+					question,
+					requestedBy: createdBy,
+					now,
+				});
+				let savedMessage = await this.#insertMemberMessage(
+					transaction,
+					workspaceId,
+					1,
+					required(input.messageId, "message id"),
+					savedTurn,
+					createdByHandle,
+					now,
+				);
+				return {
+					workspace: workspace(savedWorkspaceRow),
+					turn: savedTurn,
+					message: savedMessage,
+					repeated: false,
+				};
 			}));
 
 	readonly confirm = (

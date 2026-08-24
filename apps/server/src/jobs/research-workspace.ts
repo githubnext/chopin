@@ -325,6 +325,13 @@ function boundedText(value: JsonValue | undefined, field: string, maximum = MAX_
 	return value.trim();
 }
 
+function boundedPrompt(value: JsonValue | undefined, field: string): string {
+	if (typeof value !== "string" || !value.trim() || value.length > MAX_QUERY) {
+		throw new Error(`${field} is invalid`);
+	}
+	return value;
+}
+
 function boundedId(value: JsonValue | undefined, field: string): string {
 	return boundedText(value, field, MAX_ID);
 }
@@ -557,7 +564,7 @@ export function parseResearchEvidenceInput(value: JsonValue): ResearchEvidenceIn
 	return {
 		workspaceId: boundedId(item.workspaceId, "workspace id"),
 		turnId: boundedId(item.turnId, "turn id"),
-		query: boundedText(item.query, "research query", MAX_QUERY).replace(/\s+/g, " "),
+		query: boundedPrompt(item.query, "research query"),
 	};
 }
 
@@ -614,7 +621,7 @@ export function parseResearchAnswerInput(value: JsonValue): ResearchAnswerInput 
 	let base = {
 		workspaceId: boundedId(item.workspaceId, "workspace id"),
 		turnId: boundedId(item.turnId, "turn id"),
-		question: boundedText(item.question, "research question", MAX_QUERY).replace(/\s+/g, " "),
+		question: boundedPrompt(item.question, "research question"),
 		document,
 		evidence,
 		history,

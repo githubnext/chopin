@@ -31,6 +31,8 @@ import type {
 	ResearchWorkspaceRepositoryGroup,
 	ResearchWorkspaceRepositoryList,
 	ResearchWorkspaceSummary,
+	StartResearchWorkspace,
+	StartResearchWorkspaceResult,
 } from "../model";
 import type { ResearchWorkspaceStore } from "../port";
 
@@ -171,6 +173,99 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 			this.#nextOrdinals.set(saved.id, 1);
 			this.#nextSequences.set(saved.id, 1);
 			return { workspace: workspace(saved), repeated: false };
+		});
+
+	readonly start = (
+		input: StartResearchWorkspace,
+	): Promise<StartResearchWorkspaceResult> =>
+		this.#mutate(async () => {
+			this.#assertChannel(input.channelId, input.lease);
+			required(input.idempotencyKey, "workspace idempotency key");
+			required(input.fingerprint, "workspace fingerprint");
+			let repeatedId = this.#idempotency.get(key(input.channelId, input.idempotencyKey));
+			if (repeatedId) {
+				let repeated = this.#workspaces.get(repeatedId)!;
+				let repeatedTurn = (this.#turns.get(repeated.id) ?? [])[0];
+				if (
+					repeated.fingerprint !== input.fingerprint
+					|| repeated.origin !== "inline"
+					|| !repeatedTurn
+					|| repeatedTurn.kind !== "initial"
+				) {
+					throw conflict(
+						`research workspace idempotency key ${input.idempotencyKey} was reused`,
+					);
+				}
+				return {
+					workspace: workspace(repeated),
+					turn: turn(repeatedTurn),
+					message: message(this.#memberMessage(repeatedTurn)),
+					repeated: true,
+				};
+			}
+			this.#assertActiveChannel(input.channelId, input.lease);
+			this.#requireUser(input.createdBy);
+			required(input.id, "workspace id");
+			required(input.title, "workspace title");
+			required(input.question, "workspace question");
+			required(input.turnId, "turn id");
+			required(input.messageId, "message id");
+			required(input.requestId, "request id");
+			optional(input.createdByHandle, "creating member handle");
+			if (this.#workspaces.has(input.id)) {
+				throw conflict(`research workspace ${input.id} already exists`);
+			}
+			this.#assertNewTurn(input.turnId, input.messageId);
+			let now = timestamp(input.now, "workspace start time");
+			let savedWorkspace: ResearchWorkspace = {
+				id: input.id,
+				channelId: input.channelId,
+				publishedChannelId: undefined,
+				title: input.title,
+				proposedQuestion: input.question,
+				confirmedQuery: input.question,
+				origin: "inline",
+				originMessageId: undefined,
+				createdBy: input.createdBy,
+				confirmedBy: input.createdBy,
+				revision: 0,
+				idempotencyKey: input.idempotencyKey,
+				fingerprint: input.fingerprint,
+				createdAt: now,
+				updatedAt: now,
+			};
+			this.#workspaces.set(savedWorkspace.id, savedWorkspace);
+			this.#idempotency.set(
+				key(savedWorkspace.channelId, savedWorkspace.idempotencyKey),
+				savedWorkspace.id,
+			);
+			this.#turns.set(savedWorkspace.id, []);
+			this.#messages.set(savedWorkspace.id, []);
+			this.#nextOrdinals.set(savedWorkspace.id, 1);
+			this.#nextSequences.set(savedWorkspace.id, 1);
+			let savedTurn = this.#newTurn({
+				workspaceId: savedWorkspace.id,
+				id: input.turnId,
+				kind: "initial",
+				requestId: input.requestId,
+				fingerprint: input.fingerprint,
+				question: input.question,
+				requestedBy: input.createdBy,
+				now,
+			});
+			let savedMessage = this.#newMemberMessage(
+				savedWorkspace.id,
+				input.messageId,
+				savedTurn,
+				input.createdByHandle,
+				now,
+			);
+			return {
+				workspace: workspace(savedWorkspace),
+				turn: turn(savedTurn),
+				message: message(savedMessage),
+				repeated: false,
+			};
 		});
 
 	readonly confirm = (

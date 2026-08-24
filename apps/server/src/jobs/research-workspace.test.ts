@@ -137,7 +137,7 @@ describe("research workspace codecs", () => {
 			workspaceId: WORKSPACE_ID,
 			turnId: TURN_ID,
 			query: `  ${QUERY}  `,
-		})).toEqual({ workspaceId: WORKSPACE_ID, turnId: TURN_ID, query: QUERY });
+		})).toEqual({ workspaceId: WORKSPACE_ID, turnId: TURN_ID, query: `  ${QUERY}  ` });
 		expect(() =>
 			parseResearchEvidenceInput({
 				workspaceId: WORKSPACE_ID,

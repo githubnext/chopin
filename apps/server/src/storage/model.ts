@@ -443,7 +443,7 @@ export type PauseBackgroundJob = ControlBackgroundJob & { reason: string };
 export type ResumeBackgroundJob = ControlBackgroundJob & { availableAt: Date };
 export type SupersedeBackgroundJob = ControlBackgroundJob & { reason?: string };
 
-export type ResearchWorkspaceOrigin = "sidebar" | "planner";
+export type ResearchWorkspaceOrigin = "inline" | "sidebar" | "planner";
 
 export type ResearchWorkspace = {
 	id: string;
@@ -538,6 +538,29 @@ export type CreateResearchWorkspace = {
 
 export type CreateResearchWorkspaceResult = {
 	workspace: ResearchWorkspace;
+	repeated: boolean;
+};
+
+export type StartResearchWorkspace = {
+	id: string;
+	channelId: string;
+	title: string;
+	question: string;
+	createdBy: string;
+	createdByHandle?: string;
+	turnId: string;
+	messageId: string;
+	requestId: string;
+	idempotencyKey: string;
+	fingerprint: string;
+	now: Date;
+	lease: Lease;
+};
+
+export type StartResearchWorkspaceResult = {
+	workspace: ResearchWorkspace;
+	turn: ResearchTurn;
+	message: ResearchMessage;
 	repeated: boolean;
 };
 
