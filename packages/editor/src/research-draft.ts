@@ -33,8 +33,14 @@ export class ResearchDraftStore {
 		return this.#draft;
 	}
 
-	open(anchor: DOMRectLike, position?: RelativePosition): void {
+	canOpen(): boolean {
+		return this.#draft === undefined;
+	}
+
+	open(anchor: DOMRectLike, position?: RelativePosition): boolean {
+		if (!this.canOpen()) return false;
 		this.#set({ anchor, position, question: "" });
+		return true;
 	}
 
 	change(question: string): void {
@@ -116,9 +122,9 @@ export class ResearchDraftStore {
 		};
 	}
 
-	place(position: RelativePosition): boolean {
+	place(position: RelativePosition, writable = true): boolean {
 		let draft = this.#draft;
-		if (!draft?.created || draft.cancelling) return false;
+		if (!writable || !draft?.created || draft.cancelling) return false;
 		if (this.#insert(position, draft.created.id)) {
 			this.#set(undefined);
 			return true;
@@ -141,9 +147,10 @@ export class ResearchDraftStore {
 
 	async cancelCreated(
 		cancel: (id: string) => Promise<Research.RequestView>,
+		writable = true,
 	): Promise<boolean> {
 		let draft = this.#draft;
-		if (!draft?.created || draft.submitting || draft.cancelling) return false;
+		if (!writable || !draft?.created || draft.submitting || draft.cancelling) return false;
 		let id = draft.created.id;
 		this.#set({ ...draft, cancelling: true, error: undefined });
 		try {

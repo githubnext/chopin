@@ -31,6 +31,7 @@ type CardProps = {
 
 type ComposerProps = {
 	blocked?: string;
+	cancelDisabled?: boolean;
 	error?: string;
 	onCancel: () => void;
 	onChange: (value: string) => void;
@@ -93,6 +94,23 @@ describe("research composer", () => {
 
 		expect(markup).toContain("Connect to the document before starting research.");
 		expect(markup).toMatch(/<button[^>]*disabled=""[^>]*type="submit"/);
+	});
+
+	it("exposes no placement or cancellation mutation for read-only created recovery", async () => {
+		let { composer: Composer } = await components();
+		if (!Composer) return;
+		let markup = renderToStaticMarkup(createElement(Composer, {
+			question: BASE.question,
+			blocked: "Reconnect with edit access to place this research.",
+			cancelDisabled: true,
+			submitLabel: "Place research",
+			onCancel() {},
+			onChange() {},
+			onSubmit() {},
+		}));
+
+		expect(markup).toContain("Place research");
+		expect((markup.match(/disabled=""/g) ?? []).length).toBe(2);
 	});
 
 	it("turns Escape into a composer dismissal", async () => {

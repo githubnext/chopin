@@ -36,6 +36,18 @@ const PROVIDER = {
 	on() {},
 } as unknown as Provider;
 
+const ANCHOR = { top: 1, right: 2, bottom: 3, left: 4, width: 5, height: 6 };
+const REQUEST: Research.RequestView = {
+	id: "07aeae6d-073d-4560-a9f4-bb8e4d954a46",
+	channelId: "document-one",
+	question: "Keep this question",
+	state: "running",
+	stage: "queued",
+	sources: [],
+	createdAt: "2026-08-24T09:00:00.000Z",
+	updatedAt: "2026-08-24T09:00:00.000Z",
+};
+
 function peer(): { editor: LexicalEditor; doc: Y.Doc; binding: Binding } {
 	let editor = createHeadlessEditor({
 		nodes: registry().nodes,
@@ -145,6 +157,54 @@ describe("slash menu trigger", () => {
 });
 
 describe("slash menu commands", () => {
+	it("does not consume a second trigger during submission or created recovery", async () => {
+		let module = await import("./slash") as unknown as {
+			beginResearchDraft?: (
+				drafts: {
+					canOpen(): boolean;
+					open(anchor: typeof ANCHOR, position?: Y.RelativePosition): boolean;
+				},
+				consume: () => { anchor: typeof ANCHOR; position?: Y.RelativePosition } | undefined,
+			) => boolean;
+		};
+		let { ResearchDraftStore } = await import("../research-draft");
+		let drafts = new ResearchDraftStore();
+		let original = Y.createRelativePositionFromTypeIndex(new Y.Doc().getText("original"), 0);
+		expect(drafts.open(ANCHOR, original)).toBe(true);
+		drafts.change(REQUEST.question);
+		let resolve!: (request: Research.RequestView) => void;
+		let create = new Promise<Research.RequestView>(done => resolve = done);
+		let running = drafts.start(() => create);
+		let requestId = drafts.get()?.submitted?.requestId;
+		let consumed = 0;
+		let attempt = () =>
+			module.beginResearchDraft!(drafts, () => {
+				consumed++;
+				return {
+					anchor: { ...ANCHOR, top: 99 },
+					position: Y.createRelativePositionFromTypeIndex(
+						new Y.Doc().getText("replacement"),
+						0,
+					),
+				};
+			});
+
+		expect(typeof module.beginResearchDraft).toBe("function");
+		if (!module.beginResearchDraft) return;
+		expect(attempt()).toBe(false);
+		expect(consumed).toBe(0);
+		expect(drafts.get()?.submitted?.requestId).toBe(requestId);
+
+		resolve(REQUEST);
+		await running;
+		expect(drafts.get()?.created).toEqual(REQUEST);
+		expect(attempt()).toBe(false);
+		expect(consumed).toBe(0);
+		expect(drafts.get()?.question).toBe(REQUEST.question);
+		expect(drafts.get()?.submitted?.requestId).toBe(requestId);
+		expect(drafts.get()?.position).toBe(original);
+	});
+
 	it("discovers the research composer by research and web search", async () => {
 		let module = await import("./slash");
 		let available = (module as unknown as {

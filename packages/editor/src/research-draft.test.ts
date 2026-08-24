@@ -16,7 +16,11 @@ const REQUEST: Research.RequestView = {
 
 type DraftStore = {
 	attachPlacement(place: (position: Y.RelativePosition, id: string) => boolean): () => void;
-	cancelCreated(cancel: (id: string) => Promise<Research.RequestView>): Promise<boolean>;
+	canOpen(): boolean;
+	cancelCreated(
+		cancel: (id: string) => Promise<Research.RequestView>,
+		writable?: boolean,
+	): Promise<boolean>;
 	change(question: string): void;
 	dismiss(): boolean;
 	get(): {
@@ -38,8 +42,8 @@ type DraftStore = {
 			height: number;
 		},
 		position?: Y.RelativePosition,
-	): void;
-	place(position: Y.RelativePosition): boolean;
+	): boolean;
+	place(position: Y.RelativePosition, writable?: boolean): boolean;
 	start(
 		create: (question: string, requestId: string) => Promise<Research.RequestView>,
 	): Promise<void>;
@@ -60,6 +64,39 @@ function position(name: string): Y.RelativePosition {
 const ANCHOR = { top: 1, right: 2, bottom: 3, left: 4, width: 5, height: 6 };
 
 describe("research draft lifecycle", () => {
+	it("refuses a second research draft during submission and created recovery", async () => {
+		let Store = await draftStore();
+		if (!Store) return;
+		let store = new Store();
+		let original = position("original");
+		let replacement = position("replacement");
+		expect(store.open(ANCHOR, original)).toBe(true);
+		store.change(REQUEST.question);
+		let resolve!: (request: Research.RequestView) => void;
+		let create = new Promise<Research.RequestView>(done => resolve = done);
+		let submitted: [string, string] | undefined;
+		let running = store.start((question, requestId) => {
+			submitted = [question, requestId];
+			return create;
+		});
+		let requestId = store.get()?.submitted?.requestId;
+
+		expect(store.canOpen()).toBe(false);
+		expect(store.open({ ...ANCHOR, top: 20 }, replacement)).toBe(false);
+		expect(store.get()?.question).toBe(REQUEST.question);
+		expect(store.get()?.submitted?.requestId).toBe(requestId);
+		expect(store.get()?.position).toBe(original);
+
+		resolve(REQUEST);
+		await running;
+		expect(store.get()?.created).toEqual(REQUEST);
+		expect(store.open({ ...ANCHOR, top: 30 }, replacement)).toBe(false);
+		expect(store.get()?.created).toEqual(REQUEST);
+		expect(store.get()?.submitted?.requestId).toBe(requestId);
+		expect(store.get()?.position).toBe(original);
+		expect(submitted).toEqual([REQUEST.question, requestId!]);
+	});
+
 	it("keeps an in-flight create through disconnect or read-only placement loss", async () => {
 		let Store = await draftStore();
 		if (!Store) return;
@@ -177,5 +214,29 @@ describe("research draft lifecycle", () => {
 		expect(await cancellation).toBe(true);
 		expect(cancelled).toBe(REQUEST.id);
 		expect(store.get()).toBeUndefined();
+	});
+
+	it("preserves created recovery without mutation while read-only", async () => {
+		let Store = await draftStore();
+		if (!Store) return;
+		let store = new Store();
+		let original = position("read-only-original");
+		store.open(ANCHOR, original);
+		store.change(REQUEST.question);
+		await store.start(async () => REQUEST);
+		let snapshot = store.get();
+		let cancellations = 0;
+
+		expect(
+			await store.cancelCreated(async () => {
+				cancellations++;
+				return { ...REQUEST, state: "cancelled", stage: "cancelled" };
+			}, false),
+		).toBe(false);
+		expect(store.place(position("read-only-new"), false)).toBe(false);
+		expect(cancellations).toBe(0);
+		expect(store.get()).toBe(snapshot);
+		expect(store.get()?.created).toEqual(REQUEST);
+		expect(store.get()?.position).toBe(original);
 	});
 });
