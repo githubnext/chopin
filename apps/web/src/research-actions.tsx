@@ -5,15 +5,18 @@ import { NavigationDialog } from "./navigation-dialog";
 import { beginResearchSubmission, editResearchSubmission } from "./research-workspace-model";
 
 import type { Research } from "@chopin/protocol";
+import type { NavigationDialogMotion } from "./navigation-dialog";
 import type { ResearchSubmission } from "./research-workspace-model";
 
 export function NewResearchDialog(
 	{
 		channel,
+		motion,
 		onCreated,
 		onDismiss,
 	}: {
 		channel: Api.Channel;
+		motion: NavigationDialogMotion;
 		onCreated: (workspace: Research.WorkspaceSummary) => void;
 		onDismiss: () => void;
 	},
@@ -45,6 +48,7 @@ export function NewResearchDialog(
 	return (
 		<NavigationDialog
 			initialFocus={input}
+			motion={motion}
 			onDismiss={creating ? () => {} : onDismiss}
 			title={`New research in ${channel.title}`}
 		>

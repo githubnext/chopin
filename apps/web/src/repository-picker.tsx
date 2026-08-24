@@ -1,10 +1,12 @@
 import { CaretDownIcon, CheckIcon } from "@phosphor-icons/react";
+import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { documentsPath } from "@chopin/protocol/document-url";
 import { createPortal } from "react-dom";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { useAnchoredPicker } from "./anchored-picker";
 import * as Api from "./api";
+import { motionImmediately } from "./motion-input";
 import {
 	clearRepositoryCache,
 	installedRepositoryGroups,
@@ -80,6 +82,11 @@ export function RepositoryPicker(
 		[error, installed, loading, matches.length, normalized, refreshing],
 	);
 	let { panel, position, search, trigger } = useAnchoredPicker(open, setOpen, pickerContent);
+	let popupPresence = useTransitionPresence(
+		open ? true : undefined,
+		150,
+		motionImmediately(),
+	);
 
 	useEffect(() => {
 		mounted.current = true;
@@ -171,10 +178,12 @@ export function RepositoryPicker(
 		event.preventDefault();
 	}
 
-	let popup = open && createPortal(
+	let popup = popupPresence.phase !== "closed" && createPortal(
 		<div
-			className="fixed z-50 flex flex-col rounded-lg bg-page ring-hairline shadow-overlay"
+			aria-hidden={popupPresence.phase === "closing" ? "true" : undefined}
+			className={`motion-dropdown ${popupPresence.className} fixed z-50 flex flex-col rounded-lg bg-page ring-hairline shadow-overlay`}
 			id={panelId}
+			inert={popupPresence.phase === "closing"}
 			ref={panel}
 			style={position}
 		>
@@ -184,7 +193,7 @@ export function RepositoryPicker(
 					aria-activedescendant={activeRepository ? optionId(listId, activeRepository) : undefined}
 					aria-autocomplete="list"
 					aria-controls={listId}
-					aria-expanded="true"
+					aria-expanded={open}
 					className="repository-picker-search field h-8 w-full px-2 text-sm"
 					id={`${listId}-search`}
 					onChange={event => {

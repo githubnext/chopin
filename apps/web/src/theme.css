@@ -418,6 +418,27 @@ body {
 	height: var(--app-height, 100dvh);
 }
 
+.motion-dropdown {
+	opacity: 0;
+	transform: scale(var(--dropdown-pre-scale));
+	transition:
+		opacity var(--dropdown-open-dur) var(--dropdown-ease),
+		transform var(--dropdown-open-dur) var(--dropdown-ease);
+	will-change: opacity, transform;
+}
+
+.motion-dropdown.is-open {
+	opacity: 1;
+	transform: scale(1);
+}
+
+.motion-dropdown.is-closing {
+	pointer-events: none;
+	opacity: 0;
+	transform: scale(var(--dropdown-closing-scale));
+	transition-duration: var(--dropdown-close-dur);
+}
+
 body {
 	margin: 0;
 	background: var(--color-ground);
@@ -456,6 +477,33 @@ body {
 
 .workspace-frame #pane-chat {
 	border-color: rgb(0 0 0 / 9%);
+}
+
+.motion-panel {
+	opacity: 0;
+	transform: translateX(var(--panel-distance));
+	transition:
+		opacity var(--panel-open-dur) var(--motion-smooth-out),
+		transform var(--panel-open-dur) var(--motion-smooth-out);
+	will-change: opacity, transform;
+}
+
+.motion-panel.is-open {
+	opacity: 1;
+	transform: translateX(0);
+}
+
+.motion-panel.is-closing {
+	pointer-events: none;
+	opacity: 0;
+	transform: translateX(var(--panel-distance));
+	transition-duration: var(--panel-close-dur);
+}
+
+.workspace-root:not([data-workspace-mode="split"]) .workspace-conversation-panel {
+	position: absolute;
+	inset: 0;
+	z-index: 10;
 }
 
 .conversation-composer .field {
@@ -641,6 +689,11 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+	.motion-dropdown,
+	.motion-panel {
+		transition: none;
+	}
+
 	.animate-enter {
 		animation: none;
 	}

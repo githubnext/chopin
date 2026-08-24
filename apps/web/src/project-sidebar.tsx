@@ -218,6 +218,7 @@ function Project(
 export function ProjectSidebar(
 	{
 		accountMenu,
+		accountMenuOpen,
 		canCreateDocument,
 		creatingNewDocument,
 		creatingProjectIds,
@@ -239,6 +240,7 @@ export function ProjectSidebar(
 		user,
 	}: {
 		accountMenu?: ReactNode;
+		accountMenuOpen?: boolean;
 		canCreateDocument: boolean;
 		catalogueMode: "active" | "archived";
 		creatingNewDocument: boolean;
@@ -388,7 +390,7 @@ export function ProjectSidebar(
 				{accountMenu}
 				<button
 					className="project-sidebar-account"
-					aria-expanded={!!accountMenu}
+					aria-expanded={accountMenuOpen ?? !!accountMenu}
 					onClick={onAccount}
 					type="button"
 				>

@@ -284,6 +284,38 @@
 	z-index: 40;
 }
 
+.motion-drawer {
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity var(--drawer-open-dur) var(--motion-smooth-out);
+	will-change: opacity;
+}
+
+.motion-drawer .navigation-focus-scope {
+	transform: translateX(calc(-1 * var(--drawer-distance)));
+	transition: transform var(--drawer-open-dur) var(--motion-smooth-out);
+	will-change: transform;
+}
+
+.motion-drawer.is-open {
+	pointer-events: auto;
+	opacity: 1;
+}
+
+.motion-drawer.is-open .navigation-focus-scope {
+	transform: translateX(0);
+}
+
+.motion-drawer.is-closing {
+	opacity: 0;
+	transition-duration: var(--drawer-close-dur);
+}
+
+.motion-drawer.is-closing .navigation-focus-scope {
+	transform: translateX(calc(-1 * var(--drawer-distance)));
+	transition-duration: var(--drawer-close-dur);
+}
+
 .navigation-drawer-backdrop {
 	position: absolute;
 	inset: 0;
@@ -325,6 +357,38 @@
 	display: grid;
 	place-items: center;
 	padding: 16px;
+}
+
+.motion-modal {
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity var(--modal-open-dur) var(--modal-ease);
+	will-change: opacity;
+}
+
+.motion-modal .navigation-modal-content {
+	transform: scale(var(--modal-scale));
+	transition: transform var(--modal-open-dur) var(--modal-ease);
+	will-change: transform;
+}
+
+.motion-modal.is-open {
+	pointer-events: auto;
+	opacity: 1;
+}
+
+.motion-modal.is-open .navigation-modal-content {
+	transform: scale(1);
+}
+
+.motion-modal.is-closing {
+	opacity: 0;
+	transition-duration: var(--modal-close-dur);
+}
+
+.motion-modal.is-closing .navigation-modal-content {
+	transform: scale(var(--modal-scale-close));
+	transition-duration: var(--modal-close-dur);
 }
 
 .navigation-modal-backdrop {
@@ -387,6 +451,7 @@
 	background: var(--color-page);
 	padding: 4px;
 	box-shadow: var(--shadow-overlay);
+	transform-origin: bottom left;
 }
 
 .navigation-account-menu button {
@@ -491,4 +556,13 @@
 .document-title-trigger:hover:not(:disabled),
 .document-title-trigger:focus-visible {
 	background: var(--color-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.motion-drawer,
+	.motion-drawer .navigation-focus-scope,
+	.motion-modal,
+	.motion-modal .navigation-modal-content {
+		transition: none;
+	}
 }

@@ -5,7 +5,7 @@ import type { CSSProperties } from "react";
 
 type Position = Pick<
 	CSSProperties,
-	"height" | "left" | "maxHeight" | "top" | "visibility" | "width"
+	"height" | "left" | "maxHeight" | "top" | "transformOrigin" | "visibility" | "width"
 >;
 
 /** Shared portal geometry, focus, and dismissal for header picker controls. */
@@ -55,6 +55,7 @@ export function useAnchoredPicker(
 				left,
 				maxHeight,
 				top: Math.max(topEdge, Math.min(wantedTop, bottomEdge - maxHeight)),
+				transformOrigin: useAbove ? "bottom left" : "top left",
 				visibility: "visible",
 				width,
 			});

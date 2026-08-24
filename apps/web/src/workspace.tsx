@@ -1,6 +1,7 @@
 /** Three panes on one ground, with the document as the only raised surface. */
 
 import { useEffect, useLayoutEffect, useReducer, useRef, useSyncExternalStore } from "react";
+import { useTransitionPresence } from "@chopin/editor/transition-presence";
 
 import {
 	presentWorkspace,
@@ -11,6 +12,7 @@ import {
 import conversationCloseIcon from "./assets/icons/conversation-close.svg";
 import conversationIcon from "./assets/icons/conversation.svg";
 import { ResizeHandle, usePaneWidth } from "./resizable-pane";
+import { motionImmediately } from "./motion-input";
 
 import type { Dispatch, ReactNode, RefObject } from "react";
 import type {
@@ -207,10 +209,15 @@ export function Workspace(
 ) {
 	let [chatWidth, resizeChat] = usePaneWidth({ active: mode === "split", ...CHAT_PANE });
 	let presentation = presentWorkspace(state, mode, view);
+	let conversationPresence = useTransitionPresence(
+		presentation.conversationVisible ? true : undefined,
+		220,
+		motionImmediately(),
+	);
 	let opener = useRef<HTMLElement | undefined>(undefined);
 	let edgeTab = useRef<HTMLButtonElement>(null);
 	let previousConversationOpen = useRef(state.conversationOpen);
-	let conversationHidden = !presentation.conversationVisible;
+	let conversationInactive = !presentation.conversationVisible;
 	let planHidden = !presentation.documentVisible || presentation.documentView !== "plan";
 	let decisionsHidden = !presentation.documentVisible
 		|| presentation.documentView !== "decisions";
@@ -258,7 +265,10 @@ export function Workspace(
 	};
 
 	return (
-		<div className="flex h-full flex-col overflow-hidden bg-ground">
+		<div
+			className="workspace-root flex h-full flex-col overflow-hidden bg-ground"
+			data-workspace-mode={mode}
+		>
 			{header}
 
 			<div
@@ -268,17 +278,17 @@ export function Workspace(
 						: "pb-2"
 				}`}
 			>
-				{/* `hidden` preserves pane state and subscriptions while removing it from layout. */}
+				{/* `hidden` preserves pane state and subscriptions after its closing transition. */}
 				{chat && (
 					<aside
-						aria-hidden={conversationHidden || undefined}
+						aria-hidden={conversationInactive || undefined}
 						aria-labelledby={HEADING.conversation}
-						className={`order-2 relative flex min-w-0 flex-col overflow-hidden bg-conversation-pane ${
+						className={`workspace-conversation-panel motion-panel ${conversationPresence.className} order-2 relative flex min-w-0 flex-col overflow-hidden bg-conversation-pane ${
 							mode === "split" ? "hairline-l hairline-r hairline-b" : ""
 						}`}
-						hidden={conversationHidden}
+						hidden={conversationPresence.phase === "closed"}
 						id={paneId("chat")}
-						inert={conversationHidden}
+						inert={conversationInactive}
 						onKeyDown={event => {
 							if (event.key === "Escape" && mode !== "split") {
 								event.preventDefault();

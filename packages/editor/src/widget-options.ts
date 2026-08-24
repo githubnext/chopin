@@ -9,6 +9,7 @@ export type CommentPresentation = "popover" | "sheet";
 
 export type WidgetOptions = {
 	commentPresentation?: CommentPresentation;
+	motionImmediately?: () => boolean;
 	questions?: QuestionnaireStore;
 	threads?: ThreadStore;
 	changes?: ChangeStore;

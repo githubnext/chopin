@@ -62,6 +62,8 @@ export type PlanEditorProps = {
 	connection?: Connection;
 	/** How comment threads are presented by the surrounding workspace. */
 	commentPresentation?: CommentPresentation;
+	/** App-owned input policy for interactions that should settle without motion. */
+	motionImmediately?: () => boolean;
 	/** Identity for this client's remote cursor. */
 	user: { name: string; color: string };
 	/** Read-only while an agent turn may be rewriting the plan. */
@@ -99,6 +101,7 @@ export function PlanEditor(
 		className,
 		commentPresentation = "popover",
 		connection,
+		motionImmediately,
 		onScrollTop,
 		questions,
 		readOnly,
@@ -248,6 +251,7 @@ export function PlanEditor(
 					}),
 					widgetsPlugin({
 						commentPresentation,
+						motionImmediately,
 						questions,
 						threads,
 						changes,
@@ -267,6 +271,7 @@ export function PlanEditor(
 			onChanges,
 			questions,
 			commentPresentation,
+			motionImmediately,
 			threads,
 			changes,
 			offline,
