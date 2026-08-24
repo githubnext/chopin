@@ -31,6 +31,8 @@ import type {
 	ResearchWorkspaceRepositoryGroup,
 	ResearchWorkspaceRepositoryList,
 	ResearchWorkspaceSummary,
+	ResetInitialResearchAttempt,
+	ResetInitialResearchAttemptResult,
 	StartResearchWorkspace,
 	StartResearchWorkspaceResult,
 } from "../model";
@@ -457,6 +459,58 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 			};
 			this.#replaceTurn(savedTurn);
 			this.#linkedJobs.set(input.jobId, { turnId: savedTurn.id, role: input.role });
+			let savedWorkspace = this.#saveWorkspace(found, now);
+			return {
+				workspace: workspace(savedWorkspace),
+				turn: turn(savedTurn),
+				repeated: false,
+			};
+		});
+
+	readonly resetInitialAttempt = (
+		input: ResetInitialResearchAttempt,
+	): Promise<ResetInitialResearchAttemptResult> =>
+		this.#mutate(async () => {
+			this.#assertActiveChannel(input.channelId, input.lease);
+			let found = this.#requireWorkspace(input.channelId, input.workspaceId);
+			if (found.publishedChannelId) {
+				throw conflict(`research workspace ${found.id} is already published`);
+			}
+			let foundTurn = (this.#turns.get(found.id) ?? [])[0];
+			if (!foundTurn || foundTurn.kind !== "initial") {
+				throw conflict(`research workspace ${found.id} has no initial turn`);
+			}
+			if (
+				foundTurn.evidenceJobId !== input.expectedEvidenceJobId
+				|| foundTurn.answerJobId !== input.expectedAnswerJobId
+			) throw conflict(`research workspace ${found.id} changed before retry`);
+			if (!foundTurn.evidenceJobId && !foundTurn.answerJobId) {
+				return { workspace: workspace(found), turn: turn(foundTurn), repeated: true };
+			}
+			let terminal = false;
+			for (let jobId of [foundTurn.evidenceJobId, foundTurn.answerJobId]) {
+				if (!jobId) continue;
+				let detail = await this.#options.job(input.channelId, jobId);
+				if (!detail) {
+					throw missing(`background job ${jobId} does not exist in channel ${input.channelId}`);
+				}
+				if (["pending", "paused", "running"].includes(detail.job.state)) {
+					throw conflict(`research workspace ${found.id} still has active initial work`);
+				}
+				if (["failed", "cancelled", "superseded"].includes(detail.job.state)) terminal = true;
+			}
+			if (!terminal) throw conflict(`research workspace ${found.id} has no terminal initial work`);
+			this.#assertActiveChannel(input.channelId, input.lease);
+			let now = timestamp(input.now, "retry time");
+			let savedTurn: ResearchTurn = {
+				...foundTurn,
+				evidenceJobId: undefined,
+				answerJobId: undefined,
+				updatedAt: new Date(Math.max(foundTurn.updatedAt.getTime(), now.getTime())),
+			};
+			this.#replaceTurn(savedTurn);
+			if (foundTurn.evidenceJobId) this.#linkedJobs.delete(foundTurn.evidenceJobId);
+			if (foundTurn.answerJobId) this.#linkedJobs.delete(foundTurn.answerJobId);
 			let savedWorkspace = this.#saveWorkspace(found, now);
 			return {
 				workspace: workspace(savedWorkspace),

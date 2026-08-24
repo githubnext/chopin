@@ -1,0 +1,183 @@
+import type { Research } from "@chopin/protocol";
+import type { ResearchStore } from "@chopin/editor";
+
+import {
+	cancelResearchRequest,
+	createResearchRequest,
+	researchRequest,
+	retryResearchRequest,
+} from "./api";
+
+const POLL_INTERVAL = 2_000;
+
+export type ResearchRequestApi = {
+	create(
+		channelId: string,
+		question: string,
+		requestId: string,
+	): Promise<{ request: Research.RequestView; repeated: boolean }>;
+	get(channelId: string, requestId: string, signal?: AbortSignal): Promise<Research.RequestView>;
+	cancel(channelId: string, requestId: string): Promise<Research.RequestView>;
+	retry(channelId: string, requestId: string): Promise<Research.RequestView>;
+};
+
+export type ResearchRequestSchedule = (callback: () => void, delay: number) => () => void;
+
+export type ResearchRequestStoreOptions = {
+	api?: ResearchRequestApi;
+	channelId: string;
+	onOpen: (child: Research.ReadyChild) => void;
+	schedule?: ResearchRequestSchedule;
+};
+
+let browserApi: ResearchRequestApi = {
+	cancel: cancelResearchRequest,
+	create: createResearchRequest,
+	get: researchRequest,
+	retry: retryResearchRequest,
+};
+
+let browserSchedule: ResearchRequestSchedule = (callback, delay) => {
+	let timer = setTimeout(callback, delay);
+	return () => clearTimeout(timer);
+};
+
+type Read = {
+	controller: AbortController;
+	generation: number;
+};
+
+export class ResearchRequestStore implements ResearchStore {
+	#api: ResearchRequestApi;
+	#channelId: string;
+	#cancelPoll?: () => void;
+	#disposed = false;
+	#generations = new Map<string, number>();
+	#listeners = new Set<() => void>();
+	#onOpen: (child: Research.ReadyChild) => void;
+	#reads = new Map<string, Read>();
+	#referenced = new Set<string>();
+	#schedule: ResearchRequestSchedule;
+	#snapshots = new Map<string, Research.RequestView>();
+
+	constructor(options: ResearchRequestStoreOptions) {
+		this.#api = options.api ?? browserApi;
+		this.#channelId = options.channelId;
+		this.#onOpen = options.onOpen;
+		this.#schedule = options.schedule ?? browserSchedule;
+	}
+
+	subscribe(listener: () => void): () => void {
+		if (this.#disposed) return () => {};
+		this.#listeners.add(listener);
+		return () => {
+			this.#listeners.delete(listener);
+			if (this.#listeners.size > 0) return;
+			this.#referenced.clear();
+			this.#stopPolling();
+			for (let read of this.#reads.values()) read.controller.abort();
+			this.#reads.clear();
+		};
+	}
+
+	get(id: string): Research.RequestView | undefined {
+		return this.#snapshots.get(id);
+	}
+
+	refresh(id: string): void {
+		if (this.#disposed) return;
+		this.#referenced.add(id);
+		void this.#load(id);
+	}
+
+	async create(question: string, requestId: string): Promise<Research.RequestView> {
+		let result = await this.#api.create(this.#channelId, question, requestId);
+		return this.#accept(result.request.id, result.request);
+	}
+
+	async cancel(id: string): Promise<Research.RequestView> {
+		let result = await this.#api.cancel(this.#channelId, id);
+		return this.#accept(id, result);
+	}
+
+	async retry(id: string, _question: string): Promise<Research.RequestView> {
+		let result = await this.#api.retry(this.#channelId, id);
+		return this.#accept(id, result);
+	}
+
+	open(child: Research.ReadyChild): void {
+		this.#onOpen(child);
+	}
+
+	invalidate(id: string): void {
+		if (this.#disposed || !this.#referenced.has(id)) return;
+		void this.#load(id, true);
+	}
+
+	dispose(): void {
+		if (this.#disposed) return;
+		this.#disposed = true;
+		this.#stopPolling();
+		for (let read of this.#reads.values()) read.controller.abort();
+		this.#reads.clear();
+		this.#referenced.clear();
+		this.#listeners.clear();
+	}
+
+	#accept(id: string, snapshot: Research.RequestView): Research.RequestView {
+		if (snapshot.id !== id || snapshot.channelId !== this.#channelId) {
+			throw new Error("Research request response did not match its document reference.");
+		}
+		if (this.#disposed) return snapshot;
+		this.#snapshots.set(id, snapshot);
+		for (let listener of this.#listeners) listener();
+		this.#schedulePolling();
+		return snapshot;
+	}
+
+	async #load(id: string, replace = false): Promise<void> {
+		let active = this.#reads.get(id);
+		if (active && !replace) return;
+		if (active) active.controller.abort();
+		let controller = new AbortController();
+		let generation = (this.#generations.get(id) ?? 0) + 1;
+		this.#generations.set(id, generation);
+		let read = { controller, generation };
+		this.#reads.set(id, read);
+		try {
+			let snapshot = await this.#api.get(this.#channelId, id, controller.signal);
+			if (
+				this.#disposed || controller.signal.aborted
+				|| this.#reads.get(id)?.generation !== generation
+			) return;
+			this.#accept(id, snapshot);
+		} catch {
+			// Refresh failures leave the last durable snapshot visible. Polling or
+			// the next socket invalidation can retry the observational read.
+		} finally {
+			if (this.#reads.get(id)?.generation === generation) this.#reads.delete(id);
+			this.#schedulePolling();
+		}
+	}
+
+	#schedulePolling(): void {
+		this.#stopPolling();
+		if (this.#disposed || this.#listeners.size === 0) return;
+		let pending = [...this.#referenced].filter(id => {
+			let snapshot = this.#snapshots.get(id);
+			return !snapshot || !["ready", "failed", "cancelled"].includes(snapshot.stage);
+		});
+		if (pending.length === 0) return;
+		this.#cancelPoll = this.#schedule(() => {
+			this.#cancelPoll = undefined;
+			for (let id of pending) {
+				if (this.#referenced.has(id)) void this.#load(id);
+			}
+		}, POLL_INTERVAL);
+	}
+
+	#stopPolling(): void {
+		this.#cancelPoll?.();
+		this.#cancelPoll = undefined;
+	}
+}

@@ -312,6 +312,55 @@ export function createResearchWorkspace(
 	});
 }
 
+export function createResearchRequest(
+	channelId: string,
+	question: string,
+	requestId: string,
+): Promise<{ request: Research.RequestView; repeated: boolean }> {
+	return response(`/api/channels/${encodeURIComponent(channelId)}/research-requests`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ question, requestId }),
+	});
+}
+
+export function researchRequest(
+	channelId: string,
+	requestId: string,
+	signal?: AbortSignal,
+): Promise<Research.RequestView> {
+	return response(
+		`/api/channels/${encodeURIComponent(channelId)}/research-requests/${
+			encodeURIComponent(requestId)
+		}`,
+		{ signal },
+	);
+}
+
+export function cancelResearchRequest(
+	channelId: string,
+	requestId: string,
+): Promise<Research.RequestView> {
+	return response(
+		`/api/channels/${encodeURIComponent(channelId)}/research-requests/${
+			encodeURIComponent(requestId)
+		}/cancel`,
+		{ method: "POST" },
+	);
+}
+
+export function retryResearchRequest(
+	channelId: string,
+	requestId: string,
+): Promise<Research.RequestView> {
+	return response(
+		`/api/channels/${encodeURIComponent(channelId)}/research-requests/${
+			encodeURIComponent(requestId)
+		}/retry`,
+		{ method: "POST" },
+	);
+}
+
 export function researchWorkspace(
 	channelId: string,
 	workspaceId: string,

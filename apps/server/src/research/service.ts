@@ -143,6 +143,10 @@ export type CancelResearchRequest = {
 	workspaceId: string;
 };
 
+export type RetryResearchRequest = CancelResearchRequest & {
+	beforeStart?: () => void | Promise<void>;
+};
+
 export type ResearchWorkspaceTurnView = Research.Turn & {
 	readonly evidence?: Job.Detail;
 	readonly answer?: Job.Detail;
@@ -729,6 +733,64 @@ export class ResearchWorkspaceService {
 		});
 	}
 
+	async retryRequest(input: RetryResearchRequest): Promise<Research.RequestView> {
+		let channelId = safeId(input.channelId, "Channel id");
+		let workspaceId = safeId(input.workspaceId, "Workspace id");
+		return this.#exclusive(channelId, workspaceId, async () => {
+			let detail = await this.#reconciled(channelId, workspaceId);
+			if (!detail) throw new ResearchWorkspaceError("not-found", "Research request not found.");
+			if (detail.workspace.publishedChannelId) {
+				throw new ResearchWorkspaceError("not-ready", "Research request is already ready.");
+			}
+			let initial = detail.turns.find(value => value.kind === "initial");
+			if (!initial) {
+				throw new ResearchWorkspaceError("invalid-state", "Research request has no initial work.");
+			}
+			let linked = [
+				...(initial.evidenceJobId
+					? [{ id: initial.evidenceJobId, role: "evidence" as const }]
+					: []),
+				...(initial.answerJobId
+					? [{ id: initial.answerJobId, role: "answer" as const }]
+					: []),
+			];
+			let terminal = linked.length === 0;
+			for (let candidate of linked) {
+				let current = await this.#jobs.get(channelId, candidate.id);
+				if (!current) {
+					throw new ResearchWorkspaceError("invalid-state", "Linked research work is missing.");
+				}
+				this.#assertLinkedJob(current, detail.workspace, initial, candidate.role);
+				if (ACTIVE_JOB_STATES.has(current.job.state)) {
+					throw new ResearchWorkspaceError("active-turn", "Research request is still active.");
+				}
+				if (["failed", "cancelled", "superseded"].includes(current.job.state)) terminal = true;
+			}
+			if (!terminal) {
+				throw new ResearchWorkspaceError("not-ready", "Research request cannot be retried.");
+			}
+			let reset = await this.#storage.research.resetInitialAttempt({
+				channelId,
+				workspaceId,
+				expectedEvidenceJobId: initial.evidenceJobId,
+				expectedAnswerJobId: initial.answerJobId,
+				now: this.#time(),
+				lease: this.#lease(),
+			});
+			if (!reset.repeated) await this.#published(reset.workspace);
+			await input.beforeStart?.();
+			let cleared = await this.#stored(channelId, workspaceId);
+			let clearedInitial = cleared.turns.find(value => value.kind === "initial");
+			if (!clearedInitial) {
+				throw new ResearchWorkspaceError("invalid-state", "Research request has no initial work.");
+			}
+			await this.#ensureEvidence(cleared.workspace, clearedInitial);
+			let refreshed = await this.#reconciled(channelId, workspaceId);
+			if (!refreshed) throw new ResearchWorkspaceError("not-found", "Research request not found.");
+			return this.#requestView(refreshed);
+		});
+	}
+
 	async #cancelActiveTurn(
 		detail: ResearchWorkspaceDetail,
 		found: ResearchTurn,
@@ -860,12 +922,13 @@ export class ResearchWorkspaceService {
 		if (savedTurn.evidenceJobId !== undefined) return false;
 		this.#requireDefinition("research-evidence");
 		let targetKey = this.#target(workspace.id, savedTurn.id, "evidence");
-		let existing = await this.#targetJob(workspace.channelId, "research-evidence", targetKey);
+		let found = await this.#targetJob(workspace.channelId, "research-evidence", targetKey);
+		let existing = found && ACTIVE_JOB_STATES.has(found.state) ? found : undefined;
 		let job = existing ?? (await this.#jobs.enqueueUser({
 			channelId: workspace.channelId,
 			type: "research-evidence",
 			targetKey,
-			idempotencyKey: `research-evidence:${savedTurn.id}`,
+			idempotencyKey: `research-evidence:${savedTurn.id}:${workspace.revision}`,
 			input: {
 				workspaceId: workspace.id,
 				turnId: savedTurn.id,
