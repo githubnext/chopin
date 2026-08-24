@@ -396,6 +396,82 @@ describe("research workspace service", () => {
 		expect(owners).toBe(1);
 	});
 
+	it("keeps reads observational until owner setup succeeds on an exact retry", async () => {
+		let context = await setup();
+		let owners = 0;
+		let input = {
+			channelId: context.channelId,
+			question: "Which API contracts changed?",
+			requestId: requestId(1),
+			requestedBy: context.userId,
+		};
+		await expect(context.service.start({
+			...input,
+			beforeStart: () => {
+				owners++;
+				throw new Error("owner setup failed");
+			},
+		})).rejects.toThrow("owner setup failed");
+		let [workspace] = await context.storage.research.list(context.channelId, 100);
+		if (!workspace) throw new Error("durable research request is unavailable");
+
+		let observed = await context.restart().request(context.channelId, workspace.id);
+		expect(observed).toMatchObject({ state: "pending", stage: "queued" });
+		expect(
+			(await context.storage.research.get(context.channelId, workspace.id))?.turns[0]
+				?.evidenceJobId,
+		).toBeUndefined();
+		expect((await context.jobs.list(context.channelId, 100))?.jobs).toEqual([]);
+
+		let recovered = await context.restart().start({
+			...input,
+			beforeStart: () => {
+				owners++;
+			},
+		});
+		expect(recovered.repeated).toBe(true);
+		expect(recovered.request.stage).toBe("queued");
+		expect(owners).toBe(2);
+		expect((await context.jobs.list(context.channelId, 100))?.jobs).toHaveLength(1);
+	});
+
+	it("relinks existing first evidence work during restart reconciliation", async () => {
+		let context = await setup();
+		await expect(context.service.start({
+			channelId: context.channelId,
+			question: "Which API contracts changed?",
+			requestId: requestId(1),
+			requestedBy: context.userId,
+			beforeStart: () => {
+				throw new Error("simulate a crash before first enqueue");
+			},
+		})).rejects.toThrow("simulate a crash before first enqueue");
+		let [workspace] = await context.storage.research.list(context.channelId, 100);
+		if (!workspace) throw new Error("durable research request is unavailable");
+		let detail = await context.storage.research.get(context.channelId, workspace.id);
+		let initial = detail?.turns[0];
+		if (!initial) throw new Error("initial research turn is unavailable");
+		let existing = await context.jobs.enqueueUser({
+			channelId: context.channelId,
+			type: "research-evidence",
+			targetKey: `workspace:${workspace.id}:turn:${initial.id}:evidence`,
+			idempotencyKey: `research-evidence:${initial.id}`,
+			input: {
+				workspaceId: workspace.id,
+				turnId: initial.id,
+				query: initial.question,
+			},
+		});
+
+		let observed = await context.restart().request(context.channelId, workspace.id);
+		expect(observed).toMatchObject({ state: "pending", stage: "queued" });
+		expect(
+			(await context.storage.research.get(context.channelId, workspace.id))?.turns[0]
+				?.evidenceJobId,
+		).toBe(existing.job.id);
+		expect((await context.jobs.list(context.channelId, 100))?.jobs).toHaveLength(1);
+	});
+
 	it("publishes one canonical child while reconciling a completed initial answer after restart", async () => {
 		let context = await setup();
 		let started = await context.service.start({
