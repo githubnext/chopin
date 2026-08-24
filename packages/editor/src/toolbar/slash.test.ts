@@ -216,26 +216,21 @@ describe("slash menu commands", () => {
 		expect(exportPlan(b.editor)).toBe(source);
 	});
 
-	it("reports an insertion failure and reuses the created request at a new cursor", async () => {
+	it("reports an insertion failure and places the same request at a new cursor", async () => {
 		let target = peer();
 		importPlan(target.editor, "Keep this\n");
 		await settle();
-		let module = await import("./slash");
-		let create = (module as unknown as {
-			createResearchReference?: (
+		let module = await import("./slash") as unknown as {
+			captureResearchPosition(binding: Binding): Y.RelativePosition | undefined;
+			insertResearchReference(
 				editor: LexicalEditor,
 				binding: Binding,
 				position: Y.RelativePosition,
-				question: string,
-				requestId: string,
-				persist: (question: string, requestId: string) => Promise<Research.RequestView>,
-			) => Promise<{ inserted: boolean; request: Research.RequestView }>;
-		}).createResearchReference;
-		expect(typeof create).toBe("function");
-		if (!create) return;
+				id: string,
+			): boolean;
+		};
 		let foreign = new Y.Doc();
 		let invalid = Y.createRelativePositionFromTypeIndex(foreign.getText("gone"), 0);
-		let calls = 0;
 		let request: Research.RequestView = {
 			id: "07aeae6d-073d-4560-a9f4-bb8e4d954a46",
 			channelId: "document-one",
@@ -246,36 +241,25 @@ describe("slash menu commands", () => {
 			createdAt: "2026-08-24T09:00:00.000Z",
 			updatedAt: "2026-08-24T09:00:00.000Z",
 		};
-		let result = await create(
+		expect(module.insertResearchReference(
 			target.editor,
 			target.binding,
 			invalid,
-			"  Keep this brief exactly.  ",
-			"request-one",
-			async () => {
-				calls++;
-				return request;
-			},
-		);
-		expect(result).toEqual({ inserted: false, request });
+			request.id,
+		)).toBe(false);
 		expect(exportPlan(target.editor)).toBe("Keep this\n");
 
 		let saved: Y.RelativePosition | undefined;
 		target.editor.update(() => {
 			$getRoot().selectEnd();
-			saved = (module as unknown as {
-				captureResearchPosition(binding: Binding): Y.RelativePosition | undefined;
-			}).captureResearchPosition(target.binding);
+			saved = module.captureResearchPosition(target.binding);
 		}, { discrete: true });
-		expect((module as unknown as {
-			insertResearchReference(
-				editor: LexicalEditor,
-				binding: Binding,
-				position: Y.RelativePosition,
-				id: string,
-			): boolean;
-		}).insertResearchReference(target.editor, target.binding, saved!, request.id)).toBe(true);
-		expect(calls).toBe(1);
+		expect(module.insertResearchReference(
+			target.editor,
+			target.binding,
+			saved!,
+			request.id,
+		)).toBe(true);
 		expect(exportPlan(target.editor)).toContain(`<Research id="${request.id}" />`);
 	});
 

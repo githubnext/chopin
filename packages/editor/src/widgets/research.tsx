@@ -23,6 +23,9 @@ const STAGES: Record<Research.RequestStage, string> = {
 
 export type ResearchComposerProps = {
 	blocked?: string;
+	busyLabel?: string;
+	cancelLabel?: string;
+	dismissible?: boolean;
 	error?: string;
 	onCancel: () => void;
 	onChange: (value: string) => void;
@@ -37,16 +40,20 @@ export type ResearchComposerProps = {
 export function handleResearchComposerKey(
 	event: Pick<KeyboardEvent, "key" | "preventDefault" | "stopPropagation">,
 	onEscape: () => void,
+	dismissible = true,
 ) {
 	if (event.key !== "Escape") return;
 	event.preventDefault();
 	event.stopPropagation();
-	onEscape();
+	if (dismissible) onEscape();
 }
 
 export function ResearchComposer(
 	{
 		blocked,
+		busyLabel = "Starting…",
+		cancelLabel = "Cancel",
+		dismissible = true,
 		error,
 		onCancel,
 		onChange,
@@ -66,7 +73,9 @@ export function ResearchComposer(
 	return (
 		<form
 			className="plan-research-composer"
-			onKeyDown={onEscape ? event => handleResearchComposerKey(event, onEscape) : undefined}
+			onKeyDown={onEscape
+				? event => handleResearchComposerKey(event, onEscape, dismissible)
+				: undefined}
 			onSubmit={submit}
 		>
 			<label htmlFor={id}>Research question</label>
@@ -89,14 +98,14 @@ export function ResearchComposer(
 					onClick={onCancel}
 					type="button"
 				>
-					Cancel
+					{cancelLabel}
 				</button>
 				<button
 					className="btn btn-sm btn-primary"
 					disabled={submitting || !!blocked || !question.trim()}
 					type="submit"
 				>
-					{submitting ? "Starting…" : submitLabel}
+					{submitting ? busyLabel : submitLabel}
 				</button>
 			</div>
 		</form>

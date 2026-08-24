@@ -4,6 +4,7 @@ import type { Binding } from "@lexical/yjs";
 import type { ChangeStore } from "./changes";
 import type { ContentSwapMotion } from "./content-swap";
 import type { Research } from "@chopin/protocol";
+import type { ResearchDraftStore } from "./research-draft";
 import type { QuestionnaireStore } from "./questionnaires";
 import type { ThreadStore } from "./threads";
 import type { Transport } from "./transport";
@@ -33,6 +34,7 @@ export type WidgetOptions = {
 	questionMotion?: QuestionStepMotion;
 	questions?: QuestionnaireStore;
 	research?: ResearchStore;
+	researchDrafts?: ResearchDraftStore;
 	threads?: ThreadStore;
 	changes?: ChangeStore;
 	wire?: Transport;

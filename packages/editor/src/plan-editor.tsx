@@ -19,6 +19,7 @@ import { ChangeStore } from "./changes";
 import { PlanChanges } from "./changes-chip";
 import { collaborationPlugin } from "./collaboration";
 import { PlanStatus } from "./status";
+import { ResearchDraftStore } from "./research-draft";
 import { register } from "./widgets";
 import { widgetsPlugin } from "./widgets-plugin";
 
@@ -131,6 +132,8 @@ export function PlanEditor(
 	// Nothing outside the editor reads this one, unlike the questionnaires,
 	// so it is owned here rather than being handed down from the room.
 	let [changes] = useState(() => new ChangeStore());
+	// This survives the keyed MDXEditor remount used for collaboration epoch rotation.
+	let [researchDrafts] = useState(() => new ResearchDraftStore());
 
 	// A rotated epoch invalidates the whole local document, so the editor is
 	// rebuilt rather than reconciled — that is what "reset" means. The marks
@@ -265,6 +268,7 @@ export function PlanEditor(
 						questionMotion,
 						questions,
 						research,
+						researchDrafts,
 						threads,
 						changes,
 						wire,
@@ -284,6 +288,7 @@ export function PlanEditor(
 			binding,
 			questions,
 			research,
+			researchDrafts,
 			commentPresentation,
 			motionImmediately,
 			questionMotion,
