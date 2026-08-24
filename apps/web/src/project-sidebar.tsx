@@ -73,7 +73,6 @@ function Project(
 		archiveMode,
 		creatingProjectIds,
 		currentDocumentId,
-		currentParentDocumentId,
 		currentResearchWorkspaceId,
 		entry,
 		expanded,
@@ -87,7 +86,6 @@ function Project(
 		archiveMode: boolean;
 		creatingProjectIds: ReadonlySet<string>;
 		currentDocumentId?: string;
-		currentParentDocumentId?: string;
 		currentResearchWorkspaceId?: string;
 		entry: ProjectDocuments;
 		expanded: boolean;
@@ -124,8 +122,7 @@ function Project(
 							research.get(channel.id)?.workspaces ?? [],
 						);
 						let parentCurrent = currentDocumentId === channel.id;
-						let childCurrent = currentParentDocumentId === channel.id
-							&& children.some(child => child.id === currentDocumentId);
+						let childCurrent = children.some(child => child.id === currentDocumentId);
 						let researchCurrent = parentCurrent && currentResearchWorkspaceId !== undefined;
 						let parentHref = documentPath(
 							channel.repositoryOwner,
@@ -326,7 +323,6 @@ export function ProjectSidebar(
 		creatingNewDocument,
 		creatingProjectIds,
 		currentDocumentId,
-		currentParentDocumentId,
 		currentResearchWorkspaceId,
 		onAccount,
 		onAddProject,
@@ -350,7 +346,6 @@ export function ProjectSidebar(
 		creatingNewDocument: boolean;
 		creatingProjectIds: ReadonlySet<string>;
 		currentDocumentId?: string;
-		currentParentDocumentId?: string;
 		currentResearchWorkspaceId?: string;
 		onAccount: () => void;
 		onAddProject: () => void;
@@ -472,7 +467,6 @@ export function ProjectSidebar(
 									archiveMode={archiveMode}
 									creatingProjectIds={creatingProjectIds}
 									currentDocumentId={currentDocumentId}
-									currentParentDocumentId={currentParentDocumentId}
 									currentResearchWorkspaceId={currentResearchWorkspaceId}
 									entry={entry}
 									expanded={!collapsedProjectIds.has(entry.project.repositoryId)}

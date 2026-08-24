@@ -147,7 +147,6 @@ describe("research sidebar hierarchy", () => {
 		let markup = renderToStaticMarkup(createElement(ProjectSidebar, {
 			...props,
 			currentDocumentId: child.id,
-			currentParentDocumentId: channel.id,
 			projects: [{
 				...props.projects[0]!,
 				documents: { status: "ready", channels: [channel, child] },

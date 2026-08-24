@@ -139,6 +139,70 @@ export function validatedChildPath(
 	);
 }
 
+type DocumentReaders = {
+	channel: (id: string, signal?: AbortSignal) => Promise<Api.ChannelDetail>;
+	document: (
+		owner: string,
+		repository: string,
+		slug: string,
+		signal?: AbortSignal,
+	) => Promise<Api.ChannelDetail>;
+};
+
+export async function prepareDocumentLoad(
+	address:
+		| { id: string }
+		| {
+			owner: string;
+			repository: string;
+			slug: string;
+			parentSlug?: string;
+		},
+	signal: AbortSignal,
+	readers: DocumentReaders = Api,
+): Promise<{ detail: Api.ChannelDetail; pathname: string }> {
+	if ("id" in address) {
+		let detail = await readers.channel(address.id, signal);
+		if (!detail.channel.parentChannelId) {
+			return {
+				detail,
+				pathname: documentPath(
+					detail.repository.owner,
+					detail.repository.name,
+					detail.channel.slug,
+				),
+			};
+		}
+		let parent = await readers.channel(detail.channel.parentChannelId, signal);
+		return { detail, pathname: validatedChildPath(detail, parent) };
+	}
+	if (address.parentSlug) {
+		let [detail, parent] = await Promise.all([
+			readers.document(address.owner, address.repository, address.slug, signal),
+			readers.document(address.owner, address.repository, address.parentSlug, signal),
+		]);
+		return { detail, pathname: validatedChildPath(detail, parent) };
+	}
+	let detail = await readers.document(
+		address.owner,
+		address.repository,
+		address.slug,
+		signal,
+	);
+	if (detail.channel.parentChannelId) {
+		let parent = await readers.channel(detail.channel.parentChannelId, signal);
+		return { detail, pathname: validatedChildPath(detail, parent) };
+	}
+	return {
+		detail,
+		pathname: documentPath(
+			detail.repository.owner,
+			detail.repository.name,
+			detail.channel.slug,
+		),
+	};
+}
+
 function Loading({ label = "Loading" }: { label?: string }) {
 	return (
 		<div
@@ -302,35 +366,8 @@ function ChannelWorkspace(
 		let controller = new AbortController();
 		setLoaded(undefined);
 		setError(undefined);
-		let prepared: Promise<{ canonicalPath: string; detail: Api.ChannelDetail }>;
-		switch (source.page) {
-			case "channel":
-				prepared = Api.channel(source.id, controller.signal).then(detail => ({
-					canonicalPath: documentPath(
-						detail.repository.owner,
-						detail.repository.name,
-						detail.channel.slug,
-					),
-					detail,
-				}));
-				break;
-			case "document":
-				prepared = Api.document(
-					source.owner,
-					source.repository,
-					source.slug,
-					controller.signal,
-				).then(detail => ({
-					canonicalPath: documentPath(
-						detail.repository.owner,
-						detail.repository.name,
-						detail.channel.slug,
-					),
-					detail,
-				}));
-				break;
-			case "research":
-				prepared = Api.document(
+		let prepared = source.page === "research"
+			? Api.document(
 					source.owner,
 					source.repository,
 					source.slug,
@@ -343,28 +380,18 @@ function ChannelWorkspace(
 						source.workspaceId,
 					),
 					detail,
-				}));
-				break;
-			case "child":
-				prepared = Promise.all([
-					Api.document(
-						source.owner,
-						source.repository,
-						source.childSlug,
-						controller.signal,
-					),
-					Api.document(
-						source.owner,
-						source.repository,
-						source.parentSlug,
-						controller.signal,
-					),
-				]).then(([detail, parent]) => ({
-					canonicalPath: validatedChildPath(detail, parent),
-					detail,
-				}));
-				break;
-		}
+				}))
+			: prepareDocumentLoad(
+				source.page === "channel"
+					? { id: source.id }
+					: {
+						owner: source.owner,
+						parentSlug: source.page === "child" ? source.parentSlug : undefined,
+						repository: source.repository,
+						slug: source.page === "child" ? source.childSlug : source.slug,
+					},
+				controller.signal,
+			).then(({ detail, pathname }) => ({ canonicalPath: pathname, detail }));
 		prepared = prepared.then(resolved => {
 			if (active) {
 				rememberChannel(user.id, resolved.detail.channel, resolved.detail.repository);

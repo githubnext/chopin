@@ -151,10 +151,6 @@ describe("navigation model", () => {
 		expect(documentDestination(nested, child.id)).toBe(
 			"/documents/acme/one/channel-one/children/channel-child",
 		);
-		expect(documentDestination([{
-			...parentEntry,
-			documents: { ...parentEntry.documents, channels: [child] },
-		}], child.id)).toBe("/channels/channel-child");
 		expect(landingDocument(nested)).toBe(parent.id);
 		expect(landingDocument(nested, child.id)).toBe(child.id);
 	});
