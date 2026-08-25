@@ -576,6 +576,35 @@ body {
 	transition-duration: var(--panel-close-dur);
 }
 
+.content-swap-stack {
+	display: grid;
+}
+
+.content-swap-stack > .motion-content-swap {
+	grid-area: 1 / 1;
+	min-width: 0;
+}
+
+.motion-content-swap {
+	opacity: 0;
+	transform: translateX(var(--page-slide-distance));
+	transition:
+		opacity var(--page-slide-dur) var(--motion-smooth-out),
+		transform var(--page-slide-dur) var(--motion-smooth-out);
+	will-change: opacity, transform;
+}
+
+.motion-content-swap.is-open {
+	opacity: 1;
+	transform: translateX(0);
+}
+
+.motion-content-swap.is-closing {
+	pointer-events: none;
+	opacity: 0;
+	transform: translateX(calc(var(--page-slide-distance) * -1));
+}
+
 .workspace-root:not([data-workspace-mode="split"]) .workspace-conversation-panel {
 	position: absolute;
 	inset: 0;
@@ -768,6 +797,7 @@ body {
 	.motion-dropdown,
 	.motion-popover,
 	.motion-panel,
+	.motion-content-swap,
 	.motion-collapse,
 	.motion-collapse-content,
 	.motion-disclosure-icon {

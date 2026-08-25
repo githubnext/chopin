@@ -87,6 +87,57 @@ test("a representative compact phone exposes one mounted destination at a time",
 	await expectNoHorizontalOverflow(page);
 });
 
+test("content swaps retain one interactive destination across pointer and immediate paths", async ({ join, seed }) => {
+	await seed(RESPONSIVE_SOURCE);
+	let page = await join("ana", { hasTouch: true, viewport: { width: 390, height: 844 } });
+	let nav = page.getByRole("navigation", { name: "Workspace view" });
+	let stack = page.locator(".workspace-document-swap");
+	let visible = stack.locator(".motion-content-swap:not([hidden])");
+	let decisions = nav.getByRole("button", { name: /^Decisions/ });
+	let document = nav.getByRole("button", { name: "Document", exact: true });
+
+	await decisions.click();
+	await expect(visible).toHaveCount(2);
+	await expect(stack.locator(".motion-content-swap:not([hidden]):not([inert])")).toHaveCount(1);
+	await expect(stack.locator('.motion-content-swap:not([hidden])[aria-hidden="true"][inert]'))
+		.toHaveCount(1);
+	let sampledCounts = await stack.evaluate(async element => {
+		let counts: number[] = [];
+		for (let sample = 0; sample < 5; sample += 1) {
+			await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+			counts.push(element.querySelectorAll(".motion-content-swap:not([hidden])").length);
+		}
+		return counts;
+	});
+	expect(sampledCounts).not.toContain(0);
+	await expect(page.locator("#workspace-decisions-heading")).toBeFocused();
+	await expect(visible).toHaveCount(1);
+
+	await document.focus();
+	await page.keyboard.press("Enter");
+	await expect(visible).toHaveCount(1);
+	await expect(stack.locator(".motion-content-swap:not([hidden]).is-closing")).toHaveCount(0);
+
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	await decisions.click();
+	await expect(visible).toHaveCount(1);
+	await expect(stack.locator(".motion-content-swap:not([hidden]).is-closing")).toHaveCount(0);
+
+	await page.emulateMedia({ reducedMotion: "no-preference" });
+	await document.click();
+	await expect(visible).toHaveCount(2);
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	await expect(visible).toHaveCount(1, { timeout: 100 });
+
+	await page.emulateMedia({ reducedMotion: "no-preference" });
+	await decisions.click();
+	await expect(visible).toHaveCount(2);
+	await document.click();
+	await expect(visible).toHaveCount(2);
+	await expect(visible).toHaveCount(1);
+	await expect(page.locator('[data-document-view="plan"]')).toBeVisible();
+});
+
 test("a pointer-dismissed Projects drawer becomes inert while it exits", async ({ join, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", { hasTouch: true, viewport: { width: 390, height: 844 } });
