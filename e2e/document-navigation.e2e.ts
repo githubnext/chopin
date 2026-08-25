@@ -104,6 +104,22 @@ test("document action menu motion settles keyboard opening immediately", async (
 	await expect(page.getByRole("menuitem", { name: "Archive", exact: true })).toBeFocused();
 });
 
+test("a pointer-collapsed Project stays inert through exit and restores in place", async ({ join }) => {
+	let page = await join("ana");
+	let projects = sidebar(page);
+	let trigger = projects.getByRole("button", { name: "score", exact: true });
+	let body = projects.locator('[data-motion-disclosure="projects"]');
+
+	await expect(trigger).toHaveAttribute("aria-controls", await body.getAttribute("id"));
+	await trigger.click();
+	await expect(body).toHaveAttribute("aria-hidden", "true");
+	await expect(body).toHaveAttribute("inert", "");
+	await trigger.click();
+	await expect(body).not.toHaveAttribute("aria-hidden", "true");
+	await expect(body).not.toHaveAttribute("inert", "");
+	await expect(body).toHaveCount(1);
+});
+
 test("document action menu closes when placement cannot be measured", async ({ join }) => {
 	let page = await join("ana");
 	let trigger = headerActions(page);

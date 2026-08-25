@@ -7,10 +7,13 @@ import documentActionsIcon from "./assets/figma/navigation/document-actions.svg"
 import newDocumentIcon from "./assets/figma/navigation/new-document.svg";
 import searchIcon from "./assets/figma/navigation/search.svg";
 import { DocumentActionsMenu } from "./document-actions-menu";
+import { motionContract } from "./motion-contract";
+import { motionImmediately } from "./motion-input";
 import { canManageProject } from "./navigation-model";
+import { MotionDisclosure } from "@chopin/editor";
 import { documentPath, researchWorkspacePath } from "@chopin/protocol/document-url";
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import type * as Api from "./api";
 import type { DocumentAction } from "./document-actions-menu";
 import type { ProjectDocuments } from "./document-actions";
@@ -77,44 +80,20 @@ function Project(
 	let label = project.repository?.name ?? project.repositoryName;
 	let canManage = canManageProject(project);
 	let creating = creatingProjectIds.has(project.repositoryId);
-	return (
-		<li
-			className="project-sidebar-project group/project"
-			data-project-id={project.repositoryId}
-			tabIndex={-1}
-		>
-			<div className="project-sidebar-project-row">
-				<button
-					aria-expanded={expanded}
-					className="project-sidebar-project-disclosure flex min-w-0 flex-1 items-center gap-2 text-left"
-					onClick={onToggle}
-					type="button"
-				>
-					<NavigationIcon className="opacity-50" src={bookBookmarkIcon} />
-					<span className="truncate text-sm font-bold">{label}</span>
-				</button>
-				{!archiveMode && project.available && canManage && (
-					<button
-						aria-label={`New document in ${label}`}
-						className="project-sidebar-action"
-						disabled={creating}
-						onClick={() => onCreateDocument(project)}
-						type="button"
-					>
-						<NavigationIcon src={newDocumentIcon} />
-					</button>
-				)}
-			</div>
-			{expanded && documents.status === "unavailable" && (
+	let contentId = useId();
+	let collapseMotion = motionContract("collapse");
+	let projectContent = (
+		<>
+			{documents.status === "unavailable" && (
 				<p className="project-sidebar-status" role="status">Access unavailable</p>
 			)}
-			{expanded && documents.status === "error" && (
+			{documents.status === "error" && (
 				<p className="project-sidebar-status" role="status">{documents.message}</p>
 			)}
-			{expanded && documents.status === "loading" && channels.length === 0 && (
+			{documents.status === "loading" && channels.length === 0 && (
 				<p className="project-sidebar-status" role="status">Loading documents…</p>
 			)}
-			{expanded && channels.length > 0 && (
+			{channels.length > 0 && (
 				<ul className="project-sidebar-documents">
 					{channels.map(channel => {
 						let children = newestResearchFirst(research.get(channel.id)?.workspaces ?? []);
@@ -205,10 +184,10 @@ function Project(
 					})}
 				</ul>
 			)}
-			{expanded && documents.status === "loading" && channels.length > 0 && (
+			{documents.status === "loading" && channels.length > 0 && (
 				<p className="project-sidebar-status" role="status">Loading more…</p>
 			)}
-			{expanded && documents.status === "ready" && documents.nextCursor && (
+			{documents.status === "ready" && documents.nextCursor && (
 				<button
 					aria-label={`Load more documents in ${label}`}
 					className="project-sidebar-load-more"
@@ -218,6 +197,46 @@ function Project(
 					Load more
 				</button>
 			)}
+		</>
+	);
+	return (
+		<li
+			className="project-sidebar-project group/project"
+			data-project-id={project.repositoryId}
+			tabIndex={-1}
+		>
+			<div className="project-sidebar-project-row">
+				<button
+					aria-controls={contentId}
+					aria-expanded={expanded}
+					className="project-sidebar-project-disclosure flex min-w-0 flex-1 items-center gap-2 text-left"
+					onClick={onToggle}
+					type="button"
+				>
+					<NavigationIcon className="opacity-50" src={bookBookmarkIcon} />
+					<span className="truncate text-sm font-bold">{label}</span>
+				</button>
+				{!archiveMode && project.available && canManage && (
+					<button
+						aria-label={`New document in ${label}`}
+						className="project-sidebar-action"
+						disabled={creating}
+						onClick={() => onCreateDocument(project)}
+						type="button"
+					>
+						<NavigationIcon src={newDocumentIcon} />
+					</button>
+				)}
+			</div>
+			<MotionDisclosure
+				id={contentId}
+				immediately={motionImmediately()}
+				motion={collapseMotion}
+				open={expanded}
+				surface="projects"
+			>
+				<div className="project-sidebar-project-content">{projectContent}</div>
+			</MotionDisclosure>
 		</li>
 	);
 }
