@@ -477,8 +477,10 @@ github-mcp-server/web_search
 ```
 
 Never give one session both private context and public web capability. The
-public evidence worker receives only the submitted brief; a later private
-answer worker receives normalized evidence and private context.
+public evidence worker receives only the submitted brief. An isolated no-web
+document-analysis worker receives the brief and parent-document snapshot. A
+separate isolated no-web report-synthesis worker receives the brief, normalized
+public evidence, and the private findings from document analysis.
 
 Accepted public sources must be canonical public HTTPS URLs observed in
 successful web-search citation or typed-resource metadata. Bare URLs in model
