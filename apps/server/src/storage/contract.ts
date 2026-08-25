@@ -295,6 +295,22 @@ export function storageContract(name: string, factory: Factory): void {
 			let storage = await opened(factory);
 			try {
 				let { userId, channelId: parentChannelId, repositoryId } = await userAndChannel(storage);
+				let emptyParentChildId = id("empty-parent-child");
+				await expect(storage.channels.create({
+					id: emptyParentChildId,
+					repositoryId,
+					repositoryOwner: "octo-org",
+					repositoryName: "score",
+					title: "Invalid child",
+					createdBy: userId,
+					parentChannelId: "",
+					now: new Date("2026-01-03T02:04:05.000Z"),
+				})).rejects.toMatchObject({
+					failure: "missing",
+					message: "parent channel id is required",
+				});
+				expect(await storage.channels.get(emptyParentChildId)).toBeUndefined();
+
 				let childId = id("child-channel");
 				let child = await storage.channels.create({
 					id: childId,

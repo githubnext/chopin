@@ -666,7 +666,8 @@ export class PostgresStorage implements StorageAdapter {
 		input: CreateChannel,
 	): Promise<ChannelRecord> {
 		await this.#lockChannelTitles(transaction, input.repositoryId);
-		if (input.parentChannelId) {
+		if (input.parentChannelId !== undefined) {
+			if (input.parentChannelId.length === 0) throw missing("parent channel id is required");
 			let [parent] = await transaction<{
 				parentChannelId: string | null;
 				repositoryId: string;

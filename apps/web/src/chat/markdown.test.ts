@@ -133,7 +133,17 @@ test("historical research references remain readable without composer discovery"
 	let markup = markdown(source, [persisted]);
 
 	expect(markup).toContain('data-chat-reference="research"');
-	expect(markup).toContain('href="/documents/octo-org/score/parent/research/workspace-one"');
+	expect(markup).toContain(">%OAuth evidence</span>");
+	expect(markup).not.toContain("<a");
+	expect(markup).not.toContain("/research/");
+
+	let documentMarkup = markdown("See #Release", [reference("See #Release", "#Release")]);
+	expect(documentMarkup).toContain('data-chat-reference="document"');
+	expect(documentMarkup).toContain('href="/documents/octo-org/score/reference-one"');
+
+	let currentPercentMarkup = markdown("See %Current research");
+	expect(currentPercentMarkup).toContain("See %Current research");
+	expect(currentPercentMarkup).not.toContain("data-chat-reference");
 });
 
 test("user-authored and encoded links cannot imitate a typed reference node", () => {
