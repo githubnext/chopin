@@ -126,6 +126,7 @@ test("a delayed sibling route removes the previous editable child immediately", 
 		CHILD_SOURCE,
 	);
 	await join("ana");
+	await page.evaluate(() => history.replaceState({ navigation: 9 }, "", "?view=plan#siblings"));
 	let childLink = (title: string) =>
 		page.getByRole("complementary", { name: "Projects" })
 			.getByRole("link", { name: title, exact: true });
@@ -151,6 +152,76 @@ test("a delayed sibling route removes the previous editable child immediately", 
 	let secondSurface = page.getByRole("region", { name: `Child document: ${secondTitle}` });
 	await expect(secondSurface.locator(`[data-workspace-room="${second.id}"]`)).toBeVisible();
 	await expect(secondSurface).toBeFocused();
+	await secondSurface.getByRole("button", { name: `Back to Test ${room.slice(0, 8)}` }).click();
+	await expect(page).toHaveURL(url =>
+		url.pathname.endsWith(`/test-${room.slice(0, 8)}`)
+		&& url.search === "?view=plan"
+		&& url.hash === "#siblings"
+	);
+	await expect(secondSurface).toHaveCount(0);
+	await expect(childLink(secondTitle)).toBeFocused();
+
+	await childLink(firstTitle).click();
+	await childLink(secondTitle).click();
+	await expect(secondSurface.locator(`[data-workspace-room="${second.id}"]`)).toBeVisible();
+	await page.keyboard.press("Escape");
+	await expect(page).toHaveURL(url =>
+		url.pathname.endsWith(`/test-${room.slice(0, 8)}`)
+		&& url.search === "?view=plan"
+		&& url.hash === "#siblings"
+	);
+	await expect(childLink(secondTitle)).toBeFocused();
+
+	await childLink(firstTitle).click();
+	await childLink(secondTitle).click();
+	await expect(secondSurface.locator(`[data-workspace-room="${second.id}"]`)).toBeVisible();
+	await page.goBack();
+	await expect(page).toHaveURL(url =>
+		url.pathname.endsWith(`/test-${room.slice(0, 8)}`)
+		&& url.search === "?view=plan"
+		&& url.hash === "#siblings"
+	);
+	await expect(page.locator(`[data-workspace-room="${first.id}"]`)).toHaveCount(0);
+	await expect(childLink(secondTitle)).toBeFocused();
+});
+
+test("a direct child keeps direct-entry history when opening a sibling", async ({ baseURL, page, room, seed }) => {
+	await seed(PARENT_SOURCE);
+	let firstTitle = `Direct first ${room.slice(0, 8)}`;
+	let secondTitle = `Direct second ${room.slice(0, 8)}`;
+	let first = await seedChildChannel(
+		port(baseURL!),
+		room,
+		crypto.randomUUID(),
+		firstTitle,
+		CHILD_SOURCE,
+	);
+	let second = await seedChildChannel(
+		port(baseURL!),
+		room,
+		crypto.randomUUID(),
+		secondTitle,
+		CHILD_SOURCE,
+	);
+	await authenticate(page, "ana", baseURL!);
+	await page.goto(first.path);
+	await expect(page.locator(`[data-workspace-room="${first.id}"]`)).toBeVisible();
+	let historyLength = await page.evaluate(() => history.length);
+	let secondLink = page.getByRole("complementary", { name: "Projects" })
+		.getByRole("link", { name: secondTitle, exact: true });
+
+	await secondLink.click();
+	let secondSurface = page.getByRole("region", { name: `Child document: ${secondTitle}` });
+	await expect(secondSurface.locator(`[data-workspace-room="${second.id}"]`)).toBeVisible();
+	expect(await page.evaluate(() => history.length)).toBe(historyLength);
+	await secondSurface.getByRole("button", { name: `Back to Test ${room.slice(0, 8)}` }).click();
+	await expect(page).toHaveURL(url =>
+		url.pathname.endsWith(`/test-${room.slice(0, 8)}`)
+		&& url.search === ""
+		&& url.hash === ""
+	);
+	await expect(secondSurface).toHaveCount(0);
+	await expect(secondLink).toBeFocused();
 });
 
 test("a child load failure preserves its mounted parent through back and retry", async ({ baseURL, join, page, room, seed }) => {

@@ -397,19 +397,19 @@ function ChannelWorkspace(
 		setError(undefined);
 		let prepared = source.page === "research"
 			? Api.document(
-					source.owner,
-					source.repository,
-					source.slug,
-					controller.signal,
-				).then(detail => ({
-					canonicalPath: researchWorkspacePath(
-						detail.repository.owner,
-						detail.repository.name,
-						detail.channel.slug,
-						source.workspaceId,
-					),
-					detail,
-				}))
+				source.owner,
+				source.repository,
+				source.slug,
+				controller.signal,
+			).then(detail => ({
+				canonicalPath: researchWorkspacePath(
+					detail.repository.owner,
+					detail.repository.name,
+					detail.channel.slug,
+					source.workspaceId,
+				),
+				detail,
+			}))
 			: prepareDocumentLoad(
 				source.page === "channel"
 					? { id: source.id }
@@ -672,24 +672,24 @@ function DocumentRouteSwap(
 				let source = layer.key === requested.key ? requested.source : layer.source;
 				return (
 					<ContentSwapLayer
-					active={layer.key === state.current.key}
-					className="document-route-layer h-full min-h-0"
-					immediately={state.current.immediately}
-					key={layer.key}
-					motion={motion}
-					onClosed={layer.key === state.previous?.key
-						? () => dispatch({ key: layer.key, type: "closed" })
-						: undefined}
+						active={layer.key === state.current.key}
+						className="document-route-layer h-full min-h-0"
+						immediately={state.current.immediately}
+						key={layer.key}
+						motion={motion}
+						onClosed={layer.key === state.previous?.key
+							? () => dispatch({ key: layer.key, type: "closed" })
+							: undefined}
 					>
 						<DocumentRouteLayerWorkspace
-						agent={agent}
-						layerKey={layer.key}
-						onCanonicalPath={metadataPath}
-						onChildClose={onChildClose}
-						onParentRestored={onParentRestored}
-						onReady={ready}
-						source={source}
-						user={user}
+							agent={agent}
+							layerKey={layer.key}
+							onCanonicalPath={metadataPath}
+							onChildClose={onChildClose}
+							onParentRestored={onParentRestored}
+							onReady={ready}
+							source={source}
+							user={user}
 						/>
 					</ContentSwapLayer>
 				);
@@ -718,13 +718,21 @@ export function HostedApp(
 		if (options.replace) history.replaceState(history.state, "", next);
 		else {
 			let currentRoute = hostedRouteRef.current;
+			let siblingChild = nextRoute.page === "child" && currentRoute.page === "child"
+				&& nextRoute.owner.toLocaleLowerCase() === currentRoute.owner.toLocaleLowerCase()
+				&& nextRoute.repository.toLocaleLowerCase()
+					=== currentRoute.repository.toLocaleLowerCase()
+				&& nextRoute.parentSlug === currentRoute.parentSlug;
 			let inAppChild = nextRoute.page === "child" && currentRoute.page === "document"
 				&& nextRoute.owner.toLocaleLowerCase() === currentRoute.owner.toLocaleLowerCase()
 				&& nextRoute.repository.toLocaleLowerCase() === currentRoute.repository.toLocaleLowerCase()
 				&& nextRoute.parentSlug === currentRoute.slug;
-			if (inAppChild) {
+			if (siblingChild || inAppChild) {
 				let active = document.activeElement;
 				childOpener.current = active instanceof HTMLElement ? active : undefined;
+			}
+			if (siblingChild) history.replaceState(history.state, "", next);
+			else if (inAppChild) {
 				history.pushState(
 					childHistoryState(history.state, current),
 					"",
