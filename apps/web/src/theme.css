@@ -596,7 +596,8 @@ body {
 
 .motion-content-swap.is-open {
 	opacity: 1;
-	transform: translateX(0);
+	transform: none;
+	will-change: auto;
 }
 
 .motion-content-swap.is-closing {

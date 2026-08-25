@@ -193,6 +193,12 @@ describe("motion contracts", () => {
 		);
 	});
 
+	it("releases the transformed containing block after content swaps settle", () => {
+		expect(THEME).toMatch(
+			/\.motion-content-swap\.is-open\s*{[^}]*transform:\s*none;[^}]*will-change:\s*auto;/s,
+		);
+	});
+
 	it("settles content swaps under reduced motion", () => {
 		expect(THEME).toMatch(
 			/@media \(prefers-reduced-motion: reduce\)\s*{[\s\S]*?\.motion-content-swap[\s\S]*?transition:\s*none;[\s\S]*?}/,

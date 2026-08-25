@@ -324,10 +324,12 @@ test("automatic Decisions changes reconcile after compact Conversation closes", 
 			"true",
 			{ timeout: 20_000 },
 		);
-		let planHost = bo.locator('[data-document-view="plan"]');
+		let planHost = bo.locator('.workspace-document-layer:has([data-document-view="plan"])');
 		await planHost.evaluate(element => {
 			(element as HTMLElement).hidden = false;
 			(element as HTMLElement).inert = false;
+			element.removeAttribute("aria-hidden");
+			element.classList.add("is-open");
 		});
 		await bo.locator('[aria-label="editable markdown"]').fill("Collaborative prose arrived.");
 		await expect(ana.locator('[aria-label="editable markdown"]')).toContainText(
