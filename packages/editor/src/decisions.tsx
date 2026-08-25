@@ -16,11 +16,13 @@ import { QuestionnaireCard } from "./widgets/questionnaire";
 import type { Transport } from "@chopin/question/react";
 import type { MotionDisclosureContract } from "./disclosure-motion";
 import type { QuestionnaireEntry, QuestionnaireStore } from "./questionnaires";
+import type { QuestionStepMotion } from "./widget-options";
 
 export type DecisionsProps = {
 	store: QuestionnaireStore;
 	motion: MotionDisclosureContract;
 	motionImmediately?: () => boolean;
+	questionMotion?: QuestionStepMotion;
 	wire?: Transport;
 	connected?: boolean;
 	headingId?: string;
@@ -53,8 +55,17 @@ function useHistory() {
 }
 
 export function Decisions(
-	{ connected, headingId, motion, motionImmediately, onShowPlan, reveal, store, wire }:
-		DecisionsProps,
+	{
+		connected,
+		headingId,
+		motion,
+		motionImmediately,
+		onShowPlan,
+		questionMotion,
+		reveal,
+		store,
+		wire,
+	}: DecisionsProps,
 ) {
 	let entries = useQuestionnaires(store);
 	let content = useRef<HTMLDivElement>(null);
@@ -112,6 +123,7 @@ export function Decisions(
 		<QuestionnaireCard
 			connected={connected}
 			key={entry.id}
+			motion={questionMotion}
 			onQuestionEnter={question => store.highlight(entry.id, question)}
 			onQuestionLeave={() => store.clear()}
 			onQuestionSelect={question => {

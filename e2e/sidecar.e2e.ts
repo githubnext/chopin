@@ -26,6 +26,8 @@ const LONG_PLAN = Array.from({ length: 80 }, (_, index) => `Paragraph ${index + 
 const WIDGET = "01K0N4TR8K7JGM4R1J7PW4R8YJ";
 const QUESTION = "01K0N4V4E7Y6P4MJ5WD8XZF3B2";
 const OPTION = "01K0N4W3B7P27CBAEC7A8C8WEA";
+const SECOND_QUESTION = "01K0N4W3B7P27CBAEC7A8C8WEB";
+const SECOND_OPTION = "01K0N4W3B7P27CBAEC7A8C8WEC";
 const ANCHORED_DEFINITION = {
 	questions: [{
 		id: QUESTION,
@@ -44,6 +46,17 @@ const ANCHORED = `Anchored paragraph.
 </Questionnaire>
 `;
 const ANCHORED_DIGEST = "sha256:3ccc3e648811df8180799f8b012c6934bcf44a306f5eb8b8c9d2676b0493ccf4";
+const MULTI_QUESTIONNAIRE = `Multi-step decision.
+
+<Questionnaire id="${WIDGET}" by="ana">
+<Question id="${QUESTION}" header="Rollout" prompt="How should we deploy?" multiple="false">
+<Option id="${OPTION}" label="Canary" />
+</Question>
+<Question id="${SECOND_QUESTION}" header="Scope" prompt="What belongs in the first cut?" multiple="false">
+<Option id="${SECOND_OPTION}" label="Anchors" />
+</Question>
+</Questionnaire>
+`;
 
 /** What the injector will quote: the first forty-eight characters. */
 const QUOTED = "Room state lives on disk as MDX beside the trans";
@@ -73,6 +86,33 @@ test("the desktop document view switches through its segmented control", async (
 	await plan.click();
 	await expect(page.locator('[data-document-view="plan"]')).toBeVisible();
 	await expect(plan).toHaveAttribute("aria-pressed", "true");
+});
+
+test("question step swaps overlap only for pointer input", async ({ join, seed }) => {
+	await seed(MULTI_QUESTIONNAIRE);
+	let page = await join("ana");
+	let card = page.locator(
+		`[data-document-view="plan"] article[data-plan-sidecar-questionnaire="${WIDGET}"]`,
+	);
+	let stack = card.locator(".question-step-swap");
+	let visible = stack.locator(".question-step-layer:not([hidden])");
+	let scope = card.getByRole("tab", { name: "Scope" });
+
+	await scope.click();
+	await expect(visible).toHaveCount(2);
+	await expect(stack.locator(".question-step-layer:not([hidden]):not([inert])")).toHaveCount(1);
+	await expect(stack.locator('.question-step-layer:not([hidden])[aria-hidden="true"][inert]'))
+		.toHaveCount(1);
+	await expect(visible).toHaveCount(1);
+
+	await scope.focus();
+	await page.keyboard.press("ArrowLeft");
+	await expect(visible).toHaveCount(1);
+	await expect(stack.locator(".question-step-layer:not([hidden]).is-closing")).toHaveCount(0);
+	await expect(card.getByRole("tab", { name: "Rollout" })).toHaveAttribute(
+		"aria-selected",
+		"true",
+	);
 });
 
 async function rewriteFirstBlock(page: import("@playwright/test").Page, value: string) {

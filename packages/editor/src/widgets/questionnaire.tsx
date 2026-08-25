@@ -11,11 +11,13 @@ import { QuestionView, useQuestionnaire } from "@chopin/question/react";
 import { useCellValue } from "@mdxeditor/gurx";
 
 import { Provenance, SidecarCard } from "../card";
+import { ContentSwapLayer } from "../content-swap";
 import { widgets$ } from "../widget-options";
 
 import type { Transport } from "@chopin/question/react";
 import type { Answer } from "@chopin/question";
 import type { Questionnaire, QuestionnaireNode } from "@chopin/dialect";
+import type { QuestionStepMotion } from "../widget-options";
 
 /** The plan stores the chosen text; the shared view wants answer records. */
 function answers(value: Questionnaire): Answer[] | undefined {
@@ -55,6 +57,7 @@ export type QuestionnaireCardProps = {
 	onQuestionLeave?: (question: string) => void;
 	/** Take the reader to that prose. Without it the shared view's jump is inert. */
 	onQuestionSelect?: (question: string) => void;
+	motion?: QuestionStepMotion;
 };
 
 export function QuestionnaireCard(
@@ -64,6 +67,7 @@ export function QuestionnaireCard(
 		onQuestionEnter,
 		onQuestionLeave,
 		onQuestionSelect,
+		motion,
 		places,
 		value,
 		wire,
@@ -78,6 +82,7 @@ export function QuestionnaireCard(
 			<Undecided
 				canEdit={canEdit}
 				connected={connected}
+				motion={motion}
 				value={value}
 				wire={wire}
 				{...pointing}
@@ -93,8 +98,14 @@ type Pointing = {
 };
 
 function Undecided(
-	{ canEdit, connected, value, wire, ...pointing }:
-		& { canEdit: boolean; connected: boolean; value: Questionnaire; wire?: Transport }
+	{ canEdit, connected, motion, value, wire, ...pointing }:
+		& {
+			canEdit: boolean;
+			connected: boolean;
+			motion?: QuestionStepMotion;
+			value: Questionnaire;
+			wire?: Transport;
+		}
 		& Pointing,
 ) {
 	let state = useQuestionnaire({
@@ -124,6 +135,19 @@ function Undecided(
 				onCancel={editable ? state.cancel : undefined}
 				onChange={editable ? state.change : undefined}
 				onSubmit={editable ? state.submit : undefined}
+				renderStep={motion
+					? ({ active, children, question }) => (
+						<ContentSwapLayer
+							active={active}
+							className="question-step-layer"
+							immediately={motion.immediately()}
+							key={question}
+							motion={motion.contract}
+						>
+							{children}
+						</ContentSwapLayer>
+					)
+					: undefined}
 				status="open"
 				submitting={state.submitting}
 				{...pointing}
@@ -163,6 +187,7 @@ function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 		<QuestionnaireCard
 			canEdit={options.canEdit}
 			connected={options.connected}
+			motion={options.questionMotion}
 			onQuestionEnter={question => options.questions?.highlight(value.id, question)}
 			onQuestionLeave={() => options.questions?.clear()}
 			onQuestionSelect={question => options.questions?.reveal(value.id, question)}

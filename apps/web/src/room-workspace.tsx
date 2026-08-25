@@ -51,6 +51,11 @@ function settleMotionImmediately(): boolean {
 	return motionImmediately();
 }
 
+const QUESTION_MOTION = {
+	contract: motionContract("content-swap"),
+	immediately: settleMotionImmediately,
+};
+
 export function Header(
 	{
 		archivedAt,
@@ -468,6 +473,7 @@ export function RoomWorkspace(
 					motion={motionContract("collapse")}
 					motionImmediately={settleMotionImmediately}
 					onShowPlan={showPlan}
+					questionMotion={QUESTION_MOTION}
 					reveal={reveal}
 					store={questions}
 					wire={wire}
@@ -480,6 +486,7 @@ export function RoomWorkspace(
 					key={workspaceArchivedAt ? "archived" : "active"}
 					motionImmediately={settleMotionImmediately}
 					onScrollTop={setPlanScrollTop}
+					questionMotion={QUESTION_MOTION}
 					questions={questions}
 					readOnly={!workspaceCanEdit}
 					scrollTop={planScrollTop}
