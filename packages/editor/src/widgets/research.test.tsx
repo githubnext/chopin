@@ -85,6 +85,8 @@ type Store = {
 	subscribe(listener: () => void): () => void;
 	retain(id: string): () => void;
 	get(id: string): Research.RequestView | undefined;
+	mutating(id: string): boolean;
+	refresh(id: string): void;
 	create(question: string, requestId: string): Promise<Research.RequestView>;
 	cancel(id: string): Promise<Research.RequestView>;
 	retry(id: string): Promise<Research.RequestView>;
@@ -105,15 +107,19 @@ async function deletionGuard() {
 
 function mutableStore(request: Research.RequestView | undefined): {
 	set(next: Research.RequestView | undefined): void;
+	setMutating(next: boolean): void;
 	store: Store;
 } {
 	let current = request;
+	let mutating = false;
 	return {
 		set: next => current = next,
+		setMutating: next => mutating = next,
 		store: {
 			subscribe: () => () => {},
 			retain: () => () => {},
 			get: () => current,
+			mutating: () => mutating,
 			refresh() {},
 			create: async () => current ?? BASE,
 			cancel: async () => current ?? BASE,
@@ -428,6 +434,32 @@ describe("active research deletion", () => {
 		}
 	});
 
+	it("blocks terminal deletion from retry start through failure or queued success", async () => {
+		for (let outcome of ["failure", "success"] as const) {
+			let state = mutableStore({ ...BASE, state: "failed", stage: "failed" });
+			let editor = deletionEditor();
+			let register = await deletionGuard();
+			if (!register) return;
+			register(editor, state.store);
+			let key = selectResearch(editor);
+			state.setMutating(true);
+
+			expect(editor.dispatchCommand(DELETE_CHARACTER_COMMAND, true)).toBe(true);
+			editor.update(() => {}, { discrete: true });
+			editor.getEditorState().read(() => expect($getNodeByKey(key)).not.toBeNull());
+
+			state.setMutating(false);
+			if (outcome === "success") state.set({ ...BASE, state: "pending", stage: "queued" });
+			expect(editor.dispatchCommand(DELETE_CHARACTER_COMMAND, true)).toBe(true);
+			editor.update(() => {}, { discrete: true });
+			editor.getEditorState().read(() =>
+				outcome === "failure"
+					? expect($getNodeByKey(key)).toBeNull()
+					: expect($getNodeByKey(key)).not.toBeNull()
+			);
+		}
+	});
+
 	it("blocks a selected active reference until cancellation makes removal explicit", async () => {
 		let state = mutableStore(BASE);
 		let editor = deletionEditor();
@@ -530,6 +562,8 @@ describe("research reference", () => {
 			subscribe: () => () => {},
 			retain: () => () => {},
 			get: () => BASE,
+			mutating: () => false,
+			refresh() {},
 			create: async () => BASE,
 			cancel: async () => BASE,
 			retry: async () => BASE,
@@ -625,6 +659,8 @@ describe("research reference", () => {
 			subscribe: () => () => {},
 			retain: () => () => {},
 			get: id => id === BASE.id ? BASE : undefined,
+			mutating: () => false,
+			refresh() {},
 			create: async () => BASE,
 			cancel: async () => BASE,
 			retry: async () => BASE,
@@ -638,6 +674,36 @@ describe("research reference", () => {
 		}));
 		expect(markup).toContain(BASE.question);
 		expect(markup).toContain("Searching");
+	});
+
+	it("keeps terminal card actions disabled from shared retry mutation state", async () => {
+		let module = await import("./research");
+		let Reference = (module as unknown as {
+			ResearchReference?: ComponentType<{ id: string; onRemove: () => void; store: Store }>;
+		}).ResearchReference;
+		expect(typeof Reference).toBe("function");
+		if (!Reference) return;
+		let failed = { ...BASE, state: "failed" as const, stage: "failed" as const };
+		let store: Store = {
+			subscribe: () => () => {},
+			retain: () => () => {},
+			get: () => failed,
+			mutating: () => true,
+			refresh() {},
+			create: async () => failed,
+			cancel: async () => failed,
+			retry: async () => failed,
+			opener: () => ({ current: null }),
+			open() {},
+		};
+
+		let markup = renderToStaticMarkup(createElement(Reference, {
+			id: BASE.id,
+			onRemove() {},
+			store,
+		}));
+		expect(markup).toMatch(/aria-label="Retry research"[^>]*disabled/);
+		expect(markup).toMatch(/aria-label="Remove research reference"[^>]*disabled/);
 	});
 
 	it("subscribes safely to a class store whose method depends on this", async () => {
@@ -660,6 +726,9 @@ describe("research reference", () => {
 			}
 			get() {
 				return BASE;
+			}
+			mutating() {
+				return false;
 			}
 			retain(id: string) {
 				this.retained.push(id);
@@ -707,6 +776,8 @@ describe("research reference", () => {
 				return () => retained.delete(id);
 			},
 			get: () => BASE,
+			mutating: () => false,
+			refresh() {},
 			create: async () => BASE,
 			cancel: async () => BASE,
 			retry: async () => BASE,

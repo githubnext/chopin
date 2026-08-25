@@ -273,6 +273,7 @@ export function researchActions(
 
 function protectedResearch(node: LexicalNode, store: ResearchStore): boolean {
 	if (!$isResearchNode(node)) return false;
+	if (store.mutating(node.getId())) return true;
 	let request = store.get(node.getId());
 	return request === undefined || !REMOVABLE_STAGES.has(request.stage);
 }
@@ -377,6 +378,11 @@ export function ResearchReference({ canEdit = true, id, onRemove, store }: Resea
 		() => store.get(id),
 		() => store.get(id),
 	);
+	let mutating = useSyncExternalStore(
+		subscribe,
+		() => store.mutating(id),
+		() => store.mutating(id),
+	);
 	let [busy, setBusy] = useState(false);
 	let [actionError, setActionError] = useState<string>();
 
@@ -402,7 +408,7 @@ export function ResearchReference({ canEdit = true, id, onRemove, store }: Resea
 	return (
 		<ResearchCard
 			actionError={actionError}
-			busy={busy}
+			busy={busy || mutating}
 			canEdit={canEdit}
 			request={request}
 			onCancel={actions.cancel ? () => action(() => store.cancel(request.id)) : undefined}

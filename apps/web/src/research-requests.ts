@@ -59,6 +59,7 @@ export class ResearchRequestStore implements ResearchStore {
 	#disposed = false;
 	#generations = new Map<string, number>();
 	#listeners = new Set<() => void>();
+	#mutations = new Map<string, number>();
 	#onOpen: (child: Research.ReadyChild, opener: ResearchOpener) => void;
 	#onPublished: (child: Research.ReadyChild) => void;
 	#openers = new Map<string, { current: HTMLElement | null }>();
@@ -111,6 +112,14 @@ export class ResearchRequestStore implements ResearchStore {
 		return this.#snapshots.get(id);
 	}
 
+	mutating(id: string): boolean {
+		return (this.#mutations.get(id) ?? 0) > 0;
+	}
+
+	refresh(id: string): void {
+		if (this.#disposed) return;
+		void this.#load(id);
+	}
 	async create(question: string, requestId: string): Promise<Research.RequestView> {
 		this.#assertAvailable();
 		let result = await this.#api.create(this.#channelId, question, requestId);
@@ -125,9 +134,14 @@ export class ResearchRequestStore implements ResearchStore {
 
 	async retry(id: string): Promise<Research.RequestView> {
 		this.#assertAvailable();
-		let result = await this.#api.retry(this.#channelId, id);
-		this.#fenceRead(id);
-		return this.#accept(id, result, "retry");
+		this.#beginMutation(id);
+		try {
+			let result = await this.#api.retry(this.#channelId, id);
+			this.#fenceRead(id);
+			return this.#accept(id, result, "retry");
+		} finally {
+			this.#endMutation(id);
+		}
 	}
 
 	open(child: Research.ReadyChild, opener: ResearchOpener): void {
@@ -158,6 +172,7 @@ export class ResearchRequestStore implements ResearchStore {
 		for (let opener of this.#openers.values()) opener.current = null;
 		this.#openers.clear();
 		this.#published.clear();
+		this.#mutations.clear();
 		this.#references.clear();
 		this.#listeners.clear();
 		this.#snapshots.clear();
@@ -191,9 +206,27 @@ export class ResearchRequestStore implements ResearchStore {
 			this.#published.add(id);
 			this.#onPublished(snapshot.child);
 		}
-		for (let listener of this.#listeners) listener();
+		this.#notify();
 		this.#schedulePolling();
 		return snapshot;
+	}
+
+	#beginMutation(id: string): void {
+		if (this.#disposed) return;
+		this.#mutations.set(id, (this.#mutations.get(id) ?? 0) + 1);
+		this.#notify();
+	}
+
+	#endMutation(id: string): void {
+		if (this.#disposed) return;
+		let remaining = (this.#mutations.get(id) ?? 1) - 1;
+		if (remaining > 0) this.#mutations.set(id, remaining);
+		else this.#mutations.delete(id);
+		this.#notify();
+	}
+
+	#notify(): void {
+		for (let listener of this.#listeners) listener();
 	}
 
 	async #load(id: string, replace = false): Promise<void> {

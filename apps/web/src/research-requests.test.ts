@@ -462,6 +462,58 @@ describe("research request store", () => {
 		store.dispose();
 	});
 
+	it("keeps retry mutation state through remount until settlement or disposal", async () => {
+		for (let outcome of ["failure", "success", "dispose"] as const) {
+			let retry = deferred<Research.RequestView>();
+			let initial = request(`request-${outcome}`, "failed", {
+				error: "Research could not be completed.",
+				state: "failed",
+			});
+			let store = new ResearchRequestStore({
+				api: api({
+					get: async () => initial,
+					retry: async () => retry.promise,
+				}),
+				channelId: "channel-one",
+				onOpen() {},
+			});
+			let release = store.retain(initial.id);
+			await settle();
+
+			let retried = store.retry(initial.id, initial.question);
+			expect(store.mutating(initial.id)).toBe(true);
+			release();
+			release = store.retain(initial.id);
+			await settle();
+			expect(store.mutating(initial.id)).toBe(true);
+
+			if (outcome === "dispose") {
+				store.dispose();
+				expect(store.mutating(initial.id)).toBe(false);
+				let queued = request(initial.id, "queued", { state: "pending" });
+				retry.resolve(queued);
+				expect(await retried).toBe(queued);
+				expect(store.get(initial.id)).toBeUndefined();
+				release();
+				continue;
+			} else if (outcome === "failure") {
+				let error = new Error("Retry unavailable");
+				retry.reject(error);
+				await expect(retried).rejects.toBe(error);
+				expect(store.get(initial.id)).toBe(initial);
+			} else {
+				let queued = request(initial.id, "queued", { state: "pending" });
+				retry.resolve(queued);
+				expect(await retried).toBe(queued);
+				expect(store.get(initial.id)).toBe(queued);
+			}
+			expect(store.mutating(initial.id)).toBe(false);
+
+			release();
+			store.dispose();
+		}
+	});
+
 	it("fences a pre-retry observation before accepting current queued work", async () => {
 		let beforeRetry = deferred<Research.RequestView>();
 		let afterRetry = deferred<Research.RequestView>();
