@@ -16,6 +16,7 @@ import {
 } from "./document-workspace-state";
 
 import type { ComponentType } from "react";
+import type { ChildFocusToken } from "./anchored-child-surface";
 import type { DocumentWorkspaceAction } from "./document-workspace-state";
 import type { DocumentRouteIdentity } from "./document-route-swap";
 import type { HostedRoute } from "./hosted";
@@ -71,6 +72,7 @@ export default function DocumentWorkspaceHost(
 		Loading,
 		onCanonicalPath,
 		onChildClose,
+		onChildClosing,
 		onParentRestored,
 		onReady,
 		retryable,
@@ -92,7 +94,8 @@ export default function DocumentWorkspaceHost(
 			pathname: string,
 		) => void;
 		onChildClose: (parentPath: string) => void;
-		onParentRestored: (parentId: string) => void;
+		onChildClosing: (parentId: string, parentPath: string) => ChildFocusToken;
+		onParentRestored: (token: ChildFocusToken) => void;
 		onReady: (
 			key: DocumentRouteIdentity,
 			resolution?: {
@@ -121,6 +124,7 @@ export default function DocumentWorkspaceHost(
 	let error = state.error;
 	let presentation = state.presentation;
 	let previousPresentation = useRef(presentation);
+	let closingFocus = useRef<ChildFocusToken | undefined>(undefined);
 	let parentScrollTop = useRef<number | undefined>(undefined);
 	let parentSurface = useRef<HTMLDivElement>(null);
 
@@ -202,16 +206,44 @@ export default function DocumentWorkspaceHost(
 	useLayoutEffect(() => {
 		let previous = previousPresentation.current;
 		previousPresentation.current = presentation;
+		if (previous !== "closing" || presentation !== "closed") return;
+		let token = closingFocus.current;
+		closingFocus.current = undefined;
 		let current = stateRef.current;
-		let parentId = current.status === "ready" ? current.loaded.parent.channel.id : undefined;
-		if (previous === "closing" && presentation === "closed" && parentId) {
-			onParentRestored(parentId);
+		if (
+			token
+			&& current.status === "ready"
+			&& current.loaded.parent.channel.id === token.parentId
+		) {
+			onParentRestored(token);
 		}
 	}, [onParentRestored, presentation]);
 
 	useEffect(() => {
-		send({ route, type: "route" });
-	}, [route, send]);
+		let current = stateRef.current;
+		let action = { route, type: "route" } as const;
+		let next = transitionDocumentWorkspace(current, action);
+		if (route.page === "child") {
+			closingFocus.current = undefined;
+		} else if (
+			current.status === "ready"
+			&& current.presentation === "open"
+			&& next.status === "ready"
+			&& next.presentation === "closing"
+		) {
+			closingFocus.current = onChildClosing(
+				current.loaded.parent.channel.id,
+				documentPath(
+					current.loaded.parent.repository.owner,
+					current.loaded.parent.repository.name,
+					current.loaded.parent.channel.slug,
+				),
+			);
+		} else if (!(next.status === "ready" && next.presentation === "closing")) {
+			closingFocus.current = undefined;
+		}
+		send(action);
+	}, [onChildClosing, route, send]);
 
 	useEffect(() => {
 		if (presentation !== "closing") return;

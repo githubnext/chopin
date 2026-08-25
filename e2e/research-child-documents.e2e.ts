@@ -529,13 +529,65 @@ test("a delayed sibling route removes the previous editable child immediately", 
 	await childLink(firstTitle).click();
 	await childLink(secondTitle).click();
 	await expect(secondSurface.locator(`[data-workspace-room="${second.id}"]`)).toBeVisible();
+	await page.evaluate(() => {
+		let held = new Map<number, FrameRequestCallback>();
+		let next = 1;
+		let state = window as typeof window & {
+			__chopinHeldFrames?: {
+				cancel: typeof cancelAnimationFrame;
+				held: Map<number, FrameRequestCallback>;
+				request: typeof requestAnimationFrame;
+			};
+		};
+		state.__chopinHeldFrames = {
+			cancel: window.cancelAnimationFrame,
+			held,
+			request: window.requestAnimationFrame,
+		};
+		window.requestAnimationFrame = callback => {
+			let id = next++;
+			held.set(id, callback);
+			return id;
+		};
+		window.cancelAnimationFrame = id => held.delete(id);
+	});
 	await page.keyboard.press("Escape");
 	await expect(page).toHaveURL(url =>
 		url.pathname.endsWith(`/test-${room.slice(0, 8)}`)
 		&& url.search === "?view=plan"
 		&& url.hash === "#siblings"
 	);
-	await expect(childLink(secondTitle)).toBeFocused();
+	await expect(secondSurface).toHaveCount(0);
+	expect(
+		await page.evaluate(() => {
+			let state = window as typeof window & {
+				__chopinHeldFrames?: { held: Map<number, FrameRequestCallback> };
+			};
+			return state.__chopinHeldFrames?.held.size ?? 0;
+		}),
+	).toBeGreaterThan(0);
+	await childLink(firstTitle).click();
+	let firstSurface = page.getByRole("region", { name: `Child document: ${firstTitle}` });
+	await expect(firstSurface.locator(`[data-workspace-room="${first.id}"]`)).toBeVisible();
+	await page.evaluate(() => {
+		let state = window as typeof window & {
+			__chopinHeldFrames?: {
+				cancel: typeof cancelAnimationFrame;
+				held: Map<number, FrameRequestCallback>;
+				request: typeof requestAnimationFrame;
+			};
+		};
+		let frames = state.__chopinHeldFrames!;
+		window.requestAnimationFrame = frames.request;
+		window.cancelAnimationFrame = frames.cancel;
+		for (let callback of frames.held.values()) callback(performance.now());
+		delete state.__chopinHeldFrames;
+	});
+	await expect(firstSurface).toBeFocused();
+	await expect(childLink(secondTitle)).not.toBeFocused();
+	await page.keyboard.press("Escape");
+	await expect(firstSurface).toHaveCount(0);
+	await expect(childLink(firstTitle)).toBeFocused();
 
 	await childLink(firstTitle).click();
 	await childLink(secondTitle).click();
