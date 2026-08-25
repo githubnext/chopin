@@ -26,7 +26,6 @@ type Oklch = { l: number; c: number; h: number };
 
 const THEME = readFileSync(join(import.meta.dir, "theme.css"), "utf8");
 const NAVIGATION = readFileSync(join(import.meta.dir, "navigation.css"), "utf8");
-const RESEARCH = readFileSync(join(import.meta.dir, "research-workspace.css"), "utf8");
 const STYLES = readFileSync(
 	join(import.meta.dir, "../../../packages/editor/src/styles.css"),
 	"utf8",
@@ -371,14 +370,6 @@ describe("editor feedback motion", () => {
 	it("settles pointer-owned editor feedback under reduced motion", () => {
 		expect(FEEDBACK).toMatch(
 			/@media \(prefers-reduced-motion: reduce\)\s*{[^}]*:root\[data-motion-input="pointer"\]\s+\.editor-motion-feedback\[data-motion-feedback\][^{}]*\.editor-motion-feedback\[data-motion-feedback\]\[data-motion-owned="pointer"\]\s*{[^}]*transition-duration:\s*0s;/s,
-		);
-	});
-});
-
-describe("research route alerts", () => {
-	it("keeps stable spacing between the route failure heading and actions", () => {
-		expect(RESEARCH).toMatch(
-			/\.research-route-alert\s*{[^}]*margin:\s*8px 0 20px;/s,
 		);
 	});
 });

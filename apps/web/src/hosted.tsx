@@ -4,12 +4,10 @@ import {
 	documentsPath,
 	parseChildDocumentPath,
 	parseDocumentPath,
-	parseResearchWorkspacePath,
-	researchWorkspacePath,
 } from "@chopin/protocol/document-url";
 
 import * as Api from "./api";
-import { readChannelRecovery, readDocumentRecovery, rememberChannel } from "./channel-recovery";
+import { readChannelRecovery, rememberChannel } from "./channel-recovery";
 import { childCloseAction, childHistoryState } from "./child-history";
 import { documentRouteIdentity, transitionDocumentRoute } from "./document-route-swap";
 import { newestDocument } from "./document-actions";
@@ -61,8 +59,8 @@ export type HostedRoute =
 	| { page: "repository"; owner: string; repository: string }
 	| { page: "missing" };
 
-type DocumentRoute = Exclude<DocumentRouteIdentitySource, { page: "research" }>;
-type ChannelSource = Extract<DocumentRouteIdentitySource, { page: "channel" | "research" }>;
+type DocumentRoute = DocumentRouteIdentitySource;
+type ChannelSource = Extract<DocumentRouteIdentitySource, { page: "channel" }>;
 type DocumentSource = DocumentRoute;
 type DocumentRouteRequest = {
 	immediately: boolean;
@@ -112,8 +110,6 @@ function decoded(value: string): string | undefined {
 
 export function hostedRoute(pathname: string): HostedRoute {
 	if (pathname === "/" || pathname === "") return { page: "repositories" };
-	let research = parseResearchWorkspacePath(pathname);
-	if (research) return { page: "research", ...research };
 	let child = parseChildDocumentPath(pathname);
 	if (child) return { page: "child", ...child };
 	let document = parseDocumentPath(pathname);
@@ -261,86 +257,37 @@ function ChannelWorkspace(
 		user: Api.User;
 	},
 ) {
-	type LoadedWorkspace =
-		| {
-			kind: "document";
-			detail: Api.ChannelDetail;
-			Workspace: ComponentType<HostedWorkspaceProps>;
-		}
-		| {
-			kind: "research";
-			detail: Api.ChannelDetail;
-			Workspace: ComponentType<HostedWorkspaceProps & { workspaceId: string }>;
-			workspaceId: string;
-		};
+	type LoadedWorkspace = {
+		detail: Api.ChannelDetail;
+		Workspace: ComponentType<HostedWorkspaceProps>;
+	};
 	let [loaded, setLoaded] = useState<LoadedWorkspace>();
 	let [error, setError] = useState<unknown>();
 	let [retry, setRetry] = useState(0);
 	let { channel: navigationChannel } = useNavigationDocument();
 	let routeKey = documentRouteIdentity(source);
-	let recovery;
-	switch (source.page) {
-		case "channel":
-			recovery = readChannelRecovery(user.id, source.id);
-			break;
-		case "research":
-			recovery = readDocumentRecovery(
-				user.id,
-				source.owner,
-				source.repository,
-				source.slug,
-			);
-			break;
-	}
+	let recovery = readChannelRecovery(user.id, source.id);
 
 	useEffect(() => {
 		let active = true;
 		let controller = new AbortController();
 		setLoaded(undefined);
 		setError(undefined);
-		let prepared = source.page === "research"
-			? Api.document(
-				source.owner,
-				source.repository,
-				source.slug,
-				controller.signal,
-			).then(detail => ({
-				canonicalPath: researchWorkspacePath(
-					detail.repository.owner,
-					detail.repository.name,
-					detail.channel.slug,
-					source.workspaceId,
-				),
-				detail,
-			}))
-			: import("./document-loader").then(module =>
-				module.prepareDocumentLoad({ id: source.id }, controller.signal)
-			).then(({ detail, pathname }) => ({ canonicalPath: pathname, detail }));
+		let prepared = import("./document-loader").then(module =>
+			module.prepareDocumentLoad({ id: source.id }, controller.signal)
+		).then(({ detail, pathname }) => ({ canonicalPath: pathname, detail }));
 		prepared = prepared.then(resolved => {
 			if (active) {
 				rememberChannel(user.id, resolved.detail.channel, resolved.detail.repository);
 			}
 			return resolved;
 		});
-		let workspace;
-		switch (source.page) {
-			case "channel":
-				workspace = import("./room-workspace").then(module => ({
-					kind: "document" as const,
-					Workspace: module.RoomWorkspace,
-				}));
-				break;
-			case "research":
-				workspace = import("./research-workspace").then(module => ({
-					kind: "research" as const,
-					Workspace: module.ResearchWorkspace,
-					workspaceId: source.workspaceId,
-				}));
-				break;
-		}
+		let workspace = import("./room-workspace").then(module => ({
+			Workspace: module.RoomWorkspace,
+		}));
 		Promise.all([prepared, workspace]).then(([resolved, selected]) => {
 			if (active) {
-				setLoaded({ detail: resolved.detail, ...selected } as LoadedWorkspace);
+				setLoaded({ detail: resolved.detail, ...selected });
 				onReady?.(routeKey, {
 					canonicalPath: resolved.canonicalPath,
 					channel: resolved.detail.channel,
@@ -359,23 +306,9 @@ function ChannelWorkspace(
 		};
 	}, [onReady, retry, routeKey, source, user.id]);
 	if (error) {
-		let requestedRepository;
-		let requestedSlug;
-		switch (source.page) {
-			case "channel":
-				break;
-			case "research":
-				requestedRepository = {
-					fullName: `${source.owner}/${source.repository}`,
-					name: source.repository,
-					owner: source.owner,
-				};
-				requestedSlug = source.slug;
-				break;
-		}
 		return (
 			<Failure
-				channel={recovery?.channel ?? (requestedSlug ? { slug: requestedSlug } : undefined)}
+				channel={recovery?.channel}
 				error={error}
 				onRetry={retryableChannelFailure(error)
 					? () => {
@@ -383,7 +316,7 @@ function ChannelWorkspace(
 						setRetry(value => value + 1);
 					}
 					: undefined}
-				repository={recovery?.repository ?? requestedRepository}
+				repository={recovery?.repository}
 			/>
 		);
 	}
@@ -407,24 +340,8 @@ function ChannelWorkspace(
 		room: detail.channel.id,
 		userId: user.id,
 	};
-	if (loaded.kind === "research") {
-		let Research = loaded.Workspace;
-		return <Research {...props} workspaceId={loaded.workspaceId} />;
-	}
 	let Document = loaded.Workspace;
 	return <Document {...props} />;
-}
-
-function ActiveChannelWorkspace(
-	{ agent, source, user }: { agent: boolean; source: ChannelSource; user: Api.User },
-) {
-	let { onDocumentLoaded } = useNavigationDocument();
-	let ready = useCallback((key: DocumentRouteIdentity, resolution?: DocumentRouteResolution) => {
-		if (!resolution) return;
-		canonicalize(resolution.canonicalPath);
-		void onDocumentLoaded(resolution.channel, key);
-	}, [onDocumentLoaded]);
-	return <ChannelWorkspace agent={agent} onReady={ready} source={source} user={user} />;
 }
 
 function DocumentRouteSwap(
@@ -634,16 +551,6 @@ export function HostedApp(
 					onChildClose={closeChild}
 					onParentRestored={restoreParentFocus}
 					route={route}
-					user={user}
-				/>
-			);
-			break;
-		case "research":
-			workspace = (
-				<ActiveChannelWorkspace
-					agent={agent}
-					key={documentRouteIdentity(route)}
-					source={route}
 					user={user}
 				/>
 			);

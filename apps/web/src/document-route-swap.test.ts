@@ -47,13 +47,6 @@ test("document route identities have one canonical encoding", () => {
 		repository: "score",
 		slug: "launch-plan",
 	}))).toBe("document:octo-org/score/launch-plan");
-	expect(String(documentRouteIdentity({
-		owner: "octo-org",
-		page: "research",
-		repository: "score",
-		slug: "launch-plan",
-		workspaceId: "workspace-id",
-	}))).toBe("research:octo-org/score/launch-plan/workspace-id");
 	// @ts-expect-error Route identities must come from the canonical encoder.
 	let untyped: DocumentRouteIdentity = "document:octo-org/score/launch-plan";
 	void untyped;

@@ -160,8 +160,6 @@ export function RoomWorkspace(
 		onDocumentDeleted,
 		onRepositoryAccessChanged,
 		onResearchChildOpen,
-		onResearchWorkspaceChanged,
-		onResearchWorkspacesRefresh,
 	} = useNavigationDocument();
 	let [status, setStatus] = useState<Status>("connecting");
 	let [members, setMembers] = useState<Session.Member[]>([]);
@@ -366,16 +364,6 @@ export function RoomWorkspace(
 				}
 				updateMetadata(frame);
 				if (accessChanged) onRepositoryAccessChanged();
-				if (nextProfile.research) {
-					onResearchWorkspacesRefresh({
-						id: room,
-						repositoryId: repository.id,
-						repositoryOwner: repository.owner,
-						repositoryName: repository.name,
-						title: metadataRef.current.title,
-						slug: metadataRef.current.slug,
-					});
-				}
 			}),
 			socket.on<ManagedChannel>("session:channel", frame => {
 				if (frame.channelId !== room) return;
@@ -398,21 +386,7 @@ export function RoomWorkspace(
 				onRepositoryAccessChanged();
 			}),
 			socket.on<Research.Changed>("research:changed", frame => {
-				if (researchEnabled) {
-					onResearchWorkspaceChanged(
-						{
-							id: room,
-							repositoryId: repository.id,
-							repositoryOwner: repository.owner,
-							repositoryName: repository.name,
-							title: metadataRef.current.title,
-							slug: metadataRef.current.slug,
-						},
-						frame.workspaceId,
-						frame.revision,
-					);
-					research.invalidate(frame.workspaceId);
-				}
+				if (researchEnabled) research.invalidate(frame.workspaceId);
 			}),
 			threads.listen(socket),
 			jobs.listen(socket),
@@ -427,8 +401,6 @@ export function RoomWorkspace(
 		handle,
 		jobs,
 		onDocumentDeleted,
-		onResearchWorkspaceChanged,
-		onResearchWorkspacesRefresh,
 		onRepositoryAccessChanged,
 		research,
 		researchEnabled,

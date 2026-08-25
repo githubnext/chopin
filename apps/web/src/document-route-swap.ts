@@ -19,13 +19,6 @@ export type DocumentRouteIdentitySource =
 		page: "child";
 		parentSlug: string;
 		repository: string;
-	}
-	| {
-		owner: string;
-		page: "research";
-		repository: string;
-		slug: string;
-		workspaceId: string;
 	};
 
 export function documentRouteIdentity(source: DocumentRouteIdentitySource): DocumentRouteIdentity {
@@ -37,10 +30,6 @@ export function documentRouteIdentity(source: DocumentRouteIdentitySource): Docu
 		case "child":
 			return (
 				`child:${source.owner}/${source.repository}/${source.parentSlug}/${source.childSlug}`
-			) as DocumentRouteIdentity;
-		case "research":
-			return (
-				`research:${source.owner}/${source.repository}/${source.slug}/${source.workspaceId}`
 			) as DocumentRouteIdentity;
 	}
 }

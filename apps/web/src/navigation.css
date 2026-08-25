@@ -242,8 +242,6 @@
 .project-sidebar-project-row:focus-within,
 .project-sidebar-document:hover,
 .project-sidebar-document:focus-within,
-.project-sidebar-research-link:hover,
-.project-sidebar-research-link:focus-visible,
 .project-sidebar-account:hover,
 .project-sidebar-account:focus-visible {
 	background: var(--project-sidebar-hover);
@@ -268,8 +266,7 @@
 
 .project-sidebar-projects,
 .project-sidebar-documents,
-.project-sidebar-children,
-.project-sidebar-research {
+.project-sidebar-children {
 	display: flex;
 	flex-direction: column;
 }
@@ -352,26 +349,6 @@
 	width: auto;
 	overflow: visible;
 	visibility: visible;
-}
-
-.project-sidebar-research-link {
-	display: block;
-	min-height: 30px;
-	margin-left: 32px;
-	border-left: var(--edge-width) solid var(--color-gray-300);
-	border-radius: 0 6px 6px 0;
-	padding: 5px 10px 5px 14px;
-	overflow: hidden;
-	font-size: 0.75rem;
-	line-height: 1.25rem;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.project-sidebar-research-current {
-	border-left-color: var(--color-brand);
-	background: var(--project-sidebar-selected);
-	color: var(--color-text-primary);
 }
 
 .project-sidebar-action,
@@ -723,7 +700,7 @@
 
 :root[data-plan-coarse-pointer]
 	.project-sidebar
-	:where(.project-sidebar-action, .project-sidebar-document-action, .project-sidebar-research-link) {
+	:where(.project-sidebar-action, .project-sidebar-document-action) {
 	min-width: 44px;
 	min-height: 44px;
 }

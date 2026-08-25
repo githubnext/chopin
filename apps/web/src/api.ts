@@ -1,4 +1,4 @@
-import type { Job, Research } from "@chopin/protocol";
+import type { Research } from "@chopin/protocol";
 
 export type User = {
 	id: string;
@@ -100,28 +100,9 @@ export type ResearchParentChannel = Pick<
 	"id" | "repositoryId" | "repositoryOwner" | "repositoryName" | "title" | "slug"
 >;
 
-export type RepositoryResearchPage = {
-	repository: Repository;
-	canEdit: boolean;
-	channels: Array<{
-		channel: ResearchParentChannel;
-		workspaces: Research.WorkspaceSummary[];
-	}>;
-	truncated: boolean;
-};
-
 export type ChannelResearchPage = {
 	workspaces: Research.WorkspaceSummary[];
 	truncated: boolean;
-};
-
-export type ResearchWorkspaceTurn = Research.Turn & {
-	evidence?: Job.Detail;
-	answer?: Job.Detail;
-};
-
-export type ResearchWorkspaceDetail = Omit<Research.WorkspaceDetail, "turns"> & {
-	turns: ResearchWorkspaceTurn[];
 };
 
 export type NavigationRepository = Pick<
@@ -278,38 +259,11 @@ export function visitDocument(documentId: string): Promise<void> {
 	});
 }
 
-export function repositoryResearchWorkspaces(
-	owner: string,
-	repository: string,
-	signal?: AbortSignal,
-	includeArchived = false,
-): Promise<RepositoryResearchPage> {
-	let suffix = includeArchived ? "?includeArchived=true" : "";
-	return response(
-		`/api/repositories/${encodeURIComponent(owner)}/${
-			encodeURIComponent(repository)
-		}/research-workspaces${suffix}`,
-		{ signal },
-	);
-}
-
 export function channelResearchWorkspaces(
 	channelId: string,
 	signal?: AbortSignal,
 ): Promise<ChannelResearchPage> {
 	return response(`/api/channels/${encodeURIComponent(channelId)}/research-workspaces`, { signal });
-}
-
-export function createResearchWorkspace(
-	channelId: string,
-	question: string,
-	requestId: string,
-): Promise<{ workspace: Research.WorkspaceSummary; repeated: boolean }> {
-	return response(`/api/channels/${encodeURIComponent(channelId)}/research-workspaces`, {
-		method: "POST",
-		headers: { "content-type": "application/json" },
-		body: JSON.stringify({ question, requestId }),
-	});
 }
 
 function researchRequestPath(channelId: string, requestId?: string): string {
@@ -349,69 +303,6 @@ export function retryResearchRequest(
 	requestId: string,
 ): Promise<Research.RequestView> {
 	return response(`${researchRequestPath(channelId, requestId)}/retry`, { method: "POST" });
-}
-
-export function researchWorkspace(
-	channelId: string,
-	workspaceId: string,
-	signal?: AbortSignal,
-): Promise<ResearchWorkspaceDetail> {
-	return response(
-		`/api/channels/${encodeURIComponent(channelId)}/research-workspaces/${
-			encodeURIComponent(workspaceId)
-		}`,
-		{ signal },
-	);
-}
-
-export function confirmResearchWorkspace(
-	channelId: string,
-	workspaceId: string,
-	query: string,
-	requestId: string,
-): Promise<ResearchWorkspaceDetail> {
-	return response(
-		`/api/channels/${encodeURIComponent(channelId)}/research-workspaces/${
-			encodeURIComponent(workspaceId)
-		}/confirm`,
-		{
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ query, requestId }),
-		},
-	);
-}
-
-export function appendResearchWorkspaceTurn(
-	channelId: string,
-	workspaceId: string,
-	kind: "follow-up" | "search-more",
-	question: string,
-	requestId: string,
-): Promise<ResearchWorkspaceDetail> {
-	return response(
-		`/api/channels/${encodeURIComponent(channelId)}/research-workspaces/${
-			encodeURIComponent(workspaceId)
-		}/turns`,
-		{
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ kind, question, requestId }),
-		},
-	);
-}
-
-export function cancelResearchWorkspaceTurn(
-	channelId: string,
-	workspaceId: string,
-	turnId: string,
-): Promise<ResearchWorkspaceDetail> {
-	return response(
-		`/api/channels/${encodeURIComponent(channelId)}/research-workspaces/${
-			encodeURIComponent(workspaceId)
-		}/turns/${encodeURIComponent(turnId)}/cancel`,
-		{ method: "POST" },
-	);
 }
 
 export function renameChannel(id: string, title: string): Promise<ChannelDetail> {

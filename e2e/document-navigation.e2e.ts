@@ -344,11 +344,11 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 	expect(latestVisit()?.documentId).toBe(createdDocumentId);
 	expect(requested.filter(request => request.path === "/api/repositories/octo-org/score/channels"))
 		.toHaveLength(0);
-	await expect.poll(() =>
+	expect(
 		requested.filter(request =>
 			request.path === "/api/repositories/octo-org/score/research-workspaces"
-		).length
-	).toBe(1);
+		),
+	).toHaveLength(0);
 
 	await page.evaluate(() => history.back());
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${originalTitle}`);
@@ -446,19 +446,13 @@ test("the archive view refreshes catalogues without reopening the document", asy
 		});
 	let projects = sidebar(page);
 
-	let archived = Promise.all([
-		catalogue("channels", true),
-		catalogue("research-workspaces", true),
-	]);
+	let archived = catalogue("channels", true);
 	await projects.getByRole("button", { name: "Archived chats", exact: true }).click();
 	await archived;
 	expect(page.url()).toBe(path);
 	expect(sockets).toBe(initialSockets);
 
-	let active = Promise.all([
-		catalogue("channels", false),
-		catalogue("research-workspaces", false),
-	]);
+	let active = catalogue("channels", false);
 	await projects.getByRole("button", { name: "Back to active docs", exact: true }).click();
 	await active;
 	expect(page.url()).toBe(path);

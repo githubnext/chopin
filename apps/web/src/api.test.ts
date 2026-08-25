@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
+import * as Api from "./api";
 import {
 	archiveChannel,
 	cancelResearchRequest,
 	channels,
 	createResearchRequest,
-	createResearchWorkspace,
 	deleteChannel,
 	researchRequest,
 	restoreChannel,
@@ -19,6 +19,21 @@ afterEach(() => {
 });
 
 describe("document lifecycle API", () => {
+	it("omits the removed standalone research workspace contracts", () => {
+		for (
+			let name of [
+				"repositoryResearchWorkspaces",
+				"researchWorkspace",
+				"confirmResearchWorkspace",
+				"appendResearchWorkspaceTurn",
+				"cancelResearchWorkspaceTurn",
+				"createResearchWorkspace",
+			]
+		) {
+			expect(name in Api).toBe(false);
+		}
+	});
+
 	it("binds catalogue mode and uses the archive, restore, and delete contracts", async () => {
 		let requests: Array<{ method: string; path: string }> = [];
 		globalThis.fetch = Object.assign(
@@ -40,7 +55,6 @@ describe("document lifecycle API", () => {
 		await archiveChannel("channel/one");
 		await restoreChannel("channel/one");
 		await deleteChannel("channel/one");
-		await createResearchWorkspace("channel/one", "Private draft", "workspace/one");
 		await createResearchRequest("channel/one", "Inline request", "request/one");
 		await researchRequest("channel/one", "request/one");
 		await cancelResearchRequest("channel/one", "request/one");
@@ -62,9 +76,6 @@ describe("document lifecycle API", () => {
 		}, {
 			method: "DELETE",
 			path: "/api/channels/channel%2Fone",
-		}, {
-			method: "POST",
-			path: "/api/channels/channel%2Fone/research-workspaces",
 		}, {
 			method: "POST",
 			path: "/api/channels/channel%2Fone/research-requests",
