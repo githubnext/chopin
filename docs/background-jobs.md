@@ -12,7 +12,7 @@ worker is not a child Planner turn, coding agent, or runtime plugin.
 > job requires a source change and deployment.
 
 This guide covers the generic job framework, how to register a new definition,
-and the worker boundaries used by generated document descriptions and Research Workspaces.
+and the worker boundaries used by generated document descriptions and research requests.
 See [Hosted agent](hosted-agent.md) for the Planner conversation and
 [Storage](storage.md) for the broader durable model.
 
@@ -22,18 +22,17 @@ See [Hosted agent](hosted-agent.md) for the Planner conversation and
 | ------------------------------- | -------------------------------------------------------------------------------------------------- |
 | Definition                      | The code-owned `JobDefinition` for one `type@version`.                                             |
 | Job                             | One durable request, including normalized input and lifecycle state.                               |
-| Target                          | The semantic resource a job updates, such as one document or Research Workspace turn.              |
+| Target                          | The semantic resource a job updates, such as one document or one internal research attempt.        |
 | Target generation               | The newest request for a target. A newer generation supersedes older active work.                  |
 | Attempt                         | One job claim. Credential or capacity failure may prevent its executor from starting.              |
 | Failure                         | An attempt that consumes retry budget. `failures`, not `attempts`, is compared with `maxAttempts`. |
 | Claim generation                | A fencing counter that prevents an expired or cancelled worker from publishing late output.        |
 | Artifact                        | The immutable, validated JSON result written only when a job completes.                            |
 | Worker                          | A disposable execution context, optionally backed by an isolated Copilot SDK session.              |
-| Background Work                 | The generic browser view of current jobs, progress, and supported result previews.                 |
 | Background-job channel revision | The invalidation counter for job mutations in one channel, separate from each job's revision.      |
 
 Keep these counters separate from the Yjs epoch, document sequence, plan
-revision, storage revision, Research Workspace revision, and implementation
+revision, storage revision, research request revision, and implementation
 graph counters.
 
 ## Architecture
@@ -134,8 +133,8 @@ type JobDefinition<Input extends JsonValue, Artifact extends JsonValue> = {
   characters;
 - only one definition may claim a particular `type@version`.
 
-`label` and `description` are catalog metadata. The current generic browser UI
-does not render them automatically.
+`label` and `description` are catalog metadata. They do not create or label a
+browser surface automatically.
 
 ### Strict codecs
 
@@ -478,7 +477,7 @@ github-mcp-server/web_search
 ```
 
 Never give one session both private context and public web capability. The
-public evidence worker receives only the confirmed query; a later private
+public evidence worker receives only the submitted brief; a later private
 answer worker receives normalized evidence and private context.
 
 Accepted public sources must be canonical public HTTPS URLs observed in
@@ -501,11 +500,11 @@ and discard the SDK session in `finally`.
 
 ## Current definitions
 
-| Definition            | Production trigger                         | Persisted input                                                                      | Worker boundary                                                                           |
-| --------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| `document-summary@1`  | Open, edit, restore, or MCP persistence    | Revision, source hash, generator version, and `output:"description"`; not the source | Private worker; source loaded at execution and publication rechecks current revision/hash |
-| `research-evidence@1` | Human confirmation or explicit Search more | Workspace, turn, exact public query                                                  | Public worker with only result tool and audited `web_search`                              |
-| `research-answer@1`   | Completed evidence or private follow-up    | Document source snapshot, evidence, bounded thread, and optional original report     | One or two private workers with only result tools                                         |
+| Definition            | Production trigger                      | Persisted input                                                                      | Worker boundary                                                                           |
+| --------------------- | --------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `document-summary@1`  | Open, edit, restore, or MCP persistence | Revision, source hash, generator version, and `output:"description"`; not the source | Private worker; source loaded at execution and publication rechecks current revision/hash |
+| `research-evidence@1` | Immediate research request              | Internal workspace, initial turn, exact submitted brief                              | Public worker with only result tool and audited `web_search`                              |
+| `research-answer@1`   | Completed evidence                      | Parent document snapshot, evidence, and internal compatibility history               | Two private workers with only result tools for analysis and complete report synthesis     |
 
 `document-summary@1` remains the only durable definition version; there is no
 `document-summary@2`. New V1 requests carry the output marker and use the
@@ -548,50 +547,56 @@ model output. The Planner may explicitly call `list_background_jobs` and
 `read_background_job`, and must treat the returned artifact as untrusted
 evidence.
 
-## Research Workspace orchestration
+## Research request orchestration
 
-Research Workspaces illustrate a multi-job domain workflow:
+The public product has one immediate research request; the database and service
+retain `research_workspaces`, turns, and messages as internal staging and
+historical-reference compatibility:
 
-1. Sidebar or Planner creates a private, durable draft. This starts no
-   background research.
-2. A writer reviews and confirms the exact public query. This or any later new
-   model-backed turn may establish the channel's Planner owner when none exists.
-3. A `research-evidence` job sends only that query to public web search.
-4. Completed normalized evidence causes an idempotent `research-answer` enqueue.
-5. The answer job captures current canonical document context and runs without
-   web capability.
-6. The immutable report remains in the answer artifact; a validated summary is
-   projected into the append-only workspace thread.
-7. Ordinary follow-ups create only private answer jobs. Search more creates a
-   new public evidence job followed by a private answer job.
+1. An inline card or current Planner turn persists the exact brief, one initial
+   turn, attribution, and stable request identity.
+2. The same action establishes the channel's Planner owner when needed and
+   enqueues `research-evidence`; there is no draft or confirmation step.
+3. The evidence job sends only that exact brief to public web search.
+4. Completed normalized evidence causes an idempotent `research-answer`
+   enqueue.
+5. The answer job captures current canonical parent-document context and runs
+   without web capability.
+6. A complete report artifact is validated and converted to canonical MDX.
+7. One fenced storage transaction creates an initialized ordinary child channel
+   and links it to the request. Only then does the card become ready and the
+   child enter navigation.
 
-Workspace and job mutations are separate fenced commits. Stable targets and
-idempotency keys let reconciliation find and link a job after interruption.
-Completion observation also runs when a workspace is read, not only from the
-process-local job callback.
+Failure or cancellation publishes no child. Explicit retry clears only terminal
+initial job links under optimistic guards, preserves the request and brief, and
+starts a new evidence generation. Reconciliation runs after completion and on a
+later request read, so interruption cannot require a second child or a manual
+repair.
 
-Here, **private** means not disclosed to public web search. Drafts, confirmed
-queries, messages, and selected domain projections and artifacts are readable by
-authorized parent-channel readers. Normalized job input is persisted but omitted
-from browser and Planner job projections. Private worker material is still sent
-to the hosted Copilot inference service under the active owner's credential.
+Here, **private** means not disclosed to public web search. Internal staging
+rows, selected compatibility projections, and artifacts are readable through
+authorized server paths. Normalized job input is persisted but omitted from the
+inline card projection. Private worker material is still sent to the hosted
+Copilot inference service under the active owner's credential.
 
 ## Archive and deletion
 
 Archiving a document suspends its description coordinator, cancels any pending
 description debounce, and prevents new description scheduling. It does not
-blanket-cancel background jobs already admitted for that channel. New Research
-Workspace drafts, confirmations, follow-ups, and searches are blocked while
-archived, but already-started evidence and answer jobs may settle, and their
-idempotent workspace reconciliation may still persist.
+blanket-cancel background jobs already admitted for that channel. New research requests and
+explicit retries are blocked while archived, but already-started evidence and
+answer jobs may settle, and their idempotent request reconciliation may still
+persist. Publication rechecks that the parent is active, so an archived parent
+does not gain a child.
 
 Permanent deletion has a stronger boundary. The runner first blocks new claims
 for the channel while description scheduling remains suspended, aborts its active
 attempts, cancels every pending, paused, or running job, and waits a bounded
 grace period. The server then closes the live plan before atomically deleting
 the archived channel. Claim fencing rejects any late worker progress or
-artifact, and the channel delete cascades job targets, jobs, artifacts, Research
-Workspaces, turns, and messages.
+artifact, and an eligible channel delete cascades job targets, jobs, artifacts,
+and internal research staging. A parent with a child and a child linked from a
+published request are deliberately not eligible for deletion.
 
 ## Storage and retention
 
@@ -605,7 +610,7 @@ The generic schema supports a new standalone job type without a migration:
 - `background_job_artifacts` stores one immutable completed result per job.
 
 A migration is needed only when the job adds domain-specific durable records or
-links, as Research Workspaces do. When changing `StorageAdapter`, update the
+links, as research request staging does. When changing `StorageAdapter`, update the
 model, port, memory adapter, PostgreSQL adapter, migration, migration registry in
 `apps/server/src/storage/postgres/migrations.ts`, migration tests, and shared
 contract suite together. Never edit an applied migration; checksums make that a
@@ -617,33 +622,33 @@ example, document-description input omits document source, while research-answer
 input deliberately persists the captured source snapshot. Store only material
 the workflow needs and document its retention boundary.
 
-There is no current pruning policy for jobs, artifacts, Research Workspaces, or
-their transcripts while their document remains stored. Cancellation prevents
-publication; it does not erase input or history. Full document deletion is the
-exception and removes all of that channel-owned state.
+There is no current pruning policy for jobs, artifacts, or internal research
+staging while their parent document remains stored. Cancellation prevents child
+publication; it does not erase input or history. Full eligible document deletion
+is the exception and removes that channel-owned state.
 
 ## Browser and Planner integration
 
-Generic status works through `job:list`, `job:get`, `job:cancel`, and
-`job:changed`. Repository readers may list and read. Cancellation requires
-current write access and is currently restricted to active, user-origin
-research evidence and answer jobs.
+The current browser has no generic Background Work destination. Research status
+is deliberately projected through the inline request card: queued, searching,
+analyzing, writing, publishing, ready, failed, or cancelled, plus discovered
+sources and safe errors where available. The card uses request create, detail,
+cancel, and retry routes and refreshes after `research:changed`.
 
-A newly registered type appears as generic Background work, but richer support
-is explicit. Add or update these when needed:
+The server retains `job:list`, `job:get`, `job:cancel`, and `job:changed`
+for internal and compatibility consumers. Repository readers may list and read.
+Cancellation requires current write access and is restricted to active,
+user-origin research evidence and answer jobs.
+
+A newly registered type receives no browser surface automatically. Add or update
+these when a domain projection is needed:
 
 - subject extraction in `apps/server/src/jobs/service.ts` and both job storage
   adapters;
 - safe browser serialization and cancellation rules in
   `apps/server/src/jobs/browser.ts`;
 - protocol declarations in `packages/protocol/job.d.ts`;
-- result decoding, labels, safe reasons, and controls in
-  `packages/editor/src/background-work.tsx` and `packages/editor/src/jobs.ts`;
 - domain HTTP state and invalidations when the job belongs to a larger workflow.
-
-The generic browser loads the newest 100 jobs and indicates truncation. It shows
-only the newest generation per target. There are no browser pause or resume
-controls.
 
 The Planner can list and read jobs, but has no generic enqueue, pause, resume,
 cancel, or artifact-trust capability. A domain-specific Planner tool must still
@@ -653,12 +658,12 @@ respect the job origin, authorization, disclosure, and persistence boundaries.
 
 Only the exact value `off` disables these flags:
 
-| `AGENT` | `BACKGROUND_JOBS` | `WEB_RESEARCH` | Result                                                                                                            |
-| ------- | ----------------- | -------------- | ----------------------------------------------------------------------------------------------------------------- |
-| on      | on                | on             | Document description, research evidence, and research answer definitions; runner and coordinator active           |
-| on      | on                | off            | Document description and private research answer definitions; no new public evidence                              |
-| off     | on                | forced off     | Persisted Background Work and descriptions remain readable; the entire runner and description coordinator are off |
-| any     | off               | forced off     | No definitions execute and generic Background Work is hidden                                                      |
+| `AGENT` | `BACKGROUND_JOBS` | `WEB_RESEARCH` | Result                                                                                                  |
+| ------- | ----------------- | -------------- | ------------------------------------------------------------------------------------------------------- |
+| on      | on                | on             | Document description, research evidence, and research answer definitions; runner and coordinator active |
+| on      | on                | off            | Document description and private research answer definitions; no new public evidence                    |
+| off     | on                | forced off     | Persisted jobs and descriptions remain stored; the runner and description coordinator are off           |
+| any     | off               | forced off     | No definitions execute                                                                                  |
 
 Configuration is read at startup. Restoring a disabled capability requires a
 restart. Existing durable rows and artifacts are not deleted by a flag.
@@ -742,6 +747,5 @@ PostgreSQL run the same cases.
 - Durable job model and port: `apps/server/src/storage/model.ts` and
   `apps/server/src/storage/port.ts`
 - PostgreSQL job store: `apps/server/src/storage/postgres/jobs.ts`
-- Generic protocol and browser state: `packages/protocol/job.d.ts` and
-  `packages/editor/src/jobs.ts`
+- Generic protocol compatibility: `packages/protocol/job.d.ts`
 - Research orchestration: `apps/server/src/research/service.ts`

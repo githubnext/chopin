@@ -12,9 +12,9 @@ that is an implementation limitation, not the document model's boundary.
 
 ## Ownership
 
-The first eligible editor to invoke the Planner or start a new model-backed
-Research Workspace turn supplies the GitHub App user access token and Copilot
-entitlement for that channel. The user must pass instance admission and have
+The first eligible editor to invoke the Planner or start a model-backed research
+request supplies the GitHub App user access token and Copilot entitlement for
+that channel. The user must pass instance admission and have
 repository push or administration access. Ownership is assigned atomically in
 storage and guarded by a generation token.
 
@@ -51,7 +51,7 @@ Available capabilities are:
 - bounded file and tree reads plus commit history fixed to the default branch
   captured when the SDK session is created;
 - repository-scoped code search, post-filtered by repository node ID; and
-- bounded reads of document and Research Workspace references attached to the
+- bounded reads of document and historical research references attached to the
   current conversation context; and
 - repository-bound, read-only pull-request MCP calls.
 
@@ -104,14 +104,14 @@ every turn.
   instead of receiving a stale embedded copy.
 
 Conversation references are typed server-side resources, not URLs the model can
-follow. `#` selects another document in the current repository; `%` selects a
-Research Workspace attached to the current document. References persist with
-their message, but `read_reference` accepts only the bounded set retained by the
-active Planner session. A document reference reads latest canonical source and
-reports whether it changed since selection. A Research Workspace reference
-returns a bounded report, result, and thread projection. Both are untrusted
-evidence, and neither changes the room-fixed target of `read_plan` or editing
-tools.
+follow. `#` selects another ordinary document in the current repository.
+References persist with their message, but `read_reference` accepts only the
+bounded set retained by the active Planner session. A document reference reads
+latest canonical source and reports whether it changed since selection. New
+messages no longer offer `%` research references; persisted references from the
+removed Research Workspace interface still return a bounded compatibility
+projection. Both forms are untrusted evidence, and neither changes the
+room-fixed target of `read_plan` or editing tools.
 
 Messages from people retain their GitHub handles so disagreement is not merged
 into one anonymous user voice.
@@ -141,12 +141,13 @@ model-backed stage uses a fresh disposable SDK session. Job output is not
 automatically injected into Conversation or recreated Planner context, although
 the Planner may explicitly read an artifact in a later turn.
 
-Research Workspace drafts are durable and shared with authorized parent-channel
-readers. A sidebar draft starts no model. The Planner may instead propose a draft
-during an existing explicit turn, but that tool cannot confirm or enqueue
-research. Only the exact later browser-confirmed query reaches public web search;
-private document context goes to a separate no-web worker. Reports never edit
-collaborative prose automatically.
+An inline `/research` submission persists the exact brief and starts work
+immediately. During an explicit member turn, the Planner can call the
+plan-named `create_research_workspace` tool with that same exact brief; it may
+not refine, broaden, or replace it. The public worker receives only the brief.
+Parent-document context goes to a separate no-web worker after evidence
+completes. A validated initial report publishes as an ordinary child document;
+it never edits the parent's collaborative prose automatically.
 
 Jobs with `credential: "active-planner"` use the channel's process-local Planner
 owner and entitlement, while fenced claims store no token. Full definition
@@ -171,9 +172,11 @@ The Planner can draft and revise a graph with `read_implementation_graph` and
 `edit_implementation_graph`. It cannot approve, lock, or start implementation.
 Those are explicitly human and coding-agent responsibilities.
 
-Graph drafting is available in any channel. The supported MCP handoff can read
-only graphs on MCP-created documents, and no current production interface lets a
-person approve the draft. See
+The graph tools remain technically available in any channel, but the child
+browser surface exposes no implementation or task destination. Child
+implementation is therefore outside the supported product workflow. The
+supported MCP handoff can read only graphs on MCP-created documents, and no
+current production interface lets a person approve the draft. See
 [Experimental implementation lifecycle](implementation-lifecycle.md).
 
 ## Main implementation points
