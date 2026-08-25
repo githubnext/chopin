@@ -1,11 +1,15 @@
 import { expect, test } from "bun:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import {
 	backgroundJobLabel,
 	backgroundJobResult,
+	BackgroundWork,
 	safeInterruptionReason,
 	visibleProgress,
 } from "./background-work";
+import { JobStore } from "./jobs";
 
 import type { Job } from "@chopin/protocol";
 
@@ -28,6 +32,54 @@ function job(overrides: Partial<Job.View> = {}): Job.View {
 		...overrides,
 	};
 }
+
+function completedResult(): Job.Detail {
+	return {
+		revision: 1,
+		currentTargetGeneration: 1,
+		job: job({ state: "completed" }),
+		artifact: {
+			revision: 1,
+			value: {
+				kind: "initial",
+				report: { title: "Compatibility report", summary: "Compatibility was retained." },
+			},
+			createdAt: "2026-08-22T12:00:06.000Z",
+		},
+	};
+}
+
+function completedResultStore(): JobStore {
+	let detail = completedResult();
+	let store = Object.create(JobStore.prototype) as JobStore;
+	Object.defineProperties(store, {
+		snapshot: {
+			value: {
+				revision: 1,
+				jobs: [detail.job],
+				details: { [detail.job.id]: detail },
+				ready: true,
+				refreshing: false,
+				truncated: false,
+				pending: {},
+			},
+		},
+		subscribe: { value: () => () => {} },
+	});
+	return store;
+}
+
+test("completed result trigger identifies its closed result region", () => {
+	let markup = renderToStaticMarkup(createElement(BackgroundWork, {
+		canEdit: false,
+		connected: true,
+		motion: { className: "motion-collapse", closeDuration: 250 },
+		store: completedResultStore(),
+	}));
+
+	expect(markup).toMatch(/<button[^>]*aria-controls="[^"]+"[^>]*aria-expanded="false"/);
+	expect(markup).not.toContain("Compatibility report");
+});
 
 test("progress keeps each attempt and identifies the current stage", () => {
 	let progress = visibleProgress(job({
