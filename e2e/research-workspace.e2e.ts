@@ -86,6 +86,8 @@ test("a private research draft keeps its authored geometry until explicit dismis
 	});
 	expect(geometry.draftLeft).toBeGreaterThanOrEqual(geometry.editorLeft);
 	expect(geometry.draftRight).toBeLessThanOrEqual(geometry.editorRight);
+	expect(geometry.draftLeft - geometry.editorLeft).toBeLessThan(10);
+	expect(geometry.editorRight - geometry.draftRight).toBeLessThan(10);
 	expect(Math.abs(geometry.draftTop - geometry.anchorBottom)).toBeLessThan(2);
 
 	let scroller = page.locator("[data-plan-scroll]");
@@ -117,6 +119,7 @@ test("a private research draft keeps its authored geometry until explicit dismis
 		exact: true,
 	});
 	await expect(emptyQuestion).toHaveValue("");
+	await expect(emptyQuestion).toBeFocused();
 	await page.keyboard.press("Escape");
 	await expect(emptyComposer).toHaveCount(0);
 	await expect.poll(() => readSource(port(baseURL!), room)).not.toContain("<Research");
