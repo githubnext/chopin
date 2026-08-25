@@ -7,6 +7,8 @@ import type { PresencePhase } from "./transition-presence";
 export type MotionDisclosureContract = {
 	readonly className: string;
 	readonly closeDuration: number;
+	readonly contentClassName: string;
+	readonly iconClassName: string;
 };
 
 export function disclosureAccessibility(phase: PresencePhase) {
@@ -36,14 +38,20 @@ export function MotionDisclosure(
 			id={id}
 			inert={accessibility.inert}
 		>
-			<div className="motion-collapse-content">{children}</div>
+			<div className={motion.contentClassName}>{children}</div>
 		</div>
 	);
 }
 
-export function MotionDisclosureIcon({ children, open }: { children: ReactNode; open: boolean }) {
+export function MotionDisclosureIcon(
+	{ children, motion, open }: {
+		children: ReactNode;
+		motion: MotionDisclosureContract;
+		open: boolean;
+	},
+) {
 	return (
-		<span aria-hidden="true" className="motion-disclosure-icon" data-open={open ? "" : undefined}>
+		<span aria-hidden="true" className={motion.iconClassName} data-open={open ? "" : undefined}>
 			{children}
 		</span>
 	);

@@ -166,7 +166,7 @@ export function Decisions(
 							onClick={() => setHistory(value => !value)}
 							type="button"
 						>
-							<MotionDisclosureIcon open={history}>
+							<MotionDisclosureIcon motion={motion} open={history}>
 								<CaretRightIcon size={16} weight="bold" />
 							</MotionDisclosureIcon>
 							<span className="tabular-nums">{resolved}</span>

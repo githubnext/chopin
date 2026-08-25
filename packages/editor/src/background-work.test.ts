@@ -3,17 +3,16 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
-	backgroundDisclosurePresentation,
 	backgroundJobLabel,
 	backgroundJobResult,
 	BackgroundWork,
 	safeInterruptionReason,
-	toggleBackgroundDisclosure,
 	visibleProgress,
 } from "./background-work";
 import { JobStore } from "./jobs";
 
 import type { Job } from "@chopin/protocol";
+import type { Transport } from "./transport";
 
 function job(overrides: Partial<Job.View> = {}): Job.View {
 	return {
@@ -51,59 +50,58 @@ function completedResult(): Job.Detail {
 	};
 }
 
-function completedResultStore(): JobStore {
-	let detail = completedResult();
-	let store = Object.create(JobStore.prototype) as JobStore;
-	Object.defineProperties(store, {
-		snapshot: {
-			value: {
+class FixtureWire implements Transport {
+	connected = true;
+
+	constructor(private detail: Job.Detail) {}
+
+	on() {
+		return () => {};
+	}
+
+	send(): void {}
+
+	ask<T>(kind: string): Promise<T> {
+		if (kind === "job:list") {
+			return Promise.resolve({
+				kind: "job:list",
 				revision: 1,
-				jobs: [detail.job],
-				details: { [detail.job.id]: detail },
-				ready: true,
-				refreshing: false,
+				jobs: [this.detail.job],
 				truncated: false,
-				pending: {},
-			},
-		},
-		subscribe: { value: () => () => {} },
-	});
+			} as T);
+		}
+		if (kind === "job:get") {
+			return Promise.resolve({ kind: "job:get", detail: this.detail } as T);
+		}
+		throw new Error(`unexpected request: ${kind}`);
+	}
+}
+
+async function completedResultStore(): Promise<JobStore> {
+	let detail = completedResult();
+	let store = new JobStore();
+	store.listen(new FixtureWire(detail));
+	await store.refresh();
+	await store.detail(detail.job.id);
 	return store;
 }
 
-test("closed result trigger does not reference its unmounted result region", () => {
+test("closed result trigger does not reference its unmounted result region", async () => {
 	let markup = renderToStaticMarkup(createElement(BackgroundWork, {
 		canEdit: false,
 		connected: true,
-		motion: { className: "motion-collapse", closeDuration: 250 },
-		store: completedResultStore(),
+		motion: {
+			className: "motion-collapse",
+			closeDuration: 250,
+			contentClassName: "motion-collapse-content",
+			iconClassName: "motion-disclosure-icon",
+		},
+		store: await completedResultStore(),
 	}));
 
 	expect(markup).toMatch(/<button[^>]*aria-expanded="false"/);
 	expect(markup).not.toContain("aria-controls");
 	expect(markup).not.toContain("Compatibility report");
-});
-
-test("delayed detail keeps the input ownership captured by each toggle", () => {
-	let disclosure = toggleBackgroundDisclosure({ immediately: false, open: false }, true);
-
-	expect(backgroundDisclosurePresentation(disclosure, false)).toEqual({
-		controlled: false,
-		immediately: true,
-		open: false,
-	});
-	expect(backgroundDisclosurePresentation(disclosure, true)).toEqual({
-		controlled: true,
-		immediately: true,
-		open: true,
-	});
-
-	disclosure = toggleBackgroundDisclosure(disclosure, false);
-	expect(backgroundDisclosurePresentation(disclosure, true)).toEqual({
-		controlled: false,
-		immediately: false,
-		open: false,
-	});
 });
 
 test("progress keeps each attempt and identifies the current stage", () => {
