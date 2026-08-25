@@ -8,7 +8,7 @@ import {
 	childPresentation,
 	rebaseChildHistoryState,
 } from "./anchored-child-surface";
-import { rememberChannel } from "./channel-recovery";
+import { readDocumentRecovery, rememberChannel } from "./channel-recovery";
 
 import type { ComponentType } from "react";
 import type { ChildPresentation } from "./anchored-child-surface";
@@ -72,7 +72,12 @@ export default function DocumentWorkspaceHost(
 		user,
 	}: {
 		agent: boolean;
-		Failure: ComponentType<{ error: unknown; onRetry?: () => void }>;
+		Failure: ComponentType<{
+			channel?: { title?: string; slug?: string };
+			error: unknown;
+			onRetry?: () => void;
+			repository?: Pick<Api.Repository, "owner" | "name" | "fullName">;
+		}>;
 		Loading: ComponentType<{ label?: string }>;
 		loadDocument: (
 			address: { owner: string; repository: string; slug: string; parentSlug?: string },
@@ -100,6 +105,7 @@ export default function DocumentWorkspaceHost(
 	let [presentation, setPresentation] = useState<ChildPresentation>("closed");
 	let parentScrollTop = useRef<number | undefined>(undefined);
 	let parentSlugs = useRef(new Set<string>());
+	let childSlugs = useRef(new Set<string>());
 
 	useEffect(() => {
 		let active = true;
@@ -118,7 +124,27 @@ export default function DocumentWorkspaceHost(
 			slug: route.page === "child" ? route.childSlug : route.slug,
 			...(route.page === "child" ? { parentSlug: route.parentSlug } : {}),
 		};
-		void loadDocument(address, controller.signal).then(prepared => {
+		void (async () => {
+			if (route.page === "child" && !current) {
+				let prepared = await loadDocument({
+					owner: route.owner,
+					repository: route.repository,
+					slug: route.parentSlug,
+				}, controller.signal);
+				if (!active) return;
+				let parent = prepared.parent ?? prepared.detail;
+				rememberChannel(user.id, parent.channel, parent.repository);
+				parentSlugs.current.clear();
+				parentSlugs.current.add(parent.channel.slug);
+				parentSlugs.current.add(route.parentSlug);
+				let updated = { parent };
+				loadedRef.current = updated;
+				setLoaded(updated);
+				setPresentation("open");
+			}
+			return await loadDocument(address, controller.signal);
+		})().then(prepared => {
+			if (!prepared) return;
 			if (!active) return;
 			let parent = prepared.parent ?? prepared.detail;
 			let child = prepared.parent ? prepared.detail : undefined;
@@ -129,6 +155,11 @@ export default function DocumentWorkspaceHost(
 			if (!sameParent) parentSlugs.current.clear();
 			parentSlugs.current.add(parent.channel.slug);
 			parentSlugs.current.add(route.page === "child" ? route.parentSlug : route.slug);
+			if (child) {
+				if (previous?.child?.channel.id !== child.channel.id) childSlugs.current.clear();
+				childSlugs.current.add(child.channel.slug);
+				if (route.page === "child") childSlugs.current.add(route.childSlug);
+			}
 			let updated = child
 				? { child, parent }
 				: sameParent && previous?.child
@@ -166,16 +197,24 @@ export default function DocumentWorkspaceHost(
 
 	useEffect(() => {
 		let current = loadedRef.current;
-		if (!current?.child) return;
+		if (!current) return;
 		let sameParent = route.owner.toLocaleLowerCase()
 				=== current.parent.repository.owner.toLocaleLowerCase()
 			&& route.repository.toLocaleLowerCase()
 				=== current.parent.repository.name.toLocaleLowerCase()
 			&& parentSlugs.current.has(route.page === "child" ? route.parentSlug : route.slug);
-		setPresentation(value =>
-			childPresentation(value, route.page === "child" ? "child" : "parent", sameParent)
-		);
-		if (sameParent) {
+		if (route.page === "child") {
+			let sameChild = sameParent && current.child
+				&& childSlugs.current.has(route.childSlug);
+			setPresentation(value => childPresentation(value, "child", sameParent));
+			if (sameChild || (!current.child && sameParent)) return;
+		} else {
+			setPresentation(value => childPresentation(value, "parent", sameParent));
+			if (sameParent) return;
+		}
+		if (!sameParent) {
+			loadedRef.current = undefined;
+			setLoaded(undefined);
 			return;
 		}
 		let updated = { parent: current.parent };
@@ -205,7 +244,7 @@ export default function DocumentWorkspaceHost(
 			if (event.key !== "Escape" || event.defaultPrevented) return;
 			event.preventDefault();
 			let current = loadedRef.current;
-			if (current?.child) {
+			if (current) {
 				onChildClose(documentPath(
 					current.parent.repository.owner,
 					current.parent.repository.name,
@@ -225,6 +264,7 @@ export default function DocumentWorkspaceHost(
 		let next = { ...target, channel: { ...target.channel, ...metadata } };
 		let updated = kind === "parent" ? { ...current, parent: next } : { ...current, child: next };
 		if (kind === "parent") parentSlugs.current.add(metadata.slug);
+		else childSlugs.current.add(metadata.slug);
 		loadedRef.current = updated;
 		setLoaded(updated);
 		let paths = anchoredChildPaths(
@@ -252,20 +292,34 @@ export default function DocumentWorkspaceHost(
 		[metadataChanged],
 	);
 
-	if (error) {
+	let retryFailure = error && retryable(error)
+		? () => {
+			setError(undefined);
+			setRetry(value => value + 1);
+		}
+		: undefined;
+	let requestedSlug = route.page === "child" ? route.childSlug : route.slug;
+	let recovery = readDocumentRecovery(user.id, route.owner, route.repository, requestedSlug);
+	let requestedRepository = {
+		fullName: `${route.owner}/${route.repository}`,
+		name: route.repository,
+		owner: route.owner,
+	};
+	if (error && !loaded) {
 		return (
 			<Failure
+				channel={recovery?.channel ?? { slug: requestedSlug }}
 				error={error}
-				onRetry={retryable(error)
-					? () => {
-						setError(undefined);
-						setRetry(value => value + 1);
-					}
-					: undefined}
+				onRetry={retryFailure}
+				repository={recovery?.repository ?? requestedRepository}
 			/>
 		);
 	}
-	if (!loaded) return <Loading label="Opening document..." />;
+	if (!loaded) {
+		return (
+			<Loading label={route.page === "document" ? "Opening channel..." : "Opening document..."} />
+		);
+	}
 
 	let parentPath = anchoredChildPaths(
 		{
@@ -292,11 +346,20 @@ export default function DocumentWorkspaceHost(
 				/>
 			</Suspense>
 		)
+		: route.page === "child" && presentation === "open"
+		? error
+			? <Failure error={error} onRetry={retryFailure} />
+			: <Loading label="Opening child document..." />
 		: undefined;
 	return (
 		<AnchoredChildSurface
 			child={child}
-			childLabel={loaded.child?.channel.title ?? ""}
+			childLabel={loaded.child?.channel.title ?? (route.page === "child"
+				? route.childSlug
+				: "")}
+			focusKey={loaded.child?.channel.id ?? (route.page === "child"
+				? `${route.parentSlug}/${route.childSlug}`
+				: undefined)}
 			onClose={() => onChildClose(parentPath)}
 			parent={parent}
 			parentLabel={loaded.parent.channel.title}

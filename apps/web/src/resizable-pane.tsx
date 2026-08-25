@@ -25,6 +25,24 @@ export function restorePaneWidth(stored: string | null, { initial, min, max }: P
 	return Number.isFinite(value) && value > 0 ? clampPane(value, min, max) : initial;
 }
 
+type PaneStorage = Pick<Storage, "getItem" | "setItem">;
+
+export function readPaneWidth(
+	storage: PaneStorage,
+	storageKey: string | undefined,
+	bounds: PaneBounds,
+): number {
+	return storageKey ? restorePaneWidth(storage.getItem(storageKey), bounds) : bounds.initial;
+}
+
+export function writePaneWidth(
+	storage: PaneStorage,
+	storageKey: string | undefined,
+	width: number,
+): void {
+	if (storageKey) storage.setItem(storageKey, String(width));
+}
+
 export function keyboardPaneDelta(
 	side: PaneSide,
 	key: string,
@@ -94,7 +112,7 @@ export function ResizeHandle(
 export function usePaneWidth(
 	{ active, initial, max, min, storageKey }: PaneBounds & {
 		active: boolean;
-		storageKey: string;
+		storageKey?: string;
 	},
 ): readonly [number, (delta: number) => void] {
 	let [width, setWidth] = useState(initial);
@@ -104,13 +122,13 @@ export function usePaneWidth(
 		if (!active) return;
 		if (!loaded.current) {
 			loaded.current = true;
-			let restored = restorePaneWidth(localStorage.getItem(storageKey), { initial, min, max });
+			let restored = readPaneWidth(localStorage, storageKey, { initial, min, max });
 			if (restored !== width) {
 				setWidth(restored);
 				return;
 			}
 		}
-		localStorage.setItem(storageKey, String(width));
+		writePaneWidth(localStorage, storageKey, width);
 	}, [active, initial, max, min, storageKey, width]);
 
 	let resize = useCallback(

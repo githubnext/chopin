@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+	initialDocumentView,
 	initialWorkspaceState,
 	presentWorkspace,
 	transitionWorkspace,
@@ -27,6 +28,12 @@ describe("adaptive workspace", () => {
 			conversationOpen: false,
 			desktopConversationOpen: false,
 		});
+	});
+
+	it("starts a child on Document without inheriting the parent's saved view", () => {
+		expect(initialDocumentView("child", "decisions")).toBe("plan");
+		expect(initialDocumentView("child", "background-work")).toBe("plan");
+		expect(initialDocumentView("document", "decisions")).toBe("decisions");
 	});
 
 	it("limits a child to Document, Decisions, and Conversation", () => {

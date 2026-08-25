@@ -25,11 +25,17 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 		childTitle,
 		CHILD_SOURCE,
 	);
-	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:open", "true"));
+	await page.addInitScript(() => {
+		localStorage.setItem("chopin:pane:chat:open", "true");
+		localStorage.setItem("chopin:pane:chat", "384");
+	});
 	await join("ana");
 
 	let parent = page.locator(`[data-workspace-room="${room}"]`);
 	let parentScroll = parent.locator("[data-plan-scroll]");
+	await expect(parent.getByRole("separator", { name: "Resize the conversation" }))
+		.toHaveAttribute("aria-valuenow", "384");
+	await page.evaluate(() => localStorage.setItem("chopin:view:document", "decisions"));
 	await parent.evaluate(element => element.setAttribute("data-mount-token", "preserved"));
 	await parentScroll.evaluate(element => element.scrollTop = 240);
 	let originalScroll = await parentScroll.evaluate(element => element.scrollTop);
@@ -42,6 +48,7 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 	let surface = page.getByRole("region", { name: `Child document: ${childTitle}` });
 	await expect(page).toHaveURL(url => url.pathname === child.path);
 	await expect(surface).toBeVisible();
+	await expect(surface).toBeFocused();
 	await expect(parent).toHaveAttribute("data-mount-token", "preserved");
 	await expect(parent.locator("..")).toHaveAttribute("inert", "");
 	await expect(parent.locator("..")).toHaveAttribute("aria-hidden", "true");
@@ -54,6 +61,8 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 		0,
 	);
 	await expect(surface.locator(`[data-workspace-room="${child.id}"]`)).toBeVisible();
+	await expect(surface.locator('[data-document-view="plan"]')).toBeVisible();
+	await expect(surface.locator('[data-document-view="decisions"]')).toHaveAttribute("hidden", "");
 
 	await surface.getByRole("button", { name: "Decisions", exact: true }).click();
 	await expect(surface.locator('[data-document-view="decisions"]')).toBeVisible();
@@ -61,6 +70,11 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 	await surface.getByRole("button", { name: "Document", exact: true }).click();
 	await surface.getByRole("button", { name: "Show conversation pane" }).click();
 	await expect(surface.getByRole("button", { name: "Hide conversation pane" })).toBeVisible();
+	let childResize = surface.getByRole("separator", { name: "Resize the conversation" });
+	await expect(childResize).toHaveAttribute("aria-valuenow", "304");
+	await childResize.press("ArrowRight");
+	await expect.poll(() => page.evaluate(() => localStorage.getItem("chopin:pane:chat")))
+		.toBe("384");
 	await expect(parent.locator('button[aria-label^="Hide conversation pane"]')).toHaveCount(1);
 	await surface.getByRole("button", { name: "Hide conversation pane" }).click();
 	await expect(surface.getByRole("button", { name: "Show conversation pane" })).toBeVisible();
@@ -93,6 +107,101 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 	await expect(childLink).toBeFocused();
 });
 
+test("a delayed sibling route removes the previous editable child immediately", async ({ baseURL, join, page, room, seed }) => {
+	await seed(PARENT_SOURCE);
+	let firstTitle = `First source ${room.slice(0, 8)}`;
+	let secondTitle = `Second source ${room.slice(0, 8)}`;
+	let first = await seedChildChannel(
+		port(baseURL!),
+		room,
+		crypto.randomUUID(),
+		firstTitle,
+		CHILD_SOURCE,
+	);
+	let second = await seedChildChannel(
+		port(baseURL!),
+		room,
+		crypto.randomUUID(),
+		secondTitle,
+		CHILD_SOURCE,
+	);
+	await join("ana");
+	let childLink = (title: string) =>
+		page.getByRole("complementary", { name: "Projects" })
+			.getByRole("link", { name: title, exact: true });
+	await childLink(firstTitle).click();
+	await expect(page.locator(`[data-workspace-room="${first.id}"]`)).toBeVisible();
+
+	let release!: () => void;
+	let gate = new Promise<void>(resolve => release = resolve);
+	await page.route(
+		`**/api/repositories/octo-org/score/documents/${second.slug}`,
+		async route => {
+			let response = await route.fetch();
+			await gate;
+			await route.fulfill({ response });
+		},
+	);
+	await childLink(secondTitle).click();
+	await expect(page).toHaveURL(url => url.pathname === second.path);
+	await expect(page.locator(`[data-workspace-room="${first.id}"]`)).toHaveCount(0);
+	await expect(page.locator(".anchored-child-surface")).toContainText("Opening child document...");
+
+	release();
+	let secondSurface = page.getByRole("region", { name: `Child document: ${secondTitle}` });
+	await expect(secondSurface.locator(`[data-workspace-room="${second.id}"]`)).toBeVisible();
+	await expect(secondSurface).toBeFocused();
+});
+
+test("a child load failure preserves its mounted parent through back and retry", async ({ baseURL, join, page, room, seed }) => {
+	await seed(PARENT_SOURCE);
+	let childTitle = `Unreliable source ${room.slice(0, 8)}`;
+	let child = await seedChildChannel(
+		port(baseURL!),
+		room,
+		crypto.randomUUID(),
+		childTitle,
+		CHILD_SOURCE,
+	);
+	await join("ana");
+	let parent = page.locator(`[data-workspace-room="${room}"]`);
+	await parent.evaluate(element => element.setAttribute("data-mount-token", "preserved"));
+	let attempts = 0;
+	await page.route(
+		`**/api/repositories/octo-org/score/documents/${child.slug}`,
+		async route => {
+			attempts += 1;
+			if (attempts <= 2) {
+				await route.fulfill({
+					body: JSON.stringify({ error: "Child temporarily unavailable" }),
+					contentType: "application/json",
+					status: 503,
+				});
+				return;
+			}
+			await route.continue();
+		},
+	);
+	let childLink = page.getByRole("complementary", { name: "Projects" })
+		.getByRole("link", { name: childTitle, exact: true });
+
+	await childLink.click();
+	let surface = page.locator(".anchored-child-surface");
+	await expect(surface).toContainText("Cannot open Chopin");
+	await expect(surface).toContainText("Child temporarily unavailable");
+	await expect(parent).toHaveAttribute("data-mount-token", "preserved");
+	await expect(parent.locator("..")).toHaveAttribute("inert", "");
+	await surface.getByRole("button", { name: `Back to Test ${room.slice(0, 8)}` }).click();
+	await expect(surface).toHaveCount(0);
+	await expect(parent).toHaveAttribute("data-mount-token", "preserved");
+
+	await childLink.click();
+	await expect(surface).toContainText("Child temporarily unavailable");
+	await surface.getByRole("button", { name: "Try again" }).click();
+	await expect(surface.locator(`[data-workspace-room="${child.id}"]`)).toBeVisible();
+	await expect(parent).toHaveAttribute("data-mount-token", "preserved");
+});
+
 test("a direct compact child fills the canvas and reduces motion to a crossfade", async ({ baseURL, page, room, seed }) => {
 	await seed(PARENT_SOURCE);
 	let childTitle = `Source review ${room.slice(0, 8)}`;
@@ -110,6 +219,7 @@ test("a direct compact child fills the canvas and reduces motion to a crossfade"
 
 	let surface = page.getByRole("region", { name: `Child document: ${childTitle}` });
 	await expect(surface).toBeVisible();
+	await expect(surface).toBeFocused();
 	let geometry = await surface.evaluate(element => {
 		let style = getComputedStyle(element);
 		let box = element.getBoundingClientRect();

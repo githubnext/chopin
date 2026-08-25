@@ -37,8 +37,8 @@ import { Wire } from "./wire";
 import { useWorkspaceIds, useWorkspaceMode, useWorkspaceState, Workspace } from "./workspace";
 import {
 	availableDocumentView,
+	initialDocumentView,
 	presentWorkspace,
-	storedDocumentView,
 	workspaceCapabilities,
 } from "./workspace-model";
 
@@ -212,7 +212,7 @@ export function RoomWorkspace(
 		let stored = localStorage.getItem("chopin:view:document");
 		return {
 			phase: "initial",
-			preferred: storedDocumentView(stored),
+			preferred: initialDocumentView(surface, stored),
 		};
 	});
 	let policy = workspaceCapabilities(surface, capabilities.backgroundJobs);

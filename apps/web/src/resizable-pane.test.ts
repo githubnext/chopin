@@ -1,6 +1,13 @@
 import { describe, expect, it } from "bun:test";
 
-import { clampPane, keyboardPaneDelta, resizeDelta, restorePaneWidth } from "./resizable-pane";
+import {
+	clampPane,
+	keyboardPaneDelta,
+	readPaneWidth,
+	resizeDelta,
+	restorePaneWidth,
+	writePaneWidth,
+} from "./resizable-pane";
 
 describe("bounded pane resizing", () => {
 	it("keeps a pane width within its inclusive bounds", () => {
@@ -21,6 +28,31 @@ describe("bounded pane resizing", () => {
 		expect(restorePaneWidth("800", bounds)).toBe(400);
 		expect(restorePaneWidth("bad", bounds)).toBe(304);
 		expect(restorePaneWidth(null, bounds)).toBe(304);
+	});
+
+	it("does not read or write shared storage for an isolated pane", () => {
+		let reads: string[] = [];
+		let writes: Array<[string, string]> = [];
+		let storage = {
+			getItem(key: string) {
+				reads.push(key);
+				return "360";
+			},
+			setItem(key: string, value: string) {
+				writes.push([key, value]);
+			},
+		};
+		let bounds = { initial: 304, min: 304, max: 400 };
+
+		expect(readPaneWidth(storage, undefined, bounds)).toBe(304);
+		writePaneWidth(storage, undefined, 320);
+		expect(reads).toEqual([]);
+		expect(writes).toEqual([]);
+
+		expect(readPaneWidth(storage, "chopin:pane:chat", bounds)).toBe(360);
+		writePaneWidth(storage, "chopin:pane:chat", 320);
+		expect(reads).toEqual(["chopin:pane:chat"]);
+		expect(writes).toEqual([["chopin:pane:chat", "320"]]);
 	});
 
 	it("maps keyboard commands to bounded pane movements", () => {

@@ -27,6 +27,13 @@ export function initialWorkspaceState(
 	};
 }
 
+export function initialDocumentView(
+	surface: WorkspaceSurface,
+	stored: string | null,
+): DecisionView {
+	return surface === "child" ? "plan" : storedDocumentView(stored);
+}
+
 export function workspaceCapabilities(surface: WorkspaceSurface, backgroundJobs: boolean) {
 	let child = surface === "child";
 	return {
