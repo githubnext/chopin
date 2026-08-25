@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useReducer, useState } from "react";
+import { ContentSwapLayer } from "@chopin/editor/content-swap";
 import {
 	documentPath,
 	documentsPath,
@@ -9,10 +10,19 @@ import {
 
 import * as Api from "./api";
 import { readChannelRecovery, readDocumentRecovery, rememberChannel } from "./channel-recovery";
+import {
+	closeDocumentRoute,
+	initialDocumentRouteSwap,
+	requestDocumentRoute,
+	resolveDocumentRoute,
+} from "./document-route-swap";
 import { newestDocument } from "./document-actions";
+import { motionContract } from "./motion-contract";
+import { motionImmediately } from "./motion-input";
 import { NavigationShell, useNavigationDocument } from "./navigation-shell";
 
 import type { ComponentType, ReactNode } from "react";
+import type { DocumentRouteSwap as DocumentRouteSwapState } from "./document-route-swap";
 
 export type HostedWorkspaceProps = {
 	room: string;
@@ -43,6 +53,30 @@ export type HostedRoute =
 	}
 	| { page: "channel"; id: string }
 	| { page: "missing" };
+
+type DocumentRoute = Extract<HostedRoute, { page: "document" } | { page: "channel" }>;
+type KeyedDocumentRoute = { key: string; route: DocumentRoute };
+type DocumentRouteAction =
+	| { route: KeyedDocumentRoute; type: "requested" }
+	| { key: string; type: "resolved" | "closed" };
+
+function keyedDocumentRoute(route: DocumentRoute): KeyedDocumentRoute {
+	return {
+		key: route.page === "channel"
+			? `channel:${route.id}`
+			: `document:${route.owner}/${route.repository}/${route.slug}`,
+		route,
+	};
+}
+
+function transitionDocumentRoute(
+	state: DocumentRouteSwapState<KeyedDocumentRoute>,
+	action: DocumentRouteAction,
+): DocumentRouteSwapState<KeyedDocumentRoute> {
+	if (action.type === "requested") return requestDocumentRoute(state, action.route);
+	if (action.type === "resolved") return resolveDocumentRoute(state, action.key);
+	return closeDocumentRoute(state, action.key);
+}
 
 function decoded(value: string): string | undefined {
 	try {
@@ -194,12 +228,26 @@ export function githubLoginHref(pathname: string, search = "", hash = ""): strin
 }
 
 function ChannelWorkspace(
-	{ agent, id, owner, repository, researchWorkspaceId, slug, user }: {
+	{
+		agent,
+		id,
+		onResolved,
+		owner,
+		repository,
+		researchWorkspaceId,
+		routeKey,
+		showLoading = true,
+		slug,
+		user,
+	}: {
 		agent: boolean;
 		id?: string;
+		onResolved?: (key: string) => void;
 		owner?: string;
 		repository?: string;
 		researchWorkspaceId?: string;
+		routeKey: string;
+		showLoading?: boolean;
 		slug?: string;
 		user: Api.User;
 	},
@@ -250,7 +298,7 @@ function ChannelWorkspace(
 						),
 				);
 				rememberChannel(user.id, value.channel, value.repository);
-				void onDocumentLoaded(value.channel);
+				void onDocumentLoaded(value.channel, routeKey);
 			}
 			return value;
 		});
@@ -279,9 +327,15 @@ function ChannelWorkspace(
 		repository,
 		researchWorkspaceId,
 		retry,
+		routeKey,
 		slug,
 		user.id,
 	]);
+
+	useEffect(() => {
+		if (loaded || error !== undefined) onResolved?.(routeKey);
+	}, [error, loaded, onResolved, routeKey]);
+
 	if (error) {
 		let requestedRepository = owner && repository
 			? { owner, name: repository, fullName: `${owner}/${repository}` }
@@ -300,7 +354,7 @@ function ChannelWorkspace(
 			/>
 		);
 	}
-	if (!loaded) return <Loading label="Opening channel..." />;
+	if (!loaded) return showLoading ? <Loading label="Opening channel..." /> : null;
 	let { detail } = loaded;
 	let channel = navigationChannel?.id === detail.channel.id
 		? newestDocument(detail.channel, navigationChannel)
@@ -326,6 +380,58 @@ function ChannelWorkspace(
 	}
 	let Document = loaded.Workspace;
 	return <Document {...props} />;
+}
+
+function DocumentRouteSwap(
+	{ agent, route, user }: { agent: boolean; route: DocumentRoute; user: Api.User },
+) {
+	let requested = keyedDocumentRoute(route);
+	let [state, dispatch] = useReducer(
+		transitionDocumentRoute,
+		initialDocumentRouteSwap(requested),
+	);
+	let presentedRequest = state.pending ?? state.current;
+	if (requested.key !== presentedRequest.key) {
+		dispatch({ route: requested, type: "requested" });
+	}
+	let layers = [state.previous, state.current, state.pending].filter(
+		(layer): layer is KeyedDocumentRoute => layer !== undefined,
+	);
+	let immediately = motionImmediately();
+	let motion = motionContract("content-swap");
+	let resolved = useCallback((key: string) => dispatch({ key, type: "resolved" }), []);
+
+	return (
+		<div className="document-route-swap content-swap-stack h-full">
+			{layers.map(layer => (
+				<ContentSwapLayer
+					active={layer.key === state.current.key}
+					className="document-route-layer h-full min-h-0"
+					immediately={immediately}
+					key={layer.key}
+					motion={motion}
+					onClosed={layer.key === state.previous?.key
+						? () => dispatch({ key: layer.key, type: "closed" })
+						: undefined}
+				>
+					<ChannelWorkspace
+						agent={agent}
+						onResolved={resolved}
+						routeKey={layer.key}
+						showLoading={layer.key === state.current.key}
+						user={user}
+						{...(layer.route.page === "channel"
+							? { id: layer.route.id }
+							: {
+								owner: layer.route.owner,
+								repository: layer.route.repository,
+								slug: layer.route.slug,
+							})}
+					/>
+				</ContentSwapLayer>
+			))}
+		</div>
+	);
 }
 
 export function HostedApp(
@@ -361,16 +467,8 @@ export function HostedApp(
 		case "repository":
 			break;
 		case "document":
-			workspace = (
-				<ChannelWorkspace
-					agent={agent}
-					key={`document:${route.owner}/${route.repository}/${route.slug}`}
-					owner={route.owner}
-					repository={route.repository}
-					slug={route.slug}
-					user={user}
-				/>
-			);
+		case "channel":
+			workspace = <DocumentRouteSwap agent={agent} route={route} user={user} />;
 			break;
 		case "research":
 			workspace = (
@@ -380,14 +478,10 @@ export function HostedApp(
 					owner={route.owner}
 					repository={route.repository}
 					researchWorkspaceId={route.workspaceId}
+					routeKey={`research:${route.owner}/${route.repository}/${route.slug}/${route.workspaceId}`}
 					slug={route.slug}
 					user={user}
 				/>
-			);
-			break;
-		case "channel":
-			workspace = (
-				<ChannelWorkspace agent={agent} id={route.id} key={`channel:${route.id}`} user={user} />
 			);
 			break;
 	}

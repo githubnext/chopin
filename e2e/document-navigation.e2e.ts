@@ -252,6 +252,8 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
 	let created = projects.locator('a[aria-current="page"]');
 	let createdTitle = (await created.textContent())!.trim();
+	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${createdTitle}`);
+	await expect(page.locator(".document-route-layer:not([hidden])")).toHaveCount(1);
 	await expect(projects.getByRole("link", { name: originalTitle, exact: true })).toBeVisible();
 	expect(
 		requested.filter(request => request.method === "GET" && request.path === "/api/navigation"),
@@ -269,7 +271,9 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 	});
 	await projects.getByRole("link", { name: originalTitle, exact: true }).click();
 
-	await expect(page.getByText("Opening channel...", { exact: true })).toBeVisible();
+	await expect(page.getByText("Opening channel...", { exact: true })).toHaveCount(0);
+	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${createdTitle}`);
+	await expect(page.locator(".document-route-layer:not([hidden])")).toHaveCount(1);
 	await expect(projects.getByRole("link", { name: createdTitle, exact: true })).toBeVisible();
 	expect(
 		await page.evaluate(() =>
@@ -277,7 +281,13 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 		),
 	).toBe("preserved");
 	release.resolve();
+	let visibleRoutes = page.locator(".document-route-layer:not([hidden])");
+	await expect(visibleRoutes).toHaveCount(2);
+	await expect(page.locator(".document-route-layer:not([hidden]):not([inert])")).toHaveCount(1);
+	await expect(page.locator('.document-route-layer:not([hidden])[aria-hidden="true"][inert]'))
+		.toHaveCount(1);
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${originalTitle}`);
+	await expect(visibleRoutes).toHaveCount(1);
 	await expect(page).toHaveURL(originalPath!);
 
 	expect(requested.filter(request => request.path === "/api/session")).toHaveLength(0);
@@ -300,6 +310,13 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${createdTitle}`);
 	await page.evaluate(() => history.forward());
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${originalTitle}`);
+
+	let createdLink = projects.getByRole("link", { name: createdTitle, exact: true });
+	await createdLink.focus();
+	await page.keyboard.press("Enter");
+	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${createdTitle}`);
+	await expect(visibleRoutes).toHaveCount(1);
+	await expect(page.locator(".document-route-layer:not([hidden]).is-closing")).toHaveCount(0);
 });
 
 test("the archive view refreshes catalogues without reopening the document", async ({ join, page }) => {
