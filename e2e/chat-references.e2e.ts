@@ -15,6 +15,10 @@ function port(baseURL: string): number {
 	return Number(new URL(baseURL).port);
 }
 
+function conversationPane(page: Page) {
+	return page.getByRole("complementary", { includeHidden: true, name: "Conversation" });
+}
+
 async function enablePlanner(page: Page): Promise<void> {
 	await page.route("**/api/session", async route => {
 		let response = await route.fetch();
@@ -201,7 +205,7 @@ test("a server without chat references leaves typed tokens ordinary", async ({ j
 		});
 	});
 
-	let conversation = (await join("ana")).locator("#pane-chat");
+	let conversation = conversationPane(await join("ana"));
 	let draft = conversation.getByPlaceholder("Use @chopin to ask Chopin");
 	await expect(draft).toHaveRole("textbox");
 	await expect(draft).not.toHaveAttribute("aria-autocomplete", "list");
@@ -230,7 +234,7 @@ test("an empty picker leaves arrows and Enter to the textarea", async ({ join, p
 		server.onMessage(message => route.send(message));
 	});
 
-	let conversation = (await join("ana")).locator("#pane-chat");
+	let conversation = conversationPane(await join("ana"));
 	let draft = conversation.getByPlaceholder("Use @chopin to ask Chopin");
 	let value = `No result #missing-${crypto.randomUUID()}`;
 	await draft.fill(value);
@@ -260,7 +264,7 @@ test("a disconnect rejects a pending send without losing its draft", async ({ jo
 		server.onMessage(message => route.send(message));
 	});
 
-	let conversation = (await join("ana")).locator("#pane-chat");
+	let conversation = conversationPane(await join("ana"));
 	let draft = conversation.getByPlaceholder("Use @chopin to ask Chopin");
 	let value = "Keep this draft through disconnect";
 	await draft.fill(value);
@@ -294,7 +298,7 @@ test("legacy delivery clears immediately without waiting for an acknowledgement"
 		});
 	});
 
-	let conversation = (await join("ana")).locator("#pane-chat");
+	let conversation = conversationPane(await join("ana"));
 	let draft = conversation.getByPlaceholder("Use @chopin to ask Chopin");
 	await draft.fill("Legacy delivery");
 	await conversation.getByRole("button", { name: "Send message" }).click();
@@ -324,7 +328,7 @@ test("the composer stays read-only until fresh chat history arrives", async ({ j
 		});
 	});
 
-	let conversation = (await join("ana")).locator("#pane-chat");
+	let conversation = conversationPane(await join("ana"));
 	let draft = conversation.getByPlaceholder("Use @chopin to ask Chopin");
 	await expect.poll(() => releaseHistory !== undefined).toBe(true);
 	await expect(draft).toHaveAttribute("readonly", "");

@@ -135,7 +135,7 @@ describe("palette", () => {
 
 	it("keeps the Conversation pane edge subtly stronger than the frame hairline", () => {
 		expect(THEME).toMatch(
-			/\.workspace-frame #pane-chat\s*\{\s*border-color:\s*rgb\(0 0 0 \/ 9%\);/,
+			/\.workspace-frame \.workspace-conversation-panel\s*\{\s*border-color:\s*rgb\(0 0 0 \/ 9%\);/,
 		);
 	});
 
@@ -549,7 +549,7 @@ describe("migration", () => {
 				"apps/web/src/workspace.tsx",
 				{
 					action: "pane toggle",
-					marker: 'aria-controls={paneId("chat")}',
+					marker: "aria-controls={controls}",
 					size: "btn-icon",
 					tiers: ["btn-ghost"],
 				},

@@ -376,6 +376,7 @@ export function QuestionView(props: QuestionViewProps) {
 	let [selected, setActive] = useState(() => definition.questions[0]?.id);
 	let current = currentQuestion(definition, selected);
 	let active = current.id;
+	let panelId = `${base}-panel-${active}`;
 	if (active !== selected) setActive(active);
 	// Cancelling cannot be undone and the agent is waiting, so it takes a
 	// second, deliberate click rather than a modal nobody reads.
@@ -475,7 +476,7 @@ export function QuestionView(props: QuestionViewProps) {
 								type="button"
 								role="tab"
 								aria-selected={question.id === active}
-								aria-controls={`${base}-panel`}
+								aria-controls={question.id === active ? `${base}-panel-${question.id}` : undefined}
 								aria-label={done ? `${question.header}, answered` : question.header}
 								tabIndex={question.id === active ? 0 : -1}
 								// Switching question, and only that. A tab used to ask to be
@@ -517,8 +518,9 @@ export function QuestionView(props: QuestionViewProps) {
 			{(() => {
 				let panel = (
 					<section
+						aria-labelledby={multiple ? `${base}-tab-${current.id}` : undefined}
 						data-ace-question-id={current.id}
-						id={`${base}-panel`}
+						id={panelId}
 						role={multiple ? "tabpanel" : undefined}
 						className="px-3 py-2.5"
 						onMouseEnter={() => onQuestionEnter?.(current.id)}

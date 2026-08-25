@@ -3,28 +3,58 @@ export type KeyedDocumentRoute = {
 	key: string;
 };
 
-type ReadyDocumentRoute<T extends KeyedDocumentRoute, C> = T & { channel?: C };
+declare const documentRouteIdentityBrand: unique symbol;
 
-export type DocumentRouteSwap<T extends KeyedDocumentRoute, C = unknown> = {
-	current: ReadyDocumentRoute<T, C>;
-	pending?: ReadyDocumentRoute<T, C>;
-	previous?: ReadyDocumentRoute<T, C>;
+export type DocumentRouteIdentity = string & {
+	readonly [documentRouteIdentityBrand]: true;
 };
 
-export type DocumentRouteAction<T extends KeyedDocumentRoute, C = unknown> =
+export type DocumentRouteIdentitySource =
+	| { id: string; page: "channel" }
+	| { owner: string; page: "document"; repository: string; slug: string }
+	| {
+		owner: string;
+		page: "research";
+		repository: string;
+		slug: string;
+		workspaceId: string;
+	};
+
+export function documentRouteIdentity(source: DocumentRouteIdentitySource): DocumentRouteIdentity {
+	switch (source.page) {
+		case "channel":
+			return `channel:${source.id}` as DocumentRouteIdentity;
+		case "document":
+			return `document:${source.owner}/${source.repository}/${source.slug}` as DocumentRouteIdentity;
+		case "research":
+			return (
+				`research:${source.owner}/${source.repository}/${source.slug}/${source.workspaceId}`
+			) as DocumentRouteIdentity;
+	}
+}
+
+type ReadyDocumentRoute<T extends KeyedDocumentRoute, R> = T & { resolution?: R };
+
+export type DocumentRouteSwap<T extends KeyedDocumentRoute, R = unknown> = {
+	current: ReadyDocumentRoute<T, R>;
+	pending?: ReadyDocumentRoute<T, R>;
+	previous?: ReadyDocumentRoute<T, R>;
+};
+
+export type DocumentRouteAction<T extends KeyedDocumentRoute, R = unknown> =
 	| { route: T; type: "requested" }
-	| { channel?: C; key: string; type: "ready" }
+	| { key: string; resolution?: R; type: "ready" }
 	| { key: string; type: "closed" };
 
-export function transitionDocumentRoute<T extends KeyedDocumentRoute, C = unknown>(
-	state: DocumentRouteSwap<T, C>,
-	action: DocumentRouteAction<T, C>,
-): DocumentRouteSwap<T, C> {
+export function transitionDocumentRoute<T extends KeyedDocumentRoute, R = unknown>(
+	state: DocumentRouteSwap<T, R>,
+	action: DocumentRouteAction<T, R>,
+): DocumentRouteSwap<T, R> {
 	if (action.type === "requested") {
 		let requested = action.route;
 		let reverse = (
-			route: ReadyDocumentRoute<T, C>,
-		): ReadyDocumentRoute<T, C> => ({ ...route, immediately: requested.immediately });
+			route: ReadyDocumentRoute<T, R>,
+		): ReadyDocumentRoute<T, R> => ({ ...route, immediately: requested.immediately });
 		if (requested.key === state.current.key) {
 			return state.pending
 				? {
@@ -42,19 +72,19 @@ export function transitionDocumentRoute<T extends KeyedDocumentRoute, C = unknow
 		return { ...state, pending: requested };
 	}
 	if (action.type === "ready") {
-		let ready = (route: ReadyDocumentRoute<T, C>): ReadyDocumentRoute<T, C> =>
-			action.channel === undefined
+		let ready = (route: ReadyDocumentRoute<T, R>): ReadyDocumentRoute<T, R> =>
+			action.resolution === undefined
 				? route
-				: { ...route, channel: action.channel };
+				: { ...route, resolution: action.resolution };
 		if (state.pending?.key === action.key) {
 			return { current: ready(state.pending), previous: state.current };
 		}
-		if (state.current.key === action.key && action.channel !== undefined) {
-			if (state.current.channel === action.channel) return state;
+		if (state.current.key === action.key && action.resolution !== undefined) {
+			if (state.current.resolution === action.resolution) return state;
 			return { ...state, current: ready(state.current) };
 		}
-		if (state.previous?.key === action.key && action.channel !== undefined) {
-			if (state.previous.channel === action.channel) return state;
+		if (state.previous?.key === action.key && action.resolution !== undefined) {
+			if (state.previous.resolution === action.resolution) return state;
 			return { ...state, previous: ready(state.previous) };
 		}
 		return state;

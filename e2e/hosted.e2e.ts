@@ -99,6 +99,62 @@ test("a signed-out document link returns to the document after OAuth", async ({ 
 	await expect(page.getByRole("banner")).toBeVisible();
 });
 
+test("a stale outgoing route cannot canonicalize or publish over the active document", async ({ baseURL, page, room }) => {
+	let stale = {
+		...recoveryChannel,
+		descriptionRevision: 0,
+		id: "33333333-3333-4333-8333-333333333333",
+		slug: "stale-outgoing",
+		title: "Stale outgoing",
+	};
+	let captured = Promise.withResolvers<void>();
+	let release = Promise.withResolvers<void>();
+	let visits: string[] = [];
+	page.on("request", request => {
+		if (request.method() !== "PATCH" || new URL(request.url()).pathname !== "/api/navigation") {
+			return;
+		}
+		let body = request.postDataJSON() as { documentId?: unknown };
+		if (typeof body.documentId === "string") visits.push(body.documentId);
+	});
+	await page.route(new RegExp(`/api/channels/${stale.id}$`), async route => {
+		captured.resolve();
+		await release.promise;
+		await route.fulfill({
+			json: { canEdit: true, canManage: false, channel: stale, repository: score },
+		});
+	});
+	await authenticate(page, "stale-route", baseURL!);
+	await page.goto(`/channels/${stale.id}`);
+	await captured.promise;
+	await page.locator("body").dispatchEvent("pointerover", { pointerType: "mouse" });
+	let activePath = roomPath(room);
+	await page.evaluate(path => {
+		history.pushState(null, "", path);
+		dispatchEvent(new PopStateEvent("popstate"));
+	}, activePath);
+	let routes = page.locator(".document-route-swap > [data-content-swap-state]:not([hidden])");
+	let outgoing = page.locator(
+		'.document-route-swap > [data-content-swap-state="outgoing"]:not([hidden])',
+	);
+	await expect(routes).toHaveCount(2);
+	await expect(outgoing).toHaveAttribute("inert", "");
+	await expect.poll(() => visits).toEqual([room]);
+
+	let staleResponse = page.waitForResponse(response =>
+		new URL(response.url()).pathname === `/api/channels/${stale.id}`
+	);
+	release.resolve();
+	await staleResponse;
+	await page.evaluate(() =>
+		new Promise<void>(resolve =>
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+		)
+	);
+	await expect(page).toHaveURL(activePath);
+	expect(visits).toEqual([room]);
+});
+
 test("a legacy repository path renders the global navigation shell", async ({ baseURL, page }) => {
 	await authenticate(page, "legacy-route", baseURL!);
 	await page.route(

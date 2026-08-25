@@ -18,6 +18,7 @@ import { documentPath, researchWorkspacePath } from "@chopin/protocol/document-u
 import * as Api from "./api";
 import { forgetChannel } from "./channel-recovery";
 import { newestDocument, updateDocumentMetadata } from "./document-actions";
+import { documentRouteIdentity } from "./document-route-swap";
 import type { DocumentAction } from "./document-actions-menu";
 import { motionContract } from "./motion-contract";
 import { NavigationFocusScope } from "./navigation-focus";
@@ -46,6 +47,7 @@ import type { Research } from "@chopin/protocol";
 import type { TransitionPresence } from "@chopin/editor/transition-presence";
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import type { DocumentMetadata } from "./document-actions";
+import type { DocumentRouteIdentity, DocumentRouteIdentitySource } from "./document-route-swap";
 import type { NavigationMode } from "./navigation-model";
 
 export type Navigate = (destination: string, options?: { replace?: boolean }) => void;
@@ -94,17 +96,9 @@ let DeleteDocumentDialog = lazy(() =>
 );
 
 type Route =
+	| DocumentRouteIdentitySource
 	| { page: "repositories" }
-	| { page: "repository"; owner: string; repository: string }
-	| { page: "document"; owner: string; repository: string; slug: string }
-	| {
-		page: "research";
-		owner: string;
-		repository: string;
-		slug: string;
-		workspaceId: string;
-	}
-	| { page: "channel"; id: string };
+	| { page: "repository"; owner: string; repository: string };
 
 type NavigationFailure = { reason: unknown; retry?: "refresh" | "visit" };
 
@@ -116,7 +110,7 @@ let NavigationDocument = createContext<{
 	) => void;
 	onDocumentAction: (action: DocumentAction) => void;
 	onDocumentDeleted: (documentId: string) => void;
-	onDocumentLoaded: (channel: Api.Channel, routeKey: string) => Promise<void>;
+	onDocumentLoaded: (channel: Api.Channel, routeKey: DocumentRouteIdentity) => Promise<void>;
 	onRepositoryAccessChanged: () => void;
 	onResearchWorkspaceChanged: (
 		channel: Api.ResearchParentChannel,
@@ -273,7 +267,7 @@ export function NavigationShell(
 	let [error, setError] = useState<NavigationFailure>();
 	let [resolvedDocument, setResolvedDocument] = useState<{
 		channel: Api.Channel;
-		routeKey: string;
+		routeKey: DocumentRouteIdentity;
 	}>();
 	let resolvedDocumentRef = useRef(resolvedDocument);
 	resolvedDocumentRef.current = resolvedDocument;
@@ -339,11 +333,9 @@ export function NavigationShell(
 		upsertResearchWorkspace,
 	} = useProjectResearch(navigation, projects, catalogueMode === "archived");
 	let routeKey = route.page === "channel"
-		? `${route.page}:${route.id}`
-		: route.page === "research"
-		? `${route.page}:${route.owner}/${route.repository}/${route.slug}/${route.workspaceId}`
-		: route.page === "document"
-		? `${route.page}:${route.owner}/${route.repository}/${route.slug}`
+			|| route.page === "document"
+			|| route.page === "research"
+		? documentRouteIdentity(route)
 		: route.page;
 	let currentRouteKey = useRef(routeKey);
 	currentRouteKey.current = routeKey;
@@ -416,7 +408,10 @@ export function NavigationShell(
 		navigationRef.current = next;
 		setNavigation(next);
 	}, []);
-	let documentLoaded = useCallback(async (channel: Api.Channel, loadedRouteKey: string) => {
+	let documentLoaded = useCallback(async (
+		channel: Api.Channel,
+		loadedRouteKey: DocumentRouteIdentity,
+	) => {
 		let resolved = resolvedDocumentRef.current;
 		let loaded = {
 			channel: resolved?.routeKey === loadedRouteKey && resolved.channel.id === channel.id
@@ -728,8 +723,12 @@ export function NavigationShell(
 
 	let retryError = () => {
 		if (!error) return;
-		if (error.retry === "visit" && currentChannelRef.current) {
-			void documentLoaded(currentChannelRef.current, currentRouteKey.current);
+		if (
+			error.retry === "visit"
+			&& currentChannelRef.current
+			&& (route.page === "channel" || route.page === "document" || route.page === "research")
+		) {
+			void documentLoaded(currentChannelRef.current, documentRouteIdentity(route));
 		} else void refresh();
 	};
 	let dismissDrawer = () => {

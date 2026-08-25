@@ -551,7 +551,7 @@ body {
 	box-shadow: none;
 }
 
-.workspace-frame #pane-chat {
+.workspace-frame .workspace-conversation-panel {
 	border-color: rgb(0 0 0 / 9%);
 }
 
