@@ -2,6 +2,8 @@ export { BackgroundWork } from "./background-work";
 export type { BackgroundWorkProps } from "./background-work";
 export { collaborationPlugin } from "./collaboration";
 export type { CollaborationOptions } from "./collaboration";
+export { ContentSwapLayer } from "./content-swap";
+export type { ContentSwapLayerProps, ContentSwapMotion } from "./content-swap";
 export { Count } from "./count";
 export { color, cursor } from "./cursor";
 export type { Cursor } from "./cursor";
