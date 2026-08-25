@@ -466,6 +466,55 @@ body {
 	transition: none;
 }
 
+.motion-collapse {
+	display: grid;
+	grid-template-rows: 0fr;
+	transition: grid-template-rows var(--acc-expand) var(--motion-move);
+}
+
+.motion-collapse-content {
+	min-height: 0;
+	overflow: hidden;
+	opacity: 0;
+	transform: translateY(-4px);
+	transition:
+		opacity var(--acc-expand) var(--motion-move),
+		transform var(--acc-expand) var(--motion-move);
+}
+
+.motion-collapse.is-open {
+	grid-template-rows: 1fr;
+}
+
+.motion-collapse.is-open > .motion-collapse-content {
+	opacity: 1;
+	transform: translateY(0);
+}
+
+.motion-collapse.is-closing {
+	grid-template-rows: 0fr;
+	transition-duration: var(--acc-collapse);
+}
+
+.motion-collapse.is-closing > .motion-collapse-content {
+	opacity: 0;
+	transform: translateY(-4px);
+	transition-duration: var(--acc-collapse);
+}
+
+.motion-disclosure-icon {
+	display: inline-flex;
+	transform: rotate(0deg);
+}
+
+:root[data-motion-input="pointer"] .motion-disclosure-icon {
+	transition: transform var(--icon-swap-dur) var(--motion-smooth-out);
+}
+
+.motion-disclosure-icon[data-open] {
+	transform: rotate(90deg);
+}
+
 body {
 	margin: 0;
 	background: var(--color-ground);
@@ -718,7 +767,10 @@ body {
 @media (prefers-reduced-motion: reduce) {
 	.motion-dropdown,
 	.motion-popover,
-	.motion-panel {
+	.motion-panel,
+	.motion-collapse,
+	.motion-collapse-content,
+	.motion-disclosure-icon {
 		transition: none;
 	}
 
