@@ -30,6 +30,13 @@ export function advanceDecisionView(
 	return unanswered > 0 ? { ...state, phase: "forced" } : state;
 }
 
+export function selectDecisionView(
+	state: DecisionViewState,
+	preferred: DecisionView,
+): DecisionViewState {
+	return { ...state, phase: "complete", preferred };
+}
+
 export function visibleDecisionView(
 	state: DecisionViewState,
 	hasPlanContent: boolean,

@@ -65,6 +65,11 @@ function questionnaire(page: import("@playwright/test").Page) {
 	return page.locator('[data-document-view="decisions"] article[data-plan-sidecar-questionnaire]');
 }
 
+function documentEditor(page: Page) {
+	return page.locator('[data-document-view="plan"]')
+		.getByRole("textbox", { includeHidden: true, name: "editable markdown" });
+}
+
 function commentButton(page: import("@playwright/test").Page) {
 	return page.getByRole("button", { name: /Comment on “/ });
 }
@@ -94,21 +99,26 @@ test("question step swaps overlap only for pointer input", async ({ join, seed }
 	let card = page.locator(
 		`[data-document-view="plan"] article[data-plan-sidecar-questionnaire="${WIDGET}"]`,
 	);
-	let stack = card.locator(".question-step-swap");
-	let visible = stack.locator(".question-step-layer:not([hidden])");
+	let stack = card.locator("[data-question-step-swap]");
+	let visible = stack.locator(":scope > [data-content-swap-state]:not([hidden])");
+	let outgoing = stack.locator(
+		':scope > [data-content-swap-state="outgoing"]:not([hidden])',
+	);
 	let scope = card.getByRole("tab", { name: "Scope" });
 
 	await scope.click();
 	await expect(visible).toHaveCount(2);
-	await expect(stack.locator(".question-step-layer:not([hidden]):not([inert])")).toHaveCount(1);
-	await expect(stack.locator('.question-step-layer:not([hidden])[aria-hidden="true"][inert]'))
+	await expect(stack.locator(":scope > [data-content-swap-state]:not([hidden]):not([inert])"))
 		.toHaveCount(1);
+	await expect(outgoing).toHaveCount(1);
+	await expect(outgoing).toHaveAttribute("aria-hidden", "true");
+	await expect(outgoing).toHaveAttribute("inert", "");
 	await expect(visible).toHaveCount(1);
 
 	await scope.focus();
 	await page.keyboard.press("ArrowLeft");
 	await expect(visible).toHaveCount(1);
-	await expect(stack.locator(".question-step-layer:not([hidden]).is-closing")).toHaveCount(0);
+	await expect(outgoing).toHaveCount(0);
 	await expect(card.getByRole("tab", { name: "Rollout" })).toHaveAttribute(
 		"aria-selected",
 		"true",
@@ -192,7 +202,10 @@ test("questions leave the chat pane free of a waiting row", async ({ join, seed 
 	let page = await join("ana");
 
 	await expect(questionnaire(page)).toHaveCount(2);
-	await expect(page.locator("#pane-chat").getByRole("button", { name: "Answer" })).toHaveCount(0);
+	await expect(
+		page.getByRole("complementary", { includeHidden: true, name: "Conversation" })
+			.getByRole("button", { name: "Answer" }),
+	).toHaveCount(0);
 
 	await page.getByRole("button", { name: /^Decisions/ }).click();
 	await expect(page.getByRole("button", { name: /^Decisions/ }))
@@ -217,13 +230,13 @@ test("switching views restores the plan scroll position", async ({ join, seed })
 async function expectCompactDestinationStatePreserved(page: Page): Promise<void> {
 	let nav = page.getByRole("navigation", { name: "Workspace view" });
 	let planScroller = page.locator("[data-plan-scroll]");
+	let draft = page.getByPlaceholder("Use @chopin to ask Chopin");
 	await planScroller.evaluate(element => {
 		element.scrollTop = 160;
 		element.dispatchEvent(new Event("scroll"));
 	});
-	await page.evaluate(() => {
+	await draft.evaluate(textarea => {
 		let plan = document.querySelector("[data-plan-scroll]")!;
-		let textarea = document.querySelector("#pane-chat textarea")!;
 		let tracker = {
 			plan,
 			textarea,
@@ -246,7 +259,6 @@ async function expectCompactDestinationStatePreserved(page: Page): Promise<void>
 	});
 
 	await nav.getByRole("button", { name: /Conversation/ }).click();
-	let draft = page.locator("#pane-chat textarea");
 	await draft.fill("unfinished compact thought");
 
 	await nav.getByRole("button", { name: /^Decisions/ }).click();
@@ -266,7 +278,7 @@ async function expectCompactDestinationStatePreserved(page: Page): Promise<void>
 	);
 	await nav.getByRole("button", { name: "Document" }).click();
 	expect(decisionScroll).toBeGreaterThan(0);
-	let identity = await page.evaluate(() => {
+	let identity = await draft.evaluate(textarea => {
 		let tracker = (window as typeof window & {
 			__workspaceTracker?: {
 				plan: Element;
@@ -278,7 +290,7 @@ async function expectCompactDestinationStatePreserved(page: Page): Promise<void>
 		tracker.observer.disconnect();
 		return {
 			plan: tracker.plan === document.querySelector("[data-plan-scroll]"),
-			textarea: tracker.textarea === document.querySelector("#pane-chat textarea"),
+			textarea: tracker.textarea === textarea,
 			removed: tracker.removed,
 		};
 	});
@@ -324,15 +336,12 @@ test("automatic Decisions changes reconcile after compact Conversation closes", 
 			"true",
 			{ timeout: 20_000 },
 		);
-		let planHost = bo.locator('.workspace-document-layer:has([data-document-view="plan"])');
-		await planHost.evaluate(element => {
-			(element as HTMLElement).hidden = false;
-			(element as HTMLElement).inert = false;
-			element.removeAttribute("aria-hidden");
-			element.classList.add("is-open");
-		});
-		await bo.locator('[aria-label="editable markdown"]').fill("Collaborative prose arrived.");
-		await expect(ana.locator('[aria-label="editable markdown"]')).toContainText(
+		await bo.getByRole("group", { name: "Document view" })
+			.getByRole("button", { name: "Document", exact: true })
+			.click();
+		await expect(documentEditor(bo)).toBeVisible();
+		await documentEditor(bo).fill("Collaborative prose arrived.");
+		await expect(documentEditor(ana)).toContainText(
 			"Collaborative prose arrived.",
 		);
 	} finally {

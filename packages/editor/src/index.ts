@@ -7,7 +7,12 @@ export type { ContentSwapLayerProps, ContentSwapMotion } from "./content-swap";
 export { Count } from "./count";
 export { color, cursor } from "./cursor";
 export type { Cursor } from "./cursor";
-export { advanceDecisionView, countUnanswered, visibleDecisionView } from "./decision-state";
+export {
+	advanceDecisionView,
+	countUnanswered,
+	selectDecisionView,
+	visibleDecisionView,
+} from "./decision-state";
 export type { DecisionView, DecisionViewState, OpeningPhase } from "./decision-state";
 export { Decisions } from "./decisions";
 export type { DecisionsProps } from "./decisions";

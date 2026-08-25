@@ -53,6 +53,10 @@ async function expectCompactWorkspaceChrome(page: Page): Promise<void> {
 	await expectNoHorizontalOverflow(page);
 }
 
+function conversationPane(page: Page) {
+	return page.getByRole("complementary", { includeHidden: true, name: "Conversation" });
+}
+
 test("viewport containment rejects absent and invisible targets", async ({ page }) => {
 	await page.setContent(`
 		<button hidden id="hidden" type="button">Hidden target</button>
@@ -77,12 +81,12 @@ test("a representative compact phone exposes one mounted destination at a time",
 	await expect(projects).toBeFocused();
 	await expect(nav.getByRole("button", { name: "Document" })).toBeVisible();
 	await nav.getByRole("button", { name: /Conversation/ }).click();
-	await expect(page.locator("#pane-chat")).toBeVisible();
+	await expect(conversationPane(page)).toBeVisible();
 	await expect(page.locator('[aria-label="editable markdown"]')).toBeHidden();
 	await expect(page.locator("main")).toHaveAttribute("inert", "");
 	await nav.getByRole("button", { name: /^Decisions/ }).click();
 	await expect(page.locator('[data-document-view="decisions"]')).toBeVisible();
-	await expect(page.locator("#pane-chat")).toBeHidden();
+	await expect(conversationPane(page)).toBeHidden();
 	await expect(page.locator("#workspace-decisions-heading")).toBeFocused();
 	await expectNoHorizontalOverflow(page);
 });
@@ -91,24 +95,30 @@ test("content swaps retain one interactive destination across pointer and immedi
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", { hasTouch: true, viewport: { width: 390, height: 844 } });
 	let nav = page.getByRole("navigation", { name: "Workspace view" });
-	let stack = page.locator(".workspace-document-swap");
-	let visible = stack.locator(":scope > .motion-content-swap:not([hidden])");
+	let stack = page.locator("[data-workspace-document-swap]");
+	let visible = stack.locator(":scope > [data-content-swap-state]:not([hidden])");
+	let outgoing = stack.locator(
+		':scope > [data-content-swap-state="outgoing"]:not([hidden])',
+	);
 	let decisions = nav.getByRole("button", { name: /^Decisions/ });
 	let document = nav.getByRole("button", { name: "Document", exact: true });
 
 	await decisions.click();
 	await expect(visible).toHaveCount(2);
-	await expect(stack.locator(":scope > .motion-content-swap:not([hidden]):not([inert])"))
+	await expect(stack.locator(":scope > [data-content-swap-state]:not([hidden]):not([inert])"))
 		.toHaveCount(1);
-	await expect(
-		stack.locator(':scope > .motion-content-swap:not([hidden])[aria-hidden="true"][inert]'),
-	)
-		.toHaveCount(1);
+	await expect(outgoing).toHaveCount(1);
+	await expect(outgoing).toHaveAttribute("aria-hidden", "true");
+	await expect(outgoing).toHaveAttribute("inert", "");
 	let sampledCounts = await stack.evaluate(async element => {
 		let counts: number[] = [];
 		for (let sample = 0; sample < 5; sample += 1) {
 			await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-			counts.push(element.querySelectorAll(":scope > .motion-content-swap:not([hidden])").length);
+			counts.push(
+				element.querySelectorAll(
+					":scope > [data-content-swap-state]:not([hidden])",
+				).length,
+			);
 		}
 		return counts;
 	});
@@ -119,14 +129,12 @@ test("content swaps retain one interactive destination across pointer and immedi
 	await document.focus();
 	await page.keyboard.press("Enter");
 	await expect(visible).toHaveCount(1);
-	await expect(stack.locator(":scope > .motion-content-swap:not([hidden]).is-closing"))
-		.toHaveCount(0);
+	await expect(outgoing).toHaveCount(0);
 
 	await page.emulateMedia({ reducedMotion: "reduce" });
 	await decisions.click();
 	await expect(visible).toHaveCount(1);
-	await expect(stack.locator(":scope > .motion-content-swap:not([hidden]).is-closing"))
-		.toHaveCount(0);
+	await expect(outgoing).toHaveCount(0);
 
 	await page.emulateMedia({ reducedMotion: "no-preference" });
 	await document.click();
@@ -148,7 +156,7 @@ test("a pointer-dismissed Projects drawer becomes inert while it exits", async (
 	let page = await join("ana", { hasTouch: true, viewport: { width: 390, height: 844 } });
 	let opener = page.getByRole("button", { name: "Open Projects sidebar" });
 	await opener.click();
-	let drawer = page.locator(".navigation-drawer");
+	let drawer = page.getByRole("dialog", { includeHidden: true, name: "Projects" }).locator("../..");
 	await page.getByRole("button", { name: "Close Projects sidebar" }).click({
 		position: { x: 382, y: 422 },
 	});
@@ -164,7 +172,7 @@ test("enabling reduced motion settles an active drawer exit", async ({ join, see
 	let page = await join("ana", { hasTouch: true, viewport: { width: 390, height: 844 } });
 	await page.emulateMedia({ reducedMotion: "no-preference" });
 	await page.getByRole("button", { name: "Open Projects sidebar" }).click();
-	let drawer = page.locator(".navigation-drawer");
+	let drawer = page.getByRole("dialog", { includeHidden: true, name: "Projects" }).locator("../..");
 	await page.getByRole("button", { name: "Close Projects sidebar" }).click({
 		position: { x: 382, y: 422 },
 	});
@@ -344,7 +352,7 @@ test("the wide side of the Projects transition uses the inline sidebar", async (
 	await expect(projects).toBeVisible();
 	await expect(opener).toHaveCount(0);
 	await expect(page.getByRole("navigation", { name: "Workspace view" })).toHaveCount(0);
-	await expect(page.locator("#pane-chat")).toBeVisible();
+	await expect(conversationPane(page)).toBeVisible();
 	await expect(page.getByRole("separator", { name: "Resize the conversation" })).toBeVisible();
 	let documentView = page.getByRole("group", { name: "Document view" });
 	await expect(documentView).toBeVisible();
@@ -377,7 +385,7 @@ test("the wide side of the Projects transition uses the inline sidebar", async (
 test("a representative desktop retains the split Conversation layout", async ({ join, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
-	await expect(page.locator("#pane-chat")).toBeVisible();
+	await expect(conversationPane(page)).toBeVisible();
 	await expect(page.getByRole("separator", { name: "Resize the conversation" })).toBeVisible();
 	await expect(page.getByRole("navigation", { name: "Workspace view" })).toHaveCount(0);
 	await expect(page.getByRole("button", { name: /conversation pane/ })).toBeVisible();

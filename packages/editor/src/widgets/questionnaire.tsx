@@ -124,7 +124,7 @@ function QuestionStepSwap(
 	}, [active, question]);
 
 	return (
-		<div className="question-step-swap content-swap-stack">
+		<div className="question-step-swap content-swap-stack" data-question-step-swap>
 			{outgoing && (
 				<ContentSwapLayer
 					active={false}
