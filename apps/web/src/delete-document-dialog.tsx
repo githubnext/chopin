@@ -47,7 +47,7 @@ export function DeleteDocumentDialog(
 		>
 			<p className="mt-3 text-sm text-text-secondary">
 				<strong className="font-semibold text-text-primary">{channel.title}</strong>{" "}
-				and its research workspaces will be permanently deleted. This cannot be undone.
+				will be permanently deleted. This cannot be undone.
 			</p>
 			{error !== undefined && (
 				<TerminalAlert className="mt-3 text-sm text-destructive-ink">

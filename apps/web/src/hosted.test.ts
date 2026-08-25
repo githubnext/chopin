@@ -53,7 +53,7 @@ function detail(
 }
 
 describe("hosted routes", () => {
-	it("recognizes canonical document and legacy routes", () => {
+	it("recognizes canonical document routes and rejects the removed research route", () => {
 		expect(hostedRoute("/")).toEqual({ page: "repositories" });
 		expect(hostedRoute("/documents/octo-org/score")).toEqual({
 			page: "repository",
@@ -69,13 +69,7 @@ describe("hosted routes", () => {
 			});
 		expect(hostedRoute(
 			"/documents/octo-org/score/r%C3%A9sum%C3%A9-%E8%A8%88%E7%94%BB/research/workspace%3A1",
-		)).toEqual({
-			page: "research",
-			owner: "octo-org",
-			repository: "score",
-			slug: "résumé-計画",
-			workspaceId: "workspace:1",
-		});
+		)).toEqual({ page: "missing" });
 		expect(hostedRoute("/repositories/octo-org/score")).toEqual({
 			page: "repository",
 			owner: "octo-org",

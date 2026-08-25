@@ -5,7 +5,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { documentGroups, ProjectSidebar } from "./project-sidebar";
 
 import type { ComponentProps } from "react";
-import type { Research } from "@chopin/protocol";
 import type * as Api from "./api";
 
 let channel: Api.Channel = {
@@ -23,23 +22,6 @@ let channel: Api.Channel = {
 	description: "Coordinates the release readiness work.",
 };
 
-function workspace(id: string, title: string, createdAt: string): Research.WorkspaceSummary {
-	return {
-		id,
-		channelId: channel.id,
-		title,
-		proposedQuestion: title,
-		origin: "sidebar",
-		createdBy: "user-one",
-		revision: 0,
-		createdAt,
-		updatedAt: createdAt,
-	};
-}
-
-let older = workspace("research-older", "Older evidence", "2026-08-21T00:00:00.000Z");
-let newer = workspace("research-newer", "Newer evidence", "2026-08-22T00:00:00.000Z");
-
 let props = {
 	canCreateDocument: true,
 	creatingNewDocument: false,
@@ -52,7 +34,6 @@ let props = {
 	onDocumentAction: () => {},
 	onLoadMore: () => {},
 	onNewDocument: () => {},
-	onNewResearch: () => {},
 	onSearch: () => {},
 	onCatalogueModeChange: () => {},
 	projects: [{
@@ -72,15 +53,11 @@ let props = {
 			},
 		},
 	}],
-	research: new Map([[channel.id, {
-		channel,
-		workspaces: [older, newer],
-	}]]),
 	catalogueMode: "active",
 	user: { avatarUrl: "", id: "user-one", login: "octocat" },
 } satisfies ComponentProps<typeof ProjectSidebar>;
 
-describe("research sidebar hierarchy", () => {
+describe("document sidebar hierarchy", () => {
 	it("groups children beneath present parents without disturbing either order", () => {
 		let secondParent = { ...channel, id: "channel-two", slug: "second", title: "Second" };
 		let firstChild = {
@@ -175,19 +152,14 @@ describe("research sidebar hierarchy", () => {
 		expect(markup).toContain("block truncate font-normal text-text-quaternary");
 	});
 
-	it("marks the parent as an active ancestor and only the child as current", () => {
-		let markup = renderToStaticMarkup(createElement(ProjectSidebar, {
-			...props,
-			currentResearchWorkspaceId: newer.id,
-		}));
+	it("omits the standalone research launcher and workspace rows", () => {
+		let markup = renderToStaticMarkup(createElement(ProjectSidebar, props));
 
 		expect(markup.match(/aria-current="page"/g)).toHaveLength(1);
-		expect(markup).toContain("project-sidebar-document-ancestor");
-		expect(markup).toContain(
-			`aria-current="page" class="project-sidebar-research-link project-sidebar-research-current" href="/documents/acme/one/release-plan/research/${newer.id}"`,
-		);
-		expect(markup.indexOf(newer.title)).toBeLessThan(markup.indexOf(older.title));
-		expect(markup).toContain('aria-label="New research in Release plan"');
+		expect(markup).not.toContain("project-sidebar-document-ancestor");
+		expect(markup).not.toContain("project-sidebar-research-link");
+		expect(markup).not.toContain('href="/documents/acme/one/release-plan/research/');
+		expect(markup).not.toContain('aria-label="New research in Release plan"');
 		expect(markup).toContain('aria-label="Actions for Release plan"');
 	});
 

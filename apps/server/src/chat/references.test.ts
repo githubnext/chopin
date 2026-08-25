@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { ulid } from "@chopin/dialect";
-import { documentPath, researchWorkspacePath } from "@chopin/protocol/document-url";
+import { documentPath } from "@chopin/protocol/document-url";
 
 import { ReferenceService, restoreReferences } from "./references";
 import { sourceHash } from "../plan/service";
@@ -12,6 +12,15 @@ import type { DocumentTarget } from "../plan/service";
 import type { ResearchWorkspaceService, ResearchWorkspaceView } from "../research/service";
 
 let NOW = new Date("2026-08-23T12:00:00.000Z");
+
+function researchReferencePath(
+	owner: string,
+	repository: string,
+	slug: string,
+	workspaceId: string,
+): string {
+	return `/documents/${owner}/${repository}/${slug}/research/${workspaceId}`;
+}
 
 async function setup() {
 	let storage = new MemoryStorage();
@@ -463,7 +472,7 @@ describe("reading cached reference targets", () => {
 			kind: "research",
 			parentChannelId: parent.id,
 			label: "%Release Research",
-			href: researchWorkspacePath(
+			href: researchReferencePath(
 				parent.repositoryOwner,
 				parent.repositoryName,
 				parent.slug,

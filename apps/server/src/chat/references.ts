@@ -1,12 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { ULID, ulid } from "@chopin/dialect";
-import {
-	documentPath,
-	parseDocumentPath,
-	parseResearchWorkspacePath,
-	researchWorkspacePath,
-} from "@chopin/protocol/document-url";
+import { documentPath, parseDocumentPath } from "@chopin/protocol/document-url";
 import { instruction, MENTION } from "@chopin/protocol/address";
 
 import { isChannelId } from "../channels/id";
@@ -34,6 +29,41 @@ const MAX_RESEARCH_MESSAGE = 4_096;
 const MAX_RESEARCH_MESSAGE_BYTES = 256 * 1024;
 const SOURCE_HASH = /^sha256:[0-9a-f]{64}$/;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
+const LEGACY_RESEARCH_PATH =
+	/^\/documents\/([^/?#]+)\/([^/?#]+)\/([^/?#]+)\/research\/([^/?#]+)\/?$/;
+
+// Persisted chat references retain the removed product route as an opaque canonical identity.
+function legacyResearchPath(
+	owner: string,
+	repository: string,
+	slug: string,
+	workspaceId: string,
+): string {
+	return `/documents/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/${
+		encodeURIComponent(slug)
+	}/research/${encodeURIComponent(workspaceId)}`;
+}
+
+function parseLegacyResearchPath(value: string): {
+	owner: string;
+	repository: string;
+	slug: string;
+	workspaceId: string;
+} | undefined {
+	let match = LEGACY_RESEARCH_PATH.exec(value);
+	if (!match) return undefined;
+	try {
+		let owner = decodeURIComponent(match[1]!);
+		let repository = decodeURIComponent(match[2]!);
+		let slug = decodeURIComponent(match[3]!);
+		let workspaceId = decodeURIComponent(match[4]!);
+		return owner && repository && slug && workspaceId
+			? { owner, repository, slug, workspaceId }
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
 
 export class ChatReferenceError extends Error {
 	constructor(message: string) {
@@ -306,9 +336,9 @@ function canonicalDocumentHref(value: unknown): value is string {
 
 function canonicalResearchHref(value: unknown): value is string {
 	if (typeof value !== "string" || value.length > MAX_HREF) return false;
-	let parsed = parseResearchWorkspacePath(value);
+	let parsed = parseLegacyResearchPath(value);
 	return !!parsed
-		&& researchWorkspacePath(parsed.owner, parsed.repository, parsed.slug, parsed.workspaceId)
+		&& legacyResearchPath(parsed.owner, parsed.repository, parsed.slug, parsed.workspaceId)
 			=== value;
 }
 
@@ -347,7 +377,7 @@ function reference(value: unknown): Wire.Reference {
 	}
 	if (item.kind === "research") {
 		let parsedHref = typeof item.href === "string"
-			? parseResearchWorkspacePath(item.href)
+			? parseLegacyResearchPath(item.href)
 			: undefined;
 		if (
 			!base
@@ -611,7 +641,7 @@ export class ReferenceService {
 				start: item.start,
 				end: item.end,
 				label: `%${detail.workspace.title}`,
-				href: researchWorkspacePath(
+				href: legacyResearchPath(
 					parent.repositoryOwner,
 					parent.repositoryName,
 					parent.slug,
@@ -684,7 +714,7 @@ export class ReferenceService {
 			title: view.workspace.title,
 			observedRevision: stored.observedRevision,
 			currentRevision: view.workspace.revision,
-			href: researchWorkspacePath(
+			href: legacyResearchPath(
 				parent.repositoryOwner,
 				parent.repositoryName,
 				parent.slug,

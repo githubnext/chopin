@@ -11,11 +11,7 @@ import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
 import { canManageProject } from "./navigation-model";
 import { MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
-import {
-	childDocumentPath,
-	documentPath,
-	researchWorkspacePath,
-} from "@chopin/protocol/document-url";
+import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
 
 import { useId, useRef, useState } from "react";
 import { CaretDownIcon, CaretRightIcon } from "@phosphor-icons/react";
@@ -23,7 +19,6 @@ import type * as Api from "./api";
 import type { DocumentAction } from "./document-actions-menu";
 import type { ProjectDocuments } from "./document-actions";
 import type { ReactNode } from "react";
-import type { ResearchChannelGroup } from "./research-navigation";
 
 export function NavigationIcon(
 	{ alt = "", className, src }: { alt?: string; className?: string; src: string },
@@ -39,14 +34,6 @@ export function toggleCollapsedProjectIds(
 	if (next.has(repositoryId)) next.delete(repositoryId);
 	else next.add(repositoryId);
 	return next;
-}
-
-export function newestResearchFirst(
-	workspaces: ResearchChannelGroup["workspaces"],
-): ResearchChannelGroup["workspaces"] {
-	return [...workspaces].sort((first, second) =>
-		second.createdAt.localeCompare(first.createdAt) || second.id.localeCompare(first.id)
-	);
 }
 
 export function documentGroups(
@@ -73,27 +60,21 @@ function Project(
 		archiveMode,
 		creatingProjectIds,
 		currentDocumentId,
-		currentResearchWorkspaceId,
 		entry,
 		expanded,
 		onCreateDocument,
 		onDocumentAction,
 		onLoadMore,
-		onNewResearch,
-		research,
 		onToggle,
 	}: {
 		archiveMode: boolean;
 		creatingProjectIds: ReadonlySet<string>;
 		currentDocumentId?: string;
-		currentResearchWorkspaceId?: string;
 		entry: ProjectDocuments;
 		expanded: boolean;
 		onCreateDocument: (project: Api.NavigationProject) => void;
 		onDocumentAction: (channel: Api.Channel, action: DocumentAction) => void;
 		onLoadMore: (entry: ProjectDocuments) => void;
-		onNewResearch?: (channel: Api.Channel) => void;
-		research: ReadonlyMap<string, ResearchChannelGroup>;
 		onToggle: () => void;
 	},
 ) {
@@ -118,12 +99,8 @@ function Project(
 			{groups.length > 0 && (
 				<ul className="project-sidebar-documents">
 					{groups.map(({ children, parent: channel }) => {
-						let researchWorkspaces = newestResearchFirst(
-							research.get(channel.id)?.workspaces ?? [],
-						);
 						let parentCurrent = currentDocumentId === channel.id;
 						let childCurrent = children.some(child => child.id === currentDocumentId);
-						let researchCurrent = parentCurrent && currentResearchWorkspaceId !== undefined;
 						let parentHref = documentPath(
 							channel.repositoryOwner,
 							channel.repositoryName,
@@ -133,15 +110,15 @@ function Project(
 							<li className="group/document" key={channel.id}>
 								<div
 									className={`project-sidebar-document ${
-										parentCurrent && !researchCurrent
+										parentCurrent
 											? "project-sidebar-document-current"
-											: researchCurrent || childCurrent
+											: childCurrent
 											? "project-sidebar-document-ancestor"
 											: ""
 									}`}
 								>
 									<a
-										aria-current={parentCurrent && !researchCurrent ? "page" : undefined}
+										aria-current={parentCurrent ? "page" : undefined}
 										className="project-sidebar-document-link min-w-0 flex-1 text-left text-sm font-medium"
 										href={parentHref}
 									>
@@ -156,16 +133,6 @@ function Project(
 									</a>
 									{canManage && (
 										<div className="project-sidebar-document-actions">
-											{onNewResearch && !channel.archivedAt && (
-												<button
-													aria-label={`New research in ${channel.title}`}
-													className="project-sidebar-document-action"
-													onClick={() => onNewResearch(channel)}
-													type="button"
-												>
-													<NavigationIcon className="h-auto w-3.5" src={searchIcon} />
-												</button>
-											)}
 											<DocumentActionsMenu
 												channel={channel}
 												className="project-sidebar-document-action"
@@ -218,33 +185,6 @@ function Project(
 												</li>
 											);
 										})}
-									</ul>
-								)}
-								{researchWorkspaces.length > 0 && (
-									<ul className="project-sidebar-research">
-										{researchWorkspaces.map(workspace => (
-											<li key={workspace.id}>
-												<a
-													aria-current={parentCurrent
-															&& currentResearchWorkspaceId === workspace.id
-														? "page"
-														: undefined}
-													className={`project-sidebar-research-link ${
-														parentCurrent && currentResearchWorkspaceId === workspace.id
-															? "project-sidebar-research-current"
-															: ""
-													}`}
-													href={researchWorkspacePath(
-														channel.repositoryOwner,
-														channel.repositoryName,
-														channel.slug,
-														workspace.id,
-													)}
-												>
-													{workspace.title}
-												</a>
-											</li>
-										))}
 									</ul>
 								)}
 							</li>
@@ -323,19 +263,16 @@ export function ProjectSidebar(
 		creatingNewDocument,
 		creatingProjectIds,
 		currentDocumentId,
-		currentResearchWorkspaceId,
 		onAccount,
 		onAddProject,
 		onCollapse,
 		onCreateDocument,
 		onDocumentAction,
 		onLoadMore,
-		onNewResearch,
 		onNewDocument,
 		onSearch,
 		onCatalogueModeChange,
 		projects,
-		research = new Map(),
 		catalogueMode,
 		user,
 	}: {
@@ -346,19 +283,16 @@ export function ProjectSidebar(
 		creatingNewDocument: boolean;
 		creatingProjectIds: ReadonlySet<string>;
 		currentDocumentId?: string;
-		currentResearchWorkspaceId?: string;
 		onAccount: () => void;
 		onAddProject: () => void;
 		onCollapse: () => void;
 		onCreateDocument: (project: Api.NavigationProject) => void;
 		onDocumentAction: (channel: Api.Channel, action: DocumentAction) => void;
 		onLoadMore: (entry: ProjectDocuments) => void;
-		onNewResearch?: (channel: Api.Channel) => void;
 		onNewDocument: () => void;
 		onSearch: () => void;
 		onCatalogueModeChange: (mode: "active" | "archived") => void;
 		projects: ProjectDocuments[];
-		research?: ReadonlyMap<string, ResearchChannelGroup>;
 		user: Api.User;
 	},
 ) {
@@ -467,15 +401,12 @@ export function ProjectSidebar(
 									archiveMode={archiveMode}
 									creatingProjectIds={creatingProjectIds}
 									currentDocumentId={currentDocumentId}
-									currentResearchWorkspaceId={currentResearchWorkspaceId}
 									entry={entry}
 									expanded={!collapsedProjectIds.has(entry.project.repositoryId)}
 									key={entry.project.repositoryId}
 									onCreateDocument={onCreateDocument}
 									onDocumentAction={onDocumentAction}
 									onLoadMore={onLoadMore}
-									onNewResearch={archiveMode ? undefined : onNewResearch}
-									research={research}
 									onToggle={() =>
 										setCollapsedProjectIds(current =>
 											toggleCollapsedProjectIds(current, entry.project.repositoryId)
