@@ -1,13 +1,13 @@
 /** Reader-local comment chrome overlays rather than mutates collaborative prose. */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { ChatCircleIcon } from "@phosphor-icons/react";
 import { useCellValue } from "@mdxeditor/gurx";
 
 import { DraftCard, ThreadCard } from "./comments";
-import { markerPoints, popoverPoint } from "./comment-geometry";
+import { markerPoints, markerRect, popoverPoint } from "./comment-geometry";
 import { containsHit, passageHits } from "./comment-hits";
 import { useCommentSheetReveal } from "./comment-sheet-reveal";
 import { $rangeOf } from "./marks";
@@ -57,8 +57,53 @@ type PreviewValue = {
 	view: ThreadView;
 };
 
-function previewKey(request: PreviewRequest): string {
-	return `${request.id}:${request.width}:${request.view.quote}:${request.view.thread.notes.length}`;
+type PreviewMeasurement = {
+	height: number;
+	id: string;
+	noteCount: number;
+	quote: string;
+	width: number;
+};
+
+function previewHeight(
+	request: PreviewRequest | undefined,
+	measurement: PreviewMeasurement | undefined,
+): number | undefined {
+	return request
+			&& measurement?.id === request.id
+			&& measurement.width === request.width
+			&& measurement.quote === request.view.quote
+			&& measurement.noteCount === request.view.thread.notes.length
+		? measurement.height
+		: undefined;
+}
+
+function placedPreview(
+	request: PreviewRequest | undefined,
+	measurement: PreviewMeasurement | undefined,
+): PreviewValue | undefined {
+	let height = previewHeight(request, measurement);
+	if (!request || height === undefined) return undefined;
+	let point = popoverPoint(
+		markerRect(request.button, request.page, request.size),
+		request.page,
+		request.width,
+		height,
+	);
+	let originX = point.left >= request.button.left ? 0 : request.width;
+	let originY = Math.min(
+		height,
+		Math.max(0, request.button.top + request.size / 2 - point.top),
+	);
+	return {
+		id: request.id,
+		style: {
+			...point,
+			transformOrigin: `${originX}px ${originY}px`,
+			width: request.width,
+		},
+		view: request.view,
+	};
 }
 
 function PreviewContent({ view }: { view: ThreadView }) {
@@ -74,66 +119,24 @@ function PreviewContent({ view }: { view: ThreadView }) {
 function PreviewSurface(
 	{
 		immediately,
-		onReady,
+		onMeasure,
 		request,
+		value,
 	}: {
 		immediately: boolean;
-		onReady: (key: string) => void;
+		onMeasure: (request: PreviewRequest, height: number) => void;
 		request?: PreviewRequest;
+		value?: PreviewValue;
 	},
 ) {
-	let [measurement, setMeasurement] = useState<{ height: number; key: string }>();
-	let frame = useRef<number | undefined>(undefined);
-	let key = request ? previewKey(request) : undefined;
-	let measured = request && measurement?.key === key ? measurement?.height : undefined;
-	let value = useMemo<PreviewValue | undefined>(() => {
-		if (!request || measured === undefined) return undefined;
-		let point = popoverPoint(
-			{
-				top: request.page.top + request.button.top,
-				left: request.page.left + request.button.left,
-				right: request.page.left + request.button.left + request.size,
-				bottom: request.page.top + request.button.top + request.size,
-				width: request.size,
-				height: request.size,
-			},
-			request.page,
-			request.width,
-			measured,
-		);
-		let originX = point.left >= request.button.left ? 0 : request.width;
-		let originY = Math.min(
-			measured,
-			Math.max(0, request.button.top + request.size / 2 - point.top),
-		);
-		return {
-			id: request.id,
-			style: {
-				...point,
-				transformOrigin: `${originX}px ${originY}px`,
-				width: request.width,
-			},
-			view: request.view,
-		};
-	}, [measured, request]);
+	let measurementElement = useRef<HTMLDivElement>(null);
 	let lifecycle = useCommentPresence(value, 150, immediately);
-	let measure = useCallback((element: HTMLDivElement | null) => {
-		if (!element || !key) return;
-		cancelAnimationFrame(frame.current ?? 0);
-		let height = element.offsetHeight;
-		if (height <= 0) return;
-		frame.current = requestAnimationFrame(() => {
-			setMeasurement(current =>
-				current?.key === key && current.height === height
-					? current
-					: { height, key }
-			);
-			onReady(key);
-		});
-	}, [key, onReady]);
-	useEffect(() => () => cancelAnimationFrame(frame.current ?? 0), []);
+	useLayoutEffect(() => {
+		let element = measurementElement.current;
+		if (request && element) onMeasure(request, element.offsetHeight);
+	}, [onMeasure, request]);
 
-	let measuring = !!request && measured === undefined;
+	let measuring = !!request && value === undefined;
 	if (!measuring && lifecycle.presence.phase === "closed") return null;
 	let preview = lifecycle.presence.phase === "closed" ? undefined : lifecycle.presence.value;
 	return (
@@ -143,7 +146,7 @@ function PreviewSurface(
 					aria-hidden="true"
 					className="plan-comment-preview"
 					inert
-					ref={measure}
+					ref={measurementElement}
 					style={{ left: 0, top: 0, visibility: "hidden", width: request.width }}
 				>
 					<PreviewContent view={request.view} />
@@ -156,6 +159,7 @@ function PreviewSurface(
 					data-motion-immediate={immediately || undefined}
 					id={preview.id}
 					inert={lifecycle.inert}
+					key={preview.id}
 					role="tooltip"
 					style={preview.style}
 				>
@@ -250,7 +254,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let [host, setHost] = useState<HTMLElement>();
 	let [placed, setPlaced] = useState<PlacedThread[]>([]);
 	let [preview, setPreview] = useState<string>();
-	let [readyPreview, setReadyPreview] = useState<string>();
+	let [previewMeasurement, setPreviewMeasurement] = useState<PreviewMeasurement>();
 	let [pinned, setPinned] = useState<string>();
 	let [coarse, setCoarse] = useState(false);
 	let [cardHeights, setCardHeights] = useState<{ [id: string]: number }>({});
@@ -267,6 +271,24 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let compact = options.commentPresentation === "sheet";
 	let immediately = options.motionImmediately?.() ?? false;
 	let draft = canEdit ? state.draft : undefined;
+	let measurePreview = useCallback((request: PreviewRequest, height: number) => {
+		if (height <= 0) {
+			setPreviewMeasurement(undefined);
+			if (preview === request.view.thread.id) {
+				setPreview(undefined);
+				store.focus(undefined);
+			}
+			return;
+		}
+		let next = {
+			height,
+			id: request.id,
+			noteCount: request.view.thread.notes.length,
+			quote: request.view.quote,
+			width: request.width,
+		};
+		setPreviewMeasurement(current => previewHeight(request, current) === height ? current : next);
+	}, [preview, store]);
 
 	useEffect(() => {
 		setHost(document.querySelector<HTMLElement>(".plan-document") ?? undefined);
@@ -612,7 +634,8 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			width: previewWidth,
 		}
 		: undefined;
-	let activePreviewKey = previewRequest ? previewKey(previewRequest) : undefined;
+	let previewValue = placedPreview(previewRequest, previewMeasurement);
+	let activePreviewId = previewValue?.id;
 
 	return createPortal(
 		<div className="plan-comment-layer" data-plan-comment-sheet={compact || undefined} ref={root}>
@@ -620,14 +643,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 				let shown = pinned === view.thread.id;
 				let previewId = `plan-comment-preview-${view.thread.id}`;
 				let cardPoint = popoverPoint(
-					{
-						top: page.top + button.top,
-						left: page.left + button.left,
-						right: page.left + button.left + (coarse ? 44 : 24),
-						bottom: page.top + button.top + (coarse ? 44 : 24),
-						width: coarse ? 44 : 24,
-						height: coarse ? 44 : 24,
-					},
+					markerRect(button, page, coarse ? 44 : 24),
 					page,
 					cardWidth,
 					cardHeights[view.thread.id] ?? 0,
@@ -646,7 +662,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 						<button
 							aria-label={`Comment on “${view.quote}”. ${replyState(view)}`}
 							aria-controls={shown ? `plan-comment-thread-${view.thread.id}` : undefined}
-							aria-describedby={preview === view.thread.id && activePreviewKey === readyPreview
+							aria-describedby={preview === view.thread.id && activePreviewId === previewId
 									&& !shown
 								? previewId
 								: undefined}
@@ -690,8 +706,9 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 
 			<PreviewSurface
 				immediately={immediately}
-				onReady={setReadyPreview}
+				onMeasure={measurePreview}
 				request={previewRequest}
+				value={previewValue}
 			/>
 
 			<CommentSurface

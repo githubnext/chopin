@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { markerPoints, popoverPoint } from "./comment-geometry";
+import { markerPoints, markerRect, popoverPoint } from "./comment-geometry";
 
 import type { Rect } from "./comment-geometry";
 
@@ -217,6 +217,17 @@ test("places a popover to the left when the right side lacks room", () => {
 	);
 
 	expect(point).toEqual({ top: 160, left: 432 });
+});
+
+test("resolves a marker point into its canonical page rectangle", () => {
+	expect(markerRect({ top: 80, left: 428 }, host, 24)).toEqual({
+		top: 180,
+		right: 552,
+		bottom: 204,
+		left: 528,
+		width: 24,
+		height: 24,
+	});
 });
 
 test("keeps a tall popover inside the document bottom edge", () => {

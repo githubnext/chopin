@@ -104,6 +104,18 @@ test("document action menu motion settles keyboard opening immediately", async (
 	await expect(page.getByRole("menuitem", { name: "Archive", exact: true })).toBeFocused();
 });
 
+test("document action menu closes when placement cannot be measured", async ({ join }) => {
+	let page = await join("ana");
+	let trigger = headerActions(page);
+	await page.addStyleTag({ content: ".document-actions-menu { display: none !important; }" });
+
+	await trigger.click();
+
+	await expect(trigger).toHaveAttribute("aria-expanded", "false");
+	await expect(trigger).toBeFocused();
+	await expect(page.locator(".document-actions-menu")).toHaveCount(0);
+});
+
 test("the room header renames the current document and the sidebar creates one immediately", async ({ join }) => {
 	let page = await join("ana");
 	let header = page.getByRole("banner");
