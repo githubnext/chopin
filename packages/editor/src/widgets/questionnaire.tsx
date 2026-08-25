@@ -7,6 +7,7 @@
  * the source reads correctly on its own.
  */
 
+import { useEffect, useRef, useState } from "react";
 import { QuestionView, useQuestionnaire } from "@chopin/question/react";
 import { useCellValue } from "@mdxeditor/gurx";
 
@@ -14,6 +15,7 @@ import { Provenance, SidecarCard } from "../card";
 import { ContentSwapLayer } from "../content-swap";
 import { widgets$ } from "../widget-options";
 
+import type { ReactNode } from "react";
 import type { Transport } from "@chopin/question/react";
 import type { Answer } from "@chopin/question";
 import type { Questionnaire, QuestionnaireNode } from "@chopin/dialect";
@@ -97,6 +99,58 @@ type Pointing = {
 	onQuestionSelect?: (question: string) => void;
 };
 
+type QuestionStep = { children: ReactNode; question: string };
+
+function QuestionStepSwap(
+	{ children, motion, question }: {
+		children: ReactNode;
+		motion: QuestionStepMotion;
+		question: string;
+	},
+) {
+	let current = useRef<QuestionStep>({ children, question });
+	let immediately = motion.immediately();
+	let [presented, setPresented] = useState(question);
+	let [active, setActive] = useState(question);
+	let [outgoing, setOutgoing] = useState<QuestionStep>();
+	if (presented !== question) {
+		setOutgoing(current.current);
+		setPresented(question);
+		if (immediately) setActive(question);
+	}
+	current.current = { children, question };
+	useEffect(() => {
+		if (active !== question) setActive(question);
+	}, [active, question]);
+
+	return (
+		<div className="question-step-swap content-swap-stack">
+			{outgoing && (
+				<ContentSwapLayer
+					active={false}
+					className="question-step-layer"
+					immediately={immediately}
+					key={outgoing.question}
+					motion={motion.contract}
+					onClosed={() =>
+						setOutgoing(step => step?.question === outgoing.question ? undefined : step)}
+				>
+					{outgoing.children}
+				</ContentSwapLayer>
+			)}
+			<ContentSwapLayer
+				active={active === presented}
+				className="question-step-layer"
+				immediately={immediately}
+				key={presented}
+				motion={motion.contract}
+			>
+				{children}
+			</ContentSwapLayer>
+		</div>
+	);
+}
+
 function Undecided(
 	{ canEdit, connected, motion, value, wire, ...pointing }:
 		& {
@@ -136,16 +190,10 @@ function Undecided(
 				onChange={editable ? state.change : undefined}
 				onSubmit={editable ? state.submit : undefined}
 				renderStep={motion
-					? ({ active, children, question }) => (
-						<ContentSwapLayer
-							active={active}
-							className="question-step-layer"
-							immediately={motion.immediately()}
-							key={question}
-							motion={motion.contract}
-						>
+					? ({ children, question }) => (
+						<QuestionStepSwap motion={motion} question={question}>
 							{children}
-						</ContentSwapLayer>
+						</QuestionStepSwap>
 					)
 					: undefined}
 				status="open"

@@ -23,7 +23,7 @@ test("a replacement definition falls back before rendering when its active quest
 	expect(currentQuestion({ questions: [storage, scope] }, "removed")).toBe(storage);
 });
 
-test("a host renderer receives every stable question id with one active step", () => {
+test("a host renderer receives only the active question panel", () => {
 	let definition = {
 		questions: [
 			{
@@ -42,19 +42,17 @@ test("a host renderer receives every stable question id with one active step", (
 			},
 		],
 	};
-	let steps: { active: boolean; question: string }[] = [];
+	let steps: string[] = [];
 
-	renderToStaticMarkup(createElement(QuestionView, {
+	let markup = renderToStaticMarkup(createElement(QuestionView, {
 		definition,
 		drafts: {},
-		renderStep: ({ active, children, question }) => {
-			steps.push({ active, question });
+		renderStep: ({ children, question }) => {
+			steps.push(question);
 			return children;
 		},
 	}));
 
-	expect(steps).toEqual([
-		{ active: true, question: "storage" },
-		{ active: false, question: "scope" },
-	]);
+	expect(steps).toEqual(["storage"]);
+	expect(markup).not.toContain("content-swap-stack");
 });
