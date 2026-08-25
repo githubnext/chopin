@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { documentPath } from "@chopin/protocol/document-url";
 import {
 	advanceDecisionView,
 	countUnanswered,
@@ -176,6 +177,8 @@ export function RoomWorkspace(
 		updatedAt,
 	});
 	let metadataRef = useRef(metadata);
+	let repositoryRef = useRef(repository);
+	repositoryRef.current = repository;
 	let user = useMemo(() => cursor(handle), [handle]);
 	let mode = useWorkspaceMode();
 	let workspaceIds = useWorkspaceIds();
@@ -228,10 +231,22 @@ export function RoomWorkspace(
 		let metadata = newestDocumentMetadata(metadataRef.current, next);
 		metadataRef.current = metadata;
 		setMetadata(metadata);
-		rememberChannel(userId, { id: room, title: metadata.title, slug: metadata.slug }, repository);
+		let currentRepository = repositoryRef.current;
+		rememberChannel(
+			userId,
+			{ id: room, title: metadata.title, slug: metadata.slug },
+			currentRepository,
+		);
 		onDocumentChanged(room, metadata);
-		onMetadataChanged?.(metadata);
-	}, [onDocumentChanged, onMetadataChanged, repository, room, userId]);
+		if (onMetadataChanged) {
+			onMetadataChanged(metadata);
+			return;
+		}
+		let path = documentPath(currentRepository.owner, currentRepository.name, metadata.slug);
+		if (location.pathname !== path) {
+			history.replaceState(history.state, "", `${path}${location.search}${location.hash}`);
+		}
+	}, [onDocumentChanged, onMetadataChanged, room, userId]);
 
 	useEffect(() => {
 		setDecisionView(state => advanceDecisionView(state, hasPlanContent, unanswered));
@@ -381,7 +396,6 @@ export function RoomWorkspace(
 		onRepositoryAccessChanged,
 		research,
 		researchEnabled,
-		repository,
 		room,
 		surface,
 		threads,

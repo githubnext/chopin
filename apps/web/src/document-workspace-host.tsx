@@ -120,6 +120,7 @@ export default function DocumentWorkspaceHost(
 	routeRef.current = route;
 	let error = state.error;
 	let presentation = state.presentation;
+	let previousPresentation = useRef(presentation);
 	let parentScrollTop = useRef<number | undefined>(undefined);
 	let parentSurface = useRef<HTMLDivElement>(null);
 
@@ -198,6 +199,16 @@ export default function DocumentWorkspaceHost(
 		if (presentation === "closed") parentScrollTop.current = undefined;
 	}, [loaded, presentation]);
 
+	useLayoutEffect(() => {
+		let previous = previousPresentation.current;
+		previousPresentation.current = presentation;
+		let current = stateRef.current;
+		let parentId = current.status === "ready" ? current.loaded.parent.channel.id : undefined;
+		if (previous === "closing" && presentation === "closed" && parentId) {
+			onParentRestored(parentId);
+		}
+	}, [onParentRestored, presentation]);
+
 	useEffect(() => {
 		send({ route, type: "route" });
 	}, [route, send]);
@@ -205,13 +216,10 @@ export default function DocumentWorkspaceHost(
 	useEffect(() => {
 		if (presentation !== "closing") return;
 		let timer = window.setTimeout(() => {
-			let current = stateRef.current;
-			let parentId = current.status === "ready" ? current.loaded.parent.channel.id : undefined;
 			send({ type: "closed" });
-			if (parentId) onParentRestored(parentId);
 		}, 190);
 		return () => window.clearTimeout(timer);
-	}, [onParentRestored, presentation, send]);
+	}, [presentation, send]);
 
 	useEffect(() => {
 		if (presentation !== "open") return;
