@@ -249,6 +249,12 @@ test("inline research publishes one ordinary child and opens its isolated worksp
 	let opened = await opening;
 	let parent = opened.locator(`[data-workspace-room="${room}"]`);
 	let sidebar = opened.getByRole("complementary", { name: "Projects" });
+	let childHrefs = () =>
+		sidebar.getByRole("link").evaluateAll(links =>
+			links
+				.map(link => (link as HTMLAnchorElement).href)
+				.filter(href => new URL(href).pathname.includes("/children/"))
+		);
 	let brief = "Compare the public evidence for deterministic child publication.";
 	let childTitle = `Lifecycle evidence ${room.slice(0, 8)}`;
 	let card = await startInlineResearch(opened, brief);
@@ -257,7 +263,8 @@ test("inline research publishes one ordinary child and opens its isolated worksp
 	await expect(card).toContainText(brief);
 	await expect(card.getByRole("button", { name: "Decisions", exact: true })).toHaveCount(0);
 	await expect(card.getByRole("complementary", { name: "Conversation" })).toHaveCount(0);
-	await expect(sidebar.getByRole("link", { name: childTitle, exact: true })).toHaveCount(0);
+	await expect.poll(childHrefs).toEqual([]);
+	expect(await countChildChannels(databasePort, room)).toBe(0);
 	await expect(opened).toHaveURL(url => !url.pathname.includes("/children/"));
 
 	research.advance(brief, "searching");
@@ -271,7 +278,8 @@ test("inline research publishes one ordinary child and opens its isolated worksp
 	await expect(card).not.toContainText("A complete report grounded in the discovered sources.");
 	research.advance(brief, "writing");
 	await expect(card.getByText("Writing", { exact: true })).toBeVisible();
-	await expect(sidebar.getByRole("link", { name: childTitle, exact: true })).toHaveCount(0);
+	await expect.poll(childHrefs).toEqual([]);
+	expect(await countChildChannels(databasePort, room)).toBe(0);
 
 	let readsBeforePublication = catalogueReads;
 	let child = await research.publish(brief, childTitle);
