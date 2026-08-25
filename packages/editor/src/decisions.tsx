@@ -6,17 +6,21 @@
  * making a long-lived room open below the questions that still need an answer.
  */
 
-import { useEffect, useRef, useState } from "react";
-import { CaretDownIcon, CaretRightIcon } from "@phosphor-icons/react";
+import { useEffect, useId, useRef, useState } from "react";
+import { CaretRightIcon } from "@phosphor-icons/react";
 
+import { MotionDisclosure, MotionDisclosureIcon } from "./disclosure-motion";
 import { useQuestionnaires } from "./questionnaires";
 import { QuestionnaireCard } from "./widgets/questionnaire";
 
 import type { Transport } from "@chopin/question/react";
+import type { MotionDisclosureContract } from "./disclosure-motion";
 import type { QuestionnaireEntry, QuestionnaireStore } from "./questionnaires";
 
 export type DecisionsProps = {
 	store: QuestionnaireStore;
+	motion: MotionDisclosureContract;
+	motionImmediately?: () => boolean;
 	wire?: Transport;
 	connected?: boolean;
 	headingId?: string;
@@ -49,7 +53,8 @@ function useHistory() {
 }
 
 export function Decisions(
-	{ connected, headingId, onShowPlan, reveal, store, wire }: DecisionsProps,
+	{ connected, headingId, motion, motionImmediately, onShowPlan, reveal, store, wire }:
+		DecisionsProps,
 ) {
 	let entries = useQuestionnaires(store);
 	let content = useRef<HTMLDivElement>(null);
@@ -57,6 +62,7 @@ export function Decisions(
 	let focusedQuestionnaire = useRef<HTMLElement | undefined>(undefined);
 	let revealed = useRef<number | undefined>(undefined);
 	let [history, setHistory] = useHistory();
+	let historyId = useId();
 
 	// Leaving the pane should not leave the prose lit. A highlight belongs to
 	// the pointer that asked for it, and a pin to the pane that set it.
@@ -153,23 +159,31 @@ export function Decisions(
 				{resolved > 0 && (
 					<div className={`min-w-0 ${outstanding > 0 ? "mt-3" : ""}`}>
 						<button
+							aria-controls={historyId}
 							aria-expanded={history}
 							className="btn btn-sm btn-ghost h-auto min-h-6 w-full flex-wrap justify-start gap-2 text-left"
 							data-press="wide"
 							onClick={() => setHistory(value => !value)}
 							type="button"
 						>
-							{history
-								? <CaretDownIcon aria-hidden="true" size={16} weight="bold" />
-								: <CaretRightIcon aria-hidden="true" size={16} weight="bold" />}
+							<MotionDisclosureIcon open={history}>
+								<CaretRightIcon size={16} weight="bold" />
+							</MotionDisclosureIcon>
 							<span className="tabular-nums">{resolved}</span>
 							<span>resolved</span>
 						</button>
-						{history && (
+						<MotionDisclosure
+							className="plan-decision-history-motion"
+							id={historyId}
+							immediately={motionImmediately?.() ?? false}
+							motion={motion}
+							open={history}
+							surface="decision-history"
+						>
 							<div className="mt-2 flex flex-col gap-3">
 								{settled.map(question)}
 							</div>
-						)}
+						</MotionDisclosure>
 					</div>
 				)}
 			</div>

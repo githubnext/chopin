@@ -426,11 +426,18 @@ test("decision cards save independently with progressive custom answers", async 
 	await expect(scope).not.toContainText("Answered by");
 	await expect(scope.getByRole("checkbox", { name: "Anchors" })).not.toBeChecked();
 
-	await page.getByRole("button", { name: "1 resolved" }).click();
+	let history = page.getByRole("button", { name: "1 resolved" });
+	await history.focus();
+	await page.keyboard.press("Space");
+	let historyContent = page.locator('[data-motion-disclosure="decision-history"]');
+	await expect(historyContent).toBeVisible();
+	await expect(historyContent).not.toHaveClass(/is-closing/);
 	let resolved = questionnaire(page).filter({ hasText: "Where should room state live?" });
 	await expect(resolved).toContainText("On disk as MDX");
 	await expect(resolved).toContainText("Answered by @ana");
 	await expect(resolved.getByRole("button", { name: "Save answer" })).toHaveCount(0);
+	await page.keyboard.press("Space");
+	await expect(historyContent).toHaveCount(0);
 
 	let customChoice = scope.getByRole("checkbox", { name: "Write a custom answer" });
 	await customChoice.focus();

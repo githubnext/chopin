@@ -5,6 +5,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { Decisions } from "./decisions";
 import { QuestionnaireStore } from "./questionnaires";
 
+import type { MotionDisclosureContract } from "./disclosure-motion";
+
 let original = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
 
 afterEach(() => {
@@ -41,10 +43,15 @@ function markup(stored?: string): string {
 		}],
 		hasPlanContent: true,
 	});
-	return renderToStaticMarkup(createElement(Decisions, { store }));
+	let motion: MotionDisclosureContract = { className: "motion-collapse", closeDuration: 250 };
+	return renderToStaticMarkup(createElement(Decisions, { motion, store }));
 }
 
 test("resolved history starts collapsed and restores an explicit open preference", () => {
 	expect(markup()).toContain('aria-expanded="false"');
-	expect(markup("true")).toContain('aria-expanded="true"');
+	let restored = markup("true");
+	expect(restored).toContain('aria-expanded="true"');
+	expect(restored).toMatch(/aria-controls="[^"]+"/);
+	expect(restored).toContain('data-motion-disclosure="decision-history"');
+	expect(restored.match(/class="motion-disclosure-icon"[^>]*data-open=""/g)).toHaveLength(1);
 });
