@@ -483,10 +483,34 @@ test("comment preview motion retains one tooltip through pointer interruption", 
 
 	let button = commentButton(page);
 	await expect(button).toBeVisible();
+	let firstMount = button.evaluate(
+		(marker, quote) =>
+			new Promise<{ describedBy: string | null; role: string | null; visibility: string }>(
+				resolve => {
+					let observer = new MutationObserver(() => {
+						let candidates = document.querySelectorAll<HTMLElement>(
+							'[aria-hidden="true"], [role="tooltip"]',
+						);
+						let preview = [...candidates].find(element =>
+							element.querySelector("p")?.textContent === quote
+						);
+						if (!preview) return;
+						observer.disconnect();
+						resolve({
+							describedBy: marker.getAttribute("aria-describedby"),
+							role: preview.getAttribute("role"),
+							visibility: getComputedStyle(preview).visibility,
+						});
+					});
+					observer.observe(document.body, { childList: true, subtree: true });
+				},
+			),
+		QUOTED,
+	);
 	let initial = page.evaluate(() =>
 		new Promise<{ opacity: string; transform: string }>(resolve => {
 			let observer = new MutationObserver(() => {
-				let tooltip = document.querySelector<HTMLElement>(".motion-comment-preview");
+				let tooltip = document.querySelector<HTMLElement>('[role="tooltip"]');
 				if (!tooltip) return;
 				observer.disconnect();
 				let style = getComputedStyle(tooltip);
@@ -496,10 +520,11 @@ test("comment preview motion retains one tooltip through pointer interruption", 
 		})
 	);
 	await button.hover();
-	let preview = page.locator(".motion-comment-preview");
+	expect(await firstMount).toEqual({ describedBy: null, role: null, visibility: "hidden" });
+	let preview = page.getByRole("tooltip", { includeHidden: true });
 	await expect(preview).toContainText(QUOTED);
 	expect(await initial).not.toEqual({ opacity: "1", transform: "none" });
-	await expect(preview).toHaveClass(/is-open/);
+	await expect(preview).toHaveCSS("opacity", "1");
 	let previewId = await preview.getAttribute("id");
 	expect(previewId).not.toBeNull();
 	await expect(button).toHaveAttribute("aria-describedby", previewId!);
@@ -521,10 +546,10 @@ test("comment preview motion retains one tooltip through pointer interruption", 
 	await expect(preview).toHaveAttribute("inert", "");
 
 	await button.hover();
-	await expect(page.locator(".motion-comment-preview")).toHaveCount(1);
+	await expect(page.getByRole("tooltip", { includeHidden: true })).toHaveCount(1);
 	await expect(preview).not.toHaveAttribute("aria-hidden", "true");
 	await expect(preview).not.toHaveAttribute("inert", "");
-	await expect(preview).toHaveClass(/is-open/);
+	await expect(preview).toHaveCSS("opacity", "1");
 });
 
 test("comment preview motion settles for keyboard and reactive reduced motion", async ({ join, seed }) => {
@@ -542,10 +567,24 @@ test("comment preview motion settles for keyboard and reactive reduced motion", 
 
 	await button.evaluate(element => element.blur());
 	await page.emulateMedia({ reducedMotion: "no-preference" });
-	await page.getByRole("button", { name: "Document", exact: true }).click();
+	let pointerEntry = page.evaluate(() =>
+		new Promise<{ opacity: string; transitionDuration: string }>(resolve => {
+			let observer = new MutationObserver(() => {
+				let tooltip = document.querySelector<HTMLElement>('[role="tooltip"]');
+				if (!tooltip) return;
+				observer.disconnect();
+				let style = getComputedStyle(tooltip);
+				resolve({ opacity: style.opacity, transitionDuration: style.transitionDuration });
+			});
+			observer.observe(document.body, { childList: true, subtree: true });
+		})
+	);
 	await button.hover();
-	preview = page.locator(".motion-comment-preview");
-	await expect(preview).toHaveClass(/is-open/);
+	let pointerStart = await pointerEntry;
+	expect(pointerStart.opacity).not.toBe("1");
+	expect(pointerStart.transitionDuration).not.toBe("0s");
+	preview = page.getByRole("tooltip", { includeHidden: true });
+	await expect(preview).toHaveCSS("opacity", "1");
 	let closing = preview.evaluate(element =>
 		new Promise<void>(resolve => {
 			let observer = new MutationObserver(() => {

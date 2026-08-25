@@ -282,9 +282,9 @@ test("the compact side of the Projects transition keeps phone navigation", async
 test("the wide side of the Projects transition uses the inline sidebar", async ({ join, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", { viewport: { width: 1024, height: 768 } });
-	let projects = page.getByRole("complementary", { name: "Projects" });
+	let projects = page.getByRole("complementary", { includeHidden: true, name: "Projects" });
 	let opener = page.getByRole("button", { name: "Open Projects sidebar" });
-	let track = page.locator(".motion-sidebar");
+	let track = projects.locator("../..");
 	await expect(projects).toBeVisible();
 	await expect(opener).toHaveCount(0);
 	await expect(page.getByRole("navigation", { name: "Workspace view" })).toHaveCount(0);
@@ -309,7 +309,7 @@ test("the wide side of the Projects transition uses the inline sidebar", async (
 	await opener.click();
 	await expect(projects).toBeVisible();
 	await page.getByRole("button", { name: "Collapse Projects sidebar" }).click();
-	await expect(track).toHaveClass(/is-closing/);
+	await expect(track).toHaveAttribute("aria-hidden", "true");
 	await opener.click();
 	await expect(track).not.toHaveAttribute("aria-hidden", "true");
 	await expect(track).not.toHaveAttribute("inert", "");
