@@ -116,7 +116,7 @@ let NavigationDocument = createContext<{
 	) => void;
 	onDocumentAction: (action: DocumentAction) => void;
 	onDocumentDeleted: (documentId: string) => void;
-	onDocumentLoaded: (channel: Api.Channel) => Promise<void>;
+	onDocumentLoaded: (channel: Api.Channel, routeKey: string) => Promise<void>;
 	onRepositoryAccessChanged: () => void;
 	onResearchWorkspaceChanged: (
 		channel: Api.ResearchParentChannel,
@@ -416,13 +416,13 @@ export function NavigationShell(
 		navigationRef.current = next;
 		setNavigation(next);
 	}, []);
-	let documentLoaded = useCallback(async (channel: Api.Channel) => {
+	let documentLoaded = useCallback(async (channel: Api.Channel, loadedRouteKey: string) => {
 		let resolved = resolvedDocumentRef.current;
 		let loaded = {
-			channel: resolved?.routeKey === routeKey && resolved.channel.id === channel.id
+			channel: resolved?.routeKey === loadedRouteKey && resolved.channel.id === channel.id
 				? newestDocument(resolved.channel, channel)
 				: channel,
-			routeKey,
+			routeKey: loadedRouteKey,
 		};
 		resolvedDocumentRef.current = loaded;
 		setResolvedDocument(loaded);
@@ -436,7 +436,7 @@ export function NavigationShell(
 		try {
 			await visited;
 		} catch (reason) {
-			if (currentRouteKey.current === routeKey) setError({ reason, retry: "visit" });
+			if (currentRouteKey.current === loadedRouteKey) setError({ reason, retry: "visit" });
 			return;
 		}
 		setError(current => current?.retry === "visit" ? undefined : current);
@@ -458,7 +458,7 @@ export function NavigationShell(
 			pendingVisitedRepository.current = channel.repositoryId;
 			await refresh();
 		}
-	}, [clearLastDocument, refresh, routeKey, upsertDocument]);
+	}, [clearLastDocument, refresh, upsertDocument]);
 	let documentChanged = useCallback((
 		documentId: string,
 		update: DocumentMetadata,
@@ -729,7 +729,7 @@ export function NavigationShell(
 	let retryError = () => {
 		if (!error) return;
 		if (error.retry === "visit" && currentChannelRef.current) {
-			void documentLoaded(currentChannelRef.current);
+			void documentLoaded(currentChannelRef.current, currentRouteKey.current);
 		} else void refresh();
 	};
 	let dismissDrawer = () => {
