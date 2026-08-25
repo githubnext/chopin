@@ -9,6 +9,12 @@ export { advanceDecisionView, countUnanswered, visibleDecisionView } from "./dec
 export type { DecisionView, DecisionViewState, OpeningPhase } from "./decision-state";
 export { Decisions } from "./decisions";
 export type { DecisionsProps } from "./decisions";
+export {
+	disclosureAccessibility,
+	MotionDisclosure,
+	MotionDisclosureIcon,
+} from "./disclosure-motion";
+export type { MotionDisclosureContract } from "./disclosure-motion";
 export { AgentFace, Face } from "./face";
 export type { FaceProps } from "./face";
 export { aggregateJobs, canCancelJob, currentJobs, JobStore, useJobs } from "./jobs";
