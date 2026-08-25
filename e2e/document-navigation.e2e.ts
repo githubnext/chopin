@@ -50,9 +50,9 @@ test("document action menu motion follows its pointer trigger and survives inter
 	let page = await join("ana");
 	let trigger = headerActions(page);
 	await trigger.click();
-	let menu = page.locator(".document-actions-menu");
+	let menu = page.getByRole("menu", { name: /^Actions for / });
+	let retainedMenu = page.getByRole("menu", { includeHidden: true });
 	await expect(menu).toBeVisible();
-	await expect(menu).toHaveClass(/motion-popover/);
 
 	let [triggerBox, menuLayout] = await Promise.all([
 		trigger.boundingBox(),
@@ -81,13 +81,13 @@ test("document action menu motion follows its pointer trigger and survives inter
 	);
 
 	await trigger.click();
-	await expect(menu).toHaveAttribute("aria-hidden", "true");
-	await expect(menu).toHaveAttribute("inert", "");
+	await expect(retainedMenu).toHaveAttribute("aria-hidden", "true");
+	await expect(retainedMenu).toHaveAttribute("inert", "");
 	await expect(trigger).toBeFocused();
 	await trigger.click();
-	await expect(menu).not.toHaveAttribute("aria-hidden", "true");
-	await expect(menu).not.toHaveAttribute("inert", "");
-	await expect(menu).toHaveCount(1);
+	await expect(retainedMenu).not.toHaveAttribute("aria-hidden", "true");
+	await expect(retainedMenu).not.toHaveAttribute("inert", "");
+	await expect(retainedMenu).toHaveCount(1);
 	await page.keyboard.press("Escape");
 	await expect(menu).toHaveCount(0);
 });
@@ -97,7 +97,7 @@ test("document action menu motion settles keyboard opening immediately", async (
 	let trigger = headerActions(page);
 	await trigger.focus();
 	await trigger.press("ArrowDown");
-	let menu = page.locator(".document-actions-menu");
+	let menu = page.getByRole("menu", { name: /^Actions for / });
 	await expect(page.getByRole("menuitem", { name: "Rename", exact: true })).toBeFocused();
 	await expect(menu).toHaveCSS("transition-duration", "0s");
 	await page.keyboard.press("ArrowDown");

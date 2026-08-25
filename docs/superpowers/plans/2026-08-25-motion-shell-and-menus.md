@@ -51,16 +51,19 @@ import { describe, expect, it } from "bun:test";
 import { MOTION_STATES, motionContract } from "./motion-contract";
 
 describe("motion contracts", () => {
-	it("maps shell surfaces to one class, close duration, and shared states", () => {
+	it("maps every planned surface to one class, close duration, and expected states", () => {
 		expect(MOTION_STATES).toEqual(["", "is-open", "is-closing"]);
 		expect(motionContract("popover")).toEqual({
 			className: "motion-popover",
 			closeDuration: 150,
+			states: MOTION_STATES,
 		});
 		expect(motionContract("sidebar")).toEqual({
 			className: "motion-sidebar",
 			closeDuration: 180,
+			states: MOTION_STATES,
 		});
+		// Also assert collapse, content-swap, and feedback against their semantic tokens.
 	});
 });
 ```
@@ -74,16 +77,26 @@ Expected: FAIL because `./motion-contract` does not exist.
 - [ ] **Step 3: Add the minimal registry**
 
 ```ts
-export type MotionKind = "popover" | "sidebar";
+export type MotionKind = "collapse" | "content-swap" | "feedback" | "popover" | "sidebar";
 
 export const MOTION_STATES = ["", "is-open", "is-closing"] as const;
 
 let contracts = {
-	popover: { className: "motion-popover", closeDuration: 150 },
-	sidebar: { className: "motion-sidebar", closeDuration: 180 },
-} as const satisfies Record<MotionKind, { className: string; closeDuration: number }>;
+	collapse: { className: "motion-collapse", closeDuration: 250, states: MOTION_STATES },
+	"content-swap": {
+		className: "motion-content-swap",
+		closeDuration: 250,
+		states: MOTION_STATES,
+	},
+	feedback: { className: "motion-feedback", closeDuration: 180, states: MOTION_STATES },
+	popover: { className: "motion-popover", closeDuration: 150, states: MOTION_STATES },
+	sidebar: { className: "motion-sidebar", closeDuration: 180, states: MOTION_STATES },
+} as const satisfies Record<
+	MotionKind,
+	{ className: string; closeDuration: number; states: typeof MOTION_STATES }
+>;
 
-export function motionContract(kind: MotionKind): (typeof contracts)[MotionKind] {
+export function motionContract<Kind extends MotionKind>(kind: Kind): (typeof contracts)[Kind] {
 	return contracts[kind];
 }
 ```
@@ -289,11 +302,13 @@ Expected: all pass.
 
 - [ ] **Step 1: Write failing tooltip browser coverage**
 
-Extend the marked-passage preview test to assert pointer hover starts from a non-`1` opacity/scale,
-leaving removes `aria-describedby` immediately while the tooltip remains `aria-hidden` during its
-150ms exit, and re-hovering cancels that exit without mounting a second tooltip. Add keyboard focus
-and reduced-motion cases that assert `transitionDuration === "0s"`, including toggling reduced
-motion during an active exit and observing immediate unmount.
+Extend the marked-passage preview test to assert its first mount is hidden and unexposed until
+measurement succeeds, then pointer hover starts from a non-`1` opacity/scale. Leaving removes
+`aria-describedby` immediately while the tooltip remains `aria-hidden` during its 150ms exit, and
+re-hovering cancels that exit without mounting a second tooltip. Add a direct pointer-hover case
+after keyboard input, plus keyboard focus and reduced-motion cases that assert
+`transitionDuration === "0s"`, including toggling reduced motion during an active exit and
+observing immediate unmount.
 
 - [ ] **Step 2: Run the tooltip tests and verify red**
 
@@ -304,12 +319,14 @@ Expected: FAIL because previews mount and unmount immediately.
 
 - [ ] **Step 3: Move the preview to one presence-owned surface**
 
-Build one optional preview value from the active `preview` id after the existing geometry has been
-calculated. Render a `PreviewSurface` once per comment layer, not once per mapped thread. Inside it,
-call `useTransitionPresence(value, 150, immediately)`, keep the previous `ThreadView`, style, id,
-and measurement callback during closing, and set `aria-hidden`/`inert` immediately on exit. Keep
-`aria-describedby` tied to active preview intent so assistive technology never points at outgoing
-content.
+Build one optional preview request from the active `preview` id after marker geometry has been
+calculated. Render a `PreviewSurface` once per comment layer, not once per mapped thread. Mount a
+hidden, inert copy without tooltip semantics, measure its actual height, and only then create the
+placed presence value; never use a guessed height. Keep an unmeasurable preview hidden. Share the
+presence/accessibility lifecycle with comment surfaces through one focused local hook while keeping
+their distinct DOM APIs. During closing, retain the previous `ThreadView`, style, and id while
+setting `aria-hidden`/`inert` immediately. Add `aria-describedby` only after measurement succeeds so
+assistive technology never points at measuring or outgoing content.
 
 - [ ] **Step 4: Add the editor-owned tooltip CSS contract**
 
