@@ -9,11 +9,12 @@ runtime `STORAGE_DRIVER`.
 ## State model
 
 The database stores channel metadata, including archive state and generated
-description provenance, repository-scoped document slug aliases, collaboration
-recovery state, domain sidecars, token-free ownership references, Research
-Workspaces, durable background work, and the writer lease. GitHub tokens,
-browser-cookie verifiers, open rooms, Awareness presence, and Copilot SDK
-sessions never cross the storage boundary.
+description provenance and optional parent channel, repository-scoped document
+slug aliases, collaboration recovery state, domain sidecars, token-free ownership
+references, parent-scoped research request staging, durable background jobs,
+ordinary child channels, and the writer lease.
+GitHub tokens, browser-cookie verifiers, open rooms, Awareness presence, and
+Copilot SDK sessions never cross the storage boundary.
 
 The versioned sidecar is the atomic domain snapshot associated with a channel.
 It includes document sequence and plan revision counters, question and comment
@@ -44,11 +45,13 @@ Every adapter must provide:
 - expiring, token-free process-session registry rows;
 - startup removal of every registry row and Planner owner reference;
 - renewable leases whose fencing token protects commits, epoch replacements,
-  checkpoints, jobs, and Research Workspace mutations;
+  checkpoints, jobs, and research request mutations;
 - idempotent, independently revisioned publication of generated channel
   descriptions without changing collaboration revision or channel activity;
-- idempotent, ordered Research Workspace turns and messages with channel-local
-  job links; and
+- one-level, repository-local child relationships;
+- idempotent research request staging with channel-local job links;
+- atomic, idempotent publication of one initialized child and its request link;
+  and
 - distinct conflict, missing, corrupt, and unavailable failures.
 
 `collaboration.commit` can append a Yjs update, replace sidecar state, append
@@ -91,26 +94,31 @@ attempts, failures, and background-job channel revisions.
 The migration runner owns `chopin_migrations`, including a checksum for each
 applied migration. The application schema contains:
 
-| Table                      | Purpose                                                                                                                                    |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `users`                    | GitHub identity and attribution records.                                                                                                   |
-| `web_sessions`             | Token-free process-session IDs, user IDs, and expiry timestamps used by Planner ownership.                                                 |
-| `channels`                 | Repository identity, title, creator, archive and generated-description metadata, storage revision, next sequence, and activity timestamps. |
-| `channel_slugs`            | One canonical title-derived slug per channel plus retained repository-scoped historical aliases.                                           |
-| `channel_state`            | Current sidecar JSON for a channel.                                                                                                        |
-| `channel_snapshots`        | Complete Yjs checkpoint, canonical source, source hash, epoch, counters, and checkpoint sidecar.                                           |
-| `channel_operations`       | Per-channel operation idempotency and the revision and sequence assigned to each operation.                                                |
-| `channel_updates`          | Ordered post-checkpoint Yjs update journal.                                                                                                |
-| `channel_events`           | Ordered event capability in the adapter contract. Current collaboration commits do not use it for domain replay.                           |
-| `agent_state`              | Reserved Planner summary and transcript cursor, status, owner session reference, and ownership generation.                                 |
-| `storage_leases`           | Renewable named leases and fencing tokens.                                                                                                 |
-| `background_job_channels`  | Job-state revision per channel, independent of collaboration counters.                                                                     |
-| `background_job_targets`   | Current generation for each registered channel job target.                                                                                 |
-| `background_jobs`          | Versioned requests, lifecycle, attempts, fenced claims, bounded progress, inputs, and sanitized failures.                                  |
-| `background_job_artifacts` | Immutable validated results committed atomically with job completion.                                                                      |
-| `research_workspaces`      | Parent channel, private draft, confirmed query, attribution, revision, idempotency, and transcript counters.                               |
-| `research_turns`           | Ordered initial, private follow-up, and explicit search-more requests plus evidence and answer job links.                                  |
-| `research_messages`        | Ordered append-only member and validated agent messages for one workspace.                                                                 |
+| Table                      | Purpose                                                                                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `users`                    | GitHub identity and attribution records.                                                                                                                |
+| `web_sessions`             | Token-free process-session IDs, user IDs, and expiry timestamps used by Planner ownership.                                                              |
+| `channels`                 | Repository identity, optional parent channel, title, creator, archive and generated-description metadata, storage revision, next sequence, and timestamps. |
+| `channel_slugs`            | One canonical title-derived slug per channel plus retained repository-scoped historical aliases.                                                        |
+| `channel_state`            | Current sidecar JSON for a channel.                                                                                                                     |
+| `channel_snapshots`        | Complete Yjs checkpoint, canonical source, source hash, epoch, counters, and checkpoint sidecar.                                                        |
+| `channel_operations`       | Per-channel operation idempotency and the revision and sequence assigned to each operation.                                                             |
+| `channel_updates`          | Ordered post-checkpoint Yjs update journal.                                                                                                             |
+| `channel_events`           | Ordered event capability in the adapter contract. Current collaboration commits do not use it for domain replay.                                        |
+| `agent_state`              | Reserved Planner summary and transcript cursor, status, owner session reference, and ownership generation.                                              |
+| `storage_leases`           | Renewable named leases and fencing tokens.                                                                                                              |
+| `background_job_channels`  | Job-state revision per channel, independent of collaboration counters.                                                                                  |
+| `background_job_targets`   | Current generation for each registered channel job target.                                                                                              |
+| `background_jobs`          | Versioned requests, lifecycle, attempts, fenced claims, bounded progress, inputs, and sanitized failures.                                               |
+| `background_job_artifacts` | Immutable validated results committed atomically with job completion.                                                                                   |
+| `research_workspaces`      | Internal request staging: parent channel, exact brief fields, optional published child, attribution, revision, idempotency, and compatibility counters. |
+| `research_turns`           | Internal initial attempt and compatibility turns with evidence and answer job links.                                                                    |
+| `research_messages`        | Compatibility transcript rows retained for historical workspace references; not a current product thread.                                               |
+
+The `channels.parent_channel_id` foreign key records navigational containment.
+Storage rejects a parent from another repository and rejects a grandchild.
+`research_workspaces.published_channel_id` is unique and restricts deletion so
+a published request cannot silently lose its child link.
 
 Generated-description columns on `channels` are all absent or form one complete
 projection: value, independent description revision, source plan revision and
@@ -130,14 +138,17 @@ Channel `list` and `scan` operations exclude archived rows unless
 `includeArchived` is true. Direct UUID lookup and repository-scoped slug
 resolution do not apply that filter, so an archived document and its historical
 aliases remain readable. Navigation selection and repository-level Research
-Workspace listing apply the same active-only default.
+Workspace compatibility listing apply the same active-only default; the current
+browser does not use that listing as a product surface.
 
 Archive and restore lock and update the channel row and are no-ops when it is
 already in the requested state. Deletion also locks the row and refuses an
-active channel. Deleting the archived parent row is one transaction: foreign
+active channel. A parent cannot be deleted while it still has a child, and a
+published child cannot be deleted while its research request retains that
+link. Deleting an eligible archived channel is one transaction: foreign
 keys cascade every channel-owned sidecar, snapshot, journal, event, operation,
 Planner state, implementation state, slug, background job and artifact, and
-Research Workspace record. A saved navigation reference is set to null.
+research staging record. A saved navigation reference is set to null.
 
 Full deletion leaves no live tombstone. It removes historical aliases and the
 MCP creation idempotency identity, so former slugs can be reused and the same
@@ -157,12 +168,18 @@ Server-authored document edits, decisions, transcript entries, implementation gr
 changes, and lifecycle reports follow the same persistence-before-publication
 rule.
 
-Research Workspace mutations also commit before their parent-channel
+Research request mutations also commit before their parent-channel
 `research:changed` invalidation. Background artifacts remain the lifecycle
-authority for execution; workspace turns link those jobs rather than copying
-their state. A completed evidence job can be reconciled idempotently into its
-private answer job after interruption or the next workspace read. The complete
-job lifecycle and extension contract are documented in
+authority for execution; internal request staging links those jobs rather than
+copying their state. A completed evidence job can be reconciled idempotently
+into its private answer job after interruption or the next request read.
+
+When the initial answer artifact completes, publication locks the parent and
+request, verifies the current answer generation and artifact, creates a
+deterministic child channel with its complete revision-zero checkpoint, and
+sets `published_channel_id` in the same fenced transaction. A failed
+transaction exposes neither half. Repeating it returns the same child. The
+complete job lifecycle and extension contract are documented in
 [Background jobs and workers](background-jobs.md).
 
 A completed marked document-description artifact is likewise reconciled

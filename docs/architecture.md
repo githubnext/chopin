@@ -24,9 +24,12 @@ and [Self-hosting](self-hosting.md) for deployment.
 - A **plan** is a document being used for planning. It is not the product noun
   for every document.
 - A **room** is the server's live in-memory representation of an open channel.
-- A **Research Workspace** is a durable parent-scoped resource with a private
-  draft, immutable generated report, and append-only research thread. It is not
-  a channel or collaboratively edited document.
+- A **research request** is durable work attached to one parent document. While
+  pending, it is represented by an inline card rather than a channel, document,
+  conversation, decision set, navigation row, or browser route.
+- A **child document** is an ordinary channel attached to one top-level parent
+  for navigation and context. It owns its document, Conversation, and Decisions.
+  V1 does not allow grandchildren or child research.
 - The **Planner** is the current name of Chopin's hosted Copilot-backed document
   agent.
 - A **coding agent** is an external MCP client that creates or implements a
@@ -104,9 +107,9 @@ lifecycle mutations.
 
 ### Hosted agent
 
-The first eligible editor to invoke the Planner or start a new model-backed
-Research Workspace turn becomes that channel's Planner owner for the lifetime of
-the process session.
+The first eligible editor to invoke the Planner or start a model-backed research
+request becomes that channel's Planner owner for the lifetime of the process
+session.
 Permission callbacks recheck admission, session identity, credential revision,
 ownership generation, repository role, and App installation before execution.
 The Planner has bounded, repository-fixed read tools and no ambient checkout,
@@ -125,8 +128,9 @@ owner credential but fresh isolated sessions; see
   checkpoint;
 - background-job requests, normalized inputs, lifecycle and progress state, and
   immutable completed artifacts;
-- parent-scoped Research Workspaces, turns, messages, and links to immutable
-  background-job artifacts;
+- parent-scoped research request staging records, their internal initial turns,
+  links to immutable background-job artifacts, and an optional published child
+  channel link;
 - canonical MDX and a versioned sidecar containing questions, shared drafts,
   comments, decisions, transcript, relationships, creation metadata,
   implementation graphs, active execution, and run history;
@@ -187,7 +191,7 @@ not interchangeable:
 | Storage sequence           | Orders committed updates and events. Sidecar-only commits can create gaps in the Yjs update journal because they still consume a sequence.                    |
 | Description revision       | Orders generated catalogue-description projections. It advances independently and does not change collaboration counters or channel activity time.            |
 | Graph version and revision | Identify one implementation graph generation and the edits within its current draft. A claim also binds the exact plan revision.                              |
-| Research revision          | Orders durable workspace, turn, job-link, and transcript changes independently from the parent document, background-job channel revision, and job revisions.  |
+| Research revision          | Orders durable request, job-link, and internal staging changes independently from the parent document, background-job channel revision, and job revisions.    |
 
 Channel IDs, update IDs, operation IDs, component IDs, and lifecycle idempotency
 keys solve separate identity problems. See [Repository channels](channels.md) for
@@ -195,12 +199,13 @@ channel ID construction and [Experimental implementation lifecycle](implementati
 for graph counters.
 
 A channel UUID is the stable internal document identity used by storage, UUID
-API routes, WebSocket rooms, and MCP lifecycle mutations. The public browser
-identity is a repository-scoped, title-derived route:
-`/documents/:owner/:repository/:slug`. Slugs retain Unicode letters, numbers,
-and marks, add numeric suffixes for collisions, and keep every former canonical
-slug as an alias. Renaming changes the canonical route without changing the UUID
-or plan revision.
+API routes, WebSocket rooms, and MCP lifecycle mutations. A top-level browser
+document uses `/documents/:owner/:repository/:slug`; a child uses
+`/documents/:owner/:repository/:parentSlug/children/:childSlug`. Direct child
+entry loads both channels and rejects a repository or recorded-parent mismatch.
+Slugs retain Unicode letters, numbers, and marks, add numeric suffixes for
+collisions, and keep every former canonical slug as an alias. Renaming changes
+the canonical route without changing the UUID or plan revision.
 
 Browser creation `Location` headers and MCP `create_document.url` expose the
 readable route. MCP `read_document` and `read_implementation` bridge the two
@@ -208,6 +213,36 @@ identities by accepting either the canonical URL or UUID and returning the UUID;
 lifecycle calls continue to use that returned UUID. Legacy repository and UUID
 browser paths resolve through the existing internal routes before the browser
 replaces them with the canonical readable location.
+
+## Research requests and child publication
+
+Typing `/research` inserts a local composer into the parent document. Submitting
+it persists the exact brief and starts work immediately. The resulting
+`<Research id="…" />` block is only a reference: authoritative request state,
+job links, progress, sources, errors, and publication identity live in durable
+parent-scoped records. The parent WebSocket announces `research:changed`; the
+browser then refreshes that request over HTTP.
+
+The first worker sends only the submitted brief to public web search. After its
+evidence artifact validates, a separate private worker receives normalized
+evidence and a snapshot of the parent document, then writes the complete report.
+No partial report prose is published. Failure and cancellation create no child;
+an explicit retry keeps the request identity and immutable brief while replacing
+only its terminal job links.
+
+Successful reconciliation validates and converts the report to canonical MDX.
+One fenced storage transaction then creates a revision-zero child channel with
+complete Yjs and sidecar state and links that channel to the request. Until both
+writes commit, the card has no child URL and repository navigation has no child
+row. Reconciliation and publication are idempotent, so a restart or repeated
+read cannot publish a duplicate.
+
+The browser nests published children beneath their parent. Opening a ready card
+or nested row keeps the parent mounted but inert behind an anchored child
+surface. The child opens through its ordinary channel stack with its own
+Conversation and Decisions; closing, Escape, and browser Back restore the
+parent's history, scroll, selection, and opener focus. Compact layouts occupy
+the viewport, and reduced motion uses a crossfade.
 
 ## Collaborative document
 
@@ -381,12 +416,14 @@ transcript `summary` remain separate fields with separate purposes.
 
 ## Implementation graphs
 
-The hosted Planner can draft a versioned task graph against one plan revision in
-any channel. The supported MCP read-before-claim flow exposes graphs only when
-the document has MCP creation metadata. An approved graph can then be claimed
-for one logical run, after which task, pull-request, blocker, and verification
-transitions are persisted before publication. An active run locks plan changes
-that would invalidate the graph.
+The hosted Planner's graph tools can technically draft a versioned task graph
+against one plan revision in any channel. The child browser surface does not
+expose implementation or tasks, so child implementation is not a supported
+product workflow. The supported MCP read-before-claim flow exposes graphs only
+when the document has MCP creation metadata. An approved graph can then be
+claimed for one logical run, after which task, pull-request, blocker, and
+verification transitions are persisted before publication. An active run locks
+plan changes that would invalidate the graph.
 
 The backend lifecycle is implemented, but there is currently no production UI
 or route for a person to approve the draft. See
@@ -422,6 +459,9 @@ Treat these as implementation work, not guarantees to build new behavior upon.
 - Planner tools and block operations: `apps/server/src/agent/tools.ts` and
   `apps/server/src/plan/edit.ts`
 - Channel routes and IDs: `apps/server/src/channels/`
+- Research requests and child publication: `apps/server/src/research/service.ts`
+- Inline request state and anchored children: `apps/web/src/research-requests.ts`
+  and `apps/web/src/anchored-child-surface.tsx`
 - Storage contract: `apps/server/src/storage/port.ts`
 - PostgreSQL adapter and migrations: `apps/server/src/storage/postgres/`
 - Implementation graphs and lifecycle: `apps/server/src/tasks/`

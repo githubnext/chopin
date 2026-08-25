@@ -21,7 +21,7 @@ that origin.
 - Database migrations are forward-only. There is no automated schema rollback.
 - Restarting the application signs every browser out and releases hosted agent
   ownership. Documents, transcripts, decisions, background jobs and artifacts,
-  Research Workspaces, and implementation state remain.
+  research request staging, child documents, and implementation state remain.
 
 ## Choose the access policy first
 
@@ -109,8 +109,8 @@ the image.
 | `PORT`                         | `8787`              | Source-process HTTP and WebSocket port. The supplied image and health check expect internal port 8787.                             |
 | `MODEL`                        | `claude-sonnet-4.6` | Model requested for hosted agent sessions.                                                                                         |
 | `AGENT`                        | on                  | Set exactly `off` to prevent hosted agent turns, disable the entire background-job runner, and avoid Copilot CLI startup.          |
-| `BACKGROUND_JOBS`              | on                  | Set exactly `off` to disable background job scheduling and status surfaces. `AGENT=off` disables the entire runner.                |
-| `WEB_RESEARCH`                 | on                  | Set exactly `off` to disable confirmed public-search turns while retaining private drafts, readable artifacts, and other jobs.     |
+| `BACKGROUND_JOBS`              | on                  | Set exactly `off` to disable background job scheduling. `AGENT=off` disables the entire runner.                                    |
+| `WEB_RESEARCH`                 | on                  | Set exactly `off` to disable new public-web research while retaining durable requests, artifacts, and other jobs.                  |
 | `COPILOT_CLI_PATH`             | automatic           | Advanced override for the Copilot CLI executable.                                                                                  |
 
 See [Background jobs and workers](background-jobs.md) for the combined
@@ -313,7 +313,7 @@ lease. Do not run two application instances against one database.
 
 **The first model-backed action fails.** Check the invoking user's Copilot
 entitlement, the model, App permissions, repository write access, and Copilot
-CLI startup logs. Planner and Research Workspace execution validate these
+CLI startup logs. Planner and research request execution validate these
 dependencies lazily.
 
 **MCP returns 401 or 403.** A 401 indicates an invalid or expired bearer. A 403

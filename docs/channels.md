@@ -19,11 +19,10 @@ authorization then depends on the surface:
 Pull access may list and open active or archived documents. Push or
 administration access may create, edit, rename, archive, restore, and delete
 documents and mutate an implementation lifecycle. Deletion additionally
-requires the document to be archived. The same roles apply to document-attached
-Research Workspaces: pull may read, while push or administration may create a
-draft, confirm public search, ask follow-ups, search more, or cancel work on an
-active document. A public repository is not sufficient to expose its documents
-through the browser.
+requires the document to be archived. The same roles apply to research requests:
+pull may read a referenced request, while push or administration may start,
+cancel, or retry one on an active top-level document. A public repository is not
+sufficient to expose its documents through the browser.
 
 An MCP-created document outside the App installation remains unavailable to
 browser routes, WebSockets, and the hosted agent until an account owner adds
@@ -41,15 +40,26 @@ POST /api/channels/:channelId/archive
 POST /api/channels/:channelId/restore
 DELETE /api/channels/:channelId
 POST /api/channels/:channelId/agent/reset
-GET  /api/repositories/:owner/:repository/research-workspaces
 POST /api/channels/:channelId/research-workspaces
 GET  /api/channels/:channelId/research-workspaces/:workspaceId
+POST /api/channels/:channelId/research-workspaces/:workspaceId/cancel
+POST /api/channels/:channelId/research-workspaces/:workspaceId/retry
 ```
 
-The `channels` and UUID paths are internal API names retained by the current
-implementation. The repository-scoped `documents/:slug` route resolves both the
-current document slug and its historical aliases. Browser creation returns the
-readable canonical document route in `Location`, not a UUID route.
+The `channels`, `research-workspaces`, and UUID paths are internal API names
+retained by the current implementation. A research create accepts the exact
+`question` and a client request ID, persists one initial request, and starts it
+immediately. Detail returns the supported card projection: immutable question,
+state, stage, safe error, sources, and optional published child metadata. Cancel
+and retry require an exact browser Origin and write access. Retry keeps the
+request identity and question; it does not accept replacement prose.
+
+Older repository-list, draft-confirmation, append-turn, and transcript methods
+remain in server and storage compatibility code, but the current browser does
+not use them as product routes. The repository-scoped `documents/:slug` route
+resolves both the current document slug and its historical aliases. Browser
+creation returns the readable canonical document route in `Location`, not a
+UUID route.
 
 The listing route accepts a case-insensitive `query`, an opaque `cursor`, a
 `limit` from 1 through 100, and `includeArchived=true`. The query matches title
@@ -85,16 +95,16 @@ channel activity timestamp without advancing the collaboration revision or
 sequence, Yjs epoch, document sequence, plan revision, or implementation graph
 counters.
 
-Repository lists, searches, storage scans, and repository-level Research
-Workspace listings consider only active documents by default; their explicit
-`includeArchived` option includes archived parents. Browser landing selection
-and saved navigation remain active-only. Direct slug and UUID reads still
-resolve an archived document, including historical slug aliases.
+Repository lists, searches, and storage scans consider only active documents by
+default; their explicit `includeArchived` option includes archived documents.
+Browser landing selection and saved navigation remain active-only. Direct slug
+and UUID reads still resolve an archived document, including historical slug
+aliases.
 
 An archived browser session is read-only, including for a repository writer,
 but retains `canManage` for writers so they can restore or delete the document.
 Archival blocks metadata and document edits, chat, question and comment
-mutations, new Planner and Research Workspace work, and
+mutations, new Planner and research-request work, and
 `start_implementation`. An already active implementation may still accept
 lifecycle reports, and already-started background or research work may continue
 and persist. Archiving also ends the current Planner runtime; restoring does not
@@ -126,6 +136,8 @@ server also accepts existing UUIDv4 IDs.
   each request creates a new channel identity.
 - MCP creation hashes the repository node ID with the caller's idempotency key,
   so a retried creation resolves to the same identity.
+- Research publication hashes the repository node ID with the stable request
+  identity, so repeated reconciliation resolves to the same child identity.
 
 The stored GitHub repository node ID is authoritative. Owner and repository
 name are retained so GitHub can resolve the repository, but they are never
@@ -138,6 +150,7 @@ repository and slug instead:
 
 ```text
 /documents/:owner/:repository/:slug
+/documents/:owner/:repository/:parentSlug/children/:childSlug
 ```
 
 Renaming a document promotes its new title-derived slug as canonical while
@@ -147,7 +160,7 @@ retaining the same UUID and plan revision. Browser `Location` headers and the MC
 
 ## Creation paths
 
-Browser and MCP creation intentionally initialize storage differently.
+Browser, MCP, and research-child creation initialize storage differently.
 
 Browser creation writes channel metadata first. It has no document checkpoint
 until the first `plan:open`, which lazily creates and persists the empty
@@ -183,21 +196,30 @@ has only a legacy summary because the new idempotency key is
 `description-v1:<plan revision>:<source hash>`. Workers require an active Planner
 owner, so there is no unattended all-document backfill.
 
+A research child has no channel while work is pending. Once the complete report
+validates, one transaction creates the child metadata and revision-zero
+checkpoint, records `parentChannelId`, and links `publishedChannelId` on the
+request. The child must share the parent's repository, and a child cannot parent
+another child. Failed, cancelled, or partially reconciled work does not create a
+visible document.
+
 ## Browser routes
 
 ```text
 /documents/:owner/:repository         document list and creation
 /documents/:owner/:repository/:slug   conversation plus Plan or Decisions view
-/documents/:owner/:repository/:slug/research/:workspaceId
-                                       document-attached Research Workspace
+/documents/:owner/:repository/:parentSlug/children/:childSlug
+                                       anchored ordinary child document
 /                                     repository picker
 ```
 
-Research Workspaces appear as children of their parent document in navigation.
-They reuse the parent channel's repository authorization, Planner owner, and
-WebSocket only for invalidation. Their report and thread are stored separately
-from Yjs and remain reachable across parent renames because historical document
-slugs continue to resolve.
+Pending research requests remain inline and do not appear in navigation. After
+publication, the ordinary child channel appears beneath its parent. Selecting it
+keeps the mounted parent as receded context and opens the child through its own
+WebSocket, document state, Conversation, and Decisions. Direct entry resolves
+both slugs and verifies the repository and stored parent relationship. Browser
+Back, Escape, and the child close control return to the parent and restore its
+scroll, selection, and opener focus.
 
 Project lists, the repository document picker, cross-project document search,
 and conversation document-reference pickers show generated descriptions when
@@ -255,8 +277,8 @@ A channel persists:
 - implementation graph versions, active execution, task progress,
   verification, and archived runs;
 - token-free Planner ownership references and generation state; and
-- Research Workspace drafts, append-only turns and messages, and links to
-  immutable background-job artifacts.
+- parent-scoped research request staging, immutable job-artifact links, and the
+  optional published child identity.
 
 A client document update is acknowledged only after its fenced durable commit.
 Checkpointing removes Yjs journal entries through the checkpoint sequence; the

@@ -106,9 +106,9 @@ external implementation runs are durable.
   GitHub bearer directly, does not require the App installation, and can mutate
   data for callers with push or administration access.
 - **Planner ownership is process-bound.** The first eligible Planner or
-  model-backed Research Workspace invocation supplies its GitHub App token and
-  Copilot entitlement. The database stores only a token-free owner reference and
-  durable context.
+  model-backed research request supplies its GitHub App token and Copilot
+  entitlement. The database stores only a token-free owner reference and durable
+  context.
 - **Planner tools are repository-fixed.** The hosted runtime has no shell,
   checkout, host filesystem, skills, plugins, or arbitrary GitHub access.
 - **Repository node IDs are authoritative.** Owner and repository names resolve
@@ -161,13 +161,32 @@ linked, deliberately empty, and orphaned. Preserve the distinction. Empty means
 the Planner reviewed the decision and intentionally linked no prose; orphaned
 means a former target can no longer be identified safely.
 
+## Research requests and child documents
+
+Typing `/research` starts one parent-scoped durable request from the exact brief.
+A pending request is an inline card, not a channel: it has no URL, sidebar row,
+Conversation, or Decisions. Failure, cancellation, and explicit retry preserve
+the request identity; observational reads must not restart terminal work.
+
+Successful reconciliation validates the complete report and atomically creates
+an initialized ordinary child channel plus the request link. Publication must be
+idempotent and persistence must precede the ready card or nested navigation row.
+A child owns ordinary document, Conversation, and Decisions state. V1 does not
+offer child research, Background Work, implementation/tasks, or grandchildren.
+
+The server retains `research_workspaces`, turns, messages, and historical chat
+references as staging and compatibility internals. Do not present them as a
+standalone report, thread, navigation child, or confirmation flow.
+
 ## Implementation graphs
 
-The hosted Planner can draft and revise an implementation graph in any channel
-after plan readiness checks pass. The supported MCP read path exposes it only
-for an MCP-created document. The Planner cannot approve, lock, or start a graph.
-Approval exists in the domain but has no current production UI or route; the
-workflow is experimental.
+The hosted Planner's graph tools remain technically available in any channel
+after plan readiness checks pass. That does not make child implementation a
+supported product workflow: the child surface exposes no tasks or implementation
+destination. The supported MCP read path exposes a graph only for an MCP-created
+document. The Planner cannot approve, lock, or start a graph. Approval exists in
+the domain but has no current production UI or route; the workflow is
+experimental.
 
 An approved graph binds one plan revision, graph version, and graph revision.
 `start_implementation` atomically claims those values and locks the graph. Task,
