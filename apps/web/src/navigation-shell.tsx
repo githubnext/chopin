@@ -18,6 +18,7 @@ import * as Api from "./api";
 import { forgetChannel } from "./channel-recovery";
 import { newestDocument, updateDocumentMetadata } from "./document-actions";
 import type { DocumentAction } from "./document-actions-menu";
+import { motionContract } from "./motion-contract";
 import { NavigationFocusScope } from "./navigation-focus";
 import { motionImmediately } from "./motion-input";
 import {
@@ -42,7 +43,7 @@ import { useProjectResearch } from "./use-project-research";
 
 import type { Research } from "@chopin/protocol";
 import type { TransitionPresence } from "@chopin/editor/transition-presence";
-import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import type { DocumentMetadata } from "./document-actions";
 import type { NavigationMode } from "./navigation-model";
 
@@ -295,6 +296,16 @@ export function NavigationShell(
 	let [width, resize] = useSidebarWidth();
 	let mode = useNavigationMode();
 	let immediateMotion = motionImmediately();
+	let previousMode = useRef(mode);
+	let modeChanged = previousMode.current !== mode;
+	previousMode.current = mode;
+	let sidebarMotion = motionContract("sidebar");
+	let sidebarVisible = mode === "inline" && !collapsed;
+	let sidebarPresence = useTransitionPresence(
+		sidebarVisible ? true : undefined,
+		sidebarMotion.closeDuration,
+		immediateMotion || modeChanged,
+	);
 	let drawerPresence = useTransitionPresence(
 		mode === "drawer" && drawerOpen ? true : undefined,
 		180,
@@ -308,7 +319,6 @@ export function NavigationShell(
 	);
 	let dialogMotion = dialogPresence.phase === "closed" ? undefined : dialogPresence;
 	let presentedDialog = dialogMotion?.value;
-	let sidebarVisible = mode === "inline" && !collapsed;
 	let triggerVisible = !sidebarVisible && !drawerOpen;
 	let {
 		loadMore,
@@ -766,6 +776,7 @@ export function NavigationShell(
 				onCollapse={() => {
 					setCollapsed(true);
 					if (drawerOpen) dismissDrawer();
+					else requestAnimationFrame(() => drawerOpener.current?.focus({ preventScroll: true }));
 				}}
 				onCreateDocument={project => void createDocument(project)}
 				onDocumentAction={documentAction}
@@ -818,9 +829,14 @@ export function NavigationShell(
 				data-navigation-mode={mode}
 				onClickCapture={navigateLink}
 			>
-				{sidebarVisible && (
-					<div className="project-sidebar-frame" style={{ width }}>
-						{sidebar}
+				{sidebarPresence.phase !== "closed" && (
+					<div
+						aria-hidden={sidebarPresence.phase === "closing" ? "true" : undefined}
+						className={`project-sidebar-frame ${sidebarMotion.className} ${sidebarPresence.className}`}
+						inert={sidebarPresence.phase === "closing"}
+						style={{ "--project-sidebar-width": `${width}px` } as CSSProperties}
+					>
+						<div className="project-sidebar-motion-content">{sidebar}</div>
 						<SidebarResizeHandle onResize={resize} width={width} />
 					</div>
 				)}

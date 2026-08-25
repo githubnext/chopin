@@ -46,6 +46,64 @@ async function headerAction(page: import("@playwright/test").Page, action: strin
 	await page.getByRole("menuitem", { name: action, exact: true }).click();
 }
 
+test("document action menu motion follows its pointer trigger and survives interruption", async ({ join }) => {
+	let page = await join("ana");
+	let trigger = headerActions(page);
+	await trigger.click();
+	let menu = page.locator(".document-actions-menu");
+	await expect(menu).toBeVisible();
+	await expect(menu).toHaveClass(/motion-popover/);
+
+	let [triggerBox, menuLayout] = await Promise.all([
+		trigger.boundingBox(),
+		menu.evaluate(element => {
+			let menu = element as HTMLElement;
+			return {
+				height: menu.offsetHeight,
+				left: menu.offsetLeft,
+				origin: getComputedStyle(element).transformOrigin,
+				top: menu.offsetTop,
+				width: menu.offsetWidth,
+			};
+		}),
+	]);
+	expect(triggerBox).not.toBeNull();
+	let [originX, originY] = menuLayout.origin.split(" ").map(Number.parseFloat);
+	let triggerX = triggerBox!.x + triggerBox!.width / 2;
+	let triggerY = triggerBox!.y + triggerBox!.height / 2;
+	expect(menuLayout.left + originX!).toBeCloseTo(
+		Math.min(menuLayout.left + menuLayout.width, Math.max(menuLayout.left, triggerX)),
+		0,
+	);
+	expect(menuLayout.top + originY!).toBeCloseTo(
+		Math.min(menuLayout.top + menuLayout.height, Math.max(menuLayout.top, triggerY)),
+		0,
+	);
+
+	await trigger.click();
+	await expect(menu).toHaveAttribute("aria-hidden", "true");
+	await expect(menu).toHaveAttribute("inert", "");
+	await expect(trigger).toBeFocused();
+	await trigger.click();
+	await expect(menu).not.toHaveAttribute("aria-hidden", "true");
+	await expect(menu).not.toHaveAttribute("inert", "");
+	await expect(menu).toHaveCount(1);
+	await page.keyboard.press("Escape");
+	await expect(menu).toHaveCount(0);
+});
+
+test("document action menu motion settles keyboard opening immediately", async ({ join }) => {
+	let page = await join("ana");
+	let trigger = headerActions(page);
+	await trigger.focus();
+	await trigger.press("ArrowDown");
+	let menu = page.locator(".document-actions-menu");
+	await expect(page.getByRole("menuitem", { name: "Rename", exact: true })).toBeFocused();
+	await expect(menu).toHaveCSS("transition-duration", "0s");
+	await page.keyboard.press("ArrowDown");
+	await expect(page.getByRole("menuitem", { name: "Archive", exact: true })).toBeFocused();
+});
+
 test("the room header renames the current document and the sidebar creates one immediately", async ({ join }) => {
 	let page = await join("ana");
 	let header = page.getByRole("banner");

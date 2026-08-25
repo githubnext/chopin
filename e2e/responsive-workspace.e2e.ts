@@ -282,8 +282,11 @@ test("the compact side of the Projects transition keeps phone navigation", async
 test("the wide side of the Projects transition uses the inline sidebar", async ({ join, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", { viewport: { width: 1024, height: 768 } });
-	await expect(page.getByRole("complementary", { name: "Projects" })).toBeVisible();
-	await expect(page.getByRole("button", { name: "Open Projects sidebar" })).toHaveCount(0);
+	let projects = page.getByRole("complementary", { name: "Projects" });
+	let opener = page.getByRole("button", { name: "Open Projects sidebar" });
+	let track = page.locator(".motion-sidebar");
+	await expect(projects).toBeVisible();
+	await expect(opener).toHaveCount(0);
 	await expect(page.getByRole("navigation", { name: "Workspace view" })).toHaveCount(0);
 	await expect(page.locator("#pane-chat")).toBeVisible();
 	await expect(page.getByRole("separator", { name: "Resize the conversation" })).toBeVisible();
@@ -296,6 +299,22 @@ test("the wide side of the Projects transition uses the inline sidebar", async (
 	await backgroundWork.click();
 	await expect(backgroundWork).toBeFocused();
 	await expect(page.getByRole("heading", { name: "Background Work" })).toBeVisible();
+
+	await page.getByRole("button", { name: "Collapse Projects sidebar" }).click();
+	await expect(track).toHaveAttribute("aria-hidden", "true");
+	await expect(track).toHaveAttribute("inert", "");
+	await expect(opener).toBeFocused();
+	await expect(track).toHaveCount(0);
+
+	await opener.click();
+	await expect(projects).toBeVisible();
+	await page.getByRole("button", { name: "Collapse Projects sidebar" }).click();
+	await expect(track).toHaveClass(/is-closing/);
+	await opener.click();
+	await expect(track).not.toHaveAttribute("aria-hidden", "true");
+	await expect(track).not.toHaveAttribute("inert", "");
+	await expect(track).toHaveCount(1);
+	await expect(projects).toBeVisible();
 	await expectNoHorizontalOverflow(page);
 });
 

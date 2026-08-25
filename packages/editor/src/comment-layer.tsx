@@ -42,27 +42,31 @@ function rect(value: DOMRect): Rect {
 	};
 }
 
-function Preview({
-	id,
-	onMeasure,
-	style,
-	view,
-}: {
+type PreviewValue = {
 	id: string;
 	onMeasure: (element: HTMLDivElement | null) => void;
 	style: CSSProperties;
 	view: ThreadView;
-}) {
-	let replies = Math.max(0, view.thread.notes.length - 1);
+};
+
+function PreviewSurface({ immediately, value }: { immediately: boolean; value?: PreviewValue }) {
+	let presence = useTransitionPresence(value, 150, immediately);
+	if (presence.phase === "closed") return null;
+	let preview = presence.value;
+	let active = presence.phase !== "closing";
+	let replies = Math.max(0, preview.view.thread.notes.length - 1);
 	return (
 		<div
-			className="plan-comment-preview"
-			id={id}
-			ref={onMeasure}
+			aria-hidden={active ? undefined : "true"}
+			className={`plan-comment-preview motion-comment-preview ${presence.className}`}
+			data-motion-immediate={immediately || undefined}
+			id={preview.id}
+			inert={!active}
+			ref={preview.onMeasure}
 			role="tooltip"
-			style={style}
+			style={preview.style}
 		>
-			<p>{view.quote}</p>
+			<p>{preview.view.quote}</p>
 			{replies > 0 && <span>{replies} {replies === 1 ? "reply" : "replies"}</span>}
 		</div>
 	);
@@ -491,6 +495,38 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let page = host.getBoundingClientRect();
 	let cardWidth = Math.min(384, host.clientWidth * 0.8);
 	let previewWidth = Math.min(288, host.clientWidth * 0.8);
+	let previewEntry = preview && pinned !== preview
+		? placed.find(entry => entry.view.thread.id === preview)
+		: undefined;
+	let previewValue: PreviewValue | undefined;
+	if (previewEntry) {
+		let size = coarse ? 44 : 24;
+		let trigger = {
+			top: page.top + previewEntry.button.top,
+			left: page.left + previewEntry.button.left,
+			right: page.left + previewEntry.button.left + size,
+			bottom: page.top + previewEntry.button.top + size,
+			width: size,
+			height: size,
+		};
+		let height = cardHeights[`preview:${previewEntry.view.thread.id}`] ?? 96;
+		let point = popoverPoint(trigger, page, previewWidth, height);
+		let originX = point.left >= previewEntry.button.left ? 0 : previewWidth;
+		let originY = Math.min(
+			height,
+			Math.max(0, previewEntry.button.top + size / 2 - point.top),
+		);
+		previewValue = {
+			id: `plan-comment-preview-${previewEntry.view.thread.id}`,
+			onMeasure: element => rememberHeight(`preview:${previewEntry.view.thread.id}`, element),
+			style: {
+				...point,
+				transformOrigin: `${originX}px ${originY}px`,
+				width: previewWidth,
+			},
+			view: previewEntry.view,
+		};
+	}
 
 	return createPortal(
 		<div className="plan-comment-layer" data-plan-comment-sheet={compact || undefined} ref={root}>
@@ -543,29 +579,6 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 						>
 							<ChatCircleIcon aria-hidden="true" size={14} />
 						</button>
-						{preview === view.thread.id && !shown && (
-							<Preview
-								id={previewId}
-								onMeasure={element => rememberHeight(`preview:${view.thread.id}`, element)}
-								style={{
-									...popoverPoint(
-										{
-											top: page.top + button.top,
-											left: page.left + button.left,
-											right: page.left + button.left + (coarse ? 44 : 24),
-											bottom: page.top + button.top + (coarse ? 44 : 24),
-											width: coarse ? 44 : 24,
-											height: coarse ? 44 : 24,
-										},
-										page,
-										previewWidth,
-										cardHeights[`preview:${view.thread.id}`] ?? 96,
-									),
-									width: previewWidth,
-								}}
-								view={view}
-							/>
-						)}
 						<CommentSurface
 							compact={compact}
 							immediately={immediately}
@@ -585,6 +598,8 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 					</div>
 				);
 			})}
+
+			<PreviewSurface immediately={immediately} value={previewValue} />
 
 			<CommentSurface
 				compact={compact}

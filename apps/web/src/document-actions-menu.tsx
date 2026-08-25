@@ -1,5 +1,9 @@
 import { createPortal } from "react-dom";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useTransitionPresence } from "@chopin/editor/transition-presence";
+
+import { motionContract } from "./motion-contract";
+import { motionImmediately } from "./motion-input";
 
 import type * as Api from "./api";
 import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
@@ -53,8 +57,17 @@ export function DocumentActionsMenu(
 	let panel = useRef<HTMLDivElement>(null);
 	let initialItem = useRef(0);
 	let [open, setOpen] = useState(false);
-	let [position, setPosition] = useState<CSSProperties>({ visibility: "hidden" });
+	let [position, setPosition] = useState<CSSProperties>();
 	let items = documentMenuItems(channel);
+	let immediately = motionImmediately();
+	let motion = motionContract("popover");
+	let presence = useTransitionPresence(
+		open && position ? position : undefined,
+		motion.closeDuration,
+		immediately,
+	);
+	let mounted = open || presence.phase !== "closed";
+	let active = open && position !== undefined && presence.phase !== "closing";
 
 	useLayoutEffect(() => {
 		if (!open) return;
@@ -70,12 +83,23 @@ export function DocumentActionsMenu(
 			let top = below >= height || anchor.top < height + margin
 				? anchor.bottom + gap
 				: anchor.top - height - gap;
+			let left = Math.max(
+				margin,
+				Math.min(anchor.right - width, window.innerWidth - width - margin),
+			);
+			let placedTop = Math.max(margin, Math.min(top, window.innerHeight - height - margin));
 			setPosition({
-				left: Math.max(margin, Math.min(anchor.right - width, window.innerWidth - width - margin)),
-				top: Math.max(margin, Math.min(top, window.innerHeight - height - margin)),
+				"--motion-origin-x": `${
+					Math.min(width, Math.max(0, anchor.left + anchor.width / 2 - left))
+				}px`,
+				"--motion-origin-y": `${
+					Math.min(height, Math.max(0, anchor.top + anchor.height / 2 - placedTop))
+				}px`,
+				left,
+				top: placedTop,
 				visibility: "visible",
 				width,
-			});
+			} as CSSProperties);
 		};
 		place();
 		window.addEventListener("resize", place);
@@ -108,7 +132,7 @@ export function DocumentActionsMenu(
 
 	let openAt = (index: number) => {
 		initialItem.current = index;
-		setPosition({ visibility: "hidden" });
+		setPosition(undefined);
 		setOpen(true);
 	};
 	let menuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -156,15 +180,18 @@ export function DocumentActionsMenu(
 			>
 				{trigger}
 			</button>
-			{open && createPortal(
+			{mounted && createPortal(
 				<div
+					aria-hidden={active ? undefined : "true"}
 					aria-label={`Actions for ${channel.title}`}
-					className="document-actions-menu"
+					className={`document-actions-menu ${motion.className} ${presence.className}`}
+					data-motion-immediate={immediately || undefined}
 					id={id}
+					inert={!active}
 					onKeyDown={menuKeyDown}
 					ref={panel}
 					role="menu"
-					style={position}
+					style={presence.value ?? { visibility: "hidden" }}
 				>
 					{items.map(item => (
 						<button

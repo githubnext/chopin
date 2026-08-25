@@ -27,6 +27,45 @@
 	background: var(--color-ground);
 }
 
+.project-sidebar-motion-content {
+	display: flex;
+	width: 100%;
+	min-width: 0;
+	flex: 1 1 auto;
+	overflow: hidden;
+}
+
+.motion-sidebar {
+	width: 0;
+	transition: width var(--sidebar-open-dur) var(--motion-move);
+}
+
+.motion-sidebar .project-sidebar {
+	width: var(--project-sidebar-width, 0px);
+	flex: 0 0 var(--project-sidebar-width, 0px);
+	opacity: 0;
+	transform: translateX(calc(-1 * var(--drawer-distance)));
+	transition:
+		opacity var(--sidebar-open-dur) var(--motion-move),
+		transform var(--sidebar-open-dur) var(--motion-move);
+	will-change: opacity, transform;
+}
+
+.motion-sidebar.is-open {
+	width: var(--project-sidebar-width, 0px);
+}
+
+.motion-sidebar.is-open .project-sidebar {
+	opacity: 1;
+	transform: translateX(0);
+}
+
+.motion-sidebar.is-closing,
+.motion-sidebar.is-closing .project-sidebar {
+	pointer-events: none;
+	transition-duration: var(--sidebar-close-dur);
+}
+
 .project-sidebar {
 	--project-sidebar-hover: var(--color-gray-200);
 	--project-sidebar-selected: color-mix(
@@ -570,6 +609,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+	.motion-sidebar,
+	.motion-sidebar .project-sidebar,
 	.motion-drawer,
 	.motion-drawer .navigation-focus-scope,
 	.motion-modal,
