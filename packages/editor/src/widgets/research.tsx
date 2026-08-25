@@ -1,13 +1,27 @@
 import { useCallback, useEffect, useId, useState, useSyncExternalStore } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { useCellValue } from "@mdxeditor/gurx";
+import {
+	$getSelection,
+	$isElementNode,
+	$isNodeSelection,
+	$isRangeSelection,
+	COMMAND_PRIORITY_HIGH,
+	DELETE_CHARACTER_COMMAND,
+	DELETE_LINE_COMMAND,
+	DELETE_WORD_COMMAND,
+	mergeRegister,
+	REMOVE_TEXT_COMMAND,
+} from "lexical";
 
 import { SidecarCard } from "../card";
 import { widgets$ } from "../widget-options";
+import { $isResearchNode } from "@chopin/dialect";
 
 import type { FormEvent, KeyboardEvent } from "react";
 import type { Research } from "@chopin/protocol";
 import type { ResearchNode } from "@chopin/dialect";
+import type { LexicalEditor, LexicalNode, RangeSelection } from "lexical";
 import type { ResearchStore } from "../widget-options";
 
 const STAGES: Record<Research.RequestStage, string> = {
@@ -20,6 +34,13 @@ const STAGES: Record<Research.RequestStage, string> = {
 	failed: "Research failed",
 	cancelled: "Research cancelled",
 };
+
+const ACTIVE_STAGES = new Set<Research.RequestStage>([
+	"queued",
+	"searching",
+	"analyzing",
+	"writing",
+]);
 
 export type ResearchComposerProps = {
 	blocked?: string;
@@ -140,13 +161,27 @@ export function ResearchCard(
 	}: ResearchCardProps,
 ) {
 	let ready = request.stage === "ready" && request.child;
+	let sourceCount = ready
+		? ready.sourceCount === 0
+			? "No sources"
+			: `${ready.sourceCount} ${ready.sourceCount === 1 ? "source" : "sources"}`
+		: undefined;
 	let actions = researchActions(request, canEdit);
 	return (
 		<SidecarCard label="Research">
 			<div className="plan-research-heading">
-				<strong>{STAGES[request.stage]}</strong>
-				<span>{request.question}</span>
+				<strong>{ready ? ready.title : STAGES[request.stage]}</strong>
+				<span>{ready ? STAGES[request.stage] : request.question}</span>
 			</div>
+			{ready && (
+				<>
+					<p className="plan-research-summary">{ready.summary}</p>
+					<p className="plan-research-meta">
+						<span>{sourceCount}</span>
+						<span>Researched by Planner</span>
+					</p>
+				</>
+			)}
 			{request.error && <p className="plan-research-error" role="status">{request.error}</p>}
 			{request.sources.length > 0 && (
 				<ul aria-label="Research sources" className="plan-research-sources">
@@ -239,6 +274,87 @@ export function researchActions(
 		return { ...NONE, remove: true, retry: true };
 	}
 	return NONE;
+}
+
+function activeResearch(node: LexicalNode, store: ResearchStore): boolean {
+	if (!$isResearchNode(node)) return false;
+	let request = store.get(node.getId());
+	return request !== undefined && ACTIVE_STAGES.has(request.stage);
+}
+
+function edgeNode(node: LexicalNode | null, backward: boolean): LexicalNode | null {
+	let current = node;
+	while (current && $isElementNode(current) && current.getChildrenSize() > 0) {
+		current = current.getChildAtIndex(backward ? current.getChildrenSize() - 1 : 0);
+	}
+	return current;
+}
+
+function adjacentNode(selection: RangeSelection, backward: boolean): LexicalNode | null {
+	let point = selection.anchor;
+	let node = point.getNode();
+	if ($isElementNode(node)) {
+		let child = node.getChildAtIndex(backward ? point.offset - 1 : point.offset);
+		if (child) return edgeNode(child, backward);
+		if (backward ? point.offset !== 0 : point.offset !== node.getChildrenSize()) return null;
+	} else {
+		let size = node.getTextContentSize();
+		if (backward ? point.offset !== 0 : point.offset !== size) return null;
+	}
+
+	let current: LexicalNode | null = node;
+	while (current) {
+		let sibling = backward ? current.getPreviousSibling() : current.getNextSibling();
+		if (sibling) return edgeNode(sibling, backward);
+		current = current.getParent();
+	}
+	return null;
+}
+
+function protectsActiveResearch(store: ResearchStore, backward?: boolean): boolean {
+	let selection = $getSelection();
+	if ($isNodeSelection(selection)) {
+		return selection.getNodes().some(node => activeResearch(node, store));
+	}
+	if (!$isRangeSelection(selection)) return false;
+	if (!selection.isCollapsed()) {
+		return selection.getNodes().some(node => activeResearch(node, store));
+	}
+	if (backward === undefined) return false;
+	let adjacent = adjacentNode(selection, backward);
+	return adjacent !== null && activeResearch(adjacent, store);
+}
+
+export function registerResearchDeletion(editor: LexicalEditor, store: ResearchStore): () => void {
+	return mergeRegister(
+		editor.registerCommand(
+			DELETE_CHARACTER_COMMAND,
+			backward => protectsActiveResearch(store, backward),
+			COMMAND_PRIORITY_HIGH,
+		),
+		editor.registerCommand(
+			DELETE_WORD_COMMAND,
+			backward => protectsActiveResearch(store, backward),
+			COMMAND_PRIORITY_HIGH,
+		),
+		editor.registerCommand(
+			DELETE_LINE_COMMAND,
+			backward => protectsActiveResearch(store, backward),
+			COMMAND_PRIORITY_HIGH,
+		),
+		editor.registerCommand(
+			REMOVE_TEXT_COMMAND,
+			() => protectsActiveResearch(store),
+			COMMAND_PRIORITY_HIGH,
+		),
+	);
+}
+
+export function ResearchDeletionPlugin() {
+	let [editor] = useLexicalComposerContext();
+	let store = useCellValue(widgets$).research;
+	useEffect(() => store ? registerResearchDeletion(editor, store) : undefined, [editor, store]);
+	return null;
 }
 
 export type ResearchReferenceProps = {

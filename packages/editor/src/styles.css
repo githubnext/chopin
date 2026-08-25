@@ -44,9 +44,23 @@
 
 .plan-research-heading span,
 .plan-research-error,
-.plan-research-sources {
+.plan-research-sources,
+.plan-research-summary {
 	font-size: var(--text-sm);
 	color: var(--color-text-secondary);
+}
+
+.plan-research-summary,
+.plan-research-meta {
+	margin: 0;
+}
+
+.plan-research-meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.25rem 0.75rem;
+	font-size: var(--text-sm);
+	color: var(--color-text-quaternary);
 }
 
 .plan-research-error {

@@ -244,7 +244,12 @@ test("inline research publishes one ordinary child and opens its isolated worksp
 
 	let readsBeforePublication = catalogueReads;
 	let child = await research.publish(brief, childTitle);
-	await expect(card.getByText("Research ready", { exact: true })).toBeVisible();
+	let readyCard = opened.getByRole("article", { name: "Research" })
+		.filter({ hasText: childTitle });
+	await expect(readyCard.getByText("Research ready", { exact: true })).toBeVisible();
+	await expect(readyCard).toContainText("A complete report grounded in the discovered sources.");
+	await expect(readyCard).toContainText("1 source");
+	await expect(readyCard).toContainText("Researched by Planner");
 	expect(catalogueReads).toBe(readsBeforePublication);
 	staleCatalogue.resolve();
 	let childLink = sidebar.getByRole("link", { name: childTitle, exact: true });
@@ -256,7 +261,7 @@ test("inline research publishes one ordinary child and opens its isolated worksp
 	let parentScroll = parent.locator("[data-plan-scroll]");
 	await parentScroll.evaluate(element => element.scrollTop = 180);
 	let parentScrollTop = await parentScroll.evaluate(element => element.scrollTop);
-	let open = card.getByRole("button", { name: `Open ${childTitle}`, exact: true });
+	let open = readyCard.getByRole("button", { name: `Open ${childTitle}`, exact: true });
 	await open.focus();
 	await open.click();
 	let surface = opened.getByRole("region", { name: `Child document: ${childTitle}` });
@@ -310,6 +315,21 @@ test("failed research retries by identity while cancelled research never publish
 	await expect(failedCard).toContainText("Research could not be completed safely.");
 	await expect.poll(() => countChildChannels(databasePort, room)).toBe(0);
 
+	let cancelledBrief = "Cancel this exact research brief.";
+	let cancelledCard = await startInlineResearch(opened, cancelledBrief);
+	await expect(cancelledCard.getByText("Queued", { exact: true })).toBeVisible();
+	let cancelledId =
+		[...research.requests.values()].find(request => request.question === cancelledBrief)!.id;
+	await cancelledCard.getByText("Queued", { exact: true }).click();
+	await opened.keyboard.press("Backspace");
+	await expect(cancelledCard).toBeVisible();
+	await expect.poll(async () =>
+		(await readSource(databasePort, room)).match(/<Research\s+id=/g)?.length ?? 0
+	).toBe(2);
+	await cancelledCard.getByRole("button", { name: "Cancel research" }).click();
+	await expect(cancelledCard.getByText("Research cancelled", { exact: true })).toBeVisible();
+	expect(research.cancellations).toEqual([cancelledId]);
+
 	let failedId =
 		[...research.requests.values()].find(request => request.question === failedBrief)!.id;
 	await failedCard.getByRole("button", { name: "Retry research" }).click();
@@ -324,16 +344,7 @@ test("failed research retries by identity while cancelled research never publish
 	await expect(sidebar.getByRole("link", { name: recoveredTitle, exact: true })).toBeVisible();
 	await expect.poll(() => countChildChannels(databasePort, room)).toBe(1);
 	let source = await readSource(databasePort, room);
-	expect(source.match(/<Research\s+id=/g)).toHaveLength(1);
-
-	let cancelledBrief = "Cancel this exact research brief.";
-	let cancelledCard = await startInlineResearch(opened, cancelledBrief);
-	await expect(cancelledCard.getByText("Queued", { exact: true })).toBeVisible();
-	let cancelledId =
-		[...research.requests.values()].find(request => request.question === cancelledBrief)!.id;
-	await cancelledCard.getByRole("button", { name: "Cancel research" }).click();
-	await expect(cancelledCard.getByText("Research cancelled", { exact: true })).toBeVisible();
-	expect(research.cancellations).toEqual([cancelledId]);
+	expect(source.match(/<Research\s+id=/g)).toHaveLength(2);
 
 	// A late worker-shaped update is fetched after a real socket invalidation but remains unobservable.
 	research.advance(cancelledBrief, "ready", {
@@ -359,6 +370,11 @@ test("failed research retries by identity while cancelled research never publish
 	source = await readSource(databasePort, room);
 	expect(source.match(/<Research\s+id=/g)).toHaveLength(2);
 	await expect(sidebar.getByRole("link", { name: recoveredTitle, exact: true })).toHaveCount(1);
+	await cancelledCard.getByRole("button", { name: "Remove research reference" }).click();
+	await expect(cancelledCard).toHaveCount(0);
+	await expect.poll(async () =>
+		(await readSource(databasePort, room)).match(/<Research\s+id=/g)?.length ?? 0
+	).toBe(1);
 });
 
 test("an in-app child preserves and restores its mounted parent", async ({ baseURL, join, page, room, seed }) => {
