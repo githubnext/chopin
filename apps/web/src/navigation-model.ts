@@ -1,6 +1,7 @@
 import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
 
 import type { NavigationProject, ResearchParentChannel } from "./api";
+import type { ResearchOpener } from "@chopin/editor";
 import type { Research } from "@chopin/protocol";
 import type { ProjectDocuments } from "./document-actions";
 import type { DocumentRouteIdentitySource } from "./document-route-swap";
@@ -81,6 +82,14 @@ export function researchChildDestination(
 		parent.slug,
 		child.slug,
 	);
+}
+
+export function researchChildNavigation(
+	parent: Pick<ResearchParentChannel, "repositoryOwner" | "repositoryName" | "slug">,
+	child: Pick<Research.ReadyChild, "slug">,
+	opener: ResearchOpener,
+): { destination: string; opener: ResearchOpener } {
+	return { destination: researchChildDestination(parent, child), opener };
 }
 
 export function beginProjectCreation(

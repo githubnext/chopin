@@ -33,7 +33,7 @@ import {
 	landingDocument,
 	NAVIGATION_MEDIA,
 	navigationMode,
-	researchChildDestination,
+	researchChildNavigation,
 } from "./navigation-model";
 import {
 	ProjectSidebarExpandButton,
@@ -46,13 +46,17 @@ import { TerminalAlert } from "./terminal-alert";
 import { useProjectDocuments } from "./use-project-documents";
 
 import type { Research } from "@chopin/protocol";
+import type { ResearchOpener } from "@chopin/editor";
 import type { TransitionPresence } from "@chopin/editor/transition-presence";
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import type { DocumentMetadata } from "./document-actions";
 import type { DocumentRouteIdentity } from "./document-route-swap";
 import type { NavigationMode, NavigationRoute } from "./navigation-model";
 
-export type Navigate = (destination: string, options?: { replace?: boolean }) => void;
+export type Navigate = (
+	destination: string,
+	options?: { opener?: ResearchOpener; replace?: boolean },
+) => void;
 
 class LazyDialogBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
 	override state = { failed: false };
@@ -106,7 +110,12 @@ let NavigationDocument = createContext<{
 	onDocumentDeleted: (documentId: string) => void;
 	onDocumentLoaded: (channel: Api.Channel, routeKey: DocumentRouteIdentity) => Promise<void>;
 	onRepositoryAccessChanged: () => void;
-	onResearchChildOpen: (parentId: string, child: Research.ReadyChild) => void;
+	onResearchChildOpen: (
+		parentId: string,
+		child: Research.ReadyChild,
+		opener: ResearchOpener,
+	) => void;
+	onResearchChildPublished: (parentId: string, child: Research.ReadyChild) => void;
 }>({
 	onDocumentChanged() {},
 	onDocumentAction() {},
@@ -114,6 +123,7 @@ let NavigationDocument = createContext<{
 	async onDocumentLoaded() {},
 	onRepositoryAccessChanged() {},
 	onResearchChildOpen() {},
+	onResearchChildPublished() {},
 });
 
 export function useNavigationDocument() {
@@ -557,6 +567,10 @@ export function NavigationShell(
 	);
 	let currentDocumentIdRef = useRef(currentDocumentId);
 	currentDocumentIdRef.current = currentDocumentId;
+	let projectsRef = useRef(projects);
+	projectsRef.current = projects;
+	let refreshProjectRef = useRef(refreshProject);
+	refreshProjectRef.current = refreshProject;
 	let revalidateCatalogues = useCallback(() => {
 		let now = Date.now();
 		let navigationRefreshedAt = catalogueRefreshes.current.get("navigation") ?? 0;
@@ -652,14 +666,28 @@ export function NavigationShell(
 		let channel = knownChannelsRef.current.get(documentId);
 		if (channel) documentAction(channel, action);
 	}, [documentAction]);
-	let researchChildOpen = useCallback((parentId: string, child: Research.ReadyChild) => {
+	let researchChildOpen = useCallback((
+		parentId: string,
+		child: Research.ReadyChild,
+		opener: ResearchOpener,
+	) => {
 		let channel = knownChannelsRef.current.get(parentId);
 		if (!channel) return;
 		setError(undefined);
 		setDialog(undefined);
 		setDrawerOpen(false);
-		navigate(researchChildDestination(channel, child));
+		let target = researchChildNavigation(channel, child, opener);
+		navigate(target.destination, { opener: target.opener });
 	}, [navigate]);
+	let researchChildPublished = useCallback((parentId: string, _child: Research.ReadyChild) => {
+		let channel = knownChannelsRef.current.get(parentId);
+		if (!channel) return;
+		let entry = projectsRef.current.find(value =>
+			value.project.repositoryId === channel.repositoryId
+		);
+		if (!entry?.project.available) return;
+		refreshProjectRef.current(entry.project);
+	}, []);
 	let repositoryAccessChanged = useCallback(() => {
 		void refresh();
 	}, [refresh]);
@@ -671,6 +699,7 @@ export function NavigationShell(
 		onDocumentLoaded: documentLoaded,
 		onRepositoryAccessChanged: repositoryAccessChanged,
 		onResearchChildOpen: researchChildOpen,
+		onResearchChildPublished: researchChildPublished,
 	}), [
 		currentChannel,
 		documentChanged,
@@ -678,6 +707,7 @@ export function NavigationShell(
 		documentLoaded,
 		repositoryAccessChanged,
 		researchChildOpen,
+		researchChildPublished,
 		workspaceDocumentAction,
 	]);
 

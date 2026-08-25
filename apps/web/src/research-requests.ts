@@ -1,5 +1,5 @@
 import type { Research } from "@chopin/protocol";
-import type { ResearchStore } from "@chopin/editor";
+import type { ResearchOpener, ResearchStore } from "@chopin/editor";
 
 import {
 	cancelResearchRequest,
@@ -26,7 +26,8 @@ export type ResearchRequestSchedule = (callback: () => void, delay: number) => (
 export type ResearchRequestStoreOptions = {
 	api?: ResearchRequestApi;
 	channelId: string;
-	onOpen: (child: Research.ReadyChild) => void;
+	onOpen: (child: Research.ReadyChild, opener: ResearchOpener) => void;
+	onPublished?: (child: Research.ReadyChild) => void;
 	schedule?: ResearchRequestSchedule;
 };
 
@@ -54,7 +55,9 @@ export class ResearchRequestStore implements ResearchStore {
 	#disposed = false;
 	#generations = new Map<string, number>();
 	#listeners = new Set<() => void>();
-	#onOpen: (child: Research.ReadyChild) => void;
+	#onOpen: (child: Research.ReadyChild, opener: ResearchOpener) => void;
+	#onPublished: (child: Research.ReadyChild) => void;
+	#openers = new Map<string, { current: HTMLElement | null }>();
 	#reads = new Map<string, Read>();
 	#references = new Map<string, number>();
 	#schedule: ResearchRequestSchedule;
@@ -64,6 +67,7 @@ export class ResearchRequestStore implements ResearchStore {
 		this.#api = options.api ?? browserApi;
 		this.#channelId = options.channelId;
 		this.#onOpen = options.onOpen;
+		this.#onPublished = options.onPublished ?? (() => {});
 		this.#schedule = options.schedule ?? browserSchedule;
 	}
 
@@ -120,8 +124,18 @@ export class ResearchRequestStore implements ResearchStore {
 		return this.#accept(id, result);
 	}
 
-	open(child: Research.ReadyChild): void {
-		this.#onOpen(child);
+	open(child: Research.ReadyChild, opener: ResearchOpener): void {
+		this.#onOpen(child, opener);
+	}
+
+	opener(id: string, current?: HTMLElement | null): ResearchOpener {
+		let opener = this.#openers.get(id);
+		if (!opener) {
+			opener = { current: null };
+			this.#openers.set(id, opener);
+		}
+		if (current !== undefined) opener.current = current;
+		return opener;
 	}
 
 	invalidate(id: string): void {
@@ -150,7 +164,11 @@ export class ResearchRequestStore implements ResearchStore {
 			throw new Error("Research request response did not match its document reference.");
 		}
 		if (this.#disposed) return snapshot;
+		let previous = this.#snapshots.get(id);
 		this.#snapshots.set(id, snapshot);
+		if (previous && !previous.child && snapshot.stage === "ready" && snapshot.child) {
+			this.#onPublished(snapshot.child);
+		}
 		for (let listener of this.#listeners) listener();
 		this.#schedulePolling();
 		return snapshot;

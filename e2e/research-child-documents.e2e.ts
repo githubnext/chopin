@@ -1,5 +1,8 @@
-import { seedChildChannel } from "./database";
-import { authenticate, expect, test } from "./room";
+import { countChildChannels, readSource, seedChildChannel } from "./database";
+import { authenticate, content, expect, test } from "./room";
+
+import type { Research } from "../packages/protocol/index";
+import type { Page } from "@playwright/test";
 
 const PARENT_SOURCE = `# Parent document
 
@@ -14,6 +17,304 @@ This ordinary child has its own editable document, Decisions, and Conversation.
 function port(baseURL: string): number {
 	return Number(new URL(baseURL).port);
 }
+
+type ScriptedRequest = {
+	child?: Research.ReadyChild;
+	error?: string;
+	id: string;
+	question: string;
+	sources: Research.Source[];
+	stage: Research.RequestStage;
+};
+
+function requestView(room: string, request: ScriptedRequest): Research.RequestView {
+	let state: Research.RequestState = request.stage === "ready"
+		? "completed"
+		: request.stage === "failed"
+		? "failed"
+		: request.stage === "cancelled"
+		? "cancelled"
+		: request.stage === "queued"
+		? "pending"
+		: "running";
+	return {
+		id: request.id,
+		channelId: room,
+		question: request.question,
+		state,
+		stage: request.stage,
+		error: request.error,
+		sources: request.sources,
+		child: request.child,
+		createdAt: "2026-08-24T09:00:00.000Z",
+		updatedAt: new Date().toISOString(),
+	};
+}
+
+async function scriptResearch(page: Page, room: string, databasePort: number) {
+	let requests = new Map<string, ScriptedRequest>();
+	let retries: string[] = [];
+	let cancellations: string[] = [];
+	let prefix = `/api/channels/${room}/research-workspaces`;
+	await page.route("**/api/channels/*/research-workspaces**", async route => {
+		let request = route.request();
+		let path = new URL(request.url()).pathname;
+		if (!path.startsWith(prefix)) {
+			await route.continue();
+			return;
+		}
+		let suffix = path.slice(prefix.length);
+		if (request.method() === "POST" && suffix === "") {
+			let body = request.postDataJSON() as { question: string; requestId: string };
+			let created: ScriptedRequest = {
+				id: body.requestId,
+				question: body.question,
+				sources: [],
+				stage: "queued",
+			};
+			requests.set(created.id, created);
+			await route.fulfill({
+				json: { repeated: false, request: requestView(room, created) },
+				status: 201,
+			});
+			return;
+		}
+		let match = /^\/([^/]+)(?:\/(retry|cancel))?$/.exec(suffix);
+		let current = match ? requests.get(decodeURIComponent(match[1]!)) : undefined;
+		if (!current) {
+			await route.fulfill({ json: { error: "research workspace not found" }, status: 404 });
+			return;
+		}
+		if (request.method() === "POST" && match?.[2] === "retry") {
+			retries.push(current.id);
+			current.stage = "queued";
+			current.error = undefined;
+			current.sources = [];
+			current.child = undefined;
+			await route.fulfill({ json: requestView(room, current) });
+			return;
+		}
+		if (request.method() === "POST" && match?.[2] === "cancel") {
+			cancellations.push(current.id);
+			current.stage = "cancelled";
+			current.error = undefined;
+			await route.fulfill({ json: requestView(room, current) });
+			return;
+		}
+		if (request.method() === "GET" && match?.[2] === undefined) {
+			await route.fulfill({ json: requestView(room, current) });
+			return;
+		}
+		await route.fulfill({ json: { error: "unsupported research fixture request" }, status: 405 });
+	});
+
+	let byQuestion = (question: string) => {
+		let found = [...requests.values()].find(request => request.question === question);
+		if (!found) throw new Error(`missing scripted research request for ${question}`);
+		return found;
+	};
+	return {
+		cancellations,
+		requests,
+		retries,
+		advance(
+			question: string,
+			stage: Research.RequestStage,
+			overrides: Partial<ScriptedRequest> = {},
+		) {
+			Object.assign(byQuestion(question), overrides, { stage });
+		},
+		async publish(question: string, title: string) {
+			let request = byQuestion(question);
+			let child = await seedChildChannel(
+				databasePort,
+				room,
+				crypto.randomUUID(),
+				title,
+				CHILD_SOURCE,
+			);
+			request.stage = "ready";
+			request.error = undefined;
+			request.child = {
+				id: child.id,
+				slug: child.slug,
+				sourceCount: request.sources.length,
+				summary: "A complete report grounded in the discovered sources.",
+				title,
+			};
+			return child;
+		},
+	};
+}
+
+async function startInlineResearch(page: Page, question: string) {
+	let editor = content(page);
+	await editor.click();
+	await page.keyboard.press("Meta+End");
+	await page.keyboard.press("Enter");
+	await page.keyboard.type("/research");
+	await page.getByRole("listbox", { name: "Insert block" })
+		.getByRole("option", { name: "Research" })
+		.click();
+	await page.getByRole("textbox", { name: "Research question", exact: true }).fill(question);
+	await page.getByRole("button", { name: "Start research", exact: true }).click();
+	let card = page.getByRole("article", { name: "Research" }).filter({ hasText: question });
+	await expect(card.getByText("Queued", { exact: true })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Place research here", exact: true }))
+		.toHaveCount(0);
+	await expect(page.getByRole("button", { name: "Search public web", exact: true }))
+		.toHaveCount(0);
+	return card;
+}
+
+test("inline research publishes one ordinary child and opens its isolated workspace", async ({ baseURL, join, page, room, seed }) => {
+	await seed(PARENT_SOURCE);
+	let databasePort = port(baseURL!);
+	let research = await scriptResearch(page, room, databasePort);
+	let catalogueReads = 0;
+	page.on("request", request => {
+		if (
+			request.method() === "GET"
+			&& new URL(request.url()).pathname === "/api/repositories/octo-org/score/channels"
+		) catalogueReads++;
+	});
+	let opened = await join("ana");
+	let parent = opened.locator(`[data-workspace-room="${room}"]`);
+	let sidebar = opened.getByRole("complementary", { name: "Projects" });
+	let brief = "Compare the public evidence for deterministic child publication.";
+	let childTitle = `Lifecycle evidence ${room.slice(0, 8)}`;
+	let card = await startInlineResearch(opened, brief);
+
+	await expect(card.getByText("Queued", { exact: true })).toBeVisible();
+	await expect(card).toContainText(brief);
+	await expect(card.getByRole("button", { name: "Decisions", exact: true })).toHaveCount(0);
+	await expect(card.getByRole("complementary", { name: "Conversation" })).toHaveCount(0);
+	await expect(sidebar.getByRole("link", { name: childTitle, exact: true })).toHaveCount(0);
+	await expect(opened).toHaveURL(url => !url.pathname.includes("/children/"));
+
+	research.advance(brief, "searching");
+	await expect(card.getByText("Searching", { exact: true })).toBeVisible();
+	research.advance(brief, "analyzing", {
+		sources: [{ title: "Primary public source", url: "https://example.com/source" }],
+	});
+	await expect(card.getByText("Analyzing", { exact: true })).toBeVisible();
+	await expect(card.getByRole("link", { name: "Primary public source", exact: true }))
+		.toBeVisible();
+	await expect(card).not.toContainText("A complete report grounded in the discovered sources.");
+	research.advance(brief, "writing");
+	await expect(card.getByText("Writing", { exact: true })).toBeVisible();
+	await expect(sidebar.getByRole("link", { name: childTitle, exact: true })).toHaveCount(0);
+
+	let readsBeforePublication = catalogueReads;
+	let child = await research.publish(brief, childTitle);
+	await expect(card.getByText("Research ready", { exact: true })).toBeVisible();
+	let childLink = sidebar.getByRole("link", { name: childTitle, exact: true });
+	await expect(childLink).toBeVisible();
+	await expect(childLink).toHaveAttribute("href", child.path);
+	expect(catalogueReads).toBe(readsBeforePublication + 1);
+	await expect.poll(() => countChildChannels(databasePort, room)).toBe(1);
+
+	let parentScroll = parent.locator("[data-plan-scroll]");
+	await parentScroll.evaluate(element => element.scrollTop = 180);
+	let parentScrollTop = await parentScroll.evaluate(element => element.scrollTop);
+	let open = card.getByRole("button", { name: `Open ${childTitle}`, exact: true });
+	await open.focus();
+	await open.click();
+	let surface = opened.getByRole("region", { name: `Child document: ${childTitle}` });
+	await expect(opened).toHaveURL(url => url.pathname === child.path);
+	await expect(surface.locator(`[data-workspace-room="${child.id}"]`)).toBeVisible();
+	await expect(surface.getByRole("button", { name: "Show conversation pane" })).toBeVisible();
+	await surface.getByRole("button", { name: "Show conversation pane" }).click();
+	let childConversation = surface.getByRole("complementary", { name: "Conversation" });
+	let childMessage = `Child-only message ${room.slice(0, 8)}`;
+	await childConversation.getByPlaceholder("Use @chopin to ask Chopin").fill(childMessage);
+	await childConversation.getByRole("button", { name: "Send message" }).click();
+	await expect(childConversation.getByText(childMessage, { exact: true })).toBeVisible();
+	await expect(parent.getByText(childMessage, { exact: true })).toHaveCount(0);
+	await surface.getByRole("button", { name: "Decisions", exact: true }).click();
+	await expect(surface.locator('[data-document-view="decisions"]')).toBeVisible();
+	await expect(parent).toContainText("Parent passage 36.");
+
+	await surface.getByRole("button", { name: `Back to Test ${room.slice(0, 8)}` }).click();
+	await expect(surface).toHaveCount(0);
+	await expect(open).toBeFocused();
+	await expect.poll(() => parentScroll.evaluate(element => element.scrollTop)).toBe(
+		parentScrollTop,
+	);
+
+	await open.click();
+	await expect(surface).toBeVisible();
+	await opened.keyboard.press("Escape");
+	await expect(surface).toHaveCount(0);
+	await expect(open).toBeFocused();
+
+	await open.click();
+	await expect(surface).toBeVisible();
+	await opened.goBack();
+	await expect(surface).toHaveCount(0);
+	await expect(open).toBeFocused();
+});
+
+test("failed research retries by identity while cancelled research never publishes", async ({ baseURL, join, page, room, seed }) => {
+	await seed("# Recovery parent\n");
+	let databasePort = port(baseURL!);
+	let research = await scriptResearch(page, room, databasePort);
+	let opened = await join("ana");
+	let sidebar = opened.getByRole("complementary", { name: "Projects" });
+	let failedBrief = "Retry this exact failed research brief.";
+	let failedCard = await startInlineResearch(opened, failedBrief);
+	await expect(failedCard.getByText("Queued", { exact: true })).toBeVisible();
+	research.advance(failedBrief, "failed", {
+		error: "Research could not be completed safely.",
+	});
+	await expect(failedCard.getByText("Research failed", { exact: true })).toBeVisible();
+	await expect(failedCard).toContainText("Research could not be completed safely.");
+	await expect.poll(() => countChildChannels(databasePort, room)).toBe(0);
+
+	let failedId =
+		[...research.requests.values()].find(request => request.question === failedBrief)!.id;
+	await failedCard.getByRole("button", { name: "Retry research" }).click();
+	await expect(failedCard.getByText("Queued", { exact: true })).toBeVisible();
+	expect(research.retries).toEqual([failedId]);
+	research.advance(failedBrief, "writing", {
+		sources: [{ title: "Recovery source", url: "https://example.com/recovery" }],
+	});
+	await expect(failedCard.getByText("Writing", { exact: true })).toBeVisible();
+	let recoveredTitle = `Recovered evidence ${room.slice(0, 8)}`;
+	await research.publish(failedBrief, recoveredTitle);
+	await expect(sidebar.getByRole("link", { name: recoveredTitle, exact: true })).toBeVisible();
+	await expect.poll(() => countChildChannels(databasePort, room)).toBe(1);
+	let source = await readSource(databasePort, room);
+	expect(source.match(/<Research\s+id=/g)).toHaveLength(1);
+
+	let cancelledBrief = "Cancel this exact research brief.";
+	let cancelledCard = await startInlineResearch(opened, cancelledBrief);
+	await expect(cancelledCard.getByText("Queued", { exact: true })).toBeVisible();
+	let cancelledId =
+		[...research.requests.values()].find(request => request.question === cancelledBrief)!.id;
+	await cancelledCard.getByRole("button", { name: "Cancel research" }).click();
+	await expect(cancelledCard.getByText("Research cancelled", { exact: true })).toBeVisible();
+	expect(research.cancellations).toEqual([cancelledId]);
+
+	// A late worker-shaped update is not observed after the terminal cancellation.
+	research.advance(cancelledBrief, "ready", {
+		child: {
+			id: crypto.randomUUID(),
+			slug: "late-cancelled-child",
+			sourceCount: 0,
+			summary: "Late output",
+			title: "Late cancelled child",
+		},
+	});
+	await opened.waitForTimeout(2_250);
+	await expect(cancelledCard.getByText("Research cancelled", { exact: true })).toBeVisible();
+	await expect(sidebar.getByRole("link", { name: "Late cancelled child", exact: true }))
+		.toHaveCount(0);
+	await expect.poll(() => countChildChannels(databasePort, room)).toBe(1);
+	source = await readSource(databasePort, room);
+	expect(source.match(/<Research\s+id=/g)).toHaveLength(2);
+	await expect(sidebar.getByRole("link", { name: recoveredTitle, exact: true })).toHaveCount(1);
+});
 
 test("an in-app child preserves and restores its mounted parent", async ({ baseURL, join, page, room, seed }) => {
 	await seed(PARENT_SOURCE);

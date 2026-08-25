@@ -45,8 +45,9 @@ function atStage(stage: Research.RequestStage): Research.RequestView {
 
 type CardProps = {
 	request: Research.RequestView;
+	openButtonRef?: (button: HTMLButtonElement | null) => void;
 	onCancel?: () => void;
-	onOpen?: () => void;
+	onOpen?: (opener: HTMLElement) => void;
 	onRemove?: () => void;
 	onRetry?: () => void;
 };
@@ -71,7 +72,8 @@ type Store = {
 	create(question: string, requestId: string): Promise<Research.RequestView>;
 	cancel(id: string): Promise<Research.RequestView>;
 	retry(id: string): Promise<Research.RequestView>;
-	open(child: Research.ReadyChild): void;
+	opener(id: string, current?: HTMLElement | null): { readonly current: HTMLElement | null };
+	open(child: Research.ReadyChild, opener: { readonly current: HTMLElement | null }): void;
 };
 
 async function components() {
@@ -244,6 +246,48 @@ describe("research card", () => {
 });
 
 describe("research reference", () => {
+	it("carries the ready-card opener through the store contract", async () => {
+		let module = await import("./research");
+		let open = (module as unknown as {
+			openResearch?: (
+				store: Store,
+				id: string,
+				child: Research.ReadyChild,
+				opener: HTMLElement,
+			) => void;
+		}).openResearch;
+		expect(typeof open).toBe("function");
+		if (!open) return;
+		let received: [Research.ReadyChild, { readonly current: HTMLElement | null }] | undefined;
+		let token = { current: null as HTMLElement | null };
+		let store: Store = {
+			subscribe: () => () => {},
+			retain: () => () => {},
+			get: () => BASE,
+			create: async () => BASE,
+			cancel: async () => BASE,
+			retry: async () => BASE,
+			opener: (_id, current) => {
+				if (current !== undefined) token.current = current;
+				return token;
+			},
+			open: (child, opener) => received = [child, opener],
+		};
+		let child = {
+			id: "child-one",
+			title: "Rollout evidence",
+			slug: "rollout-evidence",
+			summary: "A complete report.",
+			sourceCount: 1,
+		};
+		let opener = { focus() {} } as HTMLElement;
+
+		open(store, "workspace-one", child, opener);
+
+		expect(received).toEqual([child, token]);
+		expect(token.current).toBe(opener);
+	});
+
 	it("defines one explicit state-to-actions policy", async () => {
 		let module = await import("./research");
 		let actions = (module as unknown as {
@@ -318,6 +362,7 @@ describe("research reference", () => {
 			create: async () => BASE,
 			cancel: async () => BASE,
 			retry: async () => BASE,
+			opener: () => ({ current: null }),
 			open() {},
 		};
 		let markup = renderToStaticMarkup(createElement(Reference, {
@@ -327,5 +372,85 @@ describe("research reference", () => {
 		}));
 		expect(markup).toContain(BASE.question);
 		expect(markup).toContain("Searching");
+	});
+
+	it("subscribes safely to a class store whose method depends on this", async () => {
+		let module = await import("./research");
+		let subscribe = (module as unknown as {
+			subscribeResearch?: (store: Store, listener: () => void) => () => void;
+		}).subscribeResearch;
+		let Reference = (module as unknown as {
+			ResearchReference?: ComponentType<{ id: string; onRemove: () => void; store: Store }>;
+		}).ResearchReference;
+		expect(typeof subscribe).toBe("function");
+		expect(typeof Reference).toBe("function");
+		if (!Reference || !subscribe) return;
+		class ClassStore implements Store {
+			listeners = new Set<() => void>();
+			retained: string[] = [];
+			subscribe(listener: () => void) {
+				this.listeners.add(listener);
+				return () => this.listeners.delete(listener);
+			}
+			get() {
+				return BASE;
+			}
+			retain(id: string) {
+				this.retained.push(id);
+				return () => this.retained.splice(this.retained.indexOf(id), 1);
+			}
+			async create() {
+				return BASE;
+			}
+			async cancel() {
+				return BASE;
+			}
+			async retry() {
+				return BASE;
+			}
+			opener() {
+				return { current: null };
+			}
+			open() {}
+		}
+		let store = new ClassStore();
+		let off = subscribe(store, () => {});
+		expect(store.listeners.size).toBe(1);
+		off();
+		expect(store.listeners.size).toBe(0);
+		let markup = renderToStaticMarkup(createElement(Reference, {
+			id: BASE.id,
+			onRemove() {},
+			store,
+		}));
+		expect(markup).toContain(BASE.question);
+	});
+
+	it("retains and releases the reference id through the store contract", async () => {
+		let module = await import("./research");
+		let retain = (module as unknown as {
+			retainResearch?: (store: Store, id: string) => () => void;
+		}).retainResearch;
+		expect(typeof retain).toBe("function");
+		if (!retain) return;
+		let retained = new Set<string>();
+		let store = {
+			subscribe: () => () => {},
+			retain: (id: string) => {
+				retained.add(id);
+				return () => retained.delete(id);
+			},
+			get: () => BASE,
+			create: async () => BASE,
+			cancel: async () => BASE,
+			retry: async () => BASE,
+			opener: () => ({ current: null }),
+			open() {},
+		};
+
+		let release = retain(store, BASE.id);
+		expect(retained).toEqual(new Set([BASE.id]));
+		release();
+		expect(retained).toEqual(new Set());
 	});
 });
