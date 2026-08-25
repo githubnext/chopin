@@ -91,6 +91,7 @@ type ComposerKeyHandler = (
 		ctrlKey: boolean;
 		nativeEvent: { isComposing: boolean };
 		currentTarget: {
+			readOnly: boolean;
 			value: string;
 			selectionStart: number;
 			selectionEnd: number;
@@ -292,6 +293,7 @@ describe("research composer", () => {
 		if (!handle) return;
 		let calls: string[] = [];
 		let textarea = {
+			readOnly: false,
 			value: "Evidence here",
 			selectionStart: 8,
 			selectionEnd: 13,
@@ -320,6 +322,39 @@ describe("research composer", () => {
 		expect(textarea.value).toBe("Evidence\n");
 		expect(textarea.selectionStart).toBe(9);
 		expect(calls).toEqual(["prevent", "stop", "end", "Evidence\n"]);
+	});
+
+	it("does not insert a modifier-Enter newline into locked recovery text", async () => {
+		let handle = await composerKeyHandler();
+		if (!handle) return;
+		let calls: string[] = [];
+		let textarea = {
+			readOnly: true,
+			value: BASE.question,
+			selectionStart: BASE.question.length,
+			selectionEnd: BASE.question.length,
+			setRangeText() {
+				calls.push("mutate");
+			},
+		};
+
+		handle({
+			key: "Enter",
+			metaKey: true,
+			ctrlKey: false,
+			nativeEvent: { isComposing: false },
+			currentTarget: textarea,
+			preventDefault: () => calls.push("prevent"),
+			stopPropagation: () => calls.push("stop"),
+		}, {
+			dismissible: false,
+			onChange: () => calls.push("change"),
+			onDismiss: () => calls.push("dismiss"),
+			onSubmit: () => calls.push("submit"),
+		});
+
+		expect(textarea.value).toBe(BASE.question);
+		expect(calls).toEqual(["prevent", "stop"]);
 	});
 
 	it("renders one accessible circular send action", async () => {
@@ -376,6 +411,9 @@ describe("research composer", () => {
 
 		expect(markup).toMatch(/<textarea[^>]*disabled=""/);
 		expect((markup.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(1);
+		expect(markup).toContain('aria-label="Start research"');
+		expect(markup).toContain('aria-busy="true"');
+		expect(markup).not.toContain("Starting…");
 		expect(markup).not.toContain("Discard research question");
 	});
 

@@ -1,8 +1,14 @@
 export function SendAction(
-	{ label, disabled, onClick }: { label: string; disabled?: boolean; onClick: () => void },
+	{ busy, label, disabled, onClick }: {
+		busy?: boolean;
+		label: string;
+		disabled?: boolean;
+		onClick: () => void;
+	},
 ) {
 	return (
 		<button
+			aria-busy={busy || undefined}
 			aria-label={label}
 			className="send-action btn btn-icon btn-primary rounded-full"
 			disabled={disabled}
