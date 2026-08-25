@@ -177,12 +177,39 @@ async function startInlineResearch(page: Page, question: string) {
 	await page.keyboard.press("Meta+End");
 	await page.keyboard.press("Enter");
 	await page.keyboard.type("/research");
-	await page.getByRole("listbox", { name: "Insert block" })
-		.getByRole("option", { name: "Research" })
-		.click();
-	await page.getByRole("textbox", { name: "Research question", exact: true }).fill(question);
-	await page.getByRole("button", { name: "Start research", exact: true }).click();
+	await page.keyboard.press("Enter");
+	let composer = page.getByRole("region", { name: "Research question", exact: true });
+	await composer.getByRole("textbox", { name: "Research question", exact: true }).fill(question);
+	let authoredOrder = await page.locator("[data-research-draft-anchor]").evaluate(anchor => {
+		let editor = anchor.closest('[role="textbox"][aria-label="editable markdown"]')!;
+		let block = anchor;
+		while (block.parentElement !== editor) block = block.parentElement!;
+		let next = block.nextElementSibling;
+		while (next && !next.textContent?.trim()) next = next.nextElementSibling;
+		let previous: Element | null = block;
+		while (previous && !previous.textContent?.trim()) previous = previous.previousElementSibling!;
+		return {
+			next: next?.textContent?.trim() || null,
+			previous: previous?.textContent?.trim() || null,
+		};
+	});
+	await page.keyboard.press("Enter");
+	await expect(composer).toHaveCount(0);
 	let card = page.getByRole("article", { name: "Research" }).filter({ hasText: question });
+	await expect(card).toHaveCount(1);
+	expect(
+		await card.evaluate(article => {
+			let editor = article.closest('[role="textbox"][aria-label="editable markdown"]')!;
+			let block = article;
+			while (block.parentElement !== editor) block = block.parentElement!;
+			let neighbor = (direction: "nextElementSibling" | "previousElementSibling") => {
+				let sibling = block[direction];
+				while (sibling && !sibling.textContent?.trim()) sibling = sibling[direction];
+				return sibling?.textContent?.trim() || null;
+			};
+			return { next: neighbor("nextElementSibling"), previous: neighbor("previousElementSibling") };
+		}),
+	).toEqual(authoredOrder);
 	await expect(card.getByText("Queued", { exact: true })).toBeVisible();
 	await expect(page.getByRole("button", { name: "Place research here", exact: true }))
 		.toHaveCount(0);
