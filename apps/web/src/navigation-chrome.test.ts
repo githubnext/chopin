@@ -82,6 +82,10 @@ describe("the Figma navigation chrome", () => {
 			/<button[^>]*aria-expanded="true"[^>]*class="project-sidebar-project-disclosure[^>]*>.*?book-bookmark\.svg.*?testing-sql-transcripts<\/span><\/button>/s,
 		);
 		expect(markup).toMatch(
+			/<button[^>]*aria-controls="[^"]+"[^>]*class="project-sidebar-project-disclosure/s,
+		);
+		expect(markup).toContain('data-motion-disclosure="projects"');
+		expect(markup).toMatch(
 			/<\/button><button[^>]*aria-label="New document in testing-sql-transcripts"/s,
 		);
 	});
