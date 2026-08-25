@@ -1,6 +1,7 @@
 /** Three panes on one ground, with the document as the only raised surface. */
 
 import { useEffect, useLayoutEffect, useReducer, useRef, useSyncExternalStore } from "react";
+import { ContentSwapLayer } from "@chopin/editor/content-swap";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 
 import {
@@ -12,6 +13,7 @@ import {
 import conversationCloseIcon from "./assets/icons/conversation-close.svg";
 import conversationIcon from "./assets/icons/conversation.svg";
 import { ResizeHandle, usePaneWidth } from "./resizable-pane";
+import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
 
 import type { Dispatch, ReactNode, RefObject } from "react";
@@ -209,20 +211,17 @@ export function Workspace(
 ) {
 	let [chatWidth, resizeChat] = usePaneWidth({ active: mode === "split", ...CHAT_PANE });
 	let presentation = presentWorkspace(state, mode, view);
+	let immediately = motionImmediately();
+	let contentSwapMotion = motionContract("content-swap");
 	let conversationPresence = useTransitionPresence(
 		presentation.conversationVisible ? true : undefined,
 		220,
-		motionImmediately(),
+		immediately,
 	);
 	let opener = useRef<HTMLElement | undefined>(undefined);
 	let edgeTab = useRef<HTMLButtonElement>(null);
 	let previousConversationOpen = useRef(state.conversationOpen);
 	let conversationInactive = !presentation.conversationVisible;
-	let planHidden = !presentation.documentVisible || presentation.documentView !== "plan";
-	let decisionsHidden = !presentation.documentVisible
-		|| presentation.documentView !== "decisions";
-	let backgroundWorkHidden = !presentation.documentVisible
-		|| presentation.documentView !== "background-work";
 	let destinations: WorkspaceDestination[] = backgroundWork
 		? ["conversation", "plan", "decisions", "background-work"]
 		: ["conversation", "plan", "decisions"];
@@ -365,37 +364,54 @@ export function Workspace(
 								{controls}
 							</div>
 						)}
-						<section
-							aria-hidden={planHidden || undefined}
-							aria-labelledby={HEADING.plan}
-							className="min-h-0 flex-1"
-							data-document-view="plan"
-							hidden={planHidden}
-							inert={planHidden}
-						>
-							<h2 className="sr-only" id={HEADING.plan} tabIndex={-1}>Document</h2>
-							{plan}
-						</section>
-						<section
-							aria-hidden={decisionsHidden || undefined}
-							aria-labelledby={HEADING.decisions}
-							className="min-h-0 flex-1"
-							data-document-view="decisions"
-							hidden={decisionsHidden}
-							inert={decisionsHidden}
-						>
-							{decisions}
-						</section>
-						<section
-							aria-hidden={backgroundWorkHidden || undefined}
-							aria-labelledby={HEADING["background-work"]}
-							className="min-h-0 flex-1 overflow-auto"
-							data-document-view="background-work"
-							hidden={backgroundWorkHidden}
-							inert={backgroundWorkHidden}
-						>
-							{backgroundWork}
-						</section>
+						<div className="workspace-document-swap content-swap-stack relative min-h-0 flex-1">
+							<ContentSwapLayer
+								active={presentation.documentVisible && presentation.documentView === "plan"}
+								className="workspace-document-layer min-h-0"
+								immediately={immediately}
+								motion={contentSwapMotion}
+							>
+								<section
+									aria-labelledby={HEADING.plan}
+									className="h-full min-h-0"
+									data-document-view="plan"
+								>
+									<h2 className="sr-only" id={HEADING.plan} tabIndex={-1}>Document</h2>
+									{plan}
+								</section>
+							</ContentSwapLayer>
+							<ContentSwapLayer
+								active={presentation.documentVisible && presentation.documentView === "decisions"}
+								className="workspace-document-layer min-h-0"
+								immediately={immediately}
+								motion={contentSwapMotion}
+							>
+								<section
+									aria-labelledby={HEADING.decisions}
+									className="h-full min-h-0"
+									data-document-view="decisions"
+								>
+									{decisions}
+								</section>
+							</ContentSwapLayer>
+							{backgroundWork && (
+								<ContentSwapLayer
+									active={presentation.documentVisible
+										&& presentation.documentView === "background-work"}
+									className="workspace-document-layer min-h-0"
+									immediately={immediately}
+									motion={contentSwapMotion}
+								>
+									<section
+										aria-labelledby={HEADING["background-work"]}
+										className="h-full min-h-0 overflow-auto"
+										data-document-view="background-work"
+									>
+										{backgroundWork}
+									</section>
+								</ContentSwapLayer>
+							)}
+						</div>
 					</div>
 				</main>
 			</div>

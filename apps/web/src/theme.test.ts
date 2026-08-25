@@ -186,6 +186,18 @@ describe("motion contracts", () => {
 			/@media \(prefers-reduced-motion: reduce\)\s*{[\s\S]*?\.motion-comment-preview[\s\S]*?transition:\s*none;[\s\S]*?}/,
 		);
 	});
+
+	it("uses the page timing, distance, and smooth curve for content swaps", () => {
+		expect(THEME).toMatch(
+			/\.motion-content-swap\s*{[^}]*var\(--page-slide-distance\)[^}]*var\(--page-slide-dur\)[^}]*var\(--motion-smooth-out\)/s,
+		);
+	});
+
+	it("settles content swaps under reduced motion", () => {
+		expect(THEME).toMatch(
+			/@media \(prefers-reduced-motion: reduce\)\s*{[\s\S]*?\.motion-content-swap[\s\S]*?transition:\s*none;[\s\S]*?}/,
+		);
+	});
 });
 
 describe("disclosure motion", () => {
