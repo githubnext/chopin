@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
 
 import { ULID, ulid } from "@chopin/dialect";
-import { documentPath, parseDocumentPath } from "@chopin/protocol/document-url";
+import {
+	childDocumentPath,
+	documentPath,
+	parseChildDocumentPath,
+	parseDocumentPath,
+} from "@chopin/protocol/document-url";
 import { instruction, MENTION } from "@chopin/protocol/address";
 
 import { isChannelId } from "../channels/id";
@@ -11,7 +16,7 @@ import {
 } from "../jobs/research-workspace";
 
 import type { Chat as Wire, Job } from "@chopin/protocol";
-import type { JsonValue } from "../storage/model";
+import type { ChannelRecord, JsonValue } from "../storage/model";
 import type { StorageAdapter } from "../storage/port";
 import type { DocumentTarget } from "../plan/service";
 import type { ResearchWorkspaceService, ResearchWorkspaceView } from "../research/service";
@@ -331,7 +336,17 @@ function validLabel(value: unknown, marker: "#" | "%"): value is string {
 function canonicalDocumentHref(value: unknown): value is string {
 	if (typeof value !== "string" || value.length > MAX_HREF) return false;
 	let parsed = parseDocumentPath(value);
-	return !!parsed?.slug && documentPath(parsed.owner, parsed.repository, parsed.slug) === value;
+	if (parsed?.slug && documentPath(parsed.owner, parsed.repository, parsed.slug) === value) {
+		return true;
+	}
+	let child = parseChildDocumentPath(value);
+	return !!child
+		&& childDocumentPath(
+				child.owner,
+				child.repository,
+				child.parentSlug,
+				child.childSlug,
+			) === value;
 }
 
 function canonicalResearchHref(value: unknown): value is string {
@@ -596,6 +611,22 @@ export class ReferenceService {
 		this.#id = options.id ?? ulid;
 	}
 
+	async #documentHref(target: ChannelRecord): Promise<string> {
+		if (!target.parentChannelId) {
+			return documentPath(target.repositoryOwner, target.repositoryName, target.slug);
+		}
+		let parent = await this.#storage.channels.get(target.parentChannelId);
+		if (
+			!parent || parent.parentChannelId || parent.repositoryId !== target.repositoryId
+		) throw new ChatReferenceError("Referenced document parent is unavailable.");
+		return childDocumentPath(
+			target.repositoryOwner,
+			target.repositoryName,
+			parent.slug,
+			target.slug,
+		);
+	}
+
 	async resolve(input: ResolveReferences): Promise<ResolvedMessage> {
 		if (typeof input.text !== "string") throw new ChatReferenceError("Message text is invalid.");
 		if (input.destination !== "room" && input.destination !== "planner") {
@@ -618,12 +649,13 @@ export class ReferenceService {
 					throw new ChatReferenceError("Referenced document is unavailable.");
 				}
 				let document = currentDocument(await this.#current(target.id), target.id);
+				let href = await this.#documentHref(target);
 				return {
 					kind: "document" as const,
 					start: item.start,
 					end: item.end,
 					label: `#${target.title}`,
-					href: documentPath(target.repositoryOwner, target.repositoryName, target.slug),
+					href,
 					repositoryId: target.repositoryId,
 					observedRevision: document.revision,
 					channelId: target.id,
@@ -679,6 +711,7 @@ export class ReferenceService {
 				throw new ChatReferenceError("Reference target moved or is unavailable.");
 			}
 			let document = currentDocument(await this.#current(target.id), target.id);
+			let href = await this.#documentHref(target);
 			return {
 				untrusted: true,
 				kind: stored.kind,
@@ -689,7 +722,7 @@ export class ReferenceService {
 				observedSourceHash: stored.observedSourceHash,
 				currentRevision: document.revision,
 				currentSourceHash: document.sourceHash,
-				href: documentPath(target.repositoryOwner, target.repositoryName, target.slug),
+				href,
 				changedSinceReference: document.revision !== stored.observedRevision
 					|| document.sourceHash !== stored.observedSourceHash,
 				source: document.source,

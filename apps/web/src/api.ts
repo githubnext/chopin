@@ -100,11 +100,6 @@ export type ResearchParentChannel = Pick<
 	"id" | "repositoryId" | "repositoryOwner" | "repositoryName" | "title" | "slug"
 >;
 
-export type ChannelResearchPage = {
-	workspaces: Research.WorkspaceSummary[];
-	truncated: boolean;
-};
-
 export type NavigationRepository = Pick<
 	Repository,
 	"id" | "owner" | "name" | "fullName" | "ownerAvatarUrl" | "permissions"
@@ -257,13 +252,6 @@ export function visitDocument(documentId: string): Promise<void> {
 		body: JSON.stringify({ documentId }),
 		keepalive: true,
 	});
-}
-
-export function channelResearchWorkspaces(
-	channelId: string,
-	signal?: AbortSignal,
-): Promise<ChannelResearchPage> {
-	return response(`/api/channels/${encodeURIComponent(channelId)}/research-workspaces`, { signal });
 }
 
 function researchRequestPath(channelId: string, requestId?: string): string {

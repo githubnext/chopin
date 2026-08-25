@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { ulid } from "@chopin/dialect";
-import { documentPath } from "@chopin/protocol/document-url";
+import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
 
 import { ReferenceService, restoreReferences } from "./references";
 import { sourceHash } from "../plan/service";
@@ -391,6 +391,48 @@ describe("chat reference requests", () => {
 			observedRevision: 0,
 			observedSourceHash: sourceHash(""),
 		});
+	});
+
+	it("uses the canonical nested URL for ordinary child documents", async () => {
+		let { current, service, storage, parent } = await setup();
+		let child = await storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: parent.repositoryId,
+			repositoryOwner: parent.repositoryOwner,
+			repositoryName: parent.repositoryName,
+			parentChannelId: parent.id,
+			title: "Source Review",
+			createdBy: "U_test",
+			now: NOW,
+		});
+		current.set(child.id, {
+			channelId: child.id,
+			revision: 1,
+			source: "Child source.\n",
+			sourceHash: sourceHash("Child source.\n"),
+		});
+
+		let resolved = await service.resolve({
+			channelId: parent.id,
+			repositoryId: parent.repositoryId,
+			text: "#source",
+			destination: "room",
+			requests: [documentRequest(child.id, 0, 7)],
+		});
+		let href = childDocumentPath(
+			parent.repositoryOwner,
+			parent.repositoryName,
+			parent.slug,
+			child.slug,
+		);
+		expect(resolved.references?.[0]).toMatchObject({ href });
+		expect(
+			await service.read({
+				channelId: parent.id,
+				repositoryId: parent.repositoryId,
+				reference: resolved.references![0]!,
+			}),
+		).toMatchObject({ href });
 	});
 });
 

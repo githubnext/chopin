@@ -1,5 +1,3 @@
-export { BackgroundWork } from "./background-work";
-export type { BackgroundWorkProps } from "./background-work";
 export { collaborationPlugin } from "./collaboration";
 export type { CollaborationOptions } from "./collaboration";
 export { ContentSwapLayer } from "./content-swap";
@@ -24,8 +22,6 @@ export {
 export type { MotionDisclosureContract } from "./disclosure-motion";
 export { AgentFace, Face } from "./face";
 export type { FaceProps } from "./face";
-export { aggregateJobs, canCancelJob, currentJobs, JobStore, useJobs } from "./jobs";
-export type { JobDetail, JobPage, JobSnapshot, JobView } from "./jobs";
 export { PlanEditor } from "./plan-editor";
 export type { PlanEditorProps, PlanState } from "./plan-editor";
 export { usePointerCapabilities } from "./pointer";

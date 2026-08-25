@@ -24,24 +24,25 @@ function mediaAt(width: number): MatchMedia {
 
 describe("adaptive workspace", () => {
 	it("starts a child with Conversation collapsed without inheriting the desktop preference", () => {
-		expect(initialWorkspaceState(workspaceProfile("child", true), true)).toEqual({
+		expect(initialWorkspaceState(workspaceProfile("child"), true)).toEqual({
 			conversationOpen: false,
 			desktopConversationOpen: false,
 		});
 	});
 
 	it("starts a child on Document without inheriting the parent's saved view", () => {
-		expect(initialDocumentView(workspaceProfile("child", true), "decisions")).toBe("plan");
-		expect(initialDocumentView(workspaceProfile("child", true), "background-work")).toBe("plan");
-		expect(initialDocumentView(workspaceProfile("document", true), "decisions"))
+		expect(initialDocumentView(workspaceProfile("child"), "decisions")).toBe("plan");
+		expect(initialDocumentView(workspaceProfile("child"), "background-work")).toBe("plan");
+		expect(initialDocumentView(workspaceProfile("document"), "decisions"))
 			.toBe("decisions");
+		expect(initialDocumentView(workspaceProfile("document"), "background-work")).toBe("plan");
+		expect(initialDocumentView(workspaceProfile("document"), "tasks")).toBe("plan");
 	});
 
 	it("limits a child to Document, Decisions, and Conversation", () => {
-		let capabilities = workspaceProfile("child", true);
+		let capabilities = workspaceProfile("child");
 
 		expect(capabilities).toEqual({
-			backgroundJobs: false,
 			implementation: false,
 			persistConversation: false,
 			persistPaneSize: false,
@@ -49,16 +50,15 @@ describe("adaptive workspace", () => {
 			research: false,
 			surface: "child",
 		});
-		expect(workspaceDestinations(capabilities.backgroundJobs)).toEqual([
+		expect(workspaceDestinations()).toEqual([
 			"conversation",
 			"plan",
 			"decisions",
 		]);
 	});
 
-	it("keeps the parent's legacy implementation surface without background jobs", () => {
-		expect(workspaceProfile("document", false)).toEqual({
-			backgroundJobs: false,
+	it("keeps the parent's research and implementation capabilities", () => {
+		expect(workspaceProfile("document")).toEqual({
 			implementation: true,
 			persistConversation: true,
 			persistPaneSize: true,
@@ -113,19 +113,6 @@ describe("adaptive workspace", () => {
 		state = transitionWorkspace(state, { type: "set-conversation", open: false });
 		expect(state.desktopConversationOpen).toBe(true);
 		expect(presentWorkspace(state, "split", "plan").conversationVisible).toBe(true);
-	});
-
-	it("restores Background Work after compact Conversation closes", () => {
-		let state: WorkspaceState = {
-			conversationOpen: true,
-			desktopConversationOpen: false,
-		};
-		state = transitionWorkspace(state, { type: "set-conversation", open: false });
-		expect(presentWorkspace(state, "compact", "background-work")).toMatchObject({
-			documentView: "background-work",
-			documentVisible: true,
-			conversationVisible: false,
-		});
 	});
 
 	it("shows Conversation as the only compact destination on tablets", () => {

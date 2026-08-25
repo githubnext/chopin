@@ -17,8 +17,7 @@ export const NAVIGATION_MEDIA = "(max-width: 1023px)";
 export function isDocumentWorkspaceRoute(
 	route: NavigationRoute,
 ): route is DocumentRouteIdentitySource {
-	return route.page === "channel" || route.page === "document" || route.page === "child"
-		|| route.page === "research";
+	return route.page === "channel" || route.page === "document" || route.page === "child";
 }
 
 export function navigationMode(

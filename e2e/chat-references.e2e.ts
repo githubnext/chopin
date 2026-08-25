@@ -1,9 +1,6 @@
 import {
-	createChannel,
-	seedChannel,
+	seedChildChannel,
 	seedChannelDescription,
-	seedCompletedResearchWorkspace,
-	testChannelPath,
 } from "./database";
 import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 import { expect, ready, test } from "./room";
@@ -30,25 +27,26 @@ async function enablePlanner(page: Page): Promise<void> {
 test("typed references survive Planner send, reload, navigation, and a mobile conversation", async ({ baseURL, join, page, room, seed }) => {
 	await seed("# Reference parent\n");
 	let targetRoom = crypto.randomUUID();
-	await createChannel(port(baseURL!), targetRoom);
-	await seedChannel(port(baseURL!), targetRoom, "# Referenced release\n");
+	let targetTitle = `Source review ${targetRoom.slice(0, 8)}`;
+	let target = await seedChildChannel(
+		port(baseURL!),
+		room,
+		targetRoom,
+		targetTitle,
+		"# Referenced child\n",
+	);
 	await seedChannelDescription(port(baseURL!), targetRoom, "RFC about referenced releases");
-	let targetTitle = `Test ${targetRoom.slice(0, 8)}`;
-	let targetPath = testChannelPath(targetRoom);
-	let researchTitle = `OAuth evidence ${room.slice(0, 8)}`;
-	let research = await seedCompletedResearchWorkspace(port(baseURL!), room, {
-		question: researchTitle,
-		report: {
-			title: "OAuth report",
-			summary: "OAuth evidence is durable.",
-			finding: "The OAuth flow preserves evidence.",
-			caveat: "Review before release.",
-			source: { title: "OAuth source", url: "https://example.com/oauth" },
-		},
-	});
+	let targetPath = target.path;
 	let sent: Chat.Send[] = [];
 	let attempts: Chat.Send[] = [];
 	let rejectNext = true;
+	let researchCatalogueCalls = 0;
+	page.on("request", request => {
+		if (
+			request.method() === "GET"
+			&& new URL(request.url()).pathname === `/api/channels/${room}/research-workspaces`
+		) researchCatalogueCalls++;
+	});
 
 	await enablePlanner(page);
 	await page.routeWebSocket("**/ws?**", route => {
@@ -89,7 +87,7 @@ test("typed references survive Planner send, reload, navigation, and a mobile co
 	let draft = conversation.getByPlaceholder("Use @chopin to ask Chopin");
 	await expect(draft).toHaveAttribute("role", "combobox");
 	await expect(draft).toHaveAttribute("aria-autocomplete", "list");
-	await draft.fill("@chopin Compare #Te");
+	await draft.fill("@chopin Compare #Sou");
 	let documents = conversation.getByRole("listbox", { name: "Document references" });
 	await expect(documents).toBeVisible();
 	await expectNoHorizontalOverflow(opened);
@@ -127,19 +125,13 @@ test("typed references survive Planner send, reload, navigation, and a mobile co
 	await expect(target).toHaveAttribute("aria-selected", "true");
 	await draft.press("Enter");
 
-	let scopedResearch = opened.waitForResponse(response =>
-		response.request().method() === "GET"
-		&& new URL(response.url()).pathname === `/api/channels/${room}/research-workspaces`
-	);
 	await draft.pressSequentially(" and %OAuth");
-	await scopedResearch;
-	let researchList = conversation.getByRole("listbox", {
-		name: "Research Workspace references",
-	});
-	await researchList.getByRole("option").filter({ hasText: researchTitle }).click();
+	await opened.waitForTimeout(250);
+	await expect(conversation.getByRole("listbox")).toHaveCount(0);
+	expect(researchCatalogueCalls).toBe(0);
 	await draft.pressSequentially(" with [external docs](https://example.com).", { delay: 1 });
 	let expected =
-		`@chopin Compare #${targetTitle} and %${researchTitle} with [external docs](https://example.com).`;
+		`@chopin Compare #${targetTitle} and %OAuth with [external docs](https://example.com).`;
 	await expect(draft).toHaveValue(expected);
 	let send = conversation.getByRole("button", { name: "Send message" });
 	await send.hover();
@@ -234,21 +226,14 @@ test("typed references survive Planner send, reload, navigation, and a mobile co
 				start: expected.indexOf(`#${targetTitle}`),
 				end: expected.indexOf(`#${targetTitle}`) + targetTitle.length + 1,
 			},
-			{
-				kind: "research",
-				workspaceId: research.workspaceId,
-				start: expected.indexOf(`%${researchTitle}`),
-				end: expected.indexOf(`%${researchTitle}`) + researchTitle.length + 1,
-			},
 		],
 	});
 	await expect(draft).toHaveValue("");
 	await expect(draft).toBeFocused();
 	let documentLink = conversation.getByRole("link", { name: `#${targetTitle}`, exact: true });
-	let researchLink = conversation.getByRole("link", { name: `%${researchTitle}`, exact: true });
 	await expect(documentLink).toHaveAttribute("href", targetPath);
 	await expect(documentLink).not.toHaveAttribute("target", "_blank");
-	await expect(researchLink).toHaveAttribute("href", research.path);
+	await expect(conversation.getByText("%OAuth", { exact: false })).toBeVisible();
 	await expect(conversation.getByRole("link", { name: "external docs", exact: true }))
 		.toHaveAttribute("target", "_blank");
 

@@ -32,6 +32,9 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 	await join("ana");
 
 	let parent = page.locator(`[data-workspace-room="${room}"]`);
+	await expect(parent.getByRole("button", { name: "Background Work", exact: true })).toHaveCount(
+		0,
+	);
 	let parentScroll = parent.locator("[data-plan-scroll]");
 	await expect(parent.getByRole("separator", { name: "Resize the conversation" }))
 		.toHaveAttribute("aria-valuenow", "384");

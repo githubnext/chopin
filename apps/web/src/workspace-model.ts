@@ -5,7 +5,6 @@ export type WorkspaceMode = "compact" | "split";
 export type WorkspaceSurface = "document" | "child";
 
 export type WorkspaceProfile = {
-	backgroundJobs: boolean;
 	implementation: boolean;
 	persistConversation: boolean;
 	persistPaneSize: boolean;
@@ -14,7 +13,7 @@ export type WorkspaceProfile = {
 	surface: WorkspaceSurface;
 };
 
-export type WorkspaceDestination = "plan" | "decisions" | "background-work" | "conversation";
+export type WorkspaceDestination = "plan" | "decisions" | "conversation";
 
 export type WorkspaceState = {
 	conversationOpen: boolean;
@@ -46,11 +45,9 @@ export function initialDocumentView(
 
 export function workspaceProfile(
 	surface: WorkspaceSurface,
-	backgroundJobs: boolean,
 ): WorkspaceProfile {
 	let child = surface === "child";
 	return {
-		backgroundJobs: !child && backgroundJobs,
 		implementation: !child,
 		persistConversation: !child,
 		persistPaneSize: !child,
@@ -60,10 +57,8 @@ export function workspaceProfile(
 	};
 }
 
-export function workspaceDestinations(backgroundWork: boolean): WorkspaceDestination[] {
-	return backgroundWork
-		? ["conversation", "plan", "decisions", "background-work"]
-		: ["conversation", "plan", "decisions"];
+export function workspaceDestinations(): WorkspaceDestination[] {
+	return ["conversation", "plan", "decisions"];
 }
 
 export function workspaceHeadingId(destination: WorkspaceDestination, scope?: string): string {
@@ -71,13 +66,8 @@ export function workspaceHeadingId(destination: WorkspaceDestination, scope?: st
 }
 
 export function storedDocumentView(value: string | null): DecisionView {
-	if (value === "decisions" || value === "background-work") return value;
-	if (value === "tasks") return "background-work";
+	if (value === "decisions") return value;
 	return "plan";
-}
-
-export function availableDocumentView(view: DecisionView, backgroundJobs: boolean): DecisionView {
-	return view === "background-work" && !backgroundJobs ? "plan" : view;
 }
 
 /** Classify the same media queries the subscription observes. */
@@ -93,7 +83,7 @@ export function transitionWorkspace(state: WorkspaceState, event: WorkspaceEvent
 export function presentWorkspace(
 	state: WorkspaceState,
 	mode: WorkspaceMode,
-	documentView: "plan" | "decisions" | "background-work",
+	documentView: DecisionView,
 ) {
 	let conversationVisible = mode === "split"
 		? state.desktopConversationOpen || state.conversationOpen

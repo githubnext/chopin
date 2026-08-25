@@ -114,6 +114,28 @@ test("chips preserve the server label and href rather than reparsing token text"
 	expect(markup).toContain('href="/documents/octo-org/score/release-at-send-time"');
 });
 
+test("historical research references remain readable without composer discovery", () => {
+	let source = "See %OAuth evidence";
+	let start = source.indexOf("%OAuth evidence");
+	let persisted: Chat.ResearchReference = {
+		id: "research-reference",
+		kind: "research",
+		parentChannelId: "parent-channel",
+		workspaceId: "workspace-one",
+		start,
+		end: source.length,
+		label: "%OAuth evidence",
+		href: "/documents/octo-org/score/parent/research/workspace-one",
+		repositoryId: "repository-one",
+		observedRevision: 4,
+	};
+
+	let markup = markdown(source, [persisted]);
+
+	expect(markup).toContain('data-chat-reference="research"');
+	expect(markup).toContain('href="/documents/octo-org/score/parent/research/workspace-one"');
+});
+
 test("user-authored and encoded links cannot imitate a typed reference node", () => {
 	let source = "[ordinary](chopin-reference:0) [encoded](chopin-reference%3A0) and #Plan";
 	let markup = markdown(source, [reference(source, "#Plan")]);

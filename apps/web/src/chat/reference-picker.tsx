@@ -7,10 +7,7 @@ import type { ReferenceTarget, ReferenceTrigger } from "./references";
 
 const SEARCH_DELAY = 160;
 
-export type ReferenceSearchApi = Pick<
-	typeof Api,
-	"channelResearchWorkspaces" | "channels"
->;
+export type ReferenceSearchApi = Pick<typeof Api, "channels">;
 
 export type ReferencePickerRequest = {
 	id: number;
@@ -70,57 +67,40 @@ export async function searchReferenceTargets(
 	signal: AbortSignal,
 	api: ReferenceSearchApi = Api,
 ): Promise<ReferenceSearchResult> {
-	if (trigger.kind === "document") {
-		let channels = new Map<string, Api.Channel>();
-		let cursor: string | undefined;
-		let pages = 0;
-		let omitted = false;
-		do {
-			let page = await api.channels(
-				repository.owner,
-				repository.name,
-				{
-					cursor,
-					includeArchived: false,
-					query: trigger.query || undefined,
-					signal,
-				},
-			);
-			for (let [index, channel] of page.channels.entries()) {
-				if (channel.id !== room) channels.set(channel.id, channel);
-				if (channels.size >= MAX_REFERENCES) {
-					omitted = index < page.channels.length - 1;
-					break;
-				}
+	let channels = new Map<string, Api.Channel>();
+	let cursor: string | undefined;
+	let pages = 0;
+	let omitted = false;
+	do {
+		let page = await api.channels(
+			repository.owner,
+			repository.name,
+			{
+				cursor,
+				includeArchived: false,
+				query: trigger.query || undefined,
+				signal,
+			},
+		);
+		for (let [index, channel] of page.channels.entries()) {
+			if (channel.id !== room) channels.set(channel.id, channel);
+			if (channels.size >= MAX_REFERENCES) {
+				omitted = index < page.channels.length - 1;
+				break;
 			}
-			cursor = page.nextCursor;
-			pages++;
-		} while (channels.size < MAX_REFERENCES && cursor && pages < 5);
-		return {
-			options: [...channels.values()].slice(0, MAX_REFERENCES).map(channel => ({
-				kind: "document" as const,
-				channelId: channel.id,
-				title: channel.title,
-				slug: channel.slug,
-				...(channel.description ? { description: channel.description } : {}),
-			})),
-			truncated: omitted || !!cursor,
-		};
-	}
-
-	let page = await api.channelResearchWorkspaces(room, signal);
-	let query = trigger.query.toLowerCase();
+		}
+		cursor = page.nextCursor;
+		pages++;
+	} while (channels.size < MAX_REFERENCES && cursor && pages < 5);
 	return {
-		options: page.workspaces
-			.filter(workspace => !query || workspace.title.toLowerCase().includes(query))
-			.slice(0, MAX_REFERENCES)
-			.map(workspace => ({
-				kind: "research" as const,
-				workspaceId: workspace.id,
-				title: workspace.title,
-				discriminator: workspace.id.slice(-8),
-			})),
-		truncated: page.truncated,
+		options: [...channels.values()].slice(0, MAX_REFERENCES).map(channel => ({
+			kind: "document" as const,
+			channelId: channel.id,
+			title: channel.title,
+			slug: channel.slug,
+			...(channel.description ? { description: channel.description } : {}),
+		})),
+		truncated: omitted || !!cursor,
 	};
 }
 
@@ -221,27 +201,21 @@ export function ReferencePicker(
 	{
 		active,
 		id,
-		kind,
 		onActive,
 		onSelect,
 		state,
 	}: {
 		active: number;
 		id: string;
-		kind: ReferenceTrigger["kind"];
 		onActive: (index: number) => void;
 		onSelect: (target: ReferenceTarget) => void;
 		state: ReferencePickerState;
 	},
 ) {
-	let documentReference = kind === "document";
-	let label = documentReference ? "Document references" : "Research Workspace references";
-	let marker = documentReference ? "#" : "%";
+	let label = "Document references";
 	let empty = state.status === "ready" && state.truncated
-		? `No matches in the available ${documentReference ? "documents" : "Research Workspaces"}.`
-		: documentReference
-		? "No matching documents."
-		: "No matching Research Workspaces.";
+		? "No matches in the available documents."
+		: "No matching documents.";
 
 	useEffect(() => {
 		if (state.options.length === 0) return;
@@ -254,14 +228,14 @@ export function ReferencePicker(
 	return (
 		<div
 			className="absolute inset-x-2.5 bottom-full z-30 mb-1 overflow-y-auto rounded-lg bg-page p-1 ring-hairline shadow-overlay"
-			data-chat-reference-picker={kind}
+			data-chat-reference-picker="document"
 			data-focus-boundary=""
 			style={{ maxHeight: "min(16rem, 45dvh, 45vh)" }}
 		>
 			<div aria-busy={state.status === "loading"} aria-label={label} id={id} role="listbox">
 				{state.status === "loading" && (
 					<p className="px-2 py-3 text-sm text-text-tertiary" role="status">
-						Loading {documentReference ? "documents" : "Research Workspaces"}...
+						Loading documents...
 					</p>
 				)}
 				{state.status === "limit" && (
@@ -279,14 +253,14 @@ export function ReferencePicker(
 				)}
 				{state.status === "ready" && state.truncated && (
 					<p className="px-2 py-2 text-sm text-text-tertiary" role="status">
-						Some {documentReference ? "documents" : "Research Workspaces"} are not shown.
+						Some documents are not shown.
 					</p>
 				)}
 				{state.options.map((option, index) => {
-					let generatedDescription = option.kind === "document" && option.description
+					let generatedDescription = option.description
 						? `${referenceOptionId(id, index)}-description`
 						: undefined;
-					let slugDescription = option.kind === "document" && option.slug
+					let slugDescription = option.slug
 						? `${referenceOptionId(id, index)}-slug`
 						: undefined;
 					let describedBy = [generatedDescription, slugDescription].filter(Boolean).join(" ")
@@ -294,15 +268,13 @@ export function ReferencePicker(
 					return (
 						<button
 							aria-describedby={describedBy}
-							aria-label={option.kind === "research"
-								? `${option.title}, workspace ${option.workspaceId}`
-								: option.title}
+							aria-label={option.title}
 							aria-selected={index === active}
 							className={`flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left ${
 								index === active ? "bg-selected" : "hover:bg-hover"
 							}`}
 							id={referenceOptionId(id, index)}
-							key={option.kind === "document" ? option.channelId : option.workspaceId}
+							key={option.channelId}
 							onClick={() => onSelect(option)}
 							onMouseDown={event => event.preventDefault()}
 							onMouseEnter={() => onActive(index)}
@@ -310,10 +282,10 @@ export function ReferencePicker(
 							tabIndex={-1}
 							type="button"
 						>
-							<span aria-hidden="true" className="shrink-0 text-text-quaternary">{marker}</span>
+							<span aria-hidden="true" className="shrink-0 text-text-quaternary">#</span>
 							<span className="min-w-0 flex-1 text-sm">
 								<span className="block truncate font-medium">{option.title}</span>
-								{option.kind === "document" && option.description && (
+								{option.description && (
 									<span
 										className="block truncate text-text-tertiary"
 										id={generatedDescription}
@@ -322,12 +294,7 @@ export function ReferencePicker(
 									</span>
 								)}
 							</span>
-							{option.kind === "research" && (
-								<span className="shrink-0 font-mono text-sm text-text-quaternary">
-									...{option.discriminator}
-								</span>
-							)}
-							{option.kind === "document" && option.slug && (
+							{option.slug && (
 								<span
 									className="shrink-0 font-mono text-sm text-text-quaternary"
 									id={slugDescription}
