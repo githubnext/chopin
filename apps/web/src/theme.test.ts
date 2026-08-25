@@ -187,3 +187,27 @@ describe("motion contracts", () => {
 		);
 	});
 });
+
+describe("disclosure motion", () => {
+	it("uses the accordion timing and movement curve for bounded collapse", () => {
+		expect(THEME).toMatch(
+			/\.motion-collapse\s*{[^}]*var\(--acc-expand\)[^}]*var\(--motion-move\)/s,
+		);
+	});
+
+	it("uses the collapse timing when closing", () => {
+		expect(THEME).toMatch(/\.motion-collapse\.is-closing\s*{[^}]*var\(--acc-collapse\)/s);
+	});
+
+	it("animates the disclosure icon only for pointer input", () => {
+		expect(THEME).toMatch(
+			/:root\[data-motion-input="pointer"\][^{]*\.motion-disclosure-icon[^}]*var\(--icon-swap-dur\)/s,
+		);
+	});
+
+	it("settles disclosure motion under reduced motion", () => {
+		expect(THEME).toMatch(
+			/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.motion-collapse[^{]*{[^}]*transition:\s*none/s,
+		);
+	});
+});
