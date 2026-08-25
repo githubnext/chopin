@@ -396,7 +396,8 @@ export class MemoryStorage implements StorageAdapter {
 	#createChannel(input: CreateChannel): ChannelRecord {
 		if (!this.#users.has(input.createdBy)) throw missing(`user ${input.createdBy} does not exist`);
 		if (this.#channels.has(input.id)) throw conflict(`channel ${input.id} already exists`);
-		if (input.parentChannelId) {
+		if (input.parentChannelId !== undefined) {
+			if (input.parentChannelId.length === 0) throw missing("parent channel id is required");
 			let parent = this.#channels.get(input.parentChannelId);
 			if (!parent) throw missing(`channel ${input.parentChannelId} does not exist`);
 			if (parent.repositoryId !== input.repositoryId) {

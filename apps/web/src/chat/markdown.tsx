@@ -64,15 +64,24 @@ export function MessageMarkdown(
 			let index = typeof property === "string" ? Number(property) : -1;
 			let reference = Number.isSafeInteger(index) ? model.references[index] : undefined;
 			return reference
-				? (
-					<a
-						className="chat-reference"
-						data-chat-reference={reference.kind}
-						href={reference.href}
-					>
-						{reference.label}
-					</a>
-				)
+				? reference.kind === "research"
+					? (
+						<span
+							className="chat-reference"
+							data-chat-reference="research"
+						>
+							{reference.label}
+						</span>
+					)
+					: (
+						<a
+							className="chat-reference"
+							data-chat-reference={reference.kind}
+							href={reference.href}
+						>
+							{reference.label}
+						</a>
+					)
 				: (
 					<a href={href} rel="noopener noreferrer" target="_blank">
 						{children}
