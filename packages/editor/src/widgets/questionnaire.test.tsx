@@ -89,7 +89,7 @@ test("a stored unanswered questionnaire keeps its compatibility view without a l
 	expect(markup).not.toContain("Cancel");
 });
 
-test("a host motion contract retains one inert question step beside the active step", () => {
+test("a host motion contract owns the active question step", () => {
 	let markup = renderToStaticMarkup(
 		createElement(QuestionnaireCard, {
 			canEdit: false,
@@ -120,10 +120,10 @@ test("a host motion contract retains one inert question step beside the active s
 		}),
 	);
 
-	expect(markup.match(/class="motion-content-swap/g)).toHaveLength(2);
+	expect(markup.match(/class="motion-content-swap/g)).toHaveLength(1);
 	expect(markup).toContain("question-step-swap content-swap-stack");
-	expect(markup).toContain('aria-hidden="true"');
-	expect(markup).toContain(' inert=""');
+	expect(markup).not.toContain('data-content-swap-state="outgoing"');
+	expect(markup).not.toContain(' inert=""');
 });
 
 test("a read-only decision remains linked but has no answer actions", () => {
