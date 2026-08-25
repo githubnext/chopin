@@ -1,13 +1,14 @@
 /** The shared conversation, grouped for reading rather than event delivery. */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { SignInIcon } from "@phosphor-icons/react";
 
-import { AgentFace, Face } from "@chopin/editor";
+import { AgentFace, Face, MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
 
 import { MessageMarkdown } from "./markdown";
 import { capitalize, displayText, duration, group, summarize, toolCopy } from "./model";
-import toolChevronDown from "../assets/icons/tool-chevron-down.svg";
+import { motionContract } from "../motion-contract";
+import { motionImmediately } from "../motion-input";
 import toolChevronRight from "../assets/icons/tool-chevron-right.svg";
 import toolLoader from "../assets/icons/tool-loader.svg";
 
@@ -20,6 +21,7 @@ function when(ts: number): string {
 
 function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 	let [open, setOpen] = useState(false);
+	let contentId = useId();
 	let summary = summarize(tools);
 	if (summary.state === "running") {
 		return (
@@ -34,12 +36,15 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 	return (
 		<div>
 			<button
+				aria-controls={contentId}
 				aria-expanded={open}
 				className="flex min-h-7 min-w-0 flex-wrap items-center gap-2 bg-transparent py-1 text-sm text-text-quaternary"
 				onClick={() => setOpen(value => !value)}
 				type="button"
 			>
-				<img alt="" className="size-[14px]" src={open ? toolChevronDown : toolChevronRight} />
+				<MotionDisclosureIcon open={open}>
+					<img alt="" className="size-[14px]" src={toolChevronRight} />
+				</MotionDisclosureIcon>
 				<span className="tabular-nums">
 					{summary.count} {summary.count === 1 ? "tool" : "tools"}
 				</span>
@@ -51,7 +56,13 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 				<span className="tabular-nums">{duration(summary.elapsed)}</span>
 			</button>
 
-			{open && (
+			<MotionDisclosure
+				id={contentId}
+				immediately={motionImmediately()}
+				motion={motionContract("collapse")}
+				open={open}
+				surface="chat-tools"
+			>
 				<ul
 					aria-label="Tool calls"
 					className="m-0 flex list-none flex-col pl-6 text-sm text-text-quaternary"
@@ -74,7 +85,7 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 						</li>
 					))}
 				</ul>
-			)}
+			</MotionDisclosure>
 		</div>
 	);
 }
