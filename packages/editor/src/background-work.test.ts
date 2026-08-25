@@ -3,10 +3,12 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
+	backgroundDisclosurePresentation,
 	backgroundJobLabel,
 	backgroundJobResult,
 	BackgroundWork,
 	safeInterruptionReason,
+	toggleBackgroundDisclosure,
 	visibleProgress,
 } from "./background-work";
 import { JobStore } from "./jobs";
@@ -69,7 +71,7 @@ function completedResultStore(): JobStore {
 	return store;
 }
 
-test("completed result trigger identifies its closed result region", () => {
+test("closed result trigger does not reference its unmounted result region", () => {
 	let markup = renderToStaticMarkup(createElement(BackgroundWork, {
 		canEdit: false,
 		connected: true,
@@ -77,8 +79,31 @@ test("completed result trigger identifies its closed result region", () => {
 		store: completedResultStore(),
 	}));
 
-	expect(markup).toMatch(/<button[^>]*aria-controls="[^"]+"[^>]*aria-expanded="false"/);
+	expect(markup).toMatch(/<button[^>]*aria-expanded="false"/);
+	expect(markup).not.toContain("aria-controls");
 	expect(markup).not.toContain("Compatibility report");
+});
+
+test("delayed detail keeps the input ownership captured by each toggle", () => {
+	let disclosure = toggleBackgroundDisclosure({ immediately: false, open: false }, true);
+
+	expect(backgroundDisclosurePresentation(disclosure, false)).toEqual({
+		controlled: false,
+		immediately: true,
+		open: false,
+	});
+	expect(backgroundDisclosurePresentation(disclosure, true)).toEqual({
+		controlled: true,
+		immediately: true,
+		open: true,
+	});
+
+	disclosure = toggleBackgroundDisclosure(disclosure, false);
+	expect(backgroundDisclosurePresentation(disclosure, true)).toEqual({
+		controlled: false,
+		immediately: false,
+		open: false,
+	});
 });
 
 test("progress keeps each attempt and identifies the current stage", () => {

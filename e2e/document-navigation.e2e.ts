@@ -114,9 +114,11 @@ test("a pointer-collapsed Project stays inert through exit and restores in place
 	expect(bodyId).not.toBeNull();
 	await expect(trigger).toHaveAttribute("aria-controls", bodyId!);
 	await trigger.click();
+	await expect(trigger).not.toHaveAttribute("aria-controls");
 	await expect(body).toHaveAttribute("aria-hidden", "true");
 	await expect(body).toHaveAttribute("inert", "");
 	await trigger.click();
+	await expect(trigger).toHaveAttribute("aria-controls", bodyId!);
 	await expect(body).not.toHaveAttribute("aria-hidden", "true");
 	await expect(body).not.toHaveAttribute("inert", "");
 	await expect(body).toHaveCount(1);

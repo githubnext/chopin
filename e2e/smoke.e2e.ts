@@ -597,18 +597,24 @@ test(
 
 		let run = chat.getByRole("button", { name: /4 tools.*1 failed.*1\.3s/ });
 		await expect(run).toBeVisible();
+		await expect(run).not.toHaveAttribute("aria-controls");
 		await run.click();
 		let toolLog = chat.locator('[data-motion-disclosure="chat-tools"]');
 		let caret = run.locator(".motion-disclosure-icon");
+		let toolLogId = await toolLog.getAttribute("id");
+		expect(toolLogId).toBeTruthy();
+		await expect(run).toHaveAttribute("aria-controls", toolLogId!);
 		await expect(caret).toHaveAttribute("data-open", "");
 		await expect(chat.getByText("Read file", { exact: true })).toBeVisible();
 		await expect(chat.getByText("Run tests", { exact: true })).toBeVisible();
 		let failed = chat.getByRole("listitem").filter({ hasText: "Run tests" });
 		await expect(failed).toHaveAttribute("data-tool-status", "failed");
 		await run.click();
+		await expect(run).not.toHaveAttribute("aria-controls");
 		await expect(toolLog).toHaveAttribute("aria-hidden", "true");
 		await expect(toolLog).toHaveAttribute("inert", "");
 		await run.click();
+		await expect(run).toHaveAttribute("aria-controls", toolLogId!);
 		await expect(toolLog).toHaveCount(1);
 		await expect(toolLog).not.toHaveAttribute("aria-hidden", "true");
 		await expect(toolLog).not.toHaveAttribute("inert", "");

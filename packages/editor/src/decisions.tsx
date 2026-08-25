@@ -159,7 +159,7 @@ export function Decisions(
 				{resolved > 0 && (
 					<div className={`min-w-0 ${outstanding > 0 ? "mt-3" : ""}`}>
 						<button
-							aria-controls={historyId}
+							aria-controls={history ? historyId : undefined}
 							aria-expanded={history}
 							className="btn btn-sm btn-ghost h-auto min-h-6 w-full flex-wrap justify-start gap-2 text-left"
 							data-press="wide"

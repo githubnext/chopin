@@ -220,7 +220,11 @@ git commit -m "Add shared disclosure motion presence"
 
 - [ ] **Step 1: Write failing tests**
 
-The markup test asserts an expanded Project trigger has `aria-controls`, and its body has `data-motion-disclosure="projects"`. The browser test pointer-collapses the seeded `score` Project, asserts retained content is immediately `aria-hidden` and `inert`, then clicks the trigger during exit and asserts the same content becomes active with no duplicate.
+The markup test asserts an expanded Project trigger has `aria-controls`, and its body has
+`data-motion-disclosure="projects"`. The browser test pointer-collapses the seeded `score`
+Project, asserts the trigger drops `aria-controls` while retained content is immediately
+`aria-hidden` and `inert`, then clicks the trigger during exit and asserts the reference and same
+content become active with no duplicate.
 
 Run: `bun test apps/web/src/navigation-chrome.test.ts`
 
@@ -235,7 +239,9 @@ let contentId = useId();
 let collapseMotion = motionContract("collapse");
 ```
 
-Set `aria-controls={contentId}` on the existing trigger. Move the existing unavailable, error, loading, channel/research, loading-more, and load-more branches unchanged inside:
+Set `aria-controls={expanded ? contentId : undefined}` on the existing trigger so it only
+references the mounted region. Move the existing unavailable, error, loading,
+channel/research, loading-more, and load-more branches unchanged inside:
 
 ```tsx
 <MotionDisclosure
@@ -268,13 +274,20 @@ git commit -m "Animate Project disclosures"
 
 - [ ] **Step 1: Write failing tests**
 
-Extend the server-render helper with the fixture contract. Assert restored open history has `aria-controls`, `data-motion-disclosure="decision-history"`, and one `.motion-disclosure-icon[data-open]`. In Playwright, focus `1 resolved`, press Space, assert content appears without `is-closing`; press Space again and assert immediate unmount.
+Extend the server-render helper with the fixture contract. Assert closed history has no
+`aria-controls`; restored open history has `aria-controls`,
+`data-motion-disclosure="decision-history"`, and one `.motion-disclosure-icon[data-open]`. In
+Playwright, focus `1 resolved`, press Space, assert content and its reference appear without
+`is-closing`; press Space again and assert the reference and content immediately unmount.
 
 Run: `bun test packages/editor/src/decisions.test.tsx`
 
 - [ ] **Step 2: Retain history and rotate one caret**
 
-Add required `motion: MotionDisclosureContract` and optional `motionImmediately?: () => boolean` props, plus `useId`. Set `aria-controls` on the trigger. Remove `CaretDownIcon`; render:
+Add required `motion: MotionDisclosureContract` and optional
+`motionImmediately?: () => boolean` props, plus `useId`. Set
+`aria-controls={history ? historyId : undefined}` on the trigger. Remove `CaretDownIcon`;
+render:
 
 ```tsx
 <MotionDisclosureIcon open={history}>
@@ -312,18 +325,27 @@ git commit -m "Animate decision history disclosure"
 
 - [ ] **Step 1: Write failing tests**
 
-Server-render `BackgroundJob` with a completed result and fixture contract; assert the closed trigger has `aria-controls` and no result content. Add Playwright coverage that reduced motion opens immediately, pointer-close enters retained `aria-hidden`/`inert`, and enabling reduced motion during exit unmounts immediately.
+Server-render `BackgroundJob` with a completed result and fixture contract; assert the closed
+trigger has no `aria-controls` and no result content. Add a pure regression proving a toggle's
+input sample survives delayed detail resolution and is replaced on the next toggle. Add
+Playwright coverage that reduced motion opens immediately, pointer-close enters retained
+`aria-hidden`/`inert`, and enabling reduced motion during exit unmounts immediately.
 
 - [ ] **Step 2: Wrap resolved detail without delaying its fetch**
 
-Add `motion: MotionDisclosureContract` and `motionImmediately?: () => boolean` to `BackgroundWorkProps`, pass them to `BackgroundJob`, and add `useId`. Keep `store.detail(job.id)` in the existing toggle. Set `aria-controls` on the trigger and replace both result conditionals with:
+Add `motion: MotionDisclosureContract` and `motionImmediately?: () => boolean` to
+`BackgroundWorkProps`, pass them to `BackgroundJob`, and add `useId`. Keep
+`store.detail(job.id)` in the existing toggle. Capture `motionImmediately?.() ?? false` in the
+disclosure state inside every toggle so delayed detail uses the event that initiated it. Set
+`aria-controls` only while `open && detail !== undefined`, and replace both result conditionals
+with:
 
 ```tsx
 <MotionDisclosure
 	id={resultId}
-	immediately={motionImmediately?.() ?? false}
+	immediately={disclosure.immediately}
 	motion={motion}
-	open={open && detail !== undefined}
+	open={disclosure.open && detail !== undefined}
 	surface="research-result"
 >
 	{artifact
@@ -357,13 +379,20 @@ git commit -m "Animate research result disclosures"
 
 - [ ] **Step 1: Write the failing browser assertion**
 
-Extend `chat groups authors and collapses a finished tool run`: after opening, assert one icon has `data-open`; close and assert the log remains `aria-hidden` and `inert`; reopen before exit completes and assert the same log and icon become open.
+Extend `chat groups authors and collapses a finished tool run`: assert the closed trigger has no
+`aria-controls`; after opening, assert its reference and one icon has `data-open`; close and assert
+the reference disappears while the log remains `aria-hidden` and `inert`; reopen before exit
+completes and assert the reference, same log, and icon become open.
 
 Run: `bun run e2e -- e2e/smoke.e2e.ts --grep "chat groups authors"`
 
 - [ ] **Step 2: Retain the log and rotate one right caret**
 
-Add `useId`, the shared disclosure pieces, `motionContract`, and `motionImmediately`. Remove the down-chevron import. Keep the running tool row unchanged. Set `aria-controls` on the finished-run trigger, wrap the existing right-chevron image in `MotionDisclosureIcon`, and wrap the existing `<ul aria-label="Tool calls">` in:
+Add `useId`, the shared disclosure pieces, `motionContract`, and `motionImmediately`. Remove the
+down-chevron import. Keep the running tool row unchanged. Set
+`aria-controls={open ? contentId : undefined}` on the finished-run trigger, wrap the existing
+right-chevron image in `MotionDisclosureIcon`, and wrap the existing
+`<ul aria-label="Tool calls">` in:
 
 ```tsx
 <MotionDisclosure
@@ -449,6 +478,10 @@ Fix any check failure with the narrowest regression, push, and watch again. Stop
 - Pointer expansion is bounded to one clipped container; close is retained and interruptible.
 - Keyboard and reduced-motion paths are immediate, including preference changes during exit.
 - Closing content is immediately `inert` and `aria-hidden`.
+- Triggers expose `aria-controls` only while their disclosure target exists; retained closing
+  content may outlive that reference.
+- Research detail resolution retains the input modality captured by the initiating toggle;
+  reduced-motion preference changes still settle the shared presence dynamically.
 - Existing caret assets rotate as one element; Project and research semantics are not redesigned.
 - Streaming, progress, typing, selection, reference pickers, and running tools remain immediate.
 - CSS uses semantic tokens, stays below 300ms, and has a reduced-motion rule.

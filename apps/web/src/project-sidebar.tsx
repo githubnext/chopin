@@ -207,7 +207,7 @@ function Project(
 		>
 			<div className="project-sidebar-project-row">
 				<button
-					aria-controls={contentId}
+					aria-controls={expanded ? contentId : undefined}
 					aria-expanded={expanded}
 					className="project-sidebar-project-disclosure flex min-w-0 flex-1 items-center gap-2 text-left"
 					onClick={onToggle}

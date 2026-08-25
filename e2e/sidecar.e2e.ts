@@ -431,12 +431,16 @@ test("decision cards save independently with progressive custom answers", async 
 	await page.keyboard.press("Space");
 	let historyContent = page.locator('[data-motion-disclosure="decision-history"]');
 	await expect(historyContent).toBeVisible();
+	let historyId = await historyContent.getAttribute("id");
+	expect(historyId).toBeTruthy();
+	await expect(history).toHaveAttribute("aria-controls", historyId!);
 	await expect(historyContent).not.toHaveClass(/is-closing/);
 	let resolved = questionnaire(page).filter({ hasText: "Where should room state live?" });
 	await expect(resolved).toContainText("On disk as MDX");
 	await expect(resolved).toContainText("Answered by @ana");
 	await expect(resolved.getByRole("button", { name: "Save answer" })).toHaveCount(0);
 	await page.keyboard.press("Space");
+	await expect(history).not.toHaveAttribute("aria-controls");
 	await expect(historyContent).toHaveCount(0);
 
 	let customChoice = scope.getByRole("checkbox", { name: "Write a custom answer" });
