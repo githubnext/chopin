@@ -36,7 +36,7 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 	return (
 		<div>
 			<button
-				aria-controls={contentId}
+				aria-controls={open ? contentId : undefined}
 				aria-expanded={open}
 				className="flex min-h-7 min-w-0 flex-wrap items-center gap-2 bg-transparent py-1 text-sm text-text-quaternary"
 				onClick={() => setOpen(value => !value)}

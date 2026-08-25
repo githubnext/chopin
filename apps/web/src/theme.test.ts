@@ -206,8 +206,12 @@ describe("disclosure motion", () => {
 	});
 
 	it("settles disclosure motion under reduced motion", () => {
-		expect(THEME).toMatch(
-			/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.motion-collapse[^{]*{[^}]*transition:\s*none/s,
-		);
+		let reduced = THEME.match(
+			/@media \(prefers-reduced-motion: reduce\)\s*{([\s\S]*?)\n}/,
+		)?.[1];
+		expect(reduced).toContain(".motion-collapse,");
+		expect(reduced).toContain(".motion-collapse-content,");
+		expect(reduced).toContain(".motion-disclosure-icon {");
+		expect(reduced).toMatch(/transition:\s*none;/);
 	});
 });

@@ -26,18 +26,20 @@ test("research results settle immediately and retain an inert pointer exit", asy
 	await page.getByRole("button", { name: /Background Work/ }).click();
 	let trigger = page.getByRole("button", { name: `Read result for Research answer: ${QUESTION}` });
 	let result = page.locator('[data-motion-disclosure="research-result"]');
-	let controls = await trigger.getAttribute("aria-controls");
+	await expect(trigger).not.toHaveAttribute("aria-controls");
 
 	await trigger.click();
 	await expect(result).toHaveClass(/is-open/);
 	await expect(result).toHaveCSS("transition-duration", "0s");
 	let resultId = await result.getAttribute("id");
 	expect(resultId).toBeTruthy();
-	expect(controls).toBe(resultId);
+	trigger = page.getByRole("button", { name: `Hide result for Research answer: ${QUESTION}` });
+	await expect(trigger).toHaveAttribute("aria-controls", resultId!);
 
 	await page.emulateMedia({ reducedMotion: "no-preference" });
-	trigger = page.getByRole("button", { name: `Hide result for Research answer: ${QUESTION}` });
 	await trigger.click();
+	trigger = page.getByRole("button", { name: `Read result for Research answer: ${QUESTION}` });
+	await expect(trigger).not.toHaveAttribute("aria-controls");
 	await expect(result).toHaveClass(/is-closing/);
 	await expect(result).toHaveAttribute("aria-hidden", "true");
 	await expect(result).toHaveAttribute("inert", "");

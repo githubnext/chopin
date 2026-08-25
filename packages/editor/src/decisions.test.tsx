@@ -48,7 +48,9 @@ function markup(stored?: string): string {
 }
 
 test("resolved history starts collapsed and restores an explicit open preference", () => {
-	expect(markup()).toContain('aria-expanded="false"');
+	let collapsed = markup();
+	expect(collapsed).toContain('aria-expanded="false"');
+	expect(collapsed).not.toContain("aria-controls");
 	let restored = markup("true");
 	expect(restored).toContain('aria-expanded="true"');
 	expect(restored).toMatch(/aria-controls="[^"]+"/);
