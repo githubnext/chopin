@@ -6,6 +6,7 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -298,7 +299,9 @@ export function NavigationShell(
 	let immediateMotion = motionImmediately();
 	let previousMode = useRef(mode);
 	let modeChanged = previousMode.current !== mode;
-	previousMode.current = mode;
+	useLayoutEffect(() => {
+		previousMode.current = mode;
+	}, [mode]);
 	let sidebarMotion = motionContract("sidebar");
 	let sidebarVisible = mode === "inline" && !collapsed;
 	let sidebarPresence = useTransitionPresence(

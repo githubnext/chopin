@@ -252,6 +252,13 @@
 	transform: none;
 }
 
+@starting-style {
+	.motion-comment-preview.is-open {
+		opacity: 0;
+		transform: scale(var(--dropdown-pre-scale));
+	}
+}
+
 .motion-comment-preview.is-closing {
 	opacity: 0;
 	transform: scale(var(--dropdown-closing-scale));

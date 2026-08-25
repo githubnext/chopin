@@ -10,6 +10,17 @@ export type Rect = {
 export type Point = { top: number; left: number };
 export type MarkerTarget = { target: Rect; passages: Rect[] };
 
+export function markerRect(point: Point, host: Rect, size: number): Rect {
+	return {
+		top: host.top + point.top,
+		right: host.left + point.left + size,
+		bottom: host.top + point.top + size,
+		left: host.left + point.left,
+		width: size,
+		height: size,
+	};
+}
+
 /** Place every comment marker against all prose before considering earlier markers. */
 export function markerPoints(
 	targets: MarkerTarget[],
@@ -23,14 +34,7 @@ export function markerPoints(
 	let markers: Rect[] = [];
 	return targets.map(({ target }) => {
 		let point = markerPoint(target, host, passages, markers, size, gap);
-		markers.push({
-			top: host.top + point.top,
-			right: host.left + point.left + size,
-			bottom: host.top + point.top + size,
-			left: host.left + point.left,
-			width: size,
-			height: size,
-		});
+		markers.push(markerRect(point, host, size));
 		return point;
 	});
 }

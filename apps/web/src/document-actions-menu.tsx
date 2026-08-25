@@ -1,5 +1,5 @@
 import { createPortal } from "react-dom";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 
 import { motionContract } from "./motion-contract";
@@ -68,17 +68,32 @@ export function DocumentActionsMenu(
 	);
 	let mounted = open || presence.phase !== "closed";
 	let active = open && position !== undefined && presence.phase !== "closing";
+	let closeMenu = useCallback((restoreFocus = false) => {
+		setOpen(false);
+		if (restoreFocus) button.current?.focus();
+	}, []);
 
 	useLayoutEffect(() => {
 		if (!open) return;
-		let place = () => {
+		let fail = () => {
+			setPosition(undefined);
+			closeMenu(true);
+		};
+		let place = (): boolean => {
 			let anchor = button.current?.getBoundingClientRect();
 			let menu = panel.current;
-			if (!anchor || !menu) return;
+			if (!anchor || !menu) {
+				fail();
+				return false;
+			}
 			let margin = 8;
 			let gap = 4;
 			let width = Math.min(208, document.documentElement.clientWidth - margin * 2);
 			let height = menu.offsetHeight;
+			if (width <= 0 || height <= 0) {
+				fail();
+				return false;
+			}
 			let below = window.innerHeight - anchor.bottom - margin;
 			let top = below >= height || anchor.top < height + margin
 				? anchor.bottom + gap
@@ -100,15 +115,16 @@ export function DocumentActionsMenu(
 				visibility: "visible",
 				width,
 			} as CSSProperties);
+			return true;
 		};
-		place();
+		if (!place()) return;
 		window.addEventListener("resize", place);
 		document.addEventListener("scroll", place, true);
 		return () => {
 			window.removeEventListener("resize", place);
 			document.removeEventListener("scroll", place, true);
 		};
-	}, [open]);
+	}, [closeMenu, open]);
 
 	useEffect(() => {
 		if (!open) return;
@@ -119,16 +135,23 @@ export function DocumentActionsMenu(
 		let outside = (event: Event) => {
 			let target = event.target;
 			if (!(target instanceof Node)) return;
-			if (!button.current?.contains(target) && !panel.current?.contains(target)) setOpen(false);
+			if (!button.current?.contains(target) && !panel.current?.contains(target)) closeMenu();
+		};
+		let escape = (event: globalThis.KeyboardEvent) => {
+			if (event.key !== "Escape") return;
+			event.preventDefault();
+			closeMenu(true);
 		};
 		document.addEventListener("pointerdown", outside);
 		document.addEventListener("focusin", outside);
+		document.addEventListener("keydown", escape);
 		return () => {
 			cancelAnimationFrame(frame);
 			document.removeEventListener("pointerdown", outside);
 			document.removeEventListener("focusin", outside);
+			document.removeEventListener("keydown", escape);
 		};
-	}, [open]);
+	}, [closeMenu, open]);
 
 	let openAt = (index: number) => {
 		initialItem.current = index;
@@ -137,15 +160,14 @@ export function DocumentActionsMenu(
 	};
 	let menuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
 		if (event.key === "Tab") {
-			setOpen(false);
+			closeMenu();
 			return;
 		}
 		let action = documentMenuKeyAction(event.key);
 		if (!action) return;
 		event.preventDefault();
 		if (action === "close") {
-			setOpen(false);
-			button.current?.focus();
+			closeMenu(true);
 			return;
 		}
 		let controls = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("[role=menuitem]")];
@@ -169,7 +191,7 @@ export function DocumentActionsMenu(
 				aria-haspopup="menu"
 				aria-label={`Actions for ${channel.title}`}
 				className={className}
-				onClick={() => open ? setOpen(false) : openAt(0)}
+				onClick={() => open ? closeMenu() : openAt(0)}
 				onKeyDown={event => {
 					if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
 					event.preventDefault();
@@ -198,8 +220,7 @@ export function DocumentActionsMenu(
 							className={item.destructive ? "document-actions-menu-destructive" : undefined}
 							key={item.action}
 							onClick={() => {
-								setOpen(false);
-								button.current?.focus();
+								closeMenu(true);
 								onAction(item.action);
 							}}
 							role="menuitem"

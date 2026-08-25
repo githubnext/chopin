@@ -91,12 +91,20 @@ export default defineConfig({
 	projects: [
 		{
 			name: "chromium",
-			testIgnore: ["**/responsive*.e2e.ts", "**/sidecar.e2e.ts"],
+			testIgnore: [
+				"**/comment-motion.e2e.ts",
+				"**/responsive*.e2e.ts",
+				"**/sidecar.e2e.ts",
+			],
 			use: { ...devices["Desktop Chrome"], baseURL: `http://${HOST}:${PLAIN}` },
 		},
 		{
 			name: "fixtures",
-			testMatch: ["**/responsive*.e2e.ts", "**/sidecar.e2e.ts"],
+			testMatch: [
+				"**/comment-motion.e2e.ts",
+				"**/responsive*.e2e.ts",
+				"**/sidecar.e2e.ts",
+			],
 			use: { ...devices["Desktop Chrome"], baseURL: `http://${HOST}:${FIXTURES}` },
 		},
 	],

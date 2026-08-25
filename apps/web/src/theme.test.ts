@@ -176,6 +176,9 @@ describe("motion contracts", () => {
 		expect(STYLES).toMatch(
 			/\.motion-comment-preview\.is-closing\s*{[^}]*var\(--dropdown-close-dur\)/s,
 		);
+		expect(STYLES).toMatch(
+			/@starting-style\s*{[^}]*\.motion-comment-preview\.is-open\s*{[^}]*opacity:\s*0/s,
+		);
 	});
 
 	it("settles comment previews under reduced motion", () => {
