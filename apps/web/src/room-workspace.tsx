@@ -494,6 +494,8 @@ export function RoomWorkspace(
 						canEdit={workspaceCanEdit}
 						connected={status === "connected"}
 						headingId={HEADING["background-work"]}
+						motion={motionContract("collapse")}
+						motionImmediately={settleMotionImmediately}
 						store={jobs}
 					/>
 				)

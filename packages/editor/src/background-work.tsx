@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
+import { MotionDisclosure } from "./disclosure-motion";
 import { canCancelJob, currentJobs, useJobs } from "./jobs";
 
 import type { Job } from "@chopin/protocol";
+import type { MotionDisclosureContract } from "./disclosure-motion";
 import type { JobStore } from "./jobs";
 
 export type BackgroundWorkProps = {
@@ -10,6 +12,8 @@ export type BackgroundWorkProps = {
 	connected: boolean;
 	canEdit: boolean;
 	headingId?: string;
+	motion: MotionDisclosureContract;
+	motionImmediately?: () => boolean;
 };
 
 const INTERRUPTION_REASONS: Record<string, string> = {
@@ -135,16 +139,19 @@ export function backgroundJobLabel(job: Job.View, detail?: Job.Detail): string {
 }
 
 function BackgroundJob(
-	{ canEdit, connected, job, store }: {
+	{ canEdit, connected, job, motion, motionImmediately, store }: {
 		canEdit: boolean;
 		connected: boolean;
 		job: Job.View;
+		motion: MotionDisclosureContract;
+		motionImmediately?: () => boolean;
 		store: JobStore;
 	},
 ) {
 	let snapshot = useJobs(store);
 	let [open, setOpen] = useState(false);
 	let [error, setError] = useState<string>();
+	let resultId = useId();
 	let detail = snapshot.details[job.id];
 	let artifact = backgroundJobResult(detail);
 	let progress = visibleProgress(job);
@@ -170,6 +177,7 @@ function BackgroundJob(
 			<div className="plan-background-job-actions">
 				{job.state === "completed" && readable && (
 					<button
+						aria-controls={resultId}
 						aria-expanded={open}
 						aria-label={`${open ? "Hide" : "Read"} result for ${subject}`}
 						data-press="wide"
@@ -213,19 +221,30 @@ function BackgroundJob(
 					</ol>
 				</div>
 			)}
-			{open && artifact && (
-				<div className="plan-background-job-result">
-					<h3>{artifact.title}</h3>
-					<p>{artifact.summary}</p>
-				</div>
-			)}
-			{open && detail && !artifact && <p>Result is unavailable.</p>}
+			<MotionDisclosure
+				id={resultId}
+				immediately={motionImmediately?.() ?? false}
+				motion={motion}
+				open={open && detail !== undefined}
+				surface="research-result"
+			>
+				{artifact
+					? (
+						<div className="plan-background-job-result">
+							<h3>{artifact.title}</h3>
+							<p>{artifact.summary}</p>
+						</div>
+					)
+					: <p>Result is unavailable.</p>}
+			</MotionDisclosure>
 			{error && <p role="status">{error}</p>}
 		</article>
 	);
 }
 
-export function BackgroundWork({ store, connected, canEdit, headingId }: BackgroundWorkProps) {
+export function BackgroundWork(
+	{ store, connected, canEdit, headingId, motion, motionImmediately }: BackgroundWorkProps,
+) {
 	let snapshot = useJobs(store);
 	let jobs = currentJobs(snapshot.jobs);
 	return (
@@ -240,6 +259,8 @@ export function BackgroundWork({ store, connected, canEdit, headingId }: Backgro
 					connected={connected}
 					job={job}
 					key={job.id}
+					motion={motion}
+					motionImmediately={motionImmediately}
 					store={store}
 				/>
 			))}
