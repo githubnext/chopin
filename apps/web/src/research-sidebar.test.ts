@@ -93,7 +93,21 @@ describe("document sidebar hierarchy", () => {
 		]);
 	});
 
-	it("filters archived parents and children before grouping", () => {
+	it("groups every child by its authoritative active parent archive state", () => {
+		let archivedChild = {
+			...channel,
+			id: "archived-child",
+			parentChannelId: channel.id,
+			archivedAt: "2026-08-24T00:00:00.000Z",
+		};
+		let activeChild = { ...archivedChild, id: "active-child", archivedAt: undefined };
+
+		expect(documentGroups([channel, archivedChild, activeChild], false))
+			.toEqual([{ parent: channel, children: [archivedChild, activeChild] }]);
+		expect(documentGroups([channel, archivedChild, activeChild], true)).toEqual([]);
+	});
+
+	it("groups every child by its authoritative archived parent archive state", () => {
 		let archivedParent = {
 			...channel,
 			id: "archived-parent",
@@ -107,10 +121,9 @@ describe("document sidebar hierarchy", () => {
 		};
 		let activeChild = { ...archivedChild, id: "active-child", archivedAt: undefined };
 
-		expect(documentGroups([channel, archivedParent, archivedChild, activeChild], false))
-			.toEqual([{ parent: channel, children: [] }]);
-		expect(documentGroups([channel, archivedParent, archivedChild, activeChild], true))
-			.toEqual([{ parent: archivedParent, children: [archivedChild] }]);
+		expect(documentGroups([archivedParent, archivedChild, activeChild], false)).toEqual([]);
+		expect(documentGroups([archivedParent, archivedChild, activeChild], true))
+			.toEqual([{ parent: archivedParent, children: [archivedChild, activeChild] }]);
 	});
 
 	it("renders an ordinary child row with the same durable route as its ready card", () => {
