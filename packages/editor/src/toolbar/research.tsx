@@ -23,15 +23,19 @@ import {
 import { $createResearchNode, $isResearchNode } from "@chopin/dialect";
 import * as Y from "yjs";
 
+import { blockElement } from "../scroll";
 import { ResearchComposer } from "../widgets/research";
-import { placeSurface } from "./placement";
-import { editorSurfaceViewport, listenToEditorGeometry, SHELL } from "./surface";
+import { editorSurfaceViewport, listenToEditorGeometry } from "./surface";
 
 import type { Binding } from "@lexical/yjs";
 import type { LexicalEditor } from "lexical";
+import type { CSSProperties, ReactNode, Ref } from "react";
 import type { ResearchDraftStore } from "../research-draft";
 import type { ResearchStore } from "../widget-options";
-import type { DOMRectLike, SurfacePlacement } from "./placement";
+import type { DOMRectLike } from "./placement";
+
+type Attachment = { block: HTMLElement; rect: DOMRectLike };
+type Position = { left: number; top: number };
 
 export type OpenResearch = {
 	anchor: DOMRectLike;
@@ -134,6 +138,109 @@ export function beginResearchDraft(
 	return next ? drafts.open(next.anchor, next.position) : false;
 }
 
+export function attachDraft(block: HTMLElement, height: number): () => void {
+	block.dataset.researchDraftAnchor = "";
+	block.style.setProperty("--research-draft-space", `${height}px`);
+	return () => {
+		delete block.dataset.researchDraftAnchor;
+		block.style.removeProperty("--research-draft-space");
+	};
+}
+
+export function retainDraftBlock<Block>(
+	resolved: Block | undefined,
+	previous: Block | undefined,
+): Block | undefined {
+	return resolved ?? previous;
+}
+
+export function attachmentBlock<Block>(
+	resolved: Block,
+	offset: number,
+	previous: Block | undefined,
+): Block {
+	return offset === 0 && previous ? previous : resolved;
+}
+
+export function ResearchDraftRecovery({ unresolved }: { unresolved: boolean }) {
+	return unresolved
+		? (
+			<p role="alert" className="plan-research-error">
+				This research draft cannot yet be placed at its saved position.
+			</p>
+		)
+		: null;
+}
+
+export function ResearchDraftShell(
+	{ children, surfaceRef, style }: {
+		children?: ReactNode;
+		surfaceRef?: Ref<HTMLDivElement>;
+		style?: CSSProperties;
+	},
+) {
+	return (
+		<div
+			ref={surfaceRef}
+			aria-label="Research question"
+			role="region"
+			data-focus-boundary=""
+			contentEditable={false}
+			className="fixed z-50 plan-research-draft"
+			style={style}
+		>
+			{children}
+		</div>
+	);
+}
+
+function resolveAttachment(
+	editor: ReturnType<typeof useLexicalComposerContext>[0],
+	binding: Binding,
+	position: Y.RelativePosition,
+): Attachment | undefined {
+	let key: string | undefined;
+	let offset = 0;
+	try {
+		editor.getEditorState().read(() => {
+			let resolved = $getAnchorAndFocusForUserState(binding, {
+				anchorPos: position,
+				focusPos: position,
+				color: "",
+				focusing: false,
+				name: "",
+				awarenessData: {},
+			});
+			key = resolved.anchorKey || undefined;
+			offset = resolved.anchorOffset;
+		});
+	} catch {
+		return undefined;
+	}
+	if (!key) return undefined;
+	let resolved = blockElement(editor, key);
+	let block = resolved
+		? attachmentBlock(
+			resolved,
+			offset,
+			resolved.previousElementSibling as HTMLElement | null ?? undefined,
+		)
+		: undefined;
+	return block ? { block, rect: block.getBoundingClientRect() } : undefined;
+}
+
+function currentPosition(
+	editor: ReturnType<typeof useLexicalComposerContext>[0],
+	binding?: Binding,
+): Y.RelativePosition | undefined {
+	if (!binding) return undefined;
+	let found: Y.RelativePosition | undefined;
+	editor.getEditorState().read(() => {
+		found = captureResearchPosition(binding);
+	});
+	return found;
+}
+
 export type ResearchComposerSurfaceProps = {
 	binding?: Binding;
 	disabled?: boolean;
@@ -149,7 +256,16 @@ export function ResearchComposerSurface(
 	let read = useCallback(() => drafts.get(), [drafts]);
 	let draft = useSyncExternalStore(subscribe, read, read);
 	let surface = useRef<HTMLDivElement>(null);
-	let [position, setPosition] = useState<SurfacePlacement>();
+	let attached = useRef<
+		{
+			block: HTMLElement;
+			height: number;
+			detach: () => void;
+		} | undefined
+	>(undefined);
+	let [position, setPosition] = useState<Position>();
+	let [unresolved, setUnresolved] = useState(false);
+	let visible = !!draft;
 
 	useEffect(() =>
 		editor.registerCommand(
@@ -167,31 +283,76 @@ export function ResearchComposerSurface(
 			COMMAND_PRIORITY_LOW,
 		), [binding, disabled, drafts, editor]);
 
+	let detach = useCallback(() => {
+		attached.current?.detach();
+		attached.current = undefined;
+	}, []);
+	let reserve = useCallback((block: HTMLElement | undefined, height: number) => {
+		let current = attached.current;
+		if (current && current.block === block && current.height === height) return;
+		detach();
+		if (block) attached.current = { block, height, detach: attachDraft(block, height) };
+	}, [detach]);
+
 	let place = useCallback(() => {
 		let element = surface.current;
 		if (!element || !draft) return;
+		let resolved = binding && draft.position
+			? resolveAttachment(editor, binding, draft.position)
+			: undefined;
+		let previous = attached.current?.block;
+		if (previous && !previous.isConnected) previous = undefined;
+		let block = retainDraftBlock(resolved?.block, previous);
+		let attachment = resolved ?? (block
+			? { block, rect: block.getBoundingClientRect() }
+			: undefined);
+		setUnresolved(!!binding && !!draft.position && !resolved);
+		let anchor = attachment?.rect ?? draft.anchor;
 		let viewport = editorSurfaceViewport(editor);
 		element.style.maxWidth = `${Math.max(0, viewport.width - 16)}px`;
-		let next = placeSurface(
-			draft.anchor,
-			{ width: element.offsetWidth, height: element.scrollHeight },
-			viewport,
-		);
+		let height = element.offsetHeight;
+		reserve(attachment?.block, height);
+		let leftEdge = viewport.left + 8;
+		let rightEdge = viewport.left + viewport.width - element.offsetWidth - 8;
+		let next = {
+			left: Math.min(Math.max(anchor.left, leftEdge), Math.max(leftEdge, rightEdge)),
+			top: anchor.bottom,
+		};
 		setPosition(current =>
-			current?.left === next.left && current.top === next.top
-				&& current.maxHeight === next.maxHeight
-				? current
-				: next
+			current?.left === next.left && current.top === next.top ? current : next
 		);
-	}, [draft, editor]);
+	}, [binding, draft, editor, reserve]);
 
 	useLayoutEffect(() => {
-		if (draft) place();
-	}, [draft, place]);
+		if (!draft) {
+			detach();
+			setPosition(undefined);
+			setUnresolved(false);
+			return;
+		}
+		place();
+		let element = surface.current;
+		if (!element || typeof ResizeObserver === "undefined") return;
+		let observer = new ResizeObserver(place);
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, [detach, draft, place]);
 
+	useEffect(() => detach, [detach]);
+	useEffect(() => {
+		if (!visible) return;
+		let frame = requestAnimationFrame(() => {
+			surface.current?.querySelector("textarea")?.focus({ preventScroll: true });
+		});
+		return () => cancelAnimationFrame(frame);
+	}, [visible]);
 	useEffect(() => {
 		if (!draft) return;
 		return listenToEditorGeometry(editor, place);
+	}, [draft, editor, place]);
+	useEffect(() => {
+		if (!draft) return;
+		return editor.registerUpdateListener(place);
 	}, [draft, editor, place]);
 
 	useLayoutEffect(() => {
@@ -202,73 +363,63 @@ export function ResearchComposerSurface(
 	}, [binding, disabled, drafts, editor]);
 
 	if (!draft) return null;
-	let dismiss = () => dismissResearchComposer(editor, () => drafts.dismiss());
-	let currentPosition = () => {
-		if (!binding) return;
-		let found: Y.RelativePosition | undefined;
-		editor.getEditorState().read(() => {
-			found = captureResearchPosition(binding);
-		});
-		return found;
+	let dismiss = () => {
+		drafts.dismiss();
+		editor.focus();
 	};
 	let submit = () => {
-		if (!draft.question.trim() || !binding || disabled) return;
-		if (draft.phase === "placement") {
-			let saved = currentPosition();
-			if (saved) drafts.place(saved);
+		if (draft.submitting || draft.cancelling || !draft.question.trim()) return;
+		if (!binding || disabled) return;
+		let position = currentPosition(editor, binding);
+		if (draft.created) {
+			if (position) drafts.place(position, !disabled);
 			return;
 		}
-		if (draft.phase !== "editing") return;
 		void drafts.start(
 			(question, requestId) => research.create(question, requestId),
-			currentPosition(),
+			position,
 		);
 	};
 	let cancel = () => {
-		if (draft.phase === "editing") return dismiss();
-		if (draft.phase !== "placement" || disabled) return;
-		void drafts.cancelCreated(id => research.cancel(id)).then(cancelled => {
+		if (!draft.created) return dismiss();
+		if (disabled) return;
+		void drafts.cancelCreated(id => research.cancel(id), !disabled).then(cancelled => {
 			if (cancelled) editor.focus();
 		});
 	};
-	let busy = draft.phase === "starting" || draft.phase === "cancelling";
-	let created = draft.phase === "placement" || draft.phase === "cancelling";
+	let busy = !!draft.submitting || !!draft.cancelling;
+	let dismissible = !busy && !draft.created;
 	return (
-		<div
-			ref={surface}
-			aria-label="Start research"
-			role="dialog"
-			data-focus-boundary=""
-			contentEditable={false}
-			className={`${SHELL} plan-research-composer-surface`}
+		<ResearchDraftShell
+			surfaceRef={surface}
 			style={position
-				? { top: position.top, left: position.left, maxHeight: position.maxHeight }
+				? { top: position.top, left: position.left }
 				: {
-					top: draft.anchor.bottom + 8,
+					top: draft.anchor.bottom,
 					left: draft.anchor.left,
 					visibility: "hidden",
 				}}
 		>
+			<ResearchDraftRecovery unresolved={unresolved && !draft.error} />
 			<ResearchComposer
 				blocked={disabled
 					? "Wait until the document is editable before placing research."
 					: binding
 					? undefined
 					: "Connect to the document before starting research."}
-				busyLabel={draft.phase === "cancelling" ? "Cancelling…" : undefined}
-				cancelDisabled={created && !!disabled}
-				cancelLabel={created ? "Cancel research" : undefined}
-				dismissible={draft.phase === "editing"}
+				cancelDisabled={!!draft.created && !!disabled}
+				cancelLabel={draft.created ? "Cancel research" : undefined}
+				dismissible={dismissible}
 				error={draft.error}
 				onCancel={cancel}
 				onChange={question => drafts.change(question)}
 				onEscape={dismiss}
 				onSubmit={submit}
 				question={draft.question}
-				questionLocked={created}
-				submitLabel={created ? "Place research here" : undefined}
+				questionLocked={!!draft.created}
+				submitLabel={draft.created ? "Place research here" : undefined}
 				submitting={busy}
 			/>
-		</div>
+		</ResearchDraftShell>
 	);
 }

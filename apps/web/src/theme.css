@@ -689,18 +689,9 @@ body {
 	background-color: transparent;
 }
 
-.conversation-send-button:disabled {
+.conversation-composer .send-action:disabled {
 	background-color: var(--color-brand);
 	color: var(--color-page);
-}
-
-.conversation-send-button {
-	width: 1.5rem;
-	height: 1.5rem;
-}
-
-.conversation-send-icon {
-	filter: brightness(0) invert(1);
 }
 
 @media (min-width: 640px) {

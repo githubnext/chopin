@@ -8,9 +8,17 @@
 
 @import "./callout.css";
 
-.plan-research-composer-surface {
-	width: min(22rem, calc(100vw - 1rem));
-	padding: 0.75rem;
+.plan-content [data-research-draft-anchor] {
+	margin-block-end: var(--research-draft-space, 0);
+}
+
+.plan-research-draft {
+	width: min(var(--plan-content-width, 48rem), calc(100vw - 2rem));
+	padding: 0.875rem;
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+	box-shadow: var(--shadow-resting);
 }
 
 .plan-research-composer {
@@ -23,6 +31,17 @@
 	font-size: var(--text-sm);
 	font-weight: 600;
 	color: var(--color-text-primary);
+}
+
+.plan-research-composer-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.plan-research-dismiss {
+	width: 2rem;
+	height: 2rem;
 }
 
 .plan-research-composer textarea {
@@ -86,6 +105,21 @@
 	flex-wrap: wrap;
 	justify-content: flex-end;
 	gap: 0.5rem;
+}
+
+.send-action {
+	width: 1.5rem;
+	height: 1.5rem;
+}
+
+.send-action-icon {
+	width: 1.125rem;
+	height: 1.125rem;
+	fill: none;
+	stroke: currentcolor;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	stroke-width: 1.5;
 }
 
 .plan,
