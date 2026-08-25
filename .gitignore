@@ -25,6 +25,7 @@ e2e/blob-report/
 .codex/
 .claude/settings.local.json
 .opencode/*
+/docs/superpowers
 
 # Page snapshots the Playwright MCP writes where it is started.
 .playwright-mcp/
