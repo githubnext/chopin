@@ -73,6 +73,7 @@ export function handleResearchComposerKey(
 		| "ctrlKey"
 		| "currentTarget"
 		| "key"
+		| "keyCode"
 		| "metaKey"
 		| "nativeEvent"
 		| "preventDefault"
@@ -89,7 +90,7 @@ export function handleResearchComposerKey(
 		key: event.key,
 		metaKey: event.metaKey,
 		ctrlKey: event.ctrlKey,
-		isComposing: event.nativeEvent.isComposing,
+		isComposing: event.nativeEvent.isComposing || event.keyCode === 229,
 	});
 	if (action === "ignore") return;
 	event.preventDefault();
