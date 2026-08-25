@@ -321,6 +321,33 @@ export async function seedRunningResearchAnswerJob(
 	});
 }
 
+export async function seedPendingLegacyResearchWorkspace(
+	port: number,
+	channelId: string,
+	title: string,
+): Promise<{ path: string; title: string; workspaceId: string }> {
+	let workspaceId = `workspace-${crypto.randomUUID()}`;
+	let now = new Date();
+	await sql(port, async database => {
+		await database`
+			INSERT INTO research_workspaces (
+				id, channel_id, title, proposed_question, origin, created_by, revision,
+				next_turn_ordinal, next_message_sequence, idempotency_key, fingerprint,
+				created_at, updated_at
+			) VALUES (
+				${workspaceId}, ${channelId}, ${title}, ${title}, 'sidebar', 'U_e2e', 0,
+				1, 1, ${`e2e-pending-${workspaceId}`}, ${`fingerprint-${workspaceId}`},
+				${now}, ${now}
+			)
+		`;
+	});
+	return {
+		path: `${testChannelPath(channelId)}/research/${encodeURIComponent(workspaceId)}`,
+		title,
+		workspaceId,
+	};
+}
+
 export async function seedCompletedResearchWorkspace(
 	port: number,
 	channelId: string,

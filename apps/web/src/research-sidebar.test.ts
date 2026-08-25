@@ -153,13 +153,32 @@ describe("document sidebar hierarchy", () => {
 	});
 
 	it("omits the standalone research launcher and workspace rows", () => {
-		let markup = renderToStaticMarkup(createElement(ProjectSidebar, props));
+		let legacyWorkspace = {
+			channelId: channel.id,
+			createdAt: "2026-08-24T00:00:00.000Z",
+			createdBy: "user-one",
+			id: "legacy-research-workspace",
+			origin: "sidebar",
+			proposedQuestion: "Hidden legacy research",
+			revision: 0,
+			title: "Hidden legacy research",
+			updatedAt: "2026-08-24T00:00:00.000Z",
+		};
+		let legacyProps = {
+			...props,
+			currentResearchWorkspaceId: legacyWorkspace.id,
+			onNewResearch: () => {},
+			research: new Map([[channel.id, { channel, workspaces: [legacyWorkspace] }]]),
+		};
+		let markup = renderToStaticMarkup(createElement(ProjectSidebar, legacyProps));
 
 		expect(markup.match(/aria-current="page"/g)).toHaveLength(1);
 		expect(markup).not.toContain("project-sidebar-document-ancestor");
 		expect(markup).not.toContain("project-sidebar-research-link");
 		expect(markup).not.toContain('href="/documents/acme/one/release-plan/research/');
 		expect(markup).not.toContain('aria-label="New research in Release plan"');
+		expect(markup).not.toContain(legacyWorkspace.id);
+		expect(markup).not.toContain(legacyWorkspace.title);
 		expect(markup).toContain('aria-label="Actions for Release plan"');
 	});
 
