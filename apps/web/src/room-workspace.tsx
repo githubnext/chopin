@@ -26,6 +26,7 @@ import { rememberChannel } from "./channel-recovery";
 import { decisionAttention, DecisionViewControl } from "./decision-view-control";
 import { newestDocumentMetadata } from "./document-actions";
 import { DocumentActionsMenu } from "./document-actions-menu";
+import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
 import { useNavigationDocument } from "./navigation-shell";
 import { NavigationIcon } from "./project-sidebar";
@@ -464,6 +465,8 @@ export function RoomWorkspace(
 				<Decisions
 					connected={status === "connected" && workspaceCanEdit}
 					headingId={HEADING.decisions}
+					motion={motionContract("collapse")}
+					motionImmediately={settleMotionImmediately}
 					onShowPlan={showPlan}
 					reveal={reveal}
 					store={questions}
