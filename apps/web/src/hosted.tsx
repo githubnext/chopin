@@ -16,6 +16,7 @@ import { motionImmediately } from "./motion-input";
 import { NavigationShell, useNavigationDocument } from "./navigation-shell";
 
 import type { ComponentType, ReactNode } from "react";
+import type { ResearchOpener } from "@chopin/editor";
 import type {
 	DocumentRouteIdentity,
 	DocumentRouteIdentitySource,
@@ -462,8 +463,11 @@ export function HostedApp(
 	let [route, setRoute] = useState(() => hostedRoute(location.pathname));
 	let hostedRouteRef = useRef(route);
 	hostedRouteRef.current = route;
-	let childOpener = useRef<HTMLElement | undefined>(undefined);
-	let navigate = useCallback((destination: string, options: { replace?: boolean } = {}) => {
+	let childOpener = useRef<ResearchOpener | undefined>(undefined);
+	let navigate = useCallback((
+		destination: string,
+		options: { opener?: ResearchOpener; replace?: boolean } = {},
+	) => {
 		let target = new URL(destination, location.href);
 		if (target.origin !== location.origin) {
 			location.assign(target.href);
@@ -487,7 +491,8 @@ export function HostedApp(
 				&& nextRoute.parentSlug === currentRoute.slug;
 			if (siblingChild || inAppChild) {
 				let active = document.activeElement;
-				childOpener.current = active instanceof HTMLElement ? active : undefined;
+				childOpener.current = options.opener
+					?? { current: active instanceof HTMLElement ? active : null };
 			}
 			if (siblingChild) history.replaceState(history.state, "", next);
 			else if (inAppChild) {
@@ -515,9 +520,10 @@ export function HostedApp(
 		else navigate(action.destination, { replace: true });
 	}, [navigate]);
 	let restoreParentFocus = useCallback((parentId: string) => {
-		let target = childOpener.current;
+		let opener = childOpener.current;
 		childOpener.current = undefined;
 		requestAnimationFrame(() => {
+			let target = opener?.current;
 			if (target?.isConnected) target.focus({ preventScroll: true });
 			else {
 				document.querySelector<HTMLElement>(

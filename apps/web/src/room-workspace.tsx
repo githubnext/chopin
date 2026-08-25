@@ -154,6 +154,7 @@ export function RoomWorkspace(
 		onDocumentDeleted,
 		onRepositoryAccessChanged,
 		onResearchChildOpen,
+		onResearchChildPublished,
 	} = useNavigationDocument();
 	let [status, setStatus] = useState<Status>("connecting");
 	let [members, setMembers] = useState<Session.Member[]>([]);
@@ -187,9 +188,10 @@ export function RoomWorkspace(
 		() =>
 			new ResearchRequestStore({
 				channelId: room,
-				onOpen: child => onResearchChildOpen(room, child),
+				onOpen: (child, opener) => onResearchChildOpen(room, child, opener),
+				onPublished: child => onResearchChildPublished(room, child),
 			}),
-		[onResearchChildOpen, room],
+		[onResearchChildOpen, onResearchChildPublished, room],
 	);
 	let [reveal, setReveal] = useState<{ widget: string; token: number }>();
 	let [planScrollTop, setPlanScrollTop] = useState(0);

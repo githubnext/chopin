@@ -505,12 +505,101 @@ describe("research request store", () => {
 		store.dispose();
 	});
 
+	it("announces the first accepted transition from pending work to a published child", async () => {
+		let readyChild: Research.ReadyChild = {
+			id: "child-one",
+			slug: "source-report",
+			sourceCount: 1,
+			summary: "A complete report.",
+			title: "Source report",
+		};
+		let snapshots = [
+			request("request-one", "queued"),
+			request("request-one", "ready", { child: readyChild }),
+			request("request-one", "ready", { child: readyChild }),
+		];
+		let published: Research.ReadyChild[] = [];
+		let store = new ResearchRequestStore({
+			api: api({ get: async () => snapshots.shift()! }),
+			channelId: "channel-one",
+			onOpen() {},
+			onPublished: child => published.push(child),
+		});
+		let unsubscribe = store.subscribe(() => {});
+		let release = store.retain("request-one");
+		await settle();
+
+		store.invalidate("request-one");
+		await settle();
+		store.invalidate("request-one");
+		await settle();
+
+		expect(published).toEqual([readyChild]);
+		release();
+		unsubscribe();
+		store.dispose();
+	});
+
+	it("does not announce restored, terminal, stale, released, or disposed snapshots", async () => {
+		let readyChild: Research.ReadyChild = {
+			id: "child-one",
+			slug: "source-report",
+			sourceCount: 1,
+			summary: "A complete report.",
+			title: "Source report",
+		};
+		let stale = deferred<Research.RequestView>();
+		let current = deferred<Research.RequestView>();
+		let calls = 0;
+		let published: Research.ReadyChild[] = [];
+		let store = new ResearchRequestStore({
+			api: api({
+				get: async (_channelId, id) => {
+					if (id === "restored") return request(id, "ready", { child: readyChild });
+					if (id === "failed") {
+						return request(id, "failed", { child: readyChild, state: "failed" });
+					}
+					if (id === "cancelled") {
+						return request(id, "cancelled", { child: readyChild, state: "cancelled" });
+					}
+					return ++calls === 1 ? stale.promise : current.promise;
+				},
+			}),
+			channelId: "channel-one",
+			onOpen() {},
+			onPublished: child => published.push(child),
+		});
+		let unsubscribe = store.subscribe(() => {});
+		let releaseRestored = store.retain("restored");
+		let releaseFailed = store.retain("failed");
+		let releaseCancelled = store.retain("cancelled");
+		let releaseLate = store.retain("late");
+		store.invalidate("late");
+		await settle();
+
+		current.resolve(request("late", "writing"));
+		await settle();
+		stale.resolve(request("late", "ready", { child: readyChild }));
+		await settle();
+		releaseLate();
+		store.dispose();
+
+		expect(published).toEqual([]);
+		releaseRestored();
+		releaseFailed();
+		releaseCancelled();
+		unsubscribe();
+	});
+
 	it("hands a ready child to app navigation", () => {
-		let opened: Research.ReadyChild[] = [];
+		let opened: Array<{
+			child: Research.ReadyChild;
+			opener: { readonly current: HTMLElement | null };
+		}> = [];
 		let store = new ResearchRequestStore({
 			api: api(),
 			channelId: "channel-one",
-			onOpen: child => opened.push(child),
+			onOpen: (child, opener) => opened.push({ child, opener }),
 		});
 		let child: Research.ReadyChild = {
 			id: "child-one",
@@ -520,9 +609,14 @@ describe("research request store", () => {
 			title: "Source report",
 		};
 
-		store.open(child);
+		let first = { focus() {} } as HTMLElement;
+		let replacement = { focus() {} } as HTMLElement;
+		let opener = store.opener("workspace-one", first);
+		expect(store.opener("workspace-one", replacement)).toBe(opener);
+		store.open(child, opener);
 
-		expect(opened).toEqual([child]);
+		expect(opened).toEqual([{ child, opener }]);
+		expect(opener.current).toBe(replacement);
 		store.dispose();
 	});
 });

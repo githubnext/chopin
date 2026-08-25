@@ -88,6 +88,15 @@ export async function seedChildChannel(
 	return { id, path: `${testChannelPath(parentId)}/children/${slug}`, slug };
 }
 
+export async function countChildChannels(port: number, parentId: string): Promise<number> {
+	return sql(port, async database => {
+		let [row] = await database<{ count: number }[]>`
+			SELECT count(*)::int AS count FROM channels WHERE parent_channel_id = ${parentId}
+		`;
+		return row?.count ?? 0;
+	});
+}
+
 export async function seedChannel(
 	port: number,
 	id: string,

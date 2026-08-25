@@ -16,6 +16,8 @@ export type QuestionStepMotion = {
 	immediately: () => boolean;
 };
 
+export type ResearchOpener = { readonly current: HTMLElement | null };
+
 /** App-owned HTTP state and actions for durable Research Workspace references. */
 export type ResearchStore = {
 	subscribe(listener: () => void): () => void;
@@ -24,7 +26,8 @@ export type ResearchStore = {
 	create(question: string, requestId: string): Promise<Research.RequestView>;
 	cancel(id: string): Promise<Research.RequestView>;
 	retry(id: string): Promise<Research.RequestView>;
-	open(child: Research.ReadyChild): void;
+	opener(id: string, current?: HTMLElement | null): ResearchOpener;
+	open(child: Research.ReadyChild, opener: ResearchOpener): void;
 };
 
 export type WidgetOptions = {

@@ -10,6 +10,7 @@ import {
 	landingDocument,
 	navigationMode,
 	researchChildDestination,
+	researchChildNavigation,
 } from "./navigation-model";
 
 import type { ProjectDocuments } from "./document-actions";
@@ -189,6 +190,23 @@ describe("navigation model", () => {
 		)).toBe(
 			"/documents/acme%20space/docs%2Ftools/release%20plan/children/rollout%20evidence",
 		);
+	});
+
+	it("carries an explicit ready-card opener into child navigation", () => {
+		let opener = { current: { focus() {} } as HTMLElement };
+		expect(researchChildNavigation(
+			{
+				repositoryOwner: "acme space",
+				repositoryName: "docs/tools",
+				slug: "release plan",
+			},
+			{ slug: "rollout evidence" },
+			opener,
+		)).toEqual({
+			destination:
+				"/documents/acme%20space/docs%2Ftools/release%20plan/children/rollout%20evidence",
+			opener,
+		});
 	});
 
 	it("keeps one Project creating while another creation settles", () => {

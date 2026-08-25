@@ -118,16 +118,26 @@ export type ResearchCardProps = {
 	actionError?: string;
 	busy?: boolean;
 	canEdit?: boolean;
+	openButtonRef?: (button: HTMLButtonElement | null) => void;
 	request: Research.RequestView;
 	onCancel?: () => void;
-	onOpen?: () => void;
+	onOpen?: (opener: HTMLElement) => void;
 	onRemove?: () => void;
 	onRetry?: () => void;
 };
 
 export function ResearchCard(
-	{ actionError, busy, canEdit = true, onCancel, onOpen, onRemove, onRetry, request }:
-		ResearchCardProps,
+	{
+		actionError,
+		busy,
+		canEdit = true,
+		onCancel,
+		onOpen,
+		onRemove,
+		onRetry,
+		openButtonRef,
+		request,
+	}: ResearchCardProps,
 ) {
 	let ready = request.stage === "ready" && request.child;
 	let actions = researchActions(request, canEdit);
@@ -172,7 +182,13 @@ export function ResearchCard(
 					</button>
 				)}
 				{actions.open && ready && onOpen && (
-					<button className="btn btn-sm btn-primary" disabled={busy} onClick={onOpen} type="button">
+					<button
+						className="btn btn-sm btn-primary"
+						disabled={busy}
+						onClick={event => onOpen(event.currentTarget)}
+						ref={openButtonRef}
+						type="button"
+					>
 						Open {ready.title}
 					</button>
 				)}
@@ -192,6 +208,14 @@ export function ResearchCard(
 	);
 }
 
+export function openResearch(
+	store: ResearchStore,
+	id: string,
+	child: Research.ReadyChild,
+	opener: HTMLElement,
+): void {
+	store.open(child, store.opener(id, opener));
+}
 export type ResearchActions = {
 	cancel: boolean;
 	open: boolean;
@@ -224,9 +248,17 @@ export type ResearchReferenceProps = {
 	store: ResearchStore;
 };
 
+export function subscribeResearch(store: ResearchStore, listener: () => void): () => void {
+	return store.subscribe(listener);
+}
+
+export function retainResearch(store: ResearchStore, id: string): () => void {
+	return store.retain(id);
+}
+
 export function ResearchReference({ canEdit = true, id, onRemove, store }: ResearchReferenceProps) {
 	let subscribe = useCallback(
-		(listener: () => void) => store.subscribe(listener),
+		(listener: () => void) => subscribeResearch(store, listener),
 		[store],
 	);
 	let request = useSyncExternalStore(
@@ -237,7 +269,7 @@ export function ResearchReference({ canEdit = true, id, onRemove, store }: Resea
 	let [busy, setBusy] = useState(false);
 	let [actionError, setActionError] = useState<string>();
 
-	useEffect(() => store.retain(id), [id, store]);
+	useEffect(() => retainResearch(store, id), [id, store]);
 
 	if (!request) {
 		return (
@@ -263,7 +295,10 @@ export function ResearchReference({ canEdit = true, id, onRemove, store }: Resea
 			canEdit={canEdit}
 			request={request}
 			onCancel={actions.cancel ? () => action(() => store.cancel(request.id)) : undefined}
-			onOpen={actions.open && request.child ? () => store.open(request.child!) : undefined}
+			onOpen={actions.open && request.child
+				? opener => openResearch(store, request.id, request.child!, opener)
+				: undefined}
+			openButtonRef={button => store.opener(request.id, button)}
 			onRemove={actions.remove ? onRemove : undefined}
 			onRetry={actions.retry ? () => action(() => store.retry(request.id)) : undefined}
 		/>

@@ -41,7 +41,12 @@ export type { Draft, ThreadState, ThreadView } from "./threads";
 export { presenceClass, transitionPresence, useTransitionPresence } from "./transition-presence";
 export type { PresenceAction, PresencePhase, TransitionPresence } from "./transition-presence";
 export type { Connection, Transport, Unsubscribe } from "./transport";
-export type { CommentPresentation, QuestionStepMotion, ResearchStore } from "./widget-options";
+export type {
+	CommentPresentation,
+	QuestionStepMotion,
+	ResearchOpener,
+	ResearchStore,
+} from "./widget-options";
 export {
 	QuestionnaireCard,
 	register as registerPlanWidgets,
