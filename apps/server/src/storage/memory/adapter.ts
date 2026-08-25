@@ -572,7 +572,13 @@ export class MemoryStorage implements StorageAdapter {
 		let count = Math.min(100, Math.max(1, limit));
 		let ordered = [...this.#channels.values()]
 			.filter(value => value.repositoryId === repositoryId)
-			.filter(value => includeArchived || !value.archivedAt)
+			.filter(value => {
+				if (!value.parentChannelId) return includeArchived || !value.archivedAt;
+				let parent = this.#channels.get(value.parentChannelId);
+				return parent?.repositoryId === repositoryId
+					&& !parent.parentChannelId
+					&& (includeArchived || !parent.archivedAt);
+			})
 			.filter(value =>
 				!query
 				|| value.title.toLowerCase().includes(query.toLowerCase())

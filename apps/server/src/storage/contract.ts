@@ -359,6 +359,75 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
+		it("lists child channels in their parent's catalogue state across pagination", async () => {
+			let storage = await opened(factory);
+			try {
+				let { userId, channelId: activeParentId, repositoryId } = await userAndChannel(storage);
+				let archivedChild = await storage.channels.create({
+					id: id("archived-child"),
+					repositoryId,
+					repositoryOwner: "octo-org",
+					repositoryName: "score",
+					title: "Archived child of active parent",
+					createdBy: userId,
+					parentChannelId: activeParentId,
+					now: new Date("2026-01-03T03:04:05.000Z"),
+				});
+				archivedChild = (await storage.channels.archive({
+					id: archivedChild.id,
+					now: new Date("2026-01-04T03:04:05.000Z"),
+				})).channel;
+				let archivedParent = await storage.channels.create({
+					id: id("archived-parent"),
+					repositoryId,
+					repositoryOwner: "octo-org",
+					repositoryName: "score",
+					title: "Archived parent",
+					createdBy: userId,
+					now: new Date("2026-01-05T03:04:05.000Z"),
+				});
+				let activeChild = await storage.channels.create({
+					id: id("active-child"),
+					repositoryId,
+					repositoryOwner: "octo-org",
+					repositoryName: "score",
+					title: "Active child of archived parent",
+					createdBy: userId,
+					parentChannelId: archivedParent.id,
+					now: new Date("2026-01-06T03:04:05.000Z"),
+				});
+				archivedParent = (await storage.channels.archive({
+					id: archivedParent.id,
+					now: new Date("2026-01-07T03:04:05.000Z"),
+				})).channel;
+
+				let first = await storage.channels.list(repositoryId, 1);
+				expect(first.channels.map(channel => channel.id)).toEqual([archivedChild.id]);
+				expect(first.next).toBeDefined();
+				let second = await storage.channels.list(repositoryId, 1, first.next);
+				expect(second.channels.map(channel => channel.id)).toEqual([activeParentId]);
+				expect(second.next).toBeUndefined();
+
+				let inclusive = await storage.channels.list(
+					repositoryId,
+					20,
+					undefined,
+					undefined,
+					true,
+				);
+				expect(new Set(inclusive.channels.map(channel => channel.id))).toEqual(
+					new Set([
+						activeParentId,
+						archivedChild.id,
+						archivedParent.id,
+						activeChild.id,
+					]),
+				);
+			} finally {
+				await storage.close();
+			}
+		});
+
 		it("archives and restores channels without hiding direct reads", async () => {
 			let storage = await opened(factory);
 			try {
