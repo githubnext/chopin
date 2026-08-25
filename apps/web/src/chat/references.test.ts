@@ -25,11 +25,6 @@ function documentDraft(text: string, token: string, channelId = "channel-one"): 
 	return { kind: "document", channelId, start, end: start + token.length, token };
 }
 
-function researchDraft(text: string, token: string, workspaceId = "research-one"): ReferenceDraft {
-	let start = text.indexOf(token);
-	return { kind: "research", workspaceId, start, end: start + token.length, token };
-}
-
 function select(text: string, target: ReferenceTarget, references: ReferenceDraft[] = []) {
 	let trigger = referenceTrigger(text, text.length);
 	if (!trigger) throw new Error("expected a reference trigger");
@@ -45,12 +40,7 @@ describe("typed reference triggers", () => {
 			start: 0,
 			end: 1,
 		});
-		expect(referenceTrigger("Ask %OAuth", 10)).toMatchObject({
-			kind: "research",
-			query: "OAuth",
-			start: 4,
-			end: 10,
-		});
+		expect(referenceTrigger("Ask %OAuth", 10)).toBeUndefined();
 		expect(referenceTrigger("Line one\n#release:v2", 20)?.query).toBe("release:v2");
 	});
 
@@ -113,9 +103,7 @@ describe("reference draft tokens", () => {
 		expect(duplicate.references).toHaveLength(1);
 		expect(duplicate.references[0]!.start).toBe(first.text.length + 1);
 		expect(
-			sameTitle.references.map(reference =>
-				reference.kind === "document" ? reference.channelId : reference.workspaceId
-			),
+			sameTitle.references.map(reference => reference.channelId),
 		).toEqual(["channel-one", "channel-two"]);
 	});
 
@@ -132,12 +120,11 @@ describe("reference draft tokens", () => {
 			text = next.text;
 			references = next.references;
 		}
-		let overflowText = `${text} %`;
+		let overflowText = `${text} #`;
 		let overflow = select(overflowText, {
-			kind: "research",
-			workspaceId: "workspace-overflow",
+			kind: "document",
+			channelId: "channel-overflow",
 			title: "Overflow",
-			discriminator: "overflow",
 		}, references);
 
 		expect(references).toHaveLength(MAX_REFERENCES);
@@ -211,8 +198,7 @@ describe("chat send payloads", () => {
 	test("sorts and trims ranges without letting references summon Planner", () => {
 		let text = "  @chopin compare #Release and %Evidence  ";
 		let document = documentDraft(text, "#Release", "channel-release");
-		let research = researchDraft(text, "%Evidence", "workspace-evidence");
-		expect(chatSendPayload(text, [research, document], true, REQUEST_ID)).toEqual({
+		expect(chatSendPayload(text, [document], true, REQUEST_ID)).toEqual({
 			requestId: REQUEST_ID,
 			text: "@chopin compare #Release and %Evidence",
 			to: "planner",
@@ -222,12 +208,6 @@ describe("chat send payloads", () => {
 					channelId: "channel-release",
 					start: document.start - 2,
 					end: document.end - 2,
-				},
-				{
-					kind: "research",
-					workspaceId: "workspace-evidence",
-					start: research.start - 2,
-					end: research.end - 2,
 				},
 			],
 		});
@@ -255,9 +235,9 @@ describe("chat send payloads", () => {
 		expect(chatSendPayload("  \n", [], true, REQUEST_ID)).toBeUndefined();
 	});
 
-	test("ignores Planner mentions inside attached document and research titles", () => {
+	test("ignores Planner mentions inside document titles but not ordinary percent text", () => {
 		let documentText = "See #Ask @chopin";
-		let researchText = "See %OAuth @chopin";
+		let percentText = "See %OAuth @chopin";
 		expect(chatSendPayload(
 			documentText,
 			[documentDraft(documentText, "#Ask @chopin")],
@@ -265,11 +245,11 @@ describe("chat send payloads", () => {
 			REQUEST_ID,
 		)).toMatchObject({ to: "room", references: [{ kind: "document" }] });
 		expect(chatSendPayload(
-			researchText,
-			[researchDraft(researchText, "%OAuth @chopin")],
+			percentText,
+			[],
 			true,
 			REQUEST_ID,
-		)).toMatchObject({ to: "room", references: [{ kind: "research" }] });
+		)).toEqual({ requestId: REQUEST_ID, text: percentText, to: "planner" });
 
 		let outside = "@chopin See #Ask @chopin";
 		expect(

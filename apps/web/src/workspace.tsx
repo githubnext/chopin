@@ -48,7 +48,6 @@ export function useWorkspaceIds(): WorkspaceIds {
 		heading: {
 			plan: workspaceHeadingId("plan", instance),
 			decisions: workspaceHeadingId("decisions", instance),
-			"background-work": workspaceHeadingId("background-work", instance),
 			conversation: workspaceHeadingId("conversation", instance),
 		},
 		pane: { chat: `${instance}-pane-chat` },
@@ -102,18 +101,16 @@ export type WorkspaceProps = {
 	chat?: ReactNode;
 	plan: ReactNode;
 	decisions: ReactNode;
-	backgroundWork?: ReactNode;
 	controls: ReactNode;
 	ids: WorkspaceIds;
 	mode: WorkspaceMode;
 	state: WorkspaceState;
-	view: "plan" | "decisions" | "background-work";
+	view: "plan" | "decisions";
 	onConversationOpen: (open: boolean) => void;
 	onDesktopConversationOpen: (open: boolean) => void;
-	onDestination: (destination: "plan" | "decisions" | "background-work") => void;
+	onDestination: (destination: "plan" | "decisions") => void;
 	unanswered: number;
 	conversationActivity: { unread: number; busy: boolean };
-	backgroundActivity?: { active: number; paused: number; failed: number };
 	identity?: string;
 	profile: WorkspaceProfile;
 };
@@ -198,16 +195,9 @@ function destinationLabel(
 	destination: WorkspaceDestination,
 	unanswered: number,
 	activity: WorkspaceProps["conversationActivity"],
-	background: NonNullable<WorkspaceProps["backgroundActivity"]>,
 ): string {
 	if (destination === "decisions" && unanswered > 0) {
 		return `Decisions, ${unanswered} unanswered`;
-	}
-	if (
-		destination === "background-work"
-		&& (background.active > 0 || background.paused > 0 || background.failed > 0)
-	) {
-		return `Background Work, ${background.active} active, ${background.paused} waiting, ${background.failed} failed`;
 	}
 	if (destination === "conversation" && activity.busy && activity.unread > 0) {
 		return `Conversation, Planner working, ${activity.unread} unread`;
@@ -216,17 +206,13 @@ function destinationLabel(
 	if (destination === "conversation" && activity.unread > 0) {
 		return `Conversation, ${activity.unread} unread`;
 	}
-	return destination === "conversation" ? "Conversation" : destination === "background-work"
-		? "Background Work"
-		: destination === "decisions"
+	return destination === "conversation" ? "Conversation" : destination === "decisions"
 		? "Decisions"
 		: "Document";
 }
 
 export function Workspace(
 	{
-		backgroundActivity = { active: 0, paused: 0, failed: 0 },
-		backgroundWork,
 		chat,
 		controls,
 		ids,
@@ -263,7 +249,7 @@ export function Workspace(
 	let edgeTab = useRef<HTMLButtonElement>(null);
 	let previousConversationOpen = useRef(state.conversationOpen);
 	let conversationInactive = !presentation.conversationVisible;
-	let destinations = workspaceDestinations(!!backgroundWork);
+	let destinations = workspaceDestinations();
 	let focusDestination = (destination: WorkspaceDestination) => {
 		root.current?.querySelector<HTMLElement>(`#${CSS.escape(ids.heading[destination])}`)
 			?.focus({ preventScroll: true });
@@ -449,23 +435,6 @@ export function Workspace(
 									{decisions}
 								</section>
 							</ContentSwapLayer>
-							{backgroundWork && (
-								<ContentSwapLayer
-									active={presentation.documentVisible
-										&& presentation.documentView === "background-work"}
-									className="workspace-document-layer min-h-0"
-									immediately={immediately}
-									motion={contentSwapMotion}
-								>
-									<section
-										aria-labelledby={ids.heading["background-work"]}
-										className="h-full min-h-0 overflow-auto"
-										data-document-view="background-work"
-									>
-										{backgroundWork}
-									</section>
-								</ContentSwapLayer>
-							)}
 						</div>
 					</div>
 				</main>
@@ -474,9 +443,7 @@ export function Workspace(
 			{mode !== "split" && (
 				<nav
 					aria-label="Workspace view"
-					className={`workspace-navigation hairline-t grid shrink-0 bg-ground p-1 ${
-						backgroundWork ? "grid-cols-4" : "grid-cols-3"
-					}`}
+					className="workspace-navigation hairline-t grid grid-cols-3 shrink-0 bg-ground p-1"
 				>
 					{destinations.map(destination => {
 						let active = destination === "conversation"
@@ -486,7 +453,6 @@ export function Workspace(
 							destination,
 							unanswered,
 							conversationActivity,
-							backgroundActivity,
 						);
 						return (
 							<button
@@ -500,8 +466,6 @@ export function Workspace(
 							>
 								{destination === "conversation"
 									? "Conversation"
-									: destination === "background-work"
-									? "Background"
 									: destination === "decisions"
 									? "Decisions"
 									: "Document"}
@@ -514,15 +478,6 @@ export function Workspace(
 										{unanswered}
 									</span>
 								)}
-								{destination === "background-work"
-									&& backgroundActivity.active + backgroundActivity.paused
-												+ backgroundActivity.failed > 0
-									&& (
-										<span aria-hidden="true" className="ml-1">
-											{backgroundActivity.active + backgroundActivity.paused
-												+ backgroundActivity.failed}
-										</span>
-									)}
 								{destination === "conversation" && conversationActivity.busy && (
 									<span aria-hidden="true" className="workspace-working-indicator ml-1 shrink-0" />
 								)}

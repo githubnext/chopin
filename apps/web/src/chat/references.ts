@@ -5,23 +5,25 @@ import type { Chat } from "@chopin/protocol";
 export const MAX_REFERENCES = 10;
 export const MAX_REFERENCE_QUERY = 64;
 
-export type ReferenceKind = Chat.ReferenceRequest["kind"];
-
 export type ReferenceTrigger = {
-	kind: ReferenceKind;
-	marker: "#" | "%";
+	kind: "document";
+	marker: "#";
 	query: string;
 	start: number;
 	end: number;
 };
 
-export type ReferenceTarget =
-	| { kind: "document"; channelId: string; title: string; slug?: string; description?: string }
-	| { kind: "research"; workspaceId: string; title: string; discriminator: string };
+export type ReferenceTarget = {
+	kind: "document";
+	channelId: string;
+	title: string;
+	slug?: string;
+	description?: string;
+};
 
-export type ReferenceDraft =
-	| (Extract<Chat.ReferenceRequest, { kind: "document" }> & { token: string })
-	| (Extract<Chat.ReferenceRequest, { kind: "research" }> & { token: string });
+export type ReferenceDraft = Extract<Chat.ReferenceRequest, { kind: "document" }> & {
+	token: string;
+};
 
 export type ReferenceInsertion = {
 	text: string;
@@ -59,15 +61,10 @@ export function prepareDraftSubmission(
 }
 
 function sameReference(left: ReferenceDraft, right: ReferenceDraft): boolean {
-	return left.kind === right.kind
-		&& left.start === right.start
+	return left.start === right.start
 		&& left.end === right.end
 		&& left.token === right.token
-		&& (left.kind === "document" && right.kind === "document"
-			? left.channelId === right.channelId
-			: left.kind === "research" && right.kind === "research"
-			? left.workspaceId === right.workspaceId
-			: false);
+		&& left.channelId === right.channelId;
 }
 
 export function reviseComposerDraft(
@@ -84,9 +81,7 @@ export function reviseComposerDraft(
 }
 
 function targetKey(value: ReferenceDraft | ReferenceTarget): string {
-	return value.kind === "document"
-		? `document:${value.channelId}`
-		: `research:${value.workspaceId}`;
+	return `document:${value.channelId}`;
 }
 
 function validDraft(text: string, reference: ReferenceDraft): boolean {
@@ -130,7 +125,7 @@ export function referenceTrigger(
 	while (start > 0 && !/\s/.test(text[start - 1]!)) start--;
 	let token = text.slice(start, selectionStart);
 	let marker = token[0];
-	if (marker !== "#" && marker !== "%") return undefined;
+	if (marker !== "#") return undefined;
 	let query = token.slice(1);
 	if (
 		query.length > MAX_REFERENCE_QUERY
@@ -138,7 +133,7 @@ export function referenceTrigger(
 		|| query.includes("%")
 	) return undefined;
 	return {
-		kind: marker === "#" ? "document" : "research",
+		kind: "document",
 		marker,
 		query,
 		start,
@@ -259,9 +254,13 @@ export function insertReference(
 		true,
 	);
 	let end = trigger.start + token.length;
-	let reference: ReferenceDraft = target.kind === "document"
-		? { kind: "document", channelId: target.channelId, start: trigger.start, end, token }
-		: { kind: "research", workspaceId: target.workspaceId, start: trigger.start, end, token };
+	let reference: ReferenceDraft = {
+		kind: "document",
+		channelId: target.channelId,
+		start: trigger.start,
+		end,
+		token,
+	};
 	return { text: next, references: [...shifted, reference], caret: end };
 }
 
@@ -311,11 +310,7 @@ export function chatSendPayload(
 		if (start < previousEnd || value.slice(start, end) !== reference.token) continue;
 		targets.add(key);
 		previousEnd = end;
-		requests.push(
-			reference.kind === "document"
-				? { kind: "document", channelId: reference.channelId, start, end }
-				: { kind: "research", workspaceId: reference.workspaceId, start, end },
-		);
+		requests.push({ kind: "document", channelId: reference.channelId, start, end });
 	}
 
 	return {

@@ -289,7 +289,6 @@ export function Chat(
 					<ReferencePicker
 						active={picker.active}
 						id={pickerId}
-						kind={trigger.kind}
 						onActive={picker.setActive}
 						onSelect={chooseReference}
 						state={atReferenceLimit
@@ -299,7 +298,7 @@ export function Chat(
 				)}
 				{referencesEnabled && (
 					<p className="sr-only" id={instructionsId}>
-						Type # to reference a document or % to reference a Research Workspace.
+						Type # to reference a document.
 					</p>
 				)}
 				<div aria-busy={submitting} className="field flex flex-col">

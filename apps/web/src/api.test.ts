@@ -28,6 +28,7 @@ describe("document lifecycle API", () => {
 				"appendResearchWorkspaceTurn",
 				"cancelResearchWorkspaceTurn",
 				"createResearchWorkspace",
+				"channelResearchWorkspaces",
 			]
 		) {
 			expect(name in Api).toBe(false);

@@ -1,20 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	advanceDecisionView,
-	aggregateJobs,
-	BackgroundWork,
 	countUnanswered,
-	currentJobs,
 	cursor,
 	Decisions,
 	Face,
-	JobStore,
 	PlanEditor,
 	QuestionnaireStore,
 	selectDecisionView,
 	ThreadStore,
 	useHasPlanContent,
-	useJobs,
 	useQuestionnaires,
 	visibleDecisionView,
 } from "@chopin/editor";
@@ -35,7 +30,6 @@ import { ResearchRequestStore } from "./research-requests";
 import { Wire } from "./wire";
 import { useWorkspaceIds, useWorkspaceMode, useWorkspaceState, Workspace } from "./workspace";
 import {
-	availableDocumentView,
 	initialDocumentView,
 	presentWorkspace,
 	workspaceProfile,
@@ -166,7 +160,6 @@ export function RoomWorkspace(
 	let [effectiveCanEdit, setEffectiveCanEdit] = useState(canEdit && !archivedAt);
 	let [effectiveCanManage, setEffectiveCanManage] = useState(canManage);
 	let [deleted, setDeleted] = useState(false);
-	let [capabilities, setCapabilities] = useState({ backgroundJobs: false });
 	let [chatReferences, setChatReferences] = useState<{ wire?: Wire; enabled: boolean }>({
 		enabled: false,
 	});
@@ -185,12 +178,11 @@ export function RoomWorkspace(
 	let user = useMemo(() => cursor(handle), [handle]);
 	let mode = useWorkspaceMode();
 	let workspaceIds = useWorkspaceIds();
-	let profile = workspaceProfile(surface, capabilities.backgroundJobs);
+	let profile = workspaceProfile(surface);
 	let researchEnabled = profile.research;
 	let [workspace, dispatch] = useWorkspaceState(profile);
 	let [questions] = useState(() => new QuestionnaireStore());
 	let [threads] = useState(() => new ThreadStore());
-	let [jobs] = useState(() => new JobStore());
 	let research = useMemo(
 		() =>
 			new ResearchRequestStore({
@@ -203,9 +195,6 @@ export function RoomWorkspace(
 	let [planScrollTop, setPlanScrollTop] = useState(0);
 	let entries = useQuestionnaires(questions);
 	let unanswered = countUnanswered(entries);
-	let jobSnapshot = useJobs(jobs);
-	let backgroundAggregate = aggregateJobs(jobSnapshot.jobs);
-	let backgroundWorkCount = currentJobs(jobSnapshot.jobs).length;
 	let hasPlanContent = useHasPlanContent(questions);
 	let [decisionView, setDecisionView] = useState<DecisionViewState>(() => {
 		let stored = localStorage.getItem("chopin:view:document");
@@ -214,10 +203,7 @@ export function RoomWorkspace(
 			preferred: initialDocumentView(profile, stored),
 		};
 	});
-	let view = availableDocumentView(
-		visibleDecisionView(decisionView, hasPlanContent, unanswered),
-		profile.backgroundJobs,
-	);
+	let view = visibleDecisionView(decisionView, hasPlanContent, unanswered);
 	let previousUnanswered = useRef(unanswered);
 	let latestCanEdit = useRef(canEdit);
 	let latestCanManage = useRef(canManage);
@@ -276,7 +262,7 @@ export function RoomWorkspace(
 		}
 	};
 
-	let selectDestination = (destination: "plan" | "decisions" | "background-work") => {
+	let selectDestination = (destination: "plan" | "decisions") => {
 		selectView(destination, mode === "split");
 		dispatch({ type: "set-conversation", open: false });
 	};
@@ -351,17 +337,8 @@ export function RoomWorkspace(
 				setMembers(frame.members);
 				setEffectiveCanEdit(editable);
 				setEffectiveCanManage(frame.canManage);
-				setCapabilities({ backgroundJobs: frame.backgroundJobs });
 				setChatReferences({ wire: socket, enabled: frame.chatReferences === true });
 				setChatSendAcks({ wire: socket, enabled: frame.chatSendAcks === true });
-				let nextProfile = workspaceProfile(surface, frame.backgroundJobs);
-				if (!nextProfile.backgroundJobs) {
-					setDecisionView(state =>
-						state.preferred === "background-work"
-							? { phase: "complete", preferred: "plan" }
-							: state
-					);
-				}
 				updateMetadata(frame);
 				if (accessChanged) onRepositoryAccessChanged();
 			}),
@@ -389,7 +366,6 @@ export function RoomWorkspace(
 				if (researchEnabled) research.invalidate(frame.workspaceId);
 			}),
 			threads.listen(socket),
-			jobs.listen(socket),
 		];
 
 		return () => {
@@ -399,7 +375,6 @@ export function RoomWorkspace(
 		};
 	}, [
 		handle,
-		jobs,
 		onDocumentDeleted,
 		onRepositoryAccessChanged,
 		research,
@@ -438,11 +413,6 @@ export function RoomWorkspace(
 				/>
 			}
 			conversationActivity={conversationActivity}
-			backgroundActivity={{
-				active: backgroundAggregate.active,
-				paused: backgroundAggregate.paused,
-				failed: backgroundAggregate.failed,
-			}}
 			header={
 				<Header
 					archivedAt={workspaceArchivedAt}
@@ -455,9 +425,6 @@ export function RoomWorkspace(
 			controls={
 				<DecisionViewControl
 					attention={attention}
-					backgroundWork={profile.backgroundJobs ? backgroundWorkCount : 0}
-					backgroundWorkEnabled={profile.backgroundJobs}
-					implementationEnabled={profile.implementation}
 					onView={selectDestination}
 					unanswered={unanswered}
 					view={view}
@@ -499,18 +466,6 @@ export function RoomWorkspace(
 					wire={wire}
 				/>
 			}
-			backgroundWork={profile.backgroundJobs
-				? (
-					<BackgroundWork
-						canEdit={workspaceCanEdit}
-						connected={status === "connected"}
-						headingId={workspaceIds.heading["background-work"]}
-						motion={motionContract("collapse")}
-						motionImmediately={settleMotionImmediately}
-						store={jobs}
-					/>
-				)
-				: undefined}
 			state={workspace}
 			profile={profile}
 			unanswered={unanswered}

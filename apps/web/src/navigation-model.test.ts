@@ -88,13 +88,6 @@ describe("navigation model", () => {
 					parentSlug: "parent",
 					repository: "one",
 				},
-				{
-					owner: "acme",
-					page: "research" as const,
-					repository: "one",
-					slug: "parent",
-					workspaceId: "research-id",
-				},
 			]
 		) expect(isDocumentWorkspaceRoute(route)).toBe(true);
 		expect(isDocumentWorkspaceRoute({ page: "repositories" })).toBe(false);

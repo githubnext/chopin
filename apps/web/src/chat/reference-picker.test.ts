@@ -13,7 +13,6 @@ import {
 import type * as Api from "../api";
 import type { ReferenceSearchApi } from "./reference-picker";
 import type { ReferenceTrigger } from "./references";
-import type { Research } from "@chopin/protocol";
 
 let REPOSITORY: Api.Repository = {
 	id: "repository-one",
@@ -42,40 +41,19 @@ function channel(id: string, title = id): Api.Channel {
 	};
 }
 
-function workspace(id: string, channelId: string, title = id): Research.WorkspaceSummary {
+function trigger(query = ""): ReferenceTrigger {
 	return {
-		id,
-		channelId,
-		title,
-		proposedQuestion: title,
-		origin: "sidebar",
-		createdBy: "user-one",
-		revision: 0,
-		createdAt: "2026-08-23T00:00:00.000Z",
-		updatedAt: "2026-08-23T00:00:00.000Z",
-	};
-}
-
-function trigger(kind: "document" | "research", query = ""): ReferenceTrigger {
-	return {
-		kind,
-		marker: kind === "document" ? "#" : "%",
+		kind: "document",
+		marker: "#",
 		query,
 		start: 0,
 		end: query.length + 1,
 	};
 }
 
-function api(
-	channels: Api.Channel[],
-	workspaces: Research.WorkspaceSummary[] = [],
-): ReferenceSearchApi {
+function api(channels: Api.Channel[]): ReferenceSearchApi {
 	return {
 		channels: async () => ({ repository: REPOSITORY, canEdit: true, channels }),
-		channelResearchWorkspaces: async () => ({
-			workspaces,
-			truncated: false,
-		}),
 	};
 }
 
@@ -86,7 +64,7 @@ describe("reference picker requests", () => {
 			...Array.from({ length: 12 }, (_, index) => channel(`channel-${index}`, `Release ${index}`)),
 		];
 		let result = await searchReferenceTargets(
-			trigger("document"),
+			trigger(),
 			REPOSITORY,
 			"current",
 			new AbortController().signal,
@@ -106,30 +84,6 @@ describe("reference picker requests", () => {
 			);
 	});
 
-	test("returns only matching Research Workspaces attached to the current document", async () => {
-		let current = channel("current", "Current");
-		let result = await searchReferenceTargets(
-			trigger("research", "oauth"),
-			REPOSITORY,
-			current.id,
-			new AbortController().signal,
-			api([], [
-				workspace("oauth", current.id, "OAuth evidence"),
-				workspace("billing", current.id, "Billing evidence"),
-			]),
-		);
-
-		expect(result).toEqual({
-			options: [{
-				kind: "research",
-				workspaceId: "oauth",
-				title: "OAuth evidence",
-				discriminator: "oauth",
-			}],
-			truncated: false,
-		});
-	});
-
 	test("maps generated descriptions without changing document reference identity", async () => {
 		let described = {
 			...channel("release", "Release plan"),
@@ -137,7 +91,7 @@ describe("reference picker requests", () => {
 			description: "Coordinates launch readiness across the repository.",
 		};
 		let result = await searchReferenceTargets(
-			trigger("document"),
+			trigger(),
 			REPOSITORY,
 			"current",
 			new AbortController().signal,
@@ -164,7 +118,7 @@ describe("reference picker requests", () => {
 			{ channels: Array.from({ length: 5 }, (_, index) => channel(`last-${index}`)) },
 		];
 		let result = await searchReferenceTargets(
-			trigger("document"),
+			trigger(),
 			REPOSITORY,
 			"current",
 			new AbortController().signal,
@@ -175,7 +129,6 @@ describe("reference picker requests", () => {
 					let page = pages[calls.length - 1]!;
 					return { repository: REPOSITORY, canEdit: true, ...page };
 				},
-				channelResearchWorkspaces: api([], []).channelResearchWorkspaces,
 			},
 		);
 
@@ -187,7 +140,7 @@ describe("reference picker requests", () => {
 	test("bounds document pagination to five pages", async () => {
 		let calls = 0;
 		let result = await searchReferenceTargets(
-			trigger("document", "rare"),
+			trigger("rare"),
 			REPOSITORY,
 			"current",
 			new AbortController().signal,
@@ -198,7 +151,6 @@ describe("reference picker requests", () => {
 					channels: [channel(`result-${++calls}`)],
 					nextCursor: `page-${calls + 1}`,
 				}),
-				channelResearchWorkspaces: api([], []).channelResearchWorkspaces,
 			},
 		);
 
@@ -217,7 +169,7 @@ describe("reference picker requests", () => {
 	});
 
 	test("keys reopened requests by repository, room, and trigger", () => {
-		let selected = trigger("document", "release");
+		let selected = trigger("release");
 		let first = referencePickerRequestKey(selected, REPOSITORY, "room-one");
 		expect(referencePickerRequestKey(selected, REPOSITORY, "room-two")).not.toBe(first);
 		expect(referencePickerRequestKey(selected, { ...REPOSITORY, id: "other" }, "room-one"))
@@ -239,7 +191,6 @@ describe("reference picker accessibility", () => {
 		let markup = renderToStaticMarkup(createElement(ReferencePicker, {
 			active: 0,
 			id: "reference-list",
-			kind: "document",
 			onActive: () => {},
 			onSelect: () => {},
 			state: {
@@ -259,7 +210,6 @@ describe("reference picker accessibility", () => {
 		let markup = renderToStaticMarkup(createElement(ReferencePicker, {
 			active: 0,
 			id: "reference-list",
-			kind: "document",
 			onActive: () => {},
 			onSelect: () => {},
 			state: {
@@ -286,60 +236,22 @@ describe("reference picker accessibility", () => {
 		let render = (state: Parameters<typeof ReferencePicker>[0]["state"]) =>
 			renderToStaticMarkup(createElement(ReferencePicker, {
 				active: 0,
-				id: "research-list",
-				kind: "research",
+				id: "document-list",
 				onActive: () => {},
 				onSelect: () => {},
 				state,
 			}));
 
-		expect(render({ status: "loading", options: [] })).toContain(
-			"Loading Research Workspaces...",
-		);
-		expect(render({ status: "ready", options: [] })).toContain(
-			"No matching Research Workspaces.",
-		);
+		expect(render({ status: "loading", options: [] })).toContain("Loading documents...");
+		expect(render({ status: "ready", options: [] })).toContain("No matching documents.");
 		expect(render({ status: "error", options: [], error: new Error("Unavailable") }))
 			.toContain('role="alert">Unavailable');
 		expect(render({ status: "limit", options: [] })).toContain(
 			"A message can include up to 10 references.",
 		);
 		let truncated = render({ status: "ready", options: [], truncated: true });
-		expect(truncated).toContain("No matches in the available Research Workspaces.");
-		expect(truncated).toContain("Some Research Workspaces are not shown.");
-		expect(truncated).not.toContain("No matching Research Workspaces.");
-	});
-
-	test("visibly and accessibly distinguishes duplicate research titles", () => {
-		let markup = renderToStaticMarkup(createElement(ReferencePicker, {
-			active: 0,
-			id: "research-list",
-			kind: "research",
-			onActive: () => {},
-			onSelect: () => {},
-			state: {
-				status: "ready",
-				options: [
-					{
-						kind: "research",
-						workspaceId: "workspace-first-12345678",
-						title: "OAuth evidence",
-						discriminator: "12345678",
-					},
-					{
-						kind: "research",
-						workspaceId: "workspace-second-87654321",
-						title: "OAuth evidence",
-						discriminator: "87654321",
-					},
-				],
-			},
-		}));
-
-		expect(markup).toContain(
-			'aria-label="OAuth evidence, workspace workspace-first-12345678"',
-		);
-		expect(markup).toContain("...12345678");
-		expect(markup).toContain("...87654321");
+		expect(truncated).toContain("No matches in the available documents.");
+		expect(truncated).toContain("Some documents are not shown.");
+		expect(truncated).not.toContain("No matching documents.");
 	});
 });
