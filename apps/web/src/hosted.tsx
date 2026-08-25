@@ -10,12 +10,7 @@ import {
 
 import * as Api from "./api";
 import { readChannelRecovery, readDocumentRecovery, rememberChannel } from "./channel-recovery";
-import {
-	closeDocumentRoute,
-	initialDocumentRouteSwap,
-	requestDocumentRoute,
-	resolveDocumentRoute,
-} from "./document-route-swap";
+import { transitionDocumentRoute } from "./document-route-swap";
 import { newestDocument } from "./document-actions";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
@@ -55,28 +50,52 @@ export type HostedRoute =
 	| { page: "missing" };
 
 type DocumentRoute = Extract<HostedRoute, { page: "document" } | { page: "channel" }>;
-type KeyedDocumentRoute = { immediately: boolean; key: string; route: DocumentRoute };
-type DocumentRouteAction =
-	| { route: KeyedDocumentRoute; type: "requested" }
-	| { key: string; type: "resolved" | "closed" };
+type ChannelSource =
+	| { id: string; type: "channel" }
+	| { owner: string; repository: string; slug: string; type: "document" }
+	| {
+		owner: string;
+		repository: string;
+		slug: string;
+		type: "research";
+		workspaceId: string;
+	};
+type DocumentSource = Exclude<ChannelSource, { type: "research" }>;
+type DocumentRouteRequest = {
+	immediately: boolean;
+	key: string;
+	source: DocumentSource;
+};
+type DocumentRouteLayer = DocumentRouteSwapState<DocumentRouteRequest, Api.Channel>["current"];
 
-function keyedDocumentRoute(route: DocumentRoute, immediately: boolean): KeyedDocumentRoute {
+function keyedDocumentRoute(
+	route: DocumentRoute,
+	immediately: boolean,
+): DocumentRouteRequest {
+	let source: DocumentSource = route.page === "channel"
+		? { id: route.id, type: "channel" }
+		: {
+			owner: route.owner,
+			repository: route.repository,
+			slug: route.slug,
+			type: "document",
+		};
 	return {
 		immediately,
-		key: route.page === "channel"
-			? `channel:${route.id}`
-			: `document:${route.owner}/${route.repository}/${route.slug}`,
-		route,
+		key: channelSourceKey(source),
+		source,
 	};
 }
 
-function transitionDocumentRoute(
-	state: DocumentRouteSwapState<KeyedDocumentRoute>,
-	action: DocumentRouteAction,
-): DocumentRouteSwapState<KeyedDocumentRoute> {
-	if (action.type === "requested") return requestDocumentRoute(state, action.route);
-	if (action.type === "resolved") return resolveDocumentRoute(state, action.key);
-	return closeDocumentRoute(state, action.key);
+function channelSourceKey(source: ChannelSource): string {
+	switch (source.type) {
+		case "channel":
+			return `channel:${source.id}`;
+		case "document":
+			return `document:${source.owner}/${source.repository}/${source.slug}`;
+		case "research":
+			return `research:${source.owner}/${source.repository}/${source.slug}/${source.workspaceId}`;
+	}
 }
 
 function decoded(value: string): string | undefined {
@@ -229,29 +248,10 @@ export function githubLoginHref(pathname: string, search = "", hash = ""): strin
 }
 
 function ChannelWorkspace(
-	{
-		active = true,
-		agent,
-		id,
-		onResolved,
-		owner,
-		repository,
-		researchWorkspaceId,
-		routeKey,
-		showLoading = true,
-		slug,
-		user,
-	}: {
-		active?: boolean;
+	{ agent, onReady, source, user }: {
 		agent: boolean;
-		id?: string;
-		onResolved?: (key: string) => void;
-		owner?: string;
-		repository?: string;
-		researchWorkspaceId?: string;
-		routeKey: string;
-		showLoading?: boolean;
-		slug?: string;
+		onReady?: (key: string, channel?: Api.Channel) => void;
+		source: ChannelSource;
 		user: Api.User;
 	},
 ) {
@@ -265,89 +265,128 @@ function ChannelWorkspace(
 			kind: "research";
 			detail: Api.ChannelDetail;
 			Workspace: ComponentType<HostedWorkspaceProps & { workspaceId: string }>;
+			workspaceId: string;
 		};
 	let [loaded, setLoaded] = useState<LoadedWorkspace>();
 	let [error, setError] = useState<unknown>();
 	let [retry, setRetry] = useState(0);
-	let { channel: navigationChannel, onDocumentLoaded } = useNavigationDocument();
-	let recovery = id
-		? readChannelRecovery(user.id, id)
-		: owner && repository && slug
-		? readDocumentRecovery(user.id, owner, repository, slug)
-		: undefined;
+	let { channel: navigationChannel } = useNavigationDocument();
+	let routeKey = channelSourceKey(source);
+	let recovery;
+	switch (source.type) {
+		case "channel":
+			recovery = readChannelRecovery(user.id, source.id);
+			break;
+		case "document":
+		case "research":
+			recovery = readDocumentRecovery(
+				user.id,
+				source.owner,
+				source.repository,
+				source.slug,
+			);
+			break;
+	}
 
 	useEffect(() => {
 		let active = true;
 		let controller = new AbortController();
 		setLoaded(undefined);
 		setError(undefined);
-		let detail = id
-			? Api.channel(id, controller.signal)
-			: Api.document(owner!, repository!, slug!, controller.signal);
+		let detail: Promise<Api.ChannelDetail>;
+		switch (source.type) {
+			case "channel":
+				detail = Api.channel(source.id, controller.signal);
+				break;
+			case "document":
+			case "research":
+				detail = Api.document(
+					source.owner,
+					source.repository,
+					source.slug,
+					controller.signal,
+				);
+				break;
+		}
 		let prepared = detail.then(value => {
 			if (active) {
-				canonicalize(
-					researchWorkspaceId
-						? researchWorkspacePath(
+				let canonicalPath: string;
+				switch (source.type) {
+					case "channel":
+					case "document":
+						canonicalPath = documentPath(
 							value.repository.owner,
 							value.repository.name,
 							value.channel.slug,
-							researchWorkspaceId,
-						)
-						: documentPath(
+						);
+						break;
+					case "research":
+						canonicalPath = researchWorkspacePath(
 							value.repository.owner,
 							value.repository.name,
 							value.channel.slug,
-						),
-				);
+							source.workspaceId,
+						);
+						break;
+				}
+				canonicalize(canonicalPath);
 				rememberChannel(user.id, value.channel, value.repository);
 			}
 			return value;
 		});
-		let workspace = researchWorkspaceId
-			? import("./research-workspace").then(module => ({
-				kind: "research" as const,
-				Workspace: module.ResearchWorkspace,
-			}))
-			: import("./room-workspace").then(module => ({
-				kind: "document" as const,
-				Workspace: module.RoomWorkspace,
-			}));
+		let workspace;
+		switch (source.type) {
+			case "channel":
+			case "document":
+				workspace = import("./room-workspace").then(module => ({
+					kind: "document" as const,
+					Workspace: module.RoomWorkspace,
+				}));
+				break;
+			case "research":
+				workspace = import("./research-workspace").then(module => ({
+					kind: "research" as const,
+					Workspace: module.ResearchWorkspace,
+					workspaceId: source.workspaceId,
+				}));
+				break;
+		}
 		Promise.all([prepared, workspace]).then(([detail, selected]) => {
-			if (active) setLoaded({ detail, ...selected } as LoadedWorkspace);
+			if (active) {
+				setLoaded({ detail, ...selected } as LoadedWorkspace);
+				onReady?.(routeKey, detail.channel);
+			}
 		}, reason => {
-			if (active) setError(reason);
+			if (active) {
+				setError(reason);
+				onReady?.(routeKey);
+			}
 		});
 		return () => {
 			active = false;
 			controller.abort();
 		};
-	}, [
-		id,
-		owner,
-		repository,
-		researchWorkspaceId,
-		retry,
-		routeKey,
-		slug,
-		user.id,
-	]);
-
-	useEffect(() => {
-		if (active && loaded) void onDocumentLoaded(loaded.detail.channel, routeKey);
-	}, [active, loaded, onDocumentLoaded, routeKey]);
-
-	useEffect(() => {
-		if (loaded || error !== undefined) onResolved?.(routeKey);
-	}, [error, loaded, onResolved, routeKey]);
+	}, [onReady, retry, routeKey, source, user.id]);
 
 	if (error) {
-		let requestedRepository = owner && repository
-			? { owner, name: repository, fullName: `${owner}/${repository}` }
-			: undefined;
+		let requestedRepository;
+		let requestedSlug;
+		switch (source.type) {
+			case "channel":
+				break;
+			case "document":
+			case "research":
+				requestedRepository = {
+					fullName: `${source.owner}/${source.repository}`,
+					name: source.repository,
+					owner: source.owner,
+				};
+				requestedSlug = source.slug;
+				break;
+		}
 		return (
 			<Failure
-				channel={recovery?.channel ?? (slug ? { slug } : undefined)}
+				channel={recovery?.channel ?? (requestedSlug ? { slug: requestedSlug } : undefined)}
 				error={error}
 				onRetry={retryableChannelFailure(error)
 					? () => {
@@ -359,7 +398,7 @@ function ChannelWorkspace(
 			/>
 		);
 	}
-	if (!loaded) return showLoading ? <Loading label="Opening channel..." /> : null;
+	if (!loaded) return <Loading label="Opening channel..." />;
 	let { detail } = loaded;
 	let channel = navigationChannel?.id === detail.channel.id
 		? newestDocument(detail.channel, navigationChannel)
@@ -381,10 +420,20 @@ function ChannelWorkspace(
 	};
 	if (loaded.kind === "research") {
 		let Research = loaded.Workspace;
-		return <Research {...props} workspaceId={researchWorkspaceId!} />;
+		return <Research {...props} workspaceId={loaded.workspaceId} />;
 	}
 	let Document = loaded.Workspace;
 	return <Document {...props} />;
+}
+
+function ActiveChannelWorkspace(
+	{ agent, source, user }: { agent: boolean; source: ChannelSource; user: Api.User },
+) {
+	let { onDocumentLoaded } = useNavigationDocument();
+	let ready = useCallback((key: string, channel?: Api.Channel) => {
+		if (channel) void onDocumentLoaded(channel, key);
+	}, [onDocumentLoaded]);
+	return <ChannelWorkspace agent={agent} onReady={ready} source={source} user={user} />;
 }
 
 function DocumentRouteSwap(
@@ -392,18 +441,26 @@ function DocumentRouteSwap(
 ) {
 	let requested = keyedDocumentRoute(route, motionImmediately());
 	let [state, dispatch] = useReducer(
-		transitionDocumentRoute,
-		initialDocumentRouteSwap(requested),
+		transitionDocumentRoute<DocumentRouteRequest, Api.Channel>,
+		{ current: requested },
 	);
 	let presentedRequest = state.pending ?? state.current;
 	if (requested.key !== presentedRequest.key) {
 		dispatch({ route: requested, type: "requested" });
 	}
 	let layers = [state.previous, state.current, state.pending].filter(
-		(layer): layer is KeyedDocumentRoute => layer !== undefined,
+		(layer): layer is DocumentRouteLayer => layer !== undefined,
 	);
 	let motion = motionContract("content-swap");
-	let resolved = useCallback((key: string) => dispatch({ key, type: "resolved" }), []);
+	let ready = useCallback((key: string, channel?: Api.Channel) => {
+		dispatch({ channel, key, type: "ready" });
+	}, []);
+	let { onDocumentLoaded } = useNavigationDocument();
+	useEffect(() => {
+		if (state.current.channel) {
+			void onDocumentLoaded(state.current.channel, state.current.key);
+		}
+	}, [onDocumentLoaded, state.current.channel, state.current.key]);
 
 	return (
 		<div className="document-route-swap content-swap-stack h-full">
@@ -419,19 +476,10 @@ function DocumentRouteSwap(
 						: undefined}
 				>
 					<ChannelWorkspace
-						active={layer.key === state.current.key}
 						agent={agent}
-						onResolved={resolved}
-						routeKey={layer.key}
-						showLoading={layer.key === state.current.key}
+						onReady={ready}
+						source={layer.source}
 						user={user}
-						{...(layer.route.page === "channel"
-							? { id: layer.route.id }
-							: {
-								owner: layer.route.owner,
-								repository: layer.route.repository,
-								slug: layer.route.slug,
-							})}
 					/>
 				</ContentSwapLayer>
 			))}
@@ -476,15 +524,18 @@ export function HostedApp(
 			workspace = <DocumentRouteSwap agent={agent} route={route} user={user} />;
 			break;
 		case "research":
+			let source: ChannelSource = {
+				owner: route.owner,
+				repository: route.repository,
+				slug: route.slug,
+				type: "research",
+				workspaceId: route.workspaceId,
+			};
 			workspace = (
-				<ChannelWorkspace
+				<ActiveChannelWorkspace
 					agent={agent}
-					key={`research:${route.owner}/${route.repository}/${route.slug}/${route.workspaceId}`}
-					owner={route.owner}
-					repository={route.repository}
-					researchWorkspaceId={route.workspaceId}
-					routeKey={`research:${route.owner}/${route.repository}/${route.slug}/${route.workspaceId}`}
-					slug={route.slug}
+					key={channelSourceKey(source)}
+					source={source}
 					user={user}
 				/>
 			);
