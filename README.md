@@ -64,8 +64,9 @@ and tool vocabulary remain optimized for planning.
 - Document and conversation context, along with repository material selected by
   the Planner, is sent to GitHub Copilot during a turn. Model-backed background
   jobs also send job-specific private material, including context loaded during
-  execution, to isolated Copilot workers; public research sends only the exact
-  submitted brief to web search. GitHub credentials remain process-local;
+  execution, to isolated Copilot workers. The public research worker receives
+  only the exact submitted brief, but may derive or refine the queries it sends
+  to web search. GitHub credentials remain process-local;
   documents, transcripts, decisions, research request staging, background-job
   inputs and artifacts, and token-free session records are stored in PostgreSQL.
 - One Chopin process may write to a database at a time. Horizontal application

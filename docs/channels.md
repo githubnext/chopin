@@ -21,7 +21,9 @@ administration access may create, edit, rename, archive, restore, and delete
 documents and mutate an implementation lifecycle. Deletion additionally
 requires the document to be archived. The same roles apply to research requests:
 pull may read a referenced request, while push or administration may start,
-cancel, or retry one on an active top-level document. A public repository is not
+cancel, or retry one on an active document. The browser only offers the start
+action on a top-level document. The API may accept a request on a child, but
+publication validation rejects linking a grandchild. A public repository is not
 sufficient to expose its documents through the browser.
 
 An MCP-created document outside the App installation remains unavailable to

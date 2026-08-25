@@ -29,7 +29,9 @@ and [Self-hosting](self-hosting.md) for deployment.
   conversation, decision set, navigation row, or browser route.
 - A **child document** is an ordinary channel attached to one top-level parent
   for navigation and context. It owns its document, Conversation, and Decisions.
-  V1 does not allow grandchildren or child research.
+  The V1 product surface offers neither child research nor grandchildren. The UI
+  blocks starting research from a child; the API may accept the request, but
+  publication validation rejects linking a grandchild.
 - The **Planner** is the current name of Chopin's hosted Copilot-backed document
   agent.
 - A **coding agent** is an external MCP client that creates or implements a
@@ -223,11 +225,14 @@ job links, progress, sources, errors, and publication identity live in durable
 parent-scoped records. The parent WebSocket announces `research:changed`; the
 browser then refreshes that request over HTTP.
 
-The first worker sends only the submitted brief to public web search. After its
-evidence artifact validates, a separate private worker receives normalized
-evidence and a snapshot of the parent document, then writes the complete report.
-No partial report prose is published. Failure and cancellation create no child;
-an explicit retry keeps the request identity and immutable brief while replacing
+The public worker receives only the submitted brief, with no private document
+context. It may derive or refine the queries it sends to web search. After its
+evidence artifact validates, one isolated private worker analyses the parent
+document from the brief and document snapshot. A second isolated private worker
+receives the brief, normalized public evidence, and private findings, then
+synthesizes the complete report. Neither private worker has web access. No
+partial report prose is published. Failure and cancellation create no child; an
+explicit retry keeps the request identity and immutable brief while replacing
 only its terminal job links.
 
 Successful reconciliation validates and converts the report to canonical MDX.
