@@ -28,7 +28,7 @@ import type { PlanProvider } from "./provider";
 import type { QuestionnaireStore } from "./questionnaires";
 import type { ThreadStore } from "./threads";
 import type { Connection, Transport } from "./transport";
-import type { CommentPresentation } from "./widget-options";
+import type { CommentPresentation, QuestionStepMotion } from "./widget-options";
 
 /**
  * Lexical paints remote cursors with inline styles unless the theme names a
@@ -64,6 +64,8 @@ export type PlanEditorProps = {
 	commentPresentation?: CommentPresentation;
 	/** App-owned input policy for interactions that should settle without motion. */
 	motionImmediately?: () => boolean;
+	/** Host presentation for moving between bounded questionnaire steps. */
+	questionMotion?: QuestionStepMotion;
 	/** Identity for this client's remote cursor. */
 	user: { name: string; color: string };
 	/** Read-only while an agent turn may be rewriting the plan. */
@@ -103,6 +105,7 @@ export function PlanEditor(
 		connection,
 		motionImmediately,
 		onScrollTop,
+		questionMotion,
 		questions,
 		readOnly,
 		scrollTop,
@@ -252,6 +255,7 @@ export function PlanEditor(
 					widgetsPlugin({
 						commentPresentation,
 						motionImmediately,
+						questionMotion,
 						questions,
 						threads,
 						changes,
@@ -272,6 +276,7 @@ export function PlanEditor(
 			questions,
 			commentPresentation,
 			motionImmediately,
+			questionMotion,
 			threads,
 			changes,
 			offline,

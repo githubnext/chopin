@@ -9,7 +9,7 @@
  * as they arrive rather than tracking local state.
  */
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useRef, useState } from "react";
 import { CheckIcon, ShuffleSimpleIcon, XIcon } from "@phosphor-icons/react";
 
 import { answered } from "../draft";
@@ -23,6 +23,12 @@ export type Collaborator = {
 	client: string;
 	handle: string;
 	question?: string;
+};
+
+export type QuestionStepRenderProps = {
+	active: boolean;
+	children: ReactNode;
+	question: string;
 };
 
 export type QuestionViewProps = {
@@ -55,6 +61,8 @@ export type QuestionViewProps = {
 	error?: string;
 	/** Rendered beside the heading; hosts use it for counts and provenance. */
 	aside?: ReactNode;
+	/** Lets a host retain bounded steps for presentation without owning question state. */
+	renderStep?: (props: QuestionStepRenderProps) => ReactNode;
 };
 
 export function currentQuestion(
@@ -361,6 +369,7 @@ export function QuestionView(props: QuestionViewProps) {
 		onQuestionEnter,
 		onQuestionLeave,
 		onQuestionSelect,
+		renderStep,
 	} = props;
 
 	let base = useId();
@@ -506,57 +515,73 @@ export function QuestionView(props: QuestionViewProps) {
 
 			{aside}
 
-			{current && (
-				<section
-					data-ace-question-id={current.id}
-					id={`${base}-panel`}
-					role={multiple ? "tabpanel" : undefined}
-					className="px-3 py-2.5"
-					onMouseEnter={() => onQuestionEnter?.(current.id)}
-					onMouseLeave={event =>
-						!event.currentTarget.contains(document.activeElement)
-						&& onQuestionLeave?.(current.id)}
-					onFocusCapture={() => onQuestionEnter?.(current.id)}
-					onBlurCapture={event =>
-						!event.currentTarget.contains(event.relatedTarget)
-						&& !event.currentTarget.matches(":hover")
-						&& onQuestionLeave?.(current.id)}
-				>
-					<header className="flex min-w-0 flex-wrap items-baseline justify-between gap-2">
-						<h4 className="m-0 min-w-0 break-words text-sm font-semibold text-text-primary">
-							{current.header}
-						</h4>
-						<Badges people={collaborators.filter(person => person.question === current.id)} />
-					</header>
+			<div className="question-step-swap content-swap-stack">
+				{definition.questions.map(question => {
+					let activeStep = question.id === active;
+					if (!activeStep && !renderStep) return null;
+					let panel = (
+						<section
+							data-ace-question-id={question.id}
+							id={activeStep ? `${base}-panel` : undefined}
+							role={multiple && activeStep ? "tabpanel" : undefined}
+							className="px-3 py-2.5"
+							onMouseEnter={() => onQuestionEnter?.(question.id)}
+							onMouseLeave={event =>
+								!event.currentTarget.contains(document.activeElement)
+								&& onQuestionLeave?.(question.id)}
+							onFocusCapture={() => onQuestionEnter?.(question.id)}
+							onBlurCapture={event =>
+								!event.currentTarget.contains(event.relatedTarget)
+								&& !event.currentTarget.matches(":hover")
+								&& onQuestionLeave?.(question.id)}
+						>
+							<header className="flex min-w-0 flex-wrap items-baseline justify-between gap-2">
+								<h4 className="m-0 min-w-0 break-words text-sm font-semibold text-text-primary">
+									{question.header}
+								</h4>
+								<Badges
+									people={collaborators.filter(person => person.question === question.id)}
+								/>
+							</header>
 
-					{/* Never the whole panel: below this is a form. */}
-					<Related
-						id={current.id}
-						count={places?.[current.id] ?? 0}
-						label={current.question}
-						className="mt-1 mb-2"
-						onSelect={onQuestionSelect}
-					>
-						<p className="m-0 text-sm text-text-secondary">{current.question}</p>
-					</Related>
+							{/* Never the whole panel: below this is a form. */}
+							<Related
+								id={question.id}
+								count={places?.[question.id] ?? 0}
+								label={question.question}
+								className="mt-1 mb-2"
+								onSelect={onQuestionSelect}
+							>
+								<p className="m-0 text-sm text-text-secondary">{question.question}</p>
+							</Related>
 
-					<Choices
-						question={current}
-						draft={drafts[current.id]}
-						disabled={disabled}
-						name={`${base}-${current.id}`}
-						onChange={change => onChange?.(current.id, change)}
-					/>
+							<Choices
+								question={question}
+								draft={drafts[question.id]}
+								disabled={disabled}
+								name={`${base}-${question.id}`}
+								onChange={change => onChange?.(question.id, change)}
+							/>
 
-					<Custom
-						question={current}
-						draft={drafts[current.id]}
-						disabled={disabled}
-						name={`${base}-${current.id}`}
-						onChange={change => onChange?.(current.id, change)}
-					/>
-				</section>
-			)}
+							<Custom
+								question={question}
+								draft={drafts[question.id]}
+								disabled={disabled}
+								name={`${base}-${question.id}`}
+								onChange={change => onChange?.(question.id, change)}
+							/>
+						</section>
+					);
+					if (renderStep) {
+						return (
+							<Fragment key={question.id}>
+								{renderStep({ active: activeStep, children: panel, question: question.id })}
+							</Fragment>
+						);
+					}
+					return <Fragment key={question.id}>{panel}</Fragment>;
+				})}
+			</div>
 
 			{error && (
 				<p role="alert" className="px-3 pb-2 text-sm text-destructive-ink">
