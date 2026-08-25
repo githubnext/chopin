@@ -7,6 +7,7 @@ import {
 	anchoredChildPaths,
 	AnchoredChildSurface,
 	childCloseAction,
+	childFocusTransition,
 	childHistoryState,
 	childPresentation,
 	rebaseChildHistoryState,
@@ -132,6 +133,79 @@ describe("hosted routes", () => {
 });
 
 describe("anchored child lifecycle", () => {
+	it("restores only the close attempt that reaches its own mounted parent", () => {
+		let opener = { current: null };
+		let state = childFocusTransition({ generation: 0 }, {
+			type: "begin",
+			opener,
+			parentId: "parent-one",
+			parentPath: "/documents/octo-org/score/parent-one",
+		});
+		let token = { generation: 1, parentId: "parent-one" };
+		state = childFocusTransition(state, {
+			type: "route",
+			pathname: "/documents/octo-org/score/parent-one",
+		});
+		state = childFocusTransition(state, { type: "restore", token });
+
+		expect(state.attempt).toMatchObject({
+			generation: 1,
+			parentId: "parent-one",
+			phase: "deferred",
+		});
+		expect(childFocusTransition(state, { type: "restore", token })).toBe(state);
+		let finished = childFocusTransition(state, { type: "finish", token });
+		expect(finished).toEqual({
+			generation: 1,
+		});
+		expect(childFocusTransition(finished, { type: "restore", token })).toBe(finished);
+	});
+
+	it("invalidates a close attempt on reopen, sibling, or different-document navigation", () => {
+		for (
+			let pathname of [
+				"/documents/octo-org/score/parent-one/children/child-one",
+				"/documents/octo-org/score/parent-one/children/child-two",
+				"/documents/octo-org/score/parent-two",
+			]
+		) {
+			let state = childFocusTransition({ generation: 0 }, {
+				type: "begin",
+				opener: { current: null },
+				parentId: "parent-one",
+				parentPath: "/documents/octo-org/score/parent-one",
+			});
+			let token = { generation: 1, parentId: "parent-one" };
+			state = childFocusTransition(state, {
+				type: "route",
+				pathname: "/documents/octo-org/score/parent-one",
+			});
+			state = childFocusTransition(state, { type: "route", pathname });
+			state = childFocusTransition(state, { type: "restore", token });
+
+			expect(state).toEqual({ generation: 2 });
+		}
+	});
+
+	it("ignores stale completion after a superseding close attempt", () => {
+		let state = childFocusTransition({ generation: 0 }, {
+			type: "begin",
+			opener: { current: null },
+			parentId: "parent-one",
+			parentPath: "/documents/octo-org/score/parent-one",
+		});
+		let stale = { generation: 1, parentId: "parent-one" };
+		state = childFocusTransition(state, {
+			type: "begin",
+			opener: { current: null },
+			parentId: "parent-one",
+			parentPath: "/documents/octo-org/score/parent-one",
+		});
+
+		expect(childFocusTransition(state, { type: "restore", token: stale })).toBe(state);
+		expect(state.attempt?.generation).toBe(2);
+	});
+
 	it("renders one parent-aware close control over an inert parent with separate rooms", () => {
 		let markup = renderToStaticMarkup(createElement(AnchoredChildSurface, {
 			child: createElement("div", { "data-workspace-room": "child-room" }),

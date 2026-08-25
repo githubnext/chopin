@@ -7,6 +7,7 @@ import {
 } from "@chopin/protocol/document-url";
 
 import * as Api from "./api";
+import { childFocusTransition } from "./anchored-child-surface";
 import { readChannelRecovery, rememberChannel } from "./channel-recovery";
 import { childCloseAction, childHistoryState } from "./child-history";
 import { documentRouteIdentity, transitionDocumentRoute } from "./document-route-swap";
@@ -17,6 +18,7 @@ import { NavigationShell, useNavigationDocument } from "./navigation-shell";
 
 import type { ComponentType, ReactNode } from "react";
 import type { ResearchOpener } from "@chopin/editor";
+import type { ChildFocusEvent, ChildFocusState, ChildFocusToken } from "./anchored-child-surface";
 import type {
 	DocumentRouteIdentity,
 	DocumentRouteIdentitySource,
@@ -350,6 +352,7 @@ function DocumentRouteSwap(
 		agent,
 		onCanonicalPath,
 		onChildClose,
+		onChildClosing,
 		onParentRestored,
 		route,
 		user,
@@ -357,7 +360,8 @@ function DocumentRouteSwap(
 		agent: boolean;
 		onCanonicalPath: (pathname: string) => void;
 		onChildClose: (parentPath: string) => void;
-		onParentRestored: (parentId: string) => void;
+		onChildClosing: (parentId: string, parentPath: string) => ChildFocusToken;
+		onParentRestored: (token: ChildFocusToken) => void;
 		route: DocumentRoute;
 		user: Api.User;
 	},
@@ -434,6 +438,7 @@ function DocumentRouteSwap(
 										Loading={Loading}
 										onCanonicalPath={metadataPath}
 										onChildClose={onChildClose}
+										onChildClosing={onChildClosing}
 										onParentRestored={onParentRestored}
 										onReady={ready}
 										retryable={retryableChannelFailure}
@@ -464,18 +469,36 @@ export function HostedApp(
 	let hostedRouteRef = useRef(route);
 	hostedRouteRef.current = route;
 	let childOpener = useRef<ResearchOpener | undefined>(undefined);
+	let childFocus = useRef<ChildFocusState>({ generation: 0 });
+	let childFocusFrame = useRef<number | undefined>(undefined);
+	let cancelChildFocusFrame = useCallback(() => {
+		if (childFocusFrame.current !== undefined) cancelAnimationFrame(childFocusFrame.current);
+		childFocusFrame.current = undefined;
+	}, []);
+	let moveChildFocus = useCallback((event: ChildFocusEvent) => {
+		let current = childFocus.current;
+		let next = childFocusTransition(current, event);
+		if (next !== current && !next.attempt) cancelChildFocusFrame();
+		childFocus.current = next;
+		return next;
+	}, [cancelChildFocusFrame]);
+	let childRouteChanged = useCallback((pathname: string) => {
+		moveChildFocus({ type: "route", pathname });
+	}, [moveChildFocus]);
 	let navigate = useCallback((
 		destination: string,
 		options: { opener?: ResearchOpener; replace?: boolean } = {},
 	) => {
 		let target = new URL(destination, location.href);
 		if (target.origin !== location.origin) {
+			moveChildFocus({ type: "cancel" });
 			location.assign(target.href);
 			return;
 		}
 		let next = `${target.pathname}${target.search}${target.hash}`;
 		let current = `${location.pathname}${location.search}${location.hash}`;
 		if (next === current) return;
+		childRouteChanged(target.pathname);
 		let nextRoute = hostedRoute(target.pathname);
 		if (options.replace) history.replaceState(history.state, "", next);
 		else {
@@ -504,40 +527,79 @@ export function HostedApp(
 			} else history.pushState(null, "", next);
 		}
 		setRoute(nextRoute);
-	}, []);
+	}, [childRouteChanged, moveChildFocus]);
 	let canonicalPath = useCallback((pathname: string) => {
 		if (location.pathname === pathname) return;
+		childRouteChanged(pathname);
 		history.replaceState(
 			history.state,
 			"",
 			`${pathname}${location.search}${location.hash}`,
 		);
 		setRoute(hostedRoute(pathname));
-	}, []);
+	}, [childRouteChanged]);
 	let closeChild = useCallback((parentPath: string) => {
 		let action = childCloseAction(history.state, parentPath);
 		if (action.type === "back") history.back();
 		else navigate(action.destination, { replace: true });
 	}, [navigate]);
-	let restoreParentFocus = useCallback((parentId: string) => {
-		let opener = childOpener.current;
+	let childClosing = useCallback((parentId: string, parentPath: string): ChildFocusToken => {
+		cancelChildFocusFrame();
+		let next = moveChildFocus({
+			type: "begin",
+			opener: childOpener.current,
+			parentId,
+			parentPath,
+		});
 		childOpener.current = undefined;
-		requestAnimationFrame(() => {
-			let target = opener?.current;
-			if (target?.isConnected) target.focus({ preventScroll: true });
-			else {
-				document.querySelector<HTMLElement>(
-					`[data-workspace-room="${CSS.escape(parentId)}"] [data-document-view="plan"] h2`,
-				)?.focus({ preventScroll: true });
+		return { generation: next.generation, parentId };
+	}, [cancelChildFocusFrame, moveChildFocus]);
+	let restoreParentFocus = useCallback((token: ChildFocusToken) => {
+		let current = childFocus.current;
+		let next = childFocusTransition(current, { type: "restore", token });
+		if (next === current || next.attempt?.phase !== "deferred") return;
+		childFocus.current = next;
+		let attempt = next.attempt;
+		cancelChildFocusFrame();
+		childFocusFrame.current = requestAnimationFrame(() => {
+			childFocusFrame.current = undefined;
+			let latest = childFocus.current.attempt;
+			if (
+				latest?.generation !== attempt.generation
+				|| latest.parentId !== attempt.parentId
+				|| latest.phase !== "deferred"
+				|| location.pathname !== attempt.parentPath
+			) return;
+			let parent = document.querySelector<HTMLElement>(
+				`[data-workspace-room="${CSS.escape(attempt.parentId)}"]`,
+			);
+			if (!parent?.isConnected || parent.closest("[inert]")) {
+				moveChildFocus({ type: "cancel" });
+				return;
+			}
+			let target = attempt.opener?.current;
+			if (!target?.isConnected || target.closest("[inert]")) {
+					target = parent.querySelector<HTMLElement>(`[data-document-view="plan"] h2`);
+			}
+			moveChildFocus({ type: "finish", token });
+			if (target?.isConnected && !target.closest("[inert]")) {
+				target.focus({ preventScroll: true });
 			}
 		});
-	}, []);
+	}, [cancelChildFocusFrame, moveChildFocus]);
 
 	useEffect(() => {
-		let changed = () => setRoute(hostedRoute(location.pathname));
+		let changed = () => {
+			childRouteChanged(location.pathname);
+			setRoute(hostedRoute(location.pathname));
+		};
 		window.addEventListener("popstate", changed);
-		return () => window.removeEventListener("popstate", changed);
-	}, []);
+		return () => {
+			window.removeEventListener("popstate", changed);
+			moveChildFocus({ type: "cancel" });
+			cancelChildFocusFrame();
+		};
+	}, [cancelChildFocusFrame, childRouteChanged, moveChildFocus]);
 
 	if (route.page === "missing") {
 		return <Failure error={new Error("This page does not exist.")} />;
@@ -555,6 +617,7 @@ export function HostedApp(
 					agent={agent}
 					onCanonicalPath={canonicalPath}
 					onChildClose={closeChild}
+					onChildClosing={childClosing}
 					onParentRestored={restoreParentFocus}
 					route={route}
 					user={user}
