@@ -1,5 +1,10 @@
-import { seedPendingLegacyResearchWorkspace } from "./database";
+import { readSource, seedPendingLegacyResearchWorkspace } from "./database";
 import { content, expect, test } from "./room";
+
+const WORKSPACE_SOURCE = `# Inline research
+
+${Array.from({ length: 36 }, (_, index) => `Workspace passage ${index + 1}.`).join("\n\n")}
+`;
 
 function port(baseURL: string): number {
 	return Number(new URL(baseURL).port);
@@ -37,19 +42,87 @@ test("a pending legacy workspace has no standalone product surface", async ({ ba
 	await expect(page.getByText("This page does not exist.", { exact: true })).toBeVisible();
 });
 
-test("research creation remains available through the editor slash menu", async ({ join }) => {
+test("a private research draft keeps its authored geometry until explicit dismissal", async ({ baseURL, join, room, seed }) => {
+	await seed(WORKSPACE_SOURCE);
 	let page = await join("ana");
-
-	await content(page).click();
+	let editor = content(page);
+	await editor.click();
+	await page.keyboard.press("Meta+End");
+	await page.keyboard.press("Enter");
 	await page.keyboard.type("/research");
-	await page.getByRole("listbox", { name: "Insert block" })
-		.getByRole("option", { name: "Research" })
-		.click();
+	await page.keyboard.press("Enter");
 
-	await expect(page.getByRole("textbox", { name: "Research question", exact: true }))
-		.toBeVisible();
+	let composer = page.getByRole("region", { name: "Research question", exact: true });
+	let question = composer.getByRole("textbox", { name: "Research question", exact: true });
+	let firstLine = "Compare the evidence across public sources.";
+	let secondLine = "Call out disagreements between sources.";
+	await expect(question).toBeFocused();
+	await page.keyboard.type(firstLine);
+	await page.keyboard.press("Meta+Enter");
+	await page.keyboard.type(secondLine);
+	await expect(question).toHaveValue(`${firstLine}\n${secondLine}`);
+
+	await page.getByText("Workspace passage 36.", { exact: true }).click();
+	await expect(composer).toBeVisible();
+	await expect(question).toHaveValue(`${firstLine}\n${secondLine}`);
+	await expect(page.locator("[data-research-draft-anchor]")).toHaveCount(1);
+
+	let geometry = await composer.evaluate(element => {
+		let anchor = document.querySelector<HTMLElement>("[data-research-draft-anchor]")!;
+		let editor = document.querySelector<HTMLElement>(
+			'[role="textbox"][aria-label="editable markdown"]',
+		)!;
+		let draftBox = element.getBoundingClientRect();
+		let anchorBox = anchor.getBoundingClientRect();
+		let editorBox = editor.getBoundingClientRect();
+		return {
+			anchorBottom: anchorBox.bottom,
+			draftLeft: draftBox.left,
+			draftRight: draftBox.right,
+			draftTop: draftBox.top,
+			editorLeft: editorBox.left,
+			editorRight: editorBox.right,
+		};
+	});
+	expect(geometry.draftLeft).toBeGreaterThanOrEqual(geometry.editorLeft);
+	expect(geometry.draftRight).toBeLessThanOrEqual(geometry.editorRight);
+	expect(Math.abs(geometry.draftTop - geometry.anchorBottom)).toBeLessThan(2);
+
+	let scroller = page.locator("[data-plan-scroll]");
+	let scrollTop = await scroller.evaluate(element => element.scrollTop);
+	expect(scrollTop).toBeGreaterThan(120);
+	await scroller.evaluate(element => element.scrollTop -= 120);
+	await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBe(scrollTop - 120);
+	await expect.poll(() =>
+		composer.evaluate(element => {
+			let anchor = document.querySelector<HTMLElement>("[data-research-draft-anchor]")!;
+			return Math.abs(
+				element.getBoundingClientRect().top - anchor.getBoundingClientRect().bottom,
+			);
+		})
+	).toBeLessThan(2);
+
+	await question.focus();
+	await page.keyboard.press("Escape");
+	await expect(composer).toHaveCount(0);
+
+	await editor.click();
+	await page.keyboard.press("Meta+End");
+	await page.keyboard.press("Enter");
+	await page.keyboard.type("/research");
+	await page.keyboard.press("Enter");
+	let emptyComposer = page.getByRole("region", { name: "Research question", exact: true });
+	let emptyQuestion = emptyComposer.getByRole("textbox", {
+		name: "Research question",
+		exact: true,
+	});
+	await expect(emptyQuestion).toHaveValue("");
+	await page.keyboard.press("Escape");
+	await expect(emptyComposer).toHaveCount(0);
+	await expect.poll(() => readSource(port(baseURL!), room)).not.toContain("<Research");
+
 	await expect(page.getByRole("button", { name: "Start research", exact: true }))
-		.toBeVisible();
+		.toHaveCount(0);
 	await expect(page.getByRole("button", { name: "Search public web", exact: true }))
 		.toHaveCount(0);
 	await expect(page.getByRole("button", { name: "Ask from research", exact: true }))

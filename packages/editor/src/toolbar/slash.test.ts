@@ -1,9 +1,15 @@
 import { describe, expect, it } from "bun:test";
 import { createHeadlessEditor } from "@lexical/headless";
-import { createYjsBinding, syncLexicalUpdateToYjs, syncYjsChangesToLexical } from "@lexical/yjs";
+import {
+	$getAnchorAndFocusForUserState,
+	createYjsBinding,
+	syncLexicalUpdateToYjs,
+	syncYjsChangesToLexical,
+} from "@lexical/yjs";
 import {
 	$createParagraphNode,
 	$createTextNode,
+	$getNodeByKey,
 	$getRoot,
 	$getSelection,
 	$isElementNode,
@@ -178,6 +184,50 @@ describe("slash menu commands", () => {
 		}, { discrete: true });
 		expect(consumed).toBe(true);
 		expect(exportPlan(target.editor)).not.toContain("/research");
+	});
+
+	it("captures the consumed slash at offset zero of its empty block", async () => {
+		let target = peer();
+		importPlan(target.editor, "Before\n\n/research\n\nAfter\n");
+		await settle();
+		let research = await import("./research");
+		let { ResearchDraftStore } = await import("../research-draft");
+		let drafts = new ResearchDraftStore();
+
+		target.editor.update(() => {
+			$getRoot().getChildAtIndex(1)?.selectEnd();
+			expect(research.beginResearchDraft(drafts, () => {
+				if (!$consumeSlashTrigger()) return;
+				return {
+					anchor: ANCHOR,
+					position: research.captureResearchPosition(target.binding),
+				};
+			})).toBe(true);
+		}, { discrete: true });
+
+		let position = drafts.get()?.position;
+		expect(position).toBeDefined();
+		await settle();
+		let observed: { offset: number; previous: string | null; resolved: string } | undefined;
+		target.editor.getEditorState().read(() => {
+			let point = $getAnchorAndFocusForUserState(target.binding, {
+				anchorPos: position!,
+				focusPos: position!,
+				color: "",
+				focusing: false,
+				name: "",
+				awarenessData: {},
+			});
+			let block = point.anchorKey ? $getNodeByKey(point.anchorKey) : null;
+			while (block?.getParent() && block.getParent() !== $getRoot()) block = block.getParent();
+			observed = {
+				offset: point.anchorOffset,
+				previous: block?.getPreviousSibling()?.getTextContent() ?? null,
+				resolved: block?.getTextContent() ?? "",
+			};
+		});
+
+		expect(observed).toEqual({ offset: 0, previous: "Before", resolved: "" });
 	});
 
 	it("does not consume a second trigger during submission or created recovery", async () => {
