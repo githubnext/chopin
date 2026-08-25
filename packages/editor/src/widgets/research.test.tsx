@@ -71,15 +71,46 @@ type CardProps = {
 type ComposerProps = {
 	blocked?: string;
 	cancelDisabled?: boolean;
+	cancelLabel?: string;
+	dismissible?: boolean;
 	error?: string;
 	onCancel: () => void;
 	onChange: (value: string) => void;
 	onEscape?: () => void;
 	onSubmit: () => void;
 	question: string;
+	questionLocked?: boolean;
 	submitLabel?: string;
 	submitting?: boolean;
 };
+
+type ComposerKeyHandler = (
+	event: {
+		key: string;
+		metaKey: boolean;
+		ctrlKey: boolean;
+		nativeEvent: { isComposing: boolean };
+		currentTarget: {
+			value: string;
+			selectionStart: number;
+			selectionEnd: number;
+			setRangeText(
+				replacement: string,
+				start: number,
+				end: number,
+				selectionMode: string,
+			): void;
+		};
+		preventDefault(): void;
+		stopPropagation(): void;
+	},
+	actions: {
+		dismissible: boolean;
+		onChange: (value: string) => void;
+		onDismiss: () => void;
+		onSubmit: () => void;
+	},
+) => void;
 
 type Store = {
 	subscribe(listener: () => void): () => void;
@@ -203,7 +234,115 @@ async function components() {
 	return { card, composer };
 }
 
+async function composerKeyHandler(): Promise<ComposerKeyHandler | undefined> {
+	let module = await import("./research") as unknown as {
+		handleResearchComposerKey?: ComposerKeyHandler;
+	};
+	expect(typeof module.handleResearchComposerKey).toBe("function");
+	return module.handleResearchComposerKey;
+}
+
 describe("research composer", () => {
+	it("maps textarea keys to submit, newline, dismissal, or no action", async () => {
+		let module = await import("./research") as unknown as {
+			researchComposerKey?: (event: {
+				key: string;
+				metaKey: boolean;
+				ctrlKey: boolean;
+				isComposing: boolean;
+			}) => string;
+		};
+		expect(typeof module.researchComposerKey).toBe("function");
+		if (!module.researchComposerKey) return;
+
+		expect(module.researchComposerKey({
+			key: "Enter",
+			metaKey: false,
+			ctrlKey: false,
+			isComposing: false,
+		})).toBe("submit");
+		expect(module.researchComposerKey({
+			key: "Enter",
+			metaKey: true,
+			ctrlKey: false,
+			isComposing: false,
+		})).toBe("newline");
+		expect(module.researchComposerKey({
+			key: "Enter",
+			metaKey: false,
+			ctrlKey: true,
+			isComposing: false,
+		})).toBe("newline");
+		expect(module.researchComposerKey({
+			key: "Enter",
+			metaKey: false,
+			ctrlKey: false,
+			isComposing: true,
+		})).toBe("ignore");
+		expect(module.researchComposerKey({
+			key: "Escape",
+			metaKey: false,
+			ctrlKey: false,
+			isComposing: false,
+		})).toBe("dismiss");
+	});
+
+	it("inserts a modifier-Enter newline at the textarea selection", async () => {
+		let handle = await composerKeyHandler();
+		if (!handle) return;
+		let calls: string[] = [];
+		let textarea = {
+			value: "Evidence here",
+			selectionStart: 8,
+			selectionEnd: 13,
+			setRangeText(replacement: string, start: number, end: number, selectionMode: string) {
+				this.value = `${this.value.slice(0, start)}${replacement}${this.value.slice(end)}`;
+				this.selectionStart = this.selectionEnd = start + replacement.length;
+				calls.push(selectionMode);
+			},
+		};
+
+		handle({
+			key: "Enter",
+			metaKey: true,
+			ctrlKey: false,
+			nativeEvent: { isComposing: false },
+			currentTarget: textarea,
+			preventDefault: () => calls.push("prevent"),
+			stopPropagation: () => calls.push("stop"),
+		}, {
+			dismissible: true,
+			onChange: value => calls.push(value),
+			onDismiss: () => calls.push("dismiss"),
+			onSubmit: () => calls.push("submit"),
+		});
+
+		expect(textarea.value).toBe("Evidence\n");
+		expect(textarea.selectionStart).toBe(9);
+		expect(calls).toEqual(["prevent", "stop", "end", "Evidence\n"]);
+	});
+
+	it("renders one accessible circular send action", async () => {
+		let module = await import("../send-action").catch(() => ({}));
+		let Action = (module as {
+			SendAction?: ComponentType<{
+				label: string;
+				onClick: () => void;
+			}>;
+		}).SendAction;
+		expect(typeof Action).toBe("function");
+		if (!Action) return;
+		let markup = renderToStaticMarkup(createElement(Action, {
+			label: "Start research",
+			onClick() {},
+		}));
+
+		expect(markup).toContain('aria-label="Start research"');
+		expect(markup).toContain('title="Start research"');
+		expect(markup).toContain("send-action btn btn-icon btn-primary rounded-full");
+		expect(markup).toContain('aria-hidden="true"');
+	});
+
 	it("keeps one exact brief actionable after a failed create", async () => {
 		let { composer: Composer } = await components();
 		if (!Composer) return;
@@ -219,8 +358,25 @@ describe("research composer", () => {
 		expect(markup).toContain(BASE.question);
 		expect(markup).toContain("Research could not be started.");
 		expect(markup).toContain("Start research");
-		expect(markup).toContain("Cancel");
+		expect(markup).toContain("Discard research question");
+		expect(markup).not.toContain(">Cancel<");
 		expect((markup.match(/textarea/g) ?? []).length).toBe(2);
+	});
+
+	it("locks the question and controls while submission is in flight", async () => {
+		let { composer: Composer } = await components();
+		if (!Composer) return;
+		let markup = renderToStaticMarkup(createElement(Composer, {
+			question: BASE.question,
+			onCancel() {},
+			onChange() {},
+			onSubmit() {},
+			submitting: true,
+		}));
+
+		expect(markup).toMatch(/<textarea[^>]*disabled=""/);
+		expect((markup.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(1);
+		expect(markup).not.toContain("Discard research question");
 	});
 
 	it("explains why submission is unavailable without a collaboration anchor", async () => {
@@ -235,7 +391,7 @@ describe("research composer", () => {
 		}));
 
 		expect(markup).toContain("Connect to the document before starting research.");
-		expect(markup).toMatch(/<button[^>]*disabled=""[^>]*type="submit"/);
+		expect(markup).toMatch(/<button[^>]*aria-label="Start research"[^>]*disabled=""/);
 	});
 
 	it("exposes no placement or cancellation mutation for read-only created recovery", async () => {
@@ -245,6 +401,9 @@ describe("research composer", () => {
 			question: BASE.question,
 			blocked: "Reconnect with edit access to place this research.",
 			cancelDisabled: true,
+			cancelLabel: "Cancel research",
+			dismissible: false,
+			questionLocked: true,
 			submitLabel: "Place research",
 			onCancel() {},
 			onChange() {},
@@ -252,46 +411,52 @@ describe("research composer", () => {
 		}));
 
 		expect(markup).toContain("Place research");
+		expect(markup).toContain("Cancel research");
+		expect(markup).toMatch(/<textarea[^>]*readOnly=""/);
 		expect((markup.match(/disabled=""/g) ?? []).length).toBe(2);
 	});
 
 	it("turns Escape into a composer dismissal", async () => {
-		let module = await import("./research") as unknown as {
-			handleResearchComposerKey?: (
-				event: { key: string; preventDefault(): void; stopPropagation(): void },
-				onEscape: () => void,
-			) => void;
-		};
-		expect(typeof module.handleResearchComposerKey).toBe("function");
-		if (!module.handleResearchComposerKey) return;
+		let handle = await composerKeyHandler();
+		if (!handle) return;
 		let calls: string[] = [];
-		module.handleResearchComposerKey({
+		handle({
 			key: "Escape",
+			metaKey: false,
+			ctrlKey: false,
+			nativeEvent: { isComposing: false },
+			currentTarget: {} as Parameters<ComposerKeyHandler>[0]["currentTarget"],
 			preventDefault: () => calls.push("prevent"),
 			stopPropagation: () => calls.push("stop"),
-		}, () => calls.push("escape"));
+		}, {
+			dismissible: true,
+			onChange: () => calls.push("change"),
+			onDismiss: () => calls.push("escape"),
+			onSubmit: () => calls.push("submit"),
+		});
 		expect(calls).toEqual(["prevent", "stop", "escape"]);
 	});
 
 	it("does not dismiss an in-flight composer on Escape", async () => {
-		let module = await import("./research") as unknown as {
-			handleResearchComposerKey?: (
-				event: { key: string; preventDefault(): void; stopPropagation(): void },
-				onEscape: () => void,
-				dismissible?: boolean,
-			) => void;
-		};
-		expect(typeof module.handleResearchComposerKey).toBe("function");
-		if (!module.handleResearchComposerKey) return;
+		let handle = await composerKeyHandler();
+		if (!handle) return;
 		let calls: string[] = [];
-		module.handleResearchComposerKey(
+		handle(
 			{
 				key: "Escape",
+				metaKey: false,
+				ctrlKey: false,
+				nativeEvent: { isComposing: false },
+				currentTarget: {} as Parameters<ComposerKeyHandler>[0]["currentTarget"],
 				preventDefault: () => calls.push("prevent"),
 				stopPropagation: () => calls.push("stop"),
 			},
-			() => calls.push("escape"),
-			false,
+			{
+				dismissible: false,
+				onChange: () => calls.push("change"),
+				onDismiss: () => calls.push("escape"),
+				onSubmit: () => calls.push("submit"),
+			},
 		);
 		expect(calls).toEqual(["prevent", "stop"]);
 	});

@@ -34,6 +34,7 @@ export {
 	useQuestionnaires,
 } from "./questionnaires";
 export type { PlanQuestionnaireState, QuestionnaireEntry } from "./questionnaires";
+export { SendAction } from "./send-action";
 export { PlanStatus } from "./status";
 export type { PlanStatusProps } from "./status";
 export { ThreadObserver, ThreadStore, useThreads } from "./threads";

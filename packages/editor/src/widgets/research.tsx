@@ -15,8 +15,10 @@ import {
 } from "lexical";
 
 import { SidecarCard } from "../card";
+import { SendAction } from "../send-action";
 import { widgets$ } from "../widget-options";
 import { $isResearchNode } from "@chopin/dialect";
+import { XIcon } from "@phosphor-icons/react";
 
 import type { FormEvent, KeyboardEvent } from "react";
 import type { Research } from "@chopin/protocol";
@@ -54,15 +56,61 @@ export type ResearchComposerProps = {
 	submitting?: boolean;
 };
 
+export function researchComposerKey(event: {
+	key: string;
+	metaKey: boolean;
+	ctrlKey: boolean;
+	isComposing: boolean;
+}): "dismiss" | "ignore" | "newline" | "submit" {
+	if (event.isComposing) return "ignore";
+	if (event.key === "Escape") return "dismiss";
+	if (event.key !== "Enter") return "ignore";
+	return event.metaKey || event.ctrlKey ? "newline" : "submit";
+}
+
 export function handleResearchComposerKey(
-	event: Pick<KeyboardEvent, "key" | "preventDefault" | "stopPropagation">,
-	onEscape: () => void,
-	dismissible = true,
+	event: Pick<
+		KeyboardEvent<HTMLTextAreaElement>,
+		| "ctrlKey"
+		| "currentTarget"
+		| "key"
+		| "metaKey"
+		| "nativeEvent"
+		| "preventDefault"
+		| "stopPropagation"
+	>,
+	actions: {
+		dismissible: boolean;
+		onChange: (value: string) => void;
+		onDismiss: () => void;
+		onSubmit: () => void;
+	},
 ) {
-	if (event.key !== "Escape") return;
+	let action = researchComposerKey({
+		key: event.key,
+		metaKey: event.metaKey,
+		ctrlKey: event.ctrlKey,
+		isComposing: event.nativeEvent.isComposing,
+	});
+	if (action === "ignore") return;
 	event.preventDefault();
 	event.stopPropagation();
-	if (dismissible) onEscape();
+	if (action === "dismiss") {
+		if (actions.dismissible) actions.onDismiss();
+		return;
+	}
+	if (action === "submit") {
+		actions.onSubmit();
+		return;
+	}
+	let textarea = event.currentTarget;
+	textarea.setRangeText(
+		"\n",
+		textarea.selectionStart,
+		textarea.selectionEnd,
+		"end",
+	);
+	actions.onChange(textarea.value);
 }
 
 export function ResearchComposer(
@@ -70,7 +118,7 @@ export function ResearchComposer(
 		blocked,
 		busyLabel = "Starting…",
 		cancelDisabled,
-		cancelLabel = "Cancel",
+		cancelLabel,
 		dismissible = true,
 		error,
 		onCancel,
@@ -89,20 +137,34 @@ export function ResearchComposer(
 		onSubmit();
 	};
 	return (
-		<form
-			className="plan-research-composer"
-			onKeyDown={onEscape
-				? event => handleResearchComposerKey(event, onEscape, dismissible)
-				: undefined}
-			onSubmit={submit}
-		>
-			<label htmlFor={id}>Research question</label>
+		<form className="plan-research-composer" onSubmit={submit}>
+			<div className="plan-research-composer-heading">
+				<label htmlFor={id}>Research question</label>
+				{dismissible && !submitting && (
+					<button
+						aria-label="Discard research question"
+						className="plan-research-dismiss btn btn-icon btn-ghost"
+						onClick={onCancel}
+						title="Discard research question"
+						type="button"
+					>
+						<XIcon aria-hidden="true" size={16} />
+					</button>
+				)}
+			</div>
 			<textarea
 				autoFocus
 				disabled={submitting}
 				id={id}
 				maxLength={4096}
 				onChange={event => onChange(event.target.value)}
+				onKeyDown={event =>
+					handleResearchComposerKey(event, {
+						dismissible,
+						onChange,
+						onDismiss: onEscape ?? onCancel,
+						onSubmit,
+					})}
 				readOnly={questionLocked}
 				rows={3}
 				value={question}
@@ -110,21 +172,21 @@ export function ResearchComposer(
 			{blocked && <p role="status">{blocked}</p>}
 			{error && <p role="alert">{error}</p>}
 			<div className="plan-research-actions">
-				<button
-					className="btn btn-sm btn-secondary"
-					disabled={submitting || cancelDisabled}
-					onClick={onCancel}
-					type="button"
-				>
-					{cancelLabel}
-				</button>
-				<button
-					className="btn btn-sm btn-primary"
+				{cancelLabel && (
+					<button
+						className="btn btn-sm btn-secondary"
+						disabled={submitting || cancelDisabled}
+						onClick={onCancel}
+						type="button"
+					>
+						{cancelLabel}
+					</button>
+				)}
+				<SendAction
 					disabled={submitting || !!blocked || !question.trim()}
-					type="submit"
-				>
-					{submitting ? busyLabel : submitLabel}
-				</button>
+					label={submitting ? busyLabel : submitLabel}
+					onClick={onSubmit}
+				/>
 			</div>
 		</form>
 	);

@@ -12,6 +12,7 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
+import { SendAction } from "@chopin/editor";
 import { MENTION } from "@chopin/protocol/address";
 
 import {
@@ -36,7 +37,6 @@ import {
 import { Transcript } from "./transcript";
 import { TerminalAlert } from "../terminal-alert";
 import plannerStop from "../assets/icons/planner-stop.svg";
-import send from "../assets/icons/send-arrow-up.svg";
 
 import type { Chat as Wire } from "@chopin/protocol";
 import type { Repository } from "../api";
@@ -423,16 +423,11 @@ export function Chat(
 								<img alt="" className="size-[18px]" src={plannerStop} />
 							</button>
 						)}
-						<button
-							aria-label="Send message"
-							className="conversation-send-button btn btn-icon btn-primary rounded-full"
+						<SendAction
 							disabled={!composerReady || submitting || !draft.text.trim()}
 							onClick={submit}
-							title="Send message"
-							type="button"
-						>
-							<img alt="" className="conversation-send-icon size-[14px]" src={send} />
-						</button>
+							label="Send message"
+						/>
 					</div>
 				</div>
 			</div>
