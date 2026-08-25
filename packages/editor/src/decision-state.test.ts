@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { advanceDecisionView, countUnanswered, visibleDecisionView } from ".";
+import { advanceDecisionView, countUnanswered, selectDecisionView, visibleDecisionView } from ".";
 
 import type { DecisionViewState } from ".";
 
@@ -67,4 +67,17 @@ describe("decision attention", () => {
 			expect(visibleDecisionView({ ...state, preferred: preference }, false, 1)).toBe(preference);
 		},
 	);
+
+	it("lets explicit Document navigation override a forced Decisions opening", () => {
+		let state = advanceDecisionView(
+			{ phase: "initial", preferred: "plan" },
+			false,
+			2,
+		);
+
+		state = selectDecisionView(state, "plan");
+
+		expect(state).toEqual({ phase: "complete", preferred: "plan" });
+		expect(visibleDecisionView(state, false, 2)).toBe("plan");
+	});
 });

@@ -75,10 +75,12 @@ test("an authenticated user adds a Project and creates its first document", asyn
 	await projects.getByRole("button", { name: "New document in score" }).click();
 
 	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
-	let activeRoute = page.locator(".document-route-layer:not([inert])");
-	await expect(activeRoute.locator("#pane-chat")).toBeVisible();
+	let activeRoute = page.locator("[data-content-swap-state]:not([inert])").filter({
+		has: page.getByRole("banner", { includeHidden: true }),
+	});
+	await expect(activeRoute.getByRole("complementary", { name: "Conversation" })).toBeVisible();
 	await expect(activeRoute.getByRole("textbox", { name: "editable markdown" })).toBeVisible();
-	await expect(activeRoute.locator(".plan-decisions")).toBeAttached();
+	await expect(activeRoute.locator("[data-plan-decisions-scroll]")).toBeAttached();
 });
 
 test("a signed-out document link returns to the document after OAuth", async ({ baseURL, page, room }) => {

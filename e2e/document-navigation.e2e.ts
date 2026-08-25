@@ -41,6 +41,12 @@ function headerActions(page: import("@playwright/test").Page) {
 	return page.getByRole("banner").getByRole("button", { name: /^Actions for / });
 }
 
+function documentRouteLayers(page: import("@playwright/test").Page, selector: string) {
+	return page.locator(selector).filter({
+		has: page.getByRole("banner", { includeHidden: true }),
+	});
+}
+
 async function headerAction(page: import("@playwright/test").Page, action: string) {
 	await headerActions(page).click();
 	await page.getByRole("menuitem", { name: action, exact: true }).click();
@@ -161,7 +167,8 @@ test("a pointer-dismissed navigation dialog releases focus while it exits", asyn
 	let trigger = sidebar(page).getByRole("button", { name: "Search", exact: true });
 	await trigger.click();
 	await expect(page.getByRole("textbox", { name: "Search documents" })).toBeFocused();
-	let modal = page.locator(".navigation-modal");
+	let modal = page.getByRole("dialog", { includeHidden: true, name: "Search documents" })
+		.locator("../..");
 	await page.getByRole("button", { name: "Close Search documents" }).click({
 		position: { x: 8, y: 8 },
 	});
@@ -264,7 +271,8 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 	let createdPath = await created.getAttribute("href");
 	expect(createdPath).toBeTruthy();
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${createdTitle}`);
-	await expect(page.locator(".document-route-layer:not([hidden])")).toHaveCount(1);
+	await expect(documentRouteLayers(page, "[data-content-swap-state]:not([hidden])"))
+		.toHaveCount(1);
 	await expect(projects.getByRole("link", { name: originalTitle, exact: true })).toBeVisible();
 	expect(
 		requested.filter(request => request.method === "GET" && request.path === "/api/navigation"),
@@ -285,9 +293,16 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 	});
 	await projects.getByRole("link", { name: originalTitle, exact: true }).click();
 
-	await expect(page.getByText("Opening channel...", { exact: true })).toHaveCount(0);
+	let interactiveRoutes = documentRouteLayers(
+		page,
+		"[data-content-swap-state]:not([hidden]):not([inert])",
+	);
+	await expect(page.getByText("Opening channel...", { exact: true })).toBeHidden();
+	await expect(interactiveRoutes).toHaveCount(1);
+	await expect(interactiveRoutes).toBeVisible();
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${createdTitle}`);
-	await expect(page.locator(".document-route-layer:not([hidden])")).toHaveCount(1);
+	await expect(documentRouteLayers(page, "[data-content-swap-state]:not([hidden])"))
+		.toHaveCount(1);
 	await expect(projects.getByRole("link", { name: createdTitle, exact: true })).toBeVisible();
 	expect(
 		await page.evaluate(() =>
@@ -296,11 +311,16 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 	).toBe("preserved");
 	await page.keyboard.press("Shift");
 	release.resolve();
-	let visibleRoutes = page.locator(".document-route-layer:not([hidden])");
+	let visibleRoutes = documentRouteLayers(page, "[data-content-swap-state]:not([hidden])");
+	let outgoingRoutes = documentRouteLayers(
+		page,
+		'[data-content-swap-state="outgoing"]:not([hidden])',
+	);
 	await expect(visibleRoutes).toHaveCount(2);
-	await expect(page.locator(".document-route-layer:not([hidden]):not([inert])")).toHaveCount(1);
-	await expect(page.locator('.document-route-layer:not([hidden])[aria-hidden="true"][inert]'))
-		.toHaveCount(1);
+	await expect(interactiveRoutes).toHaveCount(1);
+	await expect(outgoingRoutes).toHaveCount(1);
+	await expect(outgoingRoutes).toHaveAttribute("aria-hidden", "true");
+	await expect(outgoingRoutes).toHaveAttribute("inert", "");
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${originalTitle}`);
 	await expect(page).toHaveURL(originalPath!);
 
@@ -348,7 +368,7 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 	keyboardRelease.resolve();
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${originalTitle}`);
 	await expect(visibleRoutes).toHaveCount(1, { timeout: 100 });
-	await expect(page.locator(".document-route-layer:not([hidden]).is-closing")).toHaveCount(0);
+	await expect(outgoingRoutes).toHaveCount(0);
 });
 
 test("the archive view refreshes catalogues without reopening the document", async ({ join, page }) => {

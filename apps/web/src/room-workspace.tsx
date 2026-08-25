@@ -12,6 +12,7 @@ import {
 	JobStore,
 	PlanEditor,
 	QuestionnaireStore,
+	selectDecisionView,
 	ThreadStore,
 	useHasPlanContent,
 	useJobs,
@@ -249,11 +250,7 @@ export function RoomWorkspace(
 	}, [unanswered]);
 
 	let selectView = (next: DecisionView, revealFirst = true) => {
-		setDecisionView(state => ({
-			...state,
-			...(next === "background-work" ? { phase: "complete" as const } : {}),
-			preferred: next,
-		}));
+		setDecisionView(state => selectDecisionView(state, next));
 		if (hasPlanContent) localStorage.setItem("chopin:view:document", next);
 		if (next === "decisions" && revealFirst) {
 			let first = entries.find(entry =>

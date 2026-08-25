@@ -364,7 +364,10 @@ export function Workspace(
 								{controls}
 							</div>
 						)}
-						<div className="workspace-document-swap content-swap-stack relative min-h-0 flex-1">
+						<div
+							className="workspace-document-swap content-swap-stack relative min-h-0 flex-1"
+							data-workspace-document-swap
+						>
 							<ContentSwapLayer
 								active={presentation.documentVisible && presentation.documentView === "plan"}
 								className="workspace-document-layer min-h-0"
