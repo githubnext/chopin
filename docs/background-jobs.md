@@ -557,11 +557,14 @@ historical-reference compatibility:
    turn, attribution, and stable request identity.
 2. The same action establishes the channel's Planner owner when needed and
    enqueues `research-evidence`; there is no draft or confirmation step.
-3. The evidence job sends only that exact brief to public web search.
+3. The evidence worker receives only that exact brief, with no private document
+   context, and may derive or refine the queries it sends to web search.
 4. Completed normalized evidence causes an idempotent `research-answer`
    enqueue.
-5. The answer job captures current canonical parent-document context and runs
-   without web capability.
+5. The answer job captures current canonical parent-document context. It first
+   runs an isolated no-web document-analysis worker, then a separate isolated
+   no-web report-synthesis worker with the resulting private findings and
+   normalized public evidence.
 6. A complete report artifact is validated and converted to canonical MDX.
 7. One fenced storage transaction creates an initialized ordinary child channel
    and links it to the request. Only then does the card become ready and the
