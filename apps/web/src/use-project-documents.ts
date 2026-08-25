@@ -73,7 +73,9 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 				let accepted = latest ? newestDocument(latest, channel) : channel;
 				latestDocuments.current.set(channel.id, accepted);
 				return accepted;
-			}).filter(channel => includeArchived || !channel.archivedAt);
+			}).filter(channel =>
+				includeArchived || channel.parentChannelId !== undefined || !channel.archivedAt
+			);
 			setCatalogue(current => {
 				if (current.includeArchived !== includeArchived) return current;
 				let loaded = current.documents[id] ?? beginDocumentLoad();
@@ -197,7 +199,8 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 				.find(value => value.id === channel.id);
 			accepted = existing ? newestDocument(existing, accepted) : accepted;
 			latestDocuments.current.set(channel.id, accepted);
-			let documents = accepted.archivedAt && !includeArchivedRef.current
+			let documents = accepted.archivedAt && !accepted.parentChannelId
+					&& !includeArchivedRef.current
 				? removeLoadedDocument(current.documents, accepted.id)
 				: replaceLoadedDocument(current.documents, accepted);
 			return documents === current.documents ? current : { ...current, documents };
@@ -218,7 +221,8 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 			let known = latestDocuments.current.get(documentId);
 			if (known) accepted = newestDocument(known, accepted);
 			latestDocuments.current.set(documentId, accepted);
-			let documents = accepted.archivedAt && !includeArchivedRef.current
+			let documents = accepted.archivedAt && !accepted.parentChannelId
+					&& !includeArchivedRef.current
 				? removeLoadedDocument(current.documents, documentId)
 				: updateLoadedDocument(current.documents, documentId, accepted);
 			return documents === current.documents ? current : { ...current, documents };

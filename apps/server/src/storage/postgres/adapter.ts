@@ -947,31 +947,72 @@ export class PostgresStorage implements StorageAdapter {
 				? await this.#sql<ChannelRow[]>`
 					SELECT ${this.#sql.unsafe(CHANNEL_COLUMNS)}
 					FROM channels
-					WHERE repository_id = ${repositoryId}
-						AND (${includeArchived} OR archived_at IS NULL)
+					LEFT JOIN channels AS parent_channels
+						ON parent_channels.id = channels.parent_channel_id
+					WHERE channels.repository_id = ${repositoryId}
+						AND (
+							channels.parent_channel_id IS NULL
+							OR (
+								parent_channels.repository_id = channels.repository_id
+								AND parent_channels.parent_channel_id IS NULL
+							)
+						)
+						AND (
+							${includeArchived}
+							OR (
+								channels.parent_channel_id IS NULL
+								AND channels.archived_at IS NULL
+							)
+							OR (
+								channels.parent_channel_id IS NOT NULL
+								AND parent_channels.archived_at IS NULL
+							)
+						)
 						AND (
 							${!query}
-							OR title ILIKE ${pattern} ESCAPE '\\'
-							OR generated_description ILIKE ${pattern} ESCAPE '\\'
+							OR channels.title ILIKE ${pattern} ESCAPE '\\'
+							OR channels.generated_description ILIKE ${pattern} ESCAPE '\\'
 						)
 						AND (
-							updated_at < ${after.updatedAt}
-							OR (updated_at = ${after.updatedAt} AND id > ${after.id})
+							channels.updated_at < ${after.updatedAt}
+							OR (
+								channels.updated_at = ${after.updatedAt}
+								AND channels.id > ${after.id}
+							)
 						)
-					ORDER BY updated_at DESC, id ASC
+					ORDER BY channels.updated_at DESC, channels.id ASC
 					LIMIT ${count + 1}
 				`
 				: await this.#sql<ChannelRow[]>`
 					SELECT ${this.#sql.unsafe(CHANNEL_COLUMNS)}
 					FROM channels
-					WHERE repository_id = ${repositoryId}
-						AND (${includeArchived} OR archived_at IS NULL)
+					LEFT JOIN channels AS parent_channels
+						ON parent_channels.id = channels.parent_channel_id
+					WHERE channels.repository_id = ${repositoryId}
+						AND (
+							channels.parent_channel_id IS NULL
+							OR (
+								parent_channels.repository_id = channels.repository_id
+								AND parent_channels.parent_channel_id IS NULL
+							)
+						)
+						AND (
+							${includeArchived}
+							OR (
+								channels.parent_channel_id IS NULL
+								AND channels.archived_at IS NULL
+							)
+							OR (
+								channels.parent_channel_id IS NOT NULL
+								AND parent_channels.archived_at IS NULL
+							)
+						)
 						AND (
 							${!query}
-							OR title ILIKE ${pattern} ESCAPE '\\'
-							OR generated_description ILIKE ${pattern} ESCAPE '\\'
+							OR channels.title ILIKE ${pattern} ESCAPE '\\'
+							OR channels.generated_description ILIKE ${pattern} ESCAPE '\\'
 						)
-					ORDER BY updated_at DESC, id ASC
+					ORDER BY channels.updated_at DESC, channels.id ASC
 					LIMIT ${count + 1}
 				`;
 			let more = rows.length > count;
