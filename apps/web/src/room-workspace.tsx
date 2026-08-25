@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { documentPath } from "@chopin/protocol/document-url";
 import {
 	advanceDecisionView,
 	aggregateJobs,
@@ -226,10 +225,6 @@ export function RoomWorkspace(
 		setMetadata(metadata);
 		rememberChannel(userId, { id: room, title: metadata.title, slug: metadata.slug }, repository);
 		onDocumentChanged(room, metadata);
-		let path = documentPath(repository.owner, repository.name, metadata.slug);
-		if (location.pathname !== path) {
-			history.replaceState(null, "", `${path}${location.search}${location.hash}`);
-		}
 	}, [onDocumentChanged, repository, room, userId]);
 
 	useEffect(() => {

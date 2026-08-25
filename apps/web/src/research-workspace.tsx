@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { documentPath, researchWorkspacePath } from "@chopin/protocol/document-url";
+import { documentPath } from "@chopin/protocol/document-url";
 
 import * as Api from "./api";
 import { rememberChannel } from "./channel-recovery";
@@ -684,16 +684,7 @@ export function ResearchWorkspace(
 		setMetadata(metadata);
 		rememberChannel(userId, { id: room, title: metadata.title, slug: metadata.slug }, repository);
 		onDocumentChanged(room, metadata);
-		let path = researchWorkspacePath(
-			repository.owner,
-			repository.name,
-			metadata.slug,
-			workspaceId,
-		);
-		if (location.pathname !== path) {
-			history.replaceState(null, "", `${path}${location.search}${location.hash}`);
-		}
-	}, [onDocumentChanged, repository, room, userId, workspaceId]);
+	}, [onDocumentChanged, repository, room, userId]);
 
 	useEffect(() => {
 		let next: WorkspaceMetadata = {

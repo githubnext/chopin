@@ -1,3 +1,4 @@
+import { createChannel } from "./database";
 import { authenticate, expect, roomPath, test } from "./room";
 import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 import { installVisualViewport } from "./visual-viewport";
@@ -153,6 +154,65 @@ test("a stale outgoing route cannot canonicalize or publish over the active docu
 	);
 	await expect(page).toHaveURL(activePath);
 	expect(visits).toEqual([room]);
+});
+
+test("outgoing WebSocket metadata cannot canonicalize the active document", async ({ baseURL, page, room }) => {
+	let stale = crypto.randomUUID();
+	await createChannel(Number(new URL(baseURL!).port), stale);
+	let captured = Promise.withResolvers<void>();
+	let release = Promise.withResolvers<void>();
+	let title = `Renamed outgoing ${stale.slice(0, 8)}`;
+	let slug = `renamed-outgoing-${stale.slice(0, 8)}`;
+	await page.routeWebSocket("**/ws?**", route => {
+		let channel = new URL(route.url()).searchParams.get("channel");
+		let server = route.connectToServer();
+		route.onMessage(message => server.send(message));
+		server.onMessage(message => {
+			if (channel === stale && typeof message === "string") {
+				let frame = JSON.parse(message) as { kind?: string } & Record<string, unknown>;
+				if (frame.kind === "session:hello") {
+					captured.resolve();
+					void release.promise.then(() =>
+						route.send(JSON.stringify({
+							...frame,
+							slug,
+							title,
+							updatedAt: "2099-08-25T18:00:00.000Z",
+						}))
+					);
+					return;
+				}
+			}
+			route.send(message);
+		});
+	});
+
+	await authenticate(page, "stale-socket", baseURL!);
+	await page.goto(`/channels/${stale}`);
+	await captured.promise;
+	let projects = page.getByRole("complementary", { name: "Projects" });
+	await expect(projects.getByRole("link", {
+		name: `Test ${stale.slice(0, 8)}`,
+		exact: true,
+	})).toBeVisible();
+
+	await page.locator("body").dispatchEvent("pointerover", { pointerType: "mouse" });
+	let activePath = roomPath(room);
+	await page.evaluate(path => {
+		history.pushState(null, "", path);
+		dispatchEvent(new PopStateEvent("popstate"));
+	}, activePath);
+	let active = page.locator(
+		".document-route-swap > [data-content-swap-state]:not([hidden]):not([inert])",
+	);
+	await expect(active.getByRole("banner")).toContainText(`Test ${room.slice(0, 8)}`);
+	await expect(page.locator(
+		'.document-route-swap > [data-content-swap-state="outgoing"]:not([hidden])',
+	)).toHaveCount(1);
+
+	release.resolve();
+	await expect(projects.getByRole("link", { name: title, exact: true })).toBeVisible();
+	await expect(page).toHaveURL(activePath);
 });
 
 test("a legacy repository path renders the global navigation shell", async ({ baseURL, page }) => {

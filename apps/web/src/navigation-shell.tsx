@@ -339,6 +339,8 @@ export function NavigationShell(
 		: route.page;
 	let currentRouteKey = useRef(routeKey);
 	currentRouteKey.current = routeKey;
+	let currentRoute = useRef(route);
+	currentRoute.current = route;
 	let resolvedChannel = resolvedDocument?.routeKey === routeKey
 		? resolvedDocument.channel
 		: undefined;
@@ -466,6 +468,29 @@ export function NavigationShell(
 			resolvedDocumentRef.current = next;
 			setResolvedDocument(next);
 			upsertDocument(next.channel);
+			let activeRoute = currentRoute.current;
+			if (
+				current.routeKey === currentRouteKey.current
+				&& (activeRoute.page === "channel"
+					|| activeRoute.page === "document"
+					|| activeRoute.page === "research")
+			) {
+				let path = activeRoute.page === "research"
+					? researchWorkspacePath(
+						accepted.repositoryOwner,
+						accepted.repositoryName,
+						accepted.slug,
+						activeRoute.workspaceId,
+					)
+					: documentPath(
+						accepted.repositoryOwner,
+						accepted.repositoryName,
+						accepted.slug,
+					);
+				if (location.pathname !== path) {
+					history.replaceState(null, "", `${path}${location.search}${location.hash}`);
+				}
+			}
 		} else updateDocument(documentId, update);
 		if (Object.hasOwn(update, "archivedAt")) {
 			let archived = accepted ? accepted.archivedAt : update.archivedAt;
