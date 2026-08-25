@@ -138,21 +138,6 @@ export function backgroundJobLabel(job: Job.View, detail?: Job.Detail): string {
 	return "Background work";
 }
 
-export function toggleBackgroundDisclosure(
-	state: Readonly<{ immediately: boolean; open: boolean }>,
-	immediately: boolean,
-) {
-	return { immediately, open: !state.open };
-}
-
-export function backgroundDisclosurePresentation(
-	state: Readonly<{ immediately: boolean; open: boolean }>,
-	hasDetail: boolean,
-) {
-	let open = state.open && hasDetail;
-	return { controlled: open, immediately: state.immediately, open };
-}
-
 function BackgroundJob(
 	{ canEdit, connected, job, motion, motionImmediately, store }: {
 		canEdit: boolean;
@@ -168,7 +153,8 @@ function BackgroundJob(
 	let [error, setError] = useState<string>();
 	let resultId = useId();
 	let detail = snapshot.details[job.id];
-	let presentation = backgroundDisclosurePresentation(disclosure, detail !== undefined);
+	let resultOpen = disclosure.open && detail !== undefined;
+	let resultPending = snapshot.pending[job.id] === "detail";
 	let artifact = backgroundJobResult(detail);
 	let progress = visibleProgress(job);
 	let subject = backgroundJobLabel(job, detail);
@@ -182,7 +168,7 @@ function BackgroundJob(
 	}, [connected, detail, job.id, job.state, job.type, store]);
 	let toggle = () => {
 		let immediately = motionImmediately?.() ?? false;
-		setDisclosure(value => toggleBackgroundDisclosure(value, immediately));
+		setDisclosure(value => ({ immediately, open: detail ? !value.open : true }));
 		if (!detail) void store.detail(job.id).catch(() => {});
 	};
 	return (
@@ -194,14 +180,15 @@ function BackgroundJob(
 			<div className="plan-background-job-actions">
 				{job.state === "completed" && readable && (
 					<button
-						aria-controls={presentation.controlled ? resultId : undefined}
-						aria-expanded={disclosure.open}
-						aria-label={`${disclosure.open ? "Hide" : "Read"} result for ${subject}`}
+						aria-busy={resultPending || undefined}
+						aria-controls={resultOpen ? resultId : undefined}
+						aria-expanded={resultOpen}
+						aria-label={`${resultOpen ? "Hide" : "Read"} result for ${subject}`}
 						data-press="wide"
 						onClick={toggle}
 						type="button"
 					>
-						{disclosure.open ? "Hide result" : "Read result"}
+						{resultOpen ? "Hide result" : "Read result"}
 					</button>
 				)}
 				{canEdit && canCancelJob(job) && (
@@ -240,9 +227,9 @@ function BackgroundJob(
 			)}
 			<MotionDisclosure
 				id={resultId}
-				immediately={presentation.immediately}
+				immediately={disclosure.immediately}
 				motion={motion}
-				open={presentation.open}
+				open={resultOpen}
 				surface="research-result"
 			>
 				{artifact

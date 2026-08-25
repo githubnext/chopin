@@ -23,6 +23,7 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 	let [open, setOpen] = useState(false);
 	let contentId = useId();
 	let summary = summarize(tools);
+	let motion = motionContract("collapse");
 	if (summary.state === "running") {
 		return (
 			<div className="flex min-h-7 min-w-0 flex-wrap items-center gap-2 py-1 text-sm text-text-quaternary">
@@ -42,7 +43,7 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 				onClick={() => setOpen(value => !value)}
 				type="button"
 			>
-				<MotionDisclosureIcon open={open}>
+				<MotionDisclosureIcon motion={motion} open={open}>
 					<img alt="" className="size-[14px]" src={toolChevronRight} />
 				</MotionDisclosureIcon>
 				<span className="tabular-nums">
@@ -59,7 +60,7 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 			<MotionDisclosure
 				id={contentId}
 				immediately={motionImmediately()}
-				motion={motionContract("collapse")}
+				motion={motion}
 				open={open}
 				surface="chat-tools"
 			>

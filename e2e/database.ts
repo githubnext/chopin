@@ -185,7 +185,7 @@ export async function seedCompletedResearchAnswerJob(
 	port: number,
 	channelId: string,
 	question: string,
-): Promise<void> {
+): Promise<string> {
 	let now = new Date();
 	let jobId = crypto.randomUUID();
 	let fixture = researchAnswerFixture(question);
@@ -220,6 +220,7 @@ export async function seedCompletedResearchAnswerJob(
 			`;
 		});
 	});
+	return jobId;
 }
 
 export async function seedRunningResearchAnswerJob(

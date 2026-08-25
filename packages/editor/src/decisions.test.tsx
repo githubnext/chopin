@@ -43,7 +43,12 @@ function markup(stored?: string): string {
 		}],
 		hasPlanContent: true,
 	});
-	let motion: MotionDisclosureContract = { className: "motion-collapse", closeDuration: 250 };
+	let motion: MotionDisclosureContract = {
+		className: "motion-collapse",
+		closeDuration: 250,
+		contentClassName: "motion-collapse-content",
+		iconClassName: "motion-disclosure-icon",
+	};
 	return renderToStaticMarkup(createElement(Decisions, { motion, store }));
 }
 

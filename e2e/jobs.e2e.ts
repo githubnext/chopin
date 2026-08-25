@@ -18,6 +18,69 @@ test("completed workspace research is summarized in Background Work", async ({ b
 	await expect(page.getByRole("heading", { name: "Preview research report" })).toBeVisible();
 });
 
+test("keyboard-opened research waits for its result and settles immediately after retry", async ({ baseURL, join, page, room, seed }) => {
+	await seed(SOURCE);
+	let jobId = await seedCompletedResearchAnswerJob(Number(new URL(baseURL!).port), room, QUESTION);
+	let rejectDetail: (() => void) | undefined;
+	let detailRequestedResolve: (() => void) | undefined;
+	let detailRequested = new Promise<void>(resolve => detailRequestedResolve = resolve);
+	await page.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		route.onMessage(message => {
+			if (typeof message === "string") {
+				let frame = JSON.parse(message) as { id?: string; kind: string; rid?: string };
+				if (frame.kind === "job:get" && frame.id === jobId && !rejectDetail) {
+					rejectDetail = () =>
+						route.send(JSON.stringify({
+							kind: "session:error",
+							message: "Research detail is temporarily unavailable",
+							rid: frame.rid,
+							ts: 0,
+						}));
+					detailRequestedResolve?.();
+					return;
+				}
+			}
+			server.send(message);
+		});
+	});
+	page = await join("ana");
+	await page.getByRole("button", { name: /Background Work/ }).click();
+	let trigger = page.getByRole("button", { name: `Read result for Research answer: ${QUESTION}` });
+
+	await trigger.focus();
+	await trigger.press("Enter");
+	await detailRequested;
+	expect(await trigger.getAttribute("aria-expanded")).toBe("false");
+	expect(await trigger.getAttribute("aria-controls")).toBeNull();
+	await expect(trigger).toHaveAttribute("aria-busy", "true");
+	rejectDetail?.();
+	await expect(trigger).not.toHaveAttribute("aria-busy");
+	await page.evaluate(() => {
+		let state = window as typeof window & { firstResearchResultClass?: string };
+		let observer = new MutationObserver(() => {
+			let result = document.querySelector<HTMLElement>(
+				'[data-motion-disclosure="research-result"]',
+			);
+			if (!result) return;
+			state.firstResearchResultClass = result.className;
+			observer.disconnect();
+		});
+		observer.observe(document.body, { childList: true, subtree: true });
+	});
+	await trigger.press("Enter");
+	expect(await page.evaluate(() => document.documentElement.dataset.motionInput)).toBe("keyboard");
+
+	let result = page.locator('[data-motion-disclosure="research-result"]');
+	await expect.poll(() =>
+		page.evaluate(() =>
+			(window as typeof window & { firstResearchResultClass?: string })
+				.firstResearchResultClass
+		)
+	).toContain("is-open");
+	await expect(result).toHaveClass(/is-open/);
+});
+
 test("research results settle immediately and retain an inert pointer exit", async ({ baseURL, join, room, seed }) => {
 	await seed(SOURCE);
 	await seedCompletedResearchAnswerJob(Number(new URL(baseURL!).port), room, QUESTION);
