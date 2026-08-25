@@ -126,6 +126,7 @@ export class ResearchRequestStore implements ResearchStore {
 	async retry(id: string): Promise<Research.RequestView> {
 		this.#assertAvailable();
 		let result = await this.#api.retry(this.#channelId, id);
+		this.#fenceRead(id);
 		return this.#accept(id, result, "retry");
 	}
 
@@ -219,6 +220,14 @@ export class ResearchRequestStore implements ResearchStore {
 			if (this.#reads.get(id) === read) this.#reads.delete(id);
 			this.#schedulePolling();
 		}
+	}
+
+	#fenceRead(id: string): void {
+		let active = this.#reads.get(id);
+		if (!active) return;
+		active.controller.abort();
+		this.#reads.delete(id);
+		this.#generations.set(id, active.generation + 1);
 	}
 
 	#schedulePolling(): void {

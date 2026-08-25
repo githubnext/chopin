@@ -40,13 +40,13 @@ export function documentGroups(
 	channels: Api.Channel[],
 	archiveMode: boolean,
 ): Array<{ parent: Api.Channel; children: Api.Channel[] }> {
-	let visible = channels.filter(channel =>
-		archiveMode ? channel.archivedAt !== undefined : channel.archivedAt === undefined
+	let parents = channels.filter(channel =>
+		channel.parentChannelId === undefined
+		&& (archiveMode ? channel.archivedAt !== undefined : channel.archivedAt === undefined)
 	);
-	let parents = visible.filter(channel => channel.parentChannelId === undefined);
 	let parentIds = new Set(parents.map(channel => channel.id));
 	let children = new Map<string, Api.Channel[]>();
-	for (let channel of visible) {
+	for (let channel of channels) {
 		if (!channel.parentChannelId || !parentIds.has(channel.parentChannelId)) continue;
 		let nested = children.get(channel.parentChannelId) ?? [];
 		nested.push(channel);

@@ -462,6 +462,55 @@ describe("research request store", () => {
 		store.dispose();
 	});
 
+	it("fences a pre-retry observation before accepting current queued work", async () => {
+		let beforeRetry = deferred<Research.RequestView>();
+		let afterRetry = deferred<Research.RequestView>();
+		let beforeRetrySignal: AbortSignal | undefined;
+		let reads = 0;
+		let initial = request("request-one", "failed", {
+			error: "Research could not be completed.",
+			state: "failed",
+		});
+		let queued = request("request-one", "queued", { state: "pending" });
+		let store = new ResearchRequestStore({
+			api: api({
+				get: async (_channelId, _id, signal) => {
+					reads++;
+					if (reads === 1) return initial;
+					if (reads === 2) {
+						beforeRetrySignal = signal;
+						return beforeRetry.promise;
+					}
+					return afterRetry.promise;
+				},
+				retry: async () => queued,
+			}),
+			channelId: "channel-one",
+			onOpen() {},
+		});
+		let unsubscribe = store.subscribe(() => {});
+		let release = store.retain("request-one");
+		await settle();
+		store.invalidate("request-one");
+		expect(reads).toBe(2);
+
+		let retried = await store.retry("request-one", initial.question);
+		expect(retried).toBe(queued);
+		expect(beforeRetrySignal?.aborted).toBe(true);
+		beforeRetry.resolve(initial);
+		await settle();
+		expect(store.get("request-one")).toBe(queued);
+
+		store.invalidate("request-one");
+		afterRetry.resolve(request("request-one", "writing"));
+		await settle();
+		expect(store.get("request-one")?.stage).toBe("writing");
+
+		release();
+		unsubscribe();
+		store.dispose();
+	});
+
 	it("publishes a successful cancellation", async () => {
 		let store = new ResearchRequestStore({
 			api: api(),
