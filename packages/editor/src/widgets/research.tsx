@@ -41,7 +41,6 @@ const REMOVABLE_STAGES = new Set<Research.RequestStage>(["failed", "cancelled", 
 
 export type ResearchComposerProps = {
 	blocked?: string;
-	busyLabel?: string;
 	cancelDisabled?: boolean;
 	cancelLabel?: string;
 	dismissible?: boolean;
@@ -104,6 +103,7 @@ export function handleResearchComposerKey(
 		return;
 	}
 	let textarea = event.currentTarget;
+	if (textarea.readOnly) return;
 	textarea.setRangeText(
 		"\n",
 		textarea.selectionStart,
@@ -116,7 +116,6 @@ export function handleResearchComposerKey(
 export function ResearchComposer(
 	{
 		blocked,
-		busyLabel = "Starting…",
 		cancelDisabled,
 		cancelLabel,
 		dismissible = true,
@@ -183,8 +182,9 @@ export function ResearchComposer(
 					</button>
 				)}
 				<SendAction
+					busy={submitting}
 					disabled={submitting || !!blocked || !question.trim()}
-					label={submitting ? busyLabel : submitLabel}
+					label={submitLabel}
 					onClick={onSubmit}
 				/>
 			</div>
