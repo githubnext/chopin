@@ -1,4 +1,5 @@
 import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
+import { useLayoutEffect, useRef } from "react";
 
 import type { ReactNode } from "react";
 
@@ -71,6 +72,7 @@ export function AnchoredChildSurface(
 	{
 		child,
 		childLabel,
+		focusKey,
 		onClose,
 		parent,
 		parentLabel,
@@ -78,6 +80,7 @@ export function AnchoredChildSurface(
 	}: {
 		child?: ReactNode;
 		childLabel: string;
+		focusKey?: string;
 		onClose: () => void;
 		parent: ReactNode;
 		parentLabel: string;
@@ -85,6 +88,17 @@ export function AnchoredChildSurface(
 	},
 ) {
 	let childVisible = presentation !== "closed";
+	let surface = useRef<HTMLElement>(null);
+	let focused = useRef<string | undefined>(undefined);
+	useLayoutEffect(() => {
+		if (presentation !== "open") {
+			if (presentation === "closed") focused.current = undefined;
+			return;
+		}
+		if (!focusKey || focused.current === focusKey) return;
+		focused.current = focusKey;
+		surface.current?.focus({ preventScroll: true });
+	}, [focusKey, presentation]);
 	return (
 		<div
 			className="anchored-child-host"
@@ -102,6 +116,8 @@ export function AnchoredChildSurface(
 				<section
 					aria-label={`Child document: ${childLabel}`}
 					className="anchored-child-surface"
+					ref={surface}
+					tabIndex={-1}
 				>
 					<button
 						aria-label={`Back to ${parentLabel}`}

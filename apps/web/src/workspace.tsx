@@ -243,7 +243,11 @@ export function Workspace(
 		view,
 	}: WorkspaceProps,
 ) {
-	let [chatWidth, resizeChat] = usePaneWidth({ active: mode === "split", ...CHAT_PANE });
+	let [chatWidth, resizeChat] = usePaneWidth({
+		active: mode === "split",
+		...CHAT_PANE,
+		storageKey: surface === "document" ? CHAT_PANE.storageKey : undefined,
+	});
 	let root = useRef<HTMLDivElement>(null);
 	let presentation = presentWorkspace(state, mode, view);
 	let immediately = motionImmediately();
