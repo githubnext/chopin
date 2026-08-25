@@ -156,6 +156,23 @@ are broadcast decoration: a browser retains at most 50 unseen marks until they
 enter the viewport, the editor is cleared, or the epoch changes. The server does
 not persist or replay them after a reconnect.
 
+## Browser content swaps
+
+The host that owns a changing surface also owns its motion contract and keyed
+retention. The shared `ContentSwapLayer` owns presence timing: it makes an
+inactive layer `inert` and `aria-hidden` immediately, then hides it and notifies
+the host after its visual exit. Pointer input follows the host's transition
+contract; keyboard input and reduced-motion preferences settle the transition
+immediately.
+
+The editor's questionnaire host renders the current question and retains at most
+one outgoing question until that layer closes. Document navigation similarly
+keeps the active route, at most one outgoing route, and an optional pending
+route. A pending document load stays mounted but hidden and inert until it is
+ready, so the existing document remains interactive. Navigation publishes only
+the active ready channel; readiness reported later by an outgoing route cannot
+replace it.
+
 ## Counters and identities
 
 Several independent counters prevent different classes of stale write. They are
