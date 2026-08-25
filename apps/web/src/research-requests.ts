@@ -48,6 +48,10 @@ type Read = {
 	generation: number;
 };
 
+type Acceptance = "mutation" | "observation" | "retry";
+
+const TERMINAL_STAGES = new Set<Research.RequestStage>(["ready", "failed", "cancelled"]);
+
 export class ResearchRequestStore implements ResearchStore {
 	#api: ResearchRequestApi;
 	#channelId: string;
@@ -58,6 +62,7 @@ export class ResearchRequestStore implements ResearchStore {
 	#onOpen: (child: Research.ReadyChild, opener: ResearchOpener) => void;
 	#onPublished: (child: Research.ReadyChild) => void;
 	#openers = new Map<string, { current: HTMLElement | null }>();
+	#published = new Set<string>();
 	#reads = new Map<string, Read>();
 	#references = new Map<string, number>();
 	#schedule: ResearchRequestSchedule;
@@ -121,7 +126,7 @@ export class ResearchRequestStore implements ResearchStore {
 	async retry(id: string): Promise<Research.RequestView> {
 		this.#assertAvailable();
 		let result = await this.#api.retry(this.#channelId, id);
-		return this.#accept(id, result);
+		return this.#accept(id, result, "retry");
 	}
 
 	open(child: Research.ReadyChild, opener: ResearchOpener): void {
@@ -149,8 +154,12 @@ export class ResearchRequestStore implements ResearchStore {
 		this.#stopPolling();
 		for (let read of this.#reads.values()) read.controller.abort();
 		this.#reads.clear();
+		for (let opener of this.#openers.values()) opener.current = null;
+		this.#openers.clear();
+		this.#published.clear();
 		this.#references.clear();
 		this.#listeners.clear();
+		this.#snapshots.clear();
 	}
 
 	dispose(): void {
@@ -159,14 +168,26 @@ export class ResearchRequestStore implements ResearchStore {
 		this.#disposed = true;
 	}
 
-	#accept(id: string, snapshot: Research.RequestView): Research.RequestView {
+	#accept(
+		id: string,
+		snapshot: Research.RequestView,
+		acceptance: Acceptance = "mutation",
+	): Research.RequestView {
 		if (snapshot.id !== id || snapshot.channelId !== this.#channelId) {
 			throw new Error("Research request response did not match its document reference.");
 		}
 		if (this.#disposed) return snapshot;
 		let previous = this.#snapshots.get(id);
+		if (
+			previous && TERMINAL_STAGES.has(previous.stage)
+			&& (acceptance !== "retry" || previous.stage === "ready")
+		) return previous;
 		this.#snapshots.set(id, snapshot);
-		if (previous && !previous.child && snapshot.stage === "ready" && snapshot.child) {
+		if (
+			previous && !previous.child && snapshot.stage === "ready" && snapshot.child
+			&& !this.#published.has(id)
+		) {
+			this.#published.add(id);
 			this.#onPublished(snapshot.child);
 		}
 		for (let listener of this.#listeners) listener();
@@ -190,7 +211,7 @@ export class ResearchRequestStore implements ResearchStore {
 				this.#disposed || controller.signal.aborted
 				|| current !== read || current.generation !== generation
 			) return;
-			this.#accept(id, snapshot);
+			this.#accept(id, snapshot, "observation");
 		} catch {
 			// Refresh failures leave the last durable snapshot visible. Polling or
 			// the next socket invalidation can retry the observational read.

@@ -55,6 +55,14 @@ async function scriptResearch(page: Page, room: string, databasePort: number) {
 	let requests = new Map<string, ScriptedRequest>();
 	let retries: string[] = [];
 	let cancellations: string[] = [];
+	let reads: string[] = [];
+	let sendToClient: ((frame: Research.Changed) => void) | undefined;
+	await page.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		sendToClient = frame => route.send(JSON.stringify(frame));
+		route.onMessage(message => server.send(message));
+		server.onMessage(message => route.send(message));
+	});
 	let prefix = `/api/channels/${room}/research-workspaces`;
 	await page.route("**/api/channels/*/research-workspaces**", async route => {
 		let request = route.request();
@@ -102,6 +110,7 @@ async function scriptResearch(page: Page, room: string, databasePort: number) {
 			return;
 		}
 		if (request.method() === "GET" && match?.[2] === undefined) {
+			reads.push(current.id);
 			await route.fulfill({ json: requestView(room, current) });
 			return;
 		}
@@ -115,6 +124,7 @@ async function scriptResearch(page: Page, room: string, databasePort: number) {
 	};
 	return {
 		cancellations,
+		reads,
 		requests,
 		retries,
 		advance(
@@ -123,6 +133,16 @@ async function scriptResearch(page: Page, room: string, databasePort: number) {
 			overrides: Partial<ScriptedRequest> = {},
 		) {
 			Object.assign(byQuestion(question), overrides, { stage });
+		},
+		invalidate(question: string) {
+			let request = byQuestion(question);
+			if (!sendToClient) throw new Error("research socket is not connected");
+			sendToClient({
+				kind: "research:changed",
+				revision: 1,
+				ts: 0,
+				workspaceId: request.id,
+			});
 		},
 		async publish(question: string, title: string) {
 			let request = byQuestion(question);
@@ -172,13 +192,30 @@ test("inline research publishes one ordinary child and opens its isolated worksp
 	let databasePort = port(baseURL!);
 	let research = await scriptResearch(page, room, databasePort);
 	let catalogueReads = 0;
+	let staleCatalogue = Promise.withResolvers<void>();
+	let staleCatalogueStarted = Promise.withResolvers<void>();
+	let heldCatalogue = false;
+	await page.route("**/api/repositories/octo-org/score/channels**", async route => {
+		let url = new URL(route.request().url());
+		if (heldCatalogue || url.searchParams.get("includeArchived") === "true") {
+			await route.continue();
+			return;
+		}
+		heldCatalogue = true;
+		let response = await route.fetch();
+		staleCatalogueStarted.resolve();
+		await staleCatalogue.promise;
+		await route.fulfill({ response });
+	});
 	page.on("request", request => {
 		if (
 			request.method() === "GET"
 			&& new URL(request.url()).pathname === "/api/repositories/octo-org/score/channels"
 		) catalogueReads++;
 	});
-	let opened = await join("ana");
+	let opening = join("ana");
+	await staleCatalogueStarted.promise;
+	let opened = await opening;
 	let parent = opened.locator(`[data-workspace-room="${room}"]`);
 	let sidebar = opened.getByRole("complementary", { name: "Projects" });
 	let brief = "Compare the public evidence for deterministic child publication.";
@@ -208,6 +245,8 @@ test("inline research publishes one ordinary child and opens its isolated worksp
 	let readsBeforePublication = catalogueReads;
 	let child = await research.publish(brief, childTitle);
 	await expect(card.getByText("Research ready", { exact: true })).toBeVisible();
+	expect(catalogueReads).toBe(readsBeforePublication);
+	staleCatalogue.resolve();
 	let childLink = sidebar.getByRole("link", { name: childTitle, exact: true });
 	await expect(childLink).toBeVisible();
 	await expect(childLink).toHaveAttribute("href", child.path);
@@ -296,7 +335,7 @@ test("failed research retries by identity while cancelled research never publish
 	await expect(cancelledCard.getByText("Research cancelled", { exact: true })).toBeVisible();
 	expect(research.cancellations).toEqual([cancelledId]);
 
-	// A late worker-shaped update is not observed after the terminal cancellation.
+	// A late worker-shaped update is fetched after a real socket invalidation but remains unobservable.
 	research.advance(cancelledBrief, "ready", {
 		child: {
 			id: crypto.randomUUID(),
@@ -306,11 +345,17 @@ test("failed research retries by identity while cancelled research never publish
 			title: "Late cancelled child",
 		},
 	});
-	await opened.waitForTimeout(2_250);
+	let readsBeforeInvalidation = research.reads.filter(id => id === cancelledId).length;
+	research.invalidate(cancelledBrief);
+	await expect.poll(() => research.reads.filter(id => id === cancelledId).length)
+		.toBe(readsBeforeInvalidation + 1);
 	await expect(cancelledCard.getByText("Research cancelled", { exact: true })).toBeVisible();
 	await expect(sidebar.getByRole("link", { name: "Late cancelled child", exact: true }))
 		.toHaveCount(0);
 	await expect.poll(() => countChildChannels(databasePort, room)).toBe(1);
+	await expect.poll(async () =>
+		(await readSource(databasePort, room)).match(/<Research\s+id=/g)?.length ?? 0
+	).toBe(2);
 	source = await readSource(databasePort, room);
 	expect(source.match(/<Research\s+id=/g)).toHaveLength(2);
 	await expect(sidebar.getByRole("link", { name: recoveredTitle, exact: true })).toHaveCount(1);

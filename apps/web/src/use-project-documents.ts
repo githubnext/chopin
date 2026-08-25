@@ -15,6 +15,11 @@ import {
 
 import type { DocumentMetadata, LoadedDocuments, ProjectDocuments } from "./document-actions";
 
+type CatalogueLoad = {
+	controller: AbortController;
+	queued?: Api.NavigationProject;
+};
+
 export function useProjectDocuments(navigation?: Api.Navigation, includeArchived = false) {
 	let [catalogue, setCatalogue] = useState<{
 		includeArchived: boolean;
@@ -23,18 +28,27 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 	let includeArchivedRef = useRef(includeArchived);
 	includeArchivedRef.current = includeArchived;
 	let documents = catalogue.includeArchived === includeArchived ? catalogue.documents : {};
-	let loads = useRef(new Map<string, AbortController>());
+	let loads = useRef(new Map<string, CatalogueLoad>());
 	let latestDocuments = useRef(new Map<string, Api.Channel>());
 
-	let load = useCallback(async (project: Api.NavigationProject, cursor?: string) => {
+	let load = useCallback(async (
+		project: Api.NavigationProject,
+		cursor?: string,
+		queue = false,
+	) => {
 		let id = project.repositoryId;
 		let key = `${includeArchived ? "all" : "active"}:${id}`;
-		if (loads.current.has(key)) return;
+		let active = loads.current.get(key);
+		if (active) {
+			if (queue && cursor === undefined) active.queued = project;
+			return;
+		}
 		let controller = new AbortController();
+		let currentLoad: CatalogueLoad = { controller };
 		let knownDocuments = cursor === undefined
 			? new Set(latestDocuments.current.keys())
 			: undefined;
-		loads.current.set(key, controller);
+		loads.current.set(key, currentLoad);
 		setCatalogue(current => {
 			let catalogueDocuments = current.includeArchived === includeArchived
 				? current.documents
@@ -53,7 +67,7 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 				project.repositoryName,
 				{ cursor, includeArchived, signal: controller.signal },
 			);
-			if (loads.current.get(key) !== controller) return;
+			if (loads.current.get(key) !== currentLoad) return;
 			let channels = page.channels.map(channel => {
 				let latest = latestDocuments.current.get(channel.id);
 				let accepted = latest ? newestDocument(latest, channel) : channel;
@@ -84,7 +98,7 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 				};
 			});
 		} catch (error) {
-			if (controller.signal.aborted || loads.current.get(key) !== controller) return;
+			if (controller.signal.aborted || loads.current.get(key) !== currentLoad) return;
 			setCatalogue(current =>
 				current.includeArchived !== includeArchived
 					? current
@@ -100,15 +114,19 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 					}
 			);
 		} finally {
-			if (loads.current.get(key) === controller) loads.current.delete(key);
+			if (loads.current.get(key) === currentLoad) {
+				loads.current.delete(key);
+				if (currentLoad.queued) void load(currentLoad.queued);
+			}
 		}
 	}, [includeArchived]);
 
 	useEffect(() => {
 		let prefix = includeArchived ? "all:" : "active:";
-		for (let [key, controller] of loads.current) {
+		for (let [key, active] of loads.current) {
 			if (key.startsWith(prefix)) continue;
-			controller.abort();
+			active.queued = undefined;
+			active.controller.abort();
 			loads.current.delete(key);
 		}
 		setCatalogue(current =>
@@ -124,10 +142,11 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 			navigation.projects.filter(project => project.available)
 				.map(project => project.repositoryId),
 		);
-		for (let [key, controller] of loads.current) {
+		for (let [key, active] of loads.current) {
 			let id = key.slice(key.indexOf(":") + 1);
 			if (!available.has(id)) {
-				controller.abort();
+				active.queued = undefined;
+				active.controller.abort();
 				loads.current.delete(key);
 			}
 		}
@@ -149,7 +168,10 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 	}, [documents, includeArchived, load, navigation]);
 
 	useEffect(() => () => {
-		for (let controller of loads.current.values()) controller.abort();
+		for (let active of loads.current.values()) {
+			active.queued = undefined;
+			active.controller.abort();
+		}
 		loads.current.clear();
 	}, []);
 
@@ -162,7 +184,7 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 		void load(entry.project, entry.documents.nextCursor);
 	}, [load]);
 	let refreshProject = useCallback((project: Api.NavigationProject) => {
-		void load(project);
+		void load(project, undefined, true);
 	}, [load]);
 	let upsertDocument = useCallback((channel: Api.Channel) => {
 		let latest = latestDocuments.current.get(channel.id);
@@ -204,7 +226,10 @@ export function useProjectDocuments(navigation?: Api.Navigation, includeArchived
 	}, []);
 	let removeDocument = useCallback((documentId: string) => {
 		latestDocuments.current.delete(documentId);
-		for (let controller of loads.current.values()) controller.abort();
+		for (let active of loads.current.values()) {
+			active.queued = undefined;
+			active.controller.abort();
+		}
 		loads.current.clear();
 		setCatalogue(current => ({ ...current, documents: {} }));
 	}, []);
