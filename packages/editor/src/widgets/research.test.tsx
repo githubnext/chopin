@@ -2,7 +2,23 @@ import { describe, expect, it } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createHeadlessEditor } from "@lexical/headless";
-import { $getRoot } from "lexical";
+import {
+	$createNodeSelection,
+	$createParagraphNode,
+	$createRangeSelection,
+	$createTextNode,
+	$getNodeByKey,
+	$getRoot,
+	$getSelection,
+	$isNodeSelection,
+	$isRangeSelection,
+	$setSelection,
+	COMMAND_PRIORITY_LOW,
+	DELETE_CHARACTER_COMMAND,
+	DELETE_LINE_COMMAND,
+	DELETE_WORD_COMMAND,
+	REMOVE_TEXT_COMMAND,
+} from "lexical";
 
 import { $createResearchNode, registry } from "@chopin/dialect";
 import { register } from "./index";
@@ -75,6 +91,89 @@ type Store = {
 	opener(id: string, current?: HTMLElement | null): { readonly current: HTMLElement | null };
 	open(child: Research.ReadyChild, opener: { readonly current: HTMLElement | null }): void;
 };
+
+async function deletionGuard() {
+	let module = await import("./research") as unknown as {
+		registerResearchDeletion?: (
+			editor: ReturnType<typeof createHeadlessEditor>,
+			store: Store,
+		) => () => void;
+	};
+	expect(typeof module.registerResearchDeletion).toBe("function");
+	return module.registerResearchDeletion;
+}
+
+function mutableStore(request: Research.RequestView): {
+	set(next: Research.RequestView): void;
+	store: Store;
+} {
+	let current = request;
+	return {
+		set: next => current = next,
+		store: {
+			subscribe: () => () => {},
+			retain: () => () => {},
+			get: id => id === current.id ? current : undefined,
+			refresh() {},
+			create: async () => current,
+			cancel: async () => current,
+			retry: async () => current,
+			opener: () => ({ current: null }),
+			open() {},
+		},
+	};
+}
+
+function deletionEditor() {
+	let editor = createHeadlessEditor({
+		nodes: registry().nodes,
+		onError: error => {
+			throw error;
+		},
+	});
+	editor.registerCommand(
+		DELETE_CHARACTER_COMMAND,
+		backward => {
+			let selection = $getSelection();
+			if ($isNodeSelection(selection)) selection.deleteNodes();
+			else if ($isRangeSelection(selection)) selection.deleteCharacter(backward);
+			else return false;
+			return true;
+		},
+		COMMAND_PRIORITY_LOW,
+	);
+	editor.registerCommand(
+		DELETE_WORD_COMMAND,
+		backward => {
+			let selection = $getSelection();
+			if (!$isRangeSelection(selection)) return false;
+			selection.deleteWord(backward);
+			return true;
+		},
+		COMMAND_PRIORITY_LOW,
+	);
+	editor.registerCommand(
+		DELETE_LINE_COMMAND,
+		backward => {
+			let selection = $getSelection();
+			if (!$isRangeSelection(selection)) return false;
+			selection.deleteLine(backward);
+			return true;
+		},
+		COMMAND_PRIORITY_LOW,
+	);
+	editor.registerCommand(
+		REMOVE_TEXT_COMMAND,
+		() => {
+			let selection = $getSelection();
+			if (!$isRangeSelection(selection)) return false;
+			selection.removeText();
+			return true;
+		},
+		COMMAND_PRIORITY_LOW,
+	);
+	return editor;
+}
 
 async function components() {
 	let module = await import("./research").catch(() => ({}));
@@ -218,7 +317,7 @@ describe("research card", () => {
 		expect(markup).not.toContain("Cancel research");
 	});
 
-	it("opens the ready child without an expand action or report summary", async () => {
+	it("shows the published child metadata with one open affordance", async () => {
 		let { card: Card } = await components();
 		if (!Card) return;
 		let markup = renderToStaticMarkup(createElement(Card, {
@@ -230,7 +329,7 @@ describe("research card", () => {
 					id: "child-one",
 					title: "Rollout evidence",
 					slug: "rollout-evidence",
-					summary: "This must stay out of the inline card.",
+					summary: "Public evidence supports the planned rollout date.",
 					sourceCount: 1,
 				},
 			},
@@ -239,9 +338,130 @@ describe("research card", () => {
 		}));
 
 		expect(markup).toContain("Research ready");
+		expect(markup).toContain("Rollout evidence");
+		expect(markup).toContain("Public evidence supports the planned rollout date.");
+		expect(markup).toContain("1 source");
+		expect(markup).toContain("Researched by Planner");
 		expect(markup).toContain("Open Rollout evidence");
-		expect(markup).not.toContain("This must stay out of the inline card.");
+		expect(markup.match(/Open Rollout evidence/g)).toHaveLength(1);
 		expect(markup).not.toContain("Expand");
+	});
+
+	it("names zero and plural published sources", async () => {
+		let { card: Card } = await components();
+		if (!Card) return;
+		let ready = {
+			...BASE,
+			state: "completed" as const,
+			stage: "ready" as const,
+			child: {
+				id: "child-one",
+				title: "Rollout evidence",
+				slug: "rollout-evidence",
+				summary: "A complete report.",
+				sourceCount: 0,
+			},
+		};
+		let zero = renderToStaticMarkup(createElement(Card, { request: ready, onOpen() {} }));
+		let plural = renderToStaticMarkup(createElement(Card, {
+			request: { ...ready, child: { ...ready.child, sourceCount: 3 } },
+			onOpen() {},
+		}));
+
+		expect(zero).toContain("No sources");
+		expect(plural).toContain("3 sources");
+	});
+});
+
+describe("active research deletion", () => {
+	it("blocks a selected active reference until cancellation makes removal explicit", async () => {
+		let state = mutableStore(BASE);
+		let editor = deletionEditor();
+		let register = await deletionGuard();
+		if (!register) return;
+		let unregister = register(editor, state.store);
+		let key = "";
+		editor.update(() => {
+			let node = $createResearchNode(BASE.id);
+			$getRoot().append(node);
+			key = node.getKey();
+			let selection = $createNodeSelection();
+			selection.add(key);
+			$setSelection(selection);
+		}, { discrete: true });
+
+		expect(editor.dispatchCommand(DELETE_CHARACTER_COMMAND, true)).toBe(true);
+		editor.getEditorState().read(() => expect($getNodeByKey(key)).not.toBeNull());
+
+		state.set({ ...BASE, state: "cancelled", stage: "cancelled" });
+		expect(editor.dispatchCommand(DELETE_CHARACTER_COMMAND, true)).toBe(true);
+		editor.update(() => {}, { discrete: true });
+		editor.getEditorState().read(() => expect($getNodeByKey(key)).toBeNull());
+		unregister();
+	});
+
+	it("blocks collapsed Backspace, Delete, word, and line removal beside active research", async () => {
+		let state = mutableStore(BASE);
+		let editor = deletionEditor();
+		let register = await deletionGuard();
+		if (!register) return;
+		register(editor, state.store);
+		let key = "";
+		let beforeKey = "";
+		let afterKey = "";
+		editor.update(() => {
+			let before = $createParagraphNode().append($createTextNode("Before"));
+			let node = $createResearchNode(BASE.id);
+			let after = $createParagraphNode().append($createTextNode("After"));
+			$getRoot().append(before, node, after);
+			key = node.getKey();
+			beforeKey = before.getKey();
+			afterKey = after.getKey();
+		}, { discrete: true });
+
+		let selectAfterStart = () =>
+			editor.update(() => {
+				$getNodeByKey(afterKey)?.selectStart();
+			}, { discrete: true });
+		let selectBeforeEnd = () =>
+			editor.update(() => {
+				$getNodeByKey(beforeKey)?.selectEnd();
+			}, { discrete: true });
+		selectAfterStart();
+		expect(editor.dispatchCommand(DELETE_CHARACTER_COMMAND, true)).toBe(true);
+		selectBeforeEnd();
+		expect(editor.dispatchCommand(DELETE_CHARACTER_COMMAND, false)).toBe(true);
+		selectAfterStart();
+		expect(editor.dispatchCommand(DELETE_WORD_COMMAND, true)).toBe(true);
+		selectBeforeEnd();
+		expect(editor.dispatchCommand(DELETE_LINE_COMMAND, false)).toBe(true);
+		editor.getEditorState().read(() => expect($getNodeByKey(key)).not.toBeNull());
+	});
+
+	it("blocks a range removal that includes active research", async () => {
+		let state = mutableStore(BASE);
+		let editor = deletionEditor();
+		let register = await deletionGuard();
+		if (!register) return;
+		register(editor, state.store);
+		let key = "";
+		editor.update(() => {
+			let root = $getRoot();
+			let node = $createResearchNode(BASE.id);
+			root.append(
+				$createParagraphNode().append($createTextNode("Before")),
+				node,
+				$createParagraphNode().append($createTextNode("After")),
+			);
+			key = node.getKey();
+			let selection = $createRangeSelection();
+			selection.anchor.set(root.getKey(), 0, "element");
+			selection.focus.set(root.getKey(), 2, "element");
+			$setSelection(selection);
+		}, { discrete: true });
+
+		expect(editor.dispatchCommand(REMOVE_TEXT_COMMAND, null)).toBe(true);
+		editor.getEditorState().read(() => expect($getNodeByKey(key)).not.toBeNull());
 	});
 });
 

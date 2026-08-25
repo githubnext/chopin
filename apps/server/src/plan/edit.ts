@@ -23,7 +23,7 @@ import { assert } from "@chopin/dialect/validate";
 
 import * as room from "./room";
 
-import type { Root, RootContent } from "mdast";
+import type { Nodes, Root, RootContent } from "mdast";
 import type { Plan } from "./service";
 
 /** Enough leading text to tell two blocks apart without resending the source. */
@@ -362,6 +362,8 @@ function step(
 ): RootContent[] | string {
 	switch (operation.op) {
 		case "replace_root": {
+			let protectedIndex = base.findIndex(research);
+			if (protectedIndex >= 0) return protectsResearch(protectedIndex);
 			let parsed = fragment(operation.source);
 			return typeof parsed === "string" ? parsed : parsed;
 		}
@@ -387,6 +389,7 @@ function step(
 			let target = addressed(base, operation.index);
 			if (typeof target === "string") return target;
 			if (decision(target)) return protects(operation.index);
+			if (research(target)) return protectsResearch(operation.index);
 			let index = children.indexOf(target);
 			if (index < 0) return changed(operation.index);
 			let parsed = fragment(operation.source);
@@ -401,6 +404,7 @@ function step(
 			let target = addressed(base, operation.index);
 			if (typeof target === "string") return target;
 			if (decision(target)) return protects(operation.index);
+			if (research(target)) return protectsResearch(operation.index);
 			let index = children.indexOf(target);
 			if (index < 0) return changed(operation.index);
 			return children.filter((_, position) => position !== index);
@@ -408,6 +412,7 @@ function step(
 		case "move": {
 			let target = addressed(base, operation.index);
 			if (typeof target === "string") return target;
+			if (research(target)) return protectsResearch(operation.index);
 			let destination = addressed(base, operation.to);
 			if (typeof destination === "string") return destination;
 			let index = children.indexOf(target);
@@ -474,6 +479,7 @@ const RESERVED_COMPONENTS = new Set([
 	"Answer",
 	"Decision",
 	"Note",
+	"Research",
 ]);
 
 /** Parse an operation's source as a run of top-level blocks. */
@@ -511,7 +517,9 @@ function identify(root: Root): string | undefined {
 			let spec = lookup(node.name);
 			if (spec) {
 				if (RESERVED_COMPONENTS.has(spec.name)) {
-					refused = spec.name === "Decision" || spec.name === "Note"
+					refused = spec.name === "Research"
+						? "`Research` is created by starting inline research, not by editing the plan."
+						: spec.name === "Decision" || spec.name === "Note"
 						? `\`${spec.name}\` is written when the room accepts a comment, not by editing the plan.`
 						: `\`${spec.name}\` is created by asking a question, not by editing the plan.`;
 					return;
@@ -563,6 +571,11 @@ function protects(index: number): string {
 	return `block ${index} is a decision the room accepted; it cannot be edited or removed.`;
 }
 
+function protectsResearch(index: number): string {
+	return `block ${index} is inline research owned by its request record; `
+		+ "it cannot be edited, moved, or removed.";
+}
+
 /** The questionnaire id a node carries, when it is one. */
 function questionnaire(node: RootContent): string | undefined {
 	if (node.type !== "mdxJsxFlowElement" || node.name !== "Questionnaire") return undefined;
@@ -583,6 +596,11 @@ function questionnaire(node: RootContent): string | undefined {
  */
 function decision(node: RootContent): boolean {
 	return node.type === "mdxJsxFlowElement" && node.name === "Decision";
+}
+
+function research(node: Nodes): boolean {
+	if (node.type === "mdxJsxFlowElement" && node.name === "Research") return true;
+	return "children" in node && node.children.some(child => research(child as Nodes));
 }
 
 function describe(node: RootContent, index: number): Block {

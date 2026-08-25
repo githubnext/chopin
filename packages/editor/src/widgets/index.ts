@@ -33,5 +33,10 @@ export { EnterPlugin } from "./enter";
 export { QuestionnaireCard } from "./questionnaire";
 export type { QuestionnaireCardProps } from "./questionnaire";
 export { PreviewPlugin } from "./render-blocks";
-export { ResearchCard, ResearchComposer, ResearchReference } from "./research";
+export {
+	ResearchCard,
+	ResearchComposer,
+	ResearchDeletionPlugin,
+	ResearchReference,
+} from "./research";
 export { TabsPlugin } from "./tabs";

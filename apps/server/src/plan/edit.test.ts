@@ -224,6 +224,18 @@ describe("refusing a batch", () => {
 		expect(outcome).toMatchObject({ ok: false, reason: "invalid" });
 	});
 
+	it("refuses to author inline research owned by its request record", () => {
+		let outcome = edit.apply(subject, 1, [{
+			op: "insert",
+			index: 0,
+			source: '<Research id="01K0N4TR8K7JGM4R1J7PW4R8YJ" />\n',
+		}]);
+
+		expect(outcome).toMatchObject({ ok: false, reason: "invalid" });
+		if (outcome.ok || outcome.reason !== "invalid") return;
+		expect(outcome.message).toContain("inline research");
+	});
+
 	/**
 	 * A decision is what the room settled, and the record it projects has no
 	 * way to hear that the plan no longer shows it. `detach_question` exists
@@ -249,6 +261,55 @@ describe("refusing a batch", () => {
 
 		// Still there, and still saying what it said.
 		expect(room.project(held.document)).toContain("Tighten this.");
+	});
+
+	it("protects inline research while allowing unrelated Planner edits", async () => {
+		let held = await plan(
+			'# Title\n\n<Research id="01K0N4TR8K7JGM4R1J7PW4R8YJ" />\n\nAfter.\n',
+		);
+		let at = edit.outline(held).findIndex(block => block.type === "Research");
+		expect(at).toBe(1);
+
+		let attempts: edit.Operation[][] = [
+			[{ op: "delete", index: at }],
+			[{ op: "replace", index: at, source: "Gone.\n" }],
+			[{ op: "move", index: at, to: 0 }],
+			[{ op: "replace_root", source: "# Replacement\n" }],
+		];
+		for (let operations of attempts) {
+			let outcome = edit.apply(held, 1, operations);
+			expect(outcome).toMatchObject({ ok: false, reason: "invalid" });
+			if (!outcome.ok && outcome.reason === "invalid") {
+				expect(outcome.message).toContain("inline research");
+			}
+		}
+
+		expect(edit.apply(held, 1, [{ op: "insert", index: 0, source: "Context.\n" }]).ok)
+			.toBe(true);
+		expect(room.project(held.document)).toContain("<Research");
+		expect(room.project(held.document)).toContain("Context.");
+	});
+
+	it("protects inline research nested inside another Planner block", async () => {
+		let held = await plan(
+			'<Callout id="01K0N4TR8K7JGM4R1J7PW4R8YK" type="note">\n'
+				+ '<Research id="01K0N4TR8K7JGM4R1J7PW4R8YJ" />\n'
+				+ "</Callout>\n\nAfter.\n",
+		);
+		let attempts: edit.Operation[][] = [
+			[{ op: "delete", index: 0 }],
+			[{ op: "replace", index: 0, source: "Gone.\n" }],
+			[{ op: "move", index: 0, to: 1 }],
+			[{ op: "replace_root", source: "# Replacement\n" }],
+		];
+
+		for (let operations of attempts) {
+			let outcome = edit.apply(held, 1, operations);
+			expect(outcome).toMatchObject({ ok: false, reason: "invalid" });
+			if (!outcome.ok && outcome.reason === "invalid") {
+				expect(outcome.message).toContain("inline research");
+			}
+		}
 	});
 
 	it("refuses an index the plan does not have", () => {
