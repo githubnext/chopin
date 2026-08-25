@@ -386,8 +386,11 @@ describe("research request store", () => {
 		});
 		let unsubscribe = store.subscribe(() => {});
 		let releaseFirst = store.retain("request-one");
+		let opener = store.opener("request-one", { focus() {} } as HTMLElement);
 		releaseFirst();
 		let releaseSecond = store.retain("request-one");
+		let replacement = { focus() {} } as HTMLElement;
+		expect(store.opener("request-one", replacement)).toBe(opener);
 		expect(calls).toBe(2);
 
 		first.resolve(request("request-one", "searching"));
@@ -401,6 +404,7 @@ describe("research request store", () => {
 			stage: "writing",
 			updatedAt: "2026-08-24T09:03:00.000Z",
 		});
+		expect(opener.current).toBe(replacement);
 		releaseSecond();
 		unsubscribe();
 		store.dispose();
@@ -538,6 +542,131 @@ describe("research request store", () => {
 		release();
 		unsubscribe();
 		store.dispose();
+	});
+
+	it("announces a request only once across release, restoration, and a childless regression", async () => {
+		let readyChild: Research.ReadyChild = {
+			id: "child-one",
+			slug: "source-report",
+			sourceCount: 1,
+			summary: "A complete report.",
+			title: "Source report",
+		};
+		let snapshots = [
+			request("request-one", "queued"),
+			request("request-one", "ready", { child: readyChild }),
+			request("request-one", "writing"),
+			request("request-one", "ready", { child: readyChild }),
+		];
+		let published: Research.ReadyChild[] = [];
+		let store = new ResearchRequestStore({
+			api: api({ get: async () => snapshots.shift()! }),
+			channelId: "channel-one",
+			onOpen() {},
+			onPublished: child => published.push(child),
+		});
+		let unsubscribe = store.subscribe(() => {});
+		let release = store.retain("request-one");
+		await settle();
+		store.invalidate("request-one");
+		await settle();
+		release();
+
+		release = store.retain("request-one");
+		await settle();
+		store.invalidate("request-one");
+		await settle();
+
+		expect(published).toEqual([readyChild]);
+		release();
+		unsubscribe();
+		store.dispose();
+	});
+
+	it("keeps terminal snapshots monotonic across late observational invalidations", async () => {
+		let readyChild: Research.ReadyChild = {
+			id: "late-child",
+			slug: "late-child",
+			sourceCount: 0,
+			summary: "Late output.",
+			title: "Late child",
+		};
+		for (let terminal of ["cancelled", "failed", "ready"] as const) {
+			let reads = 0;
+			let published: Research.ReadyChild[] = [];
+			let initial = request(`request-${terminal}`, terminal, {
+				...(terminal === "ready" ? { child: readyChild } : {}),
+				state: terminal === "ready" ? "completed" : terminal,
+			});
+			let store = new ResearchRequestStore({
+				api: api({
+					get: async (_channelId, id) => {
+						reads++;
+						return reads === 1
+							? initial
+							: request(id, "ready", { child: readyChild });
+					},
+				}),
+				channelId: "channel-one",
+				onOpen() {},
+				onPublished: child => published.push(child),
+			});
+			let unsubscribe = store.subscribe(() => {});
+			let release = store.retain(`request-${terminal}`);
+			await settle();
+
+			store.invalidate(`request-${terminal}`);
+			await settle();
+
+			expect(reads).toBe(2);
+			expect(store.get(`request-${terminal}`)).toBe(initial);
+			expect(published).toEqual([]);
+			release();
+			unsubscribe();
+			store.dispose();
+		}
+	});
+
+	it("rejects deferred reads and clears opener targets after release or disposal", async () => {
+		let readyChild: Research.ReadyChild = {
+			id: "child-one",
+			slug: "source-report",
+			sourceCount: 1,
+			summary: "A complete report.",
+			title: "Source report",
+		};
+		for (let finish of ["release", "dispose"] as const) {
+			let read = deferred<Research.RequestView>();
+			let signal: AbortSignal | undefined;
+			let published: Research.ReadyChild[] = [];
+			let store = new ResearchRequestStore({
+				api: api({
+					get: async (_channelId, _id, currentSignal) => {
+						signal = currentSignal;
+						return read.promise;
+					},
+				}),
+				channelId: "channel-one",
+				onOpen() {},
+				onPublished: child => published.push(child),
+			});
+			let release = store.retain(`request-${finish}`);
+			let button = { focus() {} } as HTMLElement;
+			let opener = store.opener(`request-${finish}`, button);
+			if (finish === "release") {
+				store.opener(`request-${finish}`, null);
+				release();
+			} else store.dispose();
+
+			expect(signal?.aborted).toBe(true);
+			expect(opener.current).toBeNull();
+			read.resolve(request(`request-${finish}`, "ready", { child: readyChild }));
+			await settle();
+
+			expect(store.get(`request-${finish}`)).toBeUndefined();
+			expect(published).toEqual([]);
+			if (finish === "release") store.dispose();
+		}
 	});
 
 	it("does not announce restored, terminal, stale, released, or disposed snapshots", async () => {
