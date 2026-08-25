@@ -11,6 +11,10 @@
 			"types": "./src/index.ts",
 			"default": "./src/index.ts"
 		},
+		"./content-swap": {
+			"types": "./src/content-swap.tsx",
+			"default": "./src/content-swap.tsx"
+		},
 		"./pointer": {
 			"types": "./src/pointer.ts",
 			"default": "./src/pointer.ts"
