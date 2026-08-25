@@ -109,8 +109,10 @@ test("a pointer-collapsed Project stays inert through exit and restores in place
 	let projects = sidebar(page);
 	let trigger = projects.getByRole("button", { name: "score", exact: true });
 	let body = projects.locator('[data-motion-disclosure="projects"]');
+	let bodyId = await body.getAttribute("id");
 
-	await expect(trigger).toHaveAttribute("aria-controls", await body.getAttribute("id"));
+	expect(bodyId).not.toBeNull();
+	await expect(trigger).toHaveAttribute("aria-controls", bodyId!);
 	await trigger.click();
 	await expect(body).toHaveAttribute("aria-hidden", "true");
 	await expect(body).toHaveAttribute("inert", "");
