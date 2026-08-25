@@ -1,4 +1,5 @@
 import { authenticate, content, expect, roomPath, test } from "./room";
+import { createChannel } from "./database";
 
 function channel(id: string, title: string, description?: string) {
 	return {
@@ -369,6 +370,62 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${originalTitle}`);
 	await expect(visibleRoutes).toHaveCount(1, { timeout: 100 });
 	await expect(outgoingRoutes).toHaveCount(0);
+});
+
+test("overlapping document workspaces keep IDs, ARIA targets, and focus instance-scoped", async ({ baseURL, join }) => {
+	let page = await join("ana", { viewport: { width: 390, height: 844 } });
+	let created = crypto.randomUUID();
+	await createChannel(Number(new URL(baseURL!).port), created);
+	let destination = roomPath(created);
+	await page.locator("body").dispatchEvent("pointerover", { pointerType: "mouse" });
+	await page.evaluate(path => {
+		history.pushState(null, "", path);
+		dispatchEvent(new PopStateEvent("popstate"));
+	}, destination);
+
+	let routes = page.locator(".document-route-swap > [data-content-swap-state]:not([hidden])");
+	await expect(routes).toHaveCount(2);
+	let audit = await routes.evaluateAll(async layers => {
+		let current = layers.find(layer => !layer.hasAttribute("inert"));
+		let decision = [...current!.querySelectorAll<HTMLButtonElement>(
+			'nav[aria-label="Workspace view"] button',
+		)].find(button => button.textContent?.includes("Decisions"));
+		decision!.click();
+		await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+		let roots = layers.flatMap(
+			layer => [...layer.querySelectorAll<HTMLElement>(".workspace-root")],
+		);
+		let ids = roots.flatMap(root => [...root.querySelectorAll<HTMLElement>("[id]")])
+			.map(element => element.id);
+		let counts = new Map<string, number>();
+		for (let id of ids) counts.set(id, (counts.get(id) ?? 0) + 1);
+		let duplicateIds = [...counts].filter(([, count]) => count > 1).map(([id]) => id).sort();
+		let invalidReferences = roots.flatMap(root =>
+			[...root.querySelectorAll<HTMLElement>("[aria-controls], [aria-labelledby]")]
+				.flatMap(element =>
+					["aria-controls", "aria-labelledby"].flatMap(attribute =>
+						(element.getAttribute(attribute)?.split(/\s+/) ?? []).flatMap(id =>
+							document.querySelectorAll(`#${CSS.escape(id)}`).length === 1
+								? []
+								: [`${attribute}:${id}`]
+						)
+					)
+				)
+		).sort();
+		let heading = current?.querySelector('[data-document-view="decisions"] h2');
+		return {
+			activeDecisionFocused: document.activeElement === heading,
+			duplicateIds,
+			invalidReferences,
+			workspaceCount: roots.length,
+		};
+	});
+	expect(audit).toEqual({
+		activeDecisionFocused: true,
+		duplicateIds: [],
+		invalidReferences: [],
+		workspaceCount: 2,
+	});
 });
 
 test("the archive view refreshes catalogues without reopening the document", async ({ join, page }) => {

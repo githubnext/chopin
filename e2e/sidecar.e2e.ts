@@ -113,6 +113,25 @@ test("question step swaps overlap only for pointer input", async ({ join, seed }
 	await expect(outgoing).toHaveCount(1);
 	await expect(outgoing).toHaveAttribute("aria-hidden", "true");
 	await expect(outgoing).toHaveAttribute("inert", "");
+	let accessibility = await card.evaluate(root => {
+		let ids = [...root.querySelectorAll<HTMLElement>("[id]")].map(element => element.id);
+		let counts = new Map<string, number>();
+		for (let id of ids) counts.set(id, (counts.get(id) ?? 0) + 1);
+		let duplicateIds = [...counts].filter(([, count]) => count > 1).map(([id]) => id).sort();
+		let invalidReferences = [...root.querySelectorAll<HTMLElement>(
+			"[aria-controls], [aria-labelledby]",
+		)].flatMap(element =>
+			["aria-controls", "aria-labelledby"].flatMap(attribute =>
+				(element.getAttribute(attribute)?.split(/\s+/) ?? []).flatMap(id =>
+					document.querySelectorAll(`#${CSS.escape(id)}`).length === 1
+						? []
+						: [`${attribute}:${id}`]
+				)
+			)
+		).sort();
+		return { duplicateIds, invalidReferences };
+	});
+	expect(accessibility).toEqual({ duplicateIds: [], invalidReferences: [] });
 	await expect(visible).toHaveCount(1);
 
 	await scope.focus();
@@ -348,7 +367,7 @@ test("automatic Decisions changes reconcile after compact Conversation closes", 
 		await boContext.close();
 	}
 
-	await ana.locator("#workspace-conversation-heading").press("Escape");
+	await ana.getByRole("heading", { name: "Conversation", exact: true }).press("Escape");
 	await expect(ana.locator('[data-document-view="plan"]')).toBeVisible();
 	await expect(nav.getByRole("button", { name: "Document" })).toHaveAttribute(
 		"aria-current",
@@ -384,8 +403,9 @@ for (
 		let first = questionnaire(page).first();
 
 		await decisions.click();
-		if (example.compact) await expect(page.locator("#workspace-decisions-heading")).toBeFocused();
-		else await expect(first).toBeFocused();
+		if (example.compact) {
+			await expect(page.getByRole("heading", { name: "Decisions", exact: true })).toBeFocused();
+		} else await expect(first).toBeFocused();
 
 		await stack.evaluate(element => {
 			element.scrollTop = element.scrollHeight;
@@ -398,7 +418,7 @@ for (
 		await decisions.click();
 		if (example.compact) {
 			await expect.poll(() => stack.evaluate(element => element.scrollTop)).toBe(scrolled);
-			await expect(page.locator("#workspace-decisions-heading")).toBeFocused();
+			await expect(page.getByRole("heading", { name: "Decisions", exact: true })).toBeFocused();
 		} else {
 			await expect.poll(() => stack.evaluate(element => element.scrollTop)).toBeLessThan(scrolled);
 			await expect(first).toBeFocused();

@@ -54,9 +54,9 @@ for (
 		await first.selectText();
 		await expect.poll(() => page.evaluate(() => getSelection()?.toString())).toBe(PROSE);
 		await activateDestination(nav, /^Decisions/, example.activation);
-		await expect(page.locator("#workspace-decisions-heading")).toBeFocused();
+		await expect(page.getByRole("heading", { name: "Decisions", exact: true })).toBeFocused();
 		await activateDestination(nav, "Document", example.activation);
-		await expect(page.locator("#workspace-plan-heading")).toBeFocused();
+		await expect(page.getByRole("heading", { name: "Document", exact: true })).toBeFocused();
 
 		await second.click();
 		await page.evaluate(() => new Promise(requestAnimationFrame));
@@ -88,12 +88,12 @@ for (
 		await selected.selectText();
 
 		await activateDestination(nav, /^Conversation/, "keyboard");
-		await expect(page.locator("#workspace-conversation-heading")).toBeFocused();
+		await expect(page.getByRole("heading", { name: "Conversation", exact: true })).toBeFocused();
 		await expect(page.locator("main")).toBeHidden();
 		await activateDestination(nav, /^Decisions/, "keyboard");
-		await expect(page.locator("#workspace-decisions-heading")).toBeFocused();
+		await expect(page.getByRole("heading", { name: "Decisions", exact: true })).toBeFocused();
 		await activateDestination(nav, "Document", "keyboard");
-		await expect(page.locator("#workspace-plan-heading")).toBeFocused();
+		await expect(page.getByRole("heading", { name: "Document", exact: true })).toBeFocused();
 
 		await page.keyboard.press("Tab");
 		await expect(content(page)).toBeFocused();

@@ -87,7 +87,7 @@ test("a representative compact phone exposes one mounted destination at a time",
 	await nav.getByRole("button", { name: /^Decisions/ }).click();
 	await expect(page.locator('[data-document-view="decisions"]')).toBeVisible();
 	await expect(conversationPane(page)).toBeHidden();
-	await expect(page.locator("#workspace-decisions-heading")).toBeFocused();
+	await expect(page.getByRole("heading", { name: "Decisions", exact: true })).toBeFocused();
 	await expectNoHorizontalOverflow(page);
 });
 
@@ -123,7 +123,7 @@ test("content swaps retain one interactive destination across pointer and immedi
 		return counts;
 	});
 	expect(sampledCounts).not.toContain(0);
-	await expect(page.locator("#workspace-decisions-heading")).toBeFocused();
+	await expect(page.getByRole("heading", { name: "Decisions", exact: true })).toBeFocused();
 	await expect(visible).toHaveCount(1);
 
 	await document.focus();
@@ -327,16 +327,16 @@ test("the compact side of the Projects transition keeps phone navigation", async
 	await expect(page.getByRole("button", { name: "Close conversation" })).toHaveCount(0);
 	await expect(content(page)).toBeHidden();
 	await expect(page.getByRole("separator", { name: "Resize the conversation" })).toHaveCount(0);
-	await expect(page.locator("#workspace-conversation-heading")).toBeFocused();
+	await expect(page.getByRole("heading", { name: "Conversation", exact: true })).toBeFocused();
 
 	await nav.getByRole("button", { name: "Document", exact: true }).click();
 	await expect(conversation).toBeHidden();
 	await expect(content(page)).toBeVisible();
-	await expect(page.locator("#workspace-plan-heading")).toBeFocused();
+	await expect(page.getByRole("heading", { name: "Document", exact: true })).toBeFocused();
 
 	await opener.click();
 	await expect(conversation).toBeVisible();
-	await expect(page.locator("#workspace-conversation-heading")).toBeFocused();
+	await expect(page.getByRole("heading", { name: "Conversation", exact: true })).toBeFocused();
 	await page.keyboard.press("Escape");
 	await expect(conversation).toBeHidden();
 	await expect(opener).toBeFocused();

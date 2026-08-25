@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 
-import { transitionDocumentRoute } from "./document-route-swap";
+import { documentRouteIdentity, transitionDocumentRoute } from "./document-route-swap";
 
-import type { DocumentRouteSwap } from "./document-route-swap";
+import type { DocumentRouteIdentity, DocumentRouteSwap } from "./document-route-swap";
 
 type Route = {
 	channel?: string;
@@ -31,6 +31,30 @@ let c: Route = {
 	source: { slug: "c" },
 };
 
+test("document route identities have one canonical encoding", () => {
+	let identity: DocumentRouteIdentity = documentRouteIdentity({
+		id: "channel-id",
+		page: "channel",
+	});
+	expect(String(identity)).toBe("channel:channel-id");
+	expect(String(documentRouteIdentity({
+		owner: "octo-org",
+		page: "document",
+		repository: "score",
+		slug: "launch-plan",
+	}))).toBe("document:octo-org/score/launch-plan");
+	expect(String(documentRouteIdentity({
+		owner: "octo-org",
+		page: "research",
+		repository: "score",
+		slug: "launch-plan",
+		workspaceId: "workspace-id",
+	}))).toBe("research:octo-org/score/launch-plan/workspace-id");
+	// @ts-expect-error Route identities must come from the canonical encoder.
+	let untyped: DocumentRouteIdentity = "document:octo-org/score/launch-plan";
+	void untyped;
+});
+
 test("a requested document remains pending until it resolves", () => {
 	let state: DocumentRouteSwap<Route> = { current: a };
 	state = transitionDocumentRoute(state, { route: b, type: "requested" });
@@ -45,14 +69,14 @@ test("reversing to a loaded route preserves metadata and updates input modality"
 	state = transitionDocumentRoute(state, { route: b, type: "requested" });
 	state = transitionDocumentRoute(state, { key: b.key, type: "ready" });
 	state = transitionDocumentRoute(state, {
-		channel: "loaded",
 		key: a.key,
+		resolution: "loaded",
 		type: "ready",
 	});
 	let requested = { ...a, immediately: false, source: { slug: "a" } };
 	state = transitionDocumentRoute(state, { route: requested, type: "requested" });
 	expect(state).toEqual({
-		current: { ...a, channel: "loaded", immediately: false },
+		current: { ...a, immediately: false, resolution: "loaded" },
 		previous: b,
 	});
 	expect(state.current.source).toBe(a.source);

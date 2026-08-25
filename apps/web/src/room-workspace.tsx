@@ -33,7 +33,7 @@ import { useNavigationDocument } from "./navigation-shell";
 import { NavigationIcon } from "./project-sidebar";
 import { peopleHere } from "./presence";
 import { Wire } from "./wire";
-import { HEADING, useWorkspaceMode, useWorkspaceState, Workspace } from "./workspace";
+import { useWorkspaceIds, useWorkspaceMode, useWorkspaceState, Workspace } from "./workspace";
 import { availableDocumentView, presentWorkspace, storedDocumentView } from "./workspace-model";
 
 import type { Research, Session } from "@chopin/protocol";
@@ -178,6 +178,7 @@ export function RoomWorkspace(
 	let metadataRef = useRef(metadata);
 	let user = useMemo(() => cursor(handle), [handle]);
 	let mode = useWorkspaceMode();
+	let workspaceIds = useWorkspaceIds();
 	let [workspace, dispatch] = useWorkspaceState();
 	let [questions] = useState(() => new QuestionnaireStore());
 	let [threads] = useState(() => new ThreadStore());
@@ -459,6 +460,7 @@ export function RoomWorkspace(
 					view={view}
 				/>
 			}
+			ids={workspaceIds}
 			mode={mode}
 			onDesktopConversationOpen={setDesktopConversationOpen}
 			onConversationOpen={open => dispatch({ type: "set-conversation", open })}
@@ -466,7 +468,7 @@ export function RoomWorkspace(
 			decisions={
 				<Decisions
 					connected={status === "connected" && workspaceCanEdit}
-					headingId={HEADING.decisions}
+					headingId={workspaceIds.heading.decisions}
 					motion={motionContract("collapse")}
 					motionImmediately={settleMotionImmediately}
 					onShowPlan={showPlan}
@@ -497,7 +499,7 @@ export function RoomWorkspace(
 					<BackgroundWork
 						canEdit={workspaceCanEdit}
 						connected={status === "connected"}
-						headingId={HEADING["background-work"]}
+						headingId={workspaceIds.heading["background-work"]}
 						motion={motionContract("collapse")}
 						motionImmediately={settleMotionImmediately}
 						store={jobs}

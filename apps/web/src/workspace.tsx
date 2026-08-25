@@ -1,6 +1,6 @@
 /** Three panes on one ground, with the document as the only raised surface. */
 
-import { useEffect, useLayoutEffect, useReducer, useRef, useSyncExternalStore } from "react";
+import { useEffect, useId, useLayoutEffect, useReducer, useRef, useSyncExternalStore } from "react";
 import { ContentSwapLayer } from "@chopin/editor/content-swap";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 
@@ -33,8 +33,22 @@ const CHAT_PANE = {
 	storageKey: "chopin:pane:chat",
 };
 
-export function paneId(pane: Pane): string {
-	return `pane-${pane}`;
+export type WorkspaceIds = {
+	heading: Record<WorkspaceDestination, string>;
+	pane: Record<Pane, string>;
+};
+
+export function useWorkspaceIds(): WorkspaceIds {
+	let instance = useId();
+	return {
+		heading: {
+			plan: `${instance}-workspace-plan-heading`,
+			decisions: `${instance}-workspace-decisions-heading`,
+			"background-work": `${instance}-workspace-background-work-heading`,
+			conversation: `${instance}-workspace-conversation-heading`,
+		},
+		pane: { chat: `${instance}-pane-chat` },
+	};
 }
 
 function currentMode(): WorkspaceMode {
@@ -78,6 +92,7 @@ export type WorkspaceProps = {
 	decisions: ReactNode;
 	backgroundWork?: ReactNode;
 	controls: ReactNode;
+	ids: WorkspaceIds;
 	mode: WorkspaceMode;
 	state: WorkspaceState;
 	view: "plan" | "decisions" | "background-work";
@@ -94,6 +109,7 @@ function ConversationToggle(
 		activity,
 		buttonRef,
 		className,
+		controls,
 		onToggle,
 		open,
 		swapOnHover = false,
@@ -101,6 +117,7 @@ function ConversationToggle(
 		activity: WorkspaceProps["conversationActivity"];
 		buttonRef?: RefObject<HTMLButtonElement | null>;
 		className?: string;
+		controls: string;
 		onToggle: () => void;
 		open: boolean;
 		swapOnHover?: boolean;
@@ -113,7 +130,7 @@ function ConversationToggle(
 		: undefined;
 	return (
 		<button
-			aria-controls={paneId("chat")}
+			aria-controls={controls}
 			aria-expanded={open}
 			aria-label={`${open ? "Hide" : "Show"} conversation pane${status ? `, ${status}` : ""}`}
 			className={`btn btn-icon btn-ghost relative shrink-0 ${className ?? ""}`}
@@ -154,13 +171,6 @@ function ConversationToggle(
 	);
 }
 
-export const HEADING: Record<WorkspaceDestination, string> = {
-	plan: "workspace-plan-heading",
-	decisions: "workspace-decisions-heading",
-	"background-work": "workspace-background-work-heading",
-	conversation: "workspace-conversation-heading",
-};
-
 function destinationLabel(
 	destination: WorkspaceDestination,
 	unanswered: number,
@@ -196,6 +206,7 @@ export function Workspace(
 		backgroundWork,
 		chat,
 		controls,
+		ids,
 		conversationActivity,
 		decisions,
 		header,
@@ -210,6 +221,7 @@ export function Workspace(
 	}: WorkspaceProps,
 ) {
 	let [chatWidth, resizeChat] = usePaneWidth({ active: mode === "split", ...CHAT_PANE });
+	let root = useRef<HTMLDivElement>(null);
 	let presentation = presentWorkspace(state, mode, view);
 	let immediately = motionImmediately();
 	let contentSwapMotion = motionContract("content-swap");
@@ -225,13 +237,17 @@ export function Workspace(
 	let destinations: WorkspaceDestination[] = backgroundWork
 		? ["conversation", "plan", "decisions", "background-work"]
 		: ["conversation", "plan", "decisions"];
+	let focusDestination = (destination: WorkspaceDestination) => {
+		root.current?.querySelector<HTMLElement>(`#${CSS.escape(ids.heading[destination])}`)
+			?.focus({ preventScroll: true });
+	};
 
 	useLayoutEffect(() => {
 		if (!previousConversationOpen.current && state.conversationOpen) {
 			let active = document.activeElement;
 			if (active instanceof HTMLElement) opener.current = active;
 			if (mode !== "split") {
-				document.getElementById(HEADING.conversation)?.focus({ preventScroll: true });
+				focusDestination("conversation");
 			}
 		}
 		previousConversationOpen.current = state.conversationOpen;
@@ -242,7 +258,7 @@ export function Workspace(
 		if (destination === "conversation") onConversationOpen(true);
 		else onDestination(destination);
 		requestAnimationFrame(() => {
-			document.getElementById(HEADING[destination])?.focus({ preventScroll: true });
+			focusDestination(destination);
 		});
 	};
 
@@ -259,7 +275,7 @@ export function Workspace(
 	let showDesktopConversation = () => {
 		onDesktopConversationOpen(true);
 		requestAnimationFrame(() => {
-			document.getElementById(HEADING.conversation)?.focus({ preventScroll: true });
+			focusDestination("conversation");
 		});
 	};
 
@@ -267,6 +283,7 @@ export function Workspace(
 		<div
 			className="workspace-root flex h-full flex-col overflow-hidden bg-ground"
 			data-workspace-mode={mode}
+			ref={root}
 		>
 			{header}
 
@@ -281,12 +298,12 @@ export function Workspace(
 				{chat && (
 					<aside
 						aria-hidden={conversationInactive || undefined}
-						aria-labelledby={HEADING.conversation}
+						aria-labelledby={ids.heading.conversation}
 						className={`workspace-conversation-panel motion-panel ${conversationPresence.className} order-2 relative flex min-w-0 flex-col overflow-hidden bg-conversation-pane ${
 							mode === "split" ? "hairline-l hairline-r hairline-b" : ""
 						}`}
 						hidden={conversationPresence.phase === "closed"}
-						id={paneId("chat")}
+						id={ids.pane.chat}
 						inert={conversationInactive}
 						onKeyDown={event => {
 							if (event.key === "Escape" && mode !== "split") {
@@ -315,20 +332,25 @@ export function Workspace(
 									<ConversationToggle
 										activity={conversationActivity}
 										className="conversation-header-control -ml-[5px] -mr-[5px]"
+										controls={ids.pane.chat}
 										onToggle={dismissConversation}
 										open
 										swapOnHover
 									/>
 									<h2
 										className="text-[14px] font-medium text-text-tertiary"
-										id={HEADING.conversation}
+										id={ids.heading.conversation}
 										tabIndex={-1}
 									>
 										Conversation
 									</h2>
 								</div>
 							)
-							: <h2 className="sr-only" id={HEADING.conversation} tabIndex={-1}>Conversation</h2>}
+							: (
+								<h2 className="sr-only" id={ids.heading.conversation} tabIndex={-1}>
+									Conversation
+								</h2>
+							)}
 						<div className="min-h-0 flex-1">
 							{chat}
 						</div>
@@ -341,6 +363,7 @@ export function Workspace(
 							activity={conversationActivity}
 							buttonRef={edgeTab}
 							className="rounded-l-none"
+							controls={ids.pane.chat}
 							onToggle={showDesktopConversation}
 							open={false}
 						/>
@@ -375,11 +398,11 @@ export function Workspace(
 								motion={contentSwapMotion}
 							>
 								<section
-									aria-labelledby={HEADING.plan}
+									aria-labelledby={ids.heading.plan}
 									className="h-full min-h-0"
 									data-document-view="plan"
 								>
-									<h2 className="sr-only" id={HEADING.plan} tabIndex={-1}>Document</h2>
+									<h2 className="sr-only" id={ids.heading.plan} tabIndex={-1}>Document</h2>
 									{plan}
 								</section>
 							</ContentSwapLayer>
@@ -390,7 +413,7 @@ export function Workspace(
 								motion={contentSwapMotion}
 							>
 								<section
-									aria-labelledby={HEADING.decisions}
+									aria-labelledby={ids.heading.decisions}
 									className="h-full min-h-0"
 									data-document-view="decisions"
 								>
@@ -406,7 +429,7 @@ export function Workspace(
 									motion={contentSwapMotion}
 								>
 									<section
-										aria-labelledby={HEADING["background-work"]}
+										aria-labelledby={ids.heading["background-work"]}
 										className="h-full min-h-0 overflow-auto"
 										data-document-view="background-work"
 									>
