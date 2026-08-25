@@ -55,13 +55,14 @@ export type HostedRoute =
 	| { page: "missing" };
 
 type DocumentRoute = Extract<HostedRoute, { page: "document" } | { page: "channel" }>;
-type KeyedDocumentRoute = { key: string; route: DocumentRoute };
+type KeyedDocumentRoute = { immediately: boolean; key: string; route: DocumentRoute };
 type DocumentRouteAction =
 	| { route: KeyedDocumentRoute; type: "requested" }
 	| { key: string; type: "resolved" | "closed" };
 
-function keyedDocumentRoute(route: DocumentRoute): KeyedDocumentRoute {
+function keyedDocumentRoute(route: DocumentRoute, immediately: boolean): KeyedDocumentRoute {
 	return {
+		immediately,
 		key: route.page === "channel"
 			? `channel:${route.id}`
 			: `document:${route.owner}/${route.repository}/${route.slug}`,
@@ -229,6 +230,7 @@ export function githubLoginHref(pathname: string, search = "", hash = ""): strin
 
 function ChannelWorkspace(
 	{
+		active = true,
 		agent,
 		id,
 		onResolved,
@@ -240,6 +242,7 @@ function ChannelWorkspace(
 		slug,
 		user,
 	}: {
+		active?: boolean;
 		agent: boolean;
 		id?: string;
 		onResolved?: (key: string) => void;
@@ -298,7 +301,6 @@ function ChannelWorkspace(
 						),
 				);
 				rememberChannel(user.id, value.channel, value.repository);
-				void onDocumentLoaded(value.channel, routeKey);
 			}
 			return value;
 		});
@@ -322,7 +324,6 @@ function ChannelWorkspace(
 		};
 	}, [
 		id,
-		onDocumentLoaded,
 		owner,
 		repository,
 		researchWorkspaceId,
@@ -331,6 +332,10 @@ function ChannelWorkspace(
 		slug,
 		user.id,
 	]);
+
+	useEffect(() => {
+		if (active && loaded) void onDocumentLoaded(loaded.detail.channel, routeKey);
+	}, [active, loaded, onDocumentLoaded, routeKey]);
 
 	useEffect(() => {
 		if (loaded || error !== undefined) onResolved?.(routeKey);
@@ -385,7 +390,7 @@ function ChannelWorkspace(
 function DocumentRouteSwap(
 	{ agent, route, user }: { agent: boolean; route: DocumentRoute; user: Api.User },
 ) {
-	let requested = keyedDocumentRoute(route);
+	let requested = keyedDocumentRoute(route, motionImmediately());
 	let [state, dispatch] = useReducer(
 		transitionDocumentRoute,
 		initialDocumentRouteSwap(requested),
@@ -397,7 +402,6 @@ function DocumentRouteSwap(
 	let layers = [state.previous, state.current, state.pending].filter(
 		(layer): layer is KeyedDocumentRoute => layer !== undefined,
 	);
-	let immediately = motionImmediately();
 	let motion = motionContract("content-swap");
 	let resolved = useCallback((key: string) => dispatch({ key, type: "resolved" }), []);
 
@@ -407,7 +411,7 @@ function DocumentRouteSwap(
 				<ContentSwapLayer
 					active={layer.key === state.current.key}
 					className="document-route-layer h-full min-h-0"
-					immediately={immediately}
+					immediately={state.current.immediately}
 					key={layer.key}
 					motion={motion}
 					onClosed={layer.key === state.previous?.key
@@ -415,6 +419,7 @@ function DocumentRouteSwap(
 						: undefined}
 				>
 					<ChannelWorkspace
+						active={layer.key === state.current.key}
 						agent={agent}
 						onResolved={resolved}
 						routeKey={layer.key}

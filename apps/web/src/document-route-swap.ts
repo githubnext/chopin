@@ -20,7 +20,7 @@ export function requestDocumentRoute<T extends KeyedDocumentRoute>(
 		return state.pending ? { current: state.current, previous: state.previous } : state;
 	}
 	if (requested.key === state.previous?.key) {
-		return { current: state.previous, previous: state.current };
+		return { current: requested, previous: state.current };
 	}
 	return { ...state, pending: requested };
 }
