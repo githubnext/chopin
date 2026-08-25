@@ -87,6 +87,7 @@ type ComposerProps = {
 type ComposerKeyHandler = (
 	event: {
 		key: string;
+		keyCode: number;
 		metaKey: boolean;
 		ctrlKey: boolean;
 		nativeEvent: { isComposing: boolean };
@@ -306,6 +307,7 @@ describe("research composer", () => {
 
 		handle({
 			key: "Enter",
+			keyCode: 13,
 			metaKey: true,
 			ctrlKey: false,
 			nativeEvent: { isComposing: false },
@@ -340,6 +342,7 @@ describe("research composer", () => {
 
 		handle({
 			key: "Enter",
+			keyCode: 13,
 			metaKey: true,
 			ctrlKey: false,
 			nativeEvent: { isComposing: false },
@@ -355,6 +358,71 @@ describe("research composer", () => {
 
 		expect(textarea.value).toBe(BASE.question);
 		expect(calls).toEqual(["prevent", "stop"]);
+	});
+
+	it("prevents plain Enter and submits without changing the question", async () => {
+		let handle = await composerKeyHandler();
+		if (!handle) return;
+		let calls: string[] = [];
+		handle({
+			key: "Enter",
+			keyCode: 13,
+			metaKey: false,
+			ctrlKey: false,
+			nativeEvent: { isComposing: false },
+			currentTarget: {
+				readOnly: false,
+				value: BASE.question,
+				selectionStart: BASE.question.length,
+				selectionEnd: BASE.question.length,
+				setRangeText: () => calls.push("mutate"),
+			},
+			preventDefault: () => calls.push("prevent"),
+			stopPropagation: () => calls.push("stop"),
+		}, {
+			dismissible: true,
+			onChange: () => calls.push("change"),
+			onDismiss: () => calls.push("dismiss"),
+			onSubmit: () => calls.push("submit"),
+		});
+
+		expect(calls).toEqual(["prevent", "stop", "submit"]);
+	});
+
+	it("leaves composing Enter untouched, including the final keyCode 229 event", async () => {
+		let handle = await composerKeyHandler();
+		if (!handle) return;
+		for (
+			let composing of [
+				{ isComposing: true, keyCode: 13 },
+				{ isComposing: false, keyCode: 229 },
+			]
+		) {
+			let calls: string[] = [];
+			handle({
+				key: "Enter",
+				keyCode: composing.keyCode,
+				metaKey: false,
+				ctrlKey: false,
+				nativeEvent: { isComposing: composing.isComposing },
+				currentTarget: {
+					readOnly: false,
+					value: BASE.question,
+					selectionStart: BASE.question.length,
+					selectionEnd: BASE.question.length,
+					setRangeText: () => calls.push("mutate"),
+				},
+				preventDefault: () => calls.push("prevent"),
+				stopPropagation: () => calls.push("stop"),
+			}, {
+				dismissible: true,
+				onChange: () => calls.push("change"),
+				onDismiss: () => calls.push("dismiss"),
+				onSubmit: () => calls.push("submit"),
+			});
+
+			expect(calls).toEqual([]);
+		}
 	});
 
 	it("renders one accessible circular send action", async () => {
@@ -460,6 +528,7 @@ describe("research composer", () => {
 		let calls: string[] = [];
 		handle({
 			key: "Escape",
+			keyCode: 27,
 			metaKey: false,
 			ctrlKey: false,
 			nativeEvent: { isComposing: false },
@@ -482,6 +551,7 @@ describe("research composer", () => {
 		handle(
 			{
 				key: "Escape",
+				keyCode: 27,
 				metaKey: false,
 				ctrlKey: false,
 				nativeEvent: { isComposing: false },

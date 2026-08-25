@@ -42,6 +42,37 @@ test("a pending legacy workspace has no standalone product surface", async ({ ba
 	await expect(page.getByText("This page does not exist.", { exact: true })).toBeVisible();
 });
 
+test("click and Tab both insert the inline Research draft", async ({ join, seed }) => {
+	await seed("# Research selection\n");
+	let page = await join("ana");
+	let editor = content(page);
+	let composer = page.getByRole("region", { name: "Research question", exact: true });
+
+	await editor.click();
+	await page.keyboard.press("Meta+End");
+	await page.keyboard.press("Enter");
+	await page.keyboard.type("/research");
+	await page.getByRole("listbox", { name: "Insert block" })
+		.getByRole("option", { name: "Research", exact: true })
+		.click();
+	await expect(composer.getByRole("textbox", { name: "Research question", exact: true }))
+		.toBeFocused();
+	await page.keyboard.press("Escape");
+	await expect(composer).toHaveCount(0);
+
+	await editor.click();
+	await page.keyboard.press("Meta+End");
+	await page.keyboard.press("Enter");
+	await page.keyboard.type("/research");
+	await expect(
+		page.getByRole("listbox", { name: "Insert block" })
+			.getByRole("option", { name: "Research", exact: true }),
+	).toBeVisible();
+	await page.keyboard.press("Tab");
+	await expect(composer.getByRole("textbox", { name: "Research question", exact: true }))
+		.toBeFocused();
+});
+
 test("a private research draft keeps its authored geometry until explicit dismissal", async ({ baseURL, join, room, seed }) => {
 	await seed(WORKSPACE_SOURCE);
 	let page = await join("ana");
