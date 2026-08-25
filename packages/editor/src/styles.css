@@ -238,6 +238,30 @@
 	box-shadow: var(--shadow-overlay);
 }
 
+.motion-comment-preview {
+	opacity: 0;
+	transform: scale(var(--dropdown-pre-scale));
+	transition:
+		opacity var(--dropdown-open-dur) var(--dropdown-ease),
+		transform var(--dropdown-open-dur) var(--dropdown-ease);
+	will-change: opacity, transform;
+}
+
+.motion-comment-preview.is-open {
+	opacity: 1;
+	transform: none;
+}
+
+.motion-comment-preview.is-closing {
+	opacity: 0;
+	transform: scale(var(--dropdown-closing-scale));
+	transition-duration: var(--dropdown-close-dur);
+}
+
+.motion-comment-preview[data-motion-immediate] {
+	transition: none;
+}
+
 .motion-comment-surface {
 	opacity: 0;
 	transform: scale(var(--dropdown-pre-scale));
@@ -301,6 +325,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+	.motion-comment-preview,
 	.motion-comment-surface {
 		transition: none;
 	}

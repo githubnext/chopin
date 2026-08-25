@@ -150,6 +150,7 @@
 
 	/* Surface motion uses semantic names so 120ms control feedback stays fast. */
 	--motion-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+	--motion-move: cubic-bezier(0.65, 0, 0.35, 1);
 	--dropdown-open-dur: 250ms;
 	--dropdown-close-dur: 150ms;
 	--dropdown-pre-scale: 0.97;
@@ -439,6 +440,32 @@ body {
 	transition-duration: var(--dropdown-close-dur);
 }
 
+.motion-popover {
+	opacity: 0;
+	transform: scale(var(--dropdown-pre-scale));
+	transform-origin: var(--motion-origin-x, 50%) var(--motion-origin-y, 50%);
+	transition:
+		opacity var(--dropdown-open-dur) var(--dropdown-ease),
+		transform var(--dropdown-open-dur) var(--dropdown-ease);
+	will-change: opacity, transform;
+}
+
+.motion-popover.is-open {
+	opacity: 1;
+	transform: scale(1);
+}
+
+.motion-popover.is-closing {
+	pointer-events: none;
+	opacity: 0;
+	transform: scale(var(--dropdown-closing-scale));
+	transition-duration: var(--dropdown-close-dur);
+}
+
+.motion-popover[data-motion-immediate] {
+	transition: none;
+}
+
 body {
 	margin: 0;
 	background: var(--color-ground);
@@ -690,6 +717,7 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
 	.motion-dropdown,
+	.motion-popover,
 	.motion-panel {
 		transition: none;
 	}

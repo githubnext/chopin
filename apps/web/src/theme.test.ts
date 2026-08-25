@@ -139,3 +139,48 @@ describe("sidebar navigation", () => {
 		expect(NAVIGATION).toMatch(/\.project-sidebar-project-row\s*{[^}]*gap:\s*10px/s);
 	});
 });
+
+describe("motion contracts", () => {
+	it("uses semantic tokens for app popovers", () => {
+		expect(THEME).toMatch(
+			/\.motion-popover\s*{[^}]*var\(--dropdown-open-dur\)[^}]*var\(--dropdown-ease\)/s,
+		);
+	});
+
+	it("settles app popovers under reduced motion", () => {
+		expect(THEME).toMatch(
+			/@media \(prefers-reduced-motion: reduce\)\s*{[\s\S]*?\.motion-popover[\s\S]*?transition:\s*none;[\s\S]*?}/,
+		);
+	});
+
+	it("uses the movement curve for the bounded sidebar track and child", () => {
+		expect(THEME).toMatch(/--motion-move:\s*cubic-bezier\([^)]+\);/);
+		expect(NAVIGATION).toMatch(
+			/\.motion-sidebar\s*{[^}]*var\(--sidebar-open-dur\)[^}]*var\(--motion-move\)/s,
+		);
+		expect(NAVIGATION).toMatch(
+			/\.motion-sidebar\s+\.project-sidebar\s*{[^}]*var\(--sidebar-open-dur\)[^}]*var\(--motion-move\)/s,
+		);
+	});
+
+	it("settles the sidebar track and child under reduced motion", () => {
+		expect(NAVIGATION).toMatch(
+			/@media \(prefers-reduced-motion: reduce\)\s*{[\s\S]*?\.motion-sidebar[\s\S]*?\.motion-sidebar \.project-sidebar[\s\S]*?transition:\s*none;[\s\S]*?}/,
+		);
+	});
+
+	it("uses semantic dropdown timing for comment previews", () => {
+		expect(STYLES).toMatch(
+			/\.motion-comment-preview\s*{[^}]*var\(--dropdown-open-dur\)[^}]*var\(--dropdown-ease\)/s,
+		);
+		expect(STYLES).toMatch(
+			/\.motion-comment-preview\.is-closing\s*{[^}]*var\(--dropdown-close-dur\)/s,
+		);
+	});
+
+	it("settles comment previews under reduced motion", () => {
+		expect(STYLES).toMatch(
+			/@media \(prefers-reduced-motion: reduce\)\s*{[\s\S]*?\.motion-comment-preview[\s\S]*?transition:\s*none;[\s\S]*?}/,
+		);
+	});
+});

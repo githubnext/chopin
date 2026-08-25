@@ -477,23 +477,89 @@ test("cancelling asks first", async ({ join, seed }) => {
 	await expect(card.getByRole("button", { name: "Save answer" })).toBeVisible();
 });
 
-test("a marked passage has document chrome with a hover preview", async ({ join, seed }) => {
+test("comment preview motion retains one tooltip through pointer interruption", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
 
 	let button = commentButton(page);
 	await expect(button).toBeVisible();
+	let initial = page.evaluate(() =>
+		new Promise<{ opacity: string; transform: string }>(resolve => {
+			let observer = new MutationObserver(() => {
+				let tooltip = document.querySelector<HTMLElement>(".motion-comment-preview");
+				if (!tooltip) return;
+				observer.disconnect();
+				let style = getComputedStyle(tooltip);
+				resolve({ opacity: style.opacity, transform: style.transform });
+			});
+			observer.observe(document.body, { childList: true, subtree: true });
+		})
+	);
 	await button.hover();
-	let preview = page.getByRole("tooltip");
+	let preview = page.locator(".motion-comment-preview");
 	await expect(preview).toContainText(QUOTED);
+	expect(await initial).not.toEqual({ opacity: "1", transform: "none" });
+	await expect(preview).toHaveClass(/is-open/);
 	let previewId = await preview.getAttribute("id");
 	expect(previewId).not.toBeNull();
 	await expect(button).toHaveAttribute("aria-describedby", previewId!);
 
+	let closing = preview.evaluate(element =>
+		new Promise<void>(resolve => {
+			let observer = new MutationObserver(() => {
+				if (element.getAttribute("aria-hidden") !== "true") return;
+				observer.disconnect();
+				resolve();
+			});
+			observer.observe(element, { attributes: true });
+		})
+	);
+	await page.getByRole("button", { name: "Document", exact: true }).hover();
+	await closing;
+	await expect(button).not.toHaveAttribute("aria-describedby", previewId!);
+	await expect(preview).toHaveAttribute("aria-hidden", "true");
+	await expect(preview).toHaveAttribute("inert", "");
+
+	await button.hover();
+	await expect(page.locator(".motion-comment-preview")).toHaveCount(1);
+	await expect(preview).not.toHaveAttribute("aria-hidden", "true");
+	await expect(preview).not.toHaveAttribute("inert", "");
+	await expect(preview).toHaveClass(/is-open/);
+});
+
+test("comment preview motion settles for keyboard and reactive reduced motion", async ({ join, seed }) => {
+	await seed(PROSE);
+	let page = await join("ana");
+	let button = commentButton(page);
+
+	await page.keyboard.press("Alt");
 	await button.focus();
-	await expect(page.getByRole("tooltip")).toBeVisible();
+	let preview = page.getByRole("tooltip");
+	await expect(preview).toBeVisible();
+	await expect(preview).toHaveCSS("transition-duration", "0s");
 	await page.keyboard.press("Escape");
-	await expect(page.getByRole("tooltip")).toHaveCount(0);
+	await expect(preview).toHaveCount(0);
+
+	await button.evaluate(element => element.blur());
+	await page.emulateMedia({ reducedMotion: "no-preference" });
+	await page.getByRole("button", { name: "Document", exact: true }).click();
+	await button.hover();
+	preview = page.locator(".motion-comment-preview");
+	await expect(preview).toHaveClass(/is-open/);
+	let closing = preview.evaluate(element =>
+		new Promise<void>(resolve => {
+			let observer = new MutationObserver(() => {
+				if (element.getAttribute("aria-hidden") !== "true") return;
+				observer.disconnect();
+				resolve();
+			});
+			observer.observe(element, { attributes: true });
+		})
+	);
+	await page.getByRole("button", { name: "Document", exact: true }).hover();
+	await closing;
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	await expect(preview).toHaveCount(0);
 });
 
 test("a compact new-comment sheet blocks navigation and restores editor focus", async ({ join, seed }) => {
