@@ -7,9 +7,9 @@ import {
 	resolveDocumentRoute,
 } from "./document-route-swap";
 
-let a = { key: "document:a", slug: "a" };
-let b = { key: "document:b", slug: "b" };
-let c = { key: "document:c", slug: "c" };
+let a = { immediately: true, key: "document:a", slug: "a" };
+let b = { immediately: false, key: "document:b", slug: "b" };
+let c = { immediately: false, key: "document:c", slug: "c" };
 
 test("a requested document remains pending until it resolves", () => {
 	let state = initialDocumentRouteSwap(a);
@@ -22,8 +22,9 @@ test("a requested document remains pending until it resolves", () => {
 
 test("requesting the outgoing route reverses an active swap", () => {
 	let state = resolveDocumentRoute(requestDocumentRoute(initialDocumentRouteSwap(a), b), b.key);
-	state = requestDocumentRoute(state, a);
-	expect(state).toEqual({ current: a, previous: b });
+	let requested = { ...a, immediately: false };
+	state = requestDocumentRoute(state, requested);
+	expect(state).toEqual({ current: requested, previous: b });
 });
 
 test("rapid requests cancel pending work and preserve the requested visible route", () => {
