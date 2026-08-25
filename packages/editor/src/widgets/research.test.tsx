@@ -103,8 +103,8 @@ async function deletionGuard() {
 	return module.registerResearchDeletion;
 }
 
-function mutableStore(request: Research.RequestView): {
-	set(next: Research.RequestView): void;
+function mutableStore(request: Research.RequestView | undefined): {
+	set(next: Research.RequestView | undefined): void;
 	store: Store;
 } {
 	let current = request;
@@ -113,11 +113,11 @@ function mutableStore(request: Research.RequestView): {
 		store: {
 			subscribe: () => () => {},
 			retain: () => () => {},
-			get: id => id === current.id ? current : undefined,
+			get: () => current,
 			refresh() {},
-			create: async () => current,
-			cancel: async () => current,
-			retry: async () => current,
+			create: async () => current ?? BASE,
+			cancel: async () => current ?? BASE,
+			retry: async () => current ?? BASE,
 			opener: () => ({ current: null }),
 			open() {},
 		},
@@ -173,6 +173,19 @@ function deletionEditor() {
 		COMMAND_PRIORITY_LOW,
 	);
 	return editor;
+}
+
+function selectResearch(editor: ReturnType<typeof createHeadlessEditor>): string {
+	let key = "";
+	editor.update(() => {
+		let node = $createResearchNode(BASE.id);
+		$getRoot().append(node);
+		key = node.getKey();
+		let selection = $createNodeSelection();
+		selection.add(key);
+		$setSelection(selection);
+	}, { discrete: true });
+	return key;
 }
 
 async function components() {
@@ -374,21 +387,54 @@ describe("research card", () => {
 });
 
 describe("active research deletion", () => {
+	it("blocks deletion while publication is still in progress", async () => {
+		let state = mutableStore({ ...BASE, stage: "publishing" });
+		let editor = deletionEditor();
+		let register = await deletionGuard();
+		if (!register) return;
+		register(editor, state.store);
+		let key = selectResearch(editor);
+
+		expect(editor.dispatchCommand(DELETE_CHARACTER_COMMAND, true)).toBe(true);
+		editor.update(() => {}, { discrete: true });
+		editor.getEditorState().read(() => expect($getNodeByKey(key)).not.toBeNull());
+	});
+
+	it("fails closed while the initial request load is unresolved", async () => {
+		let state = mutableStore(undefined);
+		let editor = deletionEditor();
+		let register = await deletionGuard();
+		if (!register) return;
+		register(editor, state.store);
+		let key = selectResearch(editor);
+
+		expect(editor.dispatchCommand(DELETE_CHARACTER_COMMAND, true)).toBe(true);
+		editor.update(() => {}, { discrete: true });
+		editor.getEditorState().read(() => expect($getNodeByKey(key)).not.toBeNull());
+	});
+
+	it("allows deletion only after a removable terminal snapshot loads", async () => {
+		for (let stage of ["failed", "cancelled", "ready"] as const) {
+			let state = mutableStore({ ...BASE, stage });
+			let editor = deletionEditor();
+			let register = await deletionGuard();
+			if (!register) return;
+			register(editor, state.store);
+			let key = selectResearch(editor);
+
+			expect(editor.dispatchCommand(DELETE_CHARACTER_COMMAND, true)).toBe(true);
+			editor.update(() => {}, { discrete: true });
+			editor.getEditorState().read(() => expect($getNodeByKey(key)).toBeNull());
+		}
+	});
+
 	it("blocks a selected active reference until cancellation makes removal explicit", async () => {
 		let state = mutableStore(BASE);
 		let editor = deletionEditor();
 		let register = await deletionGuard();
 		if (!register) return;
 		let unregister = register(editor, state.store);
-		let key = "";
-		editor.update(() => {
-			let node = $createResearchNode(BASE.id);
-			$getRoot().append(node);
-			key = node.getKey();
-			let selection = $createNodeSelection();
-			selection.add(key);
-			$setSelection(selection);
-		}, { discrete: true });
+		let key = selectResearch(editor);
 
 		expect(editor.dispatchCommand(DELETE_CHARACTER_COMMAND, true)).toBe(true);
 		editor.getEditorState().read(() => expect($getNodeByKey(key)).not.toBeNull());

@@ -35,12 +35,7 @@ const STAGES: Record<Research.RequestStage, string> = {
 	cancelled: "Research cancelled",
 };
 
-const ACTIVE_STAGES = new Set<Research.RequestStage>([
-	"queued",
-	"searching",
-	"analyzing",
-	"writing",
-]);
+const REMOVABLE_STAGES = new Set<Research.RequestStage>(["failed", "cancelled", "ready"]);
 
 export type ResearchComposerProps = {
 	blocked?: string;
@@ -276,10 +271,10 @@ export function researchActions(
 	return NONE;
 }
 
-function activeResearch(node: LexicalNode, store: ResearchStore): boolean {
+function protectedResearch(node: LexicalNode, store: ResearchStore): boolean {
 	if (!$isResearchNode(node)) return false;
 	let request = store.get(node.getId());
-	return request !== undefined && ACTIVE_STAGES.has(request.stage);
+	return request === undefined || !REMOVABLE_STAGES.has(request.stage);
 }
 
 function edgeNode(node: LexicalNode | null, backward: boolean): LexicalNode | null {
@@ -314,15 +309,15 @@ function adjacentNode(selection: RangeSelection, backward: boolean): LexicalNode
 function protectsActiveResearch(store: ResearchStore, backward?: boolean): boolean {
 	let selection = $getSelection();
 	if ($isNodeSelection(selection)) {
-		return selection.getNodes().some(node => activeResearch(node, store));
+		return selection.getNodes().some(node => protectedResearch(node, store));
 	}
 	if (!$isRangeSelection(selection)) return false;
 	if (!selection.isCollapsed()) {
-		return selection.getNodes().some(node => activeResearch(node, store));
+		return selection.getNodes().some(node => protectedResearch(node, store));
 	}
 	if (backward === undefined) return false;
 	let adjacent = adjacentNode(selection, backward);
-	return adjacent !== null && activeResearch(adjacent, store);
+	return adjacent !== null && protectedResearch(adjacent, store);
 }
 
 export function registerResearchDeletion(editor: LexicalEditor, store: ResearchStore): () => void {
