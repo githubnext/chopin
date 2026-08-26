@@ -94,7 +94,6 @@ test("closed result trigger does not reference its unmounted result region", asy
 			className: "motion-collapse",
 			closeDuration: 250,
 			contentClassName: "motion-collapse-content",
-			iconClassName: "motion-disclosure-icon",
 		},
 		store: await completedResultStore(),
 	}));

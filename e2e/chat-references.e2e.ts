@@ -125,21 +125,78 @@ test("typed references survive Planner send, reload, navigation, and a mobile co
 		`@chopin Compare #${targetTitle} and %${researchTitle} with [external docs](https://example.com).`;
 	await expect(draft).toHaveValue(expected);
 	let send = conversation.getByRole("button", { name: "Send message" });
+	await send.hover();
+	await page.evaluate(() => {
+		let record = { ends: 0, starts: 0 };
+		Reflect.set(window, "__feedbackAlertTransitions", record);
+		document.addEventListener("transitionstart", event => {
+			if (
+				event.target instanceof Element
+				&& event.target.matches('[data-motion-feedback="alert"]')
+			) record.starts++;
+		}, true);
+		document.addEventListener("transitionend", event => {
+			if (
+				event.target instanceof Element
+				&& event.target.matches('[data-motion-feedback="alert"]')
+			) record.ends++;
+		}, true);
+	});
 	await send.click();
 	await expect(send).toBeDisabled();
 	await expect(draft).toHaveAttribute("readonly", "");
 	await expect(draft).toHaveAttribute("aria-disabled", "true");
 	let error = conversation.getByRole("alert");
 	await expect(error).toContainText("Message not sent: Unavailable");
-	await expect(error).toHaveCSS("animation-name", "feedback-alert-enter");
+	expect(
+		await error.evaluate(element =>
+			getComputedStyle(element).transitionDuration.split(",").some(duration =>
+				parseFloat(duration) > 0
+			)
+		),
+	).toBe(true);
+	await expect.poll(() =>
+		page.evaluate(() => {
+			let record = Reflect.get(window, "__feedbackAlertTransitions") as {
+				ends: number;
+				starts: number;
+			};
+			return record.starts > 0 && record.ends >= record.starts;
+		})
+	).toBe(true);
 	expect((await error.textContent())!.length).toBeLessThan(150);
 	await expect(draft).toHaveValue(expected);
 	await expect(draft).toBeFocused();
 	await expect(send).toBeEnabled();
+	let starts = await page.evaluate(() => {
+		let record = Reflect.get(window, "__feedbackAlertTransitions") as { starts: number };
+		return record.starts;
+	});
 	await draft.press("ArrowLeft");
-	await expect(error).toHaveCSS("animation-name", "none");
+	await error.evaluate(() =>
+		new Promise<void>(resolve => {
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+		})
+	);
+	await expect(error).toHaveCSS("transition-duration", "0s");
+	expect(
+		await page.evaluate(() => {
+			let record = Reflect.get(window, "__feedbackAlertTransitions") as { starts: number };
+			return record.starts;
+		}),
+	).toBe(starts);
 	await error.hover();
-	await expect(error).toHaveCSS("animation-name", "none");
+	await error.evaluate(() =>
+		new Promise<void>(resolve => {
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+		})
+	);
+	expect(
+		await page.evaluate(() => {
+			let record = Reflect.get(window, "__feedbackAlertTransitions") as { starts: number };
+			return record.starts;
+		}),
+	).toBe(starts);
 	await draft.press("End");
 	await draft.press("Enter");
 

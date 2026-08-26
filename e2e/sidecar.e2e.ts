@@ -499,9 +499,32 @@ test("decision cards save independently with progressive custom answers", async 
 
 	let history = page.getByRole("button", { name: "1 resolved" });
 	let historyIcon = history.locator("[data-feedback-icon]");
+	await history.hover();
+	await page.evaluate(() => {
+		let record = { starts: 0 };
+		Reflect.set(window, "__feedbackIconTransitions", record);
+		document.addEventListener("transitionstart", event => {
+			if (
+				event.target instanceof Element
+				&& event.target.matches('[data-motion-feedback="icon"]')
+			) record.starts++;
+		}, true);
+	});
 	await history.click();
 	await expect(historyIcon).toHaveAttribute("data-feedback-icon", "open");
-	await expect(historyIcon).toHaveCSS("animation-name", "feedback-icon-enter");
+	expect(
+		await historyIcon.evaluate(element =>
+			getComputedStyle(element).transitionDuration.split(",").some(duration =>
+				parseFloat(duration) > 0
+			)
+		),
+	).toBe(true);
+	await expect.poll(() =>
+		page.evaluate(() => {
+			let record = Reflect.get(window, "__feedbackIconTransitions") as { starts: number };
+			return record.starts > 0;
+		})
+	).toBe(true);
 	let historyContent = page.locator('[data-motion-disclosure="decision-history"]');
 	await expect(historyContent).toBeVisible();
 	let historyId = await historyContent.getAttribute("id");
@@ -512,18 +535,37 @@ test("decision cards save independently with progressive custom answers", async 
 	await expect(resolved).toContainText("On disk as MDX");
 	await expect(resolved).toContainText("Answered by @ana");
 	await expect(resolved.getByRole("button", { name: "Save answer" })).toHaveCount(0);
+	let iconStarts = await page.evaluate(() => {
+		let record = Reflect.get(window, "__feedbackIconTransitions") as { starts: number };
+		return record.starts;
+	});
 	await history.focus();
 	await page.keyboard.press("Space");
 	await expect(historyIcon).toHaveAttribute("data-feedback-icon", "closed");
-	await expect(historyIcon).toHaveCSS("animation-duration", "0s");
-	await historyIcon.evaluate(element => {
-		element.addEventListener(
-			"animationstart",
-			() => element.setAttribute("data-motion-replayed", ""),
-		);
-	});
+	await historyIcon.evaluate(() =>
+		new Promise<void>(resolve => {
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+		})
+	);
+	await expect(historyIcon).toHaveCSS("transition-duration", "0s");
+	expect(
+		await page.evaluate(() => {
+			let record = Reflect.get(window, "__feedbackIconTransitions") as { starts: number };
+			return record.starts;
+		}),
+	).toBe(iconStarts);
 	await historyIcon.hover();
-	await expect(historyIcon).not.toHaveAttribute("data-motion-replayed");
+	await historyIcon.evaluate(() =>
+		new Promise<void>(resolve => {
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+		})
+	);
+	expect(
+		await page.evaluate(() => {
+			let record = Reflect.get(window, "__feedbackIconTransitions") as { starts: number };
+			return record.starts;
+		}),
+	).toBe(iconStarts);
 	await expect(history).not.toHaveAttribute("aria-controls");
 	await expect(historyContent).toHaveCount(0);
 
@@ -532,10 +574,34 @@ test("decision cards save independently with progressive custom answers", async 
 	await page.keyboard.press("Space");
 	let custom = scope.getByRole("textbox", { name: "Custom answer for Scope" });
 	await expect(custom).toBeFocused();
-	await scope.getByRole("button", { name: "Save answer" }).click();
+	let saveScope = scope.getByRole("button", { name: "Save answer" });
+	await saveScope.hover();
+	await page.evaluate(() => {
+		let record = { starts: 0 };
+		Reflect.set(window, "__feedbackAlertTransitions", record);
+		document.addEventListener("transitionstart", event => {
+			if (
+				event.target instanceof Element
+				&& event.target.matches('[data-motion-feedback="alert"]')
+			) record.starts++;
+		}, true);
+	});
+	await saveScope.click();
 	let alert = scope.getByRole("alert");
 	await expect(alert).toBeVisible();
-	await expect(alert).toHaveCSS("animation-name", "feedback-alert-enter");
+	expect(
+		await alert.evaluate(element =>
+			getComputedStyle(element).transitionDuration.split(",").some(duration =>
+				parseFloat(duration) > 0
+			)
+		),
+	).toBe(true);
+	await expect.poll(() =>
+		page.evaluate(() => {
+			let record = Reflect.get(window, "__feedbackAlertTransitions") as { starts: number };
+			return record.starts > 0;
+		})
+	).toBe(true);
 	await custom.fill("Only collaborative anchors");
 	await scope.getByRole("checkbox", { name: "Anchors" }).check();
 	await expect(custom).toHaveCount(0);

@@ -6,7 +6,6 @@ type MotionContract = {
 	className: string;
 	closeDuration: number;
 	contentClassName?: string;
-	iconClassName?: string;
 	states: typeof MOTION_STATES;
 };
 
@@ -15,7 +14,6 @@ let contracts = {
 		className: "motion-collapse",
 		closeDuration: 250,
 		contentClassName: "motion-collapse-content",
-		iconClassName: "motion-disclosure-icon",
 		states: MOTION_STATES,
 	},
 	"content-swap": {

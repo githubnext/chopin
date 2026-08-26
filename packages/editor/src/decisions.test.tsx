@@ -47,7 +47,6 @@ function markup(stored?: string): string {
 		className: "motion-collapse",
 		closeDuration: 250,
 		contentClassName: "motion-collapse-content",
-		iconClassName: "motion-disclosure-icon",
 	};
 	return renderToStaticMarkup(createElement(Decisions, { motion, store }));
 }

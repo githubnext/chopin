@@ -6,7 +6,7 @@ import { TerminalAlert } from "./terminal-alert";
 
 test("terminal alerts own accessible feedback markup", () => {
 	let markup = renderToStaticMarkup(
-		createElement(TerminalAlert, { className: "surface-error" }, "Could not save"),
+		createElement(TerminalAlert, { children: "Could not save", className: "surface-error" }),
 	);
 	expect(markup).toContain('role="alert"');
 	expect(markup).toContain('data-motion-feedback="alert"');

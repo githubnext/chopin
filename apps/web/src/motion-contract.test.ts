@@ -19,7 +19,6 @@ describe("motion contracts", () => {
 			className: "motion-collapse",
 			closeDuration: 250,
 			contentClassName: "motion-collapse-content",
-			iconClassName: "motion-disclosure-icon",
 			states: MOTION_STATES,
 		});
 		expect(motionContract("content-swap")).toEqual({
