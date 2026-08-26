@@ -68,7 +68,7 @@ export class ResearchRequestStore implements ResearchStore {
 	}
 
 	subscribe(listener: () => void): () => void {
-		if (this.#disposed) return () => {};
+		this.#disposed = false;
 		this.#listeners.add(listener);
 		this.#schedulePolling();
 		return () => {
@@ -78,7 +78,7 @@ export class ResearchRequestStore implements ResearchStore {
 	}
 
 	retain(id: string): () => void {
-		if (this.#disposed) return () => {};
+		this.#disposed = false;
 		this.#references.set(id, (this.#references.get(id) ?? 0) + 1);
 		void this.#load(id);
 		let retained = true;
@@ -109,6 +109,7 @@ export class ResearchRequestStore implements ResearchStore {
 	}
 
 	async create(question: string, requestId: string): Promise<Research.RequestView> {
+		this.#disposed = false;
 		let result = await this.#api.create(this.#channelId, question, requestId);
 		return this.#accept(result.request.id, result.request);
 	}
