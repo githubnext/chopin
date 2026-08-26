@@ -113,6 +113,52 @@ test("filtering resets the option Enter will choose", async ({ join }) => {
 	await expect(page.getByRole("combobox", { name: "Change callout type: Note" })).toBeVisible();
 });
 
+test("slash menu Arrow navigation changes selection without colour transitions", async ({ join, page }) => {
+	await page.emulateMedia({ reducedMotion: "no-preference" });
+	await join("ana");
+	await content(page).click();
+	await page.keyboard.type("/");
+
+	let menu = page.getByRole("listbox", MENU);
+	await expect(menu).toBeVisible();
+	let selected = menu.getByRole("option", { selected: true });
+	let initial = await selected.textContent();
+	await selected.evaluate(() =>
+		new Promise<void>(resolve =>
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+		)
+	);
+	await page.evaluate(() => {
+		let record = { properties: [] as string[], starts: 0 };
+		Reflect.set(window, "__immediateMenuTransitions", record);
+		document.addEventListener("transitionstart", event => {
+			if (
+				event instanceof TransitionEvent
+				&& event.target instanceof Element
+				&& event.target.matches(".plan-menu-row, .plan-menu-cell")
+			) {
+				record.properties.push(event.propertyName);
+				if (["background-color", "color"].includes(event.propertyName)) record.starts++;
+			}
+		}, true);
+	});
+
+	await page.keyboard.press("ArrowDown");
+	await expect(selected).not.toHaveText(initial!);
+	await selected.evaluate(() =>
+		new Promise<void>(resolve =>
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+		)
+	);
+	let transitions = await page.evaluate(() =>
+		Reflect.get(window, "__immediateMenuTransitions") as {
+			properties: string[];
+			starts: number;
+		}
+	);
+	expect(transitions).toEqual({ properties: [], starts: 0 });
+});
+
 test("a callout edits like prose and keeps its type controls out of the way", async ({ join, room }) => {
 	let page = await join("ana");
 	let callout = await insertCallout(page);

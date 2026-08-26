@@ -26,8 +26,13 @@ type Oklch = { l: number; c: number; h: number };
 
 const THEME = readFileSync(join(import.meta.dir, "theme.css"), "utf8");
 const NAVIGATION = readFileSync(join(import.meta.dir, "navigation.css"), "utf8");
+const RESEARCH = readFileSync(join(import.meta.dir, "research-workspace.css"), "utf8");
 const STYLES = readFileSync(
 	join(import.meta.dir, "../../../packages/editor/src/styles.css"),
+	"utf8",
+);
+const FEEDBACK = readFileSync(
+	join(import.meta.dir, "../../../packages/editor/src/feedback.css"),
 	"utf8",
 );
 
@@ -228,6 +233,15 @@ describe("disclosure motion", () => {
 });
 
 describe("feedback motion", () => {
+	it("gates picker option colour feedback on pointer modality", () => {
+		expect(THEME).toMatch(
+			/:root\[data-motion-input="pointer"\]\s+\.motion-picker-option\s*{[^}]*background-color var\(--duration-fast\) var\(--ease-out\)/s,
+		);
+		expect(THEME).toMatch(
+			/@media \(prefers-reduced-motion: reduce\)\s*{[\s\S]*?:root\[data-motion-input="pointer"\]\s+\.motion-picker-option\s*{[^}]*transition:\s*none;/,
+		);
+	});
+
 	it("uses CSS-native starting styles for one-shot pointer feedback", () => {
 		for (
 			let [kind, duration] of [
@@ -302,5 +316,61 @@ describe("feedback motion", () => {
 			/:root\[data-motion-input="pointer"\]\s+\.motion-feedback\[data-motion-feedback\]\s*{/,
 		);
 		expect(reduced).toMatch(/transition-duration:\s*0s;/);
+	});
+});
+
+describe("editor feedback motion", () => {
+	it("uses host semantic timing and easing only for pointer-owned feedback", () => {
+		for (
+			let [kind, duration] of [
+				["icon", "icon-swap-dur"],
+				["count", "badge-pop-dur"],
+				["alert", "toast-open"],
+			]
+		) {
+			expect(FEEDBACK).toMatch(
+				new RegExp(
+					`:root\\[data-motion-input="pointer"\\]\\s+\\.editor-motion-feedback\\[data-motion-feedback="${kind}"\\]\\s*{[^}]*transition-duration: var\\(--${duration}\\)[^}]*transition-timing-function: var\\(--motion-smooth-out\\)`,
+					"s",
+				),
+			);
+		}
+		expect(FEEDBACK).not.toMatch(
+			/(?:^|})\s*\.editor-motion-feedback\[data-motion-feedback="(?:icon|count|alert)"\]\s*{[^}]*transition-duration/s,
+		);
+	});
+
+	it("starts editor icon, count, and alert feedback from their semantic origins", () => {
+		let starting = FEEDBACK.slice(FEEDBACK.indexOf("@starting-style"));
+		for (
+			let [kind, origin] of [
+				["icon", "scale(0.96)"],
+				["count", "translateY(2px) scale(0.96)"],
+				["alert", "translateY(4px)"],
+			]
+		) {
+			expect(starting).toMatch(
+				new RegExp(
+					`\\.editor-motion-feedback\\[data-motion-feedback="${kind}"\\]\\s*{[^}]*opacity: 0;[^}]*transform: ${
+						origin.replace(/[().]/g, "\\$&")
+					}`,
+					"s",
+				),
+			);
+		}
+	});
+
+	it("settles pointer-owned editor feedback under reduced motion", () => {
+		expect(FEEDBACK).toMatch(
+			/@media \(prefers-reduced-motion: reduce\)\s*{[^}]*:root\[data-motion-input="pointer"\]\s+\.editor-motion-feedback\[data-motion-feedback\]\s*{[^}]*transition-duration:\s*0s;/s,
+		);
+	});
+});
+
+describe("research route alerts", () => {
+	it("keeps stable spacing between the route failure heading and actions", () => {
+		expect(RESEARCH).toMatch(
+			/\.research-route-alert\s*{[^}]*margin:\s*8px 0 20px;/s,
+		);
 	});
 });

@@ -565,6 +565,12 @@ body {
 	transition: opacity var(--duration-fast) var(--ease-out);
 }
 
+:root[data-motion-input="pointer"] .motion-picker-option {
+	transition:
+		background-color var(--duration-fast) var(--ease-out),
+		scale var(--duration-fast) var(--ease-out);
+}
+
 body {
 	margin: 0;
 	background: var(--color-ground);
@@ -801,6 +807,10 @@ body {
 	}
 
 	:root[data-motion-input="pointer"] .conversation-toggle-icon {
+		transition: none;
+	}
+
+	:root[data-motion-input="pointer"] .motion-picker-option {
 		transition: none;
 	}
 

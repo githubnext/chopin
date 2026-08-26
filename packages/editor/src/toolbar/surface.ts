@@ -33,9 +33,8 @@ export function listenToEditorGeometry(editor: LexicalEditor, listener: () => vo
 }
 
 export const SHELL = "fixed z-50 rounded-lg bg-page p-1 ring-hairline shadow-raised";
-export const ROW =
-	"plan-menu-row flex h-8 w-full items-center rounded-sm px-2 text-left text-sm transition";
-export const CELL = "plan-menu-cell size-7 shrink-0 rounded-sm text-sm font-semibold transition";
+export const ROW = "plan-menu-row flex h-8 w-full items-center rounded-sm px-2 text-left text-sm";
+export const CELL = "plan-menu-cell size-7 shrink-0 rounded-sm text-sm font-semibold";
 export const CELL_ON = "bg-selected text-text-primary";
 export const CELL_OFF = "text-text-tertiary hover:bg-hover hover:text-text-primary";
 export const DIVIDER = "my-1 hairline-b";

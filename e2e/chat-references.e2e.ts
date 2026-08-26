@@ -349,10 +349,30 @@ test("a disconnect rejects a pending send without losing its draft", async ({ jo
 	let draft = conversation.getByPlaceholder("Use @chopin to ask Chopin");
 	let value = "Keep this draft through disconnect";
 	await draft.fill(value);
+	await page.evaluate(() => {
+		let record = { starts: 0 };
+		Reflect.set(window, "__disconnectAlertTransitions", record);
+		document.addEventListener("transitionstart", event => {
+			if (
+				event.target instanceof Element
+				&& event.target.matches('[data-motion-feedback="alert"]')
+			) record.starts++;
+		}, true);
+	});
 	await conversation.getByRole("button", { name: "Send message" }).click();
 	let error = conversation.getByRole("alert");
 	await expect(error).toContainText("Check the connection and try again");
-	await expect(error).toHaveCSS("animation-name", "none");
+	await expect(error).toHaveCSS("transition-duration", "0s");
+	await error.evaluate(() =>
+		new Promise<void>(resolve =>
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+		)
+	);
+	expect(
+		await page.evaluate(() =>
+			(Reflect.get(window, "__disconnectAlertTransitions") as { starts: number }).starts
+		),
+	).toBe(0);
 	await expect(draft).toHaveValue(value);
 	await expect(draft).toBeFocused();
 });
