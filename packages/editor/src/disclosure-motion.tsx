@@ -55,7 +55,7 @@ export function MotionDisclosureIcon(
 	return (
 		<span
 			aria-hidden="true"
-			className={className}
+			className={`${className} inline-flex`}
 			data-feedback-icon={state}
 			data-motion-feedback="icon"
 			key={state}
