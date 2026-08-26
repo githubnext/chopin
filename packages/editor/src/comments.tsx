@@ -104,7 +104,7 @@ function Quote(
 					)
 					: <blockquote className={`${QUOTED} min-w-0 flex-1`}>{text}</blockquote>}
 				{replies > 0 && (
-					<Count>
+					<Count motion>
 						{replies}
 						<span className="sr-only">{replies === 1 ? " reply" : " replies"}</span>
 					</Count>

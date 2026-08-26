@@ -2,8 +2,6 @@ import { Count } from "@chopin/editor";
 
 import type { DecisionView } from "@chopin/editor";
 
-import { motionContract } from "./motion-contract";
-
 export function decisionAttention(previous: number, current: number): boolean {
 	return current > previous;
 }
@@ -55,11 +53,10 @@ export function DecisionViewControl(
 				{unanswered > 0 && (
 					<span
 						aria-hidden="true"
-						className={`ml-1 ${attention ? motionContract("feedback").className : ""}`}
-						data-motion-feedback={attention ? "count" : undefined}
+						className="ml-1"
 						data-plan-decision-count
 					>
-						<Count>{unanswered}</Count>
+						<Count motion={attention}>{unanswered}</Count>
 					</span>
 				)}
 			</button>

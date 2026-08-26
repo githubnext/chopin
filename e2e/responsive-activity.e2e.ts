@@ -100,6 +100,7 @@ test("a closed desktop Conversation tab keeps unread activity visible", async ({
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:open", "false"));
 	page = await join("ana");
+	await page.getByRole("button", { name: "Show conversation pane" }).hover();
 	let sender = await join("ben");
 	await sender.getByPlaceholder("Use @chopin to ask Chopin").fill(
 		"A new room message",
@@ -108,6 +109,10 @@ test("a closed desktop Conversation tab keeps unread activity visible", async ({
 	let toggle = page.getByRole("button", { name: "Show conversation pane, 1 unread" });
 	await expect(toggle).toBeVisible();
 	await expect(toggle.locator('span[aria-hidden="true"]')).toHaveCount(1);
+	await expect(toggle.locator('[data-motion-feedback="count"]')).toHaveCSS(
+		"animation-name",
+		"feedback-count-enter",
+	);
 	await toggle.click();
 	await expect(page.getByRole("heading", { name: "Conversation" })).toBeFocused();
 	await expect(page.getByRole("button", { name: "Hide conversation pane" })).toBeVisible();
@@ -148,14 +153,22 @@ test("conversation activity appears while closed and clears when opened", async 
 		}],
 	});
 	let page = await join("ana", { viewport: { width: 390, height: 844 } });
+	await page.emulateMedia({ reducedMotion: "reduce" });
 	let nav = page.getByRole("navigation", { name: "Workspace view" });
-	await expect(nav.getByRole("button", { name: "Conversation" })).toBeVisible();
+	let conversation = nav.getByRole("button", { name: "Conversation" });
+	await expect(conversation).toBeVisible();
+	await conversation.hover();
 	let sender = await join("ben");
 	await sender.getByPlaceholder("Use @chopin to ask Chopin").fill(
 		"A new room message",
 	);
 	await sender.getByRole("button", { name: "Send message" }).click();
-	await expect(nav.getByRole("button", { name: "Conversation, 1 unread" })).toBeVisible();
+	conversation = nav.getByRole("button", { name: "Conversation, 1 unread" });
+	await expect(conversation).toBeVisible();
+	await expect(conversation.locator('[data-motion-feedback="count"]')).toHaveCSS(
+		"animation-name",
+		"none",
+	);
 	await nav.getByRole("button", { name: /Conversation/ }).click();
 	await expect(nav.getByRole("button", { name: "Conversation" })).toBeVisible();
 });

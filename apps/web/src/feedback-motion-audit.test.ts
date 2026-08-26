@@ -42,9 +42,15 @@ describe("feedback motion audit", () => {
 		expect(references).not.toContain("motion-feedback");
 		expect(references).not.toMatch(/\btransition\b/);
 		expect(app("document-search-dialog.tsx")).not.toContain("motion-feedback");
-		expect(app("chat/transcript.tsx")).not.toContain("animate-enter");
+		let transcript = app("chat/transcript.tsx");
+		expect(transcript).not.toContain("animate-enter");
+		expect(transcript).not.toContain("animate-pulse");
+		expect(transcript).not.toContain("chat-working");
 		expect(workspace("packages/editor/src/status.tsx")).not.toContain("animate-enter");
-		expect(app("theme.css")).not.toContain("@utility animate-enter");
+		let theme = app("theme.css");
+		expect(theme).not.toContain("@utility animate-enter");
+		expect(theme).not.toContain("workspace-working-spin");
+		expect(theme).not.toContain("chat-working-shimmer");
 
 		for (
 			let path of [
@@ -71,5 +77,14 @@ describe("feedback motion audit", () => {
 		let changes = workspace("packages/editor/src/changes-chip.tsx");
 		expect(changes).toContain('data-motion-feedback="count"');
 		expect(changes).not.toContain("animate-enter");
+	});
+
+	it("keys the completed tool disclosure icon by semantic state", () => {
+		let transcript = app("chat/transcript.tsx");
+		expect(transcript).toContain("toolChevronDown");
+		expect(transcript).toContain("toolChevronRight");
+		expect(transcript).toContain('data-motion-feedback="icon"');
+		expect(transcript).toContain('data-feedback-icon={open ? "open" : "closed"}');
+		expect(transcript).toContain('key={open ? "open" : "closed"}');
 	});
 });

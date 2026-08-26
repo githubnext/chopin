@@ -536,16 +536,35 @@ body {
 	}
 }
 
-:root[data-motion-input="pointer"] .motion-feedback[data-motion-feedback="icon"] {
-	animation: feedback-icon-enter var(--icon-swap-dur) var(--motion-move) both;
+.motion-feedback[data-motion-feedback="icon"] {
+	animation: feedback-icon-enter 0s var(--motion-move) both;
 }
 
-:root[data-motion-input="pointer"] .motion-feedback[data-motion-feedback="count"] {
-	animation: feedback-count-enter var(--badge-pop-dur) var(--motion-smooth-out) both;
+.motion-feedback[data-motion-feedback="count"] {
+	animation: feedback-count-enter 0s var(--motion-smooth-out) both;
 }
 
-:root[data-motion-input="pointer"] .motion-feedback[data-motion-feedback="alert"] {
-	animation: feedback-alert-enter var(--toast-open) var(--motion-smooth-out) both;
+.motion-feedback[data-motion-feedback="alert"] {
+	animation: feedback-alert-enter 0s var(--motion-smooth-out) both;
+}
+
+:root[data-motion-input="pointer"]
+	.motion-feedback[data-motion-feedback="icon"]:not([data-motion-settled]) {
+	animation-duration: var(--icon-swap-dur);
+}
+
+:root[data-motion-input="pointer"]
+	.motion-feedback[data-motion-feedback="count"]:not([data-motion-settled]) {
+	animation-duration: var(--badge-pop-dur);
+}
+
+:root[data-motion-input="pointer"]
+	.motion-feedback[data-motion-feedback="alert"]:not([data-motion-settled]) {
+	animation-duration: var(--toast-open);
+}
+
+.motion-feedback[data-motion-settled] {
+	animation-name: none;
 }
 
 .conversation-toggle-icon-close {
@@ -782,21 +801,6 @@ body {
 	outline: none;
 }
 
-@keyframes chat-working-shimmer {
-	from {
-		background-position: 125% 0;
-	}
-	to {
-		background-position: -25% 0;
-	}
-}
-
-@keyframes workspace-working-spin {
-	to {
-		rotate: 1turn;
-	}
-}
-
 .workspace-working-indicator {
 	width: 0.875rem;
 	height: 0.875rem;
@@ -804,48 +808,24 @@ body {
 	border-right-color: transparent;
 	border-radius: 9999px;
 }
-
-.chat-working {
-	color: var(--color-text-secondary);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-	.conversation-tool-loader {
-		animation: workspace-working-spin 0.8s linear infinite;
-	}
-
-	.workspace-working-indicator {
-		animation: workspace-working-spin 0.8s linear infinite;
-	}
-
-	.chat-working {
-		background: linear-gradient(
-			90deg,
-			var(--color-text-secondary) 35%,
-			var(--color-text-tertiary) 50%,
-			var(--color-text-secondary) 65%
-		);
-		background-clip: text;
-		background-size: 200% 100%;
-		color: transparent;
-		animation: chat-working-shimmer 1.8s ease-in-out infinite;
-	}
-}
-
 @media (prefers-reduced-motion: reduce) {
 	.motion-dropdown,
 	.motion-popover,
 	.motion-panel,
 	.motion-content-swap,
 	.motion-collapse,
-	.motion-collapse-content,
-	.motion-disclosure-icon,
-	.conversation-toggle-icon {
+	.motion-collapse-content {
 		transition: none;
 	}
 
-	.motion-feedback {
-		animation: none;
+	:root[data-motion-input="pointer"] .motion-disclosure-icon,
+	:root[data-motion-input="pointer"] .conversation-toggle-icon {
+		transition: none;
+	}
+
+	:root[data-motion-input="pointer"]
+		.motion-feedback[data-motion-feedback]:not([data-motion-settled]) {
+		animation-duration: 0s;
 	}
 }
 
