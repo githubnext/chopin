@@ -404,7 +404,7 @@ describe("sending to a named destination", () => {
 			message("closed", "room"),
 		);
 		expect(closedReplies).toEqual([
-			expect.objectContaining({ kind: "session:error", message: "conversation is closed" }),
+			expect.objectContaining({ kind: "session:error", message: "chat is closed" }),
 		]);
 
 		let full = room({ busy: true });

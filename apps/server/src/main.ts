@@ -160,8 +160,8 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 	}
 }
 
-/** A room's conversation, with everything it needs to run a turn. */
-function conversation(room: Rooms.Room, ws: Socket): Chat.Room {
+/** A room's Chat, with everything it needs to run a turn. */
+function chat(room: Rooms.Room, ws: Socket): Chat.Room {
 	return {
 		chat: room.plan!.chat,
 		plan: room.plan!,
@@ -289,15 +289,15 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			return;
 
 		case "chat:send":
-			if (room.plan) await Chat.send(conversation(room, ws), ws, frame);
+			if (room.plan) await Chat.send(chat(room, ws), ws, frame);
 			return;
 
 		case "chat:abort":
-			if (room.plan) await Chat.abort(conversation(room, ws), ws);
+			if (room.plan) await Chat.abort(chat(room, ws), ws);
 			return;
 
 		case "chat:unqueue":
-			if (room.plan) Chat.unqueue(conversation(room, ws), ws, frame);
+			if (room.plan) Chat.unqueue(chat(room, ws), ws, frame);
 			return;
 
 		case "question:open":
@@ -333,11 +333,11 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			return;
 
 		case "comment:accept":
-			if (room.plan) await Comments.accept(conversation(room, ws), ws, frame);
+			if (room.plan) await Comments.accept(chat(room, ws), ws, frame);
 			return;
 
 		case "comment:dismiss":
-			if (room.plan) await Comments.dismiss(conversation(room, ws), ws, frame);
+			if (room.plan) await Comments.dismiss(chat(room, ws), ws, frame);
 			return;
 
 		case "job:list":

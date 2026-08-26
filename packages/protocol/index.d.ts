@@ -1,8 +1,8 @@
 /**
  * The wire.
  *
- * One WebSocket carries every conversation a channel has: the collaborative
- * document, its questionnaires, and the chat driving the agent. Frames are
+ * One WebSocket carries every live channel stream: the collaborative
+ * document, its questionnaires, and Chat driving the agent. Frames are
  * JSON; binary payloads travel base64 because there is no second channel and
  * a text frame is legible in a network inspector.
  *

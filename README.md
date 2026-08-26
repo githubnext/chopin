@@ -17,7 +17,7 @@ changes, and asks the team when the code cannot settle a choice.
 A channel combines one repository-connected document with its collaboration
 context:
 
-- **Conversation** is shared by the team and the hosted agent. Ordinary messages
+- **Chat** is shared by the team and the hosted agent. Ordinary messages
   do not start an agent turn, although they can enter its bounded context;
   `@chopin` asks Chopin to act.
 - **Document** is a multiplayer rich-text artifact backed by readable, restricted
@@ -31,7 +31,7 @@ context:
 Typing `/research` in a document starts one durable request from the exact brief
 and leaves an inline progress card in place. Completed research publishes as an
 ordinary child document beneath its parent, with its own document,
-Conversation, and Decisions. Pending, failed, and cancelled requests never
+Chat, and Decisions. Pending, failed, and cancelled requests never
 appear as documents in navigation.
 
 The Planner can inspect the selected GitHub repository and its pull requests
@@ -61,7 +61,7 @@ and tool vocabulary remain optimized for planning.
   research request supplies the GitHub App user token and Copilot entitlement
   used for that channel. A server restart signs everyone out and releases that
   ownership.
-- Document and conversation context, along with repository material selected by
+- Document and Chat context, along with repository material selected by
   the Planner, is sent to GitHub Copilot during a turn. Model-backed background
   jobs also send job-specific private material, including context loaded during
   execution, to isolated Copilot workers. The public research worker receives
@@ -127,26 +127,26 @@ coding agents.
 The web composer treats `@chopin` as an instruction for the Planner:
 
 ```text
-should we cover the export format?     -> channel conversation
-yes, Markdown for now                  -> channel conversation
+should we cover the export format?     -> channel chat transcript
+yes, Markdown for now                  -> channel chat transcript
 @chopin                                -> act on the recent conversation
 @chopin draft the export section       -> act on that request
 @chopin compare #Release plan          -> read another document, then respond here
 ```
 
-Recent channel conversation is supplied as bounded context for the next turn,
+The recent channel chat transcript is supplied as bounded context for the next turn,
 even when those messages did not address the Planner. The first eligible
 model-backed action, either a Planner turn or research request, claims the
 channel's Copilot usage until that owner's session ends or the server restarts.
 The current web interface has no control for transferring that ownership
 manually.
 
-Typing `#` in Conversation opens a picker for other documents in the current
+Typing `#` in Chat opens a picker for other documents in the current
 repository, including published children. Selected references retain stable
 identities even when their titles change. The Planner reads referenced documents
 at their latest revision, and references never change which document its editing
 tools target. Research starts from `/research` in the document rather than from
-a Conversation reference.
+a Chat reference.
 
 ## Connect a coding agent
 

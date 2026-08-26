@@ -3,12 +3,12 @@ import type { Frame, Request } from "./index";
 type KIND<K extends string> = Frame & { kind: K };
 
 /**
- * The conversation driving the agent.
+ * Chat drives the agent.
  *
  * Shared, like everything else in a room: one transcript, one turn at a time,
  * and anything said while a turn is running joins a queue rather than being
  * refused. The composer stays live even when the plan does not — a turn owns
- * the document, not the conversation.
+ * the document, not Chat.
  */
 export declare namespace Chat {
 	export type Incoming =

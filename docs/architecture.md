@@ -17,7 +17,7 @@ and [Self-hosting](self-hosting.md) for deployment.
 - A **document** is the collaboratively authored, repository-connected artifact
   represented as restricted MDX, Lexical, and Yjs.
 - A **channel** is the durable collaboration container for one document, its
-  conversation, decisions, repository identity, and sidecar state.
+  Chat, decisions, repository identity, and sidecar state.
 - An **MCP document** is the public API projection of a channel and document,
   including its ID, title, source, revision, optional generated description, and
   optional creation brief.
@@ -26,9 +26,9 @@ and [Self-hosting](self-hosting.md) for deployment.
 - A **room** is the server's live in-memory representation of an open channel.
 - A **research request** is durable work attached to one parent document. While
   pending, it is represented by an inline card rather than a channel, document,
-  conversation, decision set, navigation row, or browser route.
+  Chat, decision set, navigation row, or browser route.
 - A **child document** is an ordinary channel attached to one top-level parent
-  for navigation and context. It owns its document, Conversation, and Decisions.
+  for navigation and context. It owns its document, Chat, and Decisions.
   The V1 product surface offers neither child research nor grandchildren. The UI
   blocks starting research from a child; the API may accept the request, but
   publication validation rejects linking a grandchild.
@@ -77,7 +77,7 @@ the lease. This is a single-writer design, not an application cluster.
 | `packages/viewport` | Browser viewport geometry and subscriptions                                                | none                                          |
 | `packages/editor`   | Collaborative editor, cursors, decisions, comments, and widgets                            | `dialect`, `question`, `protocol`, `viewport` |
 | `apps/server`       | Authentication, channels, rooms, storage, Planner, jobs, MCP, and implementation lifecycle | `dialect`, `question`, `protocol`             |
-| `apps/web`          | Repository picker, channel navigation, conversation, and workspace shell                   | `dialect`, `editor`, `protocol`, `viewport`   |
+| `apps/web`          | Repository picker, channel navigation, Chat, and workspace shell                           | `dialect`, `editor`, `protocol`, `viewport`   |
 
 Runtime workspace packages do not depend on either application. The E2E suite
 and skill contract tests deliberately import server internals as test harnesses;
@@ -245,7 +245,7 @@ read cannot publish a duplicate.
 The browser nests published children beneath their parent. Opening a ready card
 or nested row keeps the parent mounted but inert behind an anchored child
 surface. The child opens through its ordinary channel stack with its own
-Conversation and Decisions; closing, Escape, and browser Back restore the
+Chat and Decisions; closing, Escape, and browser Back restore the
 parent's history, scroll, selection, and opener focus. Compact layouts occupy
 the viewport, and reduced motion uses a crossfade.
 
@@ -344,7 +344,7 @@ node a mark names before trying to draw it. Explicit operations also preserve
 unaffected selections, cursors, undo history, and provenance that a structural
 diff could only guess.
 
-## Conversation addressing
+## Chat addressing
 
 The web composer uses the shared `addressed()` helper to translate an `@chopin`
 mention into `Chat.Send.to = "planner"`; other messages use `to = "room"`. The
