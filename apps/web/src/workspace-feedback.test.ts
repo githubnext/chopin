@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ConversationToggle, WorkspaceFeedbackCount } from "./workspace";
+import { ConversationToggle } from "./workspace";
 
 test("conversation state swaps use purposeful icon feedback", () => {
 	let markup = renderToStaticMarkup(
@@ -34,11 +34,8 @@ test("the open conversation hover swap crossfades without display changes", () =
 	expect(markup).not.toContain("group-hover:block");
 });
 
-test("unread counts enter while live busy feedback stays immediate", () => {
-	let unread = renderToStaticMarkup(
-		createElement(WorkspaceFeedbackCount, null, 2),
-	);
-	let busy = renderToStaticMarkup(
+test("live busy feedback stays immediate", () => {
+	let markup = renderToStaticMarkup(
 		createElement(ConversationToggle, {
 			activity: { busy: true, unread: 0 },
 			controls: "conversation",
@@ -47,6 +44,6 @@ test("unread counts enter while live busy feedback stays immediate", () => {
 		}),
 	);
 
-	expect(unread).toContain('data-motion-feedback="count"');
-	expect(busy).not.toContain('data-motion-feedback="count"');
+	expect(markup).toContain('aria-label="Show conversation pane, Planner working"');
+	expect(markup).not.toContain('data-motion-feedback="count"');
 });
