@@ -233,3 +233,36 @@ describe("disclosure motion", () => {
 		expect(reduced).toMatch(/transition:\s*none;/);
 	});
 });
+
+describe("feedback motion", () => {
+	it("uses the shipped feedback class for purposeful pointer entrances", () => {
+		expect(THEME).toMatch(
+			/:root\[data-motion-input="pointer"\] \.motion-feedback\[data-motion-feedback="icon"\]\s*{[^}]*feedback-icon-enter[^}]*var\(--icon-swap-dur\)[^}]*var\(--motion-move\)/s,
+		);
+		expect(THEME).toMatch(
+			/:root\[data-motion-input="pointer"\] \.motion-feedback\[data-motion-feedback="count"\]\s*{[^}]*feedback-count-enter[^}]*var\(--badge-pop-dur\)[^}]*var\(--motion-smooth-out\)/s,
+		);
+		expect(THEME).toMatch(
+			/:root\[data-motion-input="pointer"\] \.motion-feedback\[data-motion-feedback="alert"\]\s*{[^}]*feedback-alert-enter[^}]*var\(--toast-open\)[^}]*var\(--motion-smooth-out\)/s,
+		);
+	});
+
+	it("keeps one-shot feedback below 300ms", () => {
+		for (let token of ["icon-swap-dur", "badge-pop-dur", "toast-open"]) {
+			let value = new RegExp(`--${token}:\\s*(\\d+)ms;`).exec(THEME)?.[1];
+			expect({ token, duration: Number(value), short: Number(value) < 300 }).toEqual({
+				token,
+				duration: Number(value),
+				short: true,
+			});
+		}
+	});
+
+	it("settles feedback under reduced motion", () => {
+		let reduced = THEME.match(
+			/@media \(prefers-reduced-motion: reduce\)\s*{([\s\S]*?)\n}/,
+		)?.[1];
+		expect(reduced).toContain(".motion-feedback {");
+		expect(reduced).toMatch(/animation:\s*none;/);
+	});
+});

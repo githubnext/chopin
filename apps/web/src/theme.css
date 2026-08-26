@@ -175,7 +175,7 @@
 	--page-blur: 3px;
 	--icon-swap-dur: 250ms;
 	--icon-swap-blur: 2px;
-	--badge-pop-dur: 500ms;
+	--badge-pop-dur: 180ms;
 	--badge-close-dur: 180ms;
 	--acc-expand: 250ms;
 	--acc-collapse: 250ms;
@@ -515,6 +515,39 @@ body {
 	transform: rotate(90deg);
 }
 
+@keyframes feedback-icon-enter {
+	from {
+		opacity: 0;
+		transform: scale(0.88);
+	}
+}
+
+@keyframes feedback-count-enter {
+	from {
+		opacity: 0;
+		transform: translateY(2px) scale(0.92);
+	}
+}
+
+@keyframes feedback-alert-enter {
+	from {
+		opacity: 0;
+		transform: translateY(4px);
+	}
+}
+
+:root[data-motion-input="pointer"] .motion-feedback[data-motion-feedback="icon"] {
+	animation: feedback-icon-enter var(--icon-swap-dur) var(--motion-move) both;
+}
+
+:root[data-motion-input="pointer"] .motion-feedback[data-motion-feedback="count"] {
+	animation: feedback-count-enter var(--badge-pop-dur) var(--motion-smooth-out) both;
+}
+
+:root[data-motion-input="pointer"] .motion-feedback[data-motion-feedback="alert"] {
+	animation: feedback-alert-enter var(--toast-open) var(--motion-smooth-out) both;
+}
+
 body {
 	margin: 0;
 	background: var(--color-ground);
@@ -806,6 +839,10 @@ body {
 	}
 
 	.animate-enter {
+		animation: none;
+	}
+
+	.motion-feedback {
 		animation: none;
 	}
 }
