@@ -263,6 +263,15 @@ describe("feedback motion", () => {
 		);
 	});
 
+	it("leaves feedback opacity to the component", () => {
+		for (let kind of ["icon", "count", "alert"]) {
+			let settled = new RegExp(
+				`\\.motion-feedback\\[data-motion-feedback="${kind}"\\]\\s*{([^}]*)}`,
+			).exec(THEME)?.[1];
+			expect(settled).not.toMatch(/opacity:/);
+		}
+	});
+
 	it("keeps one-shot feedback below 300ms", () => {
 		for (let token of ["icon-swap-dur", "badge-pop-dur", "toast-open"]) {
 			let value = new RegExp(`--${token}:\\s*(\\d+)ms;`).exec(THEME)?.[1];
