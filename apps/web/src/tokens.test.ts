@@ -123,19 +123,19 @@ describe("palette", () => {
 		expect(hex("--color-destructive")).toBe("#d54d4c");
 	});
 
-	it("keeps the Conversation body ink distinct from the general secondary text", () => {
-		expect(declared("--color-conversation-body")).toBe("#3e453b");
+	it("keeps the Chat body ink distinct from the general secondary text", () => {
+		expect(declared("--color-chat-body")).toBe("#3e453b");
 	});
 
-	it("washes the Conversation pane with thirty percent of the app shell", () => {
-		expect(declared("--color-conversation-pane")).toBe(
+	it("washes the Chat pane with thirty percent of the app shell", () => {
+		expect(declared("--color-chat-pane")).toBe(
 			"color-mix(in srgb, var(--color-ground) 30%, var(--color-page))",
 		);
 	});
 
-	it("keeps the Conversation pane edge subtly stronger than the frame hairline", () => {
+	it("keeps the Chat pane edge subtly stronger than the frame hairline", () => {
 		expect(THEME).toMatch(
-			/\.workspace-frame \.workspace-conversation-panel\s*\{\s*border-color:\s*rgb\(0 0 0 \/ 9%\);/,
+			/\.workspace-frame \.workspace-chat-panel\s*\{\s*border-color:\s*rgb\(0 0 0 \/ 9%\);/,
 		);
 	});
 
@@ -252,9 +252,9 @@ describe("controls", () => {
 		);
 	});
 
-	it("puts Conversation focus around the complete composer rather than its textarea", () => {
-		expect(THEME).toContain(".conversation-composer .field:focus-within");
-		expect(THEME).toContain(".conversation-composer textarea:focus");
+	it("puts Chat focus around the complete composer rather than its textarea", () => {
+		expect(THEME).toContain(".chat-composer .field:focus-within");
+		expect(THEME).toContain(".chat-composer textarea:focus");
 	});
 
 	it("uses the two designed control edges across fields and choices", () => {

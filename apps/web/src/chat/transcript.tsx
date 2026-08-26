@@ -1,4 +1,4 @@
-/** The shared conversation, grouped for reading rather than event delivery. */
+/** The shared chat, grouped for reading rather than event delivery. */
 
 import { useEffect, useId, useRef, useState } from "react";
 import { SignInIcon } from "@phosphor-icons/react";
@@ -28,7 +28,7 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 	if (summary.state === "running") {
 		return (
 			<div className="flex min-h-7 min-w-0 flex-wrap items-center gap-2 py-1 text-sm text-text-quaternary">
-				<img alt="" className="conversation-tool-loader size-[18px]" src={toolLoader} />
+				<img alt="" className="chat-tool-loader size-[18px]" src={toolLoader} />
 				<span className="min-w-0 break-all font-mono text-text-secondary">{summary.name}</span>
 				<span className="tabular-nums">{summary.completed} done</span>
 			</div>
@@ -125,7 +125,7 @@ function MessageBody(
 				<div className="flex items-start gap-1">
 					<div className="min-w-0 flex-1">
 						<MessageMarkdown
-							className="break-words text-conversation-body [overflow-wrap:anywhere]"
+							className="break-words text-chat-body [overflow-wrap:anywhere]"
 							references={message.references}
 							source={text}
 						/>
