@@ -9,6 +9,7 @@ import * as Api from "./api";
 import { rememberChannel } from "./channel-recovery";
 import { DocumentRename } from "./document-rename";
 import { motionImmediately } from "./motion-input";
+import { TerminalAlert } from "./terminal-alert";
 
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
@@ -230,13 +231,9 @@ export function DocumentPicker(
 				)}
 				{listError !== undefined && (
 					<div className="px-2 py-3">
-						<p
-							className="motion-feedback text-sm text-destructive-ink"
-							data-motion-feedback="alert"
-							role="alert"
-						>
+						<TerminalAlert className="text-sm text-destructive-ink">
 							{message(listError, "Could not load documents.")}
-						</p>
+						</TerminalAlert>
 						<button
 							className="btn btn-sm btn-secondary mt-2"
 							disabled={creating}
@@ -317,13 +314,9 @@ export function DocumentPicker(
 						: (
 							<>
 								{createError !== undefined && (
-									<p
-										className="motion-feedback px-2 py-2 text-sm text-destructive-ink"
-										data-motion-feedback="alert"
-										role="alert"
-									>
+									<TerminalAlert className="px-2 py-2 text-sm text-destructive-ink">
 										{message(createError, "Could not create document.")}
-									</p>
+									</TerminalAlert>
 								)}
 								<button
 									className="btn btn-md btn-ghost w-full justify-start"

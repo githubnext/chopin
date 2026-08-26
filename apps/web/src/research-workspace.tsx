@@ -15,6 +15,7 @@ import {
 	latestResearchJobRevision,
 	mergeResearchWorkspaceDetail,
 } from "./research-workspace-model";
+import { TerminalAlert } from "./terminal-alert";
 import { Wire } from "./wire";
 
 import "./research-workspace.css";
@@ -360,13 +361,9 @@ function DraftConfirmation(
 			</p>
 			{reason && <p className="research-disabled-reason">{reason}</p>}
 			{error !== undefined && (
-				<p
-					className="research-error motion-feedback"
-					data-motion-feedback="alert"
-					role="alert"
-				>
+				<TerminalAlert className="research-error">
 					{error instanceof Error ? error.message : "Could not start public web research."}
-				</p>
+				</TerminalAlert>
 			)}
 			<button
 				aria-describedby="research-confirm-disclosure"
@@ -489,13 +486,9 @@ function ResearchThread(
 								</div>
 							)}
 							{!artifact && job?.job.state === "completed" && (
-								<p
-									className="research-error motion-feedback"
-									data-motion-feedback="alert"
-									role="alert"
-								>
+								<TerminalAlert className="research-error">
 									The completed answer could not be displayed safely.
-								</p>
+								</TerminalAlert>
 							)}
 							{!artifact && (
 								<JobProgress
@@ -565,13 +558,9 @@ function ResearchThread(
 					</p>
 				)}
 				{error !== undefined && (
-					<p
-						className="research-error motion-feedback"
-						data-motion-feedback="alert"
-						role="alert"
-					>
+					<TerminalAlert className="research-error">
 						{error instanceof Error ? error.message : "Could not add the research turn."}
-					</p>
+					</TerminalAlert>
 				)}
 			</div>
 		</section>
@@ -840,9 +829,9 @@ export function ResearchWorkspace(
 			<div className="research-route-state">
 				<div className="research-route-failure">
 					<h1>Cannot open research workspace</h1>
-					<p role="alert">
+					<TerminalAlert>
 						{error instanceof Error ? error.message : "The research workspace could not be loaded."}
-					</p>
+					</TerminalAlert>
 					<div className="flex flex-wrap gap-2">
 						<button className="btn btn-md btn-primary" onClick={() => void refresh()} type="button">
 							Try again
@@ -955,23 +944,15 @@ export function ResearchWorkspace(
 										turn={initial}
 									/>
 									{currentJob(initial)?.job.state === "completed" && (
-										<p
-											className="research-error motion-feedback"
-											data-motion-feedback="alert"
-											role="alert"
-										>
+										<TerminalAlert className="research-error">
 											The completed report could not be displayed safely.
-										</p>
+										</TerminalAlert>
 									)}
 								</section>
 							)
 							: null}
 						{error !== undefined && (
-							<div
-								className="research-refresh-error motion-feedback"
-								data-motion-feedback="alert"
-								role="alert"
-							>
+							<TerminalAlert className="research-refresh-error">
 								<p>
 									The latest research state could not be loaded. The last saved result remains
 									visible.
@@ -983,7 +964,7 @@ export function ResearchWorkspace(
 								>
 									Try again
 								</button>
-							</div>
+							</TerminalAlert>
 						)}
 					</section>
 					{report && (
@@ -1002,15 +983,11 @@ export function ResearchWorkspace(
 				</main>
 			</div>
 			{cancellationError !== undefined && (
-				<div
-					className="research-cancel-error motion-feedback"
-					data-motion-feedback="alert"
-					role="alert"
-				>
+				<TerminalAlert className="research-cancel-error">
 					{cancellationError instanceof Error
 						? cancellationError.message
 						: "Could not cancel the active research turn."}
-				</div>
+				</TerminalAlert>
 			)}
 			<p className="sr-only" aria-live="polite">
 				{refreshing ? "Refreshing research" : `${connection}. ${workspaceStatus}.`}

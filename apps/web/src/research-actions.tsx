@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import * as Api from "./api";
 import { NavigationDialog } from "./navigation-dialog";
 import { beginResearchSubmission, editResearchSubmission } from "./research-workspace-model";
+import { TerminalAlert } from "./terminal-alert";
 
 import type { Research } from "@chopin/protocol";
 import type { NavigationDialogMotion } from "./navigation-dialog";
@@ -76,13 +77,9 @@ export function NewResearchDialog(
 					you review and confirm the question.
 				</p>
 				{error !== undefined && (
-					<p
-						className="motion-feedback mt-3 text-sm text-destructive-ink"
-						data-motion-feedback="alert"
-						role="alert"
-					>
+					<TerminalAlert className="mt-3 text-sm text-destructive-ink">
 						{error instanceof Error ? error.message : "Could not create the research draft."}
-					</p>
+					</TerminalAlert>
 				)}
 				<div className="mt-5 flex justify-end gap-2">
 					<button

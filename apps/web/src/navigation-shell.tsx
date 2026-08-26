@@ -40,6 +40,7 @@ import {
 	SIDEBAR_STORAGE_KEY,
 } from "./project-sidebar-chrome";
 import { clearRepositoryCache } from "./repository-cache";
+import { TerminalAlert } from "./terminal-alert";
 import { useProjectDocuments } from "./use-project-documents";
 import { useProjectResearch } from "./use-project-research";
 
@@ -62,7 +63,7 @@ class LazyDialogBoundary extends Component<{ children: ReactNode }, { failed: bo
 	override render() {
 		if (!this.state.failed) return this.props.children;
 		return (
-			<div className="navigation-error" role="alert">
+			<TerminalAlert className="navigation-error">
 				Could not load this dialog.
 				<button
 					className="btn btn-sm btn-secondary ml-2"
@@ -71,7 +72,7 @@ class LazyDialogBoundary extends Component<{ children: ReactNode }, { failed: bo
 				>
 					Reload
 				</button>
-			</div>
+			</TerminalAlert>
 		);
 	}
 }
@@ -824,11 +825,7 @@ export function NavigationShell(
 	let content = (
 		<>
 			{error !== undefined && (
-				<div
-					className="navigation-error motion-feedback"
-					data-motion-feedback="alert"
-					role="alert"
-				>
+				<TerminalAlert className="navigation-error">
 					{error.reason instanceof Error
 						? error.reason.message
 						: "Could not update navigation."}
@@ -841,7 +838,7 @@ export function NavigationShell(
 							Try again
 						</button>
 					)}
-				</div>
+				</TerminalAlert>
 			)}
 			{children ?? (
 				<div className="flex h-full items-center justify-center text-sm text-text-tertiary">
