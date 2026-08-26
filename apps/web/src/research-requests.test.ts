@@ -135,6 +135,54 @@ describe("research request store", () => {
 		store.dispose();
 	});
 
+	it("restores mounted references after Strict Mode rehearses cleanup", async () => {
+		let calls = 0;
+		let ready = request("request-one", "ready", {
+			child: {
+				id: "child-one",
+				slug: "research-report",
+				sourceCount: 2,
+				summary: "Completed research.",
+				title: "Research report",
+			},
+		});
+		let store = new ResearchRequestStore({
+			api: api({
+				get: async () => {
+					calls++;
+					return ready;
+				},
+			}),
+			channelId: "channel-one",
+			onOpen() {},
+		});
+
+		store.dispose();
+		let unsubscribe = store.subscribe(() => {});
+		let release = store.retain("request-one");
+		await settle();
+
+		expect(calls).toBe(1);
+		expect(store.get("request-one")).toBe(ready);
+		release();
+		unsubscribe();
+		store.dispose();
+	});
+
+	it("keeps a newly created request after Strict Mode rehearses cleanup", async () => {
+		let store = new ResearchRequestStore({
+			api: api(),
+			channelId: "channel-one",
+			onOpen() {},
+		});
+
+		store.dispose();
+		let created = await store.create("Research this", "request-one");
+
+		expect(store.get("request-one")).toBe(created);
+		store.dispose();
+	});
+
 	it("refreshes only a mounted request named by socket invalidation", async () => {
 		let calls: string[] = [];
 		let store = new ResearchRequestStore({
