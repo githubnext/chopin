@@ -94,18 +94,25 @@ test("typed references survive Planner send, reload, navigation, and a mobile co
 	await expect(documents).toBeVisible();
 	await expectNoHorizontalOverflow(opened);
 	let pickerBox = await conversation.locator("[data-chat-reference-picker]").boundingBox();
+	let viewport = await opened.evaluate(() =>
+		visualViewport
+			? { height: visualViewport.height, width: visualViewport.width }
+			: { height: innerHeight, width: innerWidth }
+	);
 	expect(pickerBox).not.toBeNull();
 	expect(pickerBox!.x).toBeGreaterThanOrEqual(0);
-	expect(pickerBox!.x + pickerBox!.width).toBeLessThanOrEqual(390);
+	expect(pickerBox!.x + pickerBox!.width).toBeLessThanOrEqual(viewport.width);
 	expect(pickerBox!.y).toBeGreaterThanOrEqual(0);
-	expect(pickerBox!.y + pickerBox!.height).toBeLessThanOrEqual(520);
+	expect(pickerBox!.y + pickerBox!.height).toBeLessThanOrEqual(viewport.height);
 	await draft.press("Escape");
 	await expect(documents).toHaveCount(0);
 	await draft.pressSequentially("s");
 	await draft.press("Backspace");
 	expect(await documents.getByRole("option", { name: targetTitle, exact: true }).count()).toBe(0);
-	await expect(documents.getByRole("option", { name: targetTitle, exact: true })).toBeVisible();
-	await expect(documents.getByText("RFC about referenced releases", { exact: true })).toBeVisible();
+	let target = documents.getByRole("option", { name: targetTitle, exact: true });
+	await expect(target).toBeVisible();
+	await expect(target.getByText("RFC about referenced releases", { exact: true })).toBeVisible();
+	await target.hover();
 	await draft.press("ArrowDown");
 	await draft.press("ArrowUp");
 	await draft.press("Enter");
