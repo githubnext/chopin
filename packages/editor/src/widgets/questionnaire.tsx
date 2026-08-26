@@ -186,6 +186,7 @@ function Undecided(
 				disabled={!editable || state.syncing || state.submitting}
 				drafts={state.drafts}
 				error={state.error}
+				errorClassName="editor-motion-feedback"
 				onCancel={editable ? state.cancel : undefined}
 				onChange={editable ? state.change : undefined}
 				onSubmit={editable ? state.submit : undefined}

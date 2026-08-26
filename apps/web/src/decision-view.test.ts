@@ -101,6 +101,7 @@ test("new unanswered decisions animate only their count", () => {
 	);
 
 	expect(markup).toContain('data-motion-feedback="count"');
-	expect(markup.match(/class="[^"]*motion-feedback/g)).toHaveLength(1);
+	expect(markup.match(/class="[^"]*editor-motion-feedback/g)).toHaveLength(1);
+	expect(markup).not.toContain("data-motion-settled");
 	expect(markup).not.toContain("animate-enter");
 });

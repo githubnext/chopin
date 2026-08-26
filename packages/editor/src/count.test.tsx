@@ -9,8 +9,9 @@ test("count motion is explicit rather than progress-wide", () => {
 	let entering = renderToStaticMarkup(createElement(Count, { children: 2, motion: true }));
 
 	expect(quiet).not.toContain("motion-feedback");
-	expect(quiet).toContain('data-motion-settled=""');
-	expect(entering).toContain("motion-feedback");
+	expect(quiet).not.toContain("editor-motion-feedback");
+	expect(quiet).not.toContain("data-motion-settled");
+	expect(entering).toContain("editor-motion-feedback");
 	expect(entering).toContain('data-motion-feedback="count"');
 	expect(entering).not.toContain("data-motion-settled");
 });

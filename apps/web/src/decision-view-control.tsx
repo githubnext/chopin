@@ -56,7 +56,9 @@ export function DecisionViewControl(
 						className="ml-1"
 						data-plan-decision-count
 					>
-						<Count motion={attention}>{unanswered}</Count>
+						<Count key={attention ? `attention-${unanswered}` : "settled"} motion={attention}>
+							{unanswered}
+						</Count>
 					</span>
 				)}
 			</button>

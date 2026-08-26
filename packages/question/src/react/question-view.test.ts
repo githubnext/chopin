@@ -56,3 +56,24 @@ test("a host renderer receives only the active question panel", () => {
 	expect(steps).toEqual(["storage"]);
 	expect(markup).not.toContain("content-swap-stack");
 });
+
+test("a host can present an error as motion feedback", () => {
+	let markup = renderToStaticMarkup(createElement(QuestionView, {
+		definition: {
+			questions: [{
+				id: "storage",
+				header: "Storage",
+				question: "Where should room state live?",
+				multiple: false,
+				options: [],
+			}],
+		},
+		drafts: {},
+		error: "Could not save the answer.",
+		errorClassName: "host-error-feedback",
+	}));
+
+	expect(markup).toContain("host-error-feedback");
+	expect(markup).toContain('role="alert"');
+	expect(markup).toContain('data-motion-feedback="alert"');
+});
