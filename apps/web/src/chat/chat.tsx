@@ -72,7 +72,6 @@ export function Chat(
 	}: ChatProps,
 ) {
 	let [entries, setEntries] = useState<Wire.Entry[]>([]);
-	let [arrived, setArrived] = useState<ReadonlySet<string>>(new Set());
 	let [queue, setQueue] = useState<Wire.Waiting[]>([]);
 	let [busy, setBusy] = useState(false);
 	let [turn, setTurn] = useState<Wire.Turn>();
@@ -139,7 +138,6 @@ export function Chat(
 				synchronized.current = wire;
 				seen = new Set(frame.entries.map(entry => entry.id));
 				setEntries(frame.entries);
-				setArrived(new Set());
 				setQueue(frame.queued);
 				setBusy(frame.busy);
 				reportedBusy.current = frame.busy;
@@ -150,7 +148,6 @@ export function Chat(
 			}),
 			wire.on<Wire.Message>("chat:message", frame => {
 				if (loaded && !seen.has(frame.entry.id)) {
-					setArrived(current => new Set(current).add(frame.entry.id));
 					activity.current?.({ type: "message", busy: reportedBusy.current });
 				}
 				seen.add(frame.entry.id);
@@ -278,7 +275,6 @@ export function Chat(
 		<div className="flex h-full min-h-0 flex-col">
 			<Transcript
 				active={active}
-				arrived={arrived}
 				entries={entries}
 				handle={handle}
 				onWithdraw={id => wire?.send("chat:unqueue", { id })}

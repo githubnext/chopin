@@ -95,16 +95,9 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 	);
 }
 
-function SystemEntry(
-	{ arrived, item }: { arrived: boolean; item: Extract<Group, { kind: "system" }> },
-) {
-	let feedback = motionContract("feedback").className;
+function SystemEntry({ item }: { item: Extract<Group, { kind: "system" }> }) {
 	return (
-		<div
-			className={`flex items-start gap-3 text-text-tertiary ${arrived ? feedback : ""}`}
-			data-chat-system
-			data-motion-feedback={arrived ? "alert" : undefined}
-		>
+		<div className="flex items-start gap-3 text-text-tertiary" data-chat-system>
 			<div className="shrink-0">
 				<SignInIcon aria-hidden="true" size={20} />
 			</div>
@@ -198,7 +191,6 @@ function MessageGroup(
 export function Transcript(
 	{
 		active,
-		arrived,
 		entries,
 		handle,
 		onWithdraw,
@@ -206,7 +198,6 @@ export function Transcript(
 		working,
 	}: {
 		active: boolean;
-		arrived: ReadonlySet<string>;
 		entries: Chat.Entry[];
 		handle: string;
 		onWithdraw: (id: string) => void;
@@ -235,7 +226,7 @@ export function Transcript(
 			<div className="flex min-h-full flex-col justify-end gap-4" data-chat-stack>
 				{groups.map(item =>
 					item.kind === "system"
-						? <SystemEntry arrived={arrived.has(item.id)} item={item} key={item.id} />
+						? <SystemEntry item={item} key={item.id} />
 						: (
 							<MessageGroup
 								group={item}

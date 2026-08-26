@@ -217,21 +217,12 @@ describe("disclosure motion", () => {
 		expect(THEME).toMatch(/\.motion-collapse\.is-closing\s*{[^}]*var\(--acc-collapse\)/s);
 	});
 
-	it("animates the disclosure icon only for pointer input", () => {
-		expect(THEME).toMatch(
-			/:root\[data-motion-input="pointer"\][^{]*\.motion-disclosure-icon[^}]*var\(--icon-swap-dur\)/s,
-		);
-	});
-
 	it("settles disclosure motion under reduced motion", () => {
 		let reduced = THEME.match(
 			/@media \(prefers-reduced-motion: reduce\)\s*{([\s\S]*?)\n}/,
 		)?.[1];
 		expect(reduced).toContain(".motion-collapse,");
 		expect(reduced).toContain(".motion-collapse-content {");
-		expect(reduced).toContain(
-			':root[data-motion-input="pointer"] .motion-disclosure-icon,',
-		);
 		expect(reduced).toMatch(/transition:\s*none;/);
 	});
 });
@@ -253,7 +244,6 @@ describe("feedback motion", () => {
 			);
 		}
 		expect(THEME).toContain("@starting-style");
-		expect(THEME).not.toContain("data-motion-settled");
 		expect(THEME).not.toContain("@keyframes feedback-");
 	});
 

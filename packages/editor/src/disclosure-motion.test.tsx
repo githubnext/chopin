@@ -12,7 +12,6 @@ let motion = {
 	className: "motion-collapse",
 	closeDuration: 250,
 	contentClassName: "contract-collapse-content",
-	iconClassName: "contract-disclosure-icon",
 };
 
 test("renders open disclosure content with the supplied motion contract", () => {

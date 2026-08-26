@@ -8,7 +8,6 @@ export type MotionDisclosureContract = {
 	readonly className: string;
 	readonly closeDuration: number;
 	readonly contentClassName: string;
-	readonly iconClassName: string;
 };
 
 export function disclosureAccessibility(phase: PresencePhase) {

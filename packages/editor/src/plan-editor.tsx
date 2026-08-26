@@ -12,6 +12,7 @@ import { lexicalTheme, markdownShortcutPlugin, MDXEditor } from "@mdxeditor/edit
 // Structural editor CSS, then our retheme over the top.
 import "@mdxeditor/editor/style.css";
 import "./styles.css";
+import "./feedback.css";
 import { plugins as dialectPlugins } from "@chopin/dialect";
 
 import { ChangeStore } from "./changes";
