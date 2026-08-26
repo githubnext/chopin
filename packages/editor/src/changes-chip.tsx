@@ -82,6 +82,16 @@ function Chip(
 	let [open, setOpen] = useState(false);
 	let box = useRef<HTMLDivElement>(null);
 
+	// Once every change in this direction is read, the list has nothing left
+	// to show. Adjusting state during render (rather than in an Effect that
+	// fires after the fact) closes it in the same commit, with no extra pass
+	// where a stale, now-empty list is still open.
+	let [openedForWaiting, setOpenedForWaiting] = useState(waiting);
+	if (waiting !== openedForWaiting) {
+		setOpenedForWaiting(waiting);
+		if (waiting === 0) setOpen(false);
+	}
+
 	// Closing on an outside click rather than on blur: the list is inside the
 	// same box as the button, so blur fires on the way to clicking it.
 	useEffect(() => {
@@ -92,10 +102,6 @@ function Chip(
 		document.addEventListener("mousedown", close);
 		return () => document.removeEventListener("mousedown", close);
 	}, [open]);
-
-	useEffect(() => {
-		if (waiting === 0) setOpen(false);
-	}, [waiting]);
 
 	if (waiting === 0) return null;
 
