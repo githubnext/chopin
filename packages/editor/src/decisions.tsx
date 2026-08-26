@@ -9,7 +9,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { CaretDownIcon, CaretRightIcon } from "@phosphor-icons/react";
 
-import { MotionDisclosure } from "./disclosure-motion";
+import { MotionDisclosure, MotionDisclosureIcon } from "./disclosure-motion";
 import { useQuestionnaires } from "./questionnaires";
 import { QuestionnaireCard } from "./widgets/questionnaire";
 
@@ -178,29 +178,12 @@ export function Decisions(
 							onClick={() => setHistory(value => !value)}
 							type="button"
 						>
-							{history
-								? (
-									<CaretDownIcon
-										aria-hidden="true"
-										className="motion-feedback"
-										data-feedback-icon="open"
-										data-motion-feedback="icon"
-										key="open"
-										size={16}
-										weight="bold"
-									/>
-								)
-								: (
-									<CaretRightIcon
-										aria-hidden="true"
-										className="motion-feedback"
-										data-feedback-icon="closed"
-										data-motion-feedback="icon"
-										key="closed"
-										size={16}
-										weight="bold"
-									/>
-								)}
+							<MotionDisclosureIcon
+								className="editor-motion-feedback"
+								closed={<CaretRightIcon size={16} weight="bold" />}
+								open={history}
+								opened={<CaretDownIcon size={16} weight="bold" />}
+							/>
 							<span className="tabular-nums">{resolved}</span>
 							<span>resolved</span>
 						</button>

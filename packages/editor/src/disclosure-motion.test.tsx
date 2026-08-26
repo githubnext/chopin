@@ -35,13 +35,31 @@ test("renders open disclosure content with the supplied motion contract", () => 
 	expect(markup).toContain('class="contract-collapse-content"');
 });
 
-test("renders disclosure icons with the supplied motion contract", () => {
-	let markup = renderToStaticMarkup(
-		createElement(MotionDisclosureIcon, { children: "Icon", motion, open: true }),
+test("renders keyed disclosure glyphs for their open state", () => {
+	let closed = renderToStaticMarkup(
+		createElement(MotionDisclosureIcon, {
+			className: "host-feedback",
+			closed: "Closed",
+			open: false,
+			opened: "Opened",
+		}),
+	);
+	let opened = renderToStaticMarkup(
+		createElement(MotionDisclosureIcon, {
+			className: "host-feedback",
+			closed: "Closed",
+			open: true,
+			opened: "Opened",
+		}),
 	);
 
-	expect(markup).toContain('class="contract-disclosure-icon"');
-	expect(markup).toContain('data-open=""');
+	expect(closed).toContain('data-feedback-icon="closed"');
+	expect(closed).toContain('data-motion-feedback="icon"');
+	expect(closed).toContain("Closed");
+	expect(closed).not.toContain("Opened");
+	expect(opened).toContain('data-feedback-icon="open"');
+	expect(opened).toContain("Opened");
+	expect(opened).not.toContain("Closed");
 });
 
 test("renders closed disclosures without retained content", () => {
