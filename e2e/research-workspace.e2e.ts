@@ -150,6 +150,24 @@ test("a completed workspace is a durable nested child with immutable report prov
 		.toHaveAttribute("aria-current", "page");
 });
 
+test("a research route failure keeps the alert separated from its actions", async ({ baseURL, page, room, seed }) => {
+	await seed(SOURCE);
+	let fixture = await seedCompletedResearchWorkspace(port(baseURL!), room, {
+		question: question(room),
+		report: REPORT,
+	});
+	await page.route(
+		`**/api/channels/${room}/research-workspaces/${fixture.workspaceId}`,
+		route => route.fulfill({ status: 503, json: { error: "Research unavailable" } }),
+	);
+	await authenticate(page, "ana", baseURL!);
+	await page.goto(fixture.path);
+
+	let alert = page.getByRole("alert");
+	await expect(alert).toContainText("Research unavailable");
+	await expect(alert).toHaveCSS("margin", "8px 0px 20px");
+});
+
 test("collaborators receive a newly created research child without reloading", async ({ join, room, seed }) => {
 	await seed(SOURCE);
 	let ana = await join("ana");

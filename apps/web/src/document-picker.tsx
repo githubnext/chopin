@@ -265,7 +265,7 @@ export function DocumentPicker(
 								aria-describedby={descriptionId}
 								aria-label={channel.title}
 								aria-selected={selected}
-								className={`flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left transition ${
+								className={`motion-picker-option flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left ${
 									index === activeIndex ? "bg-selected" : "hover:bg-hover"
 								}`}
 								id={optionId(listId, channel)}

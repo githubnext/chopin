@@ -829,7 +829,7 @@ export function ResearchWorkspace(
 			<div className="research-route-state">
 				<div className="research-route-failure">
 					<h1>Cannot open research workspace</h1>
-					<TerminalAlert>
+					<TerminalAlert className="research-route-alert">
 						{error instanceof Error ? error.message : "The research workspace could not be loaded."}
 					</TerminalAlert>
 					<div className="flex flex-wrap gap-2">
