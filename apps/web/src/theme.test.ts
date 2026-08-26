@@ -237,35 +237,29 @@ describe("disclosure motion", () => {
 });
 
 describe("feedback motion", () => {
-	it("uses the shipped feedback class for purposeful pointer entrances", () => {
+	it("uses CSS-native starting styles for one-shot pointer feedback", () => {
 		for (
-			let [kind, name, duration, easing] of [
-				["icon", "feedback-icon-enter", "icon-swap-dur", "motion-move"],
-				["count", "feedback-count-enter", "badge-pop-dur", "motion-smooth-out"],
-				["alert", "feedback-alert-enter", "toast-open", "motion-smooth-out"],
+			let [kind, duration] of [
+				["icon", "icon-swap-dur"],
+				["count", "badge-pop-dur"],
+				["alert", "toast-open"],
 			]
 		) {
 			expect(THEME).toMatch(
 				new RegExp(
-					`\\.motion-feedback\\[data-motion-feedback="${kind}"\\]\\s*{[^}]*animation: ${name} 0s var\\(--${easing}\\) both`,
-					"s",
-				),
-			);
-			expect(THEME).toMatch(
-				new RegExp(
-					`:root\\[data-motion-input="pointer"\\]\\s+\\.motion-feedback\\[data-motion-feedback="${kind}"\\]:not\\(\\[data-motion-settled\\]\\)\\s*{[^}]*animation-duration: var\\(--${duration}\\)`,
+					`:root\\[data-motion-input="pointer"\\]\\s+\\.motion-feedback\\[data-motion-feedback="${kind}"\\]\\s*{[^}]*transition-duration: var\\(--${duration}\\)[^}]*transition-timing-function: var\\(--motion-smooth-out\\)`,
 					"s",
 				),
 			);
 		}
-		expect(THEME).toMatch(
-			/\.motion-feedback\[data-motion-settled\]\s*{[^}]*animation-name:\s*none/s,
-		);
+		expect(THEME).toContain("@starting-style");
+		expect(THEME).not.toContain("data-motion-settled");
+		expect(THEME).not.toContain("@keyframes feedback-");
 	});
 
-	it("crossfades the conversation hover icon only for pointer input", () => {
+	it("uses the short control transition for Conversation hover glyphs", () => {
 		expect(THEME).toMatch(
-			/:root\[data-motion-input="pointer"\] \.conversation-toggle-icon\s*{[^}]*opacity var\(--icon-swap-dur\) var\(--motion-move\)/s,
+			/:root\[data-motion-input="pointer"\] \.conversation-toggle-icon\s*{[^}]*opacity var\(--duration-fast\) var\(--ease-out\)/s,
 		);
 	});
 
@@ -281,11 +275,20 @@ describe("feedback motion", () => {
 	});
 
 	it("keeps icon and count deformation subtle", () => {
-		for (let keyframe of ["feedback-icon-enter", "feedback-count-enter"]) {
-			let body = new RegExp(`@keyframes ${keyframe}\\s*{([\\s\\S]*?)\\n}`).exec(THEME)?.[1];
+		let startingStyle = THEME.slice(THEME.indexOf("@starting-style"));
+		for (
+			let [kind, origin] of [
+				["icon", "scale(0.96)"],
+				["count", "translateY(2px) scale(0.96)"],
+			]
+		) {
+			let body = new RegExp(
+				`\\.motion-feedback\\[data-motion-feedback="${kind}"\\]\\s*{([\\s\\S]*?)\\n\\s*}`,
+			).exec(startingStyle)?.[1];
 			let scale = Number(/scale\(([\d.]+)\)/.exec(body ?? "")?.[1]);
-			expect({ keyframe, scale, subtle: scale >= 0.95 }).toEqual({
-				keyframe,
+			expect({ kind, origin, scale, subtle: scale >= 0.95 }).toEqual({
+				kind,
+				origin,
 				scale,
 				subtle: true,
 			});
@@ -297,8 +300,8 @@ describe("feedback motion", () => {
 			/@media \(prefers-reduced-motion: reduce\)\s*{([\s\S]*?)\n}/,
 		)?.[1];
 		expect(reduced).toMatch(
-			/:root\[data-motion-input="pointer"\]\s+\.motion-feedback\[data-motion-feedback\]:not\(\[data-motion-settled\]\)\s*{/,
+			/:root\[data-motion-input="pointer"\]\s+\.motion-feedback\[data-motion-feedback\]\s*{/,
 		);
-		expect(reduced).toMatch(/animation-duration:\s*0s;/);
+		expect(reduced).toMatch(/transition-duration:\s*0s;/);
 	});
 });

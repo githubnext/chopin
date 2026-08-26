@@ -515,56 +515,54 @@ body {
 	transform: rotate(90deg);
 }
 
-@keyframes feedback-icon-enter {
-	from {
-		opacity: 0;
-		transform: scale(0.96);
-	}
-}
-
-@keyframes feedback-count-enter {
-	from {
-		opacity: 0;
-		transform: translateY(2px) scale(0.96);
-	}
-}
-
-@keyframes feedback-alert-enter {
-	from {
-		opacity: 0;
-		transform: translateY(4px);
-	}
-}
-
 .motion-feedback[data-motion-feedback="icon"] {
-	animation: feedback-icon-enter 0s var(--motion-move) both;
+	opacity: 1;
+	transform: none;
 }
 
 .motion-feedback[data-motion-feedback="count"] {
-	animation: feedback-count-enter 0s var(--motion-smooth-out) both;
+	opacity: 1;
+	transform: none;
 }
 
 .motion-feedback[data-motion-feedback="alert"] {
-	animation: feedback-alert-enter 0s var(--motion-smooth-out) both;
+	opacity: 1;
+	transform: none;
 }
 
-:root[data-motion-input="pointer"]
-	.motion-feedback[data-motion-feedback="icon"]:not([data-motion-settled]) {
-	animation-duration: var(--icon-swap-dur);
+:root[data-motion-input="pointer"] .motion-feedback[data-motion-feedback="icon"] {
+	transition-property: opacity, transform;
+	transition-duration: var(--icon-swap-dur);
+	transition-timing-function: var(--motion-smooth-out);
 }
 
-:root[data-motion-input="pointer"]
-	.motion-feedback[data-motion-feedback="count"]:not([data-motion-settled]) {
-	animation-duration: var(--badge-pop-dur);
+:root[data-motion-input="pointer"] .motion-feedback[data-motion-feedback="count"] {
+	transition-property: opacity, transform;
+	transition-duration: var(--badge-pop-dur);
+	transition-timing-function: var(--motion-smooth-out);
 }
 
-:root[data-motion-input="pointer"]
-	.motion-feedback[data-motion-feedback="alert"]:not([data-motion-settled]) {
-	animation-duration: var(--toast-open);
+:root[data-motion-input="pointer"] .motion-feedback[data-motion-feedback="alert"] {
+	transition-property: opacity, transform;
+	transition-duration: var(--toast-open);
+	transition-timing-function: var(--motion-smooth-out);
 }
 
-.motion-feedback[data-motion-settled] {
-	animation-name: none;
+@starting-style {
+	.motion-feedback[data-motion-feedback="icon"] {
+		opacity: 0;
+		transform: scale(0.96);
+	}
+
+	.motion-feedback[data-motion-feedback="count"] {
+		opacity: 0;
+		transform: translateY(2px) scale(0.96);
+	}
+
+	.motion-feedback[data-motion-feedback="alert"] {
+		opacity: 0;
+		transform: translateY(4px);
+	}
 }
 
 .conversation-toggle-icon-close {
@@ -580,7 +578,7 @@ body {
 }
 
 :root[data-motion-input="pointer"] .conversation-toggle-icon {
-	transition: opacity var(--icon-swap-dur) var(--motion-move);
+	transition: opacity var(--duration-fast) var(--ease-out);
 }
 
 body {
@@ -823,9 +821,8 @@ body {
 		transition: none;
 	}
 
-	:root[data-motion-input="pointer"]
-		.motion-feedback[data-motion-feedback]:not([data-motion-settled]) {
-		animation-duration: 0s;
+	:root[data-motion-input="pointer"] .motion-feedback[data-motion-feedback] {
+		transition-duration: 0s;
 	}
 }
 
