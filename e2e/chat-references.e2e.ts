@@ -5,7 +5,7 @@ import {
 	seedCompletedResearchWorkspace,
 	testChannelPath,
 } from "./database";
-import { expectNoHorizontalOverflow } from "./responsive";
+import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 import { expect, ready, test } from "./room";
 
 import type { Chat } from "../packages/protocol/index";
@@ -93,17 +93,7 @@ test("typed references survive Planner send, reload, navigation, and a mobile co
 	let documents = conversation.getByRole("listbox", { name: "Document references" });
 	await expect(documents).toBeVisible();
 	await expectNoHorizontalOverflow(opened);
-	let pickerBox = await conversation.locator("[data-chat-reference-picker]").boundingBox();
-	let viewport = await opened.evaluate(() =>
-		visualViewport
-			? { height: visualViewport.height, width: visualViewport.width }
-			: { height: innerHeight, width: innerWidth }
-	);
-	expect(pickerBox).not.toBeNull();
-	expect(pickerBox!.x).toBeGreaterThanOrEqual(0);
-	expect(pickerBox!.x + pickerBox!.width).toBeLessThanOrEqual(viewport.width);
-	expect(pickerBox!.y).toBeGreaterThanOrEqual(0);
-	expect(pickerBox!.y + pickerBox!.height).toBeLessThanOrEqual(viewport.height);
+	await expectInsideViewport(conversation.locator("[data-chat-reference-picker]"));
 	await draft.press("Escape");
 	await expect(documents).toHaveCount(0);
 	await draft.pressSequentially("s");
@@ -112,9 +102,29 @@ test("typed references survive Planner send, reload, navigation, and a mobile co
 	let target = documents.getByRole("option", { name: targetTitle, exact: true });
 	await expect(target).toBeVisible();
 	await expect(target.getByText("RFC about referenced releases", { exact: true })).toBeVisible();
-	await target.hover();
+	let options = documents.getByRole("option");
+	expect(await options.count()).toBeGreaterThan(1);
+	let initial = documents.getByRole("option", { selected: true });
+	let initialId = await initial.getAttribute("id");
+	let targetId = await target.getAttribute("id");
+	let optionIds = await options.evaluateAll(option => option.map(({ id }) => id));
+	expect(initialId).not.toBeNull();
+	expect(targetId).not.toBeNull();
+	let initialIndex = optionIds.indexOf(initialId!);
+	let targetIndex = optionIds.indexOf(targetId!);
+	expect(initialIndex).toBeGreaterThanOrEqual(0);
+	expect(targetIndex).toBeGreaterThanOrEqual(0);
 	await draft.press("ArrowDown");
+	await expect(documents.getByRole("option", { selected: true })).not.toHaveAttribute(
+		"id",
+		initialId!,
+	);
 	await draft.press("ArrowUp");
+	await expect(documents.getByRole("option", { selected: true })).toHaveAttribute("id", initialId!);
+	for (let index = initialIndex; index !== targetIndex; index = (index + 1) % optionIds.length) {
+		await draft.press("ArrowDown");
+	}
+	await expect(target).toHaveAttribute("aria-selected", "true");
 	await draft.press("Enter");
 
 	let scopedResearch = opened.waitForResponse(response =>
