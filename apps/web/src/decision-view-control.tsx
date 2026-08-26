@@ -2,6 +2,8 @@ import { Count } from "@chopin/editor";
 
 import type { DecisionView } from "@chopin/editor";
 
+import { motionContract } from "./motion-contract";
+
 export function decisionAttention(previous: number, current: number): boolean {
 	return current > previous;
 }
@@ -44,14 +46,19 @@ export function DecisionViewControl(
 					view === "decisions"
 						? "bg-ground font-medium text-gray-800"
 						: "text-text-tertiary hover:bg-hover"
-				} ${attention ? "animate-enter" : ""}`}
+				}`}
 				data-attention={attention || undefined}
 				onClick={() => onView("decisions")}
 				type="button"
 			>
 				Decisions
 				{unanswered > 0 && (
-					<span aria-hidden="true" className="ml-1" data-plan-decision-count>
+					<span
+						aria-hidden="true"
+						className={`ml-1 ${attention ? motionContract("feedback").className : ""}`}
+						data-motion-feedback={attention ? "count" : undefined}
+						data-plan-decision-count
+					>
 						<Count>{unanswered}</Count>
 					</span>
 				)}

@@ -104,7 +104,19 @@ export type WorkspaceProps = {
 	backgroundActivity?: { active: number; paused: number; failed: number };
 };
 
-function ConversationToggle(
+export function WorkspaceFeedbackCount({ children }: { children: ReactNode }) {
+	return (
+		<span
+			aria-hidden="true"
+			className={`${motionContract("feedback").className} ml-1`}
+			data-motion-feedback="count"
+		>
+			{children}
+		</span>
+	);
+}
+
+export function ConversationToggle(
 	{
 		activity,
 		buttonRef,
@@ -128,12 +140,13 @@ function ConversationToggle(
 		: activity.unread > 0
 		? `${activity.unread} unread`
 		: undefined;
+	let feedback = motionContract("feedback").className;
 	return (
 		<button
 			aria-controls={controls}
 			aria-expanded={open}
 			aria-label={`${open ? "Hide" : "Show"} conversation pane${status ? `, ${status}` : ""}`}
-			className={`btn btn-icon btn-ghost relative shrink-0 ${className ?? ""}`}
+			className={`conversation-toggle btn btn-icon btn-ghost relative shrink-0 ${className ?? ""}`}
 			data-activity={activity.busy ? "busy" : activity.unread > 0 ? "unread" : undefined}
 			onClick={onToggle}
 			ref={buttonRef}
@@ -141,30 +154,38 @@ function ConversationToggle(
 		>
 			{open && swapOnHover
 				? (
-					<>
+					<span
+						className={`${feedback} grid size-[14px]`}
+						data-motion-feedback="icon"
+					>
 						<img
 							alt=""
-							className="size-[14px] group-hover:hidden group-focus-within:hidden"
+							className="conversation-toggle-icon conversation-toggle-icon-default col-start-1 row-start-1 size-[14px]"
 							src={conversationIcon}
 						/>
 						<img
 							alt=""
-							className="hidden size-[14px] opacity-50 group-hover:block group-focus-within:block"
+							className="conversation-toggle-icon conversation-toggle-icon-close col-start-1 row-start-1 size-[14px]"
 							src={conversationCloseIcon}
 						/>
-					</>
+					</span>
 				)
 				: (
 					<img
 						alt=""
-						className={`size-[14px] ${open ? "opacity-50" : ""}`}
+						className={`${feedback} size-[14px] ${open ? "opacity-50" : ""}`}
+						data-motion-feedback="icon"
+						key={open ? "open" : "closed"}
 						src={open ? conversationCloseIcon : conversationIcon}
 					/>
 				)}
 			{status && (
 				<span
 					aria-hidden="true"
-					className="absolute right-1 top-1 size-1.5 rounded-full bg-brand"
+					className={`absolute right-1 top-1 size-1.5 rounded-full bg-brand ${
+						!activity.busy && activity.unread > 0 ? feedback : ""
+					}`}
+					data-motion-feedback={!activity.busy && activity.unread > 0 ? "count" : undefined}
 				/>
 			)}
 		</button>
@@ -477,7 +498,7 @@ export function Workspace(
 									? "Decisions"
 									: "Document"}
 								{destination === "decisions" && unanswered > 0 && (
-									<span aria-hidden="true" className="ml-1">{unanswered}</span>
+									<WorkspaceFeedbackCount>{unanswered}</WorkspaceFeedbackCount>
 								)}
 								{destination === "background-work"
 									&& backgroundActivity.active + backgroundActivity.paused
@@ -492,7 +513,9 @@ export function Workspace(
 									<span aria-hidden="true" className="workspace-working-indicator ml-1 shrink-0" />
 								)}
 								{destination === "conversation" && conversationActivity.unread > 0 && (
-									<span aria-hidden="true" className="ml-1">{conversationActivity.unread}</span>
+									<WorkspaceFeedbackCount>
+										{conversationActivity.unread}
+									</WorkspaceFeedbackCount>
 								)}
 							</button>
 						);
