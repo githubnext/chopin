@@ -55,6 +55,7 @@ test("renders keyed disclosure glyphs for their open state", () => {
 
 	expect(closed).toContain('data-feedback-icon="closed"');
 	expect(closed).toContain('data-motion-feedback="icon"');
+	expect(closed).toContain('class="host-feedback inline-flex"');
 	expect(closed).toContain("Closed");
 	expect(closed).not.toContain("Opened");
 	expect(opened).toContain('data-feedback-icon="open"');
