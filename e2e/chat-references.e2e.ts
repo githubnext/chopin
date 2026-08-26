@@ -84,7 +84,7 @@ test("typed references survive Planner send, reload, navigation, and a mobile ch
 	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
 	await expect(draft).toHaveAttribute("role", "combobox");
 	await expect(draft).toHaveAttribute("aria-autocomplete", "list");
-	await draft.fill("@chopin Compare #Sou");
+	await draft.fill(`@chopin Compare #${targetRoom.slice(0, 8)}`);
 	let documents = chat.getByRole("listbox", { name: "Document references" });
 	await expect(documents).toBeVisible();
 	await expectNoHorizontalOverflow(opened);
