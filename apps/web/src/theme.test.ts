@@ -264,6 +264,18 @@ describe("feedback motion", () => {
 		}
 	});
 
+	it("keeps icon and count deformation subtle", () => {
+		for (let keyframe of ["feedback-icon-enter", "feedback-count-enter"]) {
+			let body = new RegExp(`@keyframes ${keyframe}\\s*{([\\s\\S]*?)\\n}`).exec(THEME)?.[1];
+			let scale = Number(/scale\(([\d.]+)\)/.exec(body ?? "")?.[1]);
+			expect({ keyframe, scale, subtle: scale >= 0.95 }).toEqual({
+				keyframe,
+				scale,
+				subtle: true,
+			});
+		}
+	});
+
 	it("settles feedback under reduced motion", () => {
 		let reduced = THEME.match(
 			/@media \(prefers-reduced-motion: reduce\)\s*{([\s\S]*?)\n}/,
