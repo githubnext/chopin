@@ -3,12 +3,13 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { SignInIcon } from "@phosphor-icons/react";
 
-import { AgentFace, Face, MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
+import { AgentFace, Face, MotionDisclosure } from "@chopin/editor";
 
 import { MessageMarkdown } from "./markdown";
 import { capitalize, displayText, duration, group, summarize, toolCopy } from "./model";
 import { motionContract } from "../motion-contract";
 import { motionImmediately } from "../motion-input";
+import toolChevronDown from "../assets/icons/tool-chevron-down.svg";
 import toolChevronRight from "../assets/icons/tool-chevron-right.svg";
 import toolLoader from "../assets/icons/tool-loader.svg";
 
@@ -43,9 +44,14 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 				onClick={() => setOpen(value => !value)}
 				type="button"
 			>
-				<MotionDisclosureIcon motion={motion} open={open}>
-					<img alt="" className="size-[14px]" src={toolChevronRight} />
-				</MotionDisclosureIcon>
+				<img
+					alt=""
+					className="motion-feedback size-[14px]"
+					data-feedback-icon={open ? "open" : "closed"}
+					data-motion-feedback="icon"
+					key={open ? "open" : "closed"}
+					src={open ? toolChevronDown : toolChevronRight}
+				/>
 				<span className="tabular-nums">
 					{summary.count} {summary.count === 1 ? "tool" : "tools"}
 				</span>
@@ -128,13 +134,11 @@ function MessageBody(
 				<div className="flex items-start gap-1">
 					<div className="min-w-0 flex-1">
 						<MessageMarkdown
-							className={`${
-								message.working ? "chat-working " : ""
-							}break-words text-conversation-body [overflow-wrap:anywhere]`}
+							className="break-words text-conversation-body [overflow-wrap:anywhere]"
 							references={message.references}
 							source={text}
 						/>
-						{message.streaming && <span className="ml-0.5 animate-pulse">▍</span>}
+						{message.streaming && <span className="ml-0.5">▍</span>}
 					</div>
 					{message.queued && message.author.kind === "member" && message.author.handle === handle
 						&& (

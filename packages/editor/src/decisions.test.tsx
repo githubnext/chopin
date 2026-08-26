@@ -56,9 +56,12 @@ test("resolved history starts collapsed and restores an explicit open preference
 	let collapsed = markup();
 	expect(collapsed).toContain('aria-expanded="false"');
 	expect(collapsed).not.toContain("aria-controls");
+	expect(collapsed).toContain('data-feedback-icon="closed"');
+	expect(collapsed).toContain('data-motion-feedback="icon"');
 	let restored = markup("true");
 	expect(restored).toContain('aria-expanded="true"');
 	expect(restored).toMatch(/aria-controls="[^"]+"/);
 	expect(restored).toContain('data-motion-disclosure="decision-history"');
-	expect(restored.match(/class="motion-disclosure-icon"[^>]*data-open=""/g)).toHaveLength(1);
+	expect(restored).toContain('data-feedback-icon="open"');
+	expect(restored).toContain('data-motion-feedback="icon"');
 });

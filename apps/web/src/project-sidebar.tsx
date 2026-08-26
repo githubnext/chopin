@@ -14,6 +14,7 @@ import { MotionDisclosure } from "@chopin/editor";
 import { documentPath, researchWorkspacePath } from "@chopin/protocol/document-url";
 
 import { useId, useRef, useState } from "react";
+import { CaretDownIcon, CaretRightIcon } from "@phosphor-icons/react";
 import type * as Api from "./api";
 import type { DocumentAction } from "./document-actions-menu";
 import type { ProjectDocuments } from "./document-actions";
@@ -213,6 +214,29 @@ function Project(
 					onClick={onToggle}
 					type="button"
 				>
+					{expanded
+						? (
+							<CaretDownIcon
+								aria-hidden="true"
+								className="motion-feedback shrink-0 opacity-50"
+								data-feedback-icon="open"
+								data-motion-feedback="icon"
+								key="open"
+								size={14}
+								weight="bold"
+							/>
+						)
+						: (
+							<CaretRightIcon
+								aria-hidden="true"
+								className="motion-feedback shrink-0 opacity-50"
+								data-feedback-icon="closed"
+								data-motion-feedback="icon"
+								key="closed"
+								size={14}
+								weight="bold"
+							/>
+						)}
 					<NavigationIcon className="opacity-50" src={bookBookmarkIcon} />
 					<span className="truncate text-sm font-bold">{label}</span>
 				</button>

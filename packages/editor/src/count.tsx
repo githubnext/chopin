@@ -17,8 +17,10 @@
 import type { ReactNode } from "react";
 
 export function Count(
-	{ children, ring }: {
+	{ children, motion, ring }: {
 		children: ReactNode;
+		/** True only when a newly actionable count enters. */
+		motion?: boolean;
 		/** True where it sits in the overlapping stack, beside the faces. */
 		ring?: boolean;
 	},
@@ -26,8 +28,10 @@ export function Count(
 	return (
 		<span
 			className={`inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-brand px-1.5 text-sm leading-none font-medium text-white tabular-nums ${
-				ring ? "ring-2 ring-page" : ""
-			}`}
+				motion ? "motion-feedback" : ""
+			} ${ring ? "ring-2 ring-page" : ""}`}
+			data-motion-feedback={motion ? "count" : undefined}
+			data-motion-settled={motion ? undefined : ""}
 		>
 			{children}
 		</span>

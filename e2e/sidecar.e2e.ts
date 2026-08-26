@@ -498,8 +498,10 @@ test("decision cards save independently with progressive custom answers", async 
 	await expect(scope.getByRole("checkbox", { name: "Anchors" })).not.toBeChecked();
 
 	let history = page.getByRole("button", { name: "1 resolved" });
-	await history.focus();
-	await page.keyboard.press("Space");
+	let historyIcon = history.locator("[data-feedback-icon]");
+	await history.click();
+	await expect(historyIcon).toHaveAttribute("data-feedback-icon", "open");
+	await expect(historyIcon).toHaveCSS("animation-name", "feedback-icon-enter");
 	let historyContent = page.locator('[data-motion-disclosure="decision-history"]');
 	await expect(historyContent).toBeVisible();
 	let historyId = await historyContent.getAttribute("id");
@@ -510,7 +512,18 @@ test("decision cards save independently with progressive custom answers", async 
 	await expect(resolved).toContainText("On disk as MDX");
 	await expect(resolved).toContainText("Answered by @ana");
 	await expect(resolved.getByRole("button", { name: "Save answer" })).toHaveCount(0);
+	await history.focus();
 	await page.keyboard.press("Space");
+	await expect(historyIcon).toHaveAttribute("data-feedback-icon", "closed");
+	await expect(historyIcon).toHaveCSS("animation-duration", "0s");
+	await historyIcon.evaluate(element => {
+		element.addEventListener(
+			"animationstart",
+			() => element.setAttribute("data-motion-replayed", ""),
+		);
+	});
+	await historyIcon.hover();
+	await expect(historyIcon).not.toHaveAttribute("data-motion-replayed");
 	await expect(history).not.toHaveAttribute("aria-controls");
 	await expect(historyContent).toHaveCount(0);
 
@@ -520,7 +533,9 @@ test("decision cards save independently with progressive custom answers", async 
 	let custom = scope.getByRole("textbox", { name: "Custom answer for Scope" });
 	await expect(custom).toBeFocused();
 	await scope.getByRole("button", { name: "Save answer" }).click();
-	await expect(scope.getByRole("alert")).toBeVisible();
+	let alert = scope.getByRole("alert");
+	await expect(alert).toBeVisible();
+	await expect(alert).toHaveCSS("animation-name", "feedback-alert-enter");
 	await custom.fill("Only collaborative anchors");
 	await scope.getByRole("checkbox", { name: "Anchors" }).check();
 	await expect(custom).toHaveCount(0);

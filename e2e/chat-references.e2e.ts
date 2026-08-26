@@ -131,11 +131,17 @@ test("typed references survive Planner send, reload, navigation, and a mobile co
 	await expect(draft).toHaveAttribute("aria-disabled", "true");
 	let error = conversation.getByRole("alert");
 	await expect(error).toContainText("Message not sent: Unavailable");
+	await expect(error).toHaveCSS("animation-name", "feedback-alert-enter");
 	expect((await error.textContent())!.length).toBeLessThan(150);
 	await expect(draft).toHaveValue(expected);
 	await expect(draft).toBeFocused();
 	await expect(send).toBeEnabled();
-	await send.click();
+	await draft.press("ArrowLeft");
+	await expect(error).toHaveCSS("animation-name", "none");
+	await error.hover();
+	await expect(error).toHaveCSS("animation-name", "none");
+	await draft.press("End");
+	await draft.press("Enter");
 
 	await expect.poll(() => sent).toHaveLength(1);
 	expect(attempts).toHaveLength(2);
@@ -252,6 +258,7 @@ test("an empty picker leaves arrows and Enter to the textarea", async ({ join, p
 
 test("a disconnect rejects a pending send without losing its draft", async ({ join, page, seed }) => {
 	await seed("# Pending chat send\n");
+	await page.emulateMedia({ reducedMotion: "reduce" });
 	await page.routeWebSocket("**/ws?**", route => {
 		let server = route.connectToServer();
 		route.onMessage(message => {
@@ -269,7 +276,9 @@ test("a disconnect rejects a pending send without losing its draft", async ({ jo
 	let value = "Keep this draft through disconnect";
 	await draft.fill(value);
 	await conversation.getByRole("button", { name: "Send message" }).click();
-	await expect(conversation.getByRole("alert")).toContainText("Check the connection and try again");
+	let error = conversation.getByRole("alert");
+	await expect(error).toContainText("Check the connection and try again");
+	await expect(error).toHaveCSS("animation-name", "none");
 	await expect(draft).toHaveValue(value);
 	await expect(draft).toBeFocused();
 });

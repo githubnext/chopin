@@ -228,22 +228,38 @@ describe("disclosure motion", () => {
 			/@media \(prefers-reduced-motion: reduce\)\s*{([\s\S]*?)\n}/,
 		)?.[1];
 		expect(reduced).toContain(".motion-collapse,");
-		expect(reduced).toContain(".motion-collapse-content,");
-		expect(reduced).toContain(".motion-disclosure-icon,");
+		expect(reduced).toContain(".motion-collapse-content {");
+		expect(reduced).toContain(
+			':root[data-motion-input="pointer"] .motion-disclosure-icon,',
+		);
 		expect(reduced).toMatch(/transition:\s*none;/);
 	});
 });
 
 describe("feedback motion", () => {
 	it("uses the shipped feedback class for purposeful pointer entrances", () => {
+		for (
+			let [kind, name, duration, easing] of [
+				["icon", "feedback-icon-enter", "icon-swap-dur", "motion-move"],
+				["count", "feedback-count-enter", "badge-pop-dur", "motion-smooth-out"],
+				["alert", "feedback-alert-enter", "toast-open", "motion-smooth-out"],
+			]
+		) {
+			expect(THEME).toMatch(
+				new RegExp(
+					`\\.motion-feedback\\[data-motion-feedback="${kind}"\\]\\s*{[^}]*animation: ${name} 0s var\\(--${easing}\\) both`,
+					"s",
+				),
+			);
+			expect(THEME).toMatch(
+				new RegExp(
+					`:root\\[data-motion-input="pointer"\\]\\s+\\.motion-feedback\\[data-motion-feedback="${kind}"\\]:not\\(\\[data-motion-settled\\]\\)\\s*{[^}]*animation-duration: var\\(--${duration}\\)`,
+					"s",
+				),
+			);
+		}
 		expect(THEME).toMatch(
-			/:root\[data-motion-input="pointer"\] \.motion-feedback\[data-motion-feedback="icon"\]\s*{[^}]*feedback-icon-enter[^}]*var\(--icon-swap-dur\)[^}]*var\(--motion-move\)/s,
-		);
-		expect(THEME).toMatch(
-			/:root\[data-motion-input="pointer"\] \.motion-feedback\[data-motion-feedback="count"\]\s*{[^}]*feedback-count-enter[^}]*var\(--badge-pop-dur\)[^}]*var\(--motion-smooth-out\)/s,
-		);
-		expect(THEME).toMatch(
-			/:root\[data-motion-input="pointer"\] \.motion-feedback\[data-motion-feedback="alert"\]\s*{[^}]*feedback-alert-enter[^}]*var\(--toast-open\)[^}]*var\(--motion-smooth-out\)/s,
+			/\.motion-feedback\[data-motion-settled\]\s*{[^}]*animation-name:\s*none/s,
 		);
 	});
 
@@ -280,7 +296,9 @@ describe("feedback motion", () => {
 		let reduced = THEME.match(
 			/@media \(prefers-reduced-motion: reduce\)\s*{([\s\S]*?)\n}/,
 		)?.[1];
-		expect(reduced).toContain(".motion-feedback {");
-		expect(reduced).toMatch(/animation:\s*none;/);
+		expect(reduced).toMatch(
+			/:root\[data-motion-input="pointer"\]\s+\.motion-feedback\[data-motion-feedback\]:not\(\[data-motion-settled\]\)\s*{/,
+		);
+		expect(reduced).toMatch(/animation-duration:\s*0s;/);
 	});
 });

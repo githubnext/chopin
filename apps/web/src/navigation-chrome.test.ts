@@ -81,6 +81,8 @@ describe("the Figma navigation chrome", () => {
 		expect(markup).toMatch(
 			/<button[^>]*aria-expanded="true"[^>]*class="project-sidebar-project-disclosure[^>]*>.*?book-bookmark\.svg.*?testing-sql-transcripts<\/span><\/button>/s,
 		);
+		expect(markup).toContain('data-feedback-icon="open"');
+		expect(markup).toContain('data-motion-feedback="icon"');
 		expect(markup).toMatch(
 			/<button[^>]*aria-controls="[^"]+"[^>]*class="project-sidebar-project-disclosure/s,
 		);
