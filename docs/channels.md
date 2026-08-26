@@ -1,7 +1,7 @@
 # Repository channels
 
-A channel is Chopin's internal durable collaboration container for one document, its
-conversation, decisions, and one GitHub repository. Its metadata is stored
+A channel is Chopin's internal durable collaboration container for one document, its Chat,
+decisions, and one GitHub repository. Its metadata is stored
 locally; GitHub remains the current source of identity, installation access, and
 repository roles.
 
@@ -209,7 +209,7 @@ visible document.
 
 ```text
 /documents/:owner/:repository         document list and creation
-/documents/:owner/:repository/:slug   conversation plus Plan or Decisions view
+/documents/:owner/:repository/:slug   Chat plus Plan or Decisions view
 /documents/:owner/:repository/:parentSlug/children/:childSlug
                                        anchored ordinary child document
 /                                     repository picker
@@ -218,7 +218,7 @@ visible document.
 Pending research requests remain inline and do not appear in navigation. After
 publication, the ordinary child channel appears beneath its parent. Selecting it
 keeps the mounted parent as receded context and opens the child through its own
-WebSocket, document state, Conversation, and Decisions. Direct entry resolves
+WebSocket, document state, Chat, and Decisions. Direct entry resolves
 both slugs and verifies the repository and stored parent relationship. Browser
 Back, Escape, and the child close control return to the parent and restore its
 scroll, selection, and opener focus.
@@ -235,7 +235,7 @@ replaces its address with the current canonical `/documents/...` route while
 preserving the query and fragment.
 
 The application first authorizes metadata over HTTP, then opens one WebSocket
-for live channel traffic. Wide split mode shows Conversation beside either Plan,
+for live channel traffic. Wide split mode shows Chat beside either Plan,
 the current label for the document-content view, or Decisions. Compact mode
 shows one destination at a time. Plan and Decisions are alternatives rather
 than simultaneous document panes.
@@ -246,7 +246,7 @@ than simultaneous document panes.
    admission, App installation, repository identity, and pull access.
 2. `session:hello` establishes the socket's identity and edit capability.
 3. The editor asks `plan:open` when the transport becomes available. Questions,
-   comments, and conversation receive their own current snapshots.
+   comments, and Chat receive their own current snapshots.
 4. The open request supplies the client's epoch and Yjs state vector so the
    server can return only missing state when histories are compatible.
 5. Unacknowledged browser updates remain in an outbox and replay after a

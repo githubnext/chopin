@@ -79,7 +79,7 @@ Before each custom or MCP tool executes, callbacks recheck:
 - the App installation's repository access.
 
 Permission is decided before execution. A refusal therefore produces no normal
-tool start or completion event; the conversation service renders permission
+tool start or completion event; the Chat service renders permission
 denials explicitly so the boundary remains visible.
 
 The in-memory SDK session is bound to one credential revision. Before an
@@ -87,9 +87,9 @@ eight-hour GitHub App token refresh, Chopin aborts and discards every Planner
 session using that revision. The next turn creates a fresh session with the new
 token.
 
-## Conversation context
+## Chat context
 
-Channel conversation is durable, but not every historical message is sent to
+The channel chat transcript is durable, but not every historical message is sent to
 every turn.
 
 - Messages since the last turn are retained as immediate backscroll, capped at
@@ -103,7 +103,7 @@ every turn.
 - The Planner reads the current document through the plan-named `read_plan` tool
   instead of receiving a stale embedded copy.
 
-Conversation references are typed server-side resources, not URLs the model can
+Chat references are typed server-side resources, not URLs the model can
 follow. `#` selects another ordinary document in the current repository.
 References persist with their message, but `read_reference` accepts only the
 bounded set retained by the active Planner session. A document reference reads
@@ -124,7 +124,7 @@ later turn bootstraps from the bounded transcript and reads the current document
 
 An interrupted turn is visible and is never replayed automatically because it
 may already have made durable document or question changes. `session.send()` only
-accepts a message; the conversation handler remains active until the SDK emits
+accepts a message; the Chat handler remains active until the SDK emits
 its idle event.
 
 The runtime starts lazily on the first Planner turn or model-backed worker
@@ -138,7 +138,7 @@ Background jobs are durable Chopin requests, not child Planner turns. Registered
 definitions control their input and artifact codecs, enqueue origins, credential
 mode, timeout, failure budget, declared progress, and artifact settlement. Every
 model-backed stage uses a fresh disposable SDK session. Job output is not
-automatically injected into Conversation or recreated Planner context, although
+automatically injected into Chat or recreated Planner context, although
 the Planner may explicitly read an artifact in a later turn.
 
 An inline `/research` submission persists the exact brief and starts work
@@ -185,7 +185,7 @@ current production interface lets a person approve the draft. See
 - SDK client and available-tool filter: `apps/server/src/agent/client.ts`
 - Permission callbacks: `apps/server/src/agent/permissions.ts`
 - Repository-fixed tools: `apps/server/src/agent/repository.ts`
-- Ownership and conversation lifecycle: `apps/server/src/chat/service.ts`
+- Ownership and Chat lifecycle: `apps/server/src/chat/service.ts`
 - GitHub App session lifecycle: `apps/server/src/auth/session.ts`
 - Background job registry and runner: `apps/server/src/jobs/registry.ts` and
   `apps/server/src/jobs/runner.ts`

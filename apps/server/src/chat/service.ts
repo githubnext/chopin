@@ -1,10 +1,10 @@
 /**
- * The conversation.
+ * Chat.
  *
  * One transcript per room, shared by everyone in it, and one turn at a time.
  * Messages that address the agent are queued rather than refused while it is
  * working: the plan belongs to the agent for the length of a turn, but the
- * conversation does not, and silencing somebody because a colleague prompted
+ * Chat does not, and silencing somebody because a colleague prompted
  * first is a poor way to run a room with two people in it.
  *
  * Messages that do not address it are ordinary conversation. They are carried
@@ -465,7 +465,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 	}
 	let request = requestFingerprint(msg, ws.data.principalId);
 	if (replay(chat, ws, msg, requestId, request)) return;
-	if (chat.closed) return fail(ws, msg.rid, "conversation is closed");
+	if (chat.closed) return fail(ws, msg.rid, "chat is closed");
 	let projected: { text: string; references?: Wire.Reference[] };
 	try {
 		if (context.references) {
@@ -491,7 +491,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 	let text = projected.text;
 	let references = projected.references;
 	if (!text) return fail(ws, msg.rid, "message text is empty");
-	if (chat.closed) return fail(ws, msg.rid, "conversation is closed");
+	if (chat.closed) return fail(ws, msg.rid, "chat is closed");
 	let savedDelivery = delivery(destination, request, text, references);
 
 	if (destination === "room") {
