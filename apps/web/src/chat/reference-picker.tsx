@@ -298,7 +298,7 @@ export function ReferencePicker(
 								? `${option.title}, workspace ${option.workspaceId}`
 								: option.title}
 							aria-selected={index === active}
-							className={`flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left transition ${
+							className={`flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left ${
 								index === active ? "bg-selected" : "hover:bg-hover"
 							}`}
 							id={referenceOptionId(id, index)}

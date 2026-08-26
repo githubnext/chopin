@@ -49,7 +49,11 @@ export function DeleteDocumentDialog(
 				and its research workspaces will be permanently deleted. This cannot be undone.
 			</p>
 			{error !== undefined && (
-				<p className="mt-3 text-sm text-destructive-ink" role="alert">
+				<p
+					className="motion-feedback mt-3 text-sm text-destructive-ink"
+					data-motion-feedback="alert"
+					role="alert"
+				>
 					{error instanceof Error ? error.message : "Could not delete the document."}
 				</p>
 			)}

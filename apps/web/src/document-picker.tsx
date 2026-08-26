@@ -230,7 +230,11 @@ export function DocumentPicker(
 				)}
 				{listError !== undefined && (
 					<div className="px-2 py-3">
-						<p className="text-sm text-destructive-ink" role="alert">
+						<p
+							className="motion-feedback text-sm text-destructive-ink"
+							data-motion-feedback="alert"
+							role="alert"
+						>
 							{message(listError, "Could not load documents.")}
 						</p>
 						<button
@@ -313,7 +317,11 @@ export function DocumentPicker(
 						: (
 							<>
 								{createError !== undefined && (
-									<p className="px-2 py-2 text-sm text-destructive-ink" role="alert">
+									<p
+										className="motion-feedback px-2 py-2 text-sm text-destructive-ink"
+										data-motion-feedback="alert"
+										role="alert"
+									>
 										{message(createError, "Could not create document.")}
 									</p>
 								)}

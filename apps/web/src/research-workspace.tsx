@@ -360,7 +360,11 @@ function DraftConfirmation(
 			</p>
 			{reason && <p className="research-disabled-reason">{reason}</p>}
 			{error !== undefined && (
-				<p className="research-error" role="alert">
+				<p
+					className="research-error motion-feedback"
+					data-motion-feedback="alert"
+					role="alert"
+				>
 					{error instanceof Error ? error.message : "Could not start public web research."}
 				</p>
 			)}
@@ -485,7 +489,11 @@ function ResearchThread(
 								</div>
 							)}
 							{!artifact && job?.job.state === "completed" && (
-								<p className="research-error" role="alert">
+								<p
+									className="research-error motion-feedback"
+									data-motion-feedback="alert"
+									role="alert"
+								>
 									The completed answer could not be displayed safely.
 								</p>
 							)}
@@ -557,7 +565,11 @@ function ResearchThread(
 					</p>
 				)}
 				{error !== undefined && (
-					<p className="research-error" role="alert">
+					<p
+						className="research-error motion-feedback"
+						data-motion-feedback="alert"
+						role="alert"
+					>
 						{error instanceof Error ? error.message : "Could not add the research turn."}
 					</p>
 				)}
@@ -943,7 +955,11 @@ export function ResearchWorkspace(
 										turn={initial}
 									/>
 									{currentJob(initial)?.job.state === "completed" && (
-										<p className="research-error" role="alert">
+										<p
+											className="research-error motion-feedback"
+											data-motion-feedback="alert"
+											role="alert"
+										>
 											The completed report could not be displayed safely.
 										</p>
 									)}
@@ -951,7 +967,11 @@ export function ResearchWorkspace(
 							)
 							: null}
 						{error !== undefined && (
-							<div className="research-refresh-error" role="alert">
+							<div
+								className="research-refresh-error motion-feedback"
+								data-motion-feedback="alert"
+								role="alert"
+							>
 								<p>
 									The latest research state could not be loaded. The last saved result remains
 									visible.
@@ -982,7 +1002,11 @@ export function ResearchWorkspace(
 				</main>
 			</div>
 			{cancellationError !== undefined && (
-				<div className="research-cancel-error" role="alert">
+				<div
+					className="research-cancel-error motion-feedback"
+					data-motion-feedback="alert"
+					role="alert"
+				>
 					{cancellationError instanceof Error
 						? cancellationError.message
 						: "Could not cancel the active research turn."}

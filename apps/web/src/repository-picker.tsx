@@ -219,7 +219,11 @@ export function RepositoryPicker(
 				)}
 				{!installed && !loading && error !== undefined && (
 					<div className="px-2 py-3">
-						<p className="text-sm text-destructive-ink" role="alert">
+						<p
+							className="motion-feedback text-sm text-destructive-ink"
+							data-motion-feedback="alert"
+							role="alert"
+						>
 							Could not load repositories.
 						</p>
 						<button className="btn btn-sm btn-secondary mt-2" onClick={retry} type="button">
@@ -361,7 +365,11 @@ export function RepositoryPicker(
 			{installed && (
 				<div className="p-1 hairline-t">
 					{error !== undefined && (
-						<div className="flex items-center gap-2 px-2 py-1 text-sm" role="alert">
+						<div
+							className="motion-feedback flex items-center gap-2 px-2 py-1 text-sm"
+							data-motion-feedback="alert"
+							role="alert"
+						>
 							<span className="min-w-0 flex-1 text-destructive-ink">
 								{snapshot.current
 									? "Could not refresh repositories."

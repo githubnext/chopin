@@ -412,7 +412,11 @@ export function Chat(
 
 					<div className="flex items-center justify-end gap-1 px-2 pb-2">
 						{sendError && (
-							<p className="mr-auto min-w-0 truncate text-sm text-destructive-ink" role="alert">
+							<p
+								className="motion-feedback mr-auto min-w-0 truncate text-sm text-destructive-ink"
+								data-motion-feedback="alert"
+								role="alert"
+							>
 								{sendError}
 							</p>
 						)}
