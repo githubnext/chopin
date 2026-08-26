@@ -47,8 +47,8 @@
 	--color-text-secondary: var(--color-gray-700);
 	--color-text-tertiary: var(--color-gray-600);
 	--color-text-quaternary: var(--color-gray-500);
-	--color-conversation-body: #3e453b;
-	--color-conversation-pane: color-mix(in srgb, var(--color-ground) 30%, var(--color-page));
+	--color-chat-body: #3e453b;
+	--color-chat-pane: color-mix(in srgb, var(--color-ground) 30%, var(--color-page));
 
 	/* Petrol is the only accent: action, focus, presence and links all agree. */
 	--color-brand: oklch(0.50006 0.08514 210.06); /* #06707e */
@@ -79,7 +79,7 @@
 	--edge-width: 1px;
 
 	/*
-	 * Chrome, conversation, prose, section and title. Colour carries hierarchy
+	 * Chrome, chat, prose, section and title. Colour carries hierarchy
 	 * inside the chrome rather than two more sizes below the legibility floor.
 	 */
 	--text-*: initial;
@@ -549,19 +549,19 @@ body {
 	}
 }
 
-.conversation-toggle-icon-close {
+.chat-toggle-icon-close {
 	opacity: 0;
 }
 
-.conversation-toggle:is(:hover, :focus-visible) .conversation-toggle-icon-default {
+.chat-toggle:is(:hover, :focus-visible) .chat-toggle-icon-default {
 	opacity: 0;
 }
 
-.conversation-toggle:is(:hover, :focus-visible) .conversation-toggle-icon-close {
+.chat-toggle:is(:hover, :focus-visible) .chat-toggle-icon-close {
 	opacity: 0.5;
 }
 
-:root[data-motion-input="pointer"] .conversation-toggle-icon {
+:root[data-motion-input="pointer"] .chat-toggle-icon {
 	transition: opacity var(--duration-fast) var(--ease-out);
 }
 
@@ -607,7 +607,7 @@ body {
 	box-shadow: none;
 }
 
-.workspace-frame .workspace-conversation-panel {
+.workspace-frame .workspace-chat-panel {
 	border-color: rgb(0 0 0 / 9%);
 }
 
@@ -662,34 +662,34 @@ body {
 	transform: translateX(calc(var(--page-slide-distance) * -1));
 }
 
-.workspace-root:not([data-workspace-mode="split"]) .workspace-conversation-panel {
+.workspace-root:not([data-workspace-mode="split"]) .workspace-chat-panel {
 	position: absolute;
 	inset: 0;
 	z-index: 10;
 }
 
-.conversation-composer .field {
+.chat-composer .field {
 	height: 98px;
 	border-color: var(--color-edge);
 	border-radius: var(--radius-lg);
 	box-shadow: var(--shadow-resting);
 }
 
-.conversation-composer .field:focus-within {
+.chat-composer .field:focus-within {
 	outline: 2px solid var(--color-brand);
 	outline-offset: 2px;
 }
 
-.conversation-composer textarea:focus {
+.chat-composer textarea:focus {
 	outline: none;
 }
 
-.conversation-header-control:hover:not(:disabled),
-.conversation-header-control:active:not(:disabled) {
+.chat-header-control:hover:not(:disabled),
+.chat-header-control:active:not(:disabled) {
 	background-color: transparent;
 }
 
-.conversation-composer .send-action:disabled {
+.chat-composer .send-action:disabled {
 	background-color: var(--color-brand);
 	color: var(--color-page);
 }
@@ -709,7 +709,7 @@ body {
 
 @media (min-width: 1200px) {
 	/* The desktop composer keeps the same clearance on each exposed edge. */
-	.conversation-composer {
+	.chat-composer {
 		padding-inline: 1rem;
 		padding-bottom: calc(1rem + env(safe-area-inset-bottom));
 	}
@@ -735,7 +735,7 @@ body {
 }
 
 :root[data-plan-coarse-pointer] .room-header :where(button, summary),
-:root[data-plan-coarse-pointer] .conversation-composer button,
+:root[data-plan-coarse-pointer] .chat-composer button,
 :root[data-plan-coarse-pointer] .hosted-header button,
 :root[data-plan-coarse-pointer] .repository-picker-search,
 :root[data-plan-coarse-pointer] .channel-create-input,
@@ -793,7 +793,7 @@ body {
 		transition: none;
 	}
 
-	:root[data-motion-input="pointer"] .conversation-toggle-icon {
+	:root[data-motion-input="pointer"] .chat-toggle-icon {
 		transition: none;
 	}
 

@@ -284,7 +284,7 @@ export function Chat(
 					: undefined}
 			/>
 
-			<div className="conversation-composer relative shrink-0 px-2.5 pb-2.5">
+			<div className="chat-composer relative shrink-0 px-2.5 pb-2.5">
 				{pickerOpen && trigger && (
 					<ReferencePicker
 						active={picker.active}

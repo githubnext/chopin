@@ -14,8 +14,8 @@ import {
 	workspaceMode,
 	workspaceProfile,
 } from "./workspace-model";
-import conversationCloseIcon from "./assets/icons/conversation-close.svg";
-import conversationIcon from "./assets/icons/conversation.svg";
+import chatCloseIcon from "./assets/icons/chat-close.svg";
+import chatIcon from "./assets/icons/chat.svg";
 import navigationXmark from "./assets/icons/navigation-xmark.svg";
 import { ResizeHandle, usePaneWidth } from "./resizable-pane";
 import { motionContract } from "./motion-contract";
@@ -148,7 +148,7 @@ export function ChatToggle(
 			aria-controls={controls}
 			aria-expanded={open}
 			aria-label={`${open ? "Hide" : "Show"} chat pane${status ? `, ${status}` : ""}`}
-			className={`conversation-toggle btn btn-icon btn-ghost relative shrink-0 ${className ?? ""}`}
+			className={`chat-toggle btn btn-icon btn-ghost relative shrink-0 ${className ?? ""}`}
 			data-activity={activity.busy ? "busy" : activity.unread > 0 ? "unread" : undefined}
 			onClick={onToggle}
 			ref={buttonRef}
@@ -162,13 +162,13 @@ export function ChatToggle(
 					>
 						<img
 							alt=""
-							className="conversation-toggle-icon conversation-toggle-icon-default col-start-1 row-start-1 size-[14px]"
-							src={conversationIcon}
+							className="chat-toggle-icon chat-toggle-icon-default col-start-1 row-start-1 size-[14px]"
+							src={chatIcon}
 						/>
 						<img
 							alt=""
-							className="conversation-toggle-icon conversation-toggle-icon-close col-start-1 row-start-1 size-[14px]"
-							src={conversationCloseIcon}
+							className="chat-toggle-icon chat-toggle-icon-close col-start-1 row-start-1 size-[14px]"
+							src={chatCloseIcon}
 						/>
 					</span>
 				)
@@ -178,7 +178,7 @@ export function ChatToggle(
 						className={`${feedback} size-[14px] ${open ? "opacity-50" : ""}`}
 						data-motion-feedback="icon"
 						key={open ? "open" : "closed"}
-						src={open ? conversationCloseIcon : conversationIcon}
+						src={open ? chatCloseIcon : chatIcon}
 					/>
 				)}
 			{status && (
@@ -325,7 +325,7 @@ export function Workspace(
 					<aside
 						aria-hidden={chatInactive || undefined}
 						aria-labelledby={ids.heading.chat}
-						className={`workspace-conversation-panel motion-panel ${chatPresence.className} order-2 relative flex min-w-0 flex-col overflow-hidden bg-conversation-pane ${
+						className={`workspace-chat-panel motion-panel ${chatPresence.className} order-2 relative flex min-w-0 flex-col overflow-hidden bg-chat-pane ${
 							mode === "split" ? "hairline-l hairline-r hairline-b" : ""
 						}`}
 						hidden={chatPresence.phase === "closed"}
@@ -357,7 +357,7 @@ export function Workspace(
 									)}
 									<ChatToggle
 										activity={chatActivity}
-										className="conversation-header-control -ml-[5px] -mr-[5px]"
+										className="chat-header-control -ml-[5px] -mr-[5px]"
 										controls={ids.pane.chat}
 										onToggle={dismissChat}
 										open
