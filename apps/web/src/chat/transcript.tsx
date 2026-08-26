@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { SignInIcon } from "@phosphor-icons/react";
 
-import { AgentFace, Face, MotionDisclosure } from "@chopin/editor";
+import { AgentFace, Face, MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
 
 import { MessageMarkdown } from "./markdown";
 import { capitalize, displayText, duration, group, summarize, toolCopy } from "./model";
@@ -44,13 +44,11 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 				onClick={() => setOpen(value => !value)}
 				type="button"
 			>
-				<img
-					alt=""
+				<MotionDisclosureIcon
 					className="motion-feedback size-[14px]"
-					data-feedback-icon={open ? "open" : "closed"}
-					data-motion-feedback="icon"
-					key={open ? "open" : "closed"}
-					src={open ? toolChevronDown : toolChevronRight}
+					closed={<img alt="" src={toolChevronRight} />}
+					open={open}
+					opened={<img alt="" src={toolChevronDown} />}
 				/>
 				<span className="tabular-nums">
 					{summary.count} {summary.count === 1 ? "tool" : "tools"}

@@ -10,7 +10,7 @@ import { DocumentActionsMenu } from "./document-actions-menu";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
 import { canManageProject } from "./navigation-model";
-import { MotionDisclosure } from "@chopin/editor";
+import { MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
 import { documentPath, researchWorkspacePath } from "@chopin/protocol/document-url";
 
 import { useId, useRef, useState } from "react";
@@ -214,29 +214,12 @@ function Project(
 					onClick={onToggle}
 					type="button"
 				>
-					{expanded
-						? (
-							<CaretDownIcon
-								aria-hidden="true"
-								className="motion-feedback shrink-0 opacity-50"
-								data-feedback-icon="open"
-								data-motion-feedback="icon"
-								key="open"
-								size={14}
-								weight="bold"
-							/>
-						)
-						: (
-							<CaretRightIcon
-								aria-hidden="true"
-								className="motion-feedback shrink-0 opacity-50"
-								data-feedback-icon="closed"
-								data-motion-feedback="icon"
-								key="closed"
-								size={14}
-								weight="bold"
-							/>
-						)}
+					<MotionDisclosureIcon
+						className="motion-feedback shrink-0 opacity-50"
+						closed={<CaretRightIcon size={14} weight="bold" />}
+						open={expanded}
+						opened={<CaretDownIcon size={14} weight="bold" />}
+					/>
 					<NavigationIcon className="opacity-50" src={bookBookmarkIcon} />
 					<span className="truncate text-sm font-bold">{label}</span>
 				</button>

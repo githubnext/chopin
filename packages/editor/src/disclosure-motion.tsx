@@ -44,15 +44,23 @@ export function MotionDisclosure(
 }
 
 export function MotionDisclosureIcon(
-	{ children, motion, open }: {
-		children: ReactNode;
-		motion: MotionDisclosureContract;
+	{ className, closed, open, opened }: {
+		className: string;
+		closed: ReactNode;
 		open: boolean;
+		opened: ReactNode;
 	},
 ) {
+	let state = open ? "open" : "closed";
 	return (
-		<span aria-hidden="true" className={motion.iconClassName} data-open={open ? "" : undefined}>
-			{children}
+		<span
+			aria-hidden="true"
+			className={className}
+			data-feedback-icon={state}
+			data-motion-feedback="icon"
+			key={state}
+		>
+			{open ? opened : closed}
 		</span>
 	);
 }
