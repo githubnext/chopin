@@ -11,33 +11,33 @@ export type WorkspacePresentation =
 
 export type WorkspaceProfile = {
 	implementation: boolean;
-	persistConversation: boolean;
+	persistChat: boolean;
 	persistPaneSize: boolean;
 	persistView: boolean;
 	research: boolean;
 	surface: WorkspaceSurface;
 };
 
-export type WorkspaceDestination = "plan" | "decisions" | "conversation";
+export type WorkspaceDestination = "plan" | "decisions" | "chat";
 
 export type WorkspaceState = {
-	conversationOpen: boolean;
-	desktopConversationOpen: boolean;
+	chatOpen: boolean;
+	desktopChatOpen: boolean;
 };
 
 export type WorkspaceEvent =
-	| { type: "set-conversation"; open: boolean }
-	| { type: "set-desktop-conversation"; open: boolean };
+	| { type: "set-chat"; open: boolean }
+	| { type: "set-desktop-chat"; open: boolean };
 
 export const WORKSPACE_MEDIA = ["(max-width: 1023px)"] as const;
 
 export function initialWorkspaceState(
 	profile: WorkspaceProfile,
-	desktopConversationOpen: boolean,
+	desktopChatOpen: boolean,
 ): WorkspaceState {
 	return {
-		conversationOpen: false,
-		desktopConversationOpen: profile.persistConversation && desktopConversationOpen,
+		chatOpen: false,
+		desktopChatOpen: profile.persistChat && desktopChatOpen,
 	};
 }
 
@@ -54,7 +54,7 @@ export function workspaceProfile(
 	let child = presentation.type === "child";
 	return {
 		implementation: !child,
-		persistConversation: !child,
+		persistChat: !child,
 		persistPaneSize: !child,
 		persistView: !child,
 		research: !child,
@@ -63,7 +63,7 @@ export function workspaceProfile(
 }
 
 export function workspaceDestinations(): WorkspaceDestination[] {
-	return ["conversation", "plan", "decisions"];
+	return ["chat", "plan", "decisions"];
 }
 
 export function workspaceHeadingId(destination: WorkspaceDestination, scope?: string): string {
@@ -81,8 +81,8 @@ export function workspaceMode(matchMedia: (query: string) => { matches: boolean 
 }
 
 export function transitionWorkspace(state: WorkspaceState, event: WorkspaceEvent): WorkspaceState {
-	if (event.type === "set-conversation") return { ...state, conversationOpen: event.open };
-	return { ...state, desktopConversationOpen: event.open };
+	if (event.type === "set-chat") return { ...state, chatOpen: event.open };
+	return { ...state, desktopChatOpen: event.open };
 }
 
 export function presentWorkspace(
@@ -90,15 +90,15 @@ export function presentWorkspace(
 	mode: WorkspaceMode,
 	documentView: DecisionView,
 ) {
-	let conversationVisible = mode === "split"
-		? state.desktopConversationOpen || state.conversationOpen
-		: state.conversationOpen;
-	let documentVisible = mode === "compact" ? !conversationVisible : true;
+	let chatVisible = mode === "split"
+		? state.desktopChatOpen || state.chatOpen
+		: state.chatOpen;
+	let documentVisible = mode === "compact" ? !chatVisible : true;
 
 	return {
 		documentView,
 		documentVisible,
-		conversationVisible,
-		separatorVisible: mode === "split" && conversationVisible,
+		chatVisible,
+		separatorVisible: mode === "split" && chatVisible,
 	};
 }

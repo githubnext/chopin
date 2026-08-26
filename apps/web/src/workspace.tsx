@@ -51,7 +51,7 @@ export function useWorkspaceIds(): WorkspaceIds {
 		heading: {
 			plan: workspaceHeadingId("plan", instance),
 			decisions: workspaceHeadingId("decisions", instance),
-			conversation: workspaceHeadingId("conversation", instance),
+			chat: workspaceHeadingId("chat", instance),
 		},
 		pane: { chat: `${instance}-pane-chat` },
 	};
@@ -74,7 +74,7 @@ export function useWorkspaceMode(): WorkspaceMode {
 	return useSyncExternalStore(subscribeMode, currentMode, currentMode);
 }
 
-/** Only the desktop Conversation preference crosses a page load. */
+/** Only the desktop Chat preference crosses a page load. */
 export function useWorkspaceState(
 	profile: WorkspaceProfile,
 ): [WorkspaceState, Dispatch<WorkspaceEvent>] {
@@ -89,12 +89,12 @@ export function useWorkspaceState(
 	);
 
 	useEffect(() => {
-		if (!profile.persistConversation) return;
+		if (!profile.persistChat) return;
 		localStorage.setItem(
 			"chopin:pane:chat:open",
-			String(state.desktopConversationOpen),
+			String(state.desktopChatOpen),
 		);
-	}, [profile.persistConversation, state.desktopConversationOpen]);
+	}, [profile.persistChat, state.desktopChatOpen]);
 
 	return [state, dispatch];
 }
@@ -109,16 +109,16 @@ export type WorkspaceProps = {
 	mode: WorkspaceMode;
 	state: WorkspaceState;
 	view: "plan" | "decisions";
-	onConversationOpen: (open: boolean) => void;
-	onDesktopConversationOpen: (open: boolean) => void;
+	onChatOpen: (open: boolean) => void;
+	onDesktopChatOpen: (open: boolean) => void;
 	onDestination: (destination: "plan" | "decisions") => void;
 	unanswered: number;
-	conversationActivity: { unread: number; busy: boolean };
+	chatActivity: { unread: number; busy: boolean };
 	identity?: string;
 	presentation: WorkspacePresentation;
 };
 
-export function ConversationToggle(
+export function ChatToggle(
 	{
 		activity,
 		buttonRef,
@@ -128,7 +128,7 @@ export function ConversationToggle(
 		open,
 		swapOnHover = false,
 	}: {
-		activity: WorkspaceProps["conversationActivity"];
+		activity: WorkspaceProps["chatActivity"];
 		buttonRef?: RefObject<HTMLButtonElement | null>;
 		className?: string;
 		controls: string;
@@ -147,7 +147,7 @@ export function ConversationToggle(
 		<button
 			aria-controls={controls}
 			aria-expanded={open}
-			aria-label={`${open ? "Hide" : "Show"} conversation pane${status ? `, ${status}` : ""}`}
+			aria-label={`${open ? "Hide" : "Show"} chat pane${status ? `, ${status}` : ""}`}
 			className={`conversation-toggle btn btn-icon btn-ghost relative shrink-0 ${className ?? ""}`}
 			data-activity={activity.busy ? "busy" : activity.unread > 0 ? "unread" : undefined}
 			onClick={onToggle}
@@ -197,19 +197,19 @@ export function ConversationToggle(
 function destinationLabel(
 	destination: WorkspaceDestination,
 	unanswered: number,
-	activity: WorkspaceProps["conversationActivity"],
+	activity: WorkspaceProps["chatActivity"],
 ): string {
 	if (destination === "decisions" && unanswered > 0) {
 		return `Decisions, ${unanswered} unanswered`;
 	}
-	if (destination === "conversation" && activity.busy && activity.unread > 0) {
-		return `Conversation, Planner working, ${activity.unread} unread`;
+	if (destination === "chat" && activity.busy && activity.unread > 0) {
+		return `Chat, Planner working, ${activity.unread} unread`;
 	}
-	if (destination === "conversation" && activity.busy) return "Conversation, Planner working";
-	if (destination === "conversation" && activity.unread > 0) {
-		return `Conversation, ${activity.unread} unread`;
+	if (destination === "chat" && activity.busy) return "Chat, Planner working";
+	if (destination === "chat" && activity.unread > 0) {
+		return `Chat, ${activity.unread} unread`;
 	}
-	return destination === "conversation" ? "Conversation" : destination === "decisions"
+	return destination === "chat" ? "Chat" : destination === "decisions"
 		? "Decisions"
 		: "Document";
 }
@@ -219,13 +219,13 @@ export function Workspace(
 		chat,
 		controls,
 		ids,
-		conversationActivity,
+		chatActivity,
 		decisions,
 		header,
 		identity,
 		mode,
-		onConversationOpen,
-		onDesktopConversationOpen,
+		onChatOpen,
+		onDesktopChatOpen,
 		onDestination,
 		plan,
 		presentation: workspacePresentation,
@@ -248,15 +248,15 @@ export function Workspace(
 	let paperObscured = workspacePresentation.type === "parent-with-child";
 	let immediately = motionImmediately();
 	let contentSwapMotion = motionContract("content-swap");
-	let conversationPresence = useTransitionPresence(
-		presentation.conversationVisible ? true : undefined,
+	let chatPresence = useTransitionPresence(
+		presentation.chatVisible ? true : undefined,
 		220,
 		immediately,
 	);
 	let opener = useRef<HTMLElement | undefined>(undefined);
 	let edgeTab = useRef<HTMLButtonElement>(null);
-	let previousConversationOpen = useRef(state.conversationOpen);
-	let conversationInactive = !presentation.conversationVisible;
+	let previousChatOpen = useRef(state.chatOpen);
+	let chatInactive = !presentation.chatVisible;
 	let destinations = workspaceDestinations();
 	let focusDestination = (destination: WorkspaceDestination) => {
 		root.current?.querySelector<HTMLElement>(`#${CSS.escape(ids.heading[destination])}`)
@@ -264,39 +264,39 @@ export function Workspace(
 	};
 
 	useLayoutEffect(() => {
-		if (!previousConversationOpen.current && state.conversationOpen) {
+		if (!previousChatOpen.current && state.chatOpen) {
 			let active = document.activeElement;
 			if (active instanceof HTMLElement) opener.current = active;
 			if (mode !== "split") {
-				focusDestination("conversation");
+				focusDestination("chat");
 			}
 		}
-		previousConversationOpen.current = state.conversationOpen;
-	}, [mode, state.conversationOpen]);
+		previousChatOpen.current = state.chatOpen;
+	}, [mode, state.chatOpen]);
 
 	let navigate = (destination: WorkspaceDestination, source?: HTMLElement) => {
-		if (destination === "conversation" && source) opener.current = source;
-		if (destination === "conversation") onConversationOpen(true);
+		if (destination === "chat" && source) opener.current = source;
+		if (destination === "chat") onChatOpen(true);
 		else onDestination(destination);
 		requestAnimationFrame(() => {
 			focusDestination(destination);
 		});
 	};
 
-	let dismissConversation = () => {
+	let dismissChat = () => {
 		if (mode === "split") {
-			onDesktopConversationOpen(false);
+			onDesktopChatOpen(false);
 			requestAnimationFrame(() => edgeTab.current?.focus({ preventScroll: true }));
 		} else {
-			onConversationOpen(false);
+			onChatOpen(false);
 			requestAnimationFrame(() => opener.current?.focus({ preventScroll: true }));
 		}
 	};
 
-	let showDesktopConversation = () => {
-		onDesktopConversationOpen(true);
+	let showDesktopChat = () => {
+		onDesktopChatOpen(true);
 		requestAnimationFrame(() => {
-			focusDestination("conversation");
+			focusDestination("chat");
 		});
 	};
 
@@ -323,19 +323,19 @@ export function Workspace(
 				{/* `hidden` preserves pane state and subscriptions after its closing transition. */}
 				{chat && (
 					<aside
-						aria-hidden={conversationInactive || undefined}
-						aria-labelledby={ids.heading.conversation}
-						className={`workspace-conversation-panel motion-panel ${conversationPresence.className} order-2 relative flex min-w-0 flex-col overflow-hidden bg-conversation-pane ${
+						aria-hidden={chatInactive || undefined}
+						aria-labelledby={ids.heading.chat}
+						className={`workspace-conversation-panel motion-panel ${chatPresence.className} order-2 relative flex min-w-0 flex-col overflow-hidden bg-conversation-pane ${
 							mode === "split" ? "hairline-l hairline-r hairline-b" : ""
 						}`}
-						hidden={conversationPresence.phase === "closed"}
+						hidden={chatPresence.phase === "closed"}
 						id={ids.pane.chat}
-						inert={conversationInactive}
+						inert={chatInactive}
 						onKeyDown={event => {
 							if (event.key === "Escape" && mode !== "split") {
 								event.preventDefault();
 								event.stopPropagation();
-								dismissConversation();
+								dismissChat();
 							}
 						}}
 						style={mode === "split"
@@ -347,7 +347,7 @@ export function Workspace(
 								<div className="group flex h-[46px] shrink-0 items-center gap-2 px-3.5 hairline-b">
 									{presentation.separatorVisible && (
 										<ResizeHandle
-											label="Resize the conversation"
+											label="Resize chat"
 											max={CHAT_PANE.max}
 											min={CHAT_PANE.min}
 											onResize={resizeChat}
@@ -355,26 +355,26 @@ export function Workspace(
 											width={chatWidth}
 										/>
 									)}
-									<ConversationToggle
-										activity={conversationActivity}
+									<ChatToggle
+										activity={chatActivity}
 										className="conversation-header-control -ml-[5px] -mr-[5px]"
 										controls={ids.pane.chat}
-										onToggle={dismissConversation}
+										onToggle={dismissChat}
 										open
 										swapOnHover
 									/>
 									<h2
 										className="text-[14px] font-medium text-text-tertiary"
-										id={ids.heading.conversation}
+										id={ids.heading.chat}
 										tabIndex={-1}
 									>
-										Conversation
+										Chat
 									</h2>
 								</div>
 							)
 							: (
-								<h2 className="sr-only" id={ids.heading.conversation} tabIndex={-1}>
-									Conversation
+								<h2 className="sr-only" id={ids.heading.chat} tabIndex={-1}>
+									Chat
 								</h2>
 							)}
 						<div className="min-h-0 flex-1">
@@ -383,15 +383,15 @@ export function Workspace(
 					</aside>
 				)}
 
-				{chat && mode === "split" && !presentation.conversationVisible
+				{chat && mode === "split" && !presentation.chatVisible
 					&& !childPresentation && (
 					<div className="absolute right-2.5 top-2.5 z-20">
-						<ConversationToggle
-							activity={conversationActivity}
+						<ChatToggle
+							activity={chatActivity}
 							buttonRef={edgeTab}
 							className="rounded-l-none"
 							controls={ids.pane.chat}
-							onToggle={showDesktopConversation}
+							onToggle={showDesktopChat}
 							open={false}
 						/>
 					</div>
@@ -414,12 +414,12 @@ export function Workspace(
 								{controls}
 								{childPresentation && (
 									<div className="ml-auto flex shrink-0 items-center">
-										{chat && !presentation.conversationVisible && (
-											<ConversationToggle
-												activity={conversationActivity}
+										{chat && !presentation.chatVisible && (
+											<ChatToggle
+												activity={chatActivity}
 												buttonRef={edgeTab}
 												controls={ids.pane.chat}
-												onToggle={showDesktopConversation}
+												onToggle={showDesktopChat}
 												open={false}
 											/>
 										)}
@@ -485,13 +485,13 @@ export function Workspace(
 					className="workspace-navigation hairline-t grid shrink-0 grid-cols-3 bg-ground p-1"
 				>
 					{destinations.map(destination => {
-						let active = destination === "conversation"
-							? presentation.conversationVisible
-							: !presentation.conversationVisible && view === destination;
+						let active = destination === "chat"
+							? presentation.chatVisible
+							: !presentation.chatVisible && view === destination;
 						let label = destinationLabel(
 							destination,
 							unanswered,
-							conversationActivity,
+							chatActivity,
 						);
 						return (
 							<button
@@ -503,8 +503,8 @@ export function Workspace(
 								onClick={event => navigate(destination, event.currentTarget)}
 								type="button"
 							>
-								{destination === "conversation"
-									? "Conversation"
+								{destination === "chat"
+									? "Chat"
 									: destination === "decisions"
 									? "Decisions"
 									: "Document"}
@@ -517,16 +517,16 @@ export function Workspace(
 										{unanswered}
 									</span>
 								)}
-								{destination === "conversation" && conversationActivity.busy && (
+								{destination === "chat" && chatActivity.busy && (
 									<span aria-hidden="true" className="workspace-working-indicator ml-1 shrink-0" />
 								)}
-								{destination === "conversation" && conversationActivity.unread > 0 && (
+								{destination === "chat" && chatActivity.unread > 0 && (
 									<span
 										aria-hidden="true"
 										className={`${motionContract("feedback").className} ml-1`}
 										data-motion-feedback="count"
 									>
-										{conversationActivity.unread}
+										{chatActivity.unread}
 									</span>
 								)}
 							</button>
