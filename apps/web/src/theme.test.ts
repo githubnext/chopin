@@ -229,7 +229,7 @@ describe("disclosure motion", () => {
 		)?.[1];
 		expect(reduced).toContain(".motion-collapse,");
 		expect(reduced).toContain(".motion-collapse-content,");
-		expect(reduced).toContain(".motion-disclosure-icon {");
+		expect(reduced).toContain(".motion-disclosure-icon,");
 		expect(reduced).toMatch(/transition:\s*none;/);
 	});
 });
@@ -244,6 +244,12 @@ describe("feedback motion", () => {
 		);
 		expect(THEME).toMatch(
 			/:root\[data-motion-input="pointer"\] \.motion-feedback\[data-motion-feedback="alert"\]\s*{[^}]*feedback-alert-enter[^}]*var\(--toast-open\)[^}]*var\(--motion-smooth-out\)/s,
+		);
+	});
+
+	it("crossfades the conversation hover icon only for pointer input", () => {
+		expect(THEME).toMatch(
+			/:root\[data-motion-input="pointer"\] \.conversation-toggle-icon\s*{[^}]*opacity var\(--icon-swap-dur\) var\(--motion-move\)/s,
 		);
 	});
 

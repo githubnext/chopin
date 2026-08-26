@@ -548,6 +548,22 @@ body {
 	animation: feedback-alert-enter var(--toast-open) var(--motion-smooth-out) both;
 }
 
+.conversation-toggle-icon-close {
+	opacity: 0;
+}
+
+.conversation-toggle:is(:hover, :focus-visible) .conversation-toggle-icon-default {
+	opacity: 0;
+}
+
+.conversation-toggle:is(:hover, :focus-visible) .conversation-toggle-icon-close {
+	opacity: 0.5;
+}
+
+:root[data-motion-input="pointer"] .conversation-toggle-icon {
+	transition: opacity var(--icon-swap-dur) var(--motion-move);
+}
+
 body {
 	margin: 0;
 	background: var(--color-ground);
@@ -834,7 +850,8 @@ body {
 	.motion-content-swap,
 	.motion-collapse,
 	.motion-collapse-content,
-	.motion-disclosure-icon {
+	.motion-disclosure-icon,
+	.conversation-toggle-icon {
 		transition: none;
 	}
 

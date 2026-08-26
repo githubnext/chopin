@@ -88,3 +88,19 @@ test("the Decisions control names its unanswered count", () => {
 
 	expect(markup).toContain('aria-label="Decisions, 2 unanswered"');
 });
+
+test("new unanswered decisions animate only their count", () => {
+	let markup = renderToStaticMarkup(
+		createElement(DecisionViewControl, {
+			attention: true,
+			backgroundWork: 3,
+			onView: () => {},
+			unanswered: 2,
+			view: "plan",
+		}),
+	);
+
+	expect(markup).toContain('data-motion-feedback="count"');
+	expect(markup.match(/class="[^"]*motion-feedback/g)).toHaveLength(1);
+	expect(markup).not.toContain("animate-enter");
+});
