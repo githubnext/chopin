@@ -239,18 +239,18 @@ export function RoomWorkspace(
 	let latestCanManage = useRef(canManage);
 	let [attention, setAttention] = useState(false);
 	let workspacePresentation = presentWorkspace(workspace, mode, view);
-	let conversationActive = workspacePresentation.conversationVisible;
-	let [conversationActivity, setConversationActivity] = useState({ unread: 0, busy: false });
-	let onConversationActivity = useCallback(
+	let chatActive = workspacePresentation.chatVisible;
+	let [chatActivity, setChatActivity] = useState({ unread: 0, busy: false });
+	let onChatActivity = useCallback(
 		(event: { type: "message" | "working"; busy: boolean }) => {
-			setConversationActivity(current => ({
+			setChatActivity(current => ({
 				busy: event.busy,
-				unread: event.type === "message" && !conversationActive
+				unread: event.type === "message" && !chatActive
 					? current.unread + 1
 					: current.unread,
 			}));
 		},
-		[conversationActive],
+		[chatActive],
 	);
 	let updateMetadata = useCallback((next: WorkspaceMetadata) => {
 		let previous = metadataRef.current;
@@ -286,9 +286,9 @@ export function RoomWorkspace(
 	}, [hasPlanContent, unanswered]);
 
 	useEffect(() => {
-		if (!conversationActive) return;
-		setConversationActivity(current => current.unread === 0 ? current : { ...current, unread: 0 });
-	}, [conversationActive]);
+		if (!chatActive) return;
+		setChatActivity(current => current.unread === 0 ? current : { ...current, unread: 0 });
+	}, [chatActive]);
 
 	useEffect(() => {
 		let previous = previousUnanswered.current;
@@ -314,12 +314,12 @@ export function RoomWorkspace(
 
 	let selectDestination = (destination: "plan" | "decisions") => {
 		selectView(destination, mode === "split");
-		dispatch({ type: "set-conversation", open: false });
+		dispatch({ type: "set-chat", open: false });
 	};
 
-	let setDesktopConversationOpen = (open: boolean) => {
-		dispatch({ type: "set-desktop-conversation", open });
-		if (!open) dispatch({ type: "set-conversation", open: false });
+	let setDesktopChatOpen = (open: boolean) => {
+		dispatch({ type: "set-desktop-chat", open });
+		if (!open) dispatch({ type: "set-chat", open: false });
 	};
 
 	let showPlan = (widget: string, question: string) => {
@@ -449,11 +449,11 @@ export function RoomWorkspace(
 		<Workspace
 			chat={
 				<Chat
-					active={conversationActive}
+					active={chatActive}
 					agent={agent}
 					connected={status === "connected" && workspaceCanEdit}
 					handle={handle}
-					onActivity={onConversationActivity}
+					onActivity={onChatActivity}
 					referencesEnabled={chatReferences.wire === wire && chatReferences.enabled}
 					repository={repository}
 					room={room}
@@ -461,7 +461,7 @@ export function RoomWorkspace(
 					wire={wire}
 				/>
 			}
-			conversationActivity={conversationActivity}
+			chatActivity={chatActivity}
 			header={
 				<Header
 					archivedAt={workspaceArchivedAt}
@@ -483,8 +483,8 @@ export function RoomWorkspace(
 			ids={workspaceIds}
 			identity={room}
 			mode={mode}
-			onDesktopConversationOpen={setDesktopConversationOpen}
-			onConversationOpen={open => dispatch({ type: "set-conversation", open })}
+			onDesktopChatOpen={setDesktopChatOpen}
+			onChatOpen={open => dispatch({ type: "set-chat", open })}
 			onDestination={selectDestination}
 			decisions={
 				<Decisions

@@ -20,7 +20,7 @@ import type { ChannelDetail } from "./api";
 
 const workspaceIds = {
 	heading: {
-		conversation: "workspace-conversation-heading",
+		chat: "workspace-chat-heading",
 		decisions: "workspace-decisions-heading",
 		plan: "workspace-plan-heading",
 	},
@@ -278,16 +278,16 @@ describe("anchored child lifecycle", () => {
 
 	it("obscures only the parent paper frame", () => {
 		let markup = renderToStaticMarkup(createElement(Workspace, {
-			chat: createElement("div", null, "Conversation"),
+			chat: createElement("div", null, "Chat"),
 			controls: createElement("div", null, "Controls"),
-			conversationActivity: { busy: false, unread: 0 },
+			chatActivity: { busy: false, unread: 0 },
 			decisions: createElement("div", null, "Decisions"),
 			header: createElement("header", null, "Parent header"),
 			identity: "parent-room",
 			ids: workspaceIds,
 			mode: "compact",
-			onConversationOpen() {},
-			onDesktopConversationOpen() {},
+			onChatOpen() {},
+			onDesktopChatOpen() {},
 			onDestination() {},
 			plan: createElement("div", null, "Parent paper"),
 			presentation: {
@@ -295,7 +295,7 @@ describe("anchored child lifecycle", () => {
 				onChildClose() {},
 				type: "parent-with-child",
 			},
-			state: { conversationOpen: false, desktopConversationOpen: false },
+			state: { chatOpen: false, desktopChatOpen: false },
 			unanswered: 0,
 			view: "plan",
 		}));
@@ -310,22 +310,22 @@ describe("anchored child lifecycle", () => {
 		expect(markup).toContain("Parent header");
 	});
 
-	it("renders a collapsed child Conversation toggle beside Close", () => {
+	it("renders a collapsed child Chat toggle beside Close", () => {
 		let markup = renderToStaticMarkup(createElement(Workspace, {
-			chat: createElement("div", null, "Child conversation"),
+			chat: createElement("div", null, "Child chat"),
 			controls: createElement("div", null, "Document controls"),
-			conversationActivity: { busy: true, unread: 2 },
+			chatActivity: { busy: true, unread: 2 },
 			decisions: createElement("div", null, "Decisions"),
 			header: createElement("header", null, "Child header"),
 			identity: "child-room",
 			ids: workspaceIds,
 			mode: "split",
-			onConversationOpen() {},
-			onDesktopConversationOpen() {},
+			onChatOpen() {},
+			onDesktopChatOpen() {},
 			onDestination() {},
 			plan: createElement("div", null, "Child paper"),
 			presentation: { label: "Source review", onClose() {}, type: "child" },
-			state: { conversationOpen: false, desktopConversationOpen: false },
+			state: { chatOpen: false, desktopChatOpen: false },
 			unanswered: 0,
 			view: "plan",
 		}));
@@ -334,32 +334,32 @@ describe("anchored child lifecycle", () => {
 			markup.indexOf('data-document-view="plan"'),
 		);
 
-		expect(markup).toContain("Child conversation");
-		expect(markup).toContain('aria-label="Show conversation pane, Planner working"');
+		expect(markup).toContain("Child chat");
+		expect(markup).toContain('aria-label="Show chat pane, Planner working"');
 		expect(markup).toContain('aria-label="Close Source review"');
-		expect(toolbar).toContain('aria-label="Show conversation pane, Planner working"');
+		expect(toolbar).toContain('aria-label="Show chat pane, Planner working"');
 		expect(toolbar).toContain('aria-label="Close Source review"');
-		expect(toolbar.indexOf("Show conversation pane")).toBeLessThan(
+		expect(toolbar.indexOf("Show chat pane")).toBeLessThan(
 			toolbar.indexOf("Close Source review"),
 		);
 	});
 
 	it("gives a compact child all three workspace destinations", () => {
 		let markup = renderToStaticMarkup(createElement(Workspace, {
-			chat: createElement("div", null, "Child conversation"),
+			chat: createElement("div", null, "Child chat"),
 			controls: createElement("div", null, "Document controls"),
-			conversationActivity: { busy: false, unread: 0 },
+			chatActivity: { busy: false, unread: 0 },
 			decisions: createElement("div", null, "Decisions"),
 			header: createElement("header", null, "Child header"),
 			identity: "child-room",
 			ids: workspaceIds,
 			mode: "compact",
-			onConversationOpen() {},
-			onDesktopConversationOpen() {},
+			onChatOpen() {},
+			onDesktopChatOpen() {},
 			onDestination() {},
 			plan: createElement("div", null, "Child paper"),
 			presentation: { label: "Source review", onClose() {}, type: "child" },
-			state: { conversationOpen: false, desktopConversationOpen: false },
+			state: { chatOpen: false, desktopChatOpen: false },
 			unanswered: 0,
 			view: "plan",
 		}));
@@ -369,7 +369,7 @@ describe("anchored child lifecycle", () => {
 		);
 
 		expect(navigation).toContain("grid-cols-3");
-		expect(navigation).toContain(">Conversation<");
+		expect(navigation).toContain(">Chat<");
 		expect(navigation).toContain(">Document<");
 		expect(navigation).toContain(">Decisions<");
 	});
@@ -377,16 +377,16 @@ describe("anchored child lifecycle", () => {
 	it("offers an X close control only inside a child document toolbar", () => {
 		let base = {
 			controls: createElement("div", null, "Document controls"),
-			conversationActivity: { busy: false, unread: 0 },
+			chatActivity: { busy: false, unread: 0 },
 			decisions: createElement("div", null, "Decisions"),
 			header: createElement("header", null, "Workspace header"),
 			ids: workspaceIds,
 			mode: "split" as const,
-			onConversationOpen() {},
-			onDesktopConversationOpen() {},
+			onChatOpen() {},
+			onDesktopChatOpen() {},
 			onDestination() {},
 			plan: createElement("div", null, "Paper"),
-			state: { conversationOpen: false, desktopConversationOpen: false },
+			state: { chatOpen: false, desktopChatOpen: false },
 			unanswered: 0,
 			view: "plan" as const,
 		};

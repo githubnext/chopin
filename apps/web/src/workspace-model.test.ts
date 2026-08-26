@@ -30,7 +30,7 @@ describe("adaptive workspace", () => {
 		expect(workspaceProfile(childPresentation))
 			.toEqual({
 				implementation: false,
-				persistConversation: false,
+				persistChat: false,
 				persistPaneSize: false,
 				persistView: false,
 				research: false,
@@ -38,10 +38,10 @@ describe("adaptive workspace", () => {
 			});
 	});
 
-	it("starts a child with Conversation collapsed without inheriting the desktop preference", () => {
+	it("starts a child with Chat collapsed without inheriting the desktop preference", () => {
 		expect(initialWorkspaceState(workspaceProfile(childPresentation), true)).toEqual({
-			conversationOpen: false,
-			desktopConversationOpen: false,
+			chatOpen: false,
+			desktopChatOpen: false,
 		});
 	});
 
@@ -56,19 +56,19 @@ describe("adaptive workspace", () => {
 		expect(initialDocumentView(workspaceProfile(documentPresentation), "tasks")).toBe("plan");
 	});
 
-	it("limits a child to Document, Decisions, and Conversation", () => {
+	it("limits a child to Document, Decisions, and Chat", () => {
 		let capabilities = workspaceProfile(childPresentation);
 
 		expect(capabilities).toEqual({
 			implementation: false,
-			persistConversation: false,
+			persistChat: false,
 			persistPaneSize: false,
 			persistView: false,
 			research: false,
 			surface: "child",
 		});
 		expect(workspaceDestinations()).toEqual([
-			"conversation",
+			"chat",
 			"plan",
 			"decisions",
 		]);
@@ -77,14 +77,14 @@ describe("adaptive workspace", () => {
 	it("keeps the parent's research and implementation capabilities", () => {
 		expect(workspaceProfile(documentPresentation)).toEqual({
 			implementation: true,
-			persistConversation: true,
+			persistChat: true,
 			persistPaneSize: true,
 			persistView: true,
 			research: true,
 			surface: "document",
 		});
 		expect(workspaceDestinations()).toEqual([
-			"conversation",
+			"chat",
 			"plan",
 			"decisions",
 		]);
@@ -102,51 +102,51 @@ describe("adaptive workspace", () => {
 		]);
 	});
 
-	it("closing Conversation leaves the visible document view untouched", () => {
+	it("closing Chat leaves the visible document view untouched", () => {
 		let state: WorkspaceState = {
-			conversationOpen: true,
-			desktopConversationOpen: false,
+			chatOpen: true,
+			desktopChatOpen: false,
 		};
 
-		state = transitionWorkspace(state, { type: "set-conversation", open: false });
+		state = transitionWorkspace(state, { type: "set-chat", open: false });
 
 		expect(state).toEqual({
-			conversationOpen: false,
-			desktopConversationOpen: false,
+			chatOpen: false,
+			desktopChatOpen: false,
 		});
 		expect(presentWorkspace(state, "compact", "decisions")).toMatchObject({
 			documentView: "decisions",
 			documentVisible: true,
-			conversationVisible: false,
+			chatVisible: false,
 		});
 	});
 
-	it("keeps a desktop preference while compact Conversation comes and goes", () => {
+	it("keeps a desktop preference while compact Chat comes and goes", () => {
 		let state: WorkspaceState = {
-			conversationOpen: false,
-			desktopConversationOpen: true,
+			chatOpen: false,
+			desktopChatOpen: true,
 		};
 
-		state = transitionWorkspace(state, { type: "set-conversation", open: true });
+		state = transitionWorkspace(state, { type: "set-chat", open: true });
 		expect(presentWorkspace(state, "compact", "plan")).toMatchObject({
 			documentVisible: false,
-			conversationVisible: true,
+			chatVisible: true,
 		});
-		state = transitionWorkspace(state, { type: "set-conversation", open: false });
-		expect(state.desktopConversationOpen).toBe(true);
-		expect(presentWorkspace(state, "split", "plan").conversationVisible).toBe(true);
+		state = transitionWorkspace(state, { type: "set-chat", open: false });
+		expect(state.desktopChatOpen).toBe(true);
+		expect(presentWorkspace(state, "split", "plan").chatVisible).toBe(true);
 	});
 
-	it("shows Conversation as the only compact destination on tablets", () => {
+	it("shows Chat as the only compact destination on tablets", () => {
 		let state: WorkspaceState = {
-			conversationOpen: true,
-			desktopConversationOpen: true,
+			chatOpen: true,
+			desktopChatOpen: true,
 		};
 
 		expect(presentWorkspace(state, "compact", "decisions")).toMatchObject({
 			documentView: "decisions",
 			documentVisible: false,
-			conversationVisible: true,
+			chatVisible: true,
 			separatorVisible: false,
 		});
 	});
