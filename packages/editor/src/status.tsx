@@ -50,7 +50,7 @@ export function PlanStatus(props: PlanStatusProps) {
 	return (
 		<div
 			aria-live="polite"
-			className={`plan-status ${level === "notice" ? "animate-enter" : ""}`}
+			className="plan-status"
 			data-level={level}
 		>
 			{level !== "hidden" && (

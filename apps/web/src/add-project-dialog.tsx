@@ -108,7 +108,11 @@ export function AddProjectDialog(
 				)}
 				{error !== undefined && (
 					<div>
-						<p className="text-sm text-destructive-ink" role="alert">
+						<p
+							className="motion-feedback text-sm text-destructive-ink"
+							data-motion-feedback="alert"
+							role="alert"
+						>
 							{message(error)}
 						</p>
 						<button

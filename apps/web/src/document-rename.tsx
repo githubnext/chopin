@@ -83,7 +83,13 @@ export function DocumentRename(
 				value={title}
 			/>
 			{error !== undefined && (
-				<p className="text-sm text-destructive-ink" role="alert">{message(error)}</p>
+				<p
+					className="motion-feedback text-sm text-destructive-ink"
+					data-motion-feedback="alert"
+					role="alert"
+				>
+					{message(error)}
+				</p>
 			)}
 			<div className="flex justify-end gap-2">
 				<button

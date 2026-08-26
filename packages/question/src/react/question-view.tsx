@@ -573,7 +573,11 @@ export function QuestionView(props: QuestionViewProps) {
 			})()}
 
 			{error && (
-				<p role="alert" className="px-3 pb-2 text-sm text-destructive-ink">
+				<p
+					className="motion-feedback px-3 pb-2 text-sm text-destructive-ink"
+					data-motion-feedback="alert"
+					role="alert"
+				>
 					{error}
 				</p>
 			)}

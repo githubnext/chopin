@@ -824,7 +824,11 @@ export function NavigationShell(
 	let content = (
 		<>
 			{error !== undefined && (
-				<div className="navigation-error" role="alert">
+				<div
+					className="navigation-error motion-feedback"
+					data-motion-feedback="alert"
+					role="alert"
+				>
 					{error.reason instanceof Error
 						? error.reason.message
 						: "Could not update navigation."}
