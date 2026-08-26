@@ -104,18 +104,6 @@ export type WorkspaceProps = {
 	backgroundActivity?: { active: number; paused: number; failed: number };
 };
 
-export function WorkspaceFeedbackCount({ children }: { children: ReactNode }) {
-	return (
-		<span
-			aria-hidden="true"
-			className={`${motionContract("feedback").className} ml-1`}
-			data-motion-feedback="count"
-		>
-			{children}
-		</span>
-	);
-}
-
 export function ConversationToggle(
 	{
 		activity,
@@ -498,7 +486,13 @@ export function Workspace(
 									? "Decisions"
 									: "Document"}
 								{destination === "decisions" && unanswered > 0 && (
-									<WorkspaceFeedbackCount>{unanswered}</WorkspaceFeedbackCount>
+									<span
+										aria-hidden="true"
+										className={`${motionContract("feedback").className} ml-1`}
+										data-motion-feedback="count"
+									>
+										{unanswered}
+									</span>
 								)}
 								{destination === "background-work"
 									&& backgroundActivity.active + backgroundActivity.paused
@@ -513,9 +507,13 @@ export function Workspace(
 									<span aria-hidden="true" className="workspace-working-indicator ml-1 shrink-0" />
 								)}
 								{destination === "conversation" && conversationActivity.unread > 0 && (
-									<WorkspaceFeedbackCount>
+									<span
+										aria-hidden="true"
+										className={`${motionContract("feedback").className} ml-1`}
+										data-motion-feedback="count"
+									>
 										{conversationActivity.unread}
-									</WorkspaceFeedbackCount>
+									</span>
 								)}
 							</button>
 						);

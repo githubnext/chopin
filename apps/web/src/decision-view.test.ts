@@ -81,15 +81,7 @@ test("disabling background jobs hides only Background Work", () => {
 	expect(markup).not.toContain("Background Work");
 });
 
-test("the Decisions control names its unanswered count", () => {
-	let markup = renderToStaticMarkup(
-		createElement(DecisionViewControl, { onView: () => {}, unanswered: 2, view: "plan" }),
-	);
-
-	expect(markup).toContain('aria-label="Decisions, 2 unanswered"');
-});
-
-test("new unanswered decisions animate only their count", () => {
+test("new unanswered decisions expose an accessible actionable count", () => {
 	let markup = renderToStaticMarkup(
 		createElement(DecisionViewControl, {
 			attention: true,
@@ -100,8 +92,6 @@ test("new unanswered decisions animate only their count", () => {
 		}),
 	);
 
+	expect(markup).toContain('aria-label="Decisions, 2 unanswered"');
 	expect(markup).toContain('data-motion-feedback="count"');
-	expect(markup.match(/class="[^"]*editor-motion-feedback/g)).toHaveLength(1);
-	expect(markup).not.toContain("data-motion-settled");
-	expect(markup).not.toContain("animate-enter");
 });

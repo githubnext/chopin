@@ -101,6 +101,22 @@ test("a closed desktop Conversation tab keeps unread activity visible", async ({
 	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:open", "false"));
 	page = await join("ana");
 	await page.getByRole("button", { name: "Show conversation pane" }).hover();
+	await page.evaluate(() => {
+		let record = { ends: 0, starts: 0 };
+		Reflect.set(window, "__feedbackCountTransitions", record);
+		document.addEventListener("transitionstart", event => {
+			if (
+				event.target instanceof Element
+				&& event.target.matches('[data-motion-feedback="count"]')
+			) record.starts++;
+		}, true);
+		document.addEventListener("transitionend", event => {
+			if (
+				event.target instanceof Element
+				&& event.target.matches('[data-motion-feedback="count"]')
+			) record.ends++;
+		}, true);
+	});
 	let sender = await join("ben");
 	await sender.getByPlaceholder("Use @chopin to ask Chopin").fill(
 		"A new room message",
@@ -109,10 +125,50 @@ test("a closed desktop Conversation tab keeps unread activity visible", async ({
 	let toggle = page.getByRole("button", { name: "Show conversation pane, 1 unread" });
 	await expect(toggle).toBeVisible();
 	await expect(toggle.locator('span[aria-hidden="true"]')).toHaveCount(1);
-	await expect(toggle.locator('[data-motion-feedback="count"]')).toHaveCSS(
-		"animation-name",
-		"feedback-count-enter",
+	let count = toggle.locator('[data-motion-feedback="count"]');
+	expect(
+		await count.evaluate(element =>
+			getComputedStyle(element).transitionDuration.split(",").some(duration =>
+				parseFloat(duration) > 0
+			)
+		),
+	).toBe(true);
+	await expect.poll(() =>
+		page.evaluate(() => {
+			let record = Reflect.get(window, "__feedbackCountTransitions") as {
+				ends: number;
+				starts: number;
+			};
+			return record.starts > 0 && record.ends >= record.starts;
+		})
+	).toBe(true);
+	let settled = await count.evaluate(element => ({
+		opacity: getComputedStyle(element).opacity,
+		transform: getComputedStyle(element).transform,
+	}));
+	let starts = await page.evaluate(() => {
+		let record = Reflect.get(window, "__feedbackCountTransitions") as { starts: number };
+		return record.starts;
+	});
+	await page.keyboard.press("Tab");
+	await count.evaluate(() =>
+		new Promise<void>(resolve => {
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+		})
 	);
+	await expect(count).toHaveCSS("transition-duration", "0s");
+	expect(
+		await count.evaluate(element => ({
+			opacity: getComputedStyle(element).opacity,
+			transform: getComputedStyle(element).transform,
+		})),
+	).toEqual(settled);
+	expect(
+		await page.evaluate(() => {
+			let record = Reflect.get(window, "__feedbackCountTransitions") as { starts: number };
+			return record.starts;
+		}),
+	).toBe(starts);
 	await toggle.click();
 	await expect(page.getByRole("heading", { name: "Conversation" })).toBeFocused();
 	await expect(page.getByRole("button", { name: "Hide conversation pane" })).toBeVisible();
@@ -166,11 +222,29 @@ test("conversation activity appears while closed and clears when opened", async 
 	conversation = nav.getByRole("button", { name: "Conversation, 1 unread" });
 	await expect(conversation).toBeVisible();
 	await expect(conversation.locator('[data-motion-feedback="count"]')).toHaveCSS(
-		"animation-name",
-		"none",
+		"transition-duration",
+		"0s",
 	);
 	await nav.getByRole("button", { name: /Conversation/ }).click();
 	await expect(nav.getByRole("button", { name: "Conversation" })).toBeVisible();
+});
+
+test("keyboard-created actionable feedback stays immediate", async ({ join, seed }) => {
+	await seed(RESPONSIVE_SOURCE);
+	let page = await join("ana", { viewport: { width: 390, height: 844 } });
+	let nav = page.getByRole("navigation", { name: "Workspace view" });
+	await page.keyboard.press("Tab");
+	let sender = await join("ben");
+	await sender.getByPlaceholder("Use @chopin to ask Chopin").fill(
+		"A keyboard-modality room message",
+	);
+	await sender.getByRole("button", { name: "Send message" }).click();
+	let conversation = nav.getByRole("button", { name: "Conversation, 1 unread" });
+	await expect(conversation).toBeVisible();
+	await expect(conversation.locator('[data-motion-feedback="count"]')).toHaveCSS(
+		"transition-duration",
+		"0s",
+	);
 });
 
 test("a Conversation draft survives Chromium orientation emulation", async ({ join, seed }) => {
