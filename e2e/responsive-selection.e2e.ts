@@ -87,8 +87,8 @@ for (
 		let selectedBlock = page.locator('[aria-label="editable markdown"] > p').nth(8);
 		await selected.selectText();
 
-		await activateDestination(nav, /^Conversation/, "keyboard");
-		await expect(page.getByRole("heading", { name: "Conversation", exact: true })).toBeFocused();
+		await activateDestination(nav, /^Chat/, "keyboard");
+		await expect(page.getByRole("heading", { name: "Chat", exact: true })).toBeFocused();
 		await expect(page.locator("main")).toBeHidden();
 		await activateDestination(nav, /^Decisions/, "keyboard");
 		await expect(page.getByRole("heading", { name: "Decisions", exact: true })).toBeFocused();

@@ -69,9 +69,9 @@ test("busy history exposes working state without creating false unread activity"
 	await page.setViewportSize({ width: 390, height: 844 });
 	let socket = await interceptBusyHistory(page);
 	page = await join("ana");
-	let conversation = page.getByRole("navigation", { name: "Workspace view" })
-		.getByRole("button", { name: /^Conversation/ });
-	await expect(conversation).toHaveAccessibleName("Conversation, Planner working");
+	let chat = page.getByRole("navigation", { name: "Workspace view" })
+		.getByRole("button", { name: /^Chat/ });
+	await expect(chat).toHaveAccessibleName("Chat, Planner working");
 	await expectNoHorizontalOverflow(page);
 	socket.send({ kind: "chat:state", ts: 0, busy: false });
 	socket.send({
@@ -80,27 +80,27 @@ test("busy history exposes working state without creating false unread activity"
 		busy: true,
 		turn: { id: "new-turn", handle: "ana", responded: false, started: 1_700_000_001 },
 	});
-	await expect(conversation).toHaveAccessibleName("Conversation, Planner working");
+	await expect(chat).toHaveAccessibleName("Chat, Planner working");
 });
 
-test("a closed desktop Conversation toggle exposes initial planner activity", async ({ join, page, seed }) => {
+test("a closed desktop Chat toggle exposes initial planner activity", async ({ join, page, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:open", "false"));
 	await interceptBusyHistory(page);
 	page = await join("ana");
-	let toggle = page.getByRole("button", { name: "Show conversation pane, Planner working" });
+	let toggle = page.getByRole("button", { name: "Show chat pane, Planner working" });
 	await expect(toggle).toBeVisible();
 	await expect(toggle).toHaveAttribute("aria-expanded", "false");
 	await expect(toggle.locator('span[aria-hidden="true"]')).toHaveCount(1);
 });
 
-test("a closed desktop Conversation tab keeps unread activity visible", async ({ join, page, seed }) => {
+test("a closed desktop Chat tab keeps unread activity visible", async ({ join, page, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:open", "false"));
 	page = await join("ana");
-	await page.getByRole("button", { name: "Show conversation pane" }).hover();
+	await page.getByRole("button", { name: "Show chat pane" }).hover();
 	await page.evaluate(() => {
 		let record = { ends: 0, starts: 0 };
 		Reflect.set(window, "__feedbackCountTransitions", record);
@@ -122,7 +122,7 @@ test("a closed desktop Conversation tab keeps unread activity visible", async ({
 		"A new room message",
 	);
 	await sender.getByRole("button", { name: "Send message" }).click();
-	let toggle = page.getByRole("button", { name: "Show conversation pane, 1 unread" });
+	let toggle = page.getByRole("button", { name: "Show chat pane, 1 unread" });
 	await expect(toggle).toBeVisible();
 	await expect(toggle.locator('span[aria-hidden="true"]')).toHaveCount(1);
 	let count = toggle.locator('[data-motion-feedback="count"]');
@@ -170,12 +170,12 @@ test("a closed desktop Conversation tab keeps unread activity visible", async ({
 		}),
 	).toBe(starts);
 	await toggle.click();
-	await expect(page.getByRole("heading", { name: "Conversation" })).toBeFocused();
-	await expect(page.getByRole("button", { name: "Hide conversation pane" })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Chat" })).toBeFocused();
+	await expect(page.getByRole("button", { name: "Hide chat pane" })).toBeVisible();
 });
 
-test("completed tool names wrap in compact Conversation", async ({ join, seed }) => {
-	let toolName = "averylongcompletedtoolnamethatmustwrapwithoutbeingtruncatedinsideconversation";
+test("completed tool names wrap in compact Chat", async ({ join, seed }) => {
+	let toolName = "averylongcompletedtoolnamethatmustwrapwithoutbeingtruncatedinsidechat";
 	await seed(RESPONSIVE_SOURCE, {
 		transcript: [{
 			id: "tool-entry",
@@ -187,7 +187,7 @@ test("completed tool names wrap in compact Conversation", async ({ join, seed })
 	});
 	let page = await join("ana", { viewport: { width: 390, height: 844 } });
 	await page.getByRole("navigation", { name: "Workspace view" })
-		.getByRole("button", { name: /Conversation/ }).click();
+		.getByRole("button", { name: /Chat/ }).click();
 	await page.getByRole("button", { name: /1 tool/ }).click();
 	let name = page.getByText(`A${toolName.slice(1)}`);
 	let fragments = await name.evaluate(element => {
@@ -199,7 +199,7 @@ test("completed tool names wrap in compact Conversation", async ({ join, seed })
 	await expectNoHorizontalOverflow(page);
 });
 
-test("conversation activity appears while closed and clears when opened", async ({ join, seed }) => {
+test("chat activity appears while closed and clears when opened", async ({ join, seed }) => {
 	await seed(RESPONSIVE_SOURCE, {
 		transcript: [{
 			id: "history",
@@ -211,22 +211,22 @@ test("conversation activity appears while closed and clears when opened", async 
 	let page = await join("ana", { viewport: { width: 390, height: 844 } });
 	await page.emulateMedia({ reducedMotion: "reduce" });
 	let nav = page.getByRole("navigation", { name: "Workspace view" });
-	let conversation = nav.getByRole("button", { name: "Conversation" });
-	await expect(conversation).toBeVisible();
-	await conversation.hover();
+	let chat = nav.getByRole("button", { name: "Chat" });
+	await expect(chat).toBeVisible();
+	await chat.hover();
 	let sender = await join("ben");
 	await sender.getByPlaceholder("Use @chopin to ask Chopin").fill(
 		"A new room message",
 	);
 	await sender.getByRole("button", { name: "Send message" }).click();
-	conversation = nav.getByRole("button", { name: "Conversation, 1 unread" });
-	await expect(conversation).toBeVisible();
-	await expect(conversation.locator('[data-motion-feedback="count"]')).toHaveCSS(
+	chat = nav.getByRole("button", { name: "Chat, 1 unread" });
+	await expect(chat).toBeVisible();
+	await expect(chat.locator('[data-motion-feedback="count"]')).toHaveCSS(
 		"transition-duration",
 		"0s",
 	);
-	await nav.getByRole("button", { name: /Conversation/ }).click();
-	await expect(nav.getByRole("button", { name: "Conversation" })).toBeVisible();
+	await nav.getByRole("button", { name: /Chat/ }).click();
+	await expect(nav.getByRole("button", { name: "Chat" })).toBeVisible();
 });
 
 test("keyboard-created actionable feedback stays immediate", async ({ join, seed }) => {
@@ -239,19 +239,19 @@ test("keyboard-created actionable feedback stays immediate", async ({ join, seed
 		"A keyboard-modality room message",
 	);
 	await sender.getByRole("button", { name: "Send message" }).click();
-	let conversation = nav.getByRole("button", { name: "Conversation, 1 unread" });
-	await expect(conversation).toBeVisible();
-	await expect(conversation.locator('[data-motion-feedback="count"]')).toHaveCSS(
+	let chat = nav.getByRole("button", { name: "Chat, 1 unread" });
+	await expect(chat).toBeVisible();
+	await expect(chat.locator('[data-motion-feedback="count"]')).toHaveCSS(
 		"transition-duration",
 		"0s",
 	);
 });
 
-test("a Conversation draft survives Chromium orientation emulation", async ({ join, seed }) => {
+test("a Chat draft survives Chromium orientation emulation", async ({ join, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", { viewport: { width: 390, height: 844 } });
 	await page.getByRole("navigation", { name: "Workspace view" })
-		.getByRole("button", { name: /Conversation/ }).click();
+		.getByRole("button", { name: /Chat/ }).click();
 	let textarea = page.getByPlaceholder("Use @chopin to ask Chopin");
 	await textarea.fill("Keep this draft");
 	await page.setViewportSize({ width: 844, height: 390 });

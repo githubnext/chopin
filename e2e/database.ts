@@ -205,7 +205,7 @@ function researchAnswerFixture(question: string) {
 			model: "e2e-model",
 			report: {
 				title: "Preview research report",
-				summary: "The preview report is visible outside Conversation.",
+				summary: "The preview report is visible outside Chat.",
 				findings: [{ text: "A cited finding", sourceUrls: ["https://example.com/source"] }],
 				caveats: ["Generated evidence should be reviewed."],
 			},

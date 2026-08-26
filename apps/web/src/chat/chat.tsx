@@ -143,7 +143,7 @@ export function Chat(
 				reportedBusy.current = frame.busy;
 				setTurn(frame.turn);
 				// History is not unread, but a turn already in progress still needs
-				// a signal outside a closed Conversation destination.
+				// a signal outside a closed Chat destination.
 				activity.current?.({ type: "working", busy: frame.busy });
 			}),
 			wire.on<Wire.Message>("chat:message", frame => {

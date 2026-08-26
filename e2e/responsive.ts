@@ -42,7 +42,7 @@ The canonical reference is [TheCompleteArchitectureDecisionRecordForResponsiveWo
 | UnbreakableResponsibility | UnbreakableViewportConstraint | UnbreakableInteractionSurface | UnbreakableVerificationSignal | UnbreakableRendererBoundary | UnbreakableCollaborationRecord | UnbreakableOverflowOwnership | UnbreakableAccessibleMeasure |
 | ------------------------- | ----------------------------- | ----------------------------- | ----------------------------- | --------------------------- | ------------------------------ | ---------------------------- | ---------------------------- |
 | DocumentSynchronization | CompactDestinationSwitching | CollaborativeEditorIdentity | NoHorizontalOverflow | PreviewIsASecondReading | SourceRemainsCollaborative | WidgetOwnsItsScrollbar | ProseKeepsItsMeasure |
-| ConversationContinuity | CompactFocusContainment | DraftPreservation | VisibleControlBounds | RendererLoadsOnDemand | StableLexicalIdentity | WidgetOwnsItsScrollbar | ReadableCellMinimum |
+| ChatContinuity | CompactFocusContainment | DraftPreservation | VisibleControlBounds | RendererLoadsOnDemand | StableLexicalIdentity | WidgetOwnsItsScrollbar | ReadableCellMinimum |
 
 \`\`\`typescript
 export function destinationFor(width: number): "compact" | "split" {
@@ -82,12 +82,12 @@ One destination occupies the available width at a time.
 </Tab>
 <Tab id="${TAB_SECOND}" label="Wide split workspace reading">
 
-Conversation remains beside the document when room permits it.
+Chat remains beside the document when room permits it.
 
 </Tab>
-<Tab id="${TAB_THIRD}" label="Keyboard-safe compact conversation destination">
+<Tab id="${TAB_THIRD}" label="Keyboard-safe compact chat destination">
 
-Temporary conversation still preserves the document's readable measure.
+Temporary chat still preserves the document's readable measure.
 
 </Tab>
 <Tab id="${TAB_FOURTH}" label="Independent wide-widget scrolling contract">
