@@ -58,6 +58,8 @@ export type QuestionViewProps = {
 	collaborators?: Collaborator[];
 	/** Validation or synchronisation problem, announced to assistive tech. */
 	error?: string;
+	/** Host-owned presentation class for an error entering the view. */
+	errorClassName?: string;
 	/** Rendered beside the heading; hosts use it for counts and provenance. */
 	aside?: ReactNode;
 	/** Lets a host retain bounded steps for presentation without owning question state. */
@@ -363,6 +365,7 @@ export function QuestionView(props: QuestionViewProps) {
 		resolver,
 		collaborators = [],
 		error,
+		errorClassName,
 		aside,
 		places,
 		onQuestionEnter,
@@ -574,8 +577,10 @@ export function QuestionView(props: QuestionViewProps) {
 
 			{error && (
 				<p
-					className="motion-feedback px-3 pb-2 text-sm text-destructive-ink"
-					data-motion-feedback="alert"
+					className={`${
+						errorClassName ? `${errorClassName} ` : ""
+					}px-3 pb-2 text-sm text-destructive-ink`}
+					data-motion-feedback={errorClassName ? "alert" : undefined}
 					role="alert"
 				>
 					{error}

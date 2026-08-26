@@ -103,7 +103,7 @@ function Chip(
 		<div ref={box} className="plan-changes" data-side={side}>
 			{open && <List entries={entries} />}
 			<div
-				className="plan-changes-bar motion-feedback"
+				className="plan-changes-bar editor-motion-feedback"
 				data-motion-feedback="count"
 			>
 				<button
