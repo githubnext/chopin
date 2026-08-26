@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import * as Api from "./api";
+import { TerminalAlert } from "./terminal-alert";
 
 import type { FormEvent, KeyboardEvent } from "react";
 
@@ -83,13 +84,9 @@ export function DocumentRename(
 				value={title}
 			/>
 			{error !== undefined && (
-				<p
-					className="motion-feedback text-sm text-destructive-ink"
-					data-motion-feedback="alert"
-					role="alert"
-				>
+				<TerminalAlert className="text-sm text-destructive-ink">
 					{message(error)}
-				</p>
+				</TerminalAlert>
 			)}
 			<div className="flex justify-end gap-2">
 				<button

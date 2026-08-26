@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 
 import * as Api from "./api";
 import { NavigationDialog } from "./navigation-dialog";
+import { TerminalAlert } from "./terminal-alert";
 
 import type { NavigationDialogMotion } from "./navigation-dialog";
 
@@ -49,13 +50,9 @@ export function DeleteDocumentDialog(
 				and its research workspaces will be permanently deleted. This cannot be undone.
 			</p>
 			{error !== undefined && (
-				<p
-					className="motion-feedback mt-3 text-sm text-destructive-ink"
-					data-motion-feedback="alert"
-					role="alert"
-				>
+				<TerminalAlert className="mt-3 text-sm text-destructive-ink">
 					{error instanceof Error ? error.message : "Could not delete the document."}
-				</p>
+				</TerminalAlert>
 			)}
 			<div className="mt-5 flex justify-end gap-2">
 				<button

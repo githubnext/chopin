@@ -9,6 +9,7 @@ import {
 	repositoryCacheIsStale,
 	writeRepositoryCache,
 } from "./repository-cache";
+import { TerminalAlert } from "./terminal-alert";
 
 import type { RepositorySnapshot } from "./repository-cache";
 import type { NavigationDialogMotion } from "./navigation-dialog";
@@ -108,13 +109,9 @@ export function AddProjectDialog(
 				)}
 				{error !== undefined && (
 					<div>
-						<p
-							className="motion-feedback text-sm text-destructive-ink"
-							data-motion-feedback="alert"
-							role="alert"
-						>
+						<TerminalAlert className="text-sm text-destructive-ink">
 							{message(error)}
-						</p>
+						</TerminalAlert>
 						<button
 							className="btn btn-sm btn-secondary mt-2"
 							onClick={() => setRetry(value => value + 1)}

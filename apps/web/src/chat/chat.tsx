@@ -34,6 +34,7 @@ import {
 	reviseComposerDraft,
 } from "./references";
 import { Transcript } from "./transcript";
+import { TerminalAlert } from "../terminal-alert";
 import plannerStop from "../assets/icons/planner-stop.svg";
 import send from "../assets/icons/send-arrow-up.svg";
 
@@ -412,13 +413,9 @@ export function Chat(
 
 					<div className="flex items-center justify-end gap-1 px-2 pb-2">
 						{sendError && (
-							<p
-								className="motion-feedback mr-auto min-w-0 truncate text-sm text-destructive-ink"
-								data-motion-feedback="alert"
-								role="alert"
-							>
+							<TerminalAlert className="mr-auto min-w-0 truncate text-sm text-destructive-ink">
 								{sendError}
-							</p>
+							</TerminalAlert>
 						)}
 						{agent && busy && (
 							<button

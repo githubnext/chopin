@@ -15,6 +15,7 @@ import {
 	repositoryCacheIsStale,
 	writeRepositoryCache,
 } from "./repository-cache";
+import { TerminalAlert } from "./terminal-alert";
 
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { InstalledRepositoryGroup, RepositorySnapshot } from "./repository-cache";
@@ -219,13 +220,9 @@ export function RepositoryPicker(
 				)}
 				{!installed && !loading && error !== undefined && (
 					<div className="px-2 py-3">
-						<p
-							className="motion-feedback text-sm text-destructive-ink"
-							data-motion-feedback="alert"
-							role="alert"
-						>
+						<TerminalAlert className="text-sm text-destructive-ink">
 							Could not load repositories.
-						</p>
+						</TerminalAlert>
 						<button className="btn btn-sm btn-secondary mt-2" onClick={retry} type="button">
 							Try again
 						</button>
@@ -365,11 +362,7 @@ export function RepositoryPicker(
 			{installed && (
 				<div className="p-1 hairline-t">
 					{error !== undefined && (
-						<div
-							className="motion-feedback flex items-center gap-2 px-2 py-1 text-sm"
-							data-motion-feedback="alert"
-							role="alert"
-						>
+						<TerminalAlert className="flex items-center gap-2 px-2 py-1 text-sm">
 							<span className="min-w-0 flex-1 text-destructive-ink">
 								{snapshot.current
 									? "Could not refresh repositories."
@@ -378,7 +371,7 @@ export function RepositoryPicker(
 							<button className="text-brand-ink hover:underline" onClick={retry} type="button">
 								Try again
 							</button>
-						</div>
+						</TerminalAlert>
 					)}
 					<a className="btn btn-md btn-ghost w-full" href="/auth/github/install">
 						Manage repository access
