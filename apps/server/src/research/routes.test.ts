@@ -62,7 +62,7 @@ class RepositoryAccess {
 	}
 }
 
-async function setup(options: { failOwnerOnce?: boolean } = {}) {
+async function setup() {
 	let now = new Date("2026-08-23T12:00:00.000Z");
 	let storage = new MemoryStorage();
 	await storage.users.put({ id: USER_ID, login: "octocat", avatarUrl: "avatar", now });
@@ -139,13 +139,11 @@ async function setup(options: { failOwnerOnce?: boolean } = {}) {
 		publish: () => {},
 	});
 	let owners: string[] = [];
-	let ownerFailures = options.failOwnerOnce ? 1 : 0;
 	let router = new Router();
 	registerResearchWorkspaceRoutes(router, auth, {
 		service,
 		ensureOwner: async ensured => {
 			owners.push(ensured.id);
-			if (ownerFailures-- > 0) throw new Error("owner setup failed");
 		},
 	});
 	return {
@@ -219,77 +217,36 @@ describe("research workspace routes", () => {
 		};
 		let created = await create(context);
 		expect(created.response.status).toBe(201);
-		expect(created.body).toMatchObject({
-			repeated: false,
-			request: {
-				question: "What changed?",
-				state: "pending",
-				stage: "queued",
-				sources: [],
-			},
-		});
-		expect(created.response.headers.get("location")).toBeNull();
-		expect(context.owners).toEqual([context.channel.id]);
+		expect(created.body.workspace.createdBy).toBe(USER_ID);
+		expect(created.response.headers.get("location"))
+			.toBe(`/documents/octo-org/score/release-plan/research/${created.body.workspace.id}`);
+		expect(context.owners).toEqual([]);
 
-		let replayed = await context.router.handle(request(
-			path,
-			context.cookie,
-			mutation({ question: "What changed?", requestId: requestId(1) }),
-		));
-		expect(replayed?.status).toBe(200);
-		expect(context.owners).toEqual([context.channel.id]);
-		let legacyConfirm = await context.router.handle(request(
-			`${path}/${created.body.request.id}/confirm`,
+		let confirmed = await context.router.handle(request(
+			`${path}/${created.body.workspace.id}/confirm`,
 			context.cookie,
 			mutation({ query: "What changed?", requestId: requestId(2) }),
 		));
-		expect(legacyConfirm?.status).toBe(404);
-		let legacyTurn = await context.router.handle(request(
-			`${path}/${created.body.request.id}/turns`,
+		expect(confirmed?.status).toBe(200);
+		expect((await confirmed!.json()).workspace.confirmedBy).toBe(USER_ID);
+		expect(context.owners).toEqual([context.channel.id]);
+		let replayed = await context.router.handle(request(
+			`${path}/${created.body.workspace.id}/confirm`,
 			context.cookie,
-			mutation({ kind: "follow-up", question: "More", requestId: requestId(3) }),
+			mutation({ query: "What changed?", requestId: requestId(2) }),
 		));
-		expect(legacyTurn?.status).toBe(404);
-		let cancelled = await context.router.handle(request(
-			`${path}/${created.body.request.id}/cancel`,
-			context.cookie,
-			mutation({}),
-		));
-		expect(cancelled?.status).toBe(200);
-		expect(await cancelled!.json()).toMatchObject({
-			id: created.body.request.id,
-			state: "cancelled",
-			stage: "cancelled",
-		});
+		expect(replayed?.status).toBe(200);
+		expect(context.owners).toEqual([context.channel.id]);
 
 		context.access.repository = {
 			...context.access.repository,
 			permissions: { pull: true, push: false, admin: false },
 		};
 		let read = await context.router.handle(request(
-			`${path}/${created.body.request.id}`,
+			`${path}/${created.body.workspace.id}`,
 			context.cookie,
 		));
 		expect(read?.status).toBe(200);
-		expect(await read!.json()).toMatchObject({
-			id: created.body.request.id,
-			question: "What changed?",
-		});
-	});
-
-	it("recovers an exact request after initial owner setup fails before enqueue", async () => {
-		let context = await setup({ failOwnerOnce: true });
-		let first = await create(context);
-		expect(first.response.status).toBe(500);
-		expect(await context.storage.research.list(context.channel.id, 100)).toHaveLength(1);
-
-		let recovered = await create(context);
-		expect(recovered.response.status).toBe(200);
-		expect(recovered.body).toMatchObject({
-			repeated: true,
-			request: { state: "pending", stage: "queued" },
-		});
-		expect(context.owners).toEqual([context.channel.id, context.channel.id]);
 	});
 
 	it("returns inaccessible and cross-channel children as not found", async () => {
@@ -305,7 +262,7 @@ describe("research workspace routes", () => {
 			now: context.now,
 		});
 		let crossChannel = await context.router.handle(request(
-			`/api/channels/${other.id}/research-workspaces/${created.body.request.id}`,
+			`/api/channels/${other.id}/research-workspaces/${created.body.workspace.id}`,
 			context.cookie,
 		));
 		expect(crossChannel?.status).toBe(404);
@@ -315,7 +272,7 @@ describe("research workspace routes", () => {
 			id: "MDEwOlJlcG9zaXRvcnk3ODk=",
 		};
 		let recreated = await context.router.handle(request(
-			`/api/channels/${context.channel.id}/research-workspaces/${created.body.request.id}`,
+			`/api/channels/${context.channel.id}/research-workspaces/${created.body.workspace.id}`,
 			context.cookie,
 		));
 		expect(recreated?.status).toBe(404);
@@ -326,7 +283,7 @@ describe("research workspace routes", () => {
 			permissions: { pull: false, push: true, admin: false },
 		};
 		let noPull = await context.router.handle(request(
-			`/api/channels/${context.channel.id}/research-workspaces/${created.body.request.id}`,
+			`/api/channels/${context.channel.id}/research-workspaces/${created.body.workspace.id}`,
 			context.cookie,
 		));
 		expect(noPull?.status).toBe(404);
@@ -361,7 +318,7 @@ describe("research workspace routes", () => {
 		expect(body.channels).toHaveLength(1);
 		expect(body.channels[0]).toMatchObject({
 			channel: { id: context.channel.id },
-			workspaces: [{ id: created.body.request.id, channelId: context.channel.id }],
+			workspaces: [{ id: created.body.workspace.id, channelId: context.channel.id }],
 		});
 		expect(JSON.stringify(body)).not.toContain("Private to the other repository");
 		expect(JSON.stringify(body)).not.toContain("idempotencyKey");
@@ -398,7 +355,7 @@ describe("research workspace routes", () => {
 		expect(response?.status).toBe(200);
 		let body = await response!.json();
 		expect(body).toMatchObject({
-			workspaces: [{ id: created.body.request.id, channelId: context.channel.id }],
+			workspaces: [{ id: created.body.workspace.id, channelId: context.channel.id }],
 			truncated: false,
 		});
 		let serialized = JSON.stringify(body);
