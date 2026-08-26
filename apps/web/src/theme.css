@@ -516,17 +516,14 @@ body {
 }
 
 .motion-feedback[data-motion-feedback="icon"] {
-	opacity: 1;
 	transform: none;
 }
 
 .motion-feedback[data-motion-feedback="count"] {
-	opacity: 1;
 	transform: none;
 }
 
 .motion-feedback[data-motion-feedback="alert"] {
-	opacity: 1;
 	transform: none;
 }
 
