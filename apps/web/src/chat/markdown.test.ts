@@ -50,7 +50,7 @@ function markdown(source: string, references?: Chat.Reference[]): string {
 	return renderToStaticMarkup(createElement(MessageMarkdown, { source, references }));
 }
 
-test("conversation Markdown admits formatting without document features", () => {
+test("Chat Markdown admits formatting without document features", () => {
 	let markup = markdown(PARTICIPANT_MESSAGE);
 
 	expect(markup).toContain("<strong>Bold</strong>");

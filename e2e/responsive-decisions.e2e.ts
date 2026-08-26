@@ -14,7 +14,7 @@ const LONG_QUESTIONS = [
 				id: "01K0N500000000000000000003",
 				label: "Preserve every mounted workspace surface while adapting only its presentation",
 				description:
-					"Plan, Decisions, and Conversation retain their state while their containing layout changes.",
+					"Plan, Decisions, and Chat retain their state while their containing layout changes.",
 			},
 			{
 				id: "01K0N500000000000000000004",

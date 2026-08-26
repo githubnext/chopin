@@ -12,7 +12,7 @@ test("seeded completed jobs stay out of the document workspace", async ({ baseUR
 	await expect(page.getByRole("button", { name: /Background Work/ })).toHaveCount(0);
 	await expect(page.getByRole("heading", { name: "Background Work" })).toHaveCount(0);
 	await expect(page.getByRole("textbox", { name: "editable markdown" })).toBeEditable();
-	await expect(page.getByRole("complementary", { name: "Conversation" })).toBeVisible();
+	await expect(page.getByRole("complementary", { name: "Chat" })).toBeVisible();
 });
 
 test("seeded running jobs remain invisible after reload", async ({ baseURL, join, room, seed }) => {

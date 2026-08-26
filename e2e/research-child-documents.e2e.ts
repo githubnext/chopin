@@ -292,7 +292,7 @@ test("inline research publishes one ordinary child and opens it", async ({ baseU
 	await expect(card.getByText("Queued", { exact: true })).toBeVisible();
 	await expect(card).toContainText(brief);
 	await expect(card.getByRole("button", { name: "Decisions", exact: true })).toHaveCount(0);
-	await expect(card.getByRole("complementary", { name: "Conversation" })).toHaveCount(0);
+	await expect(card.getByRole("complementary", { name: "Chat" })).toHaveCount(0);
 	await expect.poll(childHrefs).toEqual([]);
 	expect(await countChildChannels(databasePort, room)).toBe(0);
 	await expect(opened).toHaveURL(url => !url.pathname.includes("/children/"));

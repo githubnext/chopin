@@ -247,7 +247,7 @@ test("questions leave the chat pane free of a waiting row", async ({ join, seed 
 
 	await expect(questionnaire(page)).toHaveCount(2);
 	await expect(
-		page.getByRole("complementary", { includeHidden: true, name: "Conversation" })
+		page.getByRole("complementary", { includeHidden: true, name: "Chat" })
 			.getByRole("button", { name: "Answer" }),
 	).toHaveCount(0);
 
@@ -302,7 +302,7 @@ async function expectCompactDestinationStatePreserved(page: Page): Promise<void>
 			tracker;
 	});
 
-	await nav.getByRole("button", { name: /Conversation/ }).click();
+	await nav.getByRole("button", { name: /Chat/ }).click();
 	await draft.fill("unfinished compact thought");
 
 	await nav.getByRole("button", { name: /^Decisions/ }).click();
@@ -354,7 +354,7 @@ for (
 	});
 }
 
-test("automatic Decisions changes reconcile after compact Conversation closes", async ({ baseURL, browser, page: ana, room }) => {
+test("automatic Decisions changes reconcile after compact Chat closes", async ({ baseURL, browser, page: ana, room }) => {
 	await ana.setViewportSize({ width: 390, height: 844 });
 	await authenticate(ana, "ana", baseURL!);
 	await ana.goto(`/channels/${room}`);
@@ -368,7 +368,7 @@ test("automatic Decisions changes reconcile after compact Conversation closes", 
 		"aria-current",
 		"page",
 	);
-	await nav.getByRole("button", { name: /Conversation/ }).click();
+	await nav.getByRole("button", { name: /Chat/ }).click();
 
 	let boContext = await browser.newContext({ baseURL, viewport: { width: 1280, height: 800 } });
 	try {
@@ -392,7 +392,7 @@ test("automatic Decisions changes reconcile after compact Conversation closes", 
 		await boContext.close();
 	}
 
-	await ana.getByRole("heading", { name: "Conversation", exact: true }).press("Escape");
+	await ana.getByRole("heading", { name: "Chat", exact: true }).press("Escape");
 	await expect(ana.locator('[data-document-view="plan"]')).toBeVisible();
 	await expect(nav.getByRole("button", { name: "Document" })).toHaveAttribute(
 		"aria-current",
@@ -405,7 +405,7 @@ test("an edit received while compact Plan is hidden appears when it returns", as
 	let ana = await join("ana", { viewport: { width: 390, height: 844 } });
 	let bo = await join("bo", { viewport: { width: 1280, height: 800 } });
 	let nav = ana.getByRole("navigation", { name: "Workspace view" });
-	await nav.getByRole("button", { name: /Conversation/ }).click();
+	await nav.getByRole("button", { name: /Chat/ }).click();
 
 	await rewriteFirstBlock(bo, "The hidden plan still receives collaborative edits.");
 	await nav.getByRole("button", { name: "Document" }).click();

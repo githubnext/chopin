@@ -43,7 +43,7 @@ let COMPONENTS: Components = {
 	h6: paragraph,
 };
 
-/** The deliberately small Markdown dialect understood by conversation. */
+/** The deliberately small Markdown dialect understood by Chat. */
 export function MessageMarkdown(
 	{
 		className,
