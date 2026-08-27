@@ -157,6 +157,7 @@ describe("the Figma navigation chrome", () => {
 			label: "Hushed mountain",
 			members: [{ handle: "MaggieAppleton", client: "tab-one" }],
 			onAction: () => {},
+			presentation: { type: "document" as const },
 		};
 		let markup = renderToStaticMarkup(createElement(Header, props));
 
@@ -175,11 +176,15 @@ describe("the Figma navigation chrome", () => {
 
 	test("turns the parent title into a child-document breadcrumb", () => {
 		let markup = renderToStaticMarkup(createElement(Header, {
-			breadcrumb: { childLabel: "Source review", onBack() {} },
 			canManage: true,
 			label: "Release plan",
 			members: [{ handle: "MaggieAppleton", client: "tab-one" }],
 			onAction() {},
+			presentation: {
+				childLabel: "Source review",
+				onChildClose() {},
+				type: "parent-with-child",
+			},
 		}));
 
 		expect(markup).not.toContain('aria-label="Back to Release plan"');
@@ -198,6 +203,7 @@ describe("the Figma navigation chrome", () => {
 			label: "Archived brief",
 			members: [],
 			onAction: () => {},
+			presentation: { type: "document" as const },
 		};
 		let manager = renderToStaticMarkup(createElement(Header, { ...props, canManage: true }));
 		let viewer = renderToStaticMarkup(createElement(Header, { ...props, canManage: false }));

@@ -4,6 +4,11 @@ export type WorkspaceMode = "compact" | "split";
 
 export type WorkspaceSurface = "document" | "child";
 
+export type WorkspacePresentation =
+	| { type: "document" }
+	| { childLabel: string; onChildClose: () => void; type: "parent-with-child" }
+	| { label: string; onClose: () => void; type: "child" };
+
 export type WorkspaceProfile = {
 	implementation: boolean;
 	persistConversation: boolean;

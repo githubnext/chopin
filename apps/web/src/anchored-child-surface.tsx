@@ -45,6 +45,11 @@ export function childFocusTransition(
 	event: ChildFocusEvent,
 ): ChildFocusState {
 	if (event.type === "begin") {
+		if (
+			state.attempt?.phase === "closing"
+			&& state.attempt.parentId === event.parentId
+			&& state.attempt.parentPath === event.parentPath
+		) return state;
 		let generation = state.generation + 1;
 		return {
 			generation,

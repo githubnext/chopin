@@ -25,6 +25,7 @@ import type {
 	WorkspaceDestination,
 	WorkspaceEvent,
 	WorkspaceMode,
+	WorkspacePresentation,
 	WorkspaceProfile,
 	WorkspaceState,
 } from "./workspace-model";
@@ -104,10 +105,6 @@ export type WorkspaceProps = {
 	decisions: ReactNode;
 	controls: ReactNode;
 	ids: WorkspaceIds;
-	childClose?: {
-		label: string;
-		onClose: () => void;
-	};
 	mode: WorkspaceMode;
 	state: WorkspaceState;
 	view: "plan" | "decisions";
@@ -117,8 +114,8 @@ export type WorkspaceProps = {
 	unanswered: number;
 	conversationActivity: { unread: number; busy: boolean };
 	identity?: string;
+	presentation: WorkspacePresentation;
 	profile: WorkspaceProfile;
-	paperObscured?: boolean;
 };
 
 export function ConversationToggle(
@@ -220,7 +217,6 @@ function destinationLabel(
 export function Workspace(
 	{
 		chat,
-		childClose,
 		controls,
 		ids,
 		conversationActivity,
@@ -231,8 +227,8 @@ export function Workspace(
 		onConversationOpen,
 		onDesktopConversationOpen,
 		onDestination,
-		paperObscured,
 		plan,
+		presentation: workspacePresentation,
 		state,
 		profile,
 		unanswered,
@@ -246,6 +242,10 @@ export function Workspace(
 	});
 	let root = useRef<HTMLDivElement>(null);
 	let presentation = presentWorkspace(state, mode, view);
+	let childPresentation = workspacePresentation.type === "child"
+		? workspacePresentation
+		: undefined;
+	let paperObscured = workspacePresentation.type === "parent-with-child";
 	let immediately = motionImmediately();
 	let contentSwapMotion = motionContract("content-swap");
 	let conversationPresence = useTransitionPresence(
@@ -384,7 +384,7 @@ export function Workspace(
 				)}
 
 				{chat && mode === "split" && !presentation.conversationVisible
-					&& profile.surface !== "child" && (
+					&& !childPresentation && (
 					<div className="absolute right-2.5 top-2.5 z-20">
 						<ConversationToggle
 							activity={conversationActivity}
@@ -412,7 +412,7 @@ export function Workspace(
 								data-document-toolbar
 							>
 								{controls}
-								{profile.surface === "child" && (
+								{childPresentation && (
 									<div className="ml-auto flex shrink-0 items-center">
 										{chat && !presentation.conversationVisible && (
 											<ConversationToggle
@@ -423,22 +423,20 @@ export function Workspace(
 												open={false}
 											/>
 										)}
-										{childClose && (
-											<button
-												aria-label={`Close ${childClose.label}`}
-												className="btn btn-icon btn-ghost -mr-1 shrink-0"
-												data-child-document-close
-												onClick={childClose.onClose}
-												type="button"
-											>
-												<img
-													alt=""
-													aria-hidden="true"
-													className="size-[18px]"
-													src={navigationXmark}
-												/>
-											</button>
-										)}
+										<button
+											aria-label={`Close ${childPresentation.label}`}
+											className="btn btn-icon btn-ghost -mr-1 shrink-0"
+											data-child-document-close
+											onClick={childPresentation.onClose}
+											type="button"
+										>
+											<img
+												alt=""
+												aria-hidden="true"
+												className="size-[18px]"
+												src={navigationXmark}
+											/>
+										</button>
 									</div>
 								)}
 							</div>

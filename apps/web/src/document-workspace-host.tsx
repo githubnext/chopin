@@ -20,7 +20,7 @@ import type { ChildFocusToken } from "./anchored-child-surface";
 import type { DocumentWorkspaceAction } from "./document-workspace-state";
 import type { DocumentRouteIdentity } from "./document-route-swap";
 import type { HostedRoute } from "./hosted";
-import type { WorkspaceSurface } from "./workspace-model";
+import type { WorkspacePresentation } from "./workspace-model";
 
 let RoomWorkspace = lazy(() =>
 	import("./room-workspace").then(module => ({ default: module.RoomWorkspace }))
@@ -41,7 +41,7 @@ function workspaceProps(
 	detail: Api.ChannelDetail,
 	agent: boolean,
 	user: Api.User,
-	surface: WorkspaceSurface,
+	presentation: WorkspacePresentation,
 	onMetadataChanged: (metadata: Metadata) => void,
 ) {
 	let channel = detail.channel;
@@ -58,7 +58,7 @@ function workspaceProps(
 		repository: detail.repository,
 		room: channel.id,
 		slug: channel.slug,
-		surface,
+		presentation,
 		updatedAt: channel.updatedAt,
 		userId: user.id,
 	};
@@ -93,7 +93,7 @@ export default function DocumentWorkspaceHost(
 			routeKey: DocumentRouteIdentity,
 			pathname: string,
 		) => void;
-		onChildClose: (parentPath: string) => void;
+		onChildClose: (parentId: string, parentPath: string) => void;
 		onChildClosing: (parentId: string, parentPath: string) => ChildFocusToken;
 		onParentRestored: (token: ChildFocusToken) => void;
 		onReady: (
@@ -264,11 +264,14 @@ export default function DocumentWorkspaceHost(
 			event.preventDefault();
 			let current = stateRef.current;
 			if (current.status === "ready") {
-				onChildClose(documentPath(
-					current.loaded.parent.repository.owner,
-					current.loaded.parent.repository.name,
-					current.loaded.parent.channel.slug,
-				));
+				onChildClose(
+					current.loaded.parent.channel.id,
+					documentPath(
+						current.loaded.parent.repository.owner,
+						current.loaded.parent.repository.name,
+						current.loaded.parent.channel.slug,
+					),
+				);
 			}
 		};
 		window.addEventListener("keydown", closeOnEscape);
@@ -344,13 +347,19 @@ export default function DocumentWorkspaceHost(
 	).parent;
 	let childVisible = presentation !== "closed";
 	let childLabel = loaded.child?.channel.title ?? (route.page === "child" ? route.childSlug : "");
-	let closeChild = () => onChildClose(parentPath);
+	let closeChild = () => onChildClose(loaded.parent.channel.id, parentPath);
 	let parent = (
 		<Suspense fallback={<Loading label="Opening parent document..." />}>
 			<RoomWorkspace
-				{...workspaceProps(loaded.parent, agent, user, "document", parentMetadataChanged)}
-				breadcrumb={childVisible ? { childLabel, onBack: closeChild } : undefined}
-				paperObscured={childVisible}
+				{...workspaceProps(
+					loaded.parent,
+					agent,
+					user,
+					childVisible
+						? { childLabel, onChildClose: closeChild, type: "parent-with-child" }
+						: { type: "document" },
+					parentMetadataChanged,
+				)}
 				key={loaded.parent.channel.id}
 			/>
 		</Suspense>
@@ -359,8 +368,13 @@ export default function DocumentWorkspaceHost(
 		? (
 			<Suspense fallback={<Loading label="Opening child document..." />}>
 				<RoomWorkspace
-					{...workspaceProps(loaded.child, agent, user, "child", childMetadataChanged)}
-					childClose={{ label: loaded.child.channel.title, onClose: closeChild }}
+					{...workspaceProps(
+						loaded.child,
+						agent,
+						user,
+						{ label: loaded.child.channel.title, onClose: closeChild, type: "child" },
+						childMetadataChanged,
+					)}
 					key={loaded.child.channel.id}
 				/>
 			</Suspense>
