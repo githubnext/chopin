@@ -1,206 +1,28 @@
-import { createHash } from "node:crypto";
 import { describe, expect, it, spyOn } from "bun:test";
 
 import { parse } from "@chopin/dialect";
-import { JobRegistry } from "../jobs/registry";
-import {
-	parseResearchAnswerInput,
-	parseResearchEvidenceInput,
-	researchAnswerDefinition,
-	researchEvidenceDefinition,
-} from "../jobs/research-workspace";
-import { JobService } from "../jobs/service";
+import { parseResearchAnswerInput, parseResearchEvidenceInput } from "../jobs/research-workspace";
 import { StorageError } from "../storage/errors";
-import { MemoryStorage } from "../storage/memory/adapter";
 import * as Plan from "../plan/service";
-import { boundedResearchEvidence, ResearchWorkspaceService } from "./service";
+import { boundedResearchEvidence } from "./service";
+import {
+	answerArtifact,
+	createAndConfirm,
+	evidenceArtifact,
+	finishInitial,
+	PUBLIC_SOURCE,
+	reconciledRequest,
+	reconciledWorkspace,
+	REPORT,
+	REPOSITORY_ID,
+	requestId,
+	settle,
+	setup,
+	USER_ID,
+} from "./test-support";
 
-import type { BackgroundJob, JsonValue } from "../storage/model";
 import type { ResearchReport } from "../jobs/research-workspace";
-
-const SOURCE = "# Parent document\n\nThe private compatibility plan is current.\n";
-const SOURCE_HASH = `sha256:${createHash("sha256").update(SOURCE).digest("hex")}`;
-const USER_ID = "MDQ6VXNlcjU0MjcwODM=";
-const REPOSITORY_ID = "MDEwOlJlcG9zaXRvcnkxMjM=";
-const PUBLIC_SOURCE = { title: "Release notes", url: "https://example.com/releases/v3" };
-const REPORT: ResearchReport = {
-	title: "Compatibility report",
-	summary: "The public and private evidence indicate compatibility.",
-	findings: [{ text: "Compatibility was retained.", sourceUrls: [PUBLIC_SOURCE.url] }],
-	caveats: ["Only the supplied release notes were reviewed."],
-};
-
-function requestId(value: number): string {
-	return `00000000-0000-4000-8000-${value.toString(16).padStart(12, "0")}`;
-}
-
-async function setup(options: { answer?: boolean; evidence?: boolean } = {}) {
-	let now = new Date("2026-08-23T12:00:00.000Z");
-	let storage = new MemoryStorage();
-	let userId = USER_ID;
-	let channelId = crypto.randomUUID();
-	await storage.users.put({ id: userId, login: "octocat", avatarUrl: "avatar", now });
-	await storage.channels.create({
-		id: channelId,
-		repositoryId: REPOSITORY_ID,
-		repositoryOwner: "octo-org",
-		repositoryName: "score",
-		title: "Release plan",
-		createdBy: userId,
-		now,
-	});
-	let lease = await storage.leases.acquire("chopin:writer", "test-writer", 60_000);
-	if (!lease) throw new Error("writer lease unavailable");
-	let definitions = [];
-	if (options.evidence !== false) {
-		definitions.push(researchEvidenceDefinition({
-			config: { agent: true, model: "research-model" },
-			engine: async () => ({ findings: [], sources: [] }),
-		}));
-	}
-	if (options.answer !== false) {
-		definitions.push(researchAnswerDefinition({
-			config: { agent: true, model: "research-model" },
-			engines: {
-				private: async () => ({ findings: [] }),
-				synthesize: async () => REPORT,
-				answer: async () => ({ text: "Answer", sourceUrls: [] }),
-			},
-		}));
-	}
-	let registry = new JobRegistry(definitions);
-	let jobSequence = 0;
-	let jobs = new JobService({
-		storage,
-		registry,
-		lease: () => lease,
-		now: () => now,
-		id: () => `job-${++jobSequence}`,
-	});
-	let entitySequence = 0;
-	let publications: Array<{ workspaceId: string; revision: number }> = [];
-	let service = () =>
-		new ResearchWorkspaceService({
-			storage,
-			jobs,
-			lease: () => lease,
-			clock: () => now,
-			id: () => `entity-${++entitySequence}`,
-			current: async requestedChannelId => ({
-				channelId: requestedChannelId,
-				revision: 7,
-				source: SOURCE,
-				sourceHash: SOURCE_HASH,
-			}),
-			publish: async (publishedChannelId, workspaceId, revision) => {
-				let durable = await storage.research.get(publishedChannelId, workspaceId);
-				expect(durable?.workspace.revision).toBe(revision);
-				publications.push({ workspaceId, revision });
-			},
-		});
-	let advance = () => {
-		now = new Date(now.getTime() + 1);
-		return now;
-	};
-	return {
-		storage,
-		service: service(),
-		restart: service,
-		jobs,
-		lease,
-		channelId,
-		userId,
-		publications,
-		advance,
-	};
-}
-
-async function settle(
-	context: Awaited<ReturnType<typeof setup>>,
-	type: "research-evidence" | "research-answer",
-	artifact: (job: BackgroundJob) => JsonValue,
-) {
-	let claimed = await context.storage.jobs.claim({
-		channelId: context.channelId,
-		claimOwner: `worker-${type}`,
-		count: 100,
-		ttlMs: 30_000,
-		now: context.advance(),
-		lease: context.lease,
-	});
-	let job = claimed.find(value => value.type === type);
-	if (!job) throw new Error(`no pending ${type} job`);
-	return context.jobs.settle({
-		channelId: job.channelId,
-		jobId: job.id,
-		claimOwner: job.claimOwner!,
-		claimGeneration: job.claimGeneration,
-		artifact: artifact(job),
-	});
-}
-
-function evidenceArtifact(job: BackgroundJob): JsonValue {
-	let input = parseResearchEvidenceInput(job.input);
-	return {
-		...input,
-		findings: ["The public release notes retain compatibility."],
-		sources: [PUBLIC_SOURCE],
-		model: "research-model",
-	};
-}
-
-function answerArtifact(job: BackgroundJob, text = "The old client was tested."): JsonValue {
-	let input = parseResearchAnswerInput(job.input);
-	let basis = {
-		workspaceId: input.workspaceId,
-		turnId: input.turnId,
-		kind: input.kind,
-		documentRevision: input.document.revision,
-		documentSourceHash: input.document.sourceHash,
-		model: "research-model",
-	};
-	return input.kind === "initial"
-		? {
-			...basis,
-			report: REPORT,
-			sources: [PUBLIC_SOURCE],
-			publicFindings: ["The public release notes retain compatibility."],
-			privateFindings: ["The private plan is current."],
-		}
-		: {
-			...basis,
-			answer: { text, sourceUrls: [PUBLIC_SOURCE.url] },
-			sources: [PUBLIC_SOURCE],
-		};
-}
-
-async function createAndConfirm(context: Awaited<ReturnType<typeof setup>>) {
-	let created = await context.service.createDraft({
-		channelId: context.channelId,
-		question: "  Which API contracts changed?  ",
-		requestId: requestId(1),
-		origin: "sidebar",
-		createdBy: context.userId,
-	});
-	let confirmed = await context.service.confirm({
-		channelId: context.channelId,
-		workspaceId: created.workspace.id,
-		query: " Which API contracts changed? ",
-		requestId: requestId(2),
-		confirmedBy: context.userId,
-		confirmedByHandle: "octocat",
-	});
-	return { created, confirmed };
-}
-
-async function finishInitial(context: Awaited<ReturnType<typeof setup>>) {
-	let created = await createAndConfirm(context);
-	let evidence = await settle(context, "research-evidence", evidenceArtifact);
-	await context.service.jobChanged(evidence.job);
-	let answer = await settle(context, "research-answer", answerArtifact);
-	await context.service.jobChanged(answer.job);
-	return created;
-}
+import type { JsonValue } from "../storage/model";
 
 describe("research workspace service", () => {
 	it("starts one inline request and schedules its initial turn immediately", async () => {
@@ -320,9 +142,9 @@ describe("research workspace service", () => {
 			},
 		});
 		await settle(context, "research-evidence", evidenceArtifact);
-		await context.service.request(context.channelId, active.request.id);
+		await reconciledRequest(context.service, context.channelId, active.request.id);
 		await settle(context, "research-answer", answerArtifact);
-		await context.service.request(context.channelId, active.request.id);
+		await reconciledRequest(context.service, context.channelId, active.request.id);
 		await context.service.start({
 			...input,
 			beforeStart: () => {
@@ -415,7 +237,8 @@ describe("research workspace service", () => {
 		let [workspace] = await context.storage.research.list(context.channelId, 100);
 		if (!workspace) throw new Error("durable research request is unavailable");
 
-		let observed = await context.restart().request(context.channelId, workspace.id);
+		let restarted = context.restart();
+		let observed = await reconciledRequest(restarted, context.channelId, workspace.id);
 		expect(observed).toMatchObject({ state: "pending", stage: "queued" });
 		expect(
 			(await context.storage.research.get(context.channelId, workspace.id))?.turns[0]
@@ -463,7 +286,19 @@ describe("research workspace service", () => {
 			},
 		});
 
-		let observed = await context.restart().request(context.channelId, workspace.id);
+		let reader = context.restart();
+		let before = await reader.request(context.channelId, workspace.id);
+		expect(before).toMatchObject({ state: "pending", stage: "queued" });
+		expect(
+			(await context.storage.research.get(context.channelId, workspace.id))?.turns[0]
+				?.evidenceJobId,
+		).toBeUndefined();
+
+		let observed = await reconciledRequest(
+			reader,
+			context.channelId,
+			workspace.id,
+		);
 		expect(observed).toMatchObject({ state: "pending", stage: "queued" });
 		expect(
 			(await context.storage.research.get(context.channelId, workspace.id))?.turns[0]
@@ -481,10 +316,14 @@ describe("research workspace service", () => {
 			requestedBy: context.userId,
 		});
 		await settle(context, "research-evidence", evidenceArtifact);
-		await context.restart().request(context.channelId, started.request.id);
+		await reconciledRequest(context.restart(), context.channelId, started.request.id);
 		await settle(context, "research-answer", answerArtifact);
 
-		let recovered = await context.restart().request(context.channelId, started.request.id);
+		let recovered = await reconciledRequest(
+			context.restart(),
+			context.channelId,
+			started.request.id,
+		);
 		expect(recovered).toMatchObject({
 			id: started.request.id,
 			question: "Which API contracts changed?",
@@ -524,7 +363,7 @@ describe("research workspace service", () => {
 			requestedBy: context.userId,
 		});
 		await settle(context, "research-evidence", evidenceArtifact);
-		await context.service.request(context.channelId, started.request.id);
+		await reconciledRequest(context.service, context.channelId, started.request.id);
 		let answer = await settle(context, "research-answer", answerArtifact);
 		let available = false;
 		let attempts = 0;
@@ -539,12 +378,20 @@ describe("research workspace service", () => {
 			});
 		try {
 			await context.service.jobChanged(answer.job);
-			let retrying = await context.service.request(context.channelId, started.request.id);
+			let retrying = await reconciledRequest(
+				context.service,
+				context.channelId,
+				started.request.id,
+			);
 			expect(retrying).toMatchObject({ state: "completed", stage: "publishing" });
 			expect(retrying?.child).toBeUndefined();
 			expect(attempts).toBe(2);
 			available = true;
-			let ready = await context.service.request(context.channelId, started.request.id);
+			let ready = await reconciledRequest(
+				context.service,
+				context.channelId,
+				started.request.id,
+			);
 			expect(ready).toMatchObject({ state: "completed", stage: "ready" });
 			expect(attempts).toBe(3);
 		} finally {
@@ -552,7 +399,7 @@ describe("research workspace service", () => {
 		}
 	});
 
-	it("recovers a concurrent child-title conflict on the next reconciliation", async () => {
+	it("reserves a title collision atomically during publication", async () => {
 		let context = await setup();
 		let started = await context.service.start({
 			channelId: context.channelId,
@@ -561,7 +408,7 @@ describe("research workspace service", () => {
 			requestedBy: context.userId,
 		});
 		await settle(context, "research-evidence", evidenceArtifact);
-		await context.service.request(context.channelId, started.request.id);
+		await reconciledRequest(context.service, context.channelId, started.request.id);
 		let answer = await settle(context, "research-answer", answerArtifact);
 		let publish = context.storage.research.publishInitialReport.bind(context.storage.research);
 		let raced = false;
@@ -599,7 +446,7 @@ describe("research workspace service", () => {
 			requestedBy: context.userId,
 		});
 		await settle(context, "research-evidence", evidenceArtifact);
-		await context.service.request(context.channelId, started.request.id);
+		await reconciledRequest(context.service, context.channelId, started.request.id);
 		let answer = await settle(context, "research-answer", answerArtifact);
 		let publication = spyOn(context.storage.research, "publishInitialReport")
 			.mockRejectedValue(new StorageError("corrupt", "invalid publication state"));
@@ -621,7 +468,7 @@ describe("research workspace service", () => {
 			requestedBy: context.userId,
 		});
 		await settle(context, "research-evidence", evidenceArtifact);
-		await context.service.request(context.channelId, started.request.id);
+		await reconciledRequest(context.service, context.channelId, started.request.id);
 		let answer = await settle(context, "research-answer", answerArtifact);
 		let storedAnswer = await context.storage.jobs.get(context.channelId, answer.job.id);
 		if (!storedAnswer) throw new Error("completed answer job is unavailable");
@@ -649,7 +496,7 @@ describe("research workspace service", () => {
 			requestedBy: context.userId,
 		});
 		await settle(context, "research-evidence", evidenceArtifact);
-		await context.service.request(context.channelId, started.request.id);
+		await reconciledRequest(context.service, context.channelId, started.request.id);
 		let hostileSource = {
 			title: "[Release] > # notes",
 			url: "https://example.com/releases/v3?view=full",
@@ -667,7 +514,7 @@ describe("research workspace service", () => {
 			let artifact = answerArtifact(job) as Record<string, JsonValue>;
 			return { ...artifact, report: hostileReport, sources: [hostileSource] };
 		});
-		let ready = await context.service.request(context.channelId, started.request.id);
+		let ready = await reconciledRequest(context.service, context.channelId, started.request.id);
 		let stored = await context.storage.collaboration.load(ready!.child!.id, context.advance());
 		if (!stored) throw new Error("research child document was not initialized");
 		let document = await Plan.readStored(stored);
@@ -790,7 +637,7 @@ describe("research workspace service", () => {
 			requestedBy: context.userId,
 		});
 		await settle(context, "research-evidence", evidenceArtifact);
-		await context.service.request(context.channelId, started.request.id);
+		await reconciledRequest(context.service, context.channelId, started.request.id);
 		let answer = await settle(context, "research-answer", answerArtifact);
 		await context.service.jobChanged(answer.job);
 
@@ -922,7 +769,11 @@ describe("research workspace service", () => {
 		let { created } = await createAndConfirm(context);
 		await settle(context, "research-evidence", evidenceArtifact);
 
-		let recovered = await context.service.get(context.channelId, created.workspace.id);
+		let recovered = await reconciledWorkspace(
+			context.service,
+			context.channelId,
+			created.workspace.id,
+		);
 		expect(recovered?.turns[0]).toMatchObject({
 			kind: "initial",
 			evidence: { job: { state: "completed" } },
@@ -1076,7 +927,11 @@ describe("research workspace service", () => {
 			.toBe("Find newer compatibility evidence.");
 
 		await settle(context, "research-evidence", evidenceArtifact);
-		let reconciled = await context.service.get(context.channelId, created.workspace.id);
+		let reconciled = await reconciledWorkspace(
+			context.service,
+			context.channelId,
+			created.workspace.id,
+		);
 		let answerJobId = reconciled!.turns.at(-1)!.answerJobId!;
 		let storedAnswer = await context.storage.jobs.get(context.channelId, answerJobId);
 		let searchInput = parseResearchAnswerInput(storedAnswer!.job.input);

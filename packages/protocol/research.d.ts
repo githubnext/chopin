@@ -25,6 +25,8 @@ export declare namespace Research {
 		| "ready"
 		| "failed"
 		| "cancelled";
+	export type ActiveRequestStage = Exclude<RequestStage, "ready" | "failed" | "cancelled">;
+	export type ActiveRequestState = Exclude<Job.State, "failed" | "cancelled" | "superseded">;
 
 	export type Source = {
 		readonly title: string;
@@ -39,18 +41,43 @@ export declare namespace Research {
 		readonly sourceCount: number;
 	};
 
-	export type RequestView = {
+	export type RequestViewBase = {
 		readonly id: string;
 		readonly channelId: string;
 		readonly question: string;
-		readonly state: RequestState;
-		readonly stage: RequestStage;
-		readonly error?: string;
 		readonly sources: readonly Source[];
-		readonly child?: ReadyChild;
 		readonly createdAt: string;
 		readonly updatedAt: string;
 	};
+
+	export type RequestView =
+		& RequestViewBase
+		& (
+			| {
+				readonly state: ActiveRequestState;
+				readonly stage: ActiveRequestStage;
+				readonly error?: never;
+				readonly child?: never;
+			}
+			| {
+				readonly state: "failed";
+				readonly stage: "failed";
+				readonly error: string;
+				readonly child?: never;
+			}
+			| {
+				readonly state: "cancelled" | "superseded";
+				readonly stage: "cancelled";
+				readonly error?: never;
+				readonly child?: never;
+			}
+			| {
+				readonly state: "completed";
+				readonly stage: "ready";
+				readonly error?: never;
+				readonly child: ReadyChild;
+			}
+		);
 
 	export type JobLinkIds = {
 		readonly evidenceJobId?: string;

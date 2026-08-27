@@ -303,6 +303,7 @@ export function registerResearchWorkspaceRoutes(
 				if (!session) return json({ error: "authentication required" }, 401);
 				let access = await channelAccess(auth, session, params.channelId!);
 				if (!access) return json({ error: "research workspace not found" }, 404);
+				await service.reconcile(access.channel.id, params.workspaceId!);
 				let workspace = await service.get(access.channel.id, params.workspaceId!);
 				return workspace
 					? json(workspace)
