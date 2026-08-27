@@ -421,7 +421,7 @@ describe("active research deletion", () => {
 
 	it("allows deletion only after a removable terminal snapshot loads", async () => {
 		for (let stage of ["failed", "cancelled", "ready"] as const) {
-			let state = mutableStore({ ...BASE, stage });
+			let state = mutableStore(atStage(stage));
 			let editor = deletionEditor();
 			let register = await deletionGuard();
 			if (!register) return;
@@ -436,7 +436,7 @@ describe("active research deletion", () => {
 
 	it("blocks terminal deletion from retry start through failure or queued success", async () => {
 		for (let outcome of ["failure", "success"] as const) {
-			let state = mutableStore({ ...BASE, state: "failed", stage: "failed" });
+			let state = mutableStore(atStage("failed"));
 			let editor = deletionEditor();
 			let register = await deletionGuard();
 			if (!register) return;
@@ -683,7 +683,7 @@ describe("research reference", () => {
 		}).ResearchReference;
 		expect(typeof Reference).toBe("function");
 		if (!Reference) return;
-		let failed = { ...BASE, state: "failed" as const, stage: "failed" as const };
+		let failed = atStage("failed");
 		let store: Store = {
 			subscribe: () => () => {},
 			retain: () => () => {},
@@ -730,6 +730,7 @@ describe("research reference", () => {
 			mutating() {
 				return false;
 			}
+			refresh() {}
 			retain(id: string) {
 				this.retained.push(id);
 				return () => this.retained.splice(this.retained.indexOf(id), 1);

@@ -1,7 +1,4 @@
-import {
-	seedChildChannel,
-	seedChannelDescription,
-} from "./database";
+import { seedChannelDescription, seedChildChannel } from "./database";
 import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 import { expect, ready, test } from "./room";
 
@@ -28,7 +25,7 @@ test("typed references survive Planner send, reload, navigation, and a mobile co
 	await seed("# Reference parent\n");
 	let targetRoom = crypto.randomUUID();
 	let targetTitle = `Source review ${targetRoom.slice(0, 8)}`;
-	let target = await seedChildChannel(
+	let seededTarget = await seedChildChannel(
 		port(baseURL!),
 		room,
 		targetRoom,
@@ -36,7 +33,7 @@ test("typed references survive Planner send, reload, navigation, and a mobile co
 		"# Referenced child\n",
 	);
 	await seedChannelDescription(port(baseURL!), targetRoom, "RFC about referenced releases");
-	let targetPath = target.path;
+	let targetPath = seededTarget.path;
 	let sent: Chat.Send[] = [];
 	let attempts: Chat.Send[] = [];
 	let rejectNext = true;

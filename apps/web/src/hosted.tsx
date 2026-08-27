@@ -158,11 +158,6 @@ function repositoryHref(repository: { owner: string; name: string }): string {
 	return documentsPath(repository.owner, repository.name);
 }
 
-function canonicalize(pathname: string): void {
-	if (location.pathname === pathname) return;
-	history.replaceState(history.state, "", `${pathname}${location.search}${location.hash}`);
-}
-
 function Failure(
 	{
 		channel,
@@ -579,7 +574,7 @@ export function HostedApp(
 			}
 			let target = attempt.opener?.current;
 			if (!target?.isConnected || target.closest("[inert]")) {
-					target = parent.querySelector<HTMLElement>(`[data-document-view="plan"] h2`);
+				target = parent.querySelector<HTMLElement>(`[data-document-view="plan"] h2`);
 			}
 			moveChildFocus({ type: "finish", token });
 			if (target?.isConnected && !target.closest("[inert]")) {
