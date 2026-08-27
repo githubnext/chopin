@@ -11,7 +11,10 @@ export function projectRequestView(input: {
 	sources: ResearchEvidence["sources"];
 	child: Research.ReadyChild | undefined;
 }): Research.RequestView {
-	let state: Job.State = input.answer?.job.state ?? input.evidence?.job.state ?? "pending";
+	let unlinked = !input.turn.evidenceJobId && !input.turn.answerJobId;
+	let state: Job.State = unlinked
+		? "failed"
+		: input.answer?.job.state ?? input.evidence?.job.state ?? "pending";
 	let base: Research.RequestViewBase = {
 		id: input.workspace.id,
 		channelId: input.workspace.channelId,
