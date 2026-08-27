@@ -291,7 +291,9 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	}, [preview, store]);
 
 	useEffect(() => {
-		setHost(editor.getRootElement()?.closest<HTMLElement>(".plan-document") ?? undefined);
+		return editor.registerRootListener(element => {
+			setHost(element?.closest<HTMLElement>(".plan-document") ?? undefined);
+		});
 	}, [editor]);
 
 	useEffect(() => {
