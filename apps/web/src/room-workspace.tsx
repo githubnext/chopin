@@ -39,6 +39,7 @@ import type { DocumentMetadata } from "./document-actions";
 import type { DocumentAction } from "./document-actions-menu";
 import type { HostedWorkspaceProps } from "./hosted";
 import type { Status } from "./wire";
+import type { WorkspacePresentation } from "./workspace-model";
 
 type ManagedHello = Session.Hello & { archivedAt?: string; canManage: boolean };
 type ManagedChannel = Session.Channel & { archivedAt?: string; canManage: boolean };
@@ -57,18 +58,18 @@ const QUESTION_MOTION = {
 export function Header(
 	{
 		archivedAt,
-		breadcrumb,
 		canManage,
 		members,
 		label,
 		onAction,
+		presentation,
 	}: {
 		archivedAt?: string;
-		breadcrumb?: HostedWorkspaceProps["breadcrumb"];
 		canManage: boolean;
 		members: Session.Member[];
 		label: string;
 		onAction: (action: DocumentAction) => void;
+		presentation: WorkspacePresentation;
 	},
 ) {
 	let people = peopleHere(members);
@@ -79,13 +80,13 @@ export function Header(
 				className="flex min-w-0 flex-1 items-center gap-0.5"
 			>
 				<NavigationIcon className="opacity-50" src={bookBookmarkIcon} />
-				{breadcrumb
+				{presentation.type === "parent-with-child"
 					? (
 						<>
 							<button
 								aria-label={`Return to ${label}`}
 								className="document-parent-breadcrumb btn btn-ghost min-w-0"
-								onClick={breadcrumb.onBack}
+								onClick={presentation.onChildClose}
 								type="button"
 							>
 								<span className="truncate">{label}</span>
@@ -97,10 +98,10 @@ export function Header(
 								src={navigationChevronRight}
 							/>
 							<span
-								aria-label={`Child document: ${breadcrumb.childLabel}`}
+								aria-label={`Child document: ${presentation.childLabel}`}
 								className="document-child-breadcrumb truncate"
 							>
-								{breadcrumb.childLabel}
+								{presentation.childLabel}
 							</span>
 						</>
 					)
@@ -157,8 +158,6 @@ export function RoomWorkspace(
 	{
 		agent = true,
 		archivedAt,
-		breadcrumb,
-		childClose,
 		canEdit = true,
 		canManage,
 		description,
@@ -166,11 +165,10 @@ export function RoomWorkspace(
 		handle,
 		label,
 		onMetadataChanged,
+		presentation,
 		repository,
 		room,
-		paperObscured,
 		slug,
-		surface = "document",
 		updatedAt,
 		userId,
 	}: HostedWorkspaceProps,
@@ -209,7 +207,7 @@ export function RoomWorkspace(
 	let user = useMemo(() => cursor(handle), [handle]);
 	let mode = useWorkspaceMode();
 	let workspaceIds = useWorkspaceIds();
-	let profile = workspaceProfile(surface);
+	let profile = workspaceProfile(presentation.type === "child" ? "child" : "document");
 	let researchEnabled = profile.research;
 	let [workspace, dispatch] = useWorkspaceState(profile);
 	let [questions] = useState(() => new QuestionnaireStore());
@@ -432,7 +430,7 @@ export function RoomWorkspace(
 		research,
 		researchEnabled,
 		room,
-		surface,
+		profile.surface,
 		threads,
 		updateMetadata,
 	]);
@@ -449,7 +447,6 @@ export function RoomWorkspace(
 
 	return (
 		<Workspace
-			childClose={childClose}
 			chat={
 				<Chat
 					active={conversationActive}
@@ -468,11 +465,11 @@ export function RoomWorkspace(
 			header={
 				<Header
 					archivedAt={workspaceArchivedAt}
-					breadcrumb={breadcrumb}
 					canManage={effectiveCanManage}
 					members={members}
 					label={metadata.title}
 					onAction={action => onDocumentAction(room, action)}
+					presentation={presentation}
 				/>
 			}
 			controls={
@@ -521,7 +518,7 @@ export function RoomWorkspace(
 			}
 			state={workspace}
 			profile={profile}
-			paperObscured={paperObscured}
+			presentation={presentation}
 			unanswered={unanswered}
 			view={view}
 		/>

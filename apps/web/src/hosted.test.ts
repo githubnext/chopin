@@ -209,12 +209,41 @@ describe("anchored child lifecycle", () => {
 		state = childFocusTransition(state, {
 			type: "begin",
 			opener: { current: null },
-			parentId: "parent-one",
-			parentPath: "/documents/octo-org/score/parent-one",
+			parentId: "parent-two",
+			parentPath: "/documents/octo-org/score/parent-two",
 		});
 
 		expect(childFocusTransition(state, { type: "restore", token: stale })).toBe(state);
 		expect(state.attempt?.generation).toBe(2);
+	});
+
+	it("coalesces repeated close requests until the child route changes", () => {
+		let state = childFocusTransition({ generation: 0 }, {
+			type: "begin",
+			opener: { current: null },
+			parentId: "parent-one",
+			parentPath: "/documents/octo-org/score/parent-one",
+		});
+		let repeated = childFocusTransition(state, {
+			type: "begin",
+			opener: { current: null },
+			parentId: "parent-one",
+			parentPath: "/documents/octo-org/score/parent-one",
+		});
+
+		expect(repeated).toBe(state);
+		repeated = childFocusTransition(repeated, {
+			type: "route",
+			pathname: "/documents/octo-org/score/parent-one/children/child-one",
+		});
+		expect(
+			childFocusTransition(repeated, {
+				type: "begin",
+				opener: { current: null },
+				parentId: "parent-one",
+				parentPath: "/documents/octo-org/score/parent-one",
+			}).attempt?.generation,
+		).toBe(3);
 	});
 
 	it("keeps the parent shell visible around separate workspace rooms", () => {
@@ -261,8 +290,12 @@ describe("anchored child lifecycle", () => {
 			onConversationOpen() {},
 			onDesktopConversationOpen() {},
 			onDestination() {},
-			paperObscured: true,
 			plan: createElement("div", null, "Parent paper"),
+			presentation: {
+				childLabel: "Source review",
+				onChildClose() {},
+				type: "parent-with-child",
+			},
 			profile: workspaceProfile("document"),
 			state: { conversationOpen: false, desktopConversationOpen: false },
 			unanswered: 0,
@@ -282,7 +315,6 @@ describe("anchored child lifecycle", () => {
 	it("renders a collapsed child Conversation toggle beside Close", () => {
 		let markup = renderToStaticMarkup(createElement(Workspace, {
 			chat: createElement("div", null, "Child conversation"),
-			childClose: { label: "Source review", onClose() {} },
 			controls: createElement("div", null, "Document controls"),
 			conversationActivity: { busy: true, unread: 2 },
 			decisions: createElement("div", null, "Decisions"),
@@ -294,6 +326,7 @@ describe("anchored child lifecycle", () => {
 			onDesktopConversationOpen() {},
 			onDestination() {},
 			plan: createElement("div", null, "Child paper"),
+			presentation: { label: "Source review", onClose() {}, type: "child" },
 			profile: workspaceProfile("child"),
 			state: { conversationOpen: false, desktopConversationOpen: false },
 			unanswered: 0,
@@ -328,6 +361,7 @@ describe("anchored child lifecycle", () => {
 			onDesktopConversationOpen() {},
 			onDestination() {},
 			plan: createElement("div", null, "Child paper"),
+			presentation: { label: "Source review", onClose() {}, type: "child" },
 			profile: workspaceProfile("child"),
 			state: { conversationOpen: false, desktopConversationOpen: false },
 			unanswered: 0,
@@ -362,13 +396,14 @@ describe("anchored child lifecycle", () => {
 		};
 		let child = renderToStaticMarkup(createElement(Workspace, {
 			...base,
-			childClose: { label: "Source review", onClose() {} },
 			identity: "child-room",
+			presentation: { label: "Source review", onClose() {}, type: "child" },
 			profile: workspaceProfile("child"),
 		}));
 		let parent = renderToStaticMarkup(createElement(Workspace, {
 			...base,
 			identity: "parent-room",
+			presentation: { type: "document" },
 			profile: workspaceProfile("document"),
 		}));
 

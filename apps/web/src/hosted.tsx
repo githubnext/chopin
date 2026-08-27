@@ -24,7 +24,7 @@ import type {
 	DocumentRouteIdentitySource,
 	DocumentRouteSwap as DocumentRouteSwapState,
 } from "./document-route-swap";
-import type { WorkspaceSurface } from "./workspace-model";
+import type { WorkspacePresentation } from "./workspace-model";
 
 let DocumentWorkspaceHost = lazy(() => import("./document-workspace-host"));
 
@@ -53,16 +53,7 @@ export type HostedWorkspaceProps = {
 			| "updatedAt"
 		>,
 	) => void;
-	breadcrumb?: {
-		childLabel: string;
-		onBack: () => void;
-	};
-	childClose?: {
-		label: string;
-		onClose: () => void;
-	};
-	paperObscured?: boolean;
-	surface?: WorkspaceSurface;
+	presentation: WorkspacePresentation;
 };
 
 export type HostedRoute =
@@ -341,6 +332,7 @@ function ChannelWorkspace(
 		descriptionRevision: channel.descriptionRevision,
 		handle: user.login,
 		label: channel.title,
+		presentation: { type: "document" },
 		slug: channel.slug,
 		updatedAt: channel.updatedAt,
 		repository: detail.repository,
@@ -363,7 +355,7 @@ function DocumentRouteSwap(
 	}: {
 		agent: boolean;
 		onCanonicalPath: (pathname: string) => void;
-		onChildClose: (parentPath: string) => void;
+		onChildClose: (parentId: string, parentPath: string) => void;
 		onChildClosing: (parentId: string, parentPath: string) => ChildFocusToken;
 		onParentRestored: (token: ChildFocusToken) => void;
 		route: DocumentRoute;
@@ -473,7 +465,6 @@ export function HostedApp(
 	let hostedRouteRef = useRef(route);
 	hostedRouteRef.current = route;
 	let childOpener = useRef<ResearchOpener | undefined>(undefined);
-	let childClosePending = useRef(false);
 	let childFocus = useRef<ChildFocusState>({ generation: 0 });
 	let childFocusFrame = useRef<number | undefined>(undefined);
 	let cancelChildFocusFrame = useCallback(() => {
@@ -488,7 +479,6 @@ export function HostedApp(
 		return next;
 	}, [cancelChildFocusFrame]);
 	let childRouteChanged = useCallback((pathname: string) => {
-		if (hostedRoute(pathname).page === "child") childClosePending.current = false;
 		moveChildFocus({ type: "route", pathname });
 	}, [moveChildFocus]);
 	let navigate = useCallback((
@@ -544,13 +534,21 @@ export function HostedApp(
 		);
 		setRoute(hostedRoute(pathname));
 	}, [childRouteChanged]);
-	let closeChild = useCallback((parentPath: string) => {
-		if (childClosePending.current) return;
-		childClosePending.current = true;
+	let closeChild = useCallback((parentId: string, parentPath: string) => {
+		cancelChildFocusFrame();
+		let current = childFocus.current;
+		let next = moveChildFocus({
+			type: "begin",
+			opener: childOpener.current,
+			parentId,
+			parentPath,
+		});
+		if (next === current) return;
+		childOpener.current = undefined;
 		let action = childCloseAction(history.state, parentPath);
 		if (action.type === "back") history.back();
 		else navigate(action.destination, { replace: true });
-	}, [navigate]);
+	}, [cancelChildFocusFrame, moveChildFocus, navigate]);
 	let childClosing = useCallback((parentId: string, parentPath: string): ChildFocusToken => {
 		cancelChildFocusFrame();
 		let next = moveChildFocus({
