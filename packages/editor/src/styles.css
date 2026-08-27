@@ -21,6 +21,27 @@
 	box-shadow: var(--shadow-resting);
 }
 
+.plan-content [data-research-ready] {
+	position: relative;
+	box-shadow: var(--shadow-raised);
+	transition: box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.plan-content [data-research-ready]:hover,
+.plan-content [data-research-ready]:focus-within {
+	box-shadow: var(--shadow-overlay);
+}
+
+.plan-research-open {
+	position: absolute;
+	z-index: 1;
+	inset: 0;
+	cursor: pointer;
+	border: 0;
+	border-radius: inherit;
+	background: transparent;
+}
+
 .plan-research-composer {
 	display: grid;
 	gap: 0.625rem;
