@@ -15,7 +15,6 @@ import {
 import { githubLoginHref, hostedRoute, retryableChannelFailure } from "./hosted";
 import { prepareDocumentLoad, validatedChildPath } from "./document-loader";
 import { Workspace } from "./workspace";
-import { workspaceProfile } from "./workspace-model";
 
 import type { ChannelDetail } from "./api";
 
@@ -296,7 +295,6 @@ describe("anchored child lifecycle", () => {
 				onChildClose() {},
 				type: "parent-with-child",
 			},
-			profile: workspaceProfile("document"),
 			state: { conversationOpen: false, desktopConversationOpen: false },
 			unanswered: 0,
 			view: "plan",
@@ -327,7 +325,6 @@ describe("anchored child lifecycle", () => {
 			onDestination() {},
 			plan: createElement("div", null, "Child paper"),
 			presentation: { label: "Source review", onClose() {}, type: "child" },
-			profile: workspaceProfile("child"),
 			state: { conversationOpen: false, desktopConversationOpen: false },
 			unanswered: 0,
 			view: "plan",
@@ -362,7 +359,6 @@ describe("anchored child lifecycle", () => {
 			onDestination() {},
 			plan: createElement("div", null, "Child paper"),
 			presentation: { label: "Source review", onClose() {}, type: "child" },
-			profile: workspaceProfile("child"),
 			state: { conversationOpen: false, desktopConversationOpen: false },
 			unanswered: 0,
 			view: "plan",
@@ -398,13 +394,11 @@ describe("anchored child lifecycle", () => {
 			...base,
 			identity: "child-room",
 			presentation: { label: "Source review", onClose() {}, type: "child" },
-			profile: workspaceProfile("child"),
 		}));
 		let parent = renderToStaticMarkup(createElement(Workspace, {
 			...base,
 			identity: "parent-room",
 			presentation: { type: "document" },
-			profile: workspaceProfile("document"),
 		}));
 
 		expect(child).toContain('aria-label="Close Source review"');
