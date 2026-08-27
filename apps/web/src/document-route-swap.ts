@@ -1,6 +1,7 @@
 export type KeyedDocumentRoute = {
 	immediately: boolean;
 	key: string;
+	routeKey?: string;
 };
 
 declare const documentRouteIdentityBrand: unique symbol;
@@ -65,7 +66,10 @@ export function transitionDocumentRoute<T extends KeyedDocumentRoute, R = unknow
 		let requested = action.route;
 		let retarget = (
 			route: ReadyDocumentRoute<T, R>,
-		): ReadyDocumentRoute<T, R> => ({ ...requested, resolution: route.resolution });
+		): ReadyDocumentRoute<T, R> =>
+			requested.routeKey !== undefined && requested.routeKey === route.routeKey
+				? { ...route, immediately: requested.immediately }
+				: { ...requested, resolution: route.resolution };
 		if (requested.key === state.current.key) {
 			return {
 				current: retarget(state.current),

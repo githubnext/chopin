@@ -89,3 +89,41 @@ test("one state transition owns parent retention across the child lifecycle", ()
 	});
 	expect(state.status === "ready" && state.loaded.child).toBeUndefined();
 });
+
+test("restoring a document removes archived metadata from the retained workspace", () => {
+	let parent = detail("parent-one", "parent");
+	let route = {
+		owner: "octo-org",
+		page: "document" as const,
+		repository: "score",
+		slug: "parent",
+	};
+	let state = transitionDocumentWorkspace(initialDocumentWorkspaceState(), {
+		parent,
+		route,
+		type: "ready",
+	});
+	state = transitionDocumentWorkspace(state, {
+		kind: "parent",
+		metadata: {
+			archivedAt: "2026-08-27T01:00:00.000Z",
+			descriptionRevision: 0,
+			slug: "parent",
+			title: "parent",
+			updatedAt: "2026-08-27T01:00:00.000Z",
+		},
+		type: "metadata",
+	});
+	state = transitionDocumentWorkspace(state, {
+		kind: "parent",
+		metadata: {
+			descriptionRevision: 0,
+			slug: "parent",
+			title: "parent",
+			updatedAt: "2026-08-27T02:00:00.000Z",
+		},
+		type: "metadata",
+	});
+
+	expect(state.status === "ready" && state.loaded.parent.channel.archivedAt).toBeUndefined();
+});

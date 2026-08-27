@@ -1,3 +1,5 @@
+import { updateDocumentMetadata } from "./document-actions";
+
 import type { ChannelDetail } from "./api";
 import type { DocumentMetadata } from "./document-actions";
 import type { DocumentRouteIdentitySource } from "./document-route-swap";
@@ -142,7 +144,7 @@ export function transitionDocumentWorkspace(
 		if (state.status === "empty") return state;
 		let target = action.kind === "parent" ? state.loaded.parent : state.loaded.child;
 		if (!target) return state;
-		let detail = { ...target, channel: { ...target.channel, ...action.metadata } };
+		let detail = { ...target, channel: updateDocumentMetadata(target.channel, action.metadata) };
 		let loaded = action.kind === "parent"
 			? { ...state.loaded, parent: detail }
 			: { ...state.loaded, child: detail };

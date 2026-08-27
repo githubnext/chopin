@@ -8,6 +8,7 @@ type Route = {
 	channel?: string;
 	immediately: boolean;
 	key: string;
+	routeKey: string;
 	slug: string;
 	source: { slug: string };
 };
@@ -15,18 +16,21 @@ type Route = {
 let a: Route = {
 	immediately: true,
 	key: "document:a",
+	routeKey: "document:a",
 	slug: "a",
 	source: { slug: "a" },
 };
 let b: Route = {
 	immediately: false,
 	key: "document:b",
+	routeKey: "document:b",
 	slug: "b",
 	source: { slug: "b" },
 };
 let c: Route = {
 	immediately: false,
 	key: "document:c",
+	routeKey: "document:c",
 	slug: "c",
 	source: { slug: "c" },
 };
@@ -68,11 +72,28 @@ test("retargeting a retained layer makes its requested source authoritative", ()
 	let state: DocumentRouteSwap<Route, string> = {
 		current: { ...a, resolution: "loaded" },
 	};
-	let child = { ...a, slug: "child", source: { slug: "child" } };
+	let child = {
+		...a,
+		routeKey: "child:a/child",
+		slug: "child",
+		source: { slug: "child" },
+	};
 
 	state = transitionDocumentRoute(state, { route: child, type: "requested" });
 
 	expect(state.current).toEqual({ ...child, resolution: "loaded" });
+});
+
+test("reversing to the exact retained route preserves its mounted source", () => {
+	let state: DocumentRouteSwap<Route> = { current: a };
+	state = transitionDocumentRoute(state, { route: b, type: "requested" });
+	state = transitionDocumentRoute(state, { key: b.key, type: "ready" });
+	let repeated = { ...a, immediately: false, source: { slug: "a" } };
+
+	state = transitionDocumentRoute(state, { route: repeated, type: "requested" });
+
+	expect(state.current.source).toBe(a.source);
+	expect(state.current.immediately).toBe(false);
 });
 
 test("reversing to a loaded layer preserves metadata and accepts the requested source", () => {
@@ -84,7 +105,12 @@ test("reversing to a loaded layer preserves metadata and accepts the requested s
 		resolution: "loaded",
 		type: "ready",
 	});
-	let requested = { ...a, immediately: false, source: { slug: "a" } };
+	let requested = {
+		...a,
+		immediately: false,
+		routeKey: "document:alias-a",
+		source: { slug: "a" },
+	};
 	state = transitionDocumentRoute(state, { route: requested, type: "requested" });
 	expect(state).toEqual({
 		current: { ...requested, resolution: "loaded" },
