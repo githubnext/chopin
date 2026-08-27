@@ -15,6 +15,9 @@ import type { WorkspaceState } from "./workspace-model";
 
 type MatchMedia = (query: string) => { matches: boolean };
 
+const childPresentation = { label: "Source review", onClose() {}, type: "child" } as const;
+const documentPresentation = { type: "document" } as const;
+
 function mediaAt(width: number): MatchMedia {
 	return query => {
 		let maximum = /\(max-width: (\d+)px\)/.exec(query);
@@ -23,24 +26,38 @@ function mediaAt(width: number): MatchMedia {
 }
 
 describe("adaptive workspace", () => {
+	it("derives child capabilities from the workspace presentation", () => {
+		expect(workspaceProfile(childPresentation))
+			.toEqual({
+				implementation: false,
+				persistConversation: false,
+				persistPaneSize: false,
+				persistView: false,
+				research: false,
+				surface: "child",
+			});
+	});
+
 	it("starts a child with Conversation collapsed without inheriting the desktop preference", () => {
-		expect(initialWorkspaceState(workspaceProfile("child"), true)).toEqual({
+		expect(initialWorkspaceState(workspaceProfile(childPresentation), true)).toEqual({
 			conversationOpen: false,
 			desktopConversationOpen: false,
 		});
 	});
 
 	it("starts a child on Document without inheriting the parent's saved view", () => {
-		expect(initialDocumentView(workspaceProfile("child"), "decisions")).toBe("plan");
-		expect(initialDocumentView(workspaceProfile("child"), "background-work")).toBe("plan");
-		expect(initialDocumentView(workspaceProfile("document"), "decisions"))
+		expect(initialDocumentView(workspaceProfile(childPresentation), "decisions")).toBe("plan");
+		expect(initialDocumentView(workspaceProfile(childPresentation), "background-work"))
+			.toBe("plan");
+		expect(initialDocumentView(workspaceProfile(documentPresentation), "decisions"))
 			.toBe("decisions");
-		expect(initialDocumentView(workspaceProfile("document"), "background-work")).toBe("plan");
-		expect(initialDocumentView(workspaceProfile("document"), "tasks")).toBe("plan");
+		expect(initialDocumentView(workspaceProfile(documentPresentation), "background-work"))
+			.toBe("plan");
+		expect(initialDocumentView(workspaceProfile(documentPresentation), "tasks")).toBe("plan");
 	});
 
 	it("limits a child to Document, Decisions, and Conversation", () => {
-		let capabilities = workspaceProfile("child");
+		let capabilities = workspaceProfile(childPresentation);
 
 		expect(capabilities).toEqual({
 			implementation: false,
@@ -58,7 +75,7 @@ describe("adaptive workspace", () => {
 	});
 
 	it("keeps the parent's research and implementation capabilities", () => {
-		expect(workspaceProfile("document")).toEqual({
+		expect(workspaceProfile(documentPresentation)).toEqual({
 			implementation: true,
 			persistConversation: true,
 			persistPaneSize: true,

@@ -49,16 +49,16 @@ export function initialDocumentView(
 }
 
 export function workspaceProfile(
-	surface: WorkspaceSurface,
+	presentation: WorkspacePresentation,
 ): WorkspaceProfile {
-	let child = surface === "child";
+	let child = presentation.type === "child";
 	return {
 		implementation: !child,
 		persistConversation: !child,
 		persistPaneSize: !child,
 		persistView: !child,
 		research: !child,
-		surface,
+		surface: child ? "child" : "document",
 	};
 }
 

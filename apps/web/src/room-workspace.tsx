@@ -207,7 +207,7 @@ export function RoomWorkspace(
 	let user = useMemo(() => cursor(handle), [handle]);
 	let mode = useWorkspaceMode();
 	let workspaceIds = useWorkspaceIds();
-	let profile = workspaceProfile(presentation.type === "child" ? "child" : "document");
+	let profile = workspaceProfile(presentation);
 	let researchEnabled = profile.research;
 	let [workspace, dispatch] = useWorkspaceState(profile);
 	let [questions] = useState(() => new QuestionnaireStore());
@@ -517,7 +517,6 @@ export function RoomWorkspace(
 				/>
 			}
 			state={workspace}
-			profile={profile}
 			presentation={presentation}
 			unanswered={unanswered}
 			view={view}

@@ -12,6 +12,7 @@ import {
 	workspaceDestinations,
 	workspaceHeadingId,
 	workspaceMode,
+	workspaceProfile,
 } from "./workspace-model";
 import conversationCloseIcon from "./assets/icons/conversation-close.svg";
 import conversationIcon from "./assets/icons/conversation.svg";
@@ -115,7 +116,6 @@ export type WorkspaceProps = {
 	conversationActivity: { unread: number; busy: boolean };
 	identity?: string;
 	presentation: WorkspacePresentation;
-	profile: WorkspaceProfile;
 };
 
 export function ConversationToggle(
@@ -230,11 +230,11 @@ export function Workspace(
 		plan,
 		presentation: workspacePresentation,
 		state,
-		profile,
 		unanswered,
 		view,
 	}: WorkspaceProps,
 ) {
+	let profile = workspaceProfile(workspacePresentation);
 	let [chatWidth, resizeChat] = usePaneWidth({
 		active: mode === "split",
 		...CHAT_PANE,
