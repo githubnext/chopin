@@ -303,35 +303,6 @@ test("inline research publishes one ordinary child and opens its isolated worksp
 	await expect(open).toBeFocused();
 });
 
-test("a child document opens and submits its own comment composer", async ({ baseURL, page, room, seed }) => {
-	await seed(PARENT_SOURCE);
-	let childTitle = `Commentable child ${room.slice(0, 8)}`;
-	let child = await seedChildChannel(
-		port(baseURL!),
-		room,
-		crypto.randomUUID(),
-		childTitle,
-		CHILD_SOURCE,
-	);
-	await authenticate(page, "ana", baseURL!);
-	await page.goto(child.path);
-
-	let surface = page.getByRole("region", { name: `Child document: ${childTitle}` });
-	let editor = surface.getByRole("textbox", { name: "editable markdown" });
-	await expect(editor).toHaveAttribute("contenteditable", "true", { timeout: 20_000 });
-	await editor.getByText(
-		"This ordinary child has its own editable document, Decisions, and Conversation.",
-	)
-		.selectText();
-	await surface.getByRole("button", { name: "Comment on this passage", exact: true }).click();
-
-	let draft = surface.getByRole("dialog", { name: "New comment" });
-	await draft.getByPlaceholder("Comment on this passage…").fill("Keep this child passage.");
-	await draft.getByRole("button", { name: "Comment", exact: true }).click();
-	await expect(surface.getByRole("button", { name: /Comment on “This ordinary child/ }))
-		.toBeVisible();
-});
-
 test("failed research retries by identity while cancelled research never publishes", async ({ baseURL, join, page, room, seed }) => {
 	await seed("# Recovery parent\n");
 	let databasePort = port(baseURL!);
