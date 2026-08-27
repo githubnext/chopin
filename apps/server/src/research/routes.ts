@@ -1,5 +1,3 @@
-import { researchWorkspacePath } from "@chopin/protocol/document-url";
-
 import { isChannelId } from "../channels/id";
 import { GitHubError } from "../github/client";
 import { JobServiceError } from "../jobs/service";
@@ -120,15 +118,6 @@ async function channelAccess(
 
 function canWrite(value: Repository): boolean {
 	return value.permissions.push || value.permissions.admin;
-}
-
-function location(channel: ChannelRecord, repository: Repository, workspaceId: string): string {
-	return researchWorkspacePath(
-		repository.owner,
-		repository.name,
-		channel.slug,
-		workspaceId,
-	);
 }
 
 function origin(request: Request, auth: HostedAuth): Response | undefined {
@@ -286,7 +275,6 @@ export function registerResearchWorkspaceRoutes(
 				return json(
 					created,
 					created.repeated ? 200 : 201,
-					{ location: location(access.channel, access.repository, created.workspace.id) },
 				);
 			} catch (err) {
 				return failure(err, auth);
@@ -372,9 +360,7 @@ export function registerResearchWorkspaceRoutes(
 					confirmedByHandle: session.user.login,
 					beforeStart: () => options.ensureOwner(access.channel, access.session, access.repository),
 				});
-				return json(workspace, 200, {
-					location: location(access.channel, access.repository, workspace.workspace.id),
-				});
+				return json(workspace);
 			} catch (err) {
 				return failure(err, auth);
 			}
@@ -411,9 +397,7 @@ export function registerResearchWorkspaceRoutes(
 					requestedByHandle: session.user.login,
 					beforeStart: () => options.ensureOwner(access.channel, access.session, access.repository),
 				});
-				return json(workspace, 200, {
-					location: location(access.channel, access.repository, workspace.workspace.id),
-				});
+				return json(workspace);
 			} catch (err) {
 				return failure(err, auth);
 			}
@@ -442,9 +426,7 @@ export function registerResearchWorkspaceRoutes(
 					workspaceId: params.workspaceId!,
 					turnId: params.turnId!,
 				});
-				return json(workspace, 200, {
-					location: location(access.channel, access.repository, workspace.workspace.id),
-				});
+				return json(workspace);
 			} catch (err) {
 				return failure(err, auth);
 			}

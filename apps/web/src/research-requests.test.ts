@@ -465,10 +465,7 @@ describe("research request store", () => {
 	it("keeps retry mutation state through remount until settlement or disposal", async () => {
 		for (let outcome of ["failure", "success", "dispose"] as const) {
 			let retry = deferred<Research.RequestView>();
-			let initial = request(`request-${outcome}`, "failed", {
-				error: "Research could not be completed.",
-				state: "failed",
-			});
+			let initial = request(`request-${outcome}`, "failed");
 			let store = new ResearchRequestStore({
 				api: api({
 					get: async () => initial,
@@ -480,7 +477,7 @@ describe("research request store", () => {
 			let release = store.retain(initial.id);
 			await settle();
 
-			let retried = store.retry(initial.id, initial.question);
+			let retried = store.retry(initial.id);
 			expect(store.mutating(initial.id)).toBe(true);
 			release();
 			release = store.retain(initial.id);
@@ -490,7 +487,7 @@ describe("research request store", () => {
 			if (outcome === "dispose") {
 				store.dispose();
 				expect(store.mutating(initial.id)).toBe(false);
-				let queued = request(initial.id, "queued", { state: "pending" });
+				let queued = request(initial.id, "queued");
 				retry.resolve(queued);
 				expect(await retried).toBe(queued);
 				expect(store.get(initial.id)).toBeUndefined();
@@ -502,7 +499,7 @@ describe("research request store", () => {
 				await expect(retried).rejects.toBe(error);
 				expect(store.get(initial.id)).toBe(initial);
 			} else {
-				let queued = request(initial.id, "queued", { state: "pending" });
+				let queued = request(initial.id, "queued");
 				retry.resolve(queued);
 				expect(await retried).toBe(queued);
 				expect(store.get(initial.id)).toBe(queued);
@@ -519,11 +516,8 @@ describe("research request store", () => {
 		let afterRetry = deferred<Research.RequestView>();
 		let beforeRetrySignal: AbortSignal | undefined;
 		let reads = 0;
-		let initial = request("request-one", "failed", {
-			error: "Research could not be completed.",
-			state: "failed",
-		});
-		let queued = request("request-one", "queued", { state: "pending" });
+		let initial = request("request-one", "failed");
+		let queued = request("request-one", "queued");
 		let store = new ResearchRequestStore({
 			api: api({
 				get: async (_channelId, _id, signal) => {
@@ -546,7 +540,7 @@ describe("research request store", () => {
 		store.invalidate("request-one");
 		expect(reads).toBe(2);
 
-		let retried = await store.retry("request-one", initial.question);
+		let retried = await store.retry("request-one");
 		expect(retried).toBe(queued);
 		expect(beforeRetrySignal?.aborted).toBe(true);
 		beforeRetry.resolve(initial);
@@ -695,10 +689,11 @@ describe("research request store", () => {
 		for (let terminal of ["cancelled", "failed", "ready"] as const) {
 			let reads = 0;
 			let published: Research.ReadyChild[] = [];
-			let initial = request(`request-${terminal}`, terminal, {
-				...(terminal === "ready" ? { child: readyChild } : {}),
-				state: terminal === "ready" ? "completed" : terminal,
-			});
+			let initial = request(
+				`request-${terminal}`,
+				terminal,
+				terminal === "ready" ? { child: readyChild } : {},
+			);
 			let store = new ResearchRequestStore({
 				api: api({
 					get: async (_channelId, id) => {
@@ -787,10 +782,10 @@ describe("research request store", () => {
 				get: async (_channelId, id) => {
 					if (id === "restored") return request(id, "ready", { child: readyChild });
 					if (id === "failed") {
-						return request(id, "failed", { child: readyChild, state: "failed" });
+						return request(id, "failed", { child: readyChild });
 					}
 					if (id === "cancelled") {
-						return request(id, "cancelled", { child: readyChild, state: "cancelled" });
+						return request(id, "cancelled", { child: readyChild });
 					}
 					return ++calls === 1 ? stale.promise : current.promise;
 				},

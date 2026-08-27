@@ -28,27 +28,31 @@ type ScriptedRequest = {
 };
 
 function requestView(room: string, request: ScriptedRequest): Research.RequestView {
-	let state: Research.RequestState = request.stage === "ready"
-		? "completed"
-		: request.stage === "failed"
-		? "failed"
-		: request.stage === "cancelled"
-		? "cancelled"
-		: request.stage === "queued"
-		? "pending"
-		: "running";
-	return {
+	let base: Research.RequestViewBase = {
 		id: request.id,
 		channelId: room,
 		question: request.question,
-		state,
-		stage: request.stage,
-		error: request.error,
 		sources: request.sources,
-		child: request.child,
 		createdAt: "2026-08-24T09:00:00.000Z",
 		updatedAt: new Date().toISOString(),
 	};
+	if (request.stage === "ready") {
+		if (!request.child) throw new Error("ready scripted research requires a child");
+		return { ...base, state: "completed", stage: "ready", child: request.child };
+	}
+	if (request.stage === "failed") {
+		return {
+			...base,
+			state: "failed",
+			stage: "failed",
+			error: request.error ?? "Research could not be completed.",
+		};
+	}
+	if (request.stage === "cancelled") {
+		return { ...base, state: "cancelled", stage: "cancelled" };
+	}
+	let state: Research.ActiveRequestState = request.stage === "queued" ? "pending" : "running";
+	return { ...base, state, stage: request.stage };
 }
 
 async function scriptResearch(page: Page, room: string, databasePort: number) {

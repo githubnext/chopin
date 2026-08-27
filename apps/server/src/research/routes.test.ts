@@ -254,8 +254,7 @@ describe("research workspace routes", () => {
 		let created = await create(context);
 		expect(created.response.status).toBe(201);
 		expect(created.body.workspace.createdBy).toBe(USER_ID);
-		expect(created.response.headers.get("location"))
-			.toBe(`/documents/octo-org/score/release-plan/research/${created.body.workspace.id}`);
+		expect(created.response.headers.get("location")).toBeNull();
 		expect(context.owners).toEqual([]);
 
 		let confirmed = await context.router.handle(request(
