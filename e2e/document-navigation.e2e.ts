@@ -1,5 +1,5 @@
 import { authenticate, content, expect, roomPath, test } from "./room";
-import { createChannel } from "./database";
+import { createChannel, seedChannel } from "./database";
 
 function channel(id: string, title: string, description?: string) {
 	return {
@@ -52,6 +52,34 @@ async function headerAction(page: import("@playwright/test").Page, action: strin
 	await headerActions(page).click();
 	await page.getByRole("menuitem", { name: action, exact: true }).click();
 }
+
+test("a newly navigated parent document opens and submits its own comment composer", async ({ baseURL, join, seed }) => {
+	await seed("Original parent document.\n");
+	let destination = crypto.randomUUID();
+	let destinationTitle = `Test ${destination.slice(0, 8)}`;
+	let destinationText = "The destination parent document accepts a comment.";
+	let databasePort = Number(new URL(baseURL!).port);
+	await createChannel(databasePort, destination);
+	await seedChannel(databasePort, destination, `${destinationText}\n`);
+	let page = await join("ana");
+
+	await sidebar(page).getByRole("link", { name: destinationTitle, exact: true }).click();
+	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${destinationTitle}`);
+	let routes = page.locator(".document-route-swap > [data-content-swap-state]:not([hidden])");
+	await expect(routes).toHaveCount(1);
+	let active = page.locator(
+		".document-route-swap > [data-content-swap-state]:not([hidden]):not([inert])",
+	);
+	let editor = active.getByRole("textbox", { name: "editable markdown" });
+	await editor.getByText(destinationText, { exact: true }).selectText();
+	await active.getByRole("button", { name: "Comment on this passage", exact: true }).click();
+
+	let draft = active.getByRole("dialog", { name: "New comment" });
+	await draft.getByPlaceholder("Comment on this passage…").fill("Keep this parent passage.");
+	await draft.getByRole("button", { name: "Comment", exact: true }).click();
+	await expect(active.getByRole("button", { name: /Comment on “The destination parent/ }))
+		.toBeVisible();
+});
 
 test("document action menu motion follows its pointer trigger and survives interruption", async ({ join }) => {
 	let page = await join("ana");
