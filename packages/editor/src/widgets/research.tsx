@@ -192,13 +192,6 @@ export function ResearchCard(
 	);
 }
 
-export function retryResearch(
-	store: ResearchStore,
-	request: Research.RequestView,
-): Promise<Research.RequestView> {
-	return store.retry(request.id, request.question);
-}
-
 export type ResearchActions = {
 	cancel: boolean;
 	open: boolean;
@@ -224,14 +217,6 @@ export function researchActions(
 	return NONE;
 }
 
-export function subscribeResearch(store: ResearchStore, listener: () => void): () => void {
-	return store.subscribe(listener);
-}
-
-export function retainResearch(store: ResearchStore, id: string): () => void {
-	return store.retain(id);
-}
-
 export type ResearchReferenceProps = {
 	canEdit?: boolean;
 	id: string;
@@ -241,7 +226,7 @@ export type ResearchReferenceProps = {
 
 export function ResearchReference({ canEdit = true, id, onRemove, store }: ResearchReferenceProps) {
 	let subscribe = useCallback(
-		(listener: () => void) => subscribeResearch(store, listener),
+		(listener: () => void) => store.subscribe(listener),
 		[store],
 	);
 	let request = useSyncExternalStore(
@@ -252,7 +237,7 @@ export function ResearchReference({ canEdit = true, id, onRemove, store }: Resea
 	let [busy, setBusy] = useState(false);
 	let [actionError, setActionError] = useState<string>();
 
-	useEffect(() => retainResearch(store, id), [id, store]);
+	useEffect(() => store.retain(id), [id, store]);
 
 	if (!request) {
 		return (
@@ -280,7 +265,7 @@ export function ResearchReference({ canEdit = true, id, onRemove, store }: Resea
 			onCancel={actions.cancel ? () => action(() => store.cancel(request.id)) : undefined}
 			onOpen={actions.open && request.child ? () => store.open(request.child!) : undefined}
 			onRemove={actions.remove ? onRemove : undefined}
-			onRetry={actions.retry ? () => action(() => retryResearch(store, request)) : undefined}
+			onRetry={actions.retry ? () => action(() => store.retry(request.id)) : undefined}
 		/>
 	);
 }

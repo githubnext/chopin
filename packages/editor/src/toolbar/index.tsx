@@ -13,7 +13,10 @@ import { $getSelection } from "lexical";
 import { $describe } from "../passage";
 import { widgets$ } from "../widgets-plugin";
 import { SelectionBubble } from "./bubble";
+import { ResearchComposerSurface } from "./research";
 import { SlashMenu } from "./slash";
+
+const RESEARCH_ACTIONS = new Set(["research"]);
 
 /**
  * Reads what it needs from the realm so the surfaces below it stay ordinary
@@ -63,11 +66,17 @@ export function Toolbar() {
 		<>
 			<SelectionBubble disabled={disabled} onComment={comment} />
 			<SlashMenu
-				binding={options.binding}
+				actions={options.research && options.researchDrafts ? RESEARCH_ACTIONS : undefined}
 				disabled={disabled}
-				drafts={options.researchDrafts}
-				research={options.research}
 			/>
+			{options.research && options.researchDrafts && (
+				<ResearchComposerSurface
+					binding={options.binding}
+					disabled={disabled}
+					drafts={options.researchDrafts}
+					research={options.research}
+				/>
+			)}
 		</>
 	);
 }

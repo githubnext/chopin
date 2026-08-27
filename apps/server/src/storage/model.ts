@@ -303,6 +303,36 @@ export type BackgroundJobState =
 	| "cancelled"
 	| "superseded";
 
+const BACKGROUND_JOB_STATES = new Set<BackgroundJobState>([
+	"pending",
+	"paused",
+	"running",
+	"completed",
+	"failed",
+	"cancelled",
+	"superseded",
+]);
+
+export function isBackgroundJobState(value: unknown): value is BackgroundJobState {
+	return typeof value === "string" && BACKGROUND_JOB_STATES.has(value as BackgroundJobState);
+}
+
+export type ResearchAttemptDisposition = "active" | "retryable" | "settled";
+
+/** One canonical retry policy, rechecked by storage while its job rows are locked. */
+export function researchAttemptDisposition(
+	states: readonly BackgroundJobState[],
+): ResearchAttemptDisposition {
+	if (states.some(state => state === "pending" || state === "paused" || state === "running")) {
+		return "active";
+	}
+	if (
+		states.length === 0
+		|| states.some(state => state === "failed" || state === "cancelled" || state === "superseded")
+	) return "retryable";
+	return "settled";
+}
+
 export type BackgroundJob = {
 	id: string;
 	channelId: string;

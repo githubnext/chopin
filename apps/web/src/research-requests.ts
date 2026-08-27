@@ -68,7 +68,7 @@ export class ResearchRequestStore implements ResearchStore {
 	}
 
 	subscribe(listener: () => void): () => void {
-		this.#disposed = false;
+		if (this.#disposed) return () => {};
 		this.#listeners.add(listener);
 		this.#schedulePolling();
 		return () => {
@@ -78,7 +78,7 @@ export class ResearchRequestStore implements ResearchStore {
 	}
 
 	retain(id: string): () => void {
-		this.#disposed = false;
+		if (this.#disposed) return () => {};
 		this.#references.set(id, (this.#references.get(id) ?? 0) + 1);
 		void this.#load(id);
 		let retained = true;
@@ -103,23 +103,20 @@ export class ResearchRequestStore implements ResearchStore {
 		return this.#snapshots.get(id);
 	}
 
-	refresh(id: string): void {
-		if (this.#disposed) return;
-		void this.#load(id);
-	}
-
 	async create(question: string, requestId: string): Promise<Research.RequestView> {
-		this.#disposed = false;
+		this.#assertAvailable();
 		let result = await this.#api.create(this.#channelId, question, requestId);
 		return this.#accept(result.request.id, result.request);
 	}
 
 	async cancel(id: string): Promise<Research.RequestView> {
+		this.#assertAvailable();
 		let result = await this.#api.cancel(this.#channelId, id);
 		return this.#accept(id, result);
 	}
 
-	async retry(id: string, _question: string): Promise<Research.RequestView> {
+	async retry(id: string): Promise<Research.RequestView> {
+		this.#assertAvailable();
 		let result = await this.#api.retry(this.#channelId, id);
 		return this.#accept(id, result);
 	}
@@ -133,14 +130,20 @@ export class ResearchRequestStore implements ResearchStore {
 		void this.#load(id, true);
 	}
 
-	dispose(): void {
+	/** Clears mounted observers and work while retaining the durable response cache. */
+	reset(): void {
 		if (this.#disposed) return;
-		this.#disposed = true;
 		this.#stopPolling();
 		for (let read of this.#reads.values()) read.controller.abort();
 		this.#reads.clear();
 		this.#references.clear();
 		this.#listeners.clear();
+	}
+
+	dispose(): void {
+		if (this.#disposed) return;
+		this.reset();
+		this.#disposed = true;
 	}
 
 	#accept(id: string, snapshot: Research.RequestView): Research.RequestView {
@@ -166,8 +169,7 @@ export class ResearchRequestStore implements ResearchStore {
 		try {
 			let snapshot = await this.#api.get(this.#channelId, id, controller.signal);
 			if (
-				this.#disposed || controller.signal.aborted
-				|| this.#reads.get(id)?.generation !== generation
+				controller.signal.aborted || this.#reads.get(id)?.generation !== generation
 			) return;
 			this.#accept(id, snapshot);
 		} catch {
@@ -181,7 +183,7 @@ export class ResearchRequestStore implements ResearchStore {
 
 	#schedulePolling(): void {
 		this.#stopPolling();
-		if (this.#disposed || this.#listeners.size === 0) return;
+		if (this.#listeners.size === 0) return;
 		let pending = [...this.#references.keys()].filter(id => {
 			let snapshot = this.#snapshots.get(id);
 			return !snapshot || !["ready", "failed", "cancelled"].includes(snapshot.stage);
@@ -198,5 +200,9 @@ export class ResearchRequestStore implements ResearchStore {
 	#stopPolling(): void {
 		this.#cancelPoll?.();
 		this.#cancelPoll = undefined;
+	}
+
+	#assertAvailable(): void {
+		if (this.#disposed) throw new Error("Research request store is disposed.");
 	}
 }

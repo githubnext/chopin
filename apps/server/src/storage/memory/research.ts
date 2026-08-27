@@ -4,6 +4,7 @@ import {
 	RESEARCH_REPOSITORY_CHANNEL_LIMIT,
 	RESEARCH_REPOSITORY_CHANNEL_WORKSPACE_LIMIT,
 	RESEARCH_REPOSITORY_WORKSPACE_LIMIT,
+	researchAttemptDisposition,
 } from "../model";
 
 import type {
@@ -12,6 +13,7 @@ import type {
 	AppendResearchTurn,
 	AppendResearchTurnResult,
 	BackgroundJobDetail,
+	BackgroundJobState,
 	ChannelRecord,
 	ConfirmResearchWorkspace,
 	ConfirmResearchWorkspaceResult,
@@ -487,19 +489,22 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 			if (!foundTurn.evidenceJobId && !foundTurn.answerJobId) {
 				return { workspace: workspace(found), turn: turn(foundTurn), repeated: true };
 			}
-			let terminal = false;
+			let states: BackgroundJobState[] = [];
 			for (let jobId of [foundTurn.evidenceJobId, foundTurn.answerJobId]) {
 				if (!jobId) continue;
 				let detail = await this.#options.job(input.channelId, jobId);
 				if (!detail) {
 					throw missing(`background job ${jobId} does not exist in channel ${input.channelId}`);
 				}
-				if (["pending", "paused", "running"].includes(detail.job.state)) {
-					throw conflict(`research workspace ${found.id} still has active initial work`);
-				}
-				if (["failed", "cancelled", "superseded"].includes(detail.job.state)) terminal = true;
+				states.push(detail.job.state);
 			}
-			if (!terminal) throw conflict(`research workspace ${found.id} has no terminal initial work`);
+			let disposition = researchAttemptDisposition(states);
+			if (disposition === "active") {
+				throw conflict(`research workspace ${found.id} still has active initial work`);
+			}
+			if (disposition !== "retryable") {
+				throw conflict(`research workspace ${found.id} has no terminal initial work`);
+			}
 			this.#assertActiveChannel(input.channelId, input.lease);
 			let now = timestamp(input.now, "retry time");
 			let savedTurn: ResearchTurn = {

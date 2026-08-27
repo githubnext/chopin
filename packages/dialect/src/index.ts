@@ -40,15 +40,12 @@ export type { Registry } from "./registry";
 
 export {
 	$createCalloutNode,
-	$createResearchNode,
 	$createTabNode,
 	$createTabsNode,
 	$isCalloutNode,
-	$isResearchNode,
 	$isTabNode,
 	$isTabsNode,
 	CalloutNode,
-	ResearchNode,
 	TabNode,
 	TabsNode,
 } from "./nodes/containers";
@@ -70,6 +67,8 @@ export {
 	ImageNode,
 	MathNode,
 } from "./nodes/content";
+export { $createResearchNode, $isResearchNode, ResearchNode } from "./nodes/research";
+export type { SerializedResearch } from "./nodes/research";
 
 export {
 	$createQuestionnaireNode,

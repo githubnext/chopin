@@ -2,16 +2,47 @@ import type { Research } from "@chopin/protocol";
 import type { RelativePosition } from "yjs";
 import type { DOMRectLike } from "./toolbar/placement";
 
-export type ResearchDraft = {
+type ResearchDraftBase = {
 	anchor: DOMRectLike;
 	position?: RelativePosition;
 	question: string;
-	created?: Research.RequestView;
-	submitted?: { question: string; requestId: string };
-	submitting?: boolean;
-	cancelling?: boolean;
 	error?: string;
 };
+
+type Submission = { question: string; requestId: string };
+
+export type ResearchDraft =
+	& ResearchDraftBase
+	& (
+		| {
+			phase: "editing";
+			created?: never;
+			submitted?: Submission;
+			submitting?: false;
+			cancelling?: false;
+		}
+		| {
+			phase: "starting";
+			created?: never;
+			submitted: Submission;
+			submitting: true;
+			cancelling?: false;
+		}
+		| {
+			phase: "placement";
+			created: Research.RequestView;
+			submitted: Submission;
+			submitting?: false;
+			cancelling?: false;
+		}
+		| {
+			phase: "cancelling";
+			created: Research.RequestView;
+			submitted: Submission;
+			submitting?: false;
+			cancelling: true;
+		}
+	);
 
 type Placement = (position: RelativePosition, id: string) => boolean;
 
@@ -39,13 +70,13 @@ export class ResearchDraftStore {
 
 	open(anchor: DOMRectLike, position?: RelativePosition): boolean {
 		if (!this.canOpen()) return false;
-		this.#set({ anchor, position, question: "" });
+		this.#set({ phase: "editing", anchor, position, question: "" });
 		return true;
 	}
 
 	change(question: string): void {
 		let draft = this.#draft;
-		if (!draft || draft.submitting || draft.cancelling || draft.created) return;
+		if (draft?.phase !== "editing") return;
 		this.#set({
 			...draft,
 			question,
@@ -59,9 +90,7 @@ export class ResearchDraftStore {
 		fallbackPosition?: RelativePosition,
 	): Promise<void> {
 		let draft = this.#draft;
-		if (!draft || draft.submitting || draft.cancelling || draft.created || !draft.question.trim()) {
-			return;
-		}
+		if (draft?.phase !== "editing" || !draft.question.trim()) return;
 		let position = draft.position ?? fallbackPosition;
 		if (!position) {
 			this.#set({
@@ -74,7 +103,7 @@ export class ResearchDraftStore {
 		let submitted = draft.submitted?.question === draft.question
 			? draft.submitted
 			: { question: draft.question, requestId: crypto.randomUUID() };
-		this.#set({ ...draft, submitted, submitting: true, error: undefined });
+		this.#set({ ...draft, phase: "starting", submitted, submitting: true, error: undefined });
 
 		let request: Research.RequestView;
 		try {
@@ -84,7 +113,8 @@ export class ResearchDraftStore {
 			if (current) {
 				this.#set({
 					...current,
-					submitting: false,
+					phase: "editing",
+					submitting: undefined,
 					error: "Research could not be started.",
 				});
 			}
@@ -99,8 +129,9 @@ export class ResearchDraftStore {
 		}
 		this.#set({
 			...current,
+			phase: "placement",
 			created: request,
-			submitting: false,
+			submitting: undefined,
 			error:
 				"Research started, but its reference could not be placed. Choose a new insertion point in the document.",
 		});
@@ -110,8 +141,7 @@ export class ResearchDraftStore {
 		this.#placement = place;
 		let draft = this.#draft;
 		if (
-			draft?.created
-			&& !draft.cancelling
+			draft?.phase === "placement"
 			&& draft.position
 			&& this.#insert(draft.position, draft.created.id)
 		) {
@@ -124,7 +154,7 @@ export class ResearchDraftStore {
 
 	place(position: RelativePosition, writable = true): boolean {
 		let draft = this.#draft;
-		if (!writable || !draft?.created || draft.cancelling) return false;
+		if (!writable || draft?.phase !== "placement") return false;
 		if (this.#insert(position, draft.created.id)) {
 			this.#set(undefined);
 			return true;
@@ -140,7 +170,7 @@ export class ResearchDraftStore {
 	dismiss(): boolean {
 		let draft = this.#draft;
 		if (!draft) return true;
-		if (draft.submitting || draft.cancelling || draft.created) return false;
+		if (draft.phase !== "editing") return false;
 		this.#set(undefined);
 		return true;
 	}
@@ -150,30 +180,33 @@ export class ResearchDraftStore {
 		writable = true,
 	): Promise<boolean> {
 		let draft = this.#draft;
-		if (!writable || !draft?.created || draft.submitting || draft.cancelling) return false;
+		if (!writable || draft?.phase !== "placement") return false;
 		let id = draft.created.id;
-		this.#set({ ...draft, cancelling: true, error: undefined });
+		this.#set({ ...draft, phase: "cancelling", cancelling: true, error: undefined });
 		try {
 			await cancel(id);
 		} catch {
 			let current = this.#draft;
-			if (current?.created?.id === id) {
+			if (current?.phase === "cancelling" && current.created.id === id) {
 				this.#set({
 					...current,
-					cancelling: false,
+					phase: "placement",
+					cancelling: undefined,
 					error: "Research could not be cancelled.",
 				});
 			}
 			return false;
 		}
-		if (this.#draft?.created?.id !== id) return false;
+		if (this.#draft?.phase !== "cancelling" || this.#draft.created.id !== id) return false;
 		this.#set(undefined);
 		return true;
 	}
 
-	#current(requestId: string): ResearchDraft | undefined {
+	#current(requestId: string): Extract<ResearchDraft, { phase: "starting" }> | undefined {
 		let draft = this.#draft;
-		return draft?.submitted?.requestId === requestId ? draft : undefined;
+		return draft?.phase === "starting" && draft.submitted.requestId === requestId
+			? draft as Extract<ResearchDraft, { phase: "starting" }>
+			: undefined;
 	}
 
 	#insert(position: RelativePosition, id: string): boolean {
