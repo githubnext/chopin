@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { documentPath } from "@chopin/protocol/document-url";
 import {
 	advanceDecisionView,
 	aggregateJobs,
@@ -39,7 +38,7 @@ import {
 	availableDocumentView,
 	initialDocumentView,
 	presentWorkspace,
-	workspaceCapabilities,
+	workspaceProfile,
 } from "./workspace-model";
 
 import type { Research, Session } from "@chopin/protocol";
@@ -188,7 +187,9 @@ export function RoomWorkspace(
 	let user = useMemo(() => cursor(handle), [handle]);
 	let mode = useWorkspaceMode();
 	let workspaceIds = useWorkspaceIds();
-	let [workspace, dispatch] = useWorkspaceState(surface);
+	let profile = workspaceProfile(surface, capabilities.backgroundJobs);
+	let researchEnabled = profile.research;
+	let [workspace, dispatch] = useWorkspaceState(profile);
 	let [questions] = useState(() => new QuestionnaireStore());
 	let [threads] = useState(() => new ThreadStore());
 	let [jobs] = useState(() => new JobStore());
@@ -212,13 +213,12 @@ export function RoomWorkspace(
 		let stored = localStorage.getItem("chopin:view:document");
 		return {
 			phase: "initial",
-			preferred: initialDocumentView(surface, stored),
+			preferred: initialDocumentView(profile, stored),
 		};
 	});
-	let policy = workspaceCapabilities(surface, capabilities.backgroundJobs);
 	let view = availableDocumentView(
 		visibleDecisionView(decisionView, hasPlanContent, unanswered),
-		policy.backgroundJobs,
+		profile.backgroundJobs,
 	);
 	let previousUnanswered = useRef(unanswered);
 	let latestCanEdit = useRef(canEdit);
@@ -244,14 +244,7 @@ export function RoomWorkspace(
 		setMetadata(metadata);
 		rememberChannel(userId, { id: room, title: metadata.title, slug: metadata.slug }, repository);
 		onDocumentChanged(room, metadata);
-		if (onMetadataChanged) {
-			onMetadataChanged(metadata);
-			return;
-		}
-		let path = documentPath(repository.owner, repository.name, metadata.slug);
-		if (location.pathname !== path) {
-			history.replaceState(history.state, "", `${path}${location.search}${location.hash}`);
-		}
+		onMetadataChanged?.(metadata);
 	}, [onDocumentChanged, onMetadataChanged, repository, room, userId]);
 
 	useEffect(() => {
@@ -274,7 +267,7 @@ export function RoomWorkspace(
 
 	let selectView = (next: DecisionView, revealFirst = true) => {
 		setDecisionView(state => selectDecisionView(state, next));
-		if (hasPlanContent && surface === "document") {
+		if (hasPlanContent && profile.persistView) {
 			localStorage.setItem("chopin:view:document", next);
 		}
 		if (next === "decisions" && revealFirst) {
@@ -363,7 +356,8 @@ export function RoomWorkspace(
 				setCapabilities({ backgroundJobs: frame.backgroundJobs });
 				setChatReferences({ wire: socket, enabled: frame.chatReferences === true });
 				setChatSendAcks({ wire: socket, enabled: frame.chatSendAcks === true });
-				if (!workspaceCapabilities(surface, frame.backgroundJobs).backgroundJobs) {
+				let nextProfile = workspaceProfile(surface, frame.backgroundJobs);
+				if (!nextProfile.backgroundJobs) {
 					setDecisionView(state =>
 						state.preferred === "background-work"
 							? { phase: "complete", preferred: "plan" }
@@ -372,7 +366,7 @@ export function RoomWorkspace(
 				}
 				updateMetadata(frame);
 				if (accessChanged) onRepositoryAccessChanged();
-				if (surface === "document") {
+				if (nextProfile.research) {
 					onResearchWorkspacesRefresh({
 						id: room,
 						repositoryId: repository.id,
@@ -404,7 +398,7 @@ export function RoomWorkspace(
 				onRepositoryAccessChanged();
 			}),
 			socket.on<Research.Changed>("research:changed", frame => {
-				if (surface === "document") {
+				if (researchEnabled) {
 					onResearchWorkspaceChanged(
 						{
 							id: room,
@@ -437,6 +431,7 @@ export function RoomWorkspace(
 		onResearchWorkspacesRefresh,
 		onRepositoryAccessChanged,
 		research,
+		researchEnabled,
 		repository,
 		room,
 		surface,
@@ -488,9 +483,9 @@ export function RoomWorkspace(
 			controls={
 				<DecisionViewControl
 					attention={attention}
-					backgroundWork={policy.backgroundJobs ? backgroundWorkCount : 0}
-					backgroundWorkEnabled={policy.backgroundJobs}
-					implementationEnabled={policy.implementation}
+					backgroundWork={profile.backgroundJobs ? backgroundWorkCount : 0}
+					backgroundWorkEnabled={profile.backgroundJobs}
+					implementationEnabled={profile.implementation}
 					onView={selectDestination}
 					unanswered={unanswered}
 					view={view}
@@ -525,14 +520,14 @@ export function RoomWorkspace(
 					questionMotion={QUESTION_MOTION}
 					questions={questions}
 					readOnly={!workspaceCanEdit}
-					research={policy.research ? research : undefined}
+					research={profile.research ? research : undefined}
 					scrollTop={planScrollTop}
 					threads={threads}
 					user={user}
 					wire={wire}
 				/>
 			}
-			backgroundWork={policy.backgroundJobs
+			backgroundWork={profile.backgroundJobs
 				? (
 					<BackgroundWork
 						canEdit={workspaceCanEdit}
@@ -545,7 +540,7 @@ export function RoomWorkspace(
 				)
 				: undefined}
 			state={workspace}
-			surface={surface}
+			profile={profile}
 			unanswered={unanswered}
 			view={view}
 		/>

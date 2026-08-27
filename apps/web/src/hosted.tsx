@@ -67,6 +67,7 @@ type DocumentSource = DocumentRoute;
 type DocumentRouteRequest = {
 	immediately: boolean;
 	key: DocumentRouteIdentity;
+	routeKey: DocumentRouteIdentity;
 	source: DocumentSource;
 };
 type DocumentRouteResolution = {
@@ -84,6 +85,7 @@ function keyedDocumentRoute(
 	immediately: boolean,
 	alias?: DocumentRouteIdentity,
 ): DocumentRouteRequest {
+	let routeKey = documentRouteIdentity(route);
 	let key = alias ?? (route.page === "child"
 		? documentRouteIdentity({
 			owner: route.owner,
@@ -95,6 +97,7 @@ function keyedDocumentRoute(
 	return {
 		immediately,
 		key,
+		routeKey,
 		source: route,
 	};
 }
@@ -449,7 +452,7 @@ function DocumentRouteSwap(
 		{ current: requested },
 	);
 	let presentedRequest = state.pending ?? state.current;
-	if (requested.key !== presentedRequest.key) {
+	if (requested.key !== presentedRequest.key || requested.routeKey !== presentedRequest.routeKey) {
 		dispatch({ route: requested, type: "requested" });
 	}
 	let layers = [state.previous, state.current, state.pending].filter(
@@ -483,7 +486,7 @@ function DocumentRouteSwap(
 	return (
 		<div className="document-route-swap content-swap-stack h-full">
 			{layers.map(layer => {
-				let source = layer.key === requested.key ? requested.source : layer.source;
+				let source = layer.source;
 				return (
 					<ContentSwapLayer
 						active={layer.key === state.current.key}

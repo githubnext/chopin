@@ -6,6 +6,7 @@ import {
 	canManageProject,
 	documentDestination,
 	finishProjectCreation,
+	isDocumentWorkspaceRoute,
 	landingDocument,
 	navigationMode,
 	researchChildDestination,
@@ -70,6 +71,35 @@ let projects: ProjectDocuments[] = [
 ];
 
 describe("navigation model", () => {
+	it("classifies every route whose visit can be retried", () => {
+		for (
+			let route of [
+				{ id: "document-id", page: "channel" as const },
+				{
+					owner: "acme",
+					page: "document" as const,
+					repository: "one",
+					slug: "parent",
+				},
+				{
+					childSlug: "child",
+					owner: "acme",
+					page: "child" as const,
+					parentSlug: "parent",
+					repository: "one",
+				},
+				{
+					owner: "acme",
+					page: "research" as const,
+					repository: "one",
+					slug: "parent",
+					workspaceId: "research-id",
+				},
+			]
+		) expect(isDocumentWorkspaceRoute(route)).toBe(true);
+		expect(isDocumentWorkspaceRoute({ page: "repositories" })).toBe(false);
+	});
+
 	it("uses the same drawer boundary as the shell", () => {
 		expect(navigationMode(mediaAt(1023))).toBe("drawer");
 		expect(navigationMode(mediaAt(1024))).toBe("inline");

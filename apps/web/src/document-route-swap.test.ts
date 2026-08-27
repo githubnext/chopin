@@ -64,7 +64,18 @@ test("a requested document remains pending until it resolves", () => {
 	expect(state).toEqual({ current: b, previous: a });
 });
 
-test("reversing to a loaded route preserves metadata and updates input modality", () => {
+test("retargeting a retained layer makes its requested source authoritative", () => {
+	let state: DocumentRouteSwap<Route, string> = {
+		current: { ...a, resolution: "loaded" },
+	};
+	let child = { ...a, slug: "child", source: { slug: "child" } };
+
+	state = transitionDocumentRoute(state, { route: child, type: "requested" });
+
+	expect(state.current).toEqual({ ...child, resolution: "loaded" });
+});
+
+test("reversing to a loaded layer preserves metadata and accepts the requested source", () => {
 	let state: DocumentRouteSwap<Route, string> = { current: a };
 	state = transitionDocumentRoute(state, { route: b, type: "requested" });
 	state = transitionDocumentRoute(state, { key: b.key, type: "ready" });
@@ -76,10 +87,10 @@ test("reversing to a loaded route preserves metadata and updates input modality"
 	let requested = { ...a, immediately: false, source: { slug: "a" } };
 	state = transitionDocumentRoute(state, { route: requested, type: "requested" });
 	expect(state).toEqual({
-		current: { ...a, immediately: false, resolution: "loaded" },
+		current: { ...requested, resolution: "loaded" },
 		previous: b,
 	});
-	expect(state.current.source).toBe(a.source);
+	expect(state.current.source).toBe(requested.source);
 });
 
 test("rapid requests cancel pending work and preserve the requested visible route", () => {

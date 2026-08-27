@@ -2,10 +2,12 @@ import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
 import { useLayoutEffect, useRef } from "react";
 
 export { childCloseAction, childHistoryState } from "./child-history";
+export { childPresentation } from "./document-workspace-state";
 
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
+import type { ChildPresentation } from "./document-workspace-state";
 
-export type ChildPresentation = "closed" | "open" | "closing";
+export type { ChildPresentation } from "./document-workspace-state";
 
 export type ParentDocumentAddress = {
 	owner: string;
@@ -38,16 +40,6 @@ export function rebaseChildHistoryState(
 	};
 }
 
-export function childPresentation(
-	current: ChildPresentation,
-	route: "parent" | "child",
-	sameParent: boolean,
-): ChildPresentation {
-	if (route === "child") return sameParent ? "open" : "closed";
-	if (current !== "closed" && sameParent) return "closing";
-	return "closed";
-}
-
 export function AnchoredChildSurface(
 	{
 		child,
@@ -56,6 +48,7 @@ export function AnchoredChildSurface(
 		onClose,
 		parent,
 		parentLabel,
+		parentRef,
 		presentation,
 	}: {
 		child?: ReactNode;
@@ -64,6 +57,7 @@ export function AnchoredChildSurface(
 		onClose: () => void;
 		parent: ReactNode;
 		parentLabel: string;
+		parentRef?: Ref<HTMLDivElement>;
 		presentation: ChildPresentation;
 	},
 ) {
@@ -89,6 +83,7 @@ export function AnchoredChildSurface(
 				aria-hidden={childVisible || undefined}
 				className="anchored-child-parent"
 				inert={childVisible}
+				ref={parentRef}
 			>
 				{parent}
 			</div>

@@ -5,10 +5,10 @@ import {
 	initialWorkspaceState,
 	presentWorkspace,
 	transitionWorkspace,
-	workspaceCapabilities,
 	workspaceDestinations,
 	workspaceHeadingId,
 	workspaceMode,
+	workspaceProfile,
 } from "./workspace-model";
 
 import type { WorkspaceState } from "./workspace-model";
@@ -24,25 +24,30 @@ function mediaAt(width: number): MatchMedia {
 
 describe("adaptive workspace", () => {
 	it("starts a child with Conversation collapsed without inheriting the desktop preference", () => {
-		expect(initialWorkspaceState("child", true)).toEqual({
+		expect(initialWorkspaceState(workspaceProfile("child", true), true)).toEqual({
 			conversationOpen: false,
 			desktopConversationOpen: false,
 		});
 	});
 
 	it("starts a child on Document without inheriting the parent's saved view", () => {
-		expect(initialDocumentView("child", "decisions")).toBe("plan");
-		expect(initialDocumentView("child", "background-work")).toBe("plan");
-		expect(initialDocumentView("document", "decisions")).toBe("decisions");
+		expect(initialDocumentView(workspaceProfile("child", true), "decisions")).toBe("plan");
+		expect(initialDocumentView(workspaceProfile("child", true), "background-work")).toBe("plan");
+		expect(initialDocumentView(workspaceProfile("document", true), "decisions"))
+			.toBe("decisions");
 	});
 
 	it("limits a child to Document, Decisions, and Conversation", () => {
-		let capabilities = workspaceCapabilities("child", true);
+		let capabilities = workspaceProfile("child", true);
 
 		expect(capabilities).toEqual({
 			backgroundJobs: false,
 			implementation: false,
+			persistConversation: false,
+			persistPaneSize: false,
+			persistView: false,
 			research: false,
+			surface: "child",
 		});
 		expect(workspaceDestinations(capabilities.backgroundJobs)).toEqual([
 			"conversation",
@@ -52,18 +57,20 @@ describe("adaptive workspace", () => {
 	});
 
 	it("keeps the parent's legacy implementation surface without background jobs", () => {
-		expect(workspaceCapabilities("document", false)).toEqual({
+		expect(workspaceProfile("document", false)).toEqual({
 			backgroundJobs: false,
 			implementation: true,
+			persistConversation: true,
+			persistPaneSize: true,
+			persistView: true,
 			research: true,
+			surface: "document",
 		});
 	});
 
 	it("keeps child pane ids distinct from the mounted parent", () => {
 		expect(workspaceHeadingId("plan")).toBe("workspace-plan-heading");
-		expect(workspaceHeadingId("plan", "child-room")).toBe(
-			"workspace-child-room-plan-heading",
-		);
+		expect(workspaceHeadingId("plan", "child-room")).toBe("child-room-workspace-plan-heading");
 	});
 
 	it("classifies the media queries production reads at each boundary", () => {

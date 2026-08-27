@@ -4,6 +4,16 @@ export type WorkspaceMode = "compact" | "split";
 
 export type WorkspaceSurface = "document" | "child";
 
+export type WorkspaceProfile = {
+	backgroundJobs: boolean;
+	implementation: boolean;
+	persistConversation: boolean;
+	persistPaneSize: boolean;
+	persistView: boolean;
+	research: boolean;
+	surface: WorkspaceSurface;
+};
+
 export type WorkspaceDestination = "plan" | "decisions" | "background-work" | "conversation";
 
 export type WorkspaceState = {
@@ -18,28 +28,35 @@ export type WorkspaceEvent =
 export const WORKSPACE_MEDIA = ["(max-width: 1023px)"] as const;
 
 export function initialWorkspaceState(
-	surface: WorkspaceSurface,
+	profile: WorkspaceProfile,
 	desktopConversationOpen: boolean,
 ): WorkspaceState {
 	return {
 		conversationOpen: false,
-		desktopConversationOpen: surface === "document" && desktopConversationOpen,
+		desktopConversationOpen: profile.persistConversation && desktopConversationOpen,
 	};
 }
 
 export function initialDocumentView(
-	surface: WorkspaceSurface,
+	profile: WorkspaceProfile,
 	stored: string | null,
 ): DecisionView {
-	return surface === "child" ? "plan" : storedDocumentView(stored);
+	return profile.persistView ? storedDocumentView(stored) : "plan";
 }
 
-export function workspaceCapabilities(surface: WorkspaceSurface, backgroundJobs: boolean) {
+export function workspaceProfile(
+	surface: WorkspaceSurface,
+	backgroundJobs: boolean,
+): WorkspaceProfile {
 	let child = surface === "child";
 	return {
 		backgroundJobs: !child && backgroundJobs,
 		implementation: !child,
+		persistConversation: !child,
+		persistPaneSize: !child,
+		persistView: !child,
 		research: !child,
+		surface,
 	};
 }
 
@@ -50,7 +67,7 @@ export function workspaceDestinations(backgroundWork: boolean): WorkspaceDestina
 }
 
 export function workspaceHeadingId(destination: WorkspaceDestination, scope?: string): string {
-	return `workspace-${scope ? `${scope}-` : ""}${destination}-heading`;
+	return `${scope ? `${scope}-` : ""}workspace-${destination}-heading`;
 }
 
 export function storedDocumentView(value: string | null): DecisionView {
