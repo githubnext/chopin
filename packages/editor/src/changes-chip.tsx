@@ -14,6 +14,8 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
+import { MotionDisclosureIcon } from "./disclosure-motion";
+
 import type { ChangeStore, Entry, Snapshot } from "./changes";
 
 /** Past this the number stops being informative and starts being noise. */
@@ -72,14 +74,16 @@ function List({ entries }: { entries: Entry[] }) {
 }
 
 function Chip(
-	{ entries, onGo, side, waiting }: {
+	{ entries, motionImmediately, onGo, side, waiting }: {
 		entries: Entry[];
+		motionImmediately?: () => boolean;
 		onGo: () => void;
 		side: "above" | "below";
 		waiting: number;
 	},
 ) {
 	let [open, setOpen] = useState(false);
+	let [iconMotionOwner, setIconMotionOwner] = useState<"immediate" | "pointer">();
 	let box = useRef<HTMLDivElement>(null);
 
 	// Once every change in this direction is read, the list has nothing left
@@ -89,7 +93,10 @@ function Chip(
 	let [openedForWaiting, setOpenedForWaiting] = useState(waiting);
 	if (waiting !== openedForWaiting) {
 		setOpenedForWaiting(waiting);
-		if (waiting === 0) setOpen(false);
+		if (waiting === 0) {
+			setIconMotionOwner(undefined);
+			setOpen(false);
+		}
 	}
 
 	// Closing on an outside click rather than on blur: the list is inside the
@@ -97,7 +104,10 @@ function Chip(
 	useEffect(() => {
 		if (!open) return;
 		let close = (event: MouseEvent) => {
-			if (!box.current?.contains(event.target as Node)) setOpen(false);
+			if (!box.current?.contains(event.target as Node)) {
+				setIconMotionOwner("pointer");
+				setOpen(false);
+			}
 		};
 		document.addEventListener("mousedown", close);
 		return () => document.removeEventListener("mousedown", close);
@@ -125,10 +135,21 @@ function Chip(
 					type="button"
 					className="plan-changes-more"
 					aria-expanded={open}
-					onClick={() => setOpen(value => !value)}
+					onClick={() => {
+						setIconMotionOwner(
+							motionImmediately?.() ? "immediate" : "pointer",
+						);
+						setOpen(value => !value);
+					}}
 					title="What the agent changed"
 				>
-					<span aria-hidden="true">{open ? "▾" : "▸"}</span>
+					<MotionDisclosureIcon
+						className="editor-motion-feedback"
+						closed="▸"
+						motionOwner={iconMotionOwner}
+						open={open}
+						opened="▾"
+					/>
 					<span className="sr-only">What the agent changed</span>
 				</button>
 			</div>
@@ -136,7 +157,9 @@ function Chip(
 	);
 }
 
-export function PlanChanges({ store }: { store: ChangeStore }) {
+export function PlanChanges(
+	{ motionImmediately, store }: { motionImmediately?: () => boolean; store: ChangeStore },
+) {
 	let { above, below, entries } = useChanges(store);
 
 	let goUp = useCallback(() => store.reveal("above"), [store]);
@@ -144,8 +167,20 @@ export function PlanChanges({ store }: { store: ChangeStore }) {
 
 	return (
 		<>
-			<Chip entries={entries} onGo={goUp} side="above" waiting={above} />
-			<Chip entries={entries} onGo={goDown} side="below" waiting={below} />
+			<Chip
+				entries={entries}
+				motionImmediately={motionImmediately}
+				onGo={goUp}
+				side="above"
+				waiting={above}
+			/>
+			<Chip
+				entries={entries}
+				motionImmediately={motionImmediately}
+				onGo={goDown}
+				side="below"
+				waiting={below}
+			/>
 		</>
 	);
 }

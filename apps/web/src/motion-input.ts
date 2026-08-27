@@ -1,9 +1,13 @@
 import { useEffect } from "react";
 
-export function motionImmediately(dataset?: { motionInput?: string }): boolean {
+export function motionImmediately(
+	dataset?: { motionInput?: string },
+	prefersReducedMotion = typeof window !== "undefined"
+		&& window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+): boolean {
 	let source = dataset
 		?? (typeof document === "undefined" ? undefined : document.documentElement.dataset);
-	return source?.motionInput === "keyboard";
+	return source?.motionInput === "keyboard" || prefersReducedMotion;
 }
 
 export function useMotionInput(): void {

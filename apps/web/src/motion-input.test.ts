@@ -7,3 +7,7 @@ test("settles keyboard-owned surfaces immediately", () => {
 	expect(motionImmediately({})).toBe(false);
 	expect(motionImmediately()).toBe(false);
 });
+
+test("settles reduced-motion pointer surfaces immediately", () => {
+	expect(motionImmediately({ motionInput: "pointer" }, true)).toBe(true);
+});
