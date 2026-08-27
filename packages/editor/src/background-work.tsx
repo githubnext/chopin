@@ -150,7 +150,7 @@ function BackgroundJob(
 ) {
 	let snapshot = useJobs(store);
 	let [disclosure, setDisclosure] = useState({ immediately: false, open: false });
-	let [error, setError] = useState<string>();
+	let [error, setError] = useState<{ immediately: boolean; message: string }>();
 	let resultId = useId();
 	let detail = snapshot.details[job.id];
 	let resultOpen = disclosure.open && detail !== undefined;
@@ -197,9 +197,15 @@ function BackgroundJob(
 						data-press="wide"
 						disabled={!connected || !!snapshot.pending[job.id]}
 						onClick={() => {
+							let immediately = motionImmediately?.() ?? false;
 							setError(undefined);
 							void store.cancel(job).catch(err =>
-								setError(err instanceof Error ? err.message : "Could not cancel background work.")
+								setError({
+									immediately,
+									message: err instanceof Error
+										? err.message
+										: "Could not cancel background work.",
+								})
 							);
 						}}
 						type="button"
@@ -241,7 +247,16 @@ function BackgroundJob(
 					)
 					: <p>Result is unavailable.</p>}
 			</MotionDisclosure>
-			{error && <p role="status">{error}</p>}
+			{error && (
+				<p
+					className="editor-motion-feedback"
+					data-motion-feedback="alert"
+					data-motion-owned={error.immediately ? "immediate" : "pointer"}
+					role="alert"
+				>
+					{error.message}
+				</p>
+			)}
 		</article>
 	);
 }

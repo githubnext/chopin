@@ -141,3 +141,102 @@ test("running research shows durable stage progress", async ({ baseURL, join, ro
 	await expect(page.getByText("Research report synthesis")).toBeVisible();
 	await expect(page.getByText("In progress")).toBeVisible();
 });
+
+test("cancellation failures use terminal alert feedback for each motion path", async ({ baseURL, join, page, room, seed }) => {
+	await seed(SOURCE);
+	await seedRunningResearchAnswerJob(Number(new URL(baseURL!).port), room, QUESTION);
+	await page.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		route.onMessage(message => {
+			if (typeof message === "string") {
+				let frame = JSON.parse(message) as { kind: string; rid?: string };
+				if (frame.kind === "job:cancel") {
+					setTimeout(() =>
+						route.send(JSON.stringify({
+							kind: "session:error",
+							message: "Cancellation is temporarily unavailable",
+							rid: frame.rid,
+							ts: 0,
+						})), 100);
+					return;
+				}
+			}
+			server.send(message);
+		});
+	});
+	page = await join("ana");
+	await page.getByRole("button", { name: /Background Work/ }).click();
+	let cancel = page.getByRole("button", { name: `Cancel Research answer: ${QUESTION}` });
+	await page.evaluate(() => {
+		let transitionCounter = { starts: 0 };
+		Reflect.set(window, "__backgroundAlertTransitions", transitionCounter);
+		document.addEventListener("transitionstart", event => {
+			if (
+				event.target instanceof Element
+				&& event.target.matches('[data-motion-feedback="alert"]')
+			) transitionCounter.starts++;
+		}, true);
+	});
+
+	await cancel.click();
+	await page.keyboard.press("Shift");
+	let alert = page.getByRole("alert");
+	await expect(alert).toHaveText("Cancellation is temporarily unavailable");
+	await expect(alert).toHaveAttribute("data-motion-feedback", "alert");
+	await expect.poll(() =>
+		page.evaluate(() => {
+			let transitionCounter = Reflect.get(window, "__backgroundAlertTransitions") as {
+				starts: number;
+			};
+			return transitionCounter.starts;
+		})
+	).toBeGreaterThan(0);
+	let pointerStarts = await page.evaluate(() => {
+		let transitionCounter = Reflect.get(window, "__backgroundAlertTransitions") as {
+			starts: number;
+		};
+		return transitionCounter.starts;
+	});
+
+	await cancel.focus();
+	await page.keyboard.press("Enter");
+	await page.mouse.move(1, 1);
+	await expect(alert).toHaveText("Cancellation is temporarily unavailable");
+	await expect(alert).toHaveCSS("transition-duration", "0s");
+	expect(
+		await page.evaluate(() => {
+			let transitionCounter = Reflect.get(window, "__backgroundAlertTransitions") as {
+				starts: number;
+			};
+			return transitionCounter.starts;
+		}),
+	).toBe(pointerStarts);
+
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	await cancel.click();
+	await expect(alert).toHaveText("Cancellation is temporarily unavailable");
+	await expect(alert).toHaveCSS("transition-duration", "0s");
+	expect(
+		await page.evaluate(() => {
+			let transitionCounter = Reflect.get(window, "__backgroundAlertTransitions") as {
+				starts: number;
+			};
+			return transitionCounter.starts;
+		}),
+	).toBe(pointerStarts);
+
+	await page.emulateMedia({ reducedMotion: "no-preference" });
+	await cancel.click();
+	await page.keyboard.press("Shift");
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	await expect(alert).toHaveText("Cancellation is temporarily unavailable");
+	await expect(alert).toHaveCSS("transition-duration", "0s");
+	expect(
+		await page.evaluate(() => {
+			let transitionCounter = Reflect.get(window, "__backgroundAlertTransitions") as {
+				starts: number;
+			};
+			return transitionCounter.starts;
+		}),
+	).toBe(pointerStarts);
+});

@@ -62,6 +62,36 @@ test("renders keyed disclosure glyphs for their open state", () => {
 	expect(opened).not.toContain("Closed");
 });
 
+test("an immediate keyed glyph carries a zero-duration override", () => {
+	let markup = renderToStaticMarkup(
+		createElement(MotionDisclosureIcon, {
+			className: "host-feedback",
+			closed: "Closed",
+			motionOwner: "immediate",
+			open: false,
+			opened: "Opened",
+		}),
+	);
+
+	expect(markup).toContain('data-motion-owned="immediate"');
+	expect(markup).toContain('style="transition-duration:0s"');
+});
+
+test("a pointer-owned keyed glyph carries its initiating owner", () => {
+	let markup = renderToStaticMarkup(
+		createElement(MotionDisclosureIcon, {
+			className: "host-feedback",
+			closed: "Closed",
+			motionOwner: "pointer",
+			open: false,
+			opened: "Opened",
+		}),
+	);
+
+	expect(markup).toContain('data-motion-owned="pointer"');
+	expect(markup).not.toContain("transition-duration");
+});
+
 test("renders closed disclosures without retained content", () => {
 	let markup = renderToStaticMarkup(
 		createElement(

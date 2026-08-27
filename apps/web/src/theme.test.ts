@@ -330,7 +330,15 @@ describe("editor feedback motion", () => {
 		) {
 			expect(FEEDBACK).toMatch(
 				new RegExp(
-					`:root\\[data-motion-input="pointer"\\]\\s+\\.editor-motion-feedback\\[data-motion-feedback="${kind}"\\]\\s*{[^}]*transition-duration: var\\(--${duration}\\)[^}]*transition-timing-function: var\\(--motion-smooth-out\\)`,
+					`:root\\[data-motion-input="pointer"\\]\\s+\\.editor-motion-feedback\\[data-motion-feedback="${kind}"\\][^{}]*{[^}]*transition-duration: var\\(--${duration}\\)[^}]*transition-timing-function: var\\(--motion-smooth-out\\)`,
+					"s",
+				),
+			);
+		}
+		for (let [kind, duration] of [["icon", "icon-swap-dur"], ["alert", "toast-open"]]) {
+			expect(FEEDBACK).toMatch(
+				new RegExp(
+					`\\.editor-motion-feedback\\[data-motion-feedback="${kind}"\\]\\[data-motion-owned="pointer"\\][^{}]*{[^}]*transition-duration: var\\(--${duration}\\)`,
 					"s",
 				),
 			);
@@ -362,7 +370,7 @@ describe("editor feedback motion", () => {
 
 	it("settles pointer-owned editor feedback under reduced motion", () => {
 		expect(FEEDBACK).toMatch(
-			/@media \(prefers-reduced-motion: reduce\)\s*{[^}]*:root\[data-motion-input="pointer"\]\s+\.editor-motion-feedback\[data-motion-feedback\]\s*{[^}]*transition-duration:\s*0s;/s,
+			/@media \(prefers-reduced-motion: reduce\)\s*{[^}]*:root\[data-motion-input="pointer"\]\s+\.editor-motion-feedback\[data-motion-feedback\][^{}]*\.editor-motion-feedback\[data-motion-feedback\]\[data-motion-owned="pointer"\]\s*{[^}]*transition-duration:\s*0s;/s,
 		);
 	});
 });

@@ -334,7 +334,7 @@ export function PlanEditor(
 						/>
 					</div>
 					{/* In the document column, so they track the prose, not the pane. */}
-					<PlanChanges store={changes} />
+					<PlanChanges motionImmediately={motionImmediately} store={changes} />
 					<PlanStatus
 						connection={connection}
 						synced={state.synced}

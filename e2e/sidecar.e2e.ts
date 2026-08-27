@@ -142,6 +142,31 @@ test("question step swaps overlap only for pointer input", async ({ join, seed }
 		"aria-selected",
 		"true",
 	);
+
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	await stack.evaluate(root => {
+		let counts: number[] = [];
+		let recordActiveCount = () => {
+			counts.push(
+				root.querySelectorAll(":scope > [data-content-swap-state]:not([hidden]):not([inert])")
+					.length,
+			);
+		};
+		let observer = new MutationObserver(recordActiveCount);
+		observer.observe(root, { attributes: true, childList: true, subtree: true });
+		Reflect.set(window, "__questionStepActiveCounts", counts);
+		Reflect.set(window, "__questionStepObserver", observer);
+		recordActiveCount();
+	});
+	await scope.click();
+	await expect(visible).toHaveCount(1);
+	let activeCounts = await page.evaluate(() => {
+		let observer = Reflect.get(window, "__questionStepObserver") as MutationObserver;
+		observer.disconnect();
+		return Reflect.get(window, "__questionStepActiveCounts") as number[];
+	});
+	expect(activeCounts).not.toContain(0);
+	await expect(scope).toHaveAttribute("aria-selected", "true");
 });
 
 async function rewriteFirstBlock(page: import("@playwright/test").Page, value: string) {

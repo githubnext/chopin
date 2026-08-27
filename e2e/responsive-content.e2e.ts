@@ -322,6 +322,79 @@ for (let viewport of RESPONSIVE_VIEWPORTS) {
 	});
 }
 
+test("the Planner change disclosure animates only pointer-owned glyph swaps", async ({ baseURL, join, page, room, seed }) => {
+	await seed(RESPONSIVE_SOURCE);
+	let checkpoint = await readDocument(Number(new URL(baseURL!).port), room);
+	let changes = await injectAgentChange(page, checkpoint);
+	page = await join("change-reader");
+	await changes.addedAtEnd();
+	let trigger = page.getByRole("button", { name: "What the agent changed" });
+	let icon = trigger.locator("[data-feedback-icon]");
+	await expect(icon).toHaveAttribute("data-feedback-icon", "closed");
+	await page.evaluate(() => {
+		let transitionCounter = { starts: 0 };
+		Reflect.set(window, "__changeIconTransitions", transitionCounter);
+		document.addEventListener("transitionstart", event => {
+			if (
+				event.target instanceof Element
+				&& event.target.matches('[data-motion-feedback="icon"]')
+			) transitionCounter.starts++;
+		}, true);
+	});
+	await trigger.click();
+	await page.keyboard.press("Shift");
+	await expect(icon).toHaveAttribute("data-feedback-icon", "open");
+	await expect(icon).toHaveCSS("transition-duration", "0.25s");
+	await expect.poll(() =>
+		page.evaluate(() => {
+			let transitionCounter = Reflect.get(window, "__changeIconTransitions") as { starts: number };
+			return transitionCounter.starts;
+		})
+	).toBeGreaterThan(0);
+	let pointerStarts = await page.evaluate(() => {
+		let transitionCounter = Reflect.get(window, "__changeIconTransitions") as { starts: number };
+		return transitionCounter.starts;
+	});
+	await page.mouse.click(1, 1);
+	await page.keyboard.press("Shift");
+	await expect(icon).toHaveAttribute("data-feedback-icon", "closed");
+	await expect(icon).toHaveCSS("transition-duration", "0.25s");
+	await expect.poll(() =>
+		page.evaluate(() => {
+			let transitionCounter = Reflect.get(window, "__changeIconTransitions") as { starts: number };
+			return transitionCounter.starts;
+		})
+	).toBeGreaterThan(pointerStarts);
+	pointerStarts = await page.evaluate(() => {
+		let transitionCounter = Reflect.get(window, "__changeIconTransitions") as { starts: number };
+		return transitionCounter.starts;
+	});
+
+	await trigger.focus();
+	await page.keyboard.press("Space");
+	await expect(icon).toHaveAttribute("data-feedback-icon", "open");
+	await expect(icon).toHaveCSS("transition-duration", "0s");
+	await icon.hover();
+	await expect(icon).toHaveCSS("transition-duration", "0s");
+	expect(
+		await page.evaluate(() => {
+			let transitionCounter = Reflect.get(window, "__changeIconTransitions") as { starts: number };
+			return transitionCounter.starts;
+		}),
+	).toBe(pointerStarts);
+
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	await trigger.click();
+	await expect(icon).toHaveAttribute("data-feedback-icon", "closed");
+	await expect(icon).toHaveCSS("transition-duration", "0s");
+	expect(
+		await page.evaluate(() => {
+			let transitionCounter = Reflect.get(window, "__changeIconTransitions") as { starts: number };
+			return transitionCounter.starts;
+		}),
+	).toBe(pointerStarts);
+});
+
 for (let viewport of RESPONSIVE_VIEWPORTS) {
 	test(`${viewport.name} keeps hostile rich content readable and navigable`, async ({ join, seed }) => {
 		await seed(RESPONSIVE_SOURCE);

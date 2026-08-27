@@ -43,9 +43,10 @@ export function MotionDisclosure(
 }
 
 export function MotionDisclosureIcon(
-	{ className, closed, open, opened }: {
+	{ className, closed, motionOwner, open, opened }: {
 		className: string;
 		closed: ReactNode;
+		motionOwner?: "immediate" | "pointer";
 		open: boolean;
 		opened: ReactNode;
 	},
@@ -57,7 +58,11 @@ export function MotionDisclosureIcon(
 			className={`${className} inline-flex`}
 			data-feedback-icon={state}
 			data-motion-feedback="icon"
+			data-motion-owned={motionOwner}
 			key={state}
+			style={motionOwner === "immediate"
+				? { transitionDuration: "0s" }
+				: undefined}
 		>
 			{open ? opened : closed}
 		</span>
