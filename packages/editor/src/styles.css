@@ -136,11 +136,6 @@
 .send-action-icon {
 	width: 1.125rem;
 	height: 1.125rem;
-	fill: none;
-	stroke: currentcolor;
-	stroke-linecap: round;
-	stroke-linejoin: round;
-	stroke-width: 1.5;
 }
 
 .plan,
