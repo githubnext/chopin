@@ -62,11 +62,11 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 	);
 	await expect(surface.locator(`[data-workspace-room="${child.id}"]`)).toBeVisible();
 	await expect(surface.locator('[data-document-view="plan"]')).toBeVisible();
-	await expect(surface.locator('[data-document-view="decisions"]')).toHaveAttribute("hidden", "");
+	await expect(surface.locator('[data-document-view="decisions"]')).toBeHidden();
 
 	await surface.getByRole("button", { name: "Decisions", exact: true }).click();
 	await expect(surface.locator('[data-document-view="decisions"]')).toBeVisible();
-	await expect(parent.locator('[data-document-view="decisions"]')).toHaveAttribute("hidden", "");
+	await expect(parent.locator('[data-document-view="decisions"]')).toBeHidden();
 	await surface.getByRole("button", { name: "Document", exact: true }).click();
 	await surface.getByRole("button", { name: "Show conversation pane" }).click();
 	await expect(surface.getByRole("button", { name: "Hide conversation pane" })).toBeVisible();

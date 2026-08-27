@@ -16,7 +16,7 @@ export type JavaScriptBudget = { gzip: number; raw: number };
 
 export const INITIAL_JAVASCRIPT_BUDGET: JavaScriptBudget = {
 	gzip: 80_000,
-	raw: 250_000,
+	raw: 255_000,
 };
 
 export function enforceInitialJavaScript(

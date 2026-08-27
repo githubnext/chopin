@@ -11,13 +11,8 @@ import {
 	childPresentation,
 	rebaseChildHistoryState,
 } from "./anchored-child-surface";
-import {
-	githubLoginHref,
-	hostedRoute,
-	prepareDocumentLoad,
-	retryableChannelFailure,
-	validatedChildPath,
-} from "./hosted";
+import { githubLoginHref, hostedRoute, retryableChannelFailure } from "./hosted";
+import { prepareDocumentLoad, validatedChildPath } from "./document-loader";
 
 import type { ChannelDetail } from "./api";
 

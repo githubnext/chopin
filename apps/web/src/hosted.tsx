@@ -1,8 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { ContentSwapLayer } from "@chopin/editor/content-swap";
 import {
-	childDocumentPath,
-	documentPath,
 	documentsPath,
 	parseChildDocumentPath,
 	parseDocumentPath,
@@ -11,8 +9,8 @@ import {
 } from "@chopin/protocol/document-url";
 
 import * as Api from "./api";
-import { childCloseAction, childHistoryState } from "./anchored-child-surface";
 import { readChannelRecovery, readDocumentRecovery, rememberChannel } from "./channel-recovery";
+import { childCloseAction, childHistoryState } from "./child-history";
 import { documentRouteIdentity, transitionDocumentRoute } from "./document-route-swap";
 import { newestDocument } from "./document-actions";
 import { motionContract } from "./motion-contract";
@@ -64,7 +62,7 @@ export type HostedRoute =
 	| { page: "missing" };
 
 type DocumentRoute = Exclude<DocumentRouteIdentitySource, { page: "research" }>;
-type ChannelSource = DocumentRouteIdentitySource;
+type ChannelSource = Extract<DocumentRouteIdentitySource, { page: "channel" | "research" }>;
 type DocumentSource = DocumentRoute;
 type DocumentRouteRequest = {
 	immediately: boolean;
@@ -141,95 +139,6 @@ export function retryableChannelFailure(error: unknown): boolean {
 		|| error.status === 408
 		|| error.status === 429
 		|| error.status >= 500;
-}
-
-export function validatedChildPath(
-	child: Api.ChannelDetail,
-	parent: Api.ChannelDetail,
-): string {
-	let sameRepository = child.repository.id === parent.repository.id
-		&& child.channel.repositoryId === child.repository.id
-		&& parent.channel.repositoryId === parent.repository.id;
-	if (
-		!child.channel.parentChannelId
-		|| child.channel.parentChannelId !== parent.channel.id
-		|| parent.channel.parentChannelId
-		|| !sameRepository
-		|| !parent.channel.slug
-		|| !child.channel.slug
-	) {
-		throw new Api.ApiError("Child document not found", 404);
-	}
-	return childDocumentPath(
-		child.repository.owner,
-		child.repository.name,
-		parent.channel.slug,
-		child.channel.slug,
-	);
-}
-
-type DocumentReaders = {
-	channel: (id: string, signal?: AbortSignal) => Promise<Api.ChannelDetail>;
-	document: (
-		owner: string,
-		repository: string,
-		slug: string,
-		signal?: AbortSignal,
-	) => Promise<Api.ChannelDetail>;
-};
-
-export async function prepareDocumentLoad(
-	address:
-		| { id: string }
-		| {
-			owner: string;
-			repository: string;
-			slug: string;
-			parentSlug?: string;
-		},
-	signal: AbortSignal,
-	readers: DocumentReaders = Api,
-): Promise<{ detail: Api.ChannelDetail; parent?: Api.ChannelDetail; pathname: string }> {
-	if ("id" in address) {
-		let detail = await readers.channel(address.id, signal);
-		if (!detail.channel.parentChannelId) {
-			return {
-				detail,
-				pathname: documentPath(
-					detail.repository.owner,
-					detail.repository.name,
-					detail.channel.slug,
-				),
-			};
-		}
-		let parent = await readers.channel(detail.channel.parentChannelId, signal);
-		return { detail, parent, pathname: validatedChildPath(detail, parent) };
-	}
-	if (address.parentSlug) {
-		let [detail, parent] = await Promise.all([
-			readers.document(address.owner, address.repository, address.slug, signal),
-			readers.document(address.owner, address.repository, address.parentSlug, signal),
-		]);
-		return { detail, parent, pathname: validatedChildPath(detail, parent) };
-	}
-	let detail = await readers.document(
-		address.owner,
-		address.repository,
-		address.slug,
-		signal,
-	);
-	if (detail.channel.parentChannelId) {
-		let parent = await readers.channel(detail.channel.parentChannelId, signal);
-		return { detail, parent, pathname: validatedChildPath(detail, parent) };
-	}
-	return {
-		detail,
-		pathname: documentPath(
-			detail.repository.owner,
-			detail.repository.name,
-			detail.channel.slug,
-		),
-	};
 }
 
 function Loading({ label = "Loading" }: { label?: string }) {
@@ -371,15 +280,6 @@ function ChannelWorkspace(
 		case "channel":
 			recovery = readChannelRecovery(user.id, source.id);
 			break;
-		case "child":
-			recovery = readDocumentRecovery(
-				user.id,
-				source.owner,
-				source.repository,
-				source.childSlug,
-			);
-			break;
-		case "document":
 		case "research":
 			recovery = readDocumentRecovery(
 				user.id,
@@ -410,16 +310,8 @@ function ChannelWorkspace(
 				),
 				detail,
 			}))
-			: prepareDocumentLoad(
-				source.page === "channel"
-					? { id: source.id }
-					: {
-						owner: source.owner,
-						parentSlug: source.page === "child" ? source.parentSlug : undefined,
-						repository: source.repository,
-						slug: source.page === "child" ? source.childSlug : source.slug,
-					},
-				controller.signal,
+			: import("./document-loader").then(module =>
+				module.prepareDocumentLoad({ id: source.id }, controller.signal)
 			).then(({ detail, pathname }) => ({ canonicalPath: pathname, detail }));
 		prepared = prepared.then(resolved => {
 			if (active) {
@@ -430,8 +322,6 @@ function ChannelWorkspace(
 		let workspace;
 		switch (source.page) {
 			case "channel":
-			case "child":
-			case "document":
 				workspace = import("./room-workspace").then(module => ({
 					kind: "document" as const,
 					Workspace: module.RoomWorkspace,
@@ -471,15 +361,6 @@ function ChannelWorkspace(
 		switch (source.page) {
 			case "channel":
 				break;
-			case "child":
-				requestedRepository = {
-					fullName: `${source.owner}/${source.repository}`,
-					name: source.repository,
-					owner: source.owner,
-				};
-				requestedSlug = source.childSlug;
-				break;
-			case "document":
 			case "research":
 				requestedRepository = {
 					fullName: `${source.owner}/${source.repository}`,
@@ -541,73 +422,6 @@ function ActiveChannelWorkspace(
 		void onDocumentLoaded(resolution.channel, key);
 	}, [onDocumentLoaded]);
 	return <ChannelWorkspace agent={agent} onReady={ready} source={source} user={user} />;
-}
-
-function DocumentRouteLayerWorkspace(
-	{
-		agent,
-		layerKey,
-		onCanonicalPath,
-		onChildClose,
-		onParentRestored,
-		onReady,
-		source,
-		user,
-	}: {
-		agent: boolean;
-		layerKey: DocumentRouteIdentity;
-		onCanonicalPath: (key: DocumentRouteIdentity, pathname: string) => void;
-		onChildClose: (parentPath: string) => void;
-		onParentRestored: (parentId: string) => void;
-		onReady: (key: DocumentRouteIdentity, resolution?: DocumentRouteResolution) => void;
-		source: DocumentSource;
-		user: Api.User;
-	},
-) {
-	let channelReady = useCallback((
-		_sourceKey: DocumentRouteIdentity,
-		resolution?: DocumentRouteResolution,
-	) => onReady(layerKey, resolution), [layerKey, onReady]);
-	let documentReady = useCallback((pathname?: string, channel?: Api.Channel) => {
-		if (!pathname || !channel) {
-			onReady(layerKey);
-			return;
-		}
-		let canonicalRoute = hostedRoute(pathname);
-		if (canonicalRoute.page !== "document" && canonicalRoute.page !== "child") {
-			onReady(layerKey);
-			return;
-		}
-		onReady(layerKey, {
-			canonicalPath: pathname,
-			channel,
-			routeKey: documentRouteIdentity(canonicalRoute),
-		});
-	}, [layerKey, onReady]);
-	let metadataPath = useCallback(
-		(pathname: string) => onCanonicalPath(layerKey, pathname),
-		[layerKey, onCanonicalPath],
-	);
-	if (source.page === "document" || source.page === "child") {
-		return (
-			<Suspense fallback={<Loading label="Opening document..." />}>
-				<DocumentWorkspaceHost
-					agent={agent}
-					Failure={Failure}
-					Loading={Loading}
-					loadDocument={prepareDocumentLoad}
-					onCanonicalPath={metadataPath}
-					onChildClose={onChildClose}
-					onParentRestored={onParentRestored}
-					onReady={documentReady}
-					retryable={retryableChannelFailure}
-					route={source}
-					user={user}
-				/>
-			</Suspense>
-		);
-	}
-	return <ChannelWorkspace agent={agent} onReady={channelReady} source={source} user={user} />;
 }
 
 function DocumentRouteSwap(
@@ -681,16 +495,32 @@ function DocumentRouteSwap(
 							? () => dispatch({ key: layer.key, type: "closed" })
 							: undefined}
 					>
-						<DocumentRouteLayerWorkspace
-							agent={agent}
-							layerKey={layer.key}
-							onCanonicalPath={metadataPath}
-							onChildClose={onChildClose}
-							onParentRestored={onParentRestored}
-							onReady={ready}
-							source={source}
-							user={user}
-						/>
+						{source.page === "document" || source.page === "child"
+							? (
+								<Suspense fallback={<Loading label="Opening document..." />}>
+									<DocumentWorkspaceHost
+										agent={agent}
+										Failure={Failure}
+										layerKey={layer.key}
+										Loading={Loading}
+										onCanonicalPath={metadataPath}
+										onChildClose={onChildClose}
+										onParentRestored={onParentRestored}
+										onReady={ready}
+										retryable={retryableChannelFailure}
+										route={source}
+										user={user}
+									/>
+								</Suspense>
+							)
+							: (
+								<ChannelWorkspace
+									agent={agent}
+									onReady={ready}
+									source={source}
+									user={user}
+								/>
+							)}
 					</ContentSwapLayer>
 				);
 			})}
