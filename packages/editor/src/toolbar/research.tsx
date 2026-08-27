@@ -158,13 +158,10 @@ export function ResearchComposerSurface(
 				if (disabled) return false;
 				return beginResearchDraft(drafts, () => {
 					if (!consume()) return;
-					let saved: Y.RelativePosition | undefined;
-					if (binding) {
-						editor.getEditorState().read(() => {
-							saved = captureResearchPosition(binding);
-						});
-					}
-					return { anchor, position: saved };
+					return {
+						anchor,
+						position: binding ? captureResearchPosition(binding) : undefined,
+					};
 				});
 			},
 			COMMAND_PRIORITY_LOW,

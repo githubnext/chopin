@@ -272,6 +272,22 @@ export function trigger(text: string, offset: number): string | undefined {
 	return query;
 }
 
+/** Remove the active slash trigger inside the Lexical transaction handling its command. */
+export function $consumeSlashTrigger(): boolean {
+	let selection = $getSelection();
+	if (!$isRangeSelection(selection)) return false;
+	let node = selection.anchor.getNode();
+	if (!$isTextNode(node)) return false;
+	let offset = selection.anchor.offset;
+	let text = node.getTextContent();
+	let typed = trigger(text, offset);
+	if (typed === undefined) return false;
+	let start = offset - typed.length - 1;
+	node.setTextContent(text.slice(0, start) + text.slice(offset));
+	node.select(start, start);
+	return true;
+}
+
 export type Decision = "open" | "close" | "ignore";
 
 /**
@@ -370,29 +386,13 @@ export function SlashMenu({ actions = NO_ACTIONS, disabled }: SlashMenuProps) {
 	 */
 	let consume = useCallback((): boolean => {
 		let consumed = false;
-		editor.update(() => {
-			let selection = $getSelection();
-			if (!$isRangeSelection(selection)) return;
-
-			let node = selection.anchor.getNode();
-			if (!$isTextNode(node)) return;
-
-			let offset = selection.anchor.offset;
-			let text = node.getTextContent();
-			let typed = trigger(text, offset);
-			if (typed === undefined) return;
-
-			let start = offset - typed.length - 1;
-			node.setTextContent(text.slice(0, start) + text.slice(offset));
-			node.select(start, start);
-			consumed = true;
-		}, { discrete: true });
+		editor.update(() => consumed = $consumeSlashTrigger(), { discrete: true });
 		return consumed;
 	}, [editor]);
 
 	let choose = useCallback((command: SlashCommand) => {
 		if (command.kind === "action") {
-			if (anchor && command.run(editor, { anchor, consume })) close();
+			if (anchor && command.run(editor, { anchor, consume: $consumeSlashTrigger })) close();
 			return;
 		}
 		consume();
