@@ -21,10 +21,9 @@ export type ResearchStore = {
 	subscribe(listener: () => void): () => void;
 	retain(id: string): () => void;
 	get(id: string): Research.RequestView | undefined;
-	refresh(id: string): void;
 	create(question: string, requestId: string): Promise<Research.RequestView>;
 	cancel(id: string): Promise<Research.RequestView>;
-	retry(id: string, question: string): Promise<Research.RequestView>;
+	retry(id: string): Promise<Research.RequestView>;
 	open(child: Research.ReadyChild): void;
 };
 

@@ -158,7 +158,7 @@ describe("slash menu trigger", () => {
 
 describe("slash menu commands", () => {
 	it("does not consume a second trigger during submission or created recovery", async () => {
-		let module = await import("./slash") as unknown as {
+		let module = await import("./research") as unknown as {
 			beginResearchDraft?: (
 				drafts: {
 					canOpen(): boolean;
@@ -216,11 +216,15 @@ describe("slash menu commands", () => {
 
 	it("opens the local composer instead of inserting a document node immediately", async () => {
 		let module = await import("./slash");
-		let command = module.availableCommands("research")[0] as unknown as {
-			run(editor: LexicalEditor, actions: { research(): void }): void;
-		};
+		let command = module.availableCommands("research")[0]!;
 		let opened = 0;
-		command.run({} as LexicalEditor, { research: () => opened++ });
+		if (command.kind !== "action") throw new Error("research must be an action command");
+		command.run({
+			dispatchCommand(_command, action: { consume(): boolean }) {
+				if (action.consume()) opened++;
+				return true;
+			},
+		} as LexicalEditor, { anchor: ANCHOR, consume: () => true });
 		expect(opened).toBe(1);
 	});
 
@@ -231,7 +235,7 @@ describe("slash menu commands", () => {
 		importPlan(a.editor, "Before after\n");
 		await settle();
 
-		let module = await import("./slash") as unknown as {
+		let module = await import("./research") as unknown as {
 			captureResearchPosition?: (binding: Binding) => Y.RelativePosition | undefined;
 			insertResearchReference?: (
 				editor: LexicalEditor,
@@ -280,7 +284,7 @@ describe("slash menu commands", () => {
 		let target = peer();
 		importPlan(target.editor, "Keep this\n");
 		await settle();
-		let module = await import("./slash") as unknown as {
+		let module = await import("./research") as unknown as {
 			captureResearchPosition(binding: Binding): Y.RelativePosition | undefined;
 			insertResearchReference(
 				editor: LexicalEditor,
@@ -324,7 +328,7 @@ describe("slash menu commands", () => {
 	});
 
 	it("restores editor focus when the research composer is dismissed", async () => {
-		let module = await import("./slash") as unknown as {
+		let module = await import("./research") as unknown as {
 			dismissResearchComposer?: (editor: Pick<LexicalEditor, "focus">, dismiss: () => void) => void;
 		};
 		expect(typeof module.dismissResearchComposer).toBe("function");

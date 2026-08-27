@@ -9,6 +9,7 @@ import { parse } from "../parse";
 import { registry } from "../registry";
 import { validate } from "../validate";
 import * as Containers from "./containers";
+import { $isResearchNode } from "./research";
 
 import type { Binding, Provider } from "@lexical/yjs";
 import type { LexicalEditor, TextNode } from "lexical";
@@ -70,11 +71,6 @@ const TABS = `<Tabs id="${ID}">\n`
 
 describe("structural components", () => {
 	it("round-trips one externally owned research reference", () => {
-		let isResearch = (Containers as unknown as {
-			$isResearchNode?: (node: unknown) => boolean;
-		}).$isResearchNode;
-		expect(typeof isResearch).toBe("function");
-		if (!isResearch) return;
 		let source = `<Research id="${RESEARCH_ID}" />\n`;
 		expect(validate(parse(source))).toEqual({ ok: true });
 		expect(canonical(source)).toBe(source);
@@ -83,11 +79,10 @@ describe("structural components", () => {
 		importPlan(instance, source, { registry: REGISTRY });
 		instance.getEditorState().read(() => {
 			let research = $getRoot().getFirstChild();
-			expect(isResearch(research)).toBe(true);
-			if (!isResearch(research)) return;
-			let reference = research as unknown as { getId(): string; exportJSON(): unknown };
-			expect(reference.getId()).toBe(RESEARCH_ID);
-			expect(reference.exportJSON()).toMatchObject({ planId: RESEARCH_ID });
+			expect($isResearchNode(research)).toBe(true);
+			if (!$isResearchNode(research)) return;
+			expect(research.getId()).toBe(RESEARCH_ID);
+			expect(research.exportJSON()).toMatchObject({ planId: RESEARCH_ID });
 		});
 	});
 
@@ -333,8 +328,8 @@ describe("container collaboration", () => {
 
 		b.editor.getEditorState().read(() => {
 			let research = $getRoot().getFirstChild();
-			expect(Containers.$isResearchNode(research)).toBe(true);
-			if (Containers.$isResearchNode(research)) expect(research.getId()).toBe(RESEARCH_ID);
+			expect($isResearchNode(research)).toBe(true);
+			if ($isResearchNode(research)) expect(research.getId()).toBe(RESEARCH_ID);
 		});
 		expect(exportPlan(b.editor, { registry: REGISTRY })).toBe(
 			`<Research id="${RESEARCH_ID}" />\n`,

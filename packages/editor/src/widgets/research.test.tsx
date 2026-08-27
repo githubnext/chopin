@@ -46,10 +46,9 @@ type Store = {
 	subscribe(listener: () => void): () => void;
 	retain(id: string): () => void;
 	get(id: string): Research.RequestView | undefined;
-	refresh(id: string): void;
 	create(question: string, requestId: string): Promise<Research.RequestView>;
 	cancel(id: string): Promise<Research.RequestView>;
-	retry(id: string, question: string): Promise<Research.RequestView>;
+	retry(id: string): Promise<Research.RequestView>;
 	open(child: Research.ReadyChild): void;
 };
 
@@ -294,7 +293,6 @@ describe("research reference", () => {
 			subscribe: () => () => {},
 			retain: () => () => {},
 			get: id => id === BASE.id ? BASE : undefined,
-			refresh() {},
 			create: async () => BASE,
 			cancel: async () => BASE,
 			retry: async () => BASE,
@@ -307,111 +305,5 @@ describe("research reference", () => {
 		}));
 		expect(markup).toContain(BASE.question);
 		expect(markup).toContain("Searching");
-	});
-
-	it("subscribes safely to a class store whose method depends on this", async () => {
-		let module = await import("./research");
-		let subscribe = (module as unknown as {
-			subscribeResearch?: (store: Store, listener: () => void) => () => void;
-		}).subscribeResearch;
-		let Reference = (module as unknown as {
-			ResearchReference?: ComponentType<{ id: string; onRemove: () => void; store: Store }>;
-		}).ResearchReference;
-		expect(typeof subscribe).toBe("function");
-		expect(typeof Reference).toBe("function");
-		if (!Reference || !subscribe) return;
-		class ClassStore implements Store {
-			listeners = new Set<() => void>();
-			retained: string[] = [];
-			subscribe(listener: () => void) {
-				this.listeners.add(listener);
-				return () => this.listeners.delete(listener);
-			}
-			get() {
-				return BASE;
-			}
-			retain(id: string) {
-				this.retained.push(id);
-				return () => this.retained.splice(this.retained.indexOf(id), 1);
-			}
-			refresh() {}
-			async create() {
-				return BASE;
-			}
-			async cancel() {
-				return BASE;
-			}
-			async retry() {
-				return BASE;
-			}
-			open() {}
-		}
-		let store = new ClassStore();
-		let off = subscribe(store, () => {});
-		expect(store.listeners.size).toBe(1);
-		off();
-		expect(store.listeners.size).toBe(0);
-		let markup = renderToStaticMarkup(createElement(Reference, {
-			id: BASE.id,
-			onRemove() {},
-			store,
-		}));
-		expect(markup).toContain(BASE.question);
-	});
-
-	it("retains and releases the reference id through the store contract", async () => {
-		let module = await import("./research");
-		let retain = (module as unknown as {
-			retainResearch?: (store: Store, id: string) => () => void;
-		}).retainResearch;
-		expect(typeof retain).toBe("function");
-		if (!retain) return;
-		let retained = new Set<string>();
-		let store = {
-			subscribe: () => () => {},
-			retain: (id: string) => {
-				retained.add(id);
-				return () => retained.delete(id);
-			},
-			get: () => BASE,
-			refresh() {},
-			create: async () => BASE,
-			cancel: async () => BASE,
-			retry: async () => BASE,
-			open() {},
-		};
-
-		let release = retain(store, BASE.id);
-		expect(retained).toEqual(new Set([BASE.id]));
-		release();
-		expect(retained).toEqual(new Set());
-	});
-
-	it("retries the same authoritative request with its exact question", async () => {
-		let module = await import("./research");
-		let retry = (module as unknown as {
-			retryResearch?: (
-				store: Store,
-				request: Research.RequestView,
-			) => Promise<Research.RequestView>;
-		}).retryResearch;
-		expect(typeof retry).toBe("function");
-		if (!retry) return;
-		let received: [string, string] | undefined;
-		let store: Store = {
-			subscribe: () => () => {},
-			retain: () => () => {},
-			get: () => BASE,
-			refresh() {},
-			create: async () => BASE,
-			cancel: async () => BASE,
-			retry: async (id, question) => {
-				received = [id, question];
-				return BASE;
-			},
-			open() {},
-		};
-		await retry(store, BASE);
-		expect(received).toEqual([BASE.id, BASE.question]);
 	});
 });

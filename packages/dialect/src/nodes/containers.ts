@@ -1,9 +1,8 @@
 /**
  * Structural plan components.
  *
- * Tabs and callouts are `ElementNode`s whose children are ordinary Lexical
- * blocks, so their content collaborates exactly like top-level prose. Research
- * is an atomic reference whose mutable state lives outside the document.
+ * Each is an `ElementNode` whose children are ordinary Lexical blocks, so their
+ * content collaborates exactly like top-level prose.
  *
  * The DOM produced here is deliberately plain and semantic. Presentation and
  * interaction (tab strips, callout chrome) belong to `@chopin/editor`, which
@@ -15,13 +14,12 @@ import {
 	$getState,
 	$setState,
 	createState,
-	DecoratorNode,
 	ElementNode,
 	setDOMUnmanaged,
 } from "lexical";
 
 import { CALLOUT_TYPES } from "../dialect";
-import { render } from "./render";
+import { idState } from "./identity";
 
 import type {
 	EditorConfig,
@@ -30,7 +28,6 @@ import type {
 	LexicalUpdateJSON,
 	NodeKey,
 	SerializedElementNode,
-	SerializedLexicalNode,
 	Spread,
 } from "lexical";
 
@@ -45,9 +42,6 @@ function syncDOMAttribute(dom: HTMLElement, name: string, value: string | undefi
 	if (value === undefined) dom.removeAttribute(name);
 	else dom.setAttribute(name, value);
 }
-
-/** Stable identity, minted when the component is created. */
-export const idState = createState("plan-id", { parse: text });
 
 /** Tab label. */
 export const labelState = createState("plan-label", { parse: text });
@@ -296,80 +290,6 @@ export function $isCalloutNode(node: LexicalNode | null | undefined): node is Ca
 	return node instanceof CalloutNode;
 }
 
-// -- Research --------------------------------------------------------------
+export const CONTAINER_NODES = [TabsNode, TabNode, CalloutNode];
 
-type SerializedResearch = Spread<{ planId: string }, SerializedLexicalNode>;
-
-/** Atomic reference to Research Workspace state owned outside the document. */
-export class ResearchNode extends DecoratorNode<unknown> {
-	static override getType(): string {
-		return "plan-research";
-	}
-
-	static override clone(node: ResearchNode): ResearchNode {
-		return new ResearchNode(node.__key);
-	}
-
-	static override importJSON(serialized: SerializedResearch): ResearchNode {
-		return $createResearchNode().updateFromJSON(serialized);
-	}
-
-	getId(): string {
-		return $getState(this, idState);
-	}
-
-	setId(value: string): this {
-		return $setState(this.getWritable(), idState, value);
-	}
-
-	override exportJSON(): SerializedResearch {
-		return { ...super.exportJSON(), planId: this.getId() };
-	}
-
-	override updateFromJSON(serialized: LexicalUpdateJSON<SerializedResearch>): this {
-		return super.updateFromJSON(serialized).setId(serialized.planId ?? "");
-	}
-
-	override createDOM(): HTMLElement {
-		let dom = document.createElement("div");
-		dom.dataset.planResearch = this.getId();
-		return dom;
-	}
-
-	override updateDOM(): boolean {
-		return false;
-	}
-
-	override isInline(): boolean {
-		return false;
-	}
-
-	override isKeyboardSelectable(): boolean {
-		return true;
-	}
-
-	override decorate(): unknown {
-		return render(this);
-	}
-}
-
-export function $createResearchNode(id = ""): ResearchNode {
-	return $applyNodeReplacement(new ResearchNode().setId(id));
-}
-
-export function $isResearchNode(
-	node: LexicalNode | null | undefined,
-): node is ResearchNode {
-	return node instanceof ResearchNode;
-}
-
-export const CONTAINER_NODES = [TabsNode, TabNode, CalloutNode, ResearchNode];
-
-export type {
-	CalloutType,
-	NodeKey,
-	SerializedCallout,
-	SerializedContainer,
-	SerializedResearch,
-	SerializedTab,
-};
+export type { CalloutType, NodeKey, SerializedCallout, SerializedContainer, SerializedTab };

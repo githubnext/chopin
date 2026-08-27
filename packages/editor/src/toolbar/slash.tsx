@@ -15,19 +15,13 @@ import {
 	useMemo,
 	useRef,
 	useState,
-	useSyncExternalStore,
 } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $copyBlockFormatIndent, $setBlocksType } from "@lexical/selection";
-import { $getAnchorAndFocusForUserState } from "@lexical/yjs";
 import {
-	$createRangeSelection,
-	$getNodeByKey,
 	$getSelection,
-	$isElementNode,
 	$isRangeSelection,
 	$isTextNode,
-	$setSelection,
 	COLLABORATION_TAG,
 	COMMAND_PRIORITY_LOW,
 	HISTORIC_TAG,
@@ -38,10 +32,8 @@ import {
 	$createCodeBlockNode,
 	$createImageNode,
 	$createMathNode,
-	$createResearchNode,
 	$createTabNode,
 	$createTabsNode,
-	$isResearchNode,
 	DIFF_LANGUAGE,
 	IMAGE_PROTOCOLS,
 	MERMAID_LANGUAGE,
@@ -50,12 +42,10 @@ import {
 
 import { $createTableNodeWithDimensions } from "@lexical/table";
 import { $createParagraphNode, $createTextNode, $insertNodes } from "lexical";
-import * as Y from "yjs";
 
 import { askForUrl } from "./url";
-import { ResearchDraftStore } from "../research-draft";
-import { ResearchComposer } from "../widgets/research";
 import { placeSurface } from "./placement";
+import { OPEN_RESEARCH_COMMAND } from "./research";
 import {
 	DIVIDER,
 	editorSurfaceViewport,
@@ -65,20 +55,25 @@ import {
 	SHELL,
 } from "./surface";
 
-import type { Binding } from "@lexical/yjs";
 import type { ElementNode, LexicalEditor, LexicalNode } from "lexical";
-import type { ResearchStore } from "../widget-options";
 import type { DOMRectLike, SurfacePlacement } from "./placement";
+import type { OpenResearch } from "./research";
 
 const MULTI_WORD_COMMANDS = ["web search"];
 
-export type SlashCommand = {
+type SlashCommandBase = {
 	id: string;
 	label: string;
 	group: string;
 	keywords: string[];
-	run: (editor: LexicalEditor, actions?: { research?: () => void }) => void;
 };
+
+export type SlashCommand =
+	& SlashCommandBase
+	& (
+		| { kind: "insert"; run: (editor: LexicalEditor) => void }
+		| { kind: "action"; run: (editor: LexicalEditor, action: OpenResearch) => boolean }
+	);
 
 /** Replace the current block, dropping the `/query` the user typed. */
 function replace(editor: LexicalEditor, build: () => ElementNode) {
@@ -137,13 +132,15 @@ const COMMANDS: SlashCommand[] = [
 		label: "Research",
 		group: "Research",
 		keywords: ["research", "web search"],
-		run: (_editor, actions) => actions?.research?.(),
+		kind: "action",
+		run: (editor, action) => editor.dispatchCommand(OPEN_RESEARCH_COMMAND, action),
 	},
 	{
 		id: "code",
 		label: "Code block",
 		group: "Technical",
 		keywords: ["code", "snippet", "fence"],
+		kind: "insert",
 		run: editor => replace(editor, () => $createCodeBlockNode("")),
 	},
 	{
@@ -151,6 +148,7 @@ const COMMANDS: SlashCommand[] = [
 		label: "Diff",
 		group: "Technical",
 		keywords: ["diff", "patch", "change"],
+		kind: "insert",
 		run: editor => replace(editor, () => $createCodeBlockNode(DIFF_LANGUAGE)),
 	},
 	{
@@ -158,6 +156,7 @@ const COMMANDS: SlashCommand[] = [
 		label: "Diagram",
 		group: "Technical",
 		keywords: ["mermaid", "diagram", "flowchart", "graph"],
+		kind: "insert",
 		run: editor => replace(editor, () => $createCodeBlockNode(MERMAID_LANGUAGE)),
 	},
 	{
@@ -165,6 +164,7 @@ const COMMANDS: SlashCommand[] = [
 		label: "Formula",
 		group: "Technical",
 		keywords: ["math", "latex", "katex", "equation"],
+		kind: "insert",
 		run: editor => replace(editor, () => $createMathNode(false)),
 	},
 	{
@@ -172,6 +172,7 @@ const COMMANDS: SlashCommand[] = [
 		label: "Image",
 		group: "Technical",
 		keywords: ["image", "picture", "figure", "screenshot"],
+		kind: "insert",
 		run: editor => {
 			let src = askForUrl("Image URL", { protocols: IMAGE_PROTOCOLS, relative: false });
 			if (!src) return;
@@ -185,6 +186,7 @@ const COMMANDS: SlashCommand[] = [
 		label: "Callout",
 		group: "Layout",
 		keywords: ["note", "warning", "aside", "admonition"],
+		kind: "insert",
 		run: editor => insertContainer(editor, () => $createCalloutNode(ulid())),
 	},
 	{
@@ -192,6 +194,7 @@ const COMMANDS: SlashCommand[] = [
 		label: "Table",
 		group: "Layout",
 		keywords: ["table", "grid", "row", "column", "spreadsheet"],
+		kind: "insert",
 		run: editor =>
 			editor.update(() => {
 				/*
@@ -210,6 +213,7 @@ const COMMANDS: SlashCommand[] = [
 		label: "Tabs",
 		group: "Layout",
 		keywords: ["tab", "switch", "panel"],
+		kind: "insert",
 		run: editor =>
 			editor.update(() => {
 				let tabs = $createTabsNode();
@@ -235,100 +239,6 @@ function match(command: SlashCommand, query: string): boolean {
 
 export function availableCommands(query: string): SlashCommand[] {
 	return COMMANDS.filter(command => match(command, query));
-}
-
-/** Capture a document-safe insertion point before an asynchronous request begins. */
-export function captureResearchPosition(binding: Binding): Y.RelativePosition | undefined {
-	let selection = $getSelection();
-	if (!$isRangeSelection(selection) || !selection.isCollapsed()) return;
-	let point = selection.anchor;
-	let node = point.getNode();
-	let collab = binding.collabNodeMap.get(point.key);
-	if (!collab) return;
-
-	let shared = collab.getSharedType();
-	let offset = point.offset;
-	if ($isTextNode(node)) {
-		let parent = node.getParent();
-		let parentCollab = parent && binding.collabNodeMap.get(parent.getKey());
-		let currentOffset = collab.getOffset();
-		if (!parentCollab || currentOffset < 0) return;
-		shared = parentCollab.getSharedType();
-		offset = currentOffset + 1 + point.offset;
-	} else if ($isElementNode(node) && point.type === "element") {
-		offset = 0;
-		for (let child of node.getChildren().slice(0, point.offset)) {
-			offset += $isTextNode(child) ? child.getTextContentSize() + 1 : 1;
-		}
-	}
-	return Y.createRelativePositionFromTypeIndex(shared, offset);
-}
-
-/** Insert only when the saved collaborative position still resolves, and verify the result. */
-export function insertResearchReference(
-	editor: LexicalEditor,
-	binding: Binding,
-	position: Y.RelativePosition,
-	id: string,
-): boolean {
-	let key: string | undefined;
-	try {
-		editor.update(() => {
-			let resolved = $getAnchorAndFocusForUserState(binding, {
-				anchorPos: position,
-				focusPos: position,
-				color: "",
-				focusing: false,
-				name: "",
-				awarenessData: {},
-			});
-			if (!resolved.anchorKey || !resolved.focusKey) return;
-			let anchor = $getNodeByKey(resolved.anchorKey);
-			let focus = $getNodeByKey(resolved.focusKey);
-			if (!anchor || !focus) return;
-			let selection = $createRangeSelection();
-			selection.anchor.set(
-				resolved.anchorKey,
-				resolved.anchorOffset,
-				$isElementNode(anchor) ? "element" : "text",
-			);
-			selection.focus.set(
-				resolved.focusKey,
-				resolved.focusOffset,
-				$isElementNode(focus) ? "element" : "text",
-			);
-			$setSelection(selection);
-			let reference = $createResearchNode(id);
-			$insertNodes([reference]);
-			key = reference.getKey();
-		}, { discrete: true });
-	} catch {
-		return false;
-	}
-	if (!key) return false;
-	let inserted = false;
-	editor.getEditorState().read(() => {
-		let reference = $getNodeByKey(key!);
-		inserted = $isResearchNode(reference) && reference.getId() === id && reference.isAttached();
-	});
-	return inserted;
-}
-
-export function dismissResearchComposer(
-	editor: Pick<LexicalEditor, "focus">,
-	dismiss: () => void,
-) {
-	dismiss();
-	editor.focus();
-}
-
-export function beginResearchDraft(
-	drafts: ResearchDraftStore,
-	consume: () => { anchor: DOMRectLike; position?: Y.RelativePosition } | undefined,
-): boolean {
-	if (!drafts.canOpen()) return false;
-	let next = consume();
-	return next ? drafts.open(next.anchor, next.position) : false;
 }
 
 /**
@@ -397,33 +307,27 @@ export function decide(
 }
 
 export type SlashMenuProps = {
-	binding?: Binding;
+	actions?: ReadonlySet<string>;
 	disabled?: boolean;
-	drafts?: ResearchDraftStore;
-	research?: ResearchStore;
 };
 
-export function SlashMenu({ binding, disabled, drafts, research }: SlashMenuProps) {
+const NO_ACTIONS = new Set<string>();
+
+export function SlashMenu({ actions = NO_ACTIONS, disabled }: SlashMenuProps) {
 	let [editor] = useLexicalComposerContext();
 	let [query, setQuery] = useState<string>();
 	let [anchor, setAnchor] = useState<DOMRectLike>();
 	let [position, setPosition] = useState<SurfacePlacement>();
 	let [index, setIndex] = useState(0);
-	let subscribeDraft = useCallback(
-		(listener: () => void) => drafts?.subscribe(listener) ?? (() => {}),
-		[drafts],
-	);
-	let readDraft = useCallback(() => drafts?.get(), [drafts]);
-	let draft = useSyncExternalStore(subscribeDraft, readDraft, readDraft);
 	let surface = useRef<HTMLDivElement>(null);
 	let open = query !== undefined && !disabled;
 
 	let matches = useMemo(
 		() =>
 			availableCommands(query ?? "").filter(command =>
-				command.id !== "research" || (research && drafts?.canOpen())
+				command.kind === "insert" || actions.has(command.id)
 			),
-		[query, research, drafts, draft],
+		[actions, query],
 	);
 	// Groups now place dividers while options remain direct listbox children.
 	let grouped = useMemo(() => {
@@ -464,8 +368,8 @@ export function SlashMenu({ binding, disabled, drafts, research }: SlashMenuProp
 	 * Only that span: anything the user had already written after the caret
 	 * belongs to them, and truncating the line to the slash would eat it.
 	 */
-	let consume = useCallback((): { position?: Y.RelativePosition } | undefined => {
-		let consumed: { position?: Y.RelativePosition } | undefined;
+	let consume = useCallback((): boolean => {
+		let consumed = false;
 		editor.update(() => {
 			let selection = $getSelection();
 			if (!$isRangeSelection(selection)) return;
@@ -481,32 +385,20 @@ export function SlashMenu({ binding, disabled, drafts, research }: SlashMenuProp
 			let start = offset - typed.length - 1;
 			node.setTextContent(text.slice(0, start) + text.slice(offset));
 			node.select(start, start);
-			consumed = { position: binding ? captureResearchPosition(binding) : undefined };
+			consumed = true;
 		}, { discrete: true });
 		return consumed;
-	}, [binding, editor]);
+	}, [editor]);
 
 	let choose = useCallback((command: SlashCommand) => {
-		let placement = anchor;
-		if (command.id === "research") {
-			command.run(editor, {
-				research: research && drafts && placement
-					? () => {
-						beginResearchDraft(drafts, () => {
-							let consumed = consume();
-							return consumed ? { anchor: placement, position: consumed.position } : undefined;
-						});
-						setPosition(undefined);
-					}
-					: undefined,
-			});
-			close();
+		if (command.kind === "action") {
+			if (anchor && command.run(editor, { anchor, consume })) close();
 			return;
 		}
 		consume();
 		close();
 		command.run(editor);
-	}, [anchor, consume, close, drafts, editor, research]);
+	}, [anchor, consume, close, editor]);
 
 	// Arming is what separates a slash the author typed from one that arrived
 	// with someone else's edit. Registered whether or not the menu is showing,
@@ -563,9 +455,8 @@ export function SlashMenu({ binding, disabled, drafts, research }: SlashMenuProp
 
 	let place = useCallback(() => {
 		let element = surface.current;
-		let placement = draft?.anchor ?? anchor;
-		if (!element || !placement) return;
-		let liveAnchor = draft ? draft.anchor : nativeSelectionRect();
+		if (!element || !anchor) return;
+		let liveAnchor = nativeSelectionRect();
 		if (!liveAnchor) {
 			setPosition(undefined);
 			return;
@@ -583,22 +474,15 @@ export function SlashMenu({ binding, disabled, drafts, research }: SlashMenuProp
 				? current
 				: next
 		);
-	}, [anchor, draft]);
+	}, [anchor]);
 	useLayoutEffect(() => {
-		if (open || draft) place();
-	}, [open, draft, grouped, place]);
+		if (open) place();
+	}, [open, grouped, place]);
 
 	useEffect(() => {
-		if (!open && !draft) return;
+		if (!open) return;
 		return listenToEditorGeometry(editor, place);
-	}, [editor, open, draft, place]);
-
-	useLayoutEffect(() => {
-		if (!drafts || !binding || disabled) return;
-		return drafts.attachPlacement((saved, id) =>
-			insertResearchReference(editor, binding, saved, id)
-		);
-	}, [binding, disabled, drafts, editor]);
+	}, [editor, open, place]);
 
 	let selected = useRef(matches[0]);
 	selected.current = matches[index];
@@ -627,78 +511,6 @@ export function SlashMenu({ binding, disabled, drafts, research }: SlashMenuProp
 			COMMAND_PRIORITY_LOW,
 		);
 	}, [editor, open, matches.length, close, choose]);
-
-	if (draft && drafts && research) {
-		let dismiss = () => dismissResearchComposer(editor, () => drafts.dismiss());
-		let currentPosition = () => {
-			if (!binding) return;
-			let found: Y.RelativePosition | undefined;
-			editor.getEditorState().read(() => {
-				found = captureResearchPosition(binding);
-			});
-			return found;
-		};
-		let submit = () => {
-			if (draft.submitting || draft.cancelling || !draft.question.trim()) return;
-			if (!binding || disabled) return;
-			if (draft.created) {
-				let position = currentPosition();
-				if (position) drafts.place(position, !disabled);
-				return;
-			}
-			void drafts.start(
-				(question, requestId) => research.create(question, requestId),
-				currentPosition(),
-			);
-		};
-		let cancel = () => {
-			if (!draft.created) return dismiss();
-			if (disabled) return;
-			void drafts.cancelCreated(id => research.cancel(id), !disabled).then(cancelled => {
-				if (cancelled) editor.focus();
-			});
-		};
-		let busy = !!draft.submitting || !!draft.cancelling;
-		let dismissible = !busy && !draft.created;
-		return (
-			<div
-				ref={surface}
-				aria-label="Start research"
-				role="dialog"
-				data-focus-boundary=""
-				contentEditable={false}
-				className={`${SHELL} plan-research-composer-surface`}
-				style={position
-					? { top: position.top, left: position.left, maxHeight: position.maxHeight }
-					: {
-						top: draft.anchor.bottom + 8,
-						left: draft.anchor.left,
-						visibility: "hidden",
-					}}
-			>
-				<ResearchComposer
-					blocked={disabled
-						? "Wait until the document is editable before placing research."
-						: binding
-						? undefined
-						: "Connect to the document before starting research."}
-					busyLabel={draft.cancelling ? "Cancelling…" : undefined}
-					cancelDisabled={!!draft.created && !!disabled}
-					cancelLabel={draft.created ? "Cancel research" : undefined}
-					dismissible={dismissible}
-					error={draft.error}
-					onCancel={cancel}
-					onChange={question => drafts.change(question)}
-					onEscape={dismiss}
-					onSubmit={submit}
-					question={draft.question}
-					questionLocked={!!draft.created}
-					submitLabel={draft.created ? "Place research here" : undefined}
-					submitting={busy}
-				/>
-			</div>
-		);
-	}
 
 	if (!open || !anchor || matches.length === 0) return null;
 

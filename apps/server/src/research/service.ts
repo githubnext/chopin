@@ -6,7 +6,7 @@ import {
 	parseResearchAnswerInput,
 	parseResearchEvidenceArtifact,
 } from "../jobs/research-workspace";
-import { RESEARCH_REPOSITORY_WORKSPACE_LIMIT } from "../storage/model";
+import { RESEARCH_REPOSITORY_WORKSPACE_LIMIT, researchAttemptDisposition } from "../storage/model";
 import { MAX_TITLE_LENGTH } from "../channels/title";
 import { publishInitialResearchChild } from "./publication";
 import { projectRequestView } from "./request-view";
@@ -20,6 +20,7 @@ import type {
 import type { JobDetail, JobService, JobView } from "../jobs/service";
 import type { DocumentTarget } from "../plan/service";
 import type {
+	BackgroundJobState,
 	JsonValue,
 	Lease,
 	ResearchMessage,
@@ -753,19 +754,20 @@ export class ResearchWorkspaceService {
 					? [{ id: initial.answerJobId, role: "answer" as const }]
 					: []),
 			];
-			let terminal = linked.length === 0;
+			let states: BackgroundJobState[] = [];
 			for (let candidate of linked) {
 				let current = await this.#jobs.get(channelId, candidate.id);
 				if (!current) {
 					throw new ResearchWorkspaceError("invalid-state", "Linked research work is missing.");
 				}
 				this.#assertLinkedJob(current, detail.workspace, initial, candidate.role);
-				if (ACTIVE_JOB_STATES.has(current.job.state)) {
-					throw new ResearchWorkspaceError("active-turn", "Research request is still active.");
-				}
-				if (["failed", "cancelled", "superseded"].includes(current.job.state)) terminal = true;
+				states.push(current.job.state);
 			}
-			if (!terminal) {
+			let disposition = researchAttemptDisposition(states);
+			if (disposition === "active") {
+				throw new ResearchWorkspaceError("active-turn", "Research request is still active.");
+			}
+			if (disposition !== "retryable") {
 				throw new ResearchWorkspaceError("not-ready", "Research request cannot be retried.");
 			}
 			let reset = await this.#storage.research.resetInitialAttempt({

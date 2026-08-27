@@ -313,7 +313,7 @@ export function RoomWorkspace(
 		setMetadata(next);
 	}, [archivedAt, description, descriptionRevision, label, room, slug, updatedAt]);
 
-	useEffect(() => () => research.dispose(), [research]);
+	useEffect(() => () => research.reset(), [research]);
 
 	useEffect(() => {
 		let socket = new Wire({

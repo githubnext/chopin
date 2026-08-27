@@ -124,12 +124,13 @@ describe("research request store", () => {
 
 		expect(store.get("restored")).toBeUndefined();
 		let release = store.retain("restored");
-		store.refresh("restored");
+		let releaseDuplicate = store.retain("restored");
 		expect(calls).toBe(1);
 
 		load.resolve(request("restored", "searching"));
 		await settle();
 		expect(store.get("restored")?.stage).toBe("searching");
+		releaseDuplicate();
 		release();
 		unsubscribe();
 		store.dispose();
@@ -157,7 +158,7 @@ describe("research request store", () => {
 			onOpen() {},
 		});
 
-		store.dispose();
+		store.reset();
 		let unsubscribe = store.subscribe(() => {});
 		let release = store.retain("request-one");
 		await settle();
@@ -176,11 +177,42 @@ describe("research request store", () => {
 			onOpen() {},
 		});
 
-		store.dispose();
+		store.reset();
 		let created = await store.create("Research this", "request-one");
 
 		expect(store.get("request-one")).toBe(created);
 		store.dispose();
+	});
+
+	it("keeps terminal disposal distinct from reversible Strict Mode cleanup", async () => {
+		let reads = 0;
+		let creates = 0;
+		let store = new ResearchRequestStore({
+			api: api({
+				get: async (_channelId, id) => {
+					reads++;
+					return request(id);
+				},
+				create: async (_channelId, question, id) => {
+					creates++;
+					return { repeated: false, request: request(id, "queued", { question }) };
+				},
+			}),
+			channelId: "channel-one",
+			onOpen() {},
+		});
+
+		store.dispose();
+		let unsubscribe = store.subscribe(() => {});
+		let release = store.retain("request-one");
+		await settle();
+
+		expect(reads).toBe(0);
+		expect(store.get("request-one")).toBeUndefined();
+		await expect(store.create("Research this", "request-one")).rejects.toThrow("disposed");
+		expect(creates).toBe(0);
+		release();
+		unsubscribe();
 	});
 
 	it("refreshes only a mounted request named by socket invalidation", async () => {
@@ -374,7 +406,7 @@ describe("research request store", () => {
 		let release = store.retain("request-one");
 		await settle();
 
-		let retried = await store.retry("request-one", "  Exact stored question.  ");
+		let retried = await store.retry("request-one");
 		expect(retries).toEqual(["request-one"]);
 		expect(store.get("request-one")).toBe(retried);
 

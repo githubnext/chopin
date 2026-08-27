@@ -1,9 +1,11 @@
 import { conflict, corrupt, missing } from "../errors";
 import { deterministicChannelId } from "../../channels/id";
 import {
+	isBackgroundJobState,
 	RESEARCH_REPOSITORY_CHANNEL_LIMIT,
 	RESEARCH_REPOSITORY_CHANNEL_WORKSPACE_LIMIT,
 	RESEARCH_REPOSITORY_WORKSPACE_LIMIT,
+	researchAttemptDisposition,
 } from "../model";
 
 import type { SQL, TransactionSQL } from "bun";
@@ -12,6 +14,7 @@ import type {
 	AppendResearchAgentMessageResult,
 	AppendResearchTurn,
 	AppendResearchTurnResult,
+	BackgroundJobState,
 	ChannelRecord,
 	ConfirmResearchWorkspace,
 	ConfirmResearchWorkspaceResult,
@@ -870,7 +873,7 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 				if (!foundTurn.evidenceJobId && !foundTurn.answerJobId) {
 					return { workspace: locked.workspace, turn: foundTurn, repeated: true };
 				}
-				let terminal = false;
+				let states: BackgroundJobState[] = [];
 				for (let jobId of [foundTurn.evidenceJobId, foundTurn.answerJobId]) {
 					if (!jobId) continue;
 					let [job] = await transaction<RetryJobRow[]>`
@@ -882,14 +885,14 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 						throw missing(`background job ${jobId} does not exist in channel ${channelId}`);
 					}
 					let state = text(job.state, "retry job state");
-					if (["pending", "paused", "running"].includes(state)) {
-						throw conflict(`research workspace ${workspaceId} still has active initial work`);
-					}
-					if (["failed", "cancelled", "superseded"].includes(state)) {
-						terminal = true;
-					}
+					if (!isBackgroundJobState(state)) throw corrupt("background job has an invalid state");
+					states.push(state);
 				}
-				if (!terminal) {
+				let disposition = researchAttemptDisposition(states);
+				if (disposition === "active") {
+					throw conflict(`research workspace ${workspaceId} still has active initial work`);
+				}
+				if (disposition !== "retryable") {
 					throw conflict(`research workspace ${workspaceId} has no terminal initial work`);
 				}
 				let now = inputDate(input.now, "retry time");
