@@ -299,7 +299,6 @@ describe("consumer roles", () => {
 	it("uses the shared icon library instead of literal interface artwork", () => {
 		let offenders: string[] = [];
 		for (let file of [...sources(join(ROOT, "apps")), ...sources(join(ROOT, "packages"))]) {
-			if (file === join(ROOT, "packages/editor/src/send-action.tsx")) continue;
 			let content = withoutComments(readFileSync(file, "utf8"));
 			if (/<svg\b/.test(content) || /[\u{1F300}-\u{1FAFF}]/u.test(content)) {
 				offenders.push(relative(ROOT, file));

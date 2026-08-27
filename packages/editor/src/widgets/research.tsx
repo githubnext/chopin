@@ -20,7 +20,7 @@ import { widgets$ } from "../widget-options";
 import { $isResearchNode } from "@chopin/dialect";
 import { XIcon } from "@phosphor-icons/react";
 
-import type { FormEvent, KeyboardEvent } from "react";
+import type { FormEvent } from "react";
 import type { Research } from "@chopin/protocol";
 import type { ResearchNode } from "@chopin/dialect";
 import type { LexicalEditor, LexicalNode, RangeSelection } from "lexical";
@@ -67,18 +67,25 @@ export function researchComposerKey(event: {
 	return event.metaKey || event.ctrlKey ? "newline" : "submit";
 }
 
+type ResearchComposerKeyEvent = {
+	ctrlKey: boolean;
+	currentTarget: {
+		readOnly: boolean;
+		selectionEnd: number;
+		selectionStart: number;
+		setRangeText(replacement: string, start: number, end: number, selectionMode: "end"): void;
+		value: string;
+	};
+	key: string;
+	keyCode: number;
+	metaKey: boolean;
+	nativeEvent: { isComposing: boolean };
+	preventDefault(): void;
+	stopPropagation(): void;
+};
+
 export function handleResearchComposerKey(
-	event: Pick<
-		KeyboardEvent<HTMLTextAreaElement>,
-		| "ctrlKey"
-		| "currentTarget"
-		| "key"
-		| "keyCode"
-		| "metaKey"
-		| "nativeEvent"
-		| "preventDefault"
-		| "stopPropagation"
-	>,
+	event: ResearchComposerKeyEvent,
 	actions: {
 		dismissible: boolean;
 		onChange: (value: string) => void;
