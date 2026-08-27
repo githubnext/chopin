@@ -476,6 +476,35 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 	await expect(childLink).toBeFocused();
 });
 
+test("an in-app child opens and submits its own comment composer", async ({ baseURL, join, page, room, seed }) => {
+	await seed(PARENT_SOURCE);
+	let childTitle = `Commentable child ${room.slice(0, 8)}`;
+	await seedChildChannel(
+		port(baseURL!),
+		room,
+		crypto.randomUUID(),
+		childTitle,
+		CHILD_SOURCE,
+	);
+	await join("ana");
+
+	await page.getByRole("complementary", { name: "Projects" })
+		.getByRole("link", { name: childTitle, exact: true })
+		.click();
+	let surface = page.getByRole("region", { name: `Child document: ${childTitle}` });
+	let passage = "This ordinary child has its own editable document, Decisions, and Conversation.";
+	await surface.getByRole("textbox", { name: "editable markdown" })
+		.getByText(passage, { exact: true })
+		.selectText();
+	await surface.getByRole("button", { name: "Comment on this passage", exact: true }).click();
+
+	let draft = surface.getByRole("dialog", { name: "New comment" });
+	await draft.getByPlaceholder("Comment on this passage…").fill("Keep this child passage.");
+	await draft.getByRole("button", { name: "Comment", exact: true }).click();
+	await expect(surface.getByRole("button", { name: /Comment on “This ordinary child/ }))
+		.toBeVisible();
+});
+
 test("a delayed sibling route removes the previous editable child immediately", async ({ baseURL, join, page, room, seed }) => {
 	await seed(PARENT_SOURCE);
 	let firstTitle = `First source ${room.slice(0, 8)}`;
