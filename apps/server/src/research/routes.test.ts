@@ -215,11 +215,99 @@ async function failInitial(context: Awaited<ReturnType<typeof setup>>) {
 	});
 }
 
+async function completedChildEvidence(context: Awaited<ReturnType<typeof setup>>) {
+	let child = await context.storage.channels.create({
+		id: crypto.randomUUID(),
+		repositoryId: context.channel.repositoryId,
+		repositoryOwner: context.channel.repositoryOwner,
+		repositoryName: context.channel.repositoryName,
+		parentChannelId: context.channel.id,
+		title: "Published research child",
+		createdBy: USER_ID,
+		now: context.now,
+	});
+	let legacy = await context.storage.research.start({
+		id: crypto.randomUUID(),
+		channelId: child.id,
+		title: "Legacy child research",
+		question: "Create a grandchild",
+		origin: "inline",
+		createdBy: USER_ID,
+		turnId: crypto.randomUUID(),
+		messageId: crypto.randomUUID(),
+		requestId: requestId(1),
+		idempotencyKey: "legacy-child-request",
+		fingerprint: "legacy-child-request",
+		now: context.now,
+		lease: context.lease,
+	});
+	let evidence = await context.jobs.enqueueUser({
+		channelId: child.id,
+		type: "research-evidence",
+		targetKey: `workspace:${legacy.workspace.id}:turn:${legacy.turn.id}:evidence`,
+		idempotencyKey: "legacy-child-evidence",
+		input: {
+			workspaceId: legacy.workspace.id,
+			turnId: legacy.turn.id,
+			query: legacy.turn.question,
+		},
+	});
+	await context.storage.research.linkJob({
+		channelId: child.id,
+		workspaceId: legacy.workspace.id,
+		turnId: legacy.turn.id,
+		role: "evidence",
+		jobId: evidence.job.id,
+		now: context.now,
+		lease: context.lease,
+	});
+	let [claimed] = await context.storage.jobs.claim({
+		channelId: child.id,
+		claimOwner: "completed-child-worker",
+		count: 1,
+		ttlMs: 30_000,
+		now: new Date(context.now.getTime() + 1),
+		lease: context.lease,
+	});
+	if (!claimed) throw new Error("child evidence job was not claimable");
+	let completed = await context.jobs.settle({
+		channelId: child.id,
+		jobId: claimed.id,
+		claimOwner: "completed-child-worker",
+		claimGeneration: claimed.claimGeneration,
+		artifact: {
+			workspaceId: legacy.workspace.id,
+			turnId: legacy.turn.id,
+			query: legacy.turn.question,
+			findings: ["The public release notes retain compatibility."],
+			sources: [{ title: "Release notes", url: "https://example.com/releases/v3" }],
+			model: "research-model",
+		},
+	});
+	return { child, legacy, completed };
+}
+
 function retryMutation(origin = "https://chopin.test"): RequestInit {
 	return { method: "POST", headers: { origin } };
 }
 
 describe("research workspace routes", () => {
+	it("reads completed legacy child evidence without reconciling new answer work", async () => {
+		let context = await setup();
+		let { child, legacy } = await completedChildEvidence(context);
+		let response = await context.router.handle(request(
+			`/api/channels/${child.id}/research-workspaces/${legacy.workspace.id}`,
+			context.cookie,
+		));
+		if (!response) throw new Error("research workspace route was not registered");
+
+		expect(response.status).toBe(200);
+		expect(await response.json()).toMatchObject({ workspace: { id: legacy.workspace.id } });
+		expect(await context.storage.research.get(child.id, legacy.workspace.id))
+			.toMatchObject({ turns: [{ evidenceJobId: expect.any(String), answerJobId: undefined }] });
+		expect((await context.jobs.list(child.id, 100))!.jobs).toHaveLength(1);
+	});
+
 	it("enforces authentication, exact origin, write access, and owner timing", async () => {
 		let context = await setup();
 		let path = `/api/channels/${context.channel.id}/research-workspaces`;

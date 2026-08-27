@@ -46,7 +46,114 @@ async function failInitialEvidence(context: Awaited<ReturnType<typeof setup>>) {
 	return claimed.id;
 }
 
+async function childEvidence(
+	context: Awaited<ReturnType<typeof setup>>,
+	complete = true,
+) {
+	let child = await context.storage.channels.create({
+		id: crypto.randomUUID(),
+		repositoryId: REPOSITORY_ID,
+		repositoryOwner: "octo-org",
+		repositoryName: "score",
+		parentChannelId: context.channelId,
+		title: "Published research child",
+		createdBy: context.userId,
+		now: context.advance(),
+	});
+	let legacy = await context.storage.research.start({
+		id: crypto.randomUUID(),
+		channelId: child.id,
+		title: "Legacy child research",
+		question: "Create a grandchild",
+		origin: "inline",
+		createdBy: context.userId,
+		turnId: crypto.randomUUID(),
+		messageId: crypto.randomUUID(),
+		requestId: requestId(1),
+		idempotencyKey: "legacy-child-request",
+		fingerprint: "legacy-child-request",
+		now: context.advance(),
+		lease: context.lease,
+	});
+	let evidence = await context.jobs.enqueueUser({
+		channelId: child.id,
+		type: "research-evidence",
+		targetKey: `workspace:${legacy.workspace.id}:turn:${legacy.turn.id}:evidence`,
+		idempotencyKey: "legacy-child-evidence",
+		input: {
+			workspaceId: legacy.workspace.id,
+			turnId: legacy.turn.id,
+			query: legacy.turn.question,
+		},
+	});
+	await context.storage.research.linkJob({
+		channelId: child.id,
+		workspaceId: legacy.workspace.id,
+		turnId: legacy.turn.id,
+		role: "evidence",
+		jobId: evidence.job.id,
+		now: context.advance(),
+		lease: context.lease,
+	});
+	if (!complete) return { child, legacy, evidence: evidence.job };
+	let [claimed] = await context.storage.jobs.claim({
+		channelId: child.id,
+		claimOwner: "completed-child-worker",
+		count: 1,
+		ttlMs: 30_000,
+		now: context.advance(),
+		lease: context.lease,
+	});
+	if (!claimed) throw new Error("child evidence job was not claimable");
+	let completed = await context.jobs.settle({
+		channelId: child.id,
+		jobId: claimed.id,
+		claimOwner: "completed-child-worker",
+		claimGeneration: claimed.claimGeneration,
+		artifact: evidenceArtifact(claimed),
+	});
+	return { child, legacy, evidence: completed.job };
+}
+
 describe("research workspace service", () => {
+	it("observes completed legacy child evidence without reconciling new answer work", async () => {
+		let context = await setup();
+		let { child, legacy } = await childEvidence(context);
+
+		expect(await context.service.reconcile(child.id, legacy.workspace.id)).toBe(true);
+		expect(await context.service.get(child.id, legacy.workspace.id))
+			.toMatchObject({ workspace: { id: legacy.workspace.id } });
+		expect(await context.storage.research.get(child.id, legacy.workspace.id))
+			.toMatchObject({ turns: [{ evidenceJobId: expect.any(String), answerJobId: undefined }] });
+		expect((await context.jobs.list(child.id, 100))!.jobs).toHaveLength(1);
+	});
+
+	it("does not advance completed legacy child evidence from job changes", async () => {
+		let context = await setup();
+		let { child, legacy, evidence } = await childEvidence(context);
+
+		await context.service.jobChanged(evidence);
+		expect(await context.storage.research.get(child.id, legacy.workspace.id))
+			.toMatchObject({ turns: [{ evidenceJobId: expect.any(String), answerJobId: undefined }] });
+		expect((await context.jobs.list(child.id, 100))!.jobs).toHaveLength(1);
+	});
+
+	it("keeps active legacy child research cancellable and readable", async () => {
+		let context = await setup();
+		let { child, legacy, evidence } = await childEvidence(context, false);
+
+		expect(await context.service.get(child.id, legacy.workspace.id))
+			.toMatchObject({ workspace: { id: legacy.workspace.id } });
+		expect(
+			await context.service.cancelRequest({
+				channelId: child.id,
+				workspaceId: legacy.workspace.id,
+			}),
+		).toMatchObject({ id: legacy.workspace.id, stage: "cancelled" });
+		expect(await context.jobs.get(child.id, evidence.id))
+			.toMatchObject({ job: { state: "cancelled" } });
+	});
+
 	it("starts one inline request and schedules its initial turn immediately", async () => {
 		let context = await setup();
 		let brief = "  Compare API v2 with v3.\nExplain  migration risks.  ";

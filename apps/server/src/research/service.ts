@@ -664,7 +664,12 @@ export class ResearchWorkspaceService {
 		return this.#exclusive(
 			channelId,
 			workspaceId,
-			async () => await this.#reconciled(channelId, workspaceId) !== undefined,
+			async () => {
+				if (!await this.#isTopLevelChannel(channelId)) {
+					return await this.#storage.research.get(channelId, workspaceId) !== undefined;
+				}
+				return await this.#reconciled(channelId, workspaceId) !== undefined;
+			},
 		);
 	}
 
@@ -832,6 +837,7 @@ export class ResearchWorkspaceService {
 			|| (job.type !== "research-evidence" && job.type !== "research-answer")
 			|| !this.#validId(job.channelId)
 		) return;
+		if (!await this.#isTopLevelChannel(job.channelId)) return;
 		let linked = await this.#storage.research.findTurnByJob(job.channelId, job.id);
 		if (!linked) return;
 		await this.#exclusive(job.channelId, linked.workspaceId, async () => {
@@ -1347,13 +1353,16 @@ export class ResearchWorkspaceService {
 	}
 
 	async #requireTopLevelChannel(channelId: string): Promise<void> {
-		let channel = await this.#storage.channels.get(channelId);
-		if (channel?.parentChannelId) {
+		if (!await this.#isTopLevelChannel(channelId)) {
 			throw new ResearchWorkspaceError(
 				"invalid-request",
 				"Child documents cannot start research.",
 			);
 		}
+	}
+
+	async #isTopLevelChannel(channelId: string): Promise<boolean> {
+		return !(await this.#storage.channels.get(channelId))?.parentChannelId;
 	}
 
 	async #published(workspace: ResearchWorkspace): Promise<void> {
