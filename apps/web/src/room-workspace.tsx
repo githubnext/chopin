@@ -224,7 +224,8 @@ export function RoomWorkspace(
 		[conversationActive],
 	);
 	let updateMetadata = useCallback((next: WorkspaceMetadata) => {
-		let metadata = newestDocumentMetadata(metadataRef.current, next);
+		let previous = metadataRef.current;
+		let metadata = newestDocumentMetadata(previous, next);
 		metadataRef.current = metadata;
 		setMetadata(metadata);
 		let currentRepository = repositoryRef.current;
@@ -238,6 +239,13 @@ export function RoomWorkspace(
 			onMetadataChanged(metadata);
 			return;
 		}
+		let previousPath = documentPath(
+			currentRepository.owner,
+			currentRepository.name,
+			previous.slug,
+		);
+		let channelPath = `/channels/${encodeURIComponent(room)}`;
+		if (location.pathname !== previousPath && location.pathname !== channelPath) return;
 		let path = documentPath(currentRepository.owner, currentRepository.name, metadata.slug);
 		if (location.pathname !== path) {
 			history.replaceState(history.state, "", `${path}${location.search}${location.hash}`);
