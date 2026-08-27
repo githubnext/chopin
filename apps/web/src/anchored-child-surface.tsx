@@ -1,6 +1,8 @@
 import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
 import { useLayoutEffect, useRef } from "react";
 
+export { childCloseAction, childHistoryState } from "./child-history";
+
 import type { ReactNode } from "react";
 
 export type ChildPresentation = "closed" | "open" | "closing";
@@ -18,28 +20,6 @@ export function anchoredChildPaths(parent: ParentDocumentAddress, childSlug?: st
 			: undefined,
 		parent: documentPath(parent.owner, parent.repository, parent.slug),
 	};
-}
-
-export function childHistoryState(state: unknown, parent: string): Record<string, unknown> {
-	return {
-		...(typeof state === "object" && state !== null ? state : {}),
-		chopinChildParent: parent,
-	};
-}
-
-export function childCloseAction(
-	state: unknown,
-	parent: string,
-): { type: "back" } | { type: "replace"; destination: string } {
-	if (
-		typeof state === "object" && state !== null
-		&& "chopinChildParent" in state
-		&& typeof state.chopinChildParent === "string"
-	) {
-		let markedParent = new URL(state.chopinChildParent, "http://chopin.local");
-		if (markedParent.pathname === parent) return { type: "back" };
-	}
-	return { type: "replace", destination: parent };
 }
 
 export function rebaseChildHistoryState(

@@ -9,9 +9,12 @@ import {
 	rebaseChildHistoryState,
 } from "./anchored-child-surface";
 import { readDocumentRecovery, rememberChannel } from "./channel-recovery";
+import { prepareDocumentLoad } from "./document-loader";
+import { documentRouteIdentity } from "./document-route-swap";
 
 import type { ComponentType } from "react";
 import type { ChildPresentation } from "./anchored-child-surface";
+import type { DocumentRouteIdentity } from "./document-route-swap";
 import type { HostedRoute } from "./hosted";
 import type { WorkspaceSurface } from "./workspace-model";
 
@@ -61,8 +64,8 @@ export default function DocumentWorkspaceHost(
 	{
 		agent,
 		Failure,
+		layerKey,
 		Loading,
-		loadDocument,
 		onCanonicalPath,
 		onChildClose,
 		onParentRestored,
@@ -78,15 +81,19 @@ export default function DocumentWorkspaceHost(
 			onRetry?: () => void;
 			repository?: Pick<Api.Repository, "owner" | "name" | "fullName">;
 		}>;
+		layerKey: DocumentRouteIdentity;
 		Loading: ComponentType<{ label?: string }>;
-		loadDocument: (
-			address: { owner: string; repository: string; slug: string; parentSlug?: string },
-			signal: AbortSignal,
-		) => Promise<{ detail: Api.ChannelDetail; parent?: Api.ChannelDetail; pathname: string }>;
-		onCanonicalPath: (pathname: string) => void;
+		onCanonicalPath: (key: DocumentRouteIdentity, pathname: string) => void;
 		onChildClose: (parentPath: string) => void;
 		onParentRestored: (parentId: string) => void;
-		onReady: (pathname?: string, channel?: Api.Channel) => void;
+		onReady: (
+			key: DocumentRouteIdentity,
+			resolution?: {
+				canonicalPath: string;
+				channel: Api.Channel;
+				routeKey: DocumentRouteIdentity;
+			},
+		) => void;
 		retryable: (error: unknown) => boolean;
 		route: DocumentRoute;
 		user: Api.User;
@@ -126,7 +133,7 @@ export default function DocumentWorkspaceHost(
 		};
 		void (async () => {
 			if (route.page === "child" && !current) {
-				let prepared = await loadDocument({
+				let prepared = await prepareDocumentLoad({
 					owner: route.owner,
 					repository: route.repository,
 					slug: route.parentSlug,
@@ -142,7 +149,7 @@ export default function DocumentWorkspaceHost(
 				setLoaded(updated);
 				setPresentation("open");
 			}
-			return await loadDocument(address, controller.signal);
+			return await prepareDocumentLoad(address, controller.signal);
 		})().then(prepared => {
 			if (!prepared) return;
 			if (!active) return;
@@ -172,18 +179,36 @@ export default function DocumentWorkspaceHost(
 			} else if (previous?.child) {
 				setPresentation(current => childPresentation(current, "parent", sameParent));
 			}
-			onReady(prepared.pathname, (child ?? parent).channel);
+			let routeKey = child
+				? documentRouteIdentity({
+					childSlug: child.channel.slug,
+					owner: child.repository.owner,
+					page: "child",
+					parentSlug: parent.channel.slug,
+					repository: child.repository.name,
+				})
+				: documentRouteIdentity({
+					owner: parent.repository.owner,
+					page: "document",
+					repository: parent.repository.name,
+					slug: parent.channel.slug,
+				});
+			onReady(layerKey, {
+				canonicalPath: prepared.pathname,
+				channel: (child ?? parent).channel,
+				routeKey,
+			});
 		}, reason => {
 			if (active) {
 				setError(reason);
-				onReady();
+				onReady(layerKey);
 			}
 		});
 		return () => {
 			active = false;
 			controller.abort();
 		};
-	}, [loadDocument, onReady, retry, route, user.id]);
+	}, [layerKey, onReady, retry, route, user.id]);
 
 	useLayoutEffect(() => {
 		let current = loadedRef.current;
@@ -281,8 +306,8 @@ export default function DocumentWorkspaceHost(
 		if (kind === "parent" && routeRef.current.page === "child") {
 			history.replaceState(rebaseChildHistoryState(history.state, paths.parent), "");
 		}
-		onCanonicalPath(pathname);
-	}, [onCanonicalPath]);
+		onCanonicalPath(layerKey, pathname);
+	}, [layerKey, onCanonicalPath]);
 	let parentMetadataChanged = useCallback(
 		(metadata: Metadata) => metadataChanged("parent", metadata),
 		[metadataChanged],
