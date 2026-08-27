@@ -291,8 +291,8 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	}, [preview, store]);
 
 	useEffect(() => {
-		setHost(document.querySelector<HTMLElement>(".plan-document") ?? undefined);
-	}, []);
+		setHost(editor.getRootElement()?.closest<HTMLElement>(".plan-document") ?? undefined);
+	}, [editor]);
 
 	useEffect(() => {
 		let query = matchMedia(COARSE_POINTER_QUERY);
