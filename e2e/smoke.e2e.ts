@@ -212,17 +212,31 @@ test("an unauthenticated visitor is asked to sign in", async ({ page }) => {
 	await expect(content(page)).toHaveCount(0);
 });
 
-test("clicking an empty plan puts the caret at its first writing position", async ({ join }) => {
+test("an empty plan puts its muted prompt at the first writing position", async ({ join }) => {
 	let page = await join("ana");
+	await page.setViewportSize({ width: 1800, height: 900 });
 	let editor = content(page);
 	let paragraph = editor.locator(":scope > p");
+	let prompt = page.getByText("Start writing, or ask Chopin to plan", { exact: true });
 
 	// The prompt is a sibling overlay. The editable tree needs its own empty
-	// block so a click has one stable first writing position.
+	// block, and the two must share one stable first writing position.
 	await expect(paragraph).toHaveCount(1);
 	let paragraphBox = await paragraph.boundingBox();
+	let promptBox = await prompt.boundingBox();
+	let colors = await prompt.evaluate(element => {
+		let reference = document.createElement("span");
+		reference.style.color = "var(--color-text-quaternary)";
+		document.body.append(reference);
+		let muted = getComputedStyle(reference).color;
+		reference.remove();
+
+		return { actual: getComputedStyle(element).color, muted };
+	});
 
 	expect(paragraphBox).not.toBeNull();
+	expect(promptBox).not.toBeNull();
+	expect(promptBox!.x).toBeCloseTo(paragraphBox!.x, 1);
 	await page.mouse.click(paragraphBox!.x + 120, paragraphBox!.y + paragraphBox!.height / 2);
 
 	let selection = await editor.evaluate(element => {
@@ -237,6 +251,7 @@ test("clicking an empty plan puts the caret at its first writing position", asyn
 
 	expect(selection.anchorIsParagraph).toBe(true);
 	expect(selection.anchorOffset).toBe(0);
+	expect(colors.actual).toBe(colors.muted);
 	await page.keyboard.type("x");
 	let text = await editor.evaluate(element => {
 		let paragraph = element.querySelector("p")!;
