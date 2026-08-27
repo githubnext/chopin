@@ -15,6 +15,7 @@ import {
 } from "./workspace-model";
 import conversationCloseIcon from "./assets/icons/conversation-close.svg";
 import conversationIcon from "./assets/icons/conversation.svg";
+import navigationXmark from "./assets/icons/navigation-xmark.svg";
 import { ResizeHandle, usePaneWidth } from "./resizable-pane";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
@@ -103,6 +104,10 @@ export type WorkspaceProps = {
 	decisions: ReactNode;
 	controls: ReactNode;
 	ids: WorkspaceIds;
+	childClose?: {
+		label: string;
+		onClose: () => void;
+	};
 	mode: WorkspaceMode;
 	state: WorkspaceState;
 	view: "plan" | "decisions";
@@ -113,6 +118,7 @@ export type WorkspaceProps = {
 	conversationActivity: { unread: number; busy: boolean };
 	identity?: string;
 	profile: WorkspaceProfile;
+	paperObscured?: boolean;
 };
 
 export function ConversationToggle(
@@ -214,6 +220,7 @@ function destinationLabel(
 export function Workspace(
 	{
 		chat,
+		childClose,
 		controls,
 		ids,
 		conversationActivity,
@@ -224,6 +231,7 @@ export function Workspace(
 		onConversationOpen,
 		onDesktopConversationOpen,
 		onDestination,
+		paperObscured,
 		plan,
 		state,
 		profile,
@@ -303,11 +311,14 @@ export function Workspace(
 			{header}
 
 			<div
+				aria-hidden={paperObscured || undefined}
 				className={`workspace-frame relative flex min-h-0 flex-1 ${
 					mode === "split"
 						? "mx-3 mb-3 overflow-hidden rounded-[12px] bg-page shadow-raised ring-hairline"
 						: "pb-2"
 				}`}
+				data-paper-obscured={paperObscured || undefined}
+				inert={paperObscured}
 			>
 				{/* `hidden` preserves pane state and subscriptions after its closing transition. */}
 				{chat && (
@@ -372,7 +383,8 @@ export function Workspace(
 					</aside>
 				)}
 
-				{chat && mode === "split" && !presentation.conversationVisible && (
+				{chat && mode === "split" && !presentation.conversationVisible
+					&& profile.surface !== "child" && (
 					<div className="absolute right-2.5 top-2.5 z-20">
 						<ConversationToggle
 							activity={conversationActivity}
@@ -400,6 +412,35 @@ export function Workspace(
 								data-document-toolbar
 							>
 								{controls}
+								{profile.surface === "child" && (
+									<div className="ml-auto flex shrink-0 items-center">
+										{chat && !presentation.conversationVisible && (
+											<ConversationToggle
+												activity={conversationActivity}
+												buttonRef={edgeTab}
+												controls={ids.pane.chat}
+												onToggle={showDesktopConversation}
+												open={false}
+											/>
+										)}
+										{childClose && (
+											<button
+												aria-label={`Close ${childClose.label}`}
+												className="btn btn-icon btn-ghost -mr-1 shrink-0"
+												data-child-document-close
+												onClick={childClose.onClose}
+												type="button"
+											>
+												<img
+													alt=""
+													aria-hidden="true"
+													className="size-[18px]"
+													src={navigationXmark}
+												/>
+											</button>
+										)}
+									</div>
+								)}
 							</div>
 						)}
 						<div
@@ -443,7 +484,7 @@ export function Workspace(
 			{mode !== "split" && (
 				<nav
 					aria-label="Workspace view"
-					className="workspace-navigation hairline-t grid grid-cols-3 shrink-0 bg-ground p-1"
+					className="workspace-navigation hairline-t grid shrink-0 grid-cols-3 bg-ground p-1"
 				>
 					{destinations.map(destination => {
 						let active = destination === "conversation"

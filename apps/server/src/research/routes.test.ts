@@ -149,6 +149,7 @@ async function setup() {
 	return {
 		storage,
 		service,
+		jobs,
 		router,
 		access,
 		channel,
@@ -282,6 +283,43 @@ describe("research workspace routes", () => {
 			context.cookie,
 		));
 		expect(read?.status).toBe(200);
+	});
+
+	it("rejects child research before owner setup or durable work", async () => {
+		let context = await setup();
+		let child = await context.storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: context.channel.repositoryId,
+			repositoryOwner: context.channel.repositoryOwner,
+			repositoryName: context.channel.repositoryName,
+			parentChannelId: context.channel.id,
+			title: "Published research child",
+			createdBy: USER_ID,
+			now: context.now,
+		});
+		let response = await context.router.handle(request(
+			`/api/channels/${child.id}/research-requests`,
+			context.cookie,
+			mutation({ question: "Create a grandchild", requestId: requestId(1) }),
+		));
+		if (!response) throw new Error("research create route was not registered");
+		let body = await response.json() as { error?: string };
+		let durable = await context.storage.research.list(child.id, 100);
+		let jobs = (await context.jobs.list(child.id, 100))?.jobs ?? [];
+
+		expect({
+			status: response.status,
+			error: body.error,
+			owners: context.owners,
+			requests: durable.length,
+			jobs: jobs.length,
+		}).toEqual({
+			status: 400,
+			error: "invalid research workspace request",
+			owners: [],
+			requests: 0,
+			jobs: 0,
+		});
 	});
 
 	it("starts inline research without replacing private workspace creation", async () => {

@@ -16,6 +16,7 @@ import {
 } from "@chopin/editor";
 
 import bookBookmarkIcon from "./assets/figma/navigation/book-bookmark.svg";
+import navigationChevronRight from "./assets/icons/navigation-chevron-right.svg";
 import chevronDownIcon from "./assets/icons/tool-chevron-down.svg";
 import { Chat } from "./chat/chat";
 import { rememberChannel } from "./channel-recovery";
@@ -56,12 +57,14 @@ const QUESTION_MOTION = {
 export function Header(
 	{
 		archivedAt,
+		breadcrumb,
 		canManage,
 		members,
 		label,
 		onAction,
 	}: {
 		archivedAt?: string;
+		breadcrumb?: HostedWorkspaceProps["breadcrumb"];
 		canManage: boolean;
 		members: Session.Member[];
 		label: string;
@@ -70,13 +73,38 @@ export function Header(
 ) {
 	let people = peopleHere(members);
 	return (
-		<header className="room-header relative flex min-h-12 shrink-0 flex-nowrap items-center px-2 py-2 sm:h-[calc(3rem+env(safe-area-inset-top))] sm:px-5 sm:py-0 lg:h-[calc(50px+env(safe-area-inset-top))]">
+		<header className="room-header relative flex shrink-0 flex-nowrap items-center px-2 py-2 sm:px-5 sm:py-0">
 			<div
 				aria-label={`Document: ${label}`}
 				className="flex min-w-0 flex-1 items-center gap-0.5"
 			>
 				<NavigationIcon className="opacity-50" src={bookBookmarkIcon} />
-				{canManage
+				{breadcrumb
+					? (
+						<>
+							<button
+								aria-label={`Return to ${label}`}
+								className="document-parent-breadcrumb btn btn-ghost min-w-0"
+								onClick={breadcrumb.onBack}
+								type="button"
+							>
+								<span className="truncate">{label}</span>
+							</button>
+							<img
+								alt=""
+								aria-hidden="true"
+								className="document-breadcrumb-separator size-[14px] shrink-0"
+								src={navigationChevronRight}
+							/>
+							<span
+								aria-label={`Child document: ${breadcrumb.childLabel}`}
+								className="document-child-breadcrumb truncate"
+							>
+								{breadcrumb.childLabel}
+							</span>
+						</>
+					)
+					: canManage
 					? (
 						<DocumentActionsMenu
 							channel={{ archivedAt, title: label }}
@@ -129,6 +157,8 @@ export function RoomWorkspace(
 	{
 		agent = true,
 		archivedAt,
+		breadcrumb,
+		childClose,
 		canEdit = true,
 		canManage,
 		description,
@@ -138,6 +168,7 @@ export function RoomWorkspace(
 		onMetadataChanged,
 		repository,
 		room,
+		paperObscured,
 		slug,
 		surface = "document",
 		updatedAt,
@@ -418,6 +449,7 @@ export function RoomWorkspace(
 
 	return (
 		<Workspace
+			childClose={childClose}
 			chat={
 				<Chat
 					active={conversationActive}
@@ -436,6 +468,7 @@ export function RoomWorkspace(
 			header={
 				<Header
 					archivedAt={workspaceArchivedAt}
+					breadcrumb={breadcrumb}
 					canManage={effectiveCanManage}
 					members={members}
 					label={metadata.title}
@@ -488,6 +521,7 @@ export function RoomWorkspace(
 			}
 			state={workspace}
 			profile={profile}
+			paperObscured={paperObscured}
 			unanswered={unanswered}
 			view={view}
 		/>

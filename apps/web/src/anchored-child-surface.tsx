@@ -104,18 +104,16 @@ export function AnchoredChildSurface(
 		child,
 		childLabel,
 		focusKey,
-		onClose,
+		onBackdropClick,
 		parent,
-		parentLabel,
 		parentRef,
 		presentation,
 	}: {
 		child?: ReactNode;
 		childLabel: string;
 		focusKey?: string;
-		onClose: () => void;
+		onBackdropClick?: () => void;
 		parent: ReactNode;
-		parentLabel: string;
 		parentRef?: Ref<HTMLDivElement>;
 		presentation: ChildPresentation;
 	},
@@ -138,14 +136,17 @@ export function AnchoredChildSurface(
 			data-child-presentation={presentation}
 			data-child-visible={childVisible || undefined}
 		>
-			<div
-				aria-hidden={childVisible || undefined}
-				className="anchored-child-parent"
-				inert={childVisible}
-				ref={parentRef}
-			>
+			<div className="anchored-child-parent" ref={parentRef}>
 				{parent}
 			</div>
+			{presentation === "open" && onBackdropClick && (
+				<div
+					aria-hidden="true"
+					className="anchored-child-backdrop"
+					data-child-backdrop
+					onClick={onBackdropClick}
+				/>
+			)}
 			{childVisible && (
 				<section
 					aria-label={`Child document: ${childLabel}`}
@@ -153,15 +154,6 @@ export function AnchoredChildSurface(
 					ref={surface}
 					tabIndex={-1}
 				>
-					<button
-						aria-label={`Back to ${parentLabel}`}
-						className="anchored-child-back btn btn-icon btn-ghost"
-						onClick={onClose}
-						title={`Back to ${parentLabel}`}
-						type="button"
-					>
-						<span aria-hidden="true">←</span>
-					</button>
 					{child}
 				</section>
 			)}

@@ -1,4 +1,25 @@
 /* The global Project navigation is deliberately quieter than the raised document. */
+:root {
+	--document-shell-header-height: calc(3rem + env(safe-area-inset-top));
+}
+
+.room-header {
+	height: var(--document-shell-header-height);
+	min-height: var(--document-shell-header-height);
+}
+
+@media (min-width: 1024px) {
+	:root {
+		--document-shell-header-height: calc(50px + env(safe-area-inset-top));
+	}
+}
+
+@media (max-width: 639px) {
+	:root[data-plan-coarse-pointer] {
+		--document-shell-header-height: calc(3.75rem + env(safe-area-inset-top));
+	}
+}
+
 .navigation-shell {
 	position: relative;
 	display: flex;
@@ -26,33 +47,48 @@
 	min-height: 0;
 }
 
-.anchored-child-parent {
+.anchored-child-parent .workspace-frame {
 	transition:
-		transform 240ms cubic-bezier(0.16, 1, 0.3, 1),
-		opacity 240ms cubic-bezier(0.16, 1, 0.3, 1);
+		filter 240ms cubic-bezier(0.16, 1, 0.3, 1),
+		opacity 240ms cubic-bezier(0.16, 1, 0.3, 1),
+		transform 240ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.anchored-child-host[data-child-visible] .anchored-child-parent {
-	transform: translateY(3px) scale(0.985);
-	opacity: 0.58;
+.anchored-child-host[data-child-visible] .anchored-child-parent .workspace-frame {
+	filter: blur(3px);
+	transform: scale(0.99);
+	transform-origin: center;
+	opacity: 0.68;
 }
 
-.anchored-child-host[data-child-presentation="closing"] .anchored-child-parent {
+.anchored-child-host[data-child-presentation="closing"] .anchored-child-parent .workspace-frame {
+	filter: none;
 	transform: none;
 	opacity: 1;
 	transition-duration: 170ms;
 	transition-timing-function: cubic-bezier(0.55, 0, 1, 0.45);
 }
 
+.anchored-child-backdrop {
+	position: absolute;
+	z-index: 30;
+	inset: var(--document-shell-header-height) 0 0;
+	background: transparent;
+	cursor: pointer;
+	touch-action: manipulation;
+}
+
 .anchored-child-surface {
 	position: absolute;
 	z-index: 40;
-	inset: 10px 12px 12px;
+	/* The centered 0.99 parent scale withdraws 0.5% from each edge. */
+	inset: calc(var(--document-shell-header-height) + 12px + 0.5%) calc(24px + 0.5%)
+		calc(24px + 0.5%);
 	overflow: hidden;
 	border: var(--edge-width) solid var(--color-edge);
 	border-radius: var(--radius-xl);
-	background: var(--color-ground);
-	box-shadow: var(--shadow-raised);
+	background: var(--color-page);
+	box-shadow: var(--shadow-overlay);
 	transform-origin: 50% 75%;
 	animation: anchored-child-enter 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -61,15 +97,18 @@
 	animation: anchored-child-exit 170ms cubic-bezier(0.55, 0, 1, 0.45) both;
 }
 
-.anchored-child-back {
-	position: absolute;
-	z-index: 50;
-	top: calc(0.5rem + env(safe-area-inset-top));
-	left: 10px;
+.anchored-child-surface .room-header {
+	display: none;
 }
 
-.anchored-child-surface .room-header {
-	padding-left: 48px;
+.anchored-child-surface > [data-workspace-surface="child"] {
+	background: transparent;
+}
+
+.anchored-child-surface .workspace-frame {
+	margin: 0;
+	border-radius: inherit;
+	box-shadow: none;
 }
 
 @keyframes anchored-child-enter {
@@ -96,17 +135,20 @@
 
 @media (max-width: 1023px) {
 	.anchored-child-surface {
-		inset: 0;
+		inset: var(--document-shell-header-height) 0 0;
 		border: 0;
 		border-radius: 0;
+		box-shadow: none;
 	}
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.anchored-child-parent,
-	.anchored-child-host[data-child-visible] .anchored-child-parent {
+	.anchored-child-parent .workspace-frame {
+		transition: none;
+	}
+
+	.anchored-child-host[data-child-visible] .anchored-child-parent .workspace-frame {
 		transform: none;
-		transition-duration: 120ms;
 	}
 
 	.anchored-child-surface {
@@ -424,7 +466,7 @@
 	position: absolute;
 	inset-block: 0;
 	right: -2px;
-	z-index: 10;
+	z-index: 50;
 	width: 4px;
 	cursor: col-resize;
 }
@@ -461,7 +503,7 @@
 .navigation-drawer {
 	position: fixed;
 	inset: 0;
-	z-index: 40;
+	z-index: 50;
 }
 
 .motion-drawer {
@@ -736,6 +778,28 @@
 .document-title-trigger:hover:not(:disabled),
 .document-title-trigger:focus-visible {
 	background: var(--color-hover);
+}
+
+.document-parent-breadcrumb {
+	min-width: 0;
+	flex: 0 1 auto;
+	justify-content: flex-start;
+	padding-inline: 4px;
+	font-size: var(--text-sm);
+	font-weight: 500;
+	color: var(--color-text-secondary);
+}
+
+.document-breadcrumb-separator {
+	opacity: 0.45;
+}
+
+.document-child-breadcrumb {
+	min-width: 0;
+	flex: 1 1 auto;
+	font-size: var(--text-sm);
+	font-weight: 400;
+	color: var(--color-text-primary);
 }
 
 @media (prefers-reduced-motion: reduce) {

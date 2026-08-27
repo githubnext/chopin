@@ -66,6 +66,11 @@ describe("adaptive workspace", () => {
 			research: true,
 			surface: "document",
 		});
+		expect(workspaceDestinations()).toEqual([
+			"conversation",
+			"plan",
+			"decisions",
+		]);
 	});
 
 	it("keeps child pane ids distinct from the mounted parent", () => {

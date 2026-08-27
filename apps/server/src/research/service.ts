@@ -418,6 +418,13 @@ export class ResearchWorkspaceService {
 	}
 
 	async #start(input: ValidatedStartResearchRequest): Promise<StartResearchRequestResult> {
+		let channel = await this.#storage.channels.get(input.channelId);
+		if (channel?.parentChannelId) {
+			throw new ResearchWorkspaceError(
+				"invalid-request",
+				"Child documents cannot start research.",
+			);
+		}
 		this.#requireDefinition("research-evidence");
 		this.#requireDefinition("research-answer");
 		let requestFingerprint = fingerprint(
