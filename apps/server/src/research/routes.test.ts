@@ -322,6 +322,85 @@ describe("research workspace routes", () => {
 		});
 	});
 
+	it("rejects legacy child research drafts before durable work", async () => {
+		let context = await setup();
+		let child = await context.storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: context.channel.repositoryId,
+			repositoryOwner: context.channel.repositoryOwner,
+			repositoryName: context.channel.repositoryName,
+			parentChannelId: context.channel.id,
+			title: "Published research child",
+			createdBy: USER_ID,
+			now: context.now,
+		});
+		let response = await context.router.handle(request(
+			`/api/channels/${child.id}/research-workspaces`,
+			context.cookie,
+			mutation({ question: "Create a grandchild", requestId: requestId(2) }),
+		));
+		if (!response) throw new Error("research create route was not registered");
+		let body = await response.json() as { error?: string };
+		let durable = await context.storage.research.list(child.id, 100);
+
+		expect({ status: response.status, error: body.error, requests: durable.length }).toEqual({
+			status: 400,
+			error: "invalid research workspace request",
+			requests: 0,
+		});
+	});
+
+	it("rejects confirmation of legacy child research before owner setup or jobs", async () => {
+		let context = await setup();
+		let child = await context.storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: context.channel.repositoryId,
+			repositoryOwner: context.channel.repositoryOwner,
+			repositoryName: context.channel.repositoryName,
+			parentChannelId: context.channel.id,
+			title: "Published research child",
+			createdBy: USER_ID,
+			now: context.now,
+		});
+		let legacy = await context.storage.research.create({
+			id: crypto.randomUUID(),
+			channelId: child.id,
+			title: "Legacy child research",
+			proposedQuestion: "Create a grandchild",
+			origin: "sidebar",
+			createdBy: USER_ID,
+			idempotencyKey: "legacy-child-draft",
+			fingerprint: "legacy-child-draft",
+			now: context.now,
+			lease: context.lease,
+		});
+		let response = await context.router.handle(request(
+			`/api/channels/${child.id}/research-workspaces/${legacy.workspace.id}/confirm`,
+			context.cookie,
+			mutation({ query: "Create a grandchild", requestId: requestId(3) }),
+		));
+		if (!response) throw new Error("research confirm route was not registered");
+		let body = await response.json() as { error?: string };
+		let stored = await context.storage.research.get(child.id, legacy.workspace.id);
+		let jobs = (await context.jobs.list(child.id, 100))?.jobs ?? [];
+
+		expect({
+			status: response.status,
+			error: body.error,
+			owners: context.owners,
+			confirmed: stored?.workspace.confirmedQuery,
+			turns: stored?.turns.length,
+			jobs: jobs.length,
+		}).toEqual({
+			status: 400,
+			error: "invalid research workspace request",
+			owners: [],
+			confirmed: undefined,
+			turns: 0,
+			jobs: 0,
+		});
+	});
+
 	it("starts inline research without replacing private workspace creation", async () => {
 		let context = await setup();
 		let draft = await create(context);

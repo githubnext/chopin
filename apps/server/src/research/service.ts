@@ -418,13 +418,7 @@ export class ResearchWorkspaceService {
 	}
 
 	async #start(input: ValidatedStartResearchRequest): Promise<StartResearchRequestResult> {
-		let channel = await this.#storage.channels.get(input.channelId);
-		if (channel?.parentChannelId) {
-			throw new ResearchWorkspaceError(
-				"invalid-request",
-				"Child documents cannot start research.",
-			);
-		}
+		await this.#requireTopLevelChannel(input.channelId);
 		this.#requireDefinition("research-evidence");
 		this.#requireDefinition("research-answer");
 		let requestFingerprint = fingerprint(
@@ -501,6 +495,7 @@ export class ResearchWorkspaceService {
 			throw new ResearchWorkspaceError("invalid-request", "Research draft origin is invalid.");
 		}
 
+		await this.#requireTopLevelChannel(channelId);
 		let stored = await this.#storage.research.create({
 			id: this.#newId("Workspace id"),
 			channelId,
@@ -531,6 +526,7 @@ export class ResearchWorkspaceService {
 		let durableRequestId = requestId(input.requestId);
 		let confirmedBy = opaqueId(input.confirmedBy, "Confirming member id");
 		let confirmedByHandle = handle(input.confirmedByHandle);
+		await this.#requireTopLevelChannel(channelId);
 		let requestFingerprint = fingerprint("research-confirm", {
 			workspaceId,
 			query,
@@ -1346,6 +1342,16 @@ export class ResearchWorkspaceService {
 	#requireDefinition(type: "research-evidence" | "research-answer"): void {
 		if (this.#hasDefinition(type)) return;
 		throw new ResearchWorkspaceError("not-ready", "Research execution is unavailable.");
+	}
+
+	async #requireTopLevelChannel(channelId: string): Promise<void> {
+		let channel = await this.#storage.channels.get(channelId);
+		if (channel?.parentChannelId) {
+			throw new ResearchWorkspaceError(
+				"invalid-request",
+				"Child documents cannot start research.",
+			);
+		}
 	}
 
 	async #published(workspace: ResearchWorkspace): Promise<void> {
