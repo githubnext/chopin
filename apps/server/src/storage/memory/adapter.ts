@@ -1,5 +1,6 @@
 import { conflict, missing } from "../errors";
 import { documentSlug, documentSlugCandidate } from "../../channels/slug";
+import { availableChannelTitle } from "../../channels/title";
 import { MemoryBackgroundJobStore } from "./jobs";
 import { MemoryResearchWorkspaceStore } from "./research";
 
@@ -296,7 +297,16 @@ export class MemoryStorage implements StorageAdapter {
 					return found ? channel(found) : undefined;
 				},
 				job: (channelId, jobId) => this.#jobs.detail(channelId, jobId),
-				createChannel: input => this.#createChannel(input),
+				createAvailableChannel: input =>
+					this.#createChannel({
+						...input,
+						title: availableChannelTitle(
+							input.title,
+							[...this.#channels.values()]
+								.filter(channel => channel.repositoryId === input.repositoryId)
+								.map(channel => channel.title),
+						),
+					}),
 			}),
 		assertLease: held => this.#assertLease(held),
 	});

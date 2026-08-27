@@ -47,7 +47,7 @@ type Options = {
 		execute: (access: {
 			channel: (channelId: string) => ChannelRecord | undefined;
 			job: (channelId: string, jobId: string) => BackgroundJobDetail | undefined;
-			createChannel: (input: CreateChannel) => ChannelRecord;
+			createAvailableChannel: (input: CreateChannel) => ChannelRecord;
 		}) => T,
 	) => T;
 	assertLease: (lease: Lease) => void;
@@ -597,7 +597,7 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 					);
 				}
 				let now = timestamp(input.now, "publication time");
-				let child = access.createChannel({
+				let child = access.createAvailableChannel({
 					id: deterministicChannelId(currentParent.repositoryId, found.id),
 					repositoryId: currentParent.repositoryId,
 					repositoryOwner: currentParent.repositoryOwner,

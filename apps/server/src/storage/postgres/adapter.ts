@@ -1,6 +1,7 @@
 import { SQL } from "bun";
 
 import { documentSlug, documentSlugCandidate } from "../../channels/slug";
+import { availableChannelTitle } from "../../channels/title";
 import { conflict, corrupt, missing, StorageError, unavailable } from "../errors";
 import { migrate, verifyMigrations } from "./migrations";
 import { PostgresNavigationStore } from "./navigation";
@@ -466,7 +467,7 @@ export class PostgresStorage implements StorageAdapter {
 				await transaction`SELECT pg_advisory_xact_lock(2043237432)`;
 				await this.#assertLease(transaction, lease);
 			},
-			(transaction, input) => this.#createChannelInTransaction(transaction, input),
+			(transaction, input) => this.#createAvailableChannelInTransaction(transaction, input),
 		);
 	}
 
@@ -664,6 +665,7 @@ export class PostgresStorage implements StorageAdapter {
 		transaction: TransactionSQL,
 		input: CreateChannel,
 	): Promise<ChannelRecord> {
+		await this.#lockChannelTitles(transaction, input.repositoryId);
 		if (input.parentChannelId) {
 			let [parent] = await transaction<{
 				parentChannelId: string | null;
@@ -727,6 +729,26 @@ export class PostgresStorage implements StorageAdapter {
 		return channel({ ...saved, slug });
 	}
 
+	async #createAvailableChannelInTransaction(
+		transaction: TransactionSQL,
+		input: CreateChannel,
+	): Promise<ChannelRecord> {
+		await this.#lockChannelTitles(transaction, input.repositoryId);
+		let rows = await transaction<{ title: string }[]>`
+			SELECT title FROM channels WHERE repository_id = ${input.repositoryId}
+		`;
+		return this.#createChannelInTransaction(transaction, {
+			...input,
+			title: availableChannelTitle(input.title, rows.map(row => row.title)),
+		});
+	}
+
+	async #lockChannelTitles(transaction: TransactionSQL, repositoryId: string): Promise<void> {
+		await transaction`
+			SELECT pg_advisory_xact_lock(2043237434, hashtext(${repositoryId}))
+		`;
+	}
+
 	#renameChannel(input: RenameChannel): Promise<RenameResult> {
 		return this.#run("rename channel", () =>
 			this.#sql.begin(async transaction => {
@@ -742,6 +764,7 @@ export class PostgresStorage implements StorageAdapter {
 				if (existing.title === input.title) {
 					return { channel: existing, changed: false };
 				}
+				await this.#lockChannelTitles(transaction, existing.repositoryId);
 				let updatedAt = input.now > existing.updatedAt
 					? input.now
 					: new Date(existing.updatedAt.getTime() + 1);
