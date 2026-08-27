@@ -9,6 +9,8 @@ import {
 	presentWorkspace,
 	transitionWorkspace,
 	WORKSPACE_MEDIA,
+	workspaceDestinations,
+	workspaceHeadingId,
 	workspaceMode,
 } from "./workspace-model";
 import conversationCloseIcon from "./assets/icons/conversation-close.svg";
@@ -22,8 +24,8 @@ import type {
 	WorkspaceDestination,
 	WorkspaceEvent,
 	WorkspaceMode,
+	WorkspaceProfile,
 	WorkspaceState,
-	WorkspaceSurface,
 } from "./workspace-model";
 
 export type Pane = "chat";
@@ -44,10 +46,10 @@ export function useWorkspaceIds(): WorkspaceIds {
 	let instance = useId();
 	return {
 		heading: {
-			plan: `${instance}-workspace-plan-heading`,
-			decisions: `${instance}-workspace-decisions-heading`,
-			"background-work": `${instance}-workspace-background-work-heading`,
-			conversation: `${instance}-workspace-conversation-heading`,
+			plan: workspaceHeadingId("plan", instance),
+			decisions: workspaceHeadingId("decisions", instance),
+			"background-work": workspaceHeadingId("background-work", instance),
+			conversation: workspaceHeadingId("conversation", instance),
 		},
 		pane: { chat: `${instance}-pane-chat` },
 	};
@@ -72,25 +74,25 @@ export function useWorkspaceMode(): WorkspaceMode {
 
 /** Only the desktop Conversation preference crosses a page load. */
 export function useWorkspaceState(
-	surface: WorkspaceSurface = "document",
+	profile: WorkspaceProfile,
 ): [WorkspaceState, Dispatch<WorkspaceEvent>] {
 	let [state, dispatch] = useReducer(
 		transitionWorkspace,
 		undefined,
 		() =>
 			initialWorkspaceState(
-				surface,
+				profile,
 				localStorage.getItem("chopin:pane:chat:open") !== "false",
 			),
 	);
 
 	useEffect(() => {
-		if (surface === "child") return;
+		if (!profile.persistConversation) return;
 		localStorage.setItem(
 			"chopin:pane:chat:open",
 			String(state.desktopConversationOpen),
 		);
-	}, [state.desktopConversationOpen, surface]);
+	}, [profile.persistConversation, state.desktopConversationOpen]);
 
 	return [state, dispatch];
 }
@@ -113,7 +115,7 @@ export type WorkspaceProps = {
 	conversationActivity: { unread: number; busy: boolean };
 	backgroundActivity?: { active: number; paused: number; failed: number };
 	identity?: string;
-	surface?: WorkspaceSurface;
+	profile: WorkspaceProfile;
 };
 
 export function ConversationToggle(
@@ -238,7 +240,7 @@ export function Workspace(
 		onDestination,
 		plan,
 		state,
-		surface = "document",
+		profile,
 		unanswered,
 		view,
 	}: WorkspaceProps,
@@ -246,7 +248,7 @@ export function Workspace(
 	let [chatWidth, resizeChat] = usePaneWidth({
 		active: mode === "split",
 		...CHAT_PANE,
-		storageKey: surface === "document" ? CHAT_PANE.storageKey : undefined,
+		storageKey: profile.persistPaneSize ? CHAT_PANE.storageKey : undefined,
 	});
 	let root = useRef<HTMLDivElement>(null);
 	let presentation = presentWorkspace(state, mode, view);
@@ -261,9 +263,7 @@ export function Workspace(
 	let edgeTab = useRef<HTMLButtonElement>(null);
 	let previousConversationOpen = useRef(state.conversationOpen);
 	let conversationInactive = !presentation.conversationVisible;
-	let destinations: WorkspaceDestination[] = backgroundWork
-		? ["conversation", "plan", "decisions", "background-work"]
-		: ["conversation", "plan", "decisions"];
+	let destinations = workspaceDestinations(!!backgroundWork);
 	let focusDestination = (destination: WorkspaceDestination) => {
 		root.current?.querySelector<HTMLElement>(`#${CSS.escape(ids.heading[destination])}`)
 			?.focus({ preventScroll: true });
@@ -311,7 +311,7 @@ export function Workspace(
 			className="workspace-root flex h-full flex-col overflow-hidden bg-ground"
 			data-workspace-mode={mode}
 			data-workspace-room={identity}
-			data-workspace-surface={surface}
+			data-workspace-surface={profile.surface}
 			ref={root}
 		>
 			{header}

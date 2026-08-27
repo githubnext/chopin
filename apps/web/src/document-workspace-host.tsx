@@ -5,15 +5,18 @@ import * as Api from "./api";
 import {
 	anchoredChildPaths,
 	AnchoredChildSurface,
-	childPresentation,
 	rebaseChildHistoryState,
 } from "./anchored-child-surface";
 import { readDocumentRecovery, rememberChannel } from "./channel-recovery";
 import { prepareDocumentLoad } from "./document-loader";
 import { documentRouteIdentity } from "./document-route-swap";
+import {
+	initialDocumentWorkspaceState,
+	transitionDocumentWorkspace,
+} from "./document-workspace-state";
 
 import type { ComponentType } from "react";
-import type { ChildPresentation } from "./anchored-child-surface";
+import type { DocumentWorkspaceAction } from "./document-workspace-state";
 import type { DocumentRouteIdentity } from "./document-route-swap";
 import type { HostedRoute } from "./hosted";
 import type { WorkspaceSurface } from "./workspace-model";
@@ -99,30 +102,31 @@ export default function DocumentWorkspaceHost(
 		user: Api.User;
 	},
 ) {
-	let [loaded, setLoaded] = useState<{
-		child?: Api.ChannelDetail;
-		parent: Api.ChannelDetail;
-	}>();
-	let loadedRef = useRef(loaded);
-	loadedRef.current = loaded;
+	let [state, setState] = useState(initialDocumentWorkspaceState);
+	let stateRef = useRef(state);
+	stateRef.current = state;
+	let send = useCallback((action: DocumentWorkspaceAction) => {
+		let next = transitionDocumentWorkspace(stateRef.current, action);
+		stateRef.current = next;
+		setState(next);
+		return next;
+	}, []);
+	let loaded = state.status === "ready" ? state.loaded : undefined;
 	let routeRef = useRef(route);
 	routeRef.current = route;
-	let [error, setError] = useState<unknown>();
-	let [retry, setRetry] = useState(0);
-	let [presentation, setPresentation] = useState<ChildPresentation>("closed");
+	let error = state.error;
+	let presentation = state.presentation;
 	let parentScrollTop = useRef<number | undefined>(undefined);
-	let parentSlugs = useRef(new Set<string>());
-	let childSlugs = useRef(new Set<string>());
+	let parentSurface = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
 		let active = true;
 		let controller = new AbortController();
-		setError(undefined);
-		let current = loadedRef.current;
+		send({ type: "loading" });
+		let currentState = stateRef.current;
+		let current = currentState.status === "ready" ? currentState.loaded : undefined;
 		if (route.page === "child" && current && !current.child) {
-			let scroller = document.querySelector<HTMLElement>(
-				`[data-workspace-room="${CSS.escape(current.parent.channel.id)}"] [data-plan-scroll]`,
-			);
+			let scroller = parentSurface.current?.querySelector<HTMLElement>("[data-plan-scroll]");
 			if (scroller) parentScrollTop.current = scroller.scrollTop;
 		}
 		let address = {
@@ -141,13 +145,7 @@ export default function DocumentWorkspaceHost(
 				if (!active) return;
 				let parent = prepared.parent ?? prepared.detail;
 				rememberChannel(user.id, parent.channel, parent.repository);
-				parentSlugs.current.clear();
-				parentSlugs.current.add(parent.channel.slug);
-				parentSlugs.current.add(route.parentSlug);
-				let updated = { parent };
-				loadedRef.current = updated;
-				setLoaded(updated);
-				setPresentation("open");
+				send({ parent, route, type: "parent-ready" });
 			}
 			return await prepareDocumentLoad(address, controller.signal);
 		})().then(prepared => {
@@ -157,28 +155,7 @@ export default function DocumentWorkspaceHost(
 			let child = prepared.parent ? prepared.detail : undefined;
 			rememberChannel(user.id, parent.channel, parent.repository);
 			if (child) rememberChannel(user.id, child.channel, child.repository);
-			let previous = loadedRef.current;
-			let sameParent = previous?.parent.channel.id === parent.channel.id;
-			if (!sameParent) parentSlugs.current.clear();
-			parentSlugs.current.add(parent.channel.slug);
-			parentSlugs.current.add(route.page === "child" ? route.parentSlug : route.slug);
-			if (child) {
-				if (previous?.child?.channel.id !== child.channel.id) childSlugs.current.clear();
-				childSlugs.current.add(child.channel.slug);
-				if (route.page === "child") childSlugs.current.add(route.childSlug);
-			}
-			let updated = child
-				? { child, parent }
-				: sameParent && previous?.child
-				? { ...previous, parent }
-				: { parent };
-			loadedRef.current = updated;
-			setLoaded(updated);
-			if (child) {
-				setPresentation(current => childPresentation(current, "child", true));
-			} else if (previous?.child) {
-				setPresentation(current => childPresentation(current, "parent", sameParent));
-			}
+			send({ child, parent, route, type: "ready" });
 			let routeKey = child
 				? documentRouteIdentity({
 					childSlug: child.channel.slug,
@@ -200,7 +177,7 @@ export default function DocumentWorkspaceHost(
 			});
 		}, reason => {
 			if (active) {
-				setError(reason);
+				send({ error: reason, type: "failed" });
 				onReady(layerKey);
 			}
 		});
@@ -208,72 +185,41 @@ export default function DocumentWorkspaceHost(
 			active = false;
 			controller.abort();
 		};
-	}, [layerKey, onReady, retry, route, user.id]);
+	}, [layerKey, onReady, route, send, state.retry, user.id]);
 
 	useLayoutEffect(() => {
-		let current = loadedRef.current;
-		if (!current || parentScrollTop.current === undefined) return;
-		let scroller = document.querySelector<HTMLElement>(
-			`[data-workspace-room="${CSS.escape(current.parent.channel.id)}"] [data-plan-scroll]`,
-		);
+		if (!loaded || parentScrollTop.current === undefined) return;
+		let scroller = parentSurface.current?.querySelector<HTMLElement>("[data-plan-scroll]");
 		if (scroller) scroller.scrollTop = parentScrollTop.current;
 		if (presentation === "closed") parentScrollTop.current = undefined;
 	}, [loaded, presentation]);
 
 	useEffect(() => {
-		let current = loadedRef.current;
-		if (!current) return;
-		let sameParent = route.owner.toLocaleLowerCase()
-				=== current.parent.repository.owner.toLocaleLowerCase()
-			&& route.repository.toLocaleLowerCase()
-				=== current.parent.repository.name.toLocaleLowerCase()
-			&& parentSlugs.current.has(route.page === "child" ? route.parentSlug : route.slug);
-		if (route.page === "child") {
-			let sameChild = sameParent && current.child
-				&& childSlugs.current.has(route.childSlug);
-			setPresentation(value => childPresentation(value, "child", sameParent));
-			if (sameChild || (!current.child && sameParent)) return;
-		} else {
-			setPresentation(value => childPresentation(value, "parent", sameParent));
-			if (sameParent) return;
-		}
-		if (!sameParent) {
-			loadedRef.current = undefined;
-			setLoaded(undefined);
-			return;
-		}
-		let updated = { parent: current.parent };
-		loadedRef.current = updated;
-		setLoaded(updated);
-	}, [route]);
+		send({ route, type: "route" });
+	}, [route, send]);
 
 	useEffect(() => {
 		if (presentation !== "closing") return;
 		let timer = window.setTimeout(() => {
-			setPresentation("closed");
-			let current = loadedRef.current;
-			let parentId = current?.parent.channel.id;
-			if (current) {
-				let updated = { parent: current.parent };
-				loadedRef.current = updated;
-				setLoaded(updated);
-			}
+			let current = stateRef.current;
+			let parentId = current.status === "ready" ? current.loaded.parent.channel.id : undefined;
+			send({ type: "closed" });
 			if (parentId) onParentRestored(parentId);
 		}, 190);
 		return () => window.clearTimeout(timer);
-	}, [onParentRestored, presentation]);
+	}, [onParentRestored, presentation, send]);
 
 	useEffect(() => {
 		if (presentation !== "open") return;
 		let closeOnEscape = (event: KeyboardEvent) => {
 			if (event.key !== "Escape" || event.defaultPrevented) return;
 			event.preventDefault();
-			let current = loadedRef.current;
-			if (current) {
+			let current = stateRef.current;
+			if (current.status === "ready") {
 				onChildClose(documentPath(
-					current.parent.repository.owner,
-					current.parent.repository.name,
-					current.parent.channel.slug,
+					current.loaded.parent.repository.owner,
+					current.loaded.parent.repository.name,
+					current.loaded.parent.channel.slug,
 				));
 			}
 		};
@@ -282,16 +228,13 @@ export default function DocumentWorkspaceHost(
 	}, [onChildClose, presentation]);
 
 	let metadataChanged = useCallback((kind: "parent" | "child", metadata: Metadata) => {
-		let current = loadedRef.current;
-		if (!current) return;
-		let target = kind === "parent" ? current.parent : current.child;
+		let current = stateRef.current;
+		if (current.status === "empty") return;
+		let target = kind === "parent" ? current.loaded.parent : current.loaded.child;
 		if (!target) return;
-		let next = { ...target, channel: { ...target.channel, ...metadata } };
-		let updated = kind === "parent" ? { ...current, parent: next } : { ...current, child: next };
-		if (kind === "parent") parentSlugs.current.add(metadata.slug);
-		else childSlugs.current.add(metadata.slug);
-		loadedRef.current = updated;
-		setLoaded(updated);
+		let updatedState = send({ kind, metadata, type: "metadata" });
+		if (updatedState.status === "empty") return;
+		let updated = updatedState.loaded;
 		let paths = anchoredChildPaths(
 			{
 				owner: updated.parent.repository.owner,
@@ -307,7 +250,7 @@ export default function DocumentWorkspaceHost(
 			history.replaceState(rebaseChildHistoryState(history.state, paths.parent), "");
 		}
 		onCanonicalPath(layerKey, pathname);
-	}, [layerKey, onCanonicalPath]);
+	}, [layerKey, onCanonicalPath, send]);
 	let parentMetadataChanged = useCallback(
 		(metadata: Metadata) => metadataChanged("parent", metadata),
 		[metadataChanged],
@@ -318,10 +261,7 @@ export default function DocumentWorkspaceHost(
 	);
 
 	let retryFailure = error && retryable(error)
-		? () => {
-			setError(undefined);
-			setRetry(value => value + 1);
-		}
+		? () => send({ type: "retry" })
 		: undefined;
 	let requestedSlug = route.page === "child" ? route.childSlug : route.slug;
 	let recovery = readDocumentRecovery(user.id, route.owner, route.repository, requestedSlug);
@@ -388,6 +328,7 @@ export default function DocumentWorkspaceHost(
 			onClose={() => onChildClose(parentPath)}
 			parent={parent}
 			parentLabel={loaded.parent.channel.title}
+			parentRef={parentSurface}
 			presentation={presentation}
 			key={loaded.parent.channel.id}
 		/>

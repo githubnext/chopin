@@ -29,6 +29,7 @@ import {
 	canManageProject,
 	documentDestination,
 	finishProjectCreation,
+	isDocumentWorkspaceRoute,
 	landingDocument,
 	NAVIGATION_MEDIA,
 	navigationMode,
@@ -49,8 +50,8 @@ import type { Research } from "@chopin/protocol";
 import type { TransitionPresence } from "@chopin/editor/transition-presence";
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import type { DocumentMetadata } from "./document-actions";
-import type { DocumentRouteIdentity, DocumentRouteIdentitySource } from "./document-route-swap";
-import type { NavigationMode } from "./navigation-model";
+import type { DocumentRouteIdentity } from "./document-route-swap";
+import type { NavigationMode, NavigationRoute } from "./navigation-model";
 
 export type Navigate = (destination: string, options?: { replace?: boolean }) => void;
 
@@ -96,11 +97,6 @@ let RenameDocumentDialog = lazy(() =>
 let DeleteDocumentDialog = lazy(() =>
 	import("./delete-document-dialog").then(module => ({ default: module.DeleteDocumentDialog }))
 );
-
-type Route =
-	| DocumentRouteIdentitySource
-	| { page: "repositories" }
-	| { page: "repository"; owner: string; repository: string };
 
 type NavigationFailure = { reason: unknown; retry?: "refresh" | "visit" };
 
@@ -255,7 +251,7 @@ export function NavigationShell(
 	}: {
 		children?: ReactNode;
 		navigate: Navigate;
-		route: Route;
+		route: NavigationRoute;
 		user: Api.User;
 	},
 ) {
@@ -336,10 +332,7 @@ export function NavigationShell(
 		removeResearchChannel,
 		upsertResearchWorkspace,
 	} = useProjectResearch(navigation, projects, catalogueMode === "archived");
-	let routeKey = route.page === "channel"
-			|| route.page === "document"
-			|| route.page === "child"
-			|| route.page === "research"
+	let routeKey = isDocumentWorkspaceRoute(route)
 		? documentRouteIdentity(route)
 		: route.page;
 	let currentRouteKey = useRef(routeKey);
@@ -765,11 +758,7 @@ export function NavigationShell(
 
 	let retryError = () => {
 		if (!error) return;
-		if (
-			error.retry === "visit"
-			&& currentChannelRef.current
-			&& (route.page === "channel" || route.page === "document" || route.page === "research")
-		) {
+		if (error.retry === "visit" && currentChannelRef.current && isDocumentWorkspaceRoute(route)) {
 			void documentLoaded(currentChannelRef.current, documentRouteIdentity(route));
 		} else void refresh();
 	};

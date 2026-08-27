@@ -3,10 +3,23 @@ import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
 import type { NavigationProject, ResearchParentChannel } from "./api";
 import type { Research } from "@chopin/protocol";
 import type { ProjectDocuments } from "./document-actions";
+import type { DocumentRouteIdentitySource } from "./document-route-swap";
 
 export type NavigationMode = "drawer" | "inline";
 
+export type NavigationRoute =
+	| DocumentRouteIdentitySource
+	| { page: "repositories" }
+	| { page: "repository"; owner: string; repository: string };
+
 export const NAVIGATION_MEDIA = "(max-width: 1023px)";
+
+export function isDocumentWorkspaceRoute(
+	route: NavigationRoute,
+): route is DocumentRouteIdentitySource {
+	return route.page === "channel" || route.page === "document" || route.page === "child"
+		|| route.page === "research";
+}
 
 export function navigationMode(
 	matchMedia: (query: string) => { matches: boolean },

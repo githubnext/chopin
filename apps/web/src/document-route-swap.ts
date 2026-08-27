@@ -63,20 +63,18 @@ export function transitionDocumentRoute<T extends KeyedDocumentRoute, R = unknow
 ): DocumentRouteSwap<T, R> {
 	if (action.type === "requested") {
 		let requested = action.route;
-		let reverse = (
+		let retarget = (
 			route: ReadyDocumentRoute<T, R>,
-		): ReadyDocumentRoute<T, R> => ({ ...route, immediately: requested.immediately });
+		): ReadyDocumentRoute<T, R> => ({ ...requested, resolution: route.resolution });
 		if (requested.key === state.current.key) {
-			return state.pending
-				? {
-					current: reverse(state.current),
-					previous: state.previous,
-				}
-				: state;
+			return {
+				current: retarget(state.current),
+				previous: state.previous,
+			};
 		}
 		if (requested.key === state.previous?.key) {
 			return {
-				current: reverse(state.previous),
+				current: retarget(state.previous),
 				previous: state.current,
 			};
 		}
