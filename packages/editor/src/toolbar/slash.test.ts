@@ -9,6 +9,8 @@ import {
 	$isElementNode,
 	$isRangeSelection,
 	$isTextNode,
+	COMMAND_PRIORITY_LOW,
+	createCommand,
 } from "lexical";
 
 import * as Y from "yjs";
@@ -19,7 +21,7 @@ import type { Binding, Provider } from "@lexical/yjs";
 import type { LexicalEditor } from "lexical";
 import type { Research } from "@chopin/protocol";
 
-import { decide, trigger } from "./slash";
+import { $consumeSlashTrigger, decide, trigger } from "./slash";
 
 const PROVIDER = {
 	awareness: {
@@ -157,6 +159,27 @@ describe("slash menu trigger", () => {
 });
 
 describe("slash menu commands", () => {
+	it("consumes a research trigger synchronously inside its Lexical command", async () => {
+		let target = peer();
+		importPlan(target.editor, "/research\n");
+		await settle();
+		let command = createCommand<void>();
+		target.editor.registerCommand(
+			command,
+			$consumeSlashTrigger,
+			COMMAND_PRIORITY_LOW,
+		);
+		let consumed = false;
+		target.editor.update(() => {
+			let paragraph = $getRoot().getFirstChild();
+			let text = $isElementNode(paragraph) ? paragraph.getFirstChild() : undefined;
+			if ($isTextNode(text)) text.selectEnd();
+			consumed = target.editor.dispatchCommand(command, undefined);
+		}, { discrete: true });
+		expect(consumed).toBe(true);
+		expect(exportPlan(target.editor)).not.toContain("/research");
+	});
+
 	it("does not consume a second trigger during submission or created recovery", async () => {
 		let module = await import("./research") as unknown as {
 			beginResearchDraft?: (

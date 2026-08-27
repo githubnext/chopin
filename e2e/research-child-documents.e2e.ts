@@ -67,8 +67,8 @@ async function scriptResearch(page: Page, room: string, databasePort: number) {
 		route.onMessage(message => server.send(message));
 		server.onMessage(message => route.send(message));
 	});
-	let prefix = `/api/channels/${room}/research-workspaces`;
-	await page.route("**/api/channels/*/research-workspaces**", async route => {
+	let prefix = `/api/channels/${room}/research-requests`;
+	await page.route("**/api/channels/*/research-requests**", async route => {
 		let request = route.request();
 		let path = new URL(request.url()).pathname;
 		if (!path.startsWith(prefix)) {

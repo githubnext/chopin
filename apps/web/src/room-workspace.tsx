@@ -30,11 +30,7 @@ import { peopleHere } from "./presence";
 import { ResearchRequestStore } from "./research-requests";
 import { Wire } from "./wire";
 import { useWorkspaceIds, useWorkspaceMode, useWorkspaceState, Workspace } from "./workspace";
-import {
-	initialDocumentView,
-	presentWorkspace,
-	workspaceProfile,
-} from "./workspace-model";
+import { initialDocumentView, presentWorkspace, workspaceProfile } from "./workspace-model";
 
 import type { Research, Session } from "@chopin/protocol";
 import type { DecisionView, DecisionViewState } from "@chopin/editor";

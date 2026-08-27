@@ -121,6 +121,7 @@ export default function DocumentWorkspaceHost(
 	let loaded = state.status === "ready" ? state.loaded : undefined;
 	let routeRef = useRef(route);
 	routeRef.current = route;
+	let routeKey = documentRouteIdentity(route);
 	let error = state.error;
 	let presentation = state.presentation;
 	let previousPresentation = useRef(presentation);
@@ -131,30 +132,33 @@ export default function DocumentWorkspaceHost(
 	useEffect(() => {
 		let active = true;
 		let controller = new AbortController();
+		let requestedRoute = routeRef.current;
 		send({ type: "loading" });
 		let currentState = stateRef.current;
 		let current = currentState.status === "ready" ? currentState.loaded : undefined;
-		if (route.page === "child" && current && !current.child) {
+		if (requestedRoute.page === "child" && current && !current.child) {
 			let scroller = parentSurface.current?.querySelector<HTMLElement>("[data-plan-scroll]");
 			if (scroller) parentScrollTop.current = scroller.scrollTop;
 		}
 		let address = {
-			owner: route.owner,
-			repository: route.repository,
-			slug: route.page === "child" ? route.childSlug : route.slug,
-			...(route.page === "child" ? { parentSlug: route.parentSlug } : {}),
+			owner: requestedRoute.owner,
+			repository: requestedRoute.repository,
+			slug: requestedRoute.page === "child" ? requestedRoute.childSlug : requestedRoute.slug,
+			...(requestedRoute.page === "child"
+				? { parentSlug: requestedRoute.parentSlug }
+				: {}),
 		};
 		void (async () => {
-			if (route.page === "child" && !current) {
+			if (requestedRoute.page === "child" && !current) {
 				let prepared = await prepareDocumentLoad({
-					owner: route.owner,
-					repository: route.repository,
-					slug: route.parentSlug,
+					owner: requestedRoute.owner,
+					repository: requestedRoute.repository,
+					slug: requestedRoute.parentSlug,
 				}, controller.signal);
 				if (!active) return;
 				let parent = prepared.parent ?? prepared.detail;
 				rememberChannel(user.id, parent.channel, parent.repository);
-				send({ parent, route, type: "parent-ready" });
+				send({ parent, route: requestedRoute, type: "parent-ready" });
 			}
 			return await prepareDocumentLoad(address, controller.signal);
 		})().then(prepared => {
@@ -164,7 +168,7 @@ export default function DocumentWorkspaceHost(
 			let child = prepared.parent ? prepared.detail : undefined;
 			rememberChannel(user.id, parent.channel, parent.repository);
 			if (child) rememberChannel(user.id, child.channel, child.repository);
-			send({ child, parent, route, type: "ready" });
+			send({ child, parent, route: requestedRoute, type: "ready" });
 			let routeKey = child
 				? documentRouteIdentity({
 					childSlug: child.channel.slug,
@@ -194,7 +198,7 @@ export default function DocumentWorkspaceHost(
 			active = false;
 			controller.abort();
 		};
-	}, [layerKey, onReady, route, send, state.retry, user.id]);
+	}, [layerKey, onReady, routeKey, send, state.retry, user.id]);
 
 	useLayoutEffect(() => {
 		if (!loaded || parentScrollTop.current === undefined) return;
