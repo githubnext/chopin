@@ -300,8 +300,7 @@ describe("research workspace routes", () => {
 		expect(context.owners).toEqual([context.channel.id]);
 		expect(await context.storage.research.list(context.channel.id, 100)).toHaveLength(2);
 
-		let path =
-			`/api/channels/${context.channel.id}/research-requests/${inline.body.request.id}`;
+		let path = `/api/channels/${context.channel.id}/research-requests/${inline.body.request.id}`;
 		let observed = await context.router.handle(request(path, context.cookie));
 		expect(observed?.status).toBe(200);
 		expect(await observed!.json()).toMatchObject({ id: inline.body.request.id });
@@ -347,7 +346,7 @@ describe("research workspace routes", () => {
 
 	it("exposes a durably cleared request as retryable after reload", async () => {
 		let context = await setup();
-		let created = await create(context);
+		let created = await createInline(context);
 		await failInitial(context);
 		let detail = await context.storage.research.get(context.channel.id, created.body.request.id);
 		let initial = detail!.turns[0]!;
@@ -359,7 +358,7 @@ describe("research workspace routes", () => {
 			now: new Date(context.now.getTime() + 3),
 			lease: context.lease,
 		});
-		let path = `/api/channels/${context.channel.id}/research-workspaces/${created.body.request.id}`;
+		let path = `/api/channels/${context.channel.id}/research-requests/${created.body.request.id}`;
 
 		let observed = await context.router.handle(request(path, context.cookie));
 		expect(observed?.status).toBe(200);

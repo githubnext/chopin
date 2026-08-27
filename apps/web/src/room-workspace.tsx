@@ -153,6 +153,7 @@ export function RoomWorkspace(
 		onDocumentDeleted,
 		onRepositoryAccessChanged,
 		onResearchChildOpen,
+		onResearchWorkspaceChanged,
 		onResearchWorkspacesRefresh,
 	} = useNavigationDocument();
 	let [status, setStatus] = useState<Status>("connecting");
@@ -380,6 +381,18 @@ export function RoomWorkspace(
 				onRepositoryAccessChanged();
 			}),
 			socket.on<Research.Changed>("research:changed", frame => {
+				onResearchWorkspaceChanged(
+					{
+						id: room,
+						repositoryId: repository.id,
+						repositoryOwner: repository.owner,
+						repositoryName: repository.name,
+						title: metadataRef.current.title,
+						slug: metadataRef.current.slug,
+					},
+					frame.workspaceId,
+					frame.revision,
+				);
 				research.invalidate(frame.workspaceId);
 			}),
 			threads.listen(socket),
@@ -395,6 +408,7 @@ export function RoomWorkspace(
 		handle,
 		jobs,
 		onDocumentDeleted,
+		onResearchWorkspaceChanged,
 		onResearchWorkspacesRefresh,
 		onRepositoryAccessChanged,
 		research,
