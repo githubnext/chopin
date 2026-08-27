@@ -134,13 +134,16 @@ test("a stale outgoing route cannot canonicalize or publish over the active docu
 		history.pushState(null, "", path);
 		dispatchEvent(new PopStateEvent("popstate"));
 	}, activePath);
-	let routes = page.locator(".document-route-swap > [data-content-swap-state]:not([hidden])");
-	let outgoing = page.locator(
-		'.document-route-swap > [data-content-swap-state="outgoing"]:not([hidden])',
-	);
-	await expect(routes).toHaveCount(2);
-	await expect(outgoing).toHaveAttribute("inert", "");
-	await expect.poll(() => visits).toEqual([room]);
+	await page.waitForFunction(() => {
+		let routes = document.querySelectorAll<HTMLElement>(
+			".document-route-swap > [data-content-swap-state]:not([hidden])",
+		);
+		return routes.length === 2
+			&& [...routes].some(route =>
+				route.dataset.contentSwapState === "outgoing"
+				&& route.hasAttribute("inert")
+			);
+	});
 
 	let staleResponse = page.waitForResponse(response =>
 		new URL(response.url()).pathname === `/api/channels/${stale.id}`
@@ -153,14 +156,16 @@ test("a stale outgoing route cannot canonicalize or publish over the active docu
 		)
 	);
 	await expect(page).toHaveURL(activePath);
-	expect(visits).toEqual([room]);
+	await expect.poll(() => visits).toEqual([room]);
 });
 
-test("outgoing WebSocket metadata cannot canonicalize the active document", async ({ baseURL, page, room }) => {
+test("superseded WebSocket metadata cannot canonicalize a requested document", async ({ baseURL, page, room }) => {
 	let stale = crypto.randomUUID();
 	await createChannel(Number(new URL(baseURL!).port), stale);
 	let captured = Promise.withResolvers<void>();
 	let release = Promise.withResolvers<void>();
+	let activeCaptured = Promise.withResolvers<void>();
+	let activeRelease = Promise.withResolvers<void>();
 	let title = `Renamed outgoing ${stale.slice(0, 8)}`;
 	let slug = `renamed-outgoing-${stale.slice(0, 8)}`;
 	await page.routeWebSocket("**/ws?**", route => {
@@ -186,6 +191,14 @@ test("outgoing WebSocket metadata cannot canonicalize the active document", asyn
 			route.send(message);
 		});
 	});
+	await page.route(
+		new RegExp(`/api/repositories/octo-org/score/documents/test-${room.slice(0, 8)}$`),
+		async route => {
+			activeCaptured.resolve();
+			await activeRelease.promise;
+			await route.continue();
+		},
+	);
 
 	await authenticate(page, "stale-socket", baseURL!);
 	await page.goto(`/channels/${stale}`);
@@ -202,16 +215,15 @@ test("outgoing WebSocket metadata cannot canonicalize the active document", asyn
 		history.pushState(null, "", path);
 		dispatchEvent(new PopStateEvent("popstate"));
 	}, activePath);
+	await activeCaptured.promise;
+	release.resolve();
+	await expect(projects.getByRole("link", { name: title, exact: true })).toBeVisible();
+	await expect(page).toHaveURL(activePath);
+	activeRelease.resolve();
 	let active = page.locator(
 		".document-route-swap > [data-content-swap-state]:not([hidden]):not([inert])",
 	);
 	await expect(active.getByRole("banner")).toContainText(`Test ${room.slice(0, 8)}`);
-	await expect(page.locator(
-		'.document-route-swap > [data-content-swap-state="outgoing"]:not([hidden])',
-	)).toHaveCount(1);
-
-	release.resolve();
-	await expect(projects.getByRole("link", { name: title, exact: true })).toBeVisible();
 	await expect(page).toHaveURL(activePath);
 });
 

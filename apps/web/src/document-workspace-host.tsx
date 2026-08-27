@@ -86,7 +86,11 @@ export default function DocumentWorkspaceHost(
 		}>;
 		layerKey: DocumentRouteIdentity;
 		Loading: ComponentType<{ label?: string }>;
-		onCanonicalPath: (key: DocumentRouteIdentity, pathname: string) => void;
+		onCanonicalPath: (
+			key: DocumentRouteIdentity,
+			routeKey: DocumentRouteIdentity,
+			pathname: string,
+		) => void;
 		onChildClose: (parentPath: string) => void;
 		onParentRestored: (parentId: string) => void;
 		onReady: (
@@ -249,7 +253,7 @@ export default function DocumentWorkspaceHost(
 		if (kind === "parent" && routeRef.current.page === "child") {
 			history.replaceState(rebaseChildHistoryState(history.state, paths.parent), "");
 		}
-		onCanonicalPath(layerKey, pathname);
+		onCanonicalPath(layerKey, documentRouteIdentity(routeRef.current), pathname);
 	}, [layerKey, onCanonicalPath, send]);
 	let parentMetadataChanged = useCallback(
 		(metadata: Metadata) => metadataChanged("parent", metadata),

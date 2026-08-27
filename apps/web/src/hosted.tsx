@@ -451,6 +451,8 @@ function DocumentRouteSwap(
 		transitionDocumentRoute<DocumentRouteRequest, DocumentRouteResolution>,
 		{ current: requested },
 	);
+	let requestedRoute = useRef({ key: requested.key, routeKey: requested.routeKey });
+	requestedRoute.current = { key: requested.key, routeKey: requested.routeKey };
 	let presentedRequest = state.pending ?? state.current;
 	if (requested.key !== presentedRequest.key || requested.routeKey !== presentedRequest.routeKey) {
 		dispatch({ route: requested, type: "requested" });
@@ -466,7 +468,13 @@ function DocumentRouteSwap(
 		if (resolution) aliases.current.set(resolution.routeKey, key);
 		dispatch({ key, resolution, type: "ready" });
 	}, []);
-	let metadataPath = useCallback((key: DocumentRouteIdentity, pathname: string) => {
+	let metadataPath = useCallback((
+		key: DocumentRouteIdentity,
+		metadataRouteKey: DocumentRouteIdentity,
+		pathname: string,
+	) => {
+		let authority = requestedRoute.current;
+		if (key !== authority.key || metadataRouteKey !== authority.routeKey) return;
 		let canonicalRoute = hostedRoute(pathname);
 		if (canonicalRoute.page === "document" || canonicalRoute.page === "child") {
 			aliases.current.set(documentRouteIdentity(canonicalRoute), key);
