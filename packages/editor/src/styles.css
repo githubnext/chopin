@@ -488,6 +488,16 @@
 	color: var(--color-text-primary);
 }
 
+/*
+ * MDXEditor gives its placeholder the content class too. Pin its absolute box
+ * across the wrapper so auto margins center it like the editable document;
+ * without both insets it shrink-wraps left of the caret on a wide canvas.
+ */
+.plan .mdxeditor-root-contenteditable > .plan-content {
+	inset-inline: 0;
+	color: var(--color-text-quaternary);
+}
+
 :root[data-plan-coarse-pointer] .plan-menu-row {
 	height: 44px;
 	min-height: 44px;
