@@ -579,6 +579,7 @@ export class ResearchWorkspaceService {
 		let durableRequestId = requestId(input.requestId);
 		let requestedBy = opaqueId(input.requestedBy, "Requesting member id");
 		let requestedByHandle = handle(input.requestedByHandle);
+		await this.#requireTopLevelChannel(channelId);
 		let requestFingerprint = fingerprint("research-turn", {
 			workspaceId,
 			kind: input.kind,
@@ -739,6 +740,7 @@ export class ResearchWorkspaceService {
 	async retryRequest(input: RetryResearchRequest): Promise<Research.RequestView> {
 		let channelId = safeId(input.channelId, "Channel id");
 		let workspaceId = safeId(input.workspaceId, "Workspace id");
+		await this.#requireTopLevelChannel(channelId);
 		return this.#exclusive(channelId, workspaceId, async () => {
 			let detail = await this.#reconciled(channelId, workspaceId);
 			if (!detail) throw new ResearchWorkspaceError("not-found", "Research request not found.");
