@@ -991,6 +991,71 @@ describe("research workspace service", () => {
 		expect(stored?.turns).toEqual([]);
 	});
 
+	it("refuses child research drafts before durable work", async () => {
+		let context = await setup();
+		let child = await context.storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: REPOSITORY_ID,
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			parentChannelId: context.channelId,
+			title: "Published research child",
+			createdBy: context.userId,
+			now: context.advance(),
+		});
+
+		await expect(context.service.createDraft({
+			channelId: child.id,
+			question: "Create a grandchild",
+			requestId: requestId(1),
+			origin: "sidebar",
+			createdBy: context.userId,
+		})).rejects.toMatchObject({ code: "invalid-request" });
+		expect(await context.storage.research.list(child.id, 100)).toEqual([]);
+	});
+
+	it("refuses confirming legacy child research before owner setup or jobs", async () => {
+		let context = await setup();
+		let child = await context.storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: REPOSITORY_ID,
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			parentChannelId: context.channelId,
+			title: "Published research child",
+			createdBy: context.userId,
+			now: context.advance(),
+		});
+		let legacy = await context.storage.research.create({
+			id: crypto.randomUUID(),
+			channelId: child.id,
+			title: "Legacy child research",
+			proposedQuestion: "Create a grandchild",
+			origin: "sidebar",
+			createdBy: context.userId,
+			idempotencyKey: "legacy-child-draft",
+			fingerprint: "legacy-child-draft",
+			now: context.advance(),
+			lease: context.lease,
+		});
+		let owners = 0;
+
+		await expect(context.service.confirm({
+			channelId: child.id,
+			workspaceId: legacy.workspace.id,
+			query: "Create a grandchild",
+			requestId: requestId(2),
+			confirmedBy: context.userId,
+			beforeStart: () => {
+				owners++;
+			},
+		})).rejects.toMatchObject({ code: "invalid-request" });
+		expect(owners).toBe(0);
+		expect(await context.storage.research.get(child.id, legacy.workspace.id))
+			.toMatchObject({ workspace: { confirmedQuery: undefined }, turns: [] });
+		expect((await context.jobs.list(child.id, 100))!.jobs).toEqual([]);
+	});
+
 	it("rejects unavailable execution before confirmation and claims an owner only for new work", async () => {
 		let unavailable = await setup({ evidence: false });
 		let draft = await unavailable.service.createDraft({
