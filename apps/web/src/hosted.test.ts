@@ -14,8 +14,19 @@ import {
 } from "./anchored-child-surface";
 import { githubLoginHref, hostedRoute, retryableChannelFailure } from "./hosted";
 import { prepareDocumentLoad, validatedChildPath } from "./document-loader";
+import { Workspace } from "./workspace";
+import { workspaceProfile } from "./workspace-model";
 
 import type { ChannelDetail } from "./api";
+
+const workspaceIds = {
+	heading: {
+		conversation: "workspace-conversation-heading",
+		decisions: "workspace-decisions-heading",
+		plan: "workspace-plan-heading",
+	},
+	pane: { chat: "workspace-chat-pane" },
+};
 
 function detail(
 	id: string,
@@ -206,23 +217,166 @@ describe("anchored child lifecycle", () => {
 		expect(state.attempt?.generation).toBe(2);
 	});
 
-	it("renders one parent-aware close control over an inert parent with separate rooms", () => {
+	it("keeps the parent shell visible around separate workspace rooms", () => {
 		let markup = renderToStaticMarkup(createElement(AnchoredChildSurface, {
 			child: createElement("div", { "data-workspace-room": "child-room" }),
 			childLabel: "Source review",
-			onClose() {},
+			onBackdropClick() {},
 			parent: createElement("div", { "data-workspace-room": "parent-room" }),
-			parentLabel: "Release plan",
 			presentation: "open",
 		}));
+		let closing = renderToStaticMarkup(createElement(AnchoredChildSurface, {
+			child: createElement("div"),
+			childLabel: "Source review",
+			onBackdropClick() {},
+			parent: createElement("div"),
+			presentation: "closing",
+		}));
 
+		expect(markup).not.toContain('inert=""');
+		expect(markup).not.toContain('aria-label="Back to Release plan"');
+		expect(markup).toContain('class="anchored-child-backdrop"');
 		expect(markup).toContain('aria-hidden="true"');
-		expect(markup).toContain('inert=""');
-		expect(markup).toContain('aria-label="Back to Release plan"');
-		expect(markup.match(/<button/g)).toHaveLength(1);
+		expect(markup).not.toContain('<button aria-hidden="true" class="anchored-child-backdrop"');
+		expect(markup).toContain(
+			'<div aria-hidden="true" class="anchored-child-backdrop" data-child-backdrop="true"></div>',
+		);
+		expect(markup).toContain('data-child-backdrop="true"');
+		expect(closing).not.toContain("data-child-backdrop");
 		expect(markup).toContain('data-workspace-room="parent-room"');
 		expect(markup).toContain('data-workspace-room="child-room"');
 		expect(markup).not.toContain("Expand");
+	});
+
+	it("obscures only the parent paper frame", () => {
+		let markup = renderToStaticMarkup(createElement(Workspace, {
+			chat: createElement("div", null, "Conversation"),
+			controls: createElement("div", null, "Controls"),
+			conversationActivity: { busy: false, unread: 0 },
+			decisions: createElement("div", null, "Decisions"),
+			header: createElement("header", null, "Parent header"),
+			identity: "parent-room",
+			ids: workspaceIds,
+			mode: "compact",
+			onConversationOpen() {},
+			onDesktopConversationOpen() {},
+			onDestination() {},
+			paperObscured: true,
+			plan: createElement("div", null, "Parent paper"),
+			profile: workspaceProfile("document"),
+			state: { conversationOpen: false, desktopConversationOpen: false },
+			unanswered: 0,
+			view: "plan",
+		}));
+		let outer = markup.slice(0, markup.indexOf(">") + 1);
+		let frame = markup.match(/<div[^>]*class="workspace-frame[^"]*"[^>]*>/)?.[0];
+
+		expect(frame).toContain('aria-hidden="true"');
+		expect(frame).toContain('data-paper-obscured="true"');
+		expect(frame).toContain('inert=""');
+		expect(outer).not.toContain("aria-hidden");
+		expect(outer).not.toContain("inert");
+		expect(markup).toContain("Parent header");
+	});
+
+	it("renders a collapsed child Conversation toggle beside Close", () => {
+		let markup = renderToStaticMarkup(createElement(Workspace, {
+			chat: createElement("div", null, "Child conversation"),
+			childClose: { label: "Source review", onClose() {} },
+			controls: createElement("div", null, "Document controls"),
+			conversationActivity: { busy: true, unread: 2 },
+			decisions: createElement("div", null, "Decisions"),
+			header: createElement("header", null, "Child header"),
+			identity: "child-room",
+			ids: workspaceIds,
+			mode: "split",
+			onConversationOpen() {},
+			onDesktopConversationOpen() {},
+			onDestination() {},
+			plan: createElement("div", null, "Child paper"),
+			profile: workspaceProfile("child"),
+			state: { conversationOpen: false, desktopConversationOpen: false },
+			unanswered: 0,
+			view: "plan",
+		}));
+		let toolbar = markup.slice(
+			markup.indexOf('data-document-toolbar="true"'),
+			markup.indexOf('data-document-view="plan"'),
+		);
+
+		expect(markup).toContain("Child conversation");
+		expect(markup).toContain('aria-label="Show conversation pane, Planner working"');
+		expect(markup).toContain('aria-label="Close Source review"');
+		expect(toolbar).toContain('aria-label="Show conversation pane, Planner working"');
+		expect(toolbar).toContain('aria-label="Close Source review"');
+		expect(toolbar.indexOf("Show conversation pane")).toBeLessThan(
+			toolbar.indexOf("Close Source review"),
+		);
+	});
+
+	it("gives a compact child all three workspace destinations", () => {
+		let markup = renderToStaticMarkup(createElement(Workspace, {
+			chat: createElement("div", null, "Child conversation"),
+			controls: createElement("div", null, "Document controls"),
+			conversationActivity: { busy: false, unread: 0 },
+			decisions: createElement("div", null, "Decisions"),
+			header: createElement("header", null, "Child header"),
+			identity: "child-room",
+			ids: workspaceIds,
+			mode: "compact",
+			onConversationOpen() {},
+			onDesktopConversationOpen() {},
+			onDestination() {},
+			plan: createElement("div", null, "Child paper"),
+			profile: workspaceProfile("child"),
+			state: { conversationOpen: false, desktopConversationOpen: false },
+			unanswered: 0,
+			view: "plan",
+		}));
+		let navigation = markup.slice(
+			markup.indexOf('aria-label="Workspace view"'),
+			markup.indexOf("</nav>"),
+		);
+
+		expect(navigation).toContain("grid-cols-3");
+		expect(navigation).toContain(">Conversation<");
+		expect(navigation).toContain(">Document<");
+		expect(navigation).toContain(">Decisions<");
+	});
+
+	it("offers an X close control only inside a child document toolbar", () => {
+		let base = {
+			controls: createElement("div", null, "Document controls"),
+			conversationActivity: { busy: false, unread: 0 },
+			decisions: createElement("div", null, "Decisions"),
+			header: createElement("header", null, "Workspace header"),
+			ids: workspaceIds,
+			mode: "split" as const,
+			onConversationOpen() {},
+			onDesktopConversationOpen() {},
+			onDestination() {},
+			plan: createElement("div", null, "Paper"),
+			state: { conversationOpen: false, desktopConversationOpen: false },
+			unanswered: 0,
+			view: "plan" as const,
+		};
+		let child = renderToStaticMarkup(createElement(Workspace, {
+			...base,
+			childClose: { label: "Source review", onClose() {} },
+			identity: "child-room",
+			profile: workspaceProfile("child"),
+		}));
+		let parent = renderToStaticMarkup(createElement(Workspace, {
+			...base,
+			identity: "parent-room",
+			profile: workspaceProfile("document"),
+		}));
+
+		expect(child).toContain('aria-label="Close Source review"');
+		expect(child).toContain('data-child-document-close="true"');
+		expect(child).toContain("navigation-xmark.svg");
+		expect(child).toContain('class="size-[18px]"');
+		expect(parent).not.toContain("data-child-document-close");
 	});
 
 	it("marks an in-app child push without discarding existing history state", () => {

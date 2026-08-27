@@ -342,10 +342,15 @@ export default function DocumentWorkspaceHost(
 		},
 		loaded.child?.channel.slug,
 	).parent;
+	let childVisible = presentation !== "closed";
+	let childLabel = loaded.child?.channel.title ?? (route.page === "child" ? route.childSlug : "");
+	let closeChild = () => onChildClose(parentPath);
 	let parent = (
 		<Suspense fallback={<Loading label="Opening parent document..." />}>
 			<RoomWorkspace
 				{...workspaceProps(loaded.parent, agent, user, "document", parentMetadataChanged)}
+				breadcrumb={childVisible ? { childLabel, onBack: closeChild } : undefined}
+				paperObscured={childVisible}
 				key={loaded.parent.channel.id}
 			/>
 		</Suspense>
@@ -355,6 +360,7 @@ export default function DocumentWorkspaceHost(
 			<Suspense fallback={<Loading label="Opening child document..." />}>
 				<RoomWorkspace
 					{...workspaceProps(loaded.child, agent, user, "child", childMetadataChanged)}
+					childClose={{ label: loaded.child.channel.title, onClose: closeChild }}
 					key={loaded.child.channel.id}
 				/>
 			</Suspense>
@@ -367,15 +373,12 @@ export default function DocumentWorkspaceHost(
 	return (
 		<AnchoredChildSurface
 			child={child}
-			childLabel={loaded.child?.channel.title ?? (route.page === "child"
-				? route.childSlug
-				: "")}
+			childLabel={childLabel}
 			focusKey={loaded.child?.channel.id ?? (route.page === "child"
 				? `${route.parentSlug}/${route.childSlug}`
 				: undefined)}
-			onClose={() => onChildClose(parentPath)}
+			onBackdropClick={closeChild}
 			parent={parent}
-			parentLabel={loaded.parent.channel.title}
 			parentRef={parentSurface}
 			presentation={presentation}
 			key={loaded.parent.channel.id}

@@ -53,6 +53,15 @@ export type HostedWorkspaceProps = {
 			| "updatedAt"
 		>,
 	) => void;
+	breadcrumb?: {
+		childLabel: string;
+		onBack: () => void;
+	};
+	childClose?: {
+		label: string;
+		onClose: () => void;
+	};
+	paperObscured?: boolean;
 	surface?: WorkspaceSurface;
 };
 
@@ -464,6 +473,7 @@ export function HostedApp(
 	let hostedRouteRef = useRef(route);
 	hostedRouteRef.current = route;
 	let childOpener = useRef<ResearchOpener | undefined>(undefined);
+	let childClosePending = useRef(false);
 	let childFocus = useRef<ChildFocusState>({ generation: 0 });
 	let childFocusFrame = useRef<number | undefined>(undefined);
 	let cancelChildFocusFrame = useCallback(() => {
@@ -478,6 +488,7 @@ export function HostedApp(
 		return next;
 	}, [cancelChildFocusFrame]);
 	let childRouteChanged = useCallback((pathname: string) => {
+		if (hostedRoute(pathname).page === "child") childClosePending.current = false;
 		moveChildFocus({ type: "route", pathname });
 	}, [moveChildFocus]);
 	let navigate = useCallback((
@@ -534,6 +545,8 @@ export function HostedApp(
 		setRoute(hostedRoute(pathname));
 	}, [childRouteChanged]);
 	let closeChild = useCallback((parentPath: string) => {
+		if (childClosePending.current) return;
+		childClosePending.current = true;
 		let action = childCloseAction(history.state, parentPath);
 		if (action.type === "back") history.back();
 		else navigate(action.destination, { replace: true });

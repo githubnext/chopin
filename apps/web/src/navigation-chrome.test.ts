@@ -165,12 +165,31 @@ describe("the Figma navigation chrome", () => {
 		expect(markup).toContain('aria-label="Document: Hushed mountain"');
 		expect(markup).toContain('aria-label="Actions for Hushed mountain"');
 		expect(markup).toContain("gap-0.5");
-		expect(markup).toContain("lg:h-[calc(50px+env(safe-area-inset-top))]");
+		expect(markup).not.toContain("safe-area-inset-top");
 		expect(markup).toContain('style="width:24px;height:24px"');
 		expect(markup).not.toContain('aria-label="Open Projects sidebar"');
 		expect(markup).not.toContain('aria-label="Repository:');
 		expect(markup).not.toContain('href="/"');
 		expect(markup).not.toContain("hairline-b");
+	});
+
+	test("turns the parent title into a child-document breadcrumb", () => {
+		let markup = renderToStaticMarkup(createElement(Header, {
+			breadcrumb: { childLabel: "Source review", onBack() {} },
+			canManage: true,
+			label: "Release plan",
+			members: [{ handle: "MaggieAppleton", client: "tab-one" }],
+			onAction() {},
+		}));
+
+		expect(markup).not.toContain('aria-label="Back to Release plan"');
+		expect(markup).toContain('aria-label="Return to Release plan"');
+		expect(markup).toContain('aria-label="Child document: Source review"');
+		expect(markup).toContain('aria-label="People here: MaggieAppleton"');
+		expect(markup).not.toContain('aria-label="Actions for Release plan"');
+		expect(markup).toContain("navigation-chevron-right.svg");
+		expect(markup).toContain('class="document-breadcrumb-separator size-[14px]');
+		expect(markup).not.toContain(">›</span>");
 	});
 
 	test("labels archived headers while keeping management actions from viewers", () => {

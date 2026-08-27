@@ -4,7 +4,7 @@ import { parse } from "@chopin/dialect";
 import { parseResearchAnswerInput, parseResearchEvidenceInput } from "../jobs/research-workspace";
 import { StorageError } from "../storage/errors";
 import * as Plan from "../plan/service";
-import { boundedResearchEvidence } from "./service";
+import { boundedResearchEvidence, ResearchWorkspaceError } from "./service";
 import {
 	answerArtifact,
 	createAndConfirm,
@@ -139,6 +139,45 @@ describe("research workspace service", () => {
 		expect(repeated.repeated).toBe(true);
 		expect(repeated.request.id).toBe(started.request.id);
 		expect(owners).toBe(1);
+	});
+
+	it("refuses child Planner research before owner setup or durable work", async () => {
+		let context = await setup();
+		let child = await context.storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: REPOSITORY_ID,
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			parentChannelId: context.channelId,
+			title: "Published research child",
+			createdBy: context.userId,
+			now: context.advance(),
+		});
+		let owners = 0;
+		let failure: unknown;
+		try {
+			await context.service.startPlanner({
+				channelId: child.id,
+				question: "Create a grandchild",
+				originMessageId: "01K39QZG000000000000000002",
+				requestedBy: context.userId,
+				requestedByHandle: "octocat",
+				beforeStart: () => {
+					owners++;
+				},
+			});
+		} catch (err) {
+			failure = err;
+		}
+		let durable = await context.storage.research.list(child.id, 100);
+		let jobs = (await context.jobs.list(child.id, 100))?.jobs ?? [];
+
+		expect({
+			code: failure instanceof ResearchWorkspaceError ? failure.code : undefined,
+			owners,
+			requests: durable.length,
+			jobs: jobs.length,
+		}).toEqual({ code: "invalid-request", owners: 0, requests: 0, jobs: 0 });
 	});
 
 	it("checks durable work before owner setup and recovers setup failure before enqueue", async () => {

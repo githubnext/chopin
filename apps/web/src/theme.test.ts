@@ -373,3 +373,20 @@ describe("editor feedback motion", () => {
 		);
 	});
 });
+
+describe("child document shell", () => {
+	it("shares one safe-area-aware header height with the compact child offset", () => {
+		expect(NAVIGATION).toMatch(
+			/--document-shell-header-height:\s*calc\(3rem \+ env\(safe-area-inset-top\)\)/,
+		);
+		expect(NAVIGATION).toMatch(
+			/:root\[data-plan-coarse-pointer\][^{]*\{[^}]*--document-shell-header-height:\s*calc\(3\.75rem \+ env\(safe-area-inset-top\)\)/s,
+		);
+		expect(NAVIGATION).toMatch(
+			/\.room-header\s*\{[^}]*height:\s*var\(--document-shell-header-height\)/s,
+		);
+		expect(NAVIGATION).toMatch(
+			/@media \(max-width: 1023px\)[^{]*\{.*?\.anchored-child-surface\s*\{[^}]*inset:\s*var\(--document-shell-header-height\) 0 0/s,
+		);
+	});
+});
