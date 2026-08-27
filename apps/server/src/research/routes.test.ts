@@ -401,6 +401,111 @@ describe("research workspace routes", () => {
 		});
 	});
 
+	it("rejects continuation of legacy child research before owner setup or jobs", async () => {
+		let context = await setup();
+		let child = await context.storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: context.channel.repositoryId,
+			repositoryOwner: context.channel.repositoryOwner,
+			repositoryName: context.channel.repositoryName,
+			parentChannelId: context.channel.id,
+			title: "Published research child",
+			createdBy: USER_ID,
+			now: context.now,
+		});
+		let legacy = await context.storage.research.create({
+			id: crypto.randomUUID(),
+			channelId: child.id,
+			title: "Legacy child research",
+			proposedQuestion: "Create a grandchild",
+			origin: "sidebar",
+			createdBy: USER_ID,
+			idempotencyKey: "legacy-child-draft",
+			fingerprint: "legacy-child-draft",
+			now: context.now,
+			lease: context.lease,
+		});
+		let response = await context.router.handle(request(
+			`/api/channels/${child.id}/research-workspaces/${legacy.workspace.id}/turns`,
+			context.cookie,
+			mutation({
+				kind: "follow-up",
+				question: "Continue the research",
+				requestId: requestId(4),
+			}),
+		));
+		if (!response) throw new Error("research turn route was not registered");
+		let body = await response.json() as { error?: string };
+		let stored = await context.storage.research.get(child.id, legacy.workspace.id);
+		let jobs = (await context.jobs.list(child.id, 100))?.jobs ?? [];
+
+		expect({
+			status: response.status,
+			error: body.error,
+			owners: context.owners,
+			turns: stored?.turns.length,
+			jobs: jobs.length,
+		}).toEqual({
+			status: 400,
+			error: "invalid research workspace request",
+			owners: [],
+			turns: 0,
+			jobs: 0,
+		});
+	});
+
+	it("rejects retrying legacy child research before owner setup or jobs", async () => {
+		let context = await setup();
+		let child = await context.storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: context.channel.repositoryId,
+			repositoryOwner: context.channel.repositoryOwner,
+			repositoryName: context.channel.repositoryName,
+			parentChannelId: context.channel.id,
+			title: "Published research child",
+			createdBy: USER_ID,
+			now: context.now,
+		});
+		let legacy = await context.storage.research.start({
+			id: crypto.randomUUID(),
+			channelId: child.id,
+			title: "Legacy child research",
+			question: "Create a grandchild",
+			origin: "inline",
+			createdBy: USER_ID,
+			turnId: crypto.randomUUID(),
+			messageId: crypto.randomUUID(),
+			requestId: requestId(1),
+			idempotencyKey: "legacy-child-request",
+			fingerprint: "legacy-child-request",
+			now: context.now,
+			lease: context.lease,
+		});
+		let response = await context.router.handle(request(
+			`/api/channels/${child.id}/research-requests/${legacy.workspace.id}/retry`,
+			context.cookie,
+			retryMutation(),
+		));
+		if (!response) throw new Error("research retry route was not registered");
+		let body = await response.json() as { error?: string };
+		let stored = await context.storage.research.get(child.id, legacy.workspace.id);
+		let jobs = (await context.jobs.list(child.id, 100))?.jobs ?? [];
+
+		expect({
+			status: response.status,
+			error: body.error,
+			owners: context.owners,
+			evidenceJobId: stored?.turns[0]?.evidenceJobId,
+			jobs: jobs.length,
+		}).toEqual({
+			status: 400,
+			error: "invalid research workspace request",
+			owners: [],
+			evidenceJobId: undefined,
+			jobs: 0,
+		});
+	});
+
 	it("starts inline research without replacing private workspace creation", async () => {
 		let context = await setup();
 		let draft = await create(context);
