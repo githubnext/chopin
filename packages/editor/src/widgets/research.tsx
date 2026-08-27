@@ -226,7 +226,7 @@ export function ResearchCard(
 		: undefined;
 	let actions = researchActions(request, canEdit);
 	return (
-		<SidecarCard label="Research">
+		<SidecarCard data-research-ready={ready ? "" : undefined} label="Research">
 			<div className="plan-research-heading">
 				<strong>{ready ? ready.title : STAGES[request.stage]}</strong>
 				<span>{ready ? STAGES[request.stage] : request.question}</span>
@@ -241,7 +241,7 @@ export function ResearchCard(
 				</>
 			)}
 			{request.error && <p className="plan-research-error" role="status">{request.error}</p>}
-			{request.sources.length > 0 && (
+			{!ready && request.sources.length > 0 && (
 				<ul aria-label="Research sources" className="plan-research-sources">
 					{request.sources.map(source => (
 						<li key={source.url}>
@@ -251,52 +251,53 @@ export function ResearchCard(
 				</ul>
 			)}
 			{actionError && <p className="plan-research-error" role="status">{actionError}</p>}
-			<div className="plan-research-actions">
-				{actions.cancel && onCancel && (
-					<button
-						aria-label="Cancel research"
-						className="btn btn-sm btn-secondary"
-						disabled={busy || !canEdit}
-						onClick={onCancel}
-						type="button"
-					>
-						Cancel
-					</button>
-				)}
-				{actions.retry && onRetry && (
-					<button
-						aria-label="Retry research"
-						className="btn btn-sm btn-secondary"
-						disabled={busy || !canEdit}
-						onClick={onRetry}
-						type="button"
-					>
-						Retry
-					</button>
-				)}
-				{actions.open && ready && onOpen && (
-					<button
-						className="btn btn-sm btn-primary"
-						disabled={busy}
-						onClick={event => onOpen(event.currentTarget)}
-						ref={openButtonRef}
-						type="button"
-					>
-						Open {ready.title}
-					</button>
-				)}
-				{actions.remove && onRemove && (
-					<button
-						aria-label="Remove research reference"
-						className="btn btn-sm btn-ghost"
-						disabled={busy || !canEdit}
-						onClick={onRemove}
-						type="button"
-					>
-						Remove
-					</button>
-				)}
-			</div>
+			{!ready && (
+				<div className="plan-research-actions">
+					{actions.cancel && onCancel && (
+						<button
+							aria-label="Cancel research"
+							className="btn btn-sm btn-secondary"
+							disabled={busy || !canEdit}
+							onClick={onCancel}
+							type="button"
+						>
+							Cancel
+						</button>
+					)}
+					{actions.retry && onRetry && (
+						<button
+							aria-label="Retry research"
+							className="btn btn-sm btn-secondary"
+							disabled={busy || !canEdit}
+							onClick={onRetry}
+							type="button"
+						>
+							Retry
+						</button>
+					)}
+					{actions.remove && onRemove && (
+						<button
+							aria-label="Remove research reference"
+							className="btn btn-sm btn-ghost"
+							disabled={busy || !canEdit}
+							onClick={onRemove}
+							type="button"
+						>
+							Remove
+						</button>
+					)}
+				</div>
+			)}
+			{actions.open && ready && onOpen && (
+				<button
+					aria-label={`Open ${ready.title}`}
+					className="plan-research-open"
+					disabled={busy}
+					onClick={event => onOpen(event.currentTarget)}
+					ref={openButtonRef}
+					type="button"
+				/>
+			)}
 		</SidecarCard>
 	);
 }
