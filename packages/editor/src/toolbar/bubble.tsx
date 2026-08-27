@@ -11,6 +11,8 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { TOGGLE_LINK_COMMAND } from "@lexical/link";
 import { LINK_PROTOCOLS } from "@chopin/dialect";
 
+import linkPlusIcon from "../assets/icons/link-plus.svg";
+import messagePlusIcon from "../assets/icons/message-plus.svg";
 import { askForUrl } from "./url";
 import { placeSurface } from "./placement";
 import {
@@ -137,47 +139,6 @@ const MARKS: Mark[] = [
 	{ format: "underline", label: "Underline", glyph: "U", shortcut: "⌘U" },
 	{ format: "code", label: "Inline code", glyph: "<>", shortcut: "⌘E" },
 ];
-
-function LinkPlusIcon() {
-	return (
-		<svg
-			aria-hidden="true"
-			fill="none"
-			height="14"
-			stroke="#212121"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-			strokeWidth="1.5"
-			viewBox="0 0 18 18"
-			width="14"
-		>
-			<path d="M14.251 1.25V6.25" />
-			<path d="M16.751 3.75H11.751" />
-			<path d="M7.86909 7.3934C7.56649 7.5539 7.28239 7.7617 7.02799 8.017L7.01799 8.027C5.63699 9.408 5.63699 11.646 7.01799 13.027L9.19299 15.202C10.574 16.583 12.812 16.583 14.193 15.202L14.203 15.192C15.584 13.811 15.584 11.573 14.203 10.192L13.4406 9.4296" />
-			<path d="M9.13289 11.6066C9.43549 11.4461 9.71959 11.2383 9.97399 10.983L9.984 10.973C11.365 9.59199 11.365 7.35399 9.984 5.97299L7.80899 3.79799C6.42799 2.41699 4.18999 2.41699 2.80899 3.79799L2.79899 3.80799C1.41799 5.18899 1.41799 7.42699 2.79899 8.80799L3.5614 9.57039" />
-		</svg>
-	);
-}
-
-function MessagePlusIcon() {
-	return (
-		<svg
-			aria-hidden="true"
-			fill="none"
-			height="14"
-			stroke="#212121"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-			strokeWidth="1.5"
-			viewBox="0 0 18 18"
-			width="14"
-		>
-			<path d="M14.75 12.25V17.25" />
-			<path d="M16.2155 9.64111C16.2364 9.42991 16.25 9.2168 16.25 9C16.25 4.9961 13.004 1.75 9 1.75C4.996 1.75 1.75 4.9961 1.75 9C1.75 10.3188 2.10801 11.552 2.72301 12.6169C3.15301 13.4228 2.67 15.3291 1.75 16.25C3 16.3179 4.647 15.7529 5.383 15.2769C5.872 15.5591 6.647 15.9331 7.662 16.125C8.095 16.207 8.543 16.25 9 16.25C9.2167 16.25 9.4299 16.2363 9.6412 16.2156" />
-			<path d="M17.25 14.75H12.25" />
-		</svg>
-	);
-}
 
 export function SelectionBubble(
 	{ disabled, onComment }: { disabled?: boolean; onComment?: () => void },
@@ -419,7 +380,7 @@ export function SelectionBubble(
 							}}
 							className={`${CELL} ${CELL_OFF}`}
 						>
-							<LinkPlusIcon />
+							<img alt="" aria-hidden="true" className="size-3.5 opacity-70" src={linkPlusIcon} />
 						</button>
 
 						{onComment && (
@@ -438,7 +399,12 @@ export function SelectionBubble(
 									onClick={onComment}
 									className={`${CELL} ${CELL_OFF}`}
 								>
-									<MessagePlusIcon />
+									<img
+										alt=""
+										aria-hidden="true"
+										className="size-3.5 opacity-70"
+										src={messagePlusIcon}
+									/>
 								</button>
 							</>
 						)}
