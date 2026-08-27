@@ -8,19 +8,31 @@ import type { ResearchRequestApi, ResearchRequestSchedule } from "./research-req
 function request(
 	id: string,
 	stage: Research.RequestStage = "queued",
-	overrides: Partial<Research.RequestView> = {},
+	overrides: Partial<Research.RequestViewBase> & { child?: Research.ReadyChild } = {},
 ): Research.RequestView {
-	return {
+	let base: Research.RequestViewBase = {
 		id,
 		channelId: "channel-one",
-		question: "  Keep this brief exact.  ",
-		state: stage === "ready" ? "completed" : stage === "failed" ? "failed" : "running",
-		stage,
-		sources: [],
-		createdAt: "2026-08-24T09:00:00.000Z",
-		updatedAt: "2026-08-24T09:01:00.000Z",
-		...overrides,
+		question: overrides.question ?? "  Keep this brief exact.  ",
+		sources: overrides.sources ?? [],
+		createdAt: overrides.createdAt ?? "2026-08-24T09:00:00.000Z",
+		updatedAt: overrides.updatedAt ?? "2026-08-24T09:01:00.000Z",
 	};
+	if (stage === "failed") {
+		return { ...base, state: "failed", stage, error: "Research could not be completed." };
+	}
+	if (stage === "cancelled") return { ...base, state: "cancelled", stage };
+	if (stage === "ready") {
+		let child = overrides.child ?? {
+			id: "child-one",
+			title: "Research report",
+			slug: "research-report",
+			summary: "Completed research.",
+			sourceCount: 0,
+		};
+		return { ...base, state: "completed", stage, child };
+	}
+	return { ...base, state: "running", stage };
 }
 
 function deferred<T>() {
@@ -37,7 +49,7 @@ function api(
 	overrides: Partial<ResearchRequestApi> = {},
 ): ResearchRequestApi {
 	return {
-		cancel: async (_channelId, id) => request(id, "cancelled", { state: "cancelled" }),
+		cancel: async (_channelId, id) => request(id, "cancelled"),
 		create: async (_channelId, question, id) => ({
 			repeated: false,
 			request: request(id, "queued", { question }),
@@ -387,9 +399,7 @@ describe("research request store", () => {
 	it("restores a failed request and retries it by durable identity", async () => {
 		let retries: string[] = [];
 		let initial = request("request-one", "failed", {
-			error: "Research could not be completed.",
 			question: "  Exact stored question.  ",
-			state: "failed",
 		});
 		let store = new ResearchRequestStore({
 			api: api({
@@ -434,7 +444,7 @@ describe("research request store", () => {
 		store.dispose();
 	});
 
-	it("keeps authoritative safe error, sources, and ready-child metadata unchanged", async () => {
+	it("keeps authoritative sources and ready-child metadata unchanged", async () => {
 		let ready = request("request-one", "ready", {
 			child: {
 				id: "child-one",
@@ -443,7 +453,6 @@ describe("research request store", () => {
 				summary: "Validated report summary",
 				title: "Source report",
 			},
-			error: "Safe server error",
 			sources: [{ title: "Primary source", url: "https://example.com/source" }],
 		});
 		let store = new ResearchRequestStore({

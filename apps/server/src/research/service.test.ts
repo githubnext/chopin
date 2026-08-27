@@ -260,9 +260,8 @@ describe("research workspace service", () => {
 		let [workspace] = await context.storage.research.list(context.channelId, 100);
 		if (!workspace) throw new Error("durable research request is unavailable");
 
-		let restarted = context.restart();
-		let observed = await reconciledRequest(restarted, context.channelId, workspace.id);
-		expect(observed).toMatchObject({ state: "pending", stage: "queued" });
+		let observed = await context.restart().request(context.channelId, workspace.id);
+		expect(observed).toMatchObject({ state: "failed", stage: "failed" });
 		expect(
 			(await context.storage.research.get(context.channelId, workspace.id))?.turns[0]
 				?.evidenceJobId,
@@ -316,7 +315,7 @@ describe("research workspace service", () => {
 
 		let reader = context.restart();
 		let before = await reader.request(context.channelId, workspace.id);
-		expect(before).toMatchObject({ state: "pending", stage: "queued" });
+		expect(before).toMatchObject({ state: "failed", stage: "failed" });
 		expect(
 			(await context.storage.research.get(context.channelId, workspace.id))?.turns[0]
 				?.evidenceJobId,
@@ -327,7 +326,7 @@ describe("research workspace service", () => {
 			context.channelId,
 			workspace.id,
 		);
-		expect(observed).toMatchObject({ state: "pending", stage: "queued" });
+		expect(observed).toMatchObject({ state: "failed", stage: "failed" });
 		expect(
 			(await context.storage.research.get(context.channelId, workspace.id))?.turns[0]
 				?.evidenceJobId,

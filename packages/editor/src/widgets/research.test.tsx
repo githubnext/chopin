@@ -10,16 +10,38 @@ import { register } from "./index";
 import type { ComponentType } from "react";
 import type { Research } from "@chopin/protocol";
 
-const BASE: Research.RequestView = {
+const REQUEST_BASE: Research.RequestViewBase = {
 	id: "workspace-one",
 	channelId: "document-one",
 	question: "Which evidence supports the rollout date?",
-	state: "running",
-	stage: "searching",
 	sources: [{ title: "Release notes", url: "https://example.com/releases" }],
 	createdAt: "2026-08-24T09:00:00.000Z",
 	updatedAt: "2026-08-24T09:01:00.000Z",
 };
+
+const BASE: Research.RequestView = { ...REQUEST_BASE, state: "running", stage: "searching" };
+
+function atStage(stage: Research.RequestStage): Research.RequestView {
+	if (stage === "failed") {
+		return { ...REQUEST_BASE, state: "failed", stage, error: "Research could not be completed." };
+	}
+	if (stage === "cancelled") return { ...REQUEST_BASE, state: "cancelled", stage };
+	if (stage === "ready") {
+		return {
+			...REQUEST_BASE,
+			state: "completed",
+			stage,
+			child: {
+				id: "child-one",
+				title: "Rollout evidence",
+				slug: "rollout-evidence",
+				summary: "Validated report summary",
+				sourceCount: 1,
+			},
+		};
+	}
+	return { ...REQUEST_BASE, state: "running", stage };
+}
 
 type CardProps = {
 	request: Research.RequestView;
@@ -247,16 +269,16 @@ describe("research reference", () => {
 			["ready", { cancel: false, open: true, remove: true, retry: false }],
 		];
 		for (let [stage, want] of expected) {
-			let request = stage === "loading" ? undefined : { ...BASE, stage };
+			let request = stage === "loading" ? undefined : atStage(stage);
 			expect(actions(request, true)).toEqual(want);
 		}
-		expect(actions({ ...BASE, stage: "ready" }, false)).toEqual({
+		expect(actions(atStage("ready"), false)).toEqual({
 			cancel: false,
 			open: true,
 			remove: false,
 			retry: false,
 		});
-		expect(actions({ ...BASE, stage: "failed" }, false)).toEqual({
+		expect(actions(atStage("failed"), false)).toEqual({
 			cancel: false,
 			open: false,
 			remove: false,
