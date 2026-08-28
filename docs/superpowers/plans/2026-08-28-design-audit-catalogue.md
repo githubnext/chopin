@@ -63,12 +63,12 @@ export function DesignAuditPage() {
 }
 ```
 
-Run: `bun test apps/web/src/design-audit/route.test.ts && bun --cwd apps/web run types`
+Run: `bun test apps/web/src/design-audit/route.test.ts && bun run --cwd apps/web types`
 Expected: PASS.
 
 - [ ] **Step 6: Verify production exclusion and commit**
 
-Run: `bun --cwd apps/web run build && ! rg -l "Chopin design audit" apps/web/dist`
+Run: `bun run --cwd apps/web build && ! rg -l "Chopin design audit" apps/web/dist`
 Expected: build passes and `rg` finds no catalogue string.
 
 Commit: `git commit -am "Add development design audit route"`
@@ -123,7 +123,7 @@ the real application classes.
 
 - [ ] **Step 5: Run tests and commit**
 
-Run: `bun test apps/web/src/design-audit/inventory.test.ts && bun --cwd apps/web run types`
+Run: `bun test apps/web/src/design-audit/inventory.test.ts && bun run --cwd apps/web types`
 Expected: PASS.
 
 Commit: `git add apps/web/src/design-audit && git commit -m "Map design audit coverage"`
@@ -133,12 +133,15 @@ Commit: `git add apps/web/src/design-audit && git commit -m "Map design audit co
 **Files:**
 - Create: `apps/web/src/design-audit/foundations.tsx`
 - Create: `apps/web/src/design-audit/controls.tsx`
+- Create: `apps/web/src/design-audit/specimens.test.tsx`
 - Modify: `apps/web/src/design-audit/page.tsx`
 
-- [ ] **Step 1: Add source-contract assertions to the inventory test**
+- [ ] **Step 1: Write rendered specimen tests**
 
-Assert each foundation and control inventory ID appears in its specimen module. This is intentionally
-a source contract because Bun has no DOM and the repository forbids synthetic layout DOMs.
+Render the foundation and control sections with `renderToStaticMarkup`. Assert the resulting landmarks,
+headings, control roles, accessible names, native disabled attributes, selected state, and invalid state.
+The break caught is a catalogue specimen disappearing or losing the same semantics as its real control;
+CSS geometry remains a browser test.
 
 - [ ] **Step 2: Render foundations**
 
@@ -155,7 +158,7 @@ read-only examples. Include text links, tablist/tab states, list selection, drop
 
 - [ ] **Step 4: Verify and commit**
 
-Run: `bun test apps/web/src/design-audit/inventory.test.ts && bun --cwd apps/web run types`
+Run: `bun test apps/web/src/design-audit/inventory.test.ts && bun run --cwd apps/web types`
 Expected: PASS.
 
 Commit: `git add apps/web/src/design-audit && git commit -m "Catalogue foundations and controls"`
@@ -188,7 +191,7 @@ launchers must restore focus and close with Escape; inline specimens remain open
 
 - [ ] **Step 4: Verify and commit**
 
-Run: `bun test apps/web/src/design-audit/inventory.test.ts packages/editor/src/card.test.ts && bun --cwd apps/web run types`
+Run: `bun test apps/web/src/design-audit/inventory.test.ts packages/editor/src/card.test.ts && bun run --cwd apps/web types`
 Expected: PASS.
 
 Commit: `git add apps/web/src/design-audit apps/web/src packages/editor/src && git commit -m "Catalogue application surfaces"`
@@ -197,15 +200,16 @@ Commit: `git add apps/web/src/design-audit apps/web/src packages/editor/src && g
 
 **Files:**
 - Create: `packages/editor/src/static-plan-editor.tsx`
-- Create: `packages/editor/src/static-plan-editor.test.ts`
+- Create: `packages/editor/src/static-plan-editor.test.tsx`
 - Modify: `packages/editor/package.json`
 - Create: `apps/web/src/design-audit/authored-content.tsx`
 - Modify: `apps/web/src/design-audit/page.tsx`
 
-- [ ] **Step 1: Write the static-editor source contract**
+- [ ] **Step 1: Write the static-editor render contract**
 
-Assert the fixture entry point registers the production widget renderers, uses `dialectPlugins`, uses
-the production `widgetsPlugin`, sets `readOnly`, and does not import collaboration or `PlanProvider`.
+Render `StaticPlanEditor` with a heading, callout, and code fixture. Assert its labelled read-only
+document landmark and source identity render without collaboration status or connection fallback.
+The browser pass later asserts the hydrated editor's actual authored blocks.
 
 - [ ] **Step 2: Implement `StaticPlanEditor`**
 
@@ -229,7 +233,7 @@ instead of forging decision records inside MDX.
 
 - [ ] **Step 5: Verify and commit**
 
-Run: `bun test packages/editor/src/static-plan-editor.test.ts apps/web/src/design-audit/inventory.test.ts && bun --cwd packages/editor run types && bun --cwd apps/web run types`
+Run: `bun test packages/editor/src/static-plan-editor.test.tsx apps/web/src/design-audit/inventory.test.ts && bun run --cwd packages/editor types && bun run --cwd apps/web types`
 Expected: PASS.
 
 Commit: `git add packages/editor apps/web/src/design-audit && git commit -m "Catalogue authored document components"`
