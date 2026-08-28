@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { lexicalTheme, markdownShortcutPlugin, MDXEditor } from "@mdxeditor/editor";
+import { markdownShortcutPlugin, MDXEditor } from "@mdxeditor/editor";
 
 // Structural editor CSS, then our retheme over the top.
 import "@mdxeditor/editor/style.css";
@@ -19,6 +19,7 @@ import { ChangeStore } from "./changes";
 import { PlanChanges } from "./changes-chip";
 import { collaborationPlugin } from "./collaboration";
 import { PlanStatus } from "./status";
+import { PLAN_LEXICAL_THEME } from "./plan-theme";
 import { ResearchDraftStore } from "./research-draft";
 import { register } from "./widgets";
 import { widgetsPlugin } from "./widgets-plugin";
@@ -43,18 +44,6 @@ import type { CommentPresentation, QuestionStepMotion, ResearchStore } from "./w
  * at all — draws a cell selection that is completely invisible. Dragging across
  * cells then appears to do nothing while a `TableSelection` is very much live.
  */
-const THEME = {
-	...lexicalTheme,
-	collaboration: {
-		cursor: "plan-cursor",
-		cursorName: "plan-cursor-name",
-		selection: "plan-cursor-selection",
-		selectionBg: "plan-cursor-selection-bg",
-	},
-	tableCellSelected: "plan-cell-selected",
-	tableSelection: "plan-table-selecting",
-};
-
 // Decorator nodes render through whatever the UI registered, so this has to
 // happen before an editor mounts.
 register();
@@ -338,7 +327,7 @@ export function PlanEditor(
 							suppressSharedHistory
 							readOnly={locked}
 							plugins={plugins}
-							lexicalTheme={THEME}
+							lexicalTheme={PLAN_LEXICAL_THEME}
 							contentEditableClassName="plan-content focus-caret"
 							placeholder="Start writing, or ask Chopin to plan"
 							spellCheck

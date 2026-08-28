@@ -19,6 +19,10 @@
 			"types": "./src/pointer.ts",
 			"default": "./src/pointer.ts"
 		},
+		"./static": {
+			"types": "./src/static-plan-editor.tsx",
+			"default": "./src/static-plan-editor.tsx"
+		},
 		"./transition-presence": {
 			"types": "./src/transition-presence.ts",
 			"default": "./src/transition-presence.ts"
