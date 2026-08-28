@@ -828,7 +828,19 @@ test("an unavailable comment position keeps its compact sheet mounted until geom
 		viewport: { width: 390, height: 300 },
 	});
 	let editor = content(page);
-	await editor.locator("p").first().selectText();
+	await editor.locator("p").first().evaluate(paragraph => {
+		let phrase = "A selected passage keeps going.";
+		let text = paragraph.querySelector("[data-lexical-text]")?.firstChild;
+		if (!(text instanceof Text) || !text.data.startsWith(phrase)) {
+			throw new Error("expected the tall passage fixture");
+		}
+		let range = document.createRange();
+		range.setStart(text, 0);
+		range.setEnd(text, phrase.length);
+		let selection = getSelection();
+		selection?.removeAllRanges();
+		selection?.addRange(range);
+	});
 	await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
 	let draft = page.getByRole("dialog", { name: "New comment" });
 	await draft.getByPlaceholder("Comment on this passage…").fill("Keep the whole passage.");
