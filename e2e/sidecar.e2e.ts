@@ -754,12 +754,23 @@ test("a compact new-comment sheet blocks navigation and restores editor focus", 
 	let sheet = await openDraft();
 	let destination = await decisions.boundingBox();
 	expect(destination).not.toBeNull();
-	await page.mouse.click(
-		destination!.x + destination!.width / 2,
-		destination!.y + destination!.height / 2,
-	);
-	await expect(sheet).toHaveCount(0);
+	let destinationPoint = {
+		x: destination!.x + destination!.width / 2,
+		y: destination!.y + destination!.height / 2,
+	};
+	await expect.poll(() =>
+		page.evaluate(
+			({ x, y }) => !!document.elementFromPoint(x, y)?.closest("[data-plan-comment-sheet]"),
+			destinationPoint,
+		)
+	).toBe(true);
+	await page.mouse.click(destinationPoint.x, destinationPoint.y);
+	await expect(sheet).toBeVisible();
 	await expect(plan).toHaveAttribute("aria-pressed", "true");
+	await page.locator("[data-plan-comment-sheet-backdrop]").click({
+		position: { x: 10, y: 10 },
+	});
+	await expect(sheet).toHaveCount(0);
 	await expect(editor).toBeFocused();
 
 	sheet = await openDraft();
