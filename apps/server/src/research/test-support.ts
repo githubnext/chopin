@@ -13,7 +13,8 @@ import { MemoryStorage } from "../storage/memory/adapter";
 import { ResearchWorkspaceService } from "./service";
 
 import type { ResearchReport } from "../jobs/research-workspace";
-import type { BackgroundJob, JsonValue } from "../storage/model";
+import type { BackgroundJob, ChannelRecord, JsonValue, Lease } from "../storage/model";
+import type { StorageAdapter } from "../storage/port";
 
 const SOURCE = "# Parent document\n\nThe private compatibility plan is current.\n";
 const SOURCE_HASH = `sha256:${createHash("sha256").update(SOURCE).digest("hex")}`;
@@ -40,7 +41,7 @@ export async function setup(options: { answer?: boolean; evidence?: boolean } = 
 	let userId = USER_ID;
 	let channelId = crypto.randomUUID();
 	await storage.users.put({ id: userId, login: "octocat", avatarUrl: "avatar", now });
-	await storage.channels.create({
+	let channel = await storage.channels.create({
 		id: channelId,
 		repositoryId: REPOSITORY_ID,
 		repositoryOwner: "octo-org",
@@ -109,6 +110,7 @@ export async function setup(options: { answer?: boolean; evidence?: boolean } = 
 		jobs,
 		lease,
 		channelId,
+		channel,
 		userId,
 		publications,
 		advance,
@@ -116,6 +118,167 @@ export async function setup(options: { answer?: boolean; evidence?: boolean } = 
 }
 
 export type ResearchTestContext = Awaited<ReturnType<typeof setup>>;
+
+export type ChildResearchFixture = {
+	jobs: JobService;
+	lease: Lease;
+	now: () => Date;
+	parent: ChannelRecord;
+	storage: StorageAdapter;
+};
+
+export async function createChild(fixture: ChildResearchFixture) {
+	return fixture.storage.channels.create({
+		id: crypto.randomUUID(),
+		repositoryId: fixture.parent.repositoryId,
+		repositoryOwner: fixture.parent.repositoryOwner,
+		repositoryName: fixture.parent.repositoryName,
+		parentChannelId: fixture.parent.id,
+		title: "Published research child",
+		createdBy: fixture.parent.createdBy,
+		now: fixture.now(),
+	});
+}
+
+export async function createLegacyChildDraft(
+	fixture: ChildResearchFixture,
+	child: ChannelRecord,
+) {
+	return fixture.storage.research.create({
+		id: crypto.randomUUID(),
+		channelId: child.id,
+		title: "Legacy child research",
+		proposedQuestion: "Create a grandchild",
+		origin: "sidebar",
+		createdBy: fixture.parent.createdBy,
+		idempotencyKey: "legacy-child-draft",
+		fingerprint: "legacy-child-draft",
+		now: fixture.now(),
+		lease: fixture.lease,
+	});
+}
+
+export async function createLegacyChildRequest(
+	fixture: ChildResearchFixture,
+	child: ChannelRecord,
+	durableRequestId: string,
+) {
+	return fixture.storage.research.start({
+		id: crypto.randomUUID(),
+		channelId: child.id,
+		title: "Legacy child research",
+		question: "Create a grandchild",
+		origin: "inline",
+		createdBy: fixture.parent.createdBy,
+		turnId: crypto.randomUUID(),
+		messageId: crypto.randomUUID(),
+		requestId: durableRequestId,
+		idempotencyKey: "legacy-child-request",
+		fingerprint: "legacy-child-request",
+		now: fixture.now(),
+		lease: fixture.lease,
+	});
+}
+
+export async function createChildEvidence(
+	fixture: ChildResearchFixture,
+	child: ChannelRecord,
+	legacy: Awaited<ReturnType<typeof createLegacyChildRequest>>,
+) {
+	let evidence = await fixture.jobs.enqueueUser({
+		channelId: child.id,
+		type: "research-evidence",
+		targetKey: `workspace:${legacy.workspace.id}:turn:${legacy.turn.id}:evidence`,
+		idempotencyKey: "legacy-child-evidence",
+		input: {
+			workspaceId: legacy.workspace.id,
+			turnId: legacy.turn.id,
+			query: legacy.turn.question,
+		},
+	});
+	await fixture.storage.research.linkJob({
+		channelId: child.id,
+		workspaceId: legacy.workspace.id,
+		turnId: legacy.turn.id,
+		role: "evidence",
+		jobId: evidence.job.id,
+		now: fixture.now(),
+		lease: fixture.lease,
+	});
+	return evidence;
+}
+
+export async function completeChildEvidence(
+	fixture: ChildResearchFixture,
+	child: ChannelRecord,
+) {
+	let [claimed] = await fixture.storage.jobs.claim({
+		channelId: child.id,
+		claimOwner: "completed-child-worker",
+		count: 1,
+		ttlMs: 30_000,
+		now: fixture.now(),
+		lease: fixture.lease,
+	});
+	if (!claimed) throw new Error("child evidence job was not claimable");
+	return fixture.jobs.settle({
+		channelId: child.id,
+		jobId: claimed.id,
+		claimOwner: "completed-child-worker",
+		claimGeneration: claimed.claimGeneration,
+		artifact: evidenceArtifact(claimed),
+	});
+}
+
+export async function completeChildAnswer(
+	fixture: ChildResearchFixture,
+	child: ChannelRecord,
+	legacy: Awaited<ReturnType<typeof createLegacyChildRequest>>,
+) {
+	let answer = await fixture.jobs.enqueueUser({
+		channelId: child.id,
+		type: "research-answer",
+		targetKey: `workspace:${legacy.workspace.id}:turn:${legacy.turn.id}:answer`,
+		idempotencyKey: "legacy-child-answer",
+		input: {
+			workspaceId: legacy.workspace.id,
+			turnId: legacy.turn.id,
+			kind: "initial",
+			question: legacy.turn.question,
+			document: { source: SOURCE, revision: 7, sourceHash: SOURCE_HASH },
+			evidence: [{
+				findings: ["The public release notes retain compatibility."],
+				sources: [PUBLIC_SOURCE],
+			}],
+			history: [],
+		},
+	});
+	await fixture.storage.research.linkJob({
+		channelId: child.id,
+		workspaceId: legacy.workspace.id,
+		turnId: legacy.turn.id,
+		role: "answer",
+		jobId: answer.job.id,
+		now: fixture.now(),
+		lease: fixture.lease,
+	});
+	let [claimed] = await fixture.storage.jobs.claim({
+		channelId: child.id,
+		claimOwner: "completed-child-worker",
+		count: 1,
+		ttlMs: 30_000,
+		now: fixture.now(),
+		lease: fixture.lease,
+	});
+	if (!claimed) throw new Error("child answer job was not claimable");
+	return fixture.jobs.settle({
+		channelId: child.id,
+		jobId: claimed.id,
+		claimOwner: "completed-child-worker",
+		claimGeneration: claimed.claimGeneration,
+		artifact: answerArtifact(claimed),
+	});
+}
 
 export async function settle(
 	context: ResearchTestContext,

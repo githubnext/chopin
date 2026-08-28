@@ -10,6 +10,13 @@ import { Router } from "../http/router";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { registerResearchWorkspaceRoutes } from "./routes";
 import { ResearchWorkspaceService } from "./service";
+import {
+	completeChildEvidence,
+	createChild,
+	createChildEvidence,
+	createLegacyChildDraft,
+	createLegacyChildRequest,
+} from "./test-support";
 
 import type { HostedAuth } from "../auth/routes";
 import type { GitHub, GitHubTokenGrant, Repository } from "../github/client";
@@ -215,75 +222,22 @@ async function failInitial(context: Awaited<ReturnType<typeof setup>>) {
 	});
 }
 
+function childFixture(context: Awaited<ReturnType<typeof setup>>) {
+	return {
+		jobs: context.jobs,
+		lease: context.lease,
+		now: () => context.now,
+		parent: context.channel,
+		storage: context.storage,
+	};
+}
+
 async function completedChildEvidence(context: Awaited<ReturnType<typeof setup>>) {
-	let child = await context.storage.channels.create({
-		id: crypto.randomUUID(),
-		repositoryId: context.channel.repositoryId,
-		repositoryOwner: context.channel.repositoryOwner,
-		repositoryName: context.channel.repositoryName,
-		parentChannelId: context.channel.id,
-		title: "Published research child",
-		createdBy: USER_ID,
-		now: context.now,
-	});
-	let legacy = await context.storage.research.start({
-		id: crypto.randomUUID(),
-		channelId: child.id,
-		title: "Legacy child research",
-		question: "Create a grandchild",
-		origin: "inline",
-		createdBy: USER_ID,
-		turnId: crypto.randomUUID(),
-		messageId: crypto.randomUUID(),
-		requestId: requestId(1),
-		idempotencyKey: "legacy-child-request",
-		fingerprint: "legacy-child-request",
-		now: context.now,
-		lease: context.lease,
-	});
-	let evidence = await context.jobs.enqueueUser({
-		channelId: child.id,
-		type: "research-evidence",
-		targetKey: `workspace:${legacy.workspace.id}:turn:${legacy.turn.id}:evidence`,
-		idempotencyKey: "legacy-child-evidence",
-		input: {
-			workspaceId: legacy.workspace.id,
-			turnId: legacy.turn.id,
-			query: legacy.turn.question,
-		},
-	});
-	await context.storage.research.linkJob({
-		channelId: child.id,
-		workspaceId: legacy.workspace.id,
-		turnId: legacy.turn.id,
-		role: "evidence",
-		jobId: evidence.job.id,
-		now: context.now,
-		lease: context.lease,
-	});
-	let [claimed] = await context.storage.jobs.claim({
-		channelId: child.id,
-		claimOwner: "completed-child-worker",
-		count: 1,
-		ttlMs: 30_000,
-		now: new Date(context.now.getTime() + 1),
-		lease: context.lease,
-	});
-	if (!claimed) throw new Error("child evidence job was not claimable");
-	let completed = await context.jobs.settle({
-		channelId: child.id,
-		jobId: claimed.id,
-		claimOwner: "completed-child-worker",
-		claimGeneration: claimed.claimGeneration,
-		artifact: {
-			workspaceId: legacy.workspace.id,
-			turnId: legacy.turn.id,
-			query: legacy.turn.question,
-			findings: ["The public release notes retain compatibility."],
-			sources: [{ title: "Release notes", url: "https://example.com/releases/v3" }],
-			model: "research-model",
-		},
-	});
+	let fixture = childFixture(context);
+	let child = await createChild(fixture);
+	let legacy = await createLegacyChildRequest(fixture, child, requestId(1));
+	await createChildEvidence(fixture, child, legacy);
+	let completed = await completeChildEvidence(fixture, child);
 	return { child, legacy, completed };
 }
 
@@ -375,16 +329,7 @@ describe("research workspace routes", () => {
 
 	it("rejects child research before owner setup or durable work", async () => {
 		let context = await setup();
-		let child = await context.storage.channels.create({
-			id: crypto.randomUUID(),
-			repositoryId: context.channel.repositoryId,
-			repositoryOwner: context.channel.repositoryOwner,
-			repositoryName: context.channel.repositoryName,
-			parentChannelId: context.channel.id,
-			title: "Published research child",
-			createdBy: USER_ID,
-			now: context.now,
-		});
+		let child = await createChild(childFixture(context));
 		let response = await context.router.handle(request(
 			`/api/channels/${child.id}/research-requests`,
 			context.cookie,
@@ -412,16 +357,7 @@ describe("research workspace routes", () => {
 
 	it("rejects legacy child research drafts before durable work", async () => {
 		let context = await setup();
-		let child = await context.storage.channels.create({
-			id: crypto.randomUUID(),
-			repositoryId: context.channel.repositoryId,
-			repositoryOwner: context.channel.repositoryOwner,
-			repositoryName: context.channel.repositoryName,
-			parentChannelId: context.channel.id,
-			title: "Published research child",
-			createdBy: USER_ID,
-			now: context.now,
-		});
+		let child = await createChild(childFixture(context));
 		let response = await context.router.handle(request(
 			`/api/channels/${child.id}/research-workspaces`,
 			context.cookie,
@@ -440,28 +376,9 @@ describe("research workspace routes", () => {
 
 	it("rejects confirmation of legacy child research before owner setup or jobs", async () => {
 		let context = await setup();
-		let child = await context.storage.channels.create({
-			id: crypto.randomUUID(),
-			repositoryId: context.channel.repositoryId,
-			repositoryOwner: context.channel.repositoryOwner,
-			repositoryName: context.channel.repositoryName,
-			parentChannelId: context.channel.id,
-			title: "Published research child",
-			createdBy: USER_ID,
-			now: context.now,
-		});
-		let legacy = await context.storage.research.create({
-			id: crypto.randomUUID(),
-			channelId: child.id,
-			title: "Legacy child research",
-			proposedQuestion: "Create a grandchild",
-			origin: "sidebar",
-			createdBy: USER_ID,
-			idempotencyKey: "legacy-child-draft",
-			fingerprint: "legacy-child-draft",
-			now: context.now,
-			lease: context.lease,
-		});
+		let fixture = childFixture(context);
+		let child = await createChild(fixture);
+		let legacy = await createLegacyChildDraft(fixture, child);
 		let response = await context.router.handle(request(
 			`/api/channels/${child.id}/research-workspaces/${legacy.workspace.id}/confirm`,
 			context.cookie,
@@ -491,28 +408,9 @@ describe("research workspace routes", () => {
 
 	it("rejects continuation of legacy child research before owner setup or jobs", async () => {
 		let context = await setup();
-		let child = await context.storage.channels.create({
-			id: crypto.randomUUID(),
-			repositoryId: context.channel.repositoryId,
-			repositoryOwner: context.channel.repositoryOwner,
-			repositoryName: context.channel.repositoryName,
-			parentChannelId: context.channel.id,
-			title: "Published research child",
-			createdBy: USER_ID,
-			now: context.now,
-		});
-		let legacy = await context.storage.research.create({
-			id: crypto.randomUUID(),
-			channelId: child.id,
-			title: "Legacy child research",
-			proposedQuestion: "Create a grandchild",
-			origin: "sidebar",
-			createdBy: USER_ID,
-			idempotencyKey: "legacy-child-draft",
-			fingerprint: "legacy-child-draft",
-			now: context.now,
-			lease: context.lease,
-		});
+		let fixture = childFixture(context);
+		let child = await createChild(fixture);
+		let legacy = await createLegacyChildDraft(fixture, child);
 		let response = await context.router.handle(request(
 			`/api/channels/${child.id}/research-workspaces/${legacy.workspace.id}/turns`,
 			context.cookie,
@@ -544,31 +442,9 @@ describe("research workspace routes", () => {
 
 	it("rejects retrying legacy child research before owner setup or jobs", async () => {
 		let context = await setup();
-		let child = await context.storage.channels.create({
-			id: crypto.randomUUID(),
-			repositoryId: context.channel.repositoryId,
-			repositoryOwner: context.channel.repositoryOwner,
-			repositoryName: context.channel.repositoryName,
-			parentChannelId: context.channel.id,
-			title: "Published research child",
-			createdBy: USER_ID,
-			now: context.now,
-		});
-		let legacy = await context.storage.research.start({
-			id: crypto.randomUUID(),
-			channelId: child.id,
-			title: "Legacy child research",
-			question: "Create a grandchild",
-			origin: "inline",
-			createdBy: USER_ID,
-			turnId: crypto.randomUUID(),
-			messageId: crypto.randomUUID(),
-			requestId: requestId(1),
-			idempotencyKey: "legacy-child-request",
-			fingerprint: "legacy-child-request",
-			now: context.now,
-			lease: context.lease,
-		});
+		let fixture = childFixture(context);
+		let child = await createChild(fixture);
+		let legacy = await createLegacyChildRequest(fixture, child, requestId(1));
 		let response = await context.router.handle(request(
 			`/api/channels/${child.id}/research-requests/${legacy.workspace.id}/retry`,
 			context.cookie,

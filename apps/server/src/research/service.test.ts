@@ -7,7 +7,13 @@ import * as Plan from "../plan/service";
 import { boundedResearchEvidence, ResearchWorkspaceError } from "./service";
 import {
 	answerArtifact,
+	completeChildAnswer,
+	completeChildEvidence,
 	createAndConfirm,
+	createChild,
+	createChildEvidence,
+	createLegacyChildDraft,
+	createLegacyChildRequest,
 	evidenceArtifact,
 	finishInitial,
 	PUBLIC_SOURCE,
@@ -46,79 +52,34 @@ async function failInitialEvidence(context: Awaited<ReturnType<typeof setup>>) {
 	return claimed.id;
 }
 
-async function childEvidence(
-	context: Awaited<ReturnType<typeof setup>>,
-	complete = true,
-) {
-	let child = await context.storage.channels.create({
-		id: crypto.randomUUID(),
-		repositoryId: REPOSITORY_ID,
-		repositoryOwner: "octo-org",
-		repositoryName: "score",
-		parentChannelId: context.channelId,
-		title: "Published research child",
-		createdBy: context.userId,
-		now: context.advance(),
-	});
-	let legacy = await context.storage.research.start({
-		id: crypto.randomUUID(),
-		channelId: child.id,
-		title: "Legacy child research",
-		question: "Create a grandchild",
-		origin: "inline",
-		createdBy: context.userId,
-		turnId: crypto.randomUUID(),
-		messageId: crypto.randomUUID(),
-		requestId: requestId(1),
-		idempotencyKey: "legacy-child-request",
-		fingerprint: "legacy-child-request",
-		now: context.advance(),
+function childFixture(context: Awaited<ReturnType<typeof setup>>) {
+	return {
+		jobs: context.jobs,
 		lease: context.lease,
-	});
-	let evidence = await context.jobs.enqueueUser({
-		channelId: child.id,
-		type: "research-evidence",
-		targetKey: `workspace:${legacy.workspace.id}:turn:${legacy.turn.id}:evidence`,
-		idempotencyKey: "legacy-child-evidence",
-		input: {
-			workspaceId: legacy.workspace.id,
-			turnId: legacy.turn.id,
-			query: legacy.turn.question,
-		},
-	});
-	await context.storage.research.linkJob({
-		channelId: child.id,
-		workspaceId: legacy.workspace.id,
-		turnId: legacy.turn.id,
-		role: "evidence",
-		jobId: evidence.job.id,
-		now: context.advance(),
-		lease: context.lease,
-	});
-	if (!complete) return { child, legacy, evidence: evidence.job };
-	let [claimed] = await context.storage.jobs.claim({
-		channelId: child.id,
-		claimOwner: "completed-child-worker",
-		count: 1,
-		ttlMs: 30_000,
-		now: context.advance(),
-		lease: context.lease,
-	});
-	if (!claimed) throw new Error("child evidence job was not claimable");
-	let completed = await context.jobs.settle({
-		channelId: child.id,
-		jobId: claimed.id,
-		claimOwner: "completed-child-worker",
-		claimGeneration: claimed.claimGeneration,
-		artifact: evidenceArtifact(claimed),
-	});
-	return { child, legacy, evidence: completed.job };
+		now: context.advance,
+		parent: context.channel,
+		storage: context.storage,
+	};
+}
+
+async function legacyChildEvidence(context: Awaited<ReturnType<typeof setup>>) {
+	let fixture = childFixture(context);
+	let child = await createChild(fixture);
+	let legacy = await createLegacyChildRequest(fixture, child, requestId(1));
+	let evidence = await createChildEvidence(fixture, child, legacy);
+	return { child, legacy, evidence: evidence.job };
+}
+
+async function completedLegacyChildEvidence(context: Awaited<ReturnType<typeof setup>>) {
+	let seeded = await legacyChildEvidence(context);
+	let completed = await completeChildEvidence(childFixture(context), seeded.child);
+	return { ...seeded, evidence: completed.job };
 }
 
 describe("research workspace service", () => {
 	it("observes completed legacy child evidence without reconciling new answer work", async () => {
 		let context = await setup();
-		let { child, legacy } = await childEvidence(context);
+		let { child, legacy } = await completedLegacyChildEvidence(context);
 
 		expect(await context.service.reconcile(child.id, legacy.workspace.id)).toBe(true);
 		expect(await context.service.get(child.id, legacy.workspace.id))
@@ -130,7 +91,7 @@ describe("research workspace service", () => {
 
 	it("does not advance completed legacy child evidence from job changes", async () => {
 		let context = await setup();
-		let { child, legacy, evidence } = await childEvidence(context);
+		let { child, legacy, evidence } = await completedLegacyChildEvidence(context);
 
 		await context.service.jobChanged(evidence);
 		expect(await context.storage.research.get(child.id, legacy.workspace.id))
@@ -140,7 +101,7 @@ describe("research workspace service", () => {
 
 	it("keeps active legacy child research cancellable and readable", async () => {
 		let context = await setup();
-		let { child, legacy, evidence } = await childEvidence(context, false);
+		let { child, legacy, evidence } = await legacyChildEvidence(context);
 
 		expect(await context.service.get(child.id, legacy.workspace.id))
 			.toMatchObject({ workspace: { id: legacy.workspace.id } });
@@ -152,6 +113,46 @@ describe("research workspace service", () => {
 		).toMatchObject({ id: legacy.workspace.id, stage: "cancelled" });
 		expect(await context.jobs.get(child.id, evidence.id))
 			.toMatchObject({ job: { state: "cancelled" } });
+	});
+
+	it("does not advance completed legacy child work while attempting cancellation", async () => {
+		for (let operation of ["request", "turn"] as const) {
+			let context = await setup();
+			let { child, legacy } = await completedLegacyChildEvidence(context);
+			let cancelled = operation === "request"
+				? context.service.cancelRequest({
+					channelId: child.id,
+					workspaceId: legacy.workspace.id,
+				})
+				: context.service.cancelTurn({
+					channelId: child.id,
+					workspaceId: legacy.workspace.id,
+					turnId: legacy.turn.id,
+				});
+
+			await expect(cancelled).rejects.toMatchObject({ code: "not-ready" });
+			expect(await context.storage.research.get(child.id, legacy.workspace.id))
+				.toMatchObject({ turns: [{ evidenceJobId: expect.any(String), answerJobId: undefined }] });
+			expect((await context.jobs.list(child.id, 100))!.jobs).toHaveLength(1);
+			let channels = await context.storage.channels.list(REPOSITORY_ID, 100);
+			expect(channels.channels.filter(value => value.parentChannelId === child.id)).toEqual([]);
+		}
+	});
+
+	it("does not publish completed legacy child answers while attempting cancellation", async () => {
+		let context = await setup();
+		let { child, legacy } = await completedLegacyChildEvidence(context);
+		await completeChildAnswer(childFixture(context), child, legacy);
+
+		await expect(context.service.cancelRequest({
+			channelId: child.id,
+			workspaceId: legacy.workspace.id,
+		})).rejects.toMatchObject({ code: "not-ready" });
+		expect(await context.storage.research.get(child.id, legacy.workspace.id))
+			.toMatchObject({ workspace: { publishedChannelId: undefined } });
+		expect((await context.jobs.list(child.id, 100))!.jobs).toHaveLength(2);
+		let channels = await context.storage.channels.list(REPOSITORY_ID, 100);
+		expect(channels.channels.filter(value => value.parentChannelId === child.id)).toEqual([]);
 	});
 
 	it("starts one inline request and schedules its initial turn immediately", async () => {
@@ -250,16 +251,7 @@ describe("research workspace service", () => {
 
 	it("refuses child Planner research before owner setup or durable work", async () => {
 		let context = await setup();
-		let child = await context.storage.channels.create({
-			id: crypto.randomUUID(),
-			repositoryId: REPOSITORY_ID,
-			repositoryOwner: "octo-org",
-			repositoryName: "score",
-			parentChannelId: context.channelId,
-			title: "Published research child",
-			createdBy: context.userId,
-			now: context.advance(),
-		});
+		let child = await createChild(childFixture(context));
 		let owners = 0;
 		let failure: unknown;
 		try {
@@ -1100,16 +1092,7 @@ describe("research workspace service", () => {
 
 	it("refuses child research drafts before durable work", async () => {
 		let context = await setup();
-		let child = await context.storage.channels.create({
-			id: crypto.randomUUID(),
-			repositoryId: REPOSITORY_ID,
-			repositoryOwner: "octo-org",
-			repositoryName: "score",
-			parentChannelId: context.channelId,
-			title: "Published research child",
-			createdBy: context.userId,
-			now: context.advance(),
-		});
+		let child = await createChild(childFixture(context));
 
 		await expect(context.service.createDraft({
 			channelId: child.id,
@@ -1123,28 +1106,9 @@ describe("research workspace service", () => {
 
 	it("refuses confirming legacy child research before owner setup or jobs", async () => {
 		let context = await setup();
-		let child = await context.storage.channels.create({
-			id: crypto.randomUUID(),
-			repositoryId: REPOSITORY_ID,
-			repositoryOwner: "octo-org",
-			repositoryName: "score",
-			parentChannelId: context.channelId,
-			title: "Published research child",
-			createdBy: context.userId,
-			now: context.advance(),
-		});
-		let legacy = await context.storage.research.create({
-			id: crypto.randomUUID(),
-			channelId: child.id,
-			title: "Legacy child research",
-			proposedQuestion: "Create a grandchild",
-			origin: "sidebar",
-			createdBy: context.userId,
-			idempotencyKey: "legacy-child-draft",
-			fingerprint: "legacy-child-draft",
-			now: context.advance(),
-			lease: context.lease,
-		});
+		let fixture = childFixture(context);
+		let child = await createChild(fixture);
+		let legacy = await createLegacyChildDraft(fixture, child);
 		let owners = 0;
 
 		await expect(context.service.confirm({
@@ -1165,28 +1129,9 @@ describe("research workspace service", () => {
 
 	it("refuses continuing legacy child research before owner setup or jobs", async () => {
 		let context = await setup();
-		let child = await context.storage.channels.create({
-			id: crypto.randomUUID(),
-			repositoryId: REPOSITORY_ID,
-			repositoryOwner: "octo-org",
-			repositoryName: "score",
-			parentChannelId: context.channelId,
-			title: "Published research child",
-			createdBy: context.userId,
-			now: context.advance(),
-		});
-		let legacy = await context.storage.research.create({
-			id: crypto.randomUUID(),
-			channelId: child.id,
-			title: "Legacy child research",
-			proposedQuestion: "Create a grandchild",
-			origin: "sidebar",
-			createdBy: context.userId,
-			idempotencyKey: "legacy-child-draft",
-			fingerprint: "legacy-child-draft",
-			now: context.advance(),
-			lease: context.lease,
-		});
+		let fixture = childFixture(context);
+		let child = await createChild(fixture);
+		let legacy = await createLegacyChildDraft(fixture, child);
 		let owners = 0;
 
 		await expect(context.service.appendTurn({
@@ -1208,31 +1153,9 @@ describe("research workspace service", () => {
 
 	it("refuses retrying legacy child research before owner setup or jobs", async () => {
 		let context = await setup();
-		let child = await context.storage.channels.create({
-			id: crypto.randomUUID(),
-			repositoryId: REPOSITORY_ID,
-			repositoryOwner: "octo-org",
-			repositoryName: "score",
-			parentChannelId: context.channelId,
-			title: "Published research child",
-			createdBy: context.userId,
-			now: context.advance(),
-		});
-		let legacy = await context.storage.research.start({
-			id: crypto.randomUUID(),
-			channelId: child.id,
-			title: "Legacy child research",
-			question: "Create a grandchild",
-			origin: "inline",
-			createdBy: context.userId,
-			turnId: crypto.randomUUID(),
-			messageId: crypto.randomUUID(),
-			requestId: requestId(1),
-			idempotencyKey: "legacy-child-request",
-			fingerprint: "legacy-child-request",
-			now: context.advance(),
-			lease: context.lease,
-		});
+		let fixture = childFixture(context);
+		let child = await createChild(fixture);
+		let legacy = await createLegacyChildRequest(fixture, child, requestId(1));
 		let owners = 0;
 
 		await expect(context.service.retryRequest({
