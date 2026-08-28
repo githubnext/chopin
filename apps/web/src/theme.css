@@ -222,9 +222,8 @@
 	white-space: nowrap;
 
 	&:disabled {
-		background-color: var(--color-gray-200);
-		color: var(--color-gray-600);
 		cursor: default;
+		opacity: 0.4;
 	}
 }
 

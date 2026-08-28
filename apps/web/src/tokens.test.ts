@@ -284,10 +284,11 @@ describe("controls", () => {
 		expect(primary).toContain("box-shadow: var(--shadow-resting)");
 	});
 
-	it("uses the common disabled button fill and ink", () => {
+	it("dims each button's default style when disabled", () => {
 		let rule = utility("btn");
-		expect(rule).toMatch(/&:disabled\s*\{[\s\S]*background-color:\s*var\(--color-gray-200\)/);
-		expect(rule).toMatch(/&:disabled\s*\{[\s\S]*color:\s*var\(--color-gray-600\)/);
+		let disabled = /&:disabled\s*\{([^}]*)\}/.exec(rule)?.[1] ?? "";
+		expect(disabled).toContain("opacity: 0.4");
+		expect(disabled).not.toMatch(/background-color|color:/);
 	});
 
 	it("requires every shared button consumer to choose a size", () => {
