@@ -22,7 +22,6 @@
 }
 
 .plan-content [data-research-ready] {
-	position: relative;
 	box-shadow: var(--shadow-raised);
 	transition: box-shadow var(--duration-fast) var(--ease-out);
 }

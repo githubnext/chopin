@@ -43,7 +43,7 @@ export type SidecarCardProps = {
 };
 
 export function SidecarCard(
-	{ children, focused, footer, label, padded = true, settled, status, ...rest }:
+	{ children, className, focused, footer, label, padded = true, settled, status, ...rest }:
 		& SidecarCardProps
 		& Omit<ComponentProps<"article">, "children">,
 ) {
@@ -54,7 +54,7 @@ export function SidecarCard(
 			aria-label={label}
 			className={`flex flex-col overflow-hidden rounded-lg ring-hairline ${surface} ${
 				focused ? "bg-selected" : ""
-			}`}
+			} ${className ?? ""}`}
 			data-focus-boundary=""
 			{...rest}
 		>
