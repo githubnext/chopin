@@ -54,7 +54,7 @@
 	--color-brand: oklch(0.50006 0.08514 210.06); /* #06707e */
 	--color-brand-hover: oklch(0.42914 0.07315 210.634); /* #045a66 */
 	--color-brand-active: oklch(0.37546 0.06382 210.435); /* #034a54 */
-	--color-brand-wash: oklch(0.95547 0.0277 207.843); /* #dcf6fa */
+	--color-brand-wash: color-mix(in srgb, var(--color-brand) 30%, transparent);
 	--color-brand-ink: oklch(0.43882 0.07476 210.193); /* #045d69 */
 	--focus-ring-color: var(--color-brand);
 	--focus-ring-width: 2px;

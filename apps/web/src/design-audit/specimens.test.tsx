@@ -16,6 +16,15 @@ describe("design audit specimens", () => {
 			expect(markup).toContain(`data-audit-item="${id}"`);
 		}
 		expect(markup).toContain("Consolidated exact duplicate");
+		for (
+			let measurement of [
+				"13px / 20px line-height",
+				"15px / 22px line-height",
+				"17px / 27px line-height",
+				"24px / 30px line-height",
+				"32px / 38px line-height",
+			]
+		) expect(markup).toContain(measurement);
 	});
 
 	it("renders controls with their native accessibility states", () => {
