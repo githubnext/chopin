@@ -1,4 +1,4 @@
-import { CheckIcon, ChevronIcon, PlusIcon } from "@chopin/icons";
+import { CheckIcon, ChevronIcon, LoaderIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 
 import { AuditPlate, StateLabel } from "./frame";
 
@@ -215,12 +215,29 @@ export function Controls() {
 				item="tabs"
 				title="Tabs"
 			>
-				<div aria-label="Document views" className="design-audit-tabs" role="tablist">
-					<button aria-selected="true" role="tab" type="button">Document</button>
-					<button aria-selected="false" role="tab" type="button">
-						Decisions <span>3</span>
-					</button>
-					<button aria-selected="false" disabled role="tab" type="button">Unavailable</button>
+				<div className="design-audit-tab-specimens">
+					<div>
+						<StateLabel>Selected · focus · disabled</StateLabel>
+						<div aria-label="Document views" className="design-audit-tabs" role="tablist">
+							<button aria-selected="true" role="tab" type="button">Document</button>
+							<button aria-selected="false" data-audit-state="focus" role="tab" type="button">
+								Decisions <span>3</span>
+							</button>
+							<button aria-selected="false" disabled role="tab" type="button">Unavailable</button>
+						</div>
+					</div>
+					<div className="design-audit-tab-overflow">
+						<StateLabel>Overflow</StateLabel>
+						<div
+							aria-label="Overflowing document views"
+							className="design-audit-tabs"
+							role="tablist"
+						>
+							<button aria-selected="true" role="tab" type="button">Document</button>
+							<button aria-selected="false" role="tab" type="button">Resolved decisions</button>
+							<button aria-selected="false" role="tab" type="button">Resolved comments</button>
+						</div>
+					</div>
 				</div>
 			</AuditPlate>
 
@@ -229,12 +246,26 @@ export function Controls() {
 				item="menus"
 				title="Menus"
 			>
-				<div aria-label="Document actions" className="design-audit-menu" role="menu">
-					<button role="menuitem" type="button">Rename document</button>
-					<button role="menuitem" type="button">Archive document</button>
-					<button className="design-audit-menu-destructive" role="menuitem" type="button">
-						Delete document
-					</button>
+				<div className="design-audit-menu-specimens">
+					<div>
+						<StateLabel>Closed</StateLabel>
+						<button aria-expanded="false" className="btn btn-md btn-secondary" type="button">
+							Document actions
+						</button>
+					</div>
+					<div>
+						<StateLabel>Open · focus · disabled</StateLabel>
+						<div aria-label="Document actions" className="design-audit-menu" role="menu">
+							<button role="menuitem" type="button">Rename document</button>
+							<button data-audit-state="focus" role="menuitem" type="button">
+								Archive document
+							</button>
+							<button disabled role="menuitem" type="button">Restore document</button>
+							<button className="design-audit-menu-destructive" role="menuitem" type="button">
+								Delete document
+							</button>
+						</div>
+					</div>
 				</div>
 			</AuditPlate>
 
@@ -269,6 +300,30 @@ export function Controls() {
 							</div>
 							<div role="option">Archived documents</div>
 						</div>
+					</div>
+					<div className="design-audit-dropdown-open">
+						<StateLabel>Loading</StateLabel>
+						<button
+							aria-busy="true"
+							className="field design-audit-dropdown-trigger"
+							disabled
+							type="button"
+						>
+							Loading documents<LoaderIcon aria-hidden="true" />
+						</button>
+					</div>
+					<div className="design-audit-dropdown-open">
+						<StateLabel>Error</StateLabel>
+						<button
+							aria-invalid="true"
+							className="field design-audit-dropdown-trigger"
+							type="button"
+						>
+							Documents unavailable<WarningIcon aria-hidden="true" />
+						</button>
+						<span className="design-audit-dropdown-error" role="alert">
+							Could not load documents.
+						</span>
 					</div>
 				</div>
 			</AuditPlate>

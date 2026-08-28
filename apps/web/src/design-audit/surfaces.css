@@ -148,7 +148,7 @@
 	}
 }
 
-.design-audit-conversation {
+.design-audit-chat {
 	display: flex;
 	height: 33rem;
 	max-height: 70dvh;
@@ -156,10 +156,10 @@
 	overflow: hidden;
 	border: var(--edge-width) solid var(--color-control-edge);
 	border-radius: var(--radius-xl);
-	background: var(--color-conversation-pane);
+	background: var(--color-chat-pane);
 }
 
-.design-audit-conversation .conversation-composer textarea {
+.design-audit-chat .chat-composer textarea {
 	width: 100%;
 	min-height: 4.5rem;
 	resize: none;

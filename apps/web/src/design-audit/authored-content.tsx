@@ -98,7 +98,7 @@ let table = [
 	"| Component | Default | Active |",
 	"| :-- | :-- | :-- |",
 	"| Button | Secondary | Brand |",
-	"| Icon | 16px tertiary | 16px brand |",
+	"| Icon | 14px neutral | 14px brand |",
 	"| Row | Page | Selected wash |",
 ].join("\n") + "\n";
 
@@ -193,6 +193,61 @@ function ResearchSpecimens() {
 	);
 }
 
+function TableSpecimens() {
+	return (
+		<AuditPlate
+			description="The editor table plus selected-cell, toolbar, and overflow interaction states."
+			item="table"
+			title="Tables"
+		>
+			<StateLabel>Default</StateLabel>
+			<StaticPlanEditor source={table} />
+			<div className="design-audit-table-states">
+				<div>
+					<StateLabel>Selected cell · toolbar</StateLabel>
+					<div className="design-audit-table-toolbar" role="toolbar" aria-label="Table actions">
+						<button className="btn btn-sm btn-secondary" type="button">Add row</button>
+						<button className="btn btn-sm btn-secondary" type="button">Add column</button>
+					</div>
+					<table>
+						<tbody>
+							<tr>
+								<th>Component</th>
+								<th>State</th>
+							</tr>
+							<tr>
+								<td aria-selected="true">Button</td>
+								<td>Selected</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+				<div>
+					<StateLabel>Overflow</StateLabel>
+					<div className="design-audit-table-overflow" tabIndex={0}>
+						<table>
+							<tbody>
+								<tr>
+									<th>Component</th>
+									<th>Default</th>
+									<th>Hover</th>
+									<th>Active</th>
+								</tr>
+								<tr>
+									<td>Button</td>
+									<td>Secondary</td>
+									<td>Raised</td>
+									<td>Brand</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+		</AuditPlate>
+	);
+}
+
 export function AuthoredContent() {
 	return (
 		<>
@@ -233,12 +288,7 @@ export function AuthoredContent() {
 				source={images}
 				title="Images"
 			/>
-			<EditorPlate
-				description="The editor table, with alignment and overflow behavior visible."
-				item="table"
-				source={table}
-				title="Tables"
-			/>
+			<TableSpecimens />
 		</>
 	);
 }

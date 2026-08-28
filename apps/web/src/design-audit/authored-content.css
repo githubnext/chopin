@@ -54,3 +54,49 @@
 .design-audit-static-plan .plan-diagram {
 	max-height: 18rem;
 }
+
+.design-audit-table-states {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+	gap: 1rem;
+	margin-block-start: 1rem;
+}
+
+.design-audit-table-states > div {
+	display: grid;
+	align-content: start;
+	gap: 0.5rem;
+}
+
+.design-audit-table-toolbar {
+	display: flex;
+	gap: 0.25rem;
+}
+
+.design-audit-table-states table {
+	min-width: 100%;
+	border-collapse: collapse;
+	font-size: var(--text-sm);
+}
+
+.design-audit-table-states th,
+.design-audit-table-states td {
+	padding: 0.5rem;
+	border: var(--edge-width) solid var(--color-edge);
+	text-align: left;
+}
+
+.design-audit-table-states td[aria-selected="true"] {
+	background: var(--color-selected);
+	outline: var(--focus-ring-width) solid var(--focus-ring-color);
+	outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+.design-audit-table-overflow {
+	width: 15rem;
+	overflow-x: auto;
+}
+
+.design-audit-table-overflow table {
+	min-width: 30rem;
+}
