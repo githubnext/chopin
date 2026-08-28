@@ -40,7 +40,7 @@ export function Controls() {
 	return (
 		<>
 			<AuditPlate
-				description="Primary, secondary, tertiary, and destructive actions across stable states."
+				description="Two text sizes and one square icon size across every hierarchy and state."
 				item="buttons"
 				title="Buttons"
 			>
@@ -62,10 +62,10 @@ export function Controls() {
 						<ButtonRow className="btn-destructive" label="Delete document" />
 					</div>
 					<div className="design-audit-button-sizes">
-						<StateSample state="Medium">
+						<StateSample state="Medium · 32px high · 12px sides">
 							<button className="btn btn-md btn-primary" type="button">Medium</button>
 						</StateSample>
-						<StateSample state="Small">
+						<StateSample state="Small · 24px high · 8px sides">
 							<button className="btn btn-sm btn-secondary" type="button">Small</button>
 						</StateSample>
 						<StateSample state="Busy">
@@ -78,7 +78,7 @@ export function Controls() {
 			</AuditPlate>
 
 			<AuditPlate
-				description="The shared 28px icon control with a consistent 16px glyph."
+				description="The shared 28px square control with a 16px glyph and 6px inset."
 				item="icon-buttons"
 				title="Icon buttons"
 			>

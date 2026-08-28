@@ -29,7 +29,7 @@ export function DecisionViewControl(
 			<button
 				aria-current={view === "plan" ? "page" : undefined}
 				aria-pressed={view === "plan"}
-				className={`btn h-[26px] rounded-md px-2.5 text-[14px] transition-[background-color,box-shadow,color] ${
+				className={`btn btn-sm transition-[background-color,box-shadow,color] ${
 					view === "plan"
 						? "bg-ground font-medium text-gray-800"
 						: "text-text-tertiary hover:bg-hover"
@@ -43,7 +43,7 @@ export function DecisionViewControl(
 				aria-current={view === "decisions" ? "page" : undefined}
 				aria-label={unanswered > 0 ? `Decisions, ${unanswered} unanswered` : "Decisions"}
 				aria-pressed={view === "decisions"}
-				className={`btn h-[26px] rounded-md px-2.5 text-[14px] transition-[background-color,box-shadow,color] ${
+				className={`btn btn-sm transition-[background-color,box-shadow,color] ${
 					view === "decisions"
 						? "bg-ground font-medium text-gray-800"
 						: "text-text-tertiary hover:bg-hover"

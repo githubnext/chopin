@@ -84,7 +84,7 @@ export function Header(
 						<>
 							<button
 								aria-label={`Return to ${label}`}
-								className="document-parent-breadcrumb btn btn-ghost min-w-0"
+								className="document-parent-breadcrumb btn btn-md btn-ghost min-w-0"
 								onClick={presentation.onChildClose}
 								type="button"
 							>
