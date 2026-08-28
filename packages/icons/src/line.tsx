@@ -71,9 +71,56 @@ export function CloseIcon(props: IconProps) {
 
 export function PlusIcon(props: IconProps) {
 	return (
-		<LineIcon title="plus" viewBox="0 0 13 13" {...props}>
-			<path d="M6.5 0.75V12.25" />
-			<path d="M0.75 6.5H12.25" />
+		<LineIcon title="plus" {...props}>
+			<line x1="9" x2="9" y1="3.25" y2="14.75" />
+			<line x1="3.25" x2="14.75" y1="9" y2="9" />
+		</LineIcon>
+	);
+}
+
+export function SignInIcon(props: IconProps) {
+	return (
+		<LineIcon title="open-rect-arrow-in" {...props}>
+			<path d="M9.75,2.75h3.5c1.105,0,2,.895,2,2V13.25c0,1.105-.895,2-2,2h-3.5" />
+			<polyline points="6.75 12.5 10.25 9 6.75 5.5" />
+			<line x1="10.25" x2="2.75" y1="9" y2="9" />
+		</LineIcon>
+	);
+}
+
+export function SirenIcon(props: IconProps) {
+	return (
+		<LineIcon title="siren" {...props}>
+			<path d="M9 0.75V2.25" />
+			<path d="M14.834 3.166L13.773 4.227" />
+			<path d="M17.25 9H15.75" />
+			<path d="M3.16602 3.166L4.22701 4.227" />
+			<path d="M0.75 9H2.25" />
+			<path d="M14 13.25H4C3.5858 13.25 3.25 13.5858 3.25 14V15.5C3.25 15.9142 3.5858 16.25 4 16.25H14C14.4142 16.25 14.75 15.9142 14.75 15.5V14C14.75 13.5858 14.4142 13.25 14 13.25Z" />
+			<path d="M4.75 13.25V9C4.75 6.653 6.653 4.75 9 4.75C11.347 4.75 13.25 6.653 13.25 9V13.25" />
+			<path d="M9 7.75C8.3105 7.75 7.75 8.3105 7.75 9" />
+		</LineIcon>
+	);
+}
+
+export function SparkleIcon(props: IconProps) {
+	return (
+		<LineIcon title="sparkle-4" {...props}>
+			<polygon points="9 2.25 10.912 7.087 15.75 9 10.912 10.913 9 15.75 7.087 10.913 2.25 9 7.087 7.087 9 2.25" />
+		</LineIcon>
+	);
+}
+
+export function WarningIcon(props: IconProps) {
+	return (
+		<LineIcon title="triangle-warning" {...props}>
+			<path d="M7.63796 3.48996L2.21295 12.89C1.60795 13.9399 2.36395 15.25 3.57495 15.25H14.425C15.636 15.25 16.392 13.9399 15.787 12.89L10.362 3.48996C9.75696 2.44996 8.24296 2.44996 7.63796 3.48996Z" />
+			<path d="M9 6.75V9.75" />
+			<path
+				d="M9 13.5C8.448 13.5 8 13.05 8 12.5C8 11.95 8.448 11.5 9 11.5C9.552 11.5 10 11.9501 10 12.5C10 13.0499 9.552 13.5 9 13.5Z"
+				fill="currentColor"
+				stroke="none"
+			/>
 		</LineIcon>
 	);
 }

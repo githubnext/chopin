@@ -11,6 +11,10 @@ import {
 	MessageIcon,
 	PlusIcon,
 	SearchIcon,
+	SignInIcon,
+	SirenIcon,
+	SparkleIcon,
+	WarningIcon,
 } from "@chopin/icons";
 
 import addProject from "../assets/figma/navigation/add-project.svg";
@@ -70,6 +74,10 @@ const NUCLEO_ICONS: readonly {
 	{ icon: LightbulbIcon, name: "Lightbulb" },
 	{ icon: PlusIcon, name: "Plus" },
 	{ icon: CloseIcon, name: "Close" },
+	{ icon: SignInIcon, name: "Sign in" },
+	{ icon: SirenIcon, name: "Siren" },
+	{ icon: SparkleIcon, name: "Important sparkle" },
+	{ icon: WarningIcon, name: "Warning" },
 	{ icon: ArchiveIcon, name: "Archive" },
 	{ icon: DocumentIcon, name: "Document" },
 	{ icon: SearchIcon, name: "Search" },

@@ -9,7 +9,14 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CheckIcon, InfoIcon, LightbulbIcon } from "@chopin/icons";
+import {
+	CheckIcon,
+	InfoIcon,
+	LightbulbIcon,
+	SirenIcon,
+	SparkleIcon,
+	WarningIcon,
+} from "@chopin/icons";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { readOnly$ } from "@mdxeditor/editor";
 import { useCellValue } from "@mdxeditor/gurx";
@@ -40,11 +47,11 @@ function TypeIcon({ type, size = 17 }: { type: CalloutType; size?: number }) {
 		case "tip":
 			return <LightbulbIcon {...props} />;
 		case "important":
-			return <CheckIcon {...props} />;
+			return <SparkleIcon {...props} />;
 		case "warning":
-			return <InfoIcon {...props} />;
+			return <WarningIcon {...props} />;
 		case "danger":
-			return <InfoIcon {...props} />;
+			return <SirenIcon {...props} />;
 	}
 }
 

@@ -31,10 +31,20 @@ test("the interface uses only the shared Nucleo icon family", () => {
 	);
 	for (let file of files) expect(readFileSync(file, "utf8")).not.toContain("@phosphor-icons/react");
 
-	expect(existsSync(join(repository, "packages/icons/src/line.tsx"))).toBe(true);
-	expect(readFileSync(join(repository, "packages/icons/src/line.tsx"), "utf8")).toContain(
-		"M9,1.75C4.996,1.75",
-	);
+	let icons = readFileSync(join(repository, "packages/icons/src/line.tsx"), "utf8");
+	expect(icons).toContain("M9,1.75C4.996,1.75");
+	expect(icons).toContain("M9.75,2.75h3.5");
+	expect(icons).toContain("M4.75 13.25V9");
+	expect(icons).toContain("10.912 7.087 15.75 9");
+	expect(icons).toContain("M7.63796 3.48996");
+	expect(icons).toContain('x1="9" x2="9" y1="3.25" y2="14.75"');
+});
+
+test("callouts use their distinct semantic Nucleo icons", () => {
+	let callout = readFileSync(join(repository, "packages/editor/src/widgets/callout.tsx"), "utf8");
+	expect(callout).toContain('case "important":\n\t\t\treturn <SparkleIcon');
+	expect(callout).toContain('case "warning":\n\t\t\treturn <WarningIcon');
+	expect(callout).toContain('case "danger":\n\t\t\treturn <SirenIcon');
 });
 
 test("directional controls reuse one chevron and one panel icon", () => {
