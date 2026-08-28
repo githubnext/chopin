@@ -52,17 +52,17 @@
 	--color-brand: oklch(0.50006 0.08514 210.06); /* #06707e */
 	--color-brand-hover: oklch(0.42914 0.07315 210.634); /* #045a66 */
 	--color-brand-active: oklch(0.37546 0.06382 210.435); /* #034a54 */
-	--color-brand-wash: color-mix(in oklab, var(--color-brand) 25%, var(--color-page));
+	--color-brand-wash: color-mix(in oklab, var(--color-brand) 20%, var(--color-page));
 	--color-brand-ink: oklch(0.43882 0.07476 210.193); /* #045d69 */
 	--focus-ring-color: var(--color-brand);
 	--focus-ring-width: 2px;
 	--focus-ring-offset: 2px;
 
 	--color-success: oklch(0.51958 0.10966 145.072); /* #3b793f */
-	--color-success-wash: color-mix(in oklab, var(--color-success) 25%, var(--color-page));
+	--color-success-wash: color-mix(in oklab, var(--color-success) 20%, var(--color-page));
 	--color-success-ink: oklch(0.44098 0.11068 144.754); /* #236228 */
 	--color-warning: oklch(0.59898 0.12586 74.986); /* #ab7302 */
-	--color-warning-wash: color-mix(in oklab, var(--color-warning) 25%, var(--color-page));
+	--color-warning-wash: color-mix(in oklab, var(--color-warning) 20%, var(--color-page));
 	--color-warning-ink: oklch(0.4409 0.0921 74.93); /* #704a02 */
 	--color-destructive: oklch(0.60513 0.17178 24.175); /* #d54d4c */
 	--color-destructive-hover: oklch(0.56972 0.16045 24.136); /* #c44746 */
