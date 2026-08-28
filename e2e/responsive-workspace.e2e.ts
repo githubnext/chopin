@@ -34,7 +34,7 @@ async function expectCompactWorkspaceChrome(page: Page): Promise<void> {
 
 	await expect(header.getByRole("button", { name: /chat pane/ })).toHaveCount(0);
 	await expect(page.getByRole("group", { name: "Document view" })).toHaveCount(0);
-	await expect(page.getByRole("separator", { name: "Resize the chat" })).toHaveCount(0);
+	await expect(page.getByRole("separator", { name: "Resize chat" })).toHaveCount(0);
 	await expect(destinations).toHaveCount(3);
 	await expect(destinations.nth(0)).toHaveAccessibleName(/^Chat/);
 	await expect(destinations.nth(1)).toHaveAccessibleName("Document");
@@ -302,7 +302,7 @@ test("a phone landscape still exposes one destination at a time", async ({ join,
 	await expect(page.getByRole("complementary", { name: "Chat" })).toBeVisible();
 	await expect(page.getByRole("dialog", { name: "Chat" })).toHaveCount(0);
 	await expect(content(page)).toBeHidden();
-	await expect(page.getByRole("separator", { name: "Resize the chat" })).toHaveCount(0);
+	await expect(page.getByRole("separator", { name: "Resize chat" })).toHaveCount(0);
 	await expectNoHorizontalOverflow(page);
 });
 
@@ -325,7 +325,7 @@ test("the compact side of the Projects transition keeps phone navigation", async
 	await expect(page.getByRole("dialog", { name: "Chat" })).toHaveCount(0);
 	await expect(page.getByRole("button", { name: "Close chat" })).toHaveCount(0);
 	await expect(content(page)).toBeHidden();
-	await expect(page.getByRole("separator", { name: "Resize the chat" })).toHaveCount(0);
+	await expect(page.getByRole("separator", { name: "Resize chat" })).toHaveCount(0);
 	await expect(page.getByRole("heading", { name: "Chat", exact: true })).toBeFocused();
 
 	await nav.getByRole("button", { name: "Document", exact: true }).click();
@@ -352,7 +352,7 @@ test("the wide side of the Projects transition uses the inline sidebar", async (
 	await expect(opener).toHaveCount(0);
 	await expect(page.getByRole("navigation", { name: "Workspace view" })).toHaveCount(0);
 	await expect(chatPane(page)).toBeVisible();
-	await expect(page.getByRole("separator", { name: "Resize the chat" })).toBeVisible();
+	await expect(page.getByRole("separator", { name: "Resize chat" })).toBeVisible();
 	let documentView = page.getByRole("group", { name: "Document view" });
 	await expect(documentView).toBeVisible();
 	await expect(documentView.getByRole("button", { name: "Tasks & Progress" })).toHaveCount(0);
@@ -380,7 +380,7 @@ test("a representative desktop retains the split Chat layout", async ({ join, se
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
 	await expect(chatPane(page)).toBeVisible();
-	await expect(page.getByRole("separator", { name: "Resize the chat" })).toBeVisible();
+	await expect(page.getByRole("separator", { name: "Resize chat" })).toBeVisible();
 	await expect(page.getByRole("navigation", { name: "Workspace view" })).toHaveCount(0);
 	await expect(page.getByRole("button", { name: /chat pane/ })).toBeVisible();
 	await expect(page.getByRole("group", { name: "Document view" })).toBeVisible();
