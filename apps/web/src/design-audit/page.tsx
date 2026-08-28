@@ -1,9 +1,18 @@
+import { AuditFrame, AuditSection } from "./frame";
+import { AUDIT_INVENTORY } from "./inventory";
+
+import "./styles.css";
+
 export function DesignAuditPage() {
 	return (
-		<main className="min-h-dvh bg-ground p-6 text-text-primary" data-design-audit="">
-			<div className="mx-auto max-w-7xl">
-				<h1 className="m-0 text-balance text-2xl font-semibold">Chopin design audit</h1>
-			</div>
-		</main>
+		<AuditFrame groups={AUDIT_INVENTORY}>
+			{AUDIT_INVENTORY.map(group => (
+				<AuditSection id={group.id} key={group.id} title={group.label}>
+					<p className="design-audit-section-summary">
+						{group.items.length} component {group.items.length === 1 ? "family" : "families"}
+					</p>
+				</AuditSection>
+			))}
+		</AuditFrame>
 	);
 }
