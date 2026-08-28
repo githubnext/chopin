@@ -247,6 +247,8 @@
 @utility btn-primary {
 	background-color: var(--color-brand);
 	color: var(--color-page);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
 
 	&:hover:not(:disabled) {
 		background-color: var(--color-brand-hover);
@@ -260,6 +262,8 @@
 @utility btn-secondary {
 	background-color: var(--color-gray-200);
 	color: var(--color-text-primary);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
 
 	&:hover:not(:disabled) {
 		background-color: var(--color-gray-300);
