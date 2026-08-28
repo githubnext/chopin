@@ -21,14 +21,14 @@
 	box-shadow: var(--shadow-resting);
 }
 
-.plan-content [data-research-ready] {
-	box-shadow: var(--shadow-raised);
+[data-research-ready] {
+	box-shadow: var(--shadow-resting-strong);
 	transition: box-shadow var(--duration-fast) var(--ease-out);
 }
 
-.plan-content [data-research-ready]:hover,
-.plan-content [data-research-ready]:focus-within {
-	box-shadow: var(--shadow-overlay);
+[data-research-ready]:hover,
+[data-research-ready]:focus-within {
+	box-shadow: var(--shadow-raised);
 }
 
 .plan-research-open {

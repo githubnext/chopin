@@ -123,6 +123,11 @@
 		0 0 1px rgb(var(--shadow-color) / 3%),
 		0 1px 1px rgb(var(--shadow-color) / 3%),
 		0 3px 2px rgb(var(--shadow-color) / 2%);
+	--shadow-resting-strong:
+		0 0 1px rgb(var(--shadow-color) / 4%),
+		0 1px 2px rgb(var(--shadow-color) / 5%),
+		0 4px 3px rgb(var(--shadow-color) / 3%),
+		0 7px 4px rgb(var(--shadow-color) / 1%);
 	--shadow-raised:
 		0 1px 2px rgb(var(--shadow-color) / 6%),
 		0 3px 3px rgb(var(--shadow-color) / 5%),

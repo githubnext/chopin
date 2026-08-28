@@ -222,10 +222,18 @@ describe("edges and depth", () => {
 		expect(THEME).toMatch(/@media \(min-resolution: 2dppx\)[\s\S]+--edge-width:\s*0\.5px/);
 	});
 
-	it("provides exactly the three designed shadows", () => {
+	it("provides exactly the four designed shadows", () => {
 		let found = [...THEME.matchAll(/\n\s*(--shadow-(?!color)[\w-]+):/g)].map(match => match[1]);
-		expect(found).toEqual(["--shadow-resting", "--shadow-raised", "--shadow-overlay"]);
+		expect(found).toEqual([
+			"--shadow-resting",
+			"--shadow-resting-strong",
+			"--shadow-raised",
+			"--shadow-overlay",
+		]);
 		expect(declared("--shadow-color")).toBe("14 13 10");
+		expect(EDITOR_STYLES).toMatch(
+			/\[data-research-ready\]\s*\{\s*box-shadow:\s*var\(--shadow-resting-strong\)/,
+		);
 	});
 });
 
