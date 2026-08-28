@@ -110,6 +110,11 @@ function sizes(name: string): { height: number; width?: number } {
 	return result;
 }
 
+function inlinePadding(name: string): string | undefined {
+	let found = /\n\s*padding-inline:\s*([^;]+);/.exec(utility(name));
+	return found?.[1]?.trim();
+}
+
 describe("palette", () => {
 	let steps = [50, 100, 150, 200, 300, 400, 500, 600, 700, 750, 800, 850, 900, 950];
 
@@ -246,6 +251,9 @@ describe("controls", () => {
 		expect(sizes("btn-md")).toEqual({ height: 32 });
 		expect(sizes("btn-sm")).toEqual({ height: 24 });
 		expect(sizes("btn-icon")).toEqual({ height: 28, width: 28 });
+		expect(inlinePadding("btn-md")).toBe("calc(var(--spacing) * 3)");
+		expect(inlinePadding("btn-sm")).toBe("calc(var(--spacing) * 2)");
+		expect(utility("btn-icon")).toMatch(/\n\s*padding:\s*0\.375rem;/);
 		expect(hex("--color-destructive-hover")).toBe("#c44746");
 		expect(hex("--color-destructive-active")).toBe("#b34140");
 	});
@@ -263,6 +271,21 @@ describe("controls", () => {
 		let rule = utility("btn");
 		expect(rule).toMatch(/&:disabled\s*\{[\s\S]*background-color:\s*var\(--color-gray-200\)/);
 		expect(rule).toMatch(/&:disabled\s*\{[\s\S]*color:\s*var\(--color-gray-600\)/);
+	});
+
+	it("requires every shared button consumer to choose a size", () => {
+		let offenders: string[] = [];
+		for (let file of [...sources(join(ROOT, "apps")), ...sources(join(ROOT, "packages"))]) {
+			if (!file.endsWith(".tsx")) continue;
+			let lines = readFileSync(file, "utf8").split("\n");
+			for (let [index, line] of lines.entries()) {
+				if (!line.includes("className=") || !/(?<![\w-])btn(?![\w-])/.test(line)) continue;
+				if (/\bbtn-(?:md|sm|icon)\b/.test(line)) continue;
+				offenders.push(`${relative(ROOT, file)}:${index + 1}`);
+			}
+		}
+
+		expect(offenders).toEqual([]);
 	});
 
 	it("keeps button labels on one line", () => {

@@ -150,12 +150,12 @@ function Navigation() {
 				aria-label="Compact workspace view"
 				className="workspace-navigation design-audit-compact-navigation"
 			>
-				<button className="btn btn-ghost min-h-11" type="button">Conversation</button>
-				<button className="btn btn-ghost min-h-11" type="button">Document</button>
-				<button aria-current="page" className="btn btn-ghost min-h-11" type="button">
+				<button className="btn btn-md btn-ghost min-h-11" type="button">Conversation</button>
+				<button className="btn btn-md btn-ghost min-h-11" type="button">Document</button>
+				<button aria-current="page" className="btn btn-md btn-ghost min-h-11" type="button">
 					Decisions
 				</button>
-				<button className="btn btn-ghost min-h-11" type="button">Background</button>
+				<button className="btn btn-md btn-ghost min-h-11" type="button">Background</button>
 			</nav>
 		</AuditPlate>
 	);

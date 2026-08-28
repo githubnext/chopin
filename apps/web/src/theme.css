@@ -230,18 +230,18 @@
 
 @utility btn-md {
 	height: 2rem;
-	padding-inline: calc(var(--spacing) * 2);
+	padding-inline: calc(var(--spacing) * 3);
 }
 
 @utility btn-sm {
 	height: 1.5rem;
-	padding-inline: var(--spacing);
+	padding-inline: calc(var(--spacing) * 2);
 }
 
 @utility btn-icon {
 	width: 1.75rem;
 	height: 1.75rem;
-	padding: 0;
+	padding: 0.375rem;
 }
 
 @utility btn-primary {

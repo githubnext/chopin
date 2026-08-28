@@ -493,7 +493,7 @@ export function Workspace(
 								aria-current={active ? "page" : undefined}
 								aria-label={label}
 								aria-pressed={active}
-								className="btn btn-ghost min-h-11 min-w-0"
+								className="btn btn-md btn-ghost min-h-11 min-w-0"
 								key={destination}
 								onClick={event => navigate(destination, event.currentTarget)}
 								type="button"
