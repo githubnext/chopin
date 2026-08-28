@@ -233,7 +233,11 @@ export function ResearchCard(
 		: undefined;
 	let actions = researchActions(request, canEdit);
 	return (
-		<SidecarCard data-research-ready={ready ? "" : undefined} label="Research">
+		<SidecarCard
+			className={ready ? "relative" : undefined}
+			data-research-ready={ready ? "" : undefined}
+			label="Research"
+		>
 			<div className="plan-research-heading">
 				<strong>{ready ? ready.title : STAGES[request.stage]}</strong>
 				<span>{ready ? STAGES[request.stage] : request.question}</span>

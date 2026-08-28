@@ -257,6 +257,9 @@ describe("research card", () => {
 		expect(markup).toContain('aria-label="Open Rollout evidence"');
 		expect(markup).toContain('class="plan-research-open"');
 		expect(markup).toContain('data-research-ready=""');
+		expect(markup).toMatch(
+			/<article[^>]*class="[^"]*\brelative\b[^"]*"[^>]*data-research-ready=""/,
+		);
 		expect(markup).not.toContain("https://example.com/releases");
 		expect(markup).not.toContain("Remove research reference");
 		expect(markup).not.toContain("plan-research-actions");
