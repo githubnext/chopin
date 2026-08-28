@@ -11,8 +11,16 @@ export function LineIcon(
 		viewBox?: string;
 	},
 ) {
+	let labelled = props["aria-label"] !== undefined || props["aria-labelledby"] !== undefined;
 	return (
-		<svg data-nucleo-icon="" height={size} viewBox={viewBox} width={size} {...props}>
+		<svg
+			aria-hidden={labelled ? undefined : true}
+			data-nucleo-icon=""
+			height={size}
+			viewBox={viewBox}
+			width={size}
+			{...props}
+		>
 			{title && <title>{title}</title>}
 			<g
 				fill="none"

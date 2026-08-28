@@ -39,6 +39,7 @@ export function SearchIcon(props: IconProps) {
 }
 
 export function LoaderIcon({ size = 14, ...props }: IconProps) {
+	let labelled = props["aria-label"] !== undefined || props["aria-labelledby"] !== undefined;
 	let paths = [
 		[
 			"M9,5c-.414,0-.75-.336-.75-.75V1.75c0-.414,.336-.75,.75-.75s.75,.336,.75,.75v2.5c0,.414-.336,.75-.75,.75Z",
@@ -75,6 +76,7 @@ export function LoaderIcon({ size = 14, ...props }: IconProps) {
 	] as const;
 	return (
 		<svg
+			aria-hidden={labelled ? undefined : true}
 			data-nucleo-icon=""
 			fill="currentColor"
 			height={size}
