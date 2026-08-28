@@ -380,7 +380,7 @@ export function SelectionBubble(
 							}}
 							className={`${CELL} ${CELL_OFF}`}
 						>
-							<img alt="" aria-hidden="true" className="size-3.5 opacity-70" src={linkPlusIcon} />
+							<img alt="" aria-hidden="true" className="size-3.5" src={linkPlusIcon} />
 						</button>
 
 						{onComment && (
@@ -406,7 +406,7 @@ export function SelectionBubble(
 									<img
 										alt=""
 										aria-hidden="true"
-										className="size-3.5 opacity-70"
+										className="size-3.5"
 										src={messagePlusIcon}
 									/>
 								</button>

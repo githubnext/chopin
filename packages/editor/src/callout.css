@@ -84,6 +84,10 @@
 	height: 0.875rem;
 }
 
+.plan-callout-type > [data-nucleo-icon] {
+	color: var(--callout-ink);
+}
+
 .plan-callout-type:hover:not(:disabled),
 .plan-callout-type:focus-visible,
 .plan-callout-type[aria-expanded="true"] {

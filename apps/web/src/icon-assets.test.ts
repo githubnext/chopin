@@ -80,6 +80,30 @@ test("interface icons default to fourteen pixels", () => {
 	expect(offenders).toEqual([]);
 });
 
+test("interface icons share one neutral default colour", () => {
+	let theme = readFileSync(join(root, "theme.css"), "utf8");
+	let icon = readFileSync(join(repository, "packages/icons/src/icon.tsx"), "utf8");
+	let system = readFileSync(join(repository, "packages/icons/src/system.tsx"), "utf8");
+	expect(theme).toContain("--color-icon: var(--color-gray-500)");
+	expect(theme).toMatch(/:where\(\[data-nucleo-icon\]\)\s*{[^}]*color:\s*var\(--color-icon\)/s);
+	expect(icon).toContain('data-nucleo-icon=""');
+	expect(system).toContain('data-nucleo-icon=""');
+
+	let assetRoots = [
+		join(root, "assets/figma/navigation"),
+		join(root, "assets/icons"),
+		join(repository, "packages/editor/src/assets/icons"),
+	];
+	for (let assetRoot of assetRoots) {
+		for (let entry of readdirSync(assetRoot)) {
+			if (!entry.endsWith(".svg") || entry === "chopin.svg") continue;
+			let asset = readFileSync(join(assetRoot, entry), "utf8");
+			expect(asset).toContain("#78766e");
+			expect(asset).not.toContain("#212121");
+		}
+	}
+});
+
 test("the design audit presents one Nucleo icon catalogue", () => {
 	let catalogue = readFileSync(join(root, "design-audit/icons.tsx"), "utf8");
 	let foundations = readFileSync(join(root, "design-audit/foundations.tsx"), "utf8");

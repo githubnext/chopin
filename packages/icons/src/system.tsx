@@ -74,7 +74,14 @@ export function LoaderIcon({ size = 14, ...props }: IconProps) {
 		],
 	] as const;
 	return (
-		<svg fill="currentColor" height={size} viewBox="0 0 18 18" width={size} {...props}>
+		<svg
+			data-nucleo-icon=""
+			fill="currentColor"
+			height={size}
+			viewBox="0 0 18 18"
+			width={size}
+			{...props}
+		>
 			<title>loader</title>
 			{paths.map(([path, opacity]) => <path d={path} key={path} opacity={opacity} />)}
 		</svg>

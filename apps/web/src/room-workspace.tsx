@@ -78,7 +78,7 @@ export function Header(
 				aria-label={`Document: ${label}`}
 				className="flex min-w-0 flex-1 items-center gap-0.5"
 			>
-				<NavigationIcon className="opacity-50" src={bookBookmarkIcon} />
+				<NavigationIcon src={bookBookmarkIcon} />
 				{presentation.type === "parent-with-child"
 					? (
 						<>
@@ -116,7 +116,7 @@ export function Header(
 									<img
 										alt=""
 										aria-hidden="true"
-										className="size-3.5 rotate-90 opacity-50"
+										className="size-3.5 rotate-90"
 										src={navigationChevronRight}
 									/>
 								</>

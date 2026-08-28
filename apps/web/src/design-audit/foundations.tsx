@@ -10,6 +10,7 @@ const COLOURS = [
 	["Secondary text", "--color-text-secondary"],
 	["Tertiary text", "--color-text-tertiary"],
 	["Quaternary text", "--color-text-quaternary"],
+	["Default icon", "--color-icon"],
 	["Brand", "--color-brand"],
 	["Brand hover", "--color-brand-hover"],
 	["Brand wash", "--color-brand-wash"],

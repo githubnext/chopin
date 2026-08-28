@@ -153,7 +153,7 @@
 	place-items: center;
 	border-radius: var(--radius-sm);
 	background: var(--color-gray-100);
-	color: var(--color-text-secondary);
+	color: var(--color-icon);
 }
 
 .design-audit-icon-frame img {
@@ -178,16 +178,16 @@
 	font-weight: 500;
 }
 
-.design-audit-icon-states [data-icon-state="default"] {
-	color: var(--color-text-secondary);
+.design-audit-icon-states [data-icon-state="default"] [data-nucleo-icon] {
+	color: var(--color-icon);
 }
 
-.design-audit-icon-states [data-icon-state="active"] {
+.design-audit-icon-states [data-icon-state="active"] [data-nucleo-icon] {
 	color: var(--color-brand);
 }
 
 .design-audit-icon-states [data-icon-state="disabled"] {
-	color: var(--color-gray-500);
+	opacity: 0.4;
 }
 
 @media (max-width: 639px) {
