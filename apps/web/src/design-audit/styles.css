@@ -1,5 +1,8 @@
 .design-audit {
+	height: 100%;
 	min-height: 100dvh;
+	overflow: auto;
+	scroll-padding-top: 1.5rem;
 	padding: max(1.5rem, env(safe-area-inset-top)) max(1.5rem, env(safe-area-inset-right))
 		max(2.5rem, env(safe-area-inset-bottom)) max(1.5rem, env(safe-area-inset-left));
 	background: var(--color-ground);

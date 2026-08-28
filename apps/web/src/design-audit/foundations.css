@@ -1,0 +1,185 @@
+.design-audit-swatch-grid,
+.design-audit-icon-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+	gap: 0.75rem;
+}
+
+.design-audit-swatch-grid figure,
+.design-audit-icon-grid figure,
+.design-audit-token-row figure {
+	min-width: 0;
+	margin: 0;
+}
+
+.design-audit-swatch-grid figure > span {
+	display: block;
+	height: 4rem;
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-md);
+}
+
+.design-audit-swatch-grid figcaption,
+.design-audit-icon-grid figcaption {
+	display: grid;
+	gap: 0.125rem;
+	margin-block-start: 0.5rem;
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+}
+
+.design-audit-swatch-grid code,
+.design-audit-icon-grid figcaption span {
+	overflow: hidden;
+	font-size: var(--text-sm);
+	color: var(--color-text-quaternary);
+	text-overflow: ellipsis;
+}
+
+.design-audit-type-stack {
+	display: grid;
+	gap: 1.25rem;
+}
+
+.design-audit-type-stack > div {
+	display: grid;
+	grid-template-columns: 9rem minmax(0, 1fr);
+	align-items: baseline;
+	gap: 1.5rem;
+}
+
+.design-audit-type-stack span {
+	font-size: var(--text-sm);
+	font-weight: 500;
+	color: var(--color-text-quaternary);
+}
+
+.design-audit-type-stack strong {
+	font-weight: 500;
+	text-wrap: pretty;
+}
+
+.design-audit-spacing-scale {
+	display: grid;
+	gap: 0.625rem;
+}
+
+.design-audit-spacing-scale > div {
+	display: grid;
+	grid-template-columns: 3rem minmax(0, 1fr);
+	align-items: center;
+	gap: 0.75rem;
+}
+
+.design-audit-spacing-scale code {
+	font-size: var(--text-sm);
+	color: var(--color-text-tertiary);
+}
+
+.design-audit-spacing-scale span {
+	display: block;
+	height: 0.5rem;
+	border-radius: var(--radius-sm);
+	background: var(--color-brand);
+}
+
+.design-audit-token-row {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+	gap: 1rem;
+}
+
+.design-audit-token-row figure > span {
+	display: block;
+	height: 5rem;
+	border: var(--edge-width) solid var(--color-edge);
+	background: var(--color-page);
+}
+
+.design-audit-token-row figcaption {
+	margin-block-start: 0.5rem;
+	font-size: var(--text-sm);
+	font-weight: 500;
+	color: var(--color-text-tertiary);
+}
+
+.design-audit-icon-catalogue,
+.design-audit-icon-catalogue h4 {
+	margin: 0;
+}
+
+.design-audit-icon-catalogue {
+	display: grid;
+	gap: 1.5rem;
+}
+
+.design-audit-icon-catalogue h4 {
+	font-size: var(--text-sm);
+	font-weight: 600;
+	color: var(--color-text-secondary);
+}
+
+.design-audit-icon-grid figure {
+	display: grid;
+	grid-template-columns: 2rem minmax(0, 1fr);
+	align-items: center;
+	gap: 0.625rem;
+	padding: 0.5rem;
+	border-radius: var(--radius-md);
+	background: var(--color-page);
+}
+
+.design-audit-icon-grid figcaption {
+	margin: 0;
+}
+
+.design-audit-icon-frame {
+	display: grid;
+	width: 2rem;
+	height: 2rem;
+	place-items: center;
+	border-radius: var(--radius-sm);
+	background: var(--color-gray-100);
+	color: var(--color-text-secondary);
+}
+
+.design-audit-icon-frame img {
+	width: 1rem;
+	height: 1rem;
+	object-fit: contain;
+}
+
+.design-audit-icon-states,
+.design-audit-icon-sizes {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 1rem;
+}
+
+.design-audit-icon-states > div,
+.design-audit-icon-sizes > div {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	font-size: var(--text-sm);
+	font-weight: 500;
+}
+
+.design-audit-icon-states [data-icon-state="default"] {
+	color: var(--color-text-secondary);
+}
+
+.design-audit-icon-states [data-icon-state="active"] {
+	color: var(--color-brand);
+}
+
+.design-audit-icon-states [data-icon-state="disabled"] {
+	color: var(--color-gray-500);
+}
+
+@media (max-width: 639px) {
+	.design-audit-type-stack > div {
+		grid-template-columns: 1fr;
+		gap: 0.25rem;
+	}
+}
