@@ -430,7 +430,7 @@ export function Workspace(
 											onClick={childPresentation.onClose}
 											type="button"
 										>
-											<CloseIcon aria-hidden="true" size={16} />
+											<CloseIcon aria-hidden="true" size={14} />
 										</button>
 									</div>
 								)}

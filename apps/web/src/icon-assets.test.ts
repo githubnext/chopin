@@ -40,6 +40,46 @@ test("the interface uses only the shared Nucleo icon family", () => {
 	expect(icons).toContain('x1="9" x2="9" y1="3.25" y2="14.75"');
 });
 
+test("interface icons default to fourteen pixels", () => {
+	let icon = readFileSync(join(repository, "packages/icons/src/icon.tsx"), "utf8");
+	let system = readFileSync(join(repository, "packages/icons/src/system.tsx"), "utf8");
+	expect(icon).toContain("size = 14");
+	expect(system).toContain("LoaderIcon({ size = 14");
+
+	let names = [
+		"Archive",
+		"ArrowUp",
+		"Check",
+		"Chevron",
+		"Close",
+		"Document",
+		"Info",
+		"Lightbulb",
+		"Loader",
+		"Message",
+		"Plus",
+		"Search",
+		"SignIn",
+		"Siren",
+		"Sparkle",
+		"Warning",
+	].join("|");
+	let explicit = new RegExp(`<(?:${names})Icon\\b[^>]*\\bsize=\\{(\\d+)\\}`, "gs");
+	let offenders: string[] = [];
+	for (
+		let file of sourceFiles(join(repository, "apps")).concat(
+			sourceFiles(join(repository, "packages")),
+		)
+	) {
+		for (let match of readFileSync(file, "utf8").matchAll(explicit)) {
+			let size = Number(match[1]);
+			let emptyStateException = file.endsWith("design-audit/surfaces.tsx") && size === 24;
+			if (size !== 14 && !emptyStateException) offenders.push(`${file}: ${match[0]}`);
+		}
+	}
+	expect(offenders).toEqual([]);
+});
+
 test("the design audit presents one Nucleo icon catalogue", () => {
 	let catalogue = readFileSync(join(root, "design-audit/icons.tsx"), "utf8");
 	let foundations = readFileSync(join(root, "design-audit/foundations.tsx"), "utf8");

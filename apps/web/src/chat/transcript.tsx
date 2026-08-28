@@ -96,7 +96,7 @@ function SystemEntry({ item }: { item: Extract<Group, { kind: "system" }> }) {
 	return (
 		<div className="flex items-start gap-3 text-text-tertiary" data-chat-system>
 			<div className="shrink-0">
-				<SignInIcon aria-hidden="true" size={20} />
+				<SignInIcon aria-hidden="true" size={14} />
 			</div>
 			<p className="m-0 min-w-0 break-words text-[14px] [overflow-wrap:anywhere]">
 				{displayText(item.text)}
@@ -137,7 +137,7 @@ function MessageBody(
 								title="Withdraw"
 								type="button"
 							>
-								<CloseIcon aria-hidden="true" size={16} />
+								<CloseIcon aria-hidden="true" size={14} />
 							</button>
 						)}
 				</div>

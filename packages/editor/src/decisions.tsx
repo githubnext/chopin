@@ -180,9 +180,9 @@ export function Decisions(
 						>
 							<MotionDisclosureIcon
 								className="editor-motion-feedback"
-								closed={<ChevronIcon size={16} />}
+								closed={<ChevronIcon size={14} />}
 								open={history}
-								opened={<ChevronIcon className="rotate-90" size={16} />}
+								opened={<ChevronIcon className="rotate-90" size={14} />}
 							/>
 							<span className="tabular-nums">{resolved}</span>
 							<span>resolved</span>

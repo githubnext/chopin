@@ -9,13 +9,13 @@ import { Header } from "./room-workspace";
 import type { ComponentProps } from "react";
 
 describe("the Figma navigation chrome", () => {
-	test("uses the standard sixteen-pixel glyph in an icon button", () => {
+	test("uses the standard fourteen-pixel glyph in an icon button", () => {
 		let markup = renderToStaticMarkup(createElement(ProjectSidebarExpandButton, {
 			onExpand: () => {},
 		}));
 
-		expect(markup).toContain('height="16"');
-		expect(markup).toContain('width="16"');
+		expect(markup).toContain('height="14"');
+		expect(markup).toContain('width="14"');
 	});
 
 	test("renders sidebar control glyphs at fourteen pixels", () => {
@@ -74,7 +74,7 @@ describe("the Figma navigation chrome", () => {
 		expect(markup).toMatch(
 			/<button[^>]*class="project-sidebar-primary-action"[^>]*>.*?new-document\.svg.*?New document<\/span>/s,
 		);
-		expect(markup).toMatch(/height="18" src="[^"]*chopin\.svg" width="18"/);
+		expect(markup).toMatch(/height="14" src="[^"]*chopin\.svg" width="14"/);
 		expect(markup).toMatch(
 			/aria-label="New document in testing-sql-transcripts"[^>]*>.*?new-document\.svg/s,
 		);

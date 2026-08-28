@@ -78,7 +78,7 @@ export function Controls() {
 			</AuditPlate>
 
 			<AuditPlate
-				description="The shared 28px square control with a 16px glyph and 6px inset."
+				description="The shared 28px square control with a 14px glyph and 7px inset."
 				item="icon-buttons"
 				title="Icon buttons"
 			>
@@ -92,7 +92,7 @@ export function Controls() {
 								disabled={state === "Disabled"}
 								type="button"
 							>
-								<PlusIcon aria-hidden="true" size={16} />
+								<PlusIcon aria-hidden="true" size={14} />
 							</button>
 						</StateSample>
 					))}
@@ -204,7 +204,7 @@ export function Controls() {
 				<div aria-label="Documents" className="design-audit-selection-list" role="listbox">
 					<div role="option">Architecture notes</div>
 					<div aria-selected="true" role="option">
-						<CheckIcon aria-hidden="true" size={16} />Design system audit
+						<CheckIcon aria-hidden="true" size={14} />Design system audit
 					</div>
 					<div aria-disabled="true" role="option">Archived proposal</div>
 				</div>
@@ -249,7 +249,7 @@ export function Controls() {
 						className="field design-audit-dropdown-trigger"
 						type="button"
 					>
-						Active documents<ChevronIcon aria-hidden="true" className="rotate-90" size={16} />
+						Active documents<ChevronIcon aria-hidden="true" className="rotate-90" size={14} />
 					</button>
 					<div className="design-audit-dropdown-open">
 						<button
@@ -257,7 +257,7 @@ export function Controls() {
 							className="field design-audit-dropdown-trigger"
 							type="button"
 						>
-							Active documents<ChevronIcon aria-hidden="true" className="rotate-90" size={16} />
+							Active documents<ChevronIcon aria-hidden="true" className="rotate-90" size={14} />
 						</button>
 						<div
 							aria-label="Document collection"
@@ -265,7 +265,7 @@ export function Controls() {
 							role="listbox"
 						>
 							<div aria-selected="true" role="option">
-								<CheckIcon aria-hidden="true" size={16} />Active documents
+								<CheckIcon aria-hidden="true" size={14} />Active documents
 							</div>
 							<div role="option">Archived documents</div>
 						</div>

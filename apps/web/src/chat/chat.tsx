@@ -420,7 +420,7 @@ export function Chat(
 								title="Stop Planner"
 								type="button"
 							>
-								<img alt="" className="size-[16px]" src={plannerStop} />
+								<img alt="" className="size-[14px]" src={plannerStop} />
 							</button>
 						)}
 						<SendAction

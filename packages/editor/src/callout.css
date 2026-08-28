@@ -78,6 +78,12 @@
 		transform var(--duration-fast) var(--ease-out);
 }
 
+.plan-callout-type > svg,
+.plan-callout-option > svg {
+	width: 0.875rem;
+	height: 0.875rem;
+}
+
 .plan-callout-type:hover:not(:disabled),
 .plan-callout-type:focus-visible,
 .plan-callout-type[aria-expanded="true"] {

@@ -85,7 +85,7 @@ export function IconCatalogue() {
 			<div className="design-audit-icon-states" aria-label="Icon colour states">
 				{(["Default", "Active", "Disabled"] as const).map(state => (
 					<div data-icon-state={state.toLowerCase()} key={state}>
-						<CheckIcon aria-hidden="true" size={16} />
+						<CheckIcon aria-hidden="true" size={14} />
 						<span>{state}</span>
 					</div>
 				))}
@@ -96,7 +96,7 @@ export function IconCatalogue() {
 					<figure key={`${source ? "asset" : "component"}-${name}`}>
 						<span className="design-audit-icon-frame">
 							{source ? <img alt="" src={source} /> : null}
-							{Glyph ? <Glyph aria-hidden="true" className={className} size={16} /> : null}
+							{Glyph ? <Glyph aria-hidden="true" className={className} size={14} /> : null}
 						</span>
 						<figcaption>
 							<strong>{name}</strong>
@@ -106,10 +106,13 @@ export function IconCatalogue() {
 				))}
 			</div>
 			<div className="design-audit-icon-sizes" aria-label="Icon size roles">
-				{([14, 16, 20] as const).map(size => (
-					<div key={size}>
+				{([
+					{ label: "Interface", size: 14 },
+					{ label: "Illustrative", size: 24 },
+				] as const).map(({ label, size }) => (
+					<div key={label}>
 						<MessageIcon aria-hidden="true" size={size} />
-						<span>{size}px</span>
+						<span>{label} · {size}px</span>
 					</div>
 				))}
 			</div>
