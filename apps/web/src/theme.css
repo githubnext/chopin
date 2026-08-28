@@ -247,7 +247,7 @@
 @utility btn-primary {
 	background-color: var(--color-brand);
 	color: var(--color-page);
-	outline: var(--edge-width) solid var(--color-edge);
+	outline: var(--edge-width) solid rgb(0 0 0 / 12%);
 	outline-offset: calc(-1 * var(--edge-width));
 
 	&:hover:not(:disabled) {

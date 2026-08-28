@@ -267,10 +267,12 @@ describe("controls", () => {
 		}
 	});
 
-	it("gives primary and secondary buttons the passive hairline", () => {
-		for (let tier of ["primary", "secondary"]) {
-			let rest = utility(`btn-${tier}`).split("&:")[0]!;
-			expect(rest).toContain("outline: var(--edge-width) solid var(--color-edge)");
+	it("gives primary and secondary buttons distinct hairlines", () => {
+		let primary = utility("btn-primary").split("&:")[0]!;
+		let secondary = utility("btn-secondary").split("&:")[0]!;
+		expect(primary).toContain("outline: var(--edge-width) solid rgb(0 0 0 / 12%)");
+		expect(secondary).toContain("outline: var(--edge-width) solid var(--color-edge)");
+		for (let rest of [primary, secondary]) {
 			expect(rest).toContain("outline-offset: calc(-1 * var(--edge-width))");
 		}
 	});
