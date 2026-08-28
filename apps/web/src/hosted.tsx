@@ -222,7 +222,8 @@ export function HostedLogin() {
 						Plan together, in the context of the code.
 					</h1>
 					<p className="mt-5 max-w-lg text-base text-gray-300">
-						A shared document, a visible chat, and an agent that can read the repository
+						A shared document, a visible chat, and an agent that can read the repository without
+						owning the decision.
 					</p>
 				</div>
 			</section>
