@@ -239,7 +239,7 @@ export function Transcript(
 							/>
 						)
 				)}
-				<div ref={bottom} />
+				<div className="h-4 shrink-0" ref={bottom} />
 			</div>
 		</div>
 	);

@@ -7,9 +7,9 @@ desktop and compact layouts.
 
 ## Design
 
-The transcript already leaves a 16-pixel flex gap before its bottom scroll marker. Give that
-marker another 16 pixels of top margin. When Chat follows the marker to the bottom, the final
-message will sit 32 pixels above the transcript edge and composer.
+The transcript leaves a 16-pixel flex gap before its bottom scroll marker. Make that marker a
+16-pixel-high spacer. When Chat follows the marker to the bottom, the final message will sit 32
+pixels above the composer.
 
 This keeps the existing 16-pixel spacing between messages and does not change the composer's
 height, padding, or reference-picker positioning.

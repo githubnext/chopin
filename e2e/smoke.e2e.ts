@@ -294,7 +294,7 @@ test("chat uses one room-message composer when the planner is off", async ({ joi
 	await expect(chat.getByRole("button", { name: "Stop Planner" })).toHaveCount(0);
 });
 
-test("chat keeps the start of a tall transcript reachable across layouts", async ({ join, page }) => {
+test("chat keeps both ends of a tall transcript clear across layouts", async ({ join, page }) => {
 	await injectChatHistory(page, frame => ({
 		...frame,
 		entries: Array.from({ length: 24 }, (_, index) => ({
@@ -312,6 +312,16 @@ test("chat keeps the start of a tall transcript reachable across layouts", async
 	let chat = chatPane(await join("ana"));
 	let stack = chat.locator("[data-chat-stack]");
 	let scroller = stack.locator("..");
+	let composer = chat.getByPlaceholder("Use @chopin to ask Chopin").locator("..");
+	let lastMessageGap = async () => {
+		await scroller.evaluate(element => element.scrollTop = element.scrollHeight);
+		return chat.getByText("Transcript message 23", { exact: false })
+			.evaluate(
+				(message, field) =>
+					(field as Element).getBoundingClientRect().top - message.getBoundingClientRect().bottom,
+				await composer.elementHandle(),
+			);
+	};
 	let firstMessagePosition = async () => {
 		await scroller.evaluate(element => element.scrollTop = 0);
 		return chat.getByText("The first message in a deliberately tall transcript.")
@@ -330,6 +340,7 @@ test("chat keeps the start of a tall transcript reachable across layouts", async
 			}, await scroller.elementHandle());
 	};
 	await expect(chat.getByText("Transcript message 23", { exact: false })).toBeVisible();
+	expect(await lastMessageGap()).toBeGreaterThanOrEqual(32);
 	let position = await firstMessagePosition();
 	expect(position.scrollHeight).toBeGreaterThan(position.clientHeight);
 	expect(position.messageTop).toBeGreaterThanOrEqual(position.scrollerTop);
@@ -339,6 +350,7 @@ test("chat keeps the start of a tall transcript reachable across layouts", async
 	await page.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: /^Chat/ }).click();
 	await expect(chat).toBeVisible();
+	expect(await lastMessageGap()).toBeGreaterThanOrEqual(32);
 	position = await firstMessagePosition();
 	expect(position.scrollHeight).toBeGreaterThan(position.clientHeight);
 	expect(position.messageTop).toBeGreaterThanOrEqual(position.scrollerTop);
