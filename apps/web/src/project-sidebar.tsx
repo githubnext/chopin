@@ -222,12 +222,12 @@ function Project(
 					type="button"
 				>
 					<MotionDisclosureIcon
-						className="motion-feedback shrink-0 opacity-50"
+						className="motion-feedback shrink-0"
 						closed={<ChevronIcon size={14} />}
 						open={expanded}
 						opened={<ChevronIcon className="rotate-90" size={14} />}
 					/>
-					<NavigationIcon className="opacity-50" src={bookBookmarkIcon} />
+					<NavigationIcon src={bookBookmarkIcon} />
 					<span className="truncate text-sm font-bold">{label}</span>
 				</button>
 				{!archiveMode && project.available && canManage && (

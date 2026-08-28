@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18">
 	<title>box-archive</title>
-	<g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" stroke="#212121">
+	<g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" stroke="#78766e">
 		<path d="M14.75,6.25v7c0,1.105-.895,2-2,2H5.25c-1.105,0-2-.895-2-2V6.25" />
 		<rect x="1.75" y="2.75" width="14.5" height="3.5" rx="1" ry="1" />
 		<line x1="7" y1="9.25" x2="11" y2="9.25" />

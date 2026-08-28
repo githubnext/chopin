@@ -45,6 +45,7 @@
 	--color-text-secondary: var(--color-gray-700);
 	--color-text-tertiary: var(--color-gray-600);
 	--color-text-quaternary: var(--color-gray-500);
+	--color-icon: var(--color-gray-500);
 	--color-chat-body: #3e453b;
 	--color-chat-pane: color-mix(in srgb, var(--color-ground) 30%, var(--color-page));
 
@@ -201,6 +202,14 @@
 @utility ring-hairline {
 	outline: var(--edge-width) solid var(--color-edge);
 	outline-offset: calc(-1 * var(--edge-width));
+}
+
+:where([data-nucleo-icon]) {
+	color: var(--color-icon);
+}
+
+:where(.btn-primary, .btn-destructive) [data-nucleo-icon] {
+	color: inherit;
 }
 
 @utility control-edge {
