@@ -237,6 +237,16 @@ describe("controls", () => {
 		expect(rule).toMatch(/&:disabled\s*\{[\s\S]*color:\s*var\(--color-gray-600\)/);
 	});
 
+	it("keeps button labels on one line", () => {
+		expect(utility("btn")).toMatch(/white-space:\s*nowrap/);
+	});
+
+	it("distinguishes the active compact workspace destination", () => {
+		expect(THEME).toMatch(
+			/\.workspace-navigation \[aria-current="page"\]\s*\{[\s\S]*background-color:\s*var\(--color-page\);[\s\S]*color:\s*var\(--color-text-primary\)/,
+		);
+	});
+
 	it("keeps focus and invalid outlines visible above their surface", () => {
 		expect(declared("--focus-ring-color")).toBe("var(--color-brand)");
 		expect(declared("--focus-ring-width")).toBe("2px");

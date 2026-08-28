@@ -119,6 +119,17 @@
 	font-weight: 600;
 }
 
+.design-audit-compact-navigation {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	width: min(100%, 32rem);
+	margin-block-start: 1rem;
+}
+
+.design-audit-compact-navigation button {
+	min-width: 0;
+}
+
 .design-audit-sidebar a[data-navigation-state="ancestor"] {
 	font-weight: 500;
 }

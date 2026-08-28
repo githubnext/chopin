@@ -128,16 +128,6 @@
 	gap: 0.5rem;
 }
 
-.send-action {
-	width: 1.5rem;
-	height: 1.5rem;
-}
-
-.send-action-icon {
-	width: 1.125rem;
-	height: 1.125rem;
-}
-
 .plan,
 .plan-decisions {
 	--plan-gutter: 4rem;

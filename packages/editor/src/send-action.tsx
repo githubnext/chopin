@@ -18,7 +18,7 @@ export function SendAction(
 			title={label}
 			type="button"
 		>
-			<ArrowUpIcon aria-hidden="true" className="send-action-icon" size={18} />
+			<ArrowUpIcon aria-hidden="true" size={16} />
 		</button>
 	);
 }

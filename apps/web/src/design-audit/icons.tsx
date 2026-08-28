@@ -18,12 +18,11 @@ import addProject from "../assets/figma/navigation/add-project.svg";
 import archive from "../assets/figma/navigation/box-archive.svg";
 import book from "../assets/figma/navigation/book-bookmark.svg";
 import chopin from "../assets/figma/navigation/chopin.svg";
-import collapse from "../assets/figma/navigation/collapse.svg";
 import documentActions from "../assets/figma/navigation/document-actions.svg";
 import newDocument from "../assets/figma/navigation/new-document.svg";
 import search from "../assets/figma/navigation/search.svg";
 import hideSidebar from "../assets/figma/navigation/sidebar-right-3-hide.svg";
-import conversationClose from "../assets/icons/conversation-close.svg";
+import panelClose from "../assets/icons/panel-close.svg";
 import conversation from "../assets/icons/conversation.svg";
 import navigationChevron from "../assets/icons/navigation-chevron-right.svg";
 import navigationXmark from "../assets/icons/navigation-xmark.svg";
@@ -48,12 +47,15 @@ const LOCAL_ICONS: readonly LocalIcon[] = [
 	{ name: "Book bookmark", source: book },
 	{ name: "Archive", source: archive },
 	{ name: "Chopin", source: chopin },
-	{ duplicate: "conversation-close.svg", name: "Collapse", source: collapse },
+	{
+		duplicate: "collapse.svg and conversation-close.svg consolidated",
+		name: "Panel close",
+		source: panelClose,
+	},
 	{ name: "Document actions", source: documentActions },
 	{ name: "New document", source: newDocument },
 	{ name: "Search", source: search },
 	{ name: "Hide sidebar", source: hideSidebar },
-	{ duplicate: "collapse.svg", name: "Conversation close", source: conversationClose },
 	{ name: "Conversation", source: conversation },
 	{ name: "Navigation chevron", source: navigationChevron },
 	{ name: "Navigation close", source: navigationXmark },
@@ -102,7 +104,7 @@ export function IconCatalogue() {
 						</span>
 						<figcaption>
 							<strong>{icon.name}</strong>
-							{icon.duplicate ? <span>Exact duplicate: {icon.duplicate}</span> : null}
+							{icon.duplicate ? <span>Consolidated exact duplicate: {icon.duplicate}</span> : null}
 						</figcaption>
 					</figure>
 				))}

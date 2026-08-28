@@ -1,7 +1,7 @@
 /** The shared chat, grouped for reading rather than event delivery. */
 
 import { useEffect, useId, useRef, useState } from "react";
-import { SignInIcon } from "@phosphor-icons/react";
+import { SignInIcon, XIcon } from "@phosphor-icons/react";
 
 import { AgentFace, Face, MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
 
@@ -140,7 +140,7 @@ function MessageBody(
 								title="Withdraw"
 								type="button"
 							>
-								×
+								<XIcon aria-hidden="true" size={16} />
 							</button>
 						)}
 				</div>

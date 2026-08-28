@@ -15,7 +15,7 @@ describe("design audit specimens", () => {
 		for (let id of ["colours", "typography", "spacing", "radii", "shadows", "icons"]) {
 			expect(markup).toContain(`data-audit-item="${id}"`);
 		}
-		expect(markup).toContain("Exact duplicate");
+		expect(markup).toContain("Consolidated exact duplicate");
 	});
 
 	it("renders controls with their native accessibility states", () => {
@@ -49,6 +49,7 @@ describe("design audit specimens", () => {
 		}
 		expect(markup).toContain('role="dialog"');
 		expect(markup).toContain('aria-current="page"');
+		expect(markup).toContain('aria-label="Compact workspace view"');
 		expect(markup).toContain('data-chat-entry="true"');
 		expect(markup).toContain('role="alert"');
 	});
