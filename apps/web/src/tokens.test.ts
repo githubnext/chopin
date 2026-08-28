@@ -134,7 +134,13 @@ describe("palette", () => {
 		);
 	});
 
-	it("keeps the Chat pane edge subtly stronger than the frame hairline", () => {
+it("makes the brand wash the brand colour at thirty percent opacity", () => {
+	expect(declared("--color-brand-wash")).toBe(
+		"color-mix(in srgb, var(--color-brand) 30%, transparent)",
+	);
+});
+
+it("keeps the Chat pane edge subtly stronger than the frame hairline", () => {
 		expect(THEME).toMatch(
 			/\.workspace-frame \.workspace-chat-panel\s*\{\s*border-color:\s*rgb\(0 0 0 \/ 9%\);/,
 		);
@@ -162,7 +168,6 @@ describe("palette", () => {
 			"--color-brand",
 			"--color-brand-hover",
 			"--color-brand-active",
-			"--color-brand-wash",
 			"--color-brand-ink",
 		]);
 	});

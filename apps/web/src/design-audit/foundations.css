@@ -43,15 +43,28 @@
 
 .design-audit-type-stack > div {
 	display: grid;
-	grid-template-columns: 9rem minmax(0, 1fr);
+	grid-template-columns: 12rem minmax(0, 1fr);
 	align-items: baseline;
 	gap: 1.5rem;
 }
 
-.design-audit-type-stack span {
+.design-audit-type-label {
+	display: grid;
+	gap: 0.125rem;
+}
+
+.design-audit-type-label span,
+.design-audit-type-label code {
 	font-size: var(--text-sm);
-	font-weight: 500;
 	color: var(--color-text-quaternary);
+}
+
+.design-audit-type-label code {
+	white-space: nowrap;
+}
+
+.design-audit-type-label span {
+	font-weight: 500;
 }
 
 .design-audit-type-stack strong {
@@ -182,4 +195,9 @@
 		grid-template-columns: 1fr;
 		gap: 0.25rem;
 	}
+}
+
+.design-audit-preview[data-preview-width="narrow"] .design-audit-type-stack > div {
+	grid-template-columns: minmax(0, 1fr);
+	gap: 0.25rem;
 }

@@ -23,11 +23,11 @@ const COLOURS = [
 ] as const;
 
 const TYPE = [
-	["Chrome and labels", "--text-sm", "--text-sm--line-height"],
-	["Document prose", "--text-base", "--text-base--line-height"],
-	["Subheading", "--text-lg", "--text-lg--line-height"],
-	["Section heading", "--text-xl", "--text-xl--line-height"],
-	["Document title", "--text-2xl", "--text-2xl--line-height"],
+	["Chrome and labels", "13px / 20px line-height", "--text-sm", "--text-sm--line-height"],
+	["Document prose", "15px / 22px line-height", "--text-base", "--text-base--line-height"],
+	["Subheading", "17px / 27px line-height", "--text-lg", "--text-lg--line-height"],
+	["Section heading", "24px / 30px line-height", "--text-xl", "--text-xl--line-height"],
+	["Document title", "32px / 38px line-height", "--text-2xl", "--text-2xl--line-height"],
 ] as const;
 
 const SPACING = [2, 4, 6, 8, 12, 16, 24, 32] as const;
@@ -71,9 +71,12 @@ export function Foundations() {
 				description="The complete five-rung type scale."
 			>
 				<div className="design-audit-type-stack">
-					{TYPE.map(([label, size, lineHeight]) => (
+					{TYPE.map(([label, measurement, size, lineHeight]) => (
 						<div key={size} style={{ fontSize: `var(${size})`, lineHeight: `var(${lineHeight})` }}>
-							<span>{label}</span>
+							<div className="design-audit-type-label">
+								<span>{label}</span>
+								<code>{measurement}</code>
+							</div>
 							<strong>Several people and a Planner share one document.</strong>
 						</div>
 					))}
