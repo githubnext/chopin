@@ -177,6 +177,7 @@ describe("research composer", () => {
 		expect(markup).toContain("Research could not be started.");
 		expect(markup).toContain("Start research");
 		expect(markup).toContain("Discard research question");
+		expect(markup).toMatch(/<textarea[^>]*class="field"/);
 		expect(markup).not.toContain(">Cancel<");
 		expect((markup.match(/textarea/g) ?? []).length).toBe(2);
 	});

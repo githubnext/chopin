@@ -60,6 +60,8 @@ describe("design audit specimens", () => {
 		expect(markup).toContain('aria-current="page"');
 		expect(markup).toContain('aria-label="Compact workspace view"');
 		expect(markup).toContain('data-chat-entry="true"');
+		expect(markup).toContain("Avatar image loading");
+		expect(markup).toContain("Editing this question");
 		expect(markup).toContain('role="alert"');
 	});
 

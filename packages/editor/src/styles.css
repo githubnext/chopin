@@ -63,11 +63,7 @@
 	width: 100%;
 	min-height: 5rem;
 	resize: vertical;
-	border: var(--edge-width) solid var(--color-control-edge);
-	border-radius: var(--radius-md);
-	background: var(--color-control);
 	padding: 0.625rem;
-	color: var(--color-text-primary);
 	font: inherit;
 }
 
@@ -944,7 +940,7 @@
 
 .plan-grip {
 	border-radius: var(--radius-sm);
-	background: var(--color-control);
+	background: var(--color-selected);
 	transition: background-color var(--duration-fast) var(--ease-out);
 }
 

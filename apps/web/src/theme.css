@@ -40,8 +40,6 @@
 	--color-hover: var(--color-gray-100);
 	--color-inset: var(--color-gray-100);
 	--color-selected: var(--color-gray-200);
-	--color-control: var(--color-gray-200);
-	--color-control-hover: var(--color-gray-300);
 
 	--color-text-primary: var(--color-gray-900);
 	--color-text-secondary: var(--color-gray-700);

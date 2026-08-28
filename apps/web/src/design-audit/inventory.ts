@@ -103,6 +103,12 @@ export const AUDIT_INVENTORY: readonly AuditGroup[] = [
 				states: ["member", "planner", "tool", "busy", "error"],
 			},
 			{
+				id: "identity",
+				label: "Identity and collaboration",
+				source: "packages/editor/src/face.tsx",
+				states: ["avatar-loading", "editing-question"],
+			},
+			{
 				id: "decisions",
 				label: "Decisions",
 				source: "packages/editor/src/decisions.tsx",

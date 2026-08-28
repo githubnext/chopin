@@ -154,9 +154,19 @@ it("keeps the Chat pane edge subtly stronger than the frame hairline", () => {
 	});
 
 	it("keeps text used on tinted surfaces at AA contrast", () => {
-		for (let surface of ["ground", "hover", "selected", "control"]) {
+		for (let surface of ["ground", "hover", "selected"]) {
 			let ratio = contrast("--color-text-tertiary", `--color-${surface}`);
 			expect({ surface, passes: ratio >= 4.5 }).toEqual({ surface, passes: true });
+		}
+	});
+
+	it("uses selected as the single passive control fill", () => {
+		expect(THEME).not.toMatch(/\n\s*--color-control(?:-hover)?:/);
+		expect(EDITOR_STYLES).not.toContain("var(--color-control)");
+		for (
+			let source of sources(join(ROOT, "apps/web/src")).concat(sources(join(ROOT, "packages")))
+		) {
+			expect(withoutComments(readFileSync(source, "utf8"))).not.toMatch(/\bbg-control\b/);
 		}
 	});
 
@@ -201,7 +211,7 @@ describe("edges and depth", () => {
 	});
 
 	it("keeps the control boundary visible on every surface", () => {
-		for (let surface of ["page", "ground", "hover", "selected", "control"]) {
+		for (let surface of ["page", "ground", "hover", "selected"]) {
 			let ratio = contrast("--color-control-boundary", `--color-${surface}`);
 			expect({ surface, passes: ratio >= 3 }).toEqual({ surface, passes: true });
 		}
