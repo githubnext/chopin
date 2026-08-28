@@ -1,7 +1,7 @@
 /** The shared chat, grouped for reading rather than event delivery. */
 
 import { useEffect, useId, useRef, useState } from "react";
-import { ArrowUpIcon, ChevronIcon, CloseIcon, LoaderIcon } from "@chopin/icons";
+import { ChevronIcon, CloseIcon, LoaderIcon, SignInIcon } from "@chopin/icons";
 
 import { AgentFace, Face, MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
 
@@ -96,7 +96,7 @@ function SystemEntry({ item }: { item: Extract<Group, { kind: "system" }> }) {
 	return (
 		<div className="flex items-start gap-3 text-text-tertiary" data-chat-system>
 			<div className="shrink-0">
-				<ArrowUpIcon aria-hidden="true" className="rotate-90" size={20} />
+				<SignInIcon aria-hidden="true" size={20} />
 			</div>
 			<p className="m-0 min-w-0 break-words text-[14px] [overflow-wrap:anywhere]">
 				{displayText(item.text)}
