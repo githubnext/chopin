@@ -26,6 +26,7 @@
 		"./styles.css": "./src/styles.css"
 	},
 	"dependencies": {
+		"@base-ui/react": "1.7.0",
 		"@chopin/dialect": "workspace:*",
 		"@chopin/protocol": "workspace:*",
 		"@chopin/question": "workspace:*",

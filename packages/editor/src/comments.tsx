@@ -7,112 +7,95 @@
  * decision. A dismissed one is not rendered at all.
  *
  * Accept and dismiss both confirm on a second click, because neither can be
- * undone: accepting freezes the thread, puts a decision in the plan and starts
+ * undone: accepting freezes the thread, puts a decision in the document and starts
  * a turn. That is the same two-click shape `QuestionView` uses for cancelling,
  * so it is an interaction people have already met here.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ArrowUpIcon, ChatCircleIcon, CheckIcon, XIcon } from "@phosphor-icons/react";
 
 import { limits } from "@chopin/dialect";
 
 import { Provenance, SidecarCard, when } from "./card";
-import { Count } from "./count";
-import { cursor } from "./cursor";
 
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import type { Comment } from "@chopin/protocol";
 import type { ThreadView } from "./threads";
 
 function Who({ handle }: { handle: string }) {
 	return (
-		<span
-			className="text-sm font-semibold"
-			style={{ color: cursor(handle).color }}
-		>
+		<span className="text-sm font-semibold text-brand-ink">
 			@{handle}
 		</span>
 	);
 }
 
-function Note({ note }: { note: Comment.Note }) {
+function Note({
+	action,
+	note,
+	opening,
+}: {
+	action?: ReactNode;
+	note: Comment.Note;
+	opening?: boolean;
+}) {
 	return (
-		<li className="flex flex-col gap-0.5">
-			<div className="flex items-baseline gap-2">
-				<Who handle={note.handle} />
-				<span className="text-sm text-text-tertiary tabular-nums">{when(note.ts)}</span>
+		<li
+			className="flex flex-col gap-0.5"
+			data-plan-comment-opening-note={opening || undefined}
+		>
+			<div className="flex min-h-7 items-center justify-between gap-2">
+				<div className="flex min-w-0 items-baseline gap-2">
+					<Who handle={note.handle} />
+					<span className="truncate text-sm text-text-tertiary tabular-nums">
+						{when(note.ts)}
+					</span>
+				</div>
+				{action}
 			</div>
 			<p className="m-0 text-sm whitespace-pre-wrap text-text-primary">{note.text}</p>
 		</li>
 	);
 }
 
-const QUOTED = "m-0 w-full text-left text-sm text-text-secondary italic";
-
-/**
- * The prose the thread marks, as a quotation the card can be read without.
- *
- * A button when there is somewhere to go, a blockquote when there is not —
- * which is the rule `QuestionView` already applies to an answer, so both halves
- * of the sidecar offer the same thing in the same way. A real element carries
- * the affordance and the keyboard handling rather than a quotation pretending
- * to be one, and a drifted thread offers no jump it could not honour: the card
- * still reads, which is the durable part of a comment.
- *
- * The quote rather than the card. A card holds a reply box, an Accept and a
- * Dismiss; making the whole of it a link would mean deciding, on every click,
- * whether the reader meant the link or the control they actually hit.
- *
- * Two numbers meet here and only one of them is drawn. How many places the
- * thread is anchored in belongs to the jump — it says what the button will do,
- * so it is said in the label and nowhere else. How many replies the thread has
- * collected is the count worth acting on, so that is what takes the pill. The
- * pill sits outside the button and carries its own word, so a drifted thread
- * with no jump left to offer still counts its replies out loud.
- */
-function Quote(
-	{ drifted, onSelect, places = 0, replies = 0, text }: {
-		drifted?: boolean;
-		onSelect?: () => void;
-		/** How many spans of prose the thread is anchored in. */
-		places?: number;
-		/** Answers to the opening comment, which is not itself a reply. */
-		replies?: number;
-		text: string;
-	},
-) {
+function CloseButton({ onClose }: { onClose: () => void }) {
 	return (
-		<div className="flex flex-col gap-1">
-			<div className="flex items-center gap-2">
-				{places > 0 && onSelect
-					? (
-						<button
-							// The quote is part of the name, not replaced by it: it is the
-							// only place the marked phrase appears on the card, so a label
-							// saying only where the button goes would take it away from
-							// anybody who cannot see it.
-							aria-label={places > 1
-								? `${text} — show in plan, ${places} places`
-								: `${text} — show in plan`}
-							className={`${QUOTED} min-w-0 flex-1 cursor-pointer rounded-sm hover:text-text-primary`}
-							data-press="wide"
-							onClick={onSelect}
-							type="button"
-						>
-							{text}
-						</button>
-					)
-					: <blockquote className={`${QUOTED} min-w-0 flex-1`}>{text}</blockquote>}
-				{replies > 0 && (
-					<Count motion>
-						{replies}
-						<span className="sr-only">{replies === 1 ? " reply" : " replies"}</span>
-					</Count>
-				)}
-			</div>
+		<button
+			aria-label="Close comment"
+			className="plan-comment-close btn btn-icon btn-ghost"
+			data-plan-comment-close
+			onClick={onClose}
+			title="Close comment"
+			type="button"
+		>
+			<XIcon aria-hidden="true" size={16} />
+		</button>
+	);
+}
+
+function DraftHeader({ onClose, showClose }: { onClose: () => void; showClose: boolean }) {
+	return (
+		<header
+			className="flex min-h-7 items-center justify-between text-text-tertiary"
+			data-plan-comment-draft-header
+		>
+			<ChatCircleIcon aria-hidden="true" size={16} />
+			{showClose && <CloseButton onClose={onClose} />}
+		</header>
+	);
+}
+
+/** Context is repeated only when its source passage can no longer be reached. */
+function Quote({ drifted, text }: { drifted?: boolean; text: string }) {
+	return (
+		<div className="plan-comment-context flex flex-col gap-1" data-plan-comment-context>
+			<blockquote className="plan-comment-context-copy m-0 text-sm text-text-secondary">
+				{text}
+			</blockquote>
 			{drifted && (
 				<p className="m-0 text-sm text-warning-ink">
-					The text this refers to has changed.
+					This passage has changed since the comment was added.
 				</p>
 			)}
 		</div>
@@ -133,6 +116,8 @@ function Composer({
 	onSend,
 	onTyping,
 	placeholder,
+	insetSend,
+	sendLabel,
 }: {
 	autoFocus?: boolean;
 	busy?: boolean;
@@ -141,6 +126,8 @@ function Composer({
 	onSend: (text: string) => void;
 	onTyping?: (writing: boolean) => void;
 	placeholder: string;
+	insetSend?: boolean;
+	sendLabel?: string;
 }) {
 	let [text, setText] = useState("");
 	let ref = useRef<HTMLTextAreaElement>(null);
@@ -148,6 +135,15 @@ function Composer({
 	useEffect(() => {
 		if (autoFocus) ref.current?.focus();
 	}, [autoFocus]);
+
+	useLayoutEffect(() => {
+		let field = ref.current;
+		if (!field) return;
+		field.style.height = "0px";
+		let height = Math.min(field.scrollHeight, 160);
+		field.style.height = `${height}px`;
+		field.style.overflowY = field.scrollHeight > height ? "auto" : "hidden";
+	}, [text]);
 
 	// Whoever is typing stops being told about the moment this goes away, so
 	// an unmount does not leave a caret blinking in somebody else's sidecar.
@@ -173,85 +169,58 @@ function Composer({
 
 	return (
 		<div className="flex flex-col gap-1.5">
-			<textarea
-				ref={ref}
-				className="field min-h-16 w-full resize-y px-2 py-1.5 text-sm"
-				disabled={busy}
-				maxLength={limits.MAX_NOTE}
-				onChange={event => {
-					setText(event.target.value);
-					onTyping?.(event.target.value.length > 0);
-				}}
-				onKeyDown={key}
-				placeholder={placeholder}
-				value={text}
-			/>
-			<div className="flex items-center gap-2">
-				<button
-					className="btn btn-sm btn-primary"
-					disabled={!text.trim() || busy}
-					onClick={send}
-					type="button"
-				>
-					{label}
-				</button>
-				{onCancel && (
+			<div
+				className="plan-comment-composer relative"
+				data-inset-send={insetSend || undefined}
+				data-plan-comment-composer-shell={insetSend || undefined}
+			>
+				<textarea
+					ref={ref}
+					className="plan-comment-composer-field field block min-h-16 w-full resize-none px-2 py-1.5 text-sm"
+					disabled={busy}
+					maxLength={limits.MAX_NOTE}
+					onChange={event => {
+						setText(event.target.value);
+						onTyping?.(event.target.value.length > 0);
+					}}
+					onKeyDown={key}
+					placeholder={placeholder}
+					value={text}
+				/>
+				{insetSend && (
 					<button
-						className="btn btn-sm btn-secondary"
-						onClick={onCancel}
+						aria-label={sendLabel ?? `Send ${label.toLowerCase()}`}
+						className="plan-comment-send btn btn-icon btn-primary absolute right-2 bottom-2 rounded-full"
+						disabled={!text.trim() || busy}
+						onClick={send}
+						title={sendLabel ?? `Send ${label.toLowerCase()}`}
 						type="button"
 					>
-						Cancel
+						<ArrowUpIcon aria-hidden="true" size={14} weight="bold" />
 					</button>
+				)}
+				{onCancel && (
+					<div className="mt-1.5 flex items-center gap-2">
+						<button
+							className="btn btn-sm btn-primary"
+							data-plan-comment-submit
+							disabled={!text.trim() || busy}
+							onClick={send}
+							type="button"
+						>
+							{label}
+						</button>
+						<button
+							className="btn btn-sm btn-secondary"
+							onClick={onCancel}
+							type="button"
+						>
+							Cancel
+						</button>
+					</div>
 				)}
 			</div>
 		</div>
-	);
-}
-
-/** A button that asks again before doing something that cannot be undone. */
-function Confirm({
-	busy,
-	consequence,
-	label,
-	onConfirm,
-	tone,
-}: {
-	busy?: boolean;
-	consequence?: string;
-	label: string;
-	onConfirm: () => void;
-	tone: "primary" | "quiet";
-}) {
-	let [asked, setAsked] = useState(false);
-
-	useEffect(() => {
-		if (!asked) return;
-		let timer = setTimeout(() => setAsked(false), 4_000);
-		return () => clearTimeout(timer);
-	}, [asked]);
-
-	return (
-		<>
-			<button
-				className={tone === "primary" ? "btn btn-sm btn-primary" : "btn btn-sm btn-ghost"}
-				disabled={busy}
-				onClick={() => {
-					if (!asked) return setAsked(true);
-					setAsked(false);
-					onConfirm();
-				}}
-				type="button"
-			>
-				{asked ? "Sure?" : label}
-			</button>
-			{consequence && (
-				// Keep the live region mounted so later text changes are announced.
-				<span aria-live="polite" className="order-last ml-auto text-sm text-text-secondary">
-					{asked && consequence}
-				</span>
-			)}
-		</>
 	);
 }
 
@@ -272,10 +241,10 @@ export type ThreadCardProps = {
 	onTyping: (writing: boolean) => void;
 	onFocus: () => void;
 	onBlur: () => void;
-	/** Take the reader to the prose this points at. */
-	onReveal: () => void;
 	/** Dismiss a document dialog without changing the durable thread. */
 	onClose?: () => void;
+	/** Desktop owns visible close chrome; a compact sheet owns dismissal itself. */
+	showClose?: boolean;
 	/** The overlay is document chrome rather than an item in the decisions rail. */
 	inDocument?: boolean;
 };
@@ -292,18 +261,34 @@ export function ThreadCard({
 	onFocus,
 	onReply,
 	onRetry,
-	onReveal,
 	onTyping,
 	quote,
 	inDocument,
+	showClose = true,
 	view,
 	writing,
 }: ThreadCardProps) {
 	let { thread } = view;
 	let open = thread.status === "open";
+	let [confirming, setConfirming] = useState<"accept" | "dismiss">();
+
+	let confirmation = confirming === "accept"
+		? {
+			action: "Apply feedback",
+			message: "Planner will use this feedback to update the document.",
+			onConfirm: onAccept,
+		}
+		: confirming === "dismiss"
+		? {
+			action: "Dismiss",
+			message: "This closes the thread without changing the document.",
+			onConfirm: onDismiss,
+		}
+		: undefined;
 
 	return (
 		<SidecarCard
+			data-plan-comment-card
 			{...(inDocument
 				? { "data-plan-comment-thread": thread.id }
 				: { "data-plan-sidecar-thread": thread.id })}
@@ -331,29 +316,25 @@ export function ThreadCard({
 			settled={!open}
 			status={!open && <Provenance at={thread.at} by={thread.resolver} verb="Accepted" />}
 		>
-			{onClose && (
-				<div className="flex justify-end">
-					<button
-						className="btn btn-sm btn-ghost"
-						data-plan-comment-close
-						onClick={onClose}
-						type="button"
-					>
-						Close comment
-					</button>
-				</div>
-			)}
-			<Quote
-				drifted={view.drifted}
-				onSelect={onReveal}
-				places={view.places.length}
-				replies={Math.max(0, thread.notes.length - 1)}
-				text={quote}
-			/>
-
 			<ul className="m-0 flex list-none flex-col gap-2 p-0">
-				{thread.notes.map(note => <Note key={note.id} note={note} />)}
+				{thread.notes.map((note, index) => (
+					<Note
+						action={index === 0 && showClose && onClose
+							? <CloseButton onClose={onClose} />
+							: undefined}
+						key={note.id}
+						note={note}
+						opening={index === 0}
+					/>
+				))}
 			</ul>
+
+			{view.orphaned && <Quote drifted={view.drifted} text={quote} />}
+			{view.drifted && !view.orphaned && (
+				<p className="m-0 text-sm text-warning-ink">
+					This passage has changed since the comment was added.
+				</p>
+			)}
 
 			{writing && writing.length > 0 && (
 				<p className="m-0 text-sm text-text-secondary">
@@ -369,17 +350,58 @@ export function ThreadCard({
 						onSend={onReply}
 						onTyping={onTyping}
 						placeholder="Reply…"
+						insetSend
 					/>
-					<div className="flex items-center gap-2 pt-2">
-						<Confirm
-							busy={busy}
-							consequence="Accepting asks the agent to revise the plan"
-							label="Accept"
-							onConfirm={onAccept}
-							tone="primary"
-						/>
-						<Confirm busy={busy} label="Dismiss" onConfirm={onDismiss} tone="quiet" />
-					</div>
+					{confirmation
+						? (
+							<div className="plan-comment-confirm flex flex-col gap-2 pt-2">
+								<p aria-live="polite" className="m-0 text-sm text-text-secondary">
+									{confirmation.message}
+								</p>
+								<div className="flex items-center justify-between gap-2">
+									<button
+										className="btn btn-sm btn-ghost"
+										onClick={() => setConfirming(undefined)}
+										type="button"
+									>
+										Cancel
+									</button>
+									<button
+										className="btn btn-sm btn-secondary"
+										disabled={busy}
+										onClick={() => {
+											setConfirming(undefined);
+											confirmation.onConfirm();
+										}}
+										type="button"
+									>
+										{confirmation.action}
+									</button>
+								</div>
+							</div>
+						)
+						: (
+							<div className="flex items-center justify-between gap-2 pt-2">
+								<button
+									className="btn btn-sm btn-ghost gap-1"
+									disabled={busy}
+									onClick={() => setConfirming("dismiss")}
+									type="button"
+								>
+									<XIcon aria-hidden="true" size={14} />
+									Dismiss
+								</button>
+								<button
+									className="btn btn-md btn-primary gap-1"
+									disabled={busy}
+									onClick={() => setConfirming("accept")}
+									type="button"
+								>
+									<CheckIcon aria-hidden="true" size={14} weight="bold" />
+									Apply feedback
+								</button>
+							</div>
+						)}
 				</>
 			)}
 		</SidecarCard>
@@ -387,23 +409,25 @@ export function ThreadCard({
 }
 
 export type DraftCardProps = {
-	quote: string;
 	busy?: boolean;
 	onSend: (text: string) => void;
 	onCancel: () => void;
+	showClose?: boolean;
 };
 
-export function DraftCard({ busy, onCancel, onSend, quote }: DraftCardProps) {
+export function DraftCard({ busy, onCancel, onSend, showClose = true }: DraftCardProps) {
 	return (
-		<SidecarCard focused label="Comment">
-			<Quote text={quote} />
+		<SidecarCard data-plan-comment-card focused label="Comment">
+			<DraftHeader onClose={onCancel} showClose={showClose} />
 			<Composer
 				autoFocus
 				busy={busy}
+				insetSend={!showClose}
 				label="Comment"
-				onCancel={onCancel}
+				onCancel={showClose ? onCancel : undefined}
 				onSend={onSend}
 				placeholder="Comment on this passage…"
+				sendLabel="Post comment"
 			/>
 		</SidecarCard>
 	);

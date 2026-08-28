@@ -121,6 +121,20 @@ export function popoverPoint(
 	};
 }
 
+/** Keep an engaged comment in one predictable document-edge surface. */
+export function edgePanelPoint(
+	anchor: Rect,
+	host: Rect,
+	width: number,
+	height: number,
+	inset = 12,
+): Point {
+	return {
+		top: clamp(anchor.top - host.top, inset, host.height - height - inset),
+		left: Math.max(inset, host.width - width - inset),
+	};
+}
+
 function clamp(value: number, lower: number, upper: number): number {
 	return Math.min(Math.max(value, lower), Math.max(lower, upper));
 }

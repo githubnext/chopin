@@ -574,8 +574,14 @@ describe("migration", () => {
 			}],
 			["packages/editor/src/comments.tsx", {
 				action: "comment submit",
-				marker: "disabled={!text.trim() || busy}",
+				marker: "data-plan-comment-submit",
 				size: "btn-sm",
+				tiers: ["btn-primary"],
+			}],
+			["packages/editor/src/comments.tsx", {
+				action: "comment composer send",
+				marker: 'className="plan-comment-send',
+				size: "btn-icon",
 				tiers: ["btn-primary"],
 			}],
 			["packages/editor/src/comments.tsx", {
@@ -592,9 +598,27 @@ describe("migration", () => {
 			}],
 			["packages/editor/src/comments.tsx", {
 				action: "comment confirmation",
-				marker: 'asked ? "Sure?" : label',
+				marker: "confirmation.onConfirm();",
 				size: "btn-sm",
-				tiers: ["btn-primary", "btn-ghost"],
+				tiers: ["btn-secondary"],
+			}],
+			["packages/editor/src/comments.tsx", {
+				action: "cancel comment confirmation",
+				marker: "onClick={() => setConfirming(undefined)}",
+				size: "btn-sm",
+				tiers: ["btn-ghost"],
+			}],
+			["packages/editor/src/comments.tsx", {
+				action: "Dismiss comment",
+				marker: 'setConfirming("dismiss")',
+				size: "btn-sm",
+				tiers: ["btn-ghost"],
+			}],
+			["packages/editor/src/comments.tsx", {
+				action: "Apply feedback",
+				marker: 'setConfirming("accept")',
+				size: "btn-md",
+				tiers: ["btn-primary"],
 			}],
 			["packages/editor/src/decisions.tsx", {
 				action: "resolved disclosure",

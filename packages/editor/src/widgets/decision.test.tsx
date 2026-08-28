@@ -26,6 +26,12 @@ describe("DecisionCard", () => {
 		expect(markup).toContain("Use a feature flag.");
 		expect(markup).toContain("@bo");
 		expect(markup).toContain("Measure rollback time.");
-		expect(markup).toContain("Accepted by @ana");
+		expect(markup).toContain('Accepted by <span class="text-brand-ink">@ana</span>');
+		expect(markup).toContain('class="text-sm font-semibold text-brand-ink"');
+		expect(markup).toContain("data-plan-comment-context");
+		expect(markup.indexOf("Use a feature flag.")).toBeLessThan(
+			markup.indexOf("Keep the rollout reversible."),
+		);
+		expect(markup).not.toContain("italic");
 	});
 });

@@ -1,18 +1,19 @@
 /** Reader-local comment chrome overlays rather than mutates collaborative prose. */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { ChatCircleIcon } from "@phosphor-icons/react";
 import { useCellValue } from "@mdxeditor/gurx";
 
 import { DraftCard, ThreadCard } from "./comments";
-import { markerPoints, markerRect, popoverPoint } from "./comment-geometry";
+import { edgePanelPoint, markerPoints, markerRect, popoverPoint } from "./comment-geometry";
 import { containsHit, passageHits } from "./comment-hits";
+import { CommentSheet, usesCommentSheet } from "./comment-sheet";
 import { useCommentSheetReveal } from "./comment-sheet-reveal";
 import { $rangeOf } from "./marks";
 import { blockElement } from "./scroll";
-import { COARSE_POINTER_QUERY, hasCoarsePointer } from "./pointer";
+import { COARSE_POINTER_QUERY, PRIMARY_COARSE_POINTER_QUERY } from "./pointer";
 import { useThreads } from "./threads";
 import { useTransitionPresence } from "./transition-presence";
 import { widgets$ } from "./widget-options";
@@ -108,9 +109,15 @@ function placedPreview(
 
 function PreviewContent({ view }: { view: ThreadView }) {
 	let replies = Math.max(0, view.thread.notes.length - 1);
+	let opening = view.thread.notes[0];
 	return (
 		<>
-			<p>{view.quote}</p>
+			{opening && (
+				<>
+					<p className="plan-comment-preview-author">@{opening.handle}</p>
+					<p className="plan-comment-preview-note">{opening.text}</p>
+				</>
+			)}
 			{replies > 0 && <span>{replies} {replies === 1 ? "reply" : "replies"}</span>}
 		</>
 	);
@@ -232,22 +239,6 @@ function replyState(view: ThreadView): string {
 		: `${replies} ${replies === 1 ? "reply" : "replies"} waiting.`;
 }
 
-/** Give a compact document dialog the same outside-content isolation as a native modal. */
-function isolate(dialog: HTMLElement): () => void {
-	let changed: HTMLElement[] = [];
-	for (let current: HTMLElement = dialog; current.parentElement; current = current.parentElement) {
-		for (let sibling of current.parentElement.children) {
-			if (!(sibling instanceof HTMLElement) || sibling === current || sibling.inert) continue;
-			sibling.inert = true;
-			changed.push(sibling);
-		}
-		if (current.parentElement === document.body) break;
-	}
-	return () => {
-		for (let element of changed) element.inert = false;
-	};
-}
-
 export function CommentLayer({ store }: { store: ThreadStore }) {
 	let [editor] = useLexicalComposerContext();
 	let state = useThreads(store);
@@ -257,6 +248,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let [previewMeasurement, setPreviewMeasurement] = useState<PreviewMeasurement>();
 	let [pinned, setPinned] = useState<string>();
 	let [coarse, setCoarse] = useState(false);
+	let [primaryCoarse, setPrimaryCoarse] = useState(false);
 	let [cardHeights, setCardHeights] = useState<{ [id: string]: number }>({});
 	let root = useRef<HTMLDivElement>(null);
 	let placedRef = useRef<PlacedThread[]>([]);
@@ -268,7 +260,9 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let draftOpen = useRef(false);
 	let options = useCellValue(widgets$);
 	let canEdit = options.canEdit !== false;
-	let compact = options.commentPresentation === "sheet";
+	let compact = options.commentPresentation === "sheet"
+		&& usesCommentSheet({ coarse: primaryCoarse, width: host?.clientWidth ?? Infinity });
+	let previousCompact = useRef(compact);
 	let immediately = options.motionImmediately?.() ?? false;
 	let draft = canEdit ? state.draft : undefined;
 	let measurePreview = useCallback((request: PreviewRequest, height: number) => {
@@ -298,11 +292,30 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 
 	useEffect(() => {
 		let query = matchMedia(COARSE_POINTER_QUERY);
-		let update = () => setCoarse(hasCoarsePointer());
+		let primary = matchMedia(PRIMARY_COARSE_POINTER_QUERY);
+		let update = () => {
+			setCoarse(query.matches);
+			setPrimaryCoarse(primary.matches);
+		};
 		update();
 		query.addEventListener("change", update);
-		return () => query.removeEventListener("change", update);
+		primary.addEventListener("change", update);
+		return () => {
+			query.removeEventListener("change", update);
+			primary.removeEventListener("change", update);
+		};
 	}, []);
+
+	useLayoutEffect(() => {
+		let previous = previousCompact.current;
+		previousCompact.current = compact;
+		if (!previous || compact || !pinned) return;
+		let id = pinned === "orphans"
+			? "plan-comment-thread-orphans"
+			: `plan-comment-thread-${pinned}`;
+		let dialog = document.getElementById(id);
+		dialog?.querySelector<HTMLElement>("[data-plan-comment-close], button")?.focus();
+	}, [compact, pinned]);
 
 	let enter = useCallback((id: string) => {
 		clearTimeout(close.current);
@@ -518,15 +531,20 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 
 	let sheetId = compact && pinned !== "orphans" ? pinned : undefined;
 	let sheet = placed.find(entry => entry.view.thread.id === sheetId);
+	let revealId = compact && draft?.placement ? "draft" : sheetId;
+	let revealPassages = useMemo(
+		() => compact && draft?.placement ? [draft.placement] : sheet?.passages,
+		[compact, draft?.placement, sheet?.passages],
+	);
 	useCommentSheetReveal({
-		height: sheetId ? cardHeights[sheetId] : undefined,
 		host,
-		id: sheetId,
-		passages: sheet?.passages,
+		id: revealId,
+		passages: revealPassages,
 	});
 
 	useEffect(() => {
 		if (!pinned && !preview) return;
+		if (compact && pinned) return;
 		let outside = (event: PointerEvent) => {
 			let dialog = pinned
 				? document.getElementById(`plan-comment-thread-${pinned}`)
@@ -547,55 +565,12 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			document.removeEventListener("pointerdown", outside);
 			document.removeEventListener("keydown", escape);
 		};
-	}, [dismiss, pinned, preview]);
-
-	useLayoutEffect(() => {
-		if (!compact || (!pinned && !draft)) return;
-		let editorHost = editor.getRootElement();
-		let dialog = pinned
-			? document.getElementById(`plan-comment-thread-${pinned}`)
-			: root.current?.querySelector<HTMLElement>('[aria-label="New comment"]');
-		if (!dialog) return;
-		let release = isolate(dialog);
-		editorHost?.setAttribute("inert", "");
-		let initial = dialog.querySelector<HTMLElement>(
-			pinned ? "[data-plan-comment-close]" : "textarea, button, [tabindex]",
-		);
-		initial?.focus();
-		let trap = (event: KeyboardEvent) => {
-			if (event.key === "Escape") {
-				event.preventDefault();
-				if (pinned) dismiss();
-				else cancelDraft();
-				return;
-			}
-			if (event.key !== "Tab") return;
-			let focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
-				'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
-			)).filter(element => element.offsetParent !== null);
-			if (focusable.length === 0) return;
-			let first = focusable[0]!;
-			let last = focusable[focusable.length - 1]!;
-			if (event.shiftKey && document.activeElement === first) {
-				event.preventDefault();
-				last.focus();
-			} else if (!event.shiftKey && document.activeElement === last) {
-				event.preventDefault();
-				first.focus();
-			}
-		};
-		document.addEventListener("keydown", trap);
-		return () => {
-			release();
-			editorHost?.removeAttribute("inert");
-			document.removeEventListener("keydown", trap);
-		};
-	}, [cancelDraft, compact, dismiss, draft, editor, pinned]);
+	}, [compact, dismiss, pinned, preview]);
 
 	if (!host) return null;
 
 	let orphaned = state.threads.filter(view => view.thread.status === "open" && view.orphaned);
-	let card = (view: ThreadView) => (
+	let card = (view: ThreadView, showClose = true) => (
 		<ThreadCard
 			busy={false}
 			canEdit={canEdit}
@@ -604,14 +579,14 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			key={view.thread.id}
 			onAccept={() => store.accept(view.thread.id)}
 			onBlur={() => unhover(view.thread.id)}
-			onClose={dismiss}
+			onClose={showClose ? dismiss : undefined}
 			onDismiss={() => store.dismiss(view.thread.id)}
 			onFocus={() => hover(view.thread.id)}
 			onReply={text => store.reply(view.thread.id, text)}
 			onRetry={() => store.retry(view.thread.id)}
-			onReveal={() => store.reveal(view.thread.id)}
 			onTyping={writing => store.announce(view.thread.id, writing)}
 			quote={view.quote}
+			showClose={showClose}
 			view={view}
 			writing={state.writing[view.thread.id]}
 		/>
@@ -622,8 +597,13 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		setCardHeights(current => current[id] === height ? current : { ...current, [id]: height });
 	};
 	let page = host.getBoundingClientRect();
-	let cardWidth = Math.min(384, host.clientWidth * 0.8);
+	let cardWidth = Math.min(320, host.clientWidth - 24);
 	let previewWidth = Math.min(288, host.clientWidth * 0.8);
+	let compactKey: string | undefined;
+	let compactId: string | undefined;
+	let compactLabel: string | undefined;
+	let compactClose: (() => void) | undefined;
+	let compactContent: ReactNode = undefined;
 	let previewEntry = preview && pinned !== preview
 		? placed.find(entry => entry.view.thread.id === preview)
 		: undefined;
@@ -640,13 +620,50 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let previewValue = placedPreview(previewRequest, previewMeasurement);
 	let activePreviewId = previewValue?.id;
 
-	return createPortal(
-		<div className="plan-comment-layer" data-plan-comment-sheet={compact || undefined} ref={root}>
+	if (compact && draft?.placement) {
+		compactKey = "draft";
+		compactId = "plan-comment-draft";
+		compactLabel = "New comment";
+		compactClose = cancelDraft;
+		compactContent = (
+			<DraftCard
+				busy={false}
+				onCancel={cancelDraft}
+				onSend={text => store.start(text)}
+				showClose={false}
+			/>
+		);
+	} else if (compact && pinned === "orphans" && orphaned.length > 0) {
+		compactKey = "orphans";
+		compactId = "plan-comment-thread-orphans";
+		compactLabel = "Orphaned comments";
+		compactClose = dismiss;
+		compactContent = orphaned.map(view => card(view, false));
+	} else if (compact && pinned) {
+		let pinnedView = state.threads.find(view =>
+			view.thread.id === pinned && view.thread.status === "open"
+		);
+		if (pinnedView) {
+			compactKey = `thread:${pinned}`;
+			compactId = `plan-comment-thread-${pinned}`;
+			compactLabel = "Comment thread";
+			compactClose = dismiss;
+			compactContent = card(pinnedView, false);
+		}
+	}
+
+	let documentChrome = createPortal(
+		<div
+			className="plan-comment-layer"
+			data-plan-comment-presentation={compact ? "sheet" : "popover"}
+			ref={root}
+		>
 			{placed.map(({ button, hits, view }) => {
 				let shown = pinned === view.thread.id;
 				let previewId = `plan-comment-preview-${view.thread.id}`;
-				let cardPoint = popoverPoint(
-					markerRect(button, page, coarse ? 44 : 24),
+				let anchor = markerRect(button, page, coarse ? 44 : 24);
+				let cardPoint = edgePanelPoint(
+					anchor,
 					page,
 					cardWidth,
 					cardHeights[view.thread.id] ?? 0,
@@ -688,9 +705,9 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 							<ChatCircleIcon aria-hidden="true" size={14} />
 						</button>
 						<CommentSurface
-							compact={compact}
+							compact={false}
 							immediately={immediately}
-							value={shown
+							value={shown && !compact
 								? {
 									ariaLabel: "Comment thread",
 									children: card(view),
@@ -715,9 +732,9 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			/>
 
 			<CommentSurface
-				compact={compact}
+				compact={false}
 				immediately={immediately}
-				value={draft?.placement
+				value={draft?.placement && !compact
 					? {
 						ariaLabel: "New comment",
 						children: (
@@ -725,12 +742,11 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 								busy={false}
 								onCancel={cancelDraft}
 								onSend={text => store.start(text)}
-								quote={draft.quote}
 							/>
 						),
 						className: "plan-comment-card",
 						onMeasure: element => rememberHeight("draft", element),
-						style: popoverPoint(
+						style: edgePanelPoint(
 							draft.placement,
 							page,
 							cardWidth,
@@ -756,12 +772,12 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 						{orphaned.length} comments without prose
 					</button>
 					<CommentSurface
-						compact={compact}
+						compact={false}
 						immediately={immediately}
-						value={pinned === "orphans"
+						value={pinned === "orphans" && !compact
 							? {
 								ariaLabel: "Orphaned comments",
-								children: orphaned.map(card),
+								children: orphaned.map(view => card(view)),
 								className: "plan-comment-card plan-comment-orphan-card",
 								id: "plan-comment-thread-orphans",
 							}
@@ -771,5 +787,21 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			)}
 		</div>,
 		host,
+	);
+
+	return (
+		<>
+			{documentChrome}
+			{compactKey && compactId && compactLabel && compactClose && (
+				<CommentSheet
+					id={compactId}
+					key={compactKey}
+					label={compactLabel}
+					onClose={compactClose}
+				>
+					{compactContent}
+				</CommentSheet>
+			)}
+		</>
 	);
 }

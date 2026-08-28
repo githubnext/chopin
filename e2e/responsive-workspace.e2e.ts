@@ -28,6 +28,7 @@ async function emulatedVisualViewportPage(
 async function expectCompactWorkspaceChrome(page: Page): Promise<void> {
 	let header = page.getByRole("banner");
 	let nav = page.getByRole("navigation", { name: "Workspace view" });
+	let frame = page.locator(".workspace-frame");
 	let projects = page.getByRole("button", { name: "Open Projects sidebar" });
 	let document = header.getByRole("button", { name: /^Actions for / });
 	let destinations = nav.getByRole("button");
@@ -44,6 +45,22 @@ async function expectCompactWorkspaceChrome(page: Page): Promise<void> {
 	await expectInsideViewport(projects);
 	await expectInsideViewport(document);
 	await expectInsideViewport(nav);
+	let surface = await frame.evaluate(element => {
+		let style = getComputedStyle(element);
+		let bounds = element.getBoundingClientRect();
+		return {
+			left: bounds.left,
+			overflow: style.overflow,
+			radius: style.borderRadius,
+			right: innerWidth - bounds.right,
+			shadow: style.boxShadow,
+		};
+	});
+	expect(surface.left).toBe(8);
+	expect(surface.right).toBe(8);
+	expect(surface.radius).toBe("12px");
+	expect(surface.overflow).toBe("hidden");
+	expect(surface.shadow).not.toBe("none");
 
 	let heights = await destinations.evaluateAll(buttons =>
 		buttons.map(button => button.getBoundingClientRect().height)
@@ -211,8 +228,12 @@ test("a shifted visual viewport keeps workspace controls in the exposed rectangl
 			width: 320,
 		});
 
-		await expectInsideViewport(page.getByRole("button", { name: "Open Projects sidebar" }));
-		await expectInsideViewport(page.getByRole("navigation", { name: "Workspace view" }));
+		let sidebarButton = page.getByRole("button", { name: "Open Projects sidebar" });
+		await expect(sidebarButton).toBeVisible();
+		await expectInsideViewport(sidebarButton);
+		let workspaceNavigation = page.getByRole("navigation", { name: "Workspace view" });
+		await expect(workspaceNavigation).toBeVisible();
+		await expectInsideViewport(workspaceNavigation);
 	} finally {
 		await context.close();
 	}
@@ -449,7 +470,7 @@ test("a touch comment sheet keeps its composer above the visual keyboard", async
 		let marker = emulation.page.getByRole("button", { name: /Comment on “/ }).first();
 		await marker.tap();
 		let sheet = emulation.page.getByRole("dialog", { name: "Comment thread" });
-		await expect(sheet.getByRole("button", { name: "Close comment" })).toBeFocused();
+		await expect(sheet.getByRole("button", { name: "Resize comment sheet" })).toBeFocused();
 		let composer = sheet.getByPlaceholder("Reply…");
 		await composer.focus();
 		await setVisualViewport(emulation.page, {
@@ -457,8 +478,10 @@ test("a touch comment sheet keeps its composer above the visual keyboard", async
 			height: 506,
 			offsetTop: 0,
 		});
-		await expectInsideViewport(composer);
-		await expectInsideViewport(sheet.getByRole("button", { name: "Reply" }));
+		await expect(async () => {
+			await expectInsideViewport(composer);
+			await expectInsideViewport(sheet.getByRole("button", { name: "Send reply" }));
+		}).toPass();
 	} finally {
 		await emulation.close();
 	}

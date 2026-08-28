@@ -2,7 +2,7 @@ import { content, expect, test } from "./room";
 
 const PROSE = "Room state lives on disk as MDX beside the transcript.\n";
 const TWO_BLOCKS = `${PROSE}\nA second block remains after the marked passage.\n`;
-const QUOTED = "Room state lives on disk as MDX beside the trans";
+const OPENING_NOTE = "Is this still right?";
 
 function commentButton(page: import("@playwright/test").Page) {
 	return page.getByRole("button", { name: /Comment on “/ });
@@ -13,7 +13,7 @@ async function secondThread(page: import("@playwright/test").Page) {
 	await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
 	let draft = page.getByRole("dialog", { name: "New comment" });
 	await draft.getByPlaceholder("Comment on this passage…").fill("Keep this block as well.");
-	await draft.getByRole("button", { name: "Comment" }).click();
+	await draft.getByRole("button", { name: "Comment", exact: true }).click();
 	await expect.poll(() => commentButton(page).count()).toBe(2);
 	await page.keyboard.press("Escape");
 	await expect(page.getByRole("dialog", { name: "Comment thread" })).toHaveCount(0);
@@ -26,7 +26,7 @@ test("comment preview motion retains one tooltip through pointer interruption", 
 	let button = commentButton(page);
 	await expect(button).toBeVisible();
 	let firstMount = page.evaluate(
-		quote =>
+		note =>
 			new Promise<{ role: string | null; visibility: string }>(
 				resolve => {
 					let observer = new MutationObserver(records => {
@@ -39,7 +39,8 @@ test("comment preview motion retains one tooltip through pointer interruption", 
 								];
 								let preview = candidates.find(element =>
 									element.getAttribute("aria-hidden") === "true"
-									&& element.querySelector("p")?.textContent === quote
+									&& element.querySelector(".plan-comment-preview-note")?.textContent
+										.startsWith(note)
 								);
 								if (!preview) continue;
 								observer.disconnect();
@@ -54,7 +55,7 @@ test("comment preview motion retains one tooltip through pointer interruption", 
 					observer.observe(document.body, { childList: true, subtree: true });
 				},
 			),
-		QUOTED,
+		OPENING_NOTE,
 	);
 	let initial = page.evaluate(() =>
 		new Promise<{ opacity: string; transform: string }>(resolve => {
@@ -71,7 +72,8 @@ test("comment preview motion retains one tooltip through pointer interruption", 
 	await button.hover();
 	expect(await firstMount).toEqual({ role: null, visibility: "hidden" });
 	let preview = page.getByRole("tooltip", { includeHidden: true });
-	await expect(preview).toContainText(QUOTED);
+	await expect(preview).toContainText(OPENING_NOTE);
+	await expect(preview.locator("blockquote")).toHaveCount(0);
 	expect(await initial).not.toEqual({ opacity: "1", transform: "none" });
 	await expect(preview).toHaveCSS("opacity", "1");
 	let previewId = await preview.getAttribute("id");
@@ -202,7 +204,7 @@ test("moving directly between comment markers gives the next preview its own ent
 	expect(entrance.id).not.toBe(firstId);
 	expect(entrance.opacity).not.toBe("1");
 	expect(entrance.transitionDuration).not.toBe("0s");
-	await expect(page.getByRole("tooltip")).toContainText("A second block remains");
+	await expect(page.getByRole("tooltip")).toContainText("Keep this block as well.");
 	await expect(page.getByRole("tooltip")).toHaveCSS("opacity", "1");
 	await expect(page.getByRole("tooltip", { includeHidden: true })).toHaveCount(1);
 });
