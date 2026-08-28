@@ -19,7 +19,7 @@ const EDITOR_STYLES = readFileSync(join(ROOT, "packages/editor/src/styles.css"),
 function declared(name: string): string {
 	let found = new RegExp(`\\n\\s*${name}:\\s*([^;]+);`).exec(THEME);
 	if (!found) throw new Error(`no ${name} in the theme`);
-	return found[1]!.trim().replace(/\\s+/g, " ");
+	return found[1]!.trim().replace(/\s+/g, " ").replace(/\(\s+/g, "(").replace(/\s+\)/g, ")");
 }
 
 function resolved(name: string): string {
@@ -134,13 +134,18 @@ describe("palette", () => {
 		);
 	});
 
-it("makes the brand wash the brand colour at thirty percent opacity", () => {
-	expect(declared("--color-brand-wash")).toBe(
-		"color-mix(in srgb, var(--color-brand) 30%, transparent)",
-	);
-});
+	it("derives every semantic wash consistently from its parent colour", () => {
+		expect(declared("--color-brand-wash")).toBe(
+			"color-mix(in srgb, var(--color-brand) 20%, var(--color-page))",
+		);
+		for (let status of ["success", "warning", "destructive"]) {
+			expect(declared(`--color-${status}-wash`)).toBe(
+				`color-mix(in srgb, var(--color-${status}) 20%, var(--color-page))`,
+			);
+		}
+	});
 
-it("keeps the Chat pane edge subtly stronger than the frame hairline", () => {
+	it("keeps the Chat pane edge subtly stronger than the frame hairline", () => {
 		expect(THEME).toMatch(
 			/\.workspace-frame \.workspace-chat-panel\s*\{\s*border-color:\s*rgb\(0 0 0 \/ 9%\);/,
 		);

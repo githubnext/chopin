@@ -51,12 +51,13 @@ function token(name: string): Rgb {
 	if (!declaration) throw new Error(`no --color-${name} in the theme`);
 	let alias = /^var\(--color-([\w-]+)\)$/.exec(declaration);
 	if (alias) return token(alias[1]!);
-	let transparentMix = /^color-mix\(in srgb, var\(--color-([\w-]+)\) ([\d.]+)%, transparent\)$/
-		.exec(declaration);
-	if (transparentMix) {
-		let foreground = token(transparentMix[1]!);
-		let background = token("page");
-		let alpha = Number(transparentMix[2]) / 100;
+	let mix =
+		/^color-mix\(in srgb, var\(--color-([\w-]+)\) ([\d.]+)%, (?:var\(--color-([\w-]+)\)|transparent)\)$/
+			.exec(declaration);
+	if (mix) {
+		let foreground = token(mix[1]!);
+		let background = token(mix[3] ?? "page");
+		let alpha = Number(mix[2]) / 100;
 		return {
 			blue: foreground.blue * alpha + background.blue * (1 - alpha),
 			green: foreground.green * alpha + background.green * (1 - alpha),
