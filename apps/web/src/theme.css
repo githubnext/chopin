@@ -246,8 +246,9 @@
 
 @utility btn-primary {
 	background-color: var(--color-brand);
+	box-shadow: var(--shadow-resting);
 	color: var(--color-page);
-	outline: var(--edge-width) solid rgb(0 0 0 / 12%);
+	outline: var(--edge-width) solid rgb(0 0 0 / 15%);
 	outline-offset: calc(-1 * var(--edge-width));
 
 	&:hover:not(:disabled) {
@@ -290,6 +291,8 @@
 @utility btn-destructive {
 	background-color: var(--color-destructive);
 	color: var(--color-page);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
 
 	&:hover:not(:disabled) {
 		background-color: var(--color-destructive-hover);

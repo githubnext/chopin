@@ -267,14 +267,21 @@ describe("controls", () => {
 		}
 	});
 
-	it("gives primary and secondary buttons distinct hairlines", () => {
+	it("gives filled buttons their designed hairlines", () => {
 		let primary = utility("btn-primary").split("&:")[0]!;
 		let secondary = utility("btn-secondary").split("&:")[0]!;
-		expect(primary).toContain("outline: var(--edge-width) solid rgb(0 0 0 / 12%)");
+		let destructive = utility("btn-destructive").split("&:")[0]!;
+		expect(primary).toContain("outline: var(--edge-width) solid rgb(0 0 0 / 15%)");
 		expect(secondary).toContain("outline: var(--edge-width) solid var(--color-edge)");
-		for (let rest of [primary, secondary]) {
+		expect(destructive).toContain("outline: var(--edge-width) solid var(--color-edge)");
+		for (let rest of [primary, secondary, destructive]) {
 			expect(rest).toContain("outline-offset: calc(-1 * var(--edge-width))");
 		}
+	});
+
+	it("raises primary buttons with the resting shadow", () => {
+		let primary = utility("btn-primary").split("&:")[0]!;
+		expect(primary).toContain("box-shadow: var(--shadow-resting)");
 	});
 
 	it("uses the common disabled button fill and ink", () => {
