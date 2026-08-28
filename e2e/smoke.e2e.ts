@@ -12,8 +12,8 @@ import { content, expect, ready, roomPath, test } from "./room";
 import type { Chat } from "../packages/protocol/index";
 import type { Page, WebSocketRoute } from "@playwright/test";
 
-function conversationPane(page: Page) {
-	return page.getByRole("complementary", { includeHidden: true, name: "Conversation" });
+function chatPane(page: Page) {
+	return page.getByRole("complementary", { includeHidden: true, name: "Chat" });
 }
 
 async function injectChatHistory(
@@ -269,7 +269,7 @@ test("an empty plan puts its muted prompt at the first writing position", async 
 
 test("chat uses one room-message composer when the planner is off", async ({ join }) => {
 	let page = await join("ana");
-	let chat = conversationPane(page);
+	let chat = chatPane(page);
 	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
 	let send = chat.getByRole("button", { name: "Send message" });
 
@@ -301,7 +301,7 @@ test("chat disables Send when its socket disconnects", async ({ join, page }) =>
 		sockets.push(route);
 	});
 
-	let chat = conversationPane(await join("ana"));
+	let chat = chatPane(await join("ana"));
 	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
 	let send = chat.getByRole("button", { name: "Send message" });
 	await draft.fill("A draft left during reconnect.");
@@ -313,7 +313,7 @@ test("chat disables Send when its socket disconnects", async ({ join, page }) =>
 
 test("chat routes one Send action by @chopin without blocking room messages or its queue", async ({ join, page }) => {
 	let planner = await scriptPlanner(page);
-	let chat = conversationPane(await join("ana"));
+	let chat = chatPane(await join("ana"));
 	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
 	let send = chat.getByRole("button", { name: "Send message" });
 
@@ -359,7 +359,7 @@ test("chat routes one Send action by @chopin without blocking room messages or i
 
 test("chat replaces the Planner working row with its response", async ({ join, page }) => {
 	let planner = await scriptPlanner(page);
-	let chat = conversationPane(await join("ana"));
+	let chat = chatPane(await join("ana"));
 
 	await chat.getByPlaceholder("Use @chopin to ask Chopin").fill(
 		"@chopin Draft the migration.",
@@ -391,7 +391,7 @@ test("chat replaces the Planner working row with its response", async ({ join, p
 
 test("chat clears the Planner working row when a turn stops or fails", async ({ join, page }) => {
 	let planner = await scriptPlanner(page);
-	let chat = conversationPane(await join("ana"));
+	let chat = chatPane(await join("ana"));
 
 	await chat.getByPlaceholder("Use @chopin to ask Chopin").fill(
 		"@chopin Draft the migration.",
@@ -412,12 +412,12 @@ test("chat clears the Planner working row when a turn stops or fails", async ({ 
 
 	await page.reload();
 	await ready(page);
-	await expect(conversationPane(page).locator('[data-chat-state="working"]')).toHaveCount(0);
+	await expect(chatPane(page).locator('[data-chat-state="working"]')).toHaveCount(0);
 });
 
 test("chat keeps Working on it through tool activity and streamed prose", async ({ join, page }) => {
 	let planner = await scriptPlanner(page);
-	let chat = conversationPane(await join("ana"));
+	let chat = chatPane(await join("ana"));
 
 	await chat.getByPlaceholder("Use @chopin to ask Chopin").fill(
 		"@chopin Check the current plan.",
@@ -465,7 +465,7 @@ test("chat history keeps Working on it after Planner prose and a later room mess
 		],
 	}));
 
-	let chat = conversationPane(await join("ana"));
+	let chat = chatPane(await join("ana"));
 	await expect(chat.getByText("I found the issue.")).toBeVisible();
 	await expect(chat.getByText("Please include the examples.")).toBeVisible();
 	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
@@ -498,7 +498,7 @@ test("chat waits for fresh history after reconnect before projecting a stale tur
 		});
 	});
 
-	let chat = conversationPane(await join("ana"));
+	let chat = chatPane(await join("ana"));
 	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(0);
 	await sockets[0]!.close();
 	await historyHeld.promise;
@@ -546,7 +546,7 @@ test(
 		}));
 
 		await join("ana");
-		let chat = conversationPane(page);
+		let chat = chatPane(page);
 		let live = chat.getByText("Edit plan", { exact: true }).locator("..");
 
 		await expect(live).toContainText("7 done");
@@ -607,7 +607,7 @@ test(
 		});
 
 		let page = await join("ana");
-		let chat = conversationPane(page);
+		let chat = chatPane(page);
 
 		await expect(chat.getByText("Maggie", { exact: true })).toHaveCount(1);
 		await expect(chat).toContainText("Can you draft the migration?");

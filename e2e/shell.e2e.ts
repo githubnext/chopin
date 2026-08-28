@@ -16,7 +16,7 @@ function chatPane(page: Page) {
 test("a drag the browser takes away still puts the bar down", async ({ join, page }) => {
 	await join("ana");
 
-	let handle = page.getByRole("separator", { name: "Resize the chat" });
+	let handle = page.getByRole("separator", { name: "Resize chat" });
 	let start = await box(handle);
 
 	await handle.hover();
@@ -35,7 +35,7 @@ test("the chat rail has its own resize control", async ({ join, page }) => {
 	await join("ana");
 
 	let rail = page.getByRole("complementary", { name: "Chat" });
-	let handle = page.getByRole("separator", { name: "Resize the chat" });
+	let handle = page.getByRole("separator", { name: "Resize chat" });
 	await expect(rail).toBeVisible();
 	await expect(handle).toBeVisible();
 	let beforeValue = Number(await handle.getAttribute("aria-valuenow"));
@@ -59,7 +59,7 @@ test("the compact workspace keeps the document unobstructed", async ({ join, pag
 	await page.setViewportSize({ width: 640, height: 800 });
 	await join("ana");
 
-	await expect(page.getByRole("separator", { name: "Resize the chat" })).toHaveCount(0);
+	await expect(page.getByRole("separator", { name: "Resize chat" })).toHaveCount(0);
 	await expectNoHorizontalOverflow(page);
 });
 
@@ -95,7 +95,7 @@ test("the chat rail remembers its width and visibility", async ({ join, page }) 
 	await page.setViewportSize({ width: 1600, height: 800 });
 	await join("ana");
 
-	await page.getByRole("separator", { name: "Resize the chat" }).press("End");
+	await page.getByRole("separator", { name: "Resize chat" }).press("End");
 	let pane = chatPane(page);
 	let paneId = await pane.getAttribute("id");
 	expect(paneId).toBeTruthy();
@@ -115,7 +115,7 @@ test("the chat rail remembers its width and visibility", async ({ join, page }) 
 test("compact navigation does not overwrite the desktop chat preference", async ({ join, page }) => {
 	await page.setViewportSize({ width: 1600, height: 800 });
 	await join("ana");
-	await page.getByRole("separator", { name: "Resize the chat" }).press("End");
+	await page.getByRole("separator", { name: "Resize chat" }).press("End");
 	let pane = chatPane(page);
 	let rememberedWidth = (await box(pane)).width;
 	await page.setViewportSize({ width: 390, height: 844 });

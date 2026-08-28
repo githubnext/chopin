@@ -2,13 +2,13 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ConversationToggle } from "./workspace";
+import { ChatToggle } from "./workspace";
 
-test("conversation state swaps use purposeful icon feedback", () => {
+test("chat state swaps use purposeful icon feedback", () => {
 	let markup = renderToStaticMarkup(
-		createElement(ConversationToggle, {
+		createElement(ChatToggle, {
 			activity: { busy: false, unread: 0 },
-			controls: "conversation",
+			controls: "chat",
 			onToggle: () => {},
 			open: false,
 		}),
@@ -18,32 +18,32 @@ test("conversation state swaps use purposeful icon feedback", () => {
 	expect(markup).toContain("motion-feedback");
 });
 
-test("the open conversation hover swap crossfades without display changes", () => {
+test("the open chat hover swap crossfades without display changes", () => {
 	let markup = renderToStaticMarkup(
-		createElement(ConversationToggle, {
+		createElement(ChatToggle, {
 			activity: { busy: false, unread: 0 },
-			controls: "conversation",
+			controls: "chat",
 			onToggle: () => {},
 			open: true,
 			swapOnHover: true,
 		}),
 	);
 
-	expect(markup.match(/class="conversation-toggle-icon/g)).toHaveLength(2);
+	expect(markup.match(/class="chat-toggle-icon/g)).toHaveLength(2);
 	expect(markup).not.toContain("group-hover:hidden");
 	expect(markup).not.toContain("group-hover:block");
 });
 
 test("live busy feedback stays immediate", () => {
 	let markup = renderToStaticMarkup(
-		createElement(ConversationToggle, {
+		createElement(ChatToggle, {
 			activity: { busy: true, unread: 0 },
-			controls: "conversation",
+			controls: "chat",
 			onToggle: () => {},
 			open: false,
 		}),
 	);
 
-	expect(markup).toContain('aria-label="Show conversation pane, Planner working"');
+	expect(markup).toContain('aria-label="Show chat pane, Planner working"');
 	expect(markup).not.toContain('data-motion-feedback="count"');
 });

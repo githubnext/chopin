@@ -260,9 +260,9 @@ describe("feedback motion", () => {
 		expect(THEME).not.toContain("@keyframes feedback-");
 	});
 
-	it("uses the short control transition for Conversation hover glyphs", () => {
+	it("uses the short control transition for Chat hover glyphs", () => {
 		expect(THEME).toMatch(
-			/:root\[data-motion-input="pointer"\] \.conversation-toggle-icon\s*{[^}]*opacity var\(--duration-fast\) var\(--ease-out\)/s,
+			/:root\[data-motion-input="pointer"\] \.chat-toggle-icon\s*{[^}]*opacity var\(--duration-fast\) var\(--ease-out\)/s,
 		);
 	});
 

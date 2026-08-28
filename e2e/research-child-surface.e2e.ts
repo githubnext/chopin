@@ -101,24 +101,24 @@ test("a parent-owned child keeps the parent chrome and nested geometry", async (
 	expect(await surface.evaluate(element => getComputedStyle(element).boxShadow)).not.toBe("none");
 
 	let childClose = surface.getByRole("button", { name: `Close ${childTitle}`, exact: true });
-	let childConversationToggle = surface.getByRole("button", {
-		name: "Show conversation pane",
+	let childChatToggle = surface.getByRole("button", {
+		name: "Show chat pane",
 		exact: true,
 	});
-	await expect(childConversationToggle).toBeVisible();
+	await expect(childChatToggle).toBeVisible();
 	let closeHandle = await childClose.elementHandle();
 	expect(closeHandle).not.toBeNull();
 	expect(
-		await childConversationToggle.evaluate(
+		await childChatToggle.evaluate(
 			(toggle, close) => toggle.nextElementSibling === close,
 			closeHandle,
 		),
 	).toBe(true);
-	let conversationToggleBox = await childConversationToggle.boundingBox();
+	let chatToggleBox = await childChatToggle.boundingBox();
 	let childCloseBox = await childClose.boundingBox();
-	expect(conversationToggleBox).not.toBeNull();
+	expect(chatToggleBox).not.toBeNull();
 	expect(childCloseBox).not.toBeNull();
-	expect(conversationToggleBox!.x + conversationToggleBox!.width)
+	expect(chatToggleBox!.x + chatToggleBox!.width)
 		.toBeLessThanOrEqual(childCloseBox!.x);
 
 	let resize = page.getByRole("separator", { name: "Resize Projects sidebar" });
@@ -152,15 +152,15 @@ test("a child isolates chat and decisions across every parent-owned close path",
 	await page.setViewportSize({ width: 1920, height: 1080 });
 	await join("ana");
 	let parent = page.locator(`[data-workspace-room="${room}"]`);
-	let parentConversation = parent.getByRole("complementary", {
-		name: "Conversation",
+	let parentChat = parent.getByRole("complementary", {
+		name: "Chat",
 		includeHidden: true,
 	});
 	let parentRoomMessage = `Parent room message ${room.slice(0, 8)}`;
-	let parentDraft = parentConversation.getByPlaceholder("Use @chopin to ask Chopin");
+	let parentDraft = parentChat.getByPlaceholder("Use @chopin to ask Chopin");
 	await parentDraft.fill(parentRoomMessage);
-	await parentConversation.getByRole("button", { name: "Send message" }).click();
-	await expect(parentConversation.getByText(parentRoomMessage, { exact: true })).toBeVisible();
+	await parentChat.getByRole("button", { name: "Send message" }).click();
+	await expect(parentChat.getByText(parentRoomMessage, { exact: true })).toBeVisible();
 
 	let parentScroll = parent.locator("[data-plan-scroll]");
 	await parentScroll.evaluate(element => element.scrollTop = 180);
@@ -172,45 +172,45 @@ test("a child isolates chat and decisions across every parent-owned close path",
 	let surface = page.getByRole("region", { name: `Child document: ${childTitle}` });
 	let parentHeader = parent.locator(".room-header");
 	let childClose = surface.getByRole("button", { name: `Close ${childTitle}`, exact: true });
-	let childConversationToggle = surface.getByRole("button", {
-		name: "Show conversation pane",
+	let childChatToggle = surface.getByRole("button", {
+		name: "Show chat pane",
 		exact: true,
 	});
-	let childConversation = surface.getByRole("complementary", { name: "Conversation" });
-	await expect(childConversationToggle).toBeVisible();
-	await expect(childConversation).toBeHidden();
+	let childChat = surface.getByRole("complementary", { name: "Chat" });
+	await expect(childChatToggle).toBeVisible();
+	await expect(childChat).toBeHidden();
 
-	await childConversationToggle.click();
-	await expect(childConversation).toBeVisible();
-	await expect(childConversation).not.toContainText(parentRoomMessage);
-	await expect(parentConversation).toContainText(parentRoomMessage);
+	await childChatToggle.click();
+	await expect(childChat).toBeVisible();
+	await expect(childChat).not.toContainText(parentRoomMessage);
+	await expect(parentChat).toContainText(parentRoomMessage);
 	let childRoomMessage = `Child room message ${room.slice(0, 8)}`;
 	let childPlannerMessage = `@chopin Child Planner message ${room.slice(0, 8)}`;
 	let childPlannerTranscript = childPlannerMessage.replace("@chopin ", "");
-	let childDraft = childConversation.getByPlaceholder("Use @chopin to ask Chopin");
+	let childDraft = childChat.getByPlaceholder("Use @chopin to ask Chopin");
 	await childDraft.fill(childRoomMessage);
-	await childConversation.getByRole("button", { name: "Send message" }).click();
-	await expect(childConversation.getByText(childRoomMessage, { exact: true })).toBeVisible();
+	await childChat.getByRole("button", { name: "Send message" }).click();
+	await expect(childChat.getByText(childRoomMessage, { exact: true })).toBeVisible();
 	await expect.poll(chatSends).toContainEqual({
 		channelId: child.id,
 		text: childRoomMessage,
 		to: "room",
 	});
 	await childDraft.fill(childPlannerMessage);
-	await childConversation.getByRole("button", { name: "Send message" }).click();
-	await expect(childConversation.getByText(childPlannerTranscript, { exact: true })).toBeVisible();
+	await childChat.getByRole("button", { name: "Send message" }).click();
+	await expect(childChat.getByText(childPlannerTranscript, { exact: true })).toBeVisible();
 	await expect.poll(chatSends).toContainEqual({
 		channelId: child.id,
 		text: childPlannerMessage,
 		to: "planner",
 	});
-	await expect(parentConversation).not.toContainText(childRoomMessage);
-	await expect(parentConversation).not.toContainText(childPlannerTranscript);
-	await childConversation.getByRole("button", {
-		name: "Hide conversation pane",
+	await expect(parentChat).not.toContainText(childRoomMessage);
+	await expect(parentChat).not.toContainText(childPlannerTranscript);
+	await childChat.getByRole("button", {
+		name: "Hide chat pane",
 		exact: true,
 	}).click();
-	await expect(childConversation).toBeHidden();
+	await expect(childChat).toBeHidden();
 
 	let childEditor = surface.getByRole("textbox", { name: "editable markdown" });
 	await childEditor.locator("p").first().selectText();
@@ -235,19 +235,19 @@ test("a child isolates chat and decisions across every parent-owned close path",
 	await expect.poll(() => parentScroll.evaluate(element => element.scrollTop)).toBe(
 		parentScrollTop,
 	);
-	await expect(parentConversation).toContainText(parentRoomMessage);
+	await expect(parentChat).toContainText(parentRoomMessage);
 
 	await childLink.click();
 	await expect(surface).toBeVisible();
-	await expect(childConversationToggle).toBeVisible();
-	await expect(childConversation).toBeHidden();
-	await childConversationToggle.click();
-	await expect(childConversation).not.toContainText(parentRoomMessage);
-	await expect(parentConversation).toContainText(parentRoomMessage);
-	await expect(childConversation.getByText(childRoomMessage, { exact: true })).toBeVisible();
-	await expect(childConversation.getByText(childPlannerTranscript, { exact: true })).toBeVisible();
-	await childConversation.getByRole("button", {
-		name: "Hide conversation pane",
+	await expect(childChatToggle).toBeVisible();
+	await expect(childChat).toBeHidden();
+	await childChatToggle.click();
+	await expect(childChat).not.toContainText(parentRoomMessage);
+	await expect(parentChat).toContainText(parentRoomMessage);
+	await expect(childChat.getByText(childRoomMessage, { exact: true })).toBeVisible();
+	await expect(childChat.getByText(childPlannerTranscript, { exact: true })).toBeVisible();
+	await childChat.getByRole("button", {
+		name: "Hide chat pane",
 		exact: true,
 	}).click();
 	await parentHeader.getByRole("button", { name: `Return to Test ${room.slice(0, 8)}` }).click();
@@ -308,17 +308,17 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 	await join("ana");
 
 	let parent = page.locator(`[data-workspace-room="${room}"]`);
-	let parentConversation = parent.getByRole("complementary", {
-		name: "Conversation",
+	let parentChat = parent.getByRole("complementary", {
+		name: "Chat",
 		includeHidden: true,
 	});
 	await expect(parent.getByRole("button", { name: "Background Work", exact: true })).toHaveCount(
 		0,
 	);
 	let parentScroll = parent.locator("[data-plan-scroll]");
-	await expect(parent.getByRole("separator", { name: "Resize the conversation" }))
+	await expect(parent.getByRole("separator", { name: "Resize chat" }))
 		.toHaveAttribute("aria-valuenow", "384");
-	await expect(parentConversation).toBeVisible();
+	await expect(parentChat).toBeVisible();
 	await page.evaluate(() => localStorage.setItem("chopin:view:document", "decisions"));
 	await parent.evaluate(element => element.setAttribute("data-mount-token", "preserved"));
 	await parentScroll.evaluate(element => element.scrollTop = 240);
@@ -336,14 +336,14 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 	await expect(parent).toHaveAttribute("data-mount-token", "preserved");
 	await expect(parent.locator(".workspace-frame")).toHaveAttribute("inert", "");
 	await expect(parent.locator(".workspace-frame")).toHaveAttribute("aria-hidden", "true");
-	let childConversationToggle = surface.getByRole("button", {
-		name: "Show conversation pane",
+	let childChatToggle = surface.getByRole("button", {
+		name: "Show chat pane",
 		exact: true,
 	});
-	let childConversation = surface.getByRole("complementary", { name: "Conversation" });
-	await expect(childConversationToggle).toBeVisible();
-	await expect(childConversation).toBeHidden();
-	await expect(parentConversation).toBeVisible();
+	let childChat = surface.getByRole("complementary", { name: "Chat" });
+	await expect(childChatToggle).toBeVisible();
+	await expect(childChat).toBeHidden();
+	await expect(parentChat).toBeVisible();
 	await expect(surface.getByRole("button", { name: "Decisions", exact: true })).toBeVisible();
 	await expect(surface.getByRole("button", { name: "Background Work", exact: true })).toHaveCount(
 		0,
@@ -354,21 +354,21 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 	await expect(surface.locator(`[data-workspace-room="${child.id}"]`)).toBeVisible();
 	await expect(surface.locator('[data-document-view="plan"]')).toBeVisible();
 	await expect(surface.locator('[data-document-view="decisions"]')).toBeHidden();
-	await childConversationToggle.click();
-	await expect(childConversation).toBeVisible();
-	await expect(parentConversation).toBeVisible();
-	await childConversation.getByRole("button", {
-		name: "Hide conversation pane",
+	await childChatToggle.click();
+	await expect(childChat).toBeVisible();
+	await expect(parentChat).toBeVisible();
+	await childChat.getByRole("button", {
+		name: "Hide chat pane",
 		exact: true,
 	}).click();
-	await expect(childConversation).toBeHidden();
-	await expect(parentConversation).toBeVisible();
+	await expect(childChat).toBeHidden();
+	await expect(parentChat).toBeVisible();
 
 	await surface.getByRole("button", { name: "Decisions", exact: true }).click();
 	await expect(surface.locator('[data-document-view="decisions"]')).toBeVisible();
 	await expect(parent.locator('[data-document-view="decisions"]')).toBeHidden();
 	await surface.getByRole("button", { name: "Document", exact: true }).click();
-	await expect(childConversationToggle).toBeVisible();
+	await expect(childChatToggle).toBeVisible();
 
 	await page.keyboard.press("Escape");
 	await expect(page).toHaveURL(url =>
@@ -379,13 +379,13 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 	await expect(surface).toHaveCount(0);
 	await expect(childLink).toBeFocused();
 	await expect.poll(() => parentScroll.evaluate(element => element.scrollTop)).toBe(originalScroll);
-	await expect(parentConversation).toBeVisible();
+	await expect(parentChat).toBeVisible();
 
 	await childLink.click();
 	await expect(surface).toBeVisible();
-	await expect(childConversationToggle).toBeVisible();
-	await expect(childConversation).toBeHidden();
-	await expect(parentConversation).toBeVisible();
+	await expect(childChatToggle).toBeVisible();
+	await expect(childChat).toBeHidden();
+	await expect(parentChat).toBeVisible();
 	await page.goBack();
 	await expect(surface).toHaveCount(0);
 	await expect(childLink).toBeFocused();
@@ -401,7 +401,7 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 test("an in-app child opens and submits its own comment composer", async ({ baseURL, join, page, room, seed }) => {
 	await seed(PARENT_SOURCE);
 	let childTitle = `Commentable child ${room.slice(0, 8)}`;
-	let passage = "This ordinary child has its own editable document, Decisions, and Conversation.";
+	let passage = "This ordinary child has its own editable document, Decisions, and Chat.";
 	await seedChildChannel(
 		port(baseURL!),
 		room,
@@ -617,10 +617,10 @@ test("a recovered child id enters the canonical anchored child workspace", async
 	await expect(parent).toBeVisible();
 	await expect(surface.locator(`[data-workspace-room="${child.id}"]`)).toBeVisible();
 	await expect(surface.getByRole("button", {
-		name: "Show conversation pane",
+		name: "Show chat pane",
 		exact: true,
 	})).toBeVisible();
-	await expect(surface.getByRole("complementary", { name: "Conversation" })).toBeHidden();
+	await expect(surface.getByRole("complementary", { name: "Chat" })).toBeHidden();
 	let close = surface.getByRole("button", { name: `Close ${childTitle}`, exact: true });
 	await expect(close).toBeVisible();
 	await expect(
@@ -715,14 +715,14 @@ test("a direct compact child fills the canvas and reduces motion to a crossfade"
 	let navigation = surface.getByRole("navigation", { name: "Workspace view" });
 	let destinations = navigation.getByRole("button");
 	await expect(destinations).toHaveCount(3);
-	await expect(navigation.getByRole("button", { name: /^Conversation/ })).toBeVisible();
+	await expect(navigation.getByRole("button", { name: /^Chat/ })).toBeVisible();
 	await expect(navigation.getByRole("button", { name: "Document", exact: true })).toBeVisible();
 	await expect(navigation.getByRole("button", { name: /^Decisions/ })).toBeVisible();
-	await navigation.getByRole("button", { name: /^Conversation/ }).click();
-	await expect(surface.getByRole("complementary", { name: "Conversation" })).toBeVisible();
+	await navigation.getByRole("button", { name: /^Chat/ }).click();
+	await expect(surface.getByRole("complementary", { name: "Chat" })).toBeVisible();
 	await expect(surface.locator('[data-document-view="plan"]')).toBeHidden();
 	await navigation.getByRole("button", { name: "Document", exact: true }).click();
-	await expect(surface.getByRole("complementary", { name: "Conversation" })).toBeHidden();
+	await expect(surface.getByRole("complementary", { name: "Chat" })).toBeHidden();
 	await expect(surface.locator('[data-document-view="plan"]')).toBeVisible();
 	let projects = page.getByRole("button", { name: "Open Projects sidebar" });
 	await projects.click();

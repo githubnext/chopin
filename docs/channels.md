@@ -224,7 +224,7 @@ Back, Escape, and the child close control return to the parent and restore its
 scroll, selection, and opener focus.
 
 Project lists, the repository document picker, cross-project document search,
-and conversation document-reference pickers show generated descriptions when
+and Chat document-reference pickers show generated descriptions when
 present. Search uses the server's title-or-description matching rather than
 filtering only the currently loaded page.
 

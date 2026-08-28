@@ -79,7 +79,7 @@ test("an authenticated user adds a Project and creates its first document", asyn
 	let activeRoute = page.locator("[data-content-swap-state]:not([inert])").filter({
 		has: page.getByRole("banner", { includeHidden: true }),
 	});
-	await expect(activeRoute.getByRole("complementary", { name: "Conversation" })).toBeVisible();
+	await expect(activeRoute.getByRole("complementary", { name: "Chat" })).toBeVisible();
 	await expect(activeRoute.getByRole("textbox", { name: "editable markdown" })).toBeVisible();
 	await expect(activeRoute.locator("[data-plan-decisions-scroll]")).toBeAttached();
 });

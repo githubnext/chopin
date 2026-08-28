@@ -2,7 +2,7 @@
  * The chat pane.
  *
  * Drives the agent, and shows what it is doing. The composer stays live while
- * a turn runs — a turn owns the plan, not the conversation — and anything sent
+ * a turn runs — a turn owns the plan, not the chat — and anything sent
  * to the agent meanwhile is queued in order, with its author's name on it, so
  * nobody is silenced because a colleague prompted first.
  *
@@ -51,7 +51,7 @@ export type ChatProps = {
 	repository: Pick<Repository, "id" | "name" | "owner">;
 	room: string;
 	sendAcknowledgements: boolean;
-	/** Hosted mode keeps the shared conversation while repository-scoped agent work is disabled. */
+	/** Hosted mode keeps the shared chat while repository-scoped agent work is disabled. */
 	agent?: boolean;
 	active?: boolean;
 	onActivity?: (event: { type: "message" | "working"; busy: boolean }) => void;

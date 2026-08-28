@@ -52,7 +52,7 @@ Available capabilities are:
   captured when the SDK session is created;
 - repository-scoped code search, post-filtered by repository node ID; and
 - bounded reads of document and historical research references attached to the
-  current conversation context; and
+  current Chat context; and
 - repository-bound, read-only pull-request MCP calls.
 
 Issue and general search MCP tools are refused because linked objects and
