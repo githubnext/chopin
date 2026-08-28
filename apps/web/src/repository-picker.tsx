@@ -348,7 +348,7 @@ export function RepositoryPicker(
 												<CheckIcon
 													aria-hidden="true"
 													className="shrink-0 text-brand-ink"
-													size={16}
+													size={14}
 												/>
 											)}
 										</button>

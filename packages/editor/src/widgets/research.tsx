@@ -155,7 +155,7 @@ export function ResearchComposer(
 						title="Discard research question"
 						type="button"
 					>
-						<CloseIcon aria-hidden="true" size={16} />
+						<CloseIcon aria-hidden="true" size={14} />
 					</button>
 				)}
 			</div>

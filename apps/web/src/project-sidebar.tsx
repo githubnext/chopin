@@ -365,7 +365,7 @@ export function ProjectSidebar(
 			<div className="min-h-0 flex-1 overflow-y-auto">
 				<header className="project-sidebar-header group/sidebar-header">
 					<div className="flex items-center gap-2">
-						<img alt="" height={18} src={chopinIcon} width={18} />
+						<img alt="" height={14} src={chopinIcon} width={14} />
 						<span className="text-sm font-semibold text-brand">Chopin</span>
 					</div>
 					<button

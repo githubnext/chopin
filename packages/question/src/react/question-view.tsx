@@ -93,7 +93,7 @@ function Badges({ people }: { people: Collaborator[] }) {
 function DecisionHeading() {
 	return (
 		<header className="flex items-center gap-2 px-3 py-2.5 hairline-b">
-			<CheckIcon aria-hidden="true" size={16} />
+			<CheckIcon aria-hidden="true" size={14} />
 			<span className="text-sm font-medium text-text-primary">Decision</span>
 		</header>
 	);
@@ -613,7 +613,7 @@ export function QuestionView(props: QuestionViewProps) {
 								disabled={disabled || submitting}
 								className="btn btn-sm btn-destructive"
 							>
-								<CloseIcon aria-hidden="true" size={16} />
+								<CloseIcon aria-hidden="true" size={14} />
 								{submitting ? "Cancelling…" : "Yes, cancel"}
 							</button>
 						</>
@@ -634,7 +634,7 @@ export function QuestionView(props: QuestionViewProps) {
 							disabled={disabled || submitting}
 							className="btn btn-sm btn-secondary"
 						>
-							<CloseIcon aria-hidden="true" size={16} />
+							<CloseIcon aria-hidden="true" size={14} />
 							Cancel
 						</button>
 					)}
@@ -657,7 +657,7 @@ export function QuestionView(props: QuestionViewProps) {
 							<CheckIcon
 								aria-hidden="true"
 								data-plan-icon="check"
-								size={16}
+								size={14}
 							/>
 							{submitting
 								? (single ? "Saving…" : "Submitting…")

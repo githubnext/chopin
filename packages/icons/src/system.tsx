@@ -38,7 +38,7 @@ export function SearchIcon(props: IconProps) {
 	);
 }
 
-export function LoaderIcon({ size = 18, ...props }: IconProps) {
+export function LoaderIcon({ size = 14, ...props }: IconProps) {
 	let paths = [
 		[
 			"M9,5c-.414,0-.75-.336-.75-.75V1.75c0-.414,.336-.75,.75-.75s.75,.336,.75,.75v2.5c0,.414-.336,.75-.75,.75Z",

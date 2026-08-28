@@ -35,8 +35,8 @@ test("queued messages use the standard icon-button glyph", () => {
 		}),
 	);
 
-	expect(markup).toMatch(/aria-label="Withdraw queued message"[^>]*>.*?height="16"/s);
-	expect(markup).toMatch(/aria-label="Withdraw queued message"[^>]*>.*?width="16"/s);
+	expect(markup).toMatch(/aria-label="Withdraw queued message"[^>]*>.*?height="14"/s);
+	expect(markup).toMatch(/aria-label="Withdraw queued message"[^>]*>.*?width="14"/s);
 	expect(markup).toContain("<title>xmark</title>");
 	expect(markup).not.toContain(">×</button>");
 });

@@ -288,7 +288,7 @@ export function DocumentPicker(
 									)}
 								</span>
 								{selected && (
-									<CheckIcon aria-hidden="true" className="shrink-0 text-brand-ink" size={16} />
+									<CheckIcon aria-hidden="true" className="shrink-0 text-brand-ink" size={14} />
 								)}
 							</button>
 						);
@@ -332,7 +332,7 @@ export function DocumentPicker(
 									onClick={() => void create()}
 									type="button"
 								>
-									<PlusIcon aria-hidden="true" size={16} />
+									<PlusIcon aria-hidden="true" size={14} />
 									<span className="ml-1">
 										{creating ? "Creating..." : "Create new document"}
 									</span>

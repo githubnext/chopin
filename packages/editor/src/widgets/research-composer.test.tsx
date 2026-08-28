@@ -160,8 +160,8 @@ describe("research composer", () => {
 		expect(markup).toContain('title="Start research"');
 		expect(markup).toContain("send-action btn btn-icon btn-primary rounded-full");
 		expect(markup).toContain('aria-hidden="true"');
-		expect(markup).toContain('height="16"');
-		expect(markup).toContain('width="16"');
+		expect(markup).toContain('height="14"');
+		expect(markup).toContain('width="14"');
 	});
 
 	it("keeps one exact brief actionable after a failed create", () => {

@@ -99,17 +99,17 @@ function Lists() {
 		>
 			<div className="design-audit-surface-list" role="listbox" aria-label="Documents">
 				<div role="option" aria-selected="false">
-					<DocumentIcon size={16} />Design notes
+					<DocumentIcon size={14} />Design notes
 				</div>
 				<div role="option" aria-selected="true">
-					<DocumentIcon size={16} />Design system audit<CheckIcon size={16} />
+					<DocumentIcon size={14} />Design system audit<CheckIcon size={14} />
 				</div>
 				<div role="option" aria-selected="false" data-audit-state="hover">
-					<DocumentIcon size={16} />Editor architecture
+					<DocumentIcon size={14} />Editor architecture
 				</div>
 			</div>
 			<div className="design-audit-empty-row">
-				<SearchIcon size={20} />
+				<SearchIcon size={14} />
 				<span>No matching documents</span>
 			</div>
 		</AuditPlate>
@@ -127,23 +127,23 @@ function Navigation() {
 				<div className="design-audit-sidebar-heading">
 					<span>Chopin</span>
 					<button aria-label="Add document" className="btn btn-icon btn-ghost" type="button">
-						<PlusIcon size={16} />
+						<PlusIcon size={14} />
 					</button>
 				</div>
 				<a href="#surfaces">
-					<DocumentIcon size={16} />Product direction
+					<DocumentIcon size={14} />Product direction
 				</a>
 				<a aria-current="page" href="#surfaces">
-					<DocumentIcon size={16} />Design system audit
+					<DocumentIcon size={14} />Design system audit
 				</a>
 				<a data-navigation-state="ancestor" href="#surfaces">
 					<ChevronIcon size={14} />Research notes
 				</a>
 				<a data-navigation-state="archived" href="#surfaces">
-					<ArchiveIcon size={16} />Archived draft
+					<ArchiveIcon size={14} />Archived draft
 				</a>
 				<div className="design-audit-navigation-loading">
-					<LoaderIcon size={16} />Loading more…
+					<LoaderIcon size={14} />Loading more…
 				</div>
 			</nav>
 			<nav
@@ -231,7 +231,7 @@ function Decisions() {
 					className="btn btn-sm btn-ghost design-audit-resolved-toggle"
 					type="button"
 				>
-					<ChevronIcon className="rotate-90" size={16} />
+					<ChevronIcon className="rotate-90" size={14} />
 					<span>3</span>
 					<span>resolved</span>
 				</button>

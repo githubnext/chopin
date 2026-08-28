@@ -253,7 +253,7 @@ describe("controls", () => {
 		expect(sizes("btn-icon")).toEqual({ height: 28, width: 28 });
 		expect(inlinePadding("btn-md")).toBe("calc(var(--spacing) * 3)");
 		expect(inlinePadding("btn-sm")).toBe("calc(var(--spacing) * 2)");
-		expect(utility("btn-icon")).toMatch(/\n\s*padding:\s*0\.375rem;/);
+		expect(utility("btn-icon")).toMatch(/\n\s*padding:\s*0\.4375rem;/);
 		expect(hex("--color-destructive-hover")).toBe("#c44746");
 		expect(hex("--color-destructive-active")).toBe("#b34140");
 	});
