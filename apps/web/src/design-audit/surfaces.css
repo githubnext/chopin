@@ -103,7 +103,7 @@
 	justify-content: center;
 	gap: 0.5rem;
 	margin-block-start: 0.75rem;
-	border: var(--edge-width) dashed var(--color-edge-strong);
+	border: var(--edge-width) dashed var(--color-control-edge);
 	border-radius: var(--radius-lg);
 	font-size: var(--text-sm);
 	color: var(--color-text-tertiary);
@@ -154,9 +154,9 @@
 	max-height: 70dvh;
 	flex-direction: column;
 	overflow: hidden;
-	border: var(--edge-width) solid var(--color-edge-strong);
+	border: var(--edge-width) solid var(--color-control-edge);
 	border-radius: var(--radius-xl);
-	background: var(--color-conversation);
+	background: var(--color-conversation-pane);
 }
 
 .design-audit-conversation .conversation-composer textarea {
@@ -250,7 +250,7 @@
 }
 
 .design-audit-empty-grid strong {
-	font-size: var(--text-md);
+	font-size: var(--text-lg);
 }
 
 .design-audit-empty-grid span {
@@ -276,7 +276,7 @@
 	gap: 1rem;
 	padding: 0.75rem;
 	border-radius: var(--radius-lg);
-	background: var(--color-destructive-soft);
+	background: var(--color-destructive-wash);
 }
 
 @media (prefers-reduced-motion: reduce) {
