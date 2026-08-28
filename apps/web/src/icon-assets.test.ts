@@ -40,6 +40,16 @@ test("the interface uses only the shared Nucleo icon family", () => {
 	expect(icons).toContain('x1="9" x2="9" y1="3.25" y2="14.75"');
 });
 
+test("the design audit presents one Nucleo icon catalogue", () => {
+	let catalogue = readFileSync(join(root, "design-audit/icons.tsx"), "utf8");
+	let foundations = readFileSync(join(root, "design-audit/foundations.tsx"), "utf8");
+
+	expect(catalogue).toContain("Nucleo icons");
+	expect(catalogue).not.toContain("Local SVG assets");
+	expect(catalogue).not.toContain("Nucleo components");
+	expect(foundations).toContain("Every Nucleo icon currently used by the interface.");
+});
+
 test("callouts use their distinct semantic Nucleo icons", () => {
 	let callout = readFileSync(join(repository, "packages/editor/src/widgets/callout.tsx"), "utf8");
 	expect(callout).toContain('case "important":\n\t\t\treturn <SparkleIcon');
