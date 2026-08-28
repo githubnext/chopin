@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { markerPoints, markerRect, popoverPoint } from "./comment-geometry";
+import { edgePanelPoint, markerPoints, markerRect, popoverPoint } from "./comment-geometry";
 
 import type { Rect } from "./comment-geometry";
 
@@ -273,4 +273,33 @@ test("fits a full preview beside a gutter button in a 400px document", () => {
 	// 400px can hold either a 288px preview or its gutter button, but not both
 	// on the right. Keeping the preview inside the page means using the left.
 	expect(point).toEqual({ top: 200, left: 72 });
+});
+
+test("docks a comment panel at the document's right edge", () => {
+	let point = edgePanelPoint(
+		{ top: 260, right: 560, bottom: 284, left: 536, width: 24, height: 24 },
+		host,
+		320,
+		200,
+	);
+
+	expect(point).toEqual({ top: 160, left: 468 });
+});
+
+test("keeps an edge panel inside both vertical document edges", () => {
+	let above = edgePanelPoint(
+		{ top: 50, right: 560, bottom: 74, left: 536, width: 24, height: 24 },
+		host,
+		320,
+		200,
+	);
+	let below = edgePanelPoint(
+		{ top: 660, right: 560, bottom: 684, left: 536, width: 24, height: 24 },
+		host,
+		320,
+		240,
+	);
+
+	expect(above).toEqual({ top: 12, left: 468 });
+	expect(below).toEqual({ top: 348, left: 468 });
 });

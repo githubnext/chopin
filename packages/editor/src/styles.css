@@ -247,33 +247,45 @@
 
 .plan-comment-button:hover,
 .plan-comment-button:focus-visible,
+.plan-comment-button[aria-expanded="true"],
 .plan-comment-orphan-button:hover,
 .plan-comment-orphan-button:focus-visible {
 	background: var(--color-brand-wash);
+	color: var(--color-brand-ink);
 }
 
 .plan-comment-preview,
 .plan-comment-card {
 	pointer-events: auto;
 	position: absolute;
-	width: min(24rem, 80%);
+	width: min(20rem, calc(100% - 1.5rem));
 }
 
 .plan-comment-preview {
 	/* A narrow preview can overlap prose, but never intercept it. */
 	pointer-events: none;
 	max-width: 18rem;
-	padding: 0.5rem 0.625rem;
+	padding: 0.625rem;
 	border-radius: var(--radius-md);
 	background: var(--color-page);
 	box-shadow: var(--shadow-overlay);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
 	font-size: var(--text-sm);
-	color: var(--color-text-secondary);
+	color: var(--color-text-primary);
 }
 
 .plan-comment-preview p {
 	margin: 0;
-	font-style: italic;
+}
+
+.plan-comment-preview .plan-comment-preview-author {
+	font-weight: 600;
+	color: var(--color-brand-ink);
+}
+
+.plan-comment-preview .plan-comment-preview-note {
+	margin-top: 0.125rem;
 }
 
 .plan-comment-preview span {
@@ -287,6 +299,59 @@
 	overflow: auto;
 	border-radius: var(--radius-lg);
 	box-shadow: var(--shadow-overlay);
+	animation: plan-comment-enter var(--duration-base) var(--ease-out);
+}
+
+[data-plan-comment-card] {
+	background: var(--color-page);
+	box-shadow: none;
+}
+
+.plan-comment-close {
+	margin: -0.25rem -0.25rem -0.25rem 0;
+	color: var(--color-text-tertiary);
+}
+
+.plan-comment-context {
+	padding: 0.5rem 0.625rem;
+	border-radius: var(--radius-md);
+	background: var(--color-inset);
+}
+
+.plan-comment-context-copy {
+	display: -webkit-box;
+	overflow: hidden;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+	line-height: var(--text-sm--line-height);
+}
+
+.plan-comment-composer[data-inset-send] {
+	border-radius: var(--radius-md);
+	background: var(--color-page);
+}
+
+.plan-comment-composer[data-inset-send] .plan-comment-composer-field {
+	padding-right: 3rem;
+	padding-bottom: 2.75rem;
+}
+
+.plan-comment-confirm {
+	padding: 0.625rem;
+	border-radius: var(--radius-md);
+	background: var(--color-inset);
+}
+
+@keyframes plan-comment-enter {
+	from {
+		opacity: 0.92;
+		transform: translateX(0.375rem);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
 }
 
 .motion-comment-preview {
@@ -371,15 +436,91 @@
 	right: 0;
 }
 
-.plan-comment-layer[data-plan-comment-sheet] .plan-comment-card {
-	top: auto !important;
-	right: 0;
-	bottom: 0;
-	left: 0 !important;
+.plan-comment-sheet-backdrop {
+	--backdrop-opacity: 0.24;
+	position: fixed;
+	inset: 0;
+	z-index: 70;
+	background: rgb(var(--shadow-color));
+	opacity: calc(var(--backdrop-opacity) * (1 - var(--drawer-swipe-progress, 0)));
+	transition: opacity var(--duration-base) var(--ease-out);
+}
+
+.plan-comment-sheet-viewport {
+	pointer-events: none;
+	position: fixed;
+	inset: 0;
+	z-index: 71;
+	display: flex;
+	align-items: flex-end;
+}
+
+.plan-comment-sheet-popup {
+	pointer-events: auto;
 	width: 100%;
-	max-height: calc(100% - 0.5rem);
-	padding-bottom: env(safe-area-inset-bottom, 0px);
-	border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+	height: calc(100dvh - 0.5rem);
+	overflow: hidden;
+	border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+	background: var(--color-page);
+	box-shadow: 0 -1rem 3rem rgb(var(--shadow-color) / 22%);
+	transform: translateY(
+		calc(var(--drawer-snap-point-offset, 100%) + var(--drawer-swipe-movement-y, 0px))
+	);
+	transition: transform calc(var(--drawer-swipe-strength, 1) * var(--duration-base))
+		var(--ease-out);
+}
+
+.plan-comment-sheet-grabber {
+	display: grid;
+	width: 100%;
+	height: 2rem;
+	place-items: center;
+	border: 0;
+	background: transparent;
+	color: var(--color-text-tertiary);
+	touch-action: none;
+}
+
+.plan-comment-sheet-grabber span {
+	width: 2.25rem;
+	height: 0.3rem;
+	border-radius: 999px;
+	background: var(--color-text-tertiary);
+}
+
+.plan-comment-sheet-content {
+	height: calc(100% - 2rem);
+	overflow: auto;
+	padding-right: env(safe-area-inset-right, 0px);
+	padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--drawer-keyboard-inset, 0px));
+	padding-left: env(safe-area-inset-left, 0px);
+	overscroll-behavior: contain;
+}
+
+.plan-comment-sheet-content > [data-plan-comment-card] {
+	border-radius: 0;
+	box-shadow: none;
+}
+
+.plan-comment-sheet-popup[data-starting-style],
+.plan-comment-sheet-popup[data-ending-style] {
+	transform: translateY(100%);
+}
+
+.plan-comment-sheet-backdrop[data-starting-style],
+.plan-comment-sheet-backdrop[data-ending-style] {
+	opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.plan-comment-card {
+		animation: none;
+	}
+
+	.plan-comment-sheet-backdrop,
+	.plan-comment-sheet-popup {
+		transition-duration: 0ms;
+	}
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -23,7 +23,7 @@ export function ProjectSidebarExpandButton(
 			ref={buttonRef}
 			type="button"
 		>
-			<img alt="" height="18" src={sidebarOpenIcon} width="18" />
+			<img alt="" height="14" src={sidebarOpenIcon} width="14" />
 		</button>
 	);
 }

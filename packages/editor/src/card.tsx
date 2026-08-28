@@ -103,7 +103,7 @@ export function Provenance({ at, by, verb }: ProvenanceProps) {
 
 	return (
 		<span className="text-sm text-text-tertiary tabular-nums">
-			{verb} by @{by}
+			{verb} by <span className="text-brand-ink">@{by}</span>
 			{stamp && ` · ${stamp}`}
 		</span>
 	);

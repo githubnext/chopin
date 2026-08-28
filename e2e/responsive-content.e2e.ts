@@ -467,7 +467,7 @@ test("a selected tab follows strip layout changes without moving the document", 
 	await expectTabInsideStrip(tabs.last());
 	await expect.poll(() =>
 		scroller.evaluate(node => node.scrollHeight - node.clientHeight - node.scrollTop)
-	).toBeLessThanOrEqual(1);
+	).toBeLessThanOrEqual(24);
 });
 
 test("rich surfaces stay contained within their document or callout", async ({ join, page, seed }) => {

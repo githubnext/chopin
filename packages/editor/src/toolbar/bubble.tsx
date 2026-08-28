@@ -396,7 +396,11 @@ export function SelectionBubble(
 									 * goes with it. A draft that forgot what it was about the
 									 * moment you started typing would be no use.
 									 */
-									onClick={onComment}
+									onClick={() => {
+										onComment();
+										setAnchor(undefined);
+										setPosition(undefined);
+									}}
 									className={`${CELL} ${CELL_OFF}`}
 								>
 									<img
