@@ -223,7 +223,10 @@ export function Transcript(
 				pinned.current = distance < 40;
 			}}
 		>
-			<div className="flex min-h-full flex-col justify-end gap-4" data-chat-stack>
+			<div
+				className="flex min-h-full flex-col gap-4 [&>*:first-child]:mt-auto"
+				data-chat-stack
+			>
 				{groups.map(item =>
 					item.kind === "system"
 						? <SystemEntry item={item} key={item.id} />

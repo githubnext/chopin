@@ -294,6 +294,57 @@ test("chat uses one room-message composer when the planner is off", async ({ joi
 	await expect(chat.getByRole("button", { name: "Stop Planner" })).toHaveCount(0);
 });
 
+test("chat keeps the start of a tall transcript reachable across layouts", async ({ join, page }) => {
+	await injectChatHistory(page, frame => ({
+		...frame,
+		entries: Array.from({ length: 24 }, (_, index) => ({
+			author: index % 2 === 0
+				? { kind: "member" as const, handle: "ana" }
+				: { kind: "agent" as const },
+			id: `history-${index}`,
+			text: index === 0
+				? "The first message in a deliberately tall transcript."
+				: `Transcript message ${index} with enough text to occupy a complete line.`,
+			ts: 1_700_000_000 + index,
+		})),
+	}));
+
+	let chat = chatPane(await join("ana"));
+	let stack = chat.locator("[data-chat-stack]");
+	let scroller = stack.locator("..");
+	let firstMessagePosition = async () => {
+		await scroller.evaluate(element => element.scrollTop = 0);
+		return chat.getByText("The first message in a deliberately tall transcript.")
+			.evaluate((message, scrollRoot) => {
+				let messageBox = message.getBoundingClientRect();
+				let scroller = scrollRoot as Element;
+				let scrollerBox = scroller.getBoundingClientRect();
+				return {
+					clientHeight: scroller.clientHeight,
+					messageBottom: messageBox.bottom,
+					messageTop: messageBox.top,
+					scrollerBottom: scrollerBox.bottom,
+					scrollerTop: scrollerBox.top,
+					scrollHeight: scroller.scrollHeight,
+				};
+			}, await scroller.elementHandle());
+	};
+	await expect(chat.getByText("Transcript message 23", { exact: false })).toBeVisible();
+	let position = await firstMessagePosition();
+	expect(position.scrollHeight).toBeGreaterThan(position.clientHeight);
+	expect(position.messageTop).toBeGreaterThanOrEqual(position.scrollerTop);
+	expect(position.messageBottom).toBeLessThanOrEqual(position.scrollerBottom);
+
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.getByRole("navigation", { name: "Workspace view" })
+		.getByRole("button", { name: /^Chat/ }).click();
+	await expect(chat).toBeVisible();
+	position = await firstMessagePosition();
+	expect(position.scrollHeight).toBeGreaterThan(position.clientHeight);
+	expect(position.messageTop).toBeGreaterThanOrEqual(position.scrollerTop);
+	expect(position.messageBottom).toBeLessThanOrEqual(position.scrollerBottom);
+});
+
 test("chat disables Send when its socket disconnects", async ({ join, page }) => {
 	let sockets: WebSocketRoute[] = [];
 	await page.routeWebSocket("**/ws?**", route => {
