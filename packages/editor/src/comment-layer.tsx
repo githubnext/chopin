@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { ChatCircleIcon } from "@phosphor-icons/react";
+import { MessageIcon } from "@chopin/icons";
 import { useCellValue } from "@mdxeditor/gurx";
 
 import { DraftCard, ThreadCard } from "./comments";
@@ -702,7 +702,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 							style={button}
 							type="button"
 						>
-							<ChatCircleIcon aria-hidden="true" size={14} />
+							<MessageIcon aria-hidden="true" size={14} />
 						</button>
 						<CommentSurface
 							compact={false}

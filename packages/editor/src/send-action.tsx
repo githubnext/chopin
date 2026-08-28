@@ -1,4 +1,4 @@
-import { ArrowUpIcon } from "@phosphor-icons/react";
+import { ArrowUpIcon } from "@chopin/icons";
 
 export function SendAction(
 	{ busy, label, disabled, onClick }: {

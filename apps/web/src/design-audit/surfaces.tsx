@@ -1,14 +1,13 @@
 import {
 	ArchiveIcon,
-	CaretDownIcon,
-	CaretRightIcon,
-	ChatCircleIcon,
-	CheckCircleIcon,
-	CircleNotchIcon,
-	FileTextIcon,
-	MagnifyingGlassIcon,
+	CheckIcon,
+	ChevronIcon,
+	DocumentIcon,
+	LoaderIcon,
+	MessageIcon,
 	PlusIcon,
-} from "@phosphor-icons/react";
+	SearchIcon,
+} from "@chopin/icons";
 
 import { PlanStatus, SendAction } from "@chopin/editor";
 import { SidecarCard } from "../../../../packages/editor/src/card";
@@ -100,17 +99,17 @@ function Lists() {
 		>
 			<div className="design-audit-surface-list" role="listbox" aria-label="Documents">
 				<div role="option" aria-selected="false">
-					<FileTextIcon size={16} />Design notes
+					<DocumentIcon size={16} />Design notes
 				</div>
 				<div role="option" aria-selected="true">
-					<FileTextIcon size={16} />Design system audit<CheckCircleIcon size={16} />
+					<DocumentIcon size={16} />Design system audit<CheckIcon size={16} />
 				</div>
 				<div role="option" aria-selected="false" data-audit-state="hover">
-					<FileTextIcon size={16} />Editor architecture
+					<DocumentIcon size={16} />Editor architecture
 				</div>
 			</div>
 			<div className="design-audit-empty-row">
-				<MagnifyingGlassIcon size={20} />
+				<SearchIcon size={20} />
 				<span>No matching documents</span>
 			</div>
 		</AuditPlate>
@@ -132,19 +131,19 @@ function Navigation() {
 					</button>
 				</div>
 				<a href="#surfaces">
-					<FileTextIcon size={16} />Product direction
+					<DocumentIcon size={16} />Product direction
 				</a>
 				<a aria-current="page" href="#surfaces">
-					<FileTextIcon size={16} />Design system audit
+					<DocumentIcon size={16} />Design system audit
 				</a>
 				<a data-navigation-state="ancestor" href="#surfaces">
-					<CaretRightIcon size={14} />Research notes
+					<ChevronIcon size={14} />Research notes
 				</a>
 				<a data-navigation-state="archived" href="#surfaces">
 					<ArchiveIcon size={16} />Archived draft
 				</a>
 				<div className="design-audit-navigation-loading">
-					<CircleNotchIcon size={16} />Loading more…
+					<LoaderIcon size={16} />Loading more…
 				</div>
 			</nav>
 			<nav
@@ -232,7 +231,7 @@ function Decisions() {
 					className="btn btn-sm btn-ghost design-audit-resolved-toggle"
 					type="button"
 				>
-					<CaretDownIcon size={16} weight="bold" />
+					<ChevronIcon className="rotate-90" size={16} />
 					<span>3</span>
 					<span>resolved</span>
 				</button>
@@ -335,19 +334,19 @@ function Feedback() {
 			>
 				<div className="design-audit-empty-grid">
 					<div>
-						<FileTextIcon size={24} />
+						<DocumentIcon size={24} />
 						<strong>No documents yet</strong>
 						<span>Create the first shared document for this project.</span>
 						<button className="btn btn-md btn-primary" type="button">Create document</button>
 					</div>
 					<div>
-						<MagnifyingGlassIcon size={24} />
+						<SearchIcon size={24} />
 						<strong>No results</strong>
 						<span>Try a shorter search or clear the filters.</span>
 						<button className="btn btn-md btn-secondary" type="button">Clear search</button>
 					</div>
 					<div>
-						<ChatCircleIcon size={24} />
+						<MessageIcon size={24} />
 						<strong>Conversation unavailable</strong>
 						<span>Reconnect to keep collaborating.</span>
 						<button className="btn btn-md btn-secondary" type="button">Try again</button>

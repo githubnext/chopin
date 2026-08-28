@@ -32,6 +32,7 @@
 	"dependencies": {
 		"@base-ui/react": "1.7.0",
 		"@chopin/dialect": "workspace:*",
+		"@chopin/icons": "workspace:*",
 		"@chopin/protocol": "workspace:*",
 		"@chopin/question": "workspace:*",
 		"@chopin/viewport": "workspace:*",
@@ -44,7 +45,6 @@
 		"@lexical/yjs": "catalog:mdx",
 		"@mdxeditor/editor": "catalog:mdx",
 		"@mdxeditor/gurx": "catalog:mdx",
-		"@phosphor-icons/react": "^2.1.10",
 		"@pierre/diffs": "catalog:diffs",
 		"@radix-ui/react-select": "2.3.7",
 		"katex": "catalog:mdx",

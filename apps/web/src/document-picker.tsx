@@ -1,4 +1,4 @@
-import { CaretDownIcon, CheckIcon, PlusIcon } from "@phosphor-icons/react";
+import { CheckIcon, ChevronIcon, PlusIcon } from "@chopin/icons";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { documentPath } from "@chopin/protocol/document-url";
 import { createPortal } from "react-dom";
@@ -359,7 +359,7 @@ export function DocumentPicker(
 				type="button"
 			>
 				<span className="truncate">{current.title}</span>
-				<CaretDownIcon aria-hidden="true" className="shrink-0" size={14} />
+				<ChevronIcon aria-hidden="true" className="shrink-0 rotate-90" size={14} />
 			</button>
 			{popup}
 		</>

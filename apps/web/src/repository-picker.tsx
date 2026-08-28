@@ -1,4 +1,4 @@
-import { CaretDownIcon, CheckIcon } from "@phosphor-icons/react";
+import { CheckIcon, ChevronIcon } from "@chopin/icons";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { documentsPath } from "@chopin/protocol/document-url";
 import { createPortal } from "react-dom";
@@ -423,7 +423,7 @@ export function RepositoryPicker(
 						? current?.name ?? "Choose repository"
 						: current?.fullName ?? "Choose repository"}
 				</span>
-				<CaretDownIcon aria-hidden="true" className="shrink-0" size={14} />
+				<ChevronIcon aria-hidden="true" className="shrink-0 rotate-90" size={14} />
 			</button>
 			{popup}
 		</>

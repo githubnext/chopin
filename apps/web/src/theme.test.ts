@@ -22,7 +22,7 @@ import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-type Oklch = { l: number; c: number; h: number };
+type Rgb = { blue: number; green: number; red: number };
 
 const THEME = readFileSync(join(import.meta.dir, "theme.css"), "utf8");
 const NAVIGATION = readFileSync(join(import.meta.dir, "navigation.css"), "utf8");
@@ -35,44 +35,72 @@ const FEEDBACK = readFileSync(
 	"utf8",
 );
 
+function encode(value: number): number {
+	return value <= 0.0031308
+		? 12.92 * value
+		: 1.055 * Math.pow(Math.max(value, 0), 1 / 2.4) - 0.055;
+}
+
+function decode(value: number): number {
+	return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+}
+
 /** A colour token, resolving semantic aliases onto the primitive palette. */
-function token(name: string): Oklch {
+function token(name: string): Rgb {
 	let declaration = new RegExp(`--color-${name}:\\s*([^;]+);`).exec(THEME)?.[1]?.trim();
 	if (!declaration) throw new Error(`no --color-${name} in the theme`);
 	let alias = /^var\(--color-([\w-]+)\)$/.exec(declaration);
 	if (alias) return token(alias[1]!);
+	let transparentMix = /^color-mix\(in srgb, var\(--color-([\w-]+)\) ([\d.]+)%, transparent\)$/
+		.exec(declaration);
+	if (transparentMix) {
+		let foreground = token(transparentMix[1]!);
+		let background = token("page");
+		let alpha = Number(transparentMix[2]) / 100;
+		return {
+			blue: foreground.blue * alpha + background.blue * (1 - alpha),
+			green: foreground.green * alpha + background.green * (1 - alpha),
+			red: foreground.red * alpha + background.red * (1 - alpha),
+		};
+	}
 	let found = /^oklch\(([\d.]+)\s+([\d.]+)\s+([\d.]+)\)$/.exec(declaration);
 	if (!found) throw new Error(`no --color-${name} in the theme`);
-	return { l: Number(found[1]), c: Number(found[2]), h: Number(found[3]) };
-}
-
-function hex({ c, h, l }: Oklch): string {
+	let l = Number(found[1]);
+	let c = Number(found[2]);
+	let h = Number(found[3]);
 	let radians = (h * Math.PI) / 180;
 	let a = c * Math.cos(radians);
 	let b = c * Math.sin(radians);
-
 	let long = (l + 0.3963377774 * a + 0.2158037573 * b) ** 3;
 	let medium = (l - 0.1055613458 * a - 0.0638541728 * b) ** 3;
 	let short = (l - 0.0894841775 * a - 1.291485548 * b) ** 3;
+	return {
+		blue: encode(-0.0041960863 * long - 0.7034186147 * medium + 1.707614701 * short),
+		green: encode(-1.2684380046 * long + 2.6097574011 * medium - 0.3413193965 * short),
+		red: encode(4.0767416621 * long - 3.3077115913 * medium + 0.2309699292 * short),
+	};
+}
 
-	let channels = [
-		4.0767416621 * long - 3.3077115913 * medium + 0.2309699292 * short,
-		-1.2684380046 * long + 2.6097574011 * medium - 0.3413193965 * short,
-		-0.0041960863 * long - 0.7034186147 * medium + 1.707614701 * short,
-	];
-
+function hex({ blue, green, red }: Rgb): string {
 	return `#${
-		channels
+		[red, green, blue]
 			.map(value => {
-				let encoded = value <= 0.0031308
-					? 12.92 * value
-					: 1.055 * Math.pow(Math.max(value, 0), 1 / 2.4) - 0.055;
-				return Math.round(Math.min(1, Math.max(0, encoded)) * 255)
+				return Math.round(Math.min(1, Math.max(0, value)) * 255)
 					.toString(16)
 					.padStart(2, "0");
 			})
 			.join("")
 	}`;
+}
+
+function lightness({ blue, green, red }: Rgb): number {
+	let r = decode(red);
+	let g = decode(green);
+	let b = decode(blue);
+	let long = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+	let medium = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+	let short = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+	return 0.2104542553 * long + 0.793617785 * medium - 0.0040720468 * short;
 }
 
 type Mark = { name: string; token: string; recorded: string };
@@ -112,7 +140,7 @@ describe("marking prose", () => {
 	it("paints each one far enough from the page to be seen", () => {
 		for (let mark of marks()) {
 			let painted = token(mark.token);
-			let distance = page.l - painted.l;
+			let distance = lightness(page) - lightness(painted);
 
 			// Asserted as an object so a failure names the mark and what it
 			// renders as, rather than reporting a bare number nobody can place.

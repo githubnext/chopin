@@ -1,4 +1,4 @@
-import { CaretDownIcon, CheckIcon, PlusIcon } from "@phosphor-icons/react";
+import { CheckIcon, ChevronIcon, PlusIcon } from "@chopin/icons";
 
 import { AuditPlate, StateLabel } from "./frame";
 
@@ -249,7 +249,7 @@ export function Controls() {
 						className="field design-audit-dropdown-trigger"
 						type="button"
 					>
-						Active documents<CaretDownIcon aria-hidden="true" size={16} />
+						Active documents<ChevronIcon aria-hidden="true" className="rotate-90" size={16} />
 					</button>
 					<div className="design-audit-dropdown-open">
 						<button
@@ -257,7 +257,7 @@ export function Controls() {
 							className="field design-audit-dropdown-trigger"
 							type="button"
 						>
-							Active documents<CaretDownIcon aria-hidden="true" size={16} />
+							Active documents<ChevronIcon aria-hidden="true" className="rotate-90" size={16} />
 						</button>
 						<div
 							aria-label="Document collection"

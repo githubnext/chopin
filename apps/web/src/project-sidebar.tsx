@@ -14,7 +14,7 @@ import { MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
 import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
 
 import { useId, useRef, useState } from "react";
-import { CaretDownIcon, CaretRightIcon } from "@phosphor-icons/react";
+import { ChevronIcon } from "@chopin/icons";
 import type * as Api from "./api";
 import type { DocumentAction } from "./document-actions-menu";
 import type { ProjectDocuments } from "./document-actions";
@@ -223,9 +223,9 @@ function Project(
 				>
 					<MotionDisclosureIcon
 						className="motion-feedback shrink-0 opacity-50"
-						closed={<CaretRightIcon size={14} weight="bold" />}
+						closed={<ChevronIcon size={14} />}
 						open={expanded}
-						opened={<CaretDownIcon size={14} weight="bold" />}
+						opened={<ChevronIcon className="rotate-90" size={14} />}
 					/>
 					<NavigationIcon className="opacity-50" src={bookBookmarkIcon} />
 					<span className="truncate text-sm font-bold">{label}</span>

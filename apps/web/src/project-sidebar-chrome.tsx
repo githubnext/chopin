@@ -1,4 +1,4 @@
-import sidebarOpenIcon from "./assets/figma/navigation/sidebar-right-3-hide.svg";
+import panelIcon from "./assets/icons/panel-close.svg";
 
 import type { RefObject } from "react";
 
@@ -23,7 +23,7 @@ export function ProjectSidebarExpandButton(
 			ref={buttonRef}
 			type="button"
 		>
-			<img alt="" height="14" src={sidebarOpenIcon} width="14" />
+			<img alt="" className="rotate-180" height="14" src={panelIcon} width="14" />
 		</button>
 	);
 }

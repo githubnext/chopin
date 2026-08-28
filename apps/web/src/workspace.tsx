@@ -3,6 +3,7 @@
 import { useEffect, useId, useLayoutEffect, useReducer, useRef, useSyncExternalStore } from "react";
 import { ContentSwapLayer } from "@chopin/editor/content-swap";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
+import { CloseIcon } from "@chopin/icons";
 
 import {
 	initialWorkspaceState,
@@ -16,7 +17,6 @@ import {
 } from "./workspace-model";
 import chatCloseIcon from "./assets/icons/panel-close.svg";
 import chatIcon from "./assets/icons/chat.svg";
-import navigationXmark from "./assets/icons/navigation-xmark.svg";
 import { ResizeHandle, usePaneWidth } from "./resizable-pane";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
@@ -430,12 +430,7 @@ export function Workspace(
 											onClick={childPresentation.onClose}
 											type="button"
 										>
-											<img
-												alt=""
-												aria-hidden="true"
-												className="size-[16px]"
-												src={navigationXmark}
-											/>
+											<CloseIcon aria-hidden="true" size={16} />
 										</button>
 									</div>
 								)}
