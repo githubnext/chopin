@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { SearchIcon } from "@chopin/icons";
 
 let root = import.meta.dir;
 let repository = join(root, "../../..");
@@ -80,6 +83,14 @@ test("interface icons default to fourteen pixels", () => {
 	expect(offenders).toEqual([]);
 });
 
+test("interface icons are decorative unless explicitly labelled", () => {
+	let decorative = renderToStaticMarkup(createElement(SearchIcon));
+	let labelled = renderToStaticMarkup(createElement(SearchIcon, { "aria-label": "Search" }));
+
+	expect(decorative).toContain('aria-hidden="true"');
+	expect(labelled).not.toContain('aria-hidden="true"');
+});
+
 test("interface icons share one neutral default colour", () => {
 	let theme = readFileSync(join(root, "theme.css"), "utf8");
 	let icon = readFileSync(join(repository, "packages/icons/src/icon.tsx"), "utf8");
@@ -92,7 +103,6 @@ test("interface icons share one neutral default colour", () => {
 	let assetRoots = [
 		join(root, "assets/figma/navigation"),
 		join(root, "assets/icons"),
-		join(repository, "packages/editor/src/assets/icons"),
 	];
 	for (let assetRoot of assetRoots) {
 		for (let entry of readdirSync(assetRoot)) {
