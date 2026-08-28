@@ -60,10 +60,15 @@ export function AuditSection(
 }
 
 export function AuditPlate(
-	{ children, description, title }: { children?: ReactNode; description?: string; title: string },
+	{ children, description, item, title }: {
+		children?: ReactNode;
+		description?: string;
+		item?: string;
+		title: string;
+	},
 ) {
 	return (
-		<section className="design-audit-plate">
+		<section className="design-audit-plate" data-audit-item={item}>
 			<header>
 				<h3>{title}</h3>
 				{description ? <p>{description}</p> : null}
