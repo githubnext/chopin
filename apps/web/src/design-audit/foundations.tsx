@@ -39,7 +39,8 @@ const RADII = [
 ] as const;
 
 const SHADOWS = [
-	["Resting", "--shadow-resting"],
+	["Subtle resting", "--shadow-resting"],
+	["Strong resting", "--shadow-resting-strong"],
 	["Raised", "--shadow-raised"],
 	["Overlay", "--shadow-overlay"],
 ] as const;
@@ -112,7 +113,7 @@ export function Foundations() {
 			<AuditPlate
 				item="shadows"
 				title="Elevation"
-				description="Resting, raised, and overlay depth roles."
+				description="Subtle and strong resting surfaces, followed by raised and overlay depth."
 			>
 				<div className="design-audit-token-row">
 					{SHADOWS.map(([label, token]) => (

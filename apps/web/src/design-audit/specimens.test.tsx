@@ -16,6 +16,7 @@ describe("design audit specimens", () => {
 			expect(markup).toContain(`data-audit-item="${id}"`);
 		}
 		expect(markup).toContain("Consolidated exact duplicate");
+		expect(markup).toContain("Strong resting");
 		for (
 			let measurement of [
 				"13px / 20px line-height",
