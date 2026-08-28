@@ -534,7 +534,7 @@ export function HostedApp(
 		);
 		setRoute(hostedRoute(pathname));
 	}, [childRouteChanged]);
-	let closeChild = useCallback((parentId: string, parentPath: string) => {
+	let beginChildClosing = useCallback((parentId: string, parentPath: string) => {
 		cancelChildFocusFrame();
 		let current = childFocus.current;
 		let next = moveChildFocus({
@@ -543,23 +543,20 @@ export function HostedApp(
 			parentId,
 			parentPath,
 		});
-		if (next === current) return;
-		childOpener.current = undefined;
+		let started = next !== current;
+		if (started) childOpener.current = undefined;
+		return { started, token: { generation: next.generation, parentId } };
+	}, [cancelChildFocusFrame, moveChildFocus]);
+	let closeChild = useCallback((parentId: string, parentPath: string) => {
+		let closing = beginChildClosing(parentId, parentPath);
+		if (!closing.started) return;
 		let action = childCloseAction(history.state, parentPath);
 		if (action.type === "back") history.back();
 		else navigate(action.destination, { replace: true });
-	}, [cancelChildFocusFrame, moveChildFocus, navigate]);
+	}, [beginChildClosing, navigate]);
 	let childClosing = useCallback((parentId: string, parentPath: string): ChildFocusToken => {
-		cancelChildFocusFrame();
-		let next = moveChildFocus({
-			type: "begin",
-			opener: childOpener.current,
-			parentId,
-			parentPath,
-		});
-		childOpener.current = undefined;
-		return { generation: next.generation, parentId };
-	}, [cancelChildFocusFrame, moveChildFocus]);
+		return beginChildClosing(parentId, parentPath).token;
+	}, [beginChildClosing]);
 	let restoreParentFocus = useCallback((token: ChildFocusToken) => {
 		let current = childFocus.current;
 		let next = childFocusTransition(current, { type: "restore", token });

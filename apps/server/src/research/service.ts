@@ -716,12 +716,16 @@ export class ResearchWorkspaceService {
 		let workspaceId = safeId(input.workspaceId, "Workspace id");
 		let turnId = safeId(input.turnId, "Turn id");
 		return this.#exclusive(channelId, workspaceId, async () => {
-			let detail = await this.#reconciled(channelId, workspaceId);
+			let detail = await this.#cancellationDetail(channelId, workspaceId);
 			if (!detail) throw new ResearchWorkspaceError("not-found", "Research workspace not found.");
 			let found = detail.turns.find(value => value.id === turnId);
 			if (!found) throw new ResearchWorkspaceError("not-found", "Research turn not found.");
 			await this.#cancelActiveTurn(detail, found);
-			return this.#requiredView(channelId, workspaceId);
+			let refreshed = await this.#cancellationDetail(channelId, workspaceId);
+			if (!refreshed) {
+				throw new ResearchWorkspaceError("not-found", "Research workspace not found.");
+			}
+			return this.#browserView(refreshed);
 		});
 	}
 
@@ -729,14 +733,14 @@ export class ResearchWorkspaceService {
 		let channelId = safeId(input.channelId, "Channel id");
 		let workspaceId = safeId(input.workspaceId, "Workspace id");
 		return this.#exclusive(channelId, workspaceId, async () => {
-			let detail = await this.#reconciled(channelId, workspaceId);
+			let detail = await this.#cancellationDetail(channelId, workspaceId);
 			if (!detail) throw new ResearchWorkspaceError("not-found", "Research request not found.");
 			let initial = detail.turns.find(value => value.kind === "initial");
 			if (!initial) {
 				throw new ResearchWorkspaceError("invalid-state", "Research request has no initial work.");
 			}
 			await this.#cancelActiveTurn(detail, initial);
-			let refreshed = await this.#reconciled(channelId, workspaceId);
+			let refreshed = await this.#cancellationDetail(channelId, workspaceId);
 			if (!refreshed) throw new ResearchWorkspaceError("not-found", "Research request not found.");
 			return this.#requestView(refreshed);
 		});
@@ -849,6 +853,15 @@ export class ResearchWorkspaceService {
 		let detail = await this.#reconciled(channelId, workspaceId);
 		if (!detail) throw new ResearchWorkspaceError("not-found", "Research workspace not found.");
 		return this.#browserView(detail);
+	}
+
+	async #cancellationDetail(
+		channelId: string,
+		workspaceId: string,
+	): Promise<ResearchWorkspaceDetail | undefined> {
+		return await this.#isTopLevelChannel(channelId)
+			? this.#reconciled(channelId, workspaceId)
+			: this.#storage.research.get(channelId, workspaceId);
 	}
 
 	async #reconciled(
