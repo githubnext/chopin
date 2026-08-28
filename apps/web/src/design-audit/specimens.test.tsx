@@ -4,6 +4,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { Controls } from "./controls";
 import { Foundations } from "./foundations";
+import { AUDIT_INVENTORY } from "./inventory";
+import { Surfaces } from "./surfaces";
 
 describe("design audit specimens", () => {
 	it("renders every foundation family with a visible label", () => {
@@ -36,5 +38,17 @@ describe("design audit specimens", () => {
 		expect(markup).toContain("disabled");
 		expect(markup).toContain('aria-selected="true"');
 		expect(markup).toContain('role="menu"');
+	});
+
+	it("renders every application surface and its meaningful states", () => {
+		let markup = renderToStaticMarkup(createElement(Surfaces));
+
+		for (let item of AUDIT_INVENTORY.find(group => group.id === "surfaces")!.items) {
+			expect(markup).toContain(`data-audit-item="${item.id}"`);
+		}
+		expect(markup).toContain('role="dialog"');
+		expect(markup).toContain('aria-current="page"');
+		expect(markup).toContain('data-chat-entry="true"');
+		expect(markup).toContain('role="alert"');
 	});
 });
