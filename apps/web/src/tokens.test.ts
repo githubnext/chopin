@@ -134,15 +134,15 @@ describe("palette", () => {
 		);
 	});
 
-	it("derives every semantic wash consistently from its parent colour", () => {
-		expect(declared("--color-brand-wash")).toBe(
-			"color-mix(in srgb, var(--color-brand) 20%, var(--color-page))",
-		);
-		for (let status of ["success", "warning", "destructive"]) {
+	it("derives semantic washes from their parent colours", () => {
+		for (let status of ["brand", "success", "warning"]) {
 			expect(declared(`--color-${status}-wash`)).toBe(
-				`color-mix(in srgb, var(--color-${status}) 20%, var(--color-page))`,
+				`color-mix(in oklab, var(--color-${status}) 25%, var(--color-page))`,
 			);
 		}
+		expect(declared("--color-destructive-wash")).toBe(
+			"color-mix(in srgb, var(--color-destructive) 20%, var(--color-page))",
+		);
 	});
 
 	it("keeps the Chat pane edge subtly stronger than the frame hairline", () => {

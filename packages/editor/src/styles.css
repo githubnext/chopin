@@ -561,7 +561,7 @@
  * a rendered wash, not as an abstract percentage of a darker accent.
  */
 ::highlight(plan-related) {
-	/* #cde2e5 */
+	/* #c7dade */
 	background-color: var(--color-brand-wash);
 }
 
