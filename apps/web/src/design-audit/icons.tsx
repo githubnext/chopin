@@ -7,8 +7,10 @@ import {
 	DocumentIcon,
 	InfoIcon,
 	LightbulbIcon,
+	LinkPlusIcon,
 	LoaderIcon,
 	MessageIcon,
+	MessagePlusIcon,
 	PlusIcon,
 	SearchIcon,
 	SignInIcon,
@@ -18,18 +20,12 @@ import {
 } from "@chopin/icons";
 
 import addProject from "../assets/figma/navigation/add-project.svg";
-import archive from "../assets/figma/navigation/box-archive.svg";
-import book from "../assets/figma/navigation/book-bookmark.svg";
 import chopin from "../assets/figma/navigation/chopin.svg";
 import documentActions from "../assets/figma/navigation/document-actions.svg";
 import newDocument from "../assets/figma/navigation/new-document.svg";
-import search from "../assets/figma/navigation/search.svg";
 import panelClose from "../assets/icons/panel-close.svg";
-import conversation from "../assets/icons/conversation.svg";
-import navigationChevron from "../assets/icons/navigation-chevron-right.svg";
+import chat from "../assets/icons/chat.svg";
 import plannerStop from "../assets/icons/planner-stop.svg";
-import linkPlus from "../../../../packages/editor/src/assets/icons/link-plus.svg";
-import messagePlus from "../../../../packages/editor/src/assets/icons/message-plus.svg";
 
 import type { IconProps } from "@chopin/icons";
 import type { ComponentType } from "react";
@@ -44,22 +40,18 @@ type IconCatalogueItem = {
 
 const NUCLEO_ICONS: readonly IconCatalogueItem[] = [
 	{ name: "Add project", source: addProject },
-	{ name: "Book bookmark", source: book },
-	{ name: "Archive", source: archive },
 	{ name: "Chopin", source: chopin },
 	{
-		duplicate: "collapse.svg and conversation-close.svg consolidated",
+		duplicate: "collapse.svg and chat-close.svg consolidated",
 		name: "Panel close",
 		source: panelClose,
 	},
 	{ name: "Document actions", source: documentActions },
 	{ name: "New document", source: newDocument },
-	{ name: "Search", source: search },
-	{ name: "Conversation", source: conversation },
-	{ name: "Navigation chevron", source: navigationChevron },
+	{ name: "Chat", source: chat },
 	{ name: "Planner stop", source: plannerStop },
-	{ name: "Link plus", source: linkPlus },
-	{ name: "Message plus", source: messagePlus },
+	{ icon: LinkPlusIcon, name: "Link plus" },
+	{ icon: MessagePlusIcon, name: "Message plus" },
 	{ icon: ArrowUpIcon, name: "Arrow up" },
 	{ icon: ChevronIcon, name: "Chevron right" },
 	{ className: "rotate-90", icon: ChevronIcon, name: "Chevron down (rotated)" },

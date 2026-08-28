@@ -78,18 +78,17 @@ describe("the Figma navigation chrome", () => {
 		expect(markup).toMatch(
 			/aria-label="New document in testing-sql-transcripts"[^>]*>.*?new-document\.svg/s,
 		);
-		expect(markup).toContain("book-bookmark.svg");
-		expect(markup).toMatch(/src="[^"]*book-bookmark\.svg"/);
+		expect(markup).toContain("book-bookmark");
 		expect(markup).not.toContain('src="/repository.png"');
 		expect(markup).toMatch(
 			/aria-label="Add Project"[^>]*>.*?class="size-3\.5"[^>]*add-project\.svg/s,
 		);
 		expect(markup).toMatch(
-			/<button[^>]*class="project-sidebar-primary-action"[^>]*>.*?search\.svg.*?Search<\/span>/s,
+			/<button[^>]*class="project-sidebar-primary-action"[^>]*>.*?search.*?Search<\/span>/s,
 		);
 		expect(markup).toContain('class="project-sidebar-projects gap-2"');
 		expect(markup).toMatch(
-			/<button[^>]*aria-expanded="true"[^>]*class="project-sidebar-project-disclosure[^>]*>.*?book-bookmark\.svg.*?testing-sql-transcripts<\/span><\/button>/s,
+			/<button[^>]*aria-expanded="true"[^>]*class="project-sidebar-project-disclosure[^>]*>.*?book-bookmark.*?testing-sql-transcripts<\/span><\/button>/s,
 		);
 		expect(markup).toContain('data-feedback-icon="open"');
 		expect(markup).toContain('data-motion-feedback="icon"');
@@ -171,7 +170,7 @@ describe("the Figma navigation chrome", () => {
 		};
 		let markup = renderToStaticMarkup(createElement(Header, props));
 
-		expect(markup).toMatch(/src="[^"]*book-bookmark\.svg"/);
+		expect(markup).toContain("book-bookmark");
 		expect(markup).not.toContain('src="/repository.png"');
 		expect(markup).toContain('aria-label="Document: Hushed mountain"');
 		expect(markup).toContain('aria-label="Actions for Hushed mountain"');
@@ -202,8 +201,8 @@ describe("the Figma navigation chrome", () => {
 		expect(markup).toContain('aria-label="Child document: Source review"');
 		expect(markup).toContain('aria-label="People here: MaggieAppleton"');
 		expect(markup).not.toContain('aria-label="Actions for Release plan"');
-		expect(markup).toContain("navigation-chevron-right.svg");
-		expect(markup).toContain('class="document-breadcrumb-separator size-[14px]');
+		expect(markup).toContain("chevron-right");
+		expect(markup).toContain('class="document-breadcrumb-separator shrink-0"');
 		expect(markup).not.toContain(">›</span>");
 	});
 

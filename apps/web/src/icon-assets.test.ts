@@ -15,14 +15,14 @@ function sourceFiles(directory: string, found: string[] = []): string[] {
 	return found;
 }
 
-test("the sidebar and conversation share one panel-close asset", () => {
+test("the sidebar and Chat share one panel-close asset", () => {
 	let sidebar = readFileSync(join(root, "project-sidebar.tsx"), "utf8");
 	let workspace = readFileSync(join(root, "workspace.tsx"), "utf8");
 
 	expect(sidebar).toContain("assets/icons/panel-close.svg");
 	expect(workspace).toContain("assets/icons/panel-close.svg");
 	expect(existsSync(join(root, "assets/figma/navigation/collapse.svg"))).toBe(false);
-	expect(existsSync(join(root, "assets/icons/conversation-close.svg"))).toBe(false);
+	expect(existsSync(join(root, "assets/icons/chat-close.svg"))).toBe(false);
 });
 
 test("the interface uses only the shared Nucleo icon family", () => {
@@ -125,7 +125,8 @@ test("directional controls reuse one chevron and one panel icon", () => {
 	let room = readFileSync(join(root, "room-workspace.tsx"), "utf8");
 	let sidebarChrome = readFileSync(join(root, "project-sidebar-chrome.tsx"), "utf8");
 
-	expect(room).toContain("navigation-chevron-right.svg");
+	expect(room).toContain("ChevronIcon");
+	expect(existsSync(join(root, "assets/icons/navigation-chevron-right.svg"))).toBe(false);
 	expect(room).not.toContain("tool-chevron-down.svg");
 	expect(sidebarChrome).toContain("assets/icons/panel-close.svg");
 	expect(existsSync(join(root, "assets/icons/tool-chevron-down.svg"))).toBe(false);

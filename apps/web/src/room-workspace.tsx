@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { documentPath } from "@chopin/protocol/document-url";
+import { ChevronIcon, DocumentIcon } from "@chopin/icons";
 import {
 	advanceDecisionView,
 	countUnanswered,
@@ -15,8 +16,6 @@ import {
 	visibleDecisionView,
 } from "@chopin/editor";
 
-import bookBookmarkIcon from "./assets/figma/navigation/book-bookmark.svg";
-import navigationChevronRight from "./assets/icons/navigation-chevron-right.svg";
 import { Chat } from "./chat/chat";
 import { rememberChannel } from "./channel-recovery";
 import { decisionAttention, DecisionViewControl } from "./decision-view-control";
@@ -25,7 +24,6 @@ import { DocumentActionsMenu } from "./document-actions-menu";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
 import { useNavigationDocument } from "./navigation-shell";
-import { NavigationIcon } from "./project-sidebar";
 import { peopleHere } from "./presence";
 import { ResearchRequestStore } from "./research-requests";
 import { Wire } from "./wire";
@@ -78,7 +76,7 @@ export function Header(
 				aria-label={`Document: ${label}`}
 				className="flex min-w-0 flex-1 items-center gap-0.5"
 			>
-				<NavigationIcon src={bookBookmarkIcon} />
+				<DocumentIcon />
 				{presentation.type === "parent-with-child"
 					? (
 						<>
@@ -90,11 +88,9 @@ export function Header(
 							>
 								<span className="truncate">{label}</span>
 							</button>
-							<img
-								alt=""
+							<ChevronIcon
 								aria-hidden="true"
-								className="document-breadcrumb-separator size-[14px] shrink-0"
-								src={navigationChevronRight}
+								className="document-breadcrumb-separator shrink-0"
 							/>
 							<span
 								aria-label={`Child document: ${presentation.childLabel}`}
@@ -113,12 +109,7 @@ export function Header(
 							trigger={
 								<>
 									<span className="truncate">{label}</span>
-									<img
-										alt=""
-										aria-hidden="true"
-										className="size-3.5 rotate-90"
-										src={navigationChevronRight}
-									/>
+									<ChevronIcon aria-hidden="true" className="rotate-90" />
 								</>
 							}
 						/>

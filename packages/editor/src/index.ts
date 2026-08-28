@@ -1,3 +1,5 @@
+export { SidecarCard } from "./card";
+export type { SidecarCardProps } from "./card";
 export { collaborationPlugin } from "./collaboration";
 export type { CollaborationOptions } from "./collaboration";
 export { ContentSwapLayer } from "./content-swap";
@@ -55,3 +57,4 @@ export {
 	ResearchComposer,
 	ResearchReference,
 } from "./widgets";
+export { DecisionCard } from "./widgets/decision";

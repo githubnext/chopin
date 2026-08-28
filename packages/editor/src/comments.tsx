@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowUpIcon, ChatCircleIcon, CheckIcon, XIcon } from "@phosphor-icons/react";
+import { ArrowUpIcon, CheckIcon, CloseIcon, MessageIcon } from "@chopin/icons";
 
 import { limits } from "@chopin/dialect";
 
@@ -69,7 +69,7 @@ function CloseButton({ onClose }: { onClose: () => void }) {
 			title="Close comment"
 			type="button"
 		>
-			<XIcon aria-hidden="true" size={16} />
+			<CloseIcon aria-hidden="true" size={14} />
 		</button>
 	);
 }
@@ -80,7 +80,7 @@ function DraftHeader({ onClose, showClose }: { onClose: () => void; showClose: b
 			className="flex min-h-7 items-center justify-between text-text-tertiary"
 			data-plan-comment-draft-header
 		>
-			<ChatCircleIcon aria-hidden="true" size={16} />
+			<MessageIcon aria-hidden="true" size={14} />
 			{showClose && <CloseButton onClose={onClose} />}
 		</header>
 	);
@@ -196,7 +196,7 @@ function Composer({
 						title={sendLabel ?? `Send ${label.toLowerCase()}`}
 						type="button"
 					>
-						<ArrowUpIcon aria-hidden="true" size={14} weight="bold" />
+						<ArrowUpIcon aria-hidden="true" size={14} />
 					</button>
 				)}
 				{onCancel && (
@@ -388,7 +388,7 @@ export function ThreadCard({
 									onClick={() => setConfirming("dismiss")}
 									type="button"
 								>
-									<XIcon aria-hidden="true" size={14} />
+									<CloseIcon aria-hidden="true" size={14} />
 									Dismiss
 								</button>
 								<button
@@ -397,7 +397,7 @@ export function ThreadCard({
 									onClick={() => setConfirming("accept")}
 									type="button"
 								>
-									<CheckIcon aria-hidden="true" size={14} weight="bold" />
+									<CheckIcon aria-hidden="true" size={14} />
 									Apply feedback
 								</button>
 							</div>

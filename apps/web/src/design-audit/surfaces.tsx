@@ -9,9 +9,7 @@ import {
 	SearchIcon,
 } from "@chopin/icons";
 
-import { PlanStatus, SendAction } from "@chopin/editor";
-import { SidecarCard } from "../../../../packages/editor/src/card";
-import { DecisionCard } from "../../../../packages/editor/src/widgets/decision";
+import { DecisionCard, PlanStatus, SendAction, SidecarCard } from "@chopin/editor";
 import { Transcript } from "../chat/transcript";
 import { TerminalAlert } from "../terminal-alert";
 import { AuditPlate, StateLabel } from "./frame";
@@ -81,6 +79,27 @@ function DialogSpecimens() {
 							<button className="btn btn-md btn-secondary" type="button">Cancel</button>
 							<button className="btn btn-md btn-destructive" type="button">
 								Delete permanently
+							</button>
+						</div>
+					</div>
+				</div>
+				<div>
+					<StateLabel>Busy</StateLabel>
+					<div
+						aria-busy="true"
+						aria-labelledby="audit-busy-title"
+						aria-modal="true"
+						className="design-audit-dialog"
+						role="dialog"
+					>
+						<h4 id="audit-busy-title">Rename document</h4>
+						<label>
+							Document name<input defaultValue="Design system audit" disabled />
+						</label>
+						<div className="design-audit-dialog-actions">
+							<button className="btn btn-md btn-secondary" disabled type="button">Cancel</button>
+							<button className="btn btn-md btn-primary" disabled type="button">
+								<LoaderIcon aria-hidden="true" />Saving
 							</button>
 						</div>
 					</div>
@@ -168,7 +187,7 @@ function Conversation() {
 			item="chat"
 			title="Conversation"
 		>
-			<div className="design-audit-conversation">
+			<div className="design-audit-chat">
 				<Transcript
 					active
 					entries={CHAT_ENTRIES}
@@ -180,7 +199,7 @@ function Conversation() {
 						text: "Also check the compact layout.",
 					}]}
 				/>
-				<div className="conversation-composer px-2.5 pb-2.5">
+				<div className="chat-composer px-2.5 pb-2.5">
 					<div className="field flex flex-col">
 						<textarea aria-label="Message" defaultValue="@chopin Review the spacing" rows={2} />
 						<div className="design-audit-composer-actions">

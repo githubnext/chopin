@@ -143,7 +143,7 @@ export const AUDIT_INVENTORY: readonly AuditGroup[] = [
 				id: "callouts",
 				label: "Callouts",
 				source: "packages/editor/src/widgets/callout.tsx",
-				states: ["note", "tip", "warning", "danger", "focus"],
+				states: ["note", "tip", "important", "warning", "danger", "focus"],
 			},
 			{
 				id: "research",
