@@ -127,7 +127,7 @@ export function Foundations() {
 			<AuditPlate
 				item="icons"
 				title="Icons"
-				description="Every local SVG and shared Nucleo glyph currently used by the interface."
+				description="Every Nucleo icon currently used by the interface."
 			>
 				<IconCatalogue />
 			</AuditPlate>

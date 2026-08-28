@@ -34,13 +34,15 @@ import messagePlus from "../../../../packages/editor/src/assets/icons/message-pl
 import type { IconProps } from "@chopin/icons";
 import type { ComponentType } from "react";
 
-type LocalIcon = {
+type IconCatalogueItem = {
+	className?: string;
 	duplicate?: string;
+	icon?: ComponentType<IconProps>;
 	name: string;
-	source: string;
+	source?: string;
 };
 
-const LOCAL_ICONS: readonly LocalIcon[] = [
+const NUCLEO_ICONS: readonly IconCatalogueItem[] = [
 	{ name: "Add project", source: addProject },
 	{ name: "Book bookmark", source: book },
 	{ name: "Archive", source: archive },
@@ -58,13 +60,6 @@ const LOCAL_ICONS: readonly LocalIcon[] = [
 	{ name: "Planner stop", source: plannerStop },
 	{ name: "Link plus", source: linkPlus },
 	{ name: "Message plus", source: messagePlus },
-];
-
-const NUCLEO_ICONS: readonly {
-	className?: string;
-	icon: ComponentType<IconProps>;
-	name: string;
-}[] = [
 	{ icon: ArrowUpIcon, name: "Arrow up" },
 	{ icon: ChevronIcon, name: "Chevron right" },
 	{ className: "rotate-90", icon: ChevronIcon, name: "Chevron down (rotated)" },
@@ -95,29 +90,17 @@ export function IconCatalogue() {
 					</div>
 				))}
 			</div>
-			<h4>Local SVG assets</h4>
+			<h4>Nucleo icons</h4>
 			<div className="design-audit-icon-grid">
-				{LOCAL_ICONS.map(icon => (
-					<figure key={icon.name}>
+				{NUCLEO_ICONS.map(({ className, duplicate, icon: Glyph, name, source }) => (
+					<figure key={`${source ? "asset" : "component"}-${name}`}>
 						<span className="design-audit-icon-frame">
-							<img alt="" src={icon.source} />
-						</span>
-						<figcaption>
-							<strong>{icon.name}</strong>
-							{icon.duplicate ? <span>Consolidated exact duplicate: {icon.duplicate}</span> : null}
-						</figcaption>
-					</figure>
-				))}
-			</div>
-			<h4>Nucleo components</h4>
-			<div className="design-audit-icon-grid">
-				{NUCLEO_ICONS.map(({ className, icon: Glyph, name }) => (
-					<figure key={name}>
-						<span className="design-audit-icon-frame">
-							<Glyph aria-hidden="true" className={className} size={16} />
+							{source ? <img alt="" src={source} /> : null}
+							{Glyph ? <Glyph aria-hidden="true" className={className} size={16} /> : null}
 						</span>
 						<figcaption>
 							<strong>{name}</strong>
+							{duplicate ? <span>Consolidated exact duplicate: {duplicate}</span> : null}
 						</figcaption>
 					</figure>
 				))}
