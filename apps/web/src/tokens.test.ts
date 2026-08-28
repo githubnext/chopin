@@ -134,12 +134,10 @@ describe("palette", () => {
 		);
 	});
 
-	it("derives semantic washes from their parent colours", () => {
-		for (let status of ["brand", "success", "warning"]) {
-			expect(declared(`--color-${status}-wash`)).toBe(
-				`color-mix(in oklab, var(--color-${status}) 20%, var(--color-page))`,
-			);
-		}
+	it("tunes the light semantic washes independently", () => {
+		expect(declared("--color-brand-wash")).toBe("oklch(0.925 0.02 210)");
+		expect(declared("--color-success-wash")).toBe("oklch(0.93 0.026 145)");
+		expect(declared("--color-warning-wash")).toBe("oklch(0.95 0.032 75)");
 		expect(declared("--color-destructive-wash")).toBe(
 			"color-mix(in srgb, var(--color-destructive) 20%, var(--color-page))",
 		);
@@ -183,6 +181,7 @@ describe("palette", () => {
 			"--color-brand",
 			"--color-brand-hover",
 			"--color-brand-active",
+			"--color-brand-wash",
 			"--color-brand-ink",
 		]);
 	});
