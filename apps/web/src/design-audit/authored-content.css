@@ -1,0 +1,56 @@
+.design-audit-static-plan {
+	width: 100%;
+	min-width: 0;
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+}
+
+.design-audit-static-plan .plan-workspace,
+.design-audit-static-plan .plan-document {
+	height: auto;
+	min-height: 0;
+}
+
+.design-audit-static-plan .plan-content {
+	min-height: 0;
+	padding: 1rem;
+}
+
+.design-audit-static-plan .mdxeditor {
+	min-height: 0;
+}
+
+.design-audit-research-composer {
+	display: grid;
+	gap: 0.5rem;
+	margin-block-end: 1rem;
+}
+
+.design-audit-research-composer .plan-research-composer {
+	width: min(100%, 32rem);
+}
+
+.design-audit-research-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+	gap: 1rem;
+}
+
+.design-audit-research-grid > div {
+	display: grid;
+	align-content: start;
+	gap: 0.5rem;
+}
+
+.design-audit-research-grid article {
+	height: 100%;
+}
+
+.design-audit-static-plan .plan-image {
+	max-height: 10rem;
+}
+
+.design-audit-static-plan .plan-diagram {
+	max-height: 18rem;
+}

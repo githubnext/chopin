@@ -1,10 +1,12 @@
 import { AuditFrame, AuditSection } from "./frame";
+import { AuthoredContent } from "./authored-content";
 import { Controls } from "./controls";
 import { Foundations } from "./foundations";
 import { AUDIT_INVENTORY } from "./inventory";
 import { Surfaces } from "./surfaces";
 
 import "./controls.css";
+import "./authored-content.css";
 import "./foundations.css";
 import "./surfaces.css";
 import "./styles.css";
@@ -21,11 +23,9 @@ export function DesignAuditPage() {
 			<AuditSection id="surfaces" title="Application surfaces">
 				<Surfaces />
 			</AuditSection>
-			{AUDIT_INVENTORY.slice(3).map(group => (
-				<AuditSection id={group.id} key={group.id} title={group.label}>
-					<p className="design-audit-section-summary">{group.items.length} component families</p>
-				</AuditSection>
-			))}
+			<AuditSection id="authored-content" title="Authored content">
+				<AuthoredContent />
+			</AuditSection>
 		</AuditFrame>
 	);
 }

@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { Controls } from "./controls";
+import { AuthoredContent } from "./authored-content";
 import { Foundations } from "./foundations";
 import { AUDIT_INVENTORY } from "./inventory";
 import { Surfaces } from "./surfaces";
@@ -50,5 +51,16 @@ describe("design audit specimens", () => {
 		expect(markup).toContain('aria-current="page"');
 		expect(markup).toContain('data-chat-entry="true"');
 		expect(markup).toContain('role="alert"');
+	});
+
+	it("renders every authored-content family through the static editor or record card", () => {
+		let markup = renderToStaticMarkup(createElement(AuthoredContent));
+
+		for (let item of AUDIT_INVENTORY.find(group => group.id === "authored-content")!.items) {
+			expect(markup).toContain(`data-audit-item="${item.id}"`);
+		}
+		expect(markup).toContain('role="document"');
+		expect(markup).toContain("Research question");
+		expect(markup).toContain("Research ready");
 	});
 });
