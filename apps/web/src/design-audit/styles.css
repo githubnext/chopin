@@ -53,7 +53,7 @@
 	gap: 0.125rem;
 	padding: 0.125rem;
 	border-radius: var(--radius-lg);
-	background: var(--color-control);
+	background: var(--color-selected);
 }
 
 .design-audit-width-controls [aria-pressed="true"] {

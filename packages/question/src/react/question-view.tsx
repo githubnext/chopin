@@ -81,7 +81,7 @@ function Badges({ people }: { people: Collaborator[] }) {
 				<span
 					key={person.client}
 					title={`@${person.handle} is editing`}
-					className="max-w-28 truncate rounded-full bg-control px-1.5 py-0.5 text-sm font-medium text-text-tertiary"
+					className="max-w-28 truncate rounded-full bg-selected px-1.5 py-0.5 text-sm font-medium text-text-tertiary"
 				>
 					@{person.handle}
 				</span>

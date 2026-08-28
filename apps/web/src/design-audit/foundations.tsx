@@ -6,7 +6,6 @@ const COLOURS = [
 	["Ground", "--color-ground"],
 	["Inset", "--color-inset"],
 	["Selected", "--color-selected"],
-	["Control", "--color-control"],
 	["Primary text", "--color-text-primary"],
 	["Secondary text", "--color-text-secondary"],
 	["Tertiary text", "--color-text-tertiary"],

@@ -161,6 +161,7 @@ export function ResearchComposer(
 			</div>
 			<textarea
 				autoFocus
+				className="field"
 				disabled={submitting}
 				id={id}
 				maxLength={4096}

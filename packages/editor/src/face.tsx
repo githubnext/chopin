@@ -63,7 +63,7 @@ export function Face({ handle, ring, size = 20 }: FaceProps) {
 	return (
 		<img
 			alt={handle}
-			className={`block bg-control ${edge}`}
+			className={`block bg-selected ${edge}`}
 			onError={() => setFailed(true)}
 			referrerPolicy="no-referrer"
 			src={photograph(handle, size)}
