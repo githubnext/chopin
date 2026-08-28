@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { Controls } from "./controls";
-import { AuthoredContent } from "./authored-content";
+import { AuthoredContent, callouts } from "./authored-content";
 import { Foundations } from "./foundations";
 import { AUDIT_INVENTORY } from "./inventory";
 import { Surfaces } from "./surfaces";
@@ -73,6 +73,9 @@ describe("design audit specimens", () => {
 			expect(markup).toContain(`data-audit-item="${item.id}"`);
 		}
 		expect(markup).toContain('role="document"');
+		for (let type of ["note", "tip", "important", "warning", "danger"]) {
+			expect(callouts).toContain(`type="${type}"`);
+		}
 		expect(markup).toContain("Research question");
 		expect(markup).toContain("Research ready");
 	});

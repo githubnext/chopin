@@ -5,7 +5,7 @@ import { AuditPlate, StateLabel } from "./frame";
 
 import type { Research } from "@chopin/protocol";
 
-let callouts = [
+export let callouts = [
 	'<Callout id="01K0N4W3B7P27CBAEC7A8C8WEA" type="note" title="Note">',
 	"",
 	"A neutral detail that supports the surrounding prose.",
@@ -15,6 +15,12 @@ let callouts = [
 	'<Callout id="01K0N4W3B7P27CBAEC7A8C8WEB" type="tip" title="Tip">',
 	"",
 	"A useful shortcut or recommended next step.",
+	"",
+	"</Callout>",
+	"",
+	'<Callout id="01K0N4W3B7P27CBAEC7A8C8WEE" type="important" title="Important">',
+	"",
+	"A key detail that deserves extra emphasis.",
 	"",
 	"</Callout>",
 	"",
@@ -191,7 +197,7 @@ export function AuthoredContent() {
 	return (
 		<>
 			<EditorPlate
-				description="Note, tip, warning, and danger treatments from the real callout renderer."
+				description="Note, tip, important, warning, and danger treatments from the real callout renderer."
 				item="callouts"
 				source={callouts}
 				title="Callouts"
