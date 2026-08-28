@@ -14,7 +14,7 @@ import {
 	workspaceMode,
 	workspaceProfile,
 } from "./workspace-model";
-import chatCloseIcon from "./assets/icons/chat-close.svg";
+import chatCloseIcon from "./assets/icons/panel-close.svg";
 import chatIcon from "./assets/icons/chat.svg";
 import navigationXmark from "./assets/icons/navigation-xmark.svg";
 import { ResizeHandle, usePaneWidth } from "./resizable-pane";
@@ -175,7 +175,7 @@ export function ChatToggle(
 				: (
 					<img
 						alt=""
-						className={`${feedback} size-[14px] ${open ? "opacity-50" : ""}`}
+						className={`${feedback} size-[14px]`}
 						data-motion-feedback="icon"
 						key={open ? "open" : "closed"}
 						src={open ? chatCloseIcon : chatIcon}
@@ -433,7 +433,7 @@ export function Workspace(
 											<img
 												alt=""
 												aria-hidden="true"
-												className="size-[18px]"
+												className="size-[16px]"
 												src={navigationXmark}
 											/>
 										</button>

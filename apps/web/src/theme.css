@@ -212,6 +212,7 @@
 	border-radius: var(--radius-md);
 	font-size: var(--text-sm);
 	font-weight: 500;
+	white-space: nowrap;
 
 	&:disabled {
 		background-color: var(--color-gray-200);
@@ -600,6 +601,12 @@ body {
 	padding-right: calc(0.25rem + env(safe-area-inset-right));
 	padding-bottom: calc(0.25rem + env(safe-area-inset-bottom));
 	padding-left: calc(0.25rem + env(safe-area-inset-left));
+}
+
+.workspace-navigation [aria-current="page"] {
+	background-color: var(--color-page);
+	color: var(--color-text-primary);
+	box-shadow: var(--shadow-resting);
 }
 
 /* The split workspace is one elevated surface; its panes only own the divider. */

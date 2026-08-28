@@ -3,11 +3,21 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { NavigationIcon, ProjectSidebar, toggleCollapsedProjectIds } from "./project-sidebar";
+import { ProjectSidebarExpandButton } from "./project-sidebar-chrome";
 import { Header } from "./room-workspace";
 
 import type { ComponentProps } from "react";
 
 describe("the Figma navigation chrome", () => {
+	test("uses the standard sixteen-pixel glyph in an icon button", () => {
+		let markup = renderToStaticMarkup(createElement(ProjectSidebarExpandButton, {
+			onExpand: () => {},
+		}));
+
+		expect(markup).toContain('height="16"');
+		expect(markup).toContain('width="16"');
+	});
+
 	test("renders sidebar control glyphs at fourteen pixels", () => {
 		let markup = renderToStaticMarkup(createElement(NavigationIcon, { src: "/control.svg" }));
 

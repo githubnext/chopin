@@ -16,6 +16,7 @@ test("chat state swaps use purposeful icon feedback", () => {
 
 	expect(markup).toContain('data-motion-feedback="icon"');
 	expect(markup).toContain("motion-feedback");
+	expect(markup).toContain("size-[14px]");
 });
 
 test("the open chat hover swap crossfades without display changes", () => {
@@ -30,6 +31,7 @@ test("the open chat hover swap crossfades without display changes", () => {
 	);
 
 	expect(markup.match(/class="chat-toggle-icon/g)).toHaveLength(2);
+	expect(markup.match(/size-\[14px\]/g)).toHaveLength(3);
 	expect(markup).not.toContain("group-hover:hidden");
 	expect(markup).not.toContain("group-hover:block");
 });

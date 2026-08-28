@@ -2,7 +2,7 @@ import addProjectIcon from "./assets/figma/navigation/add-project.svg";
 import bookBookmarkIcon from "./assets/figma/navigation/book-bookmark.svg";
 import boxArchiveIcon from "./assets/figma/navigation/box-archive.svg";
 import chopinIcon from "./assets/figma/navigation/chopin.svg";
-import collapseIcon from "./assets/figma/navigation/collapse.svg";
+import collapseIcon from "./assets/icons/panel-close.svg";
 import documentActionsIcon from "./assets/figma/navigation/document-actions.svg";
 import newDocumentIcon from "./assets/figma/navigation/new-document.svg";
 import searchIcon from "./assets/figma/navigation/search.svg";
