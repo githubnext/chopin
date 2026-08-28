@@ -17,7 +17,6 @@ import {
 
 import bookBookmarkIcon from "./assets/figma/navigation/book-bookmark.svg";
 import navigationChevronRight from "./assets/icons/navigation-chevron-right.svg";
-import chevronDownIcon from "./assets/icons/tool-chevron-down.svg";
 import { Chat } from "./chat/chat";
 import { rememberChannel } from "./channel-recovery";
 import { decisionAttention, DecisionViewControl } from "./decision-view-control";
@@ -117,8 +116,8 @@ export function Header(
 									<img
 										alt=""
 										aria-hidden="true"
-										className="size-3.5 opacity-50"
-										src={chevronDownIcon}
+										className="size-3.5 rotate-90 opacity-50"
+										src={navigationChevronRight}
 									/>
 								</>
 							}

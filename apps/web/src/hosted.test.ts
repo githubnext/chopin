@@ -403,8 +403,9 @@ describe("anchored child lifecycle", () => {
 
 		expect(child).toContain('aria-label="Close Source review"');
 		expect(child).toContain('data-child-document-close="true"');
-		expect(child).toContain("navigation-xmark.svg");
-		expect(child).toContain('class="size-[16px]"');
+		expect(child).toContain("<title>xmark</title>");
+		expect(child).toContain('height="16"');
+		expect(child).toContain('width="16"');
 		expect(parent).not.toContain("data-child-document-close");
 	});
 

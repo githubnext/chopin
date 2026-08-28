@@ -1,18 +1,17 @@
 import {
+	ArchiveIcon,
 	ArrowUpIcon,
-	CaretDownIcon,
-	CaretRightIcon,
-	ChatCircleIcon,
 	CheckIcon,
+	ChevronIcon,
+	CloseIcon,
+	DocumentIcon,
 	InfoIcon,
 	LightbulbIcon,
+	LoaderIcon,
+	MessageIcon,
 	PlusIcon,
-	SignInIcon,
-	SirenIcon,
-	StarFourIcon,
-	WarningIcon,
-	XIcon,
-} from "@phosphor-icons/react";
+	SearchIcon,
+} from "@chopin/icons";
 
 import addProject from "../assets/figma/navigation/add-project.svg";
 import archive from "../assets/figma/navigation/box-archive.svg";
@@ -21,20 +20,15 @@ import chopin from "../assets/figma/navigation/chopin.svg";
 import documentActions from "../assets/figma/navigation/document-actions.svg";
 import newDocument from "../assets/figma/navigation/new-document.svg";
 import search from "../assets/figma/navigation/search.svg";
-import hideSidebar from "../assets/figma/navigation/sidebar-right-3-hide.svg";
 import panelClose from "../assets/icons/panel-close.svg";
 import conversation from "../assets/icons/conversation.svg";
 import navigationChevron from "../assets/icons/navigation-chevron-right.svg";
-import navigationXmark from "../assets/icons/navigation-xmark.svg";
 import plannerStop from "../assets/icons/planner-stop.svg";
-import sendArrow from "../assets/icons/send-arrow-up.svg";
-import toolChevronDown from "../assets/icons/tool-chevron-down.svg";
-import toolChevronRight from "../assets/icons/tool-chevron-right.svg";
-import toolLoader from "../assets/icons/tool-loader.svg";
 import linkPlus from "../../../../packages/editor/src/assets/icons/link-plus.svg";
 import messagePlus from "../../../../packages/editor/src/assets/icons/message-plus.svg";
 
-import type { Icon } from "@phosphor-icons/react";
+import type { IconProps } from "@chopin/icons";
+import type { ComponentType } from "react";
 
 type LocalIcon = {
 	duplicate?: string;
@@ -55,33 +49,31 @@ const LOCAL_ICONS: readonly LocalIcon[] = [
 	{ name: "Document actions", source: documentActions },
 	{ name: "New document", source: newDocument },
 	{ name: "Search", source: search },
-	{ name: "Hide sidebar", source: hideSidebar },
 	{ name: "Conversation", source: conversation },
 	{ name: "Navigation chevron", source: navigationChevron },
-	{ name: "Navigation close", source: navigationXmark },
 	{ name: "Planner stop", source: plannerStop },
-	{ name: "Send", source: sendArrow },
-	{ name: "Tool chevron down", source: toolChevronDown },
-	{ name: "Tool chevron right", source: toolChevronRight },
-	{ name: "Tool loader", source: toolLoader },
 	{ name: "Link plus", source: linkPlus },
 	{ name: "Message plus", source: messagePlus },
 ];
 
-const PHOSPHOR_ICONS: readonly { icon: Icon; name: string }[] = [
+const NUCLEO_ICONS: readonly {
+	className?: string;
+	icon: ComponentType<IconProps>;
+	name: string;
+}[] = [
 	{ icon: ArrowUpIcon, name: "Arrow up" },
-	{ icon: CaretDownIcon, name: "Caret down" },
-	{ icon: CaretRightIcon, name: "Caret right" },
-	{ icon: ChatCircleIcon, name: "Chat circle" },
+	{ icon: ChevronIcon, name: "Chevron right" },
+	{ className: "rotate-90", icon: ChevronIcon, name: "Chevron down (rotated)" },
+	{ icon: MessageIcon, name: "Message" },
 	{ icon: CheckIcon, name: "Check" },
 	{ icon: InfoIcon, name: "Info" },
 	{ icon: LightbulbIcon, name: "Lightbulb" },
 	{ icon: PlusIcon, name: "Plus" },
-	{ icon: SignInIcon, name: "Sign in" },
-	{ icon: SirenIcon, name: "Siren" },
-	{ icon: StarFourIcon, name: "Important" },
-	{ icon: WarningIcon, name: "Warning" },
-	{ icon: XIcon, name: "Close" },
+	{ icon: CloseIcon, name: "Close" },
+	{ icon: ArchiveIcon, name: "Archive" },
+	{ icon: DocumentIcon, name: "Document" },
+	{ icon: SearchIcon, name: "Search" },
+	{ icon: LoaderIcon, name: "Loader" },
 ];
 
 export function IconCatalogue() {
@@ -109,12 +101,12 @@ export function IconCatalogue() {
 					</figure>
 				))}
 			</div>
-			<h4>Phosphor components</h4>
+			<h4>Nucleo components</h4>
 			<div className="design-audit-icon-grid">
-				{PHOSPHOR_ICONS.map(({ icon: Glyph, name }) => (
+				{NUCLEO_ICONS.map(({ className, icon: Glyph, name }) => (
 					<figure key={name}>
 						<span className="design-audit-icon-frame">
-							<Glyph aria-hidden="true" size={16} />
+							<Glyph aria-hidden="true" className={className} size={16} />
 						</span>
 						<figcaption>
 							<strong>{name}</strong>
@@ -125,7 +117,7 @@ export function IconCatalogue() {
 			<div className="design-audit-icon-sizes" aria-label="Icon size roles">
 				{([14, 16, 20] as const).map(size => (
 					<div key={size}>
-						<ChatCircleIcon aria-hidden="true" size={size} />
+						<MessageIcon aria-hidden="true" size={size} />
 						<span>{size}px</span>
 					</div>
 				))}

@@ -18,7 +18,7 @@ import { SidecarCard } from "../card";
 import { SendAction } from "../send-action";
 import { widgets$ } from "../widget-options";
 import { $isResearchNode } from "@chopin/dialect";
-import { XIcon } from "@phosphor-icons/react";
+import { CloseIcon } from "@chopin/icons";
 
 import type { FormEvent } from "react";
 import type { Research } from "@chopin/protocol";
@@ -155,7 +155,7 @@ export function ResearchComposer(
 						title="Discard research question"
 						type="button"
 					>
-						<XIcon aria-hidden="true" size={16} />
+						<CloseIcon aria-hidden="true" size={16} />
 					</button>
 				)}
 			</div>

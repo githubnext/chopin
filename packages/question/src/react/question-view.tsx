@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { CheckIcon, ShuffleSimpleIcon, XIcon } from "@phosphor-icons/react";
+import { CheckIcon, CloseIcon } from "@chopin/icons";
 
 import { answered } from "../draft";
 
@@ -93,7 +93,7 @@ function Badges({ people }: { people: Collaborator[] }) {
 function DecisionHeading() {
 	return (
 		<header className="flex items-center gap-2 px-3 py-2.5 hairline-b">
-			<ShuffleSimpleIcon aria-hidden="true" size={16} weight="regular" />
+			<CheckIcon aria-hidden="true" size={16} />
 			<span className="text-sm font-medium text-text-primary">Decision</span>
 		</header>
 	);
@@ -613,7 +613,7 @@ export function QuestionView(props: QuestionViewProps) {
 								disabled={disabled || submitting}
 								className="btn btn-sm btn-destructive"
 							>
-								<XIcon aria-hidden="true" size={16} weight="bold" />
+								<CloseIcon aria-hidden="true" size={16} />
 								{submitting ? "Cancelling…" : "Yes, cancel"}
 							</button>
 						</>
@@ -634,7 +634,7 @@ export function QuestionView(props: QuestionViewProps) {
 							disabled={disabled || submitting}
 							className="btn btn-sm btn-secondary"
 						>
-							<XIcon aria-hidden="true" size={16} weight="bold" />
+							<CloseIcon aria-hidden="true" size={16} />
 							Cancel
 						</button>
 					)}
@@ -658,7 +658,6 @@ export function QuestionView(props: QuestionViewProps) {
 								aria-hidden="true"
 								data-plan-icon="check"
 								size={16}
-								weight="bold"
 							/>
 							{submitting
 								? (single ? "Saving…" : "Submitting…")
