@@ -267,6 +267,14 @@ describe("controls", () => {
 		}
 	});
 
+	it("gives primary and secondary buttons the passive hairline", () => {
+		for (let tier of ["primary", "secondary"]) {
+			let rest = utility(`btn-${tier}`).split("&:")[0]!;
+			expect(rest).toContain("outline: var(--edge-width) solid var(--color-edge)");
+			expect(rest).toContain("outline-offset: calc(-1 * var(--edge-width))");
+		}
+	});
+
 	it("uses the common disabled button fill and ink", () => {
 		let rule = utility("btn");
 		expect(rule).toMatch(/&:disabled\s*\{[\s\S]*background-color:\s*var\(--color-gray-200\)/);
