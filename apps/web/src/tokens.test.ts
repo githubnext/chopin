@@ -14,6 +14,7 @@ type Oklch = { l: number; c: number; h: number };
 
 const ROOT = join(import.meta.dir, "../../..");
 const THEME = readFileSync(join(import.meta.dir, "theme.css"), "utf8");
+const EDITOR_STYLES = readFileSync(join(ROOT, "packages/editor/src/styles.css"), "utf8");
 
 function declared(name: string): string {
 	let found = new RegExp(`\\n\\s*${name}:\\s*([^;]+);`).exec(THEME);
@@ -239,6 +240,10 @@ describe("controls", () => {
 
 	it("keeps button labels on one line", () => {
 		expect(utility("btn")).toMatch(/white-space:\s*nowrap/);
+	});
+
+	it("keeps consumer classes from resizing standard icon buttons", () => {
+		expect(EDITOR_STYLES).not.toMatch(/\.plan-research-dismiss\s*\{[^}]*(?:width|height):/s);
 	});
 
 	it("distinguishes the active compact workspace destination", () => {
