@@ -12,6 +12,7 @@
  */
 
 import { addComposerChild$, realmPlugin } from "@mdxeditor/editor";
+import { ClickableLinkPlugin } from "@lexical/react/LexicalClickableLinkPlugin";
 
 import { ChangeObserver } from "./changes-observer";
 import { CommentLayer } from "./comment-layer";
@@ -56,6 +57,9 @@ export const widgetsPlugin = realmPlugin<WidgetOptions>({
 		realm.pub(addComposerChild$, CalloutPlugin);
 		realm.pub(addComposerChild$, EnterPlugin);
 		realm.pub(addComposerChild$, ResearchDeletionPlugin);
+		// Link nodes live inside Lexical's contenteditable root, where a normal
+		// browser click changes the selection instead of following the anchor.
+		realm.pub(addComposerChild$, () => <ClickableLinkPlugin newTab />);
 		// Also where `@lexical/table`'s own plugins are registered, which the
 		// editor otherwise runs without.
 		realm.pub(addComposerChild$, TableChrome);

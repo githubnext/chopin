@@ -747,6 +747,9 @@ export function NavigationShell(
 			&& !/^\/(?:channels|documents|repositories)(?:\/|$)/.test(destination.pathname)
 		) return;
 		event.preventDefault();
+		// Lexical's clickable-link listener is attached at the editor root. Stop
+		// the event before it reaches that root after this shell has claimed an app route.
+		event.stopPropagation();
 		setDrawerOpen(false);
 		navigate(`${destination.pathname}${destination.search}${destination.hash}`);
 	};
