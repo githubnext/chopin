@@ -15,9 +15,54 @@ const CHILD_SOURCE = `# Source review
 This ordinary child has its own editable document, Decisions, and inline comments.
 `;
 
+const LINKED_PARENT_SOURCE = `# Parent document
+
+[Parent source](https://example.com/parent-source)
+`;
+
+const LINKED_CHILD_SOURCE = `# Source review
+
+[Child source](https://example.com/child-source)
+`;
+
 function port(baseURL: string): number {
 	return Number(new URL(baseURL).port);
 }
+
+test("authored links open from parent and child documents", async ({ baseURL, join, page, room, seed }) => {
+	await seed(LINKED_PARENT_SOURCE);
+	let child = await seedChildChannel(
+		port(baseURL!),
+		room,
+		crypto.randomUUID(),
+		`Linked child ${room.slice(0, 8)}`,
+		LINKED_CHILD_SOURCE,
+	);
+	await join("ana");
+
+	let parent = page.locator(`[data-workspace-room="${room}"]`);
+	let parentLink = parent.getByRole("link", { name: "Parent source", exact: true });
+	let parentPopupPromise = page.waitForEvent("popup");
+	await parentLink.click();
+	let parentPopup = await parentPopupPromise;
+	await expect(parentPopup).toHaveURL("https://example.com/parent-source");
+	await parentPopup.close();
+
+	let sidebar = page.getByRole("complementary", { name: "Projects" });
+	await sidebar.getByRole("link", { name: `Linked child ${room.slice(0, 8)}`, exact: true })
+		.click();
+	let surface = page.getByRole("region", {
+		name: `Child document: Linked child ${room.slice(0, 8)}`,
+	});
+	await expect(surface.locator(`[data-workspace-room="${child.id}"]`)).toBeVisible();
+
+	let childLink = surface.getByRole("link", { name: "Child source", exact: true });
+	let childPopupPromise = page.waitForEvent("popup");
+	await childLink.click();
+	let childPopup = await childPopupPromise;
+	await expect(childPopup).toHaveURL("https://example.com/child-source");
+	await childPopup.close();
+});
 
 async function captureChatSends(page: Page) {
 	let sends: { channelId: string; text: string; to: Chat.Destination }[] = [];
