@@ -16,7 +16,7 @@ https://github.com/user-attachments/assets/9ebf0901-6255-47c3-adb3-e905e8f6cab4
 
 > [!TIP]
 > We do not provide public Chopin instance for general use. If you want use Chopin on
-> your projects you can run it locally or host it on your own. 
+> your projects you can run it locally or host it on your own.
 
 ## What Chopin explores
 
