@@ -12,7 +12,11 @@ changes, and asks the team when the code cannot settle a choice.
 > production-ready service. Expect incomplete workflows, operational limits,
 > and breaking changes.
 
-![Chopin Overview](docs/images_videos/chopin-tour.mp4)
+https://github.com/user-attachments/assets/9ebf0901-6255-47c3-adb3-e905e8f6cab4
+
+> [!TIP]
+> We do not provide public Chopin instance for general use. If you want use Chopin on
+> your projects you can run it locally or host it on your own. 
 
 ## What Chopin explores
 
@@ -30,7 +34,8 @@ context:
   separately from the prose they produced, so a later rewrite cannot silently
   change what the team decided.
 
-![Chopin Comments](docs/images_videos/chopin-comments.mp4)
+https://github.com/user-attachments/assets/9f429bf0-762d-4d8b-871b-493dbb14c03c
+
 
 Typing `/research` in a document starts one durable request from the exact brief
 and leaves an inline progress card in place. Completed research publishes as an
@@ -38,7 +43,7 @@ ordinary child document beneath its parent, with its own document,
 Chat, and Decisions. Pending, failed, and cancelled requests never
 appear as documents in navigation.
 
-![Chopin Research](docs/images_videos/chopin-research.mp4)
+https://github.com/user-attachments/assets/72a85be8-685f-4d60-9937-b3855b46cebe
 
 The Planner can inspect the selected GitHub repository and its pull requests
 through bounded, read-only tools, then co-author the document. It cannot write to
@@ -77,6 +82,8 @@ and tool vocabulary remain optimized for planning.
   inputs and artifacts, and token-free session records are stored in PostgreSQL.
 - One Chopin process may write to a database at a time. Horizontal application
   scaling and zero-downtime rolling deployment are not supported.
+
+---
 
 ## Run locally
 
