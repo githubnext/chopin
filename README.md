@@ -36,7 +36,6 @@ context:
 
 https://github.com/user-attachments/assets/9f429bf0-762d-4d8b-871b-493dbb14c03c
 
-
 Typing `/research` in a document starts one durable request from the exact brief
 and leaves an inline progress card in place. Completed research publishes as an
 ordinary child document beneath its parent, with its own document,
