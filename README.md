@@ -7,6 +7,8 @@ decision record. People shape the document and own its decisions; the hosted
 agent, currently named **Planner**, reads the selected repository, proposes
 changes, and asks the team when the code cannot settle a choice.
 
+To learn more about our design priciples, and why we're building Chopin check out our recent blog post - https://githubnext.com/projects/chopin/
+
 > [!IMPORTANT]
 > Chopin is experimental research software, not a supported GitHub product or a
 > production-ready service. Expect incomplete workflows, operational limits,
