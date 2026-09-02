@@ -46,6 +46,7 @@ test("authored links open from parent and child documents", async ({ baseURL, jo
 	await parentLink.click();
 	let parentPopup = await parentPopupPromise;
 	await expect(parentPopup).toHaveURL("https://example.com/parent-source");
+	expect(await parentPopup.evaluate(() => opener === null)).toBe(true);
 	await parentPopup.close();
 
 	let sidebar = page.getByRole("complementary", { name: "Projects" });
