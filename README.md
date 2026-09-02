@@ -12,6 +12,8 @@ changes, and asks the team when the code cannot settle a choice.
 > production-ready service. Expect incomplete workflows, operational limits,
 > and breaking changes.
 
+![Chopin Overview](docs/images_videos/chopin-tour.mp4)
+
 ## What Chopin explores
 
 A channel combines one repository-connected document with its collaboration
@@ -28,11 +30,15 @@ context:
   separately from the prose they produced, so a later rewrite cannot silently
   change what the team decided.
 
+![Chopin Comments](docs/images_videos/chopin-comments.mp4)
+
 Typing `/research` in a document starts one durable request from the exact brief
 and leaves an inline progress card in place. Completed research publishes as an
 ordinary child document beneath its parent, with its own document,
 Chat, and Decisions. Pending, failed, and cancelled requests never
 appear as documents in navigation.
+
+![Chopin Research](docs/images_videos/chopin-research.mp4)
 
 The Planner can inspect the selected GitHub repository and its pull requests
 through bounded, read-only tools, then co-author the document. It cannot write to
