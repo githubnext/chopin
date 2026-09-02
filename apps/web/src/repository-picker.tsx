@@ -70,6 +70,11 @@ export function RepositoryPicker(
 	let [query, setQuery] = useState("");
 	let [active, setActive] = useState(0);
 	let [avatarFailed, setAvatarFailed] = useState(false);
+	let [avatarUrlForFailure, setAvatarUrlForFailure] = useState(current?.ownerAvatarUrl);
+	if (avatarUrlForFailure !== current?.ownerAvatarUrl) {
+		setAvatarUrlForFailure(current?.ownerAvatarUrl);
+		setAvatarFailed(false);
+	}
 
 	let normalized = query.trim().toLowerCase();
 	let repositories = installed?.flatMap(group => group.repositories) ?? [];
@@ -96,8 +101,6 @@ export function RepositoryPicker(
 			mounted.current = false;
 		};
 	}, []);
-
-	useEffect(() => setAvatarFailed(false), [current?.ownerAvatarUrl]);
 
 	useEffect(() => {
 		if (!open) {
