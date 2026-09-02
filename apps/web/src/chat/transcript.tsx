@@ -1,7 +1,7 @@
 /** The shared chat, grouped for reading rather than event delivery. */
 
 import { useEffect, useId, useRef, useState } from "react";
-import { SignInIcon } from "@phosphor-icons/react";
+import { ChevronIcon, CloseIcon, LoaderIcon, SignInIcon } from "@chopin/icons";
 
 import { AgentFace, Face, MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
 
@@ -9,9 +9,6 @@ import { MessageMarkdown } from "./markdown";
 import { capitalize, displayText, duration, group, summarize, toolCopy } from "./model";
 import { motionContract } from "../motion-contract";
 import { motionImmediately } from "../motion-input";
-import toolChevronDown from "../assets/icons/tool-chevron-down.svg";
-import toolChevronRight from "../assets/icons/tool-chevron-right.svg";
-import toolLoader from "../assets/icons/tool-loader.svg";
 
 import type { Chat } from "@chopin/protocol";
 import type { Group, Message } from "./model";
@@ -28,7 +25,7 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 	if (summary.state === "running") {
 		return (
 			<div className="flex min-h-7 min-w-0 flex-wrap items-center gap-2 py-1 text-sm text-text-quaternary">
-				<img alt="" className="chat-tool-loader size-[18px]" src={toolLoader} />
+				<LoaderIcon aria-hidden="true" className="chat-tool-loader" size={14} />
 				<span className="min-w-0 break-all font-mono text-text-secondary">{summary.name}</span>
 				<span className="tabular-nums">{summary.completed} done</span>
 			</div>
@@ -46,9 +43,9 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 			>
 				<MotionDisclosureIcon
 					className="motion-feedback size-[14px]"
-					closed={<img alt="" src={toolChevronRight} />}
+					closed={<ChevronIcon aria-hidden="true" size={14} />}
 					open={open}
-					opened={<img alt="" src={toolChevronDown} />}
+					opened={<ChevronIcon aria-hidden="true" className="rotate-90" size={14} />}
 				/>
 				<span className="tabular-nums">
 					{summary.count} {summary.count === 1 ? "tool" : "tools"}
@@ -99,7 +96,7 @@ function SystemEntry({ item }: { item: Extract<Group, { kind: "system" }> }) {
 	return (
 		<div className="flex items-start gap-3 text-text-tertiary" data-chat-system>
 			<div className="shrink-0">
-				<SignInIcon aria-hidden="true" size={20} />
+				<SignInIcon aria-hidden="true" size={14} />
 			</div>
 			<p className="m-0 min-w-0 break-words text-[14px] [overflow-wrap:anywhere]">
 				{displayText(item.text)}
@@ -140,7 +137,7 @@ function MessageBody(
 								title="Withdraw"
 								type="button"
 							>
-								×
+								<CloseIcon aria-hidden="true" size={14} />
 							</button>
 						)}
 				</div>

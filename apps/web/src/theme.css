@@ -40,13 +40,12 @@
 	--color-hover: var(--color-gray-100);
 	--color-inset: var(--color-gray-100);
 	--color-selected: var(--color-gray-200);
-	--color-control: var(--color-gray-200);
-	--color-control-hover: var(--color-gray-300);
 
 	--color-text-primary: var(--color-gray-900);
 	--color-text-secondary: var(--color-gray-700);
 	--color-text-tertiary: var(--color-gray-600);
 	--color-text-quaternary: var(--color-gray-500);
+	--color-icon: var(--color-gray-500);
 	--color-chat-body: #3e453b;
 	--color-chat-pane: color-mix(in srgb, var(--color-ground) 30%, var(--color-page));
 
@@ -54,22 +53,26 @@
 	--color-brand: oklch(0.50006 0.08514 210.06); /* #06707e */
 	--color-brand-hover: oklch(0.42914 0.07315 210.634); /* #045a66 */
 	--color-brand-active: oklch(0.37546 0.06382 210.435); /* #034a54 */
-	--color-brand-wash: oklch(0.95547 0.0277 207.843); /* #dcf6fa */
+	--color-brand-wash: oklch(0.925 0.02 210);
 	--color-brand-ink: oklch(0.43882 0.07476 210.193); /* #045d69 */
 	--focus-ring-color: var(--color-brand);
 	--focus-ring-width: 2px;
 	--focus-ring-offset: 2px;
 
 	--color-success: oklch(0.51958 0.10966 145.072); /* #3b793f */
-	--color-success-wash: oklch(0.95503 0.03552 145.29); /* #e2f7e2 */
+	--color-success-wash: oklch(0.93 0.026 145);
 	--color-success-ink: oklch(0.44098 0.11068 144.754); /* #236228 */
 	--color-warning: oklch(0.59898 0.12586 74.986); /* #ab7302 */
-	--color-warning-wash: oklch(0.95386 0.03439 74.416); /* #feedd7 */
+	--color-warning-wash: oklch(0.95 0.032 75);
 	--color-warning-ink: oklch(0.4409 0.0921 74.93); /* #704a02 */
 	--color-destructive: oklch(0.60513 0.17178 24.175); /* #d54d4c */
 	--color-destructive-hover: oklch(0.56972 0.16045 24.136); /* #c44746 */
 	--color-destructive-active: oklch(0.53376 0.1489 24.091); /* #b34140 */
-	--color-destructive-wash: oklch(0.94841 0.02583 29.416); /* #ffe8e4 */
+	--color-destructive-wash: color-mix(
+		in srgb,
+		var(--color-destructive) 20%,
+		var(--color-page)
+	);
 	--color-destructive-ink: oklch(0.4941 0.19046 25.161); /* #b51421 */
 
 	/* Passive structure and controls are the only two edge weights. */
@@ -125,6 +128,11 @@
 		0 0 1px rgb(var(--shadow-color) / 3%),
 		0 1px 1px rgb(var(--shadow-color) / 3%),
 		0 3px 2px rgb(var(--shadow-color) / 2%);
+	--shadow-resting-strong:
+		0 0 1px rgb(var(--shadow-color) / 4%),
+		0 1px 2px rgb(var(--shadow-color) / 5%),
+		0 4px 3px rgb(var(--shadow-color) / 3%),
+		0 7px 4px rgb(var(--shadow-color) / 1%);
 	--shadow-raised:
 		0 1px 2px rgb(var(--shadow-color) / 6%),
 		0 3px 3px rgb(var(--shadow-color) / 5%),
@@ -196,6 +204,14 @@
 	outline-offset: calc(-1 * var(--edge-width));
 }
 
+:where([data-nucleo-icon]) {
+	color: var(--color-icon);
+}
+
+:where(.btn-primary, .btn-destructive) [data-nucleo-icon] {
+	color: inherit;
+}
+
 @utility control-edge {
 	border: var(--edge-width) solid var(--color-control-edge);
 
@@ -212,33 +228,36 @@
 	border-radius: var(--radius-md);
 	font-size: var(--text-sm);
 	font-weight: 500;
+	white-space: nowrap;
 
 	&:disabled {
-		background-color: var(--color-gray-200);
-		color: var(--color-gray-600);
 		cursor: default;
+		opacity: 0.4;
 	}
 }
 
 @utility btn-md {
 	height: 2rem;
-	padding-inline: calc(var(--spacing) * 2);
+	padding-inline: calc(var(--spacing) * 3);
 }
 
 @utility btn-sm {
 	height: 1.5rem;
-	padding-inline: var(--spacing);
+	padding-inline: calc(var(--spacing) * 2);
 }
 
 @utility btn-icon {
 	width: 1.75rem;
 	height: 1.75rem;
-	padding: 0;
+	padding: 0.4375rem;
 }
 
 @utility btn-primary {
 	background-color: var(--color-brand);
+	box-shadow: var(--shadow-resting);
 	color: var(--color-page);
+	outline: var(--edge-width) solid rgb(0 0 0 / 15%);
+	outline-offset: calc(-1 * var(--edge-width));
 
 	&:hover:not(:disabled) {
 		background-color: var(--color-brand-hover);
@@ -252,6 +271,8 @@
 @utility btn-secondary {
 	background-color: var(--color-gray-200);
 	color: var(--color-text-primary);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
 
 	&:hover:not(:disabled) {
 		background-color: var(--color-gray-300);
@@ -278,6 +299,8 @@
 @utility btn-destructive {
 	background-color: var(--color-destructive);
 	color: var(--color-page);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
 
 	&:hover:not(:disabled) {
 		background-color: var(--color-destructive-hover);
@@ -600,6 +623,12 @@ body {
 	padding-right: calc(0.25rem + env(safe-area-inset-right));
 	padding-bottom: calc(0.25rem + env(safe-area-inset-bottom));
 	padding-left: calc(0.25rem + env(safe-area-inset-left));
+}
+
+.workspace-navigation [aria-current="page"] {
+	background-color: var(--color-page);
+	color: var(--color-text-primary);
+	box-shadow: var(--shadow-resting);
 }
 
 /* The split workspace is one elevated surface; its panes only own the divider. */

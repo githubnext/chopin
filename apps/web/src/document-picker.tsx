@@ -1,4 +1,4 @@
-import { CaretDownIcon, CheckIcon, PlusIcon } from "@phosphor-icons/react";
+import { CheckIcon, ChevronIcon, PlusIcon } from "@chopin/icons";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { documentPath } from "@chopin/protocol/document-url";
 import { createPortal } from "react-dom";
@@ -288,7 +288,7 @@ export function DocumentPicker(
 									)}
 								</span>
 								{selected && (
-									<CheckIcon aria-hidden="true" className="shrink-0 text-brand-ink" size={16} />
+									<CheckIcon aria-hidden="true" className="shrink-0 text-brand-ink" size={14} />
 								)}
 							</button>
 						);
@@ -332,7 +332,7 @@ export function DocumentPicker(
 									onClick={() => void create()}
 									type="button"
 								>
-									<PlusIcon aria-hidden="true" size={16} />
+									<PlusIcon aria-hidden="true" size={14} />
 									<span className="ml-1">
 										{creating ? "Creating..." : "Create new document"}
 									</span>
@@ -359,7 +359,7 @@ export function DocumentPicker(
 				type="button"
 			>
 				<span className="truncate">{current.title}</span>
-				<CaretDownIcon aria-hidden="true" className="shrink-0" size={14} />
+				<ChevronIcon aria-hidden="true" className="shrink-0 rotate-90" size={14} />
 			</button>
 			{popup}
 		</>

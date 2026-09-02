@@ -10,9 +10,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { TOGGLE_LINK_COMMAND } from "@lexical/link";
 import { LINK_PROTOCOLS } from "@chopin/dialect";
+import { LinkPlusIcon, MessagePlusIcon } from "@chopin/icons";
 
-import linkPlusIcon from "../assets/icons/link-plus.svg";
-import messagePlusIcon from "../assets/icons/message-plus.svg";
 import { askForUrl } from "./url";
 import { placeSurface } from "./placement";
 import {
@@ -380,7 +379,7 @@ export function SelectionBubble(
 							}}
 							className={`${CELL} ${CELL_OFF}`}
 						>
-							<img alt="" aria-hidden="true" className="size-3.5 opacity-70" src={linkPlusIcon} />
+							<LinkPlusIcon aria-hidden="true" />
 						</button>
 
 						{onComment && (
@@ -403,12 +402,7 @@ export function SelectionBubble(
 									}}
 									className={`${CELL} ${CELL_OFF}`}
 								>
-									<img
-										alt=""
-										aria-hidden="true"
-										className="size-3.5 opacity-70"
-										src={messagePlusIcon}
-									/>
+									<MessagePlusIcon aria-hidden="true" />
 								</button>
 							</>
 						)}

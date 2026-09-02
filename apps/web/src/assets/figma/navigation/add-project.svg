@@ -12,7 +12,7 @@
 		<path
 			id="Vector"
 			d="M6.5 0.75V12.25"
-			stroke="#212121"
+			stroke="#78766e"
 			stroke-width="1.5"
 			stroke-linecap="round"
 			stroke-linejoin="round"
@@ -20,7 +20,7 @@
 		<path
 			id="Vector_2"
 			d="M0.75 6.5H12.25"
-			stroke="#212121"
+			stroke="#78766e"
 			stroke-width="1.5"
 			stroke-linecap="round"
 			stroke-linejoin="round"

@@ -23,3 +23,20 @@ test("system presence entries stay immediate when they arrive", () => {
 	expect(markup).toContain("Sam joined");
 	expect(markup).not.toContain("data-motion-feedback");
 });
+
+test("queued messages use the standard icon-button glyph", () => {
+	let markup = renderToStaticMarkup(
+		createElement(Transcript, {
+			active: true,
+			entries: [],
+			handle: "ana",
+			onWithdraw: () => {},
+			queued: [{ handle: "ana", id: "queued", text: "One more thought" }],
+		}),
+	);
+
+	expect(markup).toMatch(/aria-label="Withdraw queued message"[^>]*>.*?height="14"/s);
+	expect(markup).toMatch(/aria-label="Withdraw queued message"[^>]*>.*?width="14"/s);
+	expect(markup).toContain("<title>xmark</title>");
+	expect(markup).not.toContain(">×</button>");
+});

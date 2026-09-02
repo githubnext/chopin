@@ -160,6 +160,8 @@ describe("research composer", () => {
 		expect(markup).toContain('title="Start research"');
 		expect(markup).toContain("send-action btn btn-icon btn-primary rounded-full");
 		expect(markup).toContain('aria-hidden="true"');
+		expect(markup).toContain('height="14"');
+		expect(markup).toContain('width="14"');
 	});
 
 	it("keeps one exact brief actionable after a failed create", () => {
@@ -176,6 +178,7 @@ describe("research composer", () => {
 		expect(markup).toContain("Research could not be started.");
 		expect(markup).toContain("Start research");
 		expect(markup).toContain("Discard research question");
+		expect(markup).toMatch(/<textarea[^>]*class="field"/);
 		expect(markup).not.toContain(">Cancel<");
 		expect((markup.match(/textarea/g) ?? []).length).toBe(2);
 	});

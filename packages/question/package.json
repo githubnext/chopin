@@ -17,8 +17,8 @@
 		}
 	},
 	"dependencies": {
+		"@chopin/icons": "workspace:*",
 		"@chopin/protocol": "workspace:*",
-		"@phosphor-icons/react": "^2.1.10",
 		"json-joy": "catalog:mdx"
 	},
 	"peerDependencies": {

@@ -22,7 +22,8 @@ import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-type Oklch = { l: number; c: number; h: number };
+type Rgb = { blue: number; green: number; red: number };
+type Oklch = { c: number; h: number; l: number };
 
 const THEME = readFileSync(join(import.meta.dir, "theme.css"), "utf8");
 const NAVIGATION = readFileSync(join(import.meta.dir, "navigation.css"), "utf8");
@@ -35,44 +36,99 @@ const FEEDBACK = readFileSync(
 	"utf8",
 );
 
+function encode(value: number): number {
+	return value <= 0.0031308
+		? 12.92 * value
+		: 1.055 * Math.pow(Math.max(value, 0), 1 / 2.4) - 0.055;
+}
+
+function decode(value: number): number {
+	return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+}
+
+function fromOklch({ c, h, l }: Oklch): Rgb {
+	let radians = (h * Math.PI) / 180;
+	let a = c * Math.cos(radians);
+	let b = c * Math.sin(radians);
+	let long = (l + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+	let medium = (l - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+	let short = (l - 0.0894841775 * a - 1.291485548 * b) ** 3;
+	return {
+		blue: encode(-0.0041960863 * long - 0.7034186147 * medium + 1.707614701 * short),
+		green: encode(-1.2684380046 * long + 2.6097574011 * medium - 0.3413193965 * short),
+		red: encode(4.0767416621 * long - 3.3077115913 * medium + 0.2309699292 * short),
+	};
+}
+
+function toOklch({ blue, green, red }: Rgb): Oklch {
+	let r = decode(red);
+	let g = decode(green);
+	let b = decode(blue);
+	let long = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+	let medium = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+	let short = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+	let a = 1.9779984951 * long - 2.428592205 * medium + 0.4505937099 * short;
+	let chromatic = 0.0259040371 * long + 0.7827717662 * medium - 0.808675766 * short;
+	return {
+		c: Math.hypot(a, chromatic),
+		h: ((Math.atan2(chromatic, a) * 180) / Math.PI + 360) % 360,
+		l: 0.2104542553 * long + 0.793617785 * medium - 0.0040720468 * short,
+	};
+}
+
 /** A colour token, resolving semantic aliases onto the primitive palette. */
-function token(name: string): Oklch {
+function token(name: string): Rgb {
 	let declaration = new RegExp(`--color-${name}:\\s*([^;]+);`).exec(THEME)?.[1]?.trim();
 	if (!declaration) throw new Error(`no --color-${name} in the theme`);
 	let alias = /^var\(--color-([\w-]+)\)$/.exec(declaration);
 	if (alias) return token(alias[1]!);
+	let mix =
+		/^color-mix\(in (srgb|oklab), var\(--color-([\w-]+)\) ([\d.]+)%, (?:var\(--color-([\w-]+)\)|transparent)\)$/
+			.exec(declaration);
+	if (mix) {
+		let foreground = token(mix[2]!);
+		let background = token(mix[4] ?? "page");
+		let alpha = Number(mix[3]) / 100;
+		if (mix[1] === "oklab") {
+			let foregroundOklch = toOklch(foreground);
+			let backgroundOklch = toOklch(background);
+			let foregroundRadians = (foregroundOklch.h * Math.PI) / 180;
+			let backgroundRadians = (backgroundOklch.h * Math.PI) / 180;
+			let a = foregroundOklch.c * Math.cos(foregroundRadians) * alpha
+				+ backgroundOklch.c * Math.cos(backgroundRadians) * (1 - alpha);
+			let b = foregroundOklch.c * Math.sin(foregroundRadians) * alpha
+				+ backgroundOklch.c * Math.sin(backgroundRadians) * (1 - alpha);
+			return fromOklch({
+				c: Math.hypot(a, b),
+				h: ((Math.atan2(b, a) * 180) / Math.PI + 360) % 360,
+				l: foregroundOklch.l * alpha + backgroundOklch.l * (1 - alpha),
+			});
+		}
+		return {
+			blue: foreground.blue * alpha + background.blue * (1 - alpha),
+			green: foreground.green * alpha + background.green * (1 - alpha),
+			red: foreground.red * alpha + background.red * (1 - alpha),
+		};
+	}
 	let found = /^oklch\(([\d.]+)\s+([\d.]+)\s+([\d.]+)\)$/.exec(declaration);
 	if (!found) throw new Error(`no --color-${name} in the theme`);
-	return { l: Number(found[1]), c: Number(found[2]), h: Number(found[3]) };
+	return fromOklch({ c: Number(found[2]), h: Number(found[3]), l: Number(found[1]) });
 }
 
-function hex({ c, h, l }: Oklch): string {
-	let radians = (h * Math.PI) / 180;
-	let a = c * Math.cos(radians);
-	let b = c * Math.sin(radians);
-
-	let long = (l + 0.3963377774 * a + 0.2158037573 * b) ** 3;
-	let medium = (l - 0.1055613458 * a - 0.0638541728 * b) ** 3;
-	let short = (l - 0.0894841775 * a - 1.291485548 * b) ** 3;
-
-	let channels = [
-		4.0767416621 * long - 3.3077115913 * medium + 0.2309699292 * short,
-		-1.2684380046 * long + 2.6097574011 * medium - 0.3413193965 * short,
-		-0.0041960863 * long - 0.7034186147 * medium + 1.707614701 * short,
-	];
-
+function hex({ blue, green, red }: Rgb): string {
 	return `#${
-		channels
+		[red, green, blue]
 			.map(value => {
-				let encoded = value <= 0.0031308
-					? 12.92 * value
-					: 1.055 * Math.pow(Math.max(value, 0), 1 / 2.4) - 0.055;
-				return Math.round(Math.min(1, Math.max(0, encoded)) * 255)
+				return Math.round(Math.min(1, Math.max(0, value)) * 255)
 					.toString(16)
 					.padStart(2, "0");
 			})
 			.join("")
 	}`;
+}
+
+function lightness({ blue, green, red }: Rgb): number {
+	return toOklch({ blue, green, red }).l;
 }
 
 type Mark = { name: string; token: string; recorded: string };
@@ -112,7 +168,7 @@ describe("marking prose", () => {
 	it("paints each one far enough from the page to be seen", () => {
 		for (let mark of marks()) {
 			let painted = token(mark.token);
-			let distance = page.l - painted.l;
+			let distance = lightness(page) - lightness(painted);
 
 			// Asserted as an object so a failure names the mark and what it
 			// renders as, rather than reporting a bare number nobody can place.

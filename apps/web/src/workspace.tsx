@@ -3,6 +3,7 @@
 import { useEffect, useId, useLayoutEffect, useReducer, useRef, useSyncExternalStore } from "react";
 import { ContentSwapLayer } from "@chopin/editor/content-swap";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
+import { CloseIcon } from "@chopin/icons";
 
 import {
 	initialWorkspaceState,
@@ -14,9 +15,8 @@ import {
 	workspaceMode,
 	workspaceProfile,
 } from "./workspace-model";
-import chatCloseIcon from "./assets/icons/chat-close.svg";
+import chatCloseIcon from "./assets/icons/panel-close.svg";
 import chatIcon from "./assets/icons/chat.svg";
-import navigationXmark from "./assets/icons/navigation-xmark.svg";
 import { ResizeHandle, usePaneWidth } from "./resizable-pane";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
@@ -175,7 +175,7 @@ export function ChatToggle(
 				: (
 					<img
 						alt=""
-						className={`${feedback} size-[14px] ${open ? "opacity-50" : ""}`}
+						className={`${feedback} size-[14px]`}
 						data-motion-feedback="icon"
 						key={open ? "open" : "closed"}
 						src={open ? chatCloseIcon : chatIcon}
@@ -430,12 +430,7 @@ export function Workspace(
 											onClick={childPresentation.onClose}
 											type="button"
 										>
-											<img
-												alt=""
-												aria-hidden="true"
-												className="size-[18px]"
-												src={navigationXmark}
-											/>
+											<CloseIcon aria-hidden="true" size={14} />
 										</button>
 									</div>
 								)}
@@ -498,7 +493,7 @@ export function Workspace(
 								aria-current={active ? "page" : undefined}
 								aria-label={label}
 								aria-pressed={active}
-								className="btn btn-ghost min-h-11 min-w-0"
+								className="btn btn-md btn-ghost min-h-11 min-w-0"
 								key={destination}
 								onClick={event => navigate(destination, event.currentTarget)}
 								type="button"

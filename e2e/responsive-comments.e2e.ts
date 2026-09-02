@@ -56,7 +56,7 @@ test("a representative compact viewport keeps a passage above the sheet and rest
 		exact: true,
 	});
 	let actionBox = await commentAction.boundingBox();
-	let iconBox = await commentAction.locator("img").boundingBox();
+	let iconBox = await commentAction.locator("[data-nucleo-icon]").boundingBox();
 	expect(actionBox).not.toBeNull();
 	expect(iconBox).not.toBeNull();
 	expect(Math.abs(

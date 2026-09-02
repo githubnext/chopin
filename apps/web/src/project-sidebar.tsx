@@ -1,11 +1,8 @@
 import addProjectIcon from "./assets/figma/navigation/add-project.svg";
-import bookBookmarkIcon from "./assets/figma/navigation/book-bookmark.svg";
-import boxArchiveIcon from "./assets/figma/navigation/box-archive.svg";
 import chopinIcon from "./assets/figma/navigation/chopin.svg";
-import collapseIcon from "./assets/figma/navigation/collapse.svg";
+import collapseIcon from "./assets/icons/panel-close.svg";
 import documentActionsIcon from "./assets/figma/navigation/document-actions.svg";
 import newDocumentIcon from "./assets/figma/navigation/new-document.svg";
-import searchIcon from "./assets/figma/navigation/search.svg";
 import { DocumentActionsMenu } from "./document-actions-menu";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
@@ -14,7 +11,7 @@ import { MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
 import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
 
 import { useId, useRef, useState } from "react";
-import { CaretDownIcon, CaretRightIcon } from "@phosphor-icons/react";
+import { ArchiveIcon, ChevronIcon, DocumentIcon, SearchIcon } from "@chopin/icons";
 import type * as Api from "./api";
 import type { DocumentAction } from "./document-actions-menu";
 import type { ProjectDocuments } from "./document-actions";
@@ -222,12 +219,12 @@ function Project(
 					type="button"
 				>
 					<MotionDisclosureIcon
-						className="motion-feedback shrink-0 opacity-50"
-						closed={<CaretRightIcon size={14} weight="bold" />}
+						className="motion-feedback shrink-0"
+						closed={<ChevronIcon size={14} />}
 						open={expanded}
-						opened={<CaretDownIcon size={14} weight="bold" />}
+						opened={<ChevronIcon className="rotate-90" size={14} />}
 					/>
-					<NavigationIcon className="opacity-50" src={bookBookmarkIcon} />
+					<DocumentIcon />
 					<span className="truncate text-sm font-bold">{label}</span>
 				</button>
 				{!archiveMode && project.available && canManage && (
@@ -335,7 +332,7 @@ export function ProjectSidebar(
 							onClick={onSearch}
 							type="button"
 						>
-							<NavigationIcon src={searchIcon} />
+							<SearchIcon />
 							<span>Search</span>
 						</button>
 					</>
@@ -354,7 +351,7 @@ export function ProjectSidebar(
 					ref={archivedChats}
 					type="button"
 				>
-					<NavigationIcon src={boxArchiveIcon} />
+					<ArchiveIcon />
 					<span>Archived chats</span>
 				</button>
 			</div>
@@ -365,7 +362,7 @@ export function ProjectSidebar(
 			<div className="min-h-0 flex-1 overflow-y-auto">
 				<header className="project-sidebar-header group/sidebar-header">
 					<div className="flex items-center gap-2">
-						<img alt="" height={18} src={chopinIcon} width={18} />
+						<img alt="" height={14} src={chopinIcon} width={14} />
 						<span className="text-sm font-semibold text-brand">Chopin</span>
 					</div>
 					<button

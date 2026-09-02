@@ -21,15 +21,14 @@
 	box-shadow: var(--shadow-resting);
 }
 
-.plan-content [data-research-ready] {
-	position: relative;
-	box-shadow: var(--shadow-raised);
+[data-research-ready] {
+	box-shadow: var(--shadow-resting-strong);
 	transition: box-shadow var(--duration-fast) var(--ease-out);
 }
 
-.plan-content [data-research-ready]:hover,
-.plan-content [data-research-ready]:focus-within {
-	box-shadow: var(--shadow-overlay);
+[data-research-ready]:hover,
+[data-research-ready]:focus-within {
+	box-shadow: var(--shadow-raised);
 }
 
 .plan-research-open {
@@ -60,20 +59,11 @@
 	justify-content: space-between;
 }
 
-.plan-research-dismiss {
-	width: 2rem;
-	height: 2rem;
-}
-
 .plan-research-composer textarea {
 	width: 100%;
 	min-height: 5rem;
 	resize: vertical;
-	border: var(--edge-width) solid var(--color-control-edge);
-	border-radius: var(--radius-md);
-	background: var(--color-control);
 	padding: 0.625rem;
-	color: var(--color-text-primary);
 	font: inherit;
 }
 
@@ -126,16 +116,6 @@
 	flex-wrap: wrap;
 	justify-content: flex-end;
 	gap: 0.5rem;
-}
-
-.send-action {
-	width: 1.5rem;
-	height: 1.5rem;
-}
-
-.send-action-icon {
-	width: 1.125rem;
-	height: 1.125rem;
 }
 
 .plan,
@@ -581,7 +561,7 @@
  * a rendered wash, not as an abstract percentage of a darker accent.
  */
 ::highlight(plan-related) {
-	/* #dcf6fa */
+	/* #d8eaee */
 	background-color: var(--color-brand-wash);
 }
 
@@ -960,7 +940,7 @@
 
 .plan-grip {
 	border-radius: var(--radius-sm);
-	background: var(--color-control);
+	background: var(--color-selected);
 	transition: background-color var(--duration-fast) var(--ease-out);
 }
 

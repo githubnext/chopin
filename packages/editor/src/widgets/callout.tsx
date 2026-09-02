@@ -14,9 +14,9 @@ import {
 	InfoIcon,
 	LightbulbIcon,
 	SirenIcon,
-	StarFourIcon,
+	SparkleIcon,
 	WarningIcon,
-} from "@phosphor-icons/react";
+} from "@chopin/icons";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { readOnly$ } from "@mdxeditor/editor";
 import { useCellValue } from "@mdxeditor/gurx";
@@ -40,14 +40,14 @@ const LABELS: Record<CalloutType, string> = {
 };
 
 function TypeIcon({ type, size = 17 }: { type: CalloutType; size?: number }) {
-	let props = { "aria-hidden": true, size, weight: "bold" } as const;
+	let props = { "aria-hidden": true, size } as const;
 	switch (type) {
 		case "note":
 			return <InfoIcon {...props} />;
 		case "tip":
 			return <LightbulbIcon {...props} />;
 		case "important":
-			return <StarFourIcon {...props} />;
+			return <SparkleIcon {...props} />;
 		case "warning":
 			return <WarningIcon {...props} />;
 		case "danger":
@@ -288,10 +288,10 @@ function Heading(
 									key={type}
 									value={type}
 								>
-									<TypeIcon type={type} size={16} />
+									<TypeIcon type={type} size={14} />
 									<Select.ItemText>{LABELS[type]}</Select.ItemText>
 									<Select.ItemIndicator asChild>
-										<CheckIcon aria-hidden="true" size={14} weight="bold" />
+										<CheckIcon aria-hidden="true" size={14} />
 									</Select.ItemIndicator>
 								</Select.Item>
 							))}

@@ -273,11 +273,6 @@
 	color: var(--color-text-tertiary);
 }
 
-.project-sidebar-primary-action img,
-.project-sidebar-action img {
-	opacity: 0.5;
-}
-
 .project-sidebar-primary-action:hover,
 .project-sidebar-primary-action:focus-visible,
 .project-sidebar-project-row:hover,

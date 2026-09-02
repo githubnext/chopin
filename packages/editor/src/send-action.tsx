@@ -1,4 +1,4 @@
-import { ArrowUpIcon } from "@phosphor-icons/react";
+import { ArrowUpIcon } from "@chopin/icons";
 
 export function SendAction(
 	{ busy, label, disabled, onClick }: {
@@ -18,7 +18,7 @@ export function SendAction(
 			title={label}
 			type="button"
 		>
-			<ArrowUpIcon aria-hidden="true" className="send-action-icon" size={18} />
+			<ArrowUpIcon aria-hidden="true" size={14} />
 		</button>
 	);
 }

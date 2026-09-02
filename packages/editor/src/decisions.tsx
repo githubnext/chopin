@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useId, useRef, useState } from "react";
-import { CaretDownIcon, CaretRightIcon } from "@phosphor-icons/react";
+import { ChevronIcon } from "@chopin/icons";
 
 import { MotionDisclosure, MotionDisclosureIcon } from "./disclosure-motion";
 import { useQuestionnaires } from "./questionnaires";
@@ -180,9 +180,9 @@ export function Decisions(
 						>
 							<MotionDisclosureIcon
 								className="editor-motion-feedback"
-								closed={<CaretRightIcon size={16} weight="bold" />}
+								closed={<ChevronIcon size={14} />}
 								open={history}
-								opened={<CaretDownIcon size={16} weight="bold" />}
+								opened={<ChevronIcon className="rotate-90" size={14} />}
 							/>
 							<span className="tabular-nums">{resolved}</span>
 							<span>resolved</span>

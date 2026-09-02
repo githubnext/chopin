@@ -18,7 +18,7 @@ import { SidecarCard } from "../card";
 import { SendAction } from "../send-action";
 import { widgets$ } from "../widget-options";
 import { $isResearchNode } from "@chopin/dialect";
-import { XIcon } from "@phosphor-icons/react";
+import { CloseIcon } from "@chopin/icons";
 
 import type { FormEvent } from "react";
 import type { Research } from "@chopin/protocol";
@@ -155,12 +155,13 @@ export function ResearchComposer(
 						title="Discard research question"
 						type="button"
 					>
-						<XIcon aria-hidden="true" size={16} />
+						<CloseIcon aria-hidden="true" size={14} />
 					</button>
 				)}
 			</div>
 			<textarea
 				autoFocus
+				className="field"
 				disabled={submitting}
 				id={id}
 				maxLength={4096}
@@ -233,7 +234,11 @@ export function ResearchCard(
 		: undefined;
 	let actions = researchActions(request, canEdit);
 	return (
-		<SidecarCard data-research-ready={ready ? "" : undefined} label="Research">
+		<SidecarCard
+			className={ready ? "relative" : undefined}
+			data-research-ready={ready ? "" : undefined}
+			label="Research"
+		>
 			<div className="plan-research-heading">
 				<strong>{ready ? ready.title : STAGES[request.stage]}</strong>
 				<span>{ready ? STAGES[request.stage] : request.question}</span>

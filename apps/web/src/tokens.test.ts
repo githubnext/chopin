@@ -14,11 +14,12 @@ type Oklch = { l: number; c: number; h: number };
 
 const ROOT = join(import.meta.dir, "../../..");
 const THEME = readFileSync(join(import.meta.dir, "theme.css"), "utf8");
+const EDITOR_STYLES = readFileSync(join(ROOT, "packages/editor/src/styles.css"), "utf8");
 
 function declared(name: string): string {
 	let found = new RegExp(`\\n\\s*${name}:\\s*([^;]+);`).exec(THEME);
 	if (!found) throw new Error(`no ${name} in the theme`);
-	return found[1]!.trim().replace(/\\s+/g, " ");
+	return found[1]!.trim().replace(/\s+/g, " ").replace(/\(\s+/g, "(").replace(/\s+\)/g, ")");
 }
 
 function resolved(name: string): string {
@@ -109,6 +110,11 @@ function sizes(name: string): { height: number; width?: number } {
 	return result;
 }
 
+function inlinePadding(name: string): string | undefined {
+	let found = /\n\s*padding-inline:\s*([^;]+);/.exec(utility(name));
+	return found?.[1]?.trim();
+}
+
 describe("palette", () => {
 	let steps = [50, 100, 150, 200, 300, 400, 500, 600, 700, 750, 800, 850, 900, 950];
 
@@ -133,6 +139,15 @@ describe("palette", () => {
 		);
 	});
 
+	it("tunes the light semantic washes independently", () => {
+		expect(declared("--color-brand-wash")).toBe("oklch(0.925 0.02 210)");
+		expect(declared("--color-success-wash")).toBe("oklch(0.93 0.026 145)");
+		expect(declared("--color-warning-wash")).toBe("oklch(0.95 0.032 75)");
+		expect(declared("--color-destructive-wash")).toBe(
+			"color-mix(in srgb, var(--color-destructive) 20%, var(--color-page))",
+		);
+	});
+
 	it("keeps the Chat pane edge subtly stronger than the frame hairline", () => {
 		expect(THEME).toMatch(
 			/\.workspace-frame \.workspace-chat-panel\s*\{\s*border-color:\s*rgb\(0 0 0 \/ 9%\);/,
@@ -147,9 +162,19 @@ describe("palette", () => {
 	});
 
 	it("keeps text used on tinted surfaces at AA contrast", () => {
-		for (let surface of ["ground", "hover", "selected", "control"]) {
+		for (let surface of ["ground", "hover", "selected"]) {
 			let ratio = contrast("--color-text-tertiary", `--color-${surface}`);
 			expect({ surface, passes: ratio >= 4.5 }).toEqual({ surface, passes: true });
+		}
+	});
+
+	it("uses selected as the single passive control fill", () => {
+		expect(THEME).not.toMatch(/\n\s*--color-control(?:-hover)?:/);
+		expect(EDITOR_STYLES).not.toContain("var(--color-control)");
+		for (
+			let source of sources(join(ROOT, "apps/web/src")).concat(sources(join(ROOT, "packages")))
+		) {
+			expect(withoutComments(readFileSync(source, "utf8"))).not.toMatch(/\bbg-control\b/);
 		}
 	});
 
@@ -195,7 +220,7 @@ describe("edges and depth", () => {
 	});
 
 	it("keeps the control boundary visible on every surface", () => {
-		for (let surface of ["page", "ground", "hover", "selected", "control"]) {
+		for (let surface of ["page", "ground", "hover", "selected"]) {
 			let ratio = contrast("--color-control-boundary", `--color-${surface}`);
 			expect({ surface, passes: ratio >= 3 }).toEqual({ surface, passes: true });
 		}
@@ -206,10 +231,18 @@ describe("edges and depth", () => {
 		expect(THEME).toMatch(/@media \(min-resolution: 2dppx\)[\s\S]+--edge-width:\s*0\.5px/);
 	});
 
-	it("provides exactly the three designed shadows", () => {
+	it("provides exactly the four designed shadows", () => {
 		let found = [...THEME.matchAll(/\n\s*(--shadow-(?!color)[\w-]+):/g)].map(match => match[1]);
-		expect(found).toEqual(["--shadow-resting", "--shadow-raised", "--shadow-overlay"]);
+		expect(found).toEqual([
+			"--shadow-resting",
+			"--shadow-resting-strong",
+			"--shadow-raised",
+			"--shadow-overlay",
+		]);
 		expect(declared("--shadow-color")).toBe("14 13 10");
+		expect(EDITOR_STYLES).toMatch(
+			/\[data-research-ready\]\s*\{\s*box-shadow:\s*var\(--shadow-resting-strong\)/,
+		);
 	});
 });
 
@@ -218,6 +251,9 @@ describe("controls", () => {
 		expect(sizes("btn-md")).toEqual({ height: 32 });
 		expect(sizes("btn-sm")).toEqual({ height: 24 });
 		expect(sizes("btn-icon")).toEqual({ height: 28, width: 28 });
+		expect(inlinePadding("btn-md")).toBe("calc(var(--spacing) * 3)");
+		expect(inlinePadding("btn-sm")).toBe("calc(var(--spacing) * 2)");
+		expect(utility("btn-icon")).toMatch(/\n\s*padding:\s*0\.4375rem;/);
 		expect(hex("--color-destructive-hover")).toBe("#c44746");
 		expect(hex("--color-destructive-active")).toBe("#b34140");
 	});
@@ -231,10 +267,57 @@ describe("controls", () => {
 		}
 	});
 
-	it("uses the common disabled button fill and ink", () => {
+	it("gives filled buttons their designed hairlines", () => {
+		let primary = utility("btn-primary").split("&:")[0]!;
+		let secondary = utility("btn-secondary").split("&:")[0]!;
+		let destructive = utility("btn-destructive").split("&:")[0]!;
+		expect(primary).toContain("outline: var(--edge-width) solid rgb(0 0 0 / 15%)");
+		expect(secondary).toContain("outline: var(--edge-width) solid var(--color-edge)");
+		expect(destructive).toContain("outline: var(--edge-width) solid var(--color-edge)");
+		for (let rest of [primary, secondary, destructive]) {
+			expect(rest).toContain("outline-offset: calc(-1 * var(--edge-width))");
+		}
+	});
+
+	it("raises primary buttons with the resting shadow", () => {
+		let primary = utility("btn-primary").split("&:")[0]!;
+		expect(primary).toContain("box-shadow: var(--shadow-resting)");
+	});
+
+	it("dims each button's default style when disabled", () => {
 		let rule = utility("btn");
-		expect(rule).toMatch(/&:disabled\s*\{[\s\S]*background-color:\s*var\(--color-gray-200\)/);
-		expect(rule).toMatch(/&:disabled\s*\{[\s\S]*color:\s*var\(--color-gray-600\)/);
+		let disabled = /&:disabled\s*\{([^}]*)\}/.exec(rule)?.[1] ?? "";
+		expect(disabled).toContain("opacity: 0.4");
+		expect(disabled).not.toMatch(/background-color|color:/);
+	});
+
+	it("requires every shared button consumer to choose a size", () => {
+		let offenders: string[] = [];
+		for (let file of [...sources(join(ROOT, "apps")), ...sources(join(ROOT, "packages"))]) {
+			if (!file.endsWith(".tsx")) continue;
+			let lines = readFileSync(file, "utf8").split("\n");
+			for (let [index, line] of lines.entries()) {
+				if (!line.includes("className=") || !/(?<![\w-])btn(?![\w-])/.test(line)) continue;
+				if (/\bbtn-(?:md|sm|icon)\b/.test(line)) continue;
+				offenders.push(`${relative(ROOT, file)}:${index + 1}`);
+			}
+		}
+
+		expect(offenders).toEqual([]);
+	});
+
+	it("keeps button labels on one line", () => {
+		expect(utility("btn")).toMatch(/white-space:\s*nowrap/);
+	});
+
+	it("keeps consumer classes from resizing standard icon buttons", () => {
+		expect(EDITOR_STYLES).not.toMatch(/\.plan-research-dismiss\s*\{[^}]*(?:width|height):/s);
+	});
+
+	it("distinguishes the active compact workspace destination", () => {
+		expect(THEME).toMatch(
+			/\.workspace-navigation \[aria-current="page"\]\s*\{[\s\S]*background-color:\s*var\(--color-page\);[\s\S]*color:\s*var\(--color-text-primary\)/,
+		);
 	});
 
 	it("keeps focus and invalid outlines visible above their surface", () => {
@@ -299,6 +382,7 @@ describe("consumer roles", () => {
 	it("uses the shared icon library instead of literal interface artwork", () => {
 		let offenders: string[] = [];
 		for (let file of [...sources(join(ROOT, "apps")), ...sources(join(ROOT, "packages"))]) {
+			if (file.startsWith(join(ROOT, "packages/icons/"))) continue;
 			let content = withoutComments(readFileSync(file, "utf8"));
 			if (/<svg\b/.test(content) || /[\u{1F300}-\u{1FAFF}]/u.test(content)) {
 				offenders.push(relative(ROOT, file));

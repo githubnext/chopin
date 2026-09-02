@@ -865,7 +865,9 @@ test("an unavailable comment position keeps its compact sheet mounted until geom
 	expect(documentBox).not.toBeNull();
 	expect(markerBox!.y).toBeGreaterThanOrEqual(documentBox!.y + documentBox!.height);
 
-	await page.setViewportSize({ width: 430, height: 844 });
+	// Recover with enough vertical room for the marker after the passage. Whether a
+	// 44px marker fits beside the wrapped text depends on platform font metrics.
+	await page.setViewportSize({ width: 430, height: 3_200 });
 	await expect(sheet).toBeVisible();
 	await expect(grabber).toBeFocused();
 	await expect(marker).toBeAttached();
@@ -1126,8 +1128,8 @@ test("the reply composer grows and keeps one inset send action", async ({ join, 
 		})
 	));
 	expect(actionStyles[0].background).not.toBe(actionStyles[1].background);
-	expect(actionStyles[0].paddingLeft).toBe("8px");
-	expect(actionStyles[0].paddingRight).toBe("8px");
+	expect(actionStyles[0].paddingLeft).toBe("12px");
+	expect(actionStyles[0].paddingRight).toBe("12px");
 });
 
 test("a reply joins the thread without a duplicate reply count", async ({ join, seed }) => {
