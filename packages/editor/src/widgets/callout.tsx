@@ -228,9 +228,14 @@ function Heading(
 		});
 	}, [editor, callout.key]);
 
-	useEffect(() => {
-		if (disabled) setChoosing(false);
-	}, [disabled]);
+	// Becoming disabled must close the picker immediately, not on the next
+	// render pass — derive it during render instead of adjusting state in an
+	// Effect after the fact.
+	let disabledForRender = useRef(disabled);
+	if (disabledForRender.current !== disabled) {
+		disabledForRender.current = disabled;
+		if (disabled && choosing) setChoosing(false);
+	}
 
 	let choose = (value: string) => {
 		if (disabledRef.current) return;
