@@ -379,13 +379,17 @@ function DocumentRouteSwap(
 		(layer): layer is DocumentRouteLayer => layer !== undefined,
 	);
 	let motion = motionContract("content-swap");
+	let { onDocumentLoaded, onDocumentRouteSettled } = useNavigationDocument();
 	let ready = useCallback((
 		key: DocumentRouteIdentity,
 		resolution?: DocumentRouteResolution,
 	) => {
 		if (resolution) aliases.current.set(resolution.routeKey, key);
 		dispatch({ key, resolution, type: "ready" });
-	}, []);
+		if (requestedRoute.current.key === key) {
+			onDocumentRouteSettled(requestedRoute.current.routeKey);
+		}
+	}, [onDocumentRouteSettled]);
 	let metadataPath = useCallback((
 		key: DocumentRouteIdentity,
 		metadataRouteKey: DocumentRouteIdentity,
@@ -399,7 +403,6 @@ function DocumentRouteSwap(
 		}
 		onCanonicalPath(pathname);
 	}, [onCanonicalPath]);
-	let { onDocumentLoaded } = useNavigationDocument();
 	let published = useRef<DocumentRouteResolution | undefined>(undefined);
 	useEffect(() => {
 		let resolution = state.current.resolution;

@@ -228,6 +228,19 @@ and Chat document-reference pickers show generated descriptions when
 present. Search uses the server's title-or-description matching rather than
 filtering only the currently loaded page.
 
+The global **New document** action creates in the current available, writable
+project. With no usable current project, it uses the sole writable project or
+asks which saved project to use when several qualify. Navigation loading is
+distinct from having no eligible project; the latter shows project and access
+guidance. An empty project offers a labeled **Create document** action, and its
+pencil creates directly in that project.
+
+Creation shows separate **Creating document…** and **Opening document…** states.
+Controls targeting the same project stay disabled until the creation request
+and destination load settle. An opening failure retries loading the document
+already created. If the user navigates elsewhere during creation, a late success
+updates the catalogue without taking over their newer navigation.
+
 Historical slug URLs continue to open the document. The legacy
 `/repositories/:owner/:repository` and `/channels/:channelId` browser routes are
 also accepted. After resolving any historical or legacy link, the browser
