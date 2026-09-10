@@ -25,10 +25,9 @@ import { NavigationFocusScope } from "./navigation-focus";
 import { motionImmediately } from "./motion-input";
 import {
 	activeProject,
-	beginProjectCreation,
 	canManageProject,
+	documentCreationTarget,
 	documentDestination,
-	finishProjectCreation,
 	isDocumentWorkspaceRoute,
 	landingDocument,
 	NAVIGATION_MEDIA,
@@ -44,6 +43,7 @@ import {
 import { clearRepositoryCache } from "./repository-cache";
 import { TerminalAlert } from "./terminal-alert";
 import { useProjectDocuments } from "./use-project-documents";
+import { useDocumentCreation } from "./use-document-creation";
 
 import type { Research } from "@chopin/protocol";
 import type { ResearchOpener } from "@chopin/editor";
@@ -88,6 +88,9 @@ let ProjectSidebar = lazy(() =>
 let AddProjectDialog = lazy(() =>
 	import("./add-project-dialog").then(module => ({ default: module.AddProjectDialog }))
 );
+let NewDocumentDialog = lazy(() =>
+	import("./new-document-dialog").then(module => ({ default: module.NewDocumentDialog }))
+);
 let DocumentSearchDialog = lazy(() =>
 	import("./document-search-dialog").then(module => ({ default: module.DocumentSearchDialog }))
 );
@@ -109,6 +112,7 @@ let NavigationDocument = createContext<{
 	onDocumentAction: (documentId: string, action: DocumentAction) => void;
 	onDocumentDeleted: (documentId: string) => void;
 	onDocumentLoaded: (channel: Api.Channel, routeKey: DocumentRouteIdentity) => Promise<void>;
+	onDocumentRouteSettled: (routeKey: DocumentRouteIdentity) => void;
 	onRepositoryAccessChanged: () => void;
 	onResearchChildOpen: (
 		parentId: string,
@@ -121,6 +125,7 @@ let NavigationDocument = createContext<{
 	onDocumentAction() {},
 	onDocumentDeleted() {},
 	async onDocumentLoaded() {},
+	onDocumentRouteSettled() {},
 	onRepositoryAccessChanged() {},
 	onResearchChildOpen() {},
 	onResearchChildPublished() {},
@@ -272,14 +277,12 @@ export function NavigationShell(
 	let [catalogueMode, setCatalogueMode] = useState<"active" | "archived">("active");
 	let [dialog, setDialog] = useState<
 		| "add"
+		| "new"
 		| "search"
 		| { channel: Api.Channel; type: "delete" | "rename" }
 	>();
 	let [accountOpen, setAccountOpen] = useState(false);
-	let creatingProjectIds = useRef<Set<string>>(new Set());
-	let [creatingProjectIdsForView, setCreatingProjectIdsForView] = useState<ReadonlySet<string>>(
-		() => new Set(),
-	);
+	let [settledRouteKey, setSettledRouteKey] = useState<DocumentRouteIdentity>();
 	let [focusProjectId, setFocusProjectId] = useState<string>();
 	let [width, resize] = useSidebarWidth();
 	let mode = useNavigationMode();
@@ -320,6 +323,8 @@ export function NavigationShell(
 	} = useProjectDocuments(navigation, catalogueMode === "archived");
 	let routeKey = isDocumentWorkspaceRoute(route)
 		? documentRouteIdentity(route)
+		: route.page === "repository"
+		? `repository:${route.owner}/${route.repository}`
 		: route.page;
 	let currentRouteKey = useRef(routeKey);
 	currentRouteKey.current = routeKey;
@@ -477,12 +482,6 @@ export function NavigationShell(
 	}, [refresh]);
 
 	useEffect(() => {
-		if (route.page !== "repositories" || !navigation) return;
-		let destination = landingDocument(projects, navigation.lastDocumentId);
-		if (destination) navigate(documentDestination(projects, destination), { replace: true });
-	}, [navigate, navigation, projects, route.page]);
-
-	useEffect(() => {
 		localStorage.setItem(`${SIDEBAR_STORAGE_KEY}:collapsed`, String(collapsed));
 	}, [collapsed]);
 
@@ -512,20 +511,6 @@ export function NavigationShell(
 		return () => cancelAnimationFrame(frame);
 	}, [focusProjectId, projects]);
 
-	let startProjectCreation = (projectId: string): boolean => {
-		if (creatingProjectIds.current.has(projectId)) return false;
-		let next = beginProjectCreation(creatingProjectIds.current, projectId);
-		creatingProjectIds.current = next;
-		setCreatingProjectIdsForView(next);
-		return true;
-	};
-
-	let completeProjectCreation = (projectId: string) => {
-		let next = finishProjectCreation(creatingProjectIds.current, projectId);
-		creatingProjectIds.current = next;
-		setCreatingProjectIdsForView(next);
-	};
-
 	let navigateToDocument = (documentId: string, path?: string) => {
 		setError(undefined);
 		setDialog(undefined);
@@ -533,27 +518,41 @@ export function NavigationShell(
 		navigate(documentDestination(projects, documentId, path));
 	};
 
-	let createDocument = async (project: Api.NavigationProject) => {
-		if (!canManageProject(project) || !startProjectCreation(project.repositoryId)) return;
-		try {
-			let created = await Api.createChannel(project.repositoryOwner, project.repositoryName);
-			upsertDocument(created.channel);
-			navigateToDocument(
-				created.channel.id,
-				documentPath(
-					created.repository.owner,
-					created.repository.name,
-					created.channel.slug,
-				),
-			);
-		} catch (reason) {
-			setError({ reason, retry: "refresh" });
-		} finally {
-			completeProjectCreation(project.repositoryId);
-		}
+	let creation = useDocumentCreation({
+		routeKey,
+		onCreated: upsertDocument,
+		onNavigate: navigateToDocument,
+		onAccessChanged: () => void refresh(),
+	});
+	useEffect(() => {
+		if (route.page !== "repositories" || !navigation) return;
+		// Catalogue updates from earlier creations must not compete with an explicit creation.
+		if (creation.pending.size > 0 || creation.error) return;
+		let destination = landingDocument(projects, navigation.lastDocumentId);
+		if (destination) navigate(documentDestination(projects, destination), { replace: true });
+	}, [creation.error, creation.pending.size, navigate, navigation, projects, route.page]);
+	let createDocument = (project: Api.NavigationProject) => {
+		let current = navigationRef.current?.projects.find(value =>
+			value.repositoryId === project.repositoryId
+		);
+		if (current) void creation.create(current);
 	};
+	let retryProject = navigation?.projects.find(project =>
+		project.repositoryId === creation.error?.project.repositoryId
+		&& project.available && canManageProject(project)
+	);
+	let documentRouteSettled = useCallback((key: DocumentRouteIdentity) => {
+		if (currentRouteKey.current !== key) return;
+		setSettledRouteKey(key);
+		creation.settled(key);
+	}, [creation.settled]);
 
 	let active = activeProject(projects, currentDocumentId, resolvedChannel?.repositoryId);
+	let creationTarget = documentCreationTarget(
+		navigation?.projects,
+		active,
+		isDocumentWorkspaceRoute(route) && settledRouteKey !== routeKey,
+	);
 	let currentChannel = projects.flatMap(project => project.documents.channels)
 		.find(channel => channel.id === currentDocumentId) ?? resolvedChannel;
 	let currentChannelRef = useRef<Api.Channel | undefined>(undefined);
@@ -603,8 +602,9 @@ export function NavigationShell(
 		};
 	}, [revalidateCatalogues]);
 	let newDocument = () => {
-		if (active && canManageProject(active)) void createDocument(active);
-		else showDialog("add");
+		if (creationTarget.type === "loading") return;
+		if (creationTarget.type === "project") createDocument(creationTarget.project);
+		else showDialog("new");
 	};
 
 	let showDialog = useCallback((next: NonNullable<typeof dialog>) => {
@@ -697,6 +697,7 @@ export function NavigationShell(
 		onDocumentChanged: documentChanged,
 		onDocumentDeleted: documentDeleted,
 		onDocumentLoaded: documentLoaded,
+		onDocumentRouteSettled: documentRouteSettled,
 		onRepositoryAccessChanged: repositoryAccessChanged,
 		onResearchChildOpen: researchChildOpen,
 		onResearchChildPublished: researchChildPublished,
@@ -705,6 +706,7 @@ export function NavigationShell(
 		documentChanged,
 		documentDeleted,
 		documentLoaded,
+		documentRouteSettled,
 		repositoryAccessChanged,
 		researchChildOpen,
 		researchChildPublished,
@@ -767,9 +769,13 @@ export function NavigationShell(
 					</div>
 				)}
 				accountMenuOpen={accountOpen}
-				canCreateDocument={!active || canManageProject(active)}
-				creatingProjectIds={creatingProjectIdsForView}
-				creatingNewDocument={!!active && creatingProjectIdsForView.has(active.repositoryId)}
+				canCreateDocument={creationTarget.type !== "loading"}
+				pendingCreations={creation.pending}
+				newDocumentPhase={creationTarget.type === "loading"
+					? "loading"
+					: creationTarget.type === "project"
+					? creation.pending.get(creationTarget.project.repositoryId)
+					: undefined}
 				currentDocumentId={currentDocumentId}
 				onAccount={() => setAccountOpen(open => !open)}
 				onAddProject={() => showDialog("add")}
@@ -792,6 +798,30 @@ export function NavigationShell(
 	);
 	let content = (
 		<>
+			{!sidebarVisible && !drawerOpen && presentedDialog !== "new" && creation.pending.size > 0 && (
+				<div className="navigation-creation-status" role="status">
+					{[...creation.pending].map(([id, phase]) => (
+						<p key={id}>
+							{phase === "creating" ? "Creating document…" : "Opening document…"}{" "}
+							{navigation?.projects.find(project => project.repositoryId === id)?.repositoryName}
+						</p>
+					))}
+				</div>
+			)}
+			{creation.error && presentedDialog !== "new" && (
+				<TerminalAlert className="navigation-error">
+					{creation.error.message}
+					{retryProject && (
+						<button
+							className="btn btn-sm btn-secondary ml-2"
+							onClick={() => createDocument(retryProject)}
+							type="button"
+						>
+							Try again
+						</button>
+					)}
+				</TerminalAlert>
+			)}
 			{error !== undefined && (
 				<TerminalAlert className="navigation-error">
 					{error.reason instanceof Error
@@ -873,10 +903,33 @@ export function NavigationShell(
 								onAdded={project => {
 									catalogueRefreshes.current.set(project.repositoryId, Date.now());
 									setFocusProjectId(project.repositoryId);
+									setCollapsed(false);
+									if (mode === "drawer") setDrawerOpen(true);
 									void refresh();
 								}}
 								onDismiss={() => setDialog(undefined)}
 								userId={user.id}
+							/>
+						</Suspense>
+					</LazyDialogBoundary>
+				)}
+				{dialogMotion && presentedDialog === "new" && (
+					<LazyDialogBoundary>
+						<Suspense fallback={null}>
+							<NewDocumentDialog
+								error={creation.error?.message}
+								motion={dialogMotion}
+								onAddProject={() => showDialog("add")}
+								onCreate={createDocument}
+								onDismiss={() => {
+									setDialog(undefined);
+									if (mode === "drawer") {
+										requestAnimationFrame(() => drawerOpener.current?.focus());
+									}
+								}}
+								onRetry={retryProject ? () => createDocument(retryProject) : undefined}
+								pending={creation.pending}
+								projects={navigation?.projects ?? []}
 							/>
 						</Suspense>
 					</LazyDialogBoundary>

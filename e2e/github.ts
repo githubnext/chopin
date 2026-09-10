@@ -94,6 +94,11 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 		let authorized = /^Bearer ghu_e2e_(.+)_\d+$/.exec(authorization);
 		if (!authorized) return json({ message: "Bad credentials" }, { status: 401 });
 		let handle = authorized[1]!;
+		let accessibleRepositories = repositories.map(repository =>
+			handle.startsWith("document-creator-") && repository.name === "archive-1"
+				? { ...repository, permissions: { ...repository.permissions, push: true } }
+				: repository
+		);
 		let tagged = (value: unknown, etag: string, responseInit: ResponseInit = {}) => {
 			let headers = new Headers(responseInit.headers);
 			headers.set("etag", etag);
@@ -121,7 +126,7 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 			return tagged({ installations }, `"installations-${handle}"`);
 		}
 		if (url.pathname === "/user/installations/101/repositories") {
-			let available = repositories.filter(value => value.owner.login === "octo-org");
+			let available = accessibleRepositories.filter(value => value.owner.login === "octo-org");
 			if (handle === "readonly") {
 				available = available.map(value => ({
 					...value,
@@ -147,11 +152,13 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 		}
 		if (url.pathname === "/user/installations/102/repositories") {
 			return tagged(
-				{ repositories: repositories.filter(value => value.owner.login === "octocat") },
+				{ repositories: accessibleRepositories.filter(value => value.owner.login === "octocat") },
 				`"repositories-${handle}-102-${url.searchParams.get("page") ?? "1"}"`,
 			);
 		}
-		let repository = repositories.find(value => url.pathname === `/repos/${value.full_name}`);
+		let repository = accessibleRepositories.find(value =>
+			url.pathname === `/repos/${value.full_name}`
+		);
 		if (repository) return json(repository);
 		return json({ message: "Not Found" }, { status: 404 });
 	}

@@ -2,10 +2,9 @@ import { describe, expect, it } from "bun:test";
 
 import {
 	activeProject,
-	beginProjectCreation,
 	canManageProject,
+	documentCreationTarget,
 	documentDestination,
-	finishProjectCreation,
 	isDocumentWorkspaceRoute,
 	landingDocument,
 	navigationMode,
@@ -209,13 +208,6 @@ describe("navigation model", () => {
 		});
 	});
 
-	it("keeps one Project creating while another creation settles", () => {
-		let creating = beginProjectCreation(new Set(), "R_one");
-		creating = beginProjectCreation(creating, "R_two");
-
-		expect([...finishProjectCreation(creating, "R_one")]).toEqual(["R_two"]);
-	});
-
 	it("allows mutations only for push or admin navigation repositories", () => {
 		let viewerProject = {
 			...projects[1]!.project,
@@ -245,5 +237,75 @@ describe("navigation model", () => {
 		expect(canManageProject(viewerProject)).toBe(false);
 		expect(canManageProject(editorProject)).toBe(true);
 		expect(canManageProject(adminProject)).toBe(true);
+	});
+});
+
+function project(id: string, permission: "push" | "admin" | "pull" = "push") {
+	return {
+		repositoryId: id,
+		repositoryOwner: "acme",
+		repositoryName: id,
+		position: 0,
+		available: true,
+		repository: {
+			id,
+			owner: "acme",
+			name: id,
+			fullName: `acme/${id}`,
+			permissions: { pull: true, push: permission === "push", admin: permission === "admin" },
+		},
+	};
+}
+
+describe("document creation targets", () => {
+	let first = project("first");
+	let second = project("second", "admin");
+	let viewer = project("viewer", "pull");
+	let unavailable = { ...project("unavailable"), available: false };
+
+	it("waits for navigation and unresolved current-document context", () => {
+		expect(documentCreationTarget(undefined, undefined)).toEqual({ type: "loading" });
+		expect(documentCreationTarget([first], undefined, true)).toEqual({ type: "loading" });
+		expect(documentCreationTarget([first], first, true)).toEqual({
+			type: "project",
+			project: first,
+		});
+	});
+
+	it("creates in the sole writable project without any document catalogue", () => {
+		expect(documentCreationTarget([viewer, first, unavailable], undefined)).toEqual({
+			type: "project",
+			project: first,
+		});
+		expect(documentCreationTarget([viewer, second], viewer)).toEqual({
+			type: "project",
+			project: second,
+		});
+	});
+
+	it("prefers the current project and asks only when the target is ambiguous", () => {
+		expect(documentCreationTarget([first, second], second)).toEqual({
+			type: "project",
+			project: second,
+		});
+		expect(documentCreationTarget([first, viewer, second, unavailable], undefined)).toEqual({
+			type: "choose",
+			projects: [first, second],
+		});
+	});
+
+	it("uses current navigation permissions rather than stale document context", () => {
+		let revoked = {
+			...first,
+			repository: { ...first.repository, permissions: viewer.repository.permissions },
+		};
+		expect(documentCreationTarget([revoked, second], first)).toEqual({
+			type: "project",
+			project: second,
+		});
+		expect(documentCreationTarget([viewer, unavailable], unavailable)).toEqual({
+			type: "unavailable",
+		});
+		expect(documentCreationTarget([], undefined)).toEqual({ type: "unavailable" });
 	});
 });
