@@ -329,13 +329,28 @@ export function RoomWorkspace(
 		});
 	};
 
-	useEffect(() => {
+	// `canEdit`/`archivedAt`/`canManage` are the authorization props from the
+	// parent; `effectiveCanEdit`/`effectiveCanManage` also absorb later
+	// `session:*` socket frames (see below), so they cannot be derived purely
+	// from props during render. Adjust them synchronously during render when
+	// the props change, instead of in an Effect: that avoids an extra paint
+	// showing stale authorization before the Effect would have run. (`room`
+	// never changes without remounting this component — it is always keyed by
+	// channel id — so it does not need to participate in this comparison.)
+	let authorizationProps = { archivedAt, canEdit, canManage };
+	let previousAuthorizationProps = useRef(authorizationProps);
+	if (
+		previousAuthorizationProps.current.archivedAt !== archivedAt
+		|| previousAuthorizationProps.current.canEdit !== canEdit
+		|| previousAuthorizationProps.current.canManage !== canManage
+	) {
+		previousAuthorizationProps.current = authorizationProps;
 		let editable = canEdit && !archivedAt;
 		latestCanEdit.current = editable;
 		latestCanManage.current = canManage;
 		setEffectiveCanEdit(editable);
 		setEffectiveCanManage(canManage);
-	}, [archivedAt, canEdit, canManage, room]);
+	}
 
 	useEffect(() => {
 		let next: WorkspaceMetadata = {
