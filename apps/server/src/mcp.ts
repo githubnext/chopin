@@ -13,15 +13,18 @@ import {
 	prepare,
 	REPOSITORY_PATH_PATTERN,
 } from "./mcp/create";
+import { prepareUpdate } from "./mcp/update";
 import { isLifecycleTool, LIFECYCLE_TOOLS, lifecycleCall } from "./mcp/lifecycle";
 import { normalizedTitle } from "./channels/title";
 
 import type { Brief, CreateDocumentInput } from "./mcp/create";
+import type { UpdateDocument } from "./mcp/update";
 import type { Run, Version } from "./tasks/graphs";
 import type { LifecycleArguments } from "./mcp/lifecycle";
 import type { ImplementationLifecycle } from "./tasks/lifecycle";
 
 export type { Brief, CreateDocumentInput, CreationOrigin } from "./mcp/create";
+export type { UpdateClient, UpdateDocument, UpdateDocumentInput } from "./mcp/update";
 
 export type DocumentSummary = {
 	id: string;
@@ -143,6 +146,7 @@ export type McpOptions<Caller> = {
 	caller(request: Request): Promise<Caller | undefined> | Caller | undefined;
 	documents: DocumentReader<Caller>;
 	create?: CreateDocument<Caller>;
+	update?: UpdateDocument<Caller>;
 	rename?: RenameDocument<Caller>;
 	archive?: ArchiveDocument<Caller>;
 	restore?: RestoreDocument<Caller>;
@@ -304,6 +308,80 @@ export const TOOLS: Tool[] = [
 			},
 			required: ["id", "title", "brief", "source", "revision", "url"],
 			additionalProperties: false,
+		},
+	},
+	{
+		name: "update_document",
+		description: "Replace a Chopin document's canonical plan against the revision last read.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				id: {
+					type: "string",
+					minLength: 1,
+					maxLength: MAX_DOCUMENT_LOCATOR_LENGTH,
+					pattern: "\\S",
+				},
+				revision: { type: "integer", minimum: 0 },
+				plan: { type: "string", minLength: 1 },
+				idempotencyKey: { type: "string", minLength: 1, maxLength: 128 },
+			},
+			required: ["id", "revision", "plan", "idempotencyKey"],
+			additionalProperties: false,
+		},
+		outputSchema: {
+			type: "object",
+			oneOf: [
+				{
+					type: "object",
+					properties: {
+						...DOCUMENT.properties,
+						brief: BRIEF,
+						source: { type: "string" },
+						revision: { type: "integer", minimum: 0 },
+						url: { type: "string" },
+					},
+					required: ["id", "title", "source", "revision", "url"],
+					additionalProperties: false,
+				},
+				{
+					type: "object",
+					properties: {
+						code: { type: "string", const: "revision-conflict" },
+						revision: { type: "integer", minimum: 0 },
+					},
+					required: ["code", "revision"],
+					additionalProperties: false,
+				},
+				outcome([
+					"idempotency-conflict",
+					"document-locked",
+					"protected-projection",
+					"document-archived",
+					"repository-forbidden",
+					"document-unavailable",
+				]),
+				{
+					type: "object",
+					properties: {
+						issues: {
+							type: "array",
+							items: {
+								type: "object",
+								properties: {
+									code: { type: "string" },
+									message: { type: "string" },
+									path: { type: "string" },
+								},
+								required: ["code", "message", "path"],
+								additionalProperties: true,
+							},
+						},
+					},
+					required: ["issues"],
+					additionalProperties: false,
+				},
+			],
 		},
 	},
 	{
@@ -578,6 +656,7 @@ function acceptsEvents(request: Request): boolean {
 function serviceInstructions(tools: Tool[]): string | undefined {
 	let documentMutations = tools.filter(tool =>
 		tool.name === "create_document"
+		|| tool.name === "update_document"
 		|| tool.name === "rename_document"
 		|| tool.name === "archive_document"
 		|| tool.name === "restore_document"
@@ -640,12 +719,14 @@ export function handler<Caller>(
 	options: McpOptions<Caller>,
 ): (request: Request) => Promise<Response> {
 	let creation = options.create;
+	let updating = options.update;
 	let renaming = options.rename;
 	let archiving = options.archive;
 	let restoring = options.restore;
 	let sessions = new Map<string, { name: string; version: string }>();
 	let tools = TOOLS.filter(tool =>
 		(tool.name !== "create_document" || creation)
+		&& (tool.name !== "update_document" || updating)
 		&& (tool.name !== "rename_document" || renaming)
 		&& (tool.name !== "archive_document" || archiving)
 		&& (tool.name !== "restore_document" || restoring)
@@ -742,6 +823,44 @@ export function handler<Caller>(
 						return respond(text({ code: "document-unavailable" }, true));
 					}
 					return respond({ content: [], isError: true });
+				}
+				if (tool.name === "update_document" && updating) {
+					let prepared = prepareUpdate(tool.arguments);
+					if (!prepared) {
+						return notification
+							? undefined
+							: error(call.id, -32602, "update_document requires a valid revision and plan");
+					}
+					if ("issues" in prepared) return respond(text({ issues: prepared.issues }, true));
+					let outcome = await updating.update(caller, prepared.input, {
+						name: client.name,
+						version: client.version,
+					});
+					if (outcome.kind === "updated" || outcome.kind === "replayed") {
+						return respond(text(outcome.document));
+					}
+					if (outcome.kind === "revision-conflict") {
+						return respond(text({
+							code: "revision-conflict",
+							revision: outcome.revision,
+						}, true));
+					}
+					if (outcome.kind === "conflict") {
+						return respond(text({ code: "idempotency-conflict" }, true));
+					}
+					if (outcome.kind === "locked") {
+						return respond(text({ code: "document-locked" }, true));
+					}
+					if (outcome.kind === "protected") {
+						return respond(text({ code: "protected-projection" }, true));
+					}
+					if (outcome.kind === "archived") {
+						return respond(text({ code: "document-archived" }, true));
+					}
+					if (outcome.kind === "unavailable") {
+						return respond(text({ code: "document-unavailable" }, true));
+					}
+					return respond(text({ code: "repository-forbidden" }, true));
 				}
 				if (tool.name === "rename_document" && renaming) {
 					let input = renameArguments(tool.arguments);

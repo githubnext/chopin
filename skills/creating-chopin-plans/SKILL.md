@@ -28,7 +28,9 @@ expressions, raw HTML, arbitrary JSX, or component ids owned by Chopin.
 Generate one idempotency key for the attempt, then use the current
 `create_document` descriptor to submit the brief, provenance, title, and plan.
 If it reports validation issues, repair the relevant content and retry with the
-same key. Once creation succeeds, do not call `create_document` again.
+same key. Once creation succeeds, do not call `create_document` again. Later
+revisions of that same document use `update_document` against the revision
+returned by `read_document`, with a new idempotency key.
 
 ## Hand off
 

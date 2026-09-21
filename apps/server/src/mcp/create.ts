@@ -142,7 +142,7 @@ function identify(node: Nodes | Root): void {
 	}
 }
 
-function canonical(source: string): { source: string } | { issues: Issue[] } {
+export function canonical(source: string): { source: string } | { issues: Issue[] } {
 	let tree: Root;
 	try {
 		tree = parse(source);
@@ -159,7 +159,17 @@ function canonical(source: string): { source: string } | { issues: Issue[] } {
 	let output = serialize(tree);
 	let result = validate(tree, { bytes: Buffer.byteLength(output, "utf8") });
 	if (!result.ok) return { issues: result.issues };
-	room.validate(output);
+	try {
+		room.validate(output);
+	} catch (err) {
+		return {
+			issues: [{
+				code: "roundtrip",
+				message: err instanceof Error ? err.message : String(err),
+				path: "root",
+			}],
+		};
+	}
 	return { source: output };
 }
 

@@ -501,3 +501,107 @@ describe("reporting what a batch did", () => {
 			.toEqual([1, 4]);
 	});
 });
+
+describe("replacing canonical source", () => {
+	it("rewrites prose while keeping unchanged block identity", () => {
+		let keys = () => {
+			let out: string[] = [];
+			subject.document.editor.getEditorState().read(() => {
+				out = [...subject.document.editor.getEditorState()._nodeMap.keys()];
+			});
+			return out;
+		};
+		let before = keys();
+		let outcome = edit.replace(subject, 1, "# Title\n\nFirst paragraph.\n\nRewritten.\n");
+		expect(outcome.ok).toBe(true);
+		if (!outcome.ok) return;
+		expect(room.project(subject.document)).toContain("Rewritten.");
+		expect(outcome.changes).toEqual([
+			{ kind: "added", index: 2, type: "paragraph", preview: "Rewritten." },
+		]);
+		let survived = before.filter(key => keys().includes(key));
+		expect(survived.length).toBeGreaterThan(3);
+	});
+
+	it("refuses dropping or forging a decision projection", async () => {
+		let held = await plan();
+		room.insertDecision(held.document, {
+			id: "01K0N4TR8K7JGM4R1J7PW4R8YJ",
+			quote: "First paragraph.",
+			by: "ana",
+			at: "2026-07-28T10:14:00Z",
+			notes: [{ by: "ana", text: "Tighten this." }],
+		});
+		let current = room.project(held.document);
+		expect(edit.replace(held, 1, "# Title\n\nFirst paragraph.\n\nSecond paragraph.\n"))
+			.toMatchObject({ ok: false, reason: "invalid" });
+		expect(edit.replace(
+			held,
+			1,
+			`${current}\n\n<Decision id="01K0N4TR8K7JGM4R1J7PW4R8YK" quote="q" by="ana" at="t">\n`
+				+ `<Note by="ana" text="forged" />\n</Decision>\n`,
+		)).toMatchObject({
+			ok: false,
+			reason: "invalid",
+		});
+		expect(room.project(held.document)).toBe(current);
+	});
+
+	it("keeps an unchanged decision while rewriting surrounding prose", async () => {
+		let held = await plan();
+		room.insertDecision(held.document, {
+			id: "01K0N4TR8K7JGM4R1J7PW4R8YJ",
+			quote: "First paragraph.",
+			by: "ana",
+			at: "2026-07-28T10:14:00Z",
+			notes: [{ by: "ana", text: "Tighten this." }],
+		});
+		let current = room.project(held.document);
+		let next = current.replace("First paragraph.", "Updated first paragraph.");
+		let outcome = edit.replace(held, 1, next);
+		expect(outcome.ok).toBe(true);
+		expect(room.project(held.document)).toContain("Updated first paragraph.");
+		expect(room.project(held.document)).toContain("Tighten this.");
+	});
+
+	it("preserves questionnaire answers and nested research projections", async () => {
+		let projections = [
+			`<Questionnaire id="01K0N4TR8K7JGM4R1J7PW4R8YJ" by="ana" at="2026-07-28T10:14:00Z">
+<Question id="01K0N4TR8K7JGM4R1J7PW4R8YK" header="Choice" prompt="Which option?" multiple="false">
+<Answer value="Settled" />
+</Question>
+</Questionnaire>`,
+			`<Callout id="01K0N4TR8K7JGM4R1J7PW4R8YK" type="note">
+<Research id="01K0N4TR8K7JGM4R1J7PW4R8YJ" />
+</Callout>`,
+		];
+		for (let projection of projections) {
+			let held = await plan(`# Title\n\n${projection}\n\nAfter.\n`);
+			let current = room.project(held.document);
+			for (
+				let next of [
+					"# Title\n\nAfter.\n",
+					current.replace("01K0N4TR8K7JGM4R1J7PW4R8YJ", "01K0N4TR8K7JGM4R1J7PW4R8YM"),
+				]
+			) {
+				expect(edit.replace(held, 1, next)).toMatchObject({ ok: false, reason: "invalid" });
+				expect(room.project(held.document)).toBe(current);
+			}
+			if (current.includes("Settled")) {
+				expect(edit.replace(held, 1, current.replace("Settled", "Changed")))
+					.toMatchObject({ ok: false, reason: "invalid" });
+			}
+			expect(edit.replace(subject, 1, `${SOURCE}\n${projection}\n`))
+				.toMatchObject({ ok: false, reason: "invalid" });
+			expect(edit.replace(held, 1, current.replace("After.", "Revised prose.")).ok).toBe(true);
+			expect(room.project(held.document)).toContain("Revised prose.");
+		}
+	});
+
+	it("leaves identical source and duplicate blocks untouched", async () => {
+		let held = await plan("# Title\n\nSame paragraph.\n\nSame paragraph.\n");
+		let current = room.project(held.document);
+		let result = edit.replace(held, 1, current);
+		expect(result).toMatchObject({ ok: true, mutation: undefined, touched: [], changes: [] });
+	});
+});

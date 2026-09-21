@@ -1269,4 +1269,186 @@ describe("the hosted MCP adapter", () => {
 
 		expect(await adapter.documents.read(caller, opened.channel.id)).toBeUndefined();
 	});
+
+	it("rewrites a closed document, replays the original result, and conflicts on a changed key", async () => {
+		let context = setup();
+		context.github.repositoryValue = {
+			...context.github.repositoryValue,
+			permissions: { pull: true, push: true, admin: false },
+		};
+		let opened = await plan(context);
+		await Service.close(opened.plan);
+		let adapter = hosted(context.auth, { lease: () => opened.lease });
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller || !adapter.update) throw new Error("hosted update adapter is unavailable");
+		let client = { name: "Codex", version: "1.2.3" };
+		let input = {
+			id: opened.channel.id,
+			revision: 0,
+			plan: "# Revised\n\nUpdated prose.\n",
+			idempotencyKey: "update-1",
+			fingerprint: "same-request",
+		};
+
+		let updated = await adapter.update.update(caller, input, client);
+		expect(updated).toMatchObject({
+			kind: "updated",
+			document: {
+				id: opened.channel.id,
+				source: "# Revised\n\nUpdated prose.\n",
+				revision: 1,
+				url: "/documents/octo-org/score/release-readiness",
+			},
+		});
+		expect(await adapter.update.update(caller, { ...input, fingerprint: "changed" }, client))
+			.toEqual({ kind: "conflict" });
+
+		let later = await adapter.update.update(caller, {
+			id: opened.channel.id,
+			revision: 1,
+			plan: "# Later\n",
+			idempotencyKey: "update-2",
+			fingerprint: "later-request",
+		}, client);
+		expect(later).toMatchObject({
+			kind: "updated",
+			document: { revision: 2, source: "# Later\n" },
+		});
+		expect(await adapter.update.update(caller, input, client)).toMatchObject({
+			kind: "replayed",
+			document: {
+				source: "# Revised\n\nUpdated prose.\n",
+				revision: 1,
+			},
+		});
+	});
+
+	it("refuses a stale rewrite, a pull-only caller, and a locked implementation", async () => {
+		let context = setup();
+		context.github.repositoryValue = {
+			...context.github.repositoryValue,
+			permissions: { pull: true, push: true, admin: false },
+		};
+		let opened = await plan(context);
+		opened.plan.creation = {
+			brief: creation.brief,
+			origin: {
+				idempotencyKey: creation.idempotencyKey,
+				fingerprint: creation.fingerprint,
+				repository: creation.repository,
+				baseBranch: creation.baseBranch,
+				baseCommit: creation.baseCommit,
+				title: creation.title,
+			},
+		};
+		expect(
+			(await implementationGraphs().revise(opened.plan, {
+				planRevision: 0,
+				graphRevision: 0,
+				operations: [{ op: "add", task: claimTask }],
+			})).ok,
+		).toBe(true);
+		expect((await implementationGraphs().approve(opened.plan)).ok).toBe(true);
+		await Service.close(opened.plan);
+		let adapter = hosted(context.auth, { lease: () => opened.lease });
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller || !adapter.update || !adapter.implementations) {
+			throw new Error("hosted update adapter is unavailable");
+		}
+		let client = { name: "Codex", version: "1.2.3" };
+
+		expect(
+			await adapter.update.update(caller, {
+				id: opened.channel.id,
+				revision: 9,
+				plan: "# Stale\n",
+				idempotencyKey: "stale",
+				fingerprint: "stale",
+			}, client),
+		).toEqual({ kind: "revision-conflict", revision: 0 });
+
+		expect(
+			await adapter.implementations.startImplementation(caller, {
+				id: opened.channel.id,
+				planRevision: 0,
+				graphVersion: 1,
+				graphRevision: 1,
+				repository: "octo-org/score",
+				branch: "tq/017",
+				commit: "deadbeef",
+				client: { name: "Codex", version: "1.2.3", session: "session-1" },
+			}),
+		).toMatchObject({ kind: "started" });
+		expect(
+			await adapter.update.update(caller, {
+				id: opened.channel.id,
+				revision: 0,
+				plan: "# Locked\n",
+				idempotencyKey: "locked",
+				fingerprint: "locked",
+			}, client),
+		).toEqual({ kind: "locked" });
+
+		context.github.repositoryValue = {
+			...context.github.repositoryValue,
+			permissions: { pull: true, push: false, admin: false },
+		};
+		expect(
+			await adapter.update.update(caller, {
+				id: opened.channel.id,
+				revision: 0,
+				plan: "# Forbidden\n",
+				idempotencyKey: "forbidden",
+				fingerprint: "forbidden",
+			}, client),
+		).toEqual({ kind: "forbidden" });
+	});
+
+	it("broadcasts live change marks after a durable rewrite and not a planner cursor", async () => {
+		let context = setup();
+		context.github.repositoryValue = {
+			...context.github.repositoryValue,
+			permissions: { pull: true, push: true, admin: false },
+		};
+		let frames: Array<{ kind?: string }> = [];
+		let opened = await plan(context);
+		opened.server = {
+			publish(_topic: string, frame: string) {
+				frames.push(JSON.parse(frame) as { kind?: string });
+			},
+		} as unknown as Server<SocketData>;
+		opened.plan.server = opened.server;
+		let socket = {
+			data: { room: opened.channel.id, client: "mcp-test" },
+		} as unknown as Socket;
+		let live = Rooms.join(socket);
+		live.plan = opened.plan;
+		let adapter = hosted(context.auth, { lease: () => opened.lease });
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller || !adapter.update) throw new Error("hosted update adapter is unavailable");
+
+		try {
+			let updated = await adapter.update.update(caller, {
+				id: opened.channel.id,
+				revision: 0,
+				plan: "# Live rewrite\n",
+				idempotencyKey: "live-update",
+				fingerprint: "live-update",
+			}, { name: "Codex", version: "1.2.3" });
+			expect(updated).toMatchObject({
+				kind: "updated",
+				document: { source: "# Live rewrite\n", revision: 1 },
+			});
+			expect(frames.map(frame => frame.kind)).toEqual([
+				"plan:update",
+				"plan:changes",
+				"plan:anchors",
+			]);
+			expect(frames.some(frame => frame.kind === "plan:awareness")).toBe(false);
+			expect(Service.source(opened.plan)).toBe("# Live rewrite\n");
+		} finally {
+			Rooms.forget(live);
+			await Service.close(opened.plan);
+		}
+	});
 });

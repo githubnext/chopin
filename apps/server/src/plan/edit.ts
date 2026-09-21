@@ -230,6 +230,181 @@ export function apply(plan: Plan, revision: number, operations: Operation[]): Re
 	};
 }
 
+const PROTECTED_PROJECTIONS = new Set(["Questionnaire", "Decision", "Research"]);
+
+export function replace(plan: Plan, revision: number, nextSource: string): Result {
+	if (revision !== plan.revision) {
+		let blocks = outline(plan);
+		return {
+			ok: false,
+			reason: "stale",
+			revision: plan.revision,
+			changed: drift(plan, revision, blocks),
+			blocks,
+		};
+	}
+
+	let root: Root;
+	let proposed: Root;
+	try {
+		root = parse(source(plan));
+		proposed = parse(nextSource);
+	} catch (err) {
+		return { ok: false, reason: "invalid", message: reason(err) };
+	}
+	if (proposed.children.length === 0) {
+		return { ok: false, reason: "invalid", message: "The plan cannot be cleared." };
+	}
+
+	let protectedMessage = protectProjections(root.children, proposed.children);
+	if (protectedMessage) return { ok: false, reason: "invalid", message: protectedMessage };
+
+	let children = align(root.children, proposed.children);
+	let duplicate = repeated(children);
+	if (duplicate) {
+		return {
+			ok: false,
+			reason: "invalid",
+			message: `\`${duplicate}\` appears twice; copied source keeps the original's id, `
+				+ "so insert new content rather than duplicating a block you read.",
+		};
+	}
+
+	try {
+		let next = serialize({ ...root, children });
+		let parsed = parse(next);
+		assert(parsed, { bytes: new TextEncoder().encode(next).byteLength });
+		if (parsed.children.length !== children.length) {
+			throw new Error("plan blocks merge or split during Markdown normalisation");
+		}
+		room.validate(next);
+	} catch (err) {
+		return { ok: false, reason: "invalid", message: reason(err) };
+	}
+
+	let mutation: room.Mutation | undefined;
+	try {
+		if (
+			children.length !== root.children.length
+			|| children.some((node, index) => node !== root.children[index])
+		) mutation = room.reconcile(plan.document, root.children, children);
+	} catch (err) {
+		return { ok: false, reason: "invalid", message: reason(err) };
+	}
+
+	let carried = new Set(root.children);
+	return {
+		ok: true,
+		detached: [],
+		mutation,
+		revision: plan.revision,
+		blocks: outline(plan),
+		touched: children.flatMap((node, index) => carried.has(node) ? [] : [index]),
+		changes: describeReplacement(root.children, children),
+	};
+}
+
+function componentId(node: RootContent): string | undefined {
+	if (node.type !== "mdxJsxFlowElement" && node.type !== "mdxJsxTextElement") return undefined;
+	for (let attribute of node.attributes) {
+		if (attribute.type !== "mdxJsxAttribute" || attribute.name !== "id") continue;
+		if (typeof attribute.value === "string") return attribute.value;
+	}
+	return undefined;
+}
+
+function collectProjections(nodes: RootContent[]): Map<string, string> | string {
+	let found = new Map<string, string>();
+	let walk = (node: RootContent): string | undefined => {
+		if (node.type === "mdxJsxFlowElement" || node.type === "mdxJsxTextElement") {
+			if (node.name && PROTECTED_PROJECTIONS.has(node.name)) {
+				let id = componentId(node);
+				if (!id) return `a ${node.name} projection is missing its id`;
+				if (found.has(id)) return `\`${id}\` appears twice`;
+				found.set(id, serialize({ type: "root", children: [node] }));
+			}
+		}
+		if ("children" in node && Array.isArray(node.children)) {
+			for (let child of node.children) {
+				let failure = walk(child as RootContent);
+				if (failure) return failure;
+			}
+		}
+		return undefined;
+	};
+	for (let node of nodes) {
+		let failure = walk(node);
+		if (failure) return failure;
+	}
+	return found;
+}
+
+function protectProjections(base: RootContent[], next: RootContent[]): string | undefined {
+	let current = collectProjections(base);
+	if (typeof current === "string") return current;
+	let proposed = collectProjections(next);
+	if (typeof proposed === "string") return proposed;
+	for (let [id, source] of current) {
+		let replacement = proposed.get(id);
+		if (!replacement) {
+			return "Existing Questionnaire, Decision, and Research projections cannot be dropped.";
+		}
+		if (replacement !== source) {
+			return "Existing Questionnaire, Decision, and Research projections cannot be altered.";
+		}
+	}
+	for (let id of proposed.keys()) {
+		if (!current.has(id)) {
+			return "Questionnaire, Decision, and Research projections cannot be authored by rewriting the plan.";
+		}
+	}
+	return undefined;
+}
+
+function align(base: RootContent[], next: RootContent[]): RootContent[] {
+	let candidates = new Map<string, { nodes: RootContent[]; used: number }>();
+	for (let node of base) {
+		let digest = fingerprint(node);
+		let bucket = candidates.get(digest) ?? { nodes: [], used: 0 };
+		bucket.nodes.push(node);
+		candidates.set(digest, bucket);
+	}
+	let digests = next.map(fingerprint);
+	let counts = new Map<string, number>();
+	for (let digest of digests) counts.set(digest, (counts.get(digest) ?? 0) + 1);
+	return next.map((node, index) => {
+		let digest = digests[index]!;
+		let bucket = candidates.get(digest);
+		if (!bucket || bucket.nodes.length !== counts.get(digest)) return node;
+		return bucket.nodes[bucket.used++]!;
+	});
+}
+
+function describeReplacement(base: RootContent[], after: RootContent[]): Change[] {
+	let carried = new Set(base);
+	let place = new Map(after.map((node, index) => [node, index]));
+	let addedIndexes = new Set(
+		after.flatMap((node, index) => carried.has(node) ? [] : [index]),
+	);
+	let changes: Change[] = [];
+	for (let [node, index] of place) {
+		if (!carried.has(node)) changes.push({ kind: "added", index, ...excerpt(node) });
+	}
+	let vacating = new Set(base.filter(node => !place.has(node)));
+	let holes = new Map<string, { at: Spot; blocks: Excerpt[] }>();
+	base.forEach((node, index) => {
+		if (place.has(node) || addedIndexes.has(index)) return;
+		let gap = gapAt(base, place, vacating, index);
+		if (!gap) return;
+		let key = `${gap.index}:${gap.side}`;
+		let hole = holes.get(key) ?? { at: gap, blocks: [] };
+		hole.blocks.push(excerpt(node));
+		holes.set(key, hole);
+	});
+	for (let hole of holes.values()) changes.push({ kind: "removed", ...hole });
+	return changes.sort((a, b) => at(a) - at(b));
+}
+
 /**
  * What a batch did, as places a reader can be sent.
  *

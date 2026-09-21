@@ -18,11 +18,11 @@ Copilot SDK sessions never cross the storage boundary.
 
 The versioned sidecar is the atomic domain snapshot associated with a channel.
 It includes document sequence and plan revision counters, question and comment
-records, shared drafts, transcript, relationships, creation metadata,
-implementation graphs, active execution, and lifecycle history. Restoration
-validates the sidecar version and selected shapes before exposing a room, but it
-does not deeply validate every nested question, passage, note, or
-transcript-author field.
+records, shared drafts, transcript, relationships, creation metadata, MCP update
+results and client attribution, implementation graphs, active execution, and
+lifecycle history. Restoration validates the sidecar version and selected shapes
+before exposing a room, but it does not deeply validate every nested question,
+passage, note, or transcript-author field.
 Compatibility conversion is limited to explicitly supported former fields. An
 invalid optional implementation graph is dropped instead of rejecting the
 sidecar.
@@ -198,6 +198,9 @@ Saving it atomically replaces the prior checkpoint and deletes
 Checkpointing does not prune `channel_operations` or `channel_events`. The
 current schema therefore retains operation idempotency records and any stored
 events until a separate retention policy or channel deletion removes them.
+MCP document-update replay records retain the original result source in the
+sidecar until channel deletion. Repeated rewrites therefore increase sidecar
+and checkpoint size; no automatic replay-record pruning is currently applied.
 Operators should account for that behavior in database monitoring and backups.
 Deleting a document removes it from the live database, not from backups already
 captured by an operator. Those copies remain governed by the operator's backup

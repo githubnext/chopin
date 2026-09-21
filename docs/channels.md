@@ -18,7 +18,8 @@ authorization then depends on the surface:
 
 Pull access may list and open active or archived documents. Push or
 administration access may create, edit, rename, archive, restore, and delete
-documents and mutate an implementation lifecycle. Deletion additionally
+documents, including MCP `update_document`, and mutate an implementation
+lifecycle. Deletion additionally
 requires the document to be archived. The same roles apply to research requests:
 pull may read a referenced request, while push or administration may start,
 cancel, or retry one on an active document. The browser only offers the start
@@ -174,7 +175,9 @@ canonical document source supplied through its current `plan` field before one
 creation transaction publishes channel metadata, a revision-zero checkpoint,
 sidecar creation metadata, and the deterministic ID. A repeated idempotency key
 either returns that same document or reports a conflict when its original input
-differs.
+differs. `update_document` later replaces that canonical source against the
+plan revision last read, with the same dialect validation and an idempotency key
+that returns the original applied result on replay.
 
 ## Generated descriptions
 
@@ -275,7 +278,8 @@ A channel persists:
 - question definitions, shared draft CRDTs, answers, and relationships;
 - comment threads, passages, decisions, and result relationships;
 - durable transcript and reserved hosted agent context fields;
-- MCP creation metadata and repository provenance when created through MCP;
+- MCP creation metadata, repository provenance, and accepted MCP rewrite records
+  when mutated through MCP;
 - implementation graph versions, active execution, task progress,
   verification, and archived runs;
 - token-free Planner ownership references and generation state; and

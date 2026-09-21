@@ -16,6 +16,7 @@ import { createHash } from "node:crypto";
 import { MENTION } from "@chopin/protocol/address";
 
 import * as presence from "./presence";
+import * as edit from "./edit";
 import * as room from "./room";
 import * as Chat from "../chat/service";
 import { restoreReferences } from "../chat/references";
@@ -30,7 +31,6 @@ import type { Plan as Wire, Request } from "@chopin/protocol";
 import type { Socket, SocketData } from "../wire";
 import type { Presence } from "./presence";
 import type { Document } from "./room";
-import type * as edit from "./edit";
 import type { Block } from "./edit";
 import type { Brief, CreationOrigin } from "../mcp";
 import type { InitialChannel, JsonValue, Lease, StoredChannel } from "../storage/model";
@@ -86,6 +86,21 @@ export type CreationMetadata = {
 	origin: CreationOrigin;
 };
 
+/** Durable result of one accepted MCP document rewrite. */
+export type McpUpdateRecord = {
+	idempotencyKey: string;
+	fingerprint: string;
+	fromRevision: number;
+	client: { name: string; version: string };
+	document: {
+		source: string;
+		revision: number;
+		title: string;
+		url: string;
+		description?: string;
+	};
+};
+
 type Persistence = Backend & {
 	channelId: string;
 	revision: number;
@@ -113,6 +128,8 @@ export type Plan = {
 	id: string;
 	/** Context retained for plans created through MCP. */
 	creation?: CreationMetadata;
+	/** Idempotent MCP rewrites retained so later edits do not change a replay. */
+	mcpUpdates: McpUpdateRecord[];
 	server: Server<SocketData>;
 	document: Document;
 	presence: Presence;
@@ -185,6 +202,7 @@ type Sidecar = {
 	graph?: Graph;
 	execution?: Run;
 	lifecycle?: Lifecycle;
+	mcpUpdates?: McpUpdateRecord[];
 	questions: Questions.Record[];
 	openQuestions: Questions.StoredOpen[];
 	threads: Comments.Record[];
@@ -202,6 +220,7 @@ function state(plan: Plan): Sidecar {
 		...(plan.lifecycle.events?.length || plan.lifecycle.history.length > 0
 			? { lifecycle: plan.lifecycle }
 			: {}),
+		...(plan.mcpUpdates.length > 0 ? { mcpUpdates: plan.mcpUpdates } : {}),
 		questions: [...plan.records.values()],
 		openQuestions: Questions.dump(plan.questions),
 		threads: [...plan.threads.values()],
@@ -365,6 +384,7 @@ function restoredState(
 	if (Object.hasOwn(item, "graph")) expected.push("graph");
 	if (Object.hasOwn(item, "execution")) expected.push("execution");
 	if (Object.hasOwn(item, "lifecycle")) expected.push("lifecycle");
+	if (Object.hasOwn(item, "mcpUpdates")) expected.push("mcpUpdates");
 	expected.sort();
 	if (
 		keys.length !== expected.length
@@ -452,6 +472,7 @@ function restoredState(
 			throw new Error("hosted channel has invalid chat delivery metadata", { cause: err });
 		}
 	}
+	let mcpUpdates = restoreMcpUpdates(item.mcpUpdates);
 	return {
 		version: 1,
 		revision: item.revision,
@@ -460,11 +481,70 @@ function restoredState(
 		...(graph ? { graph } : {}),
 		...(execution ? { execution } : {}),
 		...(lifecycle ? { lifecycle } : {}),
+		...(mcpUpdates.length > 0 ? { mcpUpdates } : {}),
 		questions: questions as never[],
 		openQuestions: openQuestions as unknown as Questions.StoredOpen[],
 		threads: threads as never[],
 		transcript: transcript as unknown as Chat.Chat["entries"],
 	};
+}
+
+function restoreMcpUpdates(value: JsonValue | undefined): McpUpdateRecord[] {
+	if (value === undefined) return [];
+	if (!Array.isArray(value)) throw new Error("hosted channel has invalid MCP updates");
+	let seen = new Set<string>();
+	return value.map(entry => {
+		if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+			throw new Error("hosted channel has invalid MCP updates");
+		}
+		let item = entry as Record<string, JsonValue>;
+		let document = item.document;
+		if (
+			!document
+			|| typeof document !== "object"
+			|| Array.isArray(document)
+			|| typeof item.idempotencyKey !== "string"
+			|| !item.idempotencyKey.trim()
+			|| seen.has(item.idempotencyKey)
+			|| typeof item.fingerprint !== "string"
+			|| !item.fingerprint.trim()
+			|| typeof item.fromRevision !== "number"
+			|| !Number.isSafeInteger(item.fromRevision)
+			|| item.fromRevision < 0
+			|| !item.client
+			|| typeof item.client !== "object"
+			|| Array.isArray(item.client)
+		) throw new Error("hosted channel has invalid MCP updates");
+		seen.add(item.idempotencyKey);
+		let client = item.client as Record<string, JsonValue>;
+		let recorded = document as Record<string, JsonValue>;
+		if (
+			typeof client.name !== "string"
+			|| !client.name.trim()
+			|| typeof client.version !== "string"
+			|| !client.version.trim()
+			|| typeof recorded.source !== "string"
+			|| typeof recorded.revision !== "number"
+			|| !Number.isSafeInteger(recorded.revision)
+			|| recorded.revision < 0
+			|| typeof recorded.title !== "string"
+			|| typeof recorded.url !== "string"
+			|| (recorded.description !== undefined && typeof recorded.description !== "string")
+		) throw new Error("hosted channel has invalid MCP updates");
+		return {
+			idempotencyKey: item.idempotencyKey,
+			fingerprint: item.fingerprint,
+			fromRevision: item.fromRevision,
+			client: { name: client.name, version: client.version },
+			document: {
+				source: recorded.source,
+				revision: recorded.revision,
+				title: recorded.title,
+				url: recorded.url,
+				...(recorded.description ? { description: recorded.description } : {}),
+			},
+		};
+	});
 }
 
 export function sourceHash(source: string): string {
@@ -644,8 +724,7 @@ async function replaceHosted(plan: Plan, operationId: string, captured: Captured
 
 /** Persist a sidecar-only state transition. */
 export function persist(plan: Plan): Promise<void> {
-	let captured = capture(plan);
-	let commit = () => commitHosted(plan, undefined, `state:${crypto.randomUUID()}`, captured);
+	let commit = () => commitHosted(plan, undefined, `state:${crypto.randomUUID()}`, capture(plan));
 	let pending = plan.flushing.then(commit, commit);
 	plan.flushing = pending;
 	return pending;
@@ -857,6 +936,7 @@ export async function open(
 	let plan: Plan = {
 		id,
 		...(sidecar.creation ? { creation: sidecar.creation } : {}),
+		mcpUpdates: sidecar.mcpUpdates ?? [],
 		server,
 		document,
 		presence: presence.create(),
@@ -1105,6 +1185,87 @@ export async function publish(
 	}
 }
 
+export async function rewrite(
+	plan: Plan,
+	nextSource: string,
+	record: (source: string, revision: number) => McpUpdateRecord,
+): Promise<edit.Result> {
+	if (implementationActive(plan)) throw new Error("implementation is active");
+	let before = room.project(plan.document);
+	let document = await room.restore(
+		plan.document.epoch,
+		Y.encodeStateAsUpdate(plan.document.doc),
+		before,
+		[],
+	);
+	document.seq = plan.document.seq;
+	let candidate: Plan = {
+		...plan,
+		document,
+		records: new Map(plan.records),
+		threads: new Map(plan.threads),
+		outlines: new Map(plan.outlines),
+		mcpUpdates: [...plan.mcpUpdates],
+	};
+	try {
+		Questions.rebase(candidate);
+		Comments.rebase(candidate);
+		let outcome = edit.replace(candidate, plan.revision, nextSource);
+		if (!outcome.ok) return outcome;
+		let source = room.project(document);
+		let changed = source !== before;
+		if (changed) {
+			Questions.rebase(candidate);
+			Questions.invalidate(candidate, "plan_changed");
+			Comments.rebase(candidate);
+			Comments.invalidate(candidate, "plan_changed");
+		} else {
+			candidate.records = plan.records;
+			candidate.threads = plan.threads;
+		}
+		if (outcome.mutation) document.seq++;
+		if (source !== plan.persistence.committedSource) candidate.revision++;
+		let recorded = record(source, candidate.revision);
+		candidate.mcpUpdates.push(recorded);
+		let operationId = outcome.mutation
+			? `server:${document.epoch}:${
+				createHash("sha256").update(outcome.mutation.update).digest("hex")
+			}`
+			: `state:${crypto.randomUUID()}`;
+		await commitHosted(plan, outcome.mutation?.update, operationId, capture(candidate));
+		if (outcome.mutation) {
+			Y.applyUpdate(plan.document.doc, outcome.mutation.update);
+			await room.settle();
+		}
+		plan.document.seq = document.seq;
+		plan.revision = candidate.revision;
+		plan.mcpUpdates.push(recorded);
+		plan.outlines = candidate.outlines;
+		if (changed) {
+			Questions.rebase(plan);
+			Questions.invalidate(plan, "plan_changed");
+			Comments.rebase(plan);
+			Comments.invalidate(plan, "plan_changed");
+		}
+		if (outcome.mutation) {
+			try {
+				broadcast(plan.server, plan.id, {
+					kind: "plan:update",
+					ts: 0,
+					epoch: plan.document.epoch,
+					update: encode(outcome.mutation.update),
+					seq: plan.document.seq,
+				});
+			} catch (err) {
+				console.error("[plan] could not broadcast a persisted update:", err);
+			}
+		}
+		return outcome;
+	} finally {
+		document.doc.destroy();
+	}
+}
+
 /**
  * Relay what the agent just did, so a reader can be shown where.
  *
@@ -1123,6 +1284,7 @@ export function changes(
 	server: Server<SocketData>,
 	roomId: string,
 	found: edit.Change[],
+	options?: { cursor?: boolean; attribution?: Wire.ChangeAttribution },
 ): void {
 	if (found.length === 0) return;
 
@@ -1174,13 +1336,15 @@ export function changes(
 			kind: "plan:changes",
 			ts: 0,
 			epoch: plan.document.epoch,
-			changes: wired,
+			changes: options?.attribution
+				? wired.map(change => ({ ...change, attribution: options.attribution }))
+				: wired,
 		});
 
 		// Read off the same pass, deliberately. Working it out separately could
 		// disagree, and then the cursor would point at one block while the
 		// marks described another.
-		if (last !== undefined) attend(plan, server, roomId, last);
+		if (last !== undefined && options?.cursor !== false) attend(plan, server, roomId, last);
 	} catch (err) {
 		console.error("[plan] could not say what the agent changed:", err);
 	}
