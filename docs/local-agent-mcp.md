@@ -107,12 +107,18 @@ Repeating the same idempotency key returns the original applied result, includin
 its source and revision, even after later edits or a server restart. A changed
 payload under that key returns `idempotency-conflict`. Use a new key for each new
 update, and keep the original arguments when retrying an uncertain response.
+A replay's title and URL also reflect the original update. Read the document
+again for current metadata before handing off its canonical URL after a rename.
 
-Source validation returns `issues`, as creation does. Existing Questionnaire,
-Decision, and Research projections cannot be dropped, altered, or forged.
-Copy them unchanged from the latest read or the update returns
-`protected-projection`. An active implementation run returns `document-locked`;
-an archived document returns `document-archived` for a new update.
+Initial source validation returns `issues`, as creation does. Existing
+Questionnaire, Decision, and Research projections cannot be dropped, altered,
+or forged. Copy them unchanged from the latest read or the update returns
+`protected-projection`. That code also covers later rewrite validation or
+reconciliation refusals, so it does not identify a particular changed projection.
+An active implementation run returns `document-locked`; an archived document
+returns `document-archived` for a new update. Changing source before an approved
+graph is claimed makes its plan revision stale; revise and reapprove the graph
+before starting implementation.
 
 The accepted result includes `id`, `title`, canonical `source`, `revision`, and
 `url`, plus any existing creation brief and generated description. The MCP client
@@ -222,7 +228,8 @@ grant it.
 
 Use the optional
 [creating-chopin-plans skill](../skills/creating-chopin-plans/SKILL.md) to turn a
-settled coding-agent conversation into one initial document. The
+settled coding-agent conversation into one initial document or safely revise an
+existing document after review. The
 [implementing-chopin-plans skill](../skills/implementing-chopin-plans/SKILL.md)
 applies only after an implementation graph has been approved through a future or
 operator-provided approval path. Current MCP initialization instructions and
