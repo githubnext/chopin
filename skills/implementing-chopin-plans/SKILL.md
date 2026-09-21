@@ -25,6 +25,24 @@ Re-read the implementation before every lifecycle action, then follow the servic
 - Perform a separate review pass after implementation. Prefer a fresh reviewer sub-agent; otherwise review independently after stepping away. Resolve in-scope findings and run focused checks.
 - Create exactly one pull request per task. Update that pull request if later verification returns the task to work.
 
+## When the document needs revision
+
+`update_document` is for document authoring, not an implementation lifecycle
+shortcut. An active implementation locks the document and returns
+`document-locked` for a new update. If scope, acceptance criteria, or dependencies
+must change, stop code work and follow the current `request_revision` contract
+to release the graph. A task blocker alone does not release that lock.
+
+After release, hand the required document changes back to the authoring workflow.
+It should read the latest source and revision, preserve server-owned projections,
+and use a new revision-guarded update rather than recreate the document. Do not
+silently switch from implementing to rewriting or approving the plan. Resume
+implementation only after the service exposes an approved graph and a new claim
+succeeds against its current revisions and checkout context.
+Approval currently has no production UI or route. If no operator-provided
+approval path is available, report that blocker rather than promising an
+automatic resume.
+
 ## Verify the graph
 
 After every task is complete, perform an independent whole-graph verification. Run all relevant checks and capture command names, outcomes, and limitations as evidence for every task. Submit that evidence through the current service contract and follow the returned lifecycle state; only an accepted passing result releases a successful implementation.
