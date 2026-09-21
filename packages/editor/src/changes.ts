@@ -53,6 +53,7 @@ type Placement = {
 export type Entry = {
 	id: string;
 	kind: Plan.Change["kind"];
+	attribution?: Plan.ChangeAttribution;
 	/** What was written, or what was taken out. */
 	blocks: Plan.Excerpt[];
 	/** Whether the reader has been shown it yet. */
@@ -419,6 +420,7 @@ export class ChangeStore {
 			entries.push({
 				id: placement.change,
 				kind: change.kind,
+				...(change.attribution ? { attribution: change.attribution } : {}),
 				blocks: change.kind === "removed"
 					? change.blocks
 					: [{ type: change.type, preview: change.preview }],

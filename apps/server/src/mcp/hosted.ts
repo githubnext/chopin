@@ -9,6 +9,7 @@ import { claimImplementation, reportImplementationLifecycle } from "../tasks/pla
 import { StorageError } from "../storage/errors";
 import { implementationLifecycle } from "../tasks/lifecycle";
 
+import type { Server } from "bun";
 import type { HostedAuth } from "../auth/routes";
 import type { GitHubUser } from "../github/client";
 import type {
@@ -18,9 +19,11 @@ import type {
 	McpOptions,
 	RenameDocumentInput,
 } from "../mcp";
+import type { UpdateClient, UpdateDocumentInput } from "./update";
 import type { LifecycleArguments } from "./lifecycle";
 import type { ChannelArchiveResult, ChannelRecord, Lease } from "../storage/model";
 import type { ClaimResult, Run } from "../tasks/graphs";
+import type { SocketData } from "../wire";
 
 export type HostedCaller = {
 	oauthToken: string;
@@ -211,8 +214,44 @@ export function hosted(
 		};
 	}
 
+	let documentOperations = new Map<string, Promise<void>>();
 	function serializeDocument<T>(channelId: string, action: () => Promise<T>): Promise<T> {
-		return callbacks.serializeDocument?.(channelId, action) ?? action();
+		if (callbacks.serializeDocument) return callbacks.serializeDocument(channelId, action);
+		let previous = documentOperations.get(channelId) ?? Promise.resolve();
+		let operation = previous.then(action, action);
+		let settled = operation.then(() => {}, () => {});
+		documentOperations.set(channelId, settled);
+		void settled.then(() => {
+			if (documentOperations.get(channelId) === settled) documentOperations.delete(channelId);
+		});
+		return operation;
+	}
+
+	let silentServer = { publish() {} } as unknown as Server<SocketData>;
+
+	async function withPlan<T>(
+		channelId: string,
+		action: (plan: Plan.Plan) => Promise<T>,
+	): Promise<T> {
+		let live = Rooms.get(channelId)?.plan;
+		if (live) {
+			await Plan.drain(live);
+			return Plan.exclusive(live, () => action(live));
+		}
+		if (!persistence) throw new Error("document is unavailable");
+		let opened = await Plan.open(channelId, {
+			storage: auth.storage,
+			lease: persistence.lease,
+			fatal: error => {
+				throw error;
+			},
+			onDocumentPersisted: callbacks.onDocumentPersisted,
+		}, silentServer);
+		try {
+			return await Plan.exclusive(opened, () => action(opened));
+		} finally {
+			await Plan.close(opened);
+		}
 	}
 
 	return {
@@ -256,15 +295,16 @@ export function hosted(
 				let live = Rooms.get(channel.id)?.plan;
 				if (live) {
 					try {
-						return document({
-							id: channel.id,
-							title: channel.title,
-							...(channel.description ? { description: channel.description.value } : {}),
-							creation: live.creation,
-							source: Plan.source(live),
-							revision: live.revision,
-							archivedAt: channel.archivedAt,
-						});
+						return await Plan.exclusive(live, async () =>
+							document({
+								id: channel.id,
+								title: channel.title,
+								...(channel.description ? { description: channel.description.value } : {}),
+								creation: live.creation,
+								source: Plan.source(live),
+								revision: live.revision,
+								archivedAt: channel.archivedAt,
+							}));
 					} catch {
 						return undefined;
 					}
@@ -467,6 +507,107 @@ export function hosted(
 				};
 			},
 		},
+		update: {
+			async update(caller, input: UpdateDocumentInput, client: UpdateClient) {
+				let access = await writableChannel(caller, input.id);
+				if (access.kind !== "allowed") return access;
+				try {
+					return await serializeDocument(access.channel.id, async () => {
+						let current = await writableChannel(caller, access.channel.id);
+						if (current.kind !== "allowed") return current;
+						let { channel, repository } = current;
+						return withPlan(channel.id, async plan => {
+							let existing = plan.mcpUpdates.find(entry =>
+								entry.idempotencyKey === input.idempotencyKey
+							);
+							if (existing) {
+								return existing.fingerprint === input.fingerprint
+									? {
+										kind: "replayed" as const,
+										document: document({
+											id: channel.id,
+											title: existing.document.title,
+											...(existing.document.description
+												? { description: existing.document.description }
+												: {}),
+											creation: plan.creation,
+											source: existing.document.source,
+											revision: existing.document.revision,
+											url: existing.document.url,
+										}),
+									}
+									: { kind: "conflict" as const };
+							}
+							if (channel.archivedAt) return { kind: "archived" as const };
+							if (Plan.implementationActive(plan)) return { kind: "locked" as const };
+							if (input.revision !== plan.revision) {
+								return {
+									kind: "revision-conflict" as const,
+									revision: plan.revision,
+								};
+							}
+
+							let url = documentPath(repository.owner, repository.name, channel.slug);
+							let outcome = await Plan.rewrite(plan, input.plan, (source, revision) => ({
+								idempotencyKey: input.idempotencyKey,
+								fingerprint: input.fingerprint,
+								fromRevision: input.revision,
+								client,
+								document: {
+									source,
+									revision,
+									title: channel.title,
+									url,
+									...(channel.description
+										? { description: channel.description.value }
+										: {}),
+								},
+							}));
+							if (!outcome.ok) {
+								return outcome.reason === "stale"
+									? {
+										kind: "revision-conflict" as const,
+										revision: outcome.revision,
+									}
+									: { kind: "protected" as const };
+							}
+
+							Plan.changes(plan, plan.server, channel.id, outcome.changes, {
+								cursor: false,
+								attribution: {
+									client,
+									fromRevision: input.revision,
+									revision: plan.revision,
+								},
+							});
+							Plan.anchors(plan, plan.server, channel.id);
+							return {
+								kind: "updated" as const,
+								document: document({
+									id: channel.id,
+									title: channel.title,
+									...(channel.description
+										? { description: channel.description.value }
+										: {}),
+									creation: plan.creation,
+									source: Plan.source(plan),
+									revision: plan.revision,
+									url,
+								}),
+							};
+						});
+					});
+				} catch (err) {
+					if (err instanceof Error && err.message === "document is unavailable") {
+						return { kind: "unavailable" as const };
+					}
+					if (err instanceof StorageError && err.failure === "missing") {
+						return { kind: "unavailable" as const };
+					}
+					throw err;
+				}
+			},
+		},
 		...(persistence
 			? {
 				implementations: {
@@ -477,14 +618,15 @@ export function hosted(
 						let { channel } = located;
 						let live = Rooms.get(channel.id)?.plan;
 						if (live) {
-							return exposed(channel, {
-								source: Plan.source(live),
-								revision: live.revision,
-								...(live.creation ? { creation: live.creation } : {}),
-								...(live.graph ? { graph: live.graph } : {}),
-								...(live.execution ? { execution: live.execution } : {}),
-								lifecycle: live.lifecycle,
-							});
+							return Plan.exclusive(live, async () =>
+								exposed(channel, {
+									source: Plan.source(live),
+									revision: live.revision,
+									...(live.creation ? { creation: live.creation } : {}),
+									...(live.graph ? { graph: live.graph } : {}),
+									...(live.execution ? { execution: live.execution } : {}),
+									lifecycle: live.lifecycle,
+								}));
 						}
 						let stored = await auth.storage.collaboration.load(channel.id, auth.clock());
 						return stored ? exposed(channel, await Plan.readStored(stored)) : undefined;

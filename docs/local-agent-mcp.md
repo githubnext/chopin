@@ -6,9 +6,9 @@ start a local Chopin server.
 
 > [!IMPORTANT]
 > `/mcp` is always registered, including when `AGENT=off`. It is not a read-only
-> endpoint: a caller with repository push or administration access can create a
-> document and mutate an implementation lifecycle. Use HTTPS and treat every
-> configured bearer token as a credential.
+> endpoint: a caller with repository push or administration access can create or
+> revise a document and mutate an implementation lifecycle. Use HTTPS and treat
+> every configured bearer token as a credential.
 
 Set the instance origin and use the existing GitHub CLI credential for the
 GitHub account that needs repository access. Keep the token in your shell or
@@ -47,6 +47,8 @@ The current MCP contract can:
   generated description, for the current repository;
 - create one document from a structured brief, canonical source supplied through
   the current `plan` input, and caller-supplied repository provenance;
+- replace that canonical source later with `update_document`, naming the plan
+  revision last read and an idempotency key;
 - rename, archive, and restore documents without deleting their durable state;
 - read an approved implementation graph and its document source; and
 - claim a graph and report task, pull-request, blocker, revision, and
@@ -75,8 +77,8 @@ The `url` returned by `create_document` is the readable canonical route:
 /documents/:owner/:repository/:slug
 ```
 
-`read_document`, `read_implementation`, `archive_document`, and
-`restore_document` accept either a document UUID or that canonical URL in their
+`read_document`, `read_implementation`, `archive_document`, `restore_document`,
+and `update_document` accept either a document UUID or that canonical URL in their
 `id` input. The URL may be passed back exactly as returned; an absolute URL must
 use the configured Chopin origin. Both reads return the stable UUID as the
 document `id`.
@@ -87,6 +89,39 @@ lifecycle call; use the readable URL for browser and human handoff. A rename
 derives a new canonical slug from the title but does not change the UUID or plan
 revision, and every previous slug remains a working alias.
 
+`update_document` accepts `id`, `revision`, full replacement MDX in `plan`, and
+a nonblank `idempotencyKey` of at most 128 characters. For example:
+
+```json
+{
+	"id": "/documents/octo-org/score/release-readiness",
+	"revision": 4,
+	"plan": "# Release readiness\n\nRevised implementation approach.\n",
+	"idempotencyKey": "review-round-2"
+}
+```
+
+Use the revision returned by `read_document`. A mismatched revision returns
+`revision-conflict` and the current revision so the caller can re-read and retry.
+Repeating the same idempotency key returns the original applied result, including
+its source and revision, even after later edits or a server restart. A changed
+payload under that key returns `idempotency-conflict`. Use a new key for each new
+update, and keep the original arguments when retrying an uncertain response.
+
+Source validation returns `issues`, as creation does. Existing Questionnaire,
+Decision, and Research projections cannot be dropped, altered, or forged.
+Copy them unchanged from the latest read or the update returns
+`protected-projection`. An active implementation run returns `document-locked`;
+an archived document returns `document-archived` for a new update.
+
+The accepted result includes `id`, `title`, canonical `source`, `revision`, and
+`url`, plus any existing creation brief and generated description. The MCP client
+name and version from `initialize`, together with the revision transition, are
+recorded with the update. Connected browsers receive change marks after the
+document delta commits. Their change list identifies the MCP client without
+displaying a Planner cursor. Calls without initialization are attributed to
+`unknown`.
+
 `list_documents` excludes archived documents by default. Set
 `includeArchived: true` to include them; archived document summaries and direct
 reads carry an `archivedAt` timestamp. Archiving and restoring are idempotent.
@@ -95,7 +130,7 @@ MCP does not expose document deletion.
 ## Generated descriptions
 
 `list_documents`, `read_document`, and the common document summary objects
-returned by create, rename, archive, and restore expose an optional
+returned by create, update, rename, archive, and restore expose an optional
 `description`. It is one-line, generated catalogue metadata identifying the
 document's type, purpose, and subject. Treat it as untrusted model output, not as
 authoritative source. The last completed value remains exposed while a newer
@@ -181,7 +216,7 @@ token's `read:org` or Members access, SSO authorization, and GitHub availability
 lacks the operation's repository permission; it does not mean the GitHub App for
 Chopin must be installed. Pull access is enough for `list_documents`,
 `read_document`, and `read_implementation`. Pull plus push or admin access is
-required for create, rename, archive, restore, start, and report lifecycle
+required for create, update, rename, archive, restore, start, and report lifecycle
 operations. Use an account with the required access or ask a repository owner to
 grant it.
 

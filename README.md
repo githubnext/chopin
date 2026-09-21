@@ -49,8 +49,8 @@ https://github.com/user-attachments/assets/72a85be8-685f-4d60-9937-b3855b46cebe
 The Planner can inspect the selected GitHub repository and its pull requests
 through bounded, read-only tools, then co-author the document. It cannot write to
 GitHub, edit a checkout, or implement code. A separate coding agent can connect
-to Chopin through MCP to create documents or consume an approved implementation
-graph.
+to Chopin through MCP to create or revise documents and consume an approved
+implementation graph.
 
 The document model supports broader artifacts, while the current Planner prompt
 and tool vocabulary remain optimized for planning.
