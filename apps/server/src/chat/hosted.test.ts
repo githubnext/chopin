@@ -70,7 +70,7 @@ function grant(accessToken: string): GitHubTokenGrant {
 
 describe("hosted Copilot ownership", () => {
 	it("keeps the first invoking login session until it is explicitly released", async () => {
-		let now = new Date("2026-08-13T12:00:00.000Z");
+		let now = new Date();
 		let storage = new MemoryStorage();
 		let key = new Uint8Array(32).fill(9);
 		for (let [id, login] of [["U_ana", "ana"], ["U_bob", "bob"]]) {
