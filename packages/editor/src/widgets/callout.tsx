@@ -216,6 +216,13 @@ function Heading(
 	},
 ) {
 	let [choosing, setChoosing] = useState(false);
+	// Becoming disabled should close the picker immediately, not one render
+	// later — adjust it here rather than in an effect that runs after commit.
+	let [previousDisabled, setPreviousDisabled] = useState(disabled);
+	if (disabled !== previousDisabled) {
+		setPreviousDisabled(disabled);
+		if (disabled) setChoosing(false);
+	}
 	let title = useRef<HTMLSpanElement>(null);
 	let disabledRef = useRef(disabled);
 	disabledRef.current = disabled;
@@ -227,10 +234,6 @@ function Heading(
 			if ($isCalloutNode(node)) node.setCalloutType(type);
 		});
 	}, [editor, callout.key]);
-
-	useEffect(() => {
-		if (disabled) setChoosing(false);
-	}, [disabled]);
 
 	let choose = (value: string) => {
 		if (disabledRef.current) return;
