@@ -50,6 +50,12 @@ export const AUDIT_INVENTORY: readonly AuditGroup[] = [
 				states: ["neutral", "success", "warning", "danger"],
 			},
 			{
+				id: "badge",
+				label: "Badges",
+				source: "packages/visuals/src/ui/badge.tsx",
+				states: ["neutral", "success", "warning", "danger"],
+			},
+			{
 				id: "sparkline",
 				label: "Sparklines",
 				source: "packages/visuals/src/ui/sparkline.tsx",

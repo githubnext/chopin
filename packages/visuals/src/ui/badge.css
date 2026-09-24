@@ -1,0 +1,16 @@
+.cv-badge {
+	display: inline-flex;
+	align-items: center;
+	box-sizing: border-box;
+	min-width: 0;
+	max-width: 100%;
+	min-height: calc(var(--spacing) * 6);
+	overflow: hidden;
+	border: var(--edge-width) solid
+		color-mix(in srgb, var(--color-current) 12%, var(--cv-semantic-surface));
+	border-radius: 999px;
+	background: var(--cv-semantic-surface);
+	padding-inline: calc(var(--spacing) * 2.5);
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+}
