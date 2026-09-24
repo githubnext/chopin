@@ -167,7 +167,7 @@ export function Foundations() {
 			<AuditPlate
 				item="spacing"
 				title="Spacing"
-				description="Common intervals on the four-pixel base scale."
+				description="Common intervals on the four-pixel base scale, plus the semantic button edge."
 			>
 				<div className="design-audit-spacing-scale">
 					{SPACING.map(value => (
@@ -176,6 +176,10 @@ export function Foundations() {
 							<span style={{ width: value }} />
 						</div>
 					))}
+					<div>
+						<code>--button-edge-width</code>
+						<span style={{ width: "var(--button-edge-width)" }} />
+					</div>
 				</div>
 			</AuditPlate>
 			<AuditPlate

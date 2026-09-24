@@ -1,4 +1,5 @@
 import { CheckIcon, ChevronIcon, LoaderIcon, PlusIcon, WarningIcon } from "@chopin/icons";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@chopin/visuals";
 
 import { AuditPlate, StateLabel } from "./frame";
 
@@ -70,7 +71,7 @@ export function Controls() {
 						</StateSample>
 						<StateSample state="Busy">
 							<button aria-busy="true" className="btn btn-md btn-primary" disabled type="button">
-								<span aria-hidden="true" className="design-audit-busy-mark" />Saving
+								<LoaderIcon aria-hidden="true" />Saving
 							</button>
 						</StateSample>
 					</div>
@@ -157,12 +158,24 @@ export function Controls() {
 							readOnly
 						/>
 					</label>
-					<label htmlFor="audit-field-select">
-						Select<select className="field" defaultValue="active" id="audit-field-select">
-							<option value="active">Active documents</option>
-							<option value="archived">Archived documents</option>
-						</select>
-					</label>
+					<div className="design-audit-field-control">
+						<span id="audit-field-select-label">Select</span>
+						<Select
+							defaultValue="active"
+							items={[
+								{ value: "active", label: "Active documents" },
+								{ value: "archived", label: "Archived documents" },
+							]}
+						>
+							<SelectTrigger aria-labelledby="audit-field-select-label" id="audit-field-select">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="active">Active documents</SelectItem>
+								<SelectItem value="archived">Archived documents</SelectItem>
+							</SelectContent>
+						</Select>
+					</div>
 					<label className="design-audit-field-wide" htmlFor="audit-field-textarea">
 						Textarea<textarea
 							className="field"

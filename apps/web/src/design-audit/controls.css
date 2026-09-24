@@ -38,14 +38,6 @@
 	align-items: center;
 }
 
-.design-audit-busy-mark {
-	width: 0.5rem;
-	height: 0.5rem;
-	margin-inline-end: 0.375rem;
-	border-radius: 9999px;
-	background: currentColor;
-}
-
 .design-audit [data-audit-state="hover"].btn-primary {
 	background: var(--color-brand-hover);
 }
@@ -94,6 +86,11 @@
 	text-underline-offset: 0.18em;
 }
 
+.design-audit-link:is([data-audit-state="focus"], :focus-visible) {
+	margin-inline: -0.25rem;
+	padding-inline: 0.25rem;
+}
+
 .design-audit-link[data-audit-state="hover"] {
 	color: var(--color-brand-hover);
 	text-decoration-color: currentColor;
@@ -114,12 +111,17 @@
 	gap: 1rem;
 }
 
-.design-audit-field-grid label {
+.design-audit-field-grid label,
+.design-audit-field-control {
 	display: grid;
 	gap: 0.375rem;
 	font-size: var(--text-sm);
 	font-weight: 500;
 	color: var(--color-text-secondary);
+}
+
+.design-audit-field-control .cv-select-trigger {
+	width: 100%;
 }
 
 .design-audit-field-grid :is(input, select, textarea) {
