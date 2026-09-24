@@ -1,0 +1,34 @@
+.cv-icon-label {
+	display: inline-flex;
+	align-items: center;
+	min-width: 0;
+	max-width: 100%;
+	gap: calc(var(--spacing) * 1.5);
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+	white-space: nowrap;
+}
+
+.cv-icon-label-icon-frame {
+	display: inline-grid;
+	place-items: center;
+	flex: 0 0 auto;
+	width: calc(var(--spacing) * 5.5);
+	height: calc(var(--spacing) * 5.5);
+	border-radius: 50%;
+	background: var(--cv-semantic-surface);
+	color: var(--cv-semantic-icon);
+}
+
+.cv-icon-label-icon {
+	display: block;
+	color: inherit;
+}
+
+.cv-icon-label-text {
+	min-width: 0;
+	overflow: hidden;
+	color: var(--cv-semantic-text);
+	font-weight: 500;
+	text-overflow: ellipsis;
+}

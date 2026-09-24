@@ -5,6 +5,7 @@ import { Foundations } from "./foundations";
 import { AUDIT_INVENTORY } from "./inventory";
 import { Surfaces } from "./surfaces";
 
+import "@chopin/visuals/styles.css";
 import "./controls.css";
 import "./authored-content.css";
 import "./foundations.css";

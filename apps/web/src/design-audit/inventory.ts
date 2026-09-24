@@ -43,6 +43,12 @@ export const AUDIT_INVENTORY: readonly AuditGroup[] = [
 				states: ["default", "active", "disabled"],
 				judgement: "Confirm the compact, default, and emphasis size roles.",
 			},
+			{
+				id: "icon-label",
+				label: "Icon labels",
+				source: "packages/visuals/src/ui/icon-label.tsx",
+				states: ["neutral", "success", "warning", "danger"],
+			},
 		],
 	},
 	{
