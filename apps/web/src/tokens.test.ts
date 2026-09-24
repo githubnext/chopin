@@ -283,17 +283,41 @@ describe("controls", () => {
 		let primary = utility("btn-primary").split("&:")[0]!;
 		let secondary = utility("btn-secondary").split("&:")[0]!;
 		let destructive = utility("btn-destructive").split("&:")[0]!;
-		expect(primary).toContain("outline: var(--edge-width) solid rgb(0 0 0 / 15%)");
-		expect(secondary).toContain("outline: var(--edge-width) solid var(--color-edge)");
-		expect(destructive).toContain("outline: var(--edge-width) solid var(--color-edge)");
+		expect(declared("--button-edge-width")).toBe("1px");
+		expect(primary).toContain("outline: var(--button-edge-width) solid var(--color-control-edge)");
+		expect(secondary).toContain(
+			"outline: var(--button-edge-width) solid var(--color-edge)",
+		);
+		expect(destructive).toContain(
+			"outline: var(--button-edge-width) solid var(--color-control-edge)",
+		);
 		for (let rest of [primary, secondary, destructive]) {
-			expect(rest).toContain("outline-offset: calc(-1 * var(--edge-width))");
+			expect(rest).toContain("outline-offset: calc(-1 * var(--button-edge-width))");
 		}
+	});
+
+	it("spaces button icons and gives busy actions a readable disabled state", () => {
+		let button = utility("btn");
+		expect(button).toContain("gap: calc(var(--spacing) * 2)");
+		expect(button).toMatch(/&\[aria-busy="true"\]:disabled\s*\{[\s\S]*opacity:\s*0\.65/);
+		expect(button).toMatch(
+			/&\[aria-busy="true"\] \[data-nucleo-icon\]\s*\{[\s\S]*animation:\s*button-loader-spin/,
+		);
+		expect(THEME).toMatch(
+			/@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*\.btn\[aria-busy="true"\] \[data-nucleo-icon\]\s*\{[\s\S]*animation:\s*none/,
+		);
 	});
 
 	it("raises primary buttons with the resting shadow", () => {
 		let primary = utility("btn-primary").split("&:")[0]!;
 		expect(primary).toContain("box-shadow: var(--shadow-resting)");
+	});
+
+	it("raises fields subtly and strengthens selected radio boundaries", () => {
+		expect(utility("field")).toContain("box-shadow: var(--shadow-resting)");
+		expect(utility("choice-control")).toMatch(
+			/&\[type="radio"\]:checked\s*\{[\s\S]*border-width:\s*calc\(var\(--edge-width\) \* 2\)/,
+		);
 	});
 
 	it("dims each button's default style when disabled", () => {

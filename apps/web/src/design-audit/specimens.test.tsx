@@ -23,6 +23,7 @@ describe("design audit specimens", () => {
 		}
 		expect(markup).toContain("Consolidated exact duplicate");
 		expect(markup).toContain("Strong resting");
+		expect(markup).toContain("--button-edge-width");
 		for (
 			let measurement of [
 				"13px / 20px line-height",
@@ -198,6 +199,19 @@ describe("design audit specimens", () => {
 		expect(markup).toContain("disabled");
 		expect(markup).toContain('aria-selected="true"');
 		expect(markup).toContain('role="menu"');
+		expect(markup).toContain('data-slot="select-trigger"');
+		expect(markup).toContain('data-slot="select-value"');
+		expect(markup).toContain("Archived documents");
+		expect(markup).not.toContain('<select class="field"');
+		expect(markup).toMatch(/aria-busy="true"[^>]*disabled[^>]*>[\s\S]*data-nucleo-icon/);
+	});
+
+	it("gives focused audit links breathing room", async () => {
+		let css = await Bun.file(new URL("./controls.css", import.meta.url)).text();
+
+		expect(css).toMatch(
+			/\.design-audit-link:is\(\[data-audit-state="focus"\], :focus-visible\)[\s\S]*margin-inline:\s*-0\.25rem;[\s\S]*padding-inline:\s*0\.25rem;/,
+		);
 	});
 
 	it("renders every application surface and its meaningful states", () => {
@@ -213,6 +227,9 @@ describe("design audit specimens", () => {
 		expect(markup).toContain("Avatar image loading");
 		expect(markup).toContain("Editing this question");
 		expect(markup).toContain('role="alert"');
+		expect(markup).toMatch(
+			/<button aria-busy="true" class="btn btn-md btn-primary" disabled=""[^>]*>/,
+		);
 	});
 
 	it("renders every authored-content family through the static editor or record card", () => {

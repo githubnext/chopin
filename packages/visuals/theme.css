@@ -120,6 +120,7 @@
 	--color-control-edge: oklch(0 0 0 / 20%);
 	--color-control-boundary: var(--color-gray-500);
 	--edge-width: 1px;
+	--button-edge-width: 1px;
 
 	/*
 	 * Chrome, chat, prose, section and title. Colour carries hierarchy
