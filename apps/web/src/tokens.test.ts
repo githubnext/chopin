@@ -142,7 +142,7 @@ describe("palette", () => {
 	});
 
 	it("keeps the Chat body ink distinct from the general secondary text", () => {
-		expect(declared("--color-chat-body")).toBe("#3e453b");
+		expect(declared("--color-chat-body")).toBe("oklch(0.38064 0.01903 136.21)");
 	});
 
 	it("washes the Chat pane with thirty percent of the app shell", () => {
@@ -227,8 +227,8 @@ describe("edges and depth", () => {
 	it("has only a passive edge and a control edge", () => {
 		let edges = [...THEME.matchAll(/\n\s*(--color-[\w-]*edge):/g)].map(match => match[1]);
 		expect(edges).toEqual(["--color-edge", "--color-control-edge"]);
-		expect(declared("--color-edge")).toBe("rgb(0 0 0 / 7%)");
-		expect(declared("--color-control-edge")).toBe("rgb(0 0 0 / 20%)");
+		expect(declared("--color-edge")).toBe("oklch(0 0 0 / 7%)");
+		expect(declared("--color-control-edge")).toBe("oklch(0 0 0 / 20%)");
 	});
 
 	it("keeps the control boundary visible on every surface", () => {
@@ -251,7 +251,7 @@ describe("edges and depth", () => {
 			"--shadow-raised",
 			"--shadow-overlay",
 		]);
-		expect(declared("--shadow-color")).toBe("14 13 10");
+		expect(declared("--shadow-color")).toBe("0.15908 0.00637 95");
 		expect(EDITOR_STYLES).toMatch(
 			/\[data-research-ready\]\s*\{\s*box-shadow:\s*var\(--shadow-resting-strong\)/,
 		);

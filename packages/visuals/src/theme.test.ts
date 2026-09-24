@@ -6,46 +6,46 @@ const THEME = readFileSync(join(import.meta.dir, "../theme.css"), "utf8");
 
 const SCALES = {
 	ruby: [
-		"#fffcfd",
-		"#fff7f8",
-		"#feeaed",
-		"#ffdce1",
-		"#ffced6",
-		"#f8bfc8",
-		"#efacb8",
-		"#e592a3",
+		"oklch(0.99364 0.00344 354.69)",
+		"oklch(0.98260 0.00865 8.54)",
+		"oklch(0.95384 0.02210 7.18)",
+		"oklch(0.92496 0.03933 8.14)",
+		"oklch(0.89604 0.05620 7.27)",
+		"oklch(0.85820 0.06638 8.00)",
+		"oklch(0.81067 0.07992 7.15)",
+		"oklch(0.74888 0.10209 6.50)",
 		"oklch(0.611 0.171 13.15)",
 		"oklch(0.55 0.182 13.52)",
 		"oklch(0.457 0.19852 13.9)",
-		"#64172b",
+		"oklch(0.34105 0.10955 10.00)",
 	],
 	orange: [
-		"#fefcfb",
-		"#fff7ed",
-		"#ffefd6",
-		"#ffdfb5",
-		"#ffd19a",
-		"#ffc182",
-		"#f5ae73",
-		"#ec9455",
+		"oklch(0.99231 0.00252 48.72)",
+		"oklch(0.97962 0.01577 73.68)",
+		"oklch(0.95832 0.03712 79.11)",
+		"oklch(0.91996 0.06510 74.37)",
+		"oklch(0.88789 0.08751 71.31)",
+		"oklch(0.85372 0.10682 66.02)",
+		"oklch(0.80586 0.11233 59.96)",
+		"oklch(0.74500 0.13223 54.68)",
 		"oklch(0.716 0.146 45.02)",
 		"oklch(0.633 0.158 43.46)",
 		"oklch(0.558 0.158 42.74)",
-		"#582d1d",
+		"oklch(0.34993 0.06851 40.83)",
 	],
 	lime: [
-		"#fcfdfa",
-		"#f8faf3",
-		"#eef6d6",
-		"#e2f0bd",
-		"#d3e7a6",
-		"#c2da91",
-		"#abc978",
-		"#8db654",
+		"oklch(0.99246 0.00408 121.56)",
+		"oklch(0.98166 0.00944 119.57)",
+		"oklch(0.95878 0.04281 118.62)",
+		"oklch(0.93191 0.06833 120.20)",
+		"oklch(0.89733 0.08759 122.06)",
+		"oklch(0.85315 0.09915 123.29)",
+		"oklch(0.79482 0.11160 125.43)",
+		"oklch(0.72504 0.13507 128.23)",
 		"oklch(0.684 0.12 126.09)",
 		"oklch(0.603 0.132 126.75)",
 		"oklch(0.474 0.14 128.6)",
-		"#37401c",
+		"oklch(0.35370 0.05728 120.98)",
 	],
 } as const;
 
@@ -67,14 +67,6 @@ function resolved(name: string): string | undefined {
 
 function linearChannels(name: string): [number, number, number] {
 	let value = resolved(name) ?? "";
-	let hex = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(value);
-	if (hex) {
-		return hex.slice(1).map(channel => {
-			let encoded = Number.parseInt(channel!, 16) / 255;
-			return encoded <= 0.04045 ? encoded / 12.92 : ((encoded + 0.055) / 1.055) ** 2.4;
-		}) as [number, number, number];
-	}
-
 	let oklch = /^oklch\(([\d.]+)\s+([\d.]+)\s+([\d.]+)\)$/.exec(value);
 	if (!oklch) return [Number.NaN, Number.NaN, Number.NaN];
 	let lightness = Number(oklch[1]);

@@ -64,9 +64,9 @@ for (let file of files) {
 /*
  * A namespace reset erases what was declared above it.
  *
- * `--shadow-*: initial` clears every `--shadow-…`, including the tint the three
+ * `--shadow-*: initial` clears every `--shadow-…`, including the tint the four
  * shadow tokens are mixed from — so declaring `--shadow-color` above the reset
- * left it out of the built CSS, made all three `rgb(var(--shadow-color) / n%)`
+ * left it out of the built CSS, made all four `oklch(var(--shadow-color) / n%)`
  * declarations invalid, and computed every shadow in the app to `none`. Nothing
  * throws and nothing is undefined in the source, which is why the loop below
  * cannot see it: it reads the declaration that is textually there.
