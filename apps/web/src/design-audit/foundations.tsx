@@ -1,5 +1,5 @@
 import { CheckIcon, InfoIcon, SirenIcon, WarningIcon } from "@chopin/icons";
-import { IconLabel, MiniBars, Sparkline } from "@chopin/visuals";
+import { IconLabel, MiniBars, ProgressBar, Sparkline } from "@chopin/visuals";
 
 import { AuditPlate } from "./frame";
 import { IconCatalogue } from "./icons";
@@ -68,6 +68,12 @@ const MINI_BARS = [
 	["success", "success volume", [1, 3, 2, 4, 6, 5]],
 	["warning", "warning volume", [6, 5, 4, 5, 3, 4]],
 	["danger", "danger volume", [1, 2, 4, 3, 5, 7]],
+] as const;
+
+const PROGRESS_BARS = [
+	["Not started", 0],
+	["In progress", 62.5],
+	["Complete", 100],
 ] as const;
 
 export function Foundations() {
@@ -190,6 +196,20 @@ export function Foundations() {
 					{MINI_BARS.map(([tone, label, values]) => (
 						<figure key={tone}>
 							<MiniBars label={label} tone={tone} values={values} />
+							<figcaption>{label}</figcaption>
+						</figure>
+					))}
+				</div>
+			</AuditPlate>
+			<AuditPlate
+				item="progress-bar"
+				title="Progress bars"
+				description="Compact completion indicators from zero through complete."
+			>
+				<div className="design-audit-progress-bars">
+					{PROGRESS_BARS.map(([label, value]) => (
+						<figure key={label}>
+							<ProgressBar label={label} value={value} />
 							<figcaption>{label}</figcaption>
 						</figure>
 					))}

@@ -97,6 +97,34 @@ describe("design audit specimens", () => {
 		expect(specimen.match(/<rect/g)).toHaveLength(20);
 	});
 
+	it("inventories and renders zero, in-progress, and complete ProgressBars", () => {
+		let item = AUDIT_INVENTORY.flatMap(group => group.items).find(
+			candidate => candidate.id === "progress-bar",
+		);
+		expect(item).toEqual({
+			id: "progress-bar",
+			label: "Progress bars",
+			source: "packages/visuals/src/ui/progress-bar.tsx",
+			states: ["zero", "in-progress", "complete"],
+		});
+
+		let markup = renderToStaticMarkup(createElement(Foundations));
+		let specimen = plate(markup, "progress-bar");
+		expect(specimen).toContain('data-audit-item="progress-bar"');
+		for (
+			let [label, value] of [
+				["Not started", 0],
+				["In progress", 62.5],
+				["Complete", 100],
+			] as const
+		) {
+			expect(specimen).toContain(`aria-label="${label}"`);
+			expect(specimen).toContain(`aria-valuenow="${value}"`);
+			expect(specimen).toContain(`>${value}%</span>`);
+		}
+		expect(specimen.match(/role="progressbar"/g)).toHaveLength(3);
+	});
+
 	it("renders controls with their native accessibility states", () => {
 		let markup = renderToStaticMarkup(createElement(Controls));
 

@@ -61,6 +61,12 @@ export const AUDIT_INVENTORY: readonly AuditGroup[] = [
 				source: "packages/visuals/src/ui/mini-bars.tsx",
 				states: ["neutral", "success", "warning", "danger"],
 			},
+			{
+				id: "progress-bar",
+				label: "Progress bars",
+				source: "packages/visuals/src/ui/progress-bar.tsx",
+				states: ["zero", "in-progress", "complete"],
+			},
 		],
 	},
 	{

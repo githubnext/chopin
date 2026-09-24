@@ -1,0 +1,29 @@
+.cv-progress-bar {
+	display: inline-flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+}
+
+.cv-progress-bar-track {
+	display: inline-block;
+	flex: 0 0 auto;
+	width: calc(var(--spacing) * 17);
+	height: calc(var(--spacing) * 2.5);
+	overflow: hidden;
+	border-radius: var(--radius-xl);
+	background: var(--color-inset);
+}
+
+.cv-progress-bar-fill {
+	display: block;
+	height: 100%;
+	border-radius: inherit;
+	background: var(--color-brand);
+}
+
+.cv-progress-bar-value {
+	color: var(--color-text-secondary);
+	font-size: var(--text-sm);
+	font-variant-numeric: tabular-nums;
+	line-height: var(--text-sm--line-height);
+}
