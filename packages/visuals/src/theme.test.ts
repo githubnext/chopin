@@ -111,7 +111,7 @@ describe("semantic colour foundations", () => {
 
 	it("keeps every approved raw value, including the tuned action and ink steps", () => {
 		for (let [name, expected] of Object.entries(SCALES)) {
-			expect(scale(name as keyof typeof SCALES).map(([, value]) => value)).toEqual(expected);
+			expect(scale(name as keyof typeof SCALES).map(([, value]) => value)).toEqual([...expected]);
 		}
 	});
 
