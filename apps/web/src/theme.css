@@ -53,7 +53,7 @@
 		opacity: 0.65;
 	}
 
-	&[aria-busy="true"] [data-nucleo-icon] {
+	&[aria-busy="true"] [data-button-loader] {
 		animation: button-loader-spin 800ms linear infinite;
 	}
 }
@@ -643,7 +643,7 @@ body {
 	border-radius: 9999px;
 }
 @media (prefers-reduced-motion: reduce) {
-	.btn[aria-busy="true"] [data-nucleo-icon] {
+	.btn[aria-busy="true"] [data-button-loader] {
 		animation: none;
 	}
 

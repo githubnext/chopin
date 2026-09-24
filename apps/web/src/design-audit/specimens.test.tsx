@@ -218,7 +218,7 @@ describe("design audit specimens", () => {
 		expect(markup).toContain('data-slot="select-trigger"');
 		expect(markup).toContain('data-slot="select-value"');
 		expect(markup).not.toContain('<select class="field"');
-		expect(markup).toMatch(/aria-busy="true"[^>]*disabled[^>]*>[\s\S]*data-nucleo-icon/);
+		expect(markup).toMatch(/aria-busy="true"[^>]*disabled[^>]*>[\s\S]*data-button-loader/);
 		expect(
 			elementsOfType(Controls(), SelectItem).map(item => [item.props.value, item.props.children]),
 		).toEqual([
@@ -251,6 +251,7 @@ describe("design audit specimens", () => {
 		expect(markup).toMatch(
 			/<button aria-busy="true" class="btn btn-md btn-primary" disabled=""[^>]*>/,
 		);
+		expect(markup).toContain('data-button-loader=""');
 	});
 
 	it("renders every authored-content family through the static editor or record card", () => {

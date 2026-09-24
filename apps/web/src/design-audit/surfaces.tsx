@@ -99,7 +99,7 @@ function DialogSpecimens() {
 						<div className="design-audit-dialog-actions">
 							<button className="btn btn-md btn-secondary" disabled type="button">Cancel</button>
 							<button aria-busy="true" className="btn btn-md btn-primary" disabled type="button">
-								<LoaderIcon aria-hidden="true" />Saving
+								<LoaderIcon aria-hidden="true" data-button-loader="" />Saving
 							</button>
 						</div>
 					</div>
