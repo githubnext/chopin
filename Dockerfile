@@ -15,6 +15,7 @@ COPY packages/icons/package.json ./packages/icons/package.json
 COPY packages/protocol/package.json ./packages/protocol/package.json
 COPY packages/question/package.json ./packages/question/package.json
 COPY packages/viewport/package.json ./packages/viewport/package.json
+COPY packages/visuals/package.json ./packages/visuals/package.json
 
 FROM manifests AS build-dependencies
 RUN bun install --frozen-lockfile
