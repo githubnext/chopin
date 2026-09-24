@@ -1,5 +1,5 @@
 import { CheckIcon, InfoIcon, SirenIcon, WarningIcon } from "@chopin/icons";
-import { IconLabel, MiniBars, ProgressBar, Sparkline } from "@chopin/visuals";
+import { Badge, IconLabel, MiniBars, ProgressBar, Sparkline } from "@chopin/visuals";
 
 import { AuditPlate } from "./frame";
 import { IconCatalogue } from "./icons";
@@ -170,6 +170,17 @@ export function Foundations() {
 				<div className="design-audit-icon-labels">
 					{ICON_LABELS.map(([tone, icon, label]) => (
 						<IconLabel icon={icon} key={tone} label={label} tone={tone} />
+					))}
+				</div>
+			</AuditPlate>
+			<AuditPlate
+				item="badge"
+				title="Badges"
+				description="Compact semantic labels for dense supporting metadata."
+			>
+				<div className="design-audit-badges">
+					{ICON_LABELS.map(([tone, icon, label]) => (
+						<Badge icon={icon} key={tone} label={label} tone={tone} />
 					))}
 				</div>
 			</AuditPlate>

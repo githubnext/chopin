@@ -164,7 +164,8 @@
 
 .design-audit-icon-states,
 .design-audit-icon-sizes,
-.design-audit-icon-labels {
+.design-audit-icon-labels,
+.design-audit-badges {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 1rem;

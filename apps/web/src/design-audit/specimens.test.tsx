@@ -53,6 +53,27 @@ describe("design audit specimens", () => {
 		}
 	});
 
+	it("inventories and renders every Badge tone", () => {
+		let item = AUDIT_INVENTORY.flatMap(group => group.items).find(
+			candidate => candidate.id === "badge",
+		);
+		expect(item).toEqual({
+			id: "badge",
+			label: "Badges",
+			source: "packages/visuals/src/ui/badge.tsx",
+			states: ["neutral", "success", "warning", "danger"],
+		});
+
+		let markup = renderToStaticMarkup(createElement(Foundations));
+		let specimen = plate(markup, "badge");
+		expect(specimen).toContain('data-audit-item="badge"');
+		expect(specimen.match(/data-slot="badge"/g)).toHaveLength(4);
+		for (let tone of ["neutral", "success", "warning", "danger"]) {
+			expect(specimen).toContain(`data-tone="${tone}"`);
+			expect(specimen).toContain(`>${tone[0]?.toUpperCase()}${tone.slice(1)}</span>`);
+		}
+	});
+
 	it("inventories and renders representative Sparkline tones and series", () => {
 		let item = AUDIT_INVENTORY.flatMap(group => group.items).find(
 			candidate => candidate.id === "sparkline",
