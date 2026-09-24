@@ -1,0 +1,55 @@
+.cv-table-container {
+	width: 100%;
+	max-width: 100%;
+	overflow-x: auto;
+}
+
+.cv-table-container[data-variant="contained"] {
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-lg);
+}
+
+.cv-table {
+	width: 100%;
+	border-collapse: collapse;
+	color: var(--color-text-primary);
+	font-family: var(--font-sans);
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+}
+
+.cv-table-row {
+	border-bottom: var(--edge-width) solid var(--color-edge);
+	border-color: var(--color-edge);
+}
+
+.cv-table-body .cv-table-row:last-child,
+.cv-table-footer .cv-table-row:last-child {
+	border-bottom: 0;
+}
+
+.cv-table-head,
+.cv-table-cell {
+	padding-block: calc(var(--spacing) * 2);
+	padding-inline: calc(var(--spacing) * 3);
+	text-align: left;
+	vertical-align: top;
+}
+
+.cv-table-head {
+	color: var(--color-text-secondary);
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.cv-table-footer {
+	border-top: var(--edge-width) solid var(--color-edge);
+	font-weight: 500;
+}
+
+.cv-table-caption {
+	padding-block-start: calc(var(--spacing) * 2);
+	caption-side: bottom;
+	color: var(--color-text-tertiary);
+	text-align: left;
+}

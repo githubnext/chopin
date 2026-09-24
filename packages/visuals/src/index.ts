@@ -9,3 +9,24 @@ export type { ProgressBarProps } from "./ui/progress-bar";
 export type { SemanticTone } from "./ui/semantic-tone";
 export { Sparkline } from "./ui/sparkline";
 export type { SparklineProps } from "./ui/sparkline";
+export {
+	Table,
+	TableBody,
+	TableCaption,
+	TableCell,
+	TableFooter,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "./ui/table";
+export type {
+	TableBodyProps,
+	TableCaptionProps,
+	TableCellProps,
+	TableFooterProps,
+	TableHeaderProps,
+	TableHeadProps,
+	TableProps,
+	TableRowProps,
+	TableVariant,
+} from "./ui/table";
