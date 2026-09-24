@@ -25,7 +25,10 @@ import { join } from "node:path";
 type Rgb = { blue: number; green: number; red: number };
 type Oklch = { c: number; h: number; l: number };
 
-const THEME = readFileSync(join(import.meta.dir, "theme.css"), "utf8");
+const THEME = [
+	readFileSync(join(import.meta.dir, "../../../packages/visuals/theme.css"), "utf8"),
+	readFileSync(join(import.meta.dir, "theme.css"), "utf8"),
+].join("\n");
 const NAVIGATION = readFileSync(join(import.meta.dir, "navigation.css"), "utf8");
 const STYLES = readFileSync(
 	join(import.meta.dir, "../../../packages/editor/src/styles.css"),

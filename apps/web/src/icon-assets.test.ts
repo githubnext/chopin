@@ -92,7 +92,10 @@ test("interface icons are decorative unless explicitly labelled", () => {
 });
 
 test("interface icons share one neutral default colour", () => {
-	let theme = readFileSync(join(root, "theme.css"), "utf8");
+	let theme = [
+		readFileSync(join(repository, "packages/visuals/theme.css"), "utf8"),
+		readFileSync(join(root, "theme.css"), "utf8"),
+	].join("\n");
 	let icon = readFileSync(join(repository, "packages/icons/src/icon.tsx"), "utf8");
 	let system = readFileSync(join(repository, "packages/icons/src/system.tsx"), "utf8");
 	expect(theme).toContain("--color-icon: var(--color-gray-500)");
