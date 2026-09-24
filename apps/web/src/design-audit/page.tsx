@@ -1,4 +1,5 @@
 import { AuditFrame, AuditSection } from "./frame";
+import { Adoption } from "./adoption";
 import { AuthoredContent } from "./authored-content";
 import { Controls } from "./controls";
 import { Foundations } from "./foundations";
@@ -16,6 +17,7 @@ export function DesignAuditPage() {
 	return (
 		<AuditFrame groups={AUDIT_INVENTORY}>
 			<AuditSection id="foundations" title="Foundations">
+				<Adoption />
 				<Foundations />
 			</AuditSection>
 			<AuditSection id="controls" title="Controls">

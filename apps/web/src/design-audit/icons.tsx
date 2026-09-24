@@ -32,7 +32,6 @@ import type { ComponentType } from "react";
 
 type IconCatalogueItem = {
 	className?: string;
-	duplicate?: string;
 	icon?: ComponentType<IconProps>;
 	name: string;
 	source?: string;
@@ -41,11 +40,7 @@ type IconCatalogueItem = {
 const NUCLEO_ICONS: readonly IconCatalogueItem[] = [
 	{ name: "Add project", source: addProject },
 	{ name: "Chopin", source: chopin },
-	{
-		duplicate: "collapse.svg and chat-close.svg consolidated",
-		name: "Panel close",
-		source: panelClose,
-	},
+	{ name: "Panel close", source: panelClose },
 	{ name: "Document actions", source: documentActions },
 	{ name: "New document", source: newDocument },
 	{ name: "Chat", source: chat },
@@ -84,7 +79,7 @@ export function IconCatalogue() {
 			</div>
 			<h4>Nucleo icons</h4>
 			<div className="design-audit-icon-grid">
-				{NUCLEO_ICONS.map(({ className, duplicate, icon: Glyph, name, source }) => (
+				{NUCLEO_ICONS.map(({ className, icon: Glyph, name, source }) => (
 					<figure key={`${source ? "asset" : "component"}-${name}`}>
 						<span className="design-audit-icon-frame">
 							{source ? <img alt="" src={source} /> : null}
@@ -92,7 +87,6 @@ export function IconCatalogue() {
 						</span>
 						<figcaption>
 							<strong>{name}</strong>
-							{duplicate ? <span>Consolidated exact duplicate: {duplicate}</span> : null}
 						</figcaption>
 					</figure>
 				))}

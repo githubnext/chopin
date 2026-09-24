@@ -72,11 +72,9 @@ export function AuditPlate(
 	return (
 		<section className="design-audit-plate" data-audit-item={item}>
 			<header>
-				<div className="design-audit-plate-heading">
-					<h3>{title}</h3>
-					{source ? <code className="design-audit-source">{source}</code> : null}
-				</div>
+				<h3>{title}</h3>
 				{description ? <p>{description}</p> : null}
+				{source ? <code className="design-audit-source">{source}</code> : null}
 			</header>
 			<div className="design-audit-specimen">{children}</div>
 		</section>

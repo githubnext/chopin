@@ -38,4 +38,28 @@ describe("design audit specimen framing", () => {
 			}
 		}
 	});
+
+	it("places source provenance after the specimen description", () => {
+		let markup = renderToStaticMarkup(
+			createElement(AuditPlate, {
+				description: "Shared action hierarchy",
+				item: "buttons",
+				title: "Primary button",
+			}),
+		);
+
+		expect(markup.indexOf("Shared action hierarchy")).toBeLessThan(
+			markup.indexOf("apps/web/src/theme.css"),
+		);
+	});
+
+	it("styles state labels as quiet metadata rather than pills", async () => {
+		let css = await Bun.file(new URL("./styles.css", import.meta.url)).text();
+		let rule = css.match(/\.design-audit-state\s*\{([^}]*)\}/)?.[1] ?? "";
+
+		expect(rule).toContain("color: var(--color-text-quaternary)");
+		expect(rule).not.toContain("background:");
+		expect(rule).not.toContain("border-radius:");
+		expect(rule).not.toContain("padding-inline:");
+	});
 });

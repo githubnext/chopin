@@ -37,7 +37,8 @@ describe("design audit specimens", () => {
 		for (let id of ["colours", "typography", "spacing", "radii", "shadows", "icons"]) {
 			expect(markup).toContain(`data-audit-item="${id}"`);
 		}
-		expect(markup).toContain("Consolidated exact duplicate");
+		expect(markup).toContain("Panel close");
+		expect(markup).not.toContain("Consolidated exact duplicate");
 		expect(markup).toContain("Strong resting");
 		expect(markup).toContain("--button-edge-width");
 		for (

@@ -22,6 +22,12 @@ export const AUDIT_INVENTORY: readonly AuditGroup[] = [
 		label: "Foundations",
 		items: [
 			{
+				id: "shared-adoption",
+				label: "One foundation, gradual adoption",
+				source: "apps/web/src/design-audit/adoption.tsx",
+				states: ["shared-foundation", "audit-field-select"],
+			},
+			{
 				id: "colours",
 				label: "Colour roles",
 				source: "packages/visuals/theme.css",
