@@ -304,7 +304,11 @@ describe("controls", () => {
 			/&\[aria-busy="true"\] \[data-button-loader\]\s*\{[\s\S]*animation:\s*button-loader-spin/,
 		);
 		expect(THEME).toMatch(
-			/@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*\.btn\[aria-busy="true"\] \[data-button-loader\]\s*\{[\s\S]*animation:\s*none/,
+			new RegExp(
+				String.raw`@media \(prefers-reduced-motion: reduce\)\s*\{`
+					+ String.raw`[\s\S]*\.btn\[aria-busy="true"\] \[data-button-loader\]\s*\{`
+					+ String.raw`[\s\S]*animation:\s*none`,
+			),
 		);
 	});
 
