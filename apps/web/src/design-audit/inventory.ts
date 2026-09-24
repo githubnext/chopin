@@ -21,11 +21,21 @@ export const AUDIT_INVENTORY: readonly AuditGroup[] = [
 		id: "foundations",
 		label: "Foundations",
 		items: [
-			{ id: "colours", label: "Colour roles", source: "apps/web/src/theme.css", states: STATIC },
-			{ id: "typography", label: "Typography", source: "apps/web/src/theme.css", states: STATIC },
-			{ id: "spacing", label: "Spacing", source: "apps/web/src/theme.css", states: STATIC },
-			{ id: "radii", label: "Radii", source: "apps/web/src/theme.css", states: STATIC },
-			{ id: "shadows", label: "Elevation", source: "apps/web/src/theme.css", states: STATIC },
+			{
+				id: "colours",
+				label: "Colour roles",
+				source: "packages/visuals/theme.css",
+				states: STATIC,
+			},
+			{
+				id: "typography",
+				label: "Typography",
+				source: "packages/visuals/theme.css",
+				states: STATIC,
+			},
+			{ id: "spacing", label: "Spacing", source: "packages/visuals/theme.css", states: STATIC },
+			{ id: "radii", label: "Radii", source: "packages/visuals/theme.css", states: STATIC },
+			{ id: "shadows", label: "Elevation", source: "packages/visuals/theme.css", states: STATIC },
 			{
 				id: "icons",
 				label: "Icons",

@@ -7,14 +7,26 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 type Oklch = { l: number; c: number; h: number };
 
 const ROOT = join(import.meta.dir, "../../..");
-const THEME = readFileSync(join(import.meta.dir, "theme.css"), "utf8");
+const SHARED_THEME = readFileSync(join(ROOT, "packages/visuals/theme.css"), "utf8");
+const WEB_THEME = readFileSync(join(import.meta.dir, "theme.css"), "utf8");
+const THEME = `${SHARED_THEME}\n${WEB_THEME}`;
 const EDITOR_STYLES = readFileSync(join(ROOT, "packages/editor/src/styles.css"), "utf8");
+
+describe("theme ownership", () => {
+	it("loads the design tokens from the shared visuals package", () => {
+		let sharedTheme = join(ROOT, "packages/visuals/theme.css");
+		expect(existsSync(sharedTheme)).toBe(true);
+		expect(SHARED_THEME).toContain("@theme static");
+		expect(WEB_THEME).toContain('@import "@chopin/visuals/theme.css";');
+		expect(WEB_THEME).not.toContain("@theme static");
+	});
+});
 
 function declared(name: string): string {
 	let found = new RegExp(`\\n\\s*${name}:\\s*([^;]+);`).exec(THEME);

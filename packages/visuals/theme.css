@@ -1,0 +1,187 @@
+/* The complete light-only system. `static` keeps tokens read from plain CSS. */
+@theme static {
+	--color-*: initial;
+	--color-transparent: transparent;
+	--color-current: currentColor;
+	--color-white: oklch(1 0 0);
+
+	/* Warm olive neutrals. The lightest steps are deliberately close, not aliases. */
+	--color-gray-50: oklch(0.99051 0.00263 95); /* #fcfcfa */
+	--color-gray-100: oklch(0.97857 0.00264 95); /* #f8f8f6 */
+	--color-gray-150: oklch(0.96623 0.0039 95); /* #f4f4f1 */
+	--color-gray-200: oklch(0.94216 0.00393 95); /* #ecece9 */
+	--color-gray-300: oklch(0.89108 0.00552 95); /* #dcdbd7 */
+	--color-gray-400: oklch(0.74029 0.00856 95); /* #acaba5 */
+	--color-gray-500: oklch(0.56514 0.0123 95); /* #78766e */
+	--color-gray-600: oklch(0.48124 0.01278 95); /* #605e56 */
+	--color-gray-700: oklch(0.39036 0.01026 95); /* #47453f */
+	--color-gray-750: oklch(0.32036 0.00877 95); /* #34332e */
+	--color-gray-800: oklch(0.25993 0.00745 95); /* #252420 */
+	--color-gray-850: oklch(0.20017 0.00605 95); /* #171613 */
+	--color-gray-900: oklch(0.15908 0.00637 95); /* #0e0d0a */
+	--color-gray-950: oklch(0.09862 0.00629 95); /* #040302 */
+
+	/* Surfaces: white is reserved for the document and things lifted above it. */
+	--color-page: oklch(1 0 0);
+	--color-ground: var(--color-gray-150);
+	--color-hover: var(--color-gray-100);
+	--color-inset: var(--color-gray-100);
+	--color-selected: var(--color-gray-200);
+
+	--color-text-primary: var(--color-gray-900);
+	--color-text-secondary: var(--color-gray-700);
+	--color-text-tertiary: var(--color-gray-600);
+	--color-text-quaternary: var(--color-gray-500);
+	--color-icon: var(--color-gray-500);
+	--color-chat-body: #3e453b;
+	--color-chat-pane: color-mix(in srgb, var(--color-ground) 30%, var(--color-page));
+
+	/* Petrol is the only accent: action, focus, presence and links all agree. */
+	--color-brand: oklch(0.50006 0.08514 210.06); /* #06707e */
+	--color-brand-hover: oklch(0.42914 0.07315 210.634); /* #045a66 */
+	--color-brand-active: oklch(0.37546 0.06382 210.435); /* #034a54 */
+	--color-brand-wash: oklch(0.925 0.02 210);
+	--color-brand-ink: oklch(0.43882 0.07476 210.193); /* #045d69 */
+	--focus-ring-color: var(--color-brand);
+	--focus-ring-width: 2px;
+	--focus-ring-offset: 2px;
+
+	--color-success: oklch(0.51958 0.10966 145.072); /* #3b793f */
+	--color-success-wash: oklch(0.93 0.026 145);
+	--color-success-ink: oklch(0.44098 0.11068 144.754); /* #236228 */
+	--color-warning: oklch(0.59898 0.12586 74.986); /* #ab7302 */
+	--color-warning-wash: oklch(0.95 0.032 75);
+	--color-warning-ink: oklch(0.4409 0.0921 74.93); /* #704a02 */
+	--color-destructive: oklch(0.60513 0.17178 24.175); /* #d54d4c */
+	--color-destructive-hover: oklch(0.56972 0.16045 24.136); /* #c44746 */
+	--color-destructive-active: oklch(0.53376 0.1489 24.091); /* #b34140 */
+	--color-destructive-wash: color-mix(
+		in srgb,
+		var(--color-destructive) 20%,
+		var(--color-page)
+	);
+	--color-destructive-ink: oklch(0.4941 0.19046 25.161); /* #b51421 */
+
+	/* Passive structure and controls are the only two edge weights. */
+	--color-edge: rgb(0 0 0 / 7%);
+	--color-control-edge: rgb(0 0 0 / 20%);
+	--color-control-boundary: var(--color-gray-500);
+	--edge-width: 1px;
+
+	/*
+	 * Chrome, chat, prose, section and title. Colour carries hierarchy
+	 * inside the chrome rather than two more sizes below the legibility floor.
+	 */
+	--text-*: initial;
+	--text-sm: 0.8125rem; /* 13px — all chrome, chat and comment bodies */
+	--text-sm--line-height: 1.25rem;
+	--text-base: 0.9375rem; /* 15px — document prose */
+	--text-base--line-height: 1.375rem;
+	--text-lg: 1.0625rem; /* 17px — document h3 subheadings */
+	--text-lg--line-height: 1.6875rem;
+	--text-xl: 1.5rem; /* 24px — section headings and dialogs */
+	--text-xl--line-height: 1.875rem;
+	--text-2xl: 2rem; /* 32px — plan title */
+	--text-2xl--line-height: 2.375rem;
+
+	/* Tailwind's multiplier keeps 4px steps and admits 2, 6, 10 and 22px. */
+	--spacing: 0.25rem;
+
+	/*
+	 * Tailwind's own values, declared here so the scale has one owner: a change
+	 * lands in one place, and a misspelt rung is caught rather than waved through.
+	 */
+	--radius-*: initial;
+	--radius-sm: 0.25rem; /* 4px — buttons, grips, toolbar cells */
+	--radius-md: 0.375rem; /* 6px — cards, inputs, callouts, code blocks */
+	--radius-lg: 0.5rem; /* 8px — popovers and panels */
+	--radius-xl: 0.625rem; /* 10px — the document page */
+
+	/*
+	 * Warm-tinted depth, copied from the settled Figma shadow table.
+	 *
+	 * The tint is declared *after* the reset, and the order is load-bearing:
+	 * `--shadow-*: initial` clears the whole namespace, and `--shadow-color` is
+	 * in it. Declared above the reset it is wiped before it is ever emitted, so
+	 * every `rgb(var(--shadow-color) / n%)` below becomes an invalid
+	 * declaration and all three shadows compute to `none`. Nothing errors and
+	 * nothing is undefined at the source — the file still reads correctly, and
+	 * `check-tokens.ts` now refuses this rather than reading the declaration
+	 * that is textually there.
+	 */
+	--shadow-*: initial;
+	--shadow-color: 14 13 10;
+	--shadow-resting:
+		0 0 1px rgb(var(--shadow-color) / 3%),
+		0 1px 1px rgb(var(--shadow-color) / 3%),
+		0 3px 2px rgb(var(--shadow-color) / 2%);
+	--shadow-resting-strong:
+		0 0 1px rgb(var(--shadow-color) / 4%),
+		0 1px 2px rgb(var(--shadow-color) / 5%),
+		0 4px 3px rgb(var(--shadow-color) / 3%),
+		0 7px 4px rgb(var(--shadow-color) / 1%);
+	--shadow-raised:
+		0 1px 2px rgb(var(--shadow-color) / 6%),
+		0 3px 3px rgb(var(--shadow-color) / 5%),
+		0 8px 5px rgb(var(--shadow-color) / 3%),
+		0 14px 5px rgb(var(--shadow-color) / 1%);
+	--shadow-overlay:
+		0 2px 3px rgb(var(--shadow-color) / 10%),
+		0 7px 6px rgb(var(--shadow-color) / 9%),
+		0 15px 8px rgb(var(--shadow-color) / 5%),
+		0 26px 10px rgb(var(--shadow-color) / 1%);
+
+	/*
+	 * Leaves immediately and settles slowly, so a change reads as a response to
+	 * whatever caused it. Durations are named for the job: `fast` is feedback
+	 * under the pointer, `linger` is the agent's change marks fading unwatched.
+	 */
+	--ease-*: initial;
+	--ease-out: cubic-bezier(0.2, 0, 0, 1);
+
+	--duration-fast: 120ms;
+	--duration-base: 200ms;
+	--duration-linger: 600ms;
+
+	/* Surface motion uses semantic names so 120ms control feedback stays fast. */
+	--motion-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+	--motion-move: cubic-bezier(0.65, 0, 0.35, 1);
+	--dropdown-open-dur: 250ms;
+	--dropdown-close-dur: 150ms;
+	--dropdown-pre-scale: 0.97;
+	--dropdown-closing-scale: 0.99;
+	--dropdown-ease: var(--motion-smooth-out);
+	--modal-open-dur: 250ms;
+	--modal-close-dur: 150ms;
+	--modal-scale: 0.96;
+	--modal-scale-close: 0.96;
+	--modal-ease: var(--motion-smooth-out);
+	--sidebar-open-dur: 250ms;
+	--sidebar-close-dur: 180ms;
+	--drawer-open-dur: 250ms;
+	--drawer-close-dur: 180ms;
+	--drawer-distance: 8px;
+	--panel-open-dur: 280ms;
+	--panel-close-dur: 220ms;
+	--panel-distance: 12px;
+	--panel-blur: 2px;
+	--page-slide-dur: 250ms;
+	--page-slide-distance: 8px;
+	--page-blur: 3px;
+	--icon-swap-dur: 250ms;
+	--icon-swap-blur: 2px;
+	--badge-pop-dur: 180ms;
+	--badge-close-dur: 180ms;
+	--acc-expand: 250ms;
+	--acc-collapse: 250ms;
+	--toast-open: 280ms;
+	--toast-close: 200ms;
+
+	/* Retunes all fifteen `transition-*` utilities, none of which names a curve. */
+	--default-transition-duration: var(--duration-fast);
+	--default-transition-timing-function: var(--ease-out);
+
+	/* Inter is loaded in `main.tsx`; the editor reads this token rather than repeating the stack. */
+	--font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+	--font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}

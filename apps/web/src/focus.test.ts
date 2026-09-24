@@ -22,8 +22,13 @@ function sources(dir: string, suffixes: string[], found: string[] = []): string[
 
 const ROOTS = [join(ROOT, "apps"), join(ROOT, "packages")];
 const COMPONENTS = ROOTS.flatMap(root => sources(root, [".tsx"]));
-const THEME = join(ROOT, "apps/web/src/theme.css");
-const STYLES = ROOTS.flatMap(root => sources(root, [".css"])).filter(file => file !== THEME);
+const THEMES = new Set([
+	join(ROOT, "apps/web/src/theme.css"),
+	join(ROOT, "packages/visuals/theme.css"),
+]);
+const STYLES = ROOTS.flatMap(root => sources(root, [".css"])).filter(
+	file => !THEMES.has(file),
+);
 
 const FOCUS_OUTLINE =
 	/:focus(?:-visible|-within)?\b[^{]*\{[^}]*(?:\boutline(?:-(?:color|offset|style|width))?\s*:)/s;
