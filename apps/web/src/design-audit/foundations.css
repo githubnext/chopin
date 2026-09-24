@@ -180,21 +180,24 @@
 }
 
 .design-audit-sparklines,
-.design-audit-mini-bars {
+.design-audit-mini-bars,
+.design-audit-progress-bars {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
 	gap: 1rem;
 }
 
 .design-audit-sparklines figure,
-.design-audit-mini-bars figure {
+.design-audit-mini-bars figure,
+.design-audit-progress-bars figure {
 	display: grid;
 	gap: 0.5rem;
 	margin: 0;
 }
 
 .design-audit-sparklines figcaption,
-.design-audit-mini-bars figcaption {
+.design-audit-mini-bars figcaption,
+.design-audit-progress-bars figcaption {
 	font-size: var(--text-sm);
 	line-height: var(--text-sm--line-height);
 	color: var(--color-text-tertiary);
