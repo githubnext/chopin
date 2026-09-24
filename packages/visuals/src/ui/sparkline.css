@@ -1,0 +1,21 @@
+.cv-sparkline {
+	display: block;
+	flex: 0 0 auto;
+	width: calc(var(--spacing) * 18);
+	height: calc(var(--spacing) * 8);
+	overflow: visible;
+	background: transparent;
+}
+
+.cv-sparkline path {
+	fill: none;
+	stroke: var(--cv-semantic-graphic);
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	stroke-width: calc(var(--spacing) * 0.5);
+	vector-effect: non-scaling-stroke;
+}
+
+.cv-sparkline circle {
+	fill: var(--cv-semantic-graphic);
+}

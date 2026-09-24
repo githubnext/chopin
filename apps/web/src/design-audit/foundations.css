@@ -179,6 +179,24 @@
 	font-weight: 500;
 }
 
+.design-audit-sparklines {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+	gap: 1rem;
+}
+
+.design-audit-sparklines figure {
+	display: grid;
+	gap: 0.5rem;
+	margin: 0;
+}
+
+.design-audit-sparklines figcaption {
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+	color: var(--color-text-tertiary);
+}
+
 .design-audit-icon-states [data-icon-state="default"] [data-nucleo-icon] {
 	color: var(--color-icon);
 }
