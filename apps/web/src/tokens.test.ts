@@ -301,10 +301,10 @@ describe("controls", () => {
 		expect(button).toContain("gap: calc(var(--spacing) * 2)");
 		expect(button).toMatch(/&\[aria-busy="true"\]:disabled\s*\{[\s\S]*opacity:\s*0\.65/);
 		expect(button).toMatch(
-			/&\[aria-busy="true"\] \[data-nucleo-icon\]\s*\{[\s\S]*animation:\s*button-loader-spin/,
+			/&\[aria-busy="true"\] \[data-button-loader\]\s*\{[\s\S]*animation:\s*button-loader-spin/,
 		);
 		expect(THEME).toMatch(
-			/@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*\.btn\[aria-busy="true"\] \[data-nucleo-icon\]\s*\{[\s\S]*animation:\s*none/,
+			/@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*\.btn\[aria-busy="true"\] \[data-button-loader\]\s*\{[\s\S]*animation:\s*none/,
 		);
 	});
 
