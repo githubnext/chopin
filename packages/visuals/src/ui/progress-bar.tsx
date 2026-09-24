@@ -15,6 +15,7 @@ export function ProgressBar({ className, label, value, ...props }: ProgressBarPr
 			aria-valuemin={0}
 			aria-valuenow={normalized}
 			className={["cv-progress-bar", className].filter(Boolean).join(" ")}
+			data-slot="progress-bar"
 			role="progressbar"
 		>
 			<span aria-hidden="true" className="cv-progress-bar-track">
