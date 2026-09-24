@@ -8,6 +8,12 @@ import { Foundations } from "./foundations";
 import { AUDIT_INVENTORY } from "./inventory";
 import { Surfaces } from "./surfaces";
 
+function plate(markup: string, item: string): string {
+	let start = markup.indexOf(`<section class="design-audit-plate" data-audit-item="${item}">`);
+	let end = markup.indexOf("</section>", start);
+	return start === -1 || end === -1 ? "" : markup.slice(start, end + "</section>".length);
+}
+
 describe("design audit specimens", () => {
 	it("renders every foundation family with a visible label", () => {
 		let markup = renderToStaticMarkup(createElement(Foundations));
@@ -67,6 +73,28 @@ describe("design audit specimens", () => {
 		expect(markup).toContain('aria-label="Successful activity"');
 		expect(markup).toContain('<path d="M 0 16 L 72 16"');
 		expect(markup).toContain('<circle cx="36" cy="16" r="1.5"');
+	});
+
+	it("inventories and renders four MiniBars tones with latest-five series", () => {
+		let item = AUDIT_INVENTORY.flatMap(group => group.items).find(
+			candidate => candidate.id === "mini-bars",
+		);
+		expect(item).toEqual({
+			id: "mini-bars",
+			label: "Mini bars",
+			source: "packages/visuals/src/ui/mini-bars.tsx",
+			states: ["neutral", "success", "warning", "danger"],
+		});
+
+		let markup = renderToStaticMarkup(createElement(Foundations));
+		let specimen = plate(markup, "mini-bars");
+		expect(specimen).toContain('data-audit-item="mini-bars"');
+		for (let tone of ["neutral", "success", "warning", "danger"]) {
+			expect(specimen).toContain(`aria-label="${tone} volume"`);
+			expect(specimen).toContain(`data-tone="${tone}"`);
+		}
+		expect(specimen.match(/data-slot="mini-bars"/g)).toHaveLength(4);
+		expect(specimen.match(/<rect/g)).toHaveLength(20);
 	});
 
 	it("renders controls with their native accessibility states", () => {

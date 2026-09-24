@@ -1,5 +1,5 @@
 import { CheckIcon, InfoIcon, SirenIcon, WarningIcon } from "@chopin/icons";
-import { IconLabel, Sparkline } from "@chopin/visuals";
+import { IconLabel, MiniBars, Sparkline } from "@chopin/visuals";
 
 import { AuditPlate } from "./frame";
 import { IconCatalogue } from "./icons";
@@ -61,6 +61,13 @@ const SPARKLINES = [
 	["success", "Successful activity", [3, 5, 4, 8]],
 	["warning", "Steady warning", [5, 5, 5]],
 	["danger", "Danger sample", [4]],
+] as const;
+
+const MINI_BARS = [
+	["neutral", "neutral volume", [8, 4, 6, 3, 7, 5]],
+	["success", "success volume", [1, 3, 2, 4, 6, 5]],
+	["warning", "warning volume", [6, 5, 4, 5, 3, 4]],
+	["danger", "danger volume", [1, 2, 4, 3, 5, 7]],
 ] as const;
 
 export function Foundations() {
@@ -169,6 +176,20 @@ export function Foundations() {
 					{SPARKLINES.map(([tone, label, values]) => (
 						<figure key={tone}>
 							<Sparkline label={label} tone={tone} values={values} />
+							<figcaption>{label}</figcaption>
+						</figure>
+					))}
+				</div>
+			</AuditPlate>
+			<AuditPlate
+				item="mini-bars"
+				title="Mini bars"
+				description="Compact semantic distributions using the latest five values."
+			>
+				<div className="design-audit-mini-bars">
+					{MINI_BARS.map(([tone, label, values]) => (
+						<figure key={tone}>
+							<MiniBars label={label} tone={tone} values={values} />
 							<figcaption>{label}</figcaption>
 						</figure>
 					))}

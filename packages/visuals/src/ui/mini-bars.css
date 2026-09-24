@@ -1,0 +1,11 @@
+.cv-mini-bars {
+	display: block;
+	flex: 0 0 auto;
+	width: calc(var(--spacing) * 16);
+	height: calc(var(--spacing) * 6);
+	background: transparent;
+}
+
+.cv-mini-bars rect {
+	fill: var(--cv-semantic-graphic);
+}
