@@ -133,6 +133,13 @@
 	margin-block-end: 1rem;
 }
 
+.design-audit-plate-heading {
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	column-gap: 0.75rem;
+}
+
 .design-audit-plate h3 {
 	font-size: var(--text-lg);
 	font-weight: 600;
@@ -145,6 +152,15 @@
 	font-size: var(--text-sm);
 	color: var(--color-text-tertiary);
 	text-wrap: pretty;
+}
+
+.design-audit-source {
+	min-width: 0;
+	font-family: var(--font-mono);
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+	color: var(--color-text-quaternary);
+	overflow-wrap: anywhere;
 }
 
 .design-audit-specimen {
