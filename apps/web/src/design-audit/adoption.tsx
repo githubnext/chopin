@@ -10,7 +10,10 @@ export function Adoption() {
 			<div className="design-audit-adoption">
 				<div>
 					<h4>Shared foundation</h4>
-					<p>Tokens, icons, and presentation primitives come from @chopin/visuals.</p>
+					<p>
+						Tokens and presentation primitives come from @chopin/visuals. Icons come from
+						@chopin/icons and local SVG assets.
+					</p>
 				</div>
 				<div>
 					<h4>Adopted shared controls</h4>
