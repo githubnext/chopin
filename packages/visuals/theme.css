@@ -6,42 +6,42 @@
 	--color-white: oklch(1 0 0);
 
 	/* Raw semantic scales. */
-	--color-ruby-1: #fffcfd;
-	--color-ruby-2: #fff7f8;
-	--color-ruby-3: #feeaed;
-	--color-ruby-4: #ffdce1;
-	--color-ruby-5: #ffced6;
-	--color-ruby-6: #f8bfc8;
-	--color-ruby-7: #efacb8;
-	--color-ruby-8: #e592a3;
+	--color-ruby-1: oklch(0.99364 0.00344 354.69);
+	--color-ruby-2: oklch(0.98260 0.00865 8.54);
+	--color-ruby-3: oklch(0.95384 0.02210 7.18);
+	--color-ruby-4: oklch(0.92496 0.03933 8.14);
+	--color-ruby-5: oklch(0.89604 0.05620 7.27);
+	--color-ruby-6: oklch(0.85820 0.06638 8.00);
+	--color-ruby-7: oklch(0.81067 0.07992 7.15);
+	--color-ruby-8: oklch(0.74888 0.10209 6.50);
 	--color-ruby-9: oklch(0.611 0.171 13.15);
 	--color-ruby-10: oklch(0.55 0.182 13.52);
 	--color-ruby-11: oklch(0.457 0.19852 13.9);
-	--color-ruby-12: #64172b;
-	--color-orange-1: #fefcfb;
-	--color-orange-2: #fff7ed;
-	--color-orange-3: #ffefd6;
-	--color-orange-4: #ffdfb5;
-	--color-orange-5: #ffd19a;
-	--color-orange-6: #ffc182;
-	--color-orange-7: #f5ae73;
-	--color-orange-8: #ec9455;
+	--color-ruby-12: oklch(0.34105 0.10955 10.00);
+	--color-orange-1: oklch(0.99231 0.00252 48.72);
+	--color-orange-2: oklch(0.97962 0.01577 73.68);
+	--color-orange-3: oklch(0.95832 0.03712 79.11);
+	--color-orange-4: oklch(0.91996 0.06510 74.37);
+	--color-orange-5: oklch(0.88789 0.08751 71.31);
+	--color-orange-6: oklch(0.85372 0.10682 66.02);
+	--color-orange-7: oklch(0.80586 0.11233 59.96);
+	--color-orange-8: oklch(0.74500 0.13223 54.68);
 	--color-orange-9: oklch(0.716 0.146 45.02);
 	--color-orange-10: oklch(0.633 0.158 43.46);
 	--color-orange-11: oklch(0.558 0.158 42.74);
-	--color-orange-12: #582d1d;
-	--color-lime-1: #fcfdfa;
-	--color-lime-2: #f8faf3;
-	--color-lime-3: #eef6d6;
-	--color-lime-4: #e2f0bd;
-	--color-lime-5: #d3e7a6;
-	--color-lime-6: #c2da91;
-	--color-lime-7: #abc978;
-	--color-lime-8: #8db654;
+	--color-orange-12: oklch(0.34993 0.06851 40.83);
+	--color-lime-1: oklch(0.99246 0.00408 121.56);
+	--color-lime-2: oklch(0.98166 0.00944 119.57);
+	--color-lime-3: oklch(0.95878 0.04281 118.62);
+	--color-lime-4: oklch(0.93191 0.06833 120.20);
+	--color-lime-5: oklch(0.89733 0.08759 122.06);
+	--color-lime-6: oklch(0.85315 0.09915 123.29);
+	--color-lime-7: oklch(0.79482 0.11160 125.43);
+	--color-lime-8: oklch(0.72504 0.13507 128.23);
 	--color-lime-9: oklch(0.684 0.12 126.09);
 	--color-lime-10: oklch(0.603 0.132 126.75);
 	--color-lime-11: oklch(0.474 0.14 128.6);
-	--color-lime-12: #37401c;
+	--color-lime-12: oklch(0.35370 0.05728 120.98);
 
 	/* Warm olive neutrals. The lightest steps are deliberately close, not aliases. */
 	--color-gray-50: oklch(0.99051 0.00263 95); /* #fcfcfa */
@@ -71,7 +71,7 @@
 	--color-text-tertiary: var(--color-gray-600);
 	--color-text-quaternary: var(--color-gray-500);
 	--color-icon: var(--color-gray-500);
-	--color-chat-body: #3e453b;
+	--color-chat-body: oklch(0.38064 0.01903 136.21);
 	--color-chat-pane: color-mix(in srgb, var(--color-ground) 30%, var(--color-page));
 
 	/* Petrol is the only accent: action, focus, presence and links all agree. */
@@ -100,7 +100,6 @@
 	--color-danger-graphic: var(--color-ruby-9);
 	--color-danger-icon: var(--color-ruby-11);
 	--color-danger-text: var(--color-ruby-12);
-
 	--color-success: oklch(0.51958 0.10966 145.072); /* #3b793f */
 	--color-success-wash: oklch(0.93 0.026 145);
 	--color-success-ink: oklch(0.44098 0.11068 144.754); /* #236228 */
@@ -118,8 +117,8 @@
 	--color-destructive-ink: oklch(0.4941 0.19046 25.161); /* #b51421 */
 
 	/* Passive structure and controls are the only two edge weights. */
-	--color-edge: rgb(0 0 0 / 7%);
-	--color-control-edge: rgb(0 0 0 / 20%);
+	--color-edge: oklch(0 0 0 / 7%);
+	--color-control-edge: oklch(0 0 0 / 20%);
 	--color-control-boundary: var(--color-gray-500);
 	--edge-width: 1px;
 
@@ -158,33 +157,33 @@
 	 * The tint is declared *after* the reset, and the order is load-bearing:
 	 * `--shadow-*: initial` clears the whole namespace, and `--shadow-color` is
 	 * in it. Declared above the reset it is wiped before it is ever emitted, so
-	 * every `rgb(var(--shadow-color) / n%)` below becomes an invalid
-	 * declaration and all three shadows compute to `none`. Nothing errors and
+	 * every `oklch(var(--shadow-color) / n%)` below becomes an invalid
+	 * declaration and all four shadows compute to `none`. Nothing errors and
 	 * nothing is undefined at the source — the file still reads correctly, and
 	 * `check-tokens.ts` now refuses this rather than reading the declaration
 	 * that is textually there.
 	 */
 	--shadow-*: initial;
-	--shadow-color: 14 13 10;
+	--shadow-color: 0.15908 0.00637 95;
 	--shadow-resting:
-		0 0 1px rgb(var(--shadow-color) / 3%),
-		0 1px 1px rgb(var(--shadow-color) / 3%),
-		0 3px 2px rgb(var(--shadow-color) / 2%);
+		0 0 1px oklch(var(--shadow-color) / 3%),
+		0 1px 1px oklch(var(--shadow-color) / 3%),
+		0 3px 2px oklch(var(--shadow-color) / 2%);
 	--shadow-resting-strong:
-		0 0 1px rgb(var(--shadow-color) / 4%),
-		0 1px 2px rgb(var(--shadow-color) / 5%),
-		0 4px 3px rgb(var(--shadow-color) / 3%),
-		0 7px 4px rgb(var(--shadow-color) / 1%);
+		0 0 1px oklch(var(--shadow-color) / 4%),
+		0 1px 2px oklch(var(--shadow-color) / 5%),
+		0 4px 3px oklch(var(--shadow-color) / 3%),
+		0 7px 4px oklch(var(--shadow-color) / 1%);
 	--shadow-raised:
-		0 1px 2px rgb(var(--shadow-color) / 6%),
-		0 3px 3px rgb(var(--shadow-color) / 5%),
-		0 8px 5px rgb(var(--shadow-color) / 3%),
-		0 14px 5px rgb(var(--shadow-color) / 1%);
+		0 1px 2px oklch(var(--shadow-color) / 6%),
+		0 3px 3px oklch(var(--shadow-color) / 5%),
+		0 8px 5px oklch(var(--shadow-color) / 3%),
+		0 14px 5px oklch(var(--shadow-color) / 1%);
 	--shadow-overlay:
-		0 2px 3px rgb(var(--shadow-color) / 10%),
-		0 7px 6px rgb(var(--shadow-color) / 9%),
-		0 15px 8px rgb(var(--shadow-color) / 5%),
-		0 26px 10px rgb(var(--shadow-color) / 1%);
+		0 2px 3px oklch(var(--shadow-color) / 10%),
+		0 7px 6px oklch(var(--shadow-color) / 9%),
+		0 15px 8px oklch(var(--shadow-color) / 5%),
+		0 26px 10px oklch(var(--shadow-color) / 1%);
 
 	/*
 	 * Leaves immediately and settles slowly, so a change reads as a response to
