@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import type { ReactNode } from "react";
-import type { AuditGroup } from "./inventory";
+import { AUDIT_INVENTORY, type AuditGroup } from "./inventory";
 
 export function AuditFrame(
 	{ children, groups }: { children: ReactNode; groups: readonly AuditGroup[] },
@@ -67,10 +67,15 @@ export function AuditPlate(
 		title: string;
 	},
 ) {
+	let source = AUDIT_INVENTORY.flatMap(group => group.items)
+		.find(candidate => candidate.id === item)?.source;
 	return (
 		<section className="design-audit-plate" data-audit-item={item}>
 			<header>
-				<h3>{title}</h3>
+				<div className="design-audit-plate-heading">
+					<h3>{title}</h3>
+					{source ? <code className="design-audit-source">{source}</code> : null}
+				</div>
 				{description ? <p>{description}</p> : null}
 			</header>
 			<div className="design-audit-specimen">{children}</div>
