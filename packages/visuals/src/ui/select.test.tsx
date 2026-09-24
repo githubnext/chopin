@@ -1,9 +1,16 @@
 import { Select as SelectPrimitive } from "@base-ui/react/select";
+import * as Visuals from "@chopin/visuals";
 import { expect, test } from "bun:test";
 import { isValidElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./select";
+
+test("publishes the complete Select composition", () => {
+	for (let name of ["Select", "SelectContent", "SelectItem", "SelectTrigger", "SelectValue"]) {
+		expect(name in Visuals).toBe(true);
+	}
+});
 
 test("delegates selection callbacks and focus return to the Base UI Select root", () => {
 	expect(Select).toBe(SelectPrimitive.Root);
@@ -44,9 +51,15 @@ test("owns popup, listbox, item, and checkmark slots", () => {
 	expect(popup.props["data-slot"]).toBe("select-popup");
 	expect(listbox.props["data-slot"]).toBe("select-listbox");
 
-	let item = SelectItem({ children: "Active documents", "data-slot": "ignored", value: "active" });
+	let item = SelectItem({
+		children: "Archived documents",
+		"data-slot": "ignored",
+		value: "archived",
+	});
 	let checkmark = item.props.children[1];
 	expect(item.props["data-slot"]).toBe("select-item");
+	expect(item.props.value).toBe("archived");
+	expect(item.props.children[0].props.children).toBe("Archived documents");
 	expect(checkmark.props["data-slot"]).toBe("select-checkmark");
 });
 
