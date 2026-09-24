@@ -1,3 +1,6 @@
+import { CheckIcon, InfoIcon, SirenIcon, WarningIcon } from "@chopin/icons";
+import { IconLabel } from "@chopin/visuals";
+
 import { AuditPlate } from "./frame";
 import { IconCatalogue } from "./icons";
 
@@ -44,6 +47,13 @@ const SHADOWS = [
 	["Strong resting", "--shadow-resting-strong"],
 	["Raised", "--shadow-raised"],
 	["Overlay", "--shadow-overlay"],
+] as const;
+
+const ICON_LABELS = [
+	["neutral", InfoIcon, "Neutral"],
+	["success", CheckIcon, "Success"],
+	["warning", WarningIcon, "Warning"],
+	["danger", SirenIcon, "Danger"],
 ] as const;
 
 export function Foundations() {
@@ -131,6 +141,17 @@ export function Foundations() {
 				description="Every Nucleo icon currently used by the interface."
 			>
 				<IconCatalogue />
+			</AuditPlate>
+			<AuditPlate
+				item="icon-label"
+				title="Icon labels"
+				description="Compact semantic labels for status and supporting metadata."
+			>
+				<div className="design-audit-icon-labels">
+					{ICON_LABELS.map(([tone, icon, label]) => (
+						<IconLabel icon={icon} key={tone} label={label} tone={tone} />
+					))}
+				</div>
 			</AuditPlate>
 		</>
 	);

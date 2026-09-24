@@ -163,7 +163,8 @@
 }
 
 .design-audit-icon-states,
-.design-audit-icon-sizes {
+.design-audit-icon-sizes,
+.design-audit-icon-labels {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 1rem;

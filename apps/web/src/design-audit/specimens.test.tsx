@@ -28,6 +28,25 @@ describe("design audit specimens", () => {
 		) expect(markup).toContain(measurement);
 	});
 
+	it("inventories and renders every IconLabel tone", () => {
+		let item = AUDIT_INVENTORY.flatMap(group => group.items).find(
+			candidate => candidate.id === "icon-label",
+		);
+		expect(item).toEqual({
+			id: "icon-label",
+			label: "Icon labels",
+			source: "packages/visuals/src/ui/icon-label.tsx",
+			states: ["neutral", "success", "warning", "danger"],
+		});
+
+		let markup = renderToStaticMarkup(createElement(Foundations));
+		expect(markup).toContain('data-audit-item="icon-label"');
+		for (let tone of ["neutral", "success", "warning", "danger"]) {
+			expect(markup).toContain(`data-tone="${tone}"`);
+			expect(markup).toContain(`>${tone[0]?.toUpperCase()}${tone.slice(1)}</span>`);
+		}
+	});
+
 	it("renders controls with their native accessibility states", () => {
 		let markup = renderToStaticMarkup(createElement(Controls));
 

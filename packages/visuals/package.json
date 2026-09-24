@@ -3,7 +3,28 @@
 	"private": true,
 	"version": "0.0.0",
 	"type": "module",
+	"scripts": {
+		"types": "tsgo --noEmit --skipLibCheck"
+	},
 	"exports": {
+		".": {
+			"types": "./src/index.ts",
+			"default": "./src/index.ts"
+		},
+		"./styles.css": "./src/styles.css",
 		"./theme.css": "./theme.css"
+	},
+	"dependencies": {
+		"@chopin/icons": "workspace:*"
+	},
+	"peerDependencies": {
+		"react": "catalog:react"
+	},
+	"devDependencies": {
+		"@types/bun": "catalog:bun",
+		"@types/react": "catalog:react",
+		"@types/react-dom": "catalog:react",
+		"react": "catalog:react",
+		"react-dom": "catalog:react"
 	}
 }

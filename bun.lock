@@ -178,6 +178,19 @@
     "packages/visuals": {
       "name": "@chopin/visuals",
       "version": "0.0.0",
+      "dependencies": {
+        "@chopin/icons": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:bun",
+        "@types/react": "catalog:react",
+        "@types/react-dom": "catalog:react",
+        "react": "catalog:react",
+        "react-dom": "catalog:react",
+      },
+      "peerDependencies": {
+        "react": "catalog:react",
+      },
     },
   },
   "patchedDependencies": {
