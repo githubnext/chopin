@@ -50,14 +50,13 @@
 	--color-gray-200: oklch(0.94216 0.00393 95); /* #ecece9 */
 	--color-gray-300: oklch(0.89108 0.00552 95); /* #dcdbd7 */
 	--color-gray-400: oklch(0.74029 0.00856 95); /* #acaba5 */
+	--color-gray-450: oklch(0.66810 0.01050 95); /* #96958e */
 	--color-gray-500: oklch(0.56514 0.0123 95); /* #78766e */
 	--color-gray-600: oklch(0.48124 0.01278 95); /* #605e56 */
 	--color-gray-700: oklch(0.39036 0.01026 95); /* #47453f */
 	--color-gray-750: oklch(0.32036 0.00877 95); /* #34332e */
 	--color-gray-800: oklch(0.25993 0.00745 95); /* #252420 */
-	--color-gray-850: oklch(0.20017 0.00605 95); /* #171613 */
 	--color-gray-900: oklch(0.15908 0.00637 95); /* #0e0d0a */
-	--color-gray-950: oklch(0.09862 0.00629 95); /* #040302 */
 
 	/* Surfaces: white is reserved for the document and things lifted above it. */
 	--color-page: oklch(1 0 0);
@@ -85,7 +84,7 @@
 	--focus-ring-offset: 2px;
 
 	--color-neutral-surface: var(--color-gray-100);
-	--color-neutral-graphic: var(--color-gray-300);
+	--color-neutral-graphic: var(--color-gray-450);
 	--color-neutral-icon: var(--color-gray-500);
 	--color-neutral-text: var(--color-gray-700);
 	--color-success-surface: var(--color-lime-3);

@@ -128,9 +128,9 @@ function inlinePadding(name: string): string | undefined {
 }
 
 describe("palette", () => {
-	let steps = [50, 100, 150, 200, 300, 400, 500, 600, 700, 750, 800, 850, 900, 950];
+	let steps = [50, 100, 150, 200, 300, 400, 450, 500, 600, 700, 750, 800, 900];
 
-	it("keeps all fourteen neutral steps on the warm olive axis", () => {
+	it("keeps all thirteen neutral steps on the warm olive axis", () => {
 		for (let step of steps) expect(colour(`--color-gray-${step}`).h).toBe(95);
 	});
 

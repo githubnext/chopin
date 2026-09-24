@@ -88,6 +88,17 @@ describe("Sparkline geometry", () => {
 		expect(empty).not.toContain("<circle");
 		expect(extreme).not.toMatch(/NaN|Infinity/);
 	});
+
+	test("renders a long finite series with a bounded path and retains a narrow peak", () => {
+		let values = Array<number>(1_000_000).fill(0);
+		values[500_000] = 10;
+		let markup = renderToStaticMarkup(<Sparkline label="Long request trend" values={values} />);
+
+		expect(markup).toContain("<path");
+		expect(markup).toContain("Q 36 2");
+		expect(markup).not.toMatch(/NaN|Infinity/);
+		expect(markup.length).toBeLessThan(20_000);
+	});
 });
 
 test("uses semantic graphic color and existing size tokens", async () => {

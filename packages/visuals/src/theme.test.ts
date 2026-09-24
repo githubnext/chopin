@@ -110,7 +110,7 @@ describe("semantic colour foundations", () => {
 	it("maps each component-facing role to its approved scale step", () => {
 		let expected = {
 			"--color-neutral-surface": "var(--color-gray-100)",
-			"--color-neutral-graphic": "var(--color-gray-300)",
+			"--color-neutral-graphic": "var(--color-gray-450)",
 			"--color-neutral-icon": "var(--color-gray-500)",
 			"--color-neutral-text": "var(--color-gray-700)",
 			"--color-success-surface": "var(--color-lime-3)",
@@ -136,6 +136,10 @@ describe("semantic colour foundations", () => {
 			let ratio = contrast(`--color-${role}-text`, `--color-${role}-surface`);
 			expect({ role, passes: ratio >= 4.5 }).toEqual({ role, passes: true });
 		}
+	});
+
+	it("keeps the neutral graphic above 3:1 contrast on white tables", () => {
+		expect(contrast("--color-neutral-graphic", "--color-page")).toBeGreaterThanOrEqual(3);
 	});
 
 	it("does not remap the existing brand or legacy status roles", () => {

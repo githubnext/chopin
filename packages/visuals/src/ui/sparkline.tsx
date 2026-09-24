@@ -13,14 +13,39 @@ type Point = { x: number; y: number };
 const Svg = "svg";
 
 function linePoints(values: readonly number[]): Point[] {
-	let minimum = Math.min(...values);
-	let maximum = Math.max(...values);
+	let minimum = Infinity;
+	let maximum = -Infinity;
+	for (let value of values) {
+		if (value < minimum) minimum = value;
+		if (value > maximum) maximum = value;
+	}
 	let scale = Math.max(Math.abs(minimum), Math.abs(maximum), 1);
 	let normalizedMinimum = minimum / scale;
 	let span = maximum / scale - normalizedMinimum;
-	return values.map((value, index) => ({
+	let indexes: number[];
+	if (values.length <= 144) {
+		indexes = values.map((_, index) => index);
+	} else {
+		// Two extrema per viewBox column retain narrow peaks without an unbounded SVG path.
+		indexes = [0];
+		for (let bucket = 0; bucket < 72; bucket++) {
+			let start = Math.floor(bucket * values.length / 72);
+			let end = Math.floor((bucket + 1) * values.length / 72);
+			let low = start;
+			let high = start;
+			for (let index = start + 1; index < end; index++) {
+				if (values[index]! < values[low]!) low = index;
+				if (values[index]! > values[high]!) high = index;
+			}
+			for (let index of low < high ? [low, high] : [high, low]) {
+				if (index !== indexes.at(-1)) indexes.push(index);
+			}
+		}
+		if (indexes.at(-1) !== values.length - 1) indexes.push(values.length - 1);
+	}
+	return indexes.map(index => ({
 		x: index * (72 / (values.length - 1)),
-		y: 30 - (value / scale - normalizedMinimum) / span * 28,
+		y: 30 - (values[index]! / scale - normalizedMinimum) / span * 28,
 	}));
 }
 
