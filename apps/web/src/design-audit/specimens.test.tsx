@@ -231,7 +231,11 @@ describe("design audit specimens", () => {
 		let css = await Bun.file(new URL("./controls.css", import.meta.url)).text();
 
 		expect(css).toMatch(
-			/\.design-audit-link:is\(\[data-audit-state="focus"\], :focus-visible\)[\s\S]*margin-inline:\s*-0\.25rem;[\s\S]*padding-inline:\s*0\.25rem;/,
+			new RegExp(
+				String.raw`\.design-audit-link:is\(\[data-audit-state="focus"\], :focus-visible\)`
+					+ String.raw`[\s\S]*margin-inline:\s*-0\.25rem;`
+					+ String.raw`[\s\S]*padding-inline:\s*0\.25rem;`,
+			),
 		);
 	});
 
