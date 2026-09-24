@@ -49,6 +49,12 @@ export const AUDIT_INVENTORY: readonly AuditGroup[] = [
 				source: "packages/visuals/src/ui/icon-label.tsx",
 				states: ["neutral", "success", "warning", "danger"],
 			},
+			{
+				id: "sparkline",
+				label: "Sparklines",
+				source: "packages/visuals/src/ui/sparkline.tsx",
+				states: ["neutral", "success", "warning", "danger"],
+			},
 		],
 	},
 	{

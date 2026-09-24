@@ -47,6 +47,28 @@ describe("design audit specimens", () => {
 		}
 	});
 
+	it("inventories and renders representative Sparkline tones and series", () => {
+		let item = AUDIT_INVENTORY.flatMap(group => group.items).find(
+			candidate => candidate.id === "sparkline",
+		);
+		expect(item).toEqual({
+			id: "sparkline",
+			label: "Sparklines",
+			source: "packages/visuals/src/ui/sparkline.tsx",
+			states: ["neutral", "success", "warning", "danger"],
+		});
+
+		let markup = renderToStaticMarkup(createElement(Foundations));
+		expect(markup).toContain('data-audit-item="sparkline"');
+		for (let tone of ["neutral", "success", "warning", "danger"]) {
+			expect(markup).toContain(`data-tone="${tone}"`);
+		}
+		expect(markup).toContain('aria-label="Neutral activity"');
+		expect(markup).toContain('aria-label="Successful activity"');
+		expect(markup).toContain('<path d="M 0 16 L 72 16"');
+		expect(markup).toContain('<circle cx="36" cy="16" r="1.5"');
+	});
+
 	it("renders controls with their native accessibility states", () => {
 		let markup = renderToStaticMarkup(createElement(Controls));
 

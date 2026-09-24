@@ -1,5 +1,6 @@
 .cv-semantic {
 	--cv-semantic-surface: var(--color-neutral-surface);
+	--cv-semantic-graphic: var(--color-neutral-graphic);
 	--cv-semantic-icon: var(--color-neutral-icon);
 	--cv-semantic-text: var(--color-neutral-text);
 	color: var(--cv-semantic-text);
@@ -7,18 +8,21 @@
 
 .cv-semantic[data-tone="success"] {
 	--cv-semantic-surface: var(--color-success-surface);
+	--cv-semantic-graphic: var(--color-success-graphic);
 	--cv-semantic-icon: var(--color-success-icon);
 	--cv-semantic-text: var(--color-success-text);
 }
 
 .cv-semantic[data-tone="warning"] {
 	--cv-semantic-surface: var(--color-warning-surface);
+	--cv-semantic-graphic: var(--color-warning-graphic);
 	--cv-semantic-icon: var(--color-warning-icon);
 	--cv-semantic-text: var(--color-warning-text);
 }
 
 .cv-semantic[data-tone="danger"] {
 	--cv-semantic-surface: var(--color-danger-surface);
+	--cv-semantic-graphic: var(--color-danger-graphic);
 	--cv-semantic-icon: var(--color-danger-icon);
 	--cv-semantic-text: var(--color-danger-text);
 }

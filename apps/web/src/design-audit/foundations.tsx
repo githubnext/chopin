@@ -1,5 +1,5 @@
 import { CheckIcon, InfoIcon, SirenIcon, WarningIcon } from "@chopin/icons";
-import { IconLabel } from "@chopin/visuals";
+import { IconLabel, Sparkline } from "@chopin/visuals";
 
 import { AuditPlate } from "./frame";
 import { IconCatalogue } from "./icons";
@@ -54,6 +54,13 @@ const ICON_LABELS = [
 	["success", CheckIcon, "Success"],
 	["warning", WarningIcon, "Warning"],
 	["danger", SirenIcon, "Danger"],
+] as const;
+
+const SPARKLINES = [
+	["neutral", "Neutral activity", [8, 6, 7, 4]],
+	["success", "Successful activity", [3, 5, 4, 8]],
+	["warning", "Steady warning", [5, 5, 5]],
+	["danger", "Danger sample", [4]],
 ] as const;
 
 export function Foundations() {
@@ -150,6 +157,20 @@ export function Foundations() {
 				<div className="design-audit-icon-labels">
 					{ICON_LABELS.map(([tone, icon, label]) => (
 						<IconLabel icon={icon} key={tone} label={label} tone={tone} />
+					))}
+				</div>
+			</AuditPlate>
+			<AuditPlate
+				item="sparkline"
+				title="Sparklines"
+				description="Compact semantic trends without axes or interaction."
+			>
+				<div className="design-audit-sparklines">
+					{SPARKLINES.map(([tone, label, values]) => (
+						<figure key={tone}>
+							<Sparkline label={label} tone={tone} values={values} />
+							<figcaption>{label}</figcaption>
+						</figure>
 					))}
 				</div>
 			</AuditPlate>

@@ -20,13 +20,12 @@ test("maps every semantic tone to the exact component-facing aliases", () => {
 
 	for (let [tone, selector] of Object.entries(selectors)) {
 		let rule = declarations(selector);
-		for (let role of ["surface", "icon", "text"]) {
+		for (let role of ["surface", "graphic", "icon", "text"]) {
 			expect(rule).toContain(
 				`--cv-semantic-${role}: var(--color-${tone}-${role});`,
 			);
 		}
 	}
-	expect(semanticCss).not.toContain("--cv-semantic-graphic");
 });
 
 test("keeps IconLabel compact, truncatable, and token-backed", () => {
