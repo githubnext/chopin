@@ -94,24 +94,24 @@ Store production values in the deployment's secret manager or an owner-readable
 environment file outside the source tree. Do not bake `.env` or credentials into
 the image.
 
-| Variable                       | Default             | Meaning                                                                                                                            |
-| ------------------------------ | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `STORAGE_DRIVER`               | `postgres`          | Storage adapter. `postgres` is currently the only accepted value.                                                                  |
-| `DATABASE_URL`                 | required            | `postgres:` or `postgresql:` connection URL. It is not printed by Chopin.                                                          |
-| `APP_ORIGIN`                   | required            | Exact public origin, without credentials, path, query, fragment, or trailing slash. HTTPS is required unless the host is loopback. |
-| `GITHUB_APP_SLUG`              | required            | Lowercase slug from the App's public URL.                                                                                          |
-| `GITHUB_APP_CLIENT_ID`         | required            | OAuth client ID, not the numeric GitHub App ID.                                                                                    |
-| `GITHUB_APP_CLIENT_SECRET`     | required            | OAuth client secret used for user-token exchange and refresh.                                                                      |
-| `GITHUB_ALLOWED_USERS`         | empty               | Comma-separated admitted GitHub logins.                                                                                            |
-| `GITHUB_ALLOWED_ORGANIZATIONS` | empty               | Comma-separated organizations whose active members are admitted.                                                                   |
-| `SESSION_ENCRYPTION_KEY`       | required            | Exactly 64 hexadecimal characters used for the encrypted OAuth attempt cookie, including its validated return path.                |
-| `SERVER_HOST`                  | `127.0.0.1`         | Source-process bind address. The image sets `0.0.0.0`.                                                                             |
-| `PORT`                         | `8787`              | Source-process HTTP and WebSocket port. The supplied image and health check expect internal port 8787.                             |
-| `MODEL`                        | `claude-sonnet-4.6` | Model requested for hosted agent sessions.                                                                                         |
-| `AGENT`                        | on                  | Set exactly `off` to prevent hosted agent turns, disable the entire background-job runner, and avoid Copilot CLI startup.          |
-| `BACKGROUND_JOBS`              | on                  | Set exactly `off` to disable background job scheduling. `AGENT=off` disables the entire runner.                                    |
-| `WEB_RESEARCH`                 | on                  | Set exactly `off` to disable new public-web research while retaining durable requests, artifacts, and other jobs.                  |
-| `COPILOT_CLI_PATH`             | automatic           | Advanced override for the Copilot CLI executable.                                                                                  |
+| Variable                       | Default      | Meaning                                                                                                                            |
+| ------------------------------ | ------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `STORAGE_DRIVER`               | `postgres`   | Storage adapter. `postgres` is currently the only accepted value.                                                                  |
+| `DATABASE_URL`                 | required     | `postgres:` or `postgresql:` connection URL. It is not printed by Chopin.                                                          |
+| `APP_ORIGIN`                   | required     | Exact public origin, without credentials, path, query, fragment, or trailing slash. HTTPS is required unless the host is loopback. |
+| `GITHUB_APP_SLUG`              | required     | Lowercase slug from the App's public URL.                                                                                          |
+| `GITHUB_APP_CLIENT_ID`         | required     | OAuth client ID, not the numeric GitHub App ID.                                                                                    |
+| `GITHUB_APP_CLIENT_SECRET`     | required     | OAuth client secret used for user-token exchange and refresh.                                                                      |
+| `GITHUB_ALLOWED_USERS`         | empty        | Comma-separated admitted GitHub logins.                                                                                            |
+| `GITHUB_ALLOWED_ORGANIZATIONS` | empty        | Comma-separated organizations whose active members are admitted.                                                                   |
+| `SESSION_ENCRYPTION_KEY`       | required     | Exactly 64 hexadecimal characters used for the encrypted OAuth attempt cookie, including its validated return path.                |
+| `SERVER_HOST`                  | `127.0.0.1`  | Source-process bind address. The image sets `0.0.0.0`.                                                                             |
+| `PORT`                         | `8787`       | Source-process HTTP and WebSocket port. The supplied image and health check expect internal port 8787.                             |
+| `MODEL`                        | `gpt-6-luna` | Model requested for hosted agent sessions.                                                                                         |
+| `AGENT`                        | on           | Set exactly `off` to prevent hosted agent turns, disable the entire background-job runner, and avoid Copilot CLI startup.          |
+| `BACKGROUND_JOBS`              | on           | Set exactly `off` to disable background job scheduling. `AGENT=off` disables the entire runner.                                    |
+| `WEB_RESEARCH`                 | on           | Set exactly `off` to disable new public-web research while retaining durable requests, artifacts, and other jobs.                  |
+| `COPILOT_CLI_PATH`             | automatic    | Advanced override for the Copilot CLI executable.                                                                                  |
 
 See [Background jobs and workers](background-jobs.md) for the combined
 `AGENT`, `BACKGROUND_JOBS`, and `WEB_RESEARCH` behavior and recovery model.
@@ -151,7 +151,7 @@ GITHUB_ALLOWED_USERS=<comma-separated-logins>
 GITHUB_ALLOWED_ORGANIZATIONS=
 SESSION_ENCRYPTION_KEY=<64-hex-character-key>
 AGENT=on
-MODEL=claude-sonnet-4.6
+MODEL=gpt-6-luna
 BACKGROUND_JOBS=on
 WEB_RESEARCH=on
 ```
