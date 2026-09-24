@@ -1,5 +1,18 @@
 import { CheckIcon, InfoIcon, SirenIcon, WarningIcon } from "@chopin/icons";
-import { Badge, IconLabel, MiniBars, ProgressBar, Sparkline } from "@chopin/visuals";
+import {
+	Badge,
+	IconLabel,
+	MiniBars,
+	ProgressBar,
+	Sparkline,
+	Table,
+	TableBody,
+	TableCaption,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "@chopin/visuals";
 
 import { AuditPlate } from "./frame";
 import { IconCatalogue } from "./icons";
@@ -75,6 +88,46 @@ const PROGRESS_BARS = [
 	["In progress", 62.5],
 	["Complete", 100],
 ] as const;
+
+const TABLE_ROWS = [
+	["Production", "Healthy", "2 minutes ago"],
+	["Preview", "Building", "12 minutes ago"],
+] as const;
+
+const OVERFLOW_TABLE_ROWS = [
+	["Production Europe West with an intentionally long name", "Healthy", "2 minutes ago"],
+	["Preview for the static presentation table branch", "Building", "12 minutes ago"],
+] as const;
+
+function TableExample({
+	rows,
+	variant = "plain",
+}: {
+	rows: readonly (readonly [string, string, string])[];
+	variant?: "plain" | "contained";
+}) {
+	return (
+		<Table aria-label="Deployment activity" className="design-audit-table" variant={variant}>
+			<TableCaption>Deployment activity</TableCaption>
+			<TableHeader>
+				<TableRow>
+					<TableHead scope="col">Environment</TableHead>
+					<TableHead scope="col">Status</TableHead>
+					<TableHead scope="col">Updated</TableHead>
+				</TableRow>
+			</TableHeader>
+			<TableBody>
+				{rows.map(([environment, status, updated]) => (
+					<TableRow key={environment}>
+						<TableCell>{environment}</TableCell>
+						<TableCell>{status}</TableCell>
+						<TableCell>{updated}</TableCell>
+					</TableRow>
+				))}
+			</TableBody>
+		</Table>
+	);
+}
 
 export function Foundations() {
 	return (
@@ -224,6 +277,20 @@ export function Foundations() {
 							<figcaption>{label}</figcaption>
 						</figure>
 					))}
+				</div>
+			</AuditPlate>
+			<AuditPlate
+				item="presentation-table"
+				title="Presentation tables"
+				description="Static native tables for compact structured data, including narrow overflow."
+			>
+				<div className="design-audit-tables">
+					<div data-table-example="plain">
+						<TableExample rows={TABLE_ROWS} />
+					</div>
+					<div className="design-audit-table-narrow" data-table-example="contained-overflow">
+						<TableExample rows={OVERFLOW_TABLE_ROWS} variant="contained" />
+					</div>
 				</div>
 			</AuditPlate>
 		</>

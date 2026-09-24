@@ -204,6 +204,20 @@
 	color: var(--color-text-tertiary);
 }
 
+.design-audit-tables {
+	display: grid;
+	gap: calc(var(--spacing) * 6);
+}
+
+.design-audit-table-narrow {
+	width: calc(var(--spacing) * 80);
+	max-width: 100%;
+}
+
+.design-audit-table-narrow .design-audit-table {
+	min-width: calc(var(--spacing) * 160);
+}
+
 .design-audit-icon-states [data-icon-state="default"] [data-nucleo-icon] {
 	color: var(--color-icon);
 }

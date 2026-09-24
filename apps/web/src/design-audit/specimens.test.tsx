@@ -146,6 +146,36 @@ describe("design audit specimens", () => {
 		expect(specimen.match(/role="progressbar"/g)).toHaveLength(3);
 	});
 
+	it("adds presentation tables without replacing the authored editor table", () => {
+		let items = AUDIT_INVENTORY.flatMap(group => group.items);
+		let presentationTable = items.find(candidate => candidate.id === "presentation-table");
+		let authoredTable = items.find(candidate => candidate.id === "table");
+
+		expect(presentationTable).toEqual({
+			id: "presentation-table",
+			label: "Presentation tables",
+			source: "packages/visuals/src/ui/table.tsx",
+			states: ["plain", "contained", "narrow-overflow"],
+		});
+		expect(authoredTable).toEqual({
+			id: "table",
+			label: "Tables",
+			source: "packages/editor/src/table/chrome.tsx",
+			states: ["default", "selected-cell", "toolbar", "overflow"],
+		});
+
+		let markup = renderToStaticMarkup(createElement(Foundations));
+		let specimen = plate(markup, "presentation-table");
+		expect(specimen).toContain('data-audit-item="presentation-table"');
+		expect(specimen).toContain('data-table-example="plain"');
+		expect(specimen).toContain('data-table-example="contained-overflow"');
+		expect(specimen).toContain('data-variant="plain"');
+		expect(specimen).toContain('data-variant="contained"');
+		expect(specimen.match(/data-slot="table"/g)).toHaveLength(2);
+		expect(specimen).toContain("Deployment activity");
+		expect(specimen).toContain("Production Europe West with an intentionally long name");
+	});
+
 	it("renders controls with their native accessibility states", () => {
 		let markup = renderToStaticMarkup(createElement(Controls));
 

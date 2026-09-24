@@ -73,6 +73,12 @@ export const AUDIT_INVENTORY: readonly AuditGroup[] = [
 				source: "packages/visuals/src/ui/progress-bar.tsx",
 				states: ["zero", "in-progress", "complete"],
 			},
+			{
+				id: "presentation-table",
+				label: "Presentation tables",
+				source: "packages/visuals/src/ui/table.tsx",
+				states: ["plain", "contained", "narrow-overflow"],
+			},
 		],
 	},
 	{
