@@ -44,7 +44,7 @@ export type Config = {
 };
 
 const DEFAULT_PORT = 8787;
-const DEFAULT_MODEL = "claude-sonnet-4.6";
+const DEFAULT_MODEL = "gpt-6-luna";
 
 function port(): number {
 	let raw = process.env.PORT;
