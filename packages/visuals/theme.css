@@ -5,6 +5,44 @@
 	--color-current: currentColor;
 	--color-white: oklch(1 0 0);
 
+	/* Raw semantic scales. */
+	--color-ruby-1: #fffcfd;
+	--color-ruby-2: #fff7f8;
+	--color-ruby-3: #feeaed;
+	--color-ruby-4: #ffdce1;
+	--color-ruby-5: #ffced6;
+	--color-ruby-6: #f8bfc8;
+	--color-ruby-7: #efacb8;
+	--color-ruby-8: #e592a3;
+	--color-ruby-9: oklch(0.611 0.171 13.15);
+	--color-ruby-10: oklch(0.55 0.182 13.52);
+	--color-ruby-11: oklch(0.457 0.19852 13.9);
+	--color-ruby-12: #64172b;
+	--color-orange-1: #fefcfb;
+	--color-orange-2: #fff7ed;
+	--color-orange-3: #ffefd6;
+	--color-orange-4: #ffdfb5;
+	--color-orange-5: #ffd19a;
+	--color-orange-6: #ffc182;
+	--color-orange-7: #f5ae73;
+	--color-orange-8: #ec9455;
+	--color-orange-9: oklch(0.716 0.146 45.02);
+	--color-orange-10: oklch(0.633 0.158 43.46);
+	--color-orange-11: oklch(0.558 0.158 42.74);
+	--color-orange-12: #582d1d;
+	--color-lime-1: #fcfdfa;
+	--color-lime-2: #f8faf3;
+	--color-lime-3: #eef6d6;
+	--color-lime-4: #e2f0bd;
+	--color-lime-5: #d3e7a6;
+	--color-lime-6: #c2da91;
+	--color-lime-7: #abc978;
+	--color-lime-8: #8db654;
+	--color-lime-9: oklch(0.684 0.12 126.09);
+	--color-lime-10: oklch(0.603 0.132 126.75);
+	--color-lime-11: oklch(0.474 0.14 128.6);
+	--color-lime-12: #37401c;
+
 	/* Warm olive neutrals. The lightest steps are deliberately close, not aliases. */
 	--color-gray-50: oklch(0.99051 0.00263 95); /* #fcfcfa */
 	--color-gray-100: oklch(0.97857 0.00264 95); /* #f8f8f6 */
@@ -45,6 +83,23 @@
 	--focus-ring-color: var(--color-brand);
 	--focus-ring-width: 2px;
 	--focus-ring-offset: 2px;
+
+	--color-neutral-surface: var(--color-gray-100);
+	--color-neutral-graphic: var(--color-gray-300);
+	--color-neutral-icon: var(--color-gray-500);
+	--color-neutral-text: var(--color-gray-700);
+	--color-success-surface: var(--color-lime-3);
+	--color-success-graphic: var(--color-lime-8);
+	--color-success-icon: var(--color-lime-11);
+	--color-success-text: var(--color-lime-12);
+	--color-warning-surface: var(--color-orange-3);
+	--color-warning-graphic: var(--color-orange-8);
+	--color-warning-icon: var(--color-orange-11);
+	--color-warning-text: var(--color-orange-12);
+	--color-danger-surface: var(--color-ruby-3);
+	--color-danger-graphic: var(--color-ruby-9);
+	--color-danger-icon: var(--color-ruby-11);
+	--color-danger-text: var(--color-ruby-12);
 
 	--color-success: oklch(0.51958 0.10966 145.072); /* #3b793f */
 	--color-success-wash: oklch(0.93 0.026 145);
