@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { createElement } from "react";
+import { SelectItem } from "@chopin/visuals";
+import { Children, createElement, isValidElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { Controls } from "./controls";
@@ -8,10 +9,25 @@ import { Foundations } from "./foundations";
 import { AUDIT_INVENTORY } from "./inventory";
 import { Surfaces } from "./surfaces";
 
+import type { ReactElement, ReactNode } from "react";
+
 function plate(markup: string, item: string): string {
 	let start = markup.indexOf(`<section class="design-audit-plate" data-audit-item="${item}">`);
 	let end = markup.indexOf("</section>", start);
 	return start === -1 || end === -1 ? "" : markup.slice(start, end + "</section>".length);
+}
+
+function elementsOfType(
+	node: ReactNode,
+	type: ReactElement["type"],
+	found: ReactElement<{ children?: ReactNode; value?: unknown }>[] = [],
+) {
+	Children.forEach(node, child => {
+		if (!isValidElement<{ children?: ReactNode; value?: unknown }>(child)) return;
+		if (child.type === type) found.push(child);
+		elementsOfType(child.props.children, type, found);
+	});
+	return found;
 }
 
 describe("design audit specimens", () => {
@@ -201,9 +217,14 @@ describe("design audit specimens", () => {
 		expect(markup).toContain('role="menu"');
 		expect(markup).toContain('data-slot="select-trigger"');
 		expect(markup).toContain('data-slot="select-value"');
-		expect(markup).toContain("Archived documents");
 		expect(markup).not.toContain('<select class="field"');
 		expect(markup).toMatch(/aria-busy="true"[^>]*disabled[^>]*>[\s\S]*data-nucleo-icon/);
+		expect(
+			elementsOfType(Controls(), SelectItem).map(item => [item.props.value, item.props.children]),
+		).toEqual([
+			["active", "Active documents"],
+			["archived", "Archived documents"],
+		]);
 	});
 
 	it("gives focused audit links breathing room", async () => {
