@@ -34,7 +34,7 @@ and [Self-hosting](self-hosting.md) for deployment.
   publication validation rejects linking a grandchild.
 - The **Planner** is the current name of Chopin's hosted Copilot-backed document
   agent.
-- A **coding agent** is an external MCP client that creates or implements a
+- A **coding agent** is an external MCP client that creates, revises, or implements a
   document from its own local workspace.
 
 The current UI, protocol, and server grew from a planning workflow and retain
@@ -104,8 +104,8 @@ push or administration access permits mutation.
 `/mcp` authenticates a GitHub bearer supplied by the coding agent. It applies
 instance admission and checks that token's current repository role without
 requiring the GitHub App for Chopin installation. Pull access permits reads;
-push or administration access permits document creation and implementation
-lifecycle mutations.
+push or administration access permits document creation, document updates, and
+implementation lifecycle mutations.
 
 ### Hosted agent
 
@@ -135,7 +135,7 @@ owner credential but fresh isolated sessions; see
   channel link;
 - canonical MDX and a versioned sidecar containing questions, shared drafts,
   comments, decisions, transcript, relationships, creation metadata,
-  implementation graphs, active execution, and run history;
+  MCP document rewrites, implementation graphs, active execution, and run history;
 - reserved Planner summary and transcript cursor fields, plus the ownership
   reference and generation; and
 - migrations and the database writer lease.
@@ -210,9 +210,10 @@ collisions, and keep every former canonical slug as an alias. Renaming changes
 the canonical route without changing the UUID or plan revision.
 
 Browser creation `Location` headers and MCP `create_document.url` expose the
-readable route. MCP `read_document` and `read_implementation` bridge the two
-identities by accepting either the canonical URL or UUID and returning the UUID;
-lifecycle calls continue to use that returned UUID. Legacy repository and UUID
+readable route. MCP `read_document`, `update_document`, and `read_implementation`
+bridge the two identities by accepting either the canonical URL or UUID and
+returning the UUID; lifecycle calls continue to use that returned UUID. Legacy
+repository and UUID
 browser paths resolve through the existing internal routes before the browser
 replaces them with the canonical readable location.
 

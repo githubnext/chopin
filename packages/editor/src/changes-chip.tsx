@@ -65,7 +65,15 @@ function List({ entries }: { entries: Entry[] }) {
 					// between this list and a plain history of the turn.
 					data-unread={entry.seen ? undefined : ""}
 				>
-					<span className="plan-changes-kind">{label(entry)}</span>
+					<span
+						className="plan-changes-kind"
+						title={entry.attribution
+							? `${entry.attribution.client.name} ${entry.attribution.client.version}, revisions ${entry.attribution.fromRevision} to ${entry.attribution.revision}`
+							: undefined}
+					>
+						{label(entry)}
+						{entry.attribution ? ` by ${entry.attribution.client.name}` : ""}
+					</span>
 					<span className="plan-changes-text">{describe(entry)}</span>
 				</li>
 			))}

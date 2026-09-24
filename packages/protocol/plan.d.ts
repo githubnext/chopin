@@ -156,6 +156,12 @@ export declare namespace Plan {
 		preview: string;
 	};
 
+	export type ChangeAttribution = {
+		client: { name: string; version: string };
+		fromRevision: number;
+		revision: number;
+	};
+
 	/**
 	 * One thing the agent did to the plan, as a reader can find it.
 	 *
@@ -166,9 +172,12 @@ export declare namespace Plan {
 	 * on the most common edit the agent makes.
 	 */
 	export type Change =
-		| ({ kind: "added"; at: Anchor } & Excerpt)
-		| ({ kind: "moved"; at: Anchor; from: Gap } & Excerpt)
-		| { kind: "removed"; at: Gap; blocks: Excerpt[] };
+		& (
+			| ({ kind: "added"; at: Anchor } & Excerpt)
+			| ({ kind: "moved"; at: Anchor; from: Gap } & Excerpt)
+			| { kind: "removed"; at: Gap; blocks: Excerpt[] }
+		)
+		& { attribution?: ChangeAttribution };
 
 	/**
 	 * What the agent just did to the plan.
