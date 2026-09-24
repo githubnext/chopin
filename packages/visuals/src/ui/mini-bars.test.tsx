@@ -106,7 +106,7 @@ test("filters invalid data before laying out the latest five bars", () => {
 	expect(markup.match(/rx="2"/g)).toHaveLength(5);
 });
 
-test("uses semantic graphic fill and existing size tokens", async () => {
+test("uses gray 400 for neutral bars and semantic graphic fill for other tones", async () => {
 	let css = await Bun.file(new URL("./mini-bars.css", import.meta.url)).text();
 	let styles = await Bun.file(new URL("../styles.css", import.meta.url)).text();
 
@@ -114,6 +114,9 @@ test("uses semantic graphic fill and existing size tokens", async () => {
 	expect(css).toContain("width: calc(var(--spacing) * 16);");
 	expect(css).toContain("height: calc(var(--spacing) * 6);");
 	expect(css).toContain("fill: var(--cv-semantic-graphic);");
+	expect(css).toMatch(
+		/\.cv-mini-bars\[data-tone="neutral"\]\s*\{\s*--cv-semantic-graphic:\s*var\(--color-gray-400\);\s*\}/,
+	);
 	expect(css).toContain("background: transparent;");
 	expect(css).not.toMatch(/#[\da-f]{3,8}|(?:oklch|rgb|hsl)\(/i);
 });

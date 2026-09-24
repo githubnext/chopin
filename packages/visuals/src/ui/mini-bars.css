@@ -6,6 +6,10 @@
 	background: transparent;
 }
 
+.cv-mini-bars[data-tone="neutral"] {
+	--cv-semantic-graphic: var(--color-gray-400);
+}
+
 .cv-mini-bars rect {
 	fill: var(--cv-semantic-graphic);
 }
