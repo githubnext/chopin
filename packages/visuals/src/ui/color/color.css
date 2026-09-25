@@ -123,3 +123,126 @@
 	color: var(--color-warning);
 	font-size: var(--text-sm);
 }
+
+.cv-color-popover {
+	box-sizing: border-box;
+	display: grid;
+	gap: calc(var(--spacing) * 4);
+	width: calc(var(--spacing) * 80);
+	padding: calc(var(--spacing) * 4);
+	border-radius: var(--radius-xl);
+	background: var(--color-page);
+	box-shadow: var(--shadow-overlay);
+}
+
+.cv-color-popover-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: calc(var(--spacing) * 2);
+}
+
+.cv-color-popover-header h3 {
+	margin: 0;
+	color: var(--color-text-secondary);
+	font-size: var(--text-sm);
+	font-weight: 600;
+}
+
+.cv-color-popover-actions {
+	display: flex;
+	align-items: center;
+	gap: var(--spacing);
+}
+
+.cv-color-popover-pickers {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: calc(var(--spacing) * 3);
+}
+
+.cv-color-plane {
+	position: relative;
+	aspect-ratio: 1;
+	min-width: 0;
+	overflow: hidden;
+	border-radius: var(--radius-md);
+	background: var(--color-inset);
+	touch-action: none;
+}
+
+.cv-color-plane canvas,
+.cv-color-plane svg {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}
+
+.cv-color-plane svg {
+	pointer-events: none;
+}
+
+.cv-color-plane path {
+	fill: none;
+	stroke: var(--color-control-boundary);
+	stroke-width: 1;
+	vector-effect: non-scaling-stroke;
+}
+
+.cv-color-plane-thumb,
+.cv-hue-strip-thumb {
+	position: absolute;
+	z-index: 1;
+	box-shadow: 0 0 0 2px var(--color-page), 0 0 0 3px var(--color-gray-800);
+	translate: -50% -50%;
+}
+
+.cv-color-plane-thumb {
+	width: 14px;
+	height: 14px;
+	border-radius: 50%;
+}
+
+.cv-hue-strip {
+	position: relative;
+	width: calc(var(--spacing) * 5);
+	border-radius: var(--radius-md);
+	touch-action: none;
+}
+
+.cv-hue-strip-thumb {
+	left: 50%;
+	width: calc(var(--spacing) * 6);
+	height: calc(var(--spacing) * 3);
+	border-radius: 999px;
+}
+
+.cv-color-compare {
+	display: grid;
+	gap: var(--spacing);
+}
+
+.cv-color-compare-labels {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	color: var(--color-text-tertiary);
+	font-size: var(--text-sm);
+}
+
+.cv-color-compare-bar {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	height: calc(var(--spacing) * 9);
+	overflow: hidden;
+	border-radius: var(--radius-md);
+}
+
+.cv-color-compare-bar button {
+	border: 0;
+	cursor: pointer;
+}
+
+.cv-color-compare-bar button:disabled {
+	cursor: default;
+}
