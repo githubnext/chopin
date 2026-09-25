@@ -10,6 +10,8 @@
 		"types": "tsgo --noEmit --skipLibCheck"
 	},
 	"dependencies": {
+		"@ai-sdk/harness": "catalog:harness",
+		"@ai-sdk/mcp": "catalog:harness",
 		"@chopin/dialect": "workspace:*",
 		"@chopin/protocol": "workspace:*",
 		"@chopin/question": "workspace:*",
@@ -17,9 +19,11 @@
 		"@github/copilot-sdk": "catalog:copilot",
 		"@lexical/headless": "catalog:mdx",
 		"@lexical/yjs": "catalog:mdx",
+		"ai": "catalog:harness",
 		"lexical": "catalog:mdx",
 		"y-protocols": "catalog:mdx",
-		"yjs": "catalog:mdx"
+		"yjs": "catalog:mdx",
+		"zod": "catalog:harness"
 	},
 	"devDependencies": {
 		"@types/bun": "catalog:bun",
