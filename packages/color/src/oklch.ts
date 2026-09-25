@@ -85,10 +85,11 @@ function channel(token: string, percent: number | null, degrees: boolean): numbe
 	let match = NUMBER.exec(token);
 	if (!match) return null;
 	let value = Number(match[1]);
+	if (!Number.isFinite(value)) return null;
 	let unit = match[2]?.toLowerCase();
 	if (unit === "%") return percent === null ? null : value / 100 * percent;
 	if (unit === "deg" && !degrees) return null;
-	return Number.isFinite(value) ? value : null;
+	return value;
 }
 
 export function parse(text: string): Oklch | null {

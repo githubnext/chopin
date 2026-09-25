@@ -58,6 +58,10 @@ describe("parse", () => {
 		expect(parse("oklch(1.5 -0.1 -30)")).toEqual({ l: 1, c: 0, h: 330 });
 	});
 
+	test("rejects non-finite percentage channels", () => {
+		expect(parse("oklch(0.5 1e309% 30)")).toBeNull();
+	});
+
 	test("delegates hex", () => {
 		expect(toHex(parse("#96958E")!)).toBe("#96958e");
 	});
