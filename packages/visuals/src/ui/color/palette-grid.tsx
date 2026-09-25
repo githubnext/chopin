@@ -5,6 +5,7 @@ import { gridMove } from "./geometry";
 
 import type { GridRow, Oklch, SwatchRef } from "@chopin/color";
 import type { GridPosition } from "./geometry";
+import type { CSSProperties } from "react";
 
 export type PaletteGridProps = {
 	rows: readonly GridRow[];
@@ -49,9 +50,13 @@ export function PaletteGrid({ rows, onActivate }: PaletteGridProps) {
 		? { row: firstRow, index: 0 }
 		: null;
 	let lengths = rows.map(row => row.cells.length);
+	let rampWidth = Math.max(0, ...lengths) * 32;
 
 	return (
-		<div className="cv-palette-grid">
+		<div
+			className="cv-palette-grid"
+			style={{ "--cv-ramp-min-width": `${rampWidth}px` } as CSSProperties}
+		>
 			{steps && (
 				<div aria-hidden="true" className="cv-palette-grid-steps">
 					<span />

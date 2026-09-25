@@ -150,7 +150,7 @@ export function PaletteEditor({ state, dispatch }: PaletteEditorProps) {
 	);
 	return (
 		<div className="cv-palette-editor">
-			{state.palette.themes.dark && (
+			{!!state.palette.themes.dark?.length && (
 				<div className="cv-palette-toolbar">
 					<ThemeToggle onChange={changeTheme} value={state.theme} />
 				</div>

@@ -115,6 +115,16 @@
 	min-width: 0;
 }
 
+@media (max-width: 639px) {
+	.cv-palette-grid {
+		width: 100%;
+		grid-template-columns: minmax(4rem, max-content) minmax(var(--cv-ramp-min-width, 0px), 1fr);
+		overflow-x: auto;
+		overflow-y: hidden;
+		overscroll-behavior-inline: contain;
+	}
+}
+
 .cv-palette-grid-steps,
 .cv-palette-grid-row {
 	display: grid;

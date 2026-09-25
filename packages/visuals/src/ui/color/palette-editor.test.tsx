@@ -42,6 +42,9 @@ test("theme control appears only with dark hues and contrast follows the active 
 	});
 	markup = renderToStaticMarkup(createElement(PaletteEditor, { state: themed, dispatch() {} }));
 	expect(markup).toContain('aria-label="Theme"');
+	let emptyDark = createPaletteState({ themes: { light: palette.themes.light, dark: [] } });
+	markup = renderToStaticMarkup(createElement(PaletteEditor, { state: emptyDark, dispatch() {} }));
+	expect(markup).not.toContain('aria-label="Theme"');
 	themed = paletteReducer(themed, { type: "theme", theme: "dark" });
 	expect(contrastOptions(themed)[0]).toEqual({
 		id: "surface",

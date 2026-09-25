@@ -55,3 +55,18 @@ test("gives the first available swatch the sole default tab stop", () => {
 	expect(markup.match(/tabindex="0"/g)!.length).toBe(1);
 	expect(markup).toContain('aria-label="Gray"');
 });
+
+test("sizes the narrow ramp from its longest row so step labels can scroll together", () => {
+	let row = gridRows(state)[0];
+	let long = {
+		...row,
+		cells: Array.from({ length: 13 }, (_, index) => ({
+			...row.cells[0],
+			step: `${index * 50}`,
+			ref: { hue: "gray", step: `${index * 50}` },
+		})),
+	};
+	let markup = renderToStaticMarkup(<PaletteGrid onActivate={() => {}} rows={[long]} />);
+	expect(markup).toContain("--cv-ramp-min-width:416px");
+	expect(markup).toContain("cv-palette-grid-steps");
+});
