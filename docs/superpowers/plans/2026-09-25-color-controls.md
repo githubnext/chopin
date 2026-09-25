@@ -3222,3 +3222,28 @@ Maggie.
 - **Open question:** An invalid draft can retain old-format syntax after the format
   selector changes. Review classified this as Minor; revisit after later browser
   interaction checks.
+
+### 2026-09-25 · Slice 2 · color-controls
+
+- **Head:** `color-controls-slice-2` (Task 10 focus-fix parent `b829802`).
+- **Commits:** Task 8 reducer `2a30c6cd` with prototype-key correction `85543d62`;
+  Task 9 grid `383bffec` with viewport-clamp correction `5d8e495`; Task 10 editor
+  `852584ee` with focus and Escape correction `b829802`.
+- **Checks:** `bun run fix`, `bun run types`, full `bun test` (1605 pass, 2 PostgreSQL
+  skips), `bun run ci`, and `git diff --check` passed. Fresh reviews of Tasks 8–10,
+  their Important fixes, and a whole-slice Sol review found no remaining Critical or
+  Important issue.
+- **Browser evidence:** `docs/superpowers/reports/color-controls/slice-2-grid-desktop.png`,
+  `slice-2-grid-mobile.png`, `slice-2-edited-dot.png`, and `slice-2-flipped.png`; plus
+  `task-10-desktop-below.png` and `task-10-mobile.png`. Playwright checked 1280×900 and
+  390×844, switching Gray 450 to Ruby 9 while open, live swatch recoloring and its edit
+  dot, discard, arrow movement between unequal rows, Escape focus, outside-link focus,
+  scroll following, above placement, and no horizontal overflow. Screenshots used in
+  the final report will be committed with that report.
+- **Deviations:** null-prototype edit maps accept arbitrary hue and step names; cramped
+  placement clamps within the visual viewport; an outside pointer dismissal keeps focus
+  on the new target, while Escape returns to the swatch; one Escape cancels an active
+  color-field draft before a later Escape closes the popover. The decision log records
+  each choice.
+- **Open question:** Popover placement currently recalculates on selection and viewport
+  changes. Recheck after the curve pane changes its content size in Task 13.
