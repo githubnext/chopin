@@ -39,7 +39,7 @@ bun run docker:up       # build and start app plus PostgreSQL locally
 bun run docker:down     # tear down the local Compose project
 ```
 
-The repository pins Bun 1.3.2. `mise.toml` selects that version automatically for
+The repository pins Bun 1.4.2. `mise.toml` selects that version automatically for
 contributors who use [mise](https://mise.jdx.dev); run `mise install` once. Keep
 the package metadata, `mise.toml`, Docker image, CI, and documentation
 synchronized when changing it.
