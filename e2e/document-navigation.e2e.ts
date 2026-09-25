@@ -345,11 +345,19 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 		page,
 		'[data-content-swap-state="outgoing"]:not([hidden])',
 	);
-	await expect(visibleRoutes).toHaveCount(2);
-	await expect(interactiveRoutes).toHaveCount(1);
-	await expect(outgoingRoutes).toHaveCount(1);
-	await expect(outgoingRoutes).toHaveAttribute("aria-hidden", "true");
-	await expect(outgoingRoutes).toHaveAttribute("inert", "");
+	// Inspect the short-lived exit layer in one browser turn, before its timer removes it.
+	await expect.poll(() =>
+		visibleRoutes.evaluateAll(routes =>
+			routes.map(route => ({
+				outgoing: route.getAttribute("data-content-swap-state") === "outgoing",
+				inert: route.hasAttribute("inert"),
+				hidden: route.getAttribute("aria-hidden"),
+			}))
+		)
+	).toEqual([
+		{ outgoing: true, inert: true, hidden: "true" },
+		{ outgoing: false, inert: false, hidden: null },
+	]);
 	await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${originalTitle}`);
 	await expect(page).toHaveURL(originalPath!);
 
@@ -587,7 +595,7 @@ test("a delayed rename response cannot overwrite a newer collaborator rename", a
 	await expect(headerDocument(ana)).toHaveAccessibleName(`Document: ${latest}`);
 });
 
-test("read-only visitors can browse documents while mutation actions stay disabled", async ({ baseURL, page, room }) => {
+test("read-only visitors can browse documents and get creation guidance", async ({ baseURL, page, room }) => {
 	await authenticate(page, "readonly", baseURL!);
 	await page.goto(roomPath(room));
 	await expect(page.getByRole("banner")).toBeVisible();
@@ -596,8 +604,14 @@ test("read-only visitors can browse documents while mutation actions stay disabl
 		"false",
 	);
 	await expect(headerActions(page)).toHaveCount(0);
-	await expect(sidebar(page).getByRole("button", { name: "New document", exact: true }))
-		.toBeDisabled();
+	await sidebar(page).getByRole("button", { name: "New document", exact: true }).click();
+	let creation = page.getByRole("dialog", { name: "New document", exact: true });
+	await expect(
+		creation.getByText("You need write access to an available project to create a document."),
+	)
+		.toBeVisible();
+	await expect(creation.getByRole("link", { name: "Manage repository access" })).toBeVisible();
+	await page.keyboard.press("Escape");
 	await sidebar(page).getByRole("button", { name: "Search", exact: true }).click();
 	await expect(page.getByRole("textbox", { name: "Search documents" })).toBeFocused();
 });

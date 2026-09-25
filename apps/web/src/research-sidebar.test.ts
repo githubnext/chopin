@@ -24,8 +24,7 @@ let channel: Api.Channel = {
 
 let props = {
 	canCreateDocument: true,
-	creatingNewDocument: false,
-	creatingProjectIds: new Set<string>(),
+	pendingCreations: new Map(),
 	currentDocumentId: channel.id,
 	onAccount: () => {},
 	onAddProject: () => {},

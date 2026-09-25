@@ -46,6 +46,27 @@ export function canManageProject(project: NavigationProject): boolean {
 		&& (project.repository.permissions.push || project.repository.permissions.admin);
 }
 
+export type DocumentCreationTarget =
+	| { type: "loading" }
+	| { type: "project"; project: NavigationProject }
+	| { type: "choose"; projects: NavigationProject[] }
+	| { type: "unavailable" };
+
+export function documentCreationTarget(
+	projects: NavigationProject[] | undefined,
+	current: NavigationProject | undefined,
+	resolvingDocument = false,
+): DocumentCreationTarget {
+	if (!projects || (resolvingDocument && !current)) return { type: "loading" };
+	let eligible = projects.filter(project => project.available && canManageProject(project));
+	let active = eligible.find(project => project.repositoryId === current?.repositoryId);
+	if (active) return { type: "project", project: active };
+	if (eligible.length === 1) return { type: "project", project: eligible[0]! };
+	return eligible.length > 1
+		? { type: "choose", projects: eligible }
+		: { type: "unavailable" };
+}
+
 export function documentDestination(
 	projects: ProjectDocuments[],
 	documentId: string,
@@ -90,22 +111,6 @@ export function researchChildNavigation(
 	opener: ResearchOpener,
 ): { destination: string; opener: ResearchOpener } {
 	return { destination: researchChildDestination(parent, child), opener };
-}
-
-export function beginProjectCreation(
-	creating: ReadonlySet<string>,
-	projectId: string,
-): Set<string> {
-	return new Set(creating).add(projectId);
-}
-
-export function finishProjectCreation(
-	creating: ReadonlySet<string>,
-	projectId: string,
-): Set<string> {
-	let next = new Set(creating);
-	next.delete(projectId);
-	return next;
 }
 
 export function landingDocument(
