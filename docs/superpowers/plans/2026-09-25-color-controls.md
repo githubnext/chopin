@@ -3273,3 +3273,29 @@ Maggie.
 - **Open questions:** Check dark-theme curve/reset and reversed-row coverage when the
   theme toggle is added. The optional curve toggle `aria-controls` relationship is a
   Minor accessibility follow-up for the final pass.
+
+### 2026-09-25 · Slice 4 · color-controls
+
+- **Head:** `color-controls-slice-4` (Task 15 mobile fix parent `85c55c42`).
+- **Commits:** Task 14 semantic tokens `921dec7b`; Task 15 theme toggle `aad4c0a8`
+  with readable mobile ramp and empty-dark correction `85c55c42`.
+- **Checks:** `bun run fix`, `bun run types`, full `bun test` (1629 pass, 2 PostgreSQL
+  skips), `bun run ci`, and `git diff --check` passed. Fresh Task 14–15 reviews, a
+  fresh review of the Task 15 fix, and the whole-slice Sol review found no remaining
+  Critical or Important issue.
+- **Browser evidence:** `docs/superpowers/reports/color-controls/task-14-tokens-desktop-viewport.png`,
+  `task-14-tokens-mobile-viewport.png`, `task-14-neutral-before.png`,
+  `task-14-neutral-after.png`, `task-15-light-desktop.png`, `task-15-dark-desktop.png`,
+  `task-15-mobile-grid-scroll-start.png`, and `task-15-mobile-grid-scroll-end.png`.
+  Playwright checked desktop 1280×900 and mobile 390×844, token retargeting and
+  discard, missing refs in dark mode, popover closure and focus on theme switch,
+  independent edits across themes, the combined change count, readable aligned
+  labels through horizontal grid scrolling, keyboard access, and no page overflow.
+  Screenshots used in the final report will be committed with that report.
+- **Deviations:** the audit dark ramp is deliberately synthetic; an empty dark theme
+  hides its unusable toggle; mobile uses one internally scrolling ramp so all 13
+  step labels stay readable. The decision log records these choices.
+- **Open questions:** The mobile ramp's scroll affordance can be revisited for the
+  document jig. Long unbroken token names need a real repository fixture before
+  changing the current four-column layout. The final whole-branch review will
+  revisit the optional `aria-controls` relationship.
