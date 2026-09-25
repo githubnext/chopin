@@ -21,6 +21,7 @@ import { createHash } from "node:crypto";
 import { ulid } from "@chopin/dialect";
 
 import * as Agent from "../agent/client";
+import { toCopilotTools } from "../agent/copilot-bridge";
 import { repositoryTools } from "../agent/repository";
 import { type ResearchWorkspaceRequest, toolbox } from "../agent/tools";
 import * as Service from "../plan/service";
@@ -716,7 +717,6 @@ export function planTools(context: Room) {
 	return toolbox({
 		plan,
 		server,
-		room,
 		publish: mutation => Service.publish(plan, server, room, mutation),
 		persist: context.persist,
 		exclusive: action => Service.exclusive(plan, action),
@@ -926,10 +926,11 @@ async function repositorySession(
 		if (!bound()) return undefined;
 		return auth.sessions.token(ownerSessionId, owner.access.revision);
 	};
-	let tools = [
-		...planTools(context),
-		...repositoryTools({ token: activeToken, repository }),
-	];
+	let tools = toCopilotTools({ ...planTools(context), ...repositoryTools() }, {
+		room: context.room,
+		repository,
+		owner: { currentToken: activeToken },
+	});
 	let opening: Promise<Agent.Agent> | undefined;
 	let opened: Agent.Agent | undefined;
 	try {

@@ -1,7 +1,8 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { ulid } from "@chopin/dialect";
 
-import { toolbox } from "./tools";
+import { type Context, toolbox } from "./tools";
+import { toCopilotTools } from "./copilot-bridge";
 import { Admission } from "../auth/admission";
 import { Sessions } from "../auth/session";
 import * as Chat from "../chat/service";
@@ -56,6 +57,31 @@ async function opened(source: string, state: SeedState = {}) {
 	return context;
 }
 
+function legacyTools({ room, ...dependencies }: Context & { room: string }) {
+	return toCopilotTools(toolbox(dependencies), { room });
+}
+
+test("document jobs use the room from each tool call's context", async () => {
+	let { plan, server } = await opened("Jobs context.\n");
+	let tools = toolbox({
+		plan,
+		server,
+		persist: () => Service.persist(plan),
+		exclusive: action => Service.exclusive(plan, action),
+		async publish() {},
+		anchors() {},
+		changes() {},
+		jobs: { list: (room: string) => ({ room }) } as unknown as Context["jobs"],
+	});
+	let list = tools.list_background_jobs;
+	expect(list.contextSchema).toBeDefined();
+	for (let room of ["one", "two"]) {
+		let result = await list.execute!({}, { context: { room }, toolCallId: "call", messages: [] });
+		if (typeof result !== "string") throw new Error("job tool did not return text");
+		expect(JSON.parse(result)).toEqual({ room });
+	}
+});
+
 test("create_research_workspace validates one question and waits for immediate research start", async () => {
 	let { plan, server } = await opened("Research context.\n");
 	let committed = Promise.withResolvers<{
@@ -64,7 +90,7 @@ test("create_research_workspace validates one question and waits for immediate r
 		stage: "queued";
 	}>();
 	let questions: string[] = [];
-	let createResearch = toolbox({
+	let createResearch = legacyTools({
 		plan,
 		server,
 		room: "test",
@@ -134,7 +160,7 @@ test("read_reference accepts only ids made available by the active chat session"
 	let { plan, server } = await opened("Reference context.\n");
 	let available = ulid();
 	let reads: string[] = [];
-	let readReference = toolbox({
+	let readReference = legacyTools({
 		plan,
 		server,
 		room: "test",
@@ -192,7 +218,7 @@ test("anchor_plan publishes moving a decision beside the validated prose", async
 	});
 	let published: unknown[] = [];
 	let anchors = 0;
-	let anchorPlan = toolbox({
+	let anchorPlan = legacyTools({
 		plan,
 		server,
 		room: "test",
@@ -234,7 +260,7 @@ test("anchor_plan publishes moving a decision beside the validated prose", async
 test("edit_plan refuses while an implementation claim drains", async () => {
 	let { plan, server } = await opened("The plan is ready.\n");
 	(plan as typeof plan & { claiming: boolean }).claiming = true;
-	let editPlan = toolbox({
+	let editPlan = legacyTools({
 		plan,
 		server,
 		room: "test",
@@ -303,7 +329,7 @@ test("anchor_plan keeps same-block decisions in original ask order", async () =>
 			],
 		},
 	);
-	let anchorPlan = toolbox({
+	let anchorPlan = legacyTools({
 		plan,
 		server,
 		room: "test",
@@ -344,7 +370,7 @@ test("ask publishes a pending questionnaire beside its validated prose", async (
 	let { broadcasts, plan, server } = await opened("Related prose.\n");
 	let anchors = 0;
 	let created = Promise.withResolvers<void>();
-	let ask = toolbox({
+	let ask = legacyTools({
 		plan,
 		server,
 		room: "test",
@@ -398,7 +424,7 @@ test("ask publishes a pending questionnaire beside its validated prose", async (
 test("a stale ask does not announce an anchor snapshot", async () => {
 	let { plan, server } = await opened("Related prose.\n");
 	let anchors = 0;
-	let ask = toolbox({
+	let ask = legacyTools({
 		plan,
 		server,
 		room: "test",
@@ -435,7 +461,7 @@ test("a stale ask does not announce an anchor snapshot", async () => {
 test("ask refuses to create a questionnaire while implementation is active", async () => {
 	let { plan, server } = await opened("Related prose.\n");
 	let anchors = 0;
-	let ask = toolbox({
+	let ask = legacyTools({
 		plan,
 		server,
 		room: "test",
@@ -479,7 +505,7 @@ test("planner graph edits draft a revision without changing plan prose", async (
 	plan.chat.busy = true;
 	plan.chat.turn = { id: "turn", handle: "ana", started: 1, responded: false };
 	let before = room.project(plan.document);
-	let graph = toolbox({
+	let graph = legacyTools({
 		plan,
 		server,
 		room: "test",
@@ -536,7 +562,7 @@ test("planner graph edits draft a revision without changing plan prose", async (
 test("chat-started tools retain only the current member request provenance", async () => {
 	let { plan, server, storage, channel } = await opened("Prepare the implementation.\n");
 	let now = new Date();
-	let tools = toolbox({
+	let tools = legacyTools({
 		plan,
 		server,
 		room: "test",
@@ -571,7 +597,7 @@ test("chat-started tools retain only the current member request provenance", asy
 	let activeRequests: Array<Chat.ActiveMemberRequest | undefined> = [];
 	let researchRequests: Array<Parameters<NonNullable<Chat.Room["createResearch"]>>[0]> = [];
 	let researchResponses: string[] = [];
-	let researchTool: ReturnType<typeof Chat.planTools>[number] | undefined;
+	let researchTool: ReturnType<typeof toCopilotTools>[number] | undefined;
 	plan.chat.agent = {
 		id: "session",
 		session: {
@@ -686,7 +712,8 @@ test("chat-started tools retain only the current member request provenance", asy
 			};
 		},
 	};
-	researchTool = Chat.planTools(context).find(tool => tool.name === "create_research_workspace");
+	researchTool = toCopilotTools(Chat.planTools(context), { room: context.room })
+		.find(tool => tool.name === "create_research_workspace");
 
 	await Chat.send(
 		context,
@@ -805,7 +832,7 @@ test("planner graph edits name readiness blockers before changing a graph", asyn
 			}],
 		},
 	} as never);
-	let graph = toolbox({
+	let graph = legacyTools({
 		plan,
 		server,
 		room: "test",
