@@ -7,7 +7,6 @@ import {
 	Sparkline,
 	Table,
 	TableBody,
-	TableCaption,
 	TableCell,
 	TableHead,
 	TableHeader,
@@ -108,7 +107,6 @@ function TableExample({
 }) {
 	return (
 		<Table aria-label="Deployment activity" className="design-audit-table" variant={variant}>
-			<TableCaption>Deployment activity</TableCaption>
 			<TableHeader>
 				<TableRow>
 					<TableHead scope="col">Environment</TableHead>

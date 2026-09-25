@@ -172,7 +172,8 @@ describe("design audit specimens", () => {
 		expect(specimen).toContain('data-variant="plain"');
 		expect(specimen).toContain('data-variant="contained"');
 		expect(specimen.match(/data-slot="table"/g)).toHaveLength(2);
-		expect(specimen).toContain("Deployment activity");
+		expect(specimen.match(/aria-label="Deployment activity"/g)).toHaveLength(2);
+		expect(specimen).not.toContain("<caption");
 		expect(specimen).toContain("Production Europe West with an intentionally long name");
 	});
 

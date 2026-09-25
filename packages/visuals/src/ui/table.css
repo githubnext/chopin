@@ -46,10 +46,3 @@
 	border-top: var(--edge-width) solid var(--color-edge);
 	font-weight: 500;
 }
-
-.cv-table-caption {
-	padding-block-start: calc(var(--spacing) * 2);
-	caption-side: bottom;
-	color: var(--color-text-tertiary);
-	text-align: left;
-}

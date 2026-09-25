@@ -13,7 +13,6 @@ export type TableFooterProps = ComponentPropsWithoutRef<"tfoot"> & Authoritative
 export type TableRowProps = ComponentPropsWithoutRef<"tr"> & AuthoritativeSlot;
 export type TableHeadProps = ComponentPropsWithoutRef<"th"> & AuthoritativeSlot;
 export type TableCellProps = ComponentPropsWithoutRef<"td"> & AuthoritativeSlot;
-export type TableCaptionProps = ComponentPropsWithoutRef<"caption"> & AuthoritativeSlot;
 
 function classes(base: string, className?: string) {
 	return [base, className].filter(Boolean).join(" ");
@@ -72,14 +71,4 @@ function TableCell({ className, "data-slot": _slot, ...props }: TableCellProps) 
 	return <td className={classes("cv-table-cell", className)} data-slot="table-cell" {...props} />;
 }
 
-function TableCaption({ className, "data-slot": _slot, ...props }: TableCaptionProps) {
-	return (
-		<caption
-			className={classes("cv-table-caption", className)}
-			data-slot="table-caption"
-			{...props}
-		/>
-	);
-}
-
-export { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow };
+export { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow };

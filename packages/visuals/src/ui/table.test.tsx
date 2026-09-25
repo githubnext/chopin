@@ -1,7 +1,6 @@
 import {
 	Table,
 	TableBody,
-	TableCaption,
 	TableCell,
 	TableFooter,
 	TableHead,
@@ -10,7 +9,6 @@ import {
 } from "@chopin/visuals";
 import type {
 	TableBodyProps,
-	TableCaptionProps,
 	TableCellProps,
 	TableFooterProps,
 	TableHeaderProps,
@@ -29,7 +27,6 @@ test("exports the complete native presentation table API", () => {
 	let row: TableRowProps = {};
 	let head: TableHeadProps = { scope: "col" };
 	let cell: TableCellProps = { headers: "status" };
-	let caption: TableCaptionProps = {};
 
 	expect([
 		Table,
@@ -39,10 +36,9 @@ test("exports the complete native presentation table API", () => {
 		TableRow,
 		TableHead,
 		TableCell,
-		TableCaption,
 	].every(component => typeof component === "function")).toBe(true);
 	expect(table.variant).toBe("contained");
-	expect([header, body, footer, row, head, cell, caption]).toHaveLength(7);
+	expect([header, body, footer, row, head, cell]).toHaveLength(6);
 });
 
 test(
@@ -58,9 +54,6 @@ test(
 				id="activity-table"
 				variant="contained"
 			>
-				<TableCaption className="custom-caption" data-slot="ignored-caption">
-					Deployment activity by environment
-				</TableCaption>
 				<TableHeader className="custom-header" data-slot="ignored-header">
 					<TableRow className="custom-row" data-slot="ignored-row">
 						<TableHead data-slot="ignored-head" id="environment" scope="col">
@@ -97,9 +90,6 @@ test(
 		expect(markup).not.toContain('data-variant="plain"');
 		expect(markup).toContain('id="activity-table"');
 		expect(markup).toContain(
-			'<caption class="cv-table-caption custom-caption" data-slot="table-caption"',
-		);
-		expect(markup).toContain(
 			'<thead class="cv-table-header custom-header" data-slot="table-header"',
 		);
 		expect(markup).toContain('<tbody class="cv-table-body custom-body" data-slot="table-body"');
@@ -114,7 +104,7 @@ test(
 			'<td class="cv-table-cell" data-slot="table-cell" headers="environment"',
 		);
 		expect(markup).toContain('colSpan="2"');
-		for (let ignored of ["caption", "header", "body", "footer", "row", "head", "cell"]) {
+		for (let ignored of ["header", "body", "footer", "row", "head", "cell"]) {
 			expect(markup).not.toContain(`data-slot="ignored-${ignored}"`);
 		}
 	},
