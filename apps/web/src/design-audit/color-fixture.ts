@@ -1,4 +1,4 @@
-import type { Oklch } from "@chopin/color";
+import type { Oklch, Palette } from "@chopin/color";
 
 export type FixtureHue = {
 	name: string;
@@ -76,3 +76,5 @@ export const CHOPIN_LIGHT_HUES: FixtureHue[] = [
 		],
 	},
 ];
+
+export const CHOPIN_PALETTE: Palette = { themes: { light: CHOPIN_LIGHT_HUES } };

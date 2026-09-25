@@ -7,6 +7,33 @@
 	white-space: nowrap;
 }
 
+.cv-palette-popover {
+	position: fixed;
+	inset: auto;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	overflow: visible;
+}
+
+.cv-palette-changes {
+	margin: calc(var(--spacing) * 3) 0 0;
+	color: var(--color-text-tertiary);
+	font-size: var(--text-sm);
+}
+
+.cv-palette-changes button {
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--color-text-secondary);
+	font: inherit;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	cursor: pointer;
+}
+
 .cv-palette-grid {
 	display: grid;
 	grid-template-columns: minmax(4rem, max-content) minmax(0, 1fr);

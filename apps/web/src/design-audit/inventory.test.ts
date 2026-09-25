@@ -18,6 +18,7 @@ const REQUIRED = [
 	"menus",
 	"dropdowns",
 	"color-popover",
+	"palette-editor",
 	"dialogs",
 	"lists",
 	"navigation",

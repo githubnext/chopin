@@ -1,6 +1,7 @@
-import { toHex } from "@chopin/color";
+import { createPaletteState, paletteReducer, toHex } from "@chopin/color";
 import {
 	ColorPopover,
+	PaletteEditor,
 	Sparkline,
 	Table,
 	TableBody,
@@ -9,9 +10,9 @@ import {
 	TableHeader,
 	TableRow,
 } from "@chopin/visuals";
-import { useState } from "react";
+import { useReducer, useState } from "react";
 
-import { CHOPIN_LIGHT_HUES } from "./color-fixture";
+import { CHOPIN_LIGHT_HUES, CHOPIN_PALETTE } from "./color-fixture";
 import { AuditPlate } from "./frame";
 
 import type { Oklch, Purpose } from "@chopin/color";
@@ -32,6 +33,17 @@ const ROWS = [
 	{ document: "Research notes", values: [2, 4, 3, 7], edits: 18 },
 	{ document: "Launch brief", values: [5, 5, 5, 5], edits: 12 },
 ] as const;
+
+export function PaletteEditorSpecimen() {
+	let [state, dispatch] = useReducer(paletteReducer, CHOPIN_PALETTE, createPaletteState);
+	return (
+		<AuditPlate item="palette-editor" title="Palette editor">
+			<div className="design-audit-palette-layout">
+				<PaletteEditor dispatch={dispatch} state={state} />
+			</div>
+		</AuditPlate>
+	);
+}
 
 export function ColorControls() {
 	let [value, setValue] = useState<Oklch>(INITIAL);

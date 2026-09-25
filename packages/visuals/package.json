@@ -17,7 +17,8 @@
 	"dependencies": {
 		"@base-ui/react": "1.7.0",
 		"@chopin/color": "workspace:*",
-		"@chopin/icons": "workspace:*"
+		"@chopin/icons": "workspace:*",
+		"@chopin/viewport": "workspace:*"
 	},
 	"peerDependencies": {
 		"react": "catalog:react"

@@ -131,6 +131,12 @@ export const AUDIT_INVENTORY: readonly AuditGroup[] = [
 		label: "Color controls",
 		items: [
 			{
+				id: "palette-editor",
+				label: "Palette editor",
+				source: "packages/visuals/src/ui/color/palette-editor.tsx",
+				states: ["initial", "selected", "edited"],
+			},
+			{
 				id: "color-popover",
 				label: "Color popover",
 				source: "packages/visuals/src/ui/color/color-popover.tsx",

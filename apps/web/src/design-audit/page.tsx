@@ -2,7 +2,7 @@ import { AuditFrame, AuditSection } from "./frame";
 import { Adoption } from "./adoption";
 import { AuthoredContent } from "./authored-content";
 import { Controls } from "./controls";
-import { ColorControls } from "./color";
+import { ColorControls, PaletteEditorSpecimen } from "./color";
 import { Foundations } from "./foundations";
 import { AUDIT_INVENTORY } from "./inventory";
 import { Surfaces } from "./surfaces";
@@ -26,6 +26,7 @@ export function DesignAuditPage() {
 				<Controls />
 			</AuditSection>
 			<AuditSection id="color" title="Color controls">
+				<PaletteEditorSpecimen />
 				<ColorControls />
 			</AuditSection>
 			<AuditSection id="surfaces" title="Application surfaces">

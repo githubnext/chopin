@@ -1,3 +1,9 @@
+.design-audit-palette-layout {
+	padding: 1.5rem;
+	border-radius: var(--radius-xl);
+	background: var(--color-ground);
+}
+
 .design-audit-color-layout {
 	display: grid;
 	grid-template-columns: minmax(0, 20rem) minmax(0, 1fr);
@@ -54,6 +60,10 @@
 }
 
 @media (max-width: 760px) {
+	.design-audit-palette-layout {
+		padding: 1rem;
+	}
+
 	.design-audit-color-layout {
 		grid-template-columns: minmax(0, 1fr);
 		padding: 0;

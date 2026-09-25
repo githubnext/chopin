@@ -4,7 +4,7 @@ import { Children, createElement, isValidElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { Controls } from "./controls";
-import { ColorControls } from "./color";
+import { ColorControls, PaletteEditorSpecimen } from "./color";
 import { CHOPIN_LIGHT_HUES } from "./color-fixture";
 import { AuthoredContent, callouts } from "./authored-content";
 import { Foundations } from "./foundations";
@@ -59,6 +59,18 @@ describe("design audit specimens", () => {
 		expect(markup).toContain(">Gray 450<");
 		expect(markup).toContain("3.00:1");
 		expect(markup).toContain('role="img"');
+	});
+
+	it("renders the palette editor without changes before any edits", () => {
+		let item = AUDIT_INVENTORY.flatMap(group => group.items).find(
+			candidate => candidate.id === "palette-editor",
+		);
+		expect(item?.source).toBe("packages/visuals/src/ui/color/palette-editor.tsx");
+		let markup = renderToStaticMarkup(createElement(PaletteEditorSpecimen));
+		expect(markup).toContain('data-audit-item="palette-editor"');
+		expect(markup).toContain('aria-label="Gray 450, oklch(0.6681 0.0105 95)"');
+		expect(markup).toContain('aria-label="Ruby 9, oklch(0.611 0.171 13.15)"');
+		expect(markup).not.toContain("Discard all");
 	});
 	it("renders every foundation family with a visible label", () => {
 		let markup = renderToStaticMarkup(createElement(Foundations));
