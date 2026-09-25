@@ -1,10 +1,21 @@
-import { baseValue, changes, currentValue, gridRows, surface } from "@chopin/color";
+import {
+	baseValue,
+	changes,
+	currentValue,
+	curveFor,
+	gridRows,
+	rowValues,
+	sameColor,
+	surface,
+} from "@chopin/color";
+import { CurveIcon } from "@chopin/icons";
 import { currentViewport, listenToViewportChanges } from "@chopin/viewport";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 
 import { ColorPopover } from "./color-popover";
 import { placePopover } from "./geometry";
 import { PaletteGrid } from "./palette-grid";
+import { RampCurveEditor } from "./ramp-curve-editor";
 
 import type { PaletteAction, PaletteState, Purpose, SwatchRef } from "@chopin/color";
 import type { ContrastOption } from "./contrast-reader";
@@ -37,8 +48,10 @@ export function PaletteEditor({ state, dispatch }: PaletteEditorProps) {
 	let popover = useRef<HTMLDivElement>(null);
 	let anchor = useRef<HTMLElement | null>(null);
 	let pointerDismissal = useRef<{ target: HTMLElement | null } | null>(null);
+	let shortRowReason = useId();
 	let [purpose, setPurpose] = useState<Purpose>("graphic");
 	let [against, setAgainst] = useState("surface");
+	let [curveOpen, setCurveOpen] = useState(false);
 	let [position, setPosition] = useState<{ left: number; top: number } | null>(null);
 	let selected = state.selected;
 	let pending = changes(state).length;
@@ -61,23 +74,66 @@ export function PaletteEditor({ state, dispatch }: PaletteEditorProps) {
 			setPosition(placePopover(trigger.getBoundingClientRect(), size, currentViewport()));
 		}
 		place();
+		// The pane and its discard note can change size after opening or editing.
+		let resizeObserver = new ResizeObserver(place);
+		resizeObserver.observe(popover.current!);
 		let stopListening = listenToViewportChanges(place, { observeDocumentScroll: true });
 		document.addEventListener("pointerdown", trackPointerDown, true);
 		return () => {
+			resizeObserver.disconnect();
 			stopListening();
 			document.removeEventListener("pointerdown", trackPointerDown, true);
 		};
-	}, [selected]);
+	}, [selected, curveOpen]);
 
 	function open(ref: SwatchRef, element: HTMLElement) {
 		anchor.current = element;
 		pointerDismissal.current = null;
+		setCurveOpen(false);
 		dispatch({ type: "select", ref });
 		if (!popover.current?.matches(":popover-open")) popover.current?.showPopover();
 	}
 
 	let value = selected && currentValue(state, selected);
 	let previous = selected && baseValue(state, selected);
+	let row = selected && rowValues(state, selected.hue);
+	let curve = selected && curveFor(state, selected.hue);
+	let canCurve = !!row && row.steps.length >= 2;
+	let colorPopover = selected && value && previous && (
+		<ColorPopover
+			actions={
+				<>
+					<button
+						aria-describedby={canCurve ? undefined : shortRowReason}
+						aria-expanded={curveOpen && canCurve}
+						aria-label={`Edit ${selected.hue} ramp curve`}
+						className="cv-curve-toggle"
+						disabled={!canCurve}
+						onClick={() => setCurveOpen(open => !open)}
+						type="button"
+					>
+						<CurveIcon size={16} />
+					</button>
+					{!canCurve && (
+						<span className="cv-visually-hidden" id={shortRowReason}>
+							Needs at least two colors
+						</span>
+					)}
+				</>
+			}
+			contrast={{
+				against,
+				onAgainstChange: setAgainst,
+				onPurposeChange: setPurpose,
+				options: contrastOptions(state),
+				purpose,
+			}}
+			onChange={next => dispatch({ type: "edit", ref: selected, value: next })}
+			previous={previous}
+			title={title(selected)}
+			value={value}
+		/>
+	);
 	return (
 		<div className="cv-palette-editor">
 			<PaletteGrid onActivate={open} rows={gridRows(state)} />
@@ -94,6 +150,7 @@ export function PaletteEditor({ state, dispatch }: PaletteEditorProps) {
 				onToggle={event => {
 					if (event.newState !== "closed" || popover.current?.matches(":popover-open")) return;
 					dispatch({ type: "select", ref: null });
+					setCurveOpen(false);
 					if (pointerDismissal.current) {
 						pointerDismissal.current.target?.focus({ preventScroll: true });
 					} else anchor.current?.focus({ preventScroll: true });
@@ -103,21 +160,21 @@ export function PaletteEditor({ state, dispatch }: PaletteEditorProps) {
 				ref={popover}
 				style={position ? { left: position.left, top: position.top } : { visibility: "hidden" }}
 			>
-				{selected && value && previous && (
-					<ColorPopover
-						contrast={{
-							against,
-							onAgainstChange: setAgainst,
-							onPurposeChange: setPurpose,
-							options: contrastOptions(state),
-							purpose,
-						}}
-						onChange={next => dispatch({ type: "edit", ref: selected, value: next })}
-						previous={previous}
-						title={title(selected)}
-						value={value}
-					/>
-				)}
+				{curveOpen && row && curve && canCurve
+					? (
+						<div className="cv-palette-popover-body">
+							{colorPopover}
+							<RampCurveEditor
+								current={row.current}
+								curve={curve}
+								edited={row.current.some((entry, index) => !sameColor(entry, row.base[index]))}
+								onCurveChange={next => dispatch({ type: "curve", hue: selected!.hue, curve: next })}
+								onDiscard={() => dispatch({ type: "resetRow", hue: selected!.hue })}
+								steps={row.steps}
+							/>
+						</div>
+					)
+					: colorPopover}
 			</div>
 		</div>
 	);
