@@ -5,12 +5,15 @@ import {
 	changes,
 	createPaletteState,
 	currentValue,
+	curveFor,
 	gridRows,
 	isEdited,
 	paletteReducer,
+	rowValues,
 	sharedSteps,
 	surface,
 } from "./palette";
+import { curveFrom } from "./curve";
 
 import type { Palette } from "./palette";
 
@@ -169,6 +172,51 @@ describe("paletteReducer", () => {
 		]);
 		state = paletteReducer(state, { type: "theme", theme: "light" });
 		expect(isEdited(state, dark)).toBe(false);
+	});
+
+	test("the curve action rewrites a row from its base and stores the settings", () => {
+		let state = createPaletteState(palette);
+		let curve = {
+			darkest: { l: 0.6, hueShift: 0, easing: "linear" as const },
+			lightest: { l: 0.8, hueShift: 0, easing: "linear" as const },
+		};
+		let once = paletteReducer(state, { type: "curve", hue: "gray", curve });
+		let twice = paletteReducer(once, { type: "curve", hue: "gray", curve });
+		expect(twice.edits).toEqual(once.edits);
+		expect(currentValue(once, { hue: "gray", step: "400" })!.l).toBeCloseTo(0.8, 6);
+		expect(curveFor(once, "gray")).toEqual(curve);
+		let reset = paletteReducer(once, { type: "resetRow", hue: "gray" });
+		expect(changes(reset)).toEqual([]);
+		expect(curveFor(reset, "gray")).toEqual(curveFrom(rowValues(reset, "gray")!.base));
+	});
+
+	test("stores curves for prototype-like hue names", () => {
+		let palette: Palette = {
+			themes: {
+				light: [{
+					name: "__proto__",
+					swatches: [
+						{ step: "toString", value: { l: 0.9, c: 0.05, h: 30 } },
+						{ step: "1", value: { l: 0.4, c: 0.1, h: 30 } },
+					],
+				}],
+			},
+		};
+		let curve = {
+			darkest: { l: 0.3, hueShift: 0, easing: "linear" as const },
+			lightest: { l: 0.8, hueShift: 0, easing: "linear" as const },
+		};
+		let state = paletteReducer(createPaletteState(palette), {
+			type: "curve",
+			hue: "__proto__",
+			curve,
+		});
+		expect(curveFor(state, "__proto__")).toEqual(curve);
+		expect(JSON.stringify(state.curves.light)).toBe(
+			'{"__proto__":{"darkest":{"l":0.3,"hueShift":0,"easing":"linear"},"lightest":{"l":0.8,"hueShift":0,"easing":"linear"}}}',
+		);
+		state = paletteReducer(state, { type: "resetRow", hue: "__proto__" });
+		expect(JSON.stringify(state.curves.light)).toBe("{}");
 	});
 });
 

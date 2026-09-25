@@ -1,5 +1,7 @@
 import { sameColor } from "./oklch";
+import { curveFrom, rampCurve } from "./curve";
 
+import type { Curve } from "./curve";
 import type { Oklch } from "./oklch";
 
 export type Theme = "light" | "dark";
@@ -17,6 +19,7 @@ export type PaletteState = {
 	palette: Palette;
 	theme: Theme;
 	edits: Record<Theme, Edits>;
+	curves: Record<Theme, Record<string, Curve>>;
 	selected: SwatchRef | null;
 };
 export type PaletteAction =
@@ -25,6 +28,7 @@ export type PaletteAction =
 	| { type: "reset"; ref: SwatchRef }
 	| { type: "resetRow"; hue: string }
 	| { type: "resetAll" }
+	| { type: "curve"; hue: string; curve: Curve }
 	| { type: "theme"; theme: Theme };
 export type SwatchChange = {
 	kind: "swatch";
@@ -75,6 +79,18 @@ function copySteps(steps: Record<string, Oklch>): Record<string, Oklch> {
 	return Object.assign(Object.create(null) as Record<string, Oklch>, steps);
 }
 
+function emptyCurves(): Record<string, Curve> {
+	return Object.create(null) as Record<string, Curve>;
+}
+
+function copyCurves(curves: Record<string, Curve>): Record<string, Curve> {
+	return Object.assign(emptyCurves(), curves);
+}
+
+function curveValue(curves: Record<string, Curve>, hue: string): Curve | undefined {
+	return Object.hasOwn(curves, hue) ? curves[hue] : undefined;
+}
+
 function editSteps(edits: Edits | undefined, hue: string): Record<string, Oklch> | undefined {
 	return edits && Object.hasOwn(edits, hue) ? edits[hue] : undefined;
 }
@@ -90,6 +106,7 @@ export function createPaletteState(palette: Palette): PaletteState {
 		palette,
 		theme: "light",
 		edits: { light: emptyEdits(), dark: emptyEdits() },
+		curves: { light: emptyCurves(), dark: emptyCurves() },
 		selected: null,
 	};
 }
@@ -133,11 +150,37 @@ export function paletteReducer(state: PaletteState, action: PaletteAction): Pale
 		}
 		case "resetRow": {
 			let edits = copyEdits(state.edits[state.theme]);
+			let curves = copyCurves(state.curves[state.theme]);
 			delete edits[action.hue];
-			return { ...state, edits: { ...state.edits, [state.theme]: edits } };
+			delete curves[action.hue];
+			return {
+				...state,
+				edits: { ...state.edits, [state.theme]: edits },
+				curves: { ...state.curves, [state.theme]: curves },
+			};
 		}
 		case "resetAll":
-			return { ...state, edits: { light: emptyEdits(), dark: emptyEdits() } };
+			return {
+				...state,
+				edits: { light: emptyEdits(), dark: emptyEdits() },
+				curves: { light: emptyCurves(), dark: emptyCurves() },
+			};
+		case "curve": {
+			let row = rowValues(state, action.hue);
+			if (!row) return state;
+			let edits = state.edits[state.theme];
+			for (let [index, value] of rampCurve(row.base, action.curve).entries()) {
+				let ref = { hue: action.hue, step: row.steps[index] };
+				edits = withEdit(edits, ref, sameColor(value, row.base[index]) ? undefined : value);
+			}
+			let curves = copyCurves(state.curves[state.theme]);
+			curves[action.hue] = action.curve;
+			return {
+				...state,
+				edits: { ...state.edits, [state.theme]: edits },
+				curves: { ...state.curves, [state.theme]: curves },
+			};
+		}
 		case "theme":
 			if (action.theme === state.theme || !huesOf(state.palette, action.theme).length) return state;
 			return { ...state, theme: action.theme, selected: null };
@@ -150,6 +193,23 @@ export function baseValue(state: PaletteState, ref: SwatchRef): Oklch | null {
 
 export function currentValue(state: PaletteState, ref: SwatchRef): Oklch | null {
 	return editValue(editSteps(state.edits[state.theme], ref.hue), ref.step) ?? baseValue(state, ref);
+}
+
+export function rowValues(
+	state: PaletteState,
+	hue: string,
+): { base: Oklch[]; current: Oklch[]; steps: string[] } | null {
+	let row = activeHues(state).find(candidate => candidate.name === hue);
+	if (!row) return null;
+	let steps = row.swatches.map(swatch => swatch.step);
+	let base = row.swatches.map(swatch => swatch.value);
+	return { base, current: steps.map(step => currentValue(state, { hue, step })!), steps };
+}
+
+export function curveFor(state: PaletteState, hue: string): Curve | null {
+	let row = rowValues(state, hue);
+	if (!row) return null;
+	return curveValue(state.curves[state.theme], hue) ?? curveFrom(row.base);
 }
 
 export function isEdited(state: PaletteState, ref: SwatchRef): boolean {
