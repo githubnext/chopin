@@ -17,6 +17,7 @@ const REQUIRED = [
 	"tabs",
 	"menus",
 	"dropdowns",
+	"color-popover",
 	"dialogs",
 	"lists",
 	"navigation",
@@ -41,6 +42,7 @@ describe("design audit inventory", () => {
 		expect(AUDIT_INVENTORY.map(group => group.id)).toEqual([
 			"foundations",
 			"controls",
+			"color",
 			"surfaces",
 			"authored-content",
 		]);

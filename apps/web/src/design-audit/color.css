@@ -1,0 +1,67 @@
+.design-audit-color-layout {
+	display: grid;
+	grid-template-columns: minmax(0, 20rem) minmax(0, 1fr);
+	align-items: start;
+	gap: 1.5rem;
+	min-width: 0;
+	padding: 1.5rem;
+	border-radius: var(--radius-xl);
+	background: var(--color-ground);
+}
+
+.design-audit-color-preview {
+	min-width: 0;
+	overflow: hidden;
+	border-radius: var(--radius-xl);
+	background: var(--color-page);
+	box-shadow: var(--shadow-resting);
+}
+
+.design-audit-color-preview header {
+	padding: 1rem 1.25rem;
+	border-bottom: var(--edge-width) solid var(--color-edge);
+}
+
+.design-audit-color-preview h4 {
+	margin: 0;
+	font-size: var(--text-sm);
+	font-weight: 600;
+}
+
+.design-audit-color-preview table {
+	width: 100%;
+}
+
+.design-audit-color-preview th,
+.design-audit-color-preview td {
+	padding-inline: 1rem;
+}
+
+.design-audit-color-preview th:nth-child(2),
+.design-audit-color-preview td:nth-child(2) {
+	width: 7rem;
+}
+
+.design-audit-color-preview th:last-child,
+.design-audit-color-preview td:last-child {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+.design-audit-color-preview .cv-sparkline {
+	display: block;
+	margin-inline: auto;
+}
+
+@media (max-width: 760px) {
+	.design-audit-color-layout {
+		grid-template-columns: minmax(0, 1fr);
+		padding: 0;
+		background: transparent;
+	}
+
+	.design-audit-color-layout > .cv-color-popover {
+		width: min(100%, 20rem);
+		margin-inline: auto;
+	}
+}

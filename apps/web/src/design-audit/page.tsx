@@ -2,12 +2,14 @@ import { AuditFrame, AuditSection } from "./frame";
 import { Adoption } from "./adoption";
 import { AuthoredContent } from "./authored-content";
 import { Controls } from "./controls";
+import { ColorControls } from "./color";
 import { Foundations } from "./foundations";
 import { AUDIT_INVENTORY } from "./inventory";
 import { Surfaces } from "./surfaces";
 
 import "@chopin/visuals/styles.css";
 import "./controls.css";
+import "./color.css";
 import "./authored-content.css";
 import "./foundations.css";
 import "./surfaces.css";
@@ -22,6 +24,9 @@ export function DesignAuditPage() {
 			</AuditSection>
 			<AuditSection id="controls" title="Controls">
 				<Controls />
+			</AuditSection>
+			<AuditSection id="color" title="Color controls">
+				<ColorControls />
 			</AuditSection>
 			<AuditSection id="surfaces" title="Application surfaces">
 				<Surfaces />

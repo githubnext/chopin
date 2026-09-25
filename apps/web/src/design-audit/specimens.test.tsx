@@ -4,6 +4,8 @@ import { Children, createElement, isValidElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { Controls } from "./controls";
+import { ColorControls } from "./color";
+import { CHOPIN_LIGHT_HUES } from "./color-fixture";
 import { AuthoredContent, callouts } from "./authored-content";
 import { Foundations } from "./foundations";
 import { AUDIT_INVENTORY } from "./inventory";
@@ -31,6 +33,33 @@ function elementsOfType(
 }
 
 describe("design audit specimens", () => {
+	it("keeps each color fixture value aligned with the visual theme", async () => {
+		let theme = await Bun.file(new URL("../../../../packages/visuals/theme.css", import.meta.url))
+			.text();
+		let sources = [...theme.matchAll(/--color-(?:gray|ruby|orange|lime)-\d+:\s*oklch\(/g)]
+			.map(match => match[0].slice(0, match[0].indexOf(":")));
+		expect(CHOPIN_LIGHT_HUES.flatMap(hue => hue.swatches.map(swatch => swatch.source)))
+			.toEqual(sources);
+		for (let hue of CHOPIN_LIGHT_HUES) {
+			for (let swatch of hue.swatches) {
+				let { l, c, h } = swatch.value;
+				let match = theme.match(new RegExp(`${swatch.source}:\\s*oklch\\(([^)]*)\\)`));
+				expect(match?.[1]?.split(/\s+/).map(Number)).toEqual([l, c, h]);
+			}
+		}
+	});
+
+	it("inventories and renders the color popover specimen", () => {
+		let item = AUDIT_INVENTORY.flatMap(group => group.items).find(
+			candidate => candidate.id === "color-popover",
+		);
+		expect(item?.source).toBe("packages/visuals/src/ui/color/color-popover.tsx");
+		let markup = renderToStaticMarkup(createElement(ColorControls));
+		expect(markup).toContain('data-audit-item="color-popover"');
+		expect(markup).toContain(">Gray 450<");
+		expect(markup).toContain("3.00:1");
+		expect(markup).toContain('role="img"');
+	});
 	it("renders every foundation family with a visible label", () => {
 		let markup = renderToStaticMarkup(createElement(Foundations));
 

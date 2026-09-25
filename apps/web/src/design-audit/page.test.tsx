@@ -15,7 +15,7 @@ describe("design audit page", () => {
 		expect(markup).toContain('aria-label="Preview wide layout"');
 		expect(markup).toContain('aria-label="Preview narrow layout"');
 		expect(markup).toContain('data-preview-width="wide"');
-		for (let id of ["foundations", "controls", "surfaces", "authored-content"]) {
+		for (let id of ["foundations", "controls", "color", "surfaces", "authored-content"]) {
 			expect(markup).toContain(`id="${id}"`);
 		}
 	});
@@ -36,6 +36,7 @@ describe("design audit page", () => {
 		expect(AUDIT_INVENTORY.map(group => group.id)).toEqual([
 			"foundations",
 			"controls",
+			"color",
 			"surfaces",
 			"authored-content",
 		]);

@@ -7,7 +7,7 @@ export type AuditItem = {
 };
 
 export type AuditGroup = {
-	id: "foundations" | "controls" | "surfaces" | "authored-content";
+	id: "foundations" | "controls" | "color" | "surfaces" | "authored-content";
 	label: string;
 	items: readonly AuditItem[];
 };
@@ -123,6 +123,18 @@ export const AUDIT_INVENTORY: readonly AuditGroup[] = [
 				label: "Dropdowns",
 				source: "apps/web/src/document-picker.tsx",
 				states: ["closed", "open", "selected", "loading", "error"],
+			},
+		],
+	},
+	{
+		id: "color",
+		label: "Color controls",
+		items: [
+			{
+				id: "color-popover",
+				label: "Color popover",
+				source: "packages/visuals/src/ui/color/color-popover.tsx",
+				states: ["initial", "edited", "out-of-gamut"],
 			},
 		],
 	},
