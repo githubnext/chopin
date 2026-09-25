@@ -8,6 +8,8 @@ export type { ColorPopoverProps } from "./ui/color/color-popover";
 export { ContrastReader } from "./ui/color/contrast-reader";
 export type { ContrastOption, ContrastReaderProps } from "./ui/color/contrast-reader";
 export { HueStrip } from "./ui/color/hue-strip";
+export { PaletteGrid } from "./ui/color/palette-grid";
+export type { PaletteGridProps } from "./ui/color/palette-grid";
 export { IconLabel } from "./ui/icon-label";
 export type { IconLabelProps } from "./ui/icon-label";
 export { MiniBars } from "./ui/mini-bars";

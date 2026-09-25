@@ -3,10 +3,12 @@ import { describe, expect, test } from "bun:test";
 
 import {
 	gamutPath,
+	gridMove,
 	hueGradient,
 	hueKey,
 	huePosition,
 	hueValue,
+	placePopover,
 	planeImage,
 	planeKey,
 	planePosition,
@@ -100,5 +102,66 @@ describe("hue strip", () => {
 		let gradient = hueGradient();
 		expect(gradient.startsWith("linear-gradient(to top, #")).toBe(true);
 		expect(gradient.match(/#[0-9a-f]{6}/g)!.length).toBe(25);
+	});
+});
+
+describe("gridMove", () => {
+	let lengths = [13, 12, 12];
+
+	test("moves within a row without wrapping", () => {
+		expect(gridMove(lengths, { row: 0, index: 0 }, "ArrowRight")).toEqual({ row: 0, index: 1 });
+		expect(gridMove(lengths, { row: 0, index: 12 }, "ArrowRight")).toEqual({ row: 0, index: 12 });
+		expect(gridMove(lengths, { row: 0, index: 0 }, "ArrowLeft")).toEqual({ row: 0, index: 0 });
+		expect(gridMove(lengths, { row: 1, index: 5 }, "End")).toEqual({ row: 1, index: 11 });
+		expect(gridMove(lengths, { row: 1, index: 5 }, "Home")).toEqual({ row: 1, index: 0 });
+	});
+
+	test("maps proportionally between rows of different lengths", () => {
+		expect(gridMove(lengths, { row: 0, index: 12 }, "ArrowDown")).toEqual({ row: 1, index: 11 });
+		expect(gridMove(lengths, { row: 1, index: 11 }, "ArrowUp")).toEqual({ row: 0, index: 12 });
+		expect(gridMove(lengths, { row: 2, index: 3 }, "ArrowDown")).toEqual({ row: 2, index: 3 });
+		expect(gridMove([1, 5], { row: 0, index: 0 }, "ArrowDown")).toEqual({ row: 1, index: 0 });
+	});
+
+	test("skips empty rows and ignores other keys", () => {
+		expect(gridMove([3, 0, 3], { row: 0, index: 1 }, "ArrowDown")).toEqual({ row: 2, index: 1 });
+		expect(gridMove(lengths, { row: 0, index: 0 }, "Tab")).toBeNull();
+	});
+});
+
+describe("placePopover", () => {
+	let viewport = { left: 0, top: 0, width: 1000, height: 800 };
+	let size = { width: 320, height: 500 };
+
+	test("centres below the anchor", () => {
+		expect(placePopover({ left: 400, top: 100, width: 60, height: 40 }, size, viewport)).toEqual({
+			left: 270,
+			top: 148,
+			side: "below",
+		});
+	});
+
+	test("flips above when there is no room below", () => {
+		expect(placePopover({ left: 400, top: 700, width: 60, height: 40 }, size, viewport)).toEqual({
+			left: 270,
+			top: 192,
+			side: "above",
+		});
+	});
+
+	test("clamps horizontally with a 16px margin, including viewport offsets", () => {
+		expect(placePopover({ left: 0, top: 100, width: 40, height: 40 }, size, viewport).left)
+			.toBe(16);
+		let narrow = { left: 50, top: 0, width: 300, height: 800 };
+		expect(placePopover({ left: 150, top: 100, width: 40, height: 40 }, size, narrow).left)
+			.toBe(66);
+	});
+
+	test("chooses the roomier side when neither fits", () => {
+		let short = { left: 0, top: 0, width: 1000, height: 400 };
+		expect(placePopover({ left: 400, top: 300, width: 60, height: 40 }, size, short).side)
+			.toBe("above");
+		expect(placePopover({ left: 400, top: 40, width: 60, height: 40 }, size, short).side)
+			.toBe("below");
 	});
 });

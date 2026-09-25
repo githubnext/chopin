@@ -5,6 +5,8 @@ import type { Oklch } from "@chopin/color";
 export type Point = { x: number; y: number };
 export type Size = { width: number; height: number };
 export type Modifiers = { shiftKey?: boolean; altKey?: boolean };
+export type GridPosition = { row: number; index: number };
+export type Box = { left: number; top: number; width: number; height: number };
 
 function clamp(value: number, minimum: number, maximum: number): number {
 	return Math.min(maximum, Math.max(minimum, value));
@@ -97,4 +99,58 @@ export function hueGradient(): string {
 		stops.push(toHex({ l: 0.75, c: Math.min(0.15, maxChroma(0.75, h)), h }));
 	}
 	return `linear-gradient(to top, ${stops.join(", ")})`;
+}
+
+function project(index: number, from: number, to: number): number {
+	if (from <= 1 || to <= 1) return 0;
+	return Math.round((index / (from - 1)) * (to - 1));
+}
+
+export function gridMove(
+	lengths: readonly number[],
+	at: GridPosition,
+	key: string,
+): GridPosition | null {
+	let length = lengths[at.row];
+	if (!length) return null;
+	if (key === "ArrowRight") return { row: at.row, index: Math.min(at.index + 1, length - 1) };
+	if (key === "ArrowLeft") return { row: at.row, index: Math.max(at.index - 1, 0) };
+	if (key === "Home") return { row: at.row, index: 0 };
+	if (key === "End") return { row: at.row, index: length - 1 };
+	if (key !== "ArrowDown" && key !== "ArrowUp") return null;
+	let direction = key === "ArrowDown" ? 1 : -1;
+	for (let row = at.row + direction; row >= 0 && row < lengths.length; row += direction) {
+		if (lengths[row] > 0) return { row, index: project(at.index, length, lengths[row]) };
+	}
+	return at;
+}
+
+export function placePopover(
+	anchor: Box,
+	size: Size,
+	viewport: Box,
+	margin = 16,
+	gap = 8,
+): { left: number; top: number; side: "below" | "above" } {
+	let top = viewport.top + margin;
+	let bottom = viewport.top + viewport.height - margin;
+	let below = anchor.top + anchor.height + gap;
+	let above = anchor.top - gap - size.height;
+	let roomBelow = bottom - below;
+	let roomAbove = anchor.top - gap - top;
+	let side: "below" | "above" = roomBelow >= size.height
+		? "below"
+		: roomAbove >= size.height || roomAbove > roomBelow
+		? "above"
+		: "below";
+	let maximum = Math.max(
+		viewport.left + margin,
+		viewport.left + viewport.width - margin - size.width,
+	);
+	let left = clamp(
+		anchor.left + anchor.width / 2 - size.width / 2,
+		viewport.left + margin,
+		maximum,
+	);
+	return { left, top: side === "below" ? below : Math.max(top, above), side };
 }
