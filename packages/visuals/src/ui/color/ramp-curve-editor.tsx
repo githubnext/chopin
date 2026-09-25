@@ -15,6 +15,7 @@ export type RampCurveEditorProps = {
 };
 
 export function RampCurveEditor({
+	steps,
 	current,
 	curve,
 	onCurveChange,
@@ -73,7 +74,7 @@ export function RampCurveEditor({
 					</div>
 				);
 			})}
-			<ChromaGraph values={current} />
+			<ChromaGraph steps={steps} values={current} />
 			{edited && (
 				<p className="cv-ramp-discard">
 					This row&apos;s previous values were overwritten.{" "}

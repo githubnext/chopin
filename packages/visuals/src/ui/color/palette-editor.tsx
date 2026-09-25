@@ -12,6 +12,7 @@ import {
 import { CurveIcon } from "@chopin/icons";
 import { currentViewport, listenToViewportChanges } from "@chopin/viewport";
 import { useId, useLayoutEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 
 import { ColorPopover } from "./color-popover";
 import { placePopover } from "./geometry";
@@ -94,8 +95,11 @@ export function PaletteEditor({ state, dispatch }: PaletteEditorProps) {
 		anchor.current = element;
 		pointerDismissal.current = null;
 		setCurveOpen(false);
-		dispatch({ type: "select", ref });
+		flushSync(() => dispatch({ type: "select", ref }));
 		if (!popover.current?.matches(":popover-open")) popover.current?.showPopover();
+		popover.current?.querySelector<HTMLElement>(
+			'button:not(:disabled), [tabindex="0"], select, input',
+		)?.focus({ preventScroll: true });
 	}
 
 	function changeTheme(theme: PaletteState["theme"]) {
@@ -142,6 +146,7 @@ export function PaletteEditor({ state, dispatch }: PaletteEditorProps) {
 				options: contrastOptions(state),
 				purpose,
 			}}
+			fieldKey={JSON.stringify([state.theme, selected.hue, selected.step])}
 			onChange={next => dispatch({ type: "edit", ref: selected, value: next })}
 			previous={previous}
 			title={title(selected)}

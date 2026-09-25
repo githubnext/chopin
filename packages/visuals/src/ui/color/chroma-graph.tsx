@@ -2,13 +2,13 @@ import { maxChroma } from "@chopin/color";
 
 import type { Oklch } from "@chopin/color";
 
-export type ChromaGraphProps = { values: readonly Oklch[] };
+export type ChromaGraphProps = { values: readonly Oklch[]; steps?: readonly string[] };
 const Svg = "svg";
 
-export function ChromaGraph({ values }: ChromaGraphProps) {
+export function ChromaGraph({ values, steps }: ChromaGraphProps) {
 	if (values.length < 2) return null;
 	let maxima = values.map(value => maxChroma(value.l, value.h));
-	let top = Math.max(0.01, ...maxima);
+	let top = Math.max(0.01, ...maxima, ...values.map(value => value.c));
 	let path = (numbers: readonly number[]) =>
 		numbers.map((number, index) => {
 			let x = (index / (numbers.length - 1)) * 232 + 4;
@@ -31,7 +31,7 @@ export function ChromaGraph({ values }: ChromaGraphProps) {
 				<path className="cv-chroma-current" d={path(values.map(value => value.c))} />
 				{values.map((_, index) => (
 					<text key={index} textAnchor="middle" x={(index / (values.length - 1)) * 232 + 4} y="87">
-						{index + 1}
+						{steps?.[index] ?? index + 1}
 					</text>
 				))}
 			</Svg>

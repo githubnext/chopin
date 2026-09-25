@@ -2,6 +2,7 @@ import { curveFrom } from "@chopin/color";
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { ChromaGraph } from "./chroma-graph";
 import { RampCurveEditor } from "./ramp-curve-editor";
 
 let row = [
@@ -54,4 +55,40 @@ test("gives each endpoint input and easing menu a distinct accessible name and o
 	) expect(html).toContain(`aria-label="${name}"`);
 	let values = [...html.matchAll(/<option value="([^"]+)"/g)].map(match => match[1]);
 	expect(new Set(values).size).toBe(values.length);
+});
+
+test("keeps an out-of-gamut current chroma path within the graph plot", () => {
+	let markup = renderToStaticMarkup(
+		<ChromaGraph
+			values={[
+				{ l: 0.6681, c: 0.5, h: 95 },
+				{ l: 0.56514, c: 0.0123, h: 95 },
+			]}
+		/>,
+	);
+	let path = markup.match(/class="cv-chroma-current" d="([^"]+)"/)?.[1];
+	let coordinates = [...(path?.matchAll(/[ML] [\d.]+ (-?[\d.]+)/g) ?? [])].map(match =>
+		Number(match[1])
+	);
+
+	expect(coordinates).toHaveLength(2);
+	for (let y of coordinates) {
+		expect(y).toBeGreaterThanOrEqual(8);
+		expect(y).toBeLessThanOrEqual(80);
+	}
+});
+
+test("uses the row's step labels in the chroma graph", () => {
+	let markup = renderToStaticMarkup(
+		<RampCurveEditor
+			current={row}
+			curve={curveFrom(row)}
+			edited={false}
+			onCurveChange={() => {}}
+			onDiscard={() => {}}
+			steps={["50", "450", "900"]}
+		/>,
+	);
+
+	for (let step of ["50", "450", "900"]) expect(markup).toContain(`>${step}</text>`);
 });

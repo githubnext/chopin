@@ -190,6 +190,7 @@
         "@base-ui/react": "1.7.0",
         "@chopin/color": "workspace:*",
         "@chopin/icons": "workspace:*",
+        "@chopin/viewport": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "catalog:bun",
@@ -200,6 +201,7 @@
       },
       "peerDependencies": {
         "react": "catalog:react",
+        "react-dom": "catalog:react",
       },
     },
   },

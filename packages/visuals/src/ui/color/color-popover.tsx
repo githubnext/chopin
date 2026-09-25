@@ -12,6 +12,7 @@ import type { ContrastReaderProps } from "./contrast-reader";
 
 export type ColorPopoverProps = Omit<ComponentProps<"section">, "onChange" | "title"> & {
 	title: string;
+	fieldKey?: string;
 	value: Oklch;
 	previous: Oklch;
 	onChange(value: Oklch): void;
@@ -26,6 +27,7 @@ export function withHue(value: Oklch, h: number): Oklch {
 
 export function ColorPopover({
 	title,
+	fieldKey,
 	value,
 	previous,
 	onChange,
@@ -66,7 +68,13 @@ export function ColorPopover({
 					<span style={{ background: toHex(value) }} />
 				</div>
 			</div>
-			<ColorField format={form} onChange={onChange} onFormatChange={setForm} value={value} />
+			<ColorField
+				format={form}
+				key={fieldKey}
+				onChange={onChange}
+				onFormatChange={setForm}
+				value={value}
+			/>
 			<ContrastReader {...contrast} previous={changed ? previous : undefined} value={value} />
 		</section>
 	);
