@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Neutral sparkline color lab</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #f4f4f1; color: #252420; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 1100px; margin: 0 auto; padding: 48px 28px 72px; }
+    header { max-width: 670px; margin-bottom: 32px; }
+    .eyebrow { margin: 0 0 9px; color: #605e56; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(26px, 4vw, 38px); letter-spacing: -.045em; line-height: 1.15; }
+    .intro { margin: 13px 0 0; color: #605e56; font-size: 14px; line-height: 1.65; }
+    .ramp-panel { margin-bottom: 24px; padding: 20px; }
+    .ramp-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 14px; }
+    .ramp-heading h2 { margin: 0; font-size: 14px; }
+    .ramp-heading p { margin: 0; color: #78766e; font-size: 11px; }
+    .ramp { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 7px; }
+    .ramp-option { display: grid; gap: 5px; min-width: 0; margin: 0; padding: 8px; text-align: left; border: 1px solid #e7e6e2; border-radius: 8px; }
+    .ramp-option[aria-pressed="true"] { border-color: #06707e; box-shadow: 0 0 0 1px #06707e; }
+    .ramp-option[data-proposed="true"] { background: #f3f8f7; }
+    .ramp-swatch { display: block; height: 23px; border: 1px solid #25242020; border-radius: 4px; background: var(--swatch); }
+    .ramp-name { color: #34332e; font-size: 11px; font-weight: 650; }
+    .trial-label { color: #06707e; font-weight: 600; }
+    .ramp-hex { color: #78766e; font-family: ui-monospace, monospace; font-size: 10px; }
+    .ramp-option[data-edited="true"] .ramp-name::after { content: " · edited"; color: #06707e; font-weight: 500; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
+    .previews { display: grid; gap: 20px; }
+    .panel { border: 1px solid #e7e6e2; border-radius: 13px; background: #fff; box-shadow: 0 3px 12px #2524200a; overflow: hidden; }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 17px 20px; border-bottom: 1px solid #eeede9; }
+    .panel-head h2, .controls h2 { margin: 0; font-size: 14px; font-weight: 650; }
+    .panel-head div code { display: block; margin-top: 4px; }
+    .panel-head code { color: #605e56; font-size: 11px; white-space: nowrap; }
+    table { width: 100%; border-collapse: collapse; text-align: left; }
+    th { height: 36px; padding: 0 20px; color: #78766e; background: #fcfcfa; font-size: 11px; font-weight: 600; }
+    td { height: 56px; padding: 0 20px; border-top: 1px solid #f1f0ed; font-size: 13px; }
+    th:last-child, td:last-child { text-align: right; }
+    .metric { font-weight: 550; }
+    .spark-cell { width: 116px; }
+    svg { display: block; width: 72px; height: 32px; margin-left: auto; overflow: visible; background: transparent; }
+    svg path { fill: none; stroke: var(--line); stroke-width: 2px; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+    .value { color: #605e56; font-variant-numeric: tabular-nums; }
+    .controls { padding: 20px; }
+    .controls h2 { margin-bottom: 5px; }
+    .token-source { margin: 0 0 19px; color: #78766e; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+    .control { display: grid; gap: 7px; margin-bottom: 18px; }
+    .control-head { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
+    .control-head output { color: #605e56; font-variant-numeric: tabular-nums; }
+    input[type="range"] { width: 100%; margin: 0; accent-color: #4d6661; cursor: pointer; }
+    .color-readout { display: flex; align-items: center; gap: 11px; padding: 12px 0 16px; border-top: 1px solid #eeede9; }
+    .swatch { width: 38px; height: 38px; flex: 0 0 auto; border: 1px solid #25242022; border-radius: 8px; background: var(--line); }
+    .codes { display: grid; gap: 3px; min-width: 0; }
+    .codes code { color: #47453f; font-size: 11px; overflow-wrap: anywhere; }
+    .contrast { padding-top: 16px; border-top: 1px solid #eeede9; }
+    .contrast-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+    .contrast-top span { color: #605e56; font-size: 12px; }
+    .ratio { font-size: 29px; font-weight: 670; letter-spacing: -.05em; font-variant-numeric: tabular-nums; }
+    .badge { display: inline-block; margin-top: 4px; padding: 5px 8px; border-radius: 5px; font-size: 11px; font-weight: 650; }
+    .badge.pass { color: #236228; background: #eaf4e8; }
+    .badge.fail { color: #9a4825; background: #faeee5; }
+    .meter { position: relative; height: 8px; margin-top: 19px; border-radius: 99px; background: linear-gradient(90deg, #faeee5 0 50%, #eaf4e8 50% 100%); }
+    .meter::after { content: ""; position: absolute; top: -4px; bottom: -4px; left: 50%; width: 2px; background: #47453f; }
+    .marker { position: absolute; top: -4px; z-index: 1; width: 12px; height: 16px; border: 2px solid white; border-radius: 4px; background: #252420; box-shadow: 0 1px 4px #25242055; transform: translateX(-50%); }
+    .meter-labels { display: flex; justify-content: space-between; margin-top: 8px; color: #78766e; font-size: 10px; }
+    .note { margin: 14px 0 0; color: #78766e; font-size: 11px; line-height: 1.5; }
+    button { width: 100%; margin-top: 19px; padding: 10px 12px; border: 1px solid #d8d7d2; border-radius: 7px; background: #fff; color: #34332e; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+    button:hover { background: #f8f8f6; }
+    button:focus-visible, input:focus-visible { outline: 2px solid #06707e; outline-offset: 3px; }
+    @media (max-width: 760px) { main { padding: 28px 16px 48px; } .layout { grid-template-columns: 1fr; } .controls { order: -1; } .ramp { grid-template-columns: repeat(4, minmax(0, 1fr)); } .ramp-heading { display: block; } .ramp-heading p { margin-top: 5px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Chopin / visual foundations / color study</p>
+      <h1>Find the quietest legible sparkline.</h1>
+      <p class="intro">Try a new gray 450 between the existing mid-tones. Tune its OKLCH value while viewing the sparkline at its actual 72 × 32 px size in a white table. The current token stays fixed for comparison.</p>
+    </header>
+    <section class="panel ramp-panel" aria-label="Proposed neutral color ramp">
+      <div class="ramp-heading"><h2>Proposed neutral ramp</h2><p>Existing values from <code>packages/visuals/theme.css</code> · 450 is a trial · 850 and 950 omitted</p></div>
+      <div class="ramp" id="ramp"></div>
+    </section>
+    <div class="layout">
+      <div class="previews">
+        <section class="panel" style="--line: oklch(0.89108 0.00552 95)">
+          <div class="panel-head"><div><h2>Current · neutral graphic</h2><code>--color-neutral-graphic → --color-gray-300</code><code>oklch(0.89108 0.00552 95)</code></div><code id="current-hex">#dcdbd7</code></div>
+          <table><thead><tr><th>Document</th><th class="spark-cell">Activity</th><th>Edits</th></tr></thead><tbody id="current-rows"></tbody></table>
+        </section>
+        <section class="panel" id="candidate-panel">
+          <div class="panel-head"><h2 id="candidate-title">Candidate · gray 450</h2><code id="candidate-hex"></code></div>
+          <table><thead><tr><th>Document</th><th class="spark-cell">Activity</th><th>Edits</th></tr></thead><tbody id="candidate-rows"></tbody></table>
+        </section>
+      </div>
+      <aside class="panel controls" aria-label="OKLCH color picker">
+        <h2>Adjust <span id="selected-token-name">gray 300</span></h2>
+        <p class="token-source" id="token-source"></p>
+        <label class="control"><span class="control-head"><span>Lightness</span><output id="lightness-output" for="lightness"></output></span><input id="lightness" type="range" min="0" max="100" step="0.001" value="89.108"></label>
+        <label class="control"><span class="control-head"><span>Chroma</span><output id="chroma-output" for="chroma"></output></span><input id="chroma" type="range" min="0" max="0.08" step="0.00001" value="0.00552"></label>
+        <label class="control"><span class="control-head"><span>Hue</span><output id="hue-output" for="hue"></output></span><input id="hue" type="range" min="0" max="360" step="1" value="95"></label>
+        <div class="color-readout"><span class="swatch" id="candidate-swatch"></span><div class="codes"><code id="candidate-oklch"></code><code id="candidate-hex-detail"></code></div></div>
+        <div class="contrast" aria-live="polite">
+          <div class="contrast-top"><span>Contrast on white</span><strong class="ratio" id="ratio"></strong></div>
+          <span class="badge" id="contrast-badge"></span>
+          <div class="meter" aria-hidden="true"><span class="marker" id="meter-marker"></span></div>
+          <div class="meter-labels"><span>1:1</span><span>3:1 threshold</span><span>5:1+</span></div>
+          <p class="note">Current: <strong id="current-ratio"></strong> on white. The preview uses a white table surface. Hex and contrast use the sRGB result of the OKLCH color.</p>
+        </div>
+        <button id="reset" type="button">Reset selected step to starting value</button>
+      </aside>
+    </div>
+  </main>
+  <script>
+    const ramp = [
+      { step: 50, L: 0.99051, C: 0.00263, h: 95, hex: "#fcfcfa" },
+      { step: 100, L: 0.97857, C: 0.00264, h: 95, hex: "#f8f8f6" },
+      { step: 150, L: 0.96623, C: 0.00390, h: 95, hex: "#f4f4f1" },
+      { step: 200, L: 0.94216, C: 0.00393, h: 95, hex: "#ecece9" },
+      { step: 300, L: 0.89108, C: 0.00552, h: 95, hex: "#dcdbd7" },
+      { step: 400, L: 0.74029, C: 0.00856, h: 95, hex: "#acaba5" },
+      { step: 450, L: 0.64000, C: 0.01050, h: 95, hex: "#8e8c85", proposed: true },
+      { step: 500, L: 0.56514, C: 0.01230, h: 95, hex: "#78766e" },
+      { step: 600, L: 0.48124, C: 0.01278, h: 95, hex: "#605e56" },
+      { step: 700, L: 0.39036, C: 0.01026, h: 95, hex: "#47453f" },
+      { step: 750, L: 0.32036, C: 0.00877, h: 95, hex: "#34332e" },
+      { step: 800, L: 0.25993, C: 0.00745, h: 95, hex: "#252420" },
+      { step: 900, L: 0.15908, C: 0.00637, h: 95, hex: "#0e0d0a" },
+    ];
+    const current = ramp.find(token => token.step === 300);
+    const edits = new Map();
+    let selected = 450;
+    const samples = [
+      { name: "Quarterly plan", values: [8, 6, 7, 4], edits: 24 },
+      { name: "Research notes", values: [2, 4, 3, 7], edits: 18 },
+      { name: "Launch brief", values: [5, 5, 5, 5], edits: 12 },
+    ];
+    const $ = id => document.getElementById(id);
+
+    function path(values) {
+      if (values.every(value => value === values[0])) return "M 0 16 L 72 16";
+      const min = Math.min(...values), max = Math.max(...values);
+      const scale = Math.max(Math.abs(min), Math.abs(max), 1);
+      const base = min / scale, span = max / scale - base;
+      const points = values.map((value, index) => ({ x: index * 72 / (values.length - 1), y: 30 - (value / scale - base) / span * 28 }));
+      const fmt = value => String(Number(value.toFixed(3)));
+      const toward = (from, to) => {
+        const distance = Math.hypot(to.x - from.x, to.y - from.y);
+        const part = Math.min(2, distance / 2) / distance;
+        return { x: from.x + (to.x - from.x) * part, y: from.y + (to.y - from.y) * part };
+      };
+      const commands = [`M ${fmt(points[0].x)} ${fmt(points[0].y)}`];
+      for (let i = 1; i < points.length - 1; i++) {
+        const before = toward(points[i], points[i - 1]);
+        const after = toward(points[i], points[i + 1]);
+        commands.push(`L ${fmt(before.x)} ${fmt(before.y)}`, `Q ${fmt(points[i].x)} ${fmt(points[i].y)} ${fmt(after.x)} ${fmt(after.y)}`);
+      }
+      const last = points.at(-1);
+      commands.push(`L ${fmt(last.x)} ${fmt(last.y)}`);
+      return commands.join(" ");
+    }
+
+    function toRgb({ L, C, h }) {
+      const radians = h * Math.PI / 180;
+      const a = C * Math.cos(radians), b = C * Math.sin(radians);
+      const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+      const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+      const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
+      const linear = [
+        4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+        -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+        -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
+      ];
+      const rgb = linear.map(value => {
+        const encoded = value <= 0.0031308 ? 12.92 * value : 1.055 * value ** (1 / 2.4) - 0.055;
+        return Math.round(Math.max(0, Math.min(1, encoded)) * 255);
+      });
+      const hex = `#${rgb.map(value => value.toString(16).padStart(2, "0")).join("")}`;
+      const luminance = rgb.map(value => {
+        const encoded = value / 255;
+        return encoded <= 0.04045 ? encoded / 12.92 : ((encoded + 0.055) / 1.055) ** 2.4;
+      }).reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
+      return { hex, contrast: 1.05 / (luminance + 0.05) };
+    }
+
+    function rows() {
+      return samples.map(sample => `<tr><td class="metric">${sample.name}</td><td class="spark-cell"><svg role="img" aria-label="${sample.name} activity" viewBox="0 0 72 32" preserveAspectRatio="none"><path d="${path(sample.values)}"></path></svg></td><td class="value">${sample.edits}</td></tr>`).join("");
+    }
+
+    function baseToken() { return ramp.find(token => token.step === selected); }
+    function oklchValue(color) { return `oklch(${color.L.toFixed(5)} ${color.C.toFixed(5)} ${color.h})`; }
+    function loadControls(color) {
+      $("lightness").value = color.L * 100;
+      $("chroma").value = color.C;
+      $("hue").value = color.h;
+    }
+    function refreshRamp() {
+      for (const button of $("ramp").querySelectorAll("button")) {
+        const step = Number(button.dataset.step);
+        button.setAttribute("aria-pressed", String(step === selected));
+        button.dataset.edited = String(edits.has(step));
+        const token = ramp.find(item => item.step === step);
+        button.setAttribute("aria-label", `Gray ${step}, ${token.hex}${token.proposed ? ", proposed" : ""}${edits.has(step) ? ", edited" : ""}`);
+      }
+    }
+    function update(save = true) {
+      const color = { L: Number($("lightness").value) / 100, C: Number($("chroma").value), h: Number($("hue").value) };
+      const base = baseToken();
+      if (save) {
+        if (oklchValue(color) === oklchValue(base)) edits.delete(selected);
+        else edits.set(selected, color);
+      }
+      const oklch = oklchValue(color);
+      const { hex, contrast } = toRgb(color);
+      $("selected-token-name").textContent = `gray ${selected}`;
+      $("token-source").textContent = `${base.proposed ? "Trial" : "System"} --color-gray-${selected}: ${oklchValue(base)} · ${base.hex}`;
+      $("candidate-title").textContent = `Candidate · gray ${selected}${edits.has(selected) ? " · edited" : ""}`;
+      $("candidate-panel").style.setProperty("--line", hex);
+      $("candidate-swatch").style.setProperty("--line", hex);
+      $("lightness-output").textContent = `${(color.L * 100).toFixed(3)}%`;
+      $("chroma-output").textContent = color.C.toFixed(5);
+      $("hue-output").textContent = `${color.h}°`;
+      $("candidate-oklch").textContent = oklch;
+      $("candidate-hex").textContent = hex;
+      $("candidate-hex-detail").textContent = `${hex} · sRGB`;
+      $("ratio").textContent = `${contrast.toFixed(2)}:1`;
+      const pass = contrast >= 3;
+      $("contrast-badge").className = `badge ${pass ? "pass" : "fail"}`;
+      $("contrast-badge").textContent = pass ? "Meets 3:1" : "Below 3:1";
+      $("meter-marker").style.left = `${Math.max(0, Math.min(100, (contrast - 1) / 4 * 100))}%`;
+      refreshRamp();
+    }
+
+    $("ramp").innerHTML = ramp.map(token => `<button class="ramp-option" type="button" data-step="${token.step}" data-proposed="${Boolean(token.proposed)}" style="--swatch: ${token.hex}"><span class="ramp-swatch"></span><span class="ramp-name">gray ${token.step}${token.proposed ? '<span class="trial-label"> · trial</span>' : ""}</span><span class="ramp-hex">${token.hex}</span></button>`).join("");
+    $("current-rows").innerHTML = rows();
+    $("candidate-rows").innerHTML = rows();
+    const original = toRgb(current);
+    $("current-hex").textContent = original.hex;
+    $("current-ratio").textContent = `${original.contrast.toFixed(2)}:1`;
+    $("ramp").addEventListener("click", event => {
+      const button = event.target.closest("button[data-step]");
+      if (!button) return;
+      selected = Number(button.dataset.step);
+      loadControls(edits.get(selected) ?? baseToken());
+      update(false);
+    });
+    for (const id of ["lightness", "chroma", "hue"]) $(id).addEventListener("input", update);
+    $("reset").addEventListener("click", () => {
+      edits.delete(selected);
+      loadControls(baseToken());
+      update(false);
+    });
+    loadControls(baseToken());
+    update(false);
+  </script>
+</body>
+</html>
