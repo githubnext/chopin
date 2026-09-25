@@ -3247,3 +3247,29 @@ Maggie.
   each choice.
 - **Open question:** Popover placement currently recalculates on selection and viewport
   changes. Recheck after the curve pane changes its content size in Task 13.
+
+### 2026-09-25 · Slice 3 · color-controls
+
+- **Head:** `color-controls-slice-3` (Task 13 focus-fix parent `81ca7932`).
+- **Commits:** Task 11 curve model `a1e3ca6e`; Task 12 controls `348f461` with scrub-draft
+  correction `09bc222`; Task 13 integration `498541bb` with stable-focus correction
+  `81ca7932`.
+- **Checks:** `bun run fix`, `bun run types`, full `bun test` (1620 pass, 2 PostgreSQL
+  skips), `bun run ci`, and `git diff --check` passed. Fresh reviews of Tasks 11–13,
+  their Important fixes, and a whole-slice Sol review found no remaining Critical or
+  Important issue.
+- **Browser evidence:** `docs/superpowers/reports/color-controls/task-13-desktop.png`,
+  `task-13-curve-after-drag.png`, `task-13-mobile.png`, `task-13-mobile-curve.png`,
+  `slice-3-grid-before.png`, and `slice-3-grid-after.png`. Playwright checked desktop
+  1280×900 and mobile 390×844 layouts, bounded internal scrolling, focus through pane
+  toggle, a live Darkest lightness drag and Lightest easing change, the chroma graph,
+  discard, gray 900 orientation, and two-step Escape from a scrub draft. The lime row
+  screenshot pair shows 11 changed swatches. Screenshots used in the final report will
+  be committed with that report.
+- **Deviations:** `curveFrom([])` returns finite endpoints; the graph uses the repository's
+  guarded SVG pattern; the selected/short-row test lives with `PaletteEditor`; a
+  ResizeObserver handles content growth; the popover remains one stable DOM subtree so
+  toggling the pane retains keyboard focus. The decision log records each choice.
+- **Open questions:** Check dark-theme curve/reset and reversed-row coverage when the
+  theme toggle is added. The optional curve toggle `aria-controls` relationship is a
+  Minor accessibility follow-up for the final pass.
