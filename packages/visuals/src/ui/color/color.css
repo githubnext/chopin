@@ -1,0 +1,81 @@
+.cv-visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+.cv-contrast {
+	display: grid;
+	gap: calc(var(--spacing) * 2);
+}
+
+.cv-contrast-reading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: calc(var(--spacing) * 3);
+}
+
+.cv-contrast-ratio {
+	font-size: var(--text-xl);
+	font-variant-numeric: tabular-nums;
+	font-weight: 650;
+	letter-spacing: -0.03em;
+}
+
+.cv-contrast-was {
+	margin: 0;
+	color: var(--color-text-tertiary);
+	font-size: var(--text-sm);
+	font-variant-numeric: tabular-nums;
+}
+
+.cv-contrast-controls {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	gap: calc(var(--spacing) * 2);
+}
+
+.cv-contrast-control {
+	display: grid;
+	gap: var(--spacing);
+	min-width: 0;
+	color: var(--color-text-tertiary);
+	font-size: var(--text-sm);
+}
+
+.cv-contrast-control select {
+	box-sizing: border-box;
+	width: 100%;
+	min-width: 0;
+	min-height: calc(var(--spacing) * 8);
+	padding: var(--spacing) calc(var(--spacing) * 2);
+	border: var(--edge-width) solid var(--color-control-edge);
+	border-radius: var(--radius-md);
+	background: var(--color-page);
+	box-shadow: var(--shadow-resting);
+	color: var(--color-text-primary);
+	font: 500 var(--text-sm) / var(--text-sm--line-height) var(--font-sans);
+}
+
+.cv-contrast-control select:hover {
+	background: var(--color-hover);
+}
+
+.cv-contrast-against {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 1.5);
+	min-width: 0;
+}
+
+.cv-contrast-swatch {
+	flex: 0 0 auto;
+	width: calc(var(--spacing) * 4);
+	height: calc(var(--spacing) * 4);
+	border-radius: var(--radius-sm);
+	box-shadow: inset 0 0 0 1px var(--color-control-boundary);
+}

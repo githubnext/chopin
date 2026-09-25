@@ -1,5 +1,7 @@
 export { Badge } from "./ui/badge";
 export type { BadgeProps } from "./ui/badge";
+export { ContrastReader } from "./ui/color/contrast-reader";
+export type { ContrastOption, ContrastReaderProps } from "./ui/color/contrast-reader";
 export { IconLabel } from "./ui/icon-label";
 export type { IconLabelProps } from "./ui/icon-label";
 export { MiniBars } from "./ui/mini-bars";
