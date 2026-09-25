@@ -12,6 +12,18 @@ function clamp(value: number, minimum: number, maximum: number): number {
 	return Math.min(maximum, Math.max(minimum, value));
 }
 
+export function scrub(
+	value: number,
+	deltaPixels: number,
+	options: { step: number; min: number; max: number; pixelsPerStep?: number },
+): number {
+	return clamp(
+		value + Math.round(deltaPixels / (options.pixelsPerStep ?? 4)) * options.step,
+		options.min,
+		options.max,
+	);
+}
+
 function round(value: number): string {
 	return String(Number(value.toFixed(2)));
 }

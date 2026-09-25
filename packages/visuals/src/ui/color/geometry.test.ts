@@ -13,6 +13,7 @@ import {
 	planeKey,
 	planePosition,
 	planeValue,
+	scrub,
 } from "./geometry";
 
 let size = { width: 200, height: 200 };
@@ -176,4 +177,11 @@ describe("placePopover", () => {
 		let placed = placePopover({ left: 400, top: 390, width: 60, height: 40 }, oversized, offset);
 		expect(placed.top).toBe(66);
 	});
+});
+
+test("scrub steps per pixel run and clamps", () => {
+	expect(scrub(50, 8, { step: 1, min: 0, max: 100 })).toBe(52);
+	expect(scrub(50, -3, { step: 1, min: 0, max: 100 })).toBe(49);
+	expect(scrub(99, 40, { step: 1, min: 0, max: 100 })).toBe(100);
+	expect(scrub(0, 12, { step: 5, min: -180, max: 180, pixelsPerStep: 6 })).toBe(10);
 });

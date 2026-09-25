@@ -4,6 +4,7 @@ export {
 	CheckIcon,
 	ChevronIcon,
 	CloseIcon,
+	CurveIcon,
 	InfoIcon,
 	LightbulbIcon,
 	LinkPlusIcon,

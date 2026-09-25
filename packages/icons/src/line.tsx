@@ -2,6 +2,14 @@ import { LineIcon } from "./icon";
 
 import type { IconProps } from "./icon";
 
+export function CurveIcon(props: IconProps) {
+	return (
+		<LineIcon title="curve" {...props}>
+			<path d="M2.75 11.75C4.5 5.25 6.5 5.25 9 9s4.5 3.75 6.25-2.75" />
+		</LineIcon>
+	);
+}
+
 export function ArrowUpIcon(props: IconProps) {
 	return (
 		<LineIcon title="arrow-up" {...props}>
