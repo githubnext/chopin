@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { Controls } from "./controls";
 import { ColorControls, PaletteEditorSpecimen } from "./color";
-import { CHOPIN_LIGHT_HUES, CHOPIN_TOKENS } from "./color-fixture";
+import { CHOPIN_DARK_HUES, CHOPIN_LIGHT_HUES, CHOPIN_TOKENS } from "./color-fixture";
 import { AuthoredContent, callouts } from "./authored-content";
 import { Foundations } from "./foundations";
 import { AUDIT_INVENTORY } from "./inventory";
@@ -78,6 +78,20 @@ describe("design audit specimens", () => {
 		expect(markup).toContain('aria-label="Gray 450, oklch(0.6681 0.0105 95)"');
 		expect(markup).toContain('aria-label="Ruby 9, oklch(0.611 0.171 13.15)"');
 		expect(markup).not.toContain("Discard all");
+		expect(markup).toContain("Dark ramp is synthetic; Chopin has no dark theme yet.");
+		expect(markup).toContain('aria-label="Theme"');
+	});
+
+	it("mirrors the documented gray ramp for the synthetic dark fixture", () => {
+		let light = CHOPIN_LIGHT_HUES.find(hue => hue.name === "gray")!;
+		expect(CHOPIN_DARK_HUES).toHaveLength(1);
+		expect(CHOPIN_DARK_HUES[0].name).toBe("gray");
+		expect(CHOPIN_DARK_HUES[0].swatches.map(swatch => swatch.step)).toEqual(
+			light.swatches.map(swatch => swatch.step),
+		);
+		expect(CHOPIN_DARK_HUES[0].swatches.map(swatch => swatch.value)).toEqual(
+			light.swatches.map(swatch => swatch.value).toReversed(),
+		);
 	});
 	it("renders every foundation family with a visible label", () => {
 		let markup = renderToStaticMarkup(createElement(Foundations));

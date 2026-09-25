@@ -18,6 +18,8 @@ export { RampCurveEditor } from "./ui/color/ramp-curve-editor";
 export type { RampCurveEditorProps } from "./ui/color/ramp-curve-editor";
 export { ScrubField } from "./ui/color/scrub-field";
 export type { ScrubFieldProps } from "./ui/color/scrub-field";
+export { ThemeToggle } from "./ui/color/theme-toggle";
+export type { ThemeToggleProps } from "./ui/color/theme-toggle";
 export { TokenList } from "./ui/color/token-list";
 export type { TokenListProps } from "./ui/color/token-list";
 export { IconLabel } from "./ui/icon-label";

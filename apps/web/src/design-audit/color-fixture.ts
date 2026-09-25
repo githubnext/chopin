@@ -1,4 +1,4 @@
-import type { Oklch, Palette, Token } from "@chopin/color";
+import type { Hue, Oklch, Palette, Token } from "@chopin/color";
 
 export type FixtureHue = {
 	name: string;
@@ -111,7 +111,16 @@ export const CHOPIN_TOKENS: Token[] = [
 	source: `--color-${name}`,
 }));
 
+let lightGray = CHOPIN_LIGHT_HUES.find(hue => hue.name === "gray")!;
+export const CHOPIN_DARK_HUES: Hue[] = [{
+	name: "gray",
+	swatches: lightGray.swatches.map((swatch, index, all) => ({
+		step: swatch.step,
+		value: all[all.length - 1 - index].value,
+	})),
+}];
+
 export const CHOPIN_PALETTE: Palette = {
-	themes: { light: CHOPIN_LIGHT_HUES },
+	themes: { light: CHOPIN_LIGHT_HUES, dark: CHOPIN_DARK_HUES },
 	tokens: CHOPIN_TOKENS,
 };

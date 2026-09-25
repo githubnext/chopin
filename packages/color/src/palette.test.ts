@@ -247,6 +247,41 @@ describe("paletteReducer", () => {
 		expect(isEdited(state, dark)).toBe(false);
 	});
 
+	test("curves and resets a reversed dark row without changing the light row", () => {
+		let reversed: Palette = {
+			themes: {
+				light: [palette.themes.light[0]],
+				dark: [{
+					name: "gray",
+					swatches: [
+						{ step: "400", value: { l: 0.2, c: 0.01, h: 95 } },
+						{ step: "450", value: { l: 0.8, c: 0.01, h: 95 } },
+					],
+				}],
+			},
+		};
+		let state = paletteReducer(createPaletteState(reversed), { type: "theme", theme: "dark" });
+		let curve = {
+			darkest: { l: 0.3, hueShift: 0, easing: "linear" as const },
+			lightest: { l: 0.9, hueShift: 0, easing: "linear" as const },
+		};
+		state = paletteReducer(state, { type: "curve", hue: "gray", curve });
+		expect(currentValue(state, { hue: "gray", step: "400" })!.l).toBeCloseTo(0.3, 6);
+		expect(currentValue(state, { hue: "gray", step: "450" })!.l).toBeCloseTo(0.9, 6);
+		expect(curveFor(state, "gray")).toEqual(curve);
+		expect(changes(state).every(change => change.kind !== "swatch" || change.theme === "dark"))
+			.toBe(true);
+		state = paletteReducer(state, { type: "theme", theme: "light" });
+		expect(currentValue(state, { hue: "gray", step: "400" })).toEqual(
+			palette.themes.light[0].swatches[0].value,
+		);
+		state = paletteReducer(state, { type: "theme", theme: "dark" });
+		expect(curveFor(state, "gray")).toEqual(curve);
+		state = paletteReducer(state, { type: "resetRow", hue: "gray" });
+		expect(changes(state)).toEqual([]);
+		expect(curveFor(state, "gray")).toEqual(curveFrom(rowValues(state, "gray")!.base));
+	});
+
 	test("the curve action rewrites a row from its base and stores the settings", () => {
 		let state = createPaletteState(palette);
 		let curve = {

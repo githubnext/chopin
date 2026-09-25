@@ -65,6 +65,38 @@
 	font-size: var(--text-sm);
 }
 
+.cv-palette-toolbar {
+	display: flex;
+	justify-content: flex-end;
+	margin-bottom: calc(var(--spacing) * 5);
+}
+
+.cv-theme-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 3);
+}
+
+.cv-theme-toggle button {
+	padding: calc(var(--spacing) * 1) calc(var(--spacing) * 2);
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: transparent;
+	color: var(--color-text-quaternary);
+	font: inherit;
+	font-weight: 400;
+	cursor: pointer;
+}
+
+.cv-theme-toggle button[aria-pressed="true"] {
+	color: var(--color-text-primary);
+	font-weight: 600;
+}
+
+.cv-theme-toggle button:hover {
+	background: var(--color-hover);
+}
+
 .cv-palette-changes button {
 	padding: 0;
 	border: 0;

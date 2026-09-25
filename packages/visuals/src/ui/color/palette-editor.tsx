@@ -17,6 +17,7 @@ import { ColorPopover } from "./color-popover";
 import { placePopover } from "./geometry";
 import { PaletteGrid } from "./palette-grid";
 import { RampCurveEditor } from "./ramp-curve-editor";
+import { ThemeToggle } from "./theme-toggle";
 import { TokenList } from "./token-list";
 
 import type { PaletteAction, PaletteState, Purpose, SwatchRef } from "@chopin/color";
@@ -97,6 +98,16 @@ export function PaletteEditor({ state, dispatch }: PaletteEditorProps) {
 		if (!popover.current?.matches(":popover-open")) popover.current?.showPopover();
 	}
 
+	function changeTheme(theme: PaletteState["theme"]) {
+		if (theme === state.theme) return;
+		popover.current?.hidePopover();
+		anchor.current = null;
+		pointerDismissal.current = null;
+		setCurveOpen(false);
+		setAgainst("surface");
+		dispatch({ type: "theme", theme });
+	}
+
 	let value = selected && currentValue(state, selected);
 	let previous = selected && baseValue(state, selected);
 	let row = selected && rowValues(state, selected.hue);
@@ -139,6 +150,11 @@ export function PaletteEditor({ state, dispatch }: PaletteEditorProps) {
 	);
 	return (
 		<div className="cv-palette-editor">
+			{state.palette.themes.dark && (
+				<div className="cv-palette-toolbar">
+					<ThemeToggle onChange={changeTheme} value={state.theme} />
+				</div>
+			)}
 			<PaletteGrid onActivate={open} rows={rows} />
 			{!!state.palette.tokens?.length && (
 				<section className="cv-palette-tokens">

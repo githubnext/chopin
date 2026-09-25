@@ -37,7 +37,11 @@ const ROWS = [
 export function PaletteEditorSpecimen() {
 	let [state, dispatch] = useReducer(paletteReducer, CHOPIN_PALETTE, createPaletteState);
 	return (
-		<AuditPlate item="palette-editor" title="Palette editor">
+		<AuditPlate
+			description="Dark ramp is synthetic; Chopin has no dark theme yet."
+			item="palette-editor"
+			title="Palette editor"
+		>
 			<div className="design-audit-palette-layout">
 				<PaletteEditor dispatch={dispatch} state={state} />
 			</div>

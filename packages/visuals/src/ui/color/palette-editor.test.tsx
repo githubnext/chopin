@@ -33,6 +33,23 @@ test("contrast options begin with the surface and include current swatches", () 
 	expect(new Set(options.map(option => option.id)).size).toBe(options.length);
 });
 
+test("theme control appears only with dark hues and contrast follows the active surface", () => {
+	let light = createPaletteState(palette);
+	let markup = renderToStaticMarkup(createElement(PaletteEditor, { state: light, dispatch() {} }));
+	expect(markup).not.toContain('aria-label="Theme"');
+	let themed = createPaletteState({
+		themes: { light: palette.themes.light, dark: palette.themes.light },
+	});
+	markup = renderToStaticMarkup(createElement(PaletteEditor, { state: themed, dispatch() {} }));
+	expect(markup).toContain('aria-label="Theme"');
+	themed = paletteReducer(themed, { type: "theme", theme: "dark" });
+	expect(contrastOptions(themed)[0]).toEqual({
+		id: "surface",
+		label: "Dark surface",
+		value: { l: 0.159, c: 0.006, h: 95 },
+	});
+});
+
 test("selected swatches expose a curve toggle and explain short rows", () => {
 	let state = paletteReducer(createPaletteState(palette), {
 		type: "select",
