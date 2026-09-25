@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { Controls } from "./controls";
 import { ColorControls, PaletteEditorSpecimen } from "./color";
-import { CHOPIN_LIGHT_HUES } from "./color-fixture";
+import { CHOPIN_LIGHT_HUES, CHOPIN_TOKENS } from "./color-fixture";
 import { AuthoredContent, callouts } from "./authored-content";
 import { Foundations } from "./foundations";
 import { AUDIT_INVENTORY } from "./inventory";
@@ -46,6 +46,13 @@ describe("design audit specimens", () => {
 				let match = theme.match(new RegExp(`${swatch.source}:\\s*oklch\\(([^)]*)\\)`));
 				expect(match?.[1]?.split(/\s+/).map(Number)).toEqual([l, c, h]);
 			}
+		}
+		let aliases = [...theme.matchAll(
+			/^\s*(--color-[\w-]+):\s*var\(--color-([\w-]+)-(\d+)\);/gm,
+		)];
+		expect(CHOPIN_TOKENS.map(token => token.source)).toEqual(aliases.map(match => match[1]));
+		for (let [index, token] of CHOPIN_TOKENS.entries()) {
+			expect(token.ref).toEqual({ hue: aliases[index][2], step: aliases[index][3] });
 		}
 	});
 

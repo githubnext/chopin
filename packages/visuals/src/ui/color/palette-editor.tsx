@@ -7,6 +7,7 @@ import {
 	rowValues,
 	sameColor,
 	surface,
+	tokenRows,
 } from "@chopin/color";
 import { CurveIcon } from "@chopin/icons";
 import { currentViewport, listenToViewportChanges } from "@chopin/viewport";
@@ -16,6 +17,7 @@ import { ColorPopover } from "./color-popover";
 import { placePopover } from "./geometry";
 import { PaletteGrid } from "./palette-grid";
 import { RampCurveEditor } from "./ramp-curve-editor";
+import { TokenList } from "./token-list";
 
 import type { PaletteAction, PaletteState, Purpose, SwatchRef } from "@chopin/color";
 import type { ContrastOption } from "./contrast-reader";
@@ -55,6 +57,7 @@ export function PaletteEditor({ state, dispatch }: PaletteEditorProps) {
 	let [position, setPosition] = useState<{ left: number; top: number } | null>(null);
 	let selected = state.selected;
 	let pending = changes(state).length;
+	let rows = gridRows(state);
 
 	useLayoutEffect(() => {
 		if (!selected) return;
@@ -136,7 +139,18 @@ export function PaletteEditor({ state, dispatch }: PaletteEditorProps) {
 	);
 	return (
 		<div className="cv-palette-editor">
-			<PaletteGrid onActivate={open} rows={gridRows(state)} />
+			<PaletteGrid onActivate={open} rows={rows} />
+			{!!state.palette.tokens?.length && (
+				<section className="cv-palette-tokens">
+					<h2>Tokens</h2>
+					<TokenList
+						onOpen={open}
+						onRetarget={(token, ref) => dispatch({ type: "retarget", token, ref })}
+						rows={tokenRows(state)}
+						swatches={rows.flatMap(row => row.cells.map(cell => cell.ref))}
+					/>
+				</section>
+			)}
 			{pending > 0 && (
 				<p className="cv-palette-changes">
 					{pending} {pending === 1 ? "change" : "changes"} ·{" "}

@@ -27,6 +27,7 @@ export {
 	rowValues,
 	sharedSteps,
 	surface,
+	tokenRows,
 } from "./palette";
 export type {
 	Change,
@@ -42,4 +43,6 @@ export type {
 	SwatchRef,
 	Theme,
 	Token,
+	TokenChange,
+	TokenRow,
 } from "./palette";

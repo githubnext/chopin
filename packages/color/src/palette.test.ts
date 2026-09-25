@@ -12,6 +12,7 @@ import {
 	rowValues,
 	sharedSteps,
 	surface,
+	tokenRows,
 } from "./palette";
 import { curveFrom } from "./curve";
 
@@ -53,6 +54,78 @@ describe("createPaletteState", () => {
 				themes: { light: [{ name: "x", swatches: [hue.swatches[0], hue.swatches[0]] }] },
 			})
 		).toThrow('Duplicate step "1" in hue "x" (light theme)');
+	});
+});
+
+describe("tokens", () => {
+	let withTokens: Palette = {
+		...palette,
+		tokens: [
+			{ name: "neutral-graphic", group: "neutral", ref: { hue: "gray", step: "450" } },
+			{ name: "ghost", ref: { hue: "gone", step: "1" } },
+		],
+	};
+
+	test("retargets, reports and resets a token after swatch changes", () => {
+		let state = createPaletteState(withTokens);
+		let to = { hue: "gray", step: "400" };
+		state = paletteReducer(state, { type: "edit", ref: to, value: { l: 0.7, c: 0.01, h: 95 } });
+		state = paletteReducer(state, { type: "retarget", token: "neutral-graphic", ref: to });
+		expect(tokenRows(state)[0]).toMatchObject({
+			ref: to,
+			value: { l: 0.7, c: 0.01, h: 95 },
+			retargeted: true,
+		});
+		expect(changes(state).at(-1)).toEqual({
+			kind: "token",
+			name: "neutral-graphic",
+			before: { hue: "gray", step: "450" },
+			after: to,
+		});
+		state = paletteReducer(state, {
+			type: "retarget",
+			token: "neutral-graphic",
+			ref: { hue: "gray", step: "450" },
+		});
+		expect(tokenRows(state)[0].retargeted).toBe(false);
+		expect(changes(state).some(change => change.kind === "token")).toBe(false);
+	});
+
+	test("resolves missing refs without throwing and ignores unknown tokens", () => {
+		let state = createPaletteState(withTokens);
+		expect(tokenRows(state)[1].value).toBeNull();
+		expect(paletteReducer(state, { type: "retarget", token: "nope", ref: null })).toBe(state);
+	});
+
+	test("supports prototype-like token names and resetAll", () => {
+		let custom: Palette = {
+			...palette,
+			tokens: [
+				{ name: "__proto__", ref: { hue: "gray", step: "450" } },
+				{ name: "toString", ref: { hue: "gray", step: "400" } },
+			],
+		};
+		let state = createPaletteState(custom);
+		expect(tokenRows(state).every(row => !row.retargeted)).toBe(true);
+		state = paletteReducer(state, {
+			type: "retarget",
+			token: "__proto__",
+			ref: { hue: "a/b", step: "1" },
+		});
+		state = paletteReducer(state, {
+			type: "retarget",
+			token: "toString",
+			ref: { hue: "gray", step: "450" },
+		});
+		expect(JSON.stringify(state.retargets)).toBe(
+			'{"__proto__":{"hue":"a/b","step":"1"},"toString":{"hue":"gray","step":"450"}}',
+		);
+		expect(changes(state).filter(change => change.kind === "token")).toHaveLength(2);
+		state = paletteReducer(state, { type: "retarget", token: "__proto__", ref: null });
+		expect(tokenRows(state)[0].retargeted).toBe(false);
+		state = paletteReducer(state, { type: "resetAll" });
+		expect(state.retargets).toEqual({});
+		expect(changes(state)).toEqual([]);
 	});
 });
 

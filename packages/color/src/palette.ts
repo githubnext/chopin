@@ -20,6 +20,7 @@ export type PaletteState = {
 	theme: Theme;
 	edits: Record<Theme, Edits>;
 	curves: Record<Theme, Record<string, Curve>>;
+	retargets: Record<string, SwatchRef>;
 	selected: SwatchRef | null;
 };
 export type PaletteAction =
@@ -29,6 +30,7 @@ export type PaletteAction =
 	| { type: "resetRow"; hue: string }
 	| { type: "resetAll" }
 	| { type: "curve"; hue: string; curve: Curve }
+	| { type: "retarget"; token: string; ref: SwatchRef | null }
 	| { type: "theme"; theme: Theme };
 export type SwatchChange = {
 	kind: "swatch";
@@ -37,7 +39,16 @@ export type SwatchChange = {
 	before: Oklch;
 	after: Oklch;
 };
-export type Change = SwatchChange;
+export type TokenChange = { kind: "token"; name: string; before: SwatchRef; after: SwatchRef };
+export type Change = SwatchChange | TokenChange;
+export type TokenRow = {
+	name: string;
+	group?: string;
+	ref: SwatchRef;
+	original: SwatchRef;
+	value: Oklch | null;
+	retargeted: boolean;
+};
 export type GridCell = {
 	ref: SwatchRef;
 	step: string;
@@ -83,6 +94,10 @@ function emptyCurves(): Record<string, Curve> {
 	return Object.create(null) as Record<string, Curve>;
 }
 
+function emptyRetargets(): Record<string, SwatchRef> {
+	return Object.create(null) as Record<string, SwatchRef>;
+}
+
 function copyCurves(curves: Record<string, Curve>): Record<string, Curve> {
 	return Object.assign(emptyCurves(), curves);
 }
@@ -107,6 +122,7 @@ export function createPaletteState(palette: Palette): PaletteState {
 		theme: "light",
 		edits: { light: emptyEdits(), dark: emptyEdits() },
 		curves: { light: emptyCurves(), dark: emptyCurves() },
+		retargets: emptyRetargets(),
 		selected: null,
 	};
 }
@@ -164,6 +180,7 @@ export function paletteReducer(state: PaletteState, action: PaletteAction): Pale
 				...state,
 				edits: { light: emptyEdits(), dark: emptyEdits() },
 				curves: { light: emptyCurves(), dark: emptyCurves() },
+				retargets: emptyRetargets(),
 			};
 		case "curve": {
 			let row = rowValues(state, action.hue);
@@ -184,6 +201,17 @@ export function paletteReducer(state: PaletteState, action: PaletteAction): Pale
 		case "theme":
 			if (action.theme === state.theme || !huesOf(state.palette, action.theme).length) return state;
 			return { ...state, theme: action.theme, selected: null };
+		case "retarget": {
+			let token = state.palette.tokens?.find(candidate => candidate.name === action.token);
+			if (!token) return state;
+			let next = Object.assign(emptyRetargets(), state.retargets);
+			if (
+				!action.ref
+				|| (action.ref.hue === token.ref.hue && action.ref.step === token.ref.step)
+			) delete next[action.token];
+			else next[action.token] = action.ref;
+			return { ...state, retargets: next };
+		}
 	}
 }
 
@@ -236,6 +264,21 @@ export function gridRows(state: PaletteState): GridRow[] {
 	}));
 }
 
+export function tokenRows(state: PaletteState): TokenRow[] {
+	return (state.palette.tokens ?? []).map(token => {
+		let retargeted = Object.hasOwn(state.retargets, token.name);
+		let ref = retargeted ? state.retargets[token.name] : token.ref;
+		return {
+			name: token.name,
+			group: token.group,
+			ref,
+			original: token.ref,
+			value: currentValue(state, ref),
+			retargeted,
+		};
+	});
+}
+
 export function sharedSteps(rows: readonly GridRow[]): string[] | null {
 	if (!rows.length) return null;
 	let steps = rows[0].cells.map(cell => cell.step);
@@ -264,6 +307,15 @@ export function changes(state: PaletteState): Change[] {
 				}
 			}
 		}
+	}
+	for (let token of state.palette.tokens ?? []) {
+		if (!Object.hasOwn(state.retargets, token.name)) continue;
+		found.push({
+			kind: "token",
+			name: token.name,
+			before: token.ref,
+			after: state.retargets[token.name],
+		});
 	}
 	return found;
 }

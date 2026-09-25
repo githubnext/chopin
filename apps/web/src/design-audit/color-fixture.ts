@@ -1,4 +1,4 @@
-import type { Oklch, Palette } from "@chopin/color";
+import type { Oklch, Palette, Token } from "@chopin/color";
 
 export type FixtureHue = {
 	name: string;
@@ -77,4 +77,41 @@ export const CHOPIN_LIGHT_HUES: FixtureHue[] = [
 	},
 ];
 
-export const CHOPIN_PALETTE: Palette = { themes: { light: CHOPIN_LIGHT_HUES } };
+export const CHOPIN_TOKENS: Token[] = [
+	["surface", "ground", "gray", "150"],
+	["surface", "hover", "gray", "100"],
+	["surface", "inset", "gray", "100"],
+	["surface", "selected", "gray", "200"],
+	["text", "text-primary", "gray", "900"],
+	["text", "text-secondary", "gray", "700"],
+	["text", "text-tertiary", "gray", "600"],
+	["text", "text-quaternary", "gray", "500"],
+	["text", "icon", "gray", "500"],
+	["neutral", "neutral-surface", "gray", "100"],
+	["neutral", "neutral-graphic", "gray", "450"],
+	["neutral", "neutral-icon", "gray", "500"],
+	["neutral", "neutral-text", "gray", "700"],
+	["success", "success-surface", "lime", "3"],
+	["success", "success-graphic", "lime", "8"],
+	["success", "success-icon", "lime", "11"],
+	["success", "success-text", "lime", "12"],
+	["warning", "warning-surface", "orange", "3"],
+	["warning", "warning-graphic", "orange", "8"],
+	["warning", "warning-icon", "orange", "11"],
+	["warning", "warning-text", "orange", "12"],
+	["danger", "danger-surface", "ruby", "3"],
+	["danger", "danger-graphic", "ruby", "9"],
+	["danger", "danger-icon", "ruby", "11"],
+	["danger", "danger-text", "ruby", "12"],
+	["control", "control-boundary", "gray", "500"],
+].map(([group, name, hue, step]) => ({
+	group,
+	name,
+	ref: { hue, step },
+	source: `--color-${name}`,
+}));
+
+export const CHOPIN_PALETTE: Palette = {
+	themes: { light: CHOPIN_LIGHT_HUES },
+	tokens: CHOPIN_TOKENS,
+};

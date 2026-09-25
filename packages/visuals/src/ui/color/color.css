@@ -183,6 +183,114 @@
 	font-size: var(--text-sm);
 }
 
+.cv-palette-tokens {
+	margin-top: calc(var(--spacing) * 12);
+}
+
+.cv-palette-tokens > h2 {
+	margin: 0 0 calc(var(--spacing) * 5);
+	color: var(--color-text-primary);
+	font-size: var(--text-xl);
+	font-weight: 600;
+}
+
+.cv-token-list {
+	display: grid;
+	gap: calc(var(--spacing) * 6);
+}
+
+.cv-token-group h3 {
+	margin: 0 0 calc(var(--spacing) * 2);
+	color: var(--color-text-primary);
+	font-size: var(--text-lg);
+	font-weight: 600;
+}
+
+.cv-token-row {
+	display: grid;
+	grid-template-columns: max-content minmax(0, 1fr) max-content max-content;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	min-height: 36px;
+	min-width: 0;
+}
+
+.cv-token-name {
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--color-text-primary);
+	font: inherit;
+	font-size: var(--text-sm);
+	text-align: left;
+	cursor: pointer;
+}
+
+.cv-token-name:disabled {
+	color: var(--color-text-tertiary);
+	cursor: default;
+}
+
+.cv-token-leader {
+	height: 1px;
+	background: var(--color-selected);
+}
+
+.cv-token-ref {
+	display: grid;
+	justify-items: end;
+	min-width: 0;
+}
+
+.cv-token-ref select {
+	max-width: 100%;
+	padding: var(--spacing);
+	border: var(--edge-width) solid transparent;
+	border-radius: var(--radius-sm);
+	appearance: none;
+	background: transparent;
+	color: var(--color-text-primary);
+	font: inherit;
+	font-size: var(--text-sm);
+	text-align: right;
+	cursor: pointer;
+}
+
+.cv-token-ref select:is(:hover, :focus-visible) {
+	border-color: var(--color-control-edge);
+	background: var(--color-page);
+}
+
+.cv-token-ref select[data-tone="danger"] {
+	color: var(--color-destructive);
+}
+
+.cv-token-was {
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--color-text-tertiary);
+	font: inherit;
+	font-size: var(--text-sm);
+	cursor: pointer;
+}
+
+.cv-token-swatch {
+	width: 24px;
+	height: 18px;
+	padding: 0;
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: var(--color-page);
+	box-shadow: inset 0 0 0 1px var(--color-control-edge);
+	cursor: pointer;
+}
+
+.cv-token-swatch[data-tone="danger"] {
+	box-shadow: inset 0 0 0 1px var(--color-destructive);
+	cursor: default;
+}
+
 .cv-contrast {
 	display: grid;
 	gap: calc(var(--spacing) * 2);
