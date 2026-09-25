@@ -133,13 +133,6 @@
 	margin-block-end: 1rem;
 }
 
-.design-audit-plate-heading {
-	display: flex;
-	align-items: baseline;
-	flex-wrap: wrap;
-	column-gap: 0.75rem;
-}
-
 .design-audit-plate h3 {
 	font-size: var(--text-lg);
 	font-weight: 600;
@@ -155,6 +148,7 @@
 }
 
 .design-audit-source {
+	display: block;
 	min-width: 0;
 	font-family: var(--font-mono);
 	font-size: var(--text-sm);
@@ -168,15 +162,56 @@
 }
 
 .design-audit-state {
-	display: inline-flex;
-	align-items: center;
-	min-height: 1.5rem;
-	padding-inline: 0.5rem;
-	border-radius: 9999px;
-	background: var(--color-gray-200);
 	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
 	font-weight: 500;
+	color: var(--color-text-quaternary);
+}
+
+.design-audit-adoption {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 1.5rem;
+	padding-block: 0.75rem;
+	border-block: var(--edge-width) solid var(--color-edge);
+}
+
+.design-audit-adoption h4,
+.design-audit-adoption p,
+.design-audit-adoption ul {
+	margin: 0;
+}
+
+.design-audit-adoption h4 {
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+}
+
+.design-audit-adoption p,
+.design-audit-adoption li {
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
 	color: var(--color-text-tertiary);
+}
+
+.design-audit-adoption p {
+	margin-block-start: 0.25rem;
+}
+
+.design-audit-adoption ul {
+	padding: 0;
+	list-style: none;
+}
+
+.design-audit-adoption li {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.25rem 0.75rem;
+	margin-block-start: 0.25rem;
+}
+
+.design-audit-adoption strong {
+	color: var(--color-text-primary);
 }
 
 @media (max-width: 639px) {
@@ -200,5 +235,9 @@
 		display: flex;
 		overflow-x: auto;
 		margin-block-end: 2rem;
+	}
+
+	.design-audit-adoption {
+		grid-template-columns: 1fr;
 	}
 }

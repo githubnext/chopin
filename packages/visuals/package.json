@@ -15,6 +15,7 @@
 		"./theme.css": "./theme.css"
 	},
 	"dependencies": {
+		"@base-ui/react": "1.7.0",
 		"@chopin/icons": "workspace:*"
 	},
 	"peerDependencies": {

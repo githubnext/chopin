@@ -37,6 +37,7 @@
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+	gap: calc(var(--spacing) * 2);
 	border: 0;
 	border-radius: var(--radius-md);
 	font-size: var(--text-sm);
@@ -46,6 +47,20 @@
 	&:disabled {
 		cursor: default;
 		opacity: 0.4;
+	}
+
+	&[aria-busy="true"]:disabled {
+		opacity: 0.65;
+	}
+
+	&[aria-busy="true"] [data-button-loader] {
+		animation: button-loader-spin 800ms linear infinite;
+	}
+}
+
+@keyframes button-loader-spin {
+	to {
+		transform: rotate(360deg);
 	}
 }
 
@@ -69,8 +84,8 @@
 	background-color: var(--color-brand);
 	box-shadow: var(--shadow-resting);
 	color: var(--color-page);
-	outline: var(--edge-width) solid rgb(0 0 0 / 15%);
-	outline-offset: calc(-1 * var(--edge-width));
+	outline: var(--button-edge-width) solid var(--color-control-edge);
+	outline-offset: calc(-1 * var(--button-edge-width));
 
 	&:hover:not(:disabled) {
 		background-color: var(--color-brand-hover);
@@ -84,8 +99,8 @@
 @utility btn-secondary {
 	background-color: var(--color-gray-200);
 	color: var(--color-text-primary);
-	outline: var(--edge-width) solid var(--color-edge);
-	outline-offset: calc(-1 * var(--edge-width));
+	outline: var(--button-edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--button-edge-width));
 
 	&:hover:not(:disabled) {
 		background-color: var(--color-gray-300);
@@ -112,8 +127,8 @@
 @utility btn-destructive {
 	background-color: var(--color-destructive);
 	color: var(--color-page);
-	outline: var(--edge-width) solid var(--color-edge);
-	outline-offset: calc(-1 * var(--edge-width));
+	outline: var(--button-edge-width) solid var(--color-control-edge);
+	outline-offset: calc(-1 * var(--button-edge-width));
 
 	&:hover:not(:disabled) {
 		background-color: var(--color-destructive-hover);
@@ -128,6 +143,7 @@
 	border: var(--edge-width) solid var(--color-control-edge);
 	border-radius: var(--radius-md);
 	background-color: var(--color-page);
+	box-shadow: var(--shadow-resting);
 	color: var(--color-text-primary);
 
 	&:disabled {
@@ -180,6 +196,7 @@
 	}
 
 	&[type="radio"]:checked {
+		border-width: calc(var(--edge-width) * 2);
 		box-shadow: inset 0 0 0 3px var(--color-page);
 	}
 
@@ -626,6 +643,10 @@ body {
 	border-radius: 9999px;
 }
 @media (prefers-reduced-motion: reduce) {
+	.btn[aria-busy="true"] [data-button-loader] {
+		animation: none;
+	}
+
 	.motion-dropdown,
 	.motion-popover,
 	.motion-panel,

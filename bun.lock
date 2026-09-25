@@ -186,6 +186,7 @@
       "name": "@chopin/visuals",
       "version": "0.0.0",
       "dependencies": {
+        "@base-ui/react": "1.7.0",
         "@chopin/icons": "workspace:*",
       },
       "devDependencies": {

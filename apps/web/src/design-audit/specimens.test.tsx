@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { createElement } from "react";
+import { SelectItem } from "@chopin/visuals";
+import { Children, createElement, isValidElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { Controls } from "./controls";
@@ -8,10 +9,25 @@ import { Foundations } from "./foundations";
 import { AUDIT_INVENTORY } from "./inventory";
 import { Surfaces } from "./surfaces";
 
+import type { ReactElement, ReactNode } from "react";
+
 function plate(markup: string, item: string): string {
 	let start = markup.indexOf(`<section class="design-audit-plate" data-audit-item="${item}">`);
 	let end = markup.indexOf("</section>", start);
 	return start === -1 || end === -1 ? "" : markup.slice(start, end + "</section>".length);
+}
+
+function elementsOfType(
+	node: ReactNode,
+	type: ReactElement["type"],
+	found: ReactElement<{ children?: ReactNode; value?: unknown }>[] = [],
+) {
+	Children.forEach(node, child => {
+		if (!isValidElement<{ children?: ReactNode; value?: unknown }>(child)) return;
+		if (child.type === type) found.push(child);
+		elementsOfType(child.props.children, type, found);
+	});
+	return found;
 }
 
 describe("design audit specimens", () => {
@@ -21,8 +37,10 @@ describe("design audit specimens", () => {
 		for (let id of ["colours", "typography", "spacing", "radii", "shadows", "icons"]) {
 			expect(markup).toContain(`data-audit-item="${id}"`);
 		}
-		expect(markup).toContain("Consolidated exact duplicate");
+		expect(markup).toContain("Panel close");
+		expect(markup).not.toContain("Consolidated exact duplicate");
 		expect(markup).toContain("Strong resting");
+		expect(markup).toContain("--button-edge-width");
 		for (
 			let measurement of [
 				"13px / 20px line-height",
@@ -198,6 +216,28 @@ describe("design audit specimens", () => {
 		expect(markup).toContain("disabled");
 		expect(markup).toContain('aria-selected="true"');
 		expect(markup).toContain('role="menu"');
+		expect(markup).toContain('data-slot="select-trigger"');
+		expect(markup).toContain('data-slot="select-value"');
+		expect(markup).not.toContain('<select class="field"');
+		expect(markup).toMatch(/aria-busy="true"[^>]*disabled[^>]*>[\s\S]*data-button-loader/);
+		expect(
+			elementsOfType(Controls(), SelectItem).map(item => [item.props.value, item.props.children]),
+		).toEqual([
+			["active", "Active documents"],
+			["archived", "Archived documents"],
+		]);
+	});
+
+	it("gives focused audit links breathing room", async () => {
+		let css = await Bun.file(new URL("./controls.css", import.meta.url)).text();
+
+		expect(css).toMatch(
+			new RegExp(
+				String.raw`\.design-audit-link:is\(\[data-audit-state="focus"\], :focus-visible\)`
+					+ String.raw`[\s\S]*margin-inline:\s*-0\.25rem;`
+					+ String.raw`[\s\S]*padding-inline:\s*0\.25rem;`,
+			),
+		);
 	});
 
 	it("renders every application surface and its meaningful states", () => {
@@ -213,6 +253,10 @@ describe("design audit specimens", () => {
 		expect(markup).toContain("Avatar image loading");
 		expect(markup).toContain("Editing this question");
 		expect(markup).toContain('role="alert"');
+		expect(markup).toMatch(
+			/<button aria-busy="true" class="btn btn-md btn-primary" disabled=""[^>]*>/,
+		);
+		expect(markup).toContain('data-button-loader=""');
 	});
 
 	it("renders every authored-content family through the static editor or record card", () => {
