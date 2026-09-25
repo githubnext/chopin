@@ -36,6 +36,7 @@ export function contrastOptions(state: PaletteState): ContrastOption[] {
 export function PaletteEditor({ state, dispatch }: PaletteEditorProps) {
 	let popover = useRef<HTMLDivElement>(null);
 	let anchor = useRef<HTMLElement | null>(null);
+	let pointerDismissal = useRef<{ target: HTMLElement | null } | null>(null);
 	let [purpose, setPurpose] = useState<Purpose>("graphic");
 	let [against, setAgainst] = useState("surface");
 	let [position, setPosition] = useState<{ left: number; top: number } | null>(null);
@@ -44,6 +45,14 @@ export function PaletteEditor({ state, dispatch }: PaletteEditorProps) {
 
 	useLayoutEffect(() => {
 		if (!selected) return;
+		function trackPointerDown(event: PointerEvent) {
+			if (event.target instanceof Element && !popover.current?.contains(event.target)) {
+				let target = event.target.closest(
+					'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])',
+				);
+				pointerDismissal.current = { target: target instanceof HTMLElement ? target : null };
+			}
+		}
 		function place() {
 			let element = popover.current;
 			let trigger = anchor.current;
@@ -52,11 +61,17 @@ export function PaletteEditor({ state, dispatch }: PaletteEditorProps) {
 			setPosition(placePopover(trigger.getBoundingClientRect(), size, currentViewport()));
 		}
 		place();
-		return listenToViewportChanges(place, { observeDocumentScroll: true });
+		let stopListening = listenToViewportChanges(place, { observeDocumentScroll: true });
+		document.addEventListener("pointerdown", trackPointerDown, true);
+		return () => {
+			stopListening();
+			document.removeEventListener("pointerdown", trackPointerDown, true);
+		};
 	}, [selected]);
 
 	function open(ref: SwatchRef, element: HTMLElement) {
 		anchor.current = element;
+		pointerDismissal.current = null;
 		dispatch({ type: "select", ref });
 		if (!popover.current?.matches(":popover-open")) popover.current?.showPopover();
 	}
@@ -79,7 +94,10 @@ export function PaletteEditor({ state, dispatch }: PaletteEditorProps) {
 				onToggle={event => {
 					if (event.newState !== "closed" || popover.current?.matches(":popover-open")) return;
 					dispatch({ type: "select", ref: null });
-					anchor.current?.focus({ preventScroll: true });
+					if (pointerDismissal.current) {
+						pointerDismissal.current.target?.focus({ preventScroll: true });
+					} else anchor.current?.focus({ preventScroll: true });
+					pointerDismissal.current = null;
 				}}
 				popover="auto"
 				ref={popover}

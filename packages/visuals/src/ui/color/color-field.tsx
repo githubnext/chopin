@@ -71,7 +71,8 @@ export function ColorField({ value, onChange, format: form, onFormatChange }: Co
 							event.preventDefault();
 							commit();
 						}
-						if (event.key === "Escape") {
+						if (event.key === "Escape" && draft) {
+							event.preventDefault();
 							event.stopPropagation();
 							setDraft(null);
 							setInvalid(false);
