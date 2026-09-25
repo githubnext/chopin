@@ -3197,3 +3197,28 @@ diff from `main` to `color-controls/4-tokens-theme`, with the spec as the refere
 Append one entry per slice checkpoint. Record the date, the branch, the head commit, the
 check results, the screenshot paths, any deviations with reasons, and open questions for
 Maggie.
+
+### 2026-09-25 · Slice 1 · color-controls
+
+- **Head:** `color-controls-slice-1` (Task 7 parent `2c411061`); based on the latest
+  `origin/main` design-system merge `c62636ae` through merge commit `c60805da`.
+- **Commits:** Tasks 1–7 landed as `8f709b97`, `783c0859`, `f0acb8bb`, `224639a6`,
+  `6e23a989`, `fa52e9fa`, `2c411061`, with reviewed parser, formatter, hue endpoint,
+  select-option, and draft-precision corrections between them.
+- **Checks:** `bun run fix`, `bun run types`, full `bun test` (1578 pass, 2 PostgreSQL
+  skips), and `bun run ci` passed. Fresh Task 1–7 reviews and a whole-slice Sol review
+  found no remaining Critical or Important issue.
+- **Browser evidence:** `docs/superpowers/reports/color-controls/task-7-desktop.png`,
+  `task-7-mobile.png`, `task-7-out-of-gamut.png`, `slice-1-plane-before.png`,
+  `slice-1-plane-after.png`, and `slice-1-verdict-fail.png`. Playwright checked
+  1280×900 and 390×844, zero horizontal overflow, plane and hue drags, keyboard
+  changes, unchanged HEX blur, clipped input, the Sparkline repaint, and both
+  contrast verdicts. The screenshots will be committed with the final HTML report.
+- **Deviations:** one `color-controls` branch and no PR per handoff; isolated worktree
+  in `/private/tmp` due sandbox permissions; dedicated dev ports 18887/15174 and
+  PostgreSQL 55445 to avoid other agents' servers; the hue pointer keeps the exact
+  360° top endpoint; the field derives idle text instead of copying props with an
+  Effect. The decision log records each choice.
+- **Open question:** An invalid draft can retain old-format syntax after the format
+  selector changes. Review classified this as Minor; revisit after later browser
+  interaction checks.
