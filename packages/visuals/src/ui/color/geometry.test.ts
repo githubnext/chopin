@@ -84,6 +84,11 @@ describe("hue strip", () => {
 		expect(huePosition(90, 200)).toBe(150);
 	});
 
+	test("round-trips the strip endpoints without moving 360 to the bottom", () => {
+		expect(huePosition(hueValue(0, 200), 200)).toBe(0);
+		expect(huePosition(hueValue(200, 200), 200)).toBe(200);
+	});
+
 	test("ArrowUp increases and wraps", () => {
 		expect(hueKey(95, "ArrowUp", {})).toBe(96);
 		expect(hueKey(95, "ArrowDown", { shiftKey: true })).toBe(85);

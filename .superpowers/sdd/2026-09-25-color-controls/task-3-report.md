@@ -43,3 +43,16 @@ Result: pass — `11 pass`, `0 fail`, `30 expect() calls`.
 The specified RED command failed first on the missing required `@chopin/color` package
 declaration rather than `./geometry`. The test was still red for the expected new-task setup;
 the dependency was added before production code so the test could exercise the missing module.
+
+## Follow-up: hue endpoint round-trip
+
+The original `huePosition()` normalization mapped the explicit `360` returned by the top of the
+strip to normalized `0`, which positioned the thumb at the bottom. Added a RED regression that
+round-trips both endpoints through `hueValue()` and `huePosition()`; it failed with top expected
+at `0` and received at `200`.
+
+`huePosition()` now preserves an explicit `360` as the top endpoint before it normalizes other
+values. This deliberately departs from the original normalization-only formula because the strip
+specification assigns `360` to its top and `0` to its bottom. Keyboard movement still normalizes
+and wraps to `0`, which remains at the bottom. The focused suite passed `12 pass`, `0 fail` after
+the fix.

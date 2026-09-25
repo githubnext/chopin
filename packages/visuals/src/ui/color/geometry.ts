@@ -80,6 +80,7 @@ export function hueValue(y: number, height: number): number {
 }
 
 export function huePosition(h: number, height: number): number {
+	if (h === 360) return 0;
 	return (1 - normalizeHue(h) / 360) * height;
 }
 
