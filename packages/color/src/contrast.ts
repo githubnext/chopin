@@ -41,8 +41,8 @@ export function passes(ratio: number, purpose: Purpose): boolean {
 
 /** Truncated, never rounded: WCAG has no rounding, so 2.999 must not read as 3.00. */
 export function formatRatio(ratio: number): string {
-	let scaled = ratio * 100;
-	return `${(Math.floor(scaled + Number.EPSILON * scaled) / 100).toFixed(2)}:1`;
+	let [whole, decimal = ""] = ratio.toString().split(".");
+	return `${whole}.${decimal.padEnd(2, "0").slice(0, 2)}:1`;
 }
 
 export function formatThreshold(purpose: Purpose): string {

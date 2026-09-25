@@ -41,5 +41,8 @@ describe("thresholds", () => {
 		expect(formatRatio(3 - 1e-12)).toBe("2.99:1");
 		expect(formatRatio(4.5 - 1e-12)).toBe("4.49:1");
 		expect(formatRatio(7 - 1e-12)).toBe("6.99:1");
+		expect(formatRatio(2.9999999999999996)).toBe("2.99:1");
+		expect(formatRatio(4.499999999999999)).toBe("4.49:1");
+		expect(formatRatio(6.999999999999999)).toBe("6.99:1");
 	});
 });
