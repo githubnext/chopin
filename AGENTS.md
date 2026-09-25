@@ -56,6 +56,7 @@ image build. A documentation-only change should still pass `bun run ci`.
 
 | Area                | Responsibility                                         | Internal workspace dependencies               |
 | ------------------- | ------------------------------------------------------ | --------------------------------------------- |
+| `packages/color`    | OKLCH math, WCAG contrast, and palette editing state   | none                                          |
 | `packages/dialect`  | Restricted MDX, MDAST, and Lexical schema              | none                                          |
 | `packages/protocol` | WebSocket declarations and addressing helper           | none                                          |
 | `packages/question` | Questionnaire definitions and shared drafts            | `protocol`                                    |

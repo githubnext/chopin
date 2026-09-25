@@ -59,6 +59,13 @@
         "yjs": "catalog:mdx",
       },
     },
+    "packages/color": {
+      "name": "@chopin/color",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@types/bun": "catalog:bun",
+      },
+    },
     "packages/dialect": {
       "name": "@chopin/dialect",
       "version": "0.0.0",
@@ -298,6 +305,8 @@
     "@chevrotain/types": ["@chevrotain/types@11.0.3", "", {}, "sha512-gsiM3G8b58kZC2HaWR50gu6Y1440cHiJ+i3JUvcp/35JchYejb2+5MVeJK0iKThYpAa/P2PYFV4hoi44HD+aHQ=="],
 
     "@chevrotain/utils": ["@chevrotain/utils@11.0.3", "", {}, "sha512-YslZMgtJUyuMbZ+aKvfF3x1f5liK4mWNxghFRv7jqRR9C3R3fAOGTTKvxXDa2Y1s9zSbcpuO0cAxDYsc9SrXoQ=="],
+
+    "@chopin/color": ["@chopin/color@workspace:packages/color"],
 
     "@chopin/dialect": ["@chopin/dialect@workspace:packages/dialect"],
 
