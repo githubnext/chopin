@@ -40,6 +40,9 @@ test("selected swatches expose a curve toggle and explain short rows", () => {
 	});
 	let markup = renderToStaticMarkup(createElement(PaletteEditor, { state, dispatch() {} }));
 	expect(markup).toMatch(/<button[^>]*aria-expanded="false"[^>]*aria-label="Edit gray ramp curve"/);
+	expect(markup).toContain('class="cv-palette-popover-body"');
+	expect(markup).toContain('data-curve-open="false"');
+	expect(markup).not.toContain('aria-label="Ramp curve"');
 	expect(markup).not.toContain("Needs at least two colors");
 
 	let short = createPaletteState({

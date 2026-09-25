@@ -147,6 +147,7 @@ export function PaletteEditor({ state, dispatch }: PaletteEditorProps) {
 			)}
 			<div
 				className="cv-palette-popover"
+				data-curve-open={curveOpen && canCurve}
 				onToggle={event => {
 					if (event.newState !== "closed" || popover.current?.matches(":popover-open")) return;
 					dispatch({ type: "select", ref: null });
@@ -160,21 +161,19 @@ export function PaletteEditor({ state, dispatch }: PaletteEditorProps) {
 				ref={popover}
 				style={position ? { left: position.left, top: position.top } : { visibility: "hidden" }}
 			>
-				{curveOpen && row && curve && canCurve
-					? (
-						<div className="cv-palette-popover-body">
-							{colorPopover}
-							<RampCurveEditor
-								current={row.current}
-								curve={curve}
-								edited={row.current.some((entry, index) => !sameColor(entry, row.base[index]))}
-								onCurveChange={next => dispatch({ type: "curve", hue: selected!.hue, curve: next })}
-								onDiscard={() => dispatch({ type: "resetRow", hue: selected!.hue })}
-								steps={row.steps}
-							/>
-						</div>
-					)
-					: colorPopover}
+				<div className="cv-palette-popover-body">
+					{colorPopover}
+					{curveOpen && row && curve && canCurve && (
+						<RampCurveEditor
+							current={row.current}
+							curve={curve}
+							edited={row.current.some((entry, index) => !sameColor(entry, row.base[index]))}
+							onCurveChange={next => dispatch({ type: "curve", hue: selected!.hue, curve: next })}
+							onDiscard={() => dispatch({ type: "resetRow", hue: selected!.hue })}
+							steps={row.steps}
+						/>
+					)}
+				</div>
 			</div>
 		</div>
 	);

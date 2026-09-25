@@ -24,7 +24,8 @@
 .cv-palette-popover-body {
 	display: flex;
 	flex-direction: column;
-	width: min(100%, calc(var(--spacing) * 80));
+	width: 100%;
+	overflow: hidden;
 	border-radius: var(--radius-xl);
 	background: var(--color-page);
 	box-shadow: var(--shadow-overlay);
@@ -44,13 +45,12 @@
 }
 
 @media (min-width: 640px) {
-	.cv-palette-popover:has(.cv-palette-popover-body) {
+	.cv-palette-popover[data-curve-open="true"] {
 		width: min(calc(var(--spacing) * 160), calc(100vw - 32px));
 	}
 
-	.cv-palette-popover-body {
+	.cv-palette-popover[data-curve-open="true"] .cv-palette-popover-body {
 		flex-direction: row;
-		width: min(calc(var(--spacing) * 160), calc(100vw - 32px));
 	}
 
 	.cv-palette-popover-body > .cv-ramp-curve {
