@@ -10,6 +10,10 @@ describe("commitText", () => {
 		expect(commitText("#96958e", "#96958e", gray)).toEqual({ value: null, invalid: false });
 	});
 
+	test("keeps source precision when only the displayed hex casing changes", () => {
+		expect(commitText("#96958E", "#96958e", gray)).toEqual({ value: null, invalid: false });
+	});
+
 	test("emits a parsed change", () => {
 		expect(commitText("oklch(0.7 0.0105 95)", "oklch(0.6681 0.0105 95)", gray)).toEqual({
 			value: { l: 0.7, c: 0.0105, h: 95 },
@@ -20,6 +24,13 @@ describe("commitText", () => {
 	test("does not emit an equivalent value written differently", () => {
 		expect(commitText("oklch(66.81% 0.0105 95deg)", "oklch(0.6681 0.0105 95)", gray).value)
 			.toBeNull();
+	});
+
+	test("compares an active draft against its captured baseline", () => {
+		expect(commitText("oklch(66.81% 0.0105 95deg)", "oklch(0.6681 0.0105 95)", gray))
+			.toEqual({ value: null, invalid: false });
+		expect(commitText("oklch(0.71 0.0105 95)", "oklch(0.6681 0.0105 95)", gray))
+			.toEqual({ value: { l: 0.71, c: 0.0105, h: 95 }, invalid: false });
 	});
 
 	test("marks garbage invalid without emitting", () => {
