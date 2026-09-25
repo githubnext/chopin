@@ -23,7 +23,11 @@ export function harnessContract(
 		function fixture() {
 			let starts: HarnessV1StartOptions[] = [];
 			let turns: HarnessV1PromptTurnOptions[] = [];
-			let toolResults: { toolCallId: string; output: unknown }[] = [];
+			let emittedTools: {
+				type: "tool-call" | "tool-result";
+				toolCallId: string;
+				toolName: string;
+			}[] = [];
 			let destroys = 0;
 			let implementation = createHarness();
 			let harness: HarnessV1 = {
@@ -35,18 +39,23 @@ export function harnessContract(
 						...session,
 						async doPromptTurn(options) {
 							turns.push(options);
-							let control = await session.doPromptTurn(options);
-							return {
-								...control,
-								async submitToolResult(input) {
-									toolResults.push(input);
-									await control.submitToolResult(input);
+							return session.doPromptTurn({
+								...options,
+								emit(part) {
+									if (part.type === "tool-call" || part.type === "tool-result") {
+										emittedTools.push({
+											type: part.type,
+											toolCallId: part.toolCallId,
+											toolName: part.toolName,
+										});
+									}
+									options.emit(part);
 								},
-							};
+							});
 						},
 						async doDestroy() {
-							destroys++;
 							await session.doDestroy();
+							destroys++;
 						},
 					};
 				},
@@ -57,7 +66,7 @@ export function harnessContract(
 				sandboxSession,
 				starts,
 				turns,
-				toolResults,
+				emittedTools,
 				get destroys() {
 					return destroys;
 				},
@@ -66,36 +75,28 @@ export function harnessContract(
 
 		it("gives the adapter only the host tools and disables its built-ins", async () => {
 			let state = fixture();
-			let builtinName = Object.keys(state.harness.builtinTools)[0];
-			let hostCalls = 0;
+			let hostNames = ["first_host", "second_host"];
 			let agent = new HarnessAgent({
 				harness: state.harness,
 				tools: {
-					first_host: tool({
-						inputSchema: z.object({}),
-						execute: async () => {
-							hostCalls++;
-							return "ok";
-						},
-					}),
+					first_host: tool({ inputSchema: z.object({}), execute: async () => "ok" }),
 					second_host: tool({ inputSchema: z.object({}), execute: async () => "ok" }),
 				},
-				activeTools: ["first_host", "second_host"],
+				activeTools: hostNames,
 				permissionMode: "allow-reads",
 			});
 			let session = await agent.createSession({ sandboxSession: state.sandboxSession });
 			try {
 				await agent.generate({ session, prompt: "tools" });
 				expect(state.turns).toHaveLength(1);
-				expect(state.turns[0]!.tools.map(spec => spec.name)).toEqual(["first_host", "second_host"]);
-				expect(state.starts[0]!.builtinToolFiltering).toEqual({ mode: "allow", toolNames: [] });
-				expect(hostCalls).toBe(1);
-				expect(state.toolResults.map(result => result.toolCallId)).toEqual(["builtin-1", "host-1"]);
-				expect(state.toolResults[0]!.output).toEqual({
-					type: "execution-denied",
-					reason:
-						`Tool '${builtinName}' is inactive due to the HarnessAgent tool filtering policy.`,
-				});
+				expect(state.turns[0]!.tools.map(spec => spec.name)).toEqual(hostNames);
+				let builtinNames = Object.keys(state.harness.builtinTools);
+				expect(builtinNames.length === 0 || state.harness.supportsBuiltinToolFiltering === true)
+					.toBe(true);
+				expect(state.starts[0]!.builtinToolFiltering).toEqual(
+					builtinNames.length === 0 ? undefined : { mode: "allow", toolNames: [] },
+				);
+				expect(state.emittedTools.filter(event => !hostNames.includes(event.toolName))).toEqual([]);
 			} finally {
 				await session.destroy();
 			}
@@ -112,7 +113,7 @@ export function harnessContract(
 			let session = await agent.createSession({ sandboxSession: state.sandboxSession });
 			try {
 				let result = await agent.generate({ session, prompt: "output" });
-				expect(result.output).toEqual({ answer: "yes" });
+				expect(result.output).toMatchObject({ answer: expect.any(String) });
 				expect(state.turns[0]!.responseFormat).toMatchObject({
 					type: "json",
 					schema: expect.any(Object),

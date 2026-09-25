@@ -4,15 +4,25 @@ import { z } from "zod";
 
 import type { HarnessV1 } from "@ai-sdk/harness";
 
-function fakeHarness(broken = false): HarnessV1 {
+type FakeVariant =
+	| "default"
+	| "no-builtins"
+	| "approvals-only"
+	| "leaky-builtin"
+	| "invalid-output"
+	| "ignore-abort"
+	| "destroy-throws";
+
+function fakeHarness(variant: FakeVariant): HarnessV1 {
+	let hostCallId = "call/host:42";
 	return {
 		specificationVersion: "harness-v1",
 		harnessId: "fake",
-		builtinTools: {
+		builtinTools: variant === "no-builtins" ? {} : {
 			hidden_builtin: tool({ inputSchema: z.object({}), execute: async () => "unexpected" }),
 		},
-		supportsBuiltinToolFiltering: true,
-		supportsBuiltinToolApprovals: true,
+		supportsBuiltinToolFiltering: variant !== "approvals-only" && variant !== "no-builtins",
+		supportsBuiltinToolApprovals: variant !== "no-builtins",
 		async doStart(start) {
 			return {
 				sessionId: start.sessionId,
@@ -23,14 +33,16 @@ function fakeHarness(broken = false): HarnessV1 {
 						resolve = complete;
 					});
 					if (options.prompt === "abort") {
-						options.abortSignal?.addEventListener("abort", resolve, { once: true });
+						if (variant !== "ignore-abort") {
+							options.abortSignal?.addEventListener("abort", resolve, { once: true });
+						}
 					} else if (options.prompt === "output") {
 						queueMicrotask(() => {
 							options.emit({ type: "text-start", id: "answer" });
 							options.emit({
 								type: "text-delta",
 								id: "answer",
-								delta: broken ? '{"answer":5}' : '{"answer":"yes"}',
+								delta: variant === "invalid-output" ? '{"answer":5}' : '{"answer":"yes"}',
 							});
 							options.emit({ type: "text-end", id: "answer" });
 							options.emit({
@@ -45,10 +57,25 @@ function fakeHarness(broken = false): HarnessV1 {
 						});
 					} else {
 						queueMicrotask(() => {
+							if (variant === "leaky-builtin") {
+								options.emit({
+									type: "tool-call",
+									toolCallId: "native-tool",
+									toolName: "hidden_builtin",
+									input: "{}",
+									providerExecuted: true,
+								});
+								options.emit({
+									type: "tool-result",
+									toolCallId: "native-tool",
+									toolName: "hidden_builtin",
+									result: "unexpected",
+								});
+							}
 							options.emit({
 								type: "tool-call",
-								toolCallId: "builtin-1",
-								toolName: "hidden_builtin",
+								toolCallId: hostCallId,
+								toolName: "first_host",
 								input: "{}",
 							});
 						});
@@ -56,14 +83,7 @@ function fakeHarness(broken = false): HarnessV1 {
 					return {
 						done,
 						async submitToolResult(input) {
-							if (input.toolCallId === "builtin-1") {
-								options.emit({
-									type: "tool-call",
-									toolCallId: "host-1",
-									toolName: "first_host",
-									input: "{}",
-								});
-							} else {
+							if (input.toolCallId === hostCallId) {
 								options.emit({
 									type: "finish-step",
 									finishReason: { unified: "stop", raw: undefined },
@@ -77,7 +97,9 @@ function fakeHarness(broken = false): HarnessV1 {
 						},
 					};
 				},
-				async doDestroy() {},
+				async doDestroy() {
+					if (variant === "destroy-throws") throw new Error("destroy failed");
+				},
 				async doCompact() {},
 				async doContinueTurn() {
 					throw new Error("not used");
@@ -96,4 +118,6 @@ function fakeHarness(broken = false): HarnessV1 {
 	};
 }
 
-harnessContract("fake", () => fakeHarness(process.env.HARNESS_CONTRACT_BROKEN === "1"));
+let variant = process.env.HARNESS_CONTRACT_VARIANT as FakeVariant | undefined;
+harnessContract("fake", () => fakeHarness(variant ?? "default"));
+harnessContract("fake without built-ins", () => fakeHarness("no-builtins"));
