@@ -438,8 +438,6 @@ describe("hosted repository tools", () => {
 	it("binds every read to one repository and filters search results", async () => {
 		let urls: URL[] = [];
 		let tools = repositoryTools({
-			token: "ghu_owner",
-			repository: { id: "R_repo", owner: "octo-org", name: "score", defaultBranch: "main" },
 			fetch: async input => {
 				let url = new URL(String(input));
 				urls.push(url);
@@ -470,10 +468,12 @@ describe("hosted repository tools", () => {
 				}]);
 			},
 		});
-		let call = (name: string, input: unknown) => {
-			let tool = tools.find(value => value.name === name)!;
-			return (tool.handler as (raw: unknown) => Promise<string>)(input);
+		let context = {
+			repository: { id: "R_repo", owner: "octo-org", name: "score", defaultBranch: "main" },
+			owner: { currentToken: () => "ghu_owner" },
 		};
+		let call = (name: keyof typeof tools, input: unknown) =>
+			tools[name].execute!(input, { context, toolCallId: "call", messages: [] });
 
 		expect(await call("read_repository_file", { path: "src/a.ts" })).toContain("1: one");
 		expect(await call("list_repository_tree", {})).toContain("src/a.ts");
@@ -490,14 +490,49 @@ describe("hosted repository tools", () => {
 			.toContain("repo:octo-org/score");
 	});
 
+	it("reads repository and owner from each call's toolsContext", async () => {
+		let requests: Array<{ url: URL; authorization: string | null }> = [];
+		let tool = repositoryTools({
+			fetch: async (input, init) => {
+				requests.push({
+					url: new URL(String(input)),
+					authorization: new Headers(init?.headers).get("authorization"),
+				});
+				return Response.json({ tree: [], truncated: false });
+			},
+		}).list_repository_tree;
+		for (let [owner, name, token] of [["first", "repo-a", "one"], ["second", "repo-b", "two"]]) {
+			await tool.execute!({ owner: "forged", repo: "forged" }, {
+				context: {
+					repository: { id: name!, owner: owner!, name: name!, defaultBranch: "main" },
+					owner: { currentToken: () => token },
+				},
+				toolCallId: "call",
+				messages: [],
+			});
+		}
+		expect(requests.map(({ url }) => url.pathname)).toEqual([
+			"/repos/first/repo-a/git/trees/main",
+			"/repos/second/repo-b/git/trees/main",
+		]);
+		expect(requests.map(({ authorization }) => authorization)).toEqual([
+			"Bearer one",
+			"Bearer two",
+		]);
+	});
+
 	it("refuses paths that can escape the repository", async () => {
 		let tools = repositoryTools({
-			token: "token",
-			repository: { id: "R", owner: "o", name: "r", defaultBranch: "main" },
 			fetch: async () => Response.json({}),
 		});
-		let read = tools.find(tool => tool.name === "read_repository_file")!;
-		let result = await (read.handler as (raw: unknown) => Promise<string>)({ path: "../secret" });
+		let result = await tools.read_repository_file.execute!({ path: "../secret" }, {
+			context: {
+				repository: { id: "R", owner: "o", name: "r", defaultBranch: "main" },
+				owner: { currentToken: () => "token" },
+			},
+			toolCallId: "call",
+			messages: [],
+		});
 		expect(result).toContain("relative repository path");
 	});
 
@@ -505,18 +540,22 @@ describe("hosted repository tools", () => {
 		let token: string | undefined = "ghu_current";
 		let requests = 0;
 		let tools = repositoryTools({
-			token: () => token,
-			repository: { id: "R", owner: "o", name: "r", defaultBranch: "main" },
 			fetch: async (_input, init) => {
 				requests++;
 				expect(new Headers(init?.headers).get("authorization")).toBe("Bearer ghu_current");
 				return Response.json({ tree: [], truncated: false });
 			},
 		});
-		let tree = tools.find(tool => tool.name === "list_repository_tree")!;
-		expect(await (tree.handler as (raw: unknown) => Promise<string>)({})).not.toContain("Error:");
+		let tree = tools.list_repository_tree;
+		let context = {
+			repository: { id: "R", owner: "o", name: "r", defaultBranch: "main" },
+			owner: { currentToken: () => token },
+		};
+		expect(await tree.execute!({}, { context, toolCallId: "call", messages: [] })).not.toContain(
+			"Error:",
+		);
 		token = undefined;
-		expect(await (tree.handler as (raw: unknown) => Promise<string>)({})).toContain(
+		expect(await tree.execute!({}, { context, toolCallId: "call", messages: [] })).toContain(
 			"authorization expired",
 		);
 		expect(requests).toBe(1);
