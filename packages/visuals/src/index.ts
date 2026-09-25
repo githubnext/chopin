@@ -12,7 +12,6 @@ export type { SparklineProps } from "./ui/sparkline";
 export {
 	Table,
 	TableBody,
-	TableCaption,
 	TableCell,
 	TableFooter,
 	TableHead,
@@ -21,7 +20,6 @@ export {
 } from "./ui/table";
 export type {
 	TableBodyProps,
-	TableCaptionProps,
 	TableCellProps,
 	TableFooterProps,
 	TableHeaderProps,
