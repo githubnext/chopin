@@ -14,6 +14,11 @@ export type ScrubFieldProps = {
 	precision?: number;
 };
 
+export function parseScrubDraft(draft: string, min: number, max: number): number | null {
+	let parsed = Number.parseFloat(draft);
+	return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : null;
+}
+
 export function ScrubField({
 	label,
 	ariaLabel,
@@ -31,9 +36,9 @@ export function ScrubField({
 
 	function commit() {
 		if (draft === null) return;
-		let parsed = Number.parseFloat(draft);
+		let parsed = parseScrubDraft(draft, min, max);
 		setDraft(null);
-		if (Number.isFinite(parsed)) onChange(Math.min(max, Math.max(min, parsed)));
+		if (parsed !== null) onChange(parsed);
 	}
 
 	return (
@@ -44,7 +49,10 @@ export function ScrubField({
 				onPointerDown={event => {
 					if (event.button !== 0) return;
 					event.preventDefault();
-					drag.current = { pointerId: event.pointerId, x: event.clientX, value };
+					let start = draft === null ? value : (parseScrubDraft(draft, min, max) ?? value);
+					setDraft(null);
+					if (start !== value) onChange(start);
+					drag.current = { pointerId: event.pointerId, x: event.clientX, value: start };
 					event.currentTarget.setPointerCapture(event.pointerId);
 				}}
 				onPointerMove={event => {
@@ -77,7 +85,8 @@ export function ScrubField({
 						setDraft(null);
 					} else if (event.key === "ArrowUp" || event.key === "ArrowDown") {
 						event.preventDefault();
-						let next = scrub(value, event.key === "ArrowUp" ? 4 : -4, {
+						let start = draft === null ? value : (parseScrubDraft(draft, min, max) ?? value);
+						let next = scrub(start, event.key === "ArrowUp" ? 4 : -4, {
 							step: step * (event.shiftKey ? 10 : 1),
 							min,
 							max,
