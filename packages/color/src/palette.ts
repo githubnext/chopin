@@ -63,10 +63,35 @@ function validate(hues: readonly Hue[], theme: Theme) {
 	}
 }
 
+function emptyEdits(): Edits {
+	return Object.create(null) as Edits;
+}
+
+function copyEdits(edits: Edits): Edits {
+	return Object.assign(emptyEdits(), edits);
+}
+
+function copySteps(steps: Record<string, Oklch>): Record<string, Oklch> {
+	return Object.assign(Object.create(null) as Record<string, Oklch>, steps);
+}
+
+function editSteps(edits: Edits | undefined, hue: string): Record<string, Oklch> | undefined {
+	return edits && Object.hasOwn(edits, hue) ? edits[hue] : undefined;
+}
+
+function editValue(steps: Record<string, Oklch> | undefined, step: string): Oklch | undefined {
+	return steps && Object.hasOwn(steps, step) ? steps[step] : undefined;
+}
+
 export function createPaletteState(palette: Palette): PaletteState {
 	validate(palette.themes.light, "light");
 	if (palette.themes.dark) validate(palette.themes.dark, "dark");
-	return { palette, theme: "light", edits: { light: {}, dark: {} }, selected: null };
+	return {
+		palette,
+		theme: "light",
+		edits: { light: emptyEdits(), dark: emptyEdits() },
+		selected: null,
+	};
 }
 
 function huesOf(palette: Palette, theme: Theme): Hue[] {
@@ -82,10 +107,10 @@ function findSwatch(hues: readonly Hue[], ref: SwatchRef): Swatch | undefined {
 }
 
 function withEdit(edits: Edits, ref: SwatchRef, value: Oklch | undefined): Edits {
-	let steps = { ...edits[ref.hue] };
+	let steps = copySteps(editSteps(edits, ref.hue) ?? Object.create(null));
 	if (value) steps[ref.step] = value;
 	else delete steps[ref.step];
-	let next = { ...edits };
+	let next = copyEdits(edits);
 	if (Object.keys(steps).length) next[ref.hue] = steps;
 	else delete next[ref.hue];
 	return next;
@@ -107,12 +132,12 @@ export function paletteReducer(state: PaletteState, action: PaletteAction): Pale
 			return { ...state, edits: { ...state.edits, [state.theme]: edits } };
 		}
 		case "resetRow": {
-			let edits = { ...state.edits[state.theme] };
+			let edits = copyEdits(state.edits[state.theme]);
 			delete edits[action.hue];
 			return { ...state, edits: { ...state.edits, [state.theme]: edits } };
 		}
 		case "resetAll":
-			return { ...state, edits: { light: {}, dark: {} } };
+			return { ...state, edits: { light: emptyEdits(), dark: emptyEdits() } };
 		case "theme":
 			if (action.theme === state.theme || !huesOf(state.palette, action.theme).length) return state;
 			return { ...state, theme: action.theme, selected: null };
@@ -124,11 +149,11 @@ export function baseValue(state: PaletteState, ref: SwatchRef): Oklch | null {
 }
 
 export function currentValue(state: PaletteState, ref: SwatchRef): Oklch | null {
-	return state.edits[state.theme][ref.hue]?.[ref.step] ?? baseValue(state, ref);
+	return editValue(editSteps(state.edits[state.theme], ref.hue), ref.step) ?? baseValue(state, ref);
 }
 
 export function isEdited(state: PaletteState, ref: SwatchRef): boolean {
-	return Boolean(state.edits[state.theme][ref.hue]?.[ref.step]);
+	return editValue(editSteps(state.edits[state.theme], ref.hue), ref.step) !== undefined;
 }
 
 export function surface(state: PaletteState): Oklch {
@@ -167,7 +192,7 @@ export function changes(state: PaletteState): Change[] {
 	for (let theme of ["light", "dark"] as const) {
 		for (let hue of huesOf(state.palette, theme)) {
 			for (let swatch of hue.swatches) {
-				let after = state.edits[theme][hue.name]?.[swatch.step];
+				let after = editValue(editSteps(state.edits[theme], hue.name), swatch.step);
 				if (after) {
 					found.push({
 						kind: "swatch",

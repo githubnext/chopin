@@ -80,6 +80,59 @@ describe("paletteReducer", () => {
 		expect(Object.keys(state.edits.light)).toEqual(["a/b"]);
 	});
 
+	test("keeps prototype-like hue and step names as ordinary serialized edits", () => {
+		let base = { l: 0.5, c: 0.1, h: 30 };
+		let palette: Palette = {
+			themes: { light: [{ name: "__proto__", swatches: [{ step: "__proto__", value: base }] }] },
+		};
+		let ref = { hue: "__proto__", step: "__proto__" };
+		let value = { l: 0.6, c: 0.1, h: 30 };
+		let state = paletteReducer(createPaletteState(palette), { type: "edit", ref, value });
+		expect(currentValue(state, ref)).toEqual(value);
+		expect(changes(state)).toEqual([{
+			kind: "swatch",
+			theme: "light",
+			ref,
+			before: base,
+			after: value,
+		}]);
+		expect(JSON.stringify(state.edits.light)).toBe(
+			'{"__proto__":{"__proto__":{"l":0.6,"c":0.1,"h":30}}}',
+		);
+		state = paletteReducer(state, { type: "reset", ref });
+		expect(currentValue(state, ref)).toEqual(base);
+		expect(changes(state)).toEqual([]);
+		expect(JSON.stringify(state.edits.light)).toBe("{}");
+	});
+
+	test("does not mistake inherited toString for a swatch edit", () => {
+		let base = { l: 0.5, c: 0.1, h: 30 };
+		let palette: Palette = {
+			themes: { light: [{ name: "__proto__", swatches: [{ step: "toString", value: base }] }] },
+		};
+		let ref = { hue: "__proto__", step: "toString" };
+		let value = { l: 0.6, c: 0.1, h: 30 };
+		let state = createPaletteState(palette);
+		expect(currentValue(state, ref)).toEqual(base);
+		expect(changes(state)).toEqual([]);
+		state = paletteReducer(state, { type: "edit", ref, value });
+		expect(currentValue(state, ref)).toEqual(value);
+		expect(changes(state)).toEqual([{
+			kind: "swatch",
+			theme: "light",
+			ref,
+			before: base,
+			after: value,
+		}]);
+		expect(JSON.stringify(state.edits.light)).toBe(
+			'{"__proto__":{"toString":{"l":0.6,"c":0.1,"h":30}}}',
+		);
+		state = paletteReducer(state, { type: "reset", ref });
+		expect(currentValue(state, ref)).toEqual(base);
+		expect(changes(state)).toEqual([]);
+		expect(JSON.stringify(state.edits.light)).toBe("{}");
+	});
+
 	test("ignores refs that do not exist and themes that are absent", () => {
 		let state = createPaletteState(palette);
 		expect(paletteReducer(state, { type: "edit", ref: { hue: "nope", step: "1" }, value: g450 }))

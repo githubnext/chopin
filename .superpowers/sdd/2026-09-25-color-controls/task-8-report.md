@@ -45,3 +45,18 @@ bun test packages/color
 
 The task's branch-creation step was intentionally skipped. Work stayed on the existing
 `color-controls` branch as directed.
+
+## Review follow-up: prototype-safe palette keys
+
+The reducer now uses null-prototype edit dictionaries and own-key access throughout state
+creation, copying, lookup, reset, and change selection. This allows valid hue and step names
+such as `"__proto__"` and `"toString"` without mutating dictionary prototypes or reading an
+inherited function as a color.
+
+New regression tests failed before the fix: an edit at `__proto__/__proto__` was discarded, and
+reading `__proto__/toString` returned the inherited `toString` function. They now verify edits,
+changes, JSON serialization, and resets for both cases.
+
+Follow-up checks: `bun run fix`, `bun run types`, socket-enabled `bun test` (1,591 pass, 2
+PostgreSQL skips, 0 fail), `bun run ci`, and `git diff --check` passed. The existing
+approximate-constant lint warning and sandbox dprint-cache write warning remain non-fatal.
