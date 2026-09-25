@@ -36,4 +36,10 @@ describe("thresholds", () => {
 		expect(formatThreshold("text")).toBe("4.5:1");
 		expect(formatThreshold("graphic")).toBe("3:1");
 	});
+
+	test("does not display a failing ratio as its threshold", () => {
+		expect(formatRatio(3 - 1e-12)).toBe("2.99:1");
+		expect(formatRatio(4.5 - 1e-12)).toBe("4.49:1");
+		expect(formatRatio(7 - 1e-12)).toBe("6.99:1");
+	});
 });
