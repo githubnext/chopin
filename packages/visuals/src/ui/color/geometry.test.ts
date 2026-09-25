@@ -1,0 +1,99 @@
+import { maxChroma, toSrgb } from "@chopin/color";
+import { describe, expect, test } from "bun:test";
+
+import {
+	gamutPath,
+	hueGradient,
+	hueKey,
+	huePosition,
+	hueValue,
+	planeImage,
+	planeKey,
+	planePosition,
+	planeValue,
+} from "./geometry";
+
+let size = { width: 200, height: 200 };
+
+describe("plane mapping", () => {
+	test("maps top to white and bottom to black", () => {
+		expect(planeValue({ x: 0, y: 0 }, size, 95, 0.18).l).toBe(1);
+		expect(planeValue({ x: 0, y: 200 }, size, 95, 0.18).l).toBe(0);
+	});
+
+	test("uses a square-root chroma axis so neutrals are not squeezed", () => {
+		let x = planePosition({ l: 0.6681, c: 0.0105, h: 95 }, size, 0.18).x;
+		expect(x).toBeGreaterThan(40);
+	});
+
+	test("round-trips a point inside the gamut", () => {
+		let value = { l: 0.6, c: 0.05, h: 95 };
+		let point = planePosition(value, size, 0.18);
+		let back = planeValue(point, size, 95, 0.18);
+		expect(back.l).toBeCloseTo(0.6, 6);
+		expect(back.c).toBeCloseTo(0.05, 6);
+	});
+
+	test("clamps dragged chroma to the gamut and points to the plane", () => {
+		let value = planeValue({ x: 400, y: -20 }, size, 140, 0.2);
+		expect(value.l).toBe(1);
+		expect(value.c).toBeLessThanOrEqual(maxChroma(1, 140));
+		let edge = planeValue({ x: 200, y: 100 }, size, 140, 0.2);
+		expect(toSrgb(edge).inGamut).toBe(true);
+	});
+});
+
+describe("plane image", () => {
+	test("is opaque in gamut and transparent outside", () => {
+		let pixels = planeImage(140, 0.2, 8);
+		expect(pixels.length).toBe(8 * 8 * 4);
+		let alpha = (x: number, y: number) => pixels[(y * 8 + x) * 4 + 3];
+		expect(alpha(0, 4)).toBe(255);
+		expect(alpha(7, 0)).toBe(0);
+	});
+
+	test("draws a boundary path from top to bottom", () => {
+		let path = gamutPath(95, 0.18, { width: 100, height: 100 }, 4);
+		expect(path.startsWith("M ")).toBe(true);
+		expect(path.split(" L ").length).toBe(5);
+	});
+});
+
+describe("plane keyboard", () => {
+	let value = { l: 0.6, c: 0.05, h: 95 };
+
+	test("steps chroma horizontally and lightness vertically", () => {
+		expect(planeKey(value, "ArrowRight", {})!.c).toBeCloseTo(0.051, 6);
+		expect(planeKey(value, "ArrowUp", {})!.l).toBeCloseTo(0.61, 6);
+		expect(planeKey(value, "ArrowUp", { shiftKey: true })!.l).toBeCloseTo(0.7, 6);
+		expect(planeKey(value, "ArrowLeft", { altKey: true })!.c).toBeCloseTo(0.0499, 6);
+		expect(planeKey(value, "PageDown", {})!.l).toBeCloseTo(0.5, 6);
+	});
+
+	test("clamps and ignores other keys", () => {
+		expect(planeKey({ l: 0.6, c: 0, h: 95 }, "ArrowLeft", {})!.c).toBe(0);
+		expect(planeKey({ l: 0.995, c: 0, h: 95 }, "ArrowUp", {})!.l).toBe(1);
+		expect(planeKey(value, "a", {})).toBeNull();
+	});
+});
+
+describe("hue strip", () => {
+	test("puts 360 at the top and 0 at the bottom", () => {
+		expect(hueValue(0, 200)).toBe(360);
+		expect(hueValue(200, 200)).toBe(0);
+		expect(huePosition(90, 200)).toBe(150);
+	});
+
+	test("ArrowUp increases and wraps", () => {
+		expect(hueKey(95, "ArrowUp", {})).toBe(96);
+		expect(hueKey(95, "ArrowDown", { shiftKey: true })).toBe(85);
+		expect(hueKey(359.5, "ArrowUp", {})).toBe(0.5);
+		expect(hueKey(95, "Enter", {})).toBeNull();
+	});
+
+	test("paints 25 stops from bottom to top", () => {
+		let gradient = hueGradient();
+		expect(gradient.startsWith("linear-gradient(to top, #")).toBe(true);
+		expect(gradient.match(/#[0-9a-f]{6}/g)!.length).toBe(25);
+	});
+});
