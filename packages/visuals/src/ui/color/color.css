@@ -79,3 +79,47 @@
 	border-radius: var(--radius-sm);
 	box-shadow: inset 0 0 0 1px var(--color-control-boundary);
 }
+
+.cv-color-field {
+	display: grid;
+	gap: var(--spacing);
+}
+
+.cv-color-field-row {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+}
+
+.cv-color-field-row select,
+.cv-color-field-row input {
+	box-sizing: border-box;
+	min-height: calc(var(--spacing) * 8);
+	padding: var(--spacing) calc(var(--spacing) * 2);
+	border: var(--edge-width) solid var(--color-control-edge);
+	border-radius: var(--radius-md);
+	background: var(--color-page);
+	box-shadow: var(--shadow-resting);
+	color: var(--color-text-primary);
+	font: 500 var(--text-sm) / var(--text-sm--line-height) var(--font-sans);
+}
+
+.cv-color-field-row select {
+	flex: 0 0 calc(var(--spacing) * 23);
+}
+
+.cv-color-field-row input {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-variant-numeric: tabular-nums;
+}
+
+.cv-color-field-row input[aria-invalid="true"] {
+	border-color: var(--color-destructive);
+}
+
+.cv-color-field-note {
+	margin: 0;
+	color: var(--color-warning);
+	font-size: var(--text-sm);
+}
