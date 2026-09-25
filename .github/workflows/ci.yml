@@ -20,7 +20,7 @@ permissions:
 env:
   # Matches the version this is developed against. Bun's lockfile format and
   # its workspace catalogs are both young enough that "latest" is a variable.
-  BUN_VERSION: 1.3.2
+  BUN_VERSION: 1.4.2
 
 jobs:
   checks:

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-ARG BUN_VERSION=1.3.2
+ARG BUN_VERSION=1.4.2
 
 FROM oven/bun:${BUN_VERSION} AS manifests
 WORKDIR /app

@@ -1,7 +1,7 @@
 {
 	"name": "chopin",
 	"private": true,
-	"packageManager": "bun@1.3.2",
+	"packageManager": "bun@1.4.2",
 	"type": "module",
 	"scripts": {
 		"dev": "bun scripts/dev.ts",
@@ -38,7 +38,7 @@
 		],
 		"catalogs": {
 			"bun": {
-				"@types/bun": "1.3.14"
+				"@types/bun": "1.4.2"
 			},
 			"copilot": {
 				"@github/copilot": "1.0.80",
