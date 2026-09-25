@@ -164,4 +164,16 @@ describe("placePopover", () => {
 		expect(placePopover({ left: 400, top: 40, width: 60, height: 40 }, size, short).side)
 			.toBe("below");
 	});
+
+	test("keeps a roomier below placement within the viewport when neither side fits", () => {
+		let placed = placePopover({ left: 400, top: 340, width: 60, height: 40 }, size, viewport);
+		expect(placed).toEqual({ left: 270, top: 284, side: "below" });
+	});
+
+	test("pins an oversized popover to the top margin", () => {
+		let offset = { left: 0, top: 50, width: 1000, height: 800 };
+		let oversized = { width: 320, height: 900 };
+		let placed = placePopover({ left: 400, top: 390, width: 60, height: 40 }, oversized, offset);
+		expect(placed.top).toBe(66);
+	});
 });

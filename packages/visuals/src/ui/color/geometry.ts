@@ -152,5 +152,6 @@ export function placePopover(
 		viewport.left + margin,
 		maximum,
 	);
-	return { left, top: side === "below" ? below : Math.max(top, above), side };
+	let maximumTop = Math.max(top, bottom - size.height);
+	return { left, top: clamp(side === "below" ? below : above, top, maximumTop), side };
 }
