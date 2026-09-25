@@ -36,6 +36,8 @@ export function ContrastReader({
 	onPurposeChange,
 }: ContrastReaderProps) {
 	let id = useId();
+	let purposePrefix = `${id}-purpose-`;
+	let againstPrefix = `${id}-against-`;
 	let background = options.find(option => option.id === against) ?? options[0];
 	let ratio = background ? contrast(value, background.value) : null;
 	let pass = ratio !== null && passes(ratio, purpose);
@@ -75,11 +77,12 @@ export function ContrastReader({
 				<label className="cv-contrast-control">
 					<span>Purpose</span>
 					<select
-						onChange={event => onPurposeChange(event.target.value.slice(id.length + 1) as Purpose)}
-						value={`${id}-${purpose}`}
+						onChange={event =>
+							onPurposeChange(event.target.value.slice(purposePrefix.length) as Purpose)}
+						value={`${purposePrefix}${purpose}`}
 					>
 						{PURPOSES.map(item => (
-							<option key={item} value={`${id}-${item}`}>
+							<option key={item} value={`${purposePrefix}${item}`}>
 								{PURPOSE_LABELS[item]} · {formatThreshold(item)}
 							</option>
 						))}
@@ -95,11 +98,11 @@ export function ContrastReader({
 								style={{ background: toHex(background.value) }}
 							/>
 							<select
-								onChange={event => onAgainstChange(event.target.value.slice(id.length + 1))}
-								value={`${id}-${background.id}`}
+								onChange={event => onAgainstChange(event.target.value.slice(againstPrefix.length))}
+								value={`${againstPrefix}${background.id}`}
 							>
 								{options.map(option => (
-									<option key={option.id} value={`${id}-${option.id}`}>
+									<option key={option.id} value={`${againstPrefix}${option.id}`}>
 										{option.label}
 									</option>
 								))}

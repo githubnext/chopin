@@ -51,4 +51,14 @@ describe("ContrastReader", () => {
 		expect(markup).toContain("—");
 		expect(markup).not.toContain("Meets");
 	});
+
+	test("keeps native option values unique when a background id matches a purpose", () => {
+		let markup = render({
+			against: "graphic",
+			options: [{ id: "graphic", label: "Graphic background", value: { l: 1, c: 0, h: 0 } }],
+		});
+		let values = Array.from(markup.matchAll(/<option[^>]*value="([^"]+)"/g), match => match[1]);
+		expect(values).toHaveLength(5);
+		expect(new Set(values).size).toBe(values.length);
+	});
 });

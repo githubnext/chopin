@@ -25,3 +25,9 @@ The reader's styles use the existing visuals tokens and are imported from the pu
 ## Plan departure
 
 The brief's live-region example compared every reading with the initial reading. That would suppress a later announcement when the user returned to the initial value. The implementation instead skips only the initial effect and schedules every subsequent change, including a return to the initial reading.
+
+## Follow-up: native option value collision
+
+Review found that a background option whose ID matched a purpose, such as `graphic`, produced the same native option value in both selects. A new static-markup regression rendered that case and failed with five options but only four unique values. Purpose and background options now use distinct value prefixes, and each callback removes its own prefix before passing the controlled ID to the parent. The focused reader suite passes with 6 tests.
+
+Follow-up checks: `bun run fix`, `bun run types`, `bun run ci`, and `git diff --check` passed. The socket-enabled full `bun test` passed with 1564 tests, 2 PostgreSQL skips, and 0 failures. The existing oxlint warning and dprint cache-write warning remained non-fatal.
