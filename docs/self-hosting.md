@@ -22,6 +22,9 @@ that origin.
 - Restarting the application signs every browser out and releases hosted agent
   ownership. Documents, transcripts, decisions, background jobs and artifacts,
   research request staging, child documents, and implementation state remain.
+  In local mode (see below), the returning browser can restore the same login
+  without repeating device-flow sign-in; it still gets a new session and does
+  not reclaim Planner ownership.
 
 ## Choose the access policy first
 
@@ -71,9 +74,11 @@ Callback URL: <APP_ORIGIN>/auth/github/callback
 Setup URL:    <APP_ORIGIN>/auth/github/setup
 ```
 
-Enable expiring user authorization tokens, leave OAuth during installation and
-device flow disabled, disable webhooks, and make the App installable on any
-account. The complete product uses these read-only repository permissions:
+Enable expiring user authorization tokens, leave OAuth during installation
+disabled, disable webhooks, and make the App installable on any account. Leave
+device flow disabled unless this deployment also uses local device-flow
+sign-in (below), which requires enabling it instead. The complete product
+uses these read-only repository permissions:
 
 ```text
 Contents:        Read-only
@@ -94,24 +99,26 @@ Store production values in the deployment's secret manager or an owner-readable
 environment file outside the source tree. Do not bake `.env` or credentials into
 the image.
 
-| Variable                       | Default      | Meaning                                                                                                                            |
-| ------------------------------ | ------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `STORAGE_DRIVER`               | `postgres`   | Storage adapter. `postgres` is currently the only accepted value.                                                                  |
-| `DATABASE_URL`                 | required     | `postgres:` or `postgresql:` connection URL. It is not printed by Chopin.                                                          |
-| `APP_ORIGIN`                   | required     | Exact public origin, without credentials, path, query, fragment, or trailing slash. HTTPS is required unless the host is loopback. |
-| `GITHUB_APP_SLUG`              | required     | Lowercase slug from the App's public URL.                                                                                          |
-| `GITHUB_APP_CLIENT_ID`         | required     | OAuth client ID, not the numeric GitHub App ID.                                                                                    |
-| `GITHUB_APP_CLIENT_SECRET`     | required     | OAuth client secret used for user-token exchange and refresh.                                                                      |
-| `GITHUB_ALLOWED_USERS`         | empty        | Comma-separated admitted GitHub logins.                                                                                            |
-| `GITHUB_ALLOWED_ORGANIZATIONS` | empty        | Comma-separated organizations whose active members are admitted.                                                                   |
-| `SESSION_ENCRYPTION_KEY`       | required     | Exactly 64 hexadecimal characters used for the encrypted OAuth attempt cookie, including its validated return path.                |
-| `SERVER_HOST`                  | `127.0.0.1`  | Source-process bind address. The image sets `0.0.0.0`.                                                                             |
-| `PORT`                         | `8787`       | Source-process HTTP and WebSocket port. The supplied image and health check expect internal port 8787.                             |
-| `MODEL`                        | `gpt-6-luna` | Model requested for hosted agent sessions.                                                                                         |
-| `AGENT`                        | on           | Set exactly `off` to prevent hosted agent turns, disable the entire background-job runner, and avoid Copilot CLI startup.          |
-| `BACKGROUND_JOBS`              | on           | Set exactly `off` to disable background job scheduling. `AGENT=off` disables the entire runner.                                    |
-| `WEB_RESEARCH`                 | on           | Set exactly `off` to disable new public-web research while retaining durable requests, artifacts, and other jobs.                  |
-| `COPILOT_CLI_PATH`             | automatic    | Advanced override for the Copilot CLI executable.                                                                                  |
+| Variable                       | Default           | Meaning                                                                                                                                                                                                                                                          |
+| ------------------------------ | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `STORAGE_DRIVER`               | `postgres`        | Storage adapter. `postgres` is currently the only accepted value.                                                                                                                                                                                                |
+| `DATABASE_URL`                 | required          | `postgres:` or `postgresql:` connection URL. It is not printed by Chopin.                                                                                                                                                                                        |
+| `APP_ORIGIN`                   | required          | Exact public origin, without credentials, path, query, fragment, or trailing slash. HTTPS is required unless the host is loopback.                                                                                                                               |
+| `GITHUB_APP_SLUG`              | required          | Lowercase slug from the App's public URL.                                                                                                                                                                                                                        |
+| `GITHUB_APP_CLIENT_ID`         | required          | OAuth client ID, not the numeric GitHub App ID.                                                                                                                                                                                                                  |
+| `GITHUB_APP_CLIENT_SECRET`     | required (hosted) | OAuth client secret used for user-token exchange and refresh. Unused when `AUTH_MODE=local`.                                                                                                                                                                     |
+| `GITHUB_ALLOWED_USERS`         | empty             | Comma-separated admitted GitHub logins.                                                                                                                                                                                                                          |
+| `GITHUB_ALLOWED_ORGANIZATIONS` | empty             | Comma-separated organizations whose active members are admitted.                                                                                                                                                                                                 |
+| `SESSION_ENCRYPTION_KEY`       | required          | Exactly 64 hexadecimal characters. Encrypts the OAuth attempt cookie in hosted mode; local mode requires the configured key but uses separate unpredictable, HttpOnly attempt and browser-binding cookies.                                                       |
+| `AUTH_MODE`                    | `hosted`          | Set `local` for loopback device-flow sign-in with persisted credentials (see [Authentication](authentication.md#local-device-flow-sign-in)). Any other value fails startup.                                                                                      |
+| `CHOPIN_LOCAL_CREDENTIALS_DIR` | platform default  | Local mode only. Overrides the plaintext-fallback credential directory (default `~/.config/chopin` on Linux, `~/Library/Application Support/Chopin` on macOS, `%APPDATA%\Chopin` on Windows). Must resolve outside the repository and process working directory. |
+| `SERVER_HOST`                  | `127.0.0.1`       | Source-process bind address. The image sets `0.0.0.0`, which local mode refuses.                                                                                                                                                                                 |
+| `PORT`                         | `8787`            | Source-process HTTP and WebSocket port. The supplied image and health check expect internal port 8787.                                                                                                                                                           |
+| `MODEL`                        | `gpt-6-luna`      | Model requested for hosted agent sessions.                                                                                                                                                                                                                       |
+| `AGENT`                        | on                | Set exactly `off` to prevent hosted agent turns, disable the entire background-job runner, and avoid Copilot CLI startup.                                                                                                                                        |
+| `BACKGROUND_JOBS`              | on                | Set exactly `off` to disable background job scheduling. `AGENT=off` disables the entire runner.                                                                                                                                                                  |
+| `WEB_RESEARCH`                 | on                | Set exactly `off` to disable new public-web research while retaining durable requests, artifacts, and other jobs.                                                                                                                                                |
+| `COPILOT_CLI_PATH`             | automatic         | Advanced override for the Copilot CLI executable.                                                                                                                                                                                                                |
 
 See [Background jobs and workers](background-jobs.md) for the combined
 `AGENT`, `BACKGROUND_JOBS`, and `WEB_RESEARCH` behavior and recovery model.
@@ -232,6 +239,40 @@ start while the browser route returns 404.
 Run the direct server command under a process manager that restarts it after any
 unexpected exit. Some fatal runtime paths drain successfully and exit with code
 zero, so a policy equivalent to `Restart=on-failure` is insufficient.
+
+## Local device-flow sign-in
+
+`AUTH_MODE=local` is a single-machine mode for evaluating Chopin without an
+operator-managed GitHub App client secret. It is not an alternative deployment
+topology: it requires a loopback `SERVER_HOST` and `APP_ORIGIN`, so it cannot
+be reached from another machine, and it is incompatible with the Docker image,
+which sets `SERVER_HOST=0.0.0.0`. Run it from a source checkout:
+
+```bash
+bun install --frozen-lockfile
+bun run build
+AUTH_MODE=local APP_ORIGIN=http://127.0.0.1:8787 GITHUB_APP_SLUG=<app-slug> \
+  GITHUB_APP_CLIENT_ID=<client-id> SESSION_ENCRYPTION_KEY=<64-hex-character-key> \
+  DATABASE_URL=<database-url> bun run migrate
+AUTH_MODE=local APP_ORIGIN=http://127.0.0.1:8787 GITHUB_APP_SLUG=<app-slug> \
+  GITHUB_APP_CLIENT_ID=<client-id> SESSION_ENCRYPTION_KEY=<64-hex-character-key> \
+  DATABASE_URL=<database-url> exec bun apps/server/src/main.ts
+```
+
+`GITHUB_APP_CLIENT_SECRET` is not read in this mode. Enable device flow on the
+App instead of the client-secret authorization-code flow described above, and
+keep expiring user authorization tokens enabled. The browser shows GitHub's
+device code, persists the resulting credential to the OS credential store or,
+with explicit consent, a local plaintext file, and restores that login after a
+restart without a fresh device-flow prompt. See
+[Local device-flow sign-in](authentication.md#local-device-flow-sign-in) for
+the complete flow, the plaintext-consent warning text, file permissions, and
+the restart-restore and logout model.
+
+Local logout deletes the persisted credential; it does not revoke the GitHub
+App authorization, because device-issued refresh tokens can be refreshed
+without the client secret but GitHub's revocation endpoint requires it. Remove
+the App from **Settings > Applications** on GitHub to revoke it there.
 
 ## First-start smoke test
 
