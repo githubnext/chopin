@@ -7,6 +7,7 @@ import type { SeedState } from "../apps/server/src/testing/plan";
 const DEFAULT_DATABASES: Record<number, string> = {
 	8788: "postgresql://chopin:chopin@127.0.0.1:5433/chopin?sslmode=disable",
 	8789: "postgresql://chopin:chopin@127.0.0.1:5434/chopin?sslmode=disable",
+	8792: "postgresql://chopin:chopin@127.0.0.1:5435/chopin?sslmode=disable",
 };
 
 export function testChannelSlug(id: string): string {
@@ -18,7 +19,7 @@ export function testChannelPath(id: string): string {
 }
 
 function url(port: number): string {
-	let index = port === 8789 ? 1 : 0;
+	let index = port === 8792 ? 2 : port === 8789 ? 1 : 0;
 	return process.env[`E2E_DATABASE_URL_${index}`] || DEFAULT_DATABASES[port]!;
 }
 

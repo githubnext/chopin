@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { defineConfig, devices } from "@playwright/test";
 
-import { FIXTURES, HOST, PLAIN, ROOT } from "./servers";
+import { FIXTURES, HARNESS, HOST, PLAIN, ROOT } from "./servers";
 
 /*
  * Refuse a client that is not there, here rather than in a global setup.
@@ -60,6 +60,36 @@ function server(port: number, database: string, extra: Record<string, string>) {
 	};
 }
 
+function harnessServer(port: number, database: string) {
+	return {
+		command: "bun --preload ./e2e/github.ts --preload ./e2e/harness/preload.ts"
+			+ " apps/server/src/main.ts",
+		cwd: ROOT,
+		url: `http://${HOST}:${port}/`,
+		env: {
+			PORT: String(port),
+			SERVER_HOST: HOST,
+			AGENT: "on",
+			HARNESS: "e2e-fake",
+			BACKGROUND_JOBS: "off",
+			WEB_RESEARCH: "off",
+			STORAGE_DRIVER: "postgres",
+			DATABASE_URL: database,
+			APP_ORIGIN: `http://${HOST}:${port}`,
+			GITHUB_APP_SLUG: "chopin-e2e",
+			GITHUB_APP_CLIENT_ID: "e2e",
+			GITHUB_APP_CLIENT_SECRET: "e2e",
+			GITHUB_ALLOWED_USERS: "",
+			GITHUB_ALLOWED_ORGANIZATIONS: "githubnext",
+			SESSION_ENCRYPTION_KEY: process.env.SESSION_ENCRYPTION_KEY!,
+			DEV_QUESTIONS: "",
+			DEV_COMMENTS: "",
+		},
+		reuseExistingServer: !process.env.CI,
+		gracefulShutdown: { signal: "SIGTERM" as const, timeout: 2_000 },
+	};
+}
+
 export default defineConfig({
 	testDir: ".",
 
@@ -95,6 +125,7 @@ export default defineConfig({
 				"**/comment-motion.e2e.ts",
 				"**/responsive*.e2e.ts",
 				"**/sidecar.e2e.ts",
+				"**/harness.e2e.ts",
 			],
 			use: { ...devices["Desktop Chrome"], baseURL: `http://${HOST}:${PLAIN}` },
 		},
@@ -107,6 +138,11 @@ export default defineConfig({
 			],
 			use: { ...devices["Desktop Chrome"], baseURL: `http://${HOST}:${FIXTURES}` },
 		},
+		{
+			name: "harness",
+			testMatch: ["**/harness.e2e.ts"],
+			use: { ...devices["Desktop Chrome"], baseURL: `http://${HOST}:${HARNESS}` },
+		},
 	],
 
 	webServer: [
@@ -115,5 +151,6 @@ export default defineConfig({
 			DEV_QUESTIONS: "1",
 			DEV_COMMENTS: "1",
 		}),
+		harnessServer(HARNESS, process.env.E2E_DATABASE_URL_2!),
 	],
 });
