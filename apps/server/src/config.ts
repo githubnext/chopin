@@ -16,6 +16,8 @@ export type Config = {
 	port: number;
 	/** Planner model. */
 	model: string;
+	harness: string;
+	harnessAuth: string | undefined;
 	/**
 	 * Whether to run the agent at all.
 	 *
@@ -45,6 +47,13 @@ export type Config = {
 
 const DEFAULT_PORT = 8787;
 const DEFAULT_MODEL = "gpt-6-luna";
+export function harnessSelection(): Pick<Config, "host" | "harness" | "harnessAuth"> {
+	return {
+		host: process.env.SERVER_HOST || "127.0.0.1",
+		harness: process.env.HARNESS || "copilot-sdk",
+		harnessAuth: process.env.HARNESS_AUTH || undefined,
+	};
+}
 
 function port(): number {
 	let raw = process.env.PORT;
@@ -77,7 +86,7 @@ export function load(): Config {
 	let agent = process.env.AGENT !== "off";
 	let backgroundJobs = process.env.BACKGROUND_JOBS !== "off";
 	return {
-		host: process.env.SERVER_HOST || "127.0.0.1",
+		...harnessSelection(),
 		port: port(),
 		model: process.env.MODEL || DEFAULT_MODEL,
 		agent,
@@ -107,6 +116,7 @@ export function describe(config: Config): string {
 		`http://${config.host}:${config.port}`,
 		config.devClient ? `client: vite (${config.devClient})` : "client: built",
 		config.agent ? `agent: ${config.model} (on demand)` : "agent: off",
+		`harness: ${config.harness}`,
 		config.backgroundJobs ? "background jobs: on" : "background jobs: off",
 		config.webResearch ? "web research: on" : "web research: off",
 		admission,

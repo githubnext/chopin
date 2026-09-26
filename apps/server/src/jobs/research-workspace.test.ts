@@ -320,6 +320,37 @@ describe("research evidence provenance", () => {
 		})).toHaveLength(64);
 	});
 
+	it("reads live MCP content text blocks without treating unrelated text as provenance", () => {
+		let result = {
+			content: [{
+				type: "text",
+				text: JSON.stringify({
+					text: {
+						annotations: [{
+							url_citation: { title: "Source", url: PUBLIC_SOURCE.url },
+						}],
+					},
+					bing_searches: ["https://untrusted.example/"],
+				}),
+			}],
+		};
+		let observed = observedWebSourceUrls(result);
+		expect(observed).toEqual([PUBLIC_SOURCE.url]);
+		expect(publicResearchResultFailure(
+			{ findings: ["Finding"], sources: [PUBLIC_SOURCE] },
+			new Set(observed),
+			{
+				webCalls: 1,
+				webSuccesses: 1,
+				webFailures: 0,
+				hostedCalls: 0,
+				hostedCompleted: 0,
+				resultInvalid: false,
+				webSearchDenied: false,
+			},
+		)).toBeUndefined();
+	});
+
 	it("rejects credentials, ports, localhost, private IPv4, and unobserved URLs", () => {
 		let urls = observedWebSourceUrls({
 			structuredContent: {

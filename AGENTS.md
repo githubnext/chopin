@@ -131,10 +131,10 @@ Planner destination without a mention.
 did not address the Planner still enter a bounded backscroll for the next turn.
 An accepted comment also starts an explicit Planner turn after it commits.
 
-The Planner is a custom agent, not a general coding agent. `session.send()` only
-accepts a message; the conversation stays active until the SDK emits idle. An
-interrupted turn is never replayed automatically because it may already have
-made durable tool changes.
+The Planner is a custom agent, not a general coding agent. Its turn runs
+through `HarnessAgent.stream()` from `@ai-sdk/harness`; the conversation stays
+active until the returned stream finishes. An interrupted turn is never
+replayed automatically because it may already have made durable tool changes.
 
 ## Questions, comments, and anchors
 
@@ -275,16 +275,26 @@ so merge ranges from all mounted editors before replacing a registry entry.
   instead of rejecting the whole sidecar. Do not generalize that fail-open
   behavior to other durable fields.
 
-### Planner
+### Harness and Planner
 
-- SDK events carry protocol data under `event.data`; do not read guessed
-  top-level fields.
-- An agent-level `tools` list filters MCP tools too. Keep the Planner's tool list
-  unset and enforce the boundary through session `availableTools`.
-- Permission-denied tools may produce no normal start or completion event. Render
-  the refusal from the permission callback path.
-- The external GitHub MCP server can change its offered tool count. Diagnose by
+- Chat consumes `HarnessAgent.stream()` as AI SDK `TextStreamPart`s; `translate()`
+  in `apps/server/src/chat/service.ts` projects each part. A `tool-call` naming a
+  tool outside the Planner's active tool set aborts the turn and logs a boundary
+  failure rather than trusting adapter-internal filtering alone.
+- Permission and approval refusals arrive as `tool-output-denied` or
+  `tool-approval-request` stream parts, not a separately shaped event; render the
+  refusal from that part rather than a guessed top-level field.
+- The Copilot SDK adapter (`apps/server/src/harness/copilot-sdk/adapter.ts`) still
+  reads raw Copilot SDK events and keeps its own live tool check against session
+  metadata. Treat that as adapter-internal behavior, not a property every harness
+  in `HARNESS` shares.
+- The GitHub MCP tools reached through `apps/server/src/harness/github-tools.ts`
+  come from a remote server that can change its offered tool count. Diagnose by
   required names and denied capabilities, not literal counts.
+- `HARNESS_AUTH` values that fall back to a host-logged-in subscription (for
+  example `auto`) are refused at startup unless the server binds only to a
+  loopback interface, so an operator's own subscription is never lent to every
+  admitted writer on a public deployment.
 - `AGENT=off` prevents hosted agent turns but does not disable local MCP and
   does not currently remove every Planner label from the UI.
 - A success callback for persisted sidecar work is not optional. Calling it
