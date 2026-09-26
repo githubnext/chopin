@@ -14,6 +14,7 @@
 		"@ai-sdk/harness-pi": "catalog:harness",
 		"@ai-sdk/mcp": "catalog:harness",
 		"@ai-sdk/sandbox-just-bash": "catalog:harness",
+		"@earendil-works/pi-coding-agent": "catalog:harness",
 		"@chopin/dialect": "workspace:*",
 		"@chopin/protocol": "workspace:*",
 		"@chopin/question": "workspace:*",
@@ -24,6 +25,7 @@
 		"ai": "catalog:harness",
 		"lexical": "catalog:mdx",
 		"y-protocols": "catalog:mdx",
+		"typebox": "catalog:harness",
 		"yjs": "catalog:mdx",
 		"zod": "catalog:harness"
 	},

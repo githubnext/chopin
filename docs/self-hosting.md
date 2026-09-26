@@ -101,16 +101,14 @@ directories, or Pi's agent directory on the host. Both changes live in
 `@ai-sdk/harness-pi`, and run the Pi contract suite
 (`apps/server/src/harness/pi.contract.test.ts`), which covers both.
 
-Structured output under Pi also depends on timing inside the pinned adapter.
-`@ai-sdk/harness-pi` 1.0.128 cannot return structured output, so Chopin's
-wrapper gives the model a result tool and answers that call on the next event
-loop turn, after Pi has registered the pending result. If the answer arrived
-earlier, the adapter would drop it silently and the summary or research turn
-would wait until its timeout. Pi 1.0.128 always registers first, and the
-version is pinned. Run the Pi contract suite
-(`apps/server/src/harness/pi.contract.test.ts`) before bumping
-`@ai-sdk/harness-pi`, because a release that adds an asynchronous step before
-registration would break this.
+`@ai-sdk/harness-pi` 1.0.128 cannot return structured output itself, so
+Chopin registers a result tool as an inline Pi extension. The tool runs inside
+Pi and ends the turn (`terminate: true`), so the summary and research workers
+get their structured result without a follow-up model request. Pi offers the
+tool only on turns that ask for a structured result and blocks it everywhere
+else. The Pi contract suite (`apps/server/src/harness/pi.contract.test.ts`)
+covers this against the real Pi agent loop; run it before bumping
+`@ai-sdk/harness-pi` or `@earendil-works/pi-coding-agent`.
 
 For a reviewed adapter that consumes a shared operator key, every admitted
 writer's turns would bill that key. Chopin adds no billing quotas of its own in

@@ -38,7 +38,12 @@ function chunk(id: string, delta: Record<string, unknown>, finishReason: string 
 	});
 }
 
-export type StubRequest = { prompt: string; system: string };
+export type StubRequest = {
+	prompt: string;
+	system: string;
+	toolNames: string[];
+	hasPriorToolResult: boolean;
+};
 
 export function startStubModelServer(
 	respond: (prompt: string, hasPriorToolResult: boolean) => StubTurn,
@@ -54,7 +59,7 @@ export function startStubModelServer(
 			}
 			let body = await request.json() as {
 				messages: { role: string; content: unknown }[];
-				tools?: unknown;
+				tools?: { function?: { name?: string } }[];
 			};
 			let lastUser = [...body.messages].toReversed().find(message => message.role === "user");
 			let prompt = extractText(lastUser?.content);
@@ -63,7 +68,12 @@ export function startStubModelServer(
 				.filter(message => message.role === "system" || message.role === "developer")
 				.map(message => extractText(message.content))
 				.join("\n");
-			requests.push({ prompt, system });
+			requests.push({
+				prompt,
+				system,
+				hasPriorToolResult,
+				toolNames: (body.tools ?? []).map(entry => entry.function?.name ?? ""),
+			});
 			let turn = respond(prompt, hasPriorToolResult);
 			let id = crypto.randomUUID();
 
