@@ -84,6 +84,7 @@ export function bindRepository(tools: ToolSet, descriptions: Record<string, stri
 			description,
 			inputSchema: source.inputSchema,
 			contextSchema: RepositoryContextSchema,
+			toModelOutput: source.toModelOutput,
 			execute: (input, options) => {
 				let context = options.context as { repository: HostedRepository };
 				let overridden = {
