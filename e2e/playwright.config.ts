@@ -95,6 +95,7 @@ export default defineConfig({
 				"**/comment-motion.e2e.ts",
 				"**/responsive*.e2e.ts",
 				"**/sidecar.e2e.ts",
+				"**/local-auth.e2e.ts",
 			],
 			use: { ...devices["Desktop Chrome"], baseURL: `http://${HOST}:${PLAIN}` },
 		},
@@ -106,6 +107,11 @@ export default defineConfig({
 				"**/sidecar.e2e.ts",
 			],
 			use: { ...devices["Desktop Chrome"], baseURL: `http://${HOST}:${FIXTURES}` },
+		},
+		{
+			name: "local",
+			testMatch: "**/local-auth.e2e.ts",
+			use: { ...devices["Desktop Chrome"], baseURL: "http://127.0.0.1:8791" },
 		},
 	],
 

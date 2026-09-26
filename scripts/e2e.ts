@@ -6,6 +6,7 @@ const COMPOSE = ["docker", "compose", "-f", "compose.yaml", "-f", "compose.local
 const databases = [
 	"postgresql://chopin:chopin@127.0.0.1:5433/chopin?sslmode=disable",
 	"postgresql://chopin:chopin@127.0.0.1:5434/chopin?sslmode=disable",
+	"postgresql://chopin:chopin@127.0.0.1:5435/chopin?sslmode=disable",
 ];
 
 async function run(command: string[], env: Record<string, string> = {}): Promise<void> {
@@ -20,15 +21,21 @@ async function run(command: string[], env: Record<string, string> = {}): Promise
 	if (code !== 0) throw new Error(`${command.join(" ")} exited with ${code}`);
 }
 
-let supplied = [process.env.E2E_DATABASE_URL_0, process.env.E2E_DATABASE_URL_1];
+let supplied = [
+	process.env.E2E_DATABASE_URL_0,
+	process.env.E2E_DATABASE_URL_1,
+	process.env.E2E_DATABASE_URL_2,
+];
 if (supplied.some(Boolean) && !supplied.every(Boolean)) {
-	throw new Error("E2E_DATABASE_URL_0 and E2E_DATABASE_URL_1 must be set together");
+	throw new Error(
+		"E2E_DATABASE_URL_0, E2E_DATABASE_URL_1 and E2E_DATABASE_URL_2 must be set together",
+	);
 }
 let managed = !supplied[0];
 try {
 	if (process.env.E2E_SKIP_BUILD !== "1") await run(["bun", "run", "build"]);
 	if (managed) {
-		await run([...COMPOSE, "up", "-d", "--wait", "db-e2e", "db-e2e-fixtures"]);
+		await run([...COMPOSE, "up", "-d", "--wait", "db-e2e", "db-e2e-fixtures", "db-e2e-local"]);
 	}
 	for (let [index, url] of databases.entries()) {
 		await run(["bun", "apps/server/src/storage/migrate.ts"], {
@@ -53,11 +60,12 @@ try {
 	], {
 		E2E_DATABASE_URL_0: supplied[0] || databases[0]!,
 		E2E_DATABASE_URL_1: supplied[1] || databases[1]!,
+		E2E_DATABASE_URL_2: supplied[2] || databases[2]!,
 		SESSION_ENCRYPTION_KEY: KEY,
 	});
 } finally {
 	if (managed) {
-		await run([...COMPOSE, "rm", "-s", "-f", "db-e2e", "db-e2e-fixtures"])
+		await run([...COMPOSE, "rm", "-s", "-f", "db-e2e", "db-e2e-fixtures", "db-e2e-local"])
 			.catch(() => {});
 	}
 }
