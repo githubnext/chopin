@@ -28,7 +28,10 @@ let processes: ReturnType<typeof spawn>[] = [];
 let directories: string[] = [];
 
 async function stop(child: ReturnType<typeof spawn>) {
-	if (child.exitCode !== null) return;
+	if (child.exitCode !== null || child.pid === undefined) {
+		processes = processes.filter(value => value !== child);
+		return;
+	}
 	let exit = new Promise<void>(resolve => child.once("close", () => resolve()));
 	process.kill(-child.pid!, "SIGTERM");
 	await exit;
@@ -36,10 +39,7 @@ async function stop(child: ReturnType<typeof spawn>) {
 }
 
 async function server(directory: string, unavailable = false) {
-	let child = spawn("mise", [
-		"exec",
-		"--",
-		"bun",
+	let child = spawn(process.execPath, [
 		"--preload",
 		"./e2e/secrets.ts",
 		"--preload",
