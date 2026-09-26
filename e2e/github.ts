@@ -2,6 +2,10 @@
  * Fake only GitHub's network boundary. OAuth state, PKCE, process-local sessions,
  * channel authorization and WebSocket admission still run in the real server.
  */
+import { readFile } from "node:fs/promises";
+
+let issuedCodes = new Map<string, string>();
+let nextCode = 0;
 let network = globalThis.fetch;
 
 const repositories = [
@@ -70,9 +74,34 @@ function json(value: unknown, init: ResponseInit = {}): Response {
 
 let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
 	let url = new URL(input instanceof Request ? input.url : input);
+	if (url.href === "https://github.com/login/device/code" && process.env.AUTH_MODE === "local") {
+		let code = `E2E-${String(++nextCode).padStart(4, "0")}`;
+		let privateCode = crypto.randomUUID();
+		issuedCodes.set(privateCode, code);
+		return json({
+			device_code: privateCode,
+			user_code: code,
+			verification_uri: "https://github.com/login/device",
+			expires_in: 900,
+			interval: 1,
+		});
+	}
 	if (url.href === "https://github.com/login/oauth/access_token") {
 		let body = new URLSearchParams(String(init?.body ?? ""));
 		let refreshing = body.get("grant_type") === "refresh_token";
+		if (body.get("grant_type") === "urn:ietf:params:oauth:grant-type:device_code") {
+			let code = issuedCodes.get(body.get("device_code") ?? "");
+			let approved = await readFile(process.env.E2E_DEVICE_APPROVAL_FILE!, "utf8").catch(() => "");
+			if (!code || approved.trim() !== code) return json({ error: "authorization_pending" });
+			issuedCodes.delete(body.get("device_code")!);
+			return json({
+				access_token: "ghu_e2e_octocat_1",
+				expires_in: 28_800,
+				refresh_token: "ghr_e2e_octocat_1",
+				refresh_token_expires_in: 15_897_600,
+				token_type: "bearer",
+			});
+		}
 		let refreshed = /^ghr_e2e_(.+)_(\d+)$/.exec(body.get("refresh_token") ?? "");
 		if (refreshing && !refreshed) return json({ error: "bad_refresh_token" });
 		let handle = refreshing

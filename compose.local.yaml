@@ -18,3 +18,7 @@ services:
   db-e2e-harness:
     ports:
       - "5435:5432"
+
+  db-e2e-local:
+    ports:
+      - "5436:5432"
