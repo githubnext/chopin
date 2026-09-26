@@ -12,9 +12,11 @@ that is an implementation limitation, not the document model's boundary.
 
 Chopin runs the Planner through `@ai-sdk/harness`: `HARNESS` selects one adapter
 from a code-owned map, defaulting to `copilot-sdk`, a host-process adapter over
-`@github/copilot-sdk`. The harness owns the agent loop and model; Chopin owns
-every tool the Planner can call. See [Self-hosting](self-hosting.md) for
-`HARNESS`/`HARNESS_AUTH` selection and adapter trust.
+`@github/copilot-sdk`. `pi`, over `@ai-sdk/harness-pi`, is a second reviewed
+adapter and requires an explicit `HARNESS_AUTH`. The harness owns the agent
+loop and model; Chopin owns every tool the Planner can call. See
+[Self-hosting](self-hosting.md) for `HARNESS`/`HARNESS_AUTH` selection and
+adapter trust.
 
 ## Ownership
 
