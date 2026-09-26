@@ -109,15 +109,19 @@ implementation lifecycle mutations.
 
 ### Hosted agent
 
-The first eligible editor to invoke the Planner or start a model-backed research
+Chopin runs the Planner through `@ai-sdk/harness`. `HARNESS` selects one
+adapter from a code-owned map (default `copilot-sdk`); `harnessFor` refuses an
+unknown name and refuses a `HARNESS_AUTH` mode that falls back to a
+host-logged-in subscription unless the server binds only to loopback. The
+first eligible editor to invoke the Planner or start a model-backed research
 request becomes that channel's Planner owner for the lifetime of the process
 session.
 Permission callbacks recheck admission, session identity, credential revision,
 ownership generation, repository role, and App installation before execution.
 The Planner has bounded, repository-fixed read tools and no ambient checkout,
-shell, or host filesystem. Model-backed `active-planner` workers use the same
-owner credential but fresh isolated sessions; see
-[Background jobs](background-jobs.md).
+shell, or host filesystem; no harness built-in is active. Model-backed
+`active-planner` workers use the same owner credential but fresh isolated
+harness sessions; see [Background jobs](background-jobs.md).
 
 ## State ownership
 
@@ -144,7 +148,7 @@ owner credential but fresh isolated sessions; see
 
 - browser cookie verifiers and GitHub access and refresh tokens;
 - open rooms, pending update batches, and persistence coordinators;
-- disposable Copilot SDK sessions and copied credentials; and
+- disposable harness sessions and copied credentials; and
 - repository and admission caches.
 
 Startup deliberately clears every process-session registry row and Planner
@@ -227,7 +231,9 @@ parent-scoped records. The parent WebSocket announces `research:changed`; the
 browser then refreshes that request over HTTP.
 
 The public worker receives only the submitted brief, with no private document
-context. It may derive or refine the queries it sends to web search. After its
+context. It calls a host `web_search` tool reached through GitHub MCP and may
+derive or refine the queries it sends; its result is validated against a
+structured `output` schema. After its
 evidence artifact validates, one isolated private worker analyses the parent
 document from the brief and document snapshot. A second isolated private worker
 receives the brief, normalized public evidence, and private findings, then
@@ -464,6 +470,11 @@ Treat these as implementation work, not guarantees to build new behavior upon.
 - Plan service and persistence coordinator: `apps/server/src/plan/service.ts`
 - Planner tools and block operations: `apps/server/src/agent/tools.ts` and
   `apps/server/src/plan/edit.ts`
+- Harness selection, agents, sessions, and GitHub tools:
+  `apps/server/src/harness/harnesses.ts`, `apps/server/src/harness/agents.ts`,
+  `apps/server/src/harness/session.ts`, and
+  `apps/server/src/harness/github-tools.ts`
+- Copilot SDK adapter: `apps/server/src/harness/copilot-sdk/adapter.ts`
 - Channel routes and IDs: `apps/server/src/channels/`
 - Research requests and child publication: `apps/server/src/research/service.ts`
 - Inline request state and anchored children: `apps/web/src/research-requests.ts`

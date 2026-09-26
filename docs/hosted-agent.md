@@ -10,6 +10,12 @@ The product role is document co-authoring. The current prompt and tool vocabular
 remain optimized for planning and may structure another document type as a plan;
 that is an implementation limitation, not the document model's boundary.
 
+Chopin runs the Planner through `@ai-sdk/harness`: `HARNESS` selects one adapter
+from a code-owned map, defaulting to `copilot-sdk`, a host-process adapter over
+`@github/copilot-sdk`. The harness owns the agent loop and model; Chopin owns
+every tool the Planner can call. See [Self-hosting](self-hosting.md) for
+`HARNESS`/`HARNESS_AUTH` selection and adapter trust.
+
 ## Ownership
 
 The first eligible editor to invoke the Planner or start a model-backed research
@@ -32,9 +38,14 @@ ownership generation.
 
 ## Runtime isolation
 
-The shared Copilot runtime runs in SDK `mode: "empty"`. Each disposable SDK
-session receives its owner's token when created and has no client-level service
-token or logged-in-user fallback.
+Every harness receives only Chopin's host-executed tools: document, question,
+relationship, implementation-graph, repository, and GitHub tools, each bound to
+the channel's repository through `toolsContext`. No harness built-in is active
+for the Planner. The default `copilot-sdk` adapter additionally runs the shared
+Copilot runtime in SDK `mode: "empty"`: each disposable session receives its
+owner's token when created and has no client-level service token or
+logged-in-user fallback. That detail is specific to the Copilot SDK adapter,
+not a property every harness in `HARNESS` shares.
 
 The Planner has no:
 
@@ -49,11 +60,13 @@ Available capabilities are:
 - Chopin document, question, relationship, and implementation-graph tools (with
   current plan-oriented tool names);
 - bounded file and tree reads plus commit history fixed to the default branch
-  captured when the SDK session is created;
+  captured when the session is created;
 - repository-scoped code search, post-filtered by repository node ID; and
 - bounded reads of document and historical research references attached to the
   current Chat context; and
-- repository-bound, read-only pull-request MCP calls.
+- repository-bound, read-only pull-request tools reached through
+  `createMCPClient` against GitHub's remote MCP server, bound to the channel's
+  repository.
 
 Issue and general search MCP tools are refused because linked objects and
 free-form qualifiers can cross the selected repository boundary. Repository
@@ -82,10 +95,9 @@ Permission is decided before execution. A refusal therefore produces no normal
 tool start or completion event; the Chat service renders permission
 denials explicitly so the boundary remains visible.
 
-The in-memory SDK session is bound to one credential revision. Before an
-eight-hour GitHub App token refresh, Chopin aborts and discards every Planner
-session using that revision. The next turn creates a fresh session with the new
-token.
+A harness session is bound to one credential revision. Before an eight-hour
+GitHub App token refresh, Chopin aborts and discards every Planner session
+using that revision. The next turn creates a fresh session with the new token.
 
 ## Chat context
 
@@ -118,33 +130,37 @@ into one anonymous user voice.
 
 ## Session lifecycle
 
-Copilot CLI session files and SDK session IDs are disposable. A process restart,
-credential rotation, logout, or ownership reset discards the SDK session. A
-later turn bootstraps from the bounded transcript and reads the current document.
+A harness session is disposable. A process restart, credential rotation,
+logout, or ownership reset discards it. A later turn bootstraps from the
+bounded transcript and reads the current document.
 
 An interrupted turn is visible and is never replayed automatically because it
-may already have made durable document or question changes. `session.send()` only
-accepts a message; the Chat handler remains active until the SDK emits
-its idle event.
+may already have made durable document or question changes. `HarnessAgent.stream()`
+returns an AI SDK stream that `chat/service.ts` consumes part by part; the Chat
+handler remains active until that stream finishes.
 
 The runtime starts lazily on the first Planner turn or model-backed worker
-attempt. `AGENT=off` prevents those turns, disables the background-job runner,
-and avoids starting Copilot CLI. It does not disable `/mcp`, and the prototype UI
-may still contain Planner-oriented explanatory copy.
+attempt. `AGENT=off` prevents those turns and disables the background-job
+runner. For the `copilot-sdk` adapter this also avoids starting Copilot CLI.
+`AGENT=off` does not disable `/mcp`, and the prototype UI may still contain
+Planner-oriented explanatory copy.
 
 ## Background jobs
 
 Background jobs are durable Chopin requests, not child Planner turns. Registered
 definitions control their input and artifact codecs, enqueue origins, credential
 mode, timeout, failure budget, declared progress, and artifact settlement. Every
-model-backed stage uses a fresh disposable SDK session. Job output is not
+model-backed stage uses a fresh disposable harness session with a structured
+`output` schema. Job output is not
 automatically injected into Chat or recreated Planner context, although
 the Planner may explicitly read an artifact in a later turn.
 
 An inline `/research` submission persists the exact brief and starts work
 immediately. During an explicit member turn, the Planner can call the
 plan-named `create_research_workspace` tool with that same exact brief; it may
-not refine, broaden, or replace it. The public worker receives only the brief.
+not refine, broaden, or replace it. The public worker's structured `output`
+binds a host `web_search` tool reached through GitHub MCP; the public worker
+receives only the brief.
 Parent-document context goes to a separate no-web worker after evidence
 completes. A validated initial report publishes as an ordinary child document;
 it never edits the parent's collaborative prose automatically.
@@ -181,9 +197,15 @@ current production interface lets a person approve the draft. See
 
 ## Main implementation points
 
-- Planner prompt and tool boundary: `apps/server/src/agent/planner.ts`
-- SDK client and available-tool filter: `apps/server/src/agent/client.ts`
-- Permission callbacks: `apps/server/src/agent/permissions.ts`
+- Harness selection, adapter factory map, and startup checks:
+  `apps/server/src/harness/harnesses.ts`
+- Planner, summary, and research `HarnessAgent` configurations:
+  `apps/server/src/harness/agents.ts`
+- Planner session lifecycle: `apps/server/src/harness/session.ts`
+- Host-executed GitHub MCP tools: `apps/server/src/harness/github-tools.ts`
+- Copilot SDK adapter: `apps/server/src/harness/copilot-sdk/adapter.ts`
+- Planner prompt and document tools: `apps/server/src/agent/planner.ts` and
+  `apps/server/src/agent/tools.ts`
 - Repository-fixed tools: `apps/server/src/agent/repository.ts`
 - Ownership and Chat lifecycle: `apps/server/src/chat/service.ts`
 - GitHub App session lifecycle: `apps/server/src/auth/session.ts`

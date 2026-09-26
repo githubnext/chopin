@@ -18,6 +18,10 @@ function configured(overrides: Record<string, string | undefined> = {}) {
 		AGENT: undefined,
 		BACKGROUND_JOBS: undefined,
 		WEB_RESEARCH: undefined,
+		HARNESS: undefined,
+		HARNESS_AUTH: undefined,
+		SERVER_HOST: undefined,
+		MODEL: undefined,
 		GITHUB_ALLOWED_USERS: undefined,
 		GITHUB_ALLOWED_ORGANIZATIONS: undefined,
 		...overrides,
@@ -70,6 +74,33 @@ describe("configuration", () => {
 			backgroundJobs: true,
 			webResearch: false,
 		});
+	});
+
+	it("selects a harness and retains AGENT and MODEL behavior", () => {
+		expect(configured()).toMatchObject({
+			harness: "copilot-sdk",
+			harnessAuth: undefined,
+			agent: true,
+			model: "gpt-6-luna",
+		});
+		expect(configured({ HARNESS: "", HARNESS_AUTH: "" })).toMatchObject({
+			harness: "copilot-sdk",
+			harnessAuth: undefined,
+		});
+		let config = configured({
+			HARNESS: "custom",
+			HARNESS_AUTH: "direct",
+			AGENT: "off",
+			MODEL: "named-model",
+		});
+		expect(config).toMatchObject({
+			harness: "custom",
+			harnessAuth: "direct",
+			agent: false,
+			model: "named-model",
+		});
+		expect(description(config)).toContain("harness: custom");
+		expect(description(config)).not.toContain("direct");
 	});
 
 	it("requires a valid PostgreSQL URL", () => {

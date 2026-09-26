@@ -37,6 +37,8 @@ export type CopilotSdkSettings = {
 	credentials: (sessionId: string) => string | undefined;
 	connect?: () => RuntimeSource;
 	model?: string;
+	auth?: string;
+	limits?: (sessionId: string) => { maxAiCredits: number } | undefined;
 };
 
 export class MissingCredentialsError extends Error {
@@ -152,6 +154,12 @@ function promptText(prompt: HarnessV1PromptTurnOptions["prompt"]): string {
 		.join("");
 }
 
+type TurnState = {
+	turn: HarnessV1PromptTurnOptions;
+	output: { received: boolean };
+	pending: Map<string, (result: { output: unknown; isError?: boolean }) => void>;
+};
+
 /** Host-process `HarnessV1` implementation over `@github/copilot-sdk`. */
 export function createCopilotSdk(
 	settings: CopilotSdkSettings,
@@ -159,22 +167,15 @@ export function createCopilotSdk(
 	let runtime = new Runtime(settings.connect ?? defaultConnect);
 
 	async function open(
-		sessionId: string,
-		turn: HarnessV1PromptTurnOptions,
-		output: { received: boolean },
-	): Promise<{
-		session: CopilotSession;
-		pending: Map<string, (result: { output: unknown; isError?: boolean }) => void>;
-	}> {
-		let token = settings.credentials(sessionId);
-		if (!token) throw new MissingCredentialsError(sessionId);
-
+		state: TurnState,
+		token: string,
+		limits: { maxAiCredits: number } | undefined,
+	): Promise<CopilotSession> {
+		let turn = state.turn;
 		let hostNames = turn.tools.map(spec => spec.name);
 		if (hostNames.includes(RESULT_TOOL_NAME)) {
 			throw new Error(`Host tool name ${RESULT_TOOL_NAME} is reserved for structured output.`);
 		}
-
-		let pending = new Map<string, (result: { output: unknown; isError?: boolean }) => void>();
 
 		let tools: Tool[] = turn.tools.map(spec => ({
 			name: spec.name,
@@ -185,16 +186,16 @@ export function createCopilotSdk(
 			async handler(args: unknown) {
 				let toolCallId = crypto.randomUUID();
 				let settled = Promise.withResolvers<{ output: unknown; isError?: boolean }>();
-				pending.set(toolCallId, settled.resolve);
-				turn.emit({
+				state.pending.set(toolCallId, settled.resolve);
+				state.turn.emit({
 					type: "tool-call",
 					toolCallId,
 					toolName: spec.name,
 					input: JSON.stringify(args ?? {}),
 				});
 				let result = await settled.promise;
-				pending.delete(toolCallId);
-				turn.emit({
+				state.pending.delete(toolCallId);
+				state.turn.emit({
 					type: "tool-result",
 					toolCallId,
 					toolName: spec.name,
@@ -220,18 +221,19 @@ export function createCopilotSdk(
 				isTerminal: true,
 				handler(args: unknown) {
 					let id = crypto.randomUUID();
-					turn.emit({ type: "text-start", id });
-					turn.emit({ type: "text-delta", id, delta: JSON.stringify(args ?? {}) });
-					turn.emit({ type: "text-end", id });
-					output.received = true;
+					state.turn.emit({ type: "text-start", id });
+					state.turn.emit({ type: "text-delta", id, delta: JSON.stringify(args ?? {}) });
+					state.turn.emit({ type: "text-end", id });
+					state.output.received = true;
 					return "Result received.";
 				},
 			});
 		}
 
 		let config: SessionConfig = {
-			model: settings.model,
+			model: turn.model ?? settings.model,
 			gitHubToken: token,
+			sessionLimits: limits,
 			streaming: true,
 			largeOutput: { enabled: false },
 			enableConfigDiscovery: false,
@@ -268,7 +270,7 @@ export function createCopilotSdk(
 			await runtime.discard(session).catch(() => {});
 			throw err;
 		}
-		return { session, pending };
+		return session;
 	}
 
 	return {
@@ -279,16 +281,79 @@ export function createCopilotSdk(
 
 		async doStart(startOptions: HarnessV1StartOptions): Promise<HarnessV1Session> {
 			let copilot: CopilotSession | undefined;
+			let limits = settings.limits?.(startOptions.sessionId);
+			let retained: TurnState | undefined;
+			let retainedSettings: string | undefined;
+			let limitedFailed = false;
+			let limitedBusy = false;
 
 			return {
 				sessionId: startOptions.sessionId,
 				isResume: false,
 
 				async doPromptTurn(turn: HarnessV1PromptTurnOptions): Promise<HarnessV1PromptControl> {
-					let output = { received: false };
+					if (limits && limitedFailed) {
+						throw new Error("credit-limited Copilot session cannot continue after a failed turn");
+					}
+					if (limits && limitedBusy) {
+						throw new Error("credit-limited Copilot session already has an active turn");
+					}
+					if (!limits && copilot) {
+						await runtime.discard(copilot);
+						copilot = undefined;
+					}
+					if (limits) limitedBusy = true;
+					let state: TurnState;
+					let session: CopilotSession;
+					try {
+						let token = settings.credentials(startOptions.sessionId);
+						if (!token) throw new MissingCredentialsError(startOptions.sessionId);
+						let identity = limits
+							? JSON.stringify({
+								token,
+								model: turn.model ?? settings.model,
+								instructions: turn.instructions,
+								skills: turn.skills,
+								tools: turn.tools,
+								responseFormat: turn.responseFormat,
+							})
+							: undefined;
+						if (limits && copilot) {
+							if (identity !== retainedSettings || !retained || retained.pending.size > 0) {
+								throw new Error(
+									"a credit-limited Copilot session cannot change settings between turns",
+								);
+							}
+							state = retained;
+							state.turn = turn;
+							state.output = { received: false };
+							state.pending = new Map();
+							session = copilot;
+						} else {
+							if (limits && retainedSettings !== undefined) {
+								throw new Error(
+									"credit-limited Copilot session cannot continue after a failed turn",
+								);
+							}
+							copilot = undefined;
+							state = { turn, output: { received: false }, pending: new Map() };
+							session = await open(state, token, limits);
+							copilot = session;
+							if (limits) {
+								retained = state;
+								retainedSettings = identity;
+							}
+						}
+					} catch (err) {
+						if (limits) {
+							limitedFailed = true;
+							limitedBusy = false;
+						}
+						throw err;
+					}
+					let output = state.output;
+					let pending = state.pending;
 					let expectingOutput = turn.responseFormat?.type === "json";
-					let { session, pending } = await open(startOptions.sessionId, turn, output);
-					copilot = session;
 					let settled = Promise.withResolvers<void>();
 					let currentTextId: string | undefined;
 					let currentTextMessageId: string | undefined;
@@ -368,6 +433,7 @@ export function createCopilotSdk(
 					});
 
 					let onAbort = () => {
+						if (limits) limitedFailed = true;
 						bounded(
 							Promise.resolve().then(() => session.abort()),
 							`Copilot session ${session.sessionId} abort timed out.`,
@@ -392,7 +458,11 @@ export function createCopilotSdk(
 							// No built-ins and no host approval requests are ever emitted, so the
 							// framework never actually calls back through this path.
 						},
-						done: settled.promise.finally(() => {
+						done: settled.promise.catch(err => {
+							if (limits) limitedFailed = true;
+							throw err;
+						}).finally(() => {
+							if (limits) limitedBusy = false;
 							turn.abortSignal?.removeEventListener("abort", onAbort);
 							release();
 						}),

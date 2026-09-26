@@ -10,8 +10,7 @@
 import { join } from "node:path";
 import { ulid } from "@chopin/dialect";
 
-import { shutdownHarnesses } from "./harness/harnesses";
-import { shutdownWorkers } from "./harness/copilot-sdk/workers";
+import { harnessFor, shutdownHarnesses } from "./harness/harnesses";
 import { ActiveOwnerBindings } from "./agent/active-owner";
 import { registerAuthRoutes } from "./auth/routes";
 import * as Chat from "./chat/service";
@@ -52,6 +51,7 @@ import type { ChannelRecord, Lease } from "./storage/model";
 import type { AuthorizationResult, Socket, SocketData } from "./wire";
 
 const config = load();
+harnessFor(config);
 const storage = createStorage(config.storage);
 const router = new Router();
 
@@ -649,10 +649,7 @@ function drain(): Promise<void> {
 		for (let result of await Promise.allSettled([stoppingJobs])) {
 			if (result.status === "rejected") record(result.reason);
 		}
-		await attempt(async () => {
-			await shutdownHarnesses();
-			await shutdownWorkers();
-		});
+		await attempt(() => shutdownHarnesses());
 		if (leaseRenewal) clearInterval(leaseRenewal);
 		if (leaseWatchdog) clearTimeout(leaseWatchdog);
 		for (let result of await Promise.allSettled([renewingLease])) {
@@ -1164,7 +1161,7 @@ try {
 	let reset = await storage.sessions.deleteAll(new Date(), heldLease, LEASE_TTL_MS);
 	heldLease = reset.lease;
 } catch (err) {
-	await Promise.all([shutdownHarnesses(), shutdownWorkers()]);
+	await shutdownHarnesses();
 	if (heldLease) await storage.leases.release(heldLease).catch(() => {});
 	await storage.close().catch(() => {});
 	let reason = err instanceof Error ? err.message : String(err);
@@ -1189,7 +1186,7 @@ try {
 	let stoppingJobs = jobRunner.shutdown();
 	ownerBindings.revokeAll();
 	await stoppingJobs.catch(() => {});
-	await Promise.all([shutdownHarnesses(), shutdownWorkers()]);
+	await shutdownHarnesses();
 	if (heldLease) await storage.leases.release(heldLease).catch(() => {});
 	await storage.close().catch(() => {});
 	throw err;
