@@ -12,6 +12,7 @@
 	"dependencies": {
 		"@ai-sdk/harness": "catalog:harness",
 		"@ai-sdk/mcp": "catalog:harness",
+		"@ai-sdk/sandbox-just-bash": "catalog:harness",
 		"@chopin/dialect": "workspace:*",
 		"@chopin/protocol": "workspace:*",
 		"@chopin/question": "workspace:*",

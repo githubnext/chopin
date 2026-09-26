@@ -4,13 +4,12 @@ import {
 	assertWorkerTools,
 	auditPublicResearchTools,
 	openWorker,
-	plannerConfiguration,
 	publicResearchConfiguration,
+	publicResearchGate,
 	RUNTIME_ENV,
+	terminalGate,
 	workerConfiguration,
-} from "./client";
-import { gate, publicResearchGate, terminalGate } from "./permissions";
-import { repositoryTools } from "./repository";
+} from "./workers";
 
 import type { PermissionRequest, Tool } from "@github/copilot-sdk";
 
@@ -19,40 +18,7 @@ async function webSearchTools(input: { serverName: string }) {
 	return { tools: [{ name: "web_search" }, { name: "search_repositories" }] };
 }
 
-describe("hosted Copilot configuration", () => {
-	it("exposes only explicit custom and MCP tools", () => {
-		let tool = {
-			name: "read_plan",
-			description: "read",
-			parameters: {},
-			handler: () => "ok",
-		} as Tool;
-		let config = plannerConfiguration(
-			{ model: "model" },
-			{ tools: [tool] },
-			{
-				token: "ghu_owner",
-				repository: { id: "R_repo", owner: "octo-org", name: "score", defaultBranch: "main" },
-			},
-		);
-
-		expect(config.gitHubToken).toBe("ghu_owner");
-		expect(config.availableTools).toEqual(["mcp:*", "custom:*"]);
-		expect(config.tools?.[0]?.skipPermission).toBe(false);
-		expect(config.enableConfigDiscovery).toBe(false);
-		expect(config.skipCustomInstructions).toBe(true);
-		expect(config.enableHostGitOperations).toBe(false);
-		expect(config.enableSkills).toBe(false);
-		expect(config.skipEmbeddingRetrieval).toBe(true);
-		expect(config.largeOutput).toEqual({ enabled: false });
-		expect(config.mcpServers?.github).toMatchObject({
-			url: "https://api.githubcopilot.com/mcp/",
-			headers: { Authorization: "Bearer ghu_owner", "X-MCP-Readonly": "true" },
-		});
-		expect(config.customAgents?.[0]?.prompt).toContain("read_repository_file");
-		expect(config.customAgents?.[0]?.prompt).not.toContain("You have `view`, `grep` and `glob`");
-	});
-
+describe("background worker configuration", () => {
 	it("gives a worker only its terminal result tool", async () => {
 		let result = {
 			name: "submit_job_result",
@@ -368,196 +334,5 @@ describe("hosted Copilot configuration", () => {
 				maxAiCredits: 32,
 			},
 		)).rejects.toThrow("disabled");
-	});
-
-	it("confines MCP and denies every host capability", async () => {
-		let decide = gate({
-			owner: "octo-org",
-			repository: "score",
-			tools: new Set(["read_plan"]),
-		});
-		expect(
-			await decide({
-				kind: "mcp",
-				serverName: "github",
-				readOnly: true,
-				toolName: "get_pull_request",
-				toolTitle: "Pull request",
-				args: { owner: "octo-org", repo: "score" },
-			} as PermissionRequest, { sessionId: "s" }),
-		).toEqual({ kind: "approve-once" });
-		expect(
-			await decide({
-				kind: "mcp",
-				serverName: "github",
-				readOnly: true,
-				toolName: "get_pull_request",
-				toolTitle: "Pull request",
-				args: { owner: "other", repo: "private" },
-			} as PermissionRequest, { sessionId: "s" }),
-		).toMatchObject({ kind: "reject" });
-		expect(
-			await decide({
-				kind: "mcp",
-				serverName: "github",
-				readOnly: true,
-				toolName: "issue_read",
-				toolTitle: "Issue",
-				args: { owner: "octo-org", repo: "score", method: "get_sub_issues" },
-			} as PermissionRequest, { sessionId: "s" }),
-		).toMatchObject({ kind: "reject" });
-		expect(
-			await decide({
-				kind: "mcp",
-				serverName: "github",
-				readOnly: true,
-				toolName: "search_issues",
-				toolTitle: "Search",
-				args: { owner: "octo-org", repo: "score", query: "repo:other/private secret" },
-			} as PermissionRequest, { sessionId: "s" }),
-		).toMatchObject({ kind: "reject" });
-		expect(
-			await decide({
-				kind: "mcp",
-				serverName: "github",
-				readOnly: true,
-				toolName: "get_pull_request",
-				toolTitle: "Pull request",
-				args: "octo-org/score",
-			} as PermissionRequest, { sessionId: "s" }),
-		).toMatchObject({ kind: "reject" });
-		expect(
-			await decide({ kind: "read", path: "/etc/passwd", intention: "read" } as PermissionRequest, {
-				sessionId: "s",
-			}),
-		).toMatchObject({ kind: "reject" });
-	});
-});
-
-describe("hosted repository tools", () => {
-	it("binds every read to one repository and filters search results", async () => {
-		let urls: URL[] = [];
-		let tools = repositoryTools({
-			fetch: async input => {
-				let url = new URL(String(input));
-				urls.push(url);
-				if (url.pathname.includes("/contents/")) {
-					return Response.json({
-						type: "file",
-						encoding: "base64",
-						content: Buffer.from("one\ntwo").toString("base64"),
-					});
-				}
-				if (url.pathname.includes("/git/trees/")) {
-					return Response.json({
-						tree: [{ path: "src/a.ts", type: "blob", size: 10 }],
-						truncated: false,
-					});
-				}
-				if (url.pathname === "/search/code") {
-					return Response.json({
-						items: [
-							{ path: "src/a.ts", html_url: "url", repository: { node_id: "R_repo" } },
-							{ path: "secret", repository: { node_id: "R_other" } },
-						],
-					});
-				}
-				return Response.json([{
-					sha: "abc",
-					commit: { message: "change", author: { name: "Mona", date: "today" } },
-				}]);
-			},
-		});
-		let context = {
-			repository: { id: "R_repo", owner: "octo-org", name: "score", defaultBranch: "main" },
-			owner: { currentToken: () => "ghu_owner" },
-		};
-		let call = (name: keyof typeof tools, input: unknown) =>
-			tools[name].execute!(input, { context, toolCallId: "call", messages: [] });
-
-		expect(await call("read_repository_file", { path: "src/a.ts" })).toContain("1: one");
-		expect(await call("list_repository_tree", {})).toContain("src/a.ts");
-		let searched = await call("search_repository", { terms: "symbol" });
-		expect(searched).toContain("src/a.ts");
-		expect(searched).not.toContain("secret");
-		expect(await call("repository_history", {})).toContain("change");
-		expect(
-			urls.filter(url => url.pathname !== "/search/code").every(url =>
-				url.pathname.startsWith("/repos/octo-org/score/")
-			),
-		).toBe(true);
-		expect(urls.find(url => url.pathname === "/search/code")!.searchParams.get("q"))
-			.toContain("repo:octo-org/score");
-	});
-
-	it("reads repository and owner from each call's toolsContext", async () => {
-		let requests: Array<{ url: URL; authorization: string | null }> = [];
-		let tool = repositoryTools({
-			fetch: async (input, init) => {
-				requests.push({
-					url: new URL(String(input)),
-					authorization: new Headers(init?.headers).get("authorization"),
-				});
-				return Response.json({ tree: [], truncated: false });
-			},
-		}).list_repository_tree;
-		for (let [owner, name, token] of [["first", "repo-a", "one"], ["second", "repo-b", "two"]]) {
-			await tool.execute!({ owner: "forged", repo: "forged" }, {
-				context: {
-					repository: { id: name!, owner: owner!, name: name!, defaultBranch: "main" },
-					owner: { currentToken: () => token },
-				},
-				toolCallId: "call",
-				messages: [],
-			});
-		}
-		expect(requests.map(({ url }) => url.pathname)).toEqual([
-			"/repos/first/repo-a/git/trees/main",
-			"/repos/second/repo-b/git/trees/main",
-		]);
-		expect(requests.map(({ authorization }) => authorization)).toEqual([
-			"Bearer one",
-			"Bearer two",
-		]);
-	});
-
-	it("refuses paths that can escape the repository", async () => {
-		let tools = repositoryTools({
-			fetch: async () => Response.json({}),
-		});
-		let result = await tools.read_repository_file.execute!({ path: "../secret" }, {
-			context: {
-				repository: { id: "R", owner: "o", name: "r", defaultBranch: "main" },
-				owner: { currentToken: () => "token" },
-			},
-			toolCallId: "call",
-			messages: [],
-		});
-		expect(result).toContain("relative repository path");
-	});
-
-	it("resolves authorization again when a repository handler starts", async () => {
-		let token: string | undefined = "ghu_current";
-		let requests = 0;
-		let tools = repositoryTools({
-			fetch: async (_input, init) => {
-				requests++;
-				expect(new Headers(init?.headers).get("authorization")).toBe("Bearer ghu_current");
-				return Response.json({ tree: [], truncated: false });
-			},
-		});
-		let tree = tools.list_repository_tree;
-		let context = {
-			repository: { id: "R", owner: "o", name: "r", defaultBranch: "main" },
-			owner: { currentToken: () => token },
-		};
-		expect(await tree.execute!({}, { context, toolCallId: "call", messages: [] })).not.toContain(
-			"Error:",
-		);
-		token = undefined;
-		expect(await tree.execute!({}, { context, toolCallId: "call", messages: [] })).toContain(
-			"authorization expired",
-		);
-		expect(requests).toBe(1);
 	});
 });
