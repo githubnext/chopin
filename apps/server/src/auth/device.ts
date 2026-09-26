@@ -18,6 +18,15 @@ export type DevicePoll =
 
 type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
+class DeviceResponseError extends Error {
+	readonly status: number;
+
+	constructor(message: string, status: number) {
+		super(message);
+		this.status = status;
+	}
+}
+
 export class DeviceAuthorization {
 	readonly #fetch: Fetch;
 	readonly #codeUrl: string;
@@ -45,10 +54,13 @@ export class DeviceAuthorization {
 		try {
 			body = await response.json();
 		} catch {
-			throw new Error("GitHub returned an unreadable device response");
+			throw new DeviceResponseError(
+				"GitHub returned an unreadable device response",
+				response.status,
+			);
 		}
 		if (!body || typeof body !== "object" || Array.isArray(body)) {
-			throw new Error("GitHub returned an invalid device response");
+			throw new DeviceResponseError("GitHub returned an invalid device response", response.status);
 		}
 		return { response, body: body as Record<string, unknown> };
 	}
@@ -89,6 +101,9 @@ export class DeviceAuthorization {
 			}, signal));
 		} catch (err) {
 			if (signal?.aborted) throw err;
+			if (err instanceof DeviceResponseError && (err.status >= 500 || err.status === 429)) {
+				return { status: "transient" };
+			}
 			return {
 				status: err instanceof Error && err.message.startsWith("GitHub returned")
 					? "failed"

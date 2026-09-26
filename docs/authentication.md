@@ -137,6 +137,18 @@ that is still in flight when the bound expires is left running and its
 eventual result is discarded (a late success is deleted, not kept) so it can
 never resurrect a declined or superseded attempt.
 
+Automated tests exercise this boundary through an injected `NativeSecrets`
+implementation (a file-backed fake in Playwright, an in-memory fake in unit
+tests), not a live OS vault. `apps/server/src/auth/local-store.test.ts` also
+has one opt-in test, gated on `TEST_NATIVE_SECRETS=1`, that round-trips a
+dummy credential through the real store. That check has only run against
+Linux libsecret/gnome-keyring; macOS Keychain and Windows Credential Manager
+behavior is implemented against the same `Bun.secrets` API but is not yet
+verified on those platforms. Windows also defaults to
+`CRED_PERSIST_ENTERPRISE` (roaming) persistence for `Bun.secrets.set`; a
+machine-local `persist: "local"` option exists in Bun's API but Chopin does
+not currently set it or verify its behavior.
+
 When the store is missing, inaccessible, disabled, or times out, Chopin keeps
 the credential in memory and asks for plaintext consent instead of writing
 anything, using this exact warning and choice text:
