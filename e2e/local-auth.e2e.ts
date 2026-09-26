@@ -91,9 +91,11 @@ test("local device approval, backend fallback, restart and logout", async ({ pag
 	let child = await server(directory);
 	await page.goto(ORIGIN);
 	await expect(page.getByText("Open your workspace")).toBeVisible();
+	await expect(page.getByRole("checkbox")).toHaveCount(0);
 	await page.getByRole("button", { name: /sign in|device|github/i }).first().click();
 	let instruction = page.getByText(/Enter one-time code:/);
 	await expect(instruction).toBeVisible();
+	await expect(page.getByRole("checkbox")).toHaveCount(0);
 	let code = (await instruction.textContent())!.match(/E2E-\d{4}/)![0]!;
 	await expect(page.getByRole("link", { name: "https://github.com/login/device" })).toBeVisible();
 	let cookies = await page.context().cookies();
@@ -190,6 +192,7 @@ test("local device approval, backend fallback, restart and logout", async ({ pag
 	await expect(page.getByRole("alertdialog")).toBeVisible({ timeout: 20_000 });
 	await expect(page.getByText("System vault not available")).toBeVisible();
 	await expect(page.getByText(join(directory, "config"), { exact: false })).toBeVisible();
+	await expect(page.getByRole("checkbox")).toHaveCount(0);
 	await page.getByRole("button", { name: "No, cancel sign-in" }).click();
 	await expect(page.getByText("Open your workspace")).toBeVisible();
 	expect((await readdir(directory)).sort()).toEqual(["approval", "fake-vault"]);
