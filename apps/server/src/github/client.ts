@@ -84,7 +84,7 @@ export interface GitHub {
 	}): Promise<GitHubTokenGrant>;
 	refresh(input: {
 		clientId: string;
-		clientSecret: string;
+		clientSecret?: string;
 		refreshToken: string;
 	}): Promise<GitHubTokenGrant>;
 	user(token: string): Promise<GitHubUser>;
@@ -365,12 +365,12 @@ export class GitHubClient implements GitHub {
 
 	async refresh(input: {
 		clientId: string;
-		clientSecret: string;
+		clientSecret?: string;
 		refreshToken: string;
 	}): Promise<GitHubTokenGrant> {
 		return this.#token({
 			client_id: input.clientId,
-			client_secret: input.clientSecret,
+			...(input.clientSecret ? { client_secret: input.clientSecret } : {}),
 			grant_type: "refresh_token",
 			refresh_token: input.refreshToken,
 		}, true);
