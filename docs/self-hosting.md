@@ -99,6 +99,17 @@ sandbox, `/home/user`, `/home`, and `/`). `@ai-sdk/harness-pi` 1.0.128 exposes
 no option to disable this, so keep those paths free of instruction files on a
 host that runs `HARNESS=pi`.
 
+Structured output under Pi also depends on timing inside the pinned adapter.
+`@ai-sdk/harness-pi` 1.0.128 cannot return structured output, so Chopin's
+wrapper gives the model a result tool and answers that call on the next event
+loop turn, after Pi has registered the pending result. If the answer arrived
+earlier, the adapter would drop it silently and the summary or research turn
+would wait until its timeout. Pi 1.0.128 always registers first, and the
+version is pinned. Run the Pi contract suite
+(`apps/server/src/harness/pi.contract.test.ts`) before bumping
+`@ai-sdk/harness-pi`, because a release that adds an asynchronous step before
+registration would break this.
+
 For a reviewed adapter that consumes a shared operator key, every admitted
 writer's turns would bill that key. Chopin adds no billing quotas of its own in
 this revision, across jobs or users; use the model provider's spend limits and
