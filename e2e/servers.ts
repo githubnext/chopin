@@ -23,5 +23,12 @@ export const PLAIN = 8788;
  */
 export const FIXTURES = 8789;
 
+/**
+ * A third, isolated server: `AGENT=on` with a fake harness and fake GitHub MCP,
+ * so a scripted Planner turn can run without touching the other two projects'
+ * `AGENT=off` servers or ports. Clear of #157's 8790/8791.
+ */
+export const HARNESS = 8792;
+
 /** The repository root, from this file rather than from the current directory. */
 export const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));

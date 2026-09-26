@@ -10,7 +10,7 @@ type SandboxSession = NonNullable<Parameters<HarnessAgent["createSession"]>[0]>[
 export function harnessContract(
 	name: string,
 	createHarness: () => HarnessV1,
-	createSandboxSession: () => SandboxSession = () =>
+	createSandboxSession: () => SandboxSession | Promise<SandboxSession> = () =>
 		({
 			defaultWorkingDirectory: "/tmp",
 			async run() {
@@ -20,7 +20,7 @@ export function harnessContract(
 		}) as unknown as SandboxSession,
 ) {
 	describe(`${name} harness contract`, () => {
-		function fixture() {
+		async function fixture() {
 			let starts: HarnessV1StartOptions[] = [];
 			let turns: HarnessV1PromptTurnOptions[] = [];
 			let emittedTools: {
@@ -60,7 +60,7 @@ export function harnessContract(
 					};
 				},
 			};
-			let sandboxSession = createSandboxSession();
+			let sandboxSession = await createSandboxSession();
 			return {
 				harness,
 				sandboxSession,
@@ -74,7 +74,7 @@ export function harnessContract(
 		}
 
 		it("gives the adapter only the host tools and disables its built-ins", async () => {
-			let state = fixture();
+			let state = await fixture();
 			let hostNames = ["first_host", "second_host"];
 			let agent = new HarnessAgent({
 				harness: state.harness,
@@ -104,7 +104,7 @@ export function harnessContract(
 		});
 
 		it("parses structured output and forwards the JSON response format", async () => {
-			let state = fixture();
+			let state = await fixture();
 			let agent = new HarnessAgent({
 				harness: state.harness,
 				activeTools: [],
@@ -125,7 +125,7 @@ export function harnessContract(
 		});
 
 		it("forwards abortSignal, ends the interrupted turn, and destroys after the turn", async () => {
-			let state = fixture();
+			let state = await fixture();
 			let agent = new HarnessAgent({ harness: state.harness, activeTools: [] });
 			let session = await agent.createSession({ sandboxSession: state.sandboxSession });
 			let controller = new AbortController();
