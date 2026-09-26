@@ -1,7 +1,7 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { ulid } from "@chopin/dialect";
 
-import { type Context, toolbox } from "./tools";
+import { type DocumentRoom, documentTools } from "./tools";
 import { toCopilotTools } from "./copilot-bridge";
 import { Admission } from "../auth/admission";
 import { Sessions } from "../auth/session";
@@ -57,13 +57,17 @@ async function opened(source: string, state: SeedState = {}) {
 	return context;
 }
 
-function legacyTools({ room, ...dependencies }: Context & { room: string }) {
-	return toCopilotTools(toolbox(dependencies), { room });
+function legacyTools({ room, ...dependencies }: Omit<DocumentRoom, "id"> & { room: string }) {
+	return toCopilotTools(documentTools, {
+		room: { id: room, ...dependencies },
+		repository: { id: "R_test" },
+	});
 }
 
-test("document jobs use the room from each tool call's context", async () => {
-	let { plan, server } = await opened("Jobs context.\n");
-	let tools = toolbox({
+test("Copilot bridge preserves document tool names, schemas and read permissions", async () => {
+	let { plan, server } = await opened("Bridge context.\n");
+	let tools = legacyTools({
+		room: "bridge",
 		plan,
 		server,
 		persist: () => Service.persist(plan),
@@ -71,15 +75,118 @@ test("document jobs use the room from each tool call's context", async () => {
 		async publish() {},
 		anchors() {},
 		changes() {},
-		jobs: { list: (room: string) => ({ room }) } as unknown as Context["jobs"],
 	});
-	let list = tools.list_background_jobs;
-	expect(list.contextSchema).toBeDefined();
-	for (let room of ["one", "two"]) {
-		let result = await list.execute!({}, { context: { room }, toolCallId: "call", messages: [] });
-		if (typeof result !== "string") throw new Error("job tool did not return text");
-		expect(JSON.parse(result)).toEqual({ room });
-	}
+	expect(tools.map(value => value.name)).toEqual([
+		"read_plan",
+		"read_reference",
+		"list_background_jobs",
+		"read_background_job",
+		"create_research_workspace",
+		"edit_plan",
+		"ask",
+		"read_implementation_graph",
+		"edit_implementation_graph",
+		"anchor_plan",
+	]);
+	expect(tools.filter(value => value.skipPermission).map(value => value.name)).toEqual([
+		"read_plan",
+		"read_reference",
+		"list_background_jobs",
+		"read_background_job",
+		"ask",
+		"read_implementation_graph",
+	]);
+	expect(tools.find(value => value.name === "edit_plan")?.parameters).toMatchObject({
+		type: "object",
+		required: ["revision", "operations"],
+		additionalProperties: false,
+	});
+});
+
+test("document tools use the room and repository supplied with each call", async () => {
+	let first = await opened("First document.\n");
+	let second = await opened("Second document.\n");
+	let events: string[] = [];
+	let makeRoom = (fixture: typeof first, id: string): DocumentRoom => ({
+		id,
+		plan: fixture.plan,
+		server: fixture.server,
+		persist: () => Service.persist(fixture.plan),
+		exclusive: action => Service.exclusive(fixture.plan, action),
+		async publish() {
+			events.push(`${id}:publish`);
+		},
+		anchors() {
+			events.push(`${id}:anchors`);
+		},
+		changes() {
+			events.push(`${id}:changes`);
+		},
+		jobs: {
+			list: (room: string) => ({ room }),
+			get: (room: string, jobId: string) => ({ room, jobId }),
+		} as unknown as DocumentRoom["jobs"],
+		readReference: async (referenceId, repositoryId) => ({ room: id, referenceId, repositoryId }),
+		createResearch: async question => ({
+			workspaceId: `${id}:${question}`,
+			state: "pending",
+			stage: "queued",
+		}),
+	});
+	let a = makeRoom(first, "first");
+	let b = makeRoom(second, "second");
+	let call = async (
+		name: "read_plan" | "read_implementation_graph" | "list_background_jobs",
+		room: DocumentRoom,
+	) => {
+		let result = await documentTools[name].execute!({}, {
+			context: { room },
+			toolCallId: "call",
+			messages: [],
+		});
+		if (typeof result !== "string") throw new Error("document tool did not return text");
+		return JSON.parse(result);
+	};
+	expect((await call("read_plan", a)).source).toContain("First document.");
+	expect((await call("read_plan", b)).source).toContain("Second document.");
+	expect((await call("read_implementation_graph", a)).source).toContain("First document.");
+	expect((await call("read_implementation_graph", b)).source).toContain("Second document.");
+	expect(await call("list_background_jobs", a)).toEqual({ room: "first" });
+	expect(await call("list_background_jobs", b)).toEqual({ room: "second" });
+	let job = await documentTools.read_background_job.execute!({ id: "job-1" }, {
+		context: { room: b },
+		toolCallId: "job",
+		messages: [],
+	});
+	if (typeof job !== "string") throw new Error("job tool did not return text");
+	expect(JSON.parse(job)).toEqual({ room: "second", jobId: "job-1" });
+	let referenceId = ulid();
+	let reference = await documentTools.read_reference.execute!({ id: referenceId }, {
+		context: { room: a, repository: { id: "R_first" } },
+		toolCallId: "ref",
+		messages: [],
+	});
+	if (typeof reference !== "string") throw new Error("reference tool did not return text");
+	expect(JSON.parse(reference)).toEqual({ room: "first", referenceId, repositoryId: "R_first" });
+	let research = await documentTools.create_research_workspace.execute!(
+		{ question: "Exact brief" },
+		{
+			context: { room: b },
+			toolCallId: "research",
+			messages: [],
+		},
+	);
+	if (typeof research !== "string") throw new Error("research tool did not return text");
+	expect(JSON.parse(research).workspaceId).toBe("second:Exact brief");
+	let result = await documentTools.edit_plan.execute!({
+		revision: second.plan.revision,
+		operations: [{ op: "replace", index: 0, source: "Changed second document.\n" }],
+	}, { context: { room: b }, toolCallId: "edit", messages: [] });
+	if (typeof result !== "string") throw new Error("edit_plan did not return text");
+	expect(JSON.parse(result).ok).toBe(true);
+	expect(room.project(first.plan.document)).toBe("First document.\n");
+	expect(room.project(second.plan.document)).toBe("Changed second document.\n");
+	expect(events).toEqual(["second:publish", "second:changes", "second:anchors"]);
 });
 
 test("create_research_workspace validates one question and waits for immediate research start", async () => {
@@ -712,8 +819,10 @@ test("chat-started tools retain only the current member request provenance", asy
 			};
 		},
 	};
-	researchTool = toCopilotTools(Chat.planTools(context), { room: context.room })
-		.find(tool => tool.name === "create_research_workspace");
+	researchTool = toCopilotTools(documentTools, {
+		room: Chat.documentRoom(context),
+		repository,
+	}).find(tool => tool.name === "create_research_workspace");
 
 	await Chat.send(
 		context,
@@ -815,6 +924,26 @@ test("chat-started tools retain only the current member request provenance", asy
 		"Error: research workspaces require the explicit member message",
 	);
 	expect(plan.chat.activeRequest).toBeUndefined();
+	let referenceId = ulid();
+	let referenceReads: unknown[] = [];
+	plan.chat.referenceCache.set(referenceId, { id: referenceId } as never);
+	context.references = {
+		read: async (input: unknown) => {
+			referenceReads.push(input);
+			return { source: "reference" };
+		},
+	} as never;
+	let reference = await documentTools.read_reference.execute!({ id: referenceId }, {
+		context: { room: Chat.documentRoom(context), repository: { id: "R_call" } },
+		toolCallId: "reference",
+		messages: [],
+	});
+	expect(reference).toContain("reference");
+	expect(referenceReads).toMatchObject([{
+		channelId: channel.id,
+		repositoryId: "R_call",
+		reference: { id: referenceId },
+	}]);
 });
 
 test("planner graph edits name readiness blockers before changing a graph", async () => {

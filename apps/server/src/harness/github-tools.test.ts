@@ -308,6 +308,84 @@ describe("githubTools", () => {
 		expect(second).toBe(first);
 	});
 
+	test("a channel reset retains a shared credential's client until rotation or expiry", async () => {
+		let sessionId = crypto.randomUUID();
+		let firstController = new AbortController();
+		let secondController = new AbortController();
+		let created = 0;
+		let closed = 0;
+		let remoteCalls: unknown[] = [];
+		let clientClosed = false;
+		let createClient = async () => {
+			created++;
+			return {
+				async tools() {
+					let bound = tool({
+						inputSchema: z.object({ state: z.string().optional() }),
+						execute: async input => {
+							if (clientClosed) throw new Error("Attempted to send a request from a closed client");
+							remoteCalls.push(input);
+							return "ok";
+						},
+					});
+					return { list_pull_requests: bound, pull_request_read: bound };
+				},
+				async close() {
+					closed++;
+					clientClosed = true;
+				},
+			};
+		};
+		let ownerA = fakeOwner({
+			ownerSessionId: sessionId,
+			channelId: "channel-a",
+			signal: firstController.signal,
+		});
+		let ownerB = fakeOwner({
+			ownerSessionId: sessionId,
+			channelId: "channel-b",
+			signal: secondController.signal,
+		});
+		let a = await githubTools(ownerA, { createClient });
+		let b = await githubTools(ownerB, { createClient });
+		expect(a.ok && b.ok).toBe(true);
+		expect(created).toBe(1);
+		firstController.abort(new Error("owner-reset"));
+		await Promise.resolve();
+		expect(closed).toBe(0);
+		if (!b.ok) throw new Error("shared tools missing");
+		await b.value.list_pull_requests?.execute?.({ owner: "wrong", repo: "wrong", state: "open" }, {
+			context: { repository: repository({ owner: "next", name: "chopin" }) },
+			messages: [],
+			toolCallId: "test",
+		});
+		expect(remoteCalls).toEqual([{ owner: "next", repo: "chopin", state: "open" }]);
+		secondController.abort(new Error("credential-rotated"));
+		await Promise.resolve();
+		expect(closed).toBe(1);
+	});
+
+	test("credential expiry closes a shared client even after another channel resets", async () => {
+		let sessionId = crypto.randomUUID();
+		let first = new AbortController();
+		let second = new AbortController();
+		let closed = 0;
+		let createClient = fakeCreateClient(["list_pull_requests", "pull_request_read"], {
+			onClose: () => closed++,
+		});
+		await githubTools(fakeOwner({ ownerSessionId: sessionId, signal: first.signal }), {
+			createClient,
+		});
+		await githubTools(fakeOwner({ ownerSessionId: sessionId, signal: second.signal }), {
+			createClient,
+		});
+		first.abort(new Error("owner-reset"));
+		expect(closed).toBe(0);
+		second.abort(new Error("credential-expired"));
+		await Promise.resolve();
+		expect(closed).toBe(1);
+	});
+
 	test("closes the cached client and reconnects when the credential rotates", async () => {
 		let sessionId = crypto.randomUUID();
 		let created = 0;
