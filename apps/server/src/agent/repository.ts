@@ -1,4 +1,5 @@
-import type { Tool } from "@github/copilot-sdk";
+import { jsonSchema, tool } from "ai";
+import { z } from "zod";
 
 export type HostedRepository = {
 	id: string;
@@ -8,8 +9,6 @@ export type HostedRepository = {
 };
 
 type Options = {
-	token: string | (() => string | undefined);
-	repository: HostedRepository;
 	fetch?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 };
 
@@ -17,6 +16,10 @@ const API = "https://api.github.com";
 const TIMEOUT_MS = 15_000;
 const MAX_FILE_BYTES = 256 * 1_024;
 const MAX_RESPONSE_BYTES = 5 * 1_024 * 1_024;
+
+function root(repository: HostedRepository): string {
+	return `/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}`;
+}
 
 function object(value: unknown): Record<string, unknown> | undefined {
 	return value && typeof value === "object" && !Array.isArray(value)
@@ -63,9 +66,22 @@ async function answer(work: () => Promise<unknown>): Promise<string> {
 	}
 }
 
-export function repositoryTools(options: Options): Tool[] {
-	let request = async (path: string, search?: URLSearchParams): Promise<unknown> => {
-		let token = typeof options.token === "string" ? options.token : options.token();
+export function repositoryTools(options: Options = {}) {
+	let repositoryContext = z.object({
+		repository: z.object({
+			id: z.string(),
+			owner: z.string(),
+			name: z.string(),
+			defaultBranch: z.string(),
+		}),
+		owner: z.custom<{ currentToken: () => string | undefined }>(),
+	});
+	let request = async (
+		context: z.infer<typeof repositoryContext>,
+		path: string,
+		search?: URLSearchParams,
+	): Promise<unknown> => {
+		let token = context.owner.currentToken();
 		if (!token) throw new Error("GitHub authorization expired");
 		let url = new URL(path, API);
 		if (search) url.search = search.toString();
@@ -90,14 +106,11 @@ export function repositoryTools(options: Options): Tool[] {
 			throw new Error("GitHub returned an unreadable response");
 		}
 	};
-	let root = `/repos/${encodeURIComponent(options.repository.owner)}/${
-		encodeURIComponent(options.repository.name)
-	}`;
-	return [
-		{
-			name: "read_repository_file",
+	return {
+		read_repository_file: tool({
+			contextSchema: repositoryContext,
 			description: "Read a UTF-8 text file from the selected repository, optionally by line range.",
-			parameters: {
+			inputSchema: jsonSchema({
 				type: "object",
 				properties: {
 					path: { type: "string" },
@@ -106,16 +119,17 @@ export function repositoryTools(options: Options): Tool[] {
 				},
 				required: ["path"],
 				additionalProperties: false,
-			},
-			skipPermission: true,
-			handler: raw =>
+			}),
+			metadata: { skipPermission: true },
+			execute: (raw, { context }) =>
 				answer(async () => {
 					let input = raw as Record<string, unknown>;
 					let file = path(input.path);
 					let value = object(
 						await request(
-							`${root}/contents/${encodedPath(file)}`,
-							new URLSearchParams({ ref: options.repository.defaultBranch }),
+							context,
+							`${root(context.repository)}/contents/${encodedPath(file)}`,
+							new URLSearchParams({ ref: context.repository.defaultBranch }),
 						),
 					);
 					if (
@@ -140,28 +154,31 @@ export function repositoryTools(options: Options): Tool[] {
 							.join("\n"),
 					};
 				}),
-		},
-		{
-			name: "list_repository_tree",
+		}),
+		list_repository_tree: tool({
+			contextSchema: repositoryContext,
 			description:
 				"List files in the selected repository's default branch, optionally below a prefix.",
-			parameters: {
+			inputSchema: jsonSchema({
 				type: "object",
 				properties: {
 					prefix: { type: "string" },
 					limit: { type: "integer", minimum: 1, maximum: 500 },
 				},
 				additionalProperties: false,
-			},
-			skipPermission: true,
-			handler: raw =>
+			}),
+			metadata: { skipPermission: true },
+			execute: (raw, { context }) =>
 				answer(async () => {
 					let input = raw as Record<string, unknown>;
 					let prefix = input.prefix === undefined ? "" : path(input.prefix);
 					let limit = bounded(input.limit, 200, 500);
 					let value = object(
 						await request(
-							`${root}/git/trees/${encodeURIComponent(options.repository.defaultBranch)}`,
+							context,
+							`${root(context.repository)}/git/trees/${
+								encodeURIComponent(context.repository.defaultBranch)
+							}`,
 							new URLSearchParams({ recursive: "1" }),
 						),
 					);
@@ -181,11 +198,11 @@ export function repositoryTools(options: Options): Tool[] {
 					}).slice(0, limit);
 					return { entries, truncated: value.truncated === true || entries.length >= limit };
 				}),
-		},
-		{
-			name: "search_repository",
+		}),
+		search_repository: tool({
+			contextSchema: repositoryContext,
 			description: "Search code terms within the selected repository only.",
-			parameters: {
+			inputSchema: jsonSchema({
 				type: "object",
 				properties: {
 					terms: { type: "string" },
@@ -193,18 +210,19 @@ export function repositoryTools(options: Options): Tool[] {
 				},
 				required: ["terms"],
 				additionalProperties: false,
-			},
-			skipPermission: true,
-			handler: raw =>
+			}),
+			metadata: { skipPermission: true },
+			execute: (raw, { context }) =>
 				answer(async () => {
 					let input = raw as Record<string, unknown>;
 					let terms = text(input.terms, "terms", 200).replace(/[\r\n]/g, " ");
 					let limit = bounded(input.limit, 20, 50);
 					let value = object(
 						await request(
+							context,
 							"/search/code",
 							new URLSearchParams({
-								q: `${terms} repo:${options.repository.owner}/${options.repository.name}`,
+								q: `${terms} repo:${context.repository.owner}/${context.repository.name}`,
 								per_page: String(limit),
 							}),
 						),
@@ -215,7 +233,7 @@ export function repositoryTools(options: Options): Tool[] {
 					let matches = value.items.flatMap(entry => {
 						let item = object(entry);
 						let repository = object(item?.repository);
-						return item && repository?.node_id === options.repository.id
+						return item && repository?.node_id === context.repository.id
 								&& typeof item.path === "string"
 							? [{
 								path: item.path,
@@ -225,30 +243,30 @@ export function repositoryTools(options: Options): Tool[] {
 					});
 					return { matches };
 				}),
-		},
-		{
-			name: "repository_history",
+		}),
+		repository_history: tool({
+			contextSchema: repositoryContext,
 			description:
 				"Read recent commits from the selected repository, optionally affecting one path.",
-			parameters: {
+			inputSchema: jsonSchema({
 				type: "object",
 				properties: {
 					path: { type: "string" },
 					limit: { type: "integer", minimum: 1, maximum: 20 },
 				},
 				additionalProperties: false,
-			},
-			skipPermission: true,
-			handler: raw =>
+			}),
+			metadata: { skipPermission: true },
+			execute: (raw, { context }) =>
 				answer(async () => {
 					let input = raw as Record<string, unknown>;
 					let limit = bounded(input.limit, 10, 20);
 					let query = new URLSearchParams({
-						sha: options.repository.defaultBranch,
+						sha: context.repository.defaultBranch,
 						per_page: String(limit),
 					});
 					if (input.path !== undefined) query.set("path", path(input.path));
-					let value = await request(`${root}/commits`, query);
+					let value = await request(context, `${root(context.repository)}/commits`, query);
 					if (!Array.isArray(value)) throw new Error("GitHub returned invalid commit history");
 					return value.slice(0, limit).flatMap(entry => {
 						let item = object(entry);
@@ -265,6 +283,6 @@ export function repositoryTools(options: Options): Tool[] {
 							: [];
 					});
 				}),
-		},
-	];
+		}),
+	};
 }
