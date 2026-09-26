@@ -2,7 +2,13 @@ import { expect, it } from "bun:test";
 import { tool } from "ai";
 import { z } from "zod";
 
-import { createPlannerAgent, PLANNER_TOOL_NAMES } from "./agents";
+import {
+	createPlannerAgent,
+	createResearchAgent,
+	createSummaryAgent,
+	descriptionSchema,
+	PLANNER_TOOL_NAMES,
+} from "./agents";
 import { openPlannerSession } from "./session";
 
 import type { HarnessV1 } from "@ai-sdk/harness";
@@ -134,4 +140,206 @@ it("opens a host-only Planner turn with bound toolsContext, then destroys its sa
 		await opened.value.destroy();
 	}
 	expect(destroyed).toEqual({ session: 1, sandbox: 1 });
+});
+
+it("returns parsed worker output with no built-ins and a per-turn model", async () => {
+	let names: string[][] = [];
+	let models: (string | undefined)[] = [];
+	let formats: unknown[] = [];
+	let destroys = 0;
+	let fake: HarnessV1 = {
+		specificationVersion: "harness-v1",
+		harnessId: "worker-fake",
+		builtinTools: {},
+		async doStart(start) {
+			expect(start.builtinToolFiltering).toBeUndefined();
+			return {
+				sessionId: start.sessionId,
+				isResume: false,
+				async doPromptTurn(turn) {
+					names.push(turn.tools.map(spec => spec.name));
+					models.push(turn.model);
+					formats.push(turn.responseFormat);
+					let done = Promise.withResolvers<void>();
+					queueMicrotask(() => {
+						turn.emit({ type: "text-start", id: "result" });
+						turn.emit({
+							type: "text-delta",
+							id: "result",
+							delta: JSON.stringify({ description: "RFC about harnesses" }),
+						});
+						turn.emit({ type: "text-end", id: "result" });
+						turn.emit({
+							type: "finish-step",
+							finishReason: { unified: "stop", raw: undefined },
+							usage: {
+								inputTokens: { total: 0, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+								outputTokens: { total: 0, text: 0, reasoning: 0 },
+							},
+						});
+						done.resolve();
+					});
+					return { done: done.promise, async submitToolResult() {}, async submitToolApproval() {} };
+				},
+				async doDestroy() {
+					destroys++;
+				},
+				async doCompact() {},
+				async doContinueTurn() {
+					throw new Error("unused");
+				},
+				async doSuspendTurn() {
+					throw new Error("unused");
+				},
+				async doDetach() {
+					throw new Error("unused");
+				},
+				async doStop() {
+					throw new Error("unused");
+				},
+			};
+		},
+	};
+	let agent = createSummaryAgent(fake);
+	let session = await agent.createSession({
+		sandboxSession: {
+			defaultWorkingDirectory: "/tmp",
+			run: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+			destroy: async () => {},
+		} as never,
+	});
+	try {
+		let result = await agent.generate({
+			session,
+			prompt: "material",
+			options: {
+				model: "test-model",
+				instructions: "describe the document",
+			},
+		});
+		expect(result.output).toEqual({ description: "RFC about harnesses" });
+		expect(names).toEqual([[]]);
+		expect(models).toEqual(["test-model"]);
+		expect(formats).toMatchObject([{ type: "json", schema: { type: "object" } }]);
+	} finally {
+		await session.destroy();
+	}
+	expect(destroys).toBe(1);
+});
+
+it("research returns parsed public evidence using only per-turn host web_search", async () => {
+	let toolNames: string[] = [];
+	let seenContext: unknown;
+	let fake: HarnessV1 = {
+		specificationVersion: "harness-v1",
+		harnessId: "research-fake",
+		builtinTools: {},
+		async doStart(start) {
+			return {
+				sessionId: start.sessionId,
+				isResume: false,
+				async doPromptTurn(turn) {
+					toolNames = turn.tools.map(value => value.name);
+					expect(turn.responseFormat).toMatchObject({ type: "json" });
+					let done = Promise.withResolvers<void>();
+					queueMicrotask(() =>
+						turn.emit({
+							type: "tool-call",
+							toolCallId: "web-1",
+							toolName: "web_search",
+							input: '{"query":"evidence"}',
+						})
+					);
+					return {
+						done: done.promise,
+						async submitToolResult(value) {
+							expect(value.output).toBe("found");
+							turn.emit({
+								type: "tool-result",
+								toolCallId: "web-1",
+								toolName: "web_search",
+								result: "found",
+							});
+							turn.emit({ type: "text-start", id: "evidence" });
+							turn.emit({
+								type: "text-delta",
+								id: "evidence",
+								delta: JSON.stringify({
+									findings: ["Finding"],
+									sources: [{ title: "Source", url: "https://example.com/" }],
+								}),
+							});
+							turn.emit({ type: "text-end", id: "evidence" });
+							turn.emit({
+								type: "finish-step",
+								finishReason: { unified: "stop", raw: undefined },
+								usage: {
+									inputTokens: { total: 0, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+									outputTokens: { total: 0, text: 0, reasoning: 0 },
+								},
+							});
+							done.resolve();
+						},
+						async submitToolApproval() {},
+					};
+				},
+				async doDestroy() {},
+				async doCompact() {},
+				async doContinueTurn() {
+					throw new Error("unused");
+				},
+				async doSuspendTurn() {
+					throw new Error("unused");
+				},
+				async doDetach() {
+					throw new Error("unused");
+				},
+				async doStop() {
+					throw new Error("unused");
+				},
+			};
+		},
+	};
+	let agent = createResearchAgent(fake);
+	let session = await agent.createSession({
+		sandboxSession: {
+			defaultWorkingDirectory: "/tmp",
+			run: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+			destroy: async () => {},
+		} as never,
+	});
+	let webSearch = tool({
+		inputSchema: z.object({ query: z.string() }),
+		contextSchema: z.object({ credential: z.custom<object>() }),
+		execute: async (input, options) => {
+			seenContext = options.context;
+			expect(input).toEqual({ query: "evidence" });
+			return "found";
+		},
+	});
+	let credential = { token: "private" };
+	try {
+		let result = await agent.generate({
+			session,
+			prompt: "query",
+			options: {
+				model: "research-model",
+				instructions: "web only",
+				webSearch,
+				webContext: { credential },
+			},
+		});
+		expect(result.output).toEqual({
+			findings: ["Finding"],
+			sources: [{ title: "Source", url: "https://example.com/" }],
+		});
+		expect(toolNames).toEqual(["web_search"]);
+		expect(seenContext).toEqual({ credential });
+	} finally {
+		await session.destroy();
+	}
+});
+
+it("keeps the description's existing Unicode code-point bound after parsing", () => {
+	expect(descriptionSchema.safeParse({ description: "😀".repeat(4_000) }).success).toBe(true);
 });
