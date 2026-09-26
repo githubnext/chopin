@@ -73,7 +73,9 @@ and tool vocabulary remain optimized for planning.
   research request supplies the GitHub App user token used for that channel
   and, under the default `copilot-sdk` harness, the Copilot entitlement. With
   `HARNESS=pi`, model access comes from the operator's `HARNESS_AUTH` instead.
-  A server restart signs everyone out and releases that ownership.
+  A server restart clears every session and releases that ownership. A
+  returning browser in local device mode can restore a new session, but does
+  not reclaim Planner ownership.
 - Document and Chat context, along with repository material selected by
   the Planner, is sent to the harness's model provider during a turn (GitHub
   Copilot by default; under `HARNESS=pi`, the provider chosen by
@@ -81,9 +83,11 @@ and tool vocabulary remain optimized for planning.
   material, including context loaded during execution, to isolated workers on
   the same harness. The public research worker receives
   only the exact submitted brief, but may derive or refine the queries it sends
-  to web search. GitHub credentials remain process-local;
-  documents, transcripts, decisions, research request staging, background-job
-  inputs and artifacts, and token-free session records are stored in PostgreSQL.
+  to web search. By default GitHub credentials remain process-local; the
+  [local device mode](docs/authentication.md#local-device-flow-sign-in) persists
+  credentials in an OS vault or an explicitly consented local file. Documents,
+  transcripts, decisions, research request staging, background-job inputs and
+  artifacts, and token-free session records are stored in PostgreSQL.
 - One Chopin process may write to a database at a time. Horizontal application
   scaling and zero-downtime rolling deployment are not supported.
 

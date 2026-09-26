@@ -1,8 +1,12 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 
 import * as Api from "./api";
 import { HostedApp, HostedFailure, HostedLoading, HostedLogin } from "./hosted";
 import { clearRepositoryCache } from "./repository-cache";
+
+let LocalLogin = lazy(() =>
+	import("./local-login").then(module => ({ default: module.LocalLogin }))
+);
 
 export function App() {
 	let [session, setSession] = useState<Api.Session>();
@@ -41,6 +45,14 @@ export function App() {
 
 	if (error) return <HostedFailure error={error} />;
 	if (!session || !repositoryCacheReady) return <HostedLoading />;
-	if (!session.user) return <HostedLogin />;
+	if (!session.user) {
+		return session.auth === "local"
+			? (
+				<Suspense fallback={<HostedLoading />}>
+					<LocalLogin />
+				</Suspense>
+			)
+			: <HostedLogin />;
+	}
 	return <HostedApp agent={session.agent} user={session.user} />;
 }
