@@ -53,22 +53,31 @@ bearer tokens and browser sessions traverse it.
 ## Choose and trust a harness
 
 Chopin runs its hosted agent through `@ai-sdk/harness`. `HARNESS` selects one
-adapter from a code-owned map; the default and only shipped adapter is
-`copilot-sdk`, a host-process wrapper over `@github/copilot-sdk`. Adding an
-adapter to that map is a reviewed trust decision, not a runtime plugin choice:
-an adapter's `builtinTools` and `supportsBuiltinToolFiltering` are
-self-declarations, and Chopin's contract suite checks those declarations and
-the tools a session actually receives, but it cannot prove what the
-underlying runtime does internally. Only adapters that ship in this
-repository and pass that suite belong in `harnesses`.
+adapter from a code-owned map: the default is `copilot-sdk`, a host-process
+wrapper over `@github/copilot-sdk`, and `pi` is a second reviewed adapter over
+`@ai-sdk/harness-pi`. Adding an adapter to that map is a reviewed trust
+decision, not a runtime plugin choice: an adapter's `builtinTools` and
+`supportsBuiltinToolFiltering` are self-declarations, and Chopin's contract
+suite checks those declarations and the tools a session actually receives,
+but it cannot prove what the underlying runtime does internally. Only
+adapters that ship in this repository and pass that suite belong in
+`harnesses`.
 
-When `HARNESS_AUTH` is set, `direct` and `ai-gateway` are explicit modes that
-may be used on any bind. A mode that could fall back to a subscription already
-logged in on the host, such as `auto`, is refused at startup unless
+For `copilot-sdk`, `direct` and `ai-gateway` are explicit `HARNESS_AUTH` modes
+that may be used on any bind. A mode that could fall back to a subscription
+already logged in on the host, such as `auto`, is refused at startup unless
 `SERVER_HOST` is loopback-only. The current `copilot-sdk` adapter still uses
-each owner's GitHub App user token and does not consume `HARNESS_AUTH`; setting
-`auto` on loopback passes the startup guard but does not enable host login in
-that adapter.
+each owner's GitHub App user token and does not consume `HARNESS_AUTH`;
+setting `auto` on loopback passes the startup guard but does not enable host
+login in that adapter.
+
+`HARNESS=pi` requires an explicit `HARNESS_AUTH`: unset is refused outright.
+Pi's own documented modes are `auto`, `openai`, `anthropic`, `custom`, and
+`ai-gateway`; `direct` is not one of them and is refused. On a non-loopback
+`SERVER_HOST`, only `ai-gateway` is accepted, because every other mode can
+fall back to Pi's native `~/.pi/agent` login. GitHub access is unaffected:
+repository reads still come from the owner's GitHub App user token through
+Chopin's own host tools, never through Pi.
 
 For a reviewed adapter that consumes a shared operator key, every admitted
 writer's turns would bill that key. Chopin adds no billing quotas of its own in
@@ -121,26 +130,26 @@ Store production values in the deployment's secret manager or an owner-readable
 environment file outside the source tree. Do not bake `.env` or credentials into
 the image.
 
-| Variable                       | Default       | Meaning                                                                                                                                                                                                                                           |
-| ------------------------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `STORAGE_DRIVER`               | `postgres`    | Storage adapter. `postgres` is currently the only accepted value.                                                                                                                                                                                 |
-| `DATABASE_URL`                 | required      | `postgres:` or `postgresql:` connection URL. It is not printed by Chopin.                                                                                                                                                                         |
-| `APP_ORIGIN`                   | required      | Exact public origin, without credentials, path, query, fragment, or trailing slash. HTTPS is required unless the host is loopback.                                                                                                                |
-| `GITHUB_APP_SLUG`              | required      | Lowercase slug from the App's public URL.                                                                                                                                                                                                         |
-| `GITHUB_APP_CLIENT_ID`         | required      | OAuth client ID, not the numeric GitHub App ID.                                                                                                                                                                                                   |
-| `GITHUB_APP_CLIENT_SECRET`     | required      | OAuth client secret used for user-token exchange and refresh.                                                                                                                                                                                     |
-| `GITHUB_ALLOWED_USERS`         | empty         | Comma-separated admitted GitHub logins.                                                                                                                                                                                                           |
-| `GITHUB_ALLOWED_ORGANIZATIONS` | empty         | Comma-separated organizations whose active members are admitted.                                                                                                                                                                                  |
-| `SESSION_ENCRYPTION_KEY`       | required      | Exactly 64 hexadecimal characters used for the encrypted OAuth attempt cookie, including its validated return path.                                                                                                                               |
-| `SERVER_HOST`                  | `127.0.0.1`   | Source-process bind address. The image sets `0.0.0.0`. A `HARNESS_AUTH` mode that falls back to a host-logged-in subscription is refused unless this stays loopback-only.                                                                         |
-| `PORT`                         | `8787`        | Source-process HTTP and WebSocket port. The supplied image and health check expect internal port 8787.                                                                                                                                            |
-| `MODEL`                        | `gpt-6-luna`  | Model requested for hosted agent sessions.                                                                                                                                                                                                        |
-| `HARNESS`                      | `copilot-sdk` | Adapter name selected from Chopin's harness map. An unknown name refuses at startup.                                                                                                                                                              |
-| `HARNESS_AUTH`                 | unset         | Auth mode forwarded to the selected adapter. `direct` and `ai-gateway` are allowed on any bind; `auto` and other possible host-login fallback modes require a loopback-only `SERVER_HOST`. The current `copilot-sdk` adapter does not consume it. |
-| `AGENT`                        | on            | Set exactly `off` to prevent hosted agent turns, disable the entire background-job runner, and avoid Copilot CLI startup.                                                                                                                         |
-| `BACKGROUND_JOBS`              | on            | Set exactly `off` to disable background job scheduling. `AGENT=off` disables the entire runner.                                                                                                                                                   |
-| `WEB_RESEARCH`                 | on            | Set exactly `off` to disable new public-web research while retaining durable requests, artifacts, and other jobs.                                                                                                                                 |
-| `COPILOT_CLI_PATH`             | automatic     | Advanced override for the Copilot CLI executable. Applies only to the `copilot-sdk` adapter.                                                                                                                                                      |
+| Variable                       | Default       | Meaning                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------ | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `STORAGE_DRIVER`               | `postgres`    | Storage adapter. `postgres` is currently the only accepted value.                                                                                                                                                                                                                                                                                                                                    |
+| `DATABASE_URL`                 | required      | `postgres:` or `postgresql:` connection URL. It is not printed by Chopin.                                                                                                                                                                                                                                                                                                                            |
+| `APP_ORIGIN`                   | required      | Exact public origin, without credentials, path, query, fragment, or trailing slash. HTTPS is required unless the host is loopback.                                                                                                                                                                                                                                                                   |
+| `GITHUB_APP_SLUG`              | required      | Lowercase slug from the App's public URL.                                                                                                                                                                                                                                                                                                                                                            |
+| `GITHUB_APP_CLIENT_ID`         | required      | OAuth client ID, not the numeric GitHub App ID.                                                                                                                                                                                                                                                                                                                                                      |
+| `GITHUB_APP_CLIENT_SECRET`     | required      | OAuth client secret used for user-token exchange and refresh.                                                                                                                                                                                                                                                                                                                                        |
+| `GITHUB_ALLOWED_USERS`         | empty         | Comma-separated admitted GitHub logins.                                                                                                                                                                                                                                                                                                                                                              |
+| `GITHUB_ALLOWED_ORGANIZATIONS` | empty         | Comma-separated organizations whose active members are admitted.                                                                                                                                                                                                                                                                                                                                     |
+| `SESSION_ENCRYPTION_KEY`       | required      | Exactly 64 hexadecimal characters used for the encrypted OAuth attempt cookie, including its validated return path.                                                                                                                                                                                                                                                                                  |
+| `SERVER_HOST`                  | `127.0.0.1`   | Source-process bind address. The image sets `0.0.0.0`. A `HARNESS_AUTH` mode that falls back to a host-logged-in subscription is refused unless this stays loopback-only.                                                                                                                                                                                                                            |
+| `PORT`                         | `8787`        | Source-process HTTP and WebSocket port. The supplied image and health check expect internal port 8787.                                                                                                                                                                                                                                                                                               |
+| `MODEL`                        | `gpt-6-luna`  | Model requested for hosted agent sessions.                                                                                                                                                                                                                                                                                                                                                           |
+| `HARNESS`                      | `copilot-sdk` | Adapter name selected from Chopin's harness map (`copilot-sdk` or `pi`). An unknown name refuses at startup.                                                                                                                                                                                                                                                                                         |
+| `HARNESS_AUTH`                 | unset         | Auth mode forwarded to the selected adapter. For `copilot-sdk`, `direct` and `ai-gateway` are allowed on any bind and `auto` requires a loopback-only `SERVER_HOST`; the adapter does not otherwise consume it. For `pi`, it is required: `auto`, `openai`, `anthropic`, and `custom` require a loopback-only `SERVER_HOST`, only `ai-gateway` is allowed otherwise, and `direct` is always refused. |
+| `AGENT`                        | on            | Set exactly `off` to prevent hosted agent turns, disable the entire background-job runner, and avoid Copilot CLI startup.                                                                                                                                                                                                                                                                            |
+| `BACKGROUND_JOBS`              | on            | Set exactly `off` to disable background job scheduling. `AGENT=off` disables the entire runner.                                                                                                                                                                                                                                                                                                      |
+| `WEB_RESEARCH`                 | on            | Set exactly `off` to disable new public-web research while retaining durable requests, artifacts, and other jobs.                                                                                                                                                                                                                                                                                    |
+| `COPILOT_CLI_PATH`             | automatic     | Advanced override for the Copilot CLI executable. Applies only to the `copilot-sdk` adapter.                                                                                                                                                                                                                                                                                                         |
 
 See [Background jobs and workers](background-jobs.md) for the combined
 `AGENT`, `BACKGROUND_JOBS`, and `WEB_RESEARCH` behavior and recovery model.

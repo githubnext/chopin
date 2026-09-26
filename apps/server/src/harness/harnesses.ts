@@ -1,4 +1,5 @@
 import { createCopilotSdk } from "./copilot-sdk/adapter";
+import { createPiAdapter } from "./pi/adapter";
 
 import type { HarnessV1 } from "@ai-sdk/harness";
 
@@ -7,8 +8,15 @@ const credentials = new Map<string, {
 	maxAiCredits?: number;
 }>();
 
+function createPiHarness(settings: { auth?: string }): HarnessV1 & { shutdown(): Promise<void> } {
+	// Pi has no notion of a GitHub credential or a per-turn credit limit; only
+	// `auth` (validated by `harnessFor` below) reaches the real adapter.
+	return createPiAdapter({ auth: settings.auth as never });
+}
+
 export const harnesses = {
 	"copilot-sdk": createCopilotSdk,
+	pi: createPiHarness,
 } satisfies Record<
 	string,
 	(settings: {
@@ -28,6 +36,11 @@ function loopback(host: string): boolean {
 			&& host.split(".").slice(1).every(part => Number(part) <= 255);
 }
 
+/** Pi's documented string auth modes. `direct` is not one of them, and an
+ * unrecognized value would silently fall back to a native host subscription
+ * Pi was never told to isolate. */
+const PI_AUTH_MODES = new Set(["auto", "openai", "anthropic", "custom", "ai-gateway"]);
+
 export function harnessFor(config: {
 	harness: string;
 	harnessAuth?: string;
@@ -37,7 +50,18 @@ export function harnessFor(config: {
 		throw new Error(`Unknown harness: ${config.harness}`);
 	}
 	let auth = config.harnessAuth;
-	if (auth && auth !== "direct" && auth !== "ai-gateway" && !loopback(config.host ?? "127.0.0.1")) {
+	let isLoopback = loopback(config.host ?? "127.0.0.1");
+	if (config.harness === "pi") {
+		if (!auth) {
+			throw new Error("HARNESS_AUTH is required for harness pi");
+		}
+		if (!PI_AUTH_MODES.has(auth)) {
+			throw new Error(`HARNESS_AUTH ${auth} is not a supported pi authentication mode`);
+		}
+		if (!isLoopback && auth !== "ai-gateway") {
+			throw new Error("HARNESS_AUTH for pi on a non-loopback SERVER_HOST must be ai-gateway");
+		}
+	} else if (auth && auth !== "direct" && auth !== "ai-gateway" && !isLoopback) {
 		throw new Error("HARNESS_AUTH requires a loopback SERVER_HOST");
 	}
 	return selected ??= harnesses[config.harness as HarnessName]({

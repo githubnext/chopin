@@ -44,10 +44,11 @@ contributors who use [mise](https://mise.jdx.dev); run `mise install` once. Keep
 the package metadata, `mise.toml`, Docker image, CI, and documentation
 synchronized when changing it.
 
-`bun run e2e` starts two disposable PostgreSQL services, migrates them, builds
-the client, starts applications on ports 8788 and 8789, and runs Chromium with
-`AGENT=off`. Set `E2E_SKIP_BUILD=1` only when the existing client build is known
-to match the checkout.
+`bun run e2e` starts three disposable PostgreSQL services, migrates them, builds
+the client, starts applications on ports 8788 and 8789 with `AGENT=off`, and an
+isolated `AGENT=on` fake-harness server on 8792 (with its fake GitHub MCP server
+on 8797) alongside them, then runs Chromium. Set `E2E_SKIP_BUILD=1` only when
+the existing client build is known to match the checkout.
 
 CI has three independent jobs: validation, browser integration, and a Docker
 image build. A documentation-only change should still pass `bun run ci`.
@@ -332,8 +333,9 @@ so merge ranges from all mounted editors before replacing a registry entry.
   supervisors kill process groups explicitly; production managers should run
   the server command directly and restart after any unexpected exit.
 - Playwright reuses a server when its probe returns success. The E2E runner does
-  not currently preflight application ports 8788 and 8789, so stop developer
-  processes on those ports before running the suite.
+  not currently preflight application ports 8788, 8789, and 8792, or the fake
+  GitHub MCP server's 8797, so stop developer processes on those ports before
+  running the suite.
 - Accessible-name matching is substring-based by default. Use `exact: true` when
   controls share labels such as `Plan` and `Plan comment`.
 - Mac Playwright uses `Meta` rather than `Control` for editor shortcuts.
