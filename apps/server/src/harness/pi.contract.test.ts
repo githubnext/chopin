@@ -1,6 +1,8 @@
 import { HarnessAgent } from "@ai-sdk/harness/agent";
 import { createJustBashNetworkSandboxSession } from "@ai-sdk/sandbox-just-bash";
+import { Output } from "ai";
 import { afterAll, describe, expect, it } from "bun:test";
+import { z } from "zod";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,7 +15,7 @@ import type { StubTurn } from "./pi/model-stub";
 
 let stub = startStubModelServer((prompt, hasPriorToolResult): StubTurn => {
 	if (hasPriorToolResult) return { kind: "text", text: "Done." };
-	if (prompt === "output") {
+	if (prompt === "output" || prompt === "rogue") {
 		return { kind: "tool", name: PI_RESULT_TOOL_NAME, arguments: '{"answer":"yes"}' };
 	}
 	if (prompt === "abort") return { kind: "hold" };
@@ -44,6 +46,66 @@ function createStubPi() {
 }
 
 harnessContract("pi", createStubPi, createJustBashNetworkSandboxSession);
+
+describe("pi structured-output result tool", () => {
+	async function run(
+		prompt: string,
+		options: { structured: boolean },
+	): Promise<{ output?: unknown; text: string; resultToolParts: number }> {
+		let agent = new HarnessAgent({
+			harness: createStubPi(),
+			activeTools: [],
+			...(options.structured
+				? { output: Output.object({ schema: z.object({ answer: z.string() }) }) }
+				: {}),
+		});
+		let session = await agent.createSession({
+			sandboxSession: await createJustBashNetworkSandboxSession(),
+		});
+		try {
+			let result = await agent.stream({ session, prompt });
+			let resultToolParts = 0;
+			for await (let part of result.fullStream) {
+				if ("toolName" in part && part.toolName === PI_RESULT_TOOL_NAME) resultToolParts++;
+			}
+			return {
+				output: options.structured ? await result.output : undefined,
+				text: await result.text,
+				resultToolParts,
+			};
+		} finally {
+			await session.destroy();
+		}
+	}
+
+	it("ends a structured turn on the terminating tool without a follow-up model request", async () => {
+		stub.requests.length = 0;
+		let result = await run("output", { structured: true });
+		expect(result.output).toEqual({ answer: "yes" });
+		expect(result.resultToolParts).toBe(0);
+		let requests = stub.requests.filter(request => request.prompt === "output");
+		expect(requests).toHaveLength(1);
+		expect(requests[0]!.toolNames).toContain(PI_RESULT_TOOL_NAME);
+	});
+
+	it("does not offer the result tool on a plain turn", async () => {
+		stub.requests.length = 0;
+		let result = await run("plain", { structured: false });
+		expect(result.text).toBe("The Pi stub model answered.");
+		let requests = stub.requests.filter(request => request.prompt === "plain");
+		expect(requests).toHaveLength(1);
+		expect(requests[0]!.toolNames).not.toContain(PI_RESULT_TOOL_NAME);
+	});
+
+	it("blocks a result-tool call on a plain turn and keeps it out of the stream", async () => {
+		stub.requests.length = 0;
+		let result = await run("rogue", { structured: false });
+		expect(result.text).toBe("Done.");
+		expect(result.resultToolParts).toBe(0);
+		let requests = stub.requests.filter(request => request.prompt === "rogue");
+		expect(requests.map(request => request.hasPriorToolResult)).toEqual([false, true]);
+	});
+});
 
 describe("pi host isolation and model resolution", () => {
 	async function turn(options: { model: string; workingDirectory?: string }) {
