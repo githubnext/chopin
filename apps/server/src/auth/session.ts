@@ -69,6 +69,8 @@ type SessionOptions = {
 	beforeRefresh?: (sessionId: string, revision: number) => Promise<void>;
 	onRevoked?: (sessionId: string) => Promise<void>;
 	invalidate?: (accessToken: string) => void;
+	persist?: (sessionId: string, grant: GitHubTokenGrant, revision: number) => Promise<void>;
+	cookieSuffix?: string;
 };
 
 type Rejection = "revoked" | "changed" | "missing";
@@ -216,7 +218,9 @@ export class Sessions {
 		this.#secure = secure;
 		this.#clock = clock;
 		this.#options = options;
-		this.cookieName = secure ? "__Host-chopin_session" : "chopin_session";
+		this.cookieName = `${secure ? "__Host-chopin_session" : "chopin_session"}${
+			options.cookieSuffix ?? ""
+		}`;
 	}
 
 	async issue(userId: string, grant: GitHubTokenGrant): Promise<IssuedSession> {
@@ -439,6 +443,15 @@ export class Sessions {
 				current.revision + 1,
 				refreshedAt,
 			);
+			if (this.#options.persist) {
+				try {
+					await this.#options.persist(id, grant, replacement.revision);
+				} catch {
+					await this.#revokeExact(current);
+					throw new GitHubTokenError("Could not persist refreshed credentials", 503, true);
+				}
+				if (this.#sessions.get(id) !== current) return this.#sessions.get(id);
+			}
 			this.#sessions.set(id, replacement);
 			this.#options.invalidate?.(current.accessToken);
 			return replacement;
