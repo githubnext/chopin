@@ -70,9 +70,10 @@ and tool vocabulary remain optimized for planning.
 - Pull access can view channels. Push or administration access is required to
   create or change them and to invoke the Planner.
 - The first eligible person to invoke the Planner or start a model-backed
-  research request supplies the GitHub App user token and Copilot entitlement
-  used for that channel. A server restart signs everyone out and releases that
-  ownership.
+  research request supplies the GitHub App user token used for that channel
+  and, under the default `copilot-sdk` harness, the Copilot entitlement. With
+  `HARNESS=pi`, model access comes from the operator's `HARNESS_AUTH` instead.
+  A server restart signs everyone out and releases that ownership.
 - Document and Chat context, along with repository material selected by
   the Planner, is sent to GitHub Copilot during a turn. Model-backed background
   jobs also send job-specific private material, including context loaded during
@@ -94,7 +95,7 @@ The development path requires:
 - Docker Engine with Docker Compose, used for PostgreSQL;
 - a GitHub App owned by the deployment; and
 - a GitHub account with push or administration access to a test repository and,
-  to use the Planner, an active Copilot entitlement.
+  to use the Planner with the default harness, an active Copilot entitlement.
 
 Register these local URLs on the GitHub App:
 

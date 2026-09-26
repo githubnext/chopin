@@ -75,9 +75,29 @@ login in that adapter.
 Pi's own documented modes are `auto`, `openai`, `anthropic`, `custom`, and
 `ai-gateway`; `direct` is not one of them and is refused. On a non-loopback
 `SERVER_HOST`, only `ai-gateway` is accepted, because every other mode can
-fall back to Pi's native `~/.pi/agent` login. GitHub access is unaffected:
-repository reads still come from the owner's GitHub App user token through
-Chopin's own host tools, never through Pi.
+fall back to Pi's native `~/.pi/agent` login. `ai-gateway` reads
+`AI_GATEWAY_API_KEY` (or `VERCEL_OIDC_TOKEN`), `openai` reads `OPENAI_API_KEY`,
+`anthropic` reads `ANTHROPIC_API_KEY`, and `custom` forwards every `*_API_KEY`
+and `*_BASE_URL` variable. With `auto` on loopback, turns use the host
+operator's own Pi login; with an operator key, every admitted writer's turns
+bill that key.
+
+Under `pi`, the channel owner supplies only the GitHub App user token; model
+access comes from `HARNESS_AUTH`, not from the owner's Copilot entitlement.
+Repository reads still come from that GitHub token through Chopin's own host
+tools, never through Pi.
+
+Set `MODEL` to an ID from Pi's model catalog, preferably provider-qualified
+(for example `github-copilot/gpt-5.6-luna`). Pi silently falls back to its
+default available model when it does not recognize the ID, and the default
+`gpt-6-luna` is not in Pi's catalog; the startup banner still prints the
+requested value.
+
+Pi's resource loader also reads `AGENTS.md` files from the session's working
+directory and each parent directory on the host filesystem (for the just-bash
+sandbox, `/home/user`, `/home`, and `/`). `@ai-sdk/harness-pi` 1.0.128 exposes
+no option to disable this, so keep those paths free of instruction files on a
+host that runs `HARNESS=pi`.
 
 For a reviewed adapter that consumes a shared operator key, every admitted
 writer's turns would bill that key. Chopin adds no billing quotas of its own in
@@ -91,11 +111,13 @@ turns of its job stage, not as a platform-wide budget; see
 - Docker for the application image, or Bun 1.4.2 for a source deployment.
 - A reachable PostgreSQL database and credentials with schema migration access.
 - A stable DNS name with TLS termination and WebSocket proxying.
-- Outbound HTTPS access to GitHub and the hosted Copilot service.
+- Outbound HTTPS access to GitHub and the selected harness's model provider
+  (the hosted Copilot service for `copilot-sdk`).
 - A GitHub App owned by the deployment.
 - At least one user with repository push or administration access.
-- An active Copilot entitlement for each user who may own a hosted agent
-  session.
+- For `copilot-sdk`, an active Copilot entitlement for each user who may own a
+  hosted agent session. For `pi`, model credentials for the chosen
+  `HARNESS_AUTH` mode instead.
 
 ## Register the GitHub App
 
@@ -289,8 +311,9 @@ After the first deployment:
 4. Confirm the picker lists only expected installations and repositories.
 5. Create a channel with a user who has push or administration access.
 6. Open the channel in a second browser and verify presence and live edits.
-7. Send one `@chopin` request to verify the owner's Copilot entitlement and the
-   hosted agent runtime.
+7. Send one `@chopin` request to verify model access (the owner's Copilot
+   entitlement for `copilot-sdk`, or the `HARNESS_AUTH` credentials for `pi`)
+   and the hosted agent runtime.
 8. Connect a local coding agent and call `list_documents` if MCP is part of the
    deployment's intended surface.
 

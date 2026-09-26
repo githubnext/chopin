@@ -21,16 +21,19 @@ adapter trust.
 ## Ownership
 
 The first eligible editor to invoke the Planner or start a model-backed research
-request supplies the GitHub App user access token and Copilot entitlement for
-that channel. The user must pass instance admission and have
+request supplies the GitHub App user access token for that channel and, under
+the default `copilot-sdk` harness, the Copilot entitlement. Under `HARNESS=pi`
+the owner supplies only the GitHub token; model access comes from the
+operator's `HARNESS_AUTH` mode. The user must pass instance admission and have
 repository push or administration access. Ownership is assigned atomically in
 storage and guarded by a generation token.
 
-That process-local login owns the channel's Copilot usage until it expires, logs
+That process-local login owns the channel's model usage until it expires, logs
 out, the server restarts, or the authenticated reset API releases it. The
-current web application does not expose a reset control. A user without Copilot
-entitlement sees the provider failure on the first model-backed action and
-remains owner until one of those release conditions occurs.
+current web application does not expose a reset control. Under `copilot-sdk`, a
+user without Copilot entitlement sees the provider failure on the first
+model-backed action and remains owner until one of those release conditions
+occurs.
 
 PostgreSQL stores the owner session ID only so durable ownership can refer to an
 active process session. The cookie verifier and GitHub credential remain in
@@ -56,6 +59,13 @@ The Planner has no:
 - repository-local instruction loading;
 - shared embeddings or cross-session store; or
 - ability to change GitHub.
+
+One known Pi limitation: `@ai-sdk/harness-pi` 1.0.128 loads `AGENTS.md` files
+from the session's working directory and each parent directory on the host
+(`/home/user`, `/home`, and `/` for the just-bash sandbox) and offers no option
+to disable it. The Planner still has no tool that reads the host filesystem,
+but under `HARNESS=pi` keep those paths free of instruction files. See
+[Self-hosting](self-hosting.md#choose-and-trust-a-harness).
 
 Available capabilities are:
 
