@@ -20,10 +20,11 @@ import { createHash } from "node:crypto";
 
 import { ulid } from "@chopin/dialect";
 
-import * as Agent from "../agent/client";
-import { toCopilotTools } from "../agent/copilot-bridge";
-import { repositoryTools } from "../agent/repository";
-import { type DocumentRoom, documentTools, type ResearchWorkspaceRequest } from "../agent/tools";
+import { PLANNER_TOOL_NAMES } from "../harness/tool-names";
+import type { PlannerSession } from "../harness/session";
+import { plannerInstructions } from "../agent/planner";
+import type { ActiveOwnerBinding } from "../agent/active-owner";
+import type { DocumentRoom, ResearchWorkspaceRequest } from "../agent/tools";
 import * as Service from "../plan/service";
 import { instruction } from "@chopin/protocol/address";
 
@@ -31,7 +32,7 @@ import { annotatedText, compose, referenceCatalog, remember } from "./address";
 import { broadcast, fail, reply, tell } from "../wire";
 
 import type { Server } from "bun";
-import type { SessionEvent } from "@github/copilot-sdk";
+import type { TextStreamPart, ToolSet } from "ai";
 import type { Chat as Wire, Request } from "@chopin/protocol";
 import type { Config } from "../config";
 import type { HostedAuth } from "../auth/routes";
@@ -60,7 +61,7 @@ type MemberEntry = Wire.Entry & { delivery?: Delivery };
 
 /** How long the agent's cursor stays where it finished, after a turn ends. */
 const LINGER_MS = 5_000;
-const CREDENTIAL_EXPIRY_SKEW_MS = 60_000;
+const ACTIVE_TOOLS = new Set(PLANNER_TOOL_NAMES);
 
 /**
  * A queued message, with what the queue needs and clients do not.
@@ -108,14 +109,13 @@ export type Chat = {
 	sending: Promise<void>;
 	/** Work admitted to the send FIFO, including the operation currently resolving. */
 	pendingSends: number;
-	/** The Copilot session, once somebody has prompted. */
-	agent?: Agent.Agent;
-	/** In flight while the session is being opened, so a second prompt waits. */
-	opening?: Promise<Agent.Agent>;
+	/** Per-turn owner for revocation and credential rotation fencing. */
 	openingOwner?: { sessionId: string; generation: number; revision: number };
-	/** Fences an SDK session that finishes opening after it was invalidated. */
+	/** Current disposable session; never reused by the next turn. */
+	agent?: PlannerSession;
+	turnController?: AbortController;
+	/** Fences a turn invalidated while opening or streaming. */
 	lifecycle: number;
-	/** Complete top-level turn lifecycle, including queued turns. */
 	running?: Promise<void>;
 	closed: boolean;
 	busy: boolean;
@@ -134,22 +134,16 @@ export type Chat = {
 	writing?: string;
 	/** The dedicated entry collecting tool calls for this turn. */
 	tooling?: string;
-	/** Detaches the event handler when a turn ends. */
-	release?: () => void;
-	/** Ends a turn when reset destroys the SDK session before it emits idle. */
-	finishTurn?: () => void;
 	/** Pending removal of the agent's cursor, cancelled if it edits again. */
 	lingering?: ReturnType<typeof setTimeout>;
 	/** When each running tool call started, for its duration. */
 	timings: Map<string, number>;
-	/** First-invoker ownership, fenced by storage generation. */
-	owner?: { sessionId: string; generation: number; revision: number; expiresAt: number };
-	/** Stops a disposable SDK session shortly before its copied token expires. */
-	credentialTimer?: ReturnType<typeof setTimeout>;
+	/** Text part ids are adapter-local; transcript ids are unique across turns. */
+	messageIds?: Map<string, string>;
+	/** Owner identity for the running turn only. */
+	owner?: { sessionId: string; generation: number; revision: number };
 	/** User-facing reason an in-flight turn was interrupted. */
 	interruption?: string;
-	/** Durable context prepended once after recreating a hosted SDK session. */
-	bootstrap?: string;
 	/** Backscroll entries already represented by an opening session's bootstrap. */
 	bootstrapEntries?: Set<string>;
 	/** References available to `read_reference` in the active SDK session. */
@@ -409,7 +403,9 @@ export type Room = {
 	auth: HostedAuth;
 	claimantSessionId: string;
 	repository: HostedRepository;
+	activeOwner?: () => Promise<ActiveOwnerBinding | undefined>;
 	persist: () => Promise<void>;
+	openPlannerSession?: typeof import("../harness/session")["openPlannerSession"];
 	ownerAvailable?: () => Promise<void>;
 	jobs?: JobService;
 	references?: ReferenceService;
@@ -687,9 +683,8 @@ export function unqueue(context: Room, ws: Socket, msg: Request<Wire.Unqueue>): 
 /** Stop the running turn. Anyone may, and the transcript says who did. */
 export async function abort(context: Room, ws: Socket): Promise<void> {
 	let { chat, room, server } = context;
-	if (!chat.busy || !chat.agent) return;
-
-	await Agent.abort(chat.agent);
+	if (!chat.busy || !chat.turnController) return;
+	chat.turnController.abort();
 	say(chat, server, room, {
 		id: ulid(),
 		author: { kind: "system" },
@@ -829,7 +824,7 @@ export function sessionBootstrap(
 		[...chat.referenceCache.values()].filter(reference => durableIds.has(reference.id)),
 	);
 	return [
-		"This Copilot session was recreated.",
+		"A fresh Planner session starts for each turn.",
 		summary ? `Earlier durable summary:\n${summary}` : "",
 		transcript ? `Durable conversation context follows:\n${transcript}` : "",
 		catalog ?? "",
@@ -848,7 +843,7 @@ async function repositorySession(
 	claimantSessionId: string,
 	currentEntryId?: string,
 	currentReferences: Wire.Reference[] = [],
-): Promise<Agent.Agent> {
+): Promise<{ session: PlannerSession; binding: ActiveOwnerBinding }> {
 	let { ownership, owner, repository } = await resolveOwner(
 		context.auth,
 		context.repository,
@@ -856,132 +851,26 @@ async function repositorySession(
 		claimantSessionId,
 	);
 	if (context.ownerAvailable) void context.ownerAvailable().catch(() => {});
-	let { auth } = context;
-	let ownerSessionId = ownership.ownerSessionId!;
-	let credentialExpiresAt = Math.min(
-		owner.access.expiresAt.getTime(),
-		owner.session.expiresAt.getTime(),
-	);
-
-	let { chat } = context;
+	let { chat, auth } = context;
 	let lifecycle = chat.lifecycle;
-	let reusable = chat.agent;
-	let binding = chat.owner;
-	let reuseLifecycle = chat.lifecycle;
-	if (
-		reusable
-		&& binding?.sessionId === ownerSessionId
-		&& binding.generation === ownership.generation
-		&& binding.revision === owner.access.revision
-		&& binding.expiresAt > Date.now() + CREDENTIAL_EXPIRY_SKEW_MS
-	) {
-		await auth.storage.channels.updateAgentContext({
-			channelId: context.room,
-			ownerSessionId,
-			generation: ownership.generation,
-			summary: ownership.summary,
-			transcriptCursor: ownership.transcriptCursor,
-			status: "ready",
-			now: new Date(),
-		});
-		if (
-			chat.lifecycle !== reuseLifecycle
-			|| chat.agent !== reusable
-			|| chat.owner !== binding
-		) throw new Error("The Planner session changed while it was being reused. Try again.");
-		return reusable;
-	}
-	chat.referenceCache.clear();
-	if (chat.agent) await Agent.discard(chat.agent);
-	chat.agent = undefined;
-	chat.owner = undefined;
-	clearTimeout(chat.credentialTimer);
-	chat.credentialTimer = undefined;
-	let activeOwner = await auth.sessions.inspect(ownerSessionId);
-	if (chat.lifecycle !== lifecycle || activeOwner?.access.revision !== owner.access.revision) {
-		throw new Error(
-			"The Planner credentials changed while its old session was closing. Try again.",
-		);
-	}
-	owner = activeOwner;
-	credentialExpiresAt = Math.min(
-		owner.access.expiresAt.getTime(),
-		owner.session.expiresAt.getTime(),
-	);
-	if (credentialExpiresAt <= Date.now() + CREDENTIAL_EXPIRY_SKEW_MS) {
-		throw new Error("The Copilot owner's login session is about to expire. Sign in again.");
-	}
+	let ownerSessionId = ownership.ownerSessionId!;
 	let openingOwner = {
 		sessionId: ownerSessionId,
 		generation: ownership.generation,
 		revision: owner.access.revision,
 	};
 	chat.openingOwner = openingOwner;
-	let bound = () =>
-		chat.lifecycle === lifecycle
-		&& (chat.openingOwner === openingOwner
-			|| (chat.owner?.sessionId === ownerSessionId
-				&& chat.owner.generation === ownership.generation
-				&& chat.owner.revision === owner.access.revision));
-	let activeToken = () => {
-		if (!bound()) return undefined;
-		return auth.sessions.token(ownerSessionId, owner.access.revision);
-	};
-	let tools = toCopilotTools({ ...documentTools, ...repositoryTools() }, {
-		room: documentRoom(context),
-		repository,
-		owner: { currentToken: activeToken },
-	});
-	let opening: Promise<Agent.Agent> | undefined;
-	let opened: Agent.Agent | undefined;
+	let binding: ActiveOwnerBinding | undefined;
+	let opened: PlannerSession | undefined;
 	try {
-		opening = Agent.openPlanner(context.config, { tools }, {
-			token: owner.access.token,
-			repository,
-			bootstrap: sessionBootstrap(
-				chat,
-				ownership.transcriptCursor,
-				ownership.summary,
-				currentEntryId,
-				currentReferences,
-			),
-			authorize: async () => {
-				if (!bound()) return false;
-				let activeOwner = await auth.sessions.inspect(ownerSessionId);
-				if (!activeOwner || activeOwner.access.revision !== owner.access.revision) return false;
-				if (!await auth.admission.allowed(activeOwner.access.token, activeOwner.user.id)) {
-					return false;
-				}
-				let stored = await auth.storage.collaboration.load(context.room, new Date());
-				if (
-					stored?.agent?.ownerSessionId !== ownerSessionId
-					|| stored.agent.generation !== ownership.generation
-				) return false;
-				let access = await auth.github.repositoryAccess(
-					activeOwner.access.token,
-					repository.owner,
-					repository.name,
-				);
-				let stillActive = await auth.sessions.inspect(ownerSessionId);
-				return bound()
-					&& stillActive?.access.revision === owner.access.revision
-					&& !!access && access.id === repository.id
-					&& (access.permissions.push || access.permissions.admin);
-			},
-		});
-		chat.opening = opening;
-		let agent = opened = await opening;
-		let activeOwner = await auth.sessions.inspect(ownerSessionId);
-		let activeOwnership = await auth.storage.collaboration.load(context.room, new Date());
+		binding = await context.activeOwner?.();
 		if (
-			chat.lifecycle !== lifecycle
-			|| chat.openingOwner !== openingOwner
-			|| activeOwner?.access.revision !== owner.access.revision
-			|| activeOwnership?.agent?.ownerSessionId !== ownerSessionId
-			|| activeOwnership.agent.generation !== ownership.generation
-		) {
-			throw new Error("The Planner session changed while it was opening. Try again.");
-		}
+			!binding || binding.ownerSessionId !== ownerSessionId
+			|| binding.ownerGeneration !== ownership.generation
+			|| binding.credentialRevision !== owner.access.revision
+			|| binding.repository.id !== repository.id
+			|| chat.lifecycle !== lifecycle || chat.openingOwner !== openingOwner
+		) throw new Error("The Planner owner changed while opening. Try again.");
 		await auth.storage.channels.updateAgentContext({
 			channelId: context.room,
 			ownerSessionId,
@@ -991,34 +880,38 @@ async function repositorySession(
 			status: "ready",
 			now: new Date(),
 		});
-		activeOwner = await auth.sessions.inspect(ownerSessionId);
+		chat.referenceCache.clear();
+		let bootstrap = sessionBootstrap(
+			chat,
+			ownership.transcriptCursor,
+			ownership.summary,
+			currentEntryId,
+			currentReferences,
+		);
+		let open = context.openPlannerSession
+			?? (await import("../harness/session")).openPlannerSession;
+		let result = await open(binding, {
+			room: documentRoom(context),
+			repository,
+			instructions: plannerInstructions(
+				`${repository.owner}/${repository.name}`,
+				bootstrap,
+			),
+			model: context.config.model,
+		});
+		if (!result.ok) throw new Error(`Planner session unavailable (${result.error.kind})`);
+		opened = result.value;
 		if (
-			chat.lifecycle !== lifecycle
-			|| chat.openingOwner !== openingOwner
-			|| activeOwner?.access.revision !== owner.access.revision
-		) {
-			throw new Error("The Planner session changed while it was opening. Try again.");
-		}
-		chat.agent = agent;
-		chat.owner = {
-			sessionId: ownerSessionId,
-			generation: ownership.generation,
-			revision: owner.access.revision,
-			expiresAt: credentialExpiresAt,
-		};
+			chat.lifecycle !== lifecycle || chat.openingOwner !== openingOwner
+			|| binding.signal.aborted || !await binding.revalidate()
+		) throw new Error("The Planner session changed while opening. Try again.");
+		chat.agent = opened;
+		chat.owner = openingOwner;
 		consumeBootstrapBackscroll(chat);
-		chat.credentialTimer = setTimeout(() => {
-			void resetAgent(
-				chat,
-				ownerSessionId,
-				owner.access.revision,
-				"GitHub credentials expired, so the Planner session was restarted. Ask it to continue.",
-			);
-		}, Math.max(0, credentialExpiresAt - Date.now() - CREDENTIAL_EXPIRY_SKEW_MS));
-		return agent;
+		return { session: opened, binding };
 	} catch (err) {
-		if (opened && chat.agent !== opened) await Agent.discard(opened);
-		if (!chat.agent) chat.referenceCache.clear();
+		await opened?.destroy();
+		binding?.release();
 		chat.bootstrapEntries = undefined;
 		await auth.storage.channels.updateAgentContext({
 			channelId: context.room,
@@ -1032,7 +925,6 @@ async function repositorySession(
 		throw err;
 	} finally {
 		if (chat.openingOwner === openingOwner) chat.openingOwner = undefined;
-		if (chat.opening === opening) chat.opening = undefined;
 	}
 }
 
@@ -1065,15 +957,6 @@ export async function resolveOwner(
 		|| (!current.permissions.push && !current.permissions.admin)
 	) throw new Error("The Copilot owner no longer has repository write access.");
 	return { ownership, owner, repository };
-}
-
-async function session(
-	context: Room,
-	claimantSessionId: string,
-	currentEntryId?: string,
-	currentReferences: Wire.Reference[] = [],
-): Promise<Agent.Agent> {
-	return repositorySession(context, claimantSessionId, currentEntryId, currentReferences);
 }
 
 /**
@@ -1124,31 +1007,16 @@ async function run(
 			lifecycle: chat.lifecycle,
 		}
 		: undefined;
+	chat.messageIds = new Map();
 
+	let opened: { session: PlannerSession; binding: ActiveOwnerBinding } | undefined;
+	let turnController = new AbortController();
+	chat.turnController = turnController;
 	try {
-		let agent = await session(context, claimantSessionId, member?.entryId, references);
-		if (chat.agent !== agent) {
+		opened = await repositorySession(context, claimantSessionId, member?.entryId, references);
+		if (chat.agent !== opened.session || turnController.signal.aborted) {
 			throw new Error("The Planner session changed before the turn started. Try again.");
 		}
-
-		/*
-		 * `send` resolves when the message is accepted, not when the turn is
-		 * over — the work happens afterwards, over events. Waiting on `send`
-		 * alone tears the handler down before the agent has said anything.
-		 *
-		 * `session.idle` is the turn actually ending. `session.error` resolves
-		 * it too: a turn that has failed is not going to reach idle, and
-		 * leaving the room busy forever is worse than ending early.
-		 */
-		let finished = Promise.withResolvers<void>();
-		chat.finishTurn = finished.resolve;
-		chat.release = agent.session.on(event => {
-			translate(context, event);
-			if (event.type === "session.idle" || event.type === "session.error") {
-				finished.resolve();
-			}
-		});
-
 		// Drained rather than copied: what the agent has been told once should
 		// not arrive again on the next turn.
 		let backscroll = chat.backscroll;
@@ -1161,10 +1029,14 @@ async function run(
 		let available = promptReferences.filter(reference => chat.referenceCache.has(reference.id));
 		let prompt = compose(backscroll, handle, text, references, available);
 
-		// The handle travels to the model, because a position belongs to
-		// whoever holds it.
-		await agent.session.send({ prompt });
-		await finished.promise;
+		let result = await opened.session.stream(
+			prompt,
+			AbortSignal.any([opened.binding.signal, turnController.signal]),
+		);
+		for await (let part of result.fullStream) {
+			translate(context, part);
+			if (turnController.signal.aborted) break;
+		}
 		if (chat.interruption) throw new Error(chat.interruption);
 	} catch (err) {
 		console.error("[chat] turn failed:", err);
@@ -1179,9 +1051,15 @@ async function run(
 		chat.interruption = undefined;
 	} finally {
 		chat.activeRequest = undefined;
-		chat.release?.();
-		chat.release = undefined;
-		chat.finishTurn = undefined;
+		chat.turnController = undefined;
+		try {
+			await opened?.session.destroy();
+		} finally {
+			opened?.binding.release();
+			if (chat.agent === opened?.session) chat.agent = undefined;
+			chat.owner = undefined;
+		}
+		chat.messageIds = undefined;
 		chat.writing = undefined;
 		chat.tooling = undefined;
 		settle(chat, server, room);
@@ -1274,84 +1152,66 @@ export function pending(chat: Chat): Waiting | undefined {
 	return next;
 }
 
-/**
- * Turn what the SDK reports into what the room sees.
- *
- * Only the events a reader needs: what the agent said, what it is doing, and
- * when something failed. The rest is diagnostic noise that belongs in a log.
- *
- * Exported so it can be driven with synthetic events. Every field it reads
- * lives under `event.data` and several are near-homonyms of fields on the
- * envelope, which is the kind of mistake that produces plausible-looking
- * output rather than an error.
- */
-export function translate(context: Room, event: SessionEvent): void {
+/** Project one AI SDK stream part into the shared Conversation. */
+export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 	let { chat, room, server } = context;
-
-	switch (event.type) {
-		case "session.idle":
+	let ids = chat.messageIds ??= new Map();
+	switch (part.type) {
+		case "finish":
 			chat.tooling = undefined;
 			return;
-
-		// One entry per assistant message, identified by the id the deltas
-		// carry, so two messages in a turn do not run together.
-		case "assistant.message_delta": {
-			let { deltaContent, messageId } = event.data;
-			let entry = chat.entries.find(item => item.id === messageId);
+		case "text-start": {
+			let id = ulid();
+			ids.set(part.id, id);
+			chat.writing = id;
+			return;
+		}
+		case "text-delta": {
+			let id = ids.get(part.id);
+			if (!id) {
+				id = ulid();
+				ids.set(part.id, id);
+			}
+			let entry = chat.entries.find(item => item.id === id);
 			if (!entry) {
-				chat.writing = messageId;
+				chat.writing = id;
 				say(chat, server, room, {
-					id: messageId,
+					id,
 					author: { kind: "agent" },
-					text: deltaContent,
+					text: part.text,
 					ts: now(),
 					streaming: true,
 				});
-				responded(chat, server, room, deltaContent);
-				return;
+			} else {
+				entry.text += part.text;
+				broadcast(server, room, { kind: "chat:delta", ts: 0, id, text: part.text });
 			}
-			entry.text += deltaContent;
-			broadcast(server, room, { kind: "chat:delta", ts: 0, id: messageId, text: deltaContent });
-			responded(chat, server, room, deltaContent);
+			responded(chat, server, room, part.text);
 			return;
 		}
-
-		case "assistant.message": {
-			// `data.messageId`, not `event.id`. The envelope's id belongs to the
-			// event; the message has its own, and it is the one the deltas were
-			// keyed by. Looking up the wrong one finds nothing, appends a second
-			// copy of the message, and leaves the first one streaming forever.
-			let { content, messageId } = event.data;
-			let entry = chat.entries.find(item => item.id === messageId);
-
+		case "text-end": {
+			let id = ids.get(part.id);
+			let entry = chat.entries.find(item => item.id === id);
 			if (entry) {
-				entry.text = content || entry.text;
 				delete entry.streaming;
 				announce(server, room, entry);
-				responded(chat, server, room, content);
-			} else if (content.trim()) {
-				// No deltas arrived — a short reply the model did not stream.
-				say(chat, server, room, {
-					id: messageId,
-					author: { kind: "agent" },
-					text: content,
-					ts: now(),
-				});
-				responded(chat, server, room, content);
 			}
-
-			chat.writing = undefined;
+			if (chat.writing === id) chat.writing = undefined;
 			return;
 		}
-
-		case "tool.execution_start": {
-			let { arguments: args, toolCallId, toolName } = event.data;
-			chat.timings.set(toolCallId, Date.now());
+		case "tool-call": {
+			if (!ACTIVE_TOOLS.has(part.toolName)) {
+				console.error(`[chat] boundary failure: inactive tool ${part.toolName}`);
+				chat.interruption = `Planner tool boundary failure: ${part.toolName}`;
+				chat.turnController?.abort();
+				return;
+			}
+			chat.timings.set(part.toolCallId, Date.now());
 			let activity: Wire.Activity = {
-				id: toolCallId,
-				name: toolName,
+				id: part.toolCallId,
+				name: part.toolName,
 				status: "running",
-				...(args ? { args: JSON.stringify(args, null, 2) } : {}),
+				args: JSON.stringify(part.input, null, 2),
 			};
 			broadcast(server, room, {
 				kind: "chat:tool",
@@ -1361,27 +1221,30 @@ export function translate(context: Room, event: SessionEvent): void {
 			});
 			return;
 		}
-
-		case "tool.execution_complete": {
-			let { error, result, success, toolCallId } = event.data;
-			let started = chat.timings.get(toolCallId);
-			chat.timings.delete(toolCallId);
-
-			// The completion does not repeat the tool's name; the start did, and
-			// the entry it was filed under still has it.
-			let name = named(chat, toolCallId);
+		case "tool-result":
+		case "tool-error":
+		case "tool-output-denied": {
+			let started = chat.timings.get(part.toolCallId);
+			chat.timings.delete(part.toolCallId);
+			let name = named(chat, part.toolCallId);
+			let success = part.type === "tool-result";
+			let output = part.type === "tool-result"
+				? part.output
+				: part.type === "tool-error"
+				? part.error
+				: "Refused.";
 			let detail = name === "read_reference"
 				? success
 					? "Reference content was returned privately to the Planner."
 					: "The reference could not be read."
-				: result?.content ?? (error ? JSON.stringify(error) : undefined);
+				: typeof output === "string"
+				? output
+				: JSON.stringify(output);
 			let activity: Wire.Activity = {
-				id: toolCallId,
+				id: part.toolCallId,
 				name,
 				status: success ? "done" : "failed",
 				...(started ? { took: Date.now() - started } : {}),
-				// Bounded: a `grep` across a repository is not a thing anybody
-				// wants delivered to every browser in the room.
 				...(detail ? { result: detail.slice(0, 4_000) } : {}),
 			};
 			broadcast(server, room, {
@@ -1392,46 +1255,19 @@ export function translate(context: Room, event: SessionEvent): void {
 			});
 			return;
 		}
-
-		/*
-		 * A refused tool never executes, so it produces no start and no
-		 * completion — without this it leaves no trace at all, and the agent
-		 * quietly works around a boundary nobody can see it hitting. Which is
-		 * indistinguishable, from the outside, from a tool it never had.
-		 */
-		case "permission.completed": {
-			let { result, toolCallId } = event.data;
-			if (!toolCallId || !result.kind.startsWith("denied")) return;
-
-			let feedback = "feedback" in result && typeof result.feedback === "string"
-				? result.feedback
-				: undefined;
-
-			let activity: Wire.Activity = {
-				id: toolCallId,
-				name: named(chat, toolCallId),
-				status: "failed",
-				result: feedback ?? "Refused.",
-			};
-			broadcast(server, room, {
-				kind: "chat:tool",
-				ts: 0,
-				entry: attach(context, activity),
-				activity,
-			});
+		case "tool-approval-request":
+			chat.interruption = "Planner tool approval was denied.";
+			chat.turnController?.abort();
 			return;
-		}
-
-		case "session.error": {
+		case "error":
 			chat.tooling = undefined;
 			say(chat, server, room, {
 				id: ulid(),
 				author: { kind: "system" },
-				text: event.data.message || "The agent stopped unexpectedly.",
+				text: part.error instanceof Error ? part.error.message : String(part.error),
 				ts: now(),
 			});
 			return;
-		}
 	}
 }
 
@@ -1487,27 +1323,11 @@ export async function resetAgent(
 	) return;
 	chat.lifecycle++;
 	chat.activeRequest = undefined;
-	clearTimeout(chat.credentialTimer);
-	chat.credentialTimer = undefined;
-	if (reason && chat.finishTurn) chat.interruption = reason;
-	let agent = chat.agent;
-	let opening = chat.opening;
-	chat.agent = undefined;
-	chat.owner = undefined;
+	if (reason && chat.turnController) chat.interruption = reason;
+	chat.turnController?.abort();
 	chat.referenceCache.clear();
 	chat.bootstrapEntries = undefined;
-	chat.opening = undefined;
 	chat.openingOwner = undefined;
-	if (agent) await Agent.abort(agent);
-	chat.finishTurn?.();
-	chat.release?.();
-	chat.release = undefined;
-	chat.finishTurn = undefined;
-	if (agent) await Agent.discard(agent);
-	if (opening) {
-		let opened = await Agent.settle(opening);
-		if (opened && opened !== agent) await Agent.discard(opened);
-	}
 }
 
 /** Let go of the session. The conversation is resumable by id. */
@@ -1516,31 +1336,11 @@ export async function close(chat: Chat): Promise<void> {
 	chat.lifecycle++;
 	chat.activeRequest = undefined;
 	chat.waiting = [];
-	let sending = chat.sending;
-	let running = chat.running;
-	let agent = chat.agent;
-	let opening = chat.opening;
-	chat.agent = undefined;
-	chat.owner = undefined;
+	chat.turnController?.abort();
 	chat.referenceCache.clear();
 	chat.bootstrapEntries = undefined;
-	chat.opening = undefined;
 	chat.openingOwner = undefined;
-	if (agent) await Agent.abort(agent);
-	chat.finishTurn?.();
-	chat.release?.();
-	chat.release = undefined;
-	chat.finishTurn = undefined;
-	// A cursor waiting to be taken down has nowhere to be taken down from, and
-	// a live timer would hold the loop open for its whole linger.
 	clearTimeout(chat.lingering);
 	chat.lingering = undefined;
-	clearTimeout(chat.credentialTimer);
-	chat.credentialTimer = undefined;
-	if (agent) await Agent.discard(agent);
-	if (opening) {
-		let opened = await Agent.settle(opening);
-		if (opened && opened !== agent) await Agent.discard(opened);
-	}
-	await Promise.all([sending, running]);
+	await Promise.all([chat.sending, chat.running]);
 }

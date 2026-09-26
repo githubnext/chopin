@@ -17,30 +17,6 @@
 import { COMPONENTS, DIFF_LANGUAGE, MERMAID_LANGUAGE } from "@chopin/dialect/dialect";
 
 import type { Component } from "@chopin/dialect/dialect";
-import type { CustomAgentConfig } from "@github/copilot-sdk";
-
-export const NAME = "chopin-plan";
-
-/**
- * Tools the planner may use.
- *
- * Expressed as the session's filter rather than the agent's own list, and that
- * distinction is load-bearing: a custom agent's `tools` cannot admit an MCP
- * tool at all. Not by wildcard, not by exact name, not with the server
- * declared on the agent instead of the session — the entry simply matches
- * nothing and is dropped without a word, and the agent then behaves as though
- * the tool never existed. `availableTools` is the filter that understands
- * where a tool came from, so it is the one that can say "and the MCP ones".
- *
- * `grep` is an alias the runtime expands to whichever of grep/rg/search the
- * model is configured for, so it survives a rename.
- *
- * `bash` is admitted only because the permission gate refuses any command the
- * runtime does not classify as read-only, and any write redirection. Reading
- * the repository is most of what planning is.
- */
-/** Empty-mode sessions expose no ambient host tools. */
-export const TOOLS = ["mcp:*", "custom:*"];
 
 /** Components the agent writes itself. The rest are created for it. */
 const AUTHORABLE = ["Callout", "Tabs", "Tab", "Underline"];
@@ -254,27 +230,13 @@ Questionnaires are created by \`ask\`, never by hand, and their answers are owne
 elsewhere — leave them alone when you rewrite around them. To take one out of
 the plan, use the \`detach_question\` operation rather than deleting the block.`;
 
-/** The planner, as the SDK takes it. */
-export const planner: CustomAgentConfig = {
-	name: NAME,
-	displayName: "Plan",
-	description: "Maintains the plan, and asks the team when a decision cannot be made from the "
-		+ "repository alone.",
-	// Deliberately unset: an agent-level list would exclude every MCP tool.
-	// The session's `availableTools` is the boundary instead.
-	prompt: PROMPT,
-	// Hidden: the planner is entered by being the only agent, never by another
-	// agent deciding to delegate to it.
-	infer: false,
-};
-
-export function plannerFor(repository: string): CustomAgentConfig {
+export function plannerInstructions(repository: string, bootstrap?: string): string {
 	let access = `Read before you propose. The selected repository is ${repository}. Use
 \`read_repository_file\`, \`list_repository_tree\`, \`search_repository\` and
-\`repository_history\` for its code, and the read-only GitHub MCP tools for its
-pull requests. Every repository tool is fixed to this repository.
+\`repository_history\` for its code, and \`list_pull_requests\` and
+\`pull_request_read\` for its pull requests. Every repository tool is fixed to this repository.
 
 You have no shell, checkout, host filesystem, skills or repository instructions,
 and cannot change GitHub. Ground the plan in what those reading tools return.`;
-	return { ...planner, prompt: `${PROMPT}\n\n${access}` };
+	return [PROMPT, access, bootstrap].filter(Boolean).join("\n\n");
 }

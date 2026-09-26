@@ -5,7 +5,6 @@ import { Admission } from "../auth/admission";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { close, create, resetAgent, resolveOwner } from "./service";
 
-import type { Agent } from "../agent/client";
 import type { HostedAuth } from "../auth/routes";
 import type {
 	GitHub,
@@ -125,28 +124,10 @@ describe("hosted Copilot ownership", () => {
 		expect(replacement.owner.access.token).toBe("ghu_bob");
 	});
 
-	it("invalidates only the agent bound to the rotating credential revision", async () => {
+	it("invalidates only the turn bound to the rotating credential revision", async () => {
 		let chat = create();
-		let aborted = 0;
-		let disconnected = 0;
-		let finished = 0;
-		chat.agent = {
-			id: "agent",
-			session: {
-				abort: async () => {
-					aborted++;
-				},
-				disconnect: async () => {
-					disconnected++;
-				},
-			},
-		} as unknown as Agent;
-		chat.owner = {
-			sessionId: "session",
-			generation: 3,
-			revision: 4,
-			expiresAt: Date.now() + 10_000,
-		};
+		let controller = chat.turnController = new AbortController();
+		chat.owner = { sessionId: "session", generation: 3, revision: 4 };
 		chat.busy = true;
 		chat.activeRequest = {
 			entryId: "entry",
@@ -157,23 +138,15 @@ describe("hosted Copilot ownership", () => {
 			turnId: "turn",
 			lifecycle: 0,
 		};
-		chat.finishTurn = () => {
-			finished++;
-		};
 		chat.referenceCache.set("reference", {} as never);
 
 		await resetAgent(chat, "session", 3, "rotated");
-		expect(aborted).toBe(0);
-		expect(chat.agent).toBeDefined();
+		expect(controller.signal.aborted).toBe(false);
 		expect(chat.activeRequest).toBeDefined();
 		expect(chat.referenceCache.size).toBe(1);
 
 		await resetAgent(chat, "session", 4, "rotated");
-		expect(aborted).toBe(1);
-		expect(disconnected).toBe(1);
-		expect(finished).toBe(1);
-		expect(chat.agent).toBeUndefined();
-		expect(chat.owner).toBeUndefined();
+		expect(controller.signal.aborted).toBe(true);
 		expect(chat.interruption).toBe("rotated");
 		expect(chat.lifecycle).toBe(1);
 		expect(chat.activeRequest).toBeUndefined();
@@ -203,36 +176,17 @@ describe("hosted Copilot ownership", () => {
 	it("closes an active turn before releasing the conversation", async () => {
 		let chat = create();
 		let finished = Promise.withResolvers<void>();
-		let aborted = 0;
+		let controller = chat.turnController = new AbortController();
+		controller.signal.addEventListener("abort", () => finished.resolve());
 		chat.busy = true;
-		chat.activeRequest = {
-			entryId: "entry",
-			userId: "U_mona",
-			handle: "mona",
-			text: "research this",
-			claimantSessionId: "session",
-			turnId: "turn",
-			lifecycle: 0,
-		};
 		chat.waiting.push({ id: "queued", handle: "mona", text: "next" });
 		chat.referenceCache.set("reference", {} as never);
 		chat.running = finished.promise;
-		chat.finishTurn = finished.resolve;
-		chat.agent = {
-			id: "agent",
-			session: {
-				abort: async () => {
-					aborted++;
-				},
-				disconnect: async () => {},
-			},
-		} as unknown as Agent;
 
 		await close(chat);
-		expect(aborted).toBe(1);
+		expect(controller.signal.aborted).toBe(true);
 		expect(chat.closed).toBe(true);
 		expect(chat.waiting).toEqual([]);
-		expect(chat.agent).toBeUndefined();
 		expect(chat.activeRequest).toBeUndefined();
 		expect(chat.referenceCache.size).toBe(0);
 	});

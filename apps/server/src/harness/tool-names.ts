@@ -1,0 +1,18 @@
+export const PLANNER_TOOL_NAMES = [
+	"read_plan",
+	"read_reference",
+	"list_background_jobs",
+	"read_background_job",
+	"create_research_workspace",
+	"edit_plan",
+	"ask",
+	"read_implementation_graph",
+	"edit_implementation_graph",
+	"anchor_plan",
+	"read_repository_file",
+	"list_repository_tree",
+	"search_repository",
+	"repository_history",
+	"list_pull_requests",
+	"pull_request_read",
+];
