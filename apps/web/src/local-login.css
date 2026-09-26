@@ -1,0 +1,230 @@
+.sign-in-page {
+	display: flex;
+	height: 100%;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	flex-direction: column;
+	background:
+		radial-gradient(
+			60rem 28rem at 18% -6rem,
+			color-mix(in oklch, var(--color-brand-wash) 90%, transparent),
+			transparent 70%
+		),
+		radial-gradient(
+		48rem 24rem at 86% -4rem,
+		color-mix(in oklch, var(--color-brand-wash) 55%, transparent),
+		transparent 70%
+	),
+		var(--color-ground);
+	color: var(--color-text-primary);
+}
+
+.sign-in-page ::selection {
+	background-color: color-mix(in oklch, var(--color-brand) 22%, transparent);
+}
+
+.sign-in-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: calc(var(--spacing) * 4);
+	padding: calc(var(--spacing) * 5) calc(var(--spacing) * 6);
+}
+
+.sign-in-main {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	align-items: center;
+	padding: calc(var(--spacing) * 10) calc(var(--spacing) * 5) calc(var(--spacing) * 20);
+}
+
+.sign-in-intro {
+	max-width: 34rem;
+	text-align: center;
+	text-wrap: balance;
+}
+
+.sign-in-title {
+	font-size: var(--text-2xl);
+	font-weight: 700;
+	letter-spacing: -0.025em;
+	line-height: 1.12;
+}
+
+.sign-in-card {
+	width: 100%;
+	max-width: 25rem;
+	margin-top: calc(var(--spacing) * 10);
+	border-radius: var(--radius-lg);
+	background-color: var(--color-page);
+	box-shadow: var(--shadow-raised);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+	padding: calc(var(--spacing) * 6);
+}
+
+.sign-in-card a:not(.btn) {
+	color: var(--color-brand-ink);
+	text-decoration-line: underline;
+	text-decoration-color: color-mix(in oklch, var(--color-brand-ink) 35%, transparent);
+	text-underline-offset: 0.2em;
+	overflow-wrap: anywhere;
+
+	&:hover {
+		text-decoration-color: currentColor;
+	}
+}
+
+.sign-in-banner {
+	--banner-accent: var(--color-gray-500);
+	--banner-icon: var(--color-neutral-icon);
+	--banner-ink: var(--color-text-secondary);
+	--banner-wash: var(--color-gray-100);
+	display: flex;
+	align-items: flex-start;
+	gap: calc(var(--spacing) * 2.5);
+	margin-top: calc(var(--spacing) * 4);
+	border: var(--edge-width) solid color-mix(in oklab, var(--banner-accent) 18%, transparent);
+	border-radius: var(--radius-md);
+	background: color-mix(in oklab, var(--banner-wash) 68%, var(--color-page));
+	padding: calc(var(--spacing) * 3) calc(var(--spacing) * 3.5);
+	color: var(--banner-ink);
+	font-size: var(--text-sm);
+}
+
+.sign-in-banner[data-tone="success"] {
+	--banner-accent: var(--color-success);
+	--banner-icon: var(--color-success-icon);
+	--banner-ink: var(--color-success-ink);
+	--banner-wash: var(--color-success-wash);
+}
+
+.sign-in-banner[data-tone="warning"] {
+	--banner-accent: var(--color-warning);
+	--banner-icon: var(--color-warning-icon);
+	--banner-ink: var(--color-warning-ink);
+	--banner-wash: var(--color-warning-wash);
+}
+
+.sign-in-banner[data-tone="danger"] {
+	--banner-accent: var(--color-destructive);
+	--banner-icon: var(--color-danger-icon);
+	--banner-ink: var(--color-destructive-ink);
+	--banner-wash: var(--color-destructive-wash);
+}
+
+.sign-in-banner-icon {
+	display: grid;
+	height: calc(var(--text-sm) * 1.5);
+	flex: none;
+	place-items: center;
+	color: var(--banner-icon);
+
+	& [data-nucleo-icon] {
+		color: inherit;
+	}
+}
+
+.sign-in-banner-title {
+	font-weight: 600;
+	line-height: 1.5;
+}
+
+.sign-in-pulse {
+	position: relative;
+	width: 0.5rem;
+	height: 0.5rem;
+	flex: none;
+	border-radius: 9999px;
+	background-color: var(--color-brand);
+
+	&::after {
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+		background-color: inherit;
+		content: "";
+		animation: sign-in-pulse 1.6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+	}
+}
+
+@keyframes sign-in-pulse {
+	from {
+		opacity: 0.55;
+		transform: scale(1);
+	}
+
+	to {
+		opacity: 0;
+		transform: scale(3);
+	}
+}
+
+.sign-in-instruction {
+	font-size: var(--text-sm);
+	color: var(--color-text-secondary);
+
+	& strong {
+		display: block;
+		margin-block: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+		border-radius: var(--radius-md);
+		background-color: var(--color-gray-100);
+		outline: var(--edge-width) solid var(--color-edge);
+		outline-offset: calc(-1 * var(--edge-width));
+		padding: calc(var(--spacing) * 3) calc(var(--spacing) * 4);
+		color: var(--color-text-primary);
+		font-family: var(--font-mono);
+		font-size: 1.75rem;
+		font-variant-numeric: tabular-nums;
+		font-weight: 600;
+		letter-spacing: 0.12em;
+		text-align: center;
+	}
+}
+
+.sign-in-danger {
+	color: var(--color-destructive-ink);
+
+	&:hover:not(:disabled) {
+		background-color: var(--color-destructive-wash);
+	}
+}
+
+.sign-in-path {
+	border-radius: var(--radius-sm);
+	background-color: var(--color-page);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+	padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+	color: var(--color-text-primary);
+	font-family: var(--font-mono);
+	font-size: var(--text-sm);
+	line-height: 1.6;
+	overflow-wrap: anywhere;
+}
+
+@media (max-width: 40rem) {
+	.sign-in-header {
+		padding-inline: calc(var(--spacing) * 4);
+	}
+
+	.sign-in-main {
+		padding-top: calc(var(--spacing) * 4);
+	}
+
+	.sign-in-title {
+		font-size: 1.75rem;
+	}
+
+	.sign-in-card {
+		margin-top: calc(var(--spacing) * 7);
+		padding: calc(var(--spacing) * 5);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.sign-in-pulse::after {
+		animation: none;
+	}
+}
