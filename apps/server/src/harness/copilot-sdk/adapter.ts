@@ -381,7 +381,8 @@ export function createCopilotSdk(
 					};
 					turn.abortSignal?.addEventListener("abort", onAbort, { once: true });
 
-					session.send({ prompt: promptText(turn.prompt) }).catch(err => settled.reject(err));
+					if (turn.abortSignal?.aborted) onAbort();
+					else session.send({ prompt: promptText(turn.prompt) }).catch(err => settled.reject(err));
 
 					return {
 						async submitToolResult({ toolCallId, output: result, isError }) {

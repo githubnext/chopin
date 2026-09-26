@@ -325,6 +325,57 @@ describe("copilot-sdk adapter", () => {
 		expect(config.mcpServers).toEqual({});
 	});
 
+	it("does not send a turn aborted while the Copilot session opens", async () => {
+		let source = stubRuntimeSource();
+		let createSession = source.client.createSession.bind(source.client);
+		let opening = Promise.withResolvers<void>();
+		let continueOpening = Promise.withResolvers<void>();
+		let sends = 0;
+		let aborts = 0;
+		let disconnects = 0;
+		source.client.createSession = async config => {
+			let session = await createSession(config);
+			let fake = source.sessions.at(-1)!;
+			let send = fake.send.bind(fake);
+			fake.send = input => {
+				sends++;
+				return send(input);
+			};
+			fake.abort = async () => {
+				aborts++;
+			};
+			fake.disconnect = async () => {
+				disconnects++;
+			};
+			opening.resolve();
+			await continueOpening.promise;
+			return session;
+		};
+		let harness = createCopilotSdk({ credentials: () => "ghu_test", connect: () => source });
+		let session = await harness.doStart({
+			sessionId: "s1",
+			sandboxSession: { defaultWorkingDirectory: "/tmp" } as never,
+			sessionWorkDir: "/tmp",
+		});
+		let controller = new AbortController();
+		let turn = session.doPromptTurn({
+			prompt: "hello",
+			tools: [],
+			skills: [],
+			abortSignal: controller.signal,
+			emit: () => {},
+		});
+		await opening.promise;
+		controller.abort();
+		continueOpening.resolve();
+		let control = await turn;
+		await control.done;
+		await session.doDestroy();
+		expect(sends).toBe(0);
+		expect(aborts).toBe(1);
+		expect(disconnects).toBe(1);
+	});
+
 	it("ends the turn on abort even with a host tool call still in flight", async () => {
 		let harness = createCopilotSdk({ credentials: () => "ghu_test", connect: stubRuntimeSource });
 		let session = await harness.doStart({
