@@ -71,16 +71,19 @@ and tool vocabulary remain optimized for planning.
   create or change them and to invoke the Planner.
 - The first eligible person to invoke the Planner or start a model-backed
   research request supplies the GitHub App user token and Copilot entitlement
-  used for that channel. A server restart signs everyone out and releases that
-  ownership.
+  used for that channel. A server restart clears every session and releases that
+  ownership. A returning browser in local device mode can restore a new session,
+  but does not reclaim Planner ownership.
 - Document and Chat context, along with repository material selected by
   the Planner, is sent to GitHub Copilot during a turn. Model-backed background
   jobs also send job-specific private material, including context loaded during
   execution, to isolated Copilot workers. The public research worker receives
   only the exact submitted brief, but may derive or refine the queries it sends
-  to web search. GitHub credentials remain process-local;
-  documents, transcripts, decisions, research request staging, background-job
-  inputs and artifacts, and token-free session records are stored in PostgreSQL.
+  to web search. By default GitHub credentials remain process-local; the
+  [local device mode](docs/authentication.md#local-device-flow-sign-in) persists
+  credentials in an OS vault or an explicitly consented local file. Documents,
+  transcripts, decisions, research request staging, background-job inputs and
+  artifacts, and token-free session records are stored in PostgreSQL.
 - One Chopin process may write to a database at a time. Horizontal application
   scaling and zero-downtime rolling deployment are not supported.
 

@@ -18,6 +18,10 @@ function configured(overrides: Record<string, string | undefined> = {}) {
 		AGENT: undefined,
 		BACKGROUND_JOBS: undefined,
 		WEB_RESEARCH: undefined,
+		AUTH_MODE: undefined,
+		SERVER_HOST: undefined,
+		PORT: undefined,
+		CHOPIN_LOCAL_CREDENTIALS_DIR: undefined,
 		GITHUB_ALLOWED_USERS: undefined,
 		GITHUB_ALLOWED_ORGANIZATIONS: undefined,
 		...overrides,
@@ -115,6 +119,31 @@ describe("configuration", () => {
 		);
 		expect(() => configured({ GITHUB_ALLOWED_ORGANIZATIONS: "managed_org" })).toThrow(
 			"GITHUB_ALLOWED_ORGANIZATIONS",
+		);
+	});
+	it("enables a client-secret-free local mode only at the exact loopback port", () => {
+		let local = {
+			AUTH_MODE: "local",
+			GITHUB_APP_CLIENT_SECRET: undefined,
+			APP_ORIGIN: "http://localhost:8790",
+			PORT: "8790",
+			SERVER_HOST: "127.0.0.1",
+		};
+		let config = configured(local);
+		expect(config.auth.clientSecret).toBeUndefined();
+		expect(config.auth.local).toMatchObject({ port: 8790 });
+		expect(description(config)).toContain("github local device flow");
+		expect(description(config)).not.toContain("secret");
+		expect(() => configured({ ...local, SERVER_HOST: "0.0.0.0" })).toThrow("loopback");
+		expect(() => configured({ ...local, APP_ORIGIN: "http://example.test:8790" }))
+			.toThrow("HTTPS");
+		expect(() => configured({ ...local, APP_ORIGIN: "http://localhost:8791" }))
+			.toThrow("loopback");
+		expect(() => configured({ ...local, APP_ORIGIN: "https://localhost:8790" }))
+			.not.toThrow();
+		expect(() => configured({ ...local, AUTH_MODE: "bad" })).toThrow("AUTH_MODE");
+		expect(() => configured({ GITHUB_APP_CLIENT_SECRET: undefined })).toThrow(
+			"GITHUB_APP_CLIENT_SECRET",
 		);
 	});
 });

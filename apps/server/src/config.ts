@@ -76,16 +76,18 @@ function storage(): StorageConfig {
 export function load(): Config {
 	let agent = process.env.AGENT !== "off";
 	let backgroundJobs = process.env.BACKGROUND_JOBS !== "off";
+	let host = process.env.SERVER_HOST || "127.0.0.1";
+	let serverPort = port();
 	return {
-		host: process.env.SERVER_HOST || "127.0.0.1",
-		port: port(),
+		host,
+		port: serverPort,
 		model: process.env.MODEL || DEFAULT_MODEL,
 		agent,
 		backgroundJobs,
 		webResearch: agent && backgroundJobs && process.env.WEB_RESEARCH !== "off",
 		devClient: process.env.DEV_CLIENT || undefined,
 		storage: storage(),
-		auth: loadAuth(),
+		auth: loadAuth(serverPort, host),
 	};
 }
 
@@ -100,8 +102,10 @@ export function describe(config: Config): string {
 	let users = config.auth.allowedUsers?.size ?? 0;
 	let organizations = config.auth.allowedOrganizations?.size ?? 0;
 	let admission = users || organizations
-		? `auth: github (restricted: ${users} users, ${organizations} organizations)`
-		: "auth: github (unrestricted)";
+		? `auth: github${
+			config.auth.local ? " local device flow" : ""
+		} (restricted: ${users} users, ${organizations} organizations)`
+		: `auth: github${config.auth.local ? " local device flow" : ""} (unrestricted)`;
 	let parts = [
 		"chopin",
 		`http://${config.host}:${config.port}`,

@@ -14,3 +14,7 @@ services:
   db-e2e-fixtures:
     ports:
       - "5434:5432"
+
+  db-e2e-local:
+    ports:
+      - "5435:5432"

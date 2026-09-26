@@ -2,6 +2,9 @@ import { GitHubClient, GitHubError } from "../github/client";
 import { StorageError } from "../storage/errors";
 import { Admission, AdmissionDenied } from "./admission";
 import { OAuthAttempts, Sessions } from "./session";
+import { DeviceAuthorization } from "./device";
+import { LocalAuth } from "./local";
+import { LocalCredentials } from "./local-store";
 
 import type { AuthConfig } from "./config";
 import type { GitHub, GitHubConditional } from "../github/client";
@@ -19,6 +22,9 @@ type Dependencies = {
 	github?: GitHub;
 	clock?: Clock;
 	agent?: boolean;
+	device?: DeviceAuthorization;
+	credentials?: LocalCredentials;
+	delay?: (ms: number, signal: AbortSignal) => Promise<void>;
 	onSessionRevoked?: (sessionId: string) => Promise<void>;
 	onCredentialsWillRotate?: (sessionId: string, revision: number) => Promise<void>;
 };
@@ -150,34 +156,113 @@ export function registerAuthRoutes(
 	let github = dependencies.github ?? new GitHubClient();
 	let admission = new Admission(config, github, () => clock().getTime());
 	let secure = new URL(config.origin).protocol === "https:";
+	let local: LocalAuth | undefined;
 	let sessions = new Sessions(storage, secure, clock, {
 		refresh: refreshToken =>
 			github.refresh({
 				clientId: config.clientId,
-				clientSecret: config.clientSecret,
+				...(config.clientSecret && !config.local ? { clientSecret: config.clientSecret } : {}),
 				refreshToken,
 			}),
 		beforeRefresh: dependencies.onCredentialsWillRotate,
-		onRevoked: dependencies.onSessionRevoked,
+		onRevoked: async id => {
+			await local?.revoked(id);
+			await dependencies.onSessionRevoked?.(id);
+		},
+		persist: config.local
+			? (id, grant, revision) => local!.persist(id, grant, revision)
+			: undefined,
+		cookieSuffix: config.local ? `_${config.local.port}` : undefined,
 		authorize: admission.restricted
 			? (user, token) => admission.allowed(token, user.id)
 			: undefined,
 		invalidate: token => admission.invalidate(token),
 	});
+	if (config.local) {
+		local = new LocalAuth({
+			config,
+			storage,
+			sessions,
+			admission,
+			github,
+			device: dependencies.device,
+			credentials: dependencies.credentials,
+			clock: () => clock().getTime(),
+			delay: dependencies.delay,
+		});
+	}
 	let attempts = new OAuthAttempts(config.encryptionKey, secure, clock);
 	let redirectUri = `${config.origin}/auth/github/callback`;
 	let context: HostedAuth = { config, storage, github, admission, sessions, clock };
-
-	router.on("GET", "/auth/github", async (_request, url) => {
-		let issued = await attempts.issue(returnPath(url, config.origin));
-		let location = github.authorize({
-			clientId: config.clientId,
-			redirectUri,
-			state: issued.state,
-			challenge: issued.challenge,
+	if (local) {
+		let flow = local;
+		let allowed = (request: Request) =>
+			(request.headers.get("host") ?? new URL(request.url).host) === new URL(config.origin).host;
+		let mutating = (request: Request) =>
+			allowed(request)
+			&& request.headers.get("origin") === config.origin;
+		let response = (result: { status: string; cookies?: string[]; [key: string]: unknown }) => {
+			let { cookies = [], ...body } = result;
+			let answer = json(body);
+			for (let value of cookies) answer.headers.append("set-cookie", value);
+			return answer;
+		};
+		router.on("POST", "/auth/device", async request => {
+			if (!mutating(request)) return json({ error: "origin is not allowed" }, 403);
+			try {
+				let result = await flow.start(request);
+				return response({ ...result.body, cookies: [result.cookie] });
+			} catch {
+				return json(
+					{ status: "failed", message: "GitHub device authorization is unavailable" },
+					502,
+				);
+			}
 		});
-		return redirected(location, 302, [issued.cookie]);
-	});
+		router.on("GET", "/auth/device", request => {
+			if (!allowed(request)) return json({ error: "origin is not allowed" }, 403);
+			return response(flow.status(request) ?? { status: "cancelled" });
+		});
+		router.on("POST", "/auth/device/cancel", request => {
+			if (!mutating(request)) return json({ error: "origin is not allowed" }, 403);
+			return response({ ...flow.cancel(request), cookies: [flow.clearAttempt] });
+		});
+		router.on("POST", "/auth/device/complete", async request => {
+			if (!mutating(request)) return json({ error: "origin is not allowed" }, 403);
+			let result = await flow.complete(request);
+			return response(result ?? { status: "cancelled" });
+		});
+		router.on("POST", "/auth/device/consent", async request => {
+			if (!mutating(request)) return json({ error: "origin is not allowed" }, 403);
+			let body: unknown;
+			try {
+				body = await request.json();
+			} catch {
+				return json({ error: "invalid choice" }, 400);
+			}
+			if (
+				!body || typeof body !== "object"
+				|| typeof (body as { accept?: unknown }).accept !== "boolean"
+			) {
+				return json({ error: "invalid choice" }, 400);
+			}
+			let result = await flow.complete(request, (body as { accept: boolean }).accept);
+			return response(result ?? { status: "cancelled" });
+		});
+	}
+
+	if (!local) {
+		router.on("GET", "/auth/github", async (_request, url) => {
+			let issued = await attempts.issue(returnPath(url, config.origin));
+			let location = github.authorize({
+				clientId: config.clientId,
+				redirectUri,
+				state: issued.state,
+				challenge: issued.challenge,
+			});
+			return redirected(location, 302, [issued.cookie]);
+		});
+	}
 
 	router.on("GET", "/auth/github/install", () =>
 		redirected(
@@ -194,53 +279,76 @@ export function registerAuthRoutes(
 		return redirected("/?repository_access=changed", 303, []);
 	});
 
-	router.on("GET", "/auth/github/callback", async (request, url) => {
-		let clear = attempts.clearCookie();
-		try {
-			if (url.searchParams.has("error")) {
-				return json({ error: "GitHub authorization was denied" }, 400, clear);
+	if (!local) {
+		router.on("GET", "/auth/github/callback", async (request, url) => {
+			let clear = attempts.clearCookie();
+			try {
+				if (url.searchParams.has("error")) {
+					return json({ error: "GitHub authorization was denied" }, 400, clear);
+				}
+				let code = parameter(url, "code");
+				let state = parameter(url, "state");
+				let stored = await attempts.read(request);
+				if (!code || !state || !stored || stored.state !== state) {
+					return json({ error: "OAuth state is missing or invalid" }, 400, clear);
+				}
+				let grant = await github.exchange({
+					clientId: config.clientId,
+					clientSecret: config.clientSecret!,
+					redirectUri,
+					code,
+					verifier: stored.verifier,
+				});
+				let profile = await admission.user(grant.accessToken);
+				let now = clock();
+				await storage.users.put({ ...profile, now });
+				let session = await sessions.issue(profile.id, grant);
+				return redirected(stored.returnPath ?? "/", 303, [clear, session.cookie]);
+			} catch (err) {
+				let response = failure(err);
+				response.headers.append("set-cookie", clear);
+				return response;
 			}
-			let code = parameter(url, "code");
-			let state = parameter(url, "state");
-			let stored = await attempts.read(request);
-			if (!code || !state || !stored || stored.state !== state) {
-				return json({ error: "OAuth state is missing or invalid" }, 400, clear);
-			}
-			let grant = await github.exchange({
-				clientId: config.clientId,
-				clientSecret: config.clientSecret,
-				redirectUri,
-				code,
-				verifier: stored.verifier,
-			});
-			let profile = await admission.user(grant.accessToken);
-			let now = clock();
-			await storage.users.put({ ...profile, now });
-			let session = await sessions.issue(profile.id, grant);
-			return redirected(stored.returnPath ?? "/", 303, [clear, session.cookie]);
-		} catch (err) {
-			let response = failure(err);
-			response.headers.append("set-cookie", clear);
-			return response;
-		}
-	});
+		});
+	}
 
 	router.on("GET", "/api/session", async request => {
 		try {
 			let authenticated = await sessions.authenticate(request);
-			if (!authenticated) {
-				return json({ user: null, agent: dependencies.agent ?? true });
+			let restoredCookie: string | undefined;
+			let clearBinding = false;
+			if (!authenticated && local) {
+				let restored = await local.restore(request);
+				restoredCookie = restored.cookie;
+				clearBinding = !!restored.clear;
+				if (restored.cookie) {
+					authenticated = await sessions.authenticate(
+						new Request(request.url, {
+							headers: { cookie: restored.cookie.split(";", 1)[0]! },
+						}),
+					);
+				}
 			}
-			return json({
-				agent: dependencies.agent ?? true,
-				installUrl: "/auth/github/install",
-				user: {
-					id: authenticated.user.id,
-					login: authenticated.user.login,
-					avatarUrl: authenticated.user.avatarUrl,
-				},
-				expiresAt: authenticated.session.expiresAt.toISOString(),
-			});
+			let reply = authenticated
+				? json({
+					agent: dependencies.agent ?? true,
+					...(local ? { auth: "local" } : {}),
+					installUrl: "/auth/github/install",
+					user: {
+						id: authenticated.user.id,
+						login: authenticated.user.login,
+						avatarUrl: authenticated.user.avatarUrl,
+					},
+					expiresAt: authenticated.session.expiresAt.toISOString(),
+				})
+				: json({
+					user: null,
+					agent: dependencies.agent ?? true,
+					...(local ? { auth: "local" } : {}),
+				});
+			if (restoredCookie) reply.headers.append("set-cookie", restoredCookie);
+			if (clearBinding) reply.headers.append("set-cookie", local!.clearBinding);
+			return reply;
 		} catch (err) {
 			return failure(err);
 		}
@@ -320,7 +428,10 @@ export function registerAuthRoutes(
 		}
 		try {
 			await sessions.revoke(request);
-			return empty(204, sessions.clearCookie());
+			await local?.logout(request).catch(() => {});
+			let response = empty(204, sessions.clearCookie());
+			if (local) response.headers.append("set-cookie", local.clearBinding);
+			return response;
 		} catch (err) {
 			return failure(err);
 		}

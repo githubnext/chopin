@@ -1,11 +1,13 @@
+import { createHash } from "node:crypto";
 export type AuthConfig = {
 	origin: string;
 	appSlug: string;
 	clientId: string;
-	clientSecret: string;
+	clientSecret?: string;
 	encryptionKey: Uint8Array;
 	allowedUsers?: ReadonlySet<string>;
 	allowedOrganizations?: ReadonlySet<string>;
+	local?: { installation: string; credentialsDir: string; port: number };
 };
 
 const GITHUB_USER_LOGIN = /^[a-z0-9](?:[a-z0-9_-]{0,37}[a-z0-9_])?$/i;
@@ -58,23 +60,51 @@ function allowed(
 	return new Set(values);
 }
 
-export function loadAuth(): AuthConfig {
+export function loadAuth(port = 8787, host = process.env.SERVER_HOST || "127.0.0.1"): AuthConfig {
 	let appSlug = process.env.GITHUB_APP_SLUG;
 	let clientId = process.env.GITHUB_APP_CLIENT_ID;
 	let clientSecret = process.env.GITHUB_APP_CLIENT_SECRET;
+	let mode = process.env.AUTH_MODE || "hosted";
+	if (mode !== "hosted" && mode !== "local") throw new Error("AUTH_MODE must be hosted or local");
 	if (!appSlug || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(appSlug)) {
 		throw new Error("GITHUB_APP_SLUG must be a lowercase GitHub App slug");
 	}
 	if (!clientId) throw new Error("GITHUB_APP_CLIENT_ID is required");
-	if (!clientSecret) {
+	if (!clientSecret && mode === "hosted") {
 		throw new Error("GITHUB_APP_CLIENT_SECRET is required");
 	}
+	let appOrigin = origin(process.env.APP_ORIGIN);
+	if (
+		mode === "local" && (
+			!["127.0.0.1", "::1", "localhost"].includes(host)
+			|| !["localhost", "127.0.0.1", "[::1]"].includes(new URL(appOrigin).hostname)
+			|| Number(new URL(appOrigin).port || (new URL(appOrigin).protocol === "https:" ? 443 : 80))
+				!== port
+		)
+	) throw new Error("AUTH_MODE=local requires a loopback SERVER_HOST and APP_ORIGIN on PORT");
 	return {
-		origin: origin(process.env.APP_ORIGIN),
+		origin: appOrigin,
 		appSlug,
 		clientId,
-		clientSecret,
+		...(clientSecret ? { clientSecret } : {}),
 		encryptionKey: encryptionKey(process.env.SESSION_ENCRYPTION_KEY),
+		...(mode === "local"
+			? {
+				local: {
+					installation: createHash("sha256")
+						.update(JSON.stringify([process.env.DATABASE_URL, appOrigin, clientId]))
+						.digest("hex"),
+					credentialsDir: process.env.CHOPIN_LOCAL_CREDENTIALS_DIR || (
+						process.platform === "win32"
+							? `${process.env.APPDATA || process.env.USERPROFILE}/Chopin`
+							: process.platform === "darwin"
+							? `${process.env.HOME}/Library/Application Support/Chopin`
+							: `${process.env.XDG_CONFIG_HOME || `${process.env.HOME}/.config`}/chopin`
+					),
+					port,
+				},
+			}
+			: {}),
 		allowedUsers: allowed(
 			"GITHUB_ALLOWED_USERS",
 			process.env.GITHUB_ALLOWED_USERS,
