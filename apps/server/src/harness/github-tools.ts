@@ -116,19 +116,17 @@ function credentialKey(owner: ActiveOwnerBinding): string {
 	return owner.ownerSessionId;
 }
 
-/**
- * `ActiveOwnerBindings#release()` aborts a binding's signal with reason `"released"`
- * once per turn even though the underlying credential (session + revision) is still
- * live for the next turn; every other abort reason (rotation, expiry, revocation,
- * channel reset, runtime stop) means the credential itself is gone. Only the latter
- * should close the cached client.
- */
-const RETAINED_ABORT_REASONS = new Set(["released"]);
+const CREDENTIAL_END_REASONS = new Set([
+	"credential-rotated",
+	"credential-expired",
+	"session-revoked",
+	"runtime-stopped",
+]);
 
-function abortRetainsCredential(signal: AbortSignal): boolean {
+function abortEndsCredential(signal: AbortSignal): boolean {
 	let reason = signal.reason;
 	let message = reason instanceof Error ? reason.message : String(reason ?? "");
-	return RETAINED_ABORT_REASONS.has(message);
+	return CREDENTIAL_END_REASONS.has(message);
 }
 
 /** Minimal shape of `MCPClient` this module depends on; keeps the test seam decoupled
@@ -177,19 +175,13 @@ function evict(key: string, entry: CacheEntry): void {
 	void closeQuietly(entry.client);
 }
 
-/**
- * Closes `entry` once `owner`'s binding ends for a reason other than a plain per-turn
- * release. Safe to call on every reuse of a cached entry: eviction is idempotent, and a
- * cache hit from a fresh `resolve()` call carries a fresh, not-yet-aborted signal that
- * still needs its own listener.
- */
 function watch(key: string, entry: CacheEntry, owner: ActiveOwnerBinding): void {
 	if (owner.signal.aborted) {
-		if (!abortRetainsCredential(owner.signal)) evict(key, entry);
+		if (abortEndsCredential(owner.signal)) evict(key, entry);
 		return;
 	}
 	owner.signal.addEventListener("abort", () => {
-		if (!abortRetainsCredential(owner.signal)) evict(key, entry);
+		if (abortEndsCredential(owner.signal)) evict(key, entry);
 	}, { once: true });
 }
 

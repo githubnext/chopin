@@ -23,7 +23,7 @@ import { ulid } from "@chopin/dialect";
 import * as Agent from "../agent/client";
 import { toCopilotTools } from "../agent/copilot-bridge";
 import { repositoryTools } from "../agent/repository";
-import { type ResearchWorkspaceRequest, toolbox } from "../agent/tools";
+import { type DocumentRoom, documentTools, type ResearchWorkspaceRequest } from "../agent/tools";
 import * as Service from "../plan/service";
 import { instruction } from "@chopin/protocol/address";
 
@@ -712,9 +712,10 @@ function currentMemberRequest(chat: Chat): ActiveMemberRequest | undefined {
 	return active;
 }
 
-export function planTools(context: Room) {
+export function documentRoom(context: Room): DocumentRoom {
 	let { chat, plan, room, server } = context;
-	return toolbox({
+	return {
+		id: room,
 		plan,
 		server,
 		publish: mutation => Service.publish(plan, server, room, mutation),
@@ -723,13 +724,13 @@ export function planTools(context: Room) {
 		anchors: () => Service.anchors(plan, server, room),
 		changes: found => Service.changes(plan, server, room, found),
 		jobs: context.jobs,
-		readReference: async id => {
+		readReference: async (id, repositoryId) => {
 			let reference = chat.referenceCache.get(id);
 			if (!reference) throw new Error("reference is not available in this Planner session");
 			if (!context.references) throw new Error("chat references are unavailable");
 			return context.references.read({
 				channelId: room,
-				repositoryId: context.repository.id,
+				repositoryId,
 				reference,
 			});
 		},
@@ -750,7 +751,7 @@ export function planTools(context: Room) {
 				question: active.text,
 			});
 		},
-	});
+	};
 }
 
 export function retainReferences(chat: Chat, references: Wire.Reference[]): void {
@@ -926,8 +927,8 @@ async function repositorySession(
 		if (!bound()) return undefined;
 		return auth.sessions.token(ownerSessionId, owner.access.revision);
 	};
-	let tools = toCopilotTools({ ...planTools(context), ...repositoryTools() }, {
-		room: context.room,
+	let tools = toCopilotTools({ ...documentTools, ...repositoryTools() }, {
+		room: documentRoom(context),
 		repository,
 		owner: { currentToken: activeToken },
 	});
