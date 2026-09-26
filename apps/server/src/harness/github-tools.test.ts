@@ -170,6 +170,20 @@ describe("bindRepository", () => {
 		]);
 	});
 
+	test("keeps the MCP tool's model-output converter so results reach a model as content parts", () => {
+		let toModelOutput = () => ({ type: "text" as const, value: "converted" });
+		let fake: ToolSet = {
+			list_pull_requests: tool({
+				description: "remote description (must not appear)",
+				inputSchema: z.object({}),
+				execute: async () => ({ content: [{ type: "text", text: "[]" }] }),
+				toModelOutput,
+			}),
+		};
+		let bound = bindRepository(fake, { list_pull_requests: "Chopin's list description" });
+		expect(bound.list_pull_requests?.toModelOutput).toBe(toModelOutput);
+	});
+
 	test("reports a tool with no mapped Chopin description as MissingTool, never using the remote one", () => {
 		let fake: ToolSet = {
 			list_pull_requests: tool({
