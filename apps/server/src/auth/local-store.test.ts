@@ -91,6 +91,39 @@ describe("local credential persistence", () => {
 		}
 	});
 
+	it("creates missing parent directories privately for the plaintext fallback", async () => {
+		let { secrets } = fake();
+		let root = await mkdtemp(join(tmpdir(), "chopin-credentials-test-"));
+		directories.push(root);
+		let nested = join(root, "missing", "nested", "chopin");
+		let store = new LocalCredentials(nested, secrets, 20);
+		let record: LocalCredential = {
+			v: 1,
+			installation: "isolated",
+			origin: "http://localhost:8790",
+			clientId: "client",
+			accountId: "U_one",
+			login: "one",
+			bindingId: crypto.randomUUID(),
+			bindingSecretHash: "abcdef",
+			accessToken: "ghu_local_secret",
+			accessExpiresAt: Date.now() + 30_000,
+			refreshToken: "ghr_local_secret",
+			refreshExpiresAt: Date.now() + 60_000,
+			backend: "plaintext",
+			generation: 1,
+		};
+		await store.save(record);
+		for (let segment of [join(root, "missing"), join(root, "missing", "nested"), nested]) {
+			expect((await stat(segment)).mode & 0o777).toBe(0o700);
+		}
+		let path = store.path(record);
+		expect((await stat(path)).mode & 0o777).toBe(0o600);
+		expect(await store.read(record)).toMatchObject({ backend: "plaintext" });
+		await store.delete(record);
+		expect(await readdir(nested)).toEqual([]);
+	});
+
 	it("bounds a delayed store, then removes a late write instead of reviving it", async () => {
 		let release = Promise.withResolvers<void>();
 		let { values, secrets } = fake();
