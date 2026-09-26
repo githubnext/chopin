@@ -2,7 +2,6 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { ulid } from "@chopin/dialect";
 
 import { type DocumentRoom, documentTools } from "./tools";
-import { toCopilotTools } from "./copilot-bridge";
 import { Admission } from "../auth/admission";
 import { Sessions } from "../auth/session";
 import * as Chat from "../chat/service";
@@ -57,26 +56,22 @@ async function opened(source: string, state: SeedState = {}) {
 	return context;
 }
 
-function legacyTools({ room, ...dependencies }: Omit<DocumentRoom, "id"> & { room: string }) {
-	return toCopilotTools(documentTools, {
-		room: { id: room, ...dependencies },
-		repository: { id: "R_test" },
-	});
+function fixtureTools({ room, ...dependencies }: Omit<DocumentRoom, "id"> & { room: string }) {
+	let context = { room: { id: room, ...dependencies }, repository: { id: "R_test" } };
+	return Object.entries(documentTools).map(([name, item]) => ({
+		name,
+		parameters: item.inputSchema,
+		handler: (input: unknown, call: { toolCallId: string; [key: string]: unknown }) =>
+			item.execute!(input as never, {
+				context,
+				toolCallId: call.toolCallId,
+				messages: [],
+			} as never),
+	}));
 }
 
-test("Copilot bridge preserves document tool names, schemas and read permissions", async () => {
-	let { plan, server } = await opened("Bridge context.\n");
-	let tools = legacyTools({
-		room: "bridge",
-		plan,
-		server,
-		persist: () => Service.persist(plan),
-		exclusive: action => Service.exclusive(plan, action),
-		async publish() {},
-		anchors() {},
-		changes() {},
-	});
-	expect(tools.map(value => value.name)).toEqual([
+test("document tool names and schemas remain available to the Planner", async () => {
+	expect(Object.keys(documentTools)).toEqual([
 		"read_plan",
 		"read_reference",
 		"list_background_jobs",
@@ -88,19 +83,7 @@ test("Copilot bridge preserves document tool names, schemas and read permissions
 		"edit_implementation_graph",
 		"anchor_plan",
 	]);
-	expect(tools.filter(value => value.skipPermission).map(value => value.name)).toEqual([
-		"read_plan",
-		"read_reference",
-		"list_background_jobs",
-		"read_background_job",
-		"ask",
-		"read_implementation_graph",
-	]);
-	expect(tools.find(value => value.name === "edit_plan")?.parameters).toMatchObject({
-		type: "object",
-		required: ["revision", "operations"],
-		additionalProperties: false,
-	});
+	expect(documentTools.edit_plan.inputSchema).toBeDefined();
 });
 
 test("document tools use the room and repository supplied with each call", async () => {
@@ -197,7 +180,7 @@ test("create_research_workspace validates one question and waits for immediate r
 		stage: "queued";
 	}>();
 	let questions: string[] = [];
-	let createResearch = legacyTools({
+	let createResearch = fixtureTools({
 		plan,
 		server,
 		room: "test",
@@ -212,7 +195,7 @@ test("create_research_workspace validates one question and waits for immediate r
 		},
 	}).find(tool => tool.name === "create_research_workspace");
 	if (!createResearch?.handler) throw new Error("create_research_workspace is missing");
-	expect(createResearch.parameters).toEqual({
+	expect((createResearch.parameters as { jsonSchema: unknown }).jsonSchema).toEqual({
 		type: "object",
 		properties: { question: { type: "string", minLength: 1, maxLength: 4_096 } },
 		required: ["question"],
@@ -267,7 +250,7 @@ test("read_reference accepts only ids made available by the active chat session"
 	let { plan, server } = await opened("Reference context.\n");
 	let available = ulid();
 	let reads: string[] = [];
-	let readReference = legacyTools({
+	let readReference = fixtureTools({
 		plan,
 		server,
 		room: "test",
@@ -325,7 +308,7 @@ test("anchor_plan publishes moving a decision beside the validated prose", async
 	});
 	let published: unknown[] = [];
 	let anchors = 0;
-	let anchorPlan = legacyTools({
+	let anchorPlan = fixtureTools({
 		plan,
 		server,
 		room: "test",
@@ -367,7 +350,7 @@ test("anchor_plan publishes moving a decision beside the validated prose", async
 test("edit_plan refuses while an implementation claim drains", async () => {
 	let { plan, server } = await opened("The plan is ready.\n");
 	(plan as typeof plan & { claiming: boolean }).claiming = true;
-	let editPlan = legacyTools({
+	let editPlan = fixtureTools({
 		plan,
 		server,
 		room: "test",
@@ -436,7 +419,7 @@ test("anchor_plan keeps same-block decisions in original ask order", async () =>
 			],
 		},
 	);
-	let anchorPlan = legacyTools({
+	let anchorPlan = fixtureTools({
 		plan,
 		server,
 		room: "test",
@@ -477,7 +460,7 @@ test("ask publishes a pending questionnaire beside its validated prose", async (
 	let { broadcasts, plan, server } = await opened("Related prose.\n");
 	let anchors = 0;
 	let created = Promise.withResolvers<void>();
-	let ask = legacyTools({
+	let ask = fixtureTools({
 		plan,
 		server,
 		room: "test",
@@ -531,7 +514,7 @@ test("ask publishes a pending questionnaire beside its validated prose", async (
 test("a stale ask does not announce an anchor snapshot", async () => {
 	let { plan, server } = await opened("Related prose.\n");
 	let anchors = 0;
-	let ask = legacyTools({
+	let ask = fixtureTools({
 		plan,
 		server,
 		room: "test",
@@ -568,7 +551,7 @@ test("a stale ask does not announce an anchor snapshot", async () => {
 test("ask refuses to create a questionnaire while implementation is active", async () => {
 	let { plan, server } = await opened("Related prose.\n");
 	let anchors = 0;
-	let ask = legacyTools({
+	let ask = fixtureTools({
 		plan,
 		server,
 		room: "test",
@@ -612,7 +595,7 @@ test("planner graph edits draft a revision without changing plan prose", async (
 	plan.chat.busy = true;
 	plan.chat.turn = { id: "turn", handle: "ana", started: 1, responded: false };
 	let before = room.project(plan.document);
-	let graph = legacyTools({
+	let graph = fixtureTools({
 		plan,
 		server,
 		room: "test",
@@ -669,7 +652,7 @@ test("planner graph edits draft a revision without changing plan prose", async (
 test("chat-started tools retain only the current member request provenance", async () => {
 	let { plan, server, storage, channel } = await opened("Prepare the implementation.\n");
 	let now = new Date();
-	let tools = legacyTools({
+	let tools = fixtureTools({
 		plan,
 		server,
 		room: "test",
@@ -697,58 +680,14 @@ test("chat-started tools retain only the current member request provenance", asy
 		}],
 	};
 	let response: string | undefined;
-	let event: ((value: { type: string }) => void) | undefined;
 	let firstStarted = Promise.withResolvers<void>();
 	let continueFirst = Promise.withResolvers<void>();
 	let sent = Promise.withResolvers<void>();
 	let activeRequests: Array<Chat.ActiveMemberRequest | undefined> = [];
 	let researchRequests: Array<Parameters<NonNullable<Chat.Room["createResearch"]>>[0]> = [];
 	let researchResponses: string[] = [];
-	let researchTool: ReturnType<typeof toCopilotTools>[number] | undefined;
-	plan.chat.agent = {
-		id: "session",
-		session: {
-			on(listener: (value: { type: string }) => void) {
-				event = listener;
-				return () => {};
-			},
-			async send() {
-				let active = plan.chat.activeRequest;
-				activeRequests.push(active ? { ...active } : undefined);
-				let turn = activeRequests.length;
-				if (turn === 1) {
-					firstStarted.resolve();
-					await continueFirst.promise;
-					let result = await graph.handler!(args, {
-						sessionId: "session",
-						toolCallId: "call",
-						toolName: "edit_implementation_graph",
-						arguments: args,
-					});
-					if (typeof result !== "string") throw new Error("graph tool returned no text");
-					response = result;
-				} else {
-					if (!researchTool?.handler) throw new Error("research tool is missing");
-					let question = "Which public release evidence supports adopting version 3?";
-					let attempts = turn === 2 ? 2 : 1;
-					for (let attempt = 0; attempt < attempts; attempt++) {
-						let result = await researchTool.handler({ question }, {
-							sessionId: "session",
-							toolCallId: `research-${turn}-${attempt}`,
-							toolName: "create_research_workspace",
-							arguments: { question },
-						});
-						if (typeof result !== "string") throw new Error("research tool returned no text");
-						researchResponses.push(result);
-					}
-				}
-				event?.({ type: "session.idle" });
-				if (turn === 3) sent.resolve();
-			},
-			async abort() {},
-			async disconnect() {},
-		} as never,
-	};
+	let destroyed = 0;
+	let researchTool: ReturnType<typeof fixtureTools>[number] | undefined;
 	let key = new Uint8Array(32).fill(7);
 	let sessions = new Sessions(storage, true, () => now);
 	let claimant = await sessions.issue("U_test", {
@@ -791,15 +730,20 @@ test("chat-started tools retain only the current member request provenance", asy
 		clock: () => now,
 	};
 	let ownership = await Chat.resolveOwner(auth, repository, channel.id, claimant.id);
-	plan.chat.owner = {
-		sessionId: claimant.id,
-		generation: ownership.ownership.generation,
-		revision: ownership.owner.access.revision,
-		expiresAt: Math.min(
-			ownership.owner.access.expiresAt.getTime(),
-			ownership.owner.session.expiresAt.getTime(),
-		),
-	};
+	let activeOwner = () =>
+		Promise.resolve({
+			channelId: channel.id,
+			token: "gho_test",
+			repository,
+			ownerSessionId: claimant.id,
+			ownerGeneration: ownership.ownership.generation,
+			credentialRevision: ownership.owner.access.revision,
+			expiresAt: ownership.owner.access.expiresAt,
+			signal: new AbortController().signal,
+			currentToken: () => "gho_test",
+			revalidate: async () => true,
+			release() {},
+		});
 	let context: Chat.Room = {
 		chat: plan.chat,
 		plan,
@@ -810,6 +754,43 @@ test("chat-started tools retain only the current member request provenance", asy
 		claimantSessionId: claimant.id,
 		repository,
 		persist: () => Service.persist(plan),
+		activeOwner,
+		openPlannerSession: async () => ({
+			ok: true,
+			value: {
+				stream: async (_prompt, _signal) =>
+					({
+						fullStream: (async function*() {
+							let active = plan.chat.activeRequest;
+							activeRequests.push(active ? { ...active } : undefined);
+							let turn = activeRequests.length;
+							if (turn === 1) {
+								firstStarted.resolve();
+								await continueFirst.promise;
+								let result = await graph.handler!(args, { toolCallId: "call" });
+								if (typeof result !== "string") throw new Error("graph tool returned no text");
+								response = result;
+							} else {
+								if (!researchTool?.handler) throw new Error("research tool is missing");
+								let question = "Which public release evidence supports adopting version 3?";
+								let attempts = turn === 2 ? 2 : 1;
+								for (let attempt = 0; attempt < attempts; attempt++) {
+									let result = await researchTool.handler({ question }, {
+										toolCallId: `research-${turn}-${attempt}`,
+									});
+									if (typeof result !== "string") throw new Error("research tool returned no text");
+									researchResponses.push(result);
+								}
+							}
+							yield { type: "finish" };
+							if (turn === 3) sent.resolve();
+						})(),
+					}) as never,
+				async destroy() {
+					destroyed++;
+				},
+			},
+		}),
 		createResearch: async request => {
 			researchRequests.push(request);
 			return {
@@ -819,10 +800,9 @@ test("chat-started tools retain only the current member request provenance", asy
 			};
 		},
 	};
-	researchTool = toCopilotTools(documentTools, {
-		room: Chat.documentRoom(context),
-		repository,
-	}).find(tool => tool.name === "create_research_workspace");
+	let { id: _id, ...documentContext } = Chat.documentRoom(context);
+	researchTool = fixtureTools({ ...documentContext, room: context.room })
+		.find(tool => tool.name === "create_research_workspace");
 
 	await Chat.send(
 		context,
@@ -961,7 +941,7 @@ test("planner graph edits name readiness blockers before changing a graph", asyn
 			}],
 		},
 	} as never);
-	let graph = legacyTools({
+	let graph = fixtureTools({
 		plan,
 		server,
 		room: "test",

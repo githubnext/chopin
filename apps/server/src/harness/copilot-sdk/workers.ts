@@ -1,9 +1,12 @@
 /**
- * Starting the agent.
+ * Background workers, still on the Copilot SDK directly.
  *
- * Disposable Planner and worker sessions share one hardened runtime. A
- * restarted process reconstructs context from durable Chopin state rather
- * than resuming Copilot's filesystem state.
+ * Temporary: kept here only because `jobs/document-summary.ts` and
+ * `jobs/research-workspace.ts` have not moved to `HarnessAgent` structured
+ * output yet. Slice 4 deletes this file along with those two dependents'
+ * SDK usage. It runs on its own `Runtime`, separate from the Planner
+ * adapter's, because the public research worker needs Copilot's built-in
+ * GitHub MCP enabled and the Planner adapter must keep it disabled.
  */
 
 import { CopilotClient, RuntimeConnection } from "@github/copilot-sdk";
@@ -11,42 +14,25 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { locate } from "./cli";
-import {
-	gate,
-	PUBLIC_WEB_SEARCH_FILTER,
-	PUBLIC_WEB_SEARCH_SERVER,
-	PUBLIC_WEB_SEARCH_TOOL,
-	publicResearchGate,
-	terminalGate,
-} from "./permissions";
-import { NAME, plannerFor, TOOLS } from "./planner";
+import { locate } from "../../agent/cli";
 import { Runtime } from "./runtime";
 
 import type {
 	CopilotSession,
 	CurrentToolMetadata,
 	CustomAgentConfig,
+	PermissionHandler,
+	PermissionRequest,
+	PermissionRequestResult,
 	SessionConfig,
 	Tool,
 } from "@github/copilot-sdk";
-import type { Config } from "../config";
-import type { HostedRepository } from "./repository";
+import type { Config } from "../../config";
 
 export type Agent = {
 	session: CopilotSession;
 	/** Runtime identity used only to delete the disposable SDK session. */
 	id: string;
-};
-
-/** The tools a planner may call, over and above the runtime's own. */
-export type Toolbox = { tools: Tool[] };
-
-export type PlannerSession = {
-	token: string;
-	repository: HostedRepository;
-	bootstrap?: string;
-	authorize?: () => Promise<boolean>;
 };
 
 export type WorkerSession = {
@@ -63,6 +49,9 @@ const SESSION_CONTROL_TIMEOUT_MS = 10_000;
 const MIN_WORKER_AI_CREDITS = 30;
 const MCP_READY_TIMEOUT_MS = 20_000;
 const MCP_READY_POLL_MS = 100;
+export const PUBLIC_WEB_SEARCH_SERVER = "github-mcp-server";
+export const PUBLIC_WEB_SEARCH_TOOL = "web_search";
+export const PUBLIC_WEB_SEARCH_FILTER = `mcp:${PUBLIC_WEB_SEARCH_TOOL}`;
 export const RUNTIME_ENV = {
 	COPILOT_ENABLE_BUILTIN_GITHUB_MCP: "true",
 	COPILOT_PLUGIN_DIR_ONLY: "true",
@@ -105,6 +94,56 @@ function workerCreditLimit(value: number): number {
 	return value;
 }
 
+function deny(feedback: string): PermissionRequestResult {
+	return { kind: "reject", feedback };
+}
+
+function allow(): PermissionRequestResult {
+	return { kind: "approve-once" };
+}
+
+/** A worker may submit one terminal result and has no ambient capabilities. */
+export function terminalGate(
+	tool: string,
+	active?: () => Promise<boolean>,
+): PermissionHandler {
+	return async (request: PermissionRequest): Promise<PermissionRequestResult> => {
+		if (active && !(await active())) {
+			return deny("The Copilot owner is no longer active.");
+		}
+		return request.kind === "custom-tool" && request.toolName === tool
+			? allow()
+			: deny("This worker may only submit its registered result.");
+	};
+}
+
+/** Public research receives no private tools and may only use exact web search. */
+export function publicResearchGate(
+	resultTool: string,
+	active?: () => Promise<boolean>,
+	onWebSearchDenied?: () => void,
+): PermissionHandler {
+	return async (request: PermissionRequest): Promise<PermissionRequestResult> => {
+		if (active && !(await active())) return deny("The Copilot owner is no longer active.");
+		if (request.kind === "custom-tool") {
+			return request.toolName === resultTool
+				? allow()
+				: deny("This worker may only submit its registered research result.");
+		}
+		if (request.kind === "mcp") {
+			let allowed = request.serverName === PUBLIC_WEB_SEARCH_SERVER
+				&& request.readOnly
+				&& request.toolName === PUBLIC_WEB_SEARCH_TOOL;
+			if (!allowed && request.toolName === PUBLIC_WEB_SEARCH_TOOL) onWebSearchDenied?.();
+			return allowed
+				? allow()
+				: deny("Only the exact read-only public web search tool is available.");
+		}
+		if (request.kind === "url") return deny("Public research has no direct URL fetch capability.");
+		return deny("Public research has no repository, filesystem, shell, or private document tools.");
+	};
+}
+
 function hardened(config: Pick<Config, "model">, token: string): SessionConfig {
 	return {
 		model: config.model,
@@ -125,49 +164,6 @@ function hardened(config: Pick<Config, "model">, token: string): SessionConfig {
 		mcpOAuthTokenStorage: "in-memory",
 		enableSessionTelemetry: false,
 		remoteSession: "off",
-	} as SessionConfig;
-}
-
-export function plannerConfiguration(
-	config: Pick<Config, "model">,
-	toolbox: Toolbox,
-	options: PlannerSession,
-): SessionConfig {
-	let repository = `${options.repository.owner}/${options.repository.name}`;
-	let tools = toolbox.tools.map(tool => ({ ...tool, skipPermission: false }));
-	return {
-		...hardened(config, options.token),
-		streaming: true,
-		availableTools: TOOLS,
-		tools,
-		customAgents: [plannerFor(repository)],
-		agent: NAME,
-		mcpServers: {
-			github: {
-				type: "http",
-				url: "https://api.githubcopilot.com/mcp/",
-				tools: ["*"],
-				headers: {
-					Authorization: `Bearer ${options.token}`,
-					"X-MCP-Readonly": "true",
-					"X-MCP-Toolsets": "pull_requests",
-				},
-			},
-		},
-		systemMessage: {
-			mode: "append",
-			content: [
-				`The selected repository is ${repository}. Repository reads must remain inside it.`,
-				"More than one person may be in this conversation; their messages are prefixed with the speaker's handle.",
-				options.bootstrap ?? "",
-			].filter(Boolean).join(" "),
-		},
-		onPermissionRequest: gate({
-			owner: options.repository.owner,
-			repository: options.repository.name,
-			tools: new Set(tools.map(tool => tool.name)),
-			active: options.authorize,
-		}),
 	} as SessionConfig;
 }
 
@@ -234,7 +230,7 @@ export function publicResearchConfiguration(
 function connect() {
 	let cli = locate();
 	if (!cli.ok) throw new Error(cli.reason);
-	let home = mkdtempSync(join(tmpdir(), "chopin-copilot-"));
+	let home = mkdtempSync(join(tmpdir(), "chopin-copilot-worker-"));
 	try {
 		let client = new CopilotClient({
 			mode: "empty",
@@ -254,48 +250,6 @@ function connect() {
 }
 
 let runtime = new Runtime(connect);
-
-/**
- * Report what the planner can actually call.
- *
- * A tool filter is matched against names by the runtime, and an entry that
- * matches nothing is dropped without a word. There is no other place that
- * truth is visible: the agent simply behaves as though it never had the tool,
- * and explains its way around the absence rather than reporting it — which is
- * how a planner can spend a turn apologising for having no GitHub access while
- * its prompt insists it has.
- *
- * Runs against a real session rather than the boot probe, because the probe
- * has no room and therefore none of the plan tools; auditing it would report a
- * set nobody ever gets. Costs one line per session, and is never fatal — a
- * diagnostic that can stop a turn is worse than no diagnostic.
- */
-async function audit(session: CopilotSession): Promise<void> {
-	try {
-		await session.rpc.tools.initializeAndValidate();
-		let { tools } = await session.rpc.tools.getCurrentMetadata();
-
-		if (!tools) {
-			console.warn("[agent] the tool list is not initialised");
-		} else {
-			let names = tools.map(tool => tool.namespacedName || tool.name).sort();
-			console.log(`[agent] ${names.length} tools: ${names.join(", ")}`);
-		}
-	} catch (err) {
-		console.warn("[agent] could not read the tool list:", err);
-	}
-
-	try {
-		// Throws when the server never connected, which is the distinction
-		// worth having: no tools because none were offered, or no tools
-		// because the ones offered were not matched.
-		let { tools } = await session.rpc.mcp.listTools({ serverName: "github" });
-		console.log(`[agent] github mcp: ${tools.length} tools offered`);
-	} catch (err) {
-		let reason = err instanceof Error ? err.message : String(err);
-		console.warn(`[agent] github mcp is not connected: ${reason}`);
-	}
-}
 
 export function assertWorkerTools(
 	tools: CurrentToolMetadata[] | null | undefined,
@@ -398,24 +352,6 @@ export async function auditPublicResearchTools(
 	assertWorkerTools(tools, expected, true);
 }
 
-/** Create a disposable session authenticated and scoped to one owner and repository. */
-export async function openPlanner(
-	config: Pick<Config, "agent" | "model">,
-	toolbox: Toolbox,
-	options: PlannerSession,
-): Promise<Agent> {
-	if (!config.agent) throw new Error("The hosted agent is disabled.");
-	let session = await runtime.open(plannerConfiguration(config, toolbox, options));
-	try {
-		await session.rpc.agent.select({ name: NAME });
-		await audit(session);
-		return { session, id: session.sessionId };
-	} catch (err) {
-		await runtime.discard(session).catch(() => {});
-		throw err;
-	}
-}
-
 /** Create a disposable isolated session for one registered background attempt. */
 export async function openWorker(
 	config: Pick<Config, "agent" | "model">,
@@ -480,7 +416,9 @@ export async function settle(opening: Promise<Agent>): Promise<Agent | undefined
 	return opened;
 }
 
-/** Close every remaining session and let go of the CLI process. */
-export async function shutdown(): Promise<void> {
+/** Close every remaining worker session and let go of the CLI process. */
+export async function shutdownWorkers(): Promise<void> {
 	await runtime.shutdown();
 }
+
+export type { Tool } from "@github/copilot-sdk";
