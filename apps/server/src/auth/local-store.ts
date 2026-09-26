@@ -148,14 +148,8 @@ export class LocalCredentials {
 			return;
 		}
 		let parent = dirname(this.path(record));
-		let created = false;
-		try {
-			await mkdir(parent, { mode: 0o700 });
-			created = true;
-		} catch (err) {
-			if (!(err instanceof Error && "code" in err && err.code === "EEXIST")) throw err;
-		}
-		if (created && process.platform !== "win32") await chmod(parent, 0o700);
+		let created = await mkdir(parent, { recursive: true, mode: 0o700 });
+		if (created !== undefined && process.platform !== "win32") await chmod(parent, 0o700);
 		let info = await lstat(parent);
 		if (
 			!info.isDirectory() || info.isSymbolicLink()

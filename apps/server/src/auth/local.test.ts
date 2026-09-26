@@ -601,4 +601,34 @@ describe("browser-bound local sign-in", () => {
 		expect(await (await f.request(restarted.router, "/api/session", "GET", binding)).json())
 			.toMatchObject({ user: null });
 	});
+
+	it("returns to sign-in without resending a spent token when restore rotation cannot be persisted", async () => {
+		let f = await fixture();
+		let first = f.server();
+		let started = await f.request(first.router, "/auth/device", "POST");
+		let attempt = pair(cookies(started)[0]!);
+		f.approve();
+		f.waits.shift()!.release();
+		await f.wait("authorized", first.router, attempt);
+		let completed = await f.request(first.router, "/auth/device/complete", "POST", attempt);
+		let binding = pair(cookies(completed).find(value => value.startsWith("chopin_local_binding"))!);
+		f.advance(28_800_000 - 4 * 60_000);
+		let originalSave = f.credentials.save;
+		f.credentials.save = async () => {
+			throw new Error("disk full");
+		};
+		let restarted = f.server();
+		let restored = await f.request(restarted.router, "/api/session", "GET", binding);
+		expect(restored.status).toBe(200);
+		expect(await restored.json()).toMatchObject({ user: null });
+		expect(cookies(restored).find(value => value.startsWith("chopin_local_binding")))
+			.toContain("Max-Age=0");
+		expect(f.refreshes()).toBe(1);
+		expect(f.values.size).toBe(0);
+		f.credentials.save = originalSave;
+		let again = f.server();
+		let second = await f.request(again.router, "/api/session", "GET", binding);
+		expect(await second.json()).toMatchObject({ user: null });
+		expect(f.refreshes()).toBe(1);
+	});
 });
