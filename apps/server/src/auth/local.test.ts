@@ -79,6 +79,7 @@ async function fixture(vaultFailure = false, initialInterval = 1) {
 		},
 	});
 	let refreshes = 0;
+	let rejectedRefresh = false;
 	let userGate: { started: () => void; release: Promise<void> } | undefined;
 	let userId = "U_one";
 	let github = new GitHubClient({
@@ -97,6 +98,7 @@ async function fixture(vaultFailure = false, initialInterval = 1) {
 				let params = new URLSearchParams(String(init?.body));
 				refreshes++;
 				expect(params.has("client_secret")).toBe(false);
+				if (rejectedRefresh) return Response.json({ error: "bad_refresh_token" });
 				return Response.json({
 					access_token: "ghu_rotated",
 					refresh_token: "ghr_rotated",
@@ -170,6 +172,9 @@ async function fixture(vaultFailure = false, initialInterval = 1) {
 		request,
 		wait,
 		refreshes: () => refreshes,
+		rejectRefresh: () => {
+			rejectedRefresh = true;
+		},
 		polls,
 		outcomes,
 		advance: (ms: number) => {
@@ -574,5 +579,26 @@ describe("browser-bound local sign-in", () => {
 		gate.release();
 		expect(await (await invalid).json()).toMatchObject({ user: null });
 		expect(await (await valid).json()).toMatchObject({ user: { id: "U_one" } });
+	});
+
+	it("returns to sign-in after an interrupted rotation leaves a spent refresh token", async () => {
+		let f = await fixture();
+		let first = f.server();
+		let started = await f.request(first.router, "/auth/device", "POST");
+		let attempt = pair(cookies(started)[0]!);
+		f.approve();
+		f.waits.shift()!.release();
+		await f.wait("authorized", first.router, attempt);
+		let completed = await f.request(first.router, "/auth/device/complete", "POST", attempt);
+		let binding = pair(cookies(completed).find(value => value.startsWith("chopin_local_binding"))!);
+		f.advance(28_800_000 + 1_000);
+		f.rejectRefresh();
+		let restarted = f.server();
+		let restored = await f.request(restarted.router, "/api/session", "GET", binding);
+		expect(await restored.json()).toMatchObject({ user: null });
+		expect(f.refreshes()).toBe(1);
+		expect(f.values.size).toBe(0);
+		expect(await (await f.request(restarted.router, "/api/session", "GET", binding)).json())
+			.toMatchObject({ user: null });
 	});
 });

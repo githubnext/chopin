@@ -129,6 +129,7 @@ export default defineConfig({
 				"**/responsive*.e2e.ts",
 				"**/sidecar.e2e.ts",
 				"**/harness.e2e.ts",
+				"**/local-auth.e2e.ts",
 			],
 			use: { ...devices["Desktop Chrome"], baseURL: `http://${HOST}:${PLAIN}` },
 		},
@@ -145,6 +146,11 @@ export default defineConfig({
 			name: "harness",
 			testMatch: ["**/harness.e2e.ts"],
 			use: { ...devices["Desktop Chrome"], baseURL: `http://${HOST}:${HARNESS}` },
+		},
+		{
+			name: "local",
+			testMatch: "**/local-auth.e2e.ts",
+			use: { ...devices["Desktop Chrome"], baseURL: "http://127.0.0.1:8791" },
 		},
 	],
 
