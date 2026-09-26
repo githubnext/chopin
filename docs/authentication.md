@@ -19,7 +19,8 @@ Setup URL:    <APP_ORIGIN>/auth/github/setup
 
 - Leave **Expire user authorization tokens** enabled.
 - Leave **Request user authorization (OAuth) during installation** disabled.
-- Leave device flow disabled.
+- Leave device flow disabled for a hosted deployment; local device-flow sign-in
+  (below) requires enabling it on the App instead.
 - Enable **Redirect on update** when a setup URL is configured.
 - Disable webhooks.
 - Select **Any account** so personal accounts and organizations can install it.
@@ -83,6 +84,111 @@ never from incoming Host or forwarded headers.
 
 The complete variable reference and deployment procedures live in
 [Self-hosting](self-hosting.md).
+
+## Local device-flow sign-in
+
+`AUTH_MODE=local` replaces the browser authorization-code flow with GitHub's
+device flow and persists the resulting credential so a restarted process can
+resume the same login. It is a loopback-only mode, not an alternative hosted
+deployment: `SERVER_HOST` must be `127.0.0.1`, `::1`, or `localhost`, and
+`APP_ORIGIN` must be an exact HTTP(S) loopback origin on the same port. The
+Docker image binds `0.0.0.0` and is incompatible with local mode; run from a
+source checkout instead.
+
+Device flow authenticates with the App's public client ID only.
+`GITHUB_APP_CLIENT_SECRET` is not read in local mode; a value left over from a
+hosted `.env` is ignored. Enable device flow on the App used for local mode
+(this is the opposite of the hosted guidance above), and keep **Expire user
+authorization tokens** enabled so expiring access and refresh tokens are
+issued.
+
+The browser flow is:
+
+1. `POST /auth/device` requests a device code from GitHub and returns the
+   user-facing code, verification URL, and expiry to the browser. The private
+   `device_code` never leaves the server. The response also sets an
+   HttpOnly, origin-checked attempt cookie that binds later requests to the
+   same browser.
+2. The browser shows the code and polls `GET /auth/device` roughly every one
+   to two seconds. The server polls GitHub independently, honoring GitHub's
+   advertised interval and any `slow_down` increase, so approval from another
+   device or browser still completes the attempt.
+3. Once GitHub reports the grant, the browser calls
+   `POST /auth/device/complete`, which validates the authorized identity and
+   admission, then attempts credential persistence.
+4. If persistence needs plaintext consent, `complete` (or the next `GET`)
+   reports `{status: "consent", path}`, the exact local file path. The browser
+   shows the plaintext-storage warning; `POST /auth/device/consent {accept}`
+   either finishes sign-in or cancels it. Declining or dismissing this prompt
+   discards the pending credential and cancels the attempt without creating a
+   session; it does not fall back to an in-memory-only login.
+5. `POST /auth/device/cancel` cancels an attempt at any point and discards any
+   pending credential.
+
+Device routes do not return `401`, which the browser client treats as an
+invalid session and reloads. A missing attempt cookie reports `cancelled`;
+state-changing requests with a mismatched Origin return `403`.
+
+**Credential persistence** prefers the operating system's credential store
+(macOS Keychain, Windows Credential Manager, or a Linux secret service such as
+gnome-keyring, through `Bun.secrets`). That attempt is bounded to five
+seconds so an unavailable or locked store cannot hang sign-in; a store call
+that is still in flight when the bound expires is left running and its
+eventual result is discarded (a late success is deleted, not kept) so it can
+never resurrect a declined or superseded attempt.
+
+When the store is missing, inaccessible, disabled, or times out, Chopin keeps
+the credential in memory and asks for plaintext consent instead of writing
+anything, using this exact warning and choice text:
+
+```text
+System vault not available
+
+The recommended secure storage (keychain, keyring, or credential manager) could not be found or accessed. You may need to install or configure one.
+
+Storing the token in the config file saves it as plain text, which is insecure. If you decline, sign-in will be cancelled and no account state will be changed.
+
+Store token in plain text config file?
+
+Yes, store in plain text (insecure)
+No, cancel sign-in
+```
+
+Accepting writes the credential to a JSON file under the directory named by
+`CHOPIN_LOCAL_CREDENTIALS_DIR` (default `$XDG_CONFIG_HOME/chopin`, or
+`~/.config/chopin` on Linux, `~/Library/Application Support/Chopin` on macOS,
+`%APPDATA%\Chopin` on Windows), with a newly created directory at `0700` and
+the credential file at `0600` on Unix, and an atomic write-then-rename so a
+crash mid-write cannot leave a partially written file. These permissions
+restrict which local account can read the file; they do not encrypt it or
+make it equivalent to an OS credential store. Chopin never writes it inside
+the repository or process working directory. Consent applies to this login
+only: it is not a standing "prefer plaintext" preference for future accounts,
+and a later secure-store failure during refresh never falls back to writing
+plaintext silently.
+
+**Restoring after a restart** uses a separate long-lived, HttpOnly,
+browser-binding cookie set only on successful sign-in. On the next
+`/api/session` call, Chopin loads the persisted credential for that binding,
+checks the installation, origin, App client ID, and account against the
+stored record, revalidates or refreshes the token, rechecks identity and
+admission exactly as a fresh sign-in would, and issues a new ordinary session.
+Startup still clears every process-local session and Planner ownership, so a
+restored login does not reclaim Planner ownership or replay interrupted model
+work; the returning browser only skips repeating the device-flow prompt.
+
+**Logout** in local mode deletes the persisted credential from whichever
+backend stored it and clears the session and binding cookies. Because
+device-issued refresh tokens do not require the client secret, but revoking
+the grant on GitHub's side does, local logout cannot revoke the GitHub
+authorization itself; the user must remove it from **Settings > Applications**
+on GitHub to fully revoke access. A stale or delayed store write after logout
+cannot revive the login, because logout also invalidates the browser binding
+it depended on.
+
+Each browser has its own binding; configured instance admission lists still
+apply to every authorized account. Loopback binding does not make this a mode
+for internet-facing or exposed multi-user deployments.
 
 ## Instance admission
 
@@ -189,6 +295,9 @@ the still-valid access token; after access expiry it reports a temporary error
 and retains the session for retry.
 
 Sessions expire absolutely after 30 days or whenever the server process stops.
+In local mode, the session created after a restart is a new session bound to
+the restored device-flow credential, not the same session ID; see
+[Local device-flow sign-in](#local-device-flow-sign-in) for the restore path.
 After acquiring the database writer lease, every new process clears session
 registry rows and Planner ownership before accepting traffic. Documents,
 transcripts, reserved Planner context fields, and repository installations
@@ -201,8 +310,8 @@ and WebSocket upgrades require an Origin header exactly equal to `APP_ORIGIN`.
 The bearer-authenticated MCP route accepts a missing Origin, as non-browser
 clients normally omit it, but rejects a present mismatched Origin. Open sockets
 periodically recheck the process-local session, instance admission, and
-installation repository permission. A browser whose socket reconnects after a
-restart is returned to sign-in.
+installation repository permission. On restart, a returning local browser
+restores a new session on `/api/session`; hosted browsers return to sign-in.
 
 When a credential rotates, any Planner SDK session holding the previous token
 is aborted and discarded before refresh. A later turn recreates it from the
@@ -226,6 +335,18 @@ GET  /api/channels/:channelId
 PATCH /api/channels/:channelId
 POST /api/channels/:channelId/agent/reset
 POST /auth/logout
+```
+
+Local mode (`AUTH_MODE=local`) additionally registers these routes. It disables
+the authorization-code flow, so `/auth/github` and `/auth/github/callback`
+return `404`; `/auth/github/install` and `/auth/github/setup` keep working:
+
+```text
+POST /auth/device
+GET  /auth/device
+POST /auth/device/complete
+POST /auth/device/consent
+POST /auth/device/cancel
 ```
 
 The repository-scoped document endpoint backs readable browser URLs. Existing
