@@ -2,13 +2,14 @@ import { describe, expect, it } from "bun:test";
 
 import { DeviceAuthorization } from "./device";
 
-function client(responses: Array<unknown | Error>) {
+function client(responses: Array<unknown | Error | Response>) {
 	let requests: Array<{ url: string; body: URLSearchParams }> = [];
 	let device = new DeviceAuthorization({
 		fetch: async (input, init) => {
 			requests.push({ url: String(input), body: new URLSearchParams(String(init?.body)) });
 			let response = responses.shift();
 			if (response instanceof Error) throw response;
+			if (response instanceof Response) return response;
 			return Response.json(response);
 		},
 	});
@@ -62,5 +63,15 @@ describe("GitHub device authorization network boundary", () => {
 		let states = [];
 		for (let index = 0; index < 6; index++) states.push((await device.poll("id", "code")).status);
 		expect(states).toEqual(["denied", "expired", "expired", "failed", "failed", "transient"]);
+	});
+	it("classifies a non-JSON 5xx or 429 body as transient rather than failed", async () => {
+		let { device } = client([
+			new Response("<html>Bad gateway</html>", { status: 502 }),
+			new Response("Too Many Requests", { status: 429 }),
+			new Response("<html>Service Unavailable</html>", { status: 503 }),
+		]);
+		let states = [];
+		for (let index = 0; index < 3; index++) states.push((await device.poll("id", "code")).status);
+		expect(states).toEqual(["transient", "transient", "transient"]);
 	});
 });

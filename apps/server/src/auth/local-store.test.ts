@@ -132,4 +132,38 @@ describe("local credential persistence", () => {
 		await store.save(invalid);
 		expect(await readFile(path, "utf8")).toContain("ghu_local_secret");
 	});
+
+	if (process.env.TEST_NATIVE_SECRETS) {
+		it("round-trips through the real OS credential store (opt-in native check)", async () => {
+			let root = await mkdtemp(join(tmpdir(), "chopin-credentials-native-"));
+			directories.push(root);
+			let store = new LocalCredentials(join(root, "config"));
+			let record: LocalCredential = {
+				v: 1,
+				installation: "native-check",
+				origin: "http://localhost:8790",
+				clientId: "client",
+				accountId: "U_native",
+				login: "native",
+				bindingId: crypto.randomUUID(),
+				bindingSecretHash: "abcdef",
+				accessToken: "ghu_native_dummy",
+				accessExpiresAt: Date.now() + 30_000,
+				refreshToken: "ghr_native_dummy",
+				refreshExpiresAt: Date.now() + 60_000,
+				backend: "keychain",
+				generation: 1,
+			};
+			let name = credentialName(record);
+			expect(await store.saveSecure(record)).toBe(true);
+			console.info(`native secret check: key ${name}, length ${JSON.stringify(record).length}`);
+			expect(await readdir(root)).toEqual([]);
+			expect(await store.read(record)).toMatchObject({
+				accountId: record.accountId,
+				backend: "keychain",
+			});
+			await store.delete(record);
+			expect(await Bun.secrets.get({ service: "chopin-local-auth", name })).toBeNull();
+		});
+	}
 });
