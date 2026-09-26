@@ -2,7 +2,7 @@
 
 Chopin's background system runs durable, versioned work outside the shared
 Planner conversation. A job may execute ordinary code or open one or more
-isolated Copilot worker sessions. The code calls the durable unit a **background
+isolated harness worker sessions. The code calls the durable unit a **background
 job**; this document uses **worker** for the disposable execution session. A
 worker is not a child Planner turn, coding agent, or runtime plugin.
 
@@ -28,7 +28,7 @@ See [Hosted agent](hosted-agent.md) for the Planner conversation and
 | Failure                         | An attempt that consumes retry budget. `failures`, not `attempts`, is compared with `maxAttempts`. |
 | Claim generation                | A fencing counter that prevents an expired or cancelled worker from publishing late output.        |
 | Artifact                        | The immutable, validated JSON result written only when a job completes.                            |
-| Worker                          | A disposable execution context, optionally backed by an isolated Copilot SDK session.              |
+| Worker                          | A disposable execution context, optionally backed by an isolated harness session.                  |
 | Background-job channel revision | The invalidation counter for job mutations in one channel, separate from each job's revision.      |
 
 Keep these counters separate from the Yjs epoch, document sequence, plan
@@ -44,7 +44,7 @@ flowchart LR
 	P -->|fenced claim| R[JobRunner]
 	R --> C[Credential resolver]
 	C --> X[Registered executor]
-	X -->|optional disposable session| A[Copilot worker]
+	X -->|optional disposable session| A[Harness worker]
 	X -->|progress| P
 	X -->|candidate artifact| S
 	S -->|validate and settle| P
@@ -454,33 +454,34 @@ under that flag without a deliberate change to the main runner gate.
 
 ## Model-backed workers
 
-Do not reuse the Planner conversation session. Every worker stage opens a fresh,
-disposable SDK session. Most stages submit one bounded structured result;
-generated document descriptions reuse one disposable session for multiple
-bounded chunk and reduction turns.
+Do not reuse the Planner conversation session. Every worker stage runs its own
+`HarnessAgent` with a fresh, disposable session. A `HarnessAgent`'s `output`
+schema is fixed per agent, not per turn, so the four research stages — public
+evidence, private document analysis, private report synthesis, and private
+answer synthesis — each get their own named agent with its own result schema;
+`summaryAgent` is a fifth, for document descriptions. Generated document
+descriptions reuse one disposable session across multiple bounded chunk and
+reduction turns; every other stage submits one bounded structured result.
 
 ### Private worker
 
-Use `Agent.openWorker()` for private document or repository-derived material.
-The effective capability set must contain only the definition's terminal result
-tool. Private workers receive no MCP server, web search, URL fetch, repository
-tool, shell, filesystem, host Git, skill, or plugin.
+A private stage's agent declares an empty tool set and empty `activeTools`, so
+its session has no MCP server, web search, URL fetch, repository tool, shell,
+filesystem, host Git, skill, or plugin. The only way it can finish is by
+returning output that matches its `output` schema.
 
 ### Public research worker
 
-Use `Agent.openPublicResearchWorker()` only for an explicitly disclosed public
-query. Its fail-closed capability audit requires exactly:
+Only the public evidence agent binds a host `web_search` tool, reached through
+`createMCPClient` against GitHub MCP's `web_search` toolset, and lists it as
+its only `activeTools` entry. Never give one agent both private document
+context and public web capability.
 
-```text
-custom:submit_research_result
-github-mcp-server/web_search
-```
-
-Never give one session both private context and public web capability. The
-public evidence worker receives only the submitted brief. An isolated no-web
-document-analysis worker receives the brief and parent-document snapshot. A
-separate isolated no-web report-synthesis worker receives the brief, normalized
-public evidence, and the private findings from document analysis.
+The public evidence worker receives only the submitted brief. An isolated
+no-web document-analysis worker receives the brief and parent-document
+snapshot. A separate isolated no-web report-synthesis worker receives the
+brief, normalized public evidence, and the private findings from document
+analysis.
 
 Accepted public sources must be canonical public HTTPS URLs observed in
 successful web-search citation or typed-resource metadata. Bare URLs in model
@@ -491,22 +492,25 @@ evidence. This validates provenance, not factual accuracy or page safety.
 ### Executor-owned limits
 
 `JobLimits.maxAiCredits` is not centrally enforced by `JobRunner`. It describes
-the maximum aggregate credits for one job attempt. A model-backed executor must
-set per-session limits whose possible total does not exceed it; for example, a
-60-credit two-stage job can allocate 30 credits to each worker. The current
-worker helper requires at least 30 credits per session. Keep definition metadata
-and actual worker construction synchronized.
+the maximum aggregate AI credits for one job attempt, so a model-backed
+executor must register per-harness-session limits whose possible total does
+not exceed it. The Copilot SDK adapter keeps a credit-limited harness session
+on one SDK session across its turns and refuses a later turn that would require
+different native settings or a new credit window. All document-description
+chunks and reductions share its 64-credit limit. Each research stage uses a
+fresh 30-credit session; the two initial answer stages fit the 60-credit job
+limit. Keep definition metadata and adapter settings synchronized.
 
-Always recheck `credential.authorize`, observe credential and job abort signals,
-and discard the SDK session in `finally`.
+Always recheck `credential.authorize`, observe credential and job abort
+signals, and destroy the harness session in `finally`.
 
 ## Current definitions
 
 | Definition            | Production trigger                      | Persisted input                                                                      | Worker boundary                                                                           |
 | --------------------- | --------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
 | `document-summary@1`  | Open, edit, restore, or MCP persistence | Revision, source hash, generator version, and `output:"description"`; not the source | Private worker; source loaded at execution and publication rechecks current revision/hash |
-| `research-evidence@1` | Immediate research request              | Internal workspace, initial turn, exact submitted brief                              | Public worker with only result tool and audited `web_search`                              |
-| `research-answer@1`   | Completed evidence                      | Parent document snapshot, evidence, and internal compatibility history               | Two private workers with only result tools for analysis and complete report synthesis     |
+| `research-evidence@1` | Immediate research request              | Internal workspace, initial turn, exact submitted brief                              | Public evidence agent bound to a host `web_search` tool, no other tools                   |
+| `research-answer@1`   | Completed evidence                      | Parent document snapshot, evidence, and internal compatibility history               | Two no-web private agents with structured output for analysis and report synthesis        |
 
 `document-summary@1` remains the only durable definition version; there is no
 `document-summary@2`. New V1 requests carry the output marker and use the
@@ -582,7 +586,8 @@ Here, **private** means not disclosed to public web search. Internal staging
 rows, selected compatibility projections, and artifacts are readable through
 authorized server paths. Normalized job input is persisted but omitted from the
 inline card projection. Private worker material is still sent to the hosted
-Copilot inference service under the active owner's credential.
+model inference service, through the configured harness, under the active
+owner's credential.
 
 ## Archive and deletion
 
@@ -706,7 +711,7 @@ E2E server environment where relevant.
 - Assuming process-local completion callbacks are durable delivery.
 - Bypassing `JobService` and therefore bypassing codecs, origins, versions, and
   byte limits.
-- Assuming Playwright executes live Copilot work; E2E runs with `AGENT=off` and
+- Assuming Playwright executes live harness work; E2E runs with `AGENT=off` and
   seeds validated job state.
 
 ## Testing
@@ -731,7 +736,7 @@ bun run ci
 bun run e2e
 ```
 
-Definition tests should inject engines rather than call live Copilot. Cover
+Definition tests should inject engines rather than call a live harness. Cover
 strict codecs, exact context separation, progress, citation or provenance rules,
 and artifact rejection. Runner tests should cover success, retries, timeout,
 owner loss, credential rotation, cancellation, heartbeat loss, late output, and
@@ -748,7 +753,8 @@ PostgreSQL run the same cases.
 - Document-description projection: `apps/server/src/jobs/document-description.ts`
 - Definition registration and runtime wiring: `apps/server/src/main.ts`
 - Active owner resolution: `apps/server/src/agent/active-owner.ts`
-- Private and public worker construction: `apps/server/src/agent/client.ts`
+- Worker agents (`summaryAgent`, `researchAgent`, and the private research
+  stage agents): `apps/server/src/harness/agents.ts`
 - Durable job model and port: `apps/server/src/storage/model.ts` and
   `apps/server/src/storage/port.ts`
 - PostgreSQL job store: `apps/server/src/storage/postgres/jobs.ts`
