@@ -17,6 +17,7 @@
 		"CODE_OF_CONDUCT.md",
 		"LICENSE.md",
 		"SECURITY.md",
+		".agents/skills/gh-stack/**",
 		"**/dist",
 		"**/node_modules",
 		"**/*-lock.json",
