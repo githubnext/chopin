@@ -75,9 +75,11 @@ and tool vocabulary remain optimized for planning.
   `HARNESS=pi`, model access comes from the operator's `HARNESS_AUTH` instead.
   A server restart signs everyone out and releases that ownership.
 - Document and Chat context, along with repository material selected by
-  the Planner, is sent to GitHub Copilot during a turn. Model-backed background
-  jobs also send job-specific private material, including context loaded during
-  execution, to isolated Copilot workers. The public research worker receives
+  the Planner, is sent to the harness's model provider during a turn (GitHub
+  Copilot by default; under `HARNESS=pi`, the provider chosen by
+  `HARNESS_AUTH`). Model-backed background jobs also send job-specific private
+  material, including context loaded during execution, to isolated workers on
+  the same harness. The public research worker receives
   only the exact submitted brief, but may derive or refine the queries it sends
   to web search. GitHub credentials remain process-local;
   documents, transcripts, decisions, research request staging, background-job

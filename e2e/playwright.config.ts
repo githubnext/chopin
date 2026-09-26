@@ -102,6 +102,9 @@ export default defineConfig({
 
 	outputDir: "test-results",
 	fullyParallel: true,
+	// Some motion assertions poll a layer that exists only for its 180-250ms exit;
+	// at the default worker count on a developer machine they outlast that window.
+	workers: process.env.CI ? undefined : 4,
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 2 : 0,
 	reporter: process.env.CI

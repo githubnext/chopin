@@ -3,8 +3,8 @@
 Chopin is one Bun application, one browser client, and one PostgreSQL database.
 The application serves the built client, HTTP API, Streamable HTTP MCP endpoint,
 and WebSocket from the same origin. GitHub supplies identity and repository
-authorization; GitHub Copilot supplies the hosted document agent runtime,
-currently named Planner.
+authorization; the selected harness (GitHub Copilot by default, or Pi) supplies
+the hosted document agent runtime, currently named Planner.
 
 This document describes the system boundaries and collaborative document model.
 See [Repository channels](channels.md) for channel creation and access,
@@ -32,8 +32,8 @@ and [Self-hosting](self-hosting.md) for deployment.
   The V1 product surface offers neither child research nor grandchildren. The UI
   blocks starting research from a child; the API may accept the request, but
   publication validation rejects linking a grandchild.
-- The **Planner** is the current name of Chopin's hosted Copilot-backed document
-  agent.
+- The **Planner** is the current name of Chopin's hosted document agent, backed
+  by GitHub Copilot by default or by Pi under `HARNESS=pi`.
 - A **coding agent** is an external MCP client that creates, revises, or implements a
   document from its own local workspace.
 
@@ -53,7 +53,7 @@ flowchart LR
 	C[Local coding agent] -->|Bearer-authenticated MCP| S
 	S --> P[(PostgreSQL)]
 	S --> G[GitHub API]
-	S --> A[GitHub Copilot]
+	S --> A[Harness model provider: Copilot or Pi]
 	S --> W[Built web client]
 ```
 
