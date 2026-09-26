@@ -10,7 +10,8 @@
 import { join } from "node:path";
 import { ulid } from "@chopin/dialect";
 
-import * as Agent from "./agent/client";
+import { shutdownHarnesses } from "./harness/harnesses";
+import { shutdownWorkers } from "./harness/copilot-sdk/workers";
 import { ActiveOwnerBindings } from "./agent/active-owner";
 import { registerAuthRoutes } from "./auth/routes";
 import * as Chat from "./chat/service";
@@ -177,6 +178,7 @@ function chat(room: Rooms.Room, ws: Socket): Chat.Room {
 			defaultBranch: ws.data.repositoryDefaultBranch,
 		},
 		persist: () => Service.persist(room.plan!),
+		activeOwner: () => ownerBindings!.resolve(room.id),
 		ownerAvailable: () => jobRunner?.ownerAvailable(room.id) ?? Promise.resolve(),
 		jobs: config.backgroundJobs ? jobService : undefined,
 		references: referenceService,
@@ -647,7 +649,10 @@ function drain(): Promise<void> {
 		for (let result of await Promise.allSettled([stoppingJobs])) {
 			if (result.status === "rejected") record(result.reason);
 		}
-		await attempt(() => Agent.shutdown());
+		await attempt(async () => {
+			await shutdownHarnesses();
+			await shutdownWorkers();
+		});
 		if (leaseRenewal) clearInterval(leaseRenewal);
 		if (leaseWatchdog) clearTimeout(leaseWatchdog);
 		for (let result of await Promise.allSettled([renewingLease])) {
@@ -1159,7 +1164,7 @@ try {
 	let reset = await storage.sessions.deleteAll(new Date(), heldLease, LEASE_TTL_MS);
 	heldLease = reset.lease;
 } catch (err) {
-	await Agent.shutdown();
+	await Promise.all([shutdownHarnesses(), shutdownWorkers()]);
 	if (heldLease) await storage.leases.release(heldLease).catch(() => {});
 	await storage.close().catch(() => {});
 	let reason = err instanceof Error ? err.message : String(err);
@@ -1184,7 +1189,7 @@ try {
 	let stoppingJobs = jobRunner.shutdown();
 	ownerBindings.revokeAll();
 	await stoppingJobs.catch(() => {});
-	await Agent.shutdown();
+	await Promise.all([shutdownHarnesses(), shutdownWorkers()]);
 	if (heldLease) await storage.leases.release(heldLease).catch(() => {});
 	await storage.close().catch(() => {});
 	throw err;

@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 import * as limits from "@chopin/dialect/limits";
 
-import * as Agent from "../agent/client";
-import { PUBLIC_WEB_SEARCH_SERVER, PUBLIC_WEB_SEARCH_TOOL } from "../agent/permissions";
+import * as Agent from "../harness/copilot-sdk/workers";
+import { PUBLIC_WEB_SEARCH_SERVER, PUBLIC_WEB_SEARCH_TOOL } from "../harness/copilot-sdk/workers";
 import { JobExecutionError } from "./registry";
 
-import type { Tool } from "@github/copilot-sdk";
+import type { Tool } from "../harness/copilot-sdk/workers";
 import type { Config } from "../config";
 import type { JsonValue } from "../storage/model";
 import type { JobDefinition, JobExecution, JobExecutionDiagnostic } from "./registry";

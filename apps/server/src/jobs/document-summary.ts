@@ -4,9 +4,9 @@ import { parse } from "@chopin/dialect/parse";
 import { serialize } from "@chopin/dialect/serialize";
 import { assert } from "@chopin/dialect/validate";
 
-import * as Agent from "../agent/client";
+import * as Agent from "../harness/copilot-sdk/workers";
 
-import type { Tool } from "@github/copilot-sdk";
+import type { Tool } from "../harness/copilot-sdk/workers";
 import type { Config } from "../config";
 import type { DocumentTarget } from "../plan/service";
 import type { JsonValue } from "../storage/model";

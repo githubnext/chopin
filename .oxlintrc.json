@@ -16,6 +16,23 @@
 		"no-await-in-loop": "off",
 		"no-cond-assign": "off",
 		"no-shadow": "off",
+		"no-restricted-imports": [
+			"error",
+			{
+				"paths": [
+					{
+						"name": "@github/copilot-sdk",
+						"message": "Import @github/copilot-sdk only from apps/server/src/harness/copilot-sdk/."
+					}
+				],
+				"patterns": [
+					{
+						"group": ["@github/copilot-sdk/*"],
+						"message": "Import @github/copilot-sdk only from apps/server/src/harness/copilot-sdk/."
+					}
+				]
+			}
+		],
 		"no-unused-expressions": [
 			"error",
 			{
@@ -35,5 +52,13 @@
 		"triple-slash-reference": "off",
 		"typescript/no-import-type-side-effects": "error",
 		"unicorn/no-array-sort": "off"
-	}
+	},
+	"overrides": [
+		{
+			"files": ["apps/server/src/harness/copilot-sdk/**"],
+			"rules": {
+				"no-restricted-imports": "off"
+			}
+		}
+	]
 }

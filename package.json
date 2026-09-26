@@ -50,6 +50,7 @@
 			"harness": {
 				"@ai-sdk/harness": "1.0.126",
 				"@ai-sdk/mcp": "2.0.60",
+				"@ai-sdk/sandbox-just-bash": "1.0.126",
 				"ai": "7.0.116",
 				"zod": "4.4.3"
 			},
