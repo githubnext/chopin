@@ -95,16 +95,17 @@ export function load(): Config {
 	let agent = process.env.AGENT !== "off";
 	let backgroundJobs = process.env.BACKGROUND_JOBS !== "off";
 	let selection = harnessSelection();
+	let serverPort = port();
 	return {
 		...selection,
-		port: port(),
+		port: serverPort,
 		model: model(selection.harness),
 		agent,
 		backgroundJobs,
 		webResearch: agent && backgroundJobs && process.env.WEB_RESEARCH !== "off",
 		devClient: process.env.DEV_CLIENT || undefined,
 		storage: storage(),
-		auth: loadAuth(),
+		auth: loadAuth(serverPort, selection.host),
 	};
 }
 
@@ -119,8 +120,10 @@ export function describe(config: Config): string {
 	let users = config.auth.allowedUsers?.size ?? 0;
 	let organizations = config.auth.allowedOrganizations?.size ?? 0;
 	let admission = users || organizations
-		? `auth: github (restricted: ${users} users, ${organizations} organizations)`
-		: "auth: github (unrestricted)";
+		? `auth: github${
+			config.auth.local ? " local device flow" : ""
+		} (restricted: ${users} users, ${organizations} organizations)`
+		: `auth: github${config.auth.local ? " local device flow" : ""} (unrestricted)`;
 	let parts = [
 		"chopin",
 		`http://${config.host}:${config.port}`,
