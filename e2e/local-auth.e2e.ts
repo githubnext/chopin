@@ -189,7 +189,9 @@ test("local device approval, backend fallback, restart and logout", async ({ pag
 	await expect(instruction).toBeVisible();
 	let firstCode = (await instruction.textContent())!.match(/E2E-\d{4}/)![0]!;
 	await writeFile(join(directory, "approval"), firstCode);
-	await expect(page.getByRole("alertdialog")).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByRole("region", { name: "System vault not available" })).toBeVisible({
+		timeout: 20_000,
+	});
 	await expect(page.getByText("System vault not available")).toBeVisible();
 	await expect(page.getByText(join(directory, "config"), { exact: false })).toBeVisible();
 	await expect(page.getByRole("checkbox")).toHaveCount(0);
@@ -201,9 +203,11 @@ test("local device approval, backend fallback, restart and logout", async ({ pag
 	let dismissedCode = (await instruction.textContent())!.match(/E2E-\d{4}/)![0]!;
 	expect(dismissedCode).not.toBe(firstCode);
 	await writeFile(join(directory, "approval"), dismissedCode);
-	await expect(page.getByRole("alertdialog")).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByRole("region", { name: "System vault not available" })).toBeVisible({
+		timeout: 20_000,
+	});
 	await page.keyboard.press("Escape");
-	await expect(page.getByRole("alertdialog")).toHaveCount(0);
+	await expect(page.getByRole("region", { name: "System vault not available" })).toHaveCount(0);
 	await expect(page.getByText("Open your workspace")).toBeVisible();
 	expect((await readdir(directory)).sort()).toEqual(["approval", "fake-vault"]);
 	await page.getByRole("button", { name: /sign in|device|github/i }).first().click();
@@ -211,7 +215,9 @@ test("local device approval, backend fallback, restart and logout", async ({ pag
 	let nextCode = (await instruction.textContent())!.match(/E2E-\d{4}/)![0]!;
 	expect(nextCode).not.toBe(dismissedCode);
 	await writeFile(join(directory, "approval"), nextCode);
-	await expect(page.getByRole("alertdialog")).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByRole("region", { name: "System vault not available" })).toBeVisible({
+		timeout: 20_000,
+	});
 	await page.getByRole("button", { name: "Yes, store in plain text (insecure)" }).click();
 	await expect(page.getByRole("button", { name: "octocat", exact: true }))
 		.toBeVisible({ timeout: 20_000 });
@@ -224,7 +230,7 @@ test("local device approval, backend fallback, restart and logout", async ({ pag
 	await page.reload();
 	await expect(page.getByRole("button", { name: "octocat", exact: true }))
 		.toBeVisible({ timeout: 20_000 });
-	await expect(page.getByRole("alertdialog")).toHaveCount(0);
+	await expect(page.getByRole("region", { name: "System vault not available" })).toHaveCount(0);
 	if (await page.getByRole("button", { name: "Close Add Project" }).isVisible()) {
 		await page.keyboard.press("Escape");
 		await expect(page.getByRole("button", { name: "Close Add Project" })).toHaveCount(0);
