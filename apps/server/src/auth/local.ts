@@ -518,7 +518,13 @@ export class LocalAuth {
 					refreshExpiresAt: now + grant.refreshExpiresIn * 1_000,
 					generation: record.generation + 1,
 				};
-				await this.#credentials.save(record);
+				try {
+					await this.#credentials.save(record);
+				} catch {
+					this.#revoked.add(binding.id);
+					await this.#credentials.delete(record).catch(() => {});
+					return { clear: true };
+				}
 				if (this.#revoked.has(binding.id)) {
 					await this.#credentials.delete(record);
 					return { clear: true };
