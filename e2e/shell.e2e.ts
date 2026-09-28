@@ -28,6 +28,27 @@ test("an icon button shows its label on keyboard focus", async ({ join }) => {
 	await expect(tooltip).toBeHidden();
 });
 
+test("an icon tooltip remains visible while its button is focused", async ({ join, page }) => {
+	await join("ana");
+	let addProject = page.getByRole("button", { exact: true, name: "Add Project" });
+	await addProject.hover();
+	await addProject.focus();
+	let tooltip = page.locator("[data-icon-tooltip]");
+	await expect(tooltip).toBeVisible();
+	await page.mouse.move(0, 0);
+	await expect(tooltip).toBeVisible();
+});
+
+test("an icon tooltip preserves a title updated during hover", async ({ join, page }) => {
+	await join("ana");
+	let addProject = page.getByRole("button", { exact: true, name: "Add Project" });
+	await addProject.evaluate(button => button.setAttribute("title", "Original title"));
+	await addProject.hover();
+	await addProject.evaluate(button => button.setAttribute("title", "Updated title"));
+	await page.mouse.move(0, 0);
+	await expect(addProject).toHaveAttribute("title", "Updated title");
+});
+
 test("a drag the browser takes away still puts the bar down", async ({ join, page }) => {
 	await join("ana");
 

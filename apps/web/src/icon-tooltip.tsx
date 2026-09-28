@@ -43,6 +43,8 @@ export function IconTooltip() {
 		tooltip.setAttribute("aria-hidden", "true");
 		document.body.append(tooltip);
 		let active: HTMLButtonElement | null = null;
+		let hovered: HTMLButtonElement | null = null;
+		let focused: HTMLButtonElement | null = null;
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		let originalTitle: string | null = null;
 
@@ -50,7 +52,9 @@ export function IconTooltip() {
 			clearTimeout(timer);
 			timer = undefined;
 			tooltip.removeAttribute("data-visible");
-			if (active && originalTitle !== null) active.setAttribute("title", originalTitle);
+			if (active && originalTitle !== null && !active.hasAttribute("title")) {
+				active.setAttribute("title", originalTitle);
+			}
 			active = null;
 			originalTitle = null;
 		}
@@ -90,23 +94,38 @@ export function IconTooltip() {
 
 		function pointerOver(event: PointerEvent) {
 			if (event.pointerType === "touch") return;
-			enter(iconButton(event.target));
+			hovered = iconButton(event.target);
+			enter(hovered ?? focused);
 		}
 
 		function pointerOut(event: PointerEvent) {
-			if (active && !active.contains(event.relatedTarget as Node)) hide();
+			if (
+				hovered?.contains(event.target as Node)
+				&& !hovered.contains(event.relatedTarget as Node)
+			) {
+				hovered = null;
+				enter(focused);
+			}
 		}
 
 		function focusOut(event: FocusEvent) {
-			if (active && !active.contains(event.relatedTarget as Node)) hide();
+			if (
+				focused?.contains(event.target as Node)
+				&& !focused.contains(event.relatedTarget as Node)
+			) {
+				focused = null;
+				enter(hovered);
+			}
 		}
 
 		function focusIn(event: FocusEvent) {
-			enter(iconButton(event.target));
+			focused = iconButton(event.target);
+			enter(hovered ?? focused);
 		}
 
 		function scroll() {
-			let focused = active === document.activeElement ? active : null;
+			hovered = null;
+			focused = iconButton(document.activeElement);
 			hide();
 			if (focused) enter(focused);
 		}
