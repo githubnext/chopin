@@ -44,11 +44,12 @@ contributors who use [mise](https://mise.jdx.dev); run `mise install` once. Keep
 the package metadata, `mise.toml`, Docker image, CI, and documentation
 synchronized when changing it.
 
-`bun run e2e` starts three disposable PostgreSQL services, migrates them, builds
+`bun run e2e` starts four disposable PostgreSQL services, migrates them, builds
 the client, starts applications on ports 8788 and 8789 with `AGENT=off`, and an
 isolated `AGENT=on` fake-harness server on 8792 (with its fake GitHub MCP server
-on 8797) alongside them, then runs Chromium. Set `E2E_SKIP_BUILD=1` only when
-the existing client build is known to match the checkout.
+on 8797) alongside them, then runs Chromium. The local-auth test starts its own
+application on port 8791 against the fourth database. Set `E2E_SKIP_BUILD=1`
+only when the existing client build is known to match the checkout.
 
 CI has three independent jobs: validation, browser integration, and a Docker
 image build. A documentation-only change should still pass `bun run ci`.
