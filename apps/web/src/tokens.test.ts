@@ -205,21 +205,46 @@ describe("palette", () => {
 });
 
 describe("type", () => {
-	it("has exactly the five designed rungs", () => {
-		let found = [...THEME.matchAll(/\n\s*(--text-(?![\w-]*--line-height)[\w-]+):\s*([\d.]+rem);/g)]
-			.map(match => [match[1], Number.parseFloat(match[2]!) * 16]);
-		expect(found).toEqual([
-			["--text-sm", 13],
-			["--text-base", 15],
-			["--text-lg", 17],
-			["--text-xl", 24],
-			["--text-2xl", 32],
-		]);
+	it("uses the designed fluid modular steps at both viewport endpoints", () => {
+		let steps = [
+			["xs", -2],
+			["sm", -1],
+			["base", 0],
+			["lg", 2],
+			["xl", 4],
+			["2xl", 7],
+		] as const;
+		let found = [...SHARED_THEME.matchAll(/\n\s*(--text-(?![\w-]*--line-height)[\w-]+):/g)]
+			.map(match => match[1]);
+		expect(found).toEqual(steps.map(([name]) => `--text-${name}`));
+		for (let [name, step] of steps) {
+			let value = declared(`--text-${name}`);
+			let match = /^clamp\(([\d.]+)rem, ([\d.]+)rem \+ ([\d.]+)vw, ([\d.]+)rem\)$/.exec(value);
+			expect(match).not.toBeNull();
+			let [, low, intercept, slope, high] = match!;
+			let expectedMin = 15 * 1.12 ** step;
+			let expectedMax = 16 * 1.14 ** step;
+			expect(Number(low) * 16).toBeCloseTo(expectedMin, 3);
+			expect(Number(intercept) * 16 + Number(slope) * 3.6).toBeCloseTo(expectedMin, 3);
+			expect(Number(intercept) * 16 + Number(slope) * 14.4).toBeCloseTo(expectedMax, 3);
+			expect(Number(high) * 16).toBeCloseTo(expectedMax, 3);
+		}
 	});
 
 	it("pairs every rung with its designed line height", () => {
-		expect(["sm", "base", "lg", "xl", "2xl"].map(name => declared(`--text-${name}--line-height`)))
-			.toEqual(["1.25rem", "1.375rem", "1.6875rem", "1.875rem", "2.375rem"]);
+		expect(
+			["xs", "sm", "base", "lg", "xl", "2xl"].map(name => declared(`--text-${name}--line-height`)),
+		)
+			.toEqual(["1.35", "1.5", "1.5", "1.4", "1.25", "1.15"]);
+	});
+
+	it("restores fluid type inside MDXEditor's fixed variable scope", () => {
+		for (let name of ["xs", "sm"] as const) {
+			expect(EDITOR_STYLES).toContain(`--plan-text-${name}: var(--text-${name});`);
+			expect(EDITOR_STYLES).toContain(`--text-${name}: var(--plan-text-${name});`);
+		}
+		expect(EDITOR_STYLES).toContain("--plan-body: var(--text-base);");
+		expect(EDITOR_STYLES).toContain("--text-base: var(--plan-body);");
 	});
 });
 
@@ -629,7 +654,7 @@ describe("migration", () => {
 
 	it("leaves no consumer on the replaced vocabulary", () => {
 		let removed =
-			/(?<![\w-])(?:text-(?:2xs|xs)|shadow-(?:xs|sm|md|lg)|(?:bg|text|border|ring)-(?:background|foreground|surface|muted(?:-foreground)?|card|popover|primary(?:-foreground|-hover)?|secondary(?:-foreground)?|accent(?:-foreground)?|border|input|ring|code))(?![\w-])|var\(--color-(?:background|foreground|surface|muted(?:-foreground)?|card(?:-foreground)?|popover(?:-foreground)?|primary(?:-foreground|-hover)?|secondary(?:-foreground)?|accent(?:-foreground)?|border|input|ring|code)\)/g;
+			/(?<![\w-])(?:shadow-(?:xs|sm|md|lg)|(?:bg|text|border|ring)-(?:background|foreground|surface|muted(?:-foreground)?|card|popover|primary(?:-foreground|-hover)?|secondary(?:-foreground)?|accent(?:-foreground)?|border|input|ring|code))(?![\w-])|var\(--color-(?:background|foreground|surface|muted(?:-foreground)?|card(?:-foreground)?|popover(?:-foreground)?|primary(?:-foreground|-hover)?|secondary(?:-foreground)?|accent(?:-foreground)?|border|input|ring|code)\)/g;
 		let offenders: string[] = [];
 		for (let file of [...sources(join(ROOT, "apps")), ...sources(join(ROOT, "packages"))]) {
 			if (file === join(import.meta.dir, "theme.css") || file === import.meta.path) continue;

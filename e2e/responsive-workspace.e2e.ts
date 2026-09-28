@@ -363,7 +363,7 @@ test("the compact side of the Projects transition keeps phone navigation", async
 	await expectNoHorizontalOverflow(page);
 });
 
-test("the wide side of the Projects transition uses the inline sidebar", async ({ join, seed }) => {
+test("the wide Projects sidebar slides over the workspace without resizing it", async ({ join, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", { viewport: { width: 1024, height: 768 } });
 	let projects = page.getByRole("complementary", { includeHidden: true, name: "Projects" });
@@ -376,6 +376,7 @@ test("the wide side of the Projects transition uses the inline sidebar", async (
 	await expect(page.getByRole("separator", { name: "Resize chat" })).toBeVisible();
 	let documentView = page.getByRole("group", { name: "Document view" });
 	await expect(documentView).toBeVisible();
+	let documentWidth = (await documentView.boundingBox())!.width;
 	await expect(documentView.getByRole("button", { name: "Tasks & Progress" })).toHaveCount(0);
 	await expect(documentView.getByRole("button", { name: "Background Work" })).toHaveCount(0);
 
@@ -384,9 +385,11 @@ test("the wide side of the Projects transition uses the inline sidebar", async (
 	await expect(track).toHaveAttribute("inert", "");
 	await expect(opener).toBeFocused();
 	await expect(track).toHaveCount(0);
+	expect((await documentView.boundingBox())!.width).toBeCloseTo(documentWidth, 0);
 
 	await opener.click();
 	await expect(projects).toBeVisible();
+	expect((await documentView.boundingBox())!.width).toBeCloseTo(documentWidth, 0);
 	await page.getByRole("button", { name: "Collapse Projects sidebar" }).click();
 	await expect(track).toHaveAttribute("aria-hidden", "true");
 	await opener.click();

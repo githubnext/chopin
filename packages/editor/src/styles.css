@@ -137,6 +137,8 @@
 	 * rather than ours. `.plan` is outside that root, so this catches the
 	 * theme's value on the way past.
 	 */
+	--plan-text-xs: var(--text-xs);
+	--plan-text-sm: var(--text-sm);
 	--plan-body: var(--text-base);
 }
 
@@ -211,7 +213,7 @@
 	height: 24px;
 	place-items: center;
 	border-radius: var(--radius-md);
-	font-size: 0.75rem;
+	font-size: var(--text-xs);
 }
 
 :root[data-plan-coarse-pointer] .plan-comment-button {
@@ -594,6 +596,9 @@
 .plan .mdxeditor {
 	background: transparent;
 	font-family: var(--font-sans);
+	--text-xs: var(--plan-text-xs);
+	--text-sm: var(--plan-text-sm);
+	--text-base: var(--plan-body);
 
 	--basePageBg: transparent;
 	--baseBase: var(--color-page);
@@ -783,17 +788,14 @@
 	font-size: var(--text-sm);
 }
 
-/*
- * Inline code. Sized in `em` so it tracks whatever it sits in — a heading's
- * code should not shrink to body size — and left to `pre` when it is a block.
- */
+/* Inline code follows its parent heading or prose; block code has its own role. */
 .plan-content :not(pre) > code {
 	background: var(--color-inset);
 	color: var(--color-text-primary);
 	border-radius: var(--radius-sm);
 	padding: 0.125em 0.3em;
 	font-family: ui-monospace, SFMono-Regular, monospace;
-	font-size: 0.875em;
+	font-size: inherit;
 }
 
 /*

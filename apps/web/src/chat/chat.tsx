@@ -312,7 +312,7 @@ export function Chat(
 						aria-disabled={!composerReady || submitting}
 						aria-expanded={referencesEnabled ? pickerOpen : undefined}
 						aria-haspopup={referencesEnabled ? "listbox" : undefined}
-						className="min-h-0 flex-1 w-full resize-none bg-transparent px-4 py-3 text-[14px]"
+						className="min-h-0 flex-1 w-full resize-none bg-transparent px-4 py-3 text-sm"
 						readOnly={!composerReady || submitting}
 						role={referencesEnabled ? "combobox" : undefined}
 						onBeforeInput={event => {
