@@ -1,0 +1,34 @@
+.icon-tooltip {
+	position: fixed;
+	z-index: 1000;
+	max-width: min(20rem, calc(100vw - 16px));
+	padding: var(--spacing) calc(var(--spacing) * 2);
+	border: 1px solid var(--color-gray-750);
+	border-radius: var(--radius-md);
+	background: var(--color-gray-800);
+	box-shadow: var(--shadow-overlay);
+	color: var(--color-white);
+	font-size: var(--text-sm);
+	font-weight: 500;
+	line-height: 1.35;
+	text-align: center;
+	pointer-events: none;
+	opacity: 0;
+	visibility: hidden;
+	transition: opacity 120ms ease-out, visibility 120ms ease-out;
+}
+
+.icon-tooltip[data-side="top"] {
+	transform: translateY(-100%);
+}
+
+.icon-tooltip[data-visible] {
+	opacity: 1;
+	visibility: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.icon-tooltip {
+		transition: none;
+	}
+}

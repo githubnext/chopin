@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Chopin · Icon tooltip jig</title>
+		<link
+			rel="stylesheet"
+			href="https://cdn.jsdelivr.net/npm/dialkit@latest/dist/vanilla/styles.css"
+		>
+		<style>
+		:root {
+			/* Standalone mirrors of the tooltip tokens in packages/visuals/theme.css. */
+			--color-gray-750: oklch(0.32036 0.00877 95);
+			--color-gray-800: oklch(0.25993 0.00745 95);
+			--color-white: oklch(1 0 0);
+			--radius-md: 0.375rem;
+			--text-sm: 0.8125rem;
+			font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+			color: #252420;
+			background: #f4f4f1;
+		}
+		* {
+			box-sizing: border-box;
+		}
+		body {
+			min-height: 100vh;
+			margin: 0;
+			padding: 48px 24px 120px;
+		}
+		main {
+			max-width: 680px;
+			margin: auto;
+		}
+		h1 {
+			margin: 0 0 8px;
+			font-size: 24px;
+			letter-spacing: -0.04em;
+		}
+		.intro {
+			margin: 0 0 30px;
+			color: #605e56;
+			font-size: 14px;
+			line-height: 1.5;
+		}
+		.preview {
+			background: white;
+			border: 1px solid #e5e4df;
+			border-radius: 10px;
+			padding: 32px;
+			box-shadow: 0 10px 40px #2524200b;
+		}
+		.compare {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 24px;
+		}
+		.example {
+			min-width: 0;
+			border: 1px solid #e5e4df;
+			border-radius: 8px;
+			overflow: visible;
+		}
+		.example h2 {
+			margin: 0;
+			padding: 12px 16px;
+			color: #605e56;
+			font-size: 12px;
+			font-weight: 600;
+			border-bottom: 1px solid #e5e4df;
+		}
+		.sidebar {
+			min-height: 240px;
+			background: #f4f4f1;
+			padding: 16px;
+			border-radius: 0 0 8px 8px;
+		}
+		.sidebar-top, .project-row {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+		}
+		.sidebar-top {
+			margin-bottom: 24px;
+			font-size: 13px;
+			font-weight: 700;
+			color: #045d69;
+		}
+		.project-row {
+			height: 32px;
+			color: #47453f;
+			font-size: 13px;
+			font-weight: 600;
+		}
+		.project-row span:first-child {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+		}
+		.doc-row {
+			display: flex;
+			gap: 8px;
+			align-items: center;
+			margin: 8px 0 0 21px;
+			color: #605e56;
+			font-size: 13px;
+		}
+		.icon-button {
+			position: relative;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			width: 24px;
+			height: 24px;
+			border: 0;
+			border-radius: 4px;
+			background: transparent;
+			padding: 5px;
+			color: #78766e;
+			cursor: pointer;
+		}
+		.sidebar-top .icon-button::before, .project-row .icon-button::before {
+			position: absolute;
+			inset: -4px;
+			content: "";
+		}
+		.icon-button:hover, .icon-button:focus-visible {
+			background: #e9e8e3;
+			outline: none;
+		}
+		.icon-button:focus-visible {
+			box-shadow: 0 0 0 2px #06707e;
+		}
+		.icon-button img {
+			width: 14px;
+			height: 14px;
+		}
+		.project-controls {
+			display: flex;
+			gap: 5px;
+		}
+		.toolbar {
+			display: flex;
+			gap: 12px;
+			align-items: center;
+			margin-top: 18px;
+			border-top: 1px solid #e5e4df;
+			padding-top: 18px;
+		}
+		.toolbar-label {
+			margin-right: auto;
+			color: #605e56;
+			font-size: 12px;
+		}
+		.toolbar .icon-button {
+			width: 28px;
+			height: 28px;
+			border-radius: 6px;
+		}
+		.tooltip {
+			position: fixed;
+			z-index: 10;
+			max-width: 300px;
+			background: var(--tip-background, var(--color-gray-800));
+			color: var(--tip-color, var(--color-white));
+			border: 1px solid var(--color-gray-750);
+			border-radius: var(--tip-radius, var(--radius-md));
+			padding: var(--tip-pad-y, 4px) var(--tip-pad-x, 8px);
+			font-size: var(--tip-size, var(--text-sm));
+			font-weight: 500;
+			line-height: 1.35;
+			white-space: nowrap;
+			box-shadow: 0 7px 14px #25242022;
+			pointer-events: none;
+			opacity: 0;
+			transition: opacity 120ms ease-out;
+		}
+		.tooltip.visible {
+			opacity: 1;
+		}
+		.tooltip.above {
+			transform: translateY(-100%);
+		}
+		.footer {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			margin-top: 20px;
+		}
+		.copy {
+			flex: none;
+			border: 1px solid #d0cfc9;
+			border-radius: 6px;
+			background: white;
+			padding: 8px 12px;
+			color: #34332e;
+			font: inherit;
+			font-size: 13px;
+			white-space: nowrap;
+			cursor: pointer;
+		}
+		.copy:hover {
+			background: #f8f8f6;
+		}
+		.values {
+			color: #605e56;
+			font-family: ui-monospace, monospace;
+			font-size: 11px;
+			overflow-wrap: anywhere;
+		}
+		@media (max-width: 680px) {
+			.compare {
+				grid-template-columns: 1fr;
+			}
+			.preview {
+				padding: 16px;
+			}
+		}
+		</style>
+	</head>
+	<body>
+		<main>
+			<h1>Icon button tooltips</h1>
+			<p class="intro">
+				Hover or focus the icons in the adjusted panel. Tune the tooltip in Dial Kit, then copy the
+				values below.
+			</p>
+			<div class="preview">
+				<div class="compare">
+					<section class="example" aria-label="Current icon buttons">
+						<h2>Current · no tooltip</h2>
+						<div class="sidebar">
+							<div class="sidebar-top">
+								<span>◈ &nbsp; Chopin</span><button
+									class="icon-button"
+									aria-label="Close Projects sidebar"
+								>
+									<img alt="" src="../apps/web/src/assets/icons/panel-close.svg">
+								</button>
+							</div>
+							<div class="project-row">
+								<span>⌄ &nbsp; Projects</span><button class="icon-button" aria-label="Add Project">
+									<img alt="" src="../apps/web/src/assets/figma/navigation/add-project.svg">
+								</button>
+							</div>
+							<div class="doc-row"><span>▤</span><span>Document</span></div>
+							<div class="toolbar">
+								<span class="toolbar-label">Document toolbar</span><button
+									class="icon-button"
+									aria-label="New document"
+								>
+									<img alt="" src="../apps/web/src/assets/figma/navigation/new-document.svg">
+								</button>
+								<button class="icon-button" aria-label="Document">
+									<span aria-hidden="true">▤</span>
+								</button>
+							</div>
+						</div>
+					</section>
+					<section class="example adjusted" aria-label="Adjusted icon buttons">
+						<h2>Adjusted · hover or focus</h2>
+						<div class="sidebar">
+							<div class="sidebar-top">
+								<span>◈ &nbsp; Chopin</span><button
+									class="icon-button"
+									aria-label="Close Projects sidebar"
+									data-tooltip="Close sidebar"
+								>
+									<img alt="" src="../apps/web/src/assets/icons/panel-close.svg">
+								</button>
+							</div>
+							<div class="project-row">
+								<span>⌄ &nbsp; Projects</span><button
+									class="icon-button"
+									aria-label="Add Project"
+									data-tooltip="Add project"
+								>
+									<img alt="" src="../apps/web/src/assets/figma/navigation/add-project.svg">
+								</button>
+							</div>
+							<div class="doc-row"><span>▤</span><span>Document</span></div>
+							<div class="toolbar">
+								<span class="toolbar-label">Document toolbar</span><button
+									class="icon-button"
+									aria-label="New document"
+									data-tooltip="New document"
+								>
+									<img alt="" src="../apps/web/src/assets/figma/navigation/new-document.svg">
+								</button>
+								<button class="icon-button" aria-label="Document" data-tooltip="Document">
+									<span aria-hidden="true">▤</span>
+								</button>
+							</div>
+						</div>
+					</section>
+				</div>
+			</div>
+			<div class="footer">
+				<button class="copy" id="copy" type="button">Copy values</button><output
+					class="values"
+					id="values"
+				></output>
+			</div>
+		</main>
+		<div class="tooltip" id="tooltip" role="tooltip"></div>
+		<script src="https://cdn.jsdelivr.net/npm/dialkit@latest/dist/vanilla/browser.global.js"></script>
+		<script>
+		const defaults = {
+			delay: 400,
+			gap: 6,
+			radius: 6,
+			fontSize: 13,
+			paddingX: 8,
+			paddingY: 4,
+			background: "#252420",
+			text: "#ffffff",
+			placement: { type: "select", options: ["above", "below"] },
+		};
+		let values = { ...defaults, placement: "above" };
+		const tip = document.querySelector("#tooltip");
+		const output = document.querySelector("#values");
+		let timer;
+		let active;
+		function apply(next) {
+			values = next;
+			for (
+				const [name, value] of Object.entries({
+					radius: next.radius === 6 ? "var(--radius-md)" : next.radius + "px",
+					size: next.fontSize === 13 ? "var(--text-sm)" : next.fontSize + "px",
+					"pad-x": next.paddingX + "px",
+					"pad-y": next.paddingY + "px",
+					background: next.background === "#252420"
+						? "var(--color-gray-800)"
+						: next.background,
+					color: next.text === "#ffffff" ? "var(--color-white)" : next.text,
+				})
+			) tip.style.setProperty("--tip-" + name, value);
+			output.textContent = JSON.stringify(next);
+		}
+		function hide() {
+			clearTimeout(timer);
+			tip.classList.remove("visible");
+			active = null;
+		}
+		function show(button) {
+			if (active === button) return;
+			hide();
+			active = button;
+			timer = setTimeout(() => {
+				tip.textContent = button.dataset.tooltip;
+				const rect = button.getBoundingClientRect();
+				const below = values.placement === "below";
+				tip.classList.toggle("above", !below);
+				tip.style.top = (below ? rect.bottom + values.gap : rect.top - values.gap) + "px";
+				tip.style.left = Math.max(
+					8,
+					Math.min(
+						rect.left + rect.width / 2 - tip.offsetWidth / 2,
+						innerWidth - tip.offsetWidth - 8,
+					),
+				) + "px";
+				tip.classList.add("visible");
+			}, values.delay);
+		}
+		document.querySelectorAll(".adjusted .icon-button").forEach(button => {
+			button.addEventListener("pointerenter", () => show(button));
+			button.addEventListener("pointerleave", hide);
+			button.addEventListener("focus", () => show(button));
+			button.addEventListener("blur", hide);
+		});
+		document.querySelector("#copy").addEventListener("click", async event => {
+			const button = event.currentTarget;
+			await navigator.clipboard.writeText(JSON.stringify(values, null, 2));
+			button.textContent = "Copied";
+			setTimeout(() => button.textContent = "Copy values", 1400);
+		});
+		apply(values);
+		if (window.DialKit) {
+			DialKit.createDialRoot({ position: "bottom-right", theme: "light" });
+			const kit = DialKit.createDialKit("Tooltip", {
+				delay: [400, 0, 1000, 25],
+				gap: [6, 0, 20],
+				radius: [6, 0, 16],
+				fontSize: [13, 10, 18],
+				paddingX: [8, 2, 20],
+				paddingY: [4, 2, 14],
+				background: "#252420",
+				text: "#ffffff",
+				placement: { type: "select", options: ["above", "below"] },
+			});
+			kit.subscribe(apply);
+		} else {output.textContent +=
+				" · Dial Kit unavailable; connect to the internet to tune values.";}
+		</script>
+	</body>
+</html>

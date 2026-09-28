@@ -333,7 +333,7 @@ export function SelectionBubble(
 						onClick={() => convert(item.id)}
 						className={`${CELL} ${item.id === block ? CELL_ON : CELL_OFF}`}
 					>
-						{item.glyph}
+						<span aria-hidden="true">{item.glyph}</span>
 					</button>
 				))
 				: (
@@ -346,7 +346,7 @@ export function SelectionBubble(
 							onClick={() => setChoosing(true)}
 							className={`${CELL} ${CELL_OFF}`}
 						>
-							{describe(block).glyph}
+							<span aria-hidden="true">{describe(block).glyph}</span>
 						</button>
 
 						<span aria-hidden="true" className={SEAM} />
@@ -361,7 +361,7 @@ export function SelectionBubble(
 								onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, mark.format)}
 								className={`${CELL} ${active.has(mark.format) ? CELL_ON : CELL_OFF}`}
 							>
-								{mark.glyph}
+								<span aria-hidden="true">{mark.glyph}</span>
 							</button>
 						))}
 
