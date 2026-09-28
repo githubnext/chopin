@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { harnessContract } from "./contract";
-import { createPiAdapter, PI_RESULT_TOOL_NAME } from "./pi/adapter";
+import { createPiAdapter, PI_RESULT_INSTRUCTION, PI_RESULT_TOOL_NAME } from "./pi/adapter";
 import { startStubModelServer } from "./pi/model-stub";
 
 import type { StubTurn } from "./pi/model-stub";
@@ -50,11 +50,12 @@ harnessContract("pi", createStubPi, createJustBashNetworkSandboxSession);
 describe("pi structured-output result tool", () => {
 	async function run(
 		prompt: string,
-		options: { structured: boolean },
+		options: { structured: boolean; instructions?: string },
 	): Promise<{ output?: unknown; text: string; resultToolParts: number }> {
 		let agent = new HarnessAgent({
 			harness: createStubPi(),
 			activeTools: [],
+			...(options.instructions ? { instructions: options.instructions } : {}),
 			...(options.structured
 				? { output: Output.object({ schema: z.object({ answer: z.string() }) }) }
 				: {}),
@@ -104,6 +105,19 @@ describe("pi structured-output result tool", () => {
 		expect(result.resultToolParts).toBe(0);
 		let requests = stub.requests.filter(request => request.prompt === "rogue");
 		expect(requests.map(request => request.hasPriorToolResult)).toEqual([false, true]);
+	});
+
+	it("keeps the result tool off a plain turn whose earlier chat quotes the result prompt", async () => {
+		stub.requests.length = 0;
+		let result = await run("rogue", {
+			structured: false,
+			instructions: `Durable conversation context follows:\nuser: ${PI_RESULT_INSTRUCTION}`,
+		});
+		expect(result.text).toBe("Done.");
+		expect(result.resultToolParts).toBe(0);
+		let requests = stub.requests.filter(request => request.prompt === "rogue");
+		expect(requests.map(request => request.hasPriorToolResult)).toEqual([false, true]);
+		expect(requests[0]!.toolNames).not.toContain(PI_RESULT_TOOL_NAME);
 	});
 });
 

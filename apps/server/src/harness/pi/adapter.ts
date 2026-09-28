@@ -8,8 +8,10 @@
  * The result tool is a Pi extension tool, following Pi's structured-output
  * example: it runs inside Pi's own agent loop and returns `terminate: true`,
  * so the turn ends on that call without a host round trip or a follow-up
- * model request. The extension offers the tool only on turns whose
- * instructions ask for a structured result and blocks it on every other turn.
+ * model request. The session wrapper tells the extension, per turn, whether
+ * that turn needs a structured result; the extension offers the tool only then
+ * and blocks it on every other turn. Instruction text, which can quote earlier
+ * chat, never switches the tool on.
  */
 
 import { createPi } from "@ai-sdk/harness-pi";
@@ -42,39 +44,39 @@ const ZERO_USAGE = {
 	outputTokens: { total: undefined, text: undefined, reasoning: undefined },
 };
 
+type ResultToolState = { structured: boolean };
+
 /**
- * Registers the terminating result tool in each Pi session. Pi runs this
- * factory once per session with that session's API, so the structured flag
- * is per session. `before_agent_start` sees the fully assembled system
- * prompt, which carries `PI_RESULT_INSTRUCTION` only on structured turns.
+ * Registers the terminating result tool in one Pi session. `state` belongs to
+ * that session and is set by `wrapSession` before each turn starts.
  */
-export function piResultToolExtension(pi: ExtensionAPI): void {
-	let structured = false;
-	pi.registerTool({
-		name: PI_RESULT_TOOL_NAME,
-		label: "Submit result",
-		description: "Submit the final structured result for this turn.",
-		parameters: Type.Object({}, { additionalProperties: true }),
-		async execute(_toolCallId, params) {
+export function piResultToolExtension(state: ResultToolState) {
+	return (pi: ExtensionAPI): void => {
+		pi.registerTool({
+			name: PI_RESULT_TOOL_NAME,
+			label: "Submit result",
+			description: "Submit the final structured result for this turn.",
+			parameters: Type.Object({}, { additionalProperties: true }),
+			async execute(_toolCallId, params) {
+				return {
+					content: [{ type: "text", text: "Result received." }],
+					details: params,
+					terminate: true,
+				};
+			},
+		});
+		pi.on("before_agent_start", () => {
+			let others = pi.getActiveTools().filter(name => name !== PI_RESULT_TOOL_NAME);
+			pi.setActiveTools(state.structured ? [...others, PI_RESULT_TOOL_NAME] : others);
+		});
+		pi.on("tool_call", event => {
+			if (event.toolName !== PI_RESULT_TOOL_NAME || state.structured) return;
 			return {
-				content: [{ type: "text", text: "Result received." }],
-				details: params,
-				terminate: true,
+				block: true,
+				reason: `${PI_RESULT_TOOL_NAME} is only available for structured results.`,
 			};
-		},
-	});
-	pi.on("before_agent_start", event => {
-		structured = event.systemPrompt.includes(PI_RESULT_INSTRUCTION);
-		let others = pi.getActiveTools().filter(name => name !== PI_RESULT_TOOL_NAME);
-		pi.setActiveTools(structured ? [...others, PI_RESULT_TOOL_NAME] : others);
-	});
-	pi.on("tool_call", event => {
-		if (event.toolName !== PI_RESULT_TOOL_NAME || structured) return;
-		return {
-			block: true,
-			reason: `${PI_RESULT_TOOL_NAME} is only available for structured results.`,
-		};
-	});
+		});
+	};
 }
 
 type OutputTurn = HarnessV1PromptTurnOptions | HarnessV1ContinueTurnOptions;
@@ -104,12 +106,14 @@ function isResultToolPart(part: HarnessV1StreamPart, suppressedIds: Set<string>)
 async function runOutputTurn<T extends OutputTurn>(
 	run: (options: T) => PromiseLike<HarnessV1PromptControl>,
 	turn: T,
+	state: ResultToolState,
 ): Promise<HarnessV1PromptControl> {
 	if (turn.tools.some(spec => spec.name === PI_RESULT_TOOL_NAME)) {
 		throw new Error(`Host tool name ${PI_RESULT_TOOL_NAME} is reserved for structured output.`);
 	}
 	let suppressedIds = new Set<string>();
 	let responseFormat = turn.responseFormat;
+	state.structured = responseFormat?.type === "json";
 	if (responseFormat?.type !== "json") {
 		return run({
 			...turn,
@@ -186,26 +190,33 @@ async function runOutputTurn<T extends OutputTurn>(
 	};
 }
 
-export function wrapSession(inner: HarnessV1Session): HarnessV1Session {
+export function wrapSession(inner: HarnessV1Session, state: ResultToolState): HarnessV1Session {
 	return {
 		...inner,
-		doPromptTurn: turn => runOutputTurn(options => inner.doPromptTurn(options), turn),
-		doContinueTurn: turn => runOutputTurn(options => inner.doContinueTurn(options), turn),
+		doPromptTurn: turn => runOutputTurn(options => inner.doPromptTurn(options), turn, state),
+		doContinueTurn: turn => runOutputTurn(options => inner.doContinueTurn(options), turn, state),
 	};
 }
 
 export function createPiAdapter(
 	settings?: PiHarnessSettings,
 ): HarnessV1 & { shutdown(): Promise<void> } {
-	let pi = createPi({
-		...settings,
-		extensionFactories: [...(settings?.extensionFactories ?? []), piResultToolExtension],
-	});
+	let pi = createPi(settings);
 	return {
 		...pi,
+		// Each session gets its own Pi runtime settings so the result-tool state
+		// cannot leak between concurrent sessions. Chopin never resumes a Pi
+		// session, so losing in-process reattach across `doStart` calls is safe.
 		async doStart(startOptions) {
-			let session = await pi.doStart(startOptions);
-			return wrapSession(session);
+			let state: ResultToolState = { structured: false };
+			let session = await createPi({
+				...settings,
+				extensionFactories: [
+					...(settings?.extensionFactories ?? []),
+					piResultToolExtension(state),
+				],
+			}).doStart(startOptions);
+			return wrapSession(session, state);
 		},
 		async shutdown() {},
 	};

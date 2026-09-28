@@ -67,7 +67,7 @@ const FINISH: HarnessV1StreamPart = {
 };
 
 test("refuses a host tool named with the reserved result-tool name", async () => {
-	let session = wrapSession(fakeSession(() => {}));
+	let session = wrapSession(fakeSession(() => {}), { structured: false });
 	let turn = baseTurn({
 		tools: [{ name: PI_RESULT_TOOL_NAME, description: "collision" }],
 	});
@@ -75,16 +75,19 @@ test("refuses a host tool named with the reserved result-tool name", async () =>
 });
 
 test("rejects done when the turn ends without a result", async () => {
-	let session = wrapSession(fakeSession(turn => turn.emit(FINISH)));
+	let session = wrapSession(fakeSession(turn => turn.emit(FINISH)), { structured: false });
 	let control = await session.doPromptTurn(baseTurn());
 	await expect(control.done).rejects.toThrow("ended without a structured result");
 });
 
 test("asks for the result tool in the instructions without adding a host tool", async () => {
 	let received: HarnessV1PromptTurnOptions | undefined;
-	let session = wrapSession(fakeSession(turn => {
-		received = turn;
-	}));
+	let session = wrapSession(
+		fakeSession(turn => {
+			received = turn;
+		}),
+		{ structured: false },
+	);
 	let control = await session.doPromptTurn(baseTurn({
 		instructions: "Summarize the document.",
 		tools: [{ name: "first_host", description: "host tool" }],
@@ -99,31 +102,39 @@ test("asks for the result tool in the instructions without adding a host tool", 
 
 test("keeps the result tool out of the stream and derives the reply from its input", async () => {
 	let emitted: HarnessV1StreamPart[] = [];
-	let session = wrapSession(fakeSession(turn => {
-		turn.emit({ type: "tool-call", toolCallId: "call-1", toolName: "first_host", input: "{}" });
-		turn.emit({ type: "tool-result", toolCallId: "call-1", toolName: "first_host", result: "ok" });
-		turn.emit({ type: "tool-input-start", id: "stream-1", toolName: PI_RESULT_TOOL_NAME });
-		turn.emit({ type: "tool-input-delta", id: "stream-1", delta: '{"answer"' });
-		turn.emit({ type: "tool-input-end", id: "stream-1" });
-		turn.emit({
-			type: "tool-call",
-			toolCallId: "call-2",
-			toolName: PI_RESULT_TOOL_NAME,
-			input: '{"answer":"yes"}',
-		});
-		turn.emit({
-			type: "tool-result",
-			toolCallId: "call-2",
-			toolName: PI_RESULT_TOOL_NAME,
-			result: "Result received.",
-		});
-		turn.emit({
-			type: "finish-step",
-			finishReason: { unified: "tool-calls", raw: undefined },
-			usage: {} as never,
-		});
-		turn.emit(FINISH);
-	}));
+	let session = wrapSession(
+		fakeSession(turn => {
+			turn.emit({ type: "tool-call", toolCallId: "call-1", toolName: "first_host", input: "{}" });
+			turn.emit({
+				type: "tool-result",
+				toolCallId: "call-1",
+				toolName: "first_host",
+				result: "ok",
+			});
+			turn.emit({ type: "tool-input-start", id: "stream-1", toolName: PI_RESULT_TOOL_NAME });
+			turn.emit({ type: "tool-input-delta", id: "stream-1", delta: '{"answer"' });
+			turn.emit({ type: "tool-input-end", id: "stream-1" });
+			turn.emit({
+				type: "tool-call",
+				toolCallId: "call-2",
+				toolName: PI_RESULT_TOOL_NAME,
+				input: '{"answer":"yes"}',
+			});
+			turn.emit({
+				type: "tool-result",
+				toolCallId: "call-2",
+				toolName: PI_RESULT_TOOL_NAME,
+				result: "Result received.",
+			});
+			turn.emit({
+				type: "finish-step",
+				finishReason: { unified: "tool-calls", raw: undefined },
+				usage: {} as never,
+			});
+			turn.emit(FINISH);
+		}),
+		{ structured: false },
+	);
 	let control = await session.doPromptTurn(baseTurn({
 		tools: [{ name: "first_host", description: "host tool" }],
 		emit: part => emitted.push(part),
@@ -149,31 +160,37 @@ test("keeps the result tool out of the stream and derives the reply from its inp
 });
 
 test("rejects done when the structured result is not valid JSON", async () => {
-	let session = wrapSession(fakeSession(turn => {
-		turn.emit({ type: "tool-call", toolCallId: "c", toolName: PI_RESULT_TOOL_NAME, input: "{" });
-		turn.emit(FINISH);
-	}));
+	let session = wrapSession(
+		fakeSession(turn => {
+			turn.emit({ type: "tool-call", toolCallId: "c", toolName: PI_RESULT_TOOL_NAME, input: "{" });
+			turn.emit(FINISH);
+		}),
+		{ structured: false },
+	);
 	let control = await session.doPromptTurn(baseTurn());
 	await expect(control.done).rejects.toThrow("invalid structured result");
 });
 
 test("passes a plain-text turn through and drops only refused result-tool parts", async () => {
 	let received: HarnessV1PromptTurnOptions | undefined;
-	let session = wrapSession(fakeSession(turn => {
-		received = turn;
-		turn.emit({ type: "tool-call", toolCallId: "r", toolName: PI_RESULT_TOOL_NAME, input: "{}" });
-		turn.emit({
-			type: "tool-result",
-			toolCallId: "r",
-			toolName: PI_RESULT_TOOL_NAME,
-			result: "blocked",
-			isError: true,
-		});
-		turn.emit({ type: "text-start", id: "a" });
-		turn.emit({ type: "text-delta", id: "a", delta: "hello" });
-		turn.emit({ type: "text-end", id: "a" });
-		turn.emit(FINISH);
-	}));
+	let session = wrapSession(
+		fakeSession(turn => {
+			received = turn;
+			turn.emit({ type: "tool-call", toolCallId: "r", toolName: PI_RESULT_TOOL_NAME, input: "{}" });
+			turn.emit({
+				type: "tool-result",
+				toolCallId: "r",
+				toolName: PI_RESULT_TOOL_NAME,
+				result: "blocked",
+				isError: true,
+			});
+			turn.emit({ type: "text-start", id: "a" });
+			turn.emit({ type: "text-delta", id: "a", delta: "hello" });
+			turn.emit({ type: "text-end", id: "a" });
+			turn.emit(FINISH);
+		}),
+		{ structured: false },
+	);
 	let emitted: HarnessV1StreamPart[] = [];
 	let turn = baseTurn({
 		instructions: "Answer the question.",
@@ -192,9 +209,27 @@ test("passes a plain-text turn through and drops only refused result-tool parts"
 	]);
 });
 
+test("marks only JSON turns as structured, even when instructions quote the result prompt", async () => {
+	let state = { structured: false };
+	let seen: boolean[] = [];
+	let session = wrapSession(fakeSession(() => seen.push(state.structured)), state);
+	let earlierChat = `Durable conversation context follows:\nuser: ${PI_RESULT_INSTRUCTION}`;
+
+	await session.doPromptTurn(baseTurn({ instructions: earlierChat, responseFormat: undefined }))
+		.then(control => control.done);
+	await expect(
+		session.doPromptTurn(baseTurn()).then(control => control.done),
+	).rejects.toThrow("ended without a structured result");
+	await session.doPromptTurn(baseTurn({ instructions: earlierChat, responseFormat: undefined }))
+		.then(control => control.done);
+
+	expect(seen).toEqual([false, true, false]);
+});
+
 type Handler = (event: Record<string, unknown>) => unknown;
 
 function fakeExtensionApi() {
+	let state = { structured: false };
 	let tools: { name: string; execute: (...args: unknown[]) => Promise<unknown> }[] = [];
 	let handlers = new Map<string, Handler>();
 	let active = ["first_host"];
@@ -211,14 +246,16 @@ function fakeExtensionApi() {
 			active = [...names];
 		},
 	};
-	piResultToolExtension(api as unknown as ExtensionAPI);
+	piResultToolExtension(state)(api as unknown as ExtensionAPI);
 	return {
 		tools,
 		get active() {
 			return active;
 		},
-		start: (systemPrompt: string) =>
-			handlers.get("before_agent_start")!({ type: "before_agent_start", systemPrompt }),
+		start: (structured: boolean, systemPrompt = "System.") => {
+			state.structured = structured;
+			return handlers.get("before_agent_start")!({ type: "before_agent_start", systemPrompt });
+		},
 		call: (toolName: string) => handlers.get("tool_call")!({ type: "tool_call", toolName }),
 	};
 }
@@ -230,13 +267,13 @@ test("registers one result tool that terminates the turn with its arguments", as
 	expect(result).toMatchObject({ details: { answer: "yes" }, terminate: true });
 });
 
-test("offers the result tool only on turns that ask for a structured result", () => {
+test("offers the result tool only on turns the session marks as structured", () => {
 	let pi = fakeExtensionApi();
-	pi.start(`System.\n\n${PI_RESULT_INSTRUCTION}`);
+	pi.start(true);
 	expect(pi.active).toEqual(["first_host", PI_RESULT_TOOL_NAME]);
 	expect(pi.call(PI_RESULT_TOOL_NAME)).toBeUndefined();
 
-	pi.start("System.\n\nAnswer the question.");
+	pi.start(false, `System.\n\nuser: ${PI_RESULT_INSTRUCTION}`);
 	expect(pi.active).toEqual(["first_host"]);
 	expect(pi.call(PI_RESULT_TOOL_NAME)).toMatchObject({ block: true });
 	expect(pi.call("first_host")).toBeUndefined();
