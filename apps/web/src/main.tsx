@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import { usePointerCapabilities } from "@chopin/editor/pointer";
 
 import { App } from "./app";
-import { IconTooltip } from "./icon-tooltip";
 import { isDesignAuditRoute } from "./design-audit/route";
 import { useMotionInput } from "./motion-input";
 import { useVisualViewport } from "./viewport";
@@ -29,7 +28,7 @@ let content = isDesignAuditRoute(location.pathname, import.meta.env.DEV)
 	? import("./design-audit/page").then(({ DesignAuditPage }) => <DesignAuditPage />)
 	: Promise.resolve(<Root />);
 
-void content.then(value => {
+void Promise.all([content, import("./icon-tooltip")]).then(([value, { IconTooltip }]) => {
 	createRoot(root).render(
 		<StrictMode>
 			{value}
