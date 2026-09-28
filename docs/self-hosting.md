@@ -127,7 +127,8 @@ enforces.
 
 - `auto` copies the host operator's Atomic login into memory when the first
   turn starts: `$ATOMIC_CODING_AGENT_DIR/auth.json` when that variable is set,
-  otherwise `~/.atomic/agent/auth.json` over the legacy `~/.pi/agent/auth.json`.
+  then `$PI_CODING_AGENT_DIR/auth.json` for the legacy variable, otherwise
+  `~/.atomic/agent/auth.json` over the legacy `~/.pi/agent/auth.json`.
   It also resolves provider keys from the process environment, such as
   `ANTHROPIC_API_KEY`, and ambient cloud credentials, such as an AWS profile or
   Google application default credentials. Because every admitted writer's turns
