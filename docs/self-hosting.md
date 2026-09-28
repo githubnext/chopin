@@ -104,9 +104,10 @@ directories, or Pi's agent directory on the host. Both changes live in
 `@ai-sdk/harness-pi` 1.0.128 cannot return structured output itself, so
 Chopin registers a result tool as an inline Pi extension. The tool runs inside
 Pi and ends the turn (`terminate: true`), so the summary and research workers
-get their structured result without a follow-up model request. Pi offers the
-tool only on turns that ask for a structured result and blocks it everywhere
-else. The Pi contract suite (`apps/server/src/harness/pi.contract.test.ts`)
+get their structured result without a follow-up model request. The adapter
+enables the tool only for a turn that requests structured output and blocks it
+on every other turn. Prompt text, including quoted earlier chat, cannot enable
+it. The Pi contract suite (`apps/server/src/harness/pi.contract.test.ts`)
 covers this against the real Pi agent loop; run it before bumping
 `@ai-sdk/harness-pi` or `@earendil-works/pi-coding-agent`.
 
