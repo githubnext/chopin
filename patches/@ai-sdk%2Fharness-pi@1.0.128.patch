@@ -1,0 +1,25 @@
+diff --git a/dist/index.js b/dist/index.js
+index 274c2536b3d11e5b5c29692f0377e66d2b357826..f86e366c8480b206c64936021265b46ec8c5ecf5 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -2519,6 +2519,8 @@ async function createPiSession(input) {
+     noExtensions: true,
+     noThemes: true,
+     noPromptTemplates: true,
++    // Chopin patch: never read AGENTS.md or CLAUDE.md from the host filesystem.
++    noContextFiles: true,
+     skillsOverride: (base) => ({
+       ...base,
+       skills: [
+@@ -2942,6 +2944,11 @@ async function createPiSession(input) {
+         turnAbortController.signal.throwIfAborted();
+         const didAppendDeliveredHostToolResults = appendDeliveredHostToolResults();
+         const nextModel = turnOpts.model == null ? void 0 : resolveModel(turnOpts.model);
++        // Chopin patch: an unrecognized model fails the turn instead of silently
++        // falling back to Pi's default model.
++        if (turnOpts.model != null && nextModel == null) {
++          throw new Error(`Pi does not recognize model ${turnOpts.model}`);
++        }
+         if (nextModel != null) activeResolvedModel = nextModel;
+         const signature = JSON.stringify(userTools.map((t) => t.name).sort());
+         const needsRebuild = piSession == null || signature !== lastToolsSignature;
