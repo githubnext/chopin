@@ -4,9 +4,8 @@ import { parse } from "@chopin/dialect/parse";
 import { serialize } from "@chopin/dialect/serialize";
 import { assert } from "@chopin/dialect/validate";
 
-import { createJustBashNetworkSandboxSession } from "@ai-sdk/sandbox-just-bash";
 import { summaryAgent } from "../harness/agents";
-import { registerCredential } from "../harness/harnesses";
+import { openWorkerSession } from "./worker-session";
 import type { Config } from "../config";
 import type { DocumentTarget } from "../plan/service";
 import type { JsonValue } from "../storage/model";
@@ -220,9 +219,6 @@ class HarnessSummaryEngine {
 		if (materials.length * 2 - 1 > MAX_AI_CREDITS) {
 			throw new Error("Document description requires too many bounded worker turns.");
 		}
-		let sandbox = await createJustBashNetworkSandboxSession();
-		let session: Awaited<ReturnType<typeof summaryAgent.createSession>> | undefined;
-		let release: (() => void) | undefined;
 		let abortSignal = AbortSignal.any([
 			execution.signal,
 			...(credential.signal ? [credential.signal] : []),
@@ -233,17 +229,13 @@ class HarnessSummaryEngine {
 			if (abortSignal.aborted) stop();
 			else abortSignal.addEventListener("abort", stop, { once: true });
 		});
+		let worker = await openWorkerSession(summaryAgent, {
+			token: () => credential.token,
+			maxAiCredits: MAX_AI_CREDITS,
+			aborted,
+		});
 		try {
-			let sessionId = crypto.randomUUID();
-			release = registerCredential(sessionId, () => credential.token, MAX_AI_CREDITS);
-			let opening = summaryAgent.createSession({ sessionId, sandboxSession: sandbox });
-			try {
-				session = await Promise.race([opening, aborted]);
-			} catch (err) {
-				void opening.then(late => late.destroy()).catch(() => {});
-				throw err;
-			}
-			let active = session;
+			let active = worker.session;
 			let turn = async (payload: JsonValue): Promise<string> => {
 				if (abortSignal.aborted || !await credential.authorize()) {
 					throw abortSignal.reason ?? new Error("Description worker authorization ended");
@@ -304,15 +296,7 @@ class HarnessSummaryEngine {
 			}
 			return { description: partials[0]!, model: this.#config.model };
 		} finally {
-			try {
-				await session?.destroy();
-			} finally {
-				try {
-					await sandbox.destroy();
-				} finally {
-					release?.();
-				}
-			}
+			await worker.close();
 		}
 	}
 }

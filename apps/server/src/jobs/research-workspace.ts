@@ -1,16 +1,15 @@
 import { createHash } from "node:crypto";
 import * as limits from "@chopin/dialect/limits";
 
-import { createJustBashNetworkSandboxSession } from "@ai-sdk/sandbox-just-bash";
 import {
 	researchAgent,
 	researchAnswerAgent,
 	researchPrivateAgent,
 	researchReportAgent,
 } from "../harness/agents";
-import { registerCredential } from "../harness/harnesses";
 import { webSearchTool } from "../harness/web-search";
 import { JobExecutionError } from "./registry";
+import { openWorkerSession, type WorkerSession } from "./worker-session";
 import type { Config } from "../config";
 import type { JsonValue } from "../storage/model";
 import type { JobDefinition, JobExecution, JobExecutionDiagnostic } from "./registry";
@@ -840,9 +839,7 @@ async function stage(
 		? researchReportAgent
 		: researchAnswerAgent;
 	let web: Awaited<ReturnType<typeof webSearchTool>> | undefined;
-	let sandbox: Awaited<ReturnType<typeof createJustBashNetworkSandboxSession>> | undefined;
-	let session: Awaited<ReturnType<typeof researchAgent.createSession>> | undefined;
-	let release: (() => void) | undefined;
+	let worker: WorkerSession<Awaited<ReturnType<typeof researchAgent.createSession>>> | undefined;
 	try {
 		await authorize();
 		if (publicWeb) {
@@ -889,22 +886,11 @@ async function stage(
 				);
 			}
 		}
-		let openingSandbox = createJustBashNetworkSandboxSession();
-		try {
-			sandbox = await Promise.race([openingSandbox, aborted]);
-		} catch (err) {
-			void openingSandbox.then(late => late.destroy()).catch(() => {});
-			throw err;
-		}
-		let sessionId = crypto.randomUUID();
-		release = registerCredential(sessionId, () => credential.token, STAGE_AI_CREDITS);
-		let opening = agent.createSession({ sessionId, sandboxSession: sandbox });
-		try {
-			session = await Promise.race([opening, aborted]);
-		} catch (err) {
-			void opening.then(late => late.destroy()).catch(() => {});
-			throw err;
-		}
+		worker = await openWorkerSession(agent, {
+			token: () => credential.token,
+			maxAiCredits: STAGE_AI_CREDITS,
+			aborted,
+		});
 		metrics.phase = "ready";
 		let stagePrompt = JSON.stringify({ material });
 		if (Buffer.byteLength(stagePrompt) > MAX_STAGE_PROMPT_BYTES) {
@@ -914,7 +900,7 @@ async function stage(
 		metrics.phase = "sending";
 		let result = await Promise.race([
 			agent.generate({
-				session,
+				session: worker.session,
 				prompt: stagePrompt,
 				abortSignal,
 				options: {
@@ -946,17 +932,9 @@ async function stage(
 		throw err;
 	} finally {
 		try {
-			await session?.destroy();
+			await worker?.close();
 		} finally {
-			try {
-				await sandbox?.destroy();
-			} finally {
-				try {
-					if (web?.ok) await web.value.close();
-				} finally {
-					release?.();
-				}
-			}
+			if (web?.ok) await web.value.close();
 		}
 	}
 }
