@@ -260,6 +260,21 @@ test("a selection raises exactly one toolbar", async ({ join }) => {
 	await expect(page.getByRole("toolbar", BUBBLE)).toHaveCount(1);
 });
 
+test("a formatting glyph shows its label on hover", async ({ join }) => {
+	let page = await join("ana");
+	await content(page).click();
+	await page.keyboard.type("Pick a storage format.");
+	await page.keyboard.press("Shift+Home");
+
+	let bold = page.getByRole("toolbar", BUBBLE).getByRole("button", { name: "Bold" });
+	await bold.hover();
+	let tooltip = page.getByRole("tooltip");
+	await expect(tooltip).toBeVisible();
+	await expect(tooltip).toHaveText("Bold");
+	await page.mouse.move(0, 0);
+	await expect(tooltip).toBeHidden();
+});
+
 test("a mark from the toolbar reaches the file", async ({ join, room }) => {
 	let page = await join("ana");
 

@@ -13,6 +13,17 @@ function chatPane(page: Page) {
 	return page.getByRole("complementary", { includeHidden: true, name: "Chat" });
 }
 
+test("an icon button shows its label on keyboard focus", async ({ join }) => {
+	let page = await join("ana");
+	let addProject = page.getByRole("button", { exact: true, name: "Add Project" });
+	await addProject.focus();
+	let tooltip = page.getByRole("tooltip");
+	await expect(tooltip).toBeVisible();
+	await expect(tooltip).toHaveText("Add Project");
+	await page.keyboard.press("Tab");
+	await expect(tooltip).toBeHidden();
+});
+
 test("a drag the browser takes away still puts the bar down", async ({ join, page }) => {
 	await join("ana");
 

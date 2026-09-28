@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { usePointerCapabilities } from "@chopin/editor/pointer";
 
 import { App } from "./app";
+import { IconTooltip } from "./icon-tooltip";
 import { isDesignAuditRoute } from "./design-audit/route";
 import { useMotionInput } from "./motion-input";
 import { useVisualViewport } from "./viewport";
@@ -12,6 +13,7 @@ import "@fontsource-variable/inter/opsz-italic.css";
 
 import "./theme.css";
 import "./navigation.css";
+import "./icon-tooltip.css";
 
 let root = document.getElementById("root");
 if (!root) throw new Error("missing #root");
@@ -28,5 +30,10 @@ let content = isDesignAuditRoute(location.pathname, import.meta.env.DEV)
 	: Promise.resolve(<Root />);
 
 void content.then(value => {
-	createRoot(root).render(<StrictMode>{value}</StrictMode>);
+	createRoot(root).render(
+		<StrictMode>
+			{value}
+			<IconTooltip />
+		</StrictMode>,
+	);
 });
