@@ -1,0 +1,416 @@
+{
+	"schemaVersion": 2,
+	"generatedAt": "2026-09-28T16:22:11Z",
+	"title": "Design System: Chopin",
+	"extensions": {
+		"colorMeta": {
+			"petrol": {
+				"role": "primary",
+				"displayName": "Petrol",
+				"canonical": "oklch(0.50006 0.08514 210.06)",
+				"tonalRamp": [
+					"oklch(0.15 0.08514 210.06)",
+					"oklch(0.25 0.08514 210.06)",
+					"oklch(0.35 0.08514 210.06)",
+					"oklch(0.45 0.08514 210.06)",
+					"oklch(0.55 0.08514 210.06)",
+					"oklch(0.68 0.08514 210.06)",
+					"oklch(0.82 0.08514 210.06)",
+					"oklch(0.95 0.08514 210.06)"
+				]
+			},
+			"petrol-hover": {
+				"role": "primary",
+				"displayName": "Petrol hover",
+				"canonical": "oklch(0.42914 0.07315 210.634)",
+				"tonalRamp": [
+					"oklch(0.15 0.07315 210.634)",
+					"oklch(0.25 0.07315 210.634)",
+					"oklch(0.35 0.07315 210.634)",
+					"oklch(0.45 0.07315 210.634)",
+					"oklch(0.55 0.07315 210.634)",
+					"oklch(0.68 0.07315 210.634)",
+					"oklch(0.82 0.07315 210.634)",
+					"oklch(0.95 0.07315 210.634)"
+				]
+			},
+			"petrol-active": {
+				"role": "primary",
+				"displayName": "Petrol active",
+				"canonical": "oklch(0.37546 0.06382 210.435)",
+				"tonalRamp": [
+					"oklch(0.15 0.06382 210.435)",
+					"oklch(0.25 0.06382 210.435)",
+					"oklch(0.35 0.06382 210.435)",
+					"oklch(0.45 0.06382 210.435)",
+					"oklch(0.55 0.06382 210.435)",
+					"oklch(0.68 0.06382 210.435)",
+					"oklch(0.82 0.06382 210.435)",
+					"oklch(0.95 0.06382 210.435)"
+				]
+			},
+			"page": {
+				"role": "neutral",
+				"displayName": "White page",
+				"canonical": "oklch(1 0 0)",
+				"tonalRamp": [
+					"oklch(0.15 0 0)",
+					"oklch(0.25 0 0)",
+					"oklch(0.35 0 0)",
+					"oklch(0.45 0 0)",
+					"oklch(0.55 0 0)",
+					"oklch(0.68 0 0)",
+					"oklch(0.82 0 0)",
+					"oklch(0.95 0 0)"
+				]
+			},
+			"ground": {
+				"role": "neutral",
+				"displayName": "Warm olive ground",
+				"canonical": "oklch(0.96623 0.0039 95)",
+				"tonalRamp": [
+					"oklch(0.15 0.0039 95)",
+					"oklch(0.25 0.0039 95)",
+					"oklch(0.35 0.0039 95)",
+					"oklch(0.45 0.0039 95)",
+					"oklch(0.55 0.0039 95)",
+					"oklch(0.68 0.0039 95)",
+					"oklch(0.82 0.0039 95)",
+					"oklch(0.95 0.0039 95)"
+				]
+			},
+			"inset": {
+				"role": "neutral",
+				"displayName": "Warm olive inset",
+				"canonical": "oklch(0.97857 0.00264 95)",
+				"tonalRamp": [
+					"oklch(0.15 0.00264 95)",
+					"oklch(0.25 0.00264 95)",
+					"oklch(0.35 0.00264 95)",
+					"oklch(0.45 0.00264 95)",
+					"oklch(0.55 0.00264 95)",
+					"oklch(0.68 0.00264 95)",
+					"oklch(0.82 0.00264 95)",
+					"oklch(0.95 0.00264 95)"
+				]
+			},
+			"selected": {
+				"role": "neutral",
+				"displayName": "Warm olive selected",
+				"canonical": "oklch(0.94216 0.00393 95)",
+				"tonalRamp": [
+					"oklch(0.15 0.00393 95)",
+					"oklch(0.25 0.00393 95)",
+					"oklch(0.35 0.00393 95)",
+					"oklch(0.45 0.00393 95)",
+					"oklch(0.55 0.00393 95)",
+					"oklch(0.68 0.00393 95)",
+					"oklch(0.82 0.00393 95)",
+					"oklch(0.95 0.00393 95)"
+				]
+			},
+			"ink": {
+				"role": "neutral",
+				"displayName": "Primary ink",
+				"canonical": "oklch(0.15908 0.00637 95)",
+				"tonalRamp": [
+					"oklch(0.15 0.00637 95)",
+					"oklch(0.25 0.00637 95)",
+					"oklch(0.35 0.00637 95)",
+					"oklch(0.45 0.00637 95)",
+					"oklch(0.55 0.00637 95)",
+					"oklch(0.68 0.00637 95)",
+					"oklch(0.82 0.00637 95)",
+					"oklch(0.95 0.00637 95)"
+				]
+			},
+			"secondary-ink": {
+				"role": "neutral",
+				"displayName": "Secondary ink",
+				"canonical": "oklch(0.39036 0.01026 95)",
+				"tonalRamp": [
+					"oklch(0.15 0.01026 95)",
+					"oklch(0.25 0.01026 95)",
+					"oklch(0.35 0.01026 95)",
+					"oklch(0.45 0.01026 95)",
+					"oklch(0.55 0.01026 95)",
+					"oklch(0.68 0.01026 95)",
+					"oklch(0.82 0.01026 95)",
+					"oklch(0.95 0.01026 95)"
+				]
+			},
+			"tertiary-ink": {
+				"role": "neutral",
+				"displayName": "Tertiary ink",
+				"canonical": "oklch(0.48124 0.01278 95)",
+				"tonalRamp": [
+					"oklch(0.15 0.01278 95)",
+					"oklch(0.25 0.01278 95)",
+					"oklch(0.35 0.01278 95)",
+					"oklch(0.45 0.01278 95)",
+					"oklch(0.55 0.01278 95)",
+					"oklch(0.68 0.01278 95)",
+					"oklch(0.82 0.01278 95)",
+					"oklch(0.95 0.01278 95)"
+				]
+			},
+			"destructive": {
+				"role": "semantic",
+				"displayName": "Destructive",
+				"canonical": "oklch(0.60513 0.17178 24.175)",
+				"tonalRamp": [
+					"oklch(0.15 0.17178 24.175)",
+					"oklch(0.25 0.17178 24.175)",
+					"oklch(0.35 0.17178 24.175)",
+					"oklch(0.45 0.17178 24.175)",
+					"oklch(0.55 0.17178 24.175)",
+					"oklch(0.68 0.17178 24.175)",
+					"oklch(0.82 0.17178 24.175)",
+					"oklch(0.95 0.17178 24.175)"
+				]
+			},
+			"success": {
+				"role": "semantic",
+				"displayName": "Success",
+				"canonical": "oklch(0.51958 0.10966 145.072)",
+				"tonalRamp": [
+					"oklch(0.15 0.10966 145.072)",
+					"oklch(0.25 0.10966 145.072)",
+					"oklch(0.35 0.10966 145.072)",
+					"oklch(0.45 0.10966 145.072)",
+					"oklch(0.55 0.10966 145.072)",
+					"oklch(0.68 0.10966 145.072)",
+					"oklch(0.82 0.10966 145.072)",
+					"oklch(0.95 0.10966 145.072)"
+				]
+			},
+			"warning": {
+				"role": "semantic",
+				"displayName": "Warning",
+				"canonical": "oklch(0.59898 0.12586 74.986)",
+				"tonalRamp": [
+					"oklch(0.15 0.12586 74.986)",
+					"oklch(0.25 0.12586 74.986)",
+					"oklch(0.35 0.12586 74.986)",
+					"oklch(0.45 0.12586 74.986)",
+					"oklch(0.55 0.12586 74.986)",
+					"oklch(0.68 0.12586 74.986)",
+					"oklch(0.82 0.12586 74.986)",
+					"oklch(0.95 0.12586 74.986)"
+				]
+			},
+			"chat-divider": {
+				"role": "neutral",
+				"displayName": "Chat divider",
+				"canonical": "rgb(0 0 0 / 9%)",
+				"tonalRamp": [
+					"rgb(0 0 0 / 50%)",
+					"rgb(0 0 0 / 35%)",
+					"rgb(0 0 0 / 25%)",
+					"rgb(0 0 0 / 18%)",
+					"rgb(0 0 0 / 12%)",
+					"rgb(0 0 0 / 9%)",
+					"rgb(0 0 0 / 5%)",
+					"rgb(0 0 0 / 2%)"
+				]
+			}
+		},
+		"typographyMeta": {
+			"document-title": {
+				"displayName": "Document title",
+				"purpose": "Top-level document heading."
+			},
+			"section-heading": {
+				"displayName": "Section heading",
+				"purpose": "Major sections in the document."
+			},
+			"subheading": {
+				"displayName": "Subheading",
+				"purpose": "Subsections in the document."
+			},
+			"document-body": {
+				"displayName": "Document body",
+				"purpose": "Authored prose."
+			},
+			"chrome": {
+				"displayName": "Chrome",
+				"purpose": "Controls, navigation, and metadata."
+			},
+			"compact": {
+				"displayName": "Compact",
+				"purpose": "Small buttons, badges, and supporting labels."
+			}
+		},
+		"shadows": [
+			{
+				"name": "resting",
+				"value": "0 0 1px oklch(var(--shadow-color) / 3%), 0 1px 1px oklch(var(--shadow-color) / 3%), 0 3px 2px oklch(var(--shadow-color) / 2%)",
+				"purpose": "Subtle lift on controls."
+			},
+			{
+				"name": "resting-strong",
+				"value": "0 0 1px oklch(var(--shadow-color) / 4%), 0 1px 2px oklch(var(--shadow-color) / 5%), 0 4px 3px oklch(var(--shadow-color) / 3%), 0 7px 4px oklch(var(--shadow-color) / 1%)",
+				"purpose": "Emphasis on a resting surface."
+			},
+			{
+				"name": "raised",
+				"value": "0 1px 2px oklch(var(--shadow-color) / 6%), 0 3px 3px oklch(var(--shadow-color) / 5%), 0 8px 5px oklch(var(--shadow-color) / 3%), 0 14px 5px oklch(var(--shadow-color) / 1%)",
+				"purpose": "Standalone document and popovers."
+			},
+			{
+				"name": "overlay",
+				"value": "0 2px 3px oklch(var(--shadow-color) / 10%), 0 7px 6px oklch(var(--shadow-color) / 9%), 0 15px 8px oklch(var(--shadow-color) / 5%), 0 26px 10px oklch(var(--shadow-color) / 1%)",
+				"purpose": "Layer above the workspace."
+			}
+		],
+		"motion": [
+			{
+				"name": "fast",
+				"value": "120ms",
+				"purpose": "Pointer feedback."
+			},
+			{
+				"name": "base",
+				"value": "200ms",
+				"purpose": "Ordinary transitions."
+			},
+			{
+				"name": "linger",
+				"value": "600ms",
+				"purpose": "Unseen change marks."
+			},
+			{
+				"name": "smooth-out",
+				"value": "cubic-bezier(0.22, 1, 0.36, 1)",
+				"purpose": "Surface entrances."
+			},
+			{
+				"name": "move",
+				"value": "cubic-bezier(0.65, 0, 0.35, 1)",
+				"purpose": "Sidebar translation."
+			},
+			{
+				"name": "sidebar-open",
+				"value": "250ms",
+				"purpose": "Projects sidebar entrance."
+			},
+			{
+				"name": "sidebar-close",
+				"value": "180ms",
+				"purpose": "Projects sidebar exit."
+			}
+		],
+		"breakpoints": [
+			{
+				"name": "compact",
+				"value": "640px"
+			},
+			{
+				"name": "desktop-navigation",
+				"value": "1024px"
+			},
+			{
+				"name": "wide-composer",
+				"value": "1200px"
+			},
+			{
+				"name": "narrow-document-container",
+				"value": "40rem"
+			}
+		]
+	},
+	"components": [
+		{
+			"name": "Primary button",
+			"kind": "button",
+			"refersTo": "button-primary",
+			"description": "Petrol action with compact type and a visible focus ring.",
+			"html": "<button class=\"ds-btn-primary\">Continue</button>",
+			"css": ".ds-btn-primary{height:2rem;padding:0 .75rem;border:1px solid var(--color-control-edge);border-radius:var(--radius-md);background:var(--color-brand);color:var(--color-page);font:500 var(--text-sm)/var(--text-sm--line-height) var(--font-sans);box-shadow:var(--shadow-resting);cursor:pointer}.ds-btn-primary:hover{background:var(--color-brand-hover)}.ds-btn-primary:active{background:var(--color-brand-active)}.ds-btn-primary:focus-visible{outline:2px solid var(--color-brand);outline-offset:2px}"
+		},
+		{
+			"name": "Secondary button",
+			"kind": "button",
+			"refersTo": "button-secondary",
+			"description": "Neutral action beside the primary tier.",
+			"html": "<button class=\"ds-btn-secondary\">Review</button>",
+			"css": ".ds-btn-secondary{height:2rem;padding:0 .75rem;border:1px solid var(--color-edge);border-radius:var(--radius-md);background:var(--color-gray-200);color:var(--color-text-primary);font:500 var(--text-sm)/var(--text-sm--line-height) var(--font-sans);cursor:pointer}.ds-btn-secondary:hover{background:var(--color-gray-300)}.ds-btn-secondary:active{background:var(--color-gray-400)}.ds-btn-secondary:focus-visible{outline:2px solid var(--color-brand);outline-offset:2px}"
+		},
+		{
+			"name": "Ghost button",
+			"kind": "button",
+			"refersTo": "button-ghost",
+			"description": "Quiet action that gains a neutral fill on interaction.",
+			"html": "<button class=\"ds-btn-ghost\">Details</button>",
+			"css": ".ds-btn-ghost{height:2rem;padding:0 .75rem;border:0;border-radius:var(--radius-md);background:transparent;color:var(--color-text-secondary);font:500 var(--text-sm)/var(--text-sm--line-height) var(--font-sans);cursor:pointer}.ds-btn-ghost:hover{background:var(--color-gray-200)}.ds-btn-ghost:active{background:var(--color-gray-300)}.ds-btn-ghost:focus-visible{outline:2px solid var(--color-brand);outline-offset:2px}"
+		},
+		{
+			"name": "Destructive button",
+			"kind": "button",
+			"description": "Reserved for destructive actions.",
+			"html": "<button class=\"ds-btn-destructive\">Delete</button>",
+			"css": ".ds-btn-destructive{height:2rem;padding:0 .75rem;border:1px solid var(--color-control-edge);border-radius:var(--radius-md);background:var(--color-destructive);color:var(--color-page);font:500 var(--text-sm)/var(--text-sm--line-height) var(--font-sans);cursor:pointer}.ds-btn-destructive:hover{background:var(--color-destructive-hover)}.ds-btn-destructive:active{background:var(--color-destructive-active)}.ds-btn-destructive:focus-visible{outline:2px solid var(--color-brand);outline-offset:2px}"
+		},
+		{
+			"name": "Text field",
+			"kind": "input",
+			"refersTo": "field",
+			"description": "White field with a control edge and restrained depth.",
+			"html": "<input class=\"ds-field\" aria-label=\"Document name\" value=\"Release plan\">",
+			"css": ".ds-field{height:2rem;padding:0 .75rem;border:1px solid var(--color-control-edge);border-radius:var(--radius-md);background:var(--color-page);box-shadow:var(--shadow-resting);color:var(--color-text-primary);font:var(--text-sm)/var(--text-sm--line-height) var(--font-sans)}.ds-field:focus-visible{outline:2px solid var(--color-brand);outline-offset:2px}.ds-field[aria-invalid=true]{border-color:var(--color-destructive);outline:2px solid var(--color-destructive)}"
+		},
+		{
+			"name": "Current navigation item",
+			"kind": "nav",
+			"refersTo": "navigation-current",
+			"description": "A white, subtly raised marker for the current location.",
+			"html": "<a class=\"ds-nav-current\" aria-current=\"page\" href=\"#\">Release plan</a>",
+			"css": ".ds-nav-current{display:block;padding:.5rem .75rem;border-radius:var(--radius-md);background:var(--color-page);box-shadow:var(--shadow-resting);color:var(--color-text-primary);font:500 var(--text-sm)/var(--text-sm--line-height) var(--font-sans);text-decoration:none}.ds-nav-current:hover{background:var(--color-hover)}.ds-nav-current:focus-visible{outline:2px solid var(--color-brand);outline-offset:2px}"
+		},
+		{
+			"name": "Status badge",
+			"kind": "chip",
+			"description": "Semantic status pairs an icon and label in a pill.",
+			"html": "<span class=\"ds-badge\"><svg viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"m3 8 3 3 7-7\"/></svg>Complete</span>",
+			"css": ".ds-badge{display:inline-flex;align-items:center;gap:.25rem;min-height:1.5rem;padding:.25rem .625rem .25rem .5rem;border:1px solid color-mix(in srgb,var(--color-success-text) 12%,var(--color-success-surface));border-radius:999px;background:var(--color-success-surface);color:var(--color-success-text);font:var(--text-sm)/var(--text-sm--line-height) var(--font-sans)}.ds-badge svg{width:1rem;height:1rem;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.75}"
+		},
+		{
+			"name": "Document surface",
+			"kind": "card",
+			"refersTo": "document",
+			"description": "White authored surface with subtle lift when standing alone.",
+			"html": "<article class=\"ds-document\"><h2>Release plan</h2><p>Decisions and next steps live here.</p></article>",
+			"css": ".ds-document{max-width:43.75rem;padding:2rem;border-radius:var(--radius-xl);background:var(--color-page);box-shadow:var(--shadow-raised);color:var(--color-text-primary);font:var(--text-base)/1.6 var(--font-sans)}.ds-document h2{margin:0 0 1rem;font-size:var(--text-xl);line-height:var(--text-xl--line-height)}.ds-document p{margin:0}"
+		}
+	],
+	"narrative": {
+		"northStar": "A Working Document",
+		"overview": "Chopin feels calm, precise, and collaborative. The authored document is the visual center; navigation, conversation, and controls support the work without competing with it. The interface is compact enough for sustained use and gives long-form prose room to breathe.",
+		"keyCharacteristics": [
+			"A white document surface sits on a warm olive ground.",
+			"Petrol marks actions, links, focus, and presence; semantic colors identify outcomes.",
+			"Controls are quiet, legible, and purposeful. Depth gives layers subtle separation."
+		],
+		"rules": [
+			{
+				"name": "The One Accent Rule",
+				"body": "New action and focus treatments use the established petrol roles. New raw color values require a change to the shared theme, not a local copy.",
+				"section": "colors"
+			},
+			{
+				"name": "The Fluid Type Rule",
+				"body": "Use a named text utility or `--text-*` token for every font size. The CI type-scale check rejects raw CSS font sizes, arbitrary Tailwind font sizes, and literal inline font sizes. Add a role in the shared theme and update its modular-scale test when the existing roles cannot serve the need. Inline code inherits the size of surrounding prose or a heading.",
+				"section": "typography"
+			}
+		],
+		"dos": [
+			"**Do** use shared color, type, radius, spacing, shadow, and motion tokens when extending the interface.",
+			"**Do** use the established semantic color pairs for status and feedback.",
+			"**Do** check new controls in the development design audit alongside their default, focus, disabled, and error states."
+		],
+		"donts": [
+			"**Don't** introduce a raw color, font size, or radius in a component when an established token serves that role.",
+			"**Don't** create a second local definition of a shared token or shadow treatment."
+		]
+	}
+}

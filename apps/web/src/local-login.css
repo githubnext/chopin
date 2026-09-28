@@ -175,7 +175,7 @@
 		padding: calc(var(--spacing) * 3) calc(var(--spacing) * 4);
 		color: var(--color-text-primary);
 		font-family: var(--font-mono);
-		font-size: 1.75rem;
+		font-size: var(--text-xl);
 		font-variant-numeric: tabular-nums;
 		font-weight: 600;
 		letter-spacing: 0.12em;
@@ -214,7 +214,7 @@
 	}
 
 	.sign-in-title {
-		font-size: 1.75rem;
+		font-size: var(--text-xl);
 	}
 
 	.sign-in-card {

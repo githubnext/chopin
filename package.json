@@ -14,7 +14,8 @@
 		"migrate": "bun apps/server/src/storage/migrate.ts",
 		"build": "bun run --filter '@chopin/web' build",
 		"start": "bun run --filter '@chopin/server' start",
-		"ci": "dprint check && oxlint && bun scripts/check-tokens.ts",
+		"ci": "dprint check && oxlint && bun scripts/check-tokens.ts && bun scripts/check-type-scale.ts && bun run design:check",
+		"design:check": "node scripts/check-design.mjs",
 		"fix": "dprint fmt && oxlint --fix",
 		"types": "bun --filter '*' types && tsgo --noEmit --skipLibCheck -p e2e",
 		"e2e": "bun scripts/e2e.ts",
@@ -26,6 +27,7 @@
 		"@types/bun": "catalog:bun",
 		"@typescript/native-preview": "7.0.0-dev.20260304.1",
 		"dprint": "0.50.2",
+		"impeccable": "4.1.0",
 		"oxlint": "1.51.0"
 	},
 	"patchedDependencies": {
