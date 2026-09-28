@@ -149,6 +149,7 @@ export function ChatToggle(
 			aria-expanded={open}
 			aria-label={`${open ? "Hide" : "Show"} chat pane${status ? `, ${status}` : ""}`}
 			className={`chat-toggle btn btn-icon btn-ghost relative shrink-0 ${className ?? ""}`}
+			data-tooltip={open ? "Hide Chat" : "Show Chat"}
 			data-activity={activity.busy ? "busy" : activity.unread > 0 ? "unread" : undefined}
 			onClick={onToggle}
 			ref={buttonRef}
@@ -427,6 +428,7 @@ export function Workspace(
 											aria-label={`Close ${childPresentation.label}`}
 											className="btn btn-icon btn-ghost -mr-1 shrink-0"
 											data-child-document-close
+											data-tooltip="Close Document"
 											onClick={childPresentation.onClose}
 											type="button"
 										>

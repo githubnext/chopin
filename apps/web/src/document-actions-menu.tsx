@@ -191,6 +191,7 @@ export function DocumentActionsMenu(
 				aria-haspopup="menu"
 				aria-label={`Actions for ${channel.title}`}
 				className={className}
+				data-tooltip="Document Actions"
 				onClick={() => open ? closeMenu() : openAt(0)}
 				onKeyDown={event => {
 					if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;

@@ -132,6 +132,7 @@ function MessageBody(
 						&& (
 							<button
 								aria-label="Withdraw queued message"
+								data-tooltip="Withdraw Message"
 								className="btn btn-icon btn-ghost -my-1 shrink-0"
 								onClick={() => onWithdraw(message.id)}
 								title="Withdraw"

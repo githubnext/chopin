@@ -95,6 +95,7 @@ export function CommentSheet({ children, id, label, onClose }: CommentSheetProps
 							<button
 								aria-label="Resize comment sheet"
 								className="plan-comment-sheet-grabber"
+								data-tooltip="Resize Sheet"
 								onClick={() => {
 									let current = typeof snapPoint === "number"
 										? snapPoint

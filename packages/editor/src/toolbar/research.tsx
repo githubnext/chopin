@@ -417,7 +417,7 @@ export function ResearchComposerSurface(
 				onSubmit={submit}
 				question={draft.question}
 				questionLocked={!!draft.created}
-				submitLabel={draft.created ? "Place research here" : undefined}
+				submitLabel={draft.created ? "Place Research" : undefined}
 				submitting={busy}
 			/>
 		</ResearchDraftShell>

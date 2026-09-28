@@ -231,6 +231,7 @@ function Project(
 					<button
 						aria-label={`New document in ${label}`}
 						className="project-sidebar-action"
+						data-tooltip="New Document"
 						disabled={creating}
 						onClick={() => onCreateDocument(project)}
 						type="button"
@@ -368,6 +369,7 @@ export function ProjectSidebar(
 					<button
 						aria-label="Collapse Projects sidebar"
 						className="project-sidebar-action"
+						data-tooltip="Close Sidebar"
 						onClick={onCollapse}
 						type="button"
 					>
