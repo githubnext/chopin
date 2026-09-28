@@ -60,11 +60,8 @@ The Planner has no:
 - shared embeddings or cross-session store; or
 - ability to change GitHub.
 
-One known Pi limitation: `@ai-sdk/harness-pi` 1.0.128 loads `AGENTS.md` files
-from the session's working directory and each parent directory on the host
-(`/home/user`, `/home`, and `/` for the just-bash sandbox) and offers no option
-to disable it. The Planner still has no tool that reads the host filesystem,
-but under `HARNESS=pi` keep those paths free of instruction files. See
+Under `HARNESS=pi`, Chopin patches `@ai-sdk/harness-pi` 1.0.128 so Pi does not
+load `AGENTS.md` or `CLAUDE.md` context files from the host filesystem. See
 [Self-hosting](self-hosting.md#choose-and-trust-a-harness).
 
 Available capabilities are:

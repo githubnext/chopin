@@ -87,17 +87,19 @@ access comes from `HARNESS_AUTH`, not from the owner's Copilot entitlement.
 Repository reads still come from that GitHub token through Chopin's own host
 tools, never through Pi.
 
-Set `MODEL` to an ID from Pi's model catalog, preferably provider-qualified
-(for example `github-copilot/gpt-5.6-luna`). Pi silently falls back to its
-default available model when it does not recognize the ID, and the default
-`gpt-6-luna` is not in Pi's catalog; the startup banner still prints the
-requested value.
+Under `pi`, `MODEL` is required and must be an ID from Pi's model catalog,
+preferably provider-qualified (for example `github-copilot/gpt-5.6-luna`).
+Chopin's default, `gpt-6-luna`, is a Copilot ID that Pi does not recognize.
+Unpatched Pi silently falls back to another model for an unknown ID; Chopin's
+patch to `@ai-sdk/harness-pi` 1.0.128 fails the turn instead, so the startup
+banner always names the model Pi runs.
 
-Pi's resource loader also reads `AGENTS.md` files from the session's working
-directory and each parent directory on the host filesystem (for the just-bash
-sandbox, `/home/user`, `/home`, and `/`). `@ai-sdk/harness-pi` 1.0.128 exposes
-no option to disable this, so keep those paths free of instruction files on a
-host that runs `HARNESS=pi`.
+The same patch stops Pi's resource loader from reading `AGENTS.md` or
+`CLAUDE.md` context files from the session's working directory, its parent
+directories, or Pi's agent directory on the host. Both changes live in
+`patches/@ai-sdk%2Fharness-pi@1.0.128.patch`; reapply or drop them when bumping
+`@ai-sdk/harness-pi`, and run the Pi contract suite
+(`apps/server/src/harness/pi.contract.test.ts`), which covers both.
 
 Structured output under Pi also depends on timing inside the pinned adapter.
 `@ai-sdk/harness-pi` 1.0.128 cannot return structured output, so Chopin's
@@ -176,7 +178,7 @@ the image.
 | `SESSION_ENCRYPTION_KEY`       | required      | Exactly 64 hexadecimal characters used for the encrypted OAuth attempt cookie, including its validated return path.                                                                                                                                                                                                                                                                                  |
 | `SERVER_HOST`                  | `127.0.0.1`   | Source-process bind address. The image sets `0.0.0.0`. A `HARNESS_AUTH` mode that falls back to a host-logged-in subscription is refused unless this stays loopback-only.                                                                                                                                                                                                                            |
 | `PORT`                         | `8787`        | Source-process HTTP and WebSocket port. The supplied image and health check expect internal port 8787.                                                                                                                                                                                                                                                                                               |
-| `MODEL`                        | `gpt-6-luna`  | Model requested for hosted agent sessions.                                                                                                                                                                                                                                                                                                                                                           |
+| `MODEL`                        | `gpt-6-luna`  | Model requested for hosted agent sessions. Required under `HARNESS=pi`.                                                                                                                                                                                                                                                                                                                              |
 | `HARNESS`                      | `copilot-sdk` | Adapter name selected from Chopin's harness map (`copilot-sdk` or `pi`). An unknown name refuses at startup.                                                                                                                                                                                                                                                                                         |
 | `HARNESS_AUTH`                 | unset         | Auth mode forwarded to the selected adapter. For `copilot-sdk`, `direct` and `ai-gateway` are allowed on any bind and `auto` requires a loopback-only `SERVER_HOST`; the adapter does not otherwise consume it. For `pi`, it is required: `auto`, `openai`, `anthropic`, and `custom` require a loopback-only `SERVER_HOST`, only `ai-gateway` is allowed otherwise, and `direct` is always refused. |
 | `AGENT`                        | on            | Set exactly `off` to prevent hosted agent turns, disable the entire background-job runner, and avoid Copilot CLI startup.                                                                                                                                                                                                                                                                            |

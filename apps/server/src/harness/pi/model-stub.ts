@@ -38,9 +38,12 @@ function chunk(id: string, delta: Record<string, unknown>, finishReason: string 
 	});
 }
 
+export type StubRequest = { prompt: string; system: string };
+
 export function startStubModelServer(
 	respond: (prompt: string, hasPriorToolResult: boolean) => StubTurn,
-): { baseUrl: string; stop: () => void } {
+): { baseUrl: string; requests: StubRequest[]; stop: () => void } {
+	let requests: StubRequest[] = [];
 	let server = Bun.serve({
 		port: 0,
 		hostname: "127.0.0.1",
@@ -56,6 +59,11 @@ export function startStubModelServer(
 			let lastUser = [...body.messages].toReversed().find(message => message.role === "user");
 			let prompt = extractText(lastUser?.content);
 			let hasPriorToolResult = body.messages.some(message => message.role === "tool");
+			let system = body.messages
+				.filter(message => message.role === "system" || message.role === "developer")
+				.map(message => extractText(message.content))
+				.join("\n");
+			requests.push({ prompt, system });
 			let turn = respond(prompt, hasPriorToolResult);
 			let id = crypto.randomUUID();
 
@@ -85,5 +93,9 @@ export function startStubModelServer(
 			return new Response(body_, { headers: { "content-type": "text/event-stream" } });
 		},
 	});
-	return { baseUrl: `http://127.0.0.1:${server.port}/v1`, stop: () => server.stop(true) };
+	return {
+		baseUrl: `http://127.0.0.1:${server.port}/v1`,
+		requests,
+		stop: () => server.stop(true),
+	};
 }

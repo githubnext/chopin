@@ -47,6 +47,15 @@ export type Config = {
 
 const DEFAULT_PORT = 8787;
 const DEFAULT_MODEL = "gpt-6-luna";
+
+/** The default is a Copilot model ID. Pi resolves IDs against its own catalog,
+ * so a Pi deployment must name its model rather than inherit one Pi lacks. */
+function model(harness: string): string {
+	let configured = process.env.MODEL;
+	if (configured) return configured;
+	if (harness === "pi") throw new Error("MODEL is required when HARNESS=pi");
+	return DEFAULT_MODEL;
+}
 export function harnessSelection(): Pick<Config, "host" | "harness" | "harnessAuth"> {
 	return {
 		host: process.env.SERVER_HOST || "127.0.0.1",
@@ -85,10 +94,11 @@ function storage(): StorageConfig {
 export function load(): Config {
 	let agent = process.env.AGENT !== "off";
 	let backgroundJobs = process.env.BACKGROUND_JOBS !== "off";
+	let selection = harnessSelection();
 	return {
-		...harnessSelection(),
+		...selection,
 		port: port(),
-		model: process.env.MODEL || DEFAULT_MODEL,
+		model: model(selection.harness),
 		agent,
 		backgroundJobs,
 		webResearch: agent && backgroundJobs && process.env.WEB_RESEARCH !== "off",

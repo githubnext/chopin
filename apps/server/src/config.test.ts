@@ -103,6 +103,13 @@ describe("configuration", () => {
 		expect(description(config)).not.toContain("direct");
 	});
 
+	it("requires an explicit MODEL under the pi harness", () => {
+		expect(() => configured({ HARNESS: "pi", HARNESS_AUTH: "openai" }))
+			.toThrow("MODEL is required when HARNESS=pi");
+		expect(configured({ HARNESS: "pi", HARNESS_AUTH: "openai", MODEL: "openai/gpt-5.6" }))
+			.toMatchObject({ harness: "pi", model: "openai/gpt-5.6" });
+	});
+
 	it("requires a valid PostgreSQL URL", () => {
 		expect(() => configured({ DATABASE_URL: undefined })).toThrow("DATABASE_URL is required");
 		expect(() => configured({ DATABASE_URL: "https://database.test" })).toThrow("PostgreSQL URL");
