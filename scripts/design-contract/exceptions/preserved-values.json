@@ -1,0 +1,395 @@
+[
+	{
+		"file": "apps/web/src/theme.css",
+		"reason": "Continuous loading indicator has an established local repeat period; no equal semantic duration token exists.",
+		"cases": [
+			[
+				"motion",
+				"animation",
+				"button-loader-spin 800ms linear infinite",
+				"CSS > @utility btn > &[aria-busy=\"true\"] [data-button-loader]",
+				1
+			]
+		]
+	},
+	{
+		"file": "apps/web/src/theme.css",
+		"reason": "Inset three-pixel radio selection ring is control geometry, not elevation; preserve checked and disabled state appearance.",
+		"cases": [
+			[
+				"shadow",
+				"box-shadow",
+				"inset 0 0 0 3px var(--color-page)",
+				"CSS > @utility choice-control > &[type=\"radio\"]:checked",
+				1
+			],
+			[
+				"shadow",
+				"box-shadow",
+				"inset 0 0 0 3px var(--color-gray-200)",
+				"CSS > @utility choice-control > &[type=\"radio\"]:disabled:checked",
+				1
+			]
+		]
+	},
+	{
+		"file": "apps/web/src/theme.css",
+		"reason": "Approved chat divider opacity is 9%, distinct from passive 7% edge and 20% control edge; retained as a checked contextual design-record value.",
+		"cases": [
+			[
+				"color",
+				"border-color",
+				"rgb(0 0 0 / 9%)",
+				"CSS > .workspace-frame .workspace-chat-panel",
+				1
+			]
+		]
+	},
+	{
+		"file": "apps/web/src/local-login-view.tsx",
+		"reason": "Existing reduced-motion-gated Tailwind continuous loader uses its standard one-second linear spin; preserve its established behavior.",
+		"cases": [
+			[
+				"utility",
+				"class",
+				"motion-safe:animate-spin",
+				"class > LocalLoginView > <StatusBanner> > <LoaderIcon>",
+				1
+			]
+		]
+	},
+	{
+		"file": "apps/web/src/design-audit/surfaces.css",
+		"reason": "Continuous loading indicator has an established local repeat period; no equal semantic duration token exists.",
+		"cases": [
+			[
+				"motion",
+				"animation",
+				"design-audit-spin 900ms linear infinite",
+				"CSS > .design-audit-navigation-loading svg",
+				1
+			]
+		]
+	},
+	{
+		"file": "apps/web/src/design-audit/foundations.tsx",
+		"reason": "Specimen iterates a finite list of canonical token names; rendering the token being demonstrated requires a dynamic var() name.",
+		"cases": [
+			[
+				"color",
+				"background",
+				"`var(${token})`",
+				"style object > Foundations > <span>",
+				1
+			],
+			[
+				"typography",
+				"font-size",
+				"`var(${size})`",
+				"style object > Foundations > <div>",
+				1
+			],
+			[
+				"radius",
+				"border-radius",
+				"`var(${token})`",
+				"style object > Foundations > <span>",
+				1
+			],
+			[
+				"shadow",
+				"box-shadow",
+				"`var(${token})`",
+				"style object > Foundations > <span>",
+				1
+			]
+		],
+		"sourceHash": "163d4731f6a726e63cfdbf7d9a16a71a482d7ca88afb45804be4e431a4b6ef44",
+		"producers": [
+			{
+				"file": "apps/web/src/design-audit/foundations.tsx",
+				"sourceHash": "163d4731f6a726e63cfdbf7d9a16a71a482d7ca88afb45804be4e431a4b6ef44"
+			}
+		]
+	},
+	{
+		"file": "apps/web/src/icon-tooltip.css",
+		"reason": "Native CSS ease-out differs from the shared custom ease-out curve; duration is migrated, original tooltip response curve is preserved.",
+		"cases": [
+			[
+				"motion",
+				"transition",
+				"opacity var(--duration-fast) ease-out, visibility var(--duration-fast) ease-out",
+				"CSS > .icon-tooltip",
+				1
+			]
+		]
+	},
+	{
+		"file": "apps/web/src/workspace.tsx",
+		"reason": "Existing workspace frame has an intentional 12px outer radius; preserve the approved layout/hierarchy rather than introducing a one-use scale token.",
+		"cases": [
+			[
+				"utility",
+				"class",
+				"rounded-[12px]",
+				"class > Workspace > <div>",
+				2
+			]
+		]
+	},
+	{
+		"file": "apps/web/src/navigation.css",
+		"reason": "Anchored navigation surface has settled asymmetric 240ms/170ms choreography and bespoke curves; preserve transform behavior rather than substituting a near-match.",
+		"cases": [
+			[
+				"motion",
+				"transition",
+				"filter 240ms cubic-bezier(0.16, 1, 0.3, 1),\n\t\topacity 240ms cubic-bezier(0.16, 1, 0.3, 1),\n\t\ttransform 240ms cubic-bezier(0.16, 1, 0.3, 1)",
+				"CSS > .anchored-child-parent .workspace-frame",
+				1
+			],
+			[
+				"motion",
+				"transition-duration",
+				"170ms",
+				"CSS > .anchored-child-host[data-child-presentation=\"closing\"] .anchored-child-parent .workspace-frame",
+				1
+			],
+			[
+				"motion",
+				"transition-timing-function",
+				"cubic-bezier(0.55, 0, 1, 0.45)",
+				"CSS > .anchored-child-host[data-child-presentation=\"closing\"] .anchored-child-parent .workspace-frame",
+				1
+			],
+			[
+				"motion",
+				"animation",
+				"anchored-child-enter 240ms cubic-bezier(0.16, 1, 0.3, 1) both",
+				"CSS > .anchored-child-surface",
+				1
+			],
+			[
+				"motion",
+				"animation",
+				"anchored-child-exit 170ms cubic-bezier(0.55, 0, 1, 0.45) both",
+				"CSS > .anchored-child-host[data-child-presentation=\"closing\"] .anchored-child-surface",
+				1
+			]
+		]
+	},
+	{
+		"file": "apps/web/src/navigation.css",
+		"reason": "Sidebar resize affordance uses neutral 20% black; its interaction geometry owns this existing local treatment.",
+		"cases": [
+			[
+				"color",
+				"background",
+				"rgb(0 0 0 / 20%)",
+				"CSS > .navigation-drawer-backdrop",
+				1
+			],
+			[
+				"color",
+				"background",
+				"rgb(0 0 0 / 20%)",
+				"CSS > .navigation-modal-backdrop",
+				1
+			]
+		]
+	},
+	{
+		"file": "apps/web/src/local-login.css",
+		"reason": "Sign-in pulse is a continuous 1.6s status signal with its established curve; not a surface transition role.",
+		"cases": [
+			[
+				"motion",
+				"animation",
+				"sign-in-pulse 1.6s cubic-bezier(0.16, 1, 0.3, 1) infinite",
+				"CSS > .sign-in-pulse > &::after",
+				1
+			]
+		]
+	},
+	{
+		"file": "packages/editor/src/styles.css",
+		"reason": "Existing sheet backdrop consumes the legacy shadow channels through rgb(); preserve current appearance and flag the color-space mismatch for separate review.",
+		"cases": [
+			[
+				"color",
+				"background",
+				"rgb(var(--shadow-color))",
+				"CSS > .plan-comment-sheet-backdrop",
+				1
+			]
+		]
+	},
+	{
+		"file": "packages/editor/src/styles.css",
+		"reason": "Bottom-sheet upward shadow has established geometry distinct from shared downward surface shadows; retained pending dedicated visual review.",
+		"cases": [
+			[
+				"shadow",
+				"box-shadow",
+				"0 -1rem 3rem rgb(var(--shadow-color) / 22%)",
+				"CSS > .plan-comment-sheet-popup",
+				1
+			]
+		]
+	},
+	{
+		"file": "packages/editor/src/styles.css",
+		"reason": "Drawer duration multiplies a shared duration by the gesture library runtime swipe-strength scalar; preserve proportional gesture response.",
+		"cases": [
+			[
+				"motion",
+				"transition",
+				"transform calc(var(--drawer-swipe-strength, 1) * var(--duration-base))\n\t\tvar(--ease-out)",
+				"CSS > .plan-comment-sheet-popup",
+				1
+			]
+		]
+	},
+	{
+		"file": "packages/editor/src/styles.css",
+		"reason": "Legacy editor/source mono stack differs from shared UI mono stack; unifying would change glyph metrics. Preserve it for separate visual review.",
+		"cases": [
+			[
+				"typography",
+				"--font-mono",
+				"ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+				"CSS > .plan .mdxeditor",
+				1
+			],
+			[
+				"typography",
+				"font-family",
+				"ui-monospace, SFMono-Regular, monospace",
+				"CSS > .plan-content pre",
+				1
+			],
+			[
+				"typography",
+				"font-family",
+				"ui-monospace, SFMono-Regular, monospace",
+				"CSS > .plan-content :not(pre) > code",
+				1
+			],
+			[
+				"typography",
+				"font-family",
+				"ui-monospace, SFMono-Regular, monospace",
+				"CSS > .plan-content [data-plan-source]",
+				1
+			]
+		]
+	},
+	{
+		"file": "packages/editor/src/styles.css",
+		"reason": "One-pixel cursor/insertion marker rounding is fine geometry rather than a control surface radius; preserve it.",
+		"cases": [
+			[
+				"radius",
+				"border-radius",
+				"1px",
+				"CSS > .plan-drop",
+				1
+			],
+			[
+				"radius",
+				"border-radius",
+				"1px",
+				"CSS > .plan .plan-cursor",
+				1
+			]
+		]
+	},
+	{
+		"file": "packages/editor/src/styles.css",
+		"reason": "Lexical writes participant identity colors at runtime; currentColor fallback keeps unassigned presence visible.",
+		"cases": [
+			[
+				"color",
+				"background-color",
+				"var(--lexical-cursor-color, currentColor)",
+				"CSS > .plan .plan-cursor",
+				1
+			],
+			[
+				"color",
+				"background",
+				"var(--lexical-cursor-color, currentColor)",
+				"CSS > .plan .plan-cursor-name",
+				1
+			],
+			[
+				"color",
+				"background-color",
+				"color-mix(in srgb, var(--lexical-cursor-color, currentColor) 30%, transparent)",
+				"CSS > .plan .plan-cursor-selection-bg",
+				1
+			]
+		]
+	},
+	{
+		"file": "packages/editor/src/styles.css",
+		"reason": "Collaborative caret halo uses participant identity color and half-pixel geometry, not shared surface elevation.",
+		"cases": [
+			[
+				"shadow",
+				"box-shadow",
+				"0 0 0 0.5px var(--lexical-cursor-color, currentColor)",
+				"CSS > .plan .plan-cursor",
+				1
+			]
+		]
+	},
+	{
+		"file": "packages/editor/src/styles.css",
+		"reason": "Removed-block marks compose two geometry-driven gap shadows; no DOM tombstone or surface elevation is intended.",
+		"cases": [
+			[
+				"shadow",
+				"box-shadow",
+				"var(--plan-gap-above, 0 0 transparent),\n\t\tvar(--plan-gap-below, 0 0 transparent)",
+				"CSS > .plan .plan-content [data-plan-gap-before],\n.plan .plan-content [data-plan-gap-after]",
+				1
+			]
+		]
+	},
+	{
+		"file": "packages/editor/src/face.tsx",
+		"reason": "Participant identity color is derived from the account handle, not a semantic interface color; preserve collaborative presence distinction.",
+		"cases": [
+			[
+				"color",
+				"background",
+				"color(handle)",
+				"style object > Face > <span>",
+				1
+			]
+		],
+		"sourceHash": "7c8b05fcb31f5dc2e1de520823986db63e472108c1a44e6d2390ca19e8b62bfe"
+	},
+	{
+		"file": "packages/editor/src/callout.css",
+		"reason": "Callout shadow combines a local inset highlight/semantic outline with depth; no equivalent elevation role preserves the appearance.",
+		"cases": [
+			[
+				"shadow",
+				"box-shadow",
+				"inset 0 1px rgb(255 255 255 / 55%), var(--shadow-resting)",
+				"CSS > .plan-content [data-plan-type]",
+				1
+			],
+			[
+				"shadow",
+				"box-shadow",
+				"0 0 0 1px color-mix(in oklab, var(--callout-accent) 25%, transparent)",
+				"CSS > .plan-callout-title[contenteditable=\"true\"]:focus",
+				1
+			]
+		]
+	}
+]

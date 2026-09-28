@@ -15,7 +15,7 @@
 	pointer-events: none;
 	opacity: 0;
 	visibility: hidden;
-	transition: opacity 120ms ease-out, visibility 120ms ease-out;
+	transition: opacity var(--duration-fast) ease-out, visibility var(--duration-fast) ease-out;
 }
 
 .icon-tooltip[data-side="top"] {

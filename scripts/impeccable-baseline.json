@@ -5,7 +5,8 @@
 			"rule": "side-tab",
 			"file": "packages/editor/src/styles.css",
 			"snippet": "border-inline-start: 3px solid",
-			"count": 1
+			"count": 1,
+			"reason": "User-approved 3px quote edge in authored document prose; preserves the accepted document hierarchy rather than decorating a card."
 		}
 	]
 }

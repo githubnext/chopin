@@ -14,7 +14,7 @@
 		"migrate": "bun apps/server/src/storage/migrate.ts",
 		"build": "bun run --filter '@chopin/web' build",
 		"start": "bun run --filter '@chopin/server' start",
-		"ci": "dprint check && oxlint && bun scripts/check-tokens.ts && bun scripts/check-type-scale.ts && bun run design:check",
+		"ci": "dprint check && oxlint && bun scripts/check-tokens.ts && bun scripts/check-design-contract.ts && bun scripts/check-design-record.ts && bun run design:check",
 		"design:check": "node scripts/check-design.mjs",
 		"fix": "dprint fmt && oxlint --fix",
 		"types": "bun --filter '*' types && tsgo --noEmit --skipLibCheck -p e2e",
@@ -23,12 +23,17 @@
 		"e2e:browsers": "bun node_modules/@playwright/test/cli.js install chromium"
 	},
 	"devDependencies": {
+		"@babel/parser": "7.29.7",
 		"@playwright/test": "1.62.1",
 		"@types/bun": "catalog:bun",
 		"@typescript/native-preview": "7.0.0-dev.20260304.1",
 		"dprint": "0.50.2",
 		"impeccable": "4.1.0",
-		"oxlint": "1.51.0"
+		"oxlint": "1.51.0",
+		"parse5": "8.0.0",
+		"postcss": "8.5.23",
+		"postcss-value-parser": "4.2.0",
+		"yaml": "2.9.0"
 	},
 	"patchedDependencies": {
 		"@mdxeditor/editor@4.1.0": "patches/@mdxeditor%2Feditor@4.1.0.patch",
