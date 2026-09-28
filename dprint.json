@@ -18,6 +18,7 @@
 		"LICENSE.md",
 		"SECURITY.md",
 		".agents/skills/gh-stack/**",
+		"**/.impeccable/hook.cache.json",
 		"**/dist",
 		"**/node_modules",
 		"**/*-lock.json",

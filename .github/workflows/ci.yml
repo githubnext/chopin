@@ -47,6 +47,11 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
+      # The pinned Impeccable CLI requires Node 22.18 or newer.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
       # Refuses rather than resolving: a lockfile that does not describe
       # package.json is a difference between what was reviewed and what ran.
       - run: bun install --frozen-lockfile
@@ -59,7 +64,8 @@ jobs:
           path: ~/.cache/dprint
           key: dprint-${{ runner.os }}-${{ hashFiles('dprint.json') }}
 
-      - run: bun run ci
+      - name: Format, lint, and enforce design tokens
+        run: bun run ci
 
       - run: bun run types
 

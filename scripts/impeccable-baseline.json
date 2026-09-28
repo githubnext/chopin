@@ -1,0 +1,11 @@
+{
+	"schemaVersion": 1,
+	"findings": [
+		{
+			"rule": "side-tab",
+			"file": "packages/editor/src/styles.css",
+			"snippet": "border-inline-start: 3px solid",
+			"count": 1
+		}
+	]
+}
