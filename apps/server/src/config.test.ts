@@ -113,6 +113,19 @@ describe("configuration", () => {
 			.toMatchObject({ harness: "pi", model: "openai/gpt-5.6" });
 	});
 
+	it("requires an explicit provider/model MODEL under the atomic harness", () => {
+		expect(() => configured({ HARNESS: "atomic", HARNESS_AUTH: "auto" }))
+			.toThrow("MODEL is required when HARNESS=atomic");
+		expect(configured({
+			HARNESS: "atomic",
+			HARNESS_AUTH: "ai-gateway",
+			MODEL: "vercel-ai-gateway/anthropic/claude-sonnet-4.6",
+		})).toMatchObject({
+			harness: "atomic",
+			model: "vercel-ai-gateway/anthropic/claude-sonnet-4.6",
+		});
+	});
+
 	it("requires a valid PostgreSQL URL", () => {
 		expect(() => configured({ DATABASE_URL: undefined })).toThrow("DATABASE_URL is required");
 		expect(() => configured({ DATABASE_URL: "https://database.test" })).toThrow("PostgreSQL URL");

@@ -4,8 +4,8 @@ import { harnesses, harnessFor, registerCredential, shutdownHarnesses } from "./
 
 afterEach(shutdownHarnesses);
 
-it("selects the tested Copilot SDK and Pi harnesses", () => {
-	expect(Object.keys(harnesses)).toEqual(["copilot-sdk", "pi"]);
+it("selects the tested Copilot SDK, Pi, and Atomic harnesses", () => {
+	expect(Object.keys(harnesses)).toEqual(["copilot-sdk", "pi", "atomic"]);
 	expect(harnessFor({ harness: "copilot-sdk" }).harnessId).toBe("copilot-sdk");
 	expect(() => harnessFor({ harness: "not-installed" })).toThrow("Unknown harness: not-installed");
 });
@@ -44,6 +44,26 @@ it("refuses every Pi auth mode but ai-gateway on a non-loopback bind", () => {
 		.toThrow("must be ai-gateway");
 	expect(harnessFor({ harness: "pi", harnessAuth: "ai-gateway", host: "0.0.0.0" }).harnessId)
 		.toBe("pi");
+});
+
+it("requires an explicit, Atomic-supported auth mode and refuses direct or unknown modes", () => {
+	expect(() => harnessFor({ harness: "atomic", host: "127.0.0.1" }))
+		.toThrow("HARNESS_AUTH is required for harness atomic");
+	for (let harnessAuth of ["direct", "openai", "custom", "bogus"]) {
+		expect(() => harnessFor({ harness: "atomic", harnessAuth, host: "127.0.0.1" }))
+			.toThrow(`HARNESS_AUTH ${harnessAuth} is not a supported atomic authentication mode`);
+	}
+	expect(harnessFor({ harness: "atomic", harnessAuth: "auto", host: "::1" }).harnessId)
+		.toBe("atomic");
+});
+
+it("refuses Atomic's host-login auto mode on a non-loopback bind but accepts ai-gateway", () => {
+	for (let host of ["0.0.0.0", "::", "192.168.1.2", "localhost.example"]) {
+		expect(() => harnessFor({ harness: "atomic", harnessAuth: "auto", host }))
+			.toThrow("HARNESS_AUTH for atomic on a non-loopback SERVER_HOST must be ai-gateway");
+	}
+	expect(harnessFor({ harness: "atomic", harnessAuth: "ai-gateway", host: "0.0.0.0" }).harnessId)
+		.toBe("atomic");
 });
 
 it("registers credentials per session without reuse or rewriting", () => {
