@@ -138,7 +138,7 @@ describe("palette", () => {
 		expect(hex("--color-gray-100")).toBe("#f8f8f6");
 		expect(hex("--color-gray-150")).toBe("#f4f4f1");
 		expect(hex("--color-brand")).toBe("#06707e");
-		expect(hex("--color-destructive")).toBe("#d54d4c");
+		expect(hex("--color-destructive")).toBe("#ce4646");
 	});
 
 	it("keeps the Chat body ink distinct from the general secondary text", () => {
