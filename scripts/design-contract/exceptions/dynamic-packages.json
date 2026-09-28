@@ -1,0 +1,576 @@
+[
+	{
+		"file": "packages/question/src/react/question-view.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > Related > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > Related > <button>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"errorClassName",
+				"class > QuestionView > <p>",
+				1
+			]
+		],
+		"sourceHash": "62f6aad113b4705b04c54a14db97a28ea0cccb2fefdb810d3c0d59539e4f69d6"
+	},
+	{
+		"file": "packages/icons/src/icon.tsx",
+		"reason": "Icon wrapper forwards SVG accessibility, sizing, and caller styling props. Literal style/class call sites are scanned; no ambient rendering code is executed.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > LineIcon > <svg>",
+				1
+			]
+		],
+		"sourceHash": "c19987ceb4f7678e42ac71e182e7f65334a8b9924ac4493ceb008f072198116b"
+	},
+	{
+		"file": "packages/icons/src/system.tsx",
+		"reason": "Icon wrapper forwards SVG accessibility, sizing, and caller styling props. Literal style/class call sites are scanned; no ambient rendering code is executed.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > ArchiveIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > DocumentIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > SearchIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > LoaderIcon > <svg>",
+				1
+			]
+		],
+		"sourceHash": "be7dae0d727f2da69d04df5d6e55978156e4c7cece990018d947012a096abcbc"
+	},
+	{
+		"file": "packages/icons/src/line.tsx",
+		"reason": "Icon wrapper forwards SVG accessibility, sizing, and caller styling props. Literal style/class call sites are scanned; no ambient rendering code is executed.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > ArrowUpIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > ChevronIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > MessageIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > CheckIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > InfoIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > LightbulbIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > CloseIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > PlusIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > SignInIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > SirenIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > SparkleIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > WarningIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > LinkPlusIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > MessagePlusIcon > <LineIcon>",
+				1
+			]
+		],
+		"sourceHash": "1ffdb49ab89b9eb184daea168c73a7c7c9286e09f2ad51d7ee6f7b72091e5230"
+	},
+	{
+		"file": "packages/visuals/src/ui/mini-bars.tsx",
+		"reason": "Public visual primitive forwards typed DOM/Base UI props. Literal style/class call sites remain scanned; runtime caller values need browser review.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > MiniBars > <Svg>",
+				1
+			]
+		],
+		"sourceHash": "ad78db5c8b1d5d2ca3498344a1bed8171105b76fae1231f00c8aa0be6385c84b"
+	},
+	{
+		"file": "packages/visuals/src/ui/mini-bars.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"semanticClasses(\"cv-mini-bars\", className)",
+				"class > MiniBars > <Svg>",
+				1
+			]
+		],
+		"sourceHash": "ad78db5c8b1d5d2ca3498344a1bed8171105b76fae1231f00c8aa0be6385c84b"
+	},
+	{
+		"file": "packages/visuals/src/ui/sparkline.tsx",
+		"reason": "Public visual primitive forwards typed DOM/Base UI props. Literal style/class call sites remain scanned; runtime caller values need browser review.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > Sparkline > <Svg>",
+				1
+			]
+		],
+		"sourceHash": "37a5b5e0dd71f5b42df1da2028f4889915677da8269a53980fc7ecf18e3956ea"
+	},
+	{
+		"file": "packages/visuals/src/ui/sparkline.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"semanticClasses(\"cv-sparkline\", className)",
+				"class > Sparkline > <Svg>",
+				1
+			]
+		],
+		"sourceHash": "37a5b5e0dd71f5b42df1da2028f4889915677da8269a53980fc7ecf18e3956ea"
+	},
+	{
+		"file": "packages/visuals/src/ui/icon-label.tsx",
+		"reason": "Public visual primitive forwards typed DOM/Base UI props. Literal style/class call sites remain scanned; runtime caller values need browser review.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > IconLabel > <span>",
+				1
+			]
+		],
+		"sourceHash": "2eb63d928188477c4d6ea1c21909b8e729f485ffdaf558809f46bd9c40f00a1a"
+	},
+	{
+		"file": "packages/visuals/src/ui/icon-label.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"semanticClasses(\"cv-icon-label\", className)",
+				"class > IconLabel > <span>",
+				1
+			]
+		],
+		"sourceHash": "2eb63d928188477c4d6ea1c21909b8e729f485ffdaf558809f46bd9c40f00a1a"
+	},
+	{
+		"file": "packages/visuals/src/ui/progress-bar.tsx",
+		"reason": "Public visual primitive forwards typed DOM/Base UI props. Literal style/class call sites remain scanned; runtime caller values need browser review.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > ProgressBar > <span>",
+				1
+			]
+		],
+		"sourceHash": "234021af7158e8dafcb6c05e59ea73e1cc067c9c58f4fcd23f4d52a8164a8c5e"
+	},
+	{
+		"file": "packages/visuals/src/ui/progress-bar.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"[\"cv-progress-bar\", className].filter(Boolean)",
+				"class > ProgressBar > <span>",
+				1
+			]
+		],
+		"sourceHash": "234021af7158e8dafcb6c05e59ea73e1cc067c9c58f4fcd23f4d52a8164a8c5e"
+	},
+	{
+		"file": "packages/visuals/src/ui/badge.tsx",
+		"reason": "Public visual primitive forwards typed DOM/Base UI props. Literal style/class call sites remain scanned; runtime caller values need browser review.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > Badge > <span>",
+				1
+			]
+		],
+		"sourceHash": "c05928e1771f8684f1e67bdc2997b46e6a0aee430c8b89aa5c3913bf26d002e6"
+	},
+	{
+		"file": "packages/visuals/src/ui/badge.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"semanticClasses(\"cv-badge\", className)",
+				"class > Badge > <span>",
+				1
+			]
+		],
+		"sourceHash": "c05928e1771f8684f1e67bdc2997b46e6a0aee430c8b89aa5c3913bf26d002e6"
+	},
+	{
+		"file": "packages/visuals/src/ui/table.tsx",
+		"reason": "Public visual primitive forwards typed DOM/Base UI props. Literal style/class call sites remain scanned; runtime caller values need browser review.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > Table > <table>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > TableHeader > <thead>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > TableBody > <tbody>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > TableFooter > <tfoot>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > TableRow > <tr>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > TableHead > <th>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > TableCell > <td>",
+				1
+			]
+		],
+		"sourceHash": "09399f3de710c53593cbeecf48b5f6ee06c72f7e1eb588a7d826154efb87e054"
+	},
+	{
+		"file": "packages/visuals/src/ui/table.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"classes(\"cv-table\", className)",
+				"class > Table > <table>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"classes(\"cv-table-header\", className)",
+				"class > TableHeader > <thead>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"classes(\"cv-table-body\", className)",
+				"class > TableBody > <tbody>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"classes(\"cv-table-footer\", className)",
+				"class > TableFooter > <tfoot>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"classes(\"cv-table-row\", className)",
+				"class > TableRow > <tr>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"classes(\"cv-table-head\", className)",
+				"class > TableHead > <th>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"classes(\"cv-table-cell\", className)",
+				"class > TableCell > <td>",
+				1
+			]
+		],
+		"sourceHash": "09399f3de710c53593cbeecf48b5f6ee06c72f7e1eb588a7d826154efb87e054"
+	},
+	{
+		"file": "packages/visuals/src/ui/select.tsx",
+		"reason": "Public visual primitive forwards typed DOM/Base UI props. Literal style/class call sites remain scanned; runtime caller values need browser review.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > SelectValue > <SelectPrimitive.Value>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > SelectTrigger > <SelectPrimitive.Trigger>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > SelectContent > <SelectPrimitive.Popup>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > SelectItem > <SelectPrimitive.Item>",
+				1
+			]
+		],
+		"sourceHash": "332e0f7dd19c48d5a89ab024403a47f849d3161b0ed80c4553d279b2dc052512"
+	},
+	{
+		"file": "packages/visuals/src/ui/select.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > SelectValue > <SelectPrimitive.Value>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > SelectTrigger > <SelectPrimitive.Trigger>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > SelectContent > <SelectPrimitive.Popup>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > SelectItem > <SelectPrimitive.Item>",
+				1
+			]
+		],
+		"sourceHash": "332e0f7dd19c48d5a89ab024403a47f849d3161b0ed80c4553d279b2dc052512"
+	},
+	{
+		"file": "packages/dialect/src/nodes/content.ts",
+		"reason": "Lexical selects classes from the registered theme; exported theme literals are scanned separately. This boundary does not execute Lexical at lint time.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"config.theme.planCode",
+				"class",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"config.theme.planMath",
+				"class",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"config.theme.planFootnote",
+				"class",
+				1
+			]
+		],
+		"sourceHash": "972a9d9783af2b4506ab6cf1c02abe553f1aad059bfc1b50f6438886f8fe90a3"
+	},
+	{
+		"file": "packages/dialect/src/nodes/containers.ts",
+		"reason": "Lexical selects classes from the registered theme; exported theme literals are scanned separately. This boundary does not execute Lexical at lint time.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"config.theme[className]",
+				"class",
+				1
+			]
+		],
+		"sourceHash": "1bd51181586edf1aedd919cf00b3e825a5efcda631fee849f88df887f1adad3f"
+	},
+	{
+		"file": "packages/dialect/src/nodes/containers.ts",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class",
+				1
+			]
+		],
+		"sourceHash": "1bd51181586edf1aedd919cf00b3e825a5efcda631fee849f88df887f1adad3f"
+	},
+	{
+		"file": "packages/dialect/src/nodes/containers.ts",
+		"reason": "Dialect NodeState projection synchronizes a finite set of data-plan and ARIA attributes supplied by local call sites; this helper does not set style/class presentation values.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"value",
+				"DOM dynamic attribute > dom.setAttribute(name) > syncDOMAttribute",
+				1
+			]
+		],
+		"sourceHash": "1bd51181586edf1aedd919cf00b3e825a5efcda631fee849f88df887f1adad3f"
+	}
+]

@@ -18,32 +18,32 @@ colors:
   chat-divider: "rgb(0 0 0 / 9%)"
 typography:
   document-title:
-    fontFamily: "Inter Variable, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: '"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
     fontSize: "var(--text-2xl)"
     fontWeight: 600
     lineHeight: 1.15
   section-heading:
-    fontFamily: "Inter Variable, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: '"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
     fontSize: "var(--text-xl)"
     fontWeight: 600
     lineHeight: 1.25
   subheading:
-    fontFamily: "Inter Variable, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: '"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
     fontSize: "var(--text-lg)"
     fontWeight: 600
     lineHeight: 1.4
   document-body:
-    fontFamily: "Inter Variable, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: '"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
     fontSize: "var(--text-base)"
     fontWeight: 400
     lineHeight: 1.6
   chrome:
-    fontFamily: "Inter Variable, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: '"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
     fontSize: "var(--text-sm)"
     fontWeight: 400
     lineHeight: 1.5
   compact:
-    fontFamily: "Inter Variable, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: '"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
     fontSize: "var(--text-xs)"
     fontWeight: 400
     lineHeight: 1.35
@@ -107,7 +107,7 @@ Chopin feels calm, precise, and collaborative. The authored document is the visu
 - Petrol marks actions, links, focus, and presence; semantic colors identify outcomes.
 - Controls are quiet, legible, and purposeful. Depth gives layers subtle separation.
 
-The implementation is the authority for values: `../../packages/visuals/theme.css` owns shared tokens, while `src/theme.css`, `src/navigation.css`, and `../../packages/editor/src/styles.css` apply them. The frontmatter records the most reused values; it is not a replacement for those source files.
+The implementation is the authority for values: `../../packages/visuals/theme.css` owns shared tokens, while `src/theme.css`, `src/navigation.css`, and `../../packages/editor/src/styles.css` apply them. The frontmatter records the most reused values; it is not a replacement for those source files. `scripts/check-design-record.ts` compares the structured subset against the shared theme, including explicit aliases. Two contextual values are checked against their owning selectors: Chat's divider in `.workspace-frame .workspace-chat-panel`, and prose leading in `.plan .plan-content`. Prose leading is deliberately 1.6 while the paired base UI token remains 1.5. The sidecar's color values, shadows, and motion entries are checked too; generated dates and illustrative tonal ramps do not establish authority. See [the design contract guide](../../docs/design-contract.md) for the exact scope and change workflow.
 
 ## Colors
 

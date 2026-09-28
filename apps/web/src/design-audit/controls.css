@@ -235,7 +235,7 @@
 	bottom: -1px;
 	left: 0.5rem;
 	height: 2px;
-	border-radius: 9999px;
+	border-radius: var(--radius-full);
 	background: var(--color-brand);
 	content: "";
 }

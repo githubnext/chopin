@@ -8,7 +8,7 @@
 	overflow: hidden;
 	border: var(--edge-width) solid
 		color-mix(in srgb, var(--color-current) 12%, var(--cv-semantic-surface));
-	border-radius: 999px;
+	border-radius: var(--radius-full);
 	background: var(--cv-semantic-surface);
 	padding: var(--spacing) calc(var(--spacing) * 2.5) var(--spacing) calc(var(--spacing) * 2);
 	font-size: var(--text-sm);

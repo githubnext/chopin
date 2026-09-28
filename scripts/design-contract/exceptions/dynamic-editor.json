@@ -1,0 +1,408 @@
+[
+	{
+		"file": "packages/editor/src/card.tsx",
+		"reason": "Sidecar wrapper forwards typed article DOM props; literal style/class values at call sites remain checked.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"rest",
+				"unresolved JSX props > SidecarCard > <article>",
+				1
+			]
+		],
+		"sourceHash": "15e75053a320e6d67b970ae2ad4ef973c0059c5cb85bb74ac44e30449a559272"
+	},
+	{
+		"file": "packages/editor/src/card.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > SidecarCard > <article>",
+				1
+			]
+		],
+		"sourceHash": "15e75053a320e6d67b970ae2ad4ef973c0059c5cb85bb74ac44e30449a559272"
+	},
+	{
+		"file": "packages/editor/src/content-swap.tsx",
+		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"motion.className",
+				"class > ContentSwapLayer > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"presence.className",
+				"class > ContentSwapLayer > <div>",
+				1
+			]
+		],
+		"sourceHash": "f285810ba8efe65355adea1f208e7d03c51d27ef66ab8da3579eff60cfaf3da3"
+	},
+	{
+		"file": "packages/editor/src/content-swap.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > ContentSwapLayer > <div>",
+				1
+			]
+		],
+		"sourceHash": "f285810ba8efe65355adea1f208e7d03c51d27ef66ab8da3579eff60cfaf3da3"
+	},
+	{
+		"file": "packages/editor/src/static-plan-editor.tsx",
+		"reason": "Lexical plugin parameters carry collaboration/source configuration; this spread is not evaluated as code during linting.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"params",
+				"unresolved JSX props > staticSourcePlugin > <StaticSource>",
+				1
+			]
+		],
+		"sourceHash": "8c19c2628572bd604d4a20ace72e65d6f13713dc06871b349aec883b42ff4092"
+	},
+	{
+		"file": "packages/editor/src/toolbar/slash.tsx",
+		"reason": "Imported toolbar class constant is scanned at its exported producer in toolbar/surface.ts; this exact sink preserves the cross-module boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"SHELL",
+				"class > SlashMenu > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"DIVIDER",
+				"class > SlashMenu > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"ROW",
+				"class > SlashMenu > <button>",
+				1
+			]
+		],
+		"sourceHash": "93562ee92ff04a87622d531fb413cf3f7734e2830658e069706ce69ec25623c9"
+	},
+	{
+		"file": "packages/editor/src/toolbar/bubble.tsx",
+		"reason": "Imported toolbar class constant is scanned at its exported producer in toolbar/surface.ts; this exact sink preserves the cross-module boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"SHELL",
+				"class > SelectionBubble > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"CELL",
+				"class > SelectionBubble > <button>",
+				5
+			],
+			[
+				"dynamic",
+				"class",
+				"CELL_ON",
+				"class > SelectionBubble > <button>",
+				2
+			],
+			[
+				"dynamic",
+				"class",
+				"CELL_OFF",
+				"class > SelectionBubble > <button>",
+				5
+			],
+			[
+				"dynamic",
+				"class",
+				"SEAM",
+				"class > SelectionBubble > <span>",
+				3
+			]
+		],
+		"sourceHash": "9e0f068fcf0162f1e6b70c876295c6cf7cd48dd5e9dfe53cfa5b224b34ced5a2"
+	},
+	{
+		"file": "packages/editor/src/toolbar/research.tsx",
+		"reason": "Research draft portal receives measured placement from its anchor; the style boundary is geometry owned by the browser.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"style",
+				"unresolved style > ResearchDraftShell > <div>",
+				1
+			]
+		],
+		"sourceHash": "9771a14a23f11d99d1c5c0c137b435586b9f11c9d08a1dd1a89348e62c2e95d3"
+	},
+	{
+		"file": "packages/editor/src/comment-layer.tsx",
+		"reason": "Comment overlay style is measured anchor/hit-target geometry; browser positioning remains outside static token evaluation.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"preview.style",
+				"unresolved style > PreviewSurface > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"surface.style",
+				"unresolved style > CommentSurface > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"hit",
+				"unresolved style > CommentLayer > documentChrome > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"button",
+				"unresolved style > CommentLayer > documentChrome > <button>",
+				1
+			]
+		],
+		"sourceHash": "736540dffb7041ccc154691b541ad2f1d3bf0d3eaad396b3279e3415ddf33d32"
+	},
+	{
+		"file": "packages/editor/src/comment-layer.tsx",
+		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"lifecycle.presence.className",
+				"class > PreviewSurface > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"surface.className",
+				"class > CommentSurface > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"lifecycle.presence.className",
+				"class > CommentSurface > <div>",
+				1
+			]
+		],
+		"sourceHash": "736540dffb7041ccc154691b541ad2f1d3bf0d3eaad396b3279e3415ddf33d32"
+	},
+	{
+		"file": "packages/editor/src/table/rails.tsx",
+		"reason": "Table rail style is computed viewport geometry (position, size, transform); token policy deliberately does not ban measured dimensions.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"box",
+				"unresolved style > Rail > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"box",
+				"unresolved style > Rail > <button>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"place(-PAIR)",
+				"unresolved style > Rail > <button>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"place(PAIR)",
+				"unresolved style > Rail > <button>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"seamBox(axis, line, origin, TOOL, SEAM)",
+				"unresolved style > Rail > <button>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"seamBox(axis, lines[at] ?? 0, origin, GRIP, 2, gripLane)",
+				"unresolved style > Rail > <div>",
+				1
+			]
+		],
+		"sourceHash": "bd86857696930d6350727ecb37e8baedbd462e0e27fcbe0084decfcafc76e984"
+	},
+	{
+		"file": "packages/editor/src/disclosure-motion.tsx",
+		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"motion.className",
+				"class > MotionDisclosure > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"presence.className",
+				"class > MotionDisclosure > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"motion.contentClassName",
+				"class > MotionDisclosure > <div>",
+				1
+			]
+		],
+		"sourceHash": "3b771409dcd49716b9285746e56624a54b12fb9945735a78ba7eb910b7a1b805"
+	},
+	{
+		"file": "packages/editor/src/disclosure-motion.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > MotionDisclosure > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > MotionDisclosureIcon > <span>",
+				1
+			]
+		],
+		"sourceHash": "3b771409dcd49716b9285746e56624a54b12fb9945735a78ba7eb910b7a1b805"
+	},
+	{
+		"file": "packages/editor/src/plan-editor.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > PlanEditor > <div>",
+				2
+			]
+		],
+		"sourceHash": "f0586a698b1e66d29c0ccb9e518603b23146e5166d78b695ba6405518ca20ba8"
+	},
+	{
+		"file": "packages/editor/src/collaboration.tsx",
+		"reason": "Lexical plugin parameters carry collaboration/source configuration; this spread is not evaluated as code during linting.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"params",
+				"unresolved JSX props > collaborationPlugin > <Collaboration>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"options",
+				"unresolved JSX props > collaborationPlugin > <Collaboration>",
+				1
+			]
+		],
+		"sourceHash": "d210230ab09b8560bb9e17286af0df2648beff3891e183eb8c87a46f390185f2"
+	},
+	{
+		"file": "packages/editor/src/widgets/questionnaire.tsx",
+		"reason": "Pointing props connect questionnaire anchors and callbacks; they do not supply presentation values.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"pointing",
+				"unresolved JSX props > Undecided > <QuestionView>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"pointing",
+				"unresolved JSX props > Decided > <QuestionView>",
+				1
+			]
+		],
+		"sourceHash": "a893cf76153f551ec623590a097d3a760237d8c1de5ef2e2cc655d8662a55e14"
+	},
+	{
+		"file": "packages/editor/src/widgets/code-view.tsx",
+		"reason": "Derived syntax/diff renderer forwards parsed content and renderer options. Third-party preview styles remain browser-reviewed.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > CodeView > <View>",
+				1
+			]
+		],
+		"sourceHash": "3dcffe7814b9822e297e0e8e4449a2dcb3d01a0dcc10c8a634f50c3b81c3b526"
+	},
+	{
+		"file": "packages/editor/src/changes.ts",
+		"reason": "Change-mark renderer selects data-plan-change/gap attributes from the placement kind; appearance remains in separately checked CSS.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"value(placement)",
+				"DOM dynamic attribute > element.setAttribute(attribute(placement))",
+				1
+			]
+		],
+		"sourceHash": "e14622f16d62dca66486a913fec462b1d5380c732c6f04b63e713c877302ded9"
+	}
+]

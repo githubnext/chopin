@@ -183,7 +183,7 @@
 	color: var(--color-text-primary);
 
 	&[type="radio"] {
-		border-radius: 9999px;
+		border-radius: var(--radius-full);
 	}
 
 	&[type="checkbox"] {
@@ -640,7 +640,7 @@ body {
 	height: 0.875rem;
 	border: 2px solid currentColor;
 	border-right-color: transparent;
-	border-radius: 9999px;
+	border-radius: var(--radius-full);
 }
 @media (prefers-reduced-motion: reduce) {
 	.btn[aria-busy="true"] [data-button-loader] {
