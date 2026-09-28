@@ -151,6 +151,7 @@ export function ResearchComposer(
 					<button
 						aria-label="Discard research question"
 						className="plan-research-dismiss btn btn-icon btn-ghost"
+						data-tooltip="Discard Research"
 						onClick={onCancel}
 						title="Discard research question"
 						type="button"

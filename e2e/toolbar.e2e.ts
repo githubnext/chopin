@@ -268,7 +268,7 @@ test("a formatting glyph shows its label on hover", async ({ join }) => {
 
 	let bold = page.getByRole("toolbar", BUBBLE).getByRole("button", { name: "Bold" });
 	await bold.hover();
-	let tooltip = page.getByRole("tooltip");
+	let tooltip = page.locator("[data-icon-tooltip]");
 	await expect(tooltip).toBeVisible();
 	await expect(tooltip).toHaveText("Bold");
 	await page.mouse.move(0, 0);

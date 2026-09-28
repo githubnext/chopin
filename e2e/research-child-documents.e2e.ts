@@ -241,7 +241,7 @@ async function startInlineResearch(page: Page, question: string) {
 		}),
 	).toEqual(authoredOrder);
 	await expect(card.getByText("Queued", { exact: true })).toBeVisible();
-	await expect(page.getByRole("button", { name: "Place research here", exact: true }))
+	await expect(page.getByRole("button", { name: "Place Research", exact: true }))
 		.toHaveCount(0);
 	await expect(page.getByRole("button", { name: "Search public web", exact: true }))
 		.toHaveCount(0);

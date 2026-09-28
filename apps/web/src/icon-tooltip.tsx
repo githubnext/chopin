@@ -19,7 +19,14 @@ function hasVisibleText(button: HTMLButtonElement): boolean {
 function iconButton(target: EventTarget | null): HTMLButtonElement | null {
 	if (!(target instanceof Element)) return null;
 	let button = target.closest<HTMLButtonElement>("button");
-	if (!button || button.disabled || button.closest("[inert]")) return null;
+	if (
+		!button || button.disabled || button.closest("[inert]")
+		|| button.matches(
+			".sr-only, .navigation-drawer-backdrop, .navigation-modal-backdrop, .plan-comment-button",
+		)
+	) {
+		return null;
+	}
 	if (hasVisibleText(button)) return null;
 	if (
 		!button.getAttribute("data-tooltip") && !button.getAttribute("aria-label")
@@ -32,7 +39,8 @@ export function IconTooltip() {
 	useEffect(() => {
 		let tooltip = document.createElement("div");
 		tooltip.className = "icon-tooltip";
-		tooltip.setAttribute("role", "tooltip");
+		tooltip.setAttribute("data-icon-tooltip", "");
+		tooltip.setAttribute("aria-hidden", "true");
 		document.body.append(tooltip);
 		let active: HTMLButtonElement | null = null;
 		let timer: ReturnType<typeof setTimeout> | undefined;
@@ -59,7 +67,10 @@ export function IconTooltip() {
 				let label = button.getAttribute("data-tooltip") ?? button.getAttribute("aria-label")
 					?? originalTitle ?? button.querySelector(".sr-only")?.textContent;
 				if (!label) return hide();
-				tooltip.textContent = label;
+				tooltip.textContent = label.trim().replace(
+					/(^|\s)([a-z])/g,
+					(_, space, letter) => space + letter.toUpperCase(),
+				);
 				let rect = button.getBoundingClientRect();
 				let below = rect.top < tooltip.offsetHeight + GAP;
 				tooltip.style.top = `${below ? rect.bottom + GAP : rect.top - GAP}px`;
