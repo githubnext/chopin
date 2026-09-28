@@ -1,7 +1,9 @@
+import { ATOMIC_AUTH_MODES, createAtomicAdapter } from "./atomic/adapter";
 import { createCopilotSdk } from "./copilot-sdk/adapter";
 import { createPiAdapter } from "./pi/adapter";
 
 import type { HarnessV1 } from "@ai-sdk/harness";
+import type { AtomicAuthMode } from "./atomic/adapter";
 
 const credentials = new Map<string, {
 	currentToken: () => string | undefined;
@@ -14,9 +16,17 @@ function createPiHarness(settings: { auth?: string }): HarnessV1 & { shutdown():
 	return createPiAdapter({ auth: settings.auth as never });
 }
 
+function createAtomicHarness(
+	settings: { auth?: string },
+): HarnessV1 & { shutdown(): Promise<void> } {
+	// Like Pi, Atomic takes neither a GitHub credential nor a credit limit.
+	return createAtomicAdapter({ auth: settings.auth as AtomicAuthMode });
+}
+
 export const harnesses = {
 	"copilot-sdk": createCopilotSdk,
 	pi: createPiHarness,
+	atomic: createAtomicHarness,
 } satisfies Record<
 	string,
 	(settings: {
@@ -41,6 +51,13 @@ function loopback(host: string): boolean {
  * Pi was never told to isolate. */
 const PI_AUTH_MODES = new Set(["auto", "openai", "anthropic", "custom", "ai-gateway"]);
 
+/** Harnesses whose auth modes are validated explicitly; only `ai-gateway`
+ * avoids a host login and may serve a non-loopback bind. */
+const AUTH_MODES = new Map<string, ReadonlySet<string>>([
+	["pi", PI_AUTH_MODES],
+	["atomic", new Set(ATOMIC_AUTH_MODES)],
+]);
+
 export function harnessFor(config: {
 	harness: string;
 	harnessAuth?: string;
@@ -51,15 +68,20 @@ export function harnessFor(config: {
 	}
 	let auth = config.harnessAuth;
 	let isLoopback = loopback(config.host ?? "127.0.0.1");
-	if (config.harness === "pi") {
+	let modes = AUTH_MODES.get(config.harness);
+	if (modes) {
 		if (!auth) {
-			throw new Error("HARNESS_AUTH is required for harness pi");
+			throw new Error(`HARNESS_AUTH is required for harness ${config.harness}`);
 		}
-		if (!PI_AUTH_MODES.has(auth)) {
-			throw new Error(`HARNESS_AUTH ${auth} is not a supported pi authentication mode`);
+		if (!modes.has(auth)) {
+			throw new Error(
+				`HARNESS_AUTH ${auth} is not a supported ${config.harness} authentication mode`,
+			);
 		}
 		if (!isLoopback && auth !== "ai-gateway") {
-			throw new Error("HARNESS_AUTH for pi on a non-loopback SERVER_HOST must be ai-gateway");
+			throw new Error(
+				`HARNESS_AUTH for ${config.harness} on a non-loopback SERVER_HOST must be ai-gateway`,
+			);
 		}
 	} else if (auth && auth !== "direct" && auth !== "ai-gateway" && !isLoopback) {
 		throw new Error("HARNESS_AUTH requires a loopback SERVER_HOST");

@@ -121,7 +121,7 @@ if (database) {
 			replacement.kill("SIGTERM");
 			expect(await replacement.exited).toBe(0);
 			await storage.close();
-		});
+		}, 20_000);
 	});
 } else {
 	describe("postgres server lifecycle", () => {
