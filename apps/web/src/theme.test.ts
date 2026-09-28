@@ -216,19 +216,16 @@ describe("motion contracts", () => {
 		);
 	});
 
-	it("uses the movement curve for the bounded sidebar track and child", () => {
+	it("uses the movement curve for the overlay sidebar", () => {
 		expect(THEME).toMatch(/--motion-move:\s*cubic-bezier\([^)]+\);/);
 		expect(NAVIGATION).toMatch(
-			/\.motion-sidebar\s*{[^}]*var\(--sidebar-open-dur\)[^}]*var\(--motion-move\)/s,
-		);
-		expect(NAVIGATION).toMatch(
-			/\.motion-sidebar\s+\.project-sidebar\s*{[^}]*var\(--sidebar-open-dur\)[^}]*var\(--motion-move\)/s,
+			/\.motion-sidebar\s*{[^}]*transition:\s*transform var\(--sidebar-open-dur\) var\(--motion-move\)/s,
 		);
 	});
 
-	it("settles the sidebar track and child under reduced motion", () => {
+	it("settles the sidebar under reduced motion", () => {
 		expect(NAVIGATION).toMatch(
-			/@media \(prefers-reduced-motion: reduce\)\s*{[\s\S]*?\.motion-sidebar[\s\S]*?\.motion-sidebar \.project-sidebar[\s\S]*?transition:\s*none;[\s\S]*?}/,
+			/@media \(prefers-reduced-motion: reduce\)\s*{[\s\S]*?\.motion-sidebar[\s\S]*?transition:\s*none;[\s\S]*?}/,
 		);
 	});
 

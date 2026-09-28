@@ -98,7 +98,7 @@ function SystemEntry({ item }: { item: Extract<Group, { kind: "system" }> }) {
 			<div className="shrink-0">
 				<SignInIcon aria-hidden="true" size={14} />
 			</div>
-			<p className="m-0 min-w-0 break-words text-[14px] [overflow-wrap:anywhere]">
+			<p className="m-0 min-w-0 break-words text-sm [overflow-wrap:anywhere]">
 				{displayText(item.text)}
 			</p>
 		</div>
@@ -172,9 +172,9 @@ function MessageGroup(
 			<div
 				className={`-mt-0.5 flex min-w-0 flex-1 flex-col gap-1 ${item.queued ? "opacity-60" : ""}`}
 			>
-				<div className="flex items-baseline gap-1.5 text-[14px]">
+				<div className="flex items-baseline gap-1.5 text-sm">
 					<span className="min-w-0 break-all font-semibold">{name}</span>
-					<span className="text-[13px] text-text-quaternary tabular-nums">
+					<span className="text-sm text-text-quaternary tabular-nums">
 						{item.queued ? "queued" : when(first.ts!)}
 					</span>
 				</div>

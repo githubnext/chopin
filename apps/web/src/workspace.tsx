@@ -365,7 +365,7 @@ export function Workspace(
 										swapOnHover
 									/>
 									<h2
-										className="text-[14px] font-medium text-text-tertiary"
+										className="text-sm font-medium text-text-tertiary"
 										id={ids.heading.chat}
 										tabIndex={-1}
 									>

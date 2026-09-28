@@ -38,11 +38,12 @@ const COLOURS = [
 ] as const;
 
 const TYPE = [
-	["Chrome and labels", "13px / 20px line-height", "--text-sm", "--text-sm--line-height"],
-	["Document prose", "15px / 22px line-height", "--text-base", "--text-base--line-height"],
-	["Subheading", "17px / 27px line-height", "--text-lg", "--text-lg--line-height"],
-	["Section heading", "24px / 30px line-height", "--text-xl", "--text-xl--line-height"],
-	["Document title", "32px / 38px line-height", "--text-2xl", "--text-2xl--line-height"],
+	["Compact controls", "12–12.3px · step −2", "--text-xs", "--text-xs--line-height"],
+	["Interface and chat", "13.4–14px · step −1", "--text-sm", "--text-sm--line-height"],
+	["Document prose", "15–16px · step 0", "--text-base", "--text-base--line-height"],
+	["Subheading", "18.8–20.8px · step +2", "--text-lg", "--text-lg--line-height"],
+	["Section heading", "23.6–27px · step +4", "--text-xl", "--text-xl--line-height"],
+	["Document title", "33.2–40px · step +7", "--text-2xl", "--text-2xl--line-height"],
 ] as const;
 
 const SPACING = [2, 4, 6, 8, 12, 16, 24, 32] as const;
@@ -150,7 +151,7 @@ export function Foundations() {
 			<AuditPlate
 				item="typography"
 				title="Typography"
-				description="The complete five-rung type scale."
+				description="The complete fluid six-rung type scale."
 			>
 				<div className="design-audit-type-stack">
 					{TYPE.map(([label, measurement, size, lineHeight]) => (

@@ -42,14 +42,10 @@ describe("design audit specimens", () => {
 		expect(markup).toContain("Strong resting");
 		expect(markup).toContain("--button-edge-width");
 		for (
-			let measurement of [
-				"13px / 20px line-height",
-				"15px / 22px line-height",
-				"17px / 27px line-height",
-				"24px / 30px line-height",
-				"32px / 38px line-height",
-			]
-		) expect(markup).toContain(measurement);
+			let token of ["--text-xs", "--text-sm", "--text-base", "--text-lg", "--text-xl", "--text-2xl"]
+		) {
+			expect(markup).toContain(`var(${token})`);
+		}
 	});
 
 	it("inventories and renders every IconLabel tone", () => {

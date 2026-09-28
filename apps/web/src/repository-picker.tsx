@@ -415,7 +415,7 @@ export function RepositoryPicker(
 								/>
 							)
 							: (
-								<span className="flex size-full items-center justify-center text-[10px] font-medium">
+								<span className="flex size-full items-center justify-center text-xs font-medium">
 									{current.owner.slice(0, 1).toUpperCase()}
 								</span>
 							)}
