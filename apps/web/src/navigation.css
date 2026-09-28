@@ -196,8 +196,8 @@
 }
 
 .motion-sidebar {
-	position: absolute;
-	z-index: 1;
+	position: relative;
+	z-index: 45;
 	height: 100%;
 	width: var(--project-sidebar-width, 0px);
 	transform: translateX(-100%);
@@ -311,7 +311,7 @@
 .project-sidebar-document {
 	min-height: 33px;
 	border-radius: 8px;
-	padding: 4px 4px 4px 32px;
+	padding: 4px 4px 4px 24px;
 	font-size: var(--text-sm);
 }
 
@@ -452,7 +452,7 @@
 .project-sidebar-resize {
 	position: absolute;
 	inset-block: 0;
-	right: -2px;
+	right: 0;
 	z-index: 50;
 	width: 4px;
 	cursor: col-resize;
@@ -484,7 +484,7 @@
 	position: absolute;
 	left: 8px;
 	top: 11px;
-	z-index: 20;
+	z-index: 45;
 }
 
 .navigation-drawer {
