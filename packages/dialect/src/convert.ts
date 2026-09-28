@@ -17,7 +17,7 @@ import { assert } from "./validate";
 
 import type { ImportPoint } from "@mdxeditor/editor";
 import type { LexicalEditor, LexicalNode, RootNode } from "lexical";
-import type { Root } from "mdast";
+import type { Nodes, Parent, Root } from "mdast";
 import type { Registry } from "./registry";
 
 export type ConvertOptions = {
@@ -92,6 +92,19 @@ export function $createPlanNodes(tree: Root, options: ConvertOptions = {}): Lexi
 	return nodes;
 }
 
+/**
+ * Parsing never yields an empty paragraph, so exporting one would persist
+ * source that does not survive its own round trip.
+ */
+function dropEmptyParagraphs(node: Nodes): void {
+	let parent = node as Parent;
+	if (!parent.children) return;
+	parent.children = parent.children.filter(child =>
+		child.type !== "paragraph" || child.children.length > 0
+	);
+	for (let child of parent.children) dropEmptyParagraphs(child);
+}
+
 /** Project the current editor content to MDAST. Must run inside a read or update. */
 export function $exportPlanTree(options: ConvertOptions = {}): Root {
 	let reg = options.registry ?? buildRegistry();
@@ -106,6 +119,7 @@ export function $exportPlanTree(options: ConvertOptions = {}): Root {
 	});
 
 	normalizeMarks(tree);
+	dropEmptyParagraphs(tree);
 	return tree;
 }
 
