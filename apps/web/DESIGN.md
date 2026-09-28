@@ -12,7 +12,7 @@ colors:
   ink: "oklch(0.15908 0.00637 95)"
   secondary-ink: "oklch(0.39036 0.01026 95)"
   tertiary-ink: "oklch(0.48124 0.01278 95)"
-  destructive: "oklch(0.60513 0.17178 24.175)"
+  destructive: "oklch(0.585 0.17178 24.175)"
   success: "oklch(0.51958 0.10966 145.072)"
   warning: "oklch(0.59898 0.12586 74.986)"
   chat-divider: "rgb(0 0 0 / 9%)"

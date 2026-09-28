@@ -157,7 +157,7 @@
 			"destructive": {
 				"role": "semantic",
 				"displayName": "Destructive",
-				"canonical": "oklch(0.60513 0.17178 24.175)",
+				"canonical": "oklch(0.585 0.17178 24.175)",
 				"tonalRamp": [
 					"oklch(0.15 0.17178 24.175)",
 					"oklch(0.25 0.17178 24.175)",
