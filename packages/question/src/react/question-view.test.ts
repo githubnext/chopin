@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { currentQuestion, QuestionView } from "./question-view";
+import { create, normalize, read } from "../index";
 
 test("a replacement definition falls back before rendering when its active question disappears", () => {
 	let storage = {
@@ -224,4 +225,18 @@ test("Next waits for an answer to the current question, but not in a read-only v
 		renderToStaticMarkup(createElement(QuestionView, { definition, drafts: {} })),
 		"Next",
 	)).not.toContain("disabled");
+});
+
+test("a free-text host dialog renders an editable textarea without inventing a choice", () => {
+	let definition = normalize({
+		questions: [{ header: "Input", question: "Write the brief", options: [], multiple: false }],
+	}, { verbatim: true });
+	let markup = renderToStaticMarkup(createElement(QuestionView, {
+		definition,
+		drafts: read(create(definition), definition),
+		onChange() {},
+	}));
+	expect(markup).toContain("<textarea");
+	expect(markup).toContain("Write the brief");
+	expect(markup).not.toContain('disabled=""');
 });
