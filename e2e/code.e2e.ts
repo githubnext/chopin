@@ -357,7 +357,7 @@ test("showing the source leaves everybody else's hidden", async ({ join, seed })
 });
 
 test("the language menu is a keyboard-operable listbox", async ({ join, room, seed }) => {
-	await seed("```ts\nlet total = 1;\n```\n");
+	await seed("```typescript\nlet total = 1;\n```\n");
 	let page = await join("ana");
 	let trigger = content(page).getByRole("button", { name: "Code language: TypeScript" });
 	let list = page.getByRole("listbox", { name: "Code language" });
@@ -390,5 +390,5 @@ test("the language menu is a keyboard-operable listbox", async ({ join, room, se
 	await expect(list).toBeHidden();
 	await expect(content(page).getByRole("button", { name: /^Code language: (?!TypeScript)/ }))
 		.toBeVisible();
-	await written(page, room, /^```(?!ts$)\S+$/m);
+	await written(page, room, /^```(?!typescript$)\S+$/m);
 });
