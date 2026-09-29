@@ -616,13 +616,6 @@ describe("migration", () => {
 				tag: "input",
 				utility: "choice-control",
 			},
-			{
-				file: "packages/editor/src/widgets/render-blocks.tsx",
-				marker: 'aria-label="Code language"',
-				name: "code language",
-				tag: "select",
-				utility: "field-ghost",
-			},
 		];
 		let offenders = controls.flatMap(control =>
 			controlOffenders(

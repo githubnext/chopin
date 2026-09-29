@@ -22,7 +22,7 @@
 
 import { Component, useEffect, useMemo, useState } from "react";
 
-import { fileNameOf, repaired, titled } from "./code";
+import { fileNameOf, repaired } from "./code";
 
 import type { ErrorInfo, ReactNode } from "react";
 import type { Kind } from "./code";
@@ -191,14 +191,13 @@ function View({ kind, source, language, meta }: CodeViewProps) {
 		() => ({
 			theme: THEME,
 			themeType: "light" as const,
-			// A snippet's identity is its language, and the control beside it
-			// already says that. A snippet quoting a file has a second one.
-			disableFileHeader: !titled(meta),
+			// The block's own header carries the language and any file name.
+			disableFileHeader: true,
 			disableLineNumbers: true,
 			overflow: "scroll" as const,
 			disableWorkerPool: true,
 		}),
-		[meta],
+		[],
 	);
 
 	let diffOptions = useMemo(
@@ -235,6 +234,7 @@ function View({ kind, source, language, meta }: CodeViewProps) {
 			contentEditable={false}
 			role="group"
 			aria-label={kind === "diff" ? "Diff preview" : "Code preview"}
+			data-view={patch ? "diff" : "file"}
 			tabIndex={0}
 		>
 			{patch
