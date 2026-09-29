@@ -143,15 +143,22 @@ Chopin implements Atomic's `HostInput`, bound through
 `extensionBindings.humanInput`; it does not intercept tools. `ask_user_question`,
 extension dialogs, and workflow-stage input become ordinary shared Decisions:
 
-- Questionnaires retain question and option order, multi-selection, and custom
-  text; answers return their Atomic question indices and answer kinds, including
-  a selected option's preview.
+- Questionnaires retain question and option order, multi-selection, and the
+  exact text Atomic supplied; answers return their Atomic question indices and
+  answer kinds, including a selected option's preview.
+- Every card offers a written answer. It returns as Atomic's `custom` kind where
+  Atomic's own dialog accepts typed text (single-select without previews), and
+  otherwise as typed `chat`, which Atomic delivers to the model as the member's
+  inline message (blank `chat` text is Atomic's plain request to talk first).
+  Chopin never reports written text as a chosen option, and Atomic workflows
+  treat `chat` as a request to keep discussing, not approval.
 - Confirm uses Yes/No; only choosing Yes approves. Select returns only a supplied
   choice. Input and editor use free-text cards; hints and initial editor text
   appear verbatim in the prompt. Explicitly submitted empty text is an answer,
   not cancellation.
 - Workflow cards show `Workflow run: <id>; stage: <id>` below their question.
-  A request is appended as one adjacent batch at the end of the document.
+  The label is added to the card only; Atomic receives its question text as
+  asked. A request is appended as one adjacent batch at the end of the document.
 - An abort withdraws still-open cards, removes their document nodes, and records
   cancellation by `@chopin` in Decisions. Member cancellations retain any answers
   already given in that batch. Late submissions cannot approve withdrawn input.
@@ -159,10 +166,15 @@ extension dialogs, and workflow-stage input become ordinary shared Decisions:
   integer in milliseconds, at most 2147483647). Unset waits indefinitely. Expiry
   withdraws pending cards and returns no answer; confirm returns false.
 
-Chopin's question size limits still apply: oversized dialogs fail rather than
-silently truncating text. Atomic keeps durable workflow approvals pending on
-withdrawal; Chopin does not automatically resume workflows or replay interrupted
-turns after a restart. A new Atomic session must explicitly resume a saved run.
+Host input is not held to the Planner `ask` tool's per-field limits on question
+and option counts or header, question, label, description, and answer lengths.
+Only Chopin's aggregate bounds apply. A request whose cards would take the
+document past its 256 KiB source limit fails with that message before any card
+appears. A written answer is limited by one shared-draft edit (64 KiB) and the
+whole draft (256 KiB). Text is never silently truncated. Atomic keeps durable
+workflow approvals pending on withdrawal; Chopin does not automatically resume
+workflows or replay interrupted turns after a restart. A new Atomic session must
+explicitly resume a saved run.
 
 ## Permission checks
 

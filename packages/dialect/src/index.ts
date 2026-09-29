@@ -75,6 +75,7 @@ export {
 	$isQuestionnaireNode,
 	cardStatus,
 	QuestionnaireNode,
+	toElement as questionnaireElement,
 } from "./nodes/questionnaire";
 export type { CardStatus, Option, Previous, Question, Questionnaire } from "./nodes/questionnaire";
 

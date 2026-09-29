@@ -12,6 +12,7 @@ import {
 } from "./adapter";
 import { registerFullPlanner } from "./full";
 import { startStubModelServer } from "../pi/model-stub";
+import { hostInputRoom } from "../../testing/decisions";
 import type { HostInput, QuestionParams } from "@bastani/atomic";
 
 let params: QuestionParams = {
@@ -24,18 +25,43 @@ let params: QuestionParams = {
 		],
 	}],
 };
+let freeText: Record<string, QuestionParams> = {
+	multiple: {
+		questions: [{
+			header: "Scope",
+			question: "Which areas?",
+			multiSelect: true,
+			options: [
+				{ label: "Server", description: "Back end" },
+				{ label: "Web", description: "Front end" },
+			],
+		}],
+	},
+	preview: {
+		questions: [{
+			header: "Layout",
+			question: "Which layout?",
+			options: [
+				{ label: "Rows", description: "Stacked", preview: "row\nrow" },
+				{ label: "Columns", description: "Side by side", preview: "col | col" },
+			],
+		}],
+	},
+};
 let stub = startStubModelServer((prompt, prior) =>
 	prior
 		? { kind: "text", text: "Answered." }
 		: prompt === "question"
 		? { kind: "tool", name: "ask_user_question", arguments: JSON.stringify(params) }
+		: freeText[prompt]
+		? { kind: "tool", name: "ask_user_question", arguments: JSON.stringify(freeText[prompt]) }
 		: prompt === "cwd"
 		? { kind: "tool", name: "bash", arguments: JSON.stringify({ command: "pwd" }) }
 		: { kind: "text", text: "Ready." }
 );
 afterAll(stub.stop);
 
-async function run(full: boolean, registered: boolean, prompt = "plain") {
+async function run(full: boolean, registered: boolean, prompt = "plain", host?: HostInput) {
 	let root = await mkdtemp(join(tmpdir(), "chopin-atomic-full-"));
 	let agentDir = join(root, "agent");
 	let cwd = join(root, "checkout");
@@ -86,7 +112,7 @@ async function run(full: boolean, registered: boolean, prompt = "plain") {
 		let git = Bun.spawn(["git", "-C", cwd, "init", "--quiet"], { stdout: "pipe", stderr: "pipe" });
 		expect(await git.exited).toBe(0);
 		process.env.ATOMIC_CODING_AGENT_DIR = agentDir;
-		let humanInput: HostInput = {
+		let humanInput: HostInput = host ?? {
 			confirm: async () => false,
 			select: async () => undefined,
 			input: async () => undefined,
@@ -177,6 +203,22 @@ test("full sessions use the checkout cwd and route ask_user_question through Hos
 	expect(question.requests.at(-1)!.toolResults.join("\n")).toContain("Second");
 	let prompt = await run(true, true, "/marker");
 	expect(prompt.requests[0]!.prompt).toBe("OPERATOR-PROMPT-MARKER");
+});
+
+test("free-text Decisions answers to multi-select and preview questions reach the model", async () => {
+	let room = await hostInputRoom();
+	try {
+		for (let prompt of ["multiple", "preview"]) {
+			let turn = run(true, true, prompt, room.input);
+			let [card] = await room.cards(1);
+			await room.answer(card!.id, `  typed ${prompt}\n`);
+			let output = (await turn).requests.at(-1)!.toolResults.join("\n");
+			expect(output).toContain(`  typed ${prompt}\n`);
+			expect(output).not.toContain("InvalidHostInput");
+		}
+	} finally {
+		await room.close();
+	}
 });
 
 test("workers without a verified registration and default-mode sessions stay isolated", async () => {

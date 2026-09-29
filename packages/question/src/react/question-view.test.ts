@@ -240,3 +240,26 @@ test("a free-text host dialog renders an editable textarea without inventing a c
 	expect(markup).toContain("Write the brief");
 	expect(markup).not.toContain('disabled=""');
 });
+
+test("only the Planner's own questions cap the custom answer textarea", () => {
+	let question = { header: "Input", question: "Write the brief", multiple: false };
+	for (
+		let [definition, cap] of [
+			[normalize({ questions: [{ ...question, options: [] }] }, { verbatim: true }), false],
+			[
+				normalize({ questions: [{ ...question, options: [{ label: "A", description: "" }] }] }),
+				true,
+			],
+		] as const
+	) {
+		let drafts = read(create(definition), definition);
+		drafts.q0!.mode = "custom";
+		let markup = renderToStaticMarkup(createElement(QuestionView, {
+			definition,
+			drafts,
+			onChange() {},
+		}));
+		expect(markup).toContain("<textarea");
+		expect(markup.includes('maxLength="4000"')).toBe(cap);
+	}
+});

@@ -1,16 +1,13 @@
 import { afterEach, expect, test } from "bun:test";
-import * as Question from "@chopin/question";
+import { $nodesOfType } from "lexical";
+import { limits, QuestionnaireNode } from "@chopin/dialect";
 import * as Questions from "../../questions/service";
 import * as Store from "../../questions/store";
 import * as Plan from "../../plan/service";
 import * as Room from "../../plan/room";
-import { MemoryStorage } from "../../storage/memory/adapter";
 import * as Edit from "../../plan/edit";
-import { createHumanInput } from "./human-input";
-import type { Server } from "bun";
-import type { HostInputOptions, QuestionParams } from "@bastani/atomic";
-import type { Socket, SocketData } from "../../wire";
-import type { DocumentRoom } from "../../agent/tools";
+import { hostInputRoom } from "../../testing/decisions";
+import type { QuestionParams } from "@bastani/atomic";
 
 let cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -18,102 +15,9 @@ afterEach(async () => {
 });
 
 async function fixture(timeoutMs?: number) {
-	let storage = new MemoryStorage();
-	let now = new Date();
-	await storage.users.put({ id: "user", login: "reader", avatarUrl: "", now });
-	let channel = await storage.channels.create({
-		id: crypto.randomUUID(),
-		repositoryId: "R_test",
-		repositoryOwner: "org",
-		repositoryName: "repo",
-		title: "Questions",
-		createdBy: "user",
-		now,
-	});
-	let lease = (await storage.leases.acquire("writer", "test", 60_000))!;
-	let frames: any[] = [];
-	let server = {
-		publish(_topic: string, frame: string) {
-			frames.push(JSON.parse(frame));
-		},
-	} as unknown as Server<SocketData>;
-	let plan = await Plan.open(channel.id, {
-		storage,
-		lease: () => lease,
-		fatal: error => {
-			throw error;
-		},
-	}, server);
-	let room = {
-		id: channel.id,
-		plan,
-		server,
-		anchors() {},
-	} as DocumentRoom;
-	let ws = {
-		data: { handle: "reader", room: channel.id, client: "client" },
-		send(frame: string) {
-			frames.push(JSON.parse(frame));
-		},
-		publish(_topic: string, frame: string) {
-			frames.push(JSON.parse(frame));
-		},
-	} as unknown as Socket;
-	cleanups.push(() => Plan.close(plan));
-	let controller = new AbortController();
-	let options: HostInputOptions = {
-		requestId: "request",
-		sessionId: "session",
-		signal: controller.signal,
-	};
-	let input = createHumanInput(room, timeoutMs);
-	async function cards(count: number) {
-		await wait(() => Store.outstanding(plan.questions).length === count);
-		return Store.outstanding(plan.questions);
-	}
-	async function answer(id: string, value: number[] | string) {
-		let opened = Store.snapshot(plan.questions, id);
-		if (!opened.open) throw new Error("question closed");
-		let definition = Store.get(plan.questions, id)!.definition;
-		let model = Question.restore(opened.model, definition);
-		let question = definition.questions[0];
-		if (typeof value === "string") {
-			model.api.val([question.id, "mode"]).set("custom");
-			if (value) model.api.str([question.id, "custom"]).ins(0, value);
-		} else if (question.multiple) {
-			for (let index of value) {
-				model.api.val([question.id, "options", question.options[index]!.id]).set(true);
-			}
-		} else model.api.val([question.id, "choice"]).set(question.options[value[0]!]!.id);
-		let patch = model.api.flush();
-		if (patch) {
-			await Questions.edit(plan, ws, {
-				kind: "question:edit",
-				rid: "edit",
-				ts: 0,
-				id,
-				patch: [...patch.toBinary()],
-			});
-		}
-		let current = Store.snapshot(plan.questions, id);
-		if (!current.open) throw new Error("question closed");
-		await Questions.submit(plan, server, channel.id, ws, {
-			kind: "question:submit",
-			rid: "submit",
-			ts: 0,
-			id,
-			revision: current.revision,
-		});
-	}
-	return { input, plan, storage, frames, controller, options, cards, answer, ws, server, room };
-}
-
-async function wait(ready: () => boolean) {
-	for (let i = 0; i < 200; i++) {
-		if (ready()) return;
-		await Bun.sleep(5);
-	}
-	throw new Error("question did not arrive");
+	let f = await hostInputRoom(timeoutMs);
+	cleanups.push(f.close);
+	return f;
 }
 
 let params: QuestionParams = {
@@ -190,6 +94,36 @@ test("HostInput appends one ordered questionnaire batch and returns typed answer
 			{ questionIndex: 2, question: "Or free text?", kind: "custom", answer: "  typed\n" },
 		],
 	});
+});
+
+test("Atomic's own HostInput validator accepts every answer a member can give", async () => {
+	let { HostInputBridge, getHostQuestionnaire } = await import(
+		new URL("./core/extensions/host-input.js", import.meta.resolve("@bastani/atomic")).href
+	);
+	let f = await fixture();
+	let bridge = new HostInputBridge(() => "session", () => undefined);
+	bridge.bind(f.input, "chopin");
+	let questionnaire = getHostQuestionnaire(bridge.wrap({}));
+	let [preview, multiple, plain] = params.questions;
+	for (
+		let [question, value, expected] of [
+			[preview!, [1], { kind: "option", answer: "B" }],
+			[preview!, [0], { kind: "option", answer: " A ", preview: "preview A" }],
+			[preview!, "  typed\n", { kind: "chat", answer: "  typed\n" }],
+			[multiple!, [1, 0], { kind: "multi", answer: null, selected: ["C", "D"] }],
+			[multiple!, "several\n", { kind: "chat", answer: "several\n" }],
+			[plain!, [1], { kind: "option", answer: "F" }],
+			[plain!, " own ", { kind: "custom", answer: " own " }],
+		] as const
+	) {
+		let response = questionnaire({ questions: [question] }, new AbortController().signal);
+		let [card] = await f.cards(1);
+		await f.answer(card!.id, typeof value === "string" ? value : [...value]);
+		expect(await response).toEqual({
+			cancelled: false,
+			answers: [{ questionIndex: 0, question: question.question, ...expected }],
+		});
+	}
 });
 
 test("maps confirm/select dialogs without treating custom text as approval or a selection", async () => {
@@ -366,4 +300,114 @@ test("blank dialog titles and supplied empty choices remain valid verbatim input
 	expect(Room.project(restored)).toContain('label=""');
 	expect(Room.project(restored)).toContain('value=""');
 	restored.doc.destroy();
+});
+
+/** Re-import the canonical document, proving the dialect accepts every card it holds. */
+async function documentQuestionnaires(source: string) {
+	let document = await Room.create(source);
+	try {
+		return document.editor.getEditorState().read(() =>
+			$nodesOfType(QuestionnaireNode).map(node => node.getQuestionnaire().questions[0]!)
+		);
+	} finally {
+		document.doc.destroy();
+	}
+}
+
+test("dialogs beyond the Planner's per-field limits become verbatim cards and answers", async () => {
+	let f = await fixture();
+	let initial = "Keep this line of the plan.\n".repeat(180);
+	let edited = `${initial}${"Add this reviewed line.\n".repeat(60)}`;
+	let editor = f.input.editor("Edit plan", initial, f.options);
+	let [card] = await f.cards(1);
+	expect(initial.length).toBeGreaterThan(5_000);
+	expect(card!.definition.questions[0].question).toBe(`Edit plan\n\n${initial}`);
+	await f.answer(card!.id, edited);
+	expect(edited.length).toBeGreaterThan(6_000);
+	expect(await editor).toBe(edited);
+
+	let message = "This workflow step rewrites generated files. ".repeat(30);
+	let confirmed = f.input.confirm("Proceed?", message, f.options);
+	[card] = await f.cards(1);
+	await f.answer(card!.id, [0]);
+	expect(await confirmed).toBe(true);
+
+	let choices = Array.from({ length: 25 }, (_, index) => `Choice ${index}`);
+	choices[24] = `The long choice ${"x".repeat(250)}`;
+	let selected = f.input.select("Pick one", choices, f.options);
+	[card] = await f.cards(1);
+	expect(card!.definition.questions[0].options.map(option => option.label)).toEqual(choices);
+	await f.answer(card!.id, [24]);
+	expect(await selected).toBe(choices[24]);
+
+	let rollout = "Explain the rollout, its owners, and its checks. ".repeat(40);
+	let asked = f.input.questionnaire({
+		questions: [{
+			header: "Rollout",
+			question: "Which rollout?",
+			options: [{ label: "Staged", description: rollout }, { label: "All", description: "" }],
+		}],
+	}, f.options);
+	[card] = await f.cards(1);
+	await f.answer(card!.id, [0]);
+	expect((await asked).answers[0]).toMatchObject({ kind: "option", answer: "Staged" });
+
+	expect(await documentQuestionnaires(Plan.source(f.plan))).toMatchObject([
+		{ header: "Editor", prompt: `Edit plan\n\n${initial}`, options: [], answer: edited },
+		{ header: "Confirm", prompt: `Proceed?\n\n${message}`, answer: "Yes" },
+		{
+			header: "Select",
+			prompt: "Pick one",
+			options: choices.map(label => ({ label })),
+			answer: choices[24],
+		},
+		{
+			header: "Rollout",
+			options: [{ label: "Staged", description: rollout }, { label: "All" }],
+			answer: "Staged",
+		},
+	]);
+});
+
+test("a workflow label never pushes a verbatim question into a rejection", async () => {
+	let f = await fixture();
+	let question = "Should the review stage accept this change? ".repeat(23).slice(0, 990);
+	let long: QuestionParams = {
+		questions: [{
+			header: "Review",
+			question,
+			options: [{ label: "Ship", description: "" }, { label: "Hold", description: "" }],
+		}],
+	};
+	let response = f.input.questionnaire(long, {
+		...f.options,
+		workflowRunId: "run-123",
+		workflowStageId: "review",
+	});
+	let [card] = await f.cards(1);
+	let labelled = `${question}\n\nWorkflow run: run-123; stage: review`;
+	expect(card!.definition.questions[0].question).toBe(labelled);
+	expect(await documentQuestionnaires(Plan.source(f.plan))).toMatchObject([{ prompt: labelled }]);
+	await f.answer(card!.id, [0]);
+	expect(await response).toEqual({
+		cancelled: false,
+		answers: [{ questionIndex: 0, question, kind: "option", answer: "Ship" }],
+	});
+});
+
+test("a dialog that cannot fit in the document fails loudly without leaving a card", async () => {
+	let f = await fixture();
+	let edited = Edit.apply(f.plan, f.plan.revision, [{
+		op: "replace_root",
+		source: `${"Existing prose in the document. ".repeat(3_000)}\n`,
+	}]);
+	if (!edited.ok || !edited.mutation) throw new Error("fixture edit failed");
+	await Plan.publish(f.plan, f.server, f.room.id, edited.mutation);
+	let before = Plan.source(f.plan);
+	await expect(
+		f.input.editor("Too large", "x".repeat(limits.MAX_SOURCE_BYTES - 90_000), f.options),
+	).rejects.toThrow(`${limits.MAX_SOURCE_BYTES / 1024} KiB`);
+	expect(Store.outstanding(f.plan.questions)).toHaveLength(0);
+	expect(f.plan.records.size).toBe(0);
+	expect(Plan.source(f.plan)).toBe(before);
 });

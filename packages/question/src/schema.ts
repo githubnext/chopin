@@ -53,16 +53,23 @@ function text(
 	verbatim = false,
 ): string {
 	if (typeof value !== "string") fail(`${name} must be text`);
-	let result = verbatim ? value : value.trim();
+	if (verbatim) return value;
+	let result = value.trim();
 	if (!optional && !result) fail(`${name} is required`);
 	if (result.length > max) fail(`${name} exceeds ${max} characters`);
 	return result;
 }
 
 /** A stored definition keeps its original string, so enforce the bound on that string. */
-function storedText(value: unknown, name: string, max: number, optional = false): void {
-	text(value, name, max, optional);
-	if ((value as string).length > max) fail(`${name} exceeds ${max} characters`);
+function storedText(
+	value: unknown,
+	name: string,
+	max: number,
+	optional = false,
+	verbatim = false,
+): void {
+	text(value, name, max, optional, verbatim);
+	if (!verbatim && (value as string).length > max) fail(`${name} exceeds ${max} characters`);
 }
 
 /**
@@ -71,6 +78,10 @@ function storedText(value: unknown, name: string, max: number, optional = false)
  * Option and question identifiers are positional because they only have to be
  * unique within one call. Durable plan questionnaires re-key them to ULIDs on
  * the way in, since those do have to survive rewrites.
+ *
+ * A verbatim definition is a host dialog the runtime already permitted: it
+ * keeps its text exactly and is bounded by the draft and document byte limits
+ * rather than by the `ask` tool's per-field contract.
  *
  * @throws {QuestionError}
  */
@@ -81,7 +92,7 @@ export function normalize(raw: unknown, { verbatim = false } = {}): Definition {
 	if (!Array.isArray(args.questions) || args.questions.length === 0) {
 		fail("At least one question is required");
 	}
-	if (args.questions.length > limits.MAX_QUESTIONS) {
+	if (!verbatim && args.questions.length > limits.MAX_QUESTIONS) {
 		fail(`A questionnaire can contain at most ${limits.MAX_QUESTIONS} questions`);
 	}
 
@@ -92,7 +103,7 @@ export function normalize(raw: unknown, { verbatim = false } = {}): Definition {
 		if (!Array.isArray(raw.options) || (!verbatim && raw.options.length === 0)) {
 			fail(`Question ${index + 1} requires at least one option`);
 		}
-		if (raw.options.length > limits.MAX_OPTIONS) {
+		if (!verbatim && raw.options.length > limits.MAX_OPTIONS) {
 			fail(`Question ${index + 1} can contain at most ${limits.MAX_OPTIONS} options`);
 		}
 		if (typeof raw.multiple !== "boolean") {
@@ -159,6 +170,9 @@ export function identified(raw: unknown): Definition {
 	if (
 		!Array.isArray(source.questions) || source.questions.length === 0
 		|| source.questions.length > limits.MAX_QUESTIONS
+			&& !source.questions.every(question =>
+				(question as { verbatim?: unknown })?.verbatim === true
+			)
 	) {
 		fail("Questionnaire definition has an invalid question count");
 	}
@@ -177,14 +191,14 @@ export function identified(raw: unknown): Definition {
 		let id = question.id as string;
 		if (questionIds.has(id)) fail("Questionnaire has duplicate question IDs");
 		questionIds.add(id);
-		storedText(question.header, `Question ${index + 1} header`, limits.MAX_HEADER, verbatim);
-		storedText(question.question, `Question ${index + 1}`, limits.MAX_QUESTION, verbatim);
+		storedText(question.header, `Question ${index + 1} header`, limits.MAX_HEADER, false, verbatim);
+		storedText(question.question, `Question ${index + 1}`, limits.MAX_QUESTION, false, verbatim);
 		if (
 			typeof question.multiple !== "boolean"
 			|| !Array.isArray(question.options)
 			|| question.options.length === 0 && !verbatim
 				&& (source.questions.length !== 1 || question.multiple)
-			|| question.options.length > limits.MAX_OPTIONS
+			|| !verbatim && question.options.length > limits.MAX_OPTIONS
 		) {
 			fail(`Question ${index + 1} has invalid options or multiple value`);
 		}
@@ -195,12 +209,19 @@ export function identified(raw: unknown): Definition {
 			let optionId = option.id as string;
 			if (optionIds.has(optionId)) fail("Questionnaire has duplicate option IDs");
 			optionIds.add(optionId);
-			storedText(option.label, `Question ${index + 1} option label`, limits.MAX_LABEL, verbatim);
+			storedText(
+				option.label,
+				`Question ${index + 1} option label`,
+				limits.MAX_LABEL,
+				false,
+				verbatim,
+			);
 			storedText(
 				option.description,
 				`Question ${index + 1} option description`,
 				limits.MAX_DESCRIPTION,
 				true,
+				verbatim,
 			);
 		}
 	}
