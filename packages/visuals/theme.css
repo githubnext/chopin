@@ -105,7 +105,7 @@
 	--color-warning: oklch(0.59898 0.12586 74.986); /* #ab7302 */
 	--color-warning-wash: oklch(0.95 0.032 75);
 	--color-warning-ink: oklch(0.4409 0.0921 74.93); /* #704a02 */
-	--color-destructive: oklch(0.585 0.17178 24.175); /* #ce4646 */
+	--color-destructive: oklch(0.60513 0.17178 24.175); /* #d54d4c */
 	--color-destructive-hover: oklch(0.56972 0.16045 24.136); /* #c44746 */
 	--color-destructive-active: oklch(0.53376 0.1489 24.091); /* #b34140 */
 	--color-destructive-wash: color-mix(
