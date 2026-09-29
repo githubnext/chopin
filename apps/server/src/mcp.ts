@@ -402,6 +402,7 @@ export const TOOLS: Tool[] = [
 			additionalProperties: false,
 		},
 		outputSchema: {
+			type: "object",
 			oneOf: [
 				ACTIVE_DOCUMENT,
 				outcome([
@@ -430,6 +431,7 @@ export const TOOLS: Tool[] = [
 			additionalProperties: false,
 		},
 		outputSchema: {
+			type: "object",
 			oneOf: [
 				ARCHIVED_DOCUMENT,
 				outcome(["repository-forbidden", "document-unavailable"]),
@@ -453,6 +455,7 @@ export const TOOLS: Tool[] = [
 			additionalProperties: false,
 		},
 		outputSchema: {
+			type: "object",
 			oneOf: [
 				ACTIVE_DOCUMENT,
 				outcome(["repository-forbidden", "document-unavailable"]),
