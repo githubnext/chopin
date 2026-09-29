@@ -407,10 +407,11 @@ class Validator {
 						stringAttribute(parent, "status") ?? "",
 					)
 					&& stringAttribute(node, "multiple") === "false";
-				// A free-text question, from a card with no thread or status, has no options
-				// until its answer is projected.
+				// A free-text question, from a card with no thread that is open or expired,
+				// has no options until its answer is projected.
 				let freeTextQuestion = spec.name === "Question" && parent?.name === "Questionnaire"
-					&& !stringAttribute(parent, "thread") && stringAttribute(parent, "status") === undefined;
+					&& !stringAttribute(parent, "thread")
+					&& [undefined, "expired"].includes(stringAttribute(parent, "status"));
 				if (found === 0 && !pendingQuestion && !freeTextQuestion) {
 					this.add(
 						"missing-children",

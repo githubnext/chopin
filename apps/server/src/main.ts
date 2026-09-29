@@ -249,10 +249,10 @@ function chat(room: Rooms.Room, ws: Socket): Chat.Room {
 	});
 }
 
-/** A room's Chat, shared by browser messages and local MCP handoffs. */
+/** A room's Chat, shared by browser messages and MCP handoffs. */
 function conversation(
 	room: Rooms.Room,
-	claimantSessionId: string,
+	claimantSessionId: string | undefined,
 	repository: Chat.Room["repository"],
 ): Chat.Room {
 	let opened = room.plan!;
@@ -1350,34 +1350,31 @@ registerMcpRoutes(router, hostedAuth, {
 		return heldLease;
 	},
 }, {
-	invokePlanner: config.atomicPlanner
-		? input =>
-			withDocumentTransition(input.channel.id, async () => {
-				let channel = await storage.channels.get(input.channel.id);
-				if (!channel || deletingChannels.has(channel.id)) return "document-unavailable";
-				if (channel.archivedAt) return "document-archived";
-				await Rooms.get(channel.id)?.closing;
-				let held = Rooms.hold(channel.id);
-				let release = () => {
-					held.release();
-					evict(held.room);
-				};
-				let running = false;
-				try {
-					await plan(held.room, server);
-					let context = conversation(held.room, input.session.session.id, input.repository);
-					context.checkout = input.checkout;
-					let code = await Chat.invoke(context, input.session.user, input.instruction);
-					if (!code && context.chat.running) {
-						running = true;
-						void context.chat.running.finally(release).catch(() => {});
-					}
-					return code;
-				} finally {
-					if (!running) release();
+	invokePlanner: input =>
+		withDocumentTransition(input.channel.id, async () => {
+			let channel = await storage.channels.get(input.channel.id);
+			if (!channel || deletingChannels.has(channel.id)) return "document-unavailable";
+			if (channel.archivedAt) return "document-archived";
+			await Rooms.get(channel.id)?.closing;
+			let held = Rooms.hold(channel.id);
+			let release = () => {
+				held.release();
+				evict(held.room);
+			};
+			let running = false;
+			try {
+				await plan(held.room, server);
+				let context = conversation(held.room, input.session?.session.id, input.repository);
+				let code = await Chat.invoke(context, input.user, input.instruction, input.checkout);
+				if (!code && context.chat.running) {
+					running = true;
+					void context.chat.running.finally(release).catch(() => {});
 				}
-			})
-		: undefined,
+				return code;
+			} finally {
+				if (!running) release();
+			}
+		}),
 	archiveChannel,
 	isChannelDeleting: channelId => deletingChannels.has(channelId),
 	onChannelRenamed: announceChannel,

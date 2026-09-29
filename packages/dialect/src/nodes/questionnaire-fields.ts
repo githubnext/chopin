@@ -8,7 +8,8 @@ export type Option = {
 	description?: string;
 };
 
-export type CardStatus = "open" | "decided" | "reopened" | "discarded";
+/** `expired` is host input nobody answered in time: settled, but with no answer. */
+export type CardStatus = "open" | "decided" | "reopened" | "discarded" | "expired";
 
 export type Previous = { choices: string[]; value?: string; by: string; at: string };
 
@@ -47,7 +48,13 @@ export type Questionnaire = {
 
 export const EMPTY: Questionnaire = { id: "", questions: [] };
 
-const STATUSES: ReadonlySet<CardStatus> = new Set(["open", "decided", "reopened", "discarded"]);
+const STATUSES: ReadonlySet<CardStatus> = new Set([
+	"open",
+	"decided",
+	"reopened",
+	"discarded",
+	"expired",
+]);
 
 export function cardStatus(value: Questionnaire): CardStatus {
 	if (value.status !== undefined) {

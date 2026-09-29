@@ -66,6 +66,10 @@ function createStubAtomic(overrides: Partial<AtomicSettings> = {}) {
 
 harnessContract("atomic", createStubAtomic, createJustBashNetworkSandboxSession);
 
+/**
+ * Sessions here are never registered as Planner sessions, so each is the
+ * isolated session the summary and research workers run in.
+ */
 async function run(prompt: string, options: {
 	structured?: boolean;
 	instructions?: string;
@@ -109,7 +113,7 @@ async function run(prompt: string, options: {
 	}
 }
 
-describe("atomic turns", () => {
+describe("atomic worker turns", () => {
 	it("answers a plain text turn with exactly the neutral system prompt and no tools", async () => {
 		stub.requests.length = 0;
 		let result = await run("plain");
@@ -351,7 +355,7 @@ describe("atomic HarnessV1 lifecycle", () => {
 	});
 });
 
-describe("atomic structured-output result tool", () => {
+describe("atomic worker structured-output result tool", () => {
 	it("ends a structured turn on the terminating tool without a follow-up model request", async () => {
 		stub.requests.length = 0;
 		let result = await run("output", { structured: true });
@@ -387,7 +391,7 @@ describe("atomic structured-output result tool", () => {
 	});
 });
 
-describe("atomic host isolation and model resolution", () => {
+describe("atomic worker host isolation and model resolution", () => {
 	async function snapshot(root: string): Promise<Map<string, number>> {
 		let files = new Map<string, number>();
 		for (let entry of await readdir(root, { recursive: true })) {

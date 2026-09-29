@@ -1,3 +1,5 @@
+import { limits } from "@chopin/question";
+
 import * as Questions from "../../questions/service";
 
 import type {
@@ -9,8 +11,16 @@ import type {
 } from "@bastani/atomic";
 import type { DocumentRoom } from "../../agent/tools";
 
-/** Atomic owns input requests; Chopin owns their shared decision records. */
-export function createHumanInput(room: DocumentRoom, timeoutMs?: number): HostInput {
+/**
+ * Atomic owns input requests; Chopin owns their shared decision records.
+ *
+ * A request nobody answers within `expiresInMs` expires: its cards stay in
+ * Decisions marked expired, and Atomic gets no answer.
+ */
+export function createHumanInput(
+	room: DocumentRoom,
+	expiresInMs = limits.INPUT_EXPIRY_MS,
+): HostInput {
 	async function questionnaire(
 		params: QuestionParams,
 		options: HostInputOptions,
@@ -31,24 +41,19 @@ export function createHumanInput(room: DocumentRoom, timeoutMs?: number): HostIn
 				multiple: question.multiSelect ?? false,
 			})),
 		}, { verbatim: true });
-		let deadline = new AbortController();
-		let signal = AbortSignal.any([options.signal, deadline.signal]);
-		let timer = timeoutMs === undefined ? undefined : setTimeout(() => deadline.abort(), timeoutMs);
-		let ended;
-		try {
-			ended = await Questions.ask(
-				room.plan,
-				room.server,
-				room.id,
-				definition,
-				undefined,
-				room.anchors,
-				signal,
-			);
-		} finally {
-			clearTimeout(timer);
+		let ended = await Questions.ask(
+			room.plan,
+			room.server,
+			room.id,
+			definition,
+			undefined,
+			room.anchors,
+			options.signal,
+			expiresInMs,
+		);
+		if (options.signal.aborted || ended.some(outcome => outcome.status === "expired")) {
+			return { answers: [], cancelled: true };
 		}
-		if (signal.aborted) return { answers: [], cancelled: true };
 		let answers: QuestionAnswer[] = [];
 		ended.forEach((outcome, questionIndex) => {
 			if (outcome.status !== "answered") return;

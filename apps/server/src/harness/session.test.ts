@@ -1,9 +1,10 @@
-import { describe, expect, it } from "bun:test";
-import { openPlannerSession } from "./session";
-import { mkdtemp, rm } from "node:fs/promises";
+import { afterEach, describe, expect, it } from "bun:test";
+import { mkdtemp, readdir, realpath, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { openPlannerSession } from "./session";
 import { fullPlanner } from "./atomic/full";
+import { rememberCheckout, removeWorkspaces } from "./atomic/workspace";
 import { plannerInstructions } from "../agent/planner";
 
 import type { ActiveOwnerBinding } from "../agent/active-owner";
@@ -115,52 +116,105 @@ describe("openPlannerSession", () => {
 		expect(result).toMatchObject({ ok: false, error: { kind: "Timeout" } });
 		expect(destroyed).toEqual({ sandbox: 1, session: 0, unregistered: 1 });
 	});
-	it("registers full Planner input only for verified checkouts and releases it with the session", async () => {
-		let cwd = await mkdtemp(join(tmpdir(), "chopin-planner-session-"));
-		try {
-			for (
-				let args of [["init", "--quiet"], ["remote", "add", "origin", "workgit:owner/repo.git"]]
-			) {
-				expect(
-					await Bun.spawn(["git", "-C", cwd, ...args], { stdout: "pipe", stderr: "pipe" }).exited,
-				).toBe(0);
-			}
-			for (let checkouts of [[cwd], []]) {
-				let { owner, channel, deps } = fixture();
-				let sessionId = "";
-				let instructions = "";
-				deps.agent = {
-					createSession: async (options: { sessionId: string }) => {
-						sessionId = options.sessionId;
-						return { destroy: async () => {} };
-					},
-					stream: async (call: { options: { instructions: string } }) => {
-						instructions = call.options.instructions;
-					},
-				} as never;
-				let opened = await openPlannerSession(owner, {
-					...channel,
-					atomicPlanner: { checkouts },
-					instructions: checkout => plannerInstructions("owner/repo", "BOOTSTRAP", checkout),
-				}, deps);
-				expect(opened.ok).toBe(true);
-				if (!opened.ok) throw new Error("Planner unavailable");
-				await opened.value.stream("prompt", new AbortController().signal);
-				expect(instructions).toContain("BOOTSTRAP");
-				if (checkouts.length) {
-					expect(fullPlanner(sessionId)?.cwd).toBe(cwd);
-					expect(fullPlanner(sessionId)?.humanInput.questionnaire).toBeFunction();
-					expect(instructions).toContain(cwd);
-					expect(instructions).not.toContain("You have no shell");
-				} else {
-					expect(fullPlanner(sessionId)).toBeUndefined();
-					expect(instructions).toContain("You have no shell");
-				}
-				await opened.value.destroy();
-				expect(fullPlanner(sessionId)).toBeUndefined();
-			}
-		} finally {
-			await rm(cwd, { recursive: true, force: true });
+});
+
+describe("Planner workspaces", () => {
+	let roots: string[] = [];
+	afterEach(async () => {
+		await removeWorkspaces();
+		for (let root of roots.splice(0)) await rm(root, { recursive: true, force: true });
+	});
+
+	async function checkout(origin: string): Promise<string> {
+		let root = await mkdtemp(join(tmpdir(), "chopin-planner-checkout-"));
+		roots.push(root);
+		for (let args of [["init", "--quiet"], ["remote", "add", "origin", origin]]) {
+			expect(
+				await Bun.spawn(["git", "-C", root, ...args], { stdout: "pipe", stderr: "pipe" }).exited,
+			).toBe(0);
+		}
+		return realpath(root);
+	}
+
+	/** Open and stream one Planner session, observing what the harness would see. */
+	async function open(channelId: string, harness?: string) {
+		let { owner, channel, deps } = fixture();
+		let sessionId = "";
+		let instructions = "";
+		let registered: ReturnType<typeof fullPlanner>;
+		deps.agent = {
+			createSession: async (options: { sessionId: string }) => {
+				sessionId = options.sessionId;
+				return { destroy: async () => {} };
+			},
+			stream: async (call: { options: { instructions: string } }) => {
+				instructions = call.options.instructions;
+				registered = fullPlanner(sessionId);
+			},
+		} as never;
+		let opened = await openPlannerSession(owner, {
+			...channel,
+			room: { id: channelId, plan: {}, server: {} } as never,
+			harness,
+			instructions: workspace => plannerInstructions("owner/repo", "BOOTSTRAP", workspace),
+		}, deps);
+		if (!opened.ok) throw new Error("Planner unavailable");
+		await opened.value.stream("prompt", new AbortController().signal);
+		await opened.value.destroy();
+		expect(fullPlanner(sessionId)).toBeUndefined();
+		expect(instructions).toContain("BOOTSTRAP");
+		return { registered: registered!, instructions };
+	}
+
+	it("reuses a channel's remembered checkout for every later atomic session while it verifies", async () => {
+		let path = await checkout("workgit:owner/repo.git");
+		rememberCheckout("channel", path);
+		for (let attempt of [1, 2]) {
+			let { registered, instructions } = await open("channel", "atomic");
+			expect({ attempt, cwd: registered?.cwd }).toEqual({ attempt, cwd: path });
+			expect(registered?.humanInput.questionnaire).toBeFunction();
+			expect(instructions).toContain(`${path}, is a local checkout of owner/repo`);
+			expect(instructions).toContain("This is a full Atomic session");
+			expect(instructions).not.toContain("You have no shell");
+		}
+		let git = Bun.spawn(["git", "-C", path, "remote", "set-url", "origin", "workgit:other/repo"], {
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		expect(await git.exited).toBe(0);
+		let fallback = await open("channel", "atomic");
+		expect(fallback.registered?.cwd).not.toBe(path);
+		expect(await readdir(fallback.registered!.cwd)).toEqual([]);
+		expect(fallback.instructions).toContain("scratch directory Chopin created");
+	});
+
+	it("gives each atomic channel without a checkout its own empty, private directory", async () => {
+		let first = await open("first", "atomic");
+		let again = await open("first", "atomic");
+		let second = await open("second", "atomic");
+		expect(again.registered?.cwd).toBe(first.registered!.cwd);
+		expect(second.registered?.cwd).not.toBe(first.registered!.cwd);
+		for (let { registered, instructions } of [first, second]) {
+			let cwd = registered!.cwd;
+			expect((await stat(cwd)).mode & 0o777).toBe(0o700);
+			expect(await readdir(cwd)).toEqual([]);
+			expect(registered?.humanInput.questionnaire).toBeFunction();
+			expect(instructions).toContain(`${cwd}, is a scratch directory Chopin created`);
+			expect(instructions).toContain("holds no repository files");
+			expect(instructions).toContain("`read_repository_file`");
+			expect(instructions).toContain("This is a full Atomic session");
+		}
+		await removeWorkspaces();
+		expect(await stat(first.registered!.cwd).catch(() => undefined)).toBeUndefined();
+	});
+
+	it("keeps copilot-sdk and pi Planner sessions isolated, whatever the channel remembers", async () => {
+		rememberCheckout("channel", await checkout("workgit:owner/repo.git"));
+		for (let harness of ["copilot-sdk", "pi", undefined]) {
+			let { registered, instructions } = await open("channel", harness);
+			expect(registered).toBeUndefined();
+			expect(instructions).toContain("You have no shell");
+			expect(instructions).not.toContain("full Atomic session");
 		}
 	});
 });

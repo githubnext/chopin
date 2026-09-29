@@ -47,8 +47,11 @@ appear as documents in navigation.
 https://github.com/user-attachments/assets/72a85be8-685f-4d60-9937-b3855b46cebe
 
 The Planner can inspect the selected GitHub repository and its pull requests
-through bounded, read-only tools, then co-author the document. It cannot write to
-GitHub, edit a checkout, or implement code. A separate coding agent can connect
+through bounded, read-only tools, then co-author the document. Under the default
+`copilot-sdk` harness, and under `pi`, it cannot write to GitHub, edit a checkout,
+or implement code. `HARNESS=atomic` deliberately runs it as a full Atomic session
+with shell and filesystem access as the server process's user; see
+[Self-hosting](docs/self-hosting.md#choose-and-trust-a-harness). A separate coding agent can connect
 to Chopin through MCP to create or revise documents and consume an approved
 implementation graph.
 
@@ -60,8 +63,8 @@ and tool vocabulary remain optimized for planning.
 - Chopin supports GitHub.com. GitHub Enterprise Server endpoints are not
   configurable.
 - The Planner's file, tree, and history tools read the default branch captured
-  when its session starts; code search is repository-scoped. It never reads a
-  local checkout or uncommitted changes.
+  when its session starts; code search is repository-scoped. Except under
+  `HARNESS=atomic`, it never reads a local checkout or uncommitted changes.
 - Every browser participant signs in, passes the instance admission policy, and
   needs repository access through the GitHub App installation. MCP callers also
   pass instance admission, but use their own bearer token for repository

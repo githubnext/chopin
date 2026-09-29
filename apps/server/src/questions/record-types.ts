@@ -20,7 +20,7 @@ export type Record = {
 	id: string;
 	definition: Definition;
 	/** "answered" is the stored status of a decided card. */
-	status: "open" | "answered" | "reopened" | "discarded" | "cancelled";
+	status: "open" | "answered" | "reopened" | "discarded" | "cancelled" | "expired";
 	answers?: { [question: string]: string };
 	resolver?: string;
 	at?: number;

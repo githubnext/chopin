@@ -486,9 +486,10 @@ export const TOOLS: Tool[] = [
 	},
 	{
 		name: "invoke_planner",
-		description: "Post an instruction to a document's Planner as the locally signed-in user and "
-			+ "return its URL without waiting for the turn. Available only in full Atomic mode; "
-			+ "a supplied checkout must match the document repository. Questions appear in Decisions.",
+		description: "Post an instruction to a document's Planner, attributed to the caller, and "
+			+ "return its URL without waiting for the turn. The turn runs under the document's "
+			+ "Planner owner; without one, the caller's live Chopin browser login becomes the "
+			+ "owner, and otherwise the call is refused. Questions appear in Decisions.",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -507,7 +508,9 @@ export const TOOLS: Tool[] = [
 				},
 				checkout: {
 					type: "string",
-					description: "Absolute path to a local checkout of this repository.",
+					description: "Absolute path, on the Chopin server's machine, to a checkout of this "
+						+ "repository. Used only by HARNESS=atomic, which verifies its origin and "
+						+ "remembers it as the document's Planner working directory; ignored otherwise.",
 				},
 			},
 			required: ["id", "instruction"],
