@@ -647,6 +647,15 @@ body {
 	outline-offset: var(--focus-ring-offset);
 }
 
+/*
+ * The ring answers "where am I?" for keyboard users, so it hides after a pointer
+ * press. Text fields keep theirs: a caret alone is easy to lose.
+ */
+:root[data-focus-input="pointer"]
+	:where(button, select, summary, [role="button"], [role="listbox"], [role="option"], [tabindex]:not(input, textarea)):focus-visible {
+	outline: none;
+}
+
 /* The editable plan has a live caret, so a second focus marker is redundant. */
 :where(.focus-caret):focus-visible {
 	outline: none;
