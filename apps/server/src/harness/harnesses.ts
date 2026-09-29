@@ -1,10 +1,10 @@
 import { ATOMIC_AUTH_MODES, createAtomicAdapter } from "./atomic/adapter";
+import { removeWorkspaces } from "./atomic/workspace";
 import { createCopilotSdk } from "./copilot-sdk/adapter";
 import { createPiAdapter } from "./pi/adapter";
 
 import type { HarnessV1 } from "@ai-sdk/harness";
 import type { AtomicAuthMode } from "./atomic/adapter";
-import type { Config } from "../config";
 
 const credentials = new Map<string, {
 	currentToken: () => string | undefined;
@@ -18,13 +18,10 @@ function createPiHarness(settings: { auth?: string }): HarnessV1 & { shutdown():
 }
 
 function createAtomicHarness(
-	settings: { auth?: string; fullPlanner?: boolean },
+	settings: { auth?: string },
 ): HarnessV1 & { shutdown(): Promise<void> } {
 	// Like Pi, Atomic takes neither a GitHub credential nor a credit limit.
-	return createAtomicAdapter({
-		auth: settings.auth as AtomicAuthMode,
-		fullPlanner: settings.fullPlanner,
-	});
+	return createAtomicAdapter({ auth: settings.auth as AtomicAuthMode });
 }
 
 export const harnesses = {
@@ -37,7 +34,6 @@ export const harnesses = {
 		credentials: (id: string) => string | undefined;
 		limits: (id: string) => { maxAiCredits: number } | undefined;
 		auth?: string;
-		fullPlanner?: boolean;
 	}) => HarnessV1
 >;
 
@@ -67,7 +63,6 @@ export function harnessFor(config: {
 	harness: string;
 	harnessAuth?: string;
 	host?: string;
-	atomicPlanner?: Config["atomicPlanner"];
 }): HarnessV1 {
 	if (!Object.hasOwn(harnesses, config.harness)) {
 		throw new Error(`Unknown harness: ${config.harness}`);
@@ -99,7 +94,6 @@ export function harnessFor(config: {
 			return maxAiCredits === undefined ? undefined : { maxAiCredits };
 		},
 		auth,
-		fullPlanner: !!config.atomicPlanner,
 	});
 }
 
@@ -119,4 +113,5 @@ export async function shutdownHarnesses(): Promise<void> {
 	credentials.clear();
 	await selected?.shutdown();
 	selected = undefined;
+	await removeWorkspaces();
 }

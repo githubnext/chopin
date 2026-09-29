@@ -47,12 +47,15 @@ export type Question = {
 export type Questionnaire = {
 	id: string;
 	questions: Question[];
+	/** Host input nobody answered in time: settled, but with no answer. */
+	status?: "expired";
 	/**
 	 * Who settled it, and when.
 	 *
 	 * On the questionnaire rather than on each answer: it resolves as a unit,
 	 * so this is one fact about one moment. Absent until it is answered, and
-	 * absent for good on one answered before this was written down.
+	 * absent for good on one answered before this was written down. An expired
+	 * questionnaire has only `at`.
 	 */
 	by?: string;
 	/** ISO 8601. */
@@ -67,9 +70,16 @@ function parse(value: unknown): Questionnaire {
 	return {
 		id: typeof raw.id === "string" ? raw.id : "",
 		questions: Array.isArray(raw.questions) ? raw.questions : [],
+		...(raw.status === "expired" ? { status: raw.status } : {}),
 		...(typeof raw.by === "string" ? { by: raw.by } : {}),
 		...(typeof raw.at === "string" ? { at: raw.at } : {}),
 	};
+}
+
+/** Questions still waiting for somebody; an expired questionnaire waits for nobody. */
+export function unanswered(value: Questionnaire): Question[] {
+	if (value.status === "expired") return [];
+	return value.questions.filter(question => question.answer === undefined);
 }
 
 export const questionnaireState = createState("plan-questionnaire", {
@@ -196,6 +206,7 @@ export function fromElement(node: Jsx): Questionnaire {
 	return {
 		id: attribute(node, "id") ?? "",
 		questions,
+		...(attribute(node, "status") === "expired" ? { status: "expired" as const } : {}),
 		...(by ? { by } : {}),
 		...(at ? { at } : {}),
 	};
@@ -206,7 +217,7 @@ export function toElement(value: Questionnaire): MdxJsxFlowElement {
 	return {
 		type: "mdxJsxFlowElement",
 		name: "Questionnaire",
-		attributes: identity(value.id, { by: value.by, at: value.at }),
+		attributes: identity(value.id, { status: value.status, by: value.by, at: value.at }),
 		children: value.questions.map(question => ({
 			type: "mdxJsxFlowElement",
 			name: "Question",

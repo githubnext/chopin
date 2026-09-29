@@ -119,8 +119,11 @@ request becomes that channel's Planner owner for the lifetime of the process
 session.
 Permission callbacks recheck admission, session identity, credential revision,
 ownership generation, repository role, and App installation before execution.
-The Planner has bounded, repository-fixed read tools and no ambient checkout,
-shell, or host filesystem; no harness built-in is active. Model-backed
+Under `copilot-sdk` and `pi` the Planner has bounded, repository-fixed read tools
+and no ambient checkout, shell, or host filesystem; no harness built-in is active.
+Under `atomic` every Planner session is a
+[full Atomic session](hosted-agent.md#full-atomic-planner) with shell and
+filesystem access as the server process's user. Model-backed
 `active-planner` workers use the same owner credential but fresh isolated
 harness sessions; see [Background jobs](background-jobs.md).
 

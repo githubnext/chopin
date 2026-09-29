@@ -31,7 +31,7 @@ export type Room = {
 	closing?: Promise<void>;
 	/** Pending eviction, cancelled if somebody comes back. */
 	eviction?: ReturnType<typeof setTimeout>;
-	/** Local MCP work keeps a memberless room alive until its turn and queue finish. */
+	/** MCP work keeps a memberless room alive until its turn and queue finish. */
 	holds?: number;
 };
 

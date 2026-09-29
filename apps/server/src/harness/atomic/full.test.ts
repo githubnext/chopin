@@ -61,15 +61,24 @@ let stub = startStubModelServer((prompt, prior) =>
 );
 afterAll(stub.stop);
 
-async function run(full: boolean, registered: boolean, prompt = "plain", host?: HostInput) {
+async function run(
+	registered: boolean,
+	prompt = "plain",
+	{ host, checkout = true, worker = false }: {
+		host?: HostInput;
+		/** False runs the Planner in an empty directory, as a channel without a checkout does. */
+		checkout?: boolean;
+		/** Also run an unregistered worker session on the same harness while the Planner is open. */
+		worker?: boolean;
+	} = {},
+) {
 	let root = await mkdtemp(join(tmpdir(), "chopin-atomic-full-"));
 	let agentDir = join(root, "agent");
-	let cwd = join(root, "checkout");
+	let cwd = join(root, checkout ? "checkout" : "empty");
 	let previous = process.env.ATOMIC_CODING_AGENT_DIR;
 	let received: QuestionParams[] = [];
 	let harness = createAtomicAdapter({
 		auth: "ai-gateway",
-		fullPlanner: full,
 		model: "stub/model",
 		providers: {
 			stub: {
@@ -109,8 +118,13 @@ async function run(full: boolean, registered: boolean, prompt = "plain", host?: 
 			join(agentDir, "extensions", "marker.ts"),
 			`export default api => api.registerTool({name: "operator_tool", label: "Operator", description: "Marker", parameters: {type:"object"}, async execute() { return {content:[{type:"text",text:"marker"}], details:{}}; }});`,
 		);
-		let git = Bun.spawn(["git", "-C", cwd, "init", "--quiet"], { stdout: "pipe", stderr: "pipe" });
-		expect(await git.exited).toBe(0);
+		if (checkout) {
+			let git = Bun.spawn(["git", "-C", cwd, "init", "--quiet"], {
+				stdout: "pipe",
+				stderr: "pipe",
+			});
+			expect(await git.exited).toBe(0);
+		}
 		process.env.ATOMIC_CODING_AGENT_DIR = agentDir;
 		let humanInput: HostInput = host ?? {
 			confirm: async () => false,
@@ -151,7 +165,17 @@ async function run(full: boolean, registered: boolean, prompt = "plain", host?: 
 			let result = await agent.stream({ session, prompt });
 			await result.consumeStream();
 			await result.text;
-			return { cwd, received, requests: [...stub.requests] };
+			let requests = [...stub.requests];
+			if (!worker) return { cwd, received, requests, workerRequests: [] };
+			let workerSession = await agent.createSession({ sandboxSession: sandbox });
+			try {
+				stub.requests.length = 0;
+				let output = await agent.stream({ session: workerSession, prompt: "plain" });
+				await output.consumeStream();
+				return { cwd, received, requests, workerRequests: [...stub.requests] };
+			} finally {
+				await workerSession.destroy();
+			}
 		} finally {
 			await session.destroy();
 		}
@@ -165,24 +189,24 @@ async function run(full: boolean, registered: boolean, prompt = "plain", host?: 
 	}
 }
 
-test("verified full Planner sessions load operator resources and expose Atomic tools beside host tools", async () => {
-	let result = await run(true, true);
+const FULL_TOOLS = [
+	"read",
+	"bash",
+	"edit",
+	"write",
+	"ask_user_question",
+	"workflow",
+	"subagent",
+	"intercom",
+	"web_search",
+	"operator_tool",
+	"host_tool",
+];
+
+test("registered Planner sessions load operator resources and expose Atomic tools beside host tools", async () => {
+	let result = await run(true);
 	let request = result.requests[0]!;
-	for (
-		let name of [
-			"read",
-			"bash",
-			"edit",
-			"write",
-			"ask_user_question",
-			"workflow",
-			"subagent",
-			"intercom",
-			"web_search",
-			"operator_tool",
-			"host_tool",
-		]
-	) expect(request.toolNames).toContain(name);
+	for (let name of FULL_TOOLS) expect(request.toolNames).toContain(name);
 	expect(request.toolNames).not.toContain(ATOMIC_RESULT_TOOL_NAME);
 	for (
 		let marker of [
@@ -195,21 +219,28 @@ test("verified full Planner sessions load operator resources and expose Atomic t
 	expect(request.system).not.toBe(ATOMIC_DEFAULT_SYSTEM_PROMPT);
 });
 
-test("full sessions use the checkout cwd and route ask_user_question through HostInput", async () => {
-	let cwd = await run(true, true, "cwd");
+test("Planner sessions use their checkout cwd and route ask_user_question through HostInput", async () => {
+	let cwd = await run(true, "cwd");
 	expect(cwd.requests.at(-1)!.toolResults.join("\n")).toContain(cwd.cwd);
-	let question = await run(true, true, "question");
+	let question = await run(true, "question");
 	expect(question.received).toEqual([params]);
 	expect(question.requests.at(-1)!.toolResults.join("\n")).toContain("Second");
-	let prompt = await run(true, true, "/marker");
+	let prompt = await run(true, "/marker");
 	expect(prompt.requests[0]!.prompt).toBe("OPERATOR-PROMPT-MARKER");
+});
+
+test("a Planner session without a checkout is just as full in its empty working directory", async () => {
+	let result = await run(true, "cwd", { checkout: false });
+	for (let name of FULL_TOOLS) expect(result.requests[0]!.toolNames).toContain(name);
+	expect(result.requests[0]!.system).toContain(result.cwd);
+	expect(result.requests.at(-1)!.toolResults.join("\n")).toContain(result.cwd);
 });
 
 test("free-text Decisions answers to multi-select and preview questions reach the model", async () => {
 	let room = await hostInputRoom();
 	try {
 		for (let prompt of ["multiple", "preview"]) {
-			let turn = run(true, true, prompt, room.input);
+			let turn = run(true, prompt, { host: room.input });
 			let [card] = await room.cards(1);
 			await room.answer(card!.id, `  typed ${prompt}\n`);
 			let output = (await turn).requests.at(-1)!.toolResults.join("\n");
@@ -221,10 +252,13 @@ test("free-text Decisions answers to multi-select and preview questions reach th
 	}
 });
 
-test("workers without a verified registration and default-mode sessions stay isolated", async () => {
-	for (let [full, registered] of [[true, false], [false, true]]) {
-		let result = await run(full!, registered!);
-		expect(result.requests[0]!.toolNames).toEqual(["host_tool"]);
-		expect(result.requests[0]!.system).toBe("CHOPIN-INSTRUCTIONS-MARKER");
-	}
+test("worker sessions stay isolated, even beside a full Planner session on the same harness", async () => {
+	let alone = await run(false);
+	expect(alone.requests[0]!.toolNames).toEqual(["host_tool"]);
+	expect(alone.requests[0]!.system).toBe("CHOPIN-INSTRUCTIONS-MARKER");
+	let beside = await run(true, "plain", { worker: true });
+	expect(beside.requests[0]!.toolNames).toContain("bash");
+	expect(beside.workerRequests).toHaveLength(1);
+	expect(beside.workerRequests[0]!.toolNames).toEqual(["host_tool"]);
+	expect(beside.workerRequests[0]!.system).toBe("CHOPIN-INSTRUCTIONS-MARKER");
 });

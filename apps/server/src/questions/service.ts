@@ -67,7 +67,7 @@ export function identify(raw: unknown, options?: { verbatim?: boolean }): Defini
 export type Record = {
 	id: string;
 	definition: Definition;
-	status: "open" | "answered" | "cancelled";
+	status: "open" | Wire.Status;
 	/** Question id to the answer as it reads, for projection into the plan. */
 	answers?: { [question: string]: string };
 	resolver?: string;
@@ -95,7 +95,12 @@ function decide(
 	return out;
 }
 
-/** Ask each decision independently; register its record before publishing its node. */
+/**
+ * Ask each decision independently; register its record before publishing its node.
+ *
+ * An abort withdraws the cards still open. After `expiresInMs` without an answer
+ * they expire instead, and stay in the document marked as such.
+ */
 export async function ask(
 	plan: Plan,
 	server: Server<SocketData>,
@@ -104,6 +109,7 @@ export async function ask(
 	placement?: AskPlacement,
 	created?: () => void,
 	signal?: AbortSignal,
+	expiresInMs?: number,
 ): Promise<Ended[]> {
 	if (signal?.aborted) return [];
 	if (Service.implementationActive(plan)) throw new Error("implementation is active");
@@ -177,20 +183,29 @@ export async function ask(
 	});
 
 	let failed = Promise.withResolvers<never>();
-	let withdrawing: Promise<unknown> | undefined;
-	let abort = () => {
-		withdrawing ??= Promise.all(
-			asked.map(item => withdraw(plan, server, roomId, item.id, "chopin")),
+	let closing: Promise<unknown> | undefined;
+	let close = (status: "cancelled" | "expired") => {
+		closing ??= Promise.all(
+			asked.map(item =>
+				status === "expired"
+					? expire(plan, server, roomId, item.id)
+					: withdraw(plan, server, roomId, item.id, "chopin")
+			),
 		);
-		void withdrawing.catch(failed.reject);
+		void closing.catch(failed.reject);
 	};
+	let abort = () => close("cancelled");
 	signal?.addEventListener("abort", abort, { once: true });
 	if (signal?.aborted) abort();
+	let timer = expiresInMs === undefined
+		? undefined
+		: setTimeout(() => close("expired"), expiresInMs);
 	try {
 		let ended = await Promise.race([Promise.all(asked.map(item => item.waiting)), failed.promise]);
-		await withdrawing;
+		await closing;
 		return ended;
 	} finally {
+		clearTimeout(timer);
 		signal?.removeEventListener("abort", abort);
 	}
 }
@@ -557,26 +572,68 @@ export async function cancel(
 }
 
 /** Withdraw input on behalf of a member or the Planner, after its durable commit. */
-export async function withdraw(
+export function withdraw(
 	plan: Plan,
 	server: Server<SocketData>,
 	roomId: string,
 	id: string,
 	resolver: string,
 ): Promise<Store.CancelRefusal | { ok: true; resolver: string }> {
+	return closeUnanswered(
+		plan,
+		server,
+		roomId,
+		id,
+		{ status: "cancelled", resolver },
+		() => room.removeQuestionnaire(plan.document, id),
+	);
+}
+
+/**
+ * Expire host input nobody answered in time, after its durable commit.
+ *
+ * Unlike a withdrawal the card stays in the document, marked expired, so the
+ * room can still see what was asked and that nobody answered it.
+ */
+export function expire(
+	plan: Plan,
+	server: Server<SocketData>,
+	roomId: string,
+	id: string,
+): Promise<Store.CancelRefusal | { ok: true; resolver: string }> {
+	let at = Math.floor(Date.now() / 1_000);
+	return closeUnanswered(
+		plan,
+		server,
+		roomId,
+		id,
+		{ status: "expired", resolver: "chopin", at },
+		() => room.projectExpiry(plan.document, id, new Date(at * 1_000).toISOString()),
+	);
+}
+
+async function closeUnanswered(
+	plan: Plan,
+	server: Server<SocketData>,
+	roomId: string,
+	id: string,
+	closed: { status: "cancelled" | "expired"; resolver: string; at?: number },
+	project: () => room.Mutation | undefined,
+): Promise<Store.CancelRefusal | { ok: true; resolver: string }> {
+	let { status, resolver } = closed;
 	return Service.exclusive(plan, async () => {
-		let claimed = Store.claimCancel(plan.questions, id, resolver);
+		let claimed = Store.claimCancel(plan.questions, id, resolver, status);
 		if (!claimed.ok) return claimed;
 		let mutation: room.Mutation | undefined;
 		try {
-			mutation = room.removeQuestionnaire(plan.document, id);
+			mutation = project();
 		} catch (err) {
-			console.error("[questions] could not remove the node:", err);
+			console.error(`[questions] could not project the ${status} node:`, err);
 			Store.rollback(plan.questions, claimed.claim);
 			return { ok: false, reason: "resolving" };
 		}
 		let record = plan.records.get(id);
-		if (record) plan.records.set(id, { ...record, status: "cancelled", resolver });
+		if (record) plan.records.set(id, { ...record, ...closed });
 		let finish = Store.stage(plan.questions, claimed.claim);
 		try {
 			if (mutation) await Service.publish(plan, server, roomId, mutation);
@@ -589,13 +646,7 @@ export async function withdraw(
 			throw err;
 		}
 		finish();
-		broadcast(server, roomId, {
-			kind: "question:resolved",
-			ts: 0,
-			id,
-			status: "cancelled",
-			resolver,
-		});
+		broadcast(server, roomId, { kind: "question:resolved", ts: 0, id, status, resolver });
 		return { ok: true, resolver };
 	});
 }

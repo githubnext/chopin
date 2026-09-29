@@ -1,50 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { delimiter } from "node:path";
 
-import { describe as description, load } from "./config";
-
-const REQUIRED = {
-	STORAGE_DRIVER: "postgres",
-	DATABASE_URL: "postgresql://chopin:secret@database.test/chopin",
-	APP_ORIGIN: "https://chopin.example",
-	GITHUB_APP_SLUG: "chopin-test",
-	GITHUB_APP_CLIENT_ID: "client-id",
-	GITHUB_APP_CLIENT_SECRET: "client-secret",
-	SESSION_ENCRYPTION_KEY: "11".repeat(32),
-};
-
-function configured(overrides: Record<string, string | undefined> = {}) {
-	let env: Record<string, string | undefined> = {
-		...REQUIRED,
-		AGENT: undefined,
-		BACKGROUND_JOBS: undefined,
-		WEB_RESEARCH: undefined,
-		HARNESS: undefined,
-		HARNESS_AUTH: undefined,
-		AUTH_MODE: undefined,
-		ATOMIC_PLANNER: undefined,
-		ATOMIC_PLANNER_CHECKOUTS: undefined,
-		ATOMIC_PLANNER_INPUT_TIMEOUT_MS: undefined,
-		SERVER_HOST: undefined,
-		PORT: undefined,
-		MODEL: undefined,
-		CHOPIN_LOCAL_CREDENTIALS_DIR: undefined,
-		GITHUB_ALLOWED_USERS: undefined,
-		GITHUB_ALLOWED_ORGANIZATIONS: undefined,
-		...overrides,
-	};
-	let previous = { ...process.env };
-	for (let [key, value] of Object.entries(env)) {
-		if (value === undefined) delete process.env[key];
-		else process.env[key] = value;
-	}
-	try {
-		return load();
-	} finally {
-		for (let key of Object.keys(env)) delete process.env[key];
-		Object.assign(process.env, previous);
-	}
-}
+import { describe as description } from "./config";
+import { configured, LOCAL, REQUIRED } from "./testing/config";
 
 describe("configuration", () => {
 	it("loads the mandatory GitHub and PostgreSQL services without printing secrets", () => {
@@ -130,86 +87,24 @@ describe("configuration", () => {
 		});
 	});
 
-	it("allows full Atomic Planner only in local atomic mode, with either auth mode", () => {
-		let full = {
-			ATOMIC_PLANNER: "full",
-			AUTH_MODE: "local",
-			HARNESS: "atomic",
-			MODEL: "stub/model",
-			APP_ORIGIN: "http://localhost:8790",
-			PORT: "8790",
-		};
-		for (let auth of ["auto", "ai-gateway"]) {
-			expect(configured({ ...full, HARNESS_AUTH: auth }).atomicPlanner).toEqual({
-				checkouts: [],
-			});
-		}
-		expect(configured().atomicPlanner).toBeUndefined();
-		for (let mode of ["isolated", "FULL", " "]) {
-			expect(() => configured({ ...full, ATOMIC_PLANNER: mode })).toThrow("ATOMIC_PLANNER");
-		}
-		for (let auth of [undefined, "hosted"]) {
-			expect(() => configured({ ...full, AUTH_MODE: auth })).toThrow("AUTH_MODE=local");
-		}
-		for (let harness of [undefined, "pi", "copilot-sdk"]) {
-			expect(() => configured({ ...full, HARNESS: harness })).toThrow("HARNESS=atomic");
-		}
-	});
-
-	it("validates checkout paths and an optional per-request input timeout", () => {
-		let full = {
-			ATOMIC_PLANNER: "full",
-			AUTH_MODE: "local",
-			HARNESS: "atomic",
-			MODEL: "stub/model",
-			APP_ORIGIN: "http://localhost:8790",
-			PORT: "8790",
-		};
-		expect(
-			configured({
-				...full,
-				ATOMIC_PLANNER_CHECKOUTS: ["/tmp/one", "/tmp/two", "/tmp/one"].join(delimiter),
-				ATOMIC_PLANNER_INPUT_TIMEOUT_MS: "1234",
-			}).atomicPlanner,
-		).toEqual({ checkouts: ["/tmp/one", "/tmp/two", "/tmp/one"], inputTimeoutMs: 1234 });
-		for (let paths of ["relative", ["/tmp/one", "relative"].join(delimiter)]) {
-			expect(() => configured({ ...full, ATOMIC_PLANNER_CHECKOUTS: paths })).toThrow("absolute");
-		}
-		for (let timeout of ["0", "-1", "1.5", "oops", "10ms", "2147483648"]) {
-			expect(() => configured({ ...full, ATOMIC_PLANNER_INPUT_TIMEOUT_MS: timeout })).toThrow(
-				"ATOMIC_PLANNER_INPUT_TIMEOUT_MS",
+	it("chooses a full Atomic Planner by harness alone, in hosted and local configuration", () => {
+		let atomic = { HARNESS: "atomic", HARNESS_AUTH: "ai-gateway", MODEL: "stub/model" };
+		for (let mode of [{}, LOCAL]) {
+			let config = configured({ ...atomic, ...mode });
+			expect(config.harness).toBe("atomic");
+			expect(description(config)).toContain(
+				"Planner: full Atomic session (shell and filesystem access as this process's user)",
 			);
 		}
-	});
-
-	it("ignores Atomic Planner settings outside full mode and treats empty values as unset", () => {
-		for (let planner of [undefined, ""]) {
-			for (let [checkouts, timeout] of [["", ""], ["relative", "oops"]]) {
-				expect(
-					configured({
-						ATOMIC_PLANNER: planner,
-						ATOMIC_PLANNER_CHECKOUTS: checkouts,
-						ATOMIC_PLANNER_INPUT_TIMEOUT_MS: timeout,
-					}).atomicPlanner,
-				).toBeUndefined();
+		for (
+			let isolated of [
+				{},
+				{ HARNESS: "pi", HARNESS_AUTH: "ai-gateway", MODEL: "stub/model" },
+			]
+		) {
+			for (let mode of [{}, LOCAL]) {
+				expect(description(configured({ ...isolated, ...mode }))).not.toContain("full Atomic");
 			}
-		}
-		let full = {
-			ATOMIC_PLANNER: "full",
-			AUTH_MODE: "local",
-			HARNESS: "atomic",
-			MODEL: "stub/model",
-			APP_ORIGIN: "http://localhost:8790",
-			PORT: "8790",
-		};
-		for (let checkouts of [undefined, ""]) {
-			expect(
-				configured({
-					...full,
-					ATOMIC_PLANNER_CHECKOUTS: checkouts,
-					ATOMIC_PLANNER_INPUT_TIMEOUT_MS: "",
-				}).atomicPlanner,
-			).toEqual({ checkouts: [] });
 		}
 	});
 

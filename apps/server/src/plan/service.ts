@@ -418,8 +418,7 @@ function restoredState(
 	let questions = objects(item.questions, "question record");
 	for (let question of questions) {
 		if (
-			(question.status !== "open" && question.status !== "answered"
-				&& question.status !== "cancelled")
+			!["open", "answered", "cancelled", "expired"].includes(question.status as string)
 			|| !question.definition
 			|| typeof question.definition !== "object"
 			|| Array.isArray(question.definition)

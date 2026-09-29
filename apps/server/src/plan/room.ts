@@ -545,6 +545,19 @@ export function appendQuestionOption(
 	});
 }
 
+/** Mark host input nobody answered in time as expired, leaving the card where it is. */
+export function projectExpiry(target: Document, id: string, at: string): Mutation | undefined {
+	return mutate(target, () => {
+		let found = false;
+		for (let node of $nodesOfType(QuestionnaireNode)) {
+			if (node.getId() !== id) continue;
+			found = true;
+			node.setQuestionnaire({ ...node.getQuestionnaire(), status: "expired", at });
+		}
+		return found;
+	});
+}
+
 /** Take a questionnaire out of the plan, leaving its record as history. */
 export function removeQuestionnaire(target: Document, id: string): Mutation | undefined {
 	return mutate(target, () => {

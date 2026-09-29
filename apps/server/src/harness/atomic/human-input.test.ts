@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { $nodesOfType } from "lexical";
-import { limits, QuestionnaireNode } from "@chopin/dialect";
+import { limits, QuestionnaireNode, unanswered } from "@chopin/dialect";
+import { limits as questionLimits } from "@chopin/question";
 import * as Questions from "../../questions/service";
 import * as Store from "../../questions/store";
 import * as Plan from "../../plan/service";
@@ -14,8 +15,8 @@ afterEach(async () => {
 	for (let cleanup of cleanups.splice(0)) await cleanup();
 });
 
-async function fixture(timeoutMs?: number) {
-	let f = await hostInputRoom(timeoutMs);
+async function fixture(expiresInMs?: number) {
+	let f = await hostInputRoom(expiresInMs);
 	cleanups.push(f.close);
 	return f;
 }
@@ -223,25 +224,90 @@ test("abort withdraws only its request's open cards, persists cancellation, and 
 	expect(saved.source).not.toContain(cards[1]!.id);
 });
 
-test("timeout withdraws unanswered dialogs and returns no answer for every HostInput method", async () => {
+test("expiry keeps every unanswered card in Decisions, marked expired, and answers no HostInput method", async () => {
 	let f = await fixture(30);
 	for (
-		let invoke of [
-			() => f.input.questionnaire(params, f.options),
-			() => f.input.confirm("Confirm", "Proceed?", f.options),
-			() => f.input.select("Select", ["A", "B"], f.options),
-			() => f.input.input("Input", undefined, f.options),
-			() => f.input.editor("Editor", undefined, f.options),
-		]
+		let [invoke, expected] of [
+			[() => f.input.questionnaire(params, f.options), { answers: [], cancelled: true }],
+			[() => f.input.confirm("Confirm", "Proceed?", f.options), false],
+			[() => f.input.select("Select", ["A", "B"], f.options), undefined],
+			[() => f.input.input("Input", undefined, f.options), undefined],
+			[() => f.input.editor("Editor", undefined, f.options), undefined],
+		] as Array<[() => Promise<unknown>, unknown]>
 	) {
-		let result = await invoke();
-		expect(
-			result === undefined || result === false
-				|| (typeof result === "object" && result.cancelled && result.answers.length === 0),
-		).toBe(true);
+		expect(await invoke()).toEqual(expected);
 		expect(Store.outstanding(f.plan.questions)).toHaveLength(0);
 	}
-	expect([...f.plan.records.values()].every(record => record.status === "cancelled")).toBe(true);
+	let records = [...f.plan.records.values()];
+	expect(records).toHaveLength(7);
+	for (let record of records) {
+		expect(record).toMatchObject({ status: "expired", resolver: "chopin" });
+		expect(record.at).toBeNumber();
+		expect(f.frames).toContainEqual(
+			expect.objectContaining({
+				kind: "question:resolved",
+				id: record.id,
+				status: "expired",
+				resolver: "chopin",
+			}),
+		);
+	}
+	let saved = await Plan.readStored((await f.storage.collaboration.load(f.room.id, new Date()))!);
+	let cards = await documentCards(saved.source);
+	expect(cards.map(card => card.id)).toEqual(records.map(record => record.id));
+	for (let card of cards) {
+		expect(card.status).toBe("expired");
+		expect(card.at).toBeString();
+		expect(card.by).toBeUndefined();
+		expect(unanswered(card)).toEqual([]);
+	}
+	await Questions.submit(f.plan, f.server, f.room.id, f.ws, {
+		kind: "question:submit",
+		ts: 0,
+		rid: "late",
+		id: records[0]!.id,
+		revision: 0,
+	});
+	expect(f.frames.findLast(frame => frame.rid === "late")).toMatchObject({
+		ok: false,
+		reason: "resolved",
+		status: "expired",
+		resolver: "chopin",
+	});
+	expect(f.plan.records.get(records[0]!.id)?.status).toBe("expired");
+});
+
+test("an abort still withdraws its cards rather than expiring them", async () => {
+	let f = await fixture(60_000);
+	let response = f.input.confirm("Confirm", "Proceed?", f.options);
+	let [card] = await f.cards(1);
+	f.controller.abort();
+	expect(await response).toBe(false);
+	expect(f.plan.records.get(card!.id)).toMatchObject({ status: "cancelled", resolver: "chopin" });
+	expect(Plan.source(f.plan)).not.toContain(card!.id);
+	expect(f.frames.filter(frame => frame.kind === "question:resolved")).toMatchObject([
+		{ kind: "question:resolved", id: card!.id, status: "cancelled", resolver: "chopin" },
+	]);
+});
+
+test("host input waits the shared 30-minute limit before expiring by default", async () => {
+	let f = await fixture();
+	let delays: number[] = [];
+	let original = globalThis.setTimeout;
+	globalThis.setTimeout = ((handler: () => void, delay?: number, ...rest: unknown[]) => {
+		if (delay !== undefined) delays.push(delay);
+		return original(handler, delay, ...rest);
+	}) as typeof setTimeout;
+	try {
+		let response = f.input.confirm("Confirm", "Proceed?", f.options);
+		await f.cards(1);
+		expect(questionLimits.INPUT_EXPIRY_MS).toBe(30 * 60 * 1_000);
+		expect(delays).toContain(questionLimits.INPUT_EXPIRY_MS);
+		f.controller.abort();
+		expect(await response).toBe(false);
+	} finally {
+		globalThis.setTimeout = original;
+	}
 });
 
 test("workflow identity labels each card while returned question text remains verbatim", async () => {
@@ -303,15 +369,19 @@ test("blank dialog titles and supplied empty choices remain valid verbatim input
 });
 
 /** Re-import the canonical document, proving the dialect accepts every card it holds. */
-async function documentQuestionnaires(source: string) {
+async function documentCards(source: string) {
 	let document = await Room.create(source);
 	try {
 		return document.editor.getEditorState().read(() =>
-			$nodesOfType(QuestionnaireNode).map(node => node.getQuestionnaire().questions[0]!)
+			$nodesOfType(QuestionnaireNode).map(node => node.getQuestionnaire())
 		);
 	} finally {
 		document.doc.destroy();
 	}
+}
+
+async function documentQuestionnaires(source: string) {
+	return (await documentCards(source)).map(card => card.questions[0]!);
 }
 
 test("dialogs beyond the Planner's per-field limits become verbatim cards and answers", async () => {

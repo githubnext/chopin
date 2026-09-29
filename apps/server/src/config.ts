@@ -6,7 +6,6 @@
  * than a puzzling behaviour three screens later.
  */
 
-import { delimiter, isAbsolute } from "node:path";
 import { loadAuth } from "./auth/config";
 
 import type { AuthConfig } from "./auth/config";
@@ -19,7 +18,6 @@ export type Config = {
 	model: string;
 	harness: string;
 	harnessAuth: string | undefined;
-	atomicPlanner?: { checkouts: string[]; inputTimeoutMs?: number };
 	/**
 	 * Whether to run the agent at all.
 	 *
@@ -61,39 +59,11 @@ function model(harness: string): string {
 	}
 	return DEFAULT_MODEL;
 }
-export function harnessSelection(): Pick<
-	Config,
-	"host" | "harness" | "harnessAuth" | "atomicPlanner"
-> {
-	let full = process.env.ATOMIC_PLANNER;
-	if (full && full !== "full") throw new Error("ATOMIC_PLANNER must be full or unset");
-	if (full && (process.env.AUTH_MODE !== "local" || process.env.HARNESS !== "atomic")) {
-		throw new Error("ATOMIC_PLANNER=full requires AUTH_MODE=local and HARNESS=atomic");
-	}
-	let selection = {
+export function harnessSelection(): Pick<Config, "host" | "harness" | "harnessAuth"> {
+	return {
 		host: process.env.SERVER_HOST || "127.0.0.1",
 		harness: process.env.HARNESS || "copilot-sdk",
 		harnessAuth: process.env.HARNESS_AUTH || undefined,
-	};
-	if (!full) return selection;
-	let checkouts = (process.env.ATOMIC_PLANNER_CHECKOUTS || undefined)?.split(delimiter) ?? [];
-	if (checkouts.some(path => !isAbsolute(path))) {
-		throw new Error(
-			"ATOMIC_PLANNER_CHECKOUTS must contain absolute paths separated by the platform path delimiter",
-		);
-	}
-	let rawTimeout = process.env.ATOMIC_PLANNER_INPUT_TIMEOUT_MS || undefined;
-	let inputTimeoutMs = rawTimeout === undefined ? undefined : Number(rawTimeout);
-	if (
-		inputTimeoutMs !== undefined
-		&& (!Number.isSafeInteger(inputTimeoutMs) || inputTimeoutMs < 1
-			|| inputTimeoutMs > 2_147_483_647)
-	) {
-		throw new Error("ATOMIC_PLANNER_INPUT_TIMEOUT_MS must be an integer between 1 and 2147483647");
-	}
-	return {
-		...selection,
-		atomicPlanner: { checkouts, ...(inputTimeoutMs === undefined ? {} : { inputTimeoutMs }) },
 	};
 }
 
@@ -163,7 +133,9 @@ export function describe(config: Config): string {
 		config.devClient ? `client: vite (${config.devClient})` : "client: built",
 		config.agent ? `agent: ${config.model} (on demand)` : "agent: off",
 		`harness: ${config.harness}`,
-		...(config.atomicPlanner ? ["Atomic Planner: full (local shell and filesystem access)"] : []),
+		...(config.harness === "atomic"
+			? ["Planner: full Atomic session (shell and filesystem access as this process's user)"]
+			: []),
 		config.backgroundJobs ? "background jobs: on" : "background jobs: off",
 		config.webResearch ? "web research: on" : "web research: off",
 		admission,

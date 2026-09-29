@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { currentQuestion, QuestionView } from "./question-view";
-import { create, normalize, read } from "../index";
+import { create, limits, normalize, read } from "../index";
 
 test("a replacement definition falls back before rendering when its active question disappears", () => {
 	let storage = {
@@ -262,4 +262,39 @@ test("only the Planner's own questions cap the custom answer textarea", () => {
 		expect(markup).toContain("<textarea");
 		expect(markup.includes('maxLength="4000"')).toBe(cap);
 	}
+});
+
+test("an expired card keeps its question and says the Planner will proceed; a withdrawn one does not", () => {
+	let definition = normalize({
+		questions: [{
+			header: "Confirm",
+			question: "Ship the migration?",
+			options: [{ label: "Yes", description: "" }],
+			multiple: false,
+		}],
+	});
+	let render = (status: "expired" | "cancelled") =>
+		renderToStaticMarkup(createElement(QuestionView, {
+			definition,
+			drafts: {},
+			status,
+			resolver: "chopin",
+			onChange() {},
+			onSubmit() {},
+			onCancel() {},
+		}));
+	let note = `Nobody answered within ${limits.INPUT_EXPIRY_MS / 60_000} minutes. `
+		+ "The Planner will use its best judgement for this decision.";
+	let expired = render("expired");
+	expect(limits.INPUT_EXPIRY_MS).toBe(30 * 60 * 1_000);
+	expect(expired).toContain(
+		"Nobody answered within 30 minutes. The Planner will use its best judgement for this decision.",
+	);
+	expect(expired).toContain(note);
+	expect(expired).toContain("Ship the migration?");
+	expect(expired).not.toContain("Cancelled");
+	for (let control of ["<input", "<textarea", "<button"]) expect(expired).not.toContain(control);
+	let withdrawn = render("cancelled");
+	expect(withdrawn).toContain("Cancelled by @chopin");
+	expect(withdrawn).not.toContain("Nobody answered");
 });

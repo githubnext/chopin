@@ -11,6 +11,7 @@ export {
 	advanceDecisionView,
 	countUnanswered,
 	selectDecisionView,
+	undecided,
 	visibleDecisionView,
 } from "./decision-state";
 export type { DecisionView, DecisionViewState, OpeningPhase } from "./decision-state";

@@ -267,7 +267,7 @@ export class Sessions {
 			: undefined;
 	}
 
-	/** A local MCP handoff borrows an existing login, never the caller's bearer. */
+	/** An MCP handoff may borrow an existing login to claim ownership, never the caller's bearer. */
 	async forUser(userId: string): Promise<AuthenticatedSession | undefined> {
 		for (let current of [...this.#sessions.values()].toReversed()) {
 			if (current.session.userId !== userId) continue;

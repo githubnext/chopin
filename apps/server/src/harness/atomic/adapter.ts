@@ -1,9 +1,11 @@
 /**
  * Chopin's Atomic `HarnessV1` adapter.
  *
- * Sessions are isolated by default: only Chopin host tools, no host resources,
- * and a checked per-turn tool boundary. A registered local full Planner uses
- * its verified checkout and Atomic resources instead, with Chopin as HostInput.
+ * A Planner session that Chopin registers by session ID runs as a full Atomic
+ * session: Atomic builtins and coding tools, the operator's Atomic resources, a
+ * channel working directory, and Chopin as HostInput. Every other session (the
+ * summary and research workers) stays isolated: only Chopin host tools, no host
+ * resources, and a checked per-turn tool boundary.
  */
 
 import { HarnessCapabilityUnsupportedError } from "@ai-sdk/harness";
@@ -90,7 +92,6 @@ export type AtomicSettings = {
 	model?: string;
 	/** Providers registered by code rather than discovered from the host. */
 	providers?: Record<string, ProviderConfig>;
-	fullPlanner?: boolean;
 };
 
 export class ToolBoundaryError extends Error {
@@ -319,7 +320,7 @@ export function createAtomicAdapter(
 				throw unsupported("resuming an in-memory session");
 			}
 			let directory: string | undefined;
-			let full = settings.fullPlanner ? fullPlanner(startOptions.sessionId) : undefined;
+			let full = fullPlanner(startOptions.sessionId);
 			let sessionManager: SessionManager | undefined;
 			let settingsManager = SettingsManager.inMemory(SETTINGS);
 			let policy: TurnPolicy = {

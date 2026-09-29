@@ -12,7 +12,7 @@ import type { DocumentRoom } from "../agent/tools";
 import type { Socket, SocketData } from "../wire";
 
 /** A room whose Decisions answer Atomic HostInput requests, with a member to answer them. */
-export async function hostInputRoom(timeoutMs?: number) {
+export async function hostInputRoom(expiresInMs?: number) {
 	let storage = new MemoryStorage();
 	let now = new Date();
 	await storage.users.put({ id: "user", login: "reader", avatarUrl: "", now });
@@ -60,7 +60,7 @@ export async function hostInputRoom(timeoutMs?: number) {
 		sessionId: "session",
 		signal: controller.signal,
 	};
-	let input = createHumanInput(room, timeoutMs);
+	let input = createHumanInput(room, expiresInMs);
 	async function cards(count: number) {
 		for (let deadline = Date.now() + 4_000; Date.now() < deadline; await Bun.sleep(5)) {
 			if (Store.outstanding(plan.questions).length === count) {

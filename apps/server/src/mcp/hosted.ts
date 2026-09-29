@@ -8,7 +8,6 @@ import * as Rooms from "../rooms";
 import { claimImplementation, reportImplementationLifecycle } from "../tasks/plan-graphs";
 import { StorageError } from "../storage/errors";
 import { implementationLifecycle } from "../tasks/lifecycle";
-import { verifiedCheckout } from "../harness/atomic/checkout";
 
 import type { Server } from "bun";
 import type { HostedAuth } from "../auth/routes";
@@ -37,8 +36,11 @@ export type HostedCaller = {
 export type PlannerInvocation = {
 	channel: ChannelRecord;
 	repository: HostedRepository;
-	session: AuthenticatedSession;
+	user: GitHubUser;
+	/** The caller's live browser login, which may claim ownership for a channel without one. */
+	session?: AuthenticatedSession;
 	instruction: string;
+	/** Unverified; only the atomic harness reads it. */
 	checkout?: string;
 };
 
@@ -268,7 +270,7 @@ export function hosted(
 	}
 
 	return {
-		invoke: auth.config.local && callbacks.invokePlanner
+		invoke: callbacks.invokePlanner
 			? {
 				async invoke(caller, input) {
 					let located = await locatedChannel(caller, input.id);
@@ -287,20 +289,13 @@ export function hosted(
 						};
 					}
 					if (channel.archivedAt) return { kind: "refused", code: "document-archived" };
-					let session = await auth.sessions.forUser(caller.user.id);
-					if (!session) return { kind: "refused", code: "planner-owner-unavailable" };
-					let checkout = input.checkout === undefined
-						? undefined
-						: await verifiedCheckout(repository, [], input.checkout);
-					if (input.checkout !== undefined && !checkout) {
-						return { kind: "refused", code: "checkout-unverified" };
-					}
 					let code = await callbacks.invokePlanner!({
 						channel,
 						repository,
-						session,
+						user: caller.user,
+						session: await auth.sessions.forUser(caller.user.id),
 						instruction: input.instruction,
-						checkout,
+						...(input.checkout === undefined ? {} : { checkout: input.checkout }),
 					});
 					if (code) return { kind: "refused", code };
 					return {
