@@ -28,6 +28,7 @@ import {
 	limits,
 	parse,
 	PlanValidationError,
+	questionnaireElement,
 	QuestionnaireNode,
 	registry as buildRegistry,
 	ResearchNode,
@@ -510,6 +511,18 @@ export function insertQuestionnaires(
 		digests: () => digests(target),
 		mutate: change => mutate(target, change),
 	}, insertions);
+}
+
+/**
+ * Whether appending these questionnaires keeps the source within its byte limit.
+ *
+ * Measured before mutating, because Yjs cannot undo an insertion that turns out
+ * to be too large.
+ */
+export function fitsQuestionnaires(target: Document, values: Questionnaire[]): boolean {
+	let tree = parse(project(target));
+	tree.children.push(...values.map(questionnaireElement));
+	return Buffer.byteLength(serialize(tree)) <= limits.MAX_SOURCE_BYTES;
 }
 
 /** Append one questionnaire to the plan. */

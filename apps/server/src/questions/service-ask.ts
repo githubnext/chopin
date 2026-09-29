@@ -1,4 +1,4 @@
-import { ulid } from "@chopin/dialect";
+import { limits, ulid } from "@chopin/dialect";
 import * as Question from "@chopin/question";
 import * as Y from "yjs";
 
@@ -141,6 +141,16 @@ export async function ask(
 			records.set(id, record);
 			return { id, single, value, waiting, at: placement?.blocks[index]?.[0] };
 		});
+		// Verbatim host input has no per-field limits, so the document bounds it. Refuse before
+		// anything is registered or published.
+		if (
+			definition.questions.some(question => question.verbatim)
+			&& !room.fitsQuestionnaires(plan.document, asked.map(item => item.value))
+		) {
+			Question.reject(
+				`This input would take the document past its ${limits.MAX_SOURCE_BYTES / 1024} KiB limit`,
+			);
+		}
 		let document = await room.restore(
 			plan.document.epoch,
 			Y.encodeStateAsUpdate(plan.document.doc),

@@ -116,8 +116,8 @@ export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
 		content: { type: "components", names: ["Option", "Answer", "Previous"] },
 		parent: ["Questionnaire"],
 		attributes: {
-			header: { type: "text", required: true, max: limits.MAX_QUESTION_HEADER },
-			prompt: { type: "text", required: true, max: limits.MAX_QUESTION_PROMPT },
+			header: { type: "text", required: true, max: limits.MAX_QUESTIONNAIRE_TEXT },
+			prompt: { type: "text", required: true, max: limits.MAX_QUESTIONNAIRE_TEXT },
 			multiple: { type: "enum", required: true, values: ["true", "false"] },
 		},
 	}),
@@ -128,8 +128,8 @@ export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
 		content: { type: "empty" },
 		parent: ["Question"],
 		attributes: {
-			label: { type: "text", required: true, max: limits.MAX_OPTION_LABEL },
-			description: { type: "text", required: false, max: limits.MAX_OPTION_DESCRIPTION },
+			label: { type: "text", required: true, max: limits.MAX_QUESTIONNAIRE_TEXT },
+			description: { type: "text", required: false, max: limits.MAX_QUESTIONNAIRE_TEXT },
 		},
 	}),
 
@@ -143,7 +143,7 @@ export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
 		content: { type: "empty" },
 		parent: ["Question"],
 		attributes: {
-			value: { type: "text", required: true, max: limits.MAX_CUSTOM_ANSWER },
+			value: { type: "text", required: true, max: limits.MAX_QUESTIONNAIRE_TEXT },
 			choices: { type: "text", required: false, max: limits.MAX_ANSWER_CHOICES },
 		},
 	}),

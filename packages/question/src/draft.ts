@@ -149,7 +149,7 @@ export function read(model: Model, definition: Definition): Drafts {
 		let custom = node.get("custom");
 		if (!(custom instanceof crdt.StrNode)) reject(`${question.id}.custom must be a CRDT string`);
 		let value = (custom as crdt.StrNode).view();
-		if (value.length > limits.MAX_CUSTOM) {
+		if (!question.verbatim && value.length > limits.MAX_CUSTOM) {
 			reject(`${question.id}.custom exceeds ${limits.MAX_CUSTOM} characters`);
 		}
 
