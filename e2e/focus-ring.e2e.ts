@@ -2,26 +2,45 @@
 
 import { expect, test } from "./room";
 
-async function outlineStyle(target: import("@playwright/test").Locator) {
+import type { Locator, Page } from "@playwright/test";
+
+function outlineStyle(target: Locator) {
 	return target.evaluate(element => getComputedStyle(element).outlineStyle);
 }
 
-test("a pointer press hides the focus ring on a button", async ({ join }) => {
+function modality(page: Page) {
+	return page.evaluate(() => document.documentElement.dataset.focusInput);
+}
+
+function handle(page: Page) {
+	return page.getByRole("separator", { name: "Resize chat" });
+}
+
+test("a pointer press hides the focus ring on a control", async ({ join }) => {
 	let page = await join("ana");
-	let button = page.getByRole("button", { exact: true, name: "Add Project" });
-	await button.click();
-	await expect(button).toBeFocused();
-	expect(await outlineStyle(button)).toBe("none");
+	await handle(page).click();
+	await expect(handle(page)).toBeFocused();
+	expect(await modality(page)).toBe("pointer");
+	expect(await outlineStyle(handle(page))).toBe("none");
 });
 
-test("Tab shows the focus ring on a button", async ({ join }) => {
+test("Tab shows the focus ring on the next control", async ({ join }) => {
 	let page = await join("ana");
-	let button = page.getByRole("button", { exact: true, name: "Add Project" });
-	await button.click();
+	await handle(page).click();
 	await page.keyboard.press("Tab");
-	await page.keyboard.press("Shift+Tab");
-	await expect(button).toBeFocused();
-	expect(await outlineStyle(button)).toBe("solid");
+	expect(await modality(page)).toBe("keyboard");
+	let next = page.locator(":focus");
+	await expect(next).not.toHaveAttribute("aria-label", "Resize chat");
+	expect(await outlineStyle(next)).toBe("solid");
+});
+
+test("a chord counts as keyboard navigation, a bare modifier does not", async ({ join }) => {
+	let page = await join("ana");
+	await handle(page).click();
+	await page.keyboard.press("Shift");
+	expect(await modality(page)).toBe("pointer");
+	await page.keyboard.press("Alt+ArrowDown");
+	expect(await modality(page)).toBe("keyboard");
 });
 
 test("a text field keeps its focus ring after a click", async ({ join }) => {
@@ -30,5 +49,6 @@ test("a text field keeps its focus ring after a click", async ({ join }) => {
 	let field = page.getByPlaceholder("Search repositories");
 	await field.click();
 	await expect(field).toBeFocused();
+	expect(await modality(page)).toBe("pointer");
 	expect(await outlineStyle(field)).toBe("solid");
 });

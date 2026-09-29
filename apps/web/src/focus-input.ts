@@ -2,11 +2,14 @@ import { useEffect } from "react";
 
 export type FocusInput = "keyboard" | "pointer";
 
-/** Shortcut chords (Cmd+K, Ctrl+C) are not navigation, so they leave the modality alone. */
-export function focusInputForKey(
-	event: { altKey: boolean; ctrlKey: boolean; metaKey: boolean },
-): FocusInput | undefined {
-	return event.metaKey || event.ctrlKey || event.altKey ? undefined : "keyboard";
+const BARE_MODIFIERS = new Set(["Control", "Meta", "Alt", "Shift", "CapsLock", "Fn"]);
+
+/**
+ * Chords such as Alt+ArrowDown or Ctrl+Option+Arrow are keyboard navigation; only
+ * pressing a modifier by itself says nothing about where focus is going.
+ */
+export function focusInputForKey(event: { key: string }): FocusInput | undefined {
+	return BARE_MODIFIERS.has(event.key) ? undefined : "keyboard";
 }
 
 /**
