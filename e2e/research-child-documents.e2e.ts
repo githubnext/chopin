@@ -303,7 +303,8 @@ test("inline research publishes one ordinary child and opens it", async ({ baseU
 		sources: [{ title: "Primary public source", url: "https://example.com/source" }],
 	});
 	await expect(card.getByText("Reading sources", { exact: true })).toBeVisible();
-	await expect(card).toContainText("1 source found");
+	// Progress sits under the card, beside it in the tracked wrapper.
+	await expect(card.locator("xpath=..")).toContainText("1 source found");
 	await expect(card).not.toContainText("A complete report grounded in the discovered sources.");
 	research.advance(brief, "writing");
 	await expect(card.getByText("Writing report", { exact: true })).toBeVisible();

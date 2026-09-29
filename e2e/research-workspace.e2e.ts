@@ -108,17 +108,20 @@ test("a private research draft keeps its authored geometry until explicit dismis
 		let editorBox = editor.getBoundingClientRect();
 		return {
 			anchorBottom: anchorBox.bottom,
+			anchorLeft: anchorBox.left,
 			draftLeft: draftBox.left,
 			draftRight: draftBox.right,
 			draftTop: draftBox.top,
+			draftWidth: draftBox.width,
 			editorLeft: editorBox.left,
 			editorRight: editorBox.right,
 		};
 	});
 	expect(geometry.draftLeft).toBeGreaterThanOrEqual(geometry.editorLeft);
 	expect(geometry.draftRight).toBeLessThanOrEqual(geometry.editorRight);
-	expect(geometry.draftLeft - geometry.editorLeft).toBeLessThan(10);
-	expect(geometry.editorRight - geometry.draftRight).toBeLessThan(10);
+	// The draft starts on the prose column and stops at its 450px cap.
+	expect(Math.abs(geometry.draftLeft - geometry.anchorLeft)).toBeLessThan(2);
+	expect(geometry.draftWidth).toBeLessThanOrEqual(450);
 	expect(Math.abs(geometry.draftTop - geometry.anchorBottom)).toBeLessThan(2);
 
 	let scroller = page.locator("[data-plan-scroll]");
