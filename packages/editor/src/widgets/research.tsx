@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { useCellValue } from "@mdxeditor/gurx";
 import {
@@ -16,26 +16,35 @@ import {
 
 import { SidecarCard } from "../card";
 import { SendAction } from "../send-action";
+import { Fold, Swap, useLast } from "./research-motion";
 import { widgets$ } from "../widget-options";
 import { $isResearchNode } from "@chopin/dialect";
-import { CloseIcon } from "@chopin/icons";
+import { CloseIcon, SparkleIcon, WarningIcon } from "@chopin/icons";
 
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import type { Research } from "@chopin/protocol";
 import type { ResearchNode } from "@chopin/dialect";
 import type { LexicalEditor, LexicalNode, RangeSelection } from "lexical";
 import type { ResearchStore } from "../widget-options";
 
-const STAGES: Record<Research.RequestStage, string> = {
-	queued: "Queued",
-	searching: "Searching",
-	analyzing: "Analyzing",
-	writing: "Writing",
+const WORDS: Record<Research.RequestStage, string> = {
+	queued: "Waiting to start",
+	searching: "Searching sources",
+	analyzing: "Reading sources",
+	writing: "Writing report",
 	publishing: "Publishing",
-	ready: "Research ready",
+	ready: "Research",
 	failed: "Research failed",
-	cancelled: "Research cancelled",
+	cancelled: "Cancelled",
 };
+
+const TRACK: Research.RequestStage[] = [
+	"queued",
+	"searching",
+	"analyzing",
+	"writing",
+	"publishing",
+];
 
 const REMOVABLE_STAGES = new Set<Research.RequestStage>(["failed", "cancelled", "ready"]);
 
@@ -138,50 +147,56 @@ export function ResearchComposer(
 		submitting,
 	}: ResearchComposerProps,
 ) {
-	let id = useId();
 	let submit = (event: FormEvent) => {
 		event.preventDefault();
 		onSubmit();
 	};
 	return (
 		<form className="plan-research-composer" onSubmit={submit}>
-			<div className="plan-research-composer-heading">
-				<label htmlFor={id}>Research question</label>
+			<div className="plan-research-field">
+				<textarea
+					aria-label="Research question"
+					autoFocus
+					className="field"
+					disabled={submitting}
+					maxLength={4096}
+					onChange={event => onChange(event.target.value)}
+					onKeyDown={event =>
+						handleResearchComposerKey(event, {
+							dismissible,
+							onChange,
+							onDismiss: onEscape ?? onCancel,
+							onSubmit,
+						})}
+					placeholder="What should Chopin research?"
+					readOnly={questionLocked}
+					rows={3}
+					value={question}
+				/>
 				{dismissible && !submitting && (
 					<button
 						aria-label="Discard research question"
 						className="plan-research-dismiss btn btn-icon btn-ghost"
-						data-tooltip="Discard Research"
+						data-tooltip="Discard research"
 						onClick={onCancel}
-						title="Discard research question"
 						type="button"
 					>
 						<CloseIcon aria-hidden="true" size={14} />
 					</button>
 				)}
+				<div className="plan-research-send">
+					<SendAction
+						busy={submitting}
+						disabled={submitting || !!blocked || !question.trim()}
+						label={submitLabel}
+						onClick={onSubmit}
+					/>
+				</div>
 			</div>
-			<textarea
-				autoFocus
-				className="field"
-				disabled={submitting}
-				id={id}
-				maxLength={4096}
-				onChange={event => onChange(event.target.value)}
-				onKeyDown={event =>
-					handleResearchComposerKey(event, {
-						dismissible,
-						onChange,
-						onDismiss: onEscape ?? onCancel,
-						onSubmit,
-					})}
-				readOnly={questionLocked}
-				rows={3}
-				value={question}
-			/>
 			{blocked && <p role="status">{blocked}</p>}
 			{error && <p role="alert">{error}</p>}
-			<div className="plan-research-actions">
-				{cancelLabel && (
+			{cancelLabel && (
+				<div className="plan-research-actions">
 					<button
 						className="btn btn-sm btn-secondary"
 						disabled={submitting || cancelDisabled}
@@ -190,14 +205,8 @@ export function ResearchComposer(
 					>
 						{cancelLabel}
 					</button>
-				)}
-				<SendAction
-					busy={submitting}
-					disabled={submitting || !!blocked || !question.trim()}
-					label={submitLabel}
-					onClick={onSubmit}
-				/>
-			</div>
+				</div>
+			)}
 		</form>
 	);
 }
@@ -214,6 +223,34 @@ export type ResearchCardProps = {
 	onRetry?: () => void;
 };
 
+function Indicator({ stage }: { stage: Research.RequestStage }) {
+	if (stage === "failed") {
+		return (
+			<span aria-hidden="true" className="plan-research-badge">
+				<WarningIcon size={14} />
+			</span>
+		);
+	}
+	if (stage === "ready") {
+		return (
+			<span aria-hidden="true" className="plan-research-badge" data-tone="brand">
+				<SparkleIcon size={14} />
+			</span>
+		);
+	}
+	return (
+		<span
+			aria-hidden="true"
+			className="plan-research-dot"
+			data-idle={stage === "cancelled" ? "" : undefined}
+		/>
+	);
+}
+
+function plural(count: number, noun: string): string {
+	return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
 export function ResearchCard(
 	{
 		actionError,
@@ -227,91 +264,124 @@ export function ResearchCard(
 		request,
 	}: ResearchCardProps,
 ) {
-	let ready = request.stage === "ready" && request.child;
+	let stage = request.stage;
+	let ready = stage === "ready" && request.child ? request.child : undefined;
 	let sourceCount = ready
-		? ready.sourceCount === 0
-			? "No sources"
-			: `${ready.sourceCount} ${ready.sourceCount === 1 ? "source" : "sources"}`
+		? ready.sourceCount === 0 ? "No sources" : plural(ready.sourceCount, "source")
 		: undefined;
 	let actions = researchActions(request, canEdit);
+	let footer: "cancel" | "retry" | undefined = actions.retry && onRetry
+		? "retry"
+		: actions.cancel && onCancel
+		? "cancel"
+		: undefined;
+	let removable = stage !== "ready" && actions.remove && !!onRemove;
+	let at = TRACK.indexOf(stage);
+	let shownAt = useLast(at >= 0 ? at : undefined);
+	let found = request.sources.length;
+	let message = request.error ?? actionError;
+	let shownMessage = useLast(message);
+	let shownSummary = useLast(ready?.summary);
+	let shownFound = useLast(found > 0 ? found : undefined);
+	let attention: ReactNode = shownMessage !== undefined && (
+		<div className="plan-research-callout" role="status">
+			<p>{shownMessage}</p>
+		</div>
+	);
 	return (
-		<SidecarCard
-			className={ready ? "relative" : undefined}
-			data-research-ready={ready ? "" : undefined}
-			label="Research"
-		>
-			<div className="plan-research-heading">
-				<strong>{ready ? ready.title : STAGES[request.stage]}</strong>
-				<span>{ready ? STAGES[request.stage] : request.question}</span>
-			</div>
-			{ready && (
-				<>
-					<p className="plan-research-summary">{ready.summary}</p>
-					<p className="plan-research-meta">
-						<span>{sourceCount}</span>
-						<span>Researched by Planner</span>
-					</p>
-				</>
-			)}
-			{request.error && <p className="plan-research-error" role="status">{request.error}</p>}
-			{!ready && request.sources.length > 0 && (
-				<ul aria-label="Research sources" className="plan-research-sources">
-					{request.sources.map(source => (
-						<li key={source.url}>
-							<a href={source.url} rel="noreferrer" target="_blank">{source.title}</a>
-						</li>
-					))}
-				</ul>
-			)}
-			{actionError && <p className="plan-research-error" role="status">{actionError}</p>}
-			{!ready && (
-				<div className="plan-research-actions">
-					{actions.cancel && onCancel && (
-						<button
-							aria-label="Cancel research"
-							className="btn btn-sm btn-secondary"
-							disabled={busy || !canEdit}
-							onClick={onCancel}
-							type="button"
-						>
-							Cancel
-						</button>
-					)}
-					{actions.retry && onRetry && (
-						<button
-							aria-label="Retry research"
-							className="btn btn-sm btn-secondary"
-							disabled={busy || !canEdit}
-							onClick={onRetry}
-							type="button"
-						>
-							Retry
-						</button>
-					)}
-					{actions.remove && onRemove && (
-						<button
-							aria-label="Remove research reference"
-							className="btn btn-sm btn-ghost"
-							disabled={busy || !canEdit}
-							onClick={onRemove}
-							type="button"
-						>
-							Remove
-						</button>
-					)}
+		<div className="plan-research-tracked">
+			<SidecarCard
+				className={`plan-research-card${ready ? " relative" : ""}`}
+				data-research-ready={ready ? "" : undefined}
+				data-stage={stage}
+				label="Research"
+			>
+				<div className="plan-research-status">
+					<Swap
+						className="plan-research-indicator"
+						id={stage === "ready" || stage === "failed" ? stage : "dot"}
+					>
+						<Indicator stage={stage} />
+					</Swap>
+					<Swap id={stage}>
+						<span>
+							{WORDS[stage]}
+							{sourceCount && <span className="plan-research-meta">{"\u00a0· "}{sourceCount}</span>}
+						</span>
+					</Swap>
+					<div className="plan-research-remove">
+						<Swap id={removable ? "remove" : "none"}>
+							{removable && (
+								<button
+									aria-label="Remove research reference"
+									className="btn btn-icon btn-ghost"
+									data-tooltip="Remove"
+									disabled={busy || !canEdit}
+									onClick={onRemove}
+									type="button"
+								>
+									<CloseIcon aria-hidden="true" size={14} />
+								</button>
+							)}
+						</Swap>
+					</div>
 				</div>
-			)}
-			{actions.open && ready && onOpen && (
-				<button
-					aria-label={`Open ${ready.title}`}
-					className="plan-research-open"
-					disabled={busy}
-					onClick={event => onOpen(event.currentTarget)}
-					ref={openButtonRef}
-					type="button"
-				/>
-			)}
-		</SidecarCard>
+				<Swap className="plan-research-title" id={ready ? "report" : "question"}>
+					{ready ? ready.title : request.question}
+				</Swap>
+				<Fold open={!!ready}>
+					{shownSummary !== undefined && <p className="plan-research-summary">{shownSummary}</p>}
+				</Fold>
+				<Fold open={message !== undefined}>{attention}</Fold>
+				<Fold open={!!footer}>
+					<div className="plan-research-footer">
+						<Swap id={footer ?? "none"}>
+							{footer && (
+								<button
+									aria-label={footer === "retry" ? "Retry research" : "Cancel research"}
+									className="btn btn-sm btn-outline"
+									disabled={busy || !canEdit}
+									onClick={footer === "retry" ? onRetry : onCancel}
+									type="button"
+								>
+									{footer === "retry" ? "Retry" : "Cancel"}
+								</button>
+							)}
+						</Swap>
+					</div>
+				</Fold>
+				{actions.open && ready && onOpen && (
+					<button
+						aria-label={`Open ${ready.title}`}
+						className="plan-research-open"
+						disabled={busy}
+						onClick={event => onOpen(event.currentTarget)}
+						ref={openButtonRef}
+						type="button"
+					/>
+				)}
+			</SidecarCard>
+			<Fold open={at >= 0}>
+				<div aria-hidden="true" className="plan-research-track">
+					{TRACK.map((step, index) => (
+						<span
+							data-state={shownAt === undefined || index > shownAt
+								? "todo"
+								: index === shownAt
+								? "now"
+								: "done"}
+							key={step}
+						/>
+					))}
+				</div>
+				<Fold open={found > 0 && at >= 0}>
+					<span className="plan-research-found">
+						<Swap id={String(shownFound)}>{shownFound}</Swap>{" "}
+						{shownFound === 1 ? "source" : "sources"} found
+					</span>
+				</Fold>
+			</Fold>
+		</div>
 	);
 }
 

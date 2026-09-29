@@ -111,6 +111,23 @@
 	}
 }
 
+@utility btn-outline {
+	background-color: var(--color-page);
+	color: var(--color-text-primary);
+	outline: var(--button-edge-width) solid var(--color-control-edge);
+	outline-offset: calc(-1 * var(--button-edge-width));
+	box-shadow: var(--shadow-resting);
+
+	&:hover:not(:disabled) {
+		background-color: var(--color-inset);
+	}
+
+	&:active:not(:disabled) {
+		background-color: var(--color-gray-200);
+		box-shadow: none;
+	}
+}
+
 @utility btn-ghost {
 	background-color: transparent;
 	color: var(--color-text-secondary);
