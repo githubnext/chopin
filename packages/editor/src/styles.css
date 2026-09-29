@@ -13,7 +13,7 @@
 }
 
 .plan-research-draft {
-	width: min(var(--plan-content-width, 48rem), calc(100vw - 2rem));
+	width: min(28.125rem, var(--plan-content-width, 48rem), calc(100vw - 2rem));
 	padding: 0.875rem;
 	border: var(--edge-width) solid var(--color-edge);
 	border-radius: var(--radius-lg);
@@ -41,74 +41,40 @@
 	background: transparent;
 }
 
+/* Research widgets never exceed 450px and shrink with their container. */
+.plan-research-composer,
+.plan-research-tracked {
+	width: 100%;
+	max-width: 28.125rem;
+}
+
 .plan-research-composer {
 	display: grid;
 	gap: 0.625rem;
 }
 
-.plan-research-composer label,
-.plan-research-heading strong {
-	font-size: var(--text-sm);
-	font-weight: 600;
-	color: var(--color-text-primary);
+.plan-research-field {
+	position: relative;
 }
 
-.plan-research-composer-heading {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-}
-
-.plan-research-composer textarea {
+.plan-research-field textarea {
+	display: block;
 	width: 100%;
-	min-height: 5rem;
-	resize: vertical;
-	padding: 0.625rem;
+	min-height: 5.5rem;
+	resize: none;
+	padding: 0.625rem 2.5rem 3rem 0.75rem;
 	font: inherit;
-}
-
-.plan-research-heading {
-	display: grid;
-	gap: 0.25rem;
-}
-
-.plan-research-heading span,
-.plan-research-error,
-.plan-research-sources,
-.plan-research-summary {
 	font-size: var(--text-sm);
-	color: var(--color-text-secondary);
 }
 
-.plan-research-summary,
-.plan-research-meta {
-	margin: 0;
+.plan-research-dismiss {
+	position: absolute;
+	inset: 0.3125rem 0.3125rem auto auto;
 }
 
-.plan-research-meta {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 0.25rem 0.75rem;
-	font-size: var(--text-sm);
-	color: var(--color-text-quaternary);
-}
-
-.plan-research-error {
-	margin: 0;
-	color: var(--color-destructive-ink);
-}
-
-.plan-research-sources {
-	display: grid;
-	gap: 0.25rem;
-	margin: 0;
-	padding-inline-start: 1.125rem;
-}
-
-.plan-research-sources a {
-	color: var(--color-text-primary);
-	text-decoration: underline;
-	text-underline-offset: 0.125rem;
+.plan-research-send {
+	position: absolute;
+	inset: auto 0.625rem 0.625rem auto;
 }
 
 .plan-research-actions {
@@ -116,6 +82,265 @@
 	flex-wrap: wrap;
 	justify-content: flex-end;
 	gap: 0.5rem;
+}
+
+.plan-research-tracked {
+	display: grid;
+}
+
+.plan-research-status {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	min-height: 1.5rem;
+	font-size: var(--text-sm);
+	color: var(--color-text-tertiary);
+}
+
+/* Stages that lead with a badge give their header more room. */
+[data-stage="failed"] > div > .plan-research-status,
+[data-stage="ready"] > div > .plan-research-status {
+	margin-block-end: 0.25rem;
+}
+
+.plan-research-remove {
+	display: flex;
+	align-items: center;
+	margin-inline-start: auto;
+}
+
+.plan-research-meta {
+	color: var(--color-text-quaternary);
+}
+
+.plan-research-title {
+	font-size: var(--text-sm);
+	font-weight: 600;
+	line-height: 1.4;
+	color: var(--color-text-primary);
+}
+
+[data-stage="cancelled"] > div > .plan-research-title {
+	color: var(--color-text-tertiary);
+}
+
+.plan-research-summary {
+	margin: 0;
+	font-size: var(--text-sm);
+	color: var(--color-text-secondary);
+}
+
+.plan-research-footer {
+	display: flex;
+	justify-content: flex-end;
+}
+
+.plan-research-dot {
+	width: 0.5rem;
+	height: 0.5rem;
+	margin-inline: 0.1875rem;
+	border-radius: 50%;
+	background: var(--color-brand);
+	animation: plan-research-pulse 1.4s var(--ease-out) infinite;
+}
+
+.plan-research-dot[data-idle] {
+	background: var(--color-text-quaternary);
+	animation: none;
+}
+
+@keyframes plan-research-pulse {
+	0% {
+		box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-brand) 45%, transparent);
+	}
+	100% {
+		box-shadow: 0 0 0 0.375rem transparent;
+	}
+}
+
+.plan-research-badge {
+	display: grid;
+	flex-shrink: 0;
+	place-items: center;
+	width: 1.5rem;
+	height: 1.5rem;
+	border-radius: 50%;
+	background: var(--color-danger-surface);
+	color: var(--color-destructive);
+}
+
+.plan-research-badge[data-tone="brand"] {
+	background: var(--color-brand-wash);
+	color: var(--color-brand);
+}
+
+.plan-research-badge [data-nucleo-icon] {
+	color: inherit;
+}
+
+.plan-research-callout {
+	padding: 0.375rem 0.75rem;
+	border-radius: var(--radius-md);
+	background: var(--color-ruby-2);
+}
+
+.plan-research-callout p {
+	margin: 0;
+	padding-block: 0.125rem;
+	font-size: var(--text-sm);
+	line-height: 1.4;
+	color: var(--color-destructive-ink);
+}
+
+.plan-research-track {
+	display: grid;
+	grid-template-columns: repeat(5, 1fr);
+	gap: 0.25rem;
+	padding-inline: 0.25rem;
+}
+
+.plan-research-track span {
+	position: relative;
+	overflow: hidden;
+	height: 0.3125rem;
+	border-radius: 9999px;
+	background: var(--color-selected);
+	transition: background-color 500ms var(--ease-out);
+}
+
+.plan-research-track span[data-state="now"],
+.plan-research-track span[data-state="done"] {
+	background: var(--color-brand);
+}
+
+/* The sheen rides its own layer so it can fade without touching the fill. */
+.plan-research-track span::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(
+		90deg,
+		transparent 0%,
+		color-mix(in oklch, white 70%, transparent) 50%,
+		transparent 100%
+	);
+	background-size: 50% 100%;
+	background-repeat: no-repeat;
+	opacity: 0;
+	animation: plan-research-sheen 1.6s linear infinite;
+	transition: opacity 400ms var(--ease-out);
+}
+
+.plan-research-track span[data-state="now"]::after {
+	opacity: 1;
+	transition-delay: 200ms;
+}
+
+@keyframes plan-research-sheen {
+	from {
+		background-position: -100% 0;
+	}
+	to {
+		background-position: 200% 0;
+	}
+}
+
+.plan-research-found {
+	padding-inline: 0.25rem;
+	font-size: var(--text-xs);
+	color: var(--color-text-tertiary);
+}
+
+/* Swap: layers share one grid cell and crossfade by opacity alone. */
+.plan-research-swap {
+	display: inline-grid;
+}
+
+.plan-research-swap > span {
+	grid-area: 1 / 1;
+	animation: plan-research-swap-in 360ms var(--ease-out) 120ms both;
+}
+
+.plan-research-swap > span[data-initial] {
+	animation: none;
+}
+
+.plan-research-swap > span[data-leaving] {
+	animation: plan-research-swap-out 240ms var(--ease-out) both;
+}
+
+@keyframes plan-research-swap-in {
+	from {
+		opacity: 0;
+	}
+}
+
+@keyframes plan-research-swap-out {
+	to {
+		opacity: 0;
+	}
+}
+
+.plan-research-indicator {
+	place-items: center;
+}
+
+.plan-research-indicator > span {
+	display: grid;
+	place-items: center;
+	min-width: 0.875rem;
+	min-height: 0.875rem;
+}
+
+.plan-research-indicator .plan-research-dot {
+	margin: 0;
+}
+
+/* Fold: animates grid rows so height changes are never a jump. */
+.plan-research-fold {
+	display: grid;
+	grid-template-rows: 0fr;
+	opacity: 0;
+	transition: grid-template-rows 420ms var(--ease-out), opacity 300ms var(--ease-out);
+}
+
+.plan-research-fold[data-open] {
+	grid-template-rows: 1fr;
+	opacity: 1;
+	transition-delay: 120ms;
+}
+
+.plan-research-fold > div {
+	min-height: 0;
+	overflow: hidden;
+}
+
+.plan-research-tracked > .plan-research-fold > div {
+	display: grid;
+	gap: 0.5rem;
+	padding-block-start: 0.625rem;
+}
+
+/* Inside the card a fold owns its gap, so a closed one takes no space. */
+.plan-research-card .plan-research-fold {
+	margin-block-start: -0.5rem;
+}
+
+.plan-research-card .plan-research-fold > div > * {
+	margin-block-start: 0.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.plan-research-dot,
+	.plan-research-swap > span,
+	.plan-research-track span::after {
+		animation: none;
+	}
+	.plan-research-fold,
+	.plan-research-track span,
+	.plan-research-track span::after {
+		transition: none;
+	}
 }
 
 .plan,

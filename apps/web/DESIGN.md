@@ -147,7 +147,7 @@ Rectangular controls use a restrained four-step radius scale: small for grips an
 
 ## Components
 
-- **Buttons:** Primary, secondary, ghost, and destructive tiers share one shape and compact text treatment. Medium buttons are 2rem high; small buttons are 1.5rem. Hover and pressed states change the relevant color role. Visible focus uses the brand focus ring.
+- **Buttons:** Primary, secondary, outline, ghost, and destructive tiers (outline is a white button with the control edge, for a quiet single action inside a card) share one shape and compact text treatment. Medium buttons are 2rem high; small buttons are 1.5rem. Hover and pressed states change the relevant color role. Visible focus uses the brand focus ring.
 - **Fields and selections:** White fields use the medium radius, control edge, and subtle resting shadow. Invalid fields use the destructive role. Disabled controls use neutral fill and muted text.
 - **Navigation:** The current location uses a white surface and primary ink. Other items stay quieter and reveal their affordance on hover or focus.
 - **Badges and status graphics:** Neutral, success, warning, and danger use paired semantic surface, icon, graphic, and text roles. A badge combines an icon and label in a pill.

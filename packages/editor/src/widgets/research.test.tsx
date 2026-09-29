@@ -199,9 +199,8 @@ describe("research card", () => {
 		}));
 
 		expect(markup).toContain(BASE.question);
-		expect(markup).toContain("Searching");
-		expect(markup).toContain("Release notes");
-		expect(markup).toContain("https://example.com/releases");
+		expect(markup).toContain("Searching sources");
+		expect(markup).toContain("source found");
 		expect(markup).toContain("Cancel research");
 		expect(markup).not.toContain("Remove research reference");
 		expect(markup).not.toContain("summary");
@@ -247,11 +246,11 @@ describe("research card", () => {
 			onRemove() {},
 		}));
 
-		expect(markup).toContain("Research ready");
+		expect(markup).toContain("Research");
 		expect(markup).toContain("Rollout evidence");
 		expect(markup).toContain("Public evidence supports the planned rollout date.");
 		expect(markup).toContain("1 source");
-		expect(markup).toContain("Researched by Planner");
+		expect(markup).not.toContain("Researched by Planner");
 		expect(markup).toContain("Open Rollout evidence");
 		expect(markup.match(/Open Rollout evidence/g)).toHaveLength(1);
 		expect(markup).toContain('aria-label="Open Rollout evidence"');
@@ -262,7 +261,8 @@ describe("research card", () => {
 		);
 		expect(markup).not.toContain("https://example.com/releases");
 		expect(markup).not.toContain("Remove research reference");
-		expect(markup).not.toContain("plan-research-actions");
+		expect(markup).not.toContain("Retry research");
+		expect(markup).not.toContain("Cancel research");
 		expect(markup).not.toContain("Expand");
 	});
 
@@ -573,7 +573,7 @@ describe("research reference", () => {
 			store,
 		}));
 		expect(markup).toContain(BASE.question);
-		expect(markup).toContain("Searching");
+		expect(markup).toContain("Searching sources");
 	});
 
 	it("keeps terminal card actions disabled from shared retry mutation state", async () => {

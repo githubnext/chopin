@@ -55,6 +55,10 @@ export function Controls() {
 						<ButtonRow className="btn-secondary" label="Cancel" />
 					</div>
 					<div>
+						<h4>Outline</h4>
+						<ButtonRow className="btn-outline" label="Retry" />
+					</div>
+					<div>
 						<h4>Ghost</h4>
 						<ButtonRow className="btn-ghost" label="Learn more" />
 					</div>

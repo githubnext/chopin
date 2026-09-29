@@ -266,6 +266,6 @@ describe("design audit specimens", () => {
 			expect(callouts).toContain(`type="${type}"`);
 		}
 		expect(markup).toContain("Research question");
-		expect(markup).toContain("Research ready");
+		expect(markup).toContain("Research failed");
 	});
 });
