@@ -322,7 +322,9 @@ function Preview(
 				>
 					<div className="flex min-w-0 items-center">
 						{named && <Language block={block} editor={editor} disabled={disabled} />}
-						{titleOf(block.meta) && <span className="plan-code-title">{titleOf(block.meta)}</span>}
+						{block.kind !== "diff" && titleOf(block.meta) && (
+							<span className="plan-code-title">{titleOf(block.meta)}</span>
+						)}
 					</div>
 					{hidable && <Toggle collapsed={collapsed} onToggle={onToggle} />}
 				</div>,
