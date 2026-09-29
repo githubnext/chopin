@@ -2,7 +2,9 @@
  * Bounds on a questionnaire.
  *
  * Enforced by the VM when the agent asks a question and again on every edit.
- * Clients apply the same numbers so a rejection is never a surprise.
+ * Clients apply the same numbers so a rejection is never a surprise. Verbatim
+ * host dialogs skip the per-field counts and lengths; the byte limits below
+ * still apply to them.
  */
 
 export const MAX_QUESTIONS = 10;

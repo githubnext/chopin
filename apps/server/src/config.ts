@@ -70,13 +70,19 @@ export function harnessSelection(): Pick<
 	if (full && (process.env.AUTH_MODE !== "local" || process.env.HARNESS !== "atomic")) {
 		throw new Error("ATOMIC_PLANNER=full requires AUTH_MODE=local and HARNESS=atomic");
 	}
-	let checkouts = process.env.ATOMIC_PLANNER_CHECKOUTS?.split(delimiter) ?? [];
+	let selection = {
+		host: process.env.SERVER_HOST || "127.0.0.1",
+		harness: process.env.HARNESS || "copilot-sdk",
+		harnessAuth: process.env.HARNESS_AUTH || undefined,
+	};
+	if (!full) return selection;
+	let checkouts = (process.env.ATOMIC_PLANNER_CHECKOUTS || undefined)?.split(delimiter) ?? [];
 	if (checkouts.some(path => !isAbsolute(path))) {
 		throw new Error(
 			"ATOMIC_PLANNER_CHECKOUTS must contain absolute paths separated by the platform path delimiter",
 		);
 	}
-	let rawTimeout = process.env.ATOMIC_PLANNER_INPUT_TIMEOUT_MS;
+	let rawTimeout = process.env.ATOMIC_PLANNER_INPUT_TIMEOUT_MS || undefined;
 	let inputTimeoutMs = rawTimeout === undefined ? undefined : Number(rawTimeout);
 	if (
 		inputTimeoutMs !== undefined
@@ -86,14 +92,8 @@ export function harnessSelection(): Pick<
 		throw new Error("ATOMIC_PLANNER_INPUT_TIMEOUT_MS must be an integer between 1 and 2147483647");
 	}
 	return {
-		host: process.env.SERVER_HOST || "127.0.0.1",
-		harness: process.env.HARNESS || "copilot-sdk",
-		harnessAuth: process.env.HARNESS_AUTH || undefined,
-		...(full
-			? {
-				atomicPlanner: { checkouts, ...(inputTimeoutMs === undefined ? {} : { inputTimeoutMs }) },
-			}
-			: {}),
+		...selection,
+		atomicPlanner: { checkouts, ...(inputTimeoutMs === undefined ? {} : { inputTimeoutMs }) },
 	};
 }
 

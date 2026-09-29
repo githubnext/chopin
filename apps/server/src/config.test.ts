@@ -182,6 +182,37 @@ describe("configuration", () => {
 		}
 	});
 
+	it("ignores Atomic Planner settings outside full mode and treats empty values as unset", () => {
+		for (let planner of [undefined, ""]) {
+			for (let [checkouts, timeout] of [["", ""], ["relative", "oops"]]) {
+				expect(
+					configured({
+						ATOMIC_PLANNER: planner,
+						ATOMIC_PLANNER_CHECKOUTS: checkouts,
+						ATOMIC_PLANNER_INPUT_TIMEOUT_MS: timeout,
+					}).atomicPlanner,
+				).toBeUndefined();
+			}
+		}
+		let full = {
+			ATOMIC_PLANNER: "full",
+			AUTH_MODE: "local",
+			HARNESS: "atomic",
+			MODEL: "stub/model",
+			APP_ORIGIN: "http://localhost:8790",
+			PORT: "8790",
+		};
+		for (let checkouts of [undefined, ""]) {
+			expect(
+				configured({
+					...full,
+					ATOMIC_PLANNER_CHECKOUTS: checkouts,
+					ATOMIC_PLANNER_INPUT_TIMEOUT_MS: "",
+				}).atomicPlanner,
+			).toEqual({ checkouts: [] });
+		}
+	});
+
 	it("requires a valid PostgreSQL URL", () => {
 		expect(() => configured({ DATABASE_URL: undefined })).toThrow("DATABASE_URL is required");
 		expect(() => configured({ DATABASE_URL: "https://database.test" })).toThrow("PostgreSQL URL");

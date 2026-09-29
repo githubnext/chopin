@@ -12,7 +12,7 @@
  * everyone already knows how to render.
  */
 
-import { ulid } from "@chopin/dialect";
+import { limits, ulid } from "@chopin/dialect";
 import * as Question from "@chopin/question";
 
 import * as Anchors from "./anchors";
@@ -119,31 +119,40 @@ export async function ask(
 	}> = [];
 	await Service.exclusive(plan, async () => {
 		let anchors = placement ? validatePlacement(plan, definition, placement) : undefined;
+		// Widget and question identities are deliberately distinct.
+		let values = definition.questions.map(question => ({
+			id: ulid(),
+			questions: [{
+				id: question.id,
+				header: question.header,
+				prompt: question.question,
+				multiple: question.multiple,
+				options: question.options.map(option => ({
+					id: option.id,
+					label: option.label,
+					...(option.description ? { description: option.description } : {}),
+				})),
+			}],
+		}));
+		// Verbatim host input has no per-field limits, so the document bounds it.
+		if (
+			definition.questions.some(question => question.verbatim)
+			&& !room.fitsQuestionnaires(plan.document, values)
+		) {
+			Question.reject(
+				`This input would take the document past its ${limits.MAX_SOURCE_BYTES / 1024} KiB limit`,
+			);
+		}
 		asked = definition.questions.map((question, index) => {
 			let single = Question.decision({ questions: [question] });
-			// Widget and question identities are deliberately distinct.
-			let id = ulid();
-			let waiting = Store.ask(plan.questions, id, single, id);
-			let value = {
-				id,
-				questions: [{
-					id: question.id,
-					header: question.header,
-					prompt: question.question,
-					multiple: question.multiple,
-					options: question.options.map(option => ({
-						id: option.id,
-						label: option.label,
-						...(option.description ? { description: option.description } : {}),
-					})),
-				}],
-			};
-			let record: Record = { id, definition: single, status: "open" };
+			let value = values[index]!;
+			let waiting = Store.ask(plan.questions, value.id, single, value.id);
+			let record: Record = { id: value.id, definition: single, status: "open" };
 			if (anchors) {
 				record.anchors = Anchors.set(Anchors.read(record), question.id, anchors[index]!);
 			}
-			plan.records.set(id, record);
-			return { id, single, value, waiting, at: placement?.blocks[index]?.[0] };
+			plan.records.set(value.id, record);
+			return { id: value.id, single, value, waiting, at: placement?.blocks[index]?.[0] };
 		});
 
 		let mutation = room.insertQuestionnaires(

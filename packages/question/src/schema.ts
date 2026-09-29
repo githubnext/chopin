@@ -53,7 +53,8 @@ function text(
 	verbatim = false,
 ): string {
 	if (typeof value !== "string") fail(`${name} must be text`);
-	let result = verbatim ? value : value.trim();
+	if (verbatim) return value;
+	let result = value.trim();
 	if (!optional && !result) fail(`${name} is required`);
 	if (result.length > max) fail(`${name} exceeds ${max} characters`);
 	return result;
@@ -66,6 +67,10 @@ function text(
  * unique within one call. Durable plan questionnaires re-key them to ULIDs on
  * the way in, since those do have to survive rewrites.
  *
+ * A verbatim definition is a host dialog the runtime already permitted: it
+ * keeps its text exactly and is bounded by the draft and document byte limits
+ * rather than by the `ask` tool's per-field contract.
+ *
  * @throws {QuestionError}
  */
 export function normalize(raw: unknown, { verbatim = false } = {}): Definition {
@@ -75,7 +80,7 @@ export function normalize(raw: unknown, { verbatim = false } = {}): Definition {
 	if (!Array.isArray(args.questions) || args.questions.length === 0) {
 		fail("At least one question is required");
 	}
-	if (args.questions.length > limits.MAX_QUESTIONS) {
+	if (!verbatim && args.questions.length > limits.MAX_QUESTIONS) {
 		fail(`A questionnaire can contain at most ${limits.MAX_QUESTIONS} questions`);
 	}
 
@@ -86,7 +91,7 @@ export function normalize(raw: unknown, { verbatim = false } = {}): Definition {
 		if (!Array.isArray(raw.options) || (!verbatim && raw.options.length === 0)) {
 			fail(`Question ${index + 1} requires at least one option`);
 		}
-		if (raw.options.length > limits.MAX_OPTIONS) {
+		if (!verbatim && raw.options.length > limits.MAX_OPTIONS) {
 			fail(`Question ${index + 1} can contain at most ${limits.MAX_OPTIONS} options`);
 		}
 		if (typeof raw.multiple !== "boolean") {

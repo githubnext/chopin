@@ -56,7 +56,9 @@ export function createHumanInput(room: DocumentRoom, timeoutMs?: number): HostIn
 			let question = params.questions[questionIndex]!;
 			let identity = { questionIndex, question: question.question };
 			if (answer.custom !== undefined) {
-				answers.push({ ...identity, kind: "custom", answer: answer.custom });
+				// Atomic accepts `custom` only where its own dialog offers a typed row.
+				let typed = !question.multiSelect && !question.options.some(option => option.preview);
+				answers.push({ ...identity, kind: typed ? "custom" : "chat", answer: answer.custom });
 			} else if (question.multiSelect) {
 				answers.push({ ...identity, kind: "multi", answer: null, selected: answer.choices ?? [] });
 			} else {

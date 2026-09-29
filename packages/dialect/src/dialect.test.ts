@@ -290,6 +290,20 @@ describe("limits", () => {
 		expect(codes(`<Callout id="${ID}" type="note" title="${long}">y</Callout>`))
 			.toContain("attribute-too-long");
 	});
+
+	it("bounds questionnaire projections only by the source size", () => {
+		let questionnaire = (text: string) =>
+			`<Questionnaire id="${ID}">\n`
+			+ `<Question id="${ID2}" header="${text}" prompt="${text}" multiple="false">\n`
+			+ `<Option id="${ID3}" label="${text}" description="${text}" />\n`
+			+ `<Answer value="${text}" />\n`
+			+ `</Question>\n`
+			+ `</Questionnaire>`;
+		accepts(questionnaire("x".repeat(5_000)));
+		let source = questionnaire("x".repeat(limits.MAX_SOURCE_BYTES));
+		let result = validate(parse(source), { bytes: new TextEncoder().encode(source).byteLength });
+		expect(result.ok ? [] : result.issues.map(issue => issue.code)).toEqual(["source-too-large"]);
+	});
 });
 
 describe("diagnostics", () => {
