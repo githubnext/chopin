@@ -30,18 +30,28 @@ export function LanguageMenu(
 	},
 ) {
 	let [open, setOpen] = useState(false);
-	let [active, setActive] = useState(0);
+	// By id, not index: a collaborator can add or remove the unlisted-language row.
+	let [activeId, setActiveId] = useState(value);
 	let [position, setPosition] = useState<CSSProperties>({ visibility: "hidden" });
 	let trigger = useRef<HTMLButtonElement>(null);
 	let panel = useRef<HTMLDivElement>(null);
 	let listId = useId();
 	let presence = useTransitionPresence(open ? true : undefined, 150, false);
 	let selected = Math.max(0, options.findIndex(([id]) => id === value));
+	let found = options.findIndex(([id]) => id === activeId);
+	let active = found < 0 ? selected : found;
+	let setActive = (next: number | ((index: number) => number)) => {
+		let index = typeof next === "function" ? next(active) : next;
+		let option = options[index];
+		if (option) setActiveId(option[0]);
+	};
 	let label = options[selected]?.[1] ?? value;
 
 	useLayoutEffect(() => {
 		if (!open) return;
-		let place = () => {
+		let place = (event?: Event) => {
+			// The menu's own scrolling must not reposition it.
+			if (event?.target instanceof Node && panel.current?.contains(event.target)) return;
 			let rect = trigger.current?.getBoundingClientRect();
 			if (!rect) return;
 			let below = window.innerHeight - rect.bottom - GAP - MARGIN;
@@ -86,7 +96,7 @@ export function LanguageMenu(
 	}, [open]);
 
 	let show = () => {
-		setActive(selected);
+		setActiveId(value);
 		setOpen(true);
 		requestAnimationFrame(() => panel.current?.focus());
 	};
@@ -112,11 +122,17 @@ export function LanguageMenu(
 			Enter: () => choose(active),
 			" ": () => choose(active),
 			Escape: () => close(),
-			Tab: () => setOpen(false),
 		};
+		// The panel is portalled to the end of body, so hand focus back to the
+		// trigger and let the browser's default Tab continue from there.
+		if (event.key === "Tab") {
+			setOpen(false);
+			trigger.current?.focus();
+			return;
+		}
 		let action = step[event.key];
 		if (action) {
-			if (event.key !== "Tab") event.preventDefault();
+			event.preventDefault();
 			event.stopPropagation();
 			action();
 			return;

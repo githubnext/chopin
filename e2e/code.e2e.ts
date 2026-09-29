@@ -355,3 +355,40 @@ test("showing the source leaves everybody else's hidden", async ({ join, seed })
 	await expect(content(bo).locator("[data-plan-source]")).toBeHidden();
 	await expect(content(bo).getByRole("button", { name: "Show source" })).toBeVisible();
 });
+
+test("the language menu is a keyboard-operable listbox", async ({ join, room, seed }) => {
+	await seed("```ts\nlet total = 1;\n```\n");
+	let page = await join("ana");
+	let trigger = content(page).getByRole("button", { name: "Code language: TypeScript" });
+	let list = page.getByRole("listbox", { name: "Code language" });
+
+	await trigger.focus();
+	await page.keyboard.press("ArrowDown");
+	await expect(list).toBeVisible();
+
+	await page.keyboard.press("Escape");
+	await expect(list).toBeHidden();
+	await expect(trigger).toBeFocused();
+
+	await trigger.click();
+	await expect(list).toBeVisible();
+	await page.mouse.click(5, 5);
+	await expect(list).toBeHidden();
+
+	// Tab from the open menu continues from the trigger, not from the end of the page.
+	await trigger.focus();
+	await page.keyboard.press("ArrowDown");
+	await expect(list).toBeVisible();
+	await page.keyboard.press("Tab");
+	await expect(list).toBeHidden();
+	await expect(content(page).getByRole("button", { name: "Show source" })).toBeFocused();
+
+	await trigger.focus();
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("Enter");
+	await expect(list).toBeHidden();
+	await expect(content(page).getByRole("button", { name: /^Code language: (?!TypeScript)/ }))
+		.toBeVisible();
+	await written(page, room, /^```(?!ts$)\S+$/m);
+});

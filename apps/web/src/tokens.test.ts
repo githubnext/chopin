@@ -696,6 +696,18 @@ describe("migration", () => {
 					tiers: ["btn-ghost"],
 				},
 			],
+			["packages/editor/src/widgets/render-blocks.tsx", {
+				action: "code source toggle",
+				marker: 'aria-label={collapsed ? "Show source" : "Hide source"}',
+				size: "btn-icon",
+				tiers: ["btn-ghost"],
+			}],
+			["packages/editor/src/widgets/language-menu.tsx", {
+				action: "code language trigger",
+				marker: 'aria-haspopup="listbox"',
+				size: "btn-sm",
+				tiers: ["btn-ghost"],
+			}],
 			["apps/web/src/chat/transcript.tsx", {
 				action: "Withdraw",
 				marker: 'title="Withdraw"',
