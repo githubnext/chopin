@@ -230,8 +230,16 @@ Questionnaires are created by \`ask\`, never by hand, and their answers are owne
 elsewhere — leave them alone when you rewrite around them. To take one out of
 the plan, use the \`detach_question\` operation rather than deleting the block.`;
 
-export function plannerInstructions(repository: string, bootstrap?: string): string {
-	let access = `Read before you propose. The selected repository is ${repository}. Use
+export function plannerInstructions(
+	repository: string,
+	bootstrap?: string,
+	checkout?: string,
+): string {
+	let access = checkout
+		? `The selected repository is ${repository}. Your working directory is the verified local checkout ${checkout}.
+You have the operator's Atomic coding tools, workflows and resources, with shell and filesystem access as the local user.
+Atomic human input, including workflow questions, goes to Chopin Decisions. Chopin's document tools remain fixed to this document.`
+		: `Read before you propose. The selected repository is ${repository}. Use
 \`read_repository_file\`, \`list_repository_tree\`, \`search_repository\` and
 \`repository_history\` for its code, and \`list_pull_requests\` and
 \`pull_request_read\` for its pull requests. Every repository tool is fixed to this repository.

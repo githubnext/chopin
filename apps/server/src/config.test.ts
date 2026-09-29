@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { delimiter } from "node:path";
 
 import { describe as description, load } from "./config";
 
@@ -26,6 +27,9 @@ function configured(overrides: Record<string, string | undefined> = {}) {
 		HARNESS: undefined,
 		HARNESS_AUTH: undefined,
 		AUTH_MODE: undefined,
+		ATOMIC_PLANNER: undefined,
+		ATOMIC_PLANNER_CHECKOUTS: undefined,
+		ATOMIC_PLANNER_INPUT_TIMEOUT_MS: undefined,
 		SERVER_HOST: undefined,
 		PORT: undefined,
 		MODEL: undefined,
@@ -129,6 +133,58 @@ describe("configuration", () => {
 			harness: "atomic",
 			model: "vercel-ai-gateway/anthropic/claude-sonnet-4.6",
 		});
+	});
+
+	it("allows full Atomic Planner only in local atomic mode, with either auth mode", () => {
+		let full = {
+			ATOMIC_PLANNER: "full",
+			AUTH_MODE: "local",
+			HARNESS: "atomic",
+			MODEL: "stub/model",
+			APP_ORIGIN: "http://localhost:8790",
+			PORT: "8790",
+		};
+		for (let auth of ["auto", "ai-gateway"]) {
+			expect(configured({ ...full, HARNESS_AUTH: auth }).atomicPlanner).toEqual({
+				checkouts: [],
+			});
+		}
+		expect(configured().atomicPlanner).toBeUndefined();
+		for (let mode of ["isolated", "FULL", " "]) {
+			expect(() => configured({ ...full, ATOMIC_PLANNER: mode })).toThrow("ATOMIC_PLANNER");
+		}
+		for (let auth of [undefined, "hosted"]) {
+			expect(() => configured({ ...full, AUTH_MODE: auth })).toThrow("AUTH_MODE=local");
+		}
+		for (let harness of [undefined, "pi", "copilot-sdk"]) {
+			expect(() => configured({ ...full, HARNESS: harness })).toThrow("HARNESS=atomic");
+		}
+	});
+
+	it("validates checkout paths and an optional per-request input timeout", () => {
+		let full = {
+			ATOMIC_PLANNER: "full",
+			AUTH_MODE: "local",
+			HARNESS: "atomic",
+			MODEL: "stub/model",
+			APP_ORIGIN: "http://localhost:8790",
+			PORT: "8790",
+		};
+		expect(
+			configured({
+				...full,
+				ATOMIC_PLANNER_CHECKOUTS: ["/tmp/one", "/tmp/two", "/tmp/one"].join(delimiter),
+				ATOMIC_PLANNER_INPUT_TIMEOUT_MS: "1234",
+			}).atomicPlanner,
+		).toEqual({ checkouts: ["/tmp/one", "/tmp/two", "/tmp/one"], inputTimeoutMs: 1234 });
+		for (let paths of ["relative", ["/tmp/one", "relative"].join(delimiter)]) {
+			expect(() => configured({ ...full, ATOMIC_PLANNER_CHECKOUTS: paths })).toThrow("absolute");
+		}
+		for (let timeout of ["0", "-1", "1.5", "oops", "10ms", "2147483648"]) {
+			expect(() => configured({ ...full, ATOMIC_PLANNER_INPUT_TIMEOUT_MS: timeout })).toThrow(
+				"ATOMIC_PLANNER_INPUT_TIMEOUT_MS",
+			);
+		}
 	});
 
 	it("requires a valid PostgreSQL URL", () => {

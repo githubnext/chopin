@@ -14,8 +14,8 @@ export type AskPlacement = {
 	blocks: Array<Array<{ index: number; digest: string }>>;
 };
 
-export function identify(raw: unknown): Definition {
-	let definition = Question.normalize(raw);
+export function identify(raw: unknown, options?: { verbatim?: boolean }): Definition {
+	let definition = Question.normalize(raw, options);
 	return {
 		questions: definition.questions.map(question => ({
 			...question,

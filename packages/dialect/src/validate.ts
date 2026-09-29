@@ -346,7 +346,7 @@ class Validator {
 					break;
 
 				case "text":
-					if (!value.trim()) {
+					if (!value.trim() && !["Question", "Option", "Answer"].includes(spec.name)) {
 						this.add("empty-attribute", `\`${spec.name}.${name}\` cannot be empty`, path, node);
 					} else if (value.length > attribute.max) {
 						this.add(
@@ -407,7 +407,11 @@ class Validator {
 						stringAttribute(parent, "status") ?? "",
 					)
 					&& stringAttribute(node, "multiple") === "false";
-				if (found === 0 && !pendingQuestion) {
+				// A free-text question, from a card with no thread or status, has no options
+				// until its answer is projected.
+				let freeTextQuestion = spec.name === "Question" && parent?.name === "Questionnaire"
+					&& !stringAttribute(parent, "thread") && stringAttribute(parent, "status") === undefined;
+				if (found === 0 && !pendingQuestion && !freeTextQuestion) {
 					this.add(
 						"missing-children",
 						`\`${spec.name}\` requires at least one ${allowed.join(" or ")}`,

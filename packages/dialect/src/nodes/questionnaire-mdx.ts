@@ -95,16 +95,27 @@ export function toElement(value: Questionnaire): MdxJsxFlowElement {
 		children: value.questions.map(question => ({
 			type: "mdxJsxFlowElement",
 			name: "Question",
-			attributes: identity(question.id, {
-				header: question.header,
-				prompt: question.prompt,
-				multiple: String(question.multiple),
-			}),
+			attributes: [
+				...identity(question.id),
+				{ type: "mdxJsxAttribute" as const, name: "header", value: question.header },
+				{ type: "mdxJsxAttribute" as const, name: "prompt", value: question.prompt },
+				{ type: "mdxJsxAttribute" as const, name: "multiple", value: String(question.multiple) },
+			],
 			children: [
 				...question.options.map(option => ({
 					type: "mdxJsxFlowElement" as const,
 					name: "Option",
-					attributes: identity(option.id, { label: option.label, description: option.description }),
+					attributes: [
+						...identity(option.id),
+						{ type: "mdxJsxAttribute" as const, name: "label", value: option.label },
+						...(option.description
+							? [{
+								type: "mdxJsxAttribute" as const,
+								name: "description",
+								value: option.description,
+							}]
+							: []),
+					],
 					children: [],
 				})),
 				// A projection of sidecar state: addressed through its Question,
@@ -112,7 +123,10 @@ export function toElement(value: Questionnaire): MdxJsxFlowElement {
 				...(question.answer === undefined ? [] : [{
 					type: "mdxJsxFlowElement" as const,
 					name: "Answer",
-					attributes: attributes({ value: question.answer, choices: question.choices?.join(" ") }),
+					attributes: [
+						{ type: "mdxJsxAttribute" as const, name: "value", value: question.answer },
+						...attributes({ choices: question.choices?.join(" ") }),
+					],
 					children: [],
 				}]),
 				...(question.previous

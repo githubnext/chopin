@@ -43,6 +43,7 @@ export type StubRequest = {
 	system: string;
 	toolNames: string[];
 	hasPriorToolResult: boolean;
+	toolResults: string[];
 };
 
 export function startStubModelServer(
@@ -73,6 +74,9 @@ export function startStubModelServer(
 				system,
 				hasPriorToolResult,
 				toolNames: (body.tools ?? []).map(entry => entry.function?.name ?? ""),
+				toolResults: body.messages.filter(message => message.role === "tool").map(message =>
+					extractText(message.content)
+				),
 			});
 			let turn = respond(prompt, hasPriorToolResult);
 			let id = crypto.randomUUID();

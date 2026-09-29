@@ -32,7 +32,7 @@ export {
 export type { DecisionEntry, OptionOrigin, Record } from "./records";
 export { appendOption as addOption } from "./service-append-option";
 export { ask } from "./service-ask";
-export { cancel } from "./service-cancel";
+export { cancel, withdraw } from "./service-cancel";
 export { identify } from "./service-definition";
 export type { AskPlacement } from "./service-definition";
 export { discard } from "./service-discard";

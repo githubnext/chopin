@@ -20,17 +20,53 @@ export async function cancel(
 	msg: Request<Wire.Cancel.Ask>,
 ): Promise<void> {
 	if (Service.implementationActive(plan)) return fail(ws, msg.rid, "implementation is active");
-	let claimed = Store.claimCancel(plan.questions, msg.id, ws.data.handle);
-	if (!claimed.ok) {
-		return reply(ws, msg.rid, { kind: "question:cancel", ts: 0, id: msg.id, ...claimed });
+	let result: Awaited<ReturnType<typeof withdraw>>;
+	let acknowledged = false;
+	try {
+		result = await withdraw(plan, server, roomId, msg.id, ws.data.handle, () => {
+			acknowledged = true;
+			reply(ws, msg.rid, {
+				kind: "question:cancel",
+				ts: 0,
+				id: msg.id,
+				ok: true,
+				resolver: ws.data.handle,
+			});
+		});
+	} catch (failure) {
+		return fail(
+			ws,
+			msg.rid,
+			failure instanceof ConversationCapacityError
+				|| failure instanceof Error && failure.message === "implementation is active"
+				? failure.message
+				: "could not cancel the questionnaire",
+		);
 	}
+	if (!acknowledged) reply(ws, msg.rid, { kind: "question:cancel", ts: 0, id: msg.id, ...result });
+}
+
+/**
+ * Withdraw input on behalf of a member or the Planner, after its durable commit.
+ * `acknowledge` runs first once the withdrawal is committed, before it is announced.
+ */
+export async function withdraw(
+	plan: Plan,
+	server: Server<SocketData>,
+	roomId: string,
+	id: string,
+	resolver: string,
+	acknowledge?: () => void,
+): Promise<Store.CancelRefusal | { ok: true; resolver: string }> {
+	let claimed = Store.claimCancel(plan.questions, id, resolver);
+	if (!claimed.ok) return claimed;
 	let mutationError: unknown;
 	let failure: unknown;
 	let finish: (() => Store.Ended) | undefined;
 	try {
 		await Service.exclusive(plan, async () => {
 			if (Service.implementationActive(plan)) throw new Error("implementation is active");
-			if (plan.questions.open.get(msg.id) !== claimed.claim.entry) {
+			if (plan.questions.open.get(id) !== claimed.claim.entry) {
 				throw new Error("questionnaire is no longer open");
 			}
 			let document = await room.restore(
@@ -43,15 +79,15 @@ export async function cancel(
 			try {
 				let mutation: room.Mutation | undefined;
 				try {
-					mutation = room.removeQuestionnaire(document, msg.id);
+					mutation = room.removeQuestionnaire(document, id);
 				} catch (err) {
 					mutationError = err;
 					return;
 				}
-				let record = plan.records.get(msg.id);
+				let record = plan.records.get(id);
 				let records = new Map(plan.records);
 				if (record) {
-					records.set(msg.id, { ...record, status: "cancelled", resolver: ws.data.handle });
+					records.set(id, { ...record, status: "cancelled", resolver });
 				}
 				let questions: Store.Questions = {
 					open: new Map(plan.questions.open),
@@ -66,8 +102,8 @@ export async function cancel(
 					pendingCardActions: record
 						? pending(plan, record, {
 							kind: "discarded",
-							id: msg.id,
-							actor: ws.data.handle,
+							id,
+							actor: resolver,
 						})
 						: plan.pendingCardActions,
 				}, mutation);
@@ -80,54 +116,32 @@ export async function cancel(
 		failure = err;
 	}
 	if (!finish) Store.rollback(plan.questions, claimed.claim);
-	if (failure) {
-		return fail(
-			ws,
-			msg.rid,
-			failure instanceof ConversationCapacityError
-				|| failure instanceof Error && failure.message === "implementation is active"
-				? failure.message
-				: "could not cancel the questionnaire",
-		);
-	}
+	if (failure) throw failure;
 	if (mutationError) {
 		console.error("[questions] could not remove the node:", mutationError);
-		return reply(ws, msg.rid, {
-			kind: "question:cancel",
-			ts: 0,
-			id: msg.id,
-			ok: false,
-			reason: "resolving",
-		});
+		return { ok: false, reason: "resolving" };
 	}
-	if (!finish) return fail(ws, msg.rid, "could not cancel the questionnaire");
+	if (!finish) throw new Error("could not cancel the questionnaire");
 	finish();
-	let record = plan.records.get(msg.id);
+	let record = plan.records.get(id);
 	for (
 		let notify of [
-			() =>
-				reply(ws, msg.rid, {
-					kind: "question:cancel",
-					ts: 0,
-					id: msg.id,
-					ok: true,
-					resolver: ws.data.handle,
-				}),
+			...(acknowledge ? [acknowledge] : []),
 			() =>
 				broadcast(server, roomId, {
 					kind: "question:resolved",
 					ts: 0,
-					id: msg.id,
+					id,
 					status: "cancelled",
-					resolver: ws.data.handle,
+					resolver,
 				}),
-			() => announce(plan, server, roomId, msg.id),
+			() => announce(plan, server, roomId, id),
 			() =>
 				emit(plan, {
 					kind: "discarded",
-					id: msg.id,
+					id,
 					...(record?.threadId ? { threadId: record.threadId } : {}),
-					actor: ws.data.handle,
+					actor: resolver,
 				}),
 		]
 	) {
@@ -137,4 +151,5 @@ export async function cancel(
 			console.error("[questions] could not announce a cancelled questionnaire:", err);
 		}
 	}
+	return { ok: true, resolver };
 }

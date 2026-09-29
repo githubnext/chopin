@@ -22,6 +22,7 @@ import type { Ended } from "./store";
 import type { Record } from "./records";
 
 import { announce } from "./card-notifications";
+import { withdraw } from "./service-cancel";
 import { type AskPlacement, validatePlacement } from "./service-definition";
 
 export async function ask(
@@ -31,7 +32,9 @@ export async function ask(
 	definition: Definition,
 	placement?: AskPlacement,
 	created?: () => void,
+	signal?: AbortSignal,
 ): Promise<Ended[]> {
+	if (signal?.aborted) return [];
 	if (Service.implementationActive(plan)) throw new Error("implementation is active");
 	if (definition.questions.length === 0) {
 		Question.reject("A questionnaire needs at least one question");
@@ -58,7 +61,8 @@ export async function ask(
 			let id = ulid();
 			// Classifier capacity must not prevent an ordinary Planner questionnaire.
 			let available = MAX_EVENTS - conversationPlan.events.length - plan.pendingCardActions.length;
-			let threadId = conversationPlan.threads.length < MAX_THREADS
+			// Host dialogs keep their raw text, which conversation events cannot carry.
+			let threadId = !question.verbatim && conversationPlan.threads.length < MAX_THREADS
 					&& question.options.length + 2 <= available
 				? ulid()
 				: undefined;
@@ -175,5 +179,21 @@ export async function ask(
 		created?.();
 	});
 
-	return Promise.all(asked.map(item => item.waiting));
+	let failed = Promise.withResolvers<never>();
+	let withdrawing: Promise<unknown> | undefined;
+	let abort = () => {
+		withdrawing ??= Promise.all(
+			asked.map(item => withdraw(plan, server, roomId, item.id, "chopin")),
+		);
+		void withdrawing.catch(failed.reject);
+	};
+	signal?.addEventListener("abort", abort, { once: true });
+	if (signal?.aborted) abort();
+	try {
+		let ended = await Promise.race([Promise.all(asked.map(item => item.waiting)), failed.promise]);
+		await withdrawing;
+		return ended;
+	} finally {
+		signal?.removeEventListener("abort", abort);
+	}
 }

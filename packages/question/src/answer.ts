@@ -37,7 +37,10 @@ export function derive(definition: Definition, drafts: Drafts): Outcome {
 		}
 
 		if (draft!.mode === "custom") {
-			answers.push({ question: question.question, custom: draft!.custom.trim() });
+			answers.push({
+				question: question.question,
+				custom: question.verbatim ? draft!.custom : draft!.custom.trim(),
+			});
 			continue;
 		}
 

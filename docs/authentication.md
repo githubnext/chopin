@@ -202,6 +202,13 @@ Each browser has its own binding; configured instance admission lists still
 apply to every authorized account. Loopback binding does not make this a mode
 for internet-facing or exposed multi-user deployments.
 
+`ATOMIC_PLANNER=full` additionally enables local Atomic tools and resources for
+Planner sessions with a verified repository checkout. It requires `HARNESS=atomic`
+and grants shell and filesystem access as the operator; loopback is not a filesystem
+sandbox. Both Atomic auth modes (`auto` and `ai-gateway`) are allowed. Keep this a
+trusted single-operator instance, with no public proxy or tunnel. See
+[Full Atomic Planner](hosted-agent.md#full-atomic-planner-in-local-mode).
+
 ## Instance admission
 
 `GITHUB_ALLOWED_USERS` and `GITHUB_ALLOWED_ORGANIZATIONS` are optional,
