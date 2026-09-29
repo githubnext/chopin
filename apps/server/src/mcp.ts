@@ -5,6 +5,9 @@
  * module only validates and presents their results through MCP.
  */
 
+import { isAbsolute } from "node:path";
+import { MAX_MESSAGE_BYTES } from "./chat/limits";
+
 import {
 	BRIEF,
 	isRepository,
@@ -141,6 +144,24 @@ export type RestoreDocument<Caller> = {
 	>;
 };
 
+export type InvokePlannerInput = { id: string; instruction: string; checkout?: string };
+
+export type InvokePlannerError =
+	| "document-unavailable"
+	| "repository-forbidden"
+	| "document-archived"
+	| "planner-owner-unavailable"
+	| "checkout-unverified"
+	| "planner-unavailable"
+	| "planner-queue-full";
+
+export type InvokePlanner<Caller> = {
+	invoke(caller: Caller, input: InvokePlannerInput): Promise<
+		| { kind: "invoked"; document: DocumentSummary & { url: string } }
+		| { kind: "refused"; code: InvokePlannerError }
+	>;
+};
+
 export type McpOptions<Caller> = {
 	/** The host owns authentication; MCP only receives its result. */
 	caller(request: Request): Promise<Caller | undefined> | Caller | undefined;
@@ -150,6 +171,7 @@ export type McpOptions<Caller> = {
 	rename?: RenameDocument<Caller>;
 	archive?: ArchiveDocument<Caller>;
 	restore?: RestoreDocument<Caller>;
+	invoke?: InvokePlanner<Caller>;
 	implementations?: Implementations<Caller>;
 };
 
@@ -463,6 +485,56 @@ export const TOOLS: Tool[] = [
 		},
 	},
 	{
+		name: "invoke_planner",
+		description: "Post an instruction to a document's Planner as the locally signed-in user and "
+			+ "return its URL without waiting for the turn. Available only in full Atomic mode; "
+			+ "a supplied checkout must match the document repository. Questions appear in Decisions.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				id: {
+					type: "string",
+					minLength: 1,
+					maxLength: MAX_DOCUMENT_LOCATOR_LENGTH,
+					pattern: "\\S",
+				},
+				instruction: {
+					type: "string",
+					minLength: 1,
+					maxLength: MAX_MESSAGE_BYTES,
+					pattern: "\\S",
+					description: "Instruction text, at most 64 KiB in UTF-8.",
+				},
+				checkout: {
+					type: "string",
+					description: "Absolute path to a local checkout of this repository.",
+				},
+			},
+			required: ["id", "instruction"],
+			additionalProperties: false,
+		},
+		outputSchema: {
+			type: "object",
+			oneOf: [
+				{
+					type: "object",
+					properties: { ...DOCUMENT_IDENTITY, url: { type: "string" } },
+					required: ["id", "title", "url"],
+					additionalProperties: false,
+				},
+				outcome([
+					"document-unavailable",
+					"repository-forbidden",
+					"document-archived",
+					"planner-owner-unavailable",
+					"checkout-unverified",
+					"planner-unavailable",
+					"planner-queue-full",
+				]),
+			],
+		},
+	},
+	{
 		name: "read_implementation",
 		description:
 			"Read the approved implementation graph, plan and repository context by document ID or canonical URL.",
@@ -663,6 +735,7 @@ function serviceInstructions(tools: Tool[]): string | undefined {
 		|| tool.name === "rename_document"
 		|| tool.name === "archive_document"
 		|| tool.name === "restore_document"
+		|| tool.name === "invoke_planner"
 	);
 	let implementation = tools
 		.filter(tool =>
@@ -733,6 +806,7 @@ export function handler<Caller>(
 		&& (tool.name !== "rename_document" || renaming)
 		&& (tool.name !== "archive_document" || archiving)
 		&& (tool.name !== "restore_document" || restoring)
+		&& (tool.name !== "invoke_planner" || options.invoke)
 		&& (!["read_implementation", "start_implementation"].includes(tool.name)
 			|| options.implementations)
 		&& (!isLifecycleTool(tool.name) || options.implementations?.reportLifecycle)
@@ -916,6 +990,29 @@ export function handler<Caller>(
 							? "repository-forbidden"
 							: "document-unavailable",
 					}, true));
+				}
+				if (tool.name === "invoke_planner" && options.invoke) {
+					let args = tool.arguments;
+					if (
+						Object.keys(args).some(key => !["id", "instruction", "checkout"].includes(key))
+						|| !isLocator(args.id)
+						|| typeof args.instruction !== "string" || !args.instruction.trim()
+						|| Buffer.byteLength(args.instruction) > MAX_MESSAGE_BYTES
+						|| (Object.hasOwn(args, "checkout")
+							&& (typeof args.checkout !== "string" || !isAbsolute(args.checkout)))
+					) {
+						return notification
+							? undefined
+							: error(
+								call.id,
+								-32602,
+								"invoke_planner requires an id or URL, instruction, and optional absolute checkout",
+							);
+					}
+					let result = await options.invoke.invoke(caller, args as InvokePlannerInput);
+					return result.kind === "invoked"
+						? respond(text(result.document))
+						: respond(text({ code: result.code }, true));
 				}
 				if (tool.name === "read_implementation") {
 					if (Object.keys(tool.arguments).length !== 1 || !isLocator(tool.arguments.id)) {

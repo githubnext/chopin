@@ -8,14 +8,18 @@ import * as Rooms from "../rooms";
 import { claimImplementation, reportImplementationLifecycle } from "../tasks/plan-graphs";
 import { StorageError } from "../storage/errors";
 import { implementationLifecycle } from "../tasks/lifecycle";
+import { verifiedCheckout } from "../harness/atomic/checkout";
 
 import type { Server } from "bun";
 import type { HostedAuth } from "../auth/routes";
 import type { GitHubUser } from "../github/client";
+import type { AuthenticatedSession } from "../auth/session";
+import type { HostedRepository } from "../agent/repository";
 import type {
 	DocumentSummary,
 	Implementation,
 	ImplementationInput,
+	InvokePlannerError,
 	McpOptions,
 	RenameDocumentInput,
 } from "../mcp";
@@ -30,6 +34,14 @@ export type HostedCaller = {
 	user: GitHubUser;
 };
 
+export type PlannerInvocation = {
+	channel: ChannelRecord;
+	repository: HostedRepository;
+	session: AuthenticatedSession;
+	instruction: string;
+	checkout?: string;
+};
+
 export type ImplementationPersistence = { lease(): Lease };
 export type HostedCallbacks = {
 	archiveChannel?: (channelId: string, now: Date) => Promise<ChannelArchiveResult>;
@@ -38,6 +50,7 @@ export type HostedCallbacks = {
 	serializeDocument?: <T>(channelId: string, action: () => Promise<T>) => Promise<T>;
 	onChannelRenamed?: (channel: ChannelRecord) => void;
 	onDocumentPersisted?: (target: Plan.DocumentTarget) => void;
+	invokePlanner?: (input: PlannerInvocation) => Promise<InvokePlannerError | undefined>;
 };
 
 const BEARER = new RegExp("^Bearer ([A-Za-z0-9._~+/-]+=*)$", "i");
@@ -255,6 +268,54 @@ export function hosted(
 	}
 
 	return {
+		invoke: auth.config.local && callbacks.invokePlanner
+			? {
+				async invoke(caller, input) {
+					let located = await locatedChannel(caller, input.id);
+					if (!located) return { kind: "refused", code: "document-unavailable" };
+					if (
+						located === "forbidden"
+						|| (!located.repository.permissions.push && !located.repository.permissions.admin)
+					) {
+						return { kind: "refused", code: "repository-forbidden" };
+					}
+					let { channel, repository } = located;
+					if (callbacks.isChannelDeleting?.(channel.id)) {
+						return {
+							kind: "refused",
+							code: "document-unavailable",
+						};
+					}
+					if (channel.archivedAt) return { kind: "refused", code: "document-archived" };
+					let session = await auth.sessions.forUser(caller.user.id);
+					if (!session) return { kind: "refused", code: "planner-owner-unavailable" };
+					let checkout = input.checkout === undefined
+						? undefined
+						: await verifiedCheckout(repository, [], input.checkout);
+					if (input.checkout !== undefined && !checkout) {
+						return { kind: "refused", code: "checkout-unverified" };
+					}
+					let code = await callbacks.invokePlanner!({
+						channel,
+						repository,
+						session,
+						instruction: input.instruction,
+						checkout,
+					});
+					if (code) return { kind: "refused", code };
+					return {
+						kind: "invoked",
+						document: {
+							...summary(channel),
+							url: new URL(
+								documentPath(channel.repositoryOwner, channel.repositoryName, channel.slug),
+								auth.config.origin,
+							).href,
+						},
+					};
+				},
+			}
+			: undefined,
 		async caller(request) {
 			let match = request.headers.get("authorization")?.match(BEARER);
 			if (!match) return undefined;
