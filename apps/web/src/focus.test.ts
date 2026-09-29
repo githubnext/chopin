@@ -40,13 +40,6 @@ const OUTLINE_SUPPRESSION_UTILITY =
 	/\b(?:outline-none|outline-0|outline-hidden|outline-transparent|outline-(?!offset-)[^\s"'`}\]]+\/0\b)/;
 const FOCUS_TOKEN_OVERRIDE = /--focus-ring-(?:color|width|offset)\s*:/;
 
-/**
- * The code block's language listbox takes focus only to hold the keyboard's
- * position (aria-activedescendant); its highlighted row is the indicator. The
- * block's header draws control focus inside itself because the box clips it.
- */
-const EXEMPT_STYLES = new Set(["packages/editor/src/styles.css"]);
-
 /** Files whose markup matches, reported by path so a failure names the offender. */
 function offenders(files: string[], pattern: RegExp): string[] {
 	return files
@@ -64,8 +57,7 @@ describe("focus", () => {
 
 	it("leaves no component suppressing the outline it is meant to show", () => {
 		expect(offenders(COMPONENTS, OUTLINE_SUPPRESSION_UTILITY)).toEqual([]);
-		expect(offenders(STYLES, OUTLINE_SUPPRESSION).filter(file => !EXEMPT_STYLES.has(file)))
-			.toEqual([]);
+		expect(offenders(STYLES, OUTLINE_SUPPRESSION)).toEqual([]);
 	});
 
 	it("keeps one focus dialect rather than three", () => {
@@ -73,7 +65,7 @@ describe("focus", () => {
 	});
 
 	it("keeps focus geometry in the theme", () => {
-		expect(offenders(STYLES, FOCUS_OUTLINE).filter(file => !EXEMPT_STYLES.has(file))).toEqual([]);
+		expect(offenders(STYLES, FOCUS_OUTLINE)).toEqual([]);
 		expect(offenders([...STYLES, ...COMPONENTS], FOCUS_TOKEN_OVERRIDE)).toEqual([]);
 	});
 });

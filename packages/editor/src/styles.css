@@ -1599,11 +1599,6 @@
 	background: var(--color-inset);
 }
 
-/* The box clips its corners, so focus is drawn inside each control. */
-.plan-content .plan-code-chrome :focus-visible {
-	outline-offset: calc(-1 * var(--focus-ring-width));
-}
-
 .plan-content .plan-code-toggle[aria-expanded="true"] {
 	background: var(--color-brand-wash);
 	color: var(--color-brand);
@@ -1951,9 +1946,4 @@
 	overflow: hidden;
 	white-space: nowrap;
 	text-overflow: ellipsis;
-}
-
-/* The highlighted option is the keyboard's position; the panel needs no ring. */
-.plan-language-menu[role="listbox"]:focus-visible {
-	outline: none;
 }

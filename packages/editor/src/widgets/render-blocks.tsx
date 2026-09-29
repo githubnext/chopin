@@ -317,6 +317,8 @@ function Preview(
 					// Chrome, not content: keep it out of the editable tree.
 					contentEditable={false}
 					className="plan-code-chrome flex items-center justify-between gap-2"
+					// The block clips its corners, so controls draw focus inside themselves.
+					data-focus-boundary=""
 				>
 					<div className="flex min-w-0 items-center">
 						{named && <Language block={block} editor={editor} disabled={disabled} />}
