@@ -113,8 +113,10 @@ external implementation runs are durable.
   model-backed research request supplies its GitHub App token and Copilot
   entitlement. The database stores only a token-free owner reference and durable
   context.
-- **Planner tools are repository-fixed.** The hosted runtime has no shell,
-  checkout, host filesystem, skills, plugins, or arbitrary GitHub access.
+- **Planner tools are repository-fixed by default.** The hosted runtime has no shell,
+  checkout, host filesystem, skills, plugins, or arbitrary GitHub access. Local-only
+  `ATOMIC_PLANNER=full` with a verified checkout deliberately enables the operator's
+  Atomic tools and resources, including shell and filesystem access.
 - **Repository node IDs are authoritative.** Owner and repository names resolve
   GitHub requests but never replace the stored node identity.
 - **Persistence should precede publication.** Do not acknowledge or broadcast a

@@ -162,7 +162,7 @@ export function read(model: Model, definition: Definition): Drafts {
 /** Whether a question has enough of an answer to submit. */
 export function answered(question: Item, draft: Draft | undefined): boolean {
 	if (!draft) return false;
-	if (draft.mode === "custom") return !!draft.custom.trim();
+	if (draft.mode === "custom") return question.verbatim || !!draft.custom.trim();
 	if (question.multiple) return question.options.some(option => draft.options[option.id]);
 	return question.options.some(option => option.id === draft.choice);
 }

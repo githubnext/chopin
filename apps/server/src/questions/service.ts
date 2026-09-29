@@ -52,8 +52,8 @@ export type { StoredOpen } from "./store";
  * a document the agent will rewrite around. Identity is minted once, here,
  * before anything references it.
  */
-export function identify(raw: unknown): Definition {
-	let definition = Question.normalize(raw);
+export function identify(raw: unknown, options?: { verbatim?: boolean }): Definition {
+	let definition = Question.normalize(raw, options);
 	return {
 		questions: definition.questions.map(question => ({
 			...question,
@@ -103,7 +103,9 @@ export async function ask(
 	definition: Definition,
 	placement?: AskPlacement,
 	created?: () => void,
+	signal?: AbortSignal,
 ): Promise<Ended[]> {
+	if (signal?.aborted) return [];
 	if (Service.implementationActive(plan)) throw new Error("implementation is active");
 	if (definition.questions.length === 0) {
 		Question.reject("A questionnaire needs at least one question");
@@ -165,7 +167,23 @@ export async function ask(
 		created?.();
 	});
 
-	return Promise.all(asked.map(item => item.waiting));
+	let failed = Promise.withResolvers<never>();
+	let withdrawing: Promise<unknown> | undefined;
+	let abort = () => {
+		withdrawing ??= Promise.all(
+			asked.map(item => withdraw(plan, server, roomId, item.id, "chopin")),
+		);
+		void withdrawing.catch(failed.reject);
+	};
+	signal?.addEventListener("abort", abort, { once: true });
+	if (signal?.aborted) abort();
+	try {
+		let ended = await Promise.race([Promise.all(asked.map(item => item.waiting)), failed.promise]);
+		await withdrawing;
+		return ended;
+	} finally {
+		signal?.removeEventListener("abort", abort);
+	}
 }
 
 /** Validate every placement before registering records or document nodes. */
@@ -525,57 +543,51 @@ export async function cancel(
 	msg: Request<Wire.Cancel.Ask>,
 ): Promise<void> {
 	if (Service.implementationActive(plan)) return fail(ws, msg.rid, "implementation is active");
-	let claimed = Store.claimCancel(plan.questions, msg.id, ws.data.handle);
-	if (!claimed.ok) {
-		return reply(ws, msg.rid, { kind: "question:cancel", ts: 0, id: msg.id, ...claimed });
-	}
-	let mutationError: unknown;
-	let finish: (() => Store.Ended) | undefined;
-	await Service.exclusive(plan, async () => {
+	let result = await withdraw(plan, server, roomId, msg.id, ws.data.handle);
+	reply(ws, msg.rid, { kind: "question:cancel", ts: 0, id: msg.id, ...result });
+}
+
+/** Withdraw input on behalf of a member or the Planner, after its durable commit. */
+export async function withdraw(
+	plan: Plan,
+	server: Server<SocketData>,
+	roomId: string,
+	id: string,
+	resolver: string,
+): Promise<Store.CancelRefusal | { ok: true; resolver: string }> {
+	return Service.exclusive(plan, async () => {
+		let claimed = Store.claimCancel(plan.questions, id, resolver);
+		if (!claimed.ok) return claimed;
 		let mutation: room.Mutation | undefined;
 		try {
-			mutation = room.removeQuestionnaire(plan.document, msg.id);
+			mutation = room.removeQuestionnaire(plan.document, id);
 		} catch (err) {
-			mutationError = err;
-			return;
+			console.error("[questions] could not remove the node:", err);
+			Store.rollback(plan.questions, claimed.claim);
+			return { ok: false, reason: "resolving" };
 		}
-		let record = plan.records.get(msg.id);
-		if (record) {
-			plan.records.set(msg.id, { ...record, status: "cancelled", resolver: ws.data.handle });
+		let record = plan.records.get(id);
+		if (record) plan.records.set(id, { ...record, status: "cancelled", resolver });
+		let finish = Store.stage(plan.questions, claimed.claim);
+		try {
+			if (mutation) await Service.publish(plan, server, roomId, mutation);
+			else await Service.persistExclusive(plan);
+		} catch (err) {
+			plan.questions.closed.delete(id);
+			plan.questions.open.set(id, claimed.claim.entry);
+			Store.rollback(plan.questions, claimed.claim);
+			if (record) plan.records.set(id, record);
+			throw err;
 		}
-		finish = Store.stage(plan.questions, claimed.claim);
-		if (mutation) await Service.publish(plan, server, roomId, mutation);
-		else await Service.persistExclusive(plan);
-	});
-	if (mutationError) {
-		// The questionnaire stays open and answerable, which is a state every
-		// client already renders. Saying "resolving" is honest: the attempt is
-		// over, and trying again is the right move.
-		console.error("[questions] could not remove the node:", mutationError);
-		Store.rollback(plan.questions, claimed.claim);
-		return reply(ws, msg.rid, {
-			kind: "question:cancel",
+		finish();
+		broadcast(server, roomId, {
+			kind: "question:resolved",
 			ts: 0,
-			id: msg.id,
-			ok: false,
-			reason: "resolving",
+			id,
+			status: "cancelled",
+			resolver,
 		});
-	}
-	finish!();
-
-	reply(ws, msg.rid, {
-		kind: "question:cancel",
-		ts: 0,
-		id: msg.id,
-		ok: true,
-		resolver: ws.data.handle,
-	});
-	broadcast(server, roomId, {
-		kind: "question:resolved",
-		ts: 0,
-		id: msg.id,
-		status: "cancelled",
-		resolver: ws.data.handle,
+		return { ok: true, resolver };
 	});
 }
 

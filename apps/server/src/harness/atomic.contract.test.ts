@@ -405,7 +405,14 @@ describe("atomic host isolation and model resolution", () => {
 		let project = join(root, "project");
 		let previous = { home: process.env.HOME, cwd: process.cwd() };
 		try {
-			for (let base of [join(home, ".atomic", "agent"), join(home, ".pi", "agent"), project]) {
+			for (
+				let base of [
+					join(home, ".atomic", "agent"),
+					join(home, ".pi", "agent"),
+					join(home, ".agents"),
+					project,
+				]
+			) {
 				for (let name of ["extensions", "skills/marker", "prompts"]) {
 					await mkdir(join(base, name), { recursive: true });
 				}

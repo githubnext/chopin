@@ -45,9 +45,15 @@ function exact(value: Record<string, unknown>, keys: string[], name: string): vo
 	}
 }
 
-function text(value: unknown, name: string, max: number, optional = false): string {
+function text(
+	value: unknown,
+	name: string,
+	max: number,
+	optional = false,
+	verbatim = false,
+): string {
 	if (typeof value !== "string") fail(`${name} must be text`);
-	let result = value.trim();
+	let result = verbatim ? value : value.trim();
 	if (!optional && !result) fail(`${name} is required`);
 	if (result.length > max) fail(`${name} exceeds ${max} characters`);
 	return result;
@@ -62,7 +68,7 @@ function text(value: unknown, name: string, max: number, optional = false): stri
  *
  * @throws {QuestionError}
  */
-export function normalize(raw: unknown): Definition {
+export function normalize(raw: unknown, { verbatim = false } = {}): Definition {
 	let args = record(raw, "Question tool input");
 	exact(args, ["questions"], "Question tool input");
 
@@ -77,7 +83,7 @@ export function normalize(raw: unknown): Definition {
 		let raw = record(source, `Question ${index + 1}`);
 		exact(raw, ["header", "question", "options", "multiple"], `Question ${index + 1}`);
 
-		if (!Array.isArray(raw.options) || raw.options.length === 0) {
+		if (!Array.isArray(raw.options) || (!verbatim && raw.options.length === 0)) {
 			fail(`Question ${index + 1} requires at least one option`);
 		}
 		if (raw.options.length > limits.MAX_OPTIONS) {
@@ -96,12 +102,15 @@ export function normalize(raw: unknown): Definition {
 					option.label,
 					`Question ${index + 1} option ${position + 1} label`,
 					limits.MAX_LABEL,
+					verbatim,
+					verbatim,
 				),
 				description: text(
 					option.description,
 					`Question ${index + 1} option ${position + 1} description`,
 					limits.MAX_DESCRIPTION,
 					true,
+					verbatim,
 				),
 			};
 		});
@@ -111,10 +120,23 @@ export function normalize(raw: unknown): Definition {
 
 		return {
 			id: `q${index}`,
-			header: text(raw.header, `Question ${index + 1} header`, limits.MAX_HEADER),
-			question: text(raw.question, `Question ${index + 1}`, limits.MAX_QUESTION),
+			header: text(
+				raw.header,
+				`Question ${index + 1} header`,
+				limits.MAX_HEADER,
+				verbatim,
+				verbatim,
+			),
+			question: text(
+				raw.question,
+				`Question ${index + 1}`,
+				limits.MAX_QUESTION,
+				verbatim,
+				verbatim,
+			),
 			options,
 			multiple: raw.multiple,
+			...(verbatim ? { verbatim: true as const } : {}),
 		};
 	});
 

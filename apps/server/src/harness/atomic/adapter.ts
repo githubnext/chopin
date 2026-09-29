@@ -1,13 +1,9 @@
 /**
  * Chopin's Atomic `HarnessV1` adapter.
  *
- * Embeds Atomic in-process through its headless SDK. Each harness session owns
- * one Atomic `AgentSession` with every shipped builtin package off, no Atomic
- * coding tools, an inert resource loader, and in-memory session, settings, and
- * credential stores. The model is offered only the host tools `HarnessAgent`
- * passes for the turn, plus a terminating result tool on structured turns. The
- * tool set is checked before every prompt and before every model request, and a
- * mismatch fails the turn.
+ * Sessions are isolated by default: only Chopin host tools, no host resources,
+ * and a checked per-turn tool boundary. A registered local full Planner uses
+ * its verified checkout and Atomic resources instead, with Chopin as HostInput.
  */
 
 import { HarnessCapabilityUnsupportedError } from "@ai-sdk/harness";
@@ -17,13 +13,15 @@ import {
 	DefaultResourceLoader,
 	FileAuthStorageBackend,
 	getAgentConfigPaths,
+	getAgentDir,
 	ModelRuntime,
 	SessionManager,
 	SettingsManager,
 } from "@bastani/atomic";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fullPlanner } from "./full";
 
 import type {
 	HarnessV1,
@@ -92,6 +90,7 @@ export type AtomicSettings = {
 	model?: string;
 	/** Providers registered by code rather than discovered from the host. */
 	providers?: Record<string, ProviderConfig>;
+	fullPlanner?: boolean;
 };
 
 export class ToolBoundaryError extends Error {
@@ -107,6 +106,7 @@ export type TurnPolicy = {
 	structured: boolean;
 	systemPrompt: string;
 	result?: { value: unknown };
+	full?: boolean;
 };
 
 /**
@@ -132,11 +132,16 @@ export function atomicTurnExtension(policy: TurnPolicy): ExtensionFactory {
 				};
 			},
 		});
-		atomic.on("before_agent_start", () => {
-			atomic.setActiveTools(activeNames(policy));
-			return { systemPrompt: policy.systemPrompt };
+		atomic.on("before_agent_start", event => {
+			if (!policy.full) atomic.setActiveTools(activeNames(policy));
+			return {
+				systemPrompt: policy.full
+					? `${event.systemPrompt}\n\n${policy.systemPrompt}`
+					: policy.systemPrompt,
+			};
 		});
 		atomic.on("tool_call", event => {
+			if (policy.full && event.toolName !== ATOMIC_RESULT_TOOL_NAME) return;
 			if (activeNames(policy).includes(event.toolName)) return;
 			return { block: true, reason: `${event.toolName} is not available in this turn.` };
 		});
@@ -314,9 +319,11 @@ export function createAtomicAdapter(
 				throw unsupported("resuming an in-memory session");
 			}
 			let directory: string | undefined;
+			let full = settings.fullPlanner ? fullPlanner(startOptions.sessionId) : undefined;
 			let sessionManager: SessionManager | undefined;
 			let settingsManager = SettingsManager.inMemory(SETTINGS);
 			let policy: TurnPolicy = {
+				full: !!full,
 				hostNames: [],
 				structured: false,
 				systemPrompt: ATOMIC_DEFAULT_SYSTEM_PROMPT,
@@ -367,7 +374,7 @@ export function createAtomicAdapter(
 				if (!run) return;
 				if (event.type === "turn_start") {
 					let offered = session.agent.state.tools.map(tool => tool.name);
-					if (!sameNames(offered, activeNames(policy))) {
+					if (!full && !sameNames(offered, activeNames(policy))) {
 						run.failure ??= new ToolBoundaryError(
 							`Atomic offered unexpected tools: ${offered.join(", ") || "none"}.`,
 						);
@@ -427,37 +434,52 @@ export function createAtomicAdapter(
 				policy.hostNames = hostNames;
 				policy.structured = false;
 				if (!live) {
-					directory ??= await mkdtemp(join(tmpdir(), "chopin-atomic-planner-"));
-					sessionManager ??= SessionManager.inMemory(directory);
+					if (!full) directory ??= await mkdtemp(join(tmpdir(), "chopin-atomic-planner-"));
+					let cwd = full?.cwd ?? directory!;
+					let agentDir = full ? getAgentDir() : directory!;
+					if (full) {
+						let file = join(agentDir, "settings.json");
+						let saved = await readFile(file, "utf8").catch(error => {
+							if (error.code === "ENOENT") return "{}";
+							throw error;
+						});
+						settingsManager = SettingsManager.inMemory({ ...JSON.parse(saved), ...SETTINGS });
+					}
+					sessionManager ??= SessionManager.inMemory(cwd);
 					let loader = new DefaultResourceLoader({
-						cwd: directory,
-						agentDir: directory,
+						cwd,
+						agentDir,
 						settingsManager,
-						noExtensions: true,
-						noSkills: true,
-						noPromptTemplates: true,
-						noThemes: true,
-						noContextFiles: true,
-						systemPrompt: ATOMIC_DEFAULT_SYSTEM_PROMPT,
-						appendSystemPrompt: [],
+						...(full ? {} : {
+							noExtensions: true,
+							noSkills: true,
+							noPromptTemplates: true,
+							noThemes: true,
+							noContextFiles: true,
+							systemPrompt: ATOMIC_DEFAULT_SYSTEM_PROMPT,
+							appendSystemPrompt: [],
+						}),
 						extensionFactories: [atomicTurnExtension(policy)],
 					});
 					await loader.reload();
 					let created = await createAgentSession({
-						cwd: directory,
-						agentDir: directory,
+						cwd,
+						agentDir,
 						modelRuntime: models,
 						model,
 						fallbackModels: [],
 						sessionManager,
 						settingsManager,
 						resourceLoader: loader,
-						builtins: BUILTINS_OFF,
-						tools: [...hostNames, ATOMIC_RESULT_TOOL_NAME],
+						builtins: full ? undefined : BUILTINS_OFF,
+						tools: full ? undefined : [...hostNames, ATOMIC_RESULT_TOOL_NAME],
+						extensionBindings: full ? { humanInput: full.humanInput } : undefined,
 						customTools: turn.tools.map(hostTool),
 					});
 					let session = created.session;
-					let leak = hostLeak(session, created.extensionsResult.extensions.length, hostNames);
+					let leak = full
+						? undefined
+						: hostLeak(session, created.extensionsResult.extensions.length, hostNames);
 					if (leak || closed) {
 						try {
 							await session.dispose();
@@ -525,9 +547,10 @@ export function createAtomicAdapter(
 					let text = promptText(turn.prompt);
 					let agent = await prepare(turn);
 					let structured = turn.responseFormat?.type === "json";
-					let expected = structured
-						? [...policy.hostNames, ATOMIC_RESULT_TOOL_NAME]
+					let names = full
+						? agent.getActiveToolNames().filter(name => name !== ATOMIC_RESULT_TOOL_NAME)
 						: policy.hostNames;
+					let expected = structured ? [...names, ATOMIC_RESULT_TOOL_NAME] : names;
 					agent.setActiveToolsByName(expected);
 					if (!sameNames(agent.getActiveToolNames(), expected)) {
 						throw new ToolBoundaryError(
@@ -561,7 +584,7 @@ export function createAtomicAdapter(
 						try {
 							if (!run.stopped) {
 								run.emit({ type: "stream-start", modelId: agent.model?.id });
-								await agent.prompt(text, { expandPromptTemplates: false });
+								await agent.prompt(text, { expandPromptTemplates: !!full });
 							}
 							if (run.failure) throw run.failure;
 							if (run.stopped) return;

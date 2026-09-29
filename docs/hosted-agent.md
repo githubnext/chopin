@@ -3,8 +3,8 @@
 Chopin's Copilot-backed document agent is currently named Planner. It can
 inspect one selected GitHub repository, co-author the shared document, ask the
 participants structured questions, and anchor decisions to prose. For documents
-used as plans, it can also draft an implementation graph. It does not implement
-code or change GitHub.
+used as plans, it can also draft an implementation graph. By default it does not
+implement code or change GitHub; the local full Atomic mode below changes its tool boundary.
 
 The product role is document co-authoring. The current prompt and tool vocabulary
 remain optimized for planning and may structure another document type as a plan;
@@ -15,8 +15,8 @@ from a code-owned map, defaulting to `copilot-sdk`, a host-process adapter over
 `@github/copilot-sdk`. `pi`, over `@ai-sdk/harness-pi`, and `atomic`, which
 embeds Atomic's headless SDK (`@bastani/atomic`) in the server process, are
 further reviewed adapters. Both require an explicit `HARNESS_AUTH`. The
-harness owns the agent loop and model; Chopin owns every tool the Planner can
-call. See [Self-hosting](self-hosting.md) for `HARNESS`/`HARNESS_AUTH`
+harness owns the agent loop and model; by default Chopin owns every tool the Planner
+can call. See [Self-hosting](self-hosting.md) for `HARNESS`/`HARNESS_AUTH`
 selection and adapter trust.
 
 ## Ownership
@@ -44,7 +44,7 @@ ownership generation.
 
 ## Runtime isolation
 
-Every harness receives only Chopin's host-executed tools: document, question,
+By default every harness receives only Chopin's host-executed tools: document, question,
 relationship, implementation-graph, repository, and GitHub tools, each bound to
 the channel's repository through `toolsContext`. No harness built-in is active
 for the Planner. The default `copilot-sdk` adapter additionally runs the shared
@@ -53,7 +53,7 @@ owner's token when created and has no client-level service token or
 logged-in-user fallback. That detail is specific to the Copilot SDK adapter,
 not a property every harness in `HARNESS` shares.
 
-The Planner has no:
+The isolated Planner has no:
 
 - checkout, shell, or host filesystem;
 - skills, plugins, or configuration discovery;
@@ -65,8 +65,8 @@ Under `HARNESS=pi`, Chopin patches `@ai-sdk/harness-pi` 1.0.128 so Pi does not
 load `AGENTS.md` or `CLAUDE.md` context files from the host filesystem. See
 [Self-hosting](self-hosting.md#choose-and-trust-a-harness).
 
-Under `HARNESS=atomic`, each harness session owns one in-process Atomic
-`AgentSession`. It is built with every shipped Atomic package disabled
+Under `HARNESS=atomic` without a verified full-mode checkout, each harness session
+owns one in-process Atomic `AgentSession`. It is built with every shipped Atomic package disabled
 (workflows, subagents, MCP, web access, and Intercom). It has no Atomic coding
 tools, and its resource loader discovers no extensions, skills, prompt
 templates, themes, or context files. Its working and configuration directory is
@@ -97,15 +97,69 @@ REST tools construct owner and repository coordinates on the server, bound
 response sizes and line ranges, reject path escape, and post-filter code search
 by GitHub repository node ID.
 
-The Planner does not see a user's local checkout, current branch, working tree,
+The isolated Planner does not see a user's local checkout, current branch, working tree,
 or uncommitted changes. A coding agent must compare the repository context
 returned by Chopin with its checkout before claiming work. The server validates
 the shape of creation provenance but does not resolve its branch and commit
 against GitHub or independently inspect the coding agent's checkout.
 
+## Full Atomic Planner in local mode
+
+`ATOMIC_PLANNER=full` is an explicit trust change, accepted only with
+`AUTH_MODE=local` and `HARNESS=atomic`. Other combinations and unrecognized
+nonempty values fail startup. Both `HARNESS_AUTH=auto` and `ai-gateway` work.
+This gives the Planner shell and filesystem access **as the local operator**,
+not a sandbox confined to a repository. Use it only on a trusted single-operator,
+loopback-only instance; never expose that instance through a proxy or tunnel.
+
+Set `ATOMIC_PLANNER_CHECKOUTS` to absolute checkout paths separated by the
+platform path delimiter (`:` on Unix, `;` on Windows). Before each Planner
+session, Chopin checks candidate paths with Git and compares `origin`'s
+owner/repository to the channel repository, case-insensitively. HTTPS,
+`ssh://`, and scp-style remotes are accepted. Remote host spellings are ignored
+because SSH aliases are common; this verifies repository coordinates, not the
+authenticity of a remote host. A per-invocation candidate takes precedence over
+the configured list. No verified checkout means the same isolated session as
+before, with no Atomic resources or HostInput binding.
+
+With a verified checkout, it becomes the session's working directory. Atomic's
+workflows, subagents, MCP, web access, Intercom, and default coding tools run
+alongside Chopin's document tools. The normal Atomic agent directory (including
+`ATOMIC_CODING_AGENT_DIR` or the legacy `PI_CODING_AGENT_DIR` override) supplies
+extensions, skills, prompt templates, context files, and a read-only copy of its
+settings. Chopin appends its Planner instructions to Atomic's assembled prompt.
+Session, settings, and model credentials remain in memory; Atomic's own enabled
+tools, extensions, MCP servers, and workflow storage can perform local writes.
+Background summary and research workers still use isolated sessions.
+
+Chopin implements Atomic's `HostInput`, bound through
+`extensionBindings.humanInput`; it does not intercept tools. `ask_user_question`,
+extension dialogs, and workflow-stage input become ordinary shared Decisions:
+
+- Questionnaires retain question and option order, multi-selection, and custom
+  text; answers return their Atomic question indices and answer kinds, including
+  a selected option's preview.
+- Confirm uses Yes/No; only choosing Yes approves. Select returns only a supplied
+  choice. Input and editor use free-text cards; hints and initial editor text
+  appear verbatim in the prompt. Explicitly submitted empty text is an answer,
+  not cancellation.
+- Workflow cards show `Workflow run: <id>; stage: <id>` below their question.
+  A request is appended as one adjacent batch at the end of the document.
+- An abort withdraws still-open cards, removes their document nodes, and records
+  cancellation by `@chopin` in Decisions. Member cancellations retain any answers
+  already given in that batch. Late submissions cannot approve withdrawn input.
+- `ATOMIC_PLANNER_INPUT_TIMEOUT_MS` optionally limits each request (a positive
+  integer in milliseconds, at most 2147483647). Unset waits indefinitely. Expiry
+  withdraws pending cards and returns no answer; confirm returns false.
+
+Chopin's question size limits still apply: oversized dialogs fail rather than
+silently truncating text. Atomic keeps durable workflow approvals pending on
+withdrawal; Chopin does not automatically resume workflows or replay interrupted
+turns after a restart. A new Atomic session must explicitly resume a saved run.
+
 ## Permission checks
 
-Before each custom or MCP tool executes, callbacks recheck:
+Before each Chopin host tool or its repository-bound GitHub MCP tool executes, callbacks recheck:
 
 - current instance admission;
 - the owner process session and its user;
@@ -117,6 +171,8 @@ Before each custom or MCP tool executes, callbacks recheck:
 Permission is decided before execution. A refusal therefore produces no normal
 tool start or completion event; the Chat service renders permission
 denials explicitly so the boundary remains visible.
+These checks do not mediate full mode's Atomic coding tools, operator extensions,
+or operator-configured MCP servers; those use the operator's local authority.
 
 A harness session is bound to one credential revision. Before an eight-hour
 GitHub App token refresh, Chopin aborts and discards every Planner session

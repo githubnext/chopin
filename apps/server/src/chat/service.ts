@@ -406,6 +406,7 @@ export type Room = {
 	activeOwner?: () => Promise<ActiveOwnerBinding | undefined>;
 	persist: () => Promise<void>;
 	openPlannerSession?: typeof import("../harness/session")["openPlannerSession"];
+	checkout?: string;
 	ownerAvailable?: () => Promise<void>;
 	jobs?: JobService;
 	references?: ReferenceService;
@@ -893,11 +894,15 @@ async function repositorySession(
 		let result = await open(binding, {
 			room: documentRoom(context),
 			repository,
-			instructions: plannerInstructions(
-				`${repository.owner}/${repository.name}`,
-				bootstrap,
-			),
+			instructions: checkout =>
+				plannerInstructions(
+					`${repository.owner}/${repository.name}`,
+					bootstrap,
+					checkout,
+				),
 			model: context.config.model,
+			atomicPlanner: context.config.atomicPlanner,
+			checkout: context.checkout,
 		});
 		if (!result.ok) throw new Error(`Planner session unavailable (${result.error.kind})`);
 		opened = result.value;

@@ -40,6 +40,19 @@ describe("normalize", () => {
 		expect(definition.questions[0]!.header).toBe("Rollout");
 		expect(definition.questions[0]!.options[1]!.description).toBe("");
 	});
+	it("supports verbatim host dialogs without choices, including empty text replies", () => {
+		let definition = normalize(tool({ header: "  Title  ", options: [] }), { verbatim: true });
+		expect(definition.questions[0]!.header).toBe("  Title  ");
+		let drafts = read(create(definition), definition);
+		expect(drafts.q0!.mode).toBe("custom");
+		for (let custom of ["", "  ", "  answer\n"]) {
+			drafts.q0!.custom = custom;
+			expect(derive(definition, drafts)).toEqual({
+				ok: true,
+				answers: [{ question: "How should we deploy?", custom }],
+			});
+		}
+	});
 
 	it("rejects unknown fields instead of ignoring them", () => {
 		expect(() => normalize({ questions: [], extra: 1 })).toThrow(QuestionError);

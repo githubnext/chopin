@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import { openPlannerSession } from "./session";
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { fullPlanner } from "./atomic/full";
+import { plannerInstructions } from "../agent/planner";
 
 import type { ActiveOwnerBinding } from "../agent/active-owner";
 import type { PlannerSessionDependencies } from "./session";
@@ -109,5 +114,53 @@ describe("openPlannerSession", () => {
 		let result = await openPlannerSession(owner, channel, deps);
 		expect(result).toMatchObject({ ok: false, error: { kind: "Timeout" } });
 		expect(destroyed).toEqual({ sandbox: 1, session: 0, unregistered: 1 });
+	});
+	it("registers full Planner input only for verified checkouts and releases it with the session", async () => {
+		let cwd = await mkdtemp(join(tmpdir(), "chopin-planner-session-"));
+		try {
+			for (
+				let args of [["init", "--quiet"], ["remote", "add", "origin", "workgit:owner/repo.git"]]
+			) {
+				expect(
+					await Bun.spawn(["git", "-C", cwd, ...args], { stdout: "pipe", stderr: "pipe" }).exited,
+				).toBe(0);
+			}
+			for (let checkouts of [[cwd], []]) {
+				let { owner, channel, deps } = fixture();
+				let sessionId = "";
+				let instructions = "";
+				deps.agent = {
+					createSession: async (options: { sessionId: string }) => {
+						sessionId = options.sessionId;
+						return { destroy: async () => {} };
+					},
+					stream: async (call: { options: { instructions: string } }) => {
+						instructions = call.options.instructions;
+					},
+				} as never;
+				let opened = await openPlannerSession(owner, {
+					...channel,
+					atomicPlanner: { checkouts },
+					instructions: checkout => plannerInstructions("owner/repo", "BOOTSTRAP", checkout),
+				}, deps);
+				expect(opened.ok).toBe(true);
+				if (!opened.ok) throw new Error("Planner unavailable");
+				await opened.value.stream("prompt", new AbortController().signal);
+				expect(instructions).toContain("BOOTSTRAP");
+				if (checkouts.length) {
+					expect(fullPlanner(sessionId)?.cwd).toBe(cwd);
+					expect(fullPlanner(sessionId)?.humanInput.questionnaire).toBeFunction();
+					expect(instructions).toContain(cwd);
+					expect(instructions).not.toContain("You have no shell");
+				} else {
+					expect(fullPlanner(sessionId)).toBeUndefined();
+					expect(instructions).toContain("You have no shell");
+				}
+				await opened.value.destroy();
+				expect(fullPlanner(sessionId)).toBeUndefined();
+			}
+		} finally {
+			await rm(cwd, { recursive: true, force: true });
+		}
 	});
 });

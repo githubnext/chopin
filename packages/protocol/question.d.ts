@@ -48,6 +48,8 @@ export declare namespace Question {
 		question: string;
 		options: Option[];
 		multiple: boolean;
+		/** Host dialogs preserve raw text, including an explicitly submitted empty answer. */
+		verbatim?: true;
 	};
 
 	export type Definition = {
