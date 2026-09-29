@@ -4,6 +4,7 @@ import { usePointerCapabilities } from "@chopin/editor/pointer";
 
 import { App } from "./app";
 import { isDesignAuditRoute } from "./design-audit/route";
+import { useFocusInput } from "./focus-input";
 import { useMotionInput } from "./motion-input";
 import { useVisualViewport } from "./viewport";
 
@@ -19,6 +20,7 @@ let root = document.getElementById("root");
 if (!root) throw new Error("missing #root");
 
 function Root() {
+	useFocusInput();
 	useMotionInput();
 	usePointerCapabilities();
 	useVisualViewport();

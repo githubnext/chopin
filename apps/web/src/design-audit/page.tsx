@@ -1,3 +1,4 @@
+import { useFocusInput } from "../focus-input";
 import { AuditFrame, AuditSection } from "./frame";
 import { Adoption } from "./adoption";
 import { AuthoredContent } from "./authored-content";
@@ -14,6 +15,7 @@ import "./surfaces.css";
 import "./styles.css";
 
 export function DesignAuditPage() {
+	useFocusInput();
 	return (
 		<AuditFrame groups={AUDIT_INVENTORY}>
 			<AuditSection id="foundations" title="Foundations">
