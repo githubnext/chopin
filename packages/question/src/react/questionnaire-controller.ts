@@ -156,8 +156,11 @@ export class QuestionnaireController {
 			}
 			if (patch.custom !== undefined) {
 				let value = doc.api.str([question, "custom"]);
-				value.del(0, value.length());
-				value.ins(0, patch.custom as string);
+				let text = patch.custom as string;
+				// json-joy 17 binary-encodes a zero-length delete so that the receiver decodes
+				// garbage that swallows the following insert, and it throws on an empty insert.
+				if (value.length() > 0) value.del(0, value.length());
+				if (text) value.ins(0, text);
 			}
 		});
 	};

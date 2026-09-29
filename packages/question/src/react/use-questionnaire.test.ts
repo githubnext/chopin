@@ -1,9 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
-import { create, decision, normalize } from "../index";
+import { apply, create, decision, normalize, read } from "../index";
 import { DEFINITION } from "./use-questionnaire.test-fixtures";
 import { FocusReporter, QuestionnaireController } from "./use-questionnaire";
 
+import type { Definition } from "../index";
 import type { Transport } from "./use-questionnaire";
 
 const QUESTIONNAIRE = normalize({
@@ -48,6 +49,12 @@ function transport(definition = DEFINITION) {
 			}
 			if (kind === "question:edit") {
 				edits++;
+				// The server's own gate: an edit counts only if its wire bytes apply.
+				let outcome = apply(model, definition, payload.patch as number[]);
+				if (!outcome.ok) {
+					return { open: true, accepted: false, revision: edits, message: outcome.message };
+				}
+				model = outcome.model;
 				return { open: true, accepted: true, applied: false, revision: edits };
 			}
 			if (kind === "question:submit") {
@@ -81,7 +88,20 @@ function transport(definition = DEFINITION) {
 		submitRevisions: () => submitRevisions,
 		presence: () => presence,
 		frames: () => frames,
+		drafts: () => read(model, definition),
 	};
+}
+
+async function open(definition: Definition) {
+	let bridge = transport(definition);
+	let controller = new QuestionnaireController(bridge.value, "question-1", definition, true);
+	let off = controller.subscribe(() => {});
+	await new Promise(resolve => setTimeout(resolve, 0));
+	return { bridge, controller, off };
+}
+
+function settle() {
+	return new Promise(resolve => setTimeout(resolve, 0));
 }
 
 describe("QuestionnaireController", () => {
@@ -250,5 +270,79 @@ describe("FocusReporter", () => {
 		reporter.set("c");
 		reporter.online(true);
 		expect(sent.slice(3)).toEqual(["b", "c"]);
+	});
+});
+
+describe("custom answer edits", () => {
+	let text = "  pasted in one input,\nwith spacing kept  ";
+
+	for (let verbatim of [false, true]) {
+		it(`stores one input into an empty custom answer (verbatim: ${verbatim})`, async () => {
+			let definition = normalize({
+				questions: [{
+					header: "Scope",
+					question: "Which areas?",
+					multiple: true,
+					options: [{ label: "Server", description: "" }, { label: "Web", description: "" }],
+				}],
+			}, { verbatim });
+			let { bridge, controller, off } = await open(definition);
+
+			controller.change("q0", { mode: "custom" });
+			await settle();
+			controller.change("q0", { custom: text });
+			await settle();
+
+			expect(controller.getSnapshot().error).toBeUndefined();
+			expect(bridge.drafts().q0).toMatchObject({ mode: "custom", custom: text });
+			off();
+		});
+	}
+
+	it("stores a paste into a host dialog that has only a custom answer", async () => {
+		let definition = normalize({
+			questions: [{ header: "Editor", question: "Edit the notes", multiple: false, options: [] }],
+		}, { verbatim: true });
+		let { bridge, controller, off } = await open(definition);
+		let long = "notes line\n".repeat(500);
+
+		controller.change("q0", { custom: long });
+		await settle();
+
+		expect(bridge.drafts().q0?.custom).toBe(long);
+		off();
+	});
+
+	it("replaces a non-empty custom answer", async () => {
+		let { bridge, controller, off } = await open(DEFINITION);
+
+		controller.change("q0", { mode: "custom" });
+		await settle();
+		controller.change("q0", { custom: "first" });
+		await settle();
+		expect(bridge.drafts().q0?.custom).toBe("first");
+		controller.change("q0", { custom: text });
+		await settle();
+
+		expect(bridge.drafts().q0?.custom).toBe(text);
+		off();
+	});
+
+	it("submits a verbatim answer that was typed and then cleared", async () => {
+		let definition = normalize({
+			questions: [{ header: "Input", question: "Name?", multiple: false, options: [] }],
+		}, { verbatim: true });
+		let { bridge, controller, off } = await open(definition);
+
+		controller.change("q0", { custom: "typed" });
+		await settle();
+		controller.change("q0", { custom: "" });
+		await settle();
+		expect(bridge.drafts().q0?.custom).toBe("");
+
+		controller.submit();
+		await new Promise(resolve => setTimeout(resolve, 10));
+		expect(bridge.submits()).toBe(1);
+		off();
 	});
 });
