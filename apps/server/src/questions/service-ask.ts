@@ -22,9 +22,15 @@ import type { Ended } from "./store";
 import type { Record } from "./records";
 
 import { announce } from "./card-notifications";
-import { withdraw } from "./service-cancel";
+import { expire, withdraw } from "./service-cancel";
 import { type AskPlacement, validatePlacement } from "./service-definition";
 
+/**
+ * Ask each decision independently; register its record before publishing its node.
+ *
+ * An abort withdraws the cards still open. After `expiresInMs` without an answer
+ * they expire instead, and stay in the document marked as such.
+ */
 export async function ask(
 	plan: Plan,
 	server: Server<SocketData>,
@@ -33,6 +39,7 @@ export async function ask(
 	placement?: AskPlacement,
 	created?: () => void,
 	signal?: AbortSignal,
+	expiresInMs?: number,
 ): Promise<Ended[]> {
 	if (signal?.aborted) return [];
 	if (Service.implementationActive(plan)) throw new Error("implementation is active");
@@ -190,20 +197,29 @@ export async function ask(
 	});
 
 	let failed = Promise.withResolvers<never>();
-	let withdrawing: Promise<unknown> | undefined;
-	let abort = () => {
-		withdrawing ??= Promise.all(
-			asked.map(item => withdraw(plan, server, roomId, item.id, "chopin")),
+	let closing: Promise<unknown> | undefined;
+	let close = (status: "cancelled" | "expired") => {
+		closing ??= Promise.all(
+			asked.map(item =>
+				status === "expired"
+					? expire(plan, server, roomId, item.id)
+					: withdraw(plan, server, roomId, item.id, "chopin")
+			),
 		);
-		void withdrawing.catch(failed.reject);
+		void closing.catch(failed.reject);
 	};
+	let abort = () => close("cancelled");
 	signal?.addEventListener("abort", abort, { once: true });
 	if (signal?.aborted) abort();
+	let timer = expiresInMs === undefined
+		? undefined
+		: setTimeout(() => close("expired"), expiresInMs);
 	try {
 		let ended = await Promise.race([Promise.all(asked.map(item => item.waiting)), failed.promise]);
-		await withdrawing;
+		await closing;
 		return ended;
 	} finally {
+		clearTimeout(timer);
 		signal?.removeEventListener("abort", abort);
 	}
 }

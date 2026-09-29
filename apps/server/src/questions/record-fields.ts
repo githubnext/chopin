@@ -1,4 +1,11 @@
-export const STATUSES = new Set(["open", "answered", "reopened", "discarded", "cancelled"]);
+export const STATUSES = new Set([
+	"open",
+	"answered",
+	"reopened",
+	"discarded",
+	"cancelled",
+	"expired",
+]);
 export const ORIGINS = new Set(["chat", "planner", "human"]);
 export const MAX_UNIX_SECONDS = 253_402_300_799;
 
@@ -28,4 +35,7 @@ export function unix(value: unknown): number {
 	return value as number;
 }
 
-export type Known = { questions: Map<string, { multiple: boolean }>; options: Map<string, string> };
+export type Known = {
+	questions: Map<string, { multiple: boolean; verbatim: boolean }>;
+	options: Map<string, string>;
+};

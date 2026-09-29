@@ -37,7 +37,8 @@ function fakeExtensionApi(policy: TurnPolicy) {
 		get active() {
 			return active;
 		},
-		start: () => handlers.get("before_agent_start")!({ type: "before_agent_start" }),
+		start: (systemPrompt?: string) =>
+			handlers.get("before_agent_start")!({ type: "before_agent_start", systemPrompt }),
 		call: (toolName: string) => handlers.get("tool_call")!({ type: "tool_call", toolName }),
 	};
 }
@@ -51,7 +52,7 @@ test("registers one result tool that terminates the turn and records its argumen
 	expect(policy.result).toEqual({ value: { answer: "yes" } });
 });
 
-test("applies the turn's tools and exact system prompt when the agent starts", () => {
+test("applies a worker turn's tools and exact system prompt when the agent starts", () => {
 	let policy: TurnPolicy = { hostNames: ["first_host"], structured: true, systemPrompt: "Plan." };
 	let atomic = fakeExtensionApi(policy);
 	expect(atomic.start()).toEqual({ systemPrompt: "Plan." });
@@ -63,12 +64,29 @@ test("applies the turn's tools and exact system prompt when the agent starts", (
 	expect(atomic.active).toEqual(["first_host"]);
 });
 
-test("blocks the result tool off structured turns and anything outside the turn", () => {
+test("blocks, for a worker, the result tool off structured turns and anything outside the turn", () => {
 	let policy: TurnPolicy = { hostNames: ["first_host"], structured: false, systemPrompt: "S." };
 	let atomic = fakeExtensionApi(policy);
 	expect(atomic.call(ATOMIC_RESULT_TOOL_NAME)).toMatchObject({ block: true });
 	expect(atomic.call("bash")).toMatchObject({ block: true });
 	expect(atomic.call("first_host")).toBeUndefined();
+	policy.structured = true;
+	expect(atomic.call(ATOMIC_RESULT_TOOL_NAME)).toBeUndefined();
+});
+
+test("a Planner turn keeps Atomic's tools and prompt but still refuses the result tool on plain turns", () => {
+	let policy: TurnPolicy = {
+		full: true,
+		hostNames: ["first_host"],
+		structured: false,
+		systemPrompt: "Plan.",
+	};
+	let atomic = fakeExtensionApi(policy);
+	expect(atomic.start("Atomic.")).toEqual({ systemPrompt: "Atomic.\n\nPlan." });
+	expect(atomic.active).toEqual([]);
+	expect(atomic.call("bash")).toBeUndefined();
+	expect(atomic.call("first_host")).toBeUndefined();
+	expect(atomic.call(ATOMIC_RESULT_TOOL_NAME)).toMatchObject({ block: true });
 	policy.structured = true;
 	expect(atomic.call(ATOMIC_RESULT_TOOL_NAME)).toBeUndefined();
 });
@@ -118,7 +136,7 @@ test("resolves provider/model exactly and never substitutes a default", () => {
 		.toThrow("HARNESS_AUTH ai-gateway allows only vercel-ai-gateway models, not anthropic/claude");
 });
 
-test("reports every way a built session exceeds the turn", () => {
+test("reports every way a built worker session exceeds the turn", () => {
 	function session(options: {
 		tools?: string[];
 		agentsFiles?: number;

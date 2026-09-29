@@ -117,6 +117,7 @@ export function QuestionnaireCard(
 		wire,
 	}: QuestionnaireCardProps,
 ) {
+	if (value.status === "expired") return <Expired value={value} />;
 	let resolved = answers(value);
 	let current = meta?.status ?? cardStatus(value);
 	let pointing = { places, onQuestionEnter, onQuestionLeave, onQuestionSelect };
@@ -511,6 +512,20 @@ export function carriedByMarkers(
 		&& value.questions.every(question =>
 			question.answer !== undefined && (places[question.id] ?? 0) > 0
 		);
+}
+
+/** Host input nobody answered in time: settled like an answer, with nothing to submit. */
+function Expired({ value }: { value: Questionnaire }) {
+	return (
+		<SidecarCard
+			data-plan-sidecar-questionnaire={value.id}
+			label={value.questions.length === 1 ? "Decision" : "Question"}
+			padded={false}
+			settled
+		>
+			<QuestionView definition={definition(value)} disabled drafts={{}} status="expired" />
+		</SidecarCard>
+	);
 }
 
 function InlineQuestionnaire({ value }: { value: Questionnaire }) {

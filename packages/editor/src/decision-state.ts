@@ -18,7 +18,7 @@ export function countUnanswered(
 	return entries.reduce(
 		(total, entry) => {
 			let status = cardMeta?.get(entry.id)?.status ?? cardStatus(entry.value);
-			if (status === "decided" || status === "discarded") return total;
+			if (status === "decided" || status === "discarded" || status === "expired") return total;
 			if (status === "reopened") return total + entry.value.questions.length;
 			return total
 				+ entry.value.questions.filter(question => question.answer === undefined).length;

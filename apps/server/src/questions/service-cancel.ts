@@ -46,11 +46,13 @@ export async function cancel(
 	if (!acknowledged) reply(ws, msg.rid, { kind: "question:cancel", ts: 0, id: msg.id, ...result });
 }
 
+type Closed = { status: "cancelled" | "expired"; resolver: string; at?: number };
+
 /**
  * Withdraw input on behalf of a member or the Planner, after its durable commit.
  * `acknowledge` runs first once the withdrawal is committed, before it is announced.
  */
-export async function withdraw(
+export function withdraw(
 	plan: Plan,
 	server: Server<SocketData>,
 	roomId: string,
@@ -58,7 +60,51 @@ export async function withdraw(
 	resolver: string,
 	acknowledge?: () => void,
 ): Promise<Store.CancelRefusal | { ok: true; resolver: string }> {
-	let claimed = Store.claimCancel(plan.questions, id, resolver);
+	return closeUnanswered(
+		plan,
+		server,
+		roomId,
+		id,
+		{ status: "cancelled", resolver },
+		document => room.removeQuestionnaire(document, id),
+		acknowledge,
+	);
+}
+
+/**
+ * Expire host input nobody answered in time, after its durable commit.
+ *
+ * Unlike a withdrawal the card stays in the document, marked expired, so the
+ * room can still see what was asked and that nobody answered it.
+ */
+export function expire(
+	plan: Plan,
+	server: Server<SocketData>,
+	roomId: string,
+	id: string,
+): Promise<Store.CancelRefusal | { ok: true; resolver: string }> {
+	let at = Math.floor(Date.now() / 1_000);
+	return closeUnanswered(
+		plan,
+		server,
+		roomId,
+		id,
+		{ status: "expired", resolver: "chopin", at },
+		document => room.projectExpiry(document, id, new Date(at * 1_000).toISOString()),
+	);
+}
+
+async function closeUnanswered(
+	plan: Plan,
+	server: Server<SocketData>,
+	roomId: string,
+	id: string,
+	closed: Closed,
+	project: (document: Parameters<typeof room.removeQuestionnaire>[0]) => room.Mutation | undefined,
+	acknowledge?: () => void,
+): Promise<Store.CancelRefusal | { ok: true; resolver: string }> {
+	let { status, resolver } = closed;
+	let claimed = Store.claimCancel(plan.questions, id, resolver, status);
 	if (!claimed.ok) return claimed;
 	let mutationError: unknown;
 	let failure: unknown;
@@ -79,7 +125,7 @@ export async function withdraw(
 			try {
 				let mutation: room.Mutation | undefined;
 				try {
-					mutation = room.removeQuestionnaire(document, id);
+					mutation = project(document);
 				} catch (err) {
 					mutationError = err;
 					return;
@@ -87,7 +133,7 @@ export async function withdraw(
 				let record = plan.records.get(id);
 				let records = new Map(plan.records);
 				if (record) {
-					records.set(id, { ...record, status: "cancelled", resolver });
+					records.set(id, { ...record, ...closed });
 				}
 				let questions: Store.Questions = {
 					open: new Map(plan.questions.open),
@@ -99,7 +145,7 @@ export async function withdraw(
 					document,
 					questions,
 					records,
-					pendingCardActions: record
+					pendingCardActions: record && status === "cancelled"
 						? pending(plan, record, {
 							kind: "discarded",
 							id,
@@ -132,17 +178,19 @@ export async function withdraw(
 					kind: "question:resolved",
 					ts: 0,
 					id,
-					status: "cancelled",
+					status,
 					resolver,
 				}),
 			() => announce(plan, server, roomId, id),
-			() =>
-				emit(plan, {
-					kind: "discarded",
-					id,
-					...(record?.threadId ? { threadId: record.threadId } : {}),
-					actor: resolver,
-				}),
+			...(status === "cancelled"
+				? [() =>
+					emit(plan, {
+						kind: "discarded",
+						id,
+						...(record?.threadId ? { threadId: record.threadId } : {}),
+						actor: resolver,
+					})]
+				: []),
 		]
 	) {
 		try {

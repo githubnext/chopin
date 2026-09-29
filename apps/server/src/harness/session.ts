@@ -3,15 +3,14 @@ import { createJustBashNetworkSandboxSession } from "@ai-sdk/sandbox-just-bash";
 import { headingPlannerAgent, plannerAgent, prosePlannerAgent, refinePlannerAgent } from "./agents";
 import { githubTools, type GitHubToolsError, type Result } from "./github-tools";
 import { registerCredential } from "./harnesses";
-import { verifiedCheckout } from "./atomic/checkout";
 import { registerFullPlanner } from "./atomic/full";
 import { createHumanInput } from "./atomic/human-input";
+import { type PlannerWorkspace, plannerWorkspace } from "./atomic/workspace";
 
 import type { HarnessAgent } from "@ai-sdk/harness/agent";
 import type { ActiveOwnerBinding } from "../agent/active-owner";
 import type { HostedRepository } from "../agent/repository";
 import type { DocumentRoom } from "../agent/tools";
-import type { Config } from "../config";
 
 export type OpenError =
 	| GitHubToolsError
@@ -26,10 +25,10 @@ type PlannerAgent = typeof plannerAgent;
 export type PlannerChannel = {
 	room: DocumentRoom;
 	repository: HostedRepository;
-	instructions: string | ((checkout?: string) => string);
+	instructions: string | ((workspace?: PlannerWorkspace) => string);
 	model?: string;
-	atomicPlanner?: Config["atomicPlanner"];
-	checkout?: string;
+	/** `atomic` runs the session as a full Atomic session in the channel's workspace. */
+	harness?: string;
 };
 
 export type PlannerSession = {
@@ -97,21 +96,17 @@ export async function openPlannerSession(
 		let sessionId = crypto.randomUUID();
 		unregister = (deps.registerCredential ?? registerCredential)(sessionId, owner.currentToken);
 		// Background jobs keep the isolated boundary; only a Planner turn may run as a full session.
-		let cwd = channel.atomicPlanner && !job
-			? await verifiedCheckout(
-				channel.repository,
-				channel.atomicPlanner.checkouts,
-				channel.checkout,
-			)
+		let workspace = channel.harness === "atomic" && !job
+			? await plannerWorkspace(channel.room.id, channel.repository)
 			: undefined;
-		if (cwd) {
+		if (workspace) {
 			unregisterFull = registerFullPlanner(sessionId, {
-				cwd,
-				humanInput: createHumanInput(channel.room, channel.atomicPlanner?.inputTimeoutMs),
+				cwd: workspace.cwd,
+				humanInput: createHumanInput(channel.room),
 			});
 		}
 		let instructions = typeof channel.instructions === "function"
-			? channel.instructions(cwd)
+			? channel.instructions(workspace)
 			: channel.instructions;
 		let agent = deps.agent ?? (job?.kind === "heading"
 			? deps.headingAgent ?? headingPlannerAgent

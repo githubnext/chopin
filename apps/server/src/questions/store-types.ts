@@ -9,7 +9,7 @@ export type Collaborator = {
 
 export type Ended =
 	| { status: "answered"; answers: Answer[]; resolver: string }
-	| { status: "cancelled"; resolver: string };
+	| { status: "cancelled" | "expired"; resolver: string };
 
 export type Open = {
 	id: string;

@@ -12,13 +12,14 @@
 import { useEffect, useId, useReducer, useRef, useState } from "react";
 import { CheckIcon, ChevronIcon, DecisionIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 
-import { MAX_LABEL, MAX_SHARED_OPTIONS } from "../limits";
+import { INPUT_EXPIRY_MS, MAX_LABEL, MAX_SHARED_OPTIONS } from "../limits";
 import { answered } from "../draft";
 import { projectSuggestion, reduceSuggestionEditState } from "./project-suggestion";
 import { ResolvedActions } from "./resolved-actions";
 import type { VisibleSuggestion } from "./project-suggestion";
 
 import type { ReactNode } from "react";
+import type { Question } from "@chopin/protocol";
 import type { Draft, Drafts } from "../draft";
 import type { Answer, Definition, Item } from "../schema";
 
@@ -58,7 +59,7 @@ export type QuestionViewProps = {
 	onAddOption?: (question: string, label: string) => Promise<AddOptionResult>;
 	disabled?: boolean;
 	submitting?: boolean;
-	status?: "open" | "answered" | "cancelled" | "discarded";
+	status?: "open" | Question.Status | "discarded";
 	/** Shown instead of controls once the questionnaire has resolved. */
 	answers?: Answer[];
 	resolver?: string;
@@ -559,6 +560,25 @@ function Callout(
 	);
 }
 
+const EXPIRED_NOTE = `Nobody answered within ${
+	INPUT_EXPIRY_MS / 60_000
+} minutes. The Planner will use its best judgement for this decision.`;
+
+/**
+ * Host input whose time ran out. Unlike a cancelled card it stays in the
+ * document, so it keeps what was asked beside the note saying nobody answered.
+ */
+function Expired({ definition }: { definition: Definition }) {
+	return (
+		<div className="space-y-2 px-3 py-2.5">
+			{definition.questions.map(question => (
+				<p key={question.id} className="m-0 text-sm text-text-secondary">{question.question}</p>
+			))}
+			<p className="m-0 text-sm text-text-primary">{EXPIRED_NOTE}</p>
+		</div>
+	);
+}
+
 export function QuestionView(props: QuestionViewProps) {
 	let {
 		definition,
@@ -661,14 +681,17 @@ export function QuestionView(props: QuestionViewProps) {
 		);
 	}
 
-	// A cancelled questionnaire has no answers, so it must be matched on status
-	// alone — falling through would offer an editable form for a dead question.
-	if (status === "cancelled") {
+	// A cancelled or expired questionnaire has no answers, so it must be matched
+	// on status alone — falling through would offer an editable form for a dead
+	// question.
+	if (status === "cancelled" || status === "expired") {
 		return (
 			<div>
 				{single && <DecisionHeading />}
 				{aside}
-				<Cancelled resolver={resolver} />
+				{status === "expired"
+					? <Expired definition={definition} />
+					: <Cancelled resolver={resolver} />}
 			</div>
 		);
 	}

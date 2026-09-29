@@ -98,6 +98,14 @@ describe("decision attention", () => {
 		])).toBe(2);
 	});
 
+	it("never waits on an expired questionnaire", () => {
+		let waiting = entry([undefined]);
+		let expired = { ...waiting, value: { ...waiting.value, status: "expired" as const } };
+		expect(countUnanswered([expired, entry([undefined, undefined])])).toBe(2);
+		expect(firstOpenDecision([expired])).toBeUndefined();
+		expect(firstOpenDecision([waiting])).toBe(waiting);
+	});
+
 	it("forces only a questionnaire-only opening document into Decisions", () => {
 		expect(visibleDecisionView({ phase: "initial", preferred: "plan" }, false, 2)).toBe(
 			"decisions",

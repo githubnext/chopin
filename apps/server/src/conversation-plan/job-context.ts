@@ -154,7 +154,8 @@ export function createJobContexts() {
 					?? [...(byMessage?.values() ?? [])].findLast(item => item.claimantSessionId === owner);
 				return context ? { context, claimantSessionId: owner } : undefined;
 			}
-			return triggered
+			// An MCP instruction without a live login has no session to claim ownership with.
+			return triggered?.claimantSessionId
 				? { context: triggered, claimantSessionId: triggered.claimantSessionId }
 				: undefined;
 		},

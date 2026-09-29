@@ -10,21 +10,24 @@ export function options(definition: unknown, pending: boolean): Known {
 	if (
 		!Array.isArray(source.questions) || source.questions.length === 0
 		|| source.questions.length > limits.MAX_QUESTIONS
+			&& !source.questions.every(question => object(question).verbatim === true)
 	) invalid();
 	let ids = new Map<string, string>();
-	let questions = new Map<string, { multiple: boolean }>();
+	let questions = new Map<string, { multiple: boolean; verbatim: boolean }>();
 	for (let candidate of source.questions) {
 		let question = object(candidate);
 		let id = text(question.id);
 		if (questions.has(id)) invalid();
+		// Host dialogs keep their raw text and counts, so only the Planner's questions are bounded.
+		let verbatim = question.verbatim === true;
 		if (
 			typeof question.multiple !== "boolean"
 			|| !Array.isArray(question.options)
-			|| question.options.length === 0
+			|| question.options.length === 0 && !verbatim
 				&& !(pending && source.questions.length === 1 && question.multiple === false)
-			|| question.options.length > limits.MAX_OPTIONS
+			|| !verbatim && question.options.length > limits.MAX_OPTIONS
 		) invalid();
-		questions.set(id, { multiple: question.multiple as boolean });
+		questions.set(id, { multiple: question.multiple as boolean, verbatim });
 		for (let candidate of question.options) {
 			let option = object(candidate);
 			let optionId = text(option.id);
@@ -53,8 +56,11 @@ export function choices(value: unknown, known: Known): string[] {
 export function answers(value: unknown, known: Known): { [question: string]: string } {
 	let entries = object(value);
 	for (let [id, answer] of Object.entries(entries)) {
-		if (!known.questions.has(id)) invalid();
-		text(answer, limits.MAX_CUSTOM);
+		let question = known.questions.get(id);
+		if (!question) invalid();
+		if (question!.verbatim) {
+			if (typeof answer !== "string") invalid();
+		} else text(answer, limits.MAX_CUSTOM);
 	}
 	return value as { [question: string]: string };
 }

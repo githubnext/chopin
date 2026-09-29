@@ -30,3 +30,6 @@ export const MAX_MODEL_BYTES = 256 * 1024;
 
 /** Longest a tool call id may be, since it identifies the request. */
 export const MAX_CALL_ID = 256;
+
+/** How long host input waits for an answer before its card expires unanswered. */
+export const INPUT_EXPIRY_MS = 30 * 60 * 1_000;

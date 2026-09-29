@@ -18,8 +18,7 @@ async function checkout(name: string, origin: string) {
 	return path;
 }
 
-test("verifies origin owner/name for URL, SSH and alias checkouts, preserving candidate priority", async () => {
-	let paths = [];
+test("verifies origin owner/name for URL, SSH and alias checkouts, and nothing else", async () => {
 	for (
 		let [index, origin] of [
 			"https://github.com/octo-org/score.git",
@@ -29,12 +28,10 @@ test("verifies origin owner/name for URL, SSH and alias checkouts, preserving ca
 		].entries()
 	) {
 		let path = await checkout(String(index), origin);
-		paths.push(path);
-		expect(await verifiedCheckout(repository, [path])).toBe(await realpath(path));
+		expect(await verifiedCheckout(repository, path)).toBe(await realpath(path));
 	}
-	expect(await verifiedCheckout(repository, paths, paths[3])).toBe(paths[3]);
 	let mismatch = await checkout("mismatch", "https://github.com/other/score.git");
-	expect(await verifiedCheckout(repository, [mismatch, paths[1]!], mismatch)).toBe(paths[1]);
-	expect(await verifiedCheckout(repository, [mismatch, root, join(root, "missing")]))
-		.toBeUndefined();
+	for (let path of [mismatch, root, join(root, "missing")]) {
+		expect(await verifiedCheckout(repository, path)).toBeUndefined();
+	}
 });

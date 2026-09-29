@@ -17,6 +17,7 @@
 import { COMPONENTS, DIFF_LANGUAGE, MERMAID_LANGUAGE } from "@chopin/dialect/dialect";
 
 import type { Component } from "@chopin/dialect/dialect";
+import type { PlannerWorkspace } from "../harness/atomic/workspace";
 
 /** Components the agent writes itself. The rest are created for it. */
 const AUTHORABLE = ["Callout", "Tabs", "Tab", "Underline"];
@@ -233,18 +234,28 @@ the plan, use the \`detach_question\` operation rather than deleting the block.`
 export function plannerInstructions(
 	repository: string,
 	bootstrap?: string,
-	checkout?: string,
+	workspace?: PlannerWorkspace,
 ): string {
-	let access = checkout
-		? `The selected repository is ${repository}. Your working directory is the verified local checkout ${checkout}.
-You have the operator's Atomic coding tools, workflows and resources, with shell and filesystem access as the local user.
-Atomic human input, including workflow questions, goes to Chopin Decisions. Chopin's document tools remain fixed to this document.`
-		: `Read before you propose. The selected repository is ${repository}. Use
+	let reading = `Read before you propose. The selected repository is ${repository}. Use
 \`read_repository_file\`, \`list_repository_tree\`, \`search_repository\` and
 \`repository_history\` for its code, and \`list_pull_requests\` and
-\`pull_request_read\` for its pull requests. Every repository tool is fixed to this repository.
-
-You have no shell, checkout, host filesystem, skills or repository instructions,
+\`pull_request_read\` for its pull requests. Every repository tool is fixed to this repository.`;
+	if (!workspace) {
+		let isolated = `You have no shell, checkout, host filesystem, skills or repository instructions,
 and cannot change GitHub. Ground the plan in what those reading tools return.`;
-	return [PROMPT, access, bootstrap].filter(Boolean).join("\n\n");
+		return [PROMPT, reading, isolated, bootstrap].filter(Boolean).join("\n\n");
+	}
+	let place = workspace.checkout
+		? `Your working directory, ${workspace.cwd}, is a local checkout of ${repository}
+verified against its origin. Its branch and working tree may differ from what the
+repository tools read.`
+		: `Your working directory, ${workspace.cwd}, is a scratch directory Chopin created
+empty for this document. It is not a checkout and holds no repository files, so read
+${repository} through the repository tools.`;
+	let full = `This is a full Atomic session: you have the operator's Atomic coding tools, workflows,
+subagents and resources, with shell and filesystem access as the server process's user.
+Atomic human input, including workflow questions, goes to Chopin Decisions. Input nobody
+answers in time expires with no answer; then proceed on your best judgement and say what
+you assumed. Chopin's document tools remain fixed to this document.`;
+	return [PROMPT, reading, place, full, bootstrap].filter(Boolean).join("\n\n");
 }
