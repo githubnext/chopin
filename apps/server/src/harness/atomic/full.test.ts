@@ -64,12 +64,14 @@ afterAll(stub.stop);
 async function run(
 	registered: boolean,
 	prompt = "plain",
-	{ host, checkout = true, worker = false }: {
+	{ host, checkout = true, worker = false, projectPackage = false }: {
 		host?: HostInput;
 		/** False runs the Planner in an empty directory, as a channel without a checkout does. */
 		checkout?: boolean;
 		/** Also run an unregistered worker session on the same harness while the Planner is open. */
 		worker?: boolean;
+		/** Install a local package through the checkout's `.atomic/settings.json`. */
+		projectPackage?: boolean;
 	} = {},
 ) {
 	let root = await mkdtemp(join(tmpdir(), "chopin-atomic-full-"));
@@ -125,6 +127,28 @@ async function run(
 			});
 			expect(await git.exited).toBe(0);
 		}
+		if (projectPackage) {
+			let pkg = join(root, "project-package");
+			await mkdir(join(pkg, "skills", "project-marker"), { recursive: true });
+			await writeFile(
+				join(pkg, "package.json"),
+				JSON.stringify({
+					name: "project-package",
+					type: "module",
+					atomic: { extensions: ["./extension.ts"], skills: ["./skills"] },
+				}),
+			);
+			await writeFile(
+				join(pkg, "extension.ts"),
+				`export default api => api.registerTool({name: "project_tool", label: "Project", description: "Marker", parameters: {type:"object"}, async execute() { return {content:[{type:"text",text:"project"}], details:{}}; }});`,
+			);
+			await writeFile(
+				join(pkg, "skills", "project-marker", "SKILL.md"),
+				"---\nname: project-marker\ndescription: PROJECT-SKILL-MARKER\n---\nProject skill.\n",
+			);
+			await mkdir(join(cwd, ".atomic"), { recursive: true });
+			await writeFile(join(cwd, ".atomic", "settings.json"), JSON.stringify({ packages: [pkg] }));
+		}
 		process.env.ATOMIC_CODING_AGENT_DIR = agentDir;
 		let humanInput: HostInput = host ?? {
 			confirm: async () => false,
@@ -166,7 +190,15 @@ async function run(
 			await result.consumeStream();
 			await result.text;
 			let requests = [...stub.requests];
-			if (!worker) return { cwd, received, requests, workerRequests: [] };
+			if (!worker) {
+				let files = {
+					operator: await Bun.file(join(agentDir, "settings.json")).exists(),
+					project: projectPackage
+						? await Bun.file(join(cwd, ".atomic", "settings.json")).text()
+						: undefined,
+				};
+				return { cwd, received, requests, workerRequests: [], files };
+			}
 			let workerSession = await agent.createSession({ sandboxSession: sandbox });
 			try {
 				stub.requests.length = 0;
@@ -234,6 +266,18 @@ test("a Planner session without a checkout is just as full in its empty working 
 	for (let name of FULL_TOOLS) expect(result.requests[0]!.toolNames).toContain(name);
 	expect(result.requests[0]!.system).toContain(result.cwd);
 	expect(result.requests.at(-1)!.toolResults.join("\n")).toContain(result.cwd);
+});
+
+test("a checkout's project settings add its packages without writing either settings file", async () => {
+	let result = await run(true, "plain", { projectPackage: true });
+	let request = result.requests[0]!;
+	expect(request.toolNames).toContain("project_tool");
+	expect(request.system).toContain("PROJECT-SKILL-MARKER");
+	for (let name of FULL_TOOLS) expect(request.toolNames).toContain(name);
+	expect(result.files!.operator).toBe(false);
+	expect(JSON.parse(result.files!.project!).packages).toHaveLength(1);
+	let plain = await run(true);
+	expect(plain.requests[0]!.toolNames).not.toContain("project_tool");
 });
 
 test("free-text Decisions answers to multi-select and preview questions reach the model", async () => {

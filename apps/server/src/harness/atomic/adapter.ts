@@ -72,6 +72,37 @@ const SETTINGS = {
 	sessionSummary: { enabled: false },
 	cacheWarming: "off" as const,
 };
+
+async function optionalFile(path: string): Promise<string | undefined> {
+	return readFile(path, "utf8").catch(error => {
+		if (error.code === "ENOENT") return undefined;
+		throw error;
+	});
+}
+
+/**
+ * The operator's settings plus the working directory's project settings, held in
+ * memory so the session never writes either file. A verified checkout's
+ * `.atomic/settings.json` can add project packages the way it does for a local
+ * Atomic session; the empty per-channel directory has none.
+ */
+async function fullSettings(agentDir: string, cwd: string): Promise<SettingsManager> {
+	let scopes: Record<"global" | "project", string | undefined> = {
+		global: JSON.stringify({
+			...JSON.parse(await optionalFile(join(agentDir, "settings.json")) ?? "{}"),
+			...SETTINGS,
+		}),
+		project: await optionalFile(join(cwd, ".atomic", "settings.json")),
+	};
+	let manager = SettingsManager.fromStorage({
+		withLock(scope, fn) {
+			let next = fn(scopes[scope]);
+			if (next !== undefined) scopes[scope] = next;
+		},
+	}, { projectTrusted: true });
+	manager.applyOverrides(SETTINGS);
+	return manager;
+}
 const ZERO_USAGE = {
 	inputTokens: {
 		total: undefined,
@@ -438,14 +469,7 @@ export function createAtomicAdapter(
 					if (!full) directory ??= await mkdtemp(join(tmpdir(), "chopin-atomic-planner-"));
 					let cwd = full?.cwd ?? directory!;
 					let agentDir = full ? getAgentDir() : directory!;
-					if (full) {
-						let file = join(agentDir, "settings.json");
-						let saved = await readFile(file, "utf8").catch(error => {
-							if (error.code === "ENOENT") return "{}";
-							throw error;
-						});
-						settingsManager = SettingsManager.inMemory({ ...JSON.parse(saved), ...SETTINGS });
-					}
+					if (full) settingsManager = await fullSettings(agentDir, cwd);
 					sessionManager ??= SessionManager.inMemory(cwd);
 					let loader = new DefaultResourceLoader({
 						cwd,
