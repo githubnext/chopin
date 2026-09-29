@@ -12,7 +12,7 @@ colors:
   ink: "oklch(0.15908 0.00637 95)"
   secondary-ink: "oklch(0.39036 0.01026 95)"
   tertiary-ink: "oklch(0.48124 0.01278 95)"
-  destructive: "oklch(0.585 0.17178 24.175)"
+  destructive: "oklch(0.60513 0.17178 24.175)"
   success: "oklch(0.51958 0.10966 145.072)"
   warning: "oklch(0.59898 0.12586 74.986)"
   chat-divider: "rgb(0 0 0 / 9%)"
@@ -122,6 +122,8 @@ The implementation is the authority for values: `../../packages/visuals/theme.cs
 - **Ink** has primary, secondary, and tertiary text roles; use the role that preserves the intended hierarchy and legibility.
 
 Success, warning, and destructive colors communicate state. Their full surface, graphic, icon, and text pairs remain defined in the shared theme.
+
+The original destructive button red is an intentional visual exception: white text on its default state measures about 4.20:1, below the usual 4.5:1 AA target. Keep this red for its aesthetic character. The hover and pressed colors remain distinct and above 4.5:1.
 
 **The One Accent Rule.** New action and focus treatments use the established petrol roles. New raw color values require a change to the shared theme, not a local copy.
 

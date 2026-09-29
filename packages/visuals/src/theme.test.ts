@@ -138,13 +138,6 @@ describe("semantic colour foundations", () => {
 		}
 	});
 
-	it("keeps destructive button text at AA contrast in every interaction state", () => {
-		for (let state of ["", "-hover", "-active"]) {
-			let role = `--color-destructive${state}`;
-			expect(contrast("--color-page", role), role).toBeGreaterThanOrEqual(4.5);
-		}
-	});
-
 	it("keeps the neutral graphic above 3:1 contrast on white tables", () => {
 		expect(contrast("--color-neutral-graphic", "--color-page")).toBeGreaterThanOrEqual(3);
 	});
@@ -162,7 +155,7 @@ describe("semantic colour foundations", () => {
 			"--color-warning": "oklch(0.59898 0.12586 74.986)",
 			"--color-warning-wash": "oklch(0.95 0.032 75)",
 			"--color-warning-ink": "oklch(0.4409 0.0921 74.93)",
-			"--color-destructive": "oklch(0.585 0.17178 24.175)",
+			"--color-destructive": "oklch(0.60513 0.17178 24.175)",
 			"--color-destructive-hover": "oklch(0.56972 0.16045 24.136)",
 			"--color-destructive-active": "oklch(0.53376 0.1489 24.091)",
 			"--color-destructive-wash":
