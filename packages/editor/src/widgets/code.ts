@@ -241,3 +241,13 @@ function named(line: string): string {
 	if (line.startsWith("+++ b/")) return `+++ ${line.slice("+++ b/".length)}`;
 	return line;
 }
+
+/** The language menu's rows: plain text, then a fence's own unlisted language, then the list. */
+export function languageOptions(language: string): (readonly [string, string])[] {
+	let listed = LANGUAGES.some(([id]) => id === language);
+	return [
+		["", "Plain text"],
+		...(!listed && language ? [[language, language] as const] : []),
+		...LANGUAGES,
+	];
+}

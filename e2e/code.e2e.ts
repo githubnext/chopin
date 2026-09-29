@@ -16,9 +16,15 @@
 import { content, expect, test, written } from "./room";
 import { expectNoHorizontalOverflow } from "./responsive";
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 let MENU = { name: "Insert block" };
+
+/** The language control is a button that opens a listbox. */
+async function chooseLanguage(scope: Locator, from: string, to: string) {
+	await scope.getByRole("button", { name: `Code language: ${from}` }).click();
+	await scope.page().getByRole("option", { name: to, exact: true }).click();
+}
 
 /** A fence with the counts a person or a model actually writes. */
 const PATCH = `\`\`\`diff
@@ -183,7 +189,7 @@ test("naming a fence colours it, and the name reaches the file", async ({ join, 
 	// an uncoloured original is two of the same thing.
 	await expect(content(page).locator("[data-file]")).toHaveCount(0);
 
-	await content(page).getByRole("combobox", { name: "Code language" }).selectOption("typescript");
+	await chooseLanguage(content(page), "Plain text", "TypeScript");
 
 	await expect(content(page).locator("[data-file]")).toBeVisible();
 	await expect.poll(() => colours(page)).toBeGreaterThan(1);
@@ -321,13 +327,13 @@ test("a language chosen by one is a change for everyone", async ({ join, room, s
 
 	await expect(content(bo).locator("[data-file]")).toHaveCount(0);
 
-	await content(ana).getByRole("combobox", { name: "Code language" }).selectOption("typescript");
+	await chooseLanguage(content(ana), "Plain text", "TypeScript");
 
 	// The language is a property of the fence rather than a way of looking at
 	// it, so it travels: the other reader's copy is coloured too, and their
 	// control says what it now is.
-	await expect(content(bo).getByRole("combobox", { name: "Code language" }))
-		.toHaveValue("typescript");
+	await expect(content(bo).getByRole("button", { name: "Code language: TypeScript" }))
+		.toBeVisible();
 	await expect(content(bo).locator("[data-file]")).toBeVisible();
 	await expect.poll(() => colours(bo)).toBeGreaterThan(1);
 

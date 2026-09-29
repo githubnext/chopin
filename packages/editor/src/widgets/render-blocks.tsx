@@ -36,8 +36,10 @@ import {
 import { $isCodeBlockNode, $isMathNode } from "@chopin/dialect";
 
 import { enclosing, remember } from "../collapse";
-import { kindOf, LANGUAGES } from "./code";
+import { kindOf, languageOptions, titleOf } from "./code";
 import { CodeView } from "./code-view";
+import { LanguageMenu } from "./language-menu";
+import { CodeIcon } from "@chopin/icons";
 
 import type { ElementNode, LexicalEditor } from "lexical";
 import type { Kind } from "./code";
@@ -184,21 +186,15 @@ function Language(
 		});
 	}, [editor, block.key]);
 
-	let listed = LANGUAGES.some(([id]) => id === block.language);
+	let options = languageOptions(block.language);
 
-	return (
-		<select
-			aria-label="Code language"
-			value={block.language}
-			disabled={disabled}
-			onChange={event => set(event.currentTarget.value)}
-			className="field-ghost cursor-pointer px-1 text-sm text-text-quaternary"
-		>
-			<option value="">Plain text</option>
-			{!listed && block.language && <option value={block.language}>{block.language}</option>}
-			{LANGUAGES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-		</select>
-	);
+	// A reader cannot change it, so it is a label rather than a disabled control.
+	if (disabled) {
+		let label = options.find(([id]) => id === block.language)?.[1] ?? block.language;
+		return <span className="plan-code-language-label">{label}</span>;
+	}
+
+	return <LanguageMenu onChange={set} options={options} value={block.language} />;
 }
 
 function Toggle({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
@@ -213,9 +209,11 @@ function Toggle({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => v
 			// change arrives asynchronously, after the collapse, and reads
 			// as the reader arrowing in — reopening what they just closed.
 			onMouseDown={event => event.preventDefault()}
-			className="cursor-pointer rounded-sm px-1.5 py-0.5 text-sm text-text-tertiary transition hover:bg-hover hover:text-text-primary"
+			aria-label={collapsed ? "Show source" : "Hide source"}
+			className="plan-code-toggle btn btn-icon btn-ghost"
+			data-tooltip={collapsed ? "Show source" : "Hide source"}
 		>
-			{collapsed ? "Show source" : "Hide source"}
+			<CodeIcon aria-hidden="true" size={14} />
 		</button>
 	);
 }
@@ -318,9 +316,12 @@ function Preview(
 				<div
 					// Chrome, not content: keep it out of the editable tree.
 					contentEditable={false}
-					className="flex items-center justify-between gap-2"
+					className="plan-code-chrome flex items-center justify-between gap-2"
 				>
-					{named ? <Language block={block} editor={editor} disabled={disabled} /> : <span />}
+					<div className="flex min-w-0 items-center">
+						{named && <Language block={block} editor={editor} disabled={disabled} />}
+						{titleOf(block.meta) && <span className="plan-code-title">{titleOf(block.meta)}</span>}
+					</div>
 					{hidable && <Toggle collapsed={collapsed} onToggle={onToggle} />}
 				</div>,
 				chrome,
