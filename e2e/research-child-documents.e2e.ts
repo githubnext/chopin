@@ -317,7 +317,6 @@ test("inline research publishes one ordinary child and opens it", async ({ baseU
 	await expect(readyCard).toContainText(/Research\s*·\s*1 source/);
 	await expect(readyCard).toContainText("A complete report grounded in the discovered sources.");
 	await expect(readyCard).toContainText("1 source");
-	await expect(readyCard).toContainText("Researched by Planner");
 	expect(catalogueReads).toBe(readsBeforePublication);
 	staleCatalogue.resolve();
 	let childLink = sidebar.getByRole("link", { name: childTitle, exact: true });

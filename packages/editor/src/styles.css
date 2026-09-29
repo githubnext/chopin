@@ -98,8 +98,7 @@
 }
 
 /* Stages that lead with a badge give their header more room. */
-[data-stage="failed"] > div > .plan-research-status,
-[data-stage="ready"] > div > .plan-research-status {
+.plan-research-status[data-lead] {
 	margin-block-end: 0.25rem;
 }
 
@@ -116,11 +115,11 @@
 .plan-research-title {
 	font-size: var(--text-sm);
 	font-weight: 600;
-	line-height: 1.4;
+	line-height: var(--text-sm--line-height);
 	color: var(--color-text-primary);
 }
 
-[data-stage="cancelled"] > div > .plan-research-title {
+.plan-research-card[data-stage="cancelled"] .plan-research-title {
 	color: var(--color-text-tertiary);
 }
 
@@ -188,7 +187,7 @@
 	margin: 0;
 	padding-block: 0.125rem;
 	font-size: var(--text-sm);
-	line-height: 1.4;
+	line-height: var(--text-sm--line-height);
 	color: var(--color-destructive-ink);
 }
 
