@@ -28,6 +28,21 @@ reviewed again. A local disable comment is not an exception: the detector runs w
 `--no-inline-ignores`. Never add a broad ignore or create a one-use token just to
 silence a finding.
 
+## Contrast and visual hierarchy
+
+AA contrast is preferred for primary content and controls, not required for every
+text role. Maggie has approved the original lighter timestamps and secondary chat
+metadata, muted queued/loading and tool-status text, original pierre-light code
+and diff colours, and original destructive red. Preserve those choices; do not
+promote them to darker roles just to make a contrast audit pass.
+
+Keep browser contrast findings visible. Tests may acknowledge only the approved
+roles and states, with a reason and measured evidence. Unexpected findings and
+changes outside that scope must still fail. Do not disable contrast checking for
+an entire page or hide accepted findings behind a claim of universal AA compliance.
+New exceptions need an explicit design decision. This policy does not relax token,
+fluid typography, keyboard, focus, or layout enforcement.
+
 ## What the record check proves
 
 The check parses YAML, JSON, and CSS. The theme owns token values; explicit
