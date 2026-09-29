@@ -19,6 +19,10 @@ export function Swap(
 	]);
 	let keys = useRef(0);
 	let latest = useRef(id);
+	let timers = useRef(new Set<ReturnType<typeof setTimeout>>());
+	// Removal timers outlive re-renders; clearing them on a dependency change
+	// would strand a leaving layer in the DOM.
+	useEffect(() => () => timers.current.forEach(clearTimeout), []);
 	useEffect(() => {
 		if (latest.current === id) {
 			setLayers(current =>
@@ -29,15 +33,16 @@ export function Swap(
 			return;
 		}
 		latest.current = id;
+		let key = ++keys.current;
 		setLayers(current => [
 			...current.filter(layer => !layer.leaving).map(layer => ({ ...layer, leaving: true })),
-			{ id, initial: false, key: ++keys.current, leaving: false, node: children },
+			{ id, initial: false, key, leaving: false, node: children },
 		]);
-		let timer = setTimeout(
-			() => setLayers(current => current.filter(layer => !layer.leaving)),
-			SWAP_MS,
-		);
-		return () => clearTimeout(timer);
+		let timer = setTimeout(() => {
+			timers.current.delete(timer);
+			setLayers(current => current.filter(layer => !layer.leaving || layer.key > key));
+		}, SWAP_MS);
+		timers.current.add(timer);
 	}, [id, children]);
 	return (
 		<span className={`plan-research-swap${className ? ` ${className}` : ""}`}>
@@ -45,6 +50,7 @@ export function Swap(
 				<span
 					aria-hidden={layer.leaving || undefined}
 					data-initial={layer.initial ? "" : undefined}
+					inert={layer.leaving}
 					data-leaving={layer.leaving ? "" : undefined}
 					key={layer.key}
 				>

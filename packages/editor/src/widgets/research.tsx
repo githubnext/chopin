@@ -21,7 +21,7 @@ import { widgets$ } from "../widget-options";
 import { $isResearchNode } from "@chopin/dialect";
 import { CloseIcon, SparkleIcon, WarningIcon } from "@chopin/icons";
 
-import type { FormEvent, ReactNode } from "react";
+import type { FormEvent, MouseEvent, ReactNode } from "react";
 import type { Research } from "@chopin/protocol";
 import type { ResearchNode } from "@chopin/dialect";
 import type { LexicalEditor, LexicalNode, RangeSelection } from "lexical";
@@ -275,17 +275,24 @@ export function ResearchCard(
 		: actions.cancel && onCancel
 		? "cancel"
 		: undefined;
-	let removable = stage !== "ready" && actions.remove && !!onRemove;
+	let removable = !ready && actions.remove && !!onRemove;
 	let at = TRACK.indexOf(stage);
 	let shownAt = useLast(at >= 0 ? at : undefined);
 	let found = request.sources.length;
-	let message = request.error ?? actionError;
-	let shownMessage = useLast(message);
+	// The user's latest action result leads; the request's own failure follows.
+	let messages = [actionError, request.error].filter((text): text is string => !!text);
+	let message = messages.length > 0 ? messages : undefined;
+	let shownMessages = useLast(message);
+	let settle = (event: MouseEvent<HTMLElement>, run?: () => void) => {
+		let card = event.currentTarget.closest("article");
+		run?.();
+		card?.focus({ preventScroll: true });
+	};
 	let shownSummary = useLast(ready?.summary);
 	let shownFound = useLast(found > 0 ? found : undefined);
-	let attention: ReactNode = shownMessage !== undefined && (
-		<div className="plan-research-callout" role="status">
-			<p>{shownMessage}</p>
+	let attention: ReactNode = shownMessages !== undefined && (
+		<div aria-hidden="true" className="plan-research-callout">
+			{shownMessages.map(text => <p key={text}>{text}</p>)}
 		</div>
 	);
 	return (
@@ -295,8 +302,13 @@ export function ResearchCard(
 				data-research-ready={ready ? "" : undefined}
 				data-stage={stage}
 				label="Research"
+				tabIndex={-1}
 			>
-				<div className="plan-research-status">
+				<span className="sr-only" role="status">{message?.join(" ")}</span>
+				<div
+					className="plan-research-status"
+					data-lead={stage === "failed" || stage === "ready" ? "" : undefined}
+				>
 					<Swap
 						className="plan-research-indicator"
 						id={stage === "ready" || stage === "failed" ? stage : "dot"}
@@ -317,7 +329,7 @@ export function ResearchCard(
 									className="btn btn-icon btn-ghost"
 									data-tooltip="Remove"
 									disabled={busy || !canEdit}
-									onClick={onRemove}
+									onClick={event => settle(event, onRemove)}
 									type="button"
 								>
 									<CloseIcon aria-hidden="true" size={14} />
@@ -341,7 +353,7 @@ export function ResearchCard(
 									aria-label={footer === "retry" ? "Retry research" : "Cancel research"}
 									className="btn btn-sm btn-outline"
 									disabled={busy || !canEdit}
-									onClick={footer === "retry" ? onRetry : onCancel}
+									onClick={event => settle(event, footer === "retry" ? onRetry : onCancel)}
 									type="button"
 								>
 									{footer === "retry" ? "Retry" : "Cancel"}

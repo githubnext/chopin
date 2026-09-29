@@ -165,9 +165,9 @@ export function attachmentBlock<Block>(
 export function ResearchDraftRecovery({ unresolved }: { unresolved: boolean }) {
 	return unresolved
 		? (
-			<p role="alert" className="plan-research-error">
-				This research draft cannot yet be placed at its saved position.
-			</p>
+			<div className="plan-research-callout" role="alert">
+				<p>This research draft cannot yet be placed at its saved position.</p>
+			</div>
 		)
 		: null;
 }
