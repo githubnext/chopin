@@ -122,6 +122,13 @@ authenticity of a remote host. A per-invocation candidate takes precedence over
 the configured list. No verified checkout means the same isolated session as
 before, with no Atomic resources or HostInput binding.
 
+A local coding agent can supply that candidate with
+[`invoke_planner`](local-agent-mcp.md#hand-an-instruction-to-the-local-planner).
+The tool requires a live browser login matching its MCP caller, posts a durable
+member instruction, and returns the document URL without waiting for the turn.
+An explicitly supplied but unverified checkout is refused before posting, rather
+than falling back to another configured path.
+
 With a verified checkout, it becomes the session's working directory. Atomic's
 workflows, subagents, MCP, web access, Intercom, and default coding tools run
 alongside Chopin's document tools. The normal Atomic agent directory (including

@@ -267,6 +267,16 @@ export class Sessions {
 			: undefined;
 	}
 
+	/** A local MCP handoff borrows an existing login, never the caller's bearer. */
+	async forUser(userId: string): Promise<AuthenticatedSession | undefined> {
+		for (let current of [...this.#sessions.values()].toReversed()) {
+			if (current.session.userId !== userId) continue;
+			let resolved = await this.resolve(current.session.id);
+			if (resolved) return resolved;
+		}
+		return undefined;
+	}
+
 	/** Read current credentials without triggering rotation from inside an active agent callback. */
 	async inspect(id: string): Promise<AuthenticatedSession | undefined> {
 		if (this.#refreshes.has(id) || this.#revocations.has(id)) return undefined;

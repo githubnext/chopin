@@ -31,6 +31,8 @@ export type Room = {
 	closing?: Promise<void>;
 	/** Pending eviction, cancelled if somebody comes back. */
 	eviction?: ReturnType<typeof setTimeout>;
+	/** Local MCP work keeps a memberless room alive until its turn and queue finish. */
+	holds?: number;
 };
 
 const rooms = new Map<string, Room>();
@@ -45,6 +47,22 @@ function open(id: string): Room {
 
 export function get(id: string): Room | undefined {
 	return rooms.get(id);
+}
+
+export function hold(id: string): { room: Room; release: () => void } {
+	let room = open(id);
+	if (room.eviction) clearTimeout(room.eviction);
+	room.eviction = undefined;
+	room.holds = (room.holds ?? 0) + 1;
+	let released = false;
+	return {
+		room,
+		release() {
+			if (released) return;
+			released = true;
+			room.holds = room.holds! - 1;
+		},
+	};
 }
 
 export function join(ws: Socket): Room {

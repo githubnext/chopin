@@ -30,6 +30,26 @@ function grant(accessToken: string, refreshToken = "ghr_refresh"): GitHubTokenGr
 }
 
 describe("hosted login sessions", () => {
+	it("finds the most recent live process-local session for only the requested user", async () => {
+		let storage = new MemoryStorage();
+		let now = new Date("2026-08-13T12:00:00.000Z");
+		for (let id of ["U_first", "U_second"]) {
+			await storage.users.put({ id, login: id, avatarUrl: "", now });
+		}
+		let sessions = new Sessions(storage, false, () => now);
+		let first = await sessions.issue("U_first", grant("first-token"));
+		now = new Date(now.getTime() + 1_000);
+		let second = await sessions.issue("U_first", grant("newer-token"));
+		await sessions.issue("U_second", grant("other-user-token"));
+		expect((await sessions.forUser("U_first"))?.session.id).toBe(second.id);
+		expect(await sessions.forUser("U_unknown")).toBeUndefined();
+		expect(await new Sessions(storage, false, () => now).forUser("U_first")).toBeUndefined();
+		await sessions.revoke(request(pair(second.cookie)));
+		expect((await sessions.forUser("U_first"))?.session.id).toBe(first.id);
+		now = new Date(first.expiresAt);
+		expect(await sessions.forUser("U_first")).toBeUndefined();
+	});
+
 	it("stores only registry metadata while credentials remain process-local", async () => {
 		let storage = new MemoryStorage();
 		let now = new Date("2026-08-13T12:00:00.000Z");
