@@ -30,6 +30,7 @@ import { instruction } from "@chopin/protocol/address";
 
 import { annotatedText, compose, referenceCatalog, remember } from "./address";
 import { broadcast, fail, reply, tell } from "../wire";
+import { MAX_MESSAGE_BYTES } from "./limits";
 
 import type { Server } from "bun";
 import type { TextStreamPart, ToolSet } from "ai";
@@ -46,7 +47,6 @@ import type { Socket, SocketData } from "../wire";
 /** Beyond this the queue is a backlog nobody is going to read. */
 const MAX_QUEUE = 20;
 const MAX_PENDING_SENDS = 20;
-const MAX_MESSAGE_BYTES = 64 * 1024;
 const MAX_SESSION_REFERENCES = 50;
 const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const FINGERPRINT = /^sha256:[0-9a-f]{64}$/;
@@ -82,6 +82,9 @@ type Waiting = Wire.Waiting & {
 	sessionId?: string;
 	/** Verified member identity, retained only for a queued composer message. */
 	userId?: string;
+	posted?: boolean;
+	checkout?: string;
+	invokedBy?: string;
 };
 
 export type ActiveMemberRequest = {
@@ -407,6 +410,7 @@ export type Room = {
 	persist: () => Promise<void>;
 	openPlannerSession?: typeof import("../harness/session")["openPlannerSession"];
 	checkout?: string;
+	invokedBy?: string;
 	ownerAvailable?: () => Promise<void>;
 	jobs?: JobService;
 	references?: ReferenceService;
@@ -437,6 +441,77 @@ export function send(context: Room, ws: Socket, msg: Request<Wire.Send>): Promis
 	let accepted = context.chat.sending.then(process, process);
 	let completed = accepted.finally(() => context.chat.pendingSends--);
 	context.chat.sending = completed.then(() => {}, () => {});
+	return completed;
+}
+
+/** Accept a local MCP instruction without waiting for its Planner turn. */
+export async function invoke(
+	context: Room,
+	user: { id: string; login: string },
+	text: string,
+): Promise<"planner-unavailable" | "planner-owner-unavailable" | "planner-queue-full" | undefined> {
+	let { chat, server, room } = context;
+	if (chat.pendingSends >= MAX_PENDING_SENDS) return "planner-queue-full";
+	chat.pendingSends++;
+	let post = async () => {
+		if (!context.config.agent || chat.closed) return "planner-unavailable" as const;
+		try {
+			let { owner } = await resolveOwner(
+				context.auth,
+				context.repository,
+				room,
+				context.claimantSessionId,
+			);
+			if (owner.user.id !== user.id) return "planner-owner-unavailable" as const;
+		} catch {
+			return "planner-owner-unavailable" as const;
+		}
+		if (chat.closed) return "planner-unavailable" as const;
+		if (chat.busy && chat.waiting.length >= MAX_QUEUE) return "planner-queue-full" as const;
+		let entry: Wire.Entry = {
+			id: ulid(),
+			author: { kind: "member", handle: user.login },
+			text,
+			ts: now(),
+		};
+		chat.entries.push(entry);
+		try {
+			await context.persist();
+		} catch (error) {
+			chat.entries = chat.entries.filter(value => value !== entry);
+			throw error;
+		}
+		if (chat.closed) return "planner-unavailable" as const;
+		announce(server, room, entry);
+		if (chat.busy) {
+			chat.waiting.push({
+				id: entry.id,
+				handle: user.login,
+				text,
+				message: true,
+				posted: true,
+				sessionId: context.claimantSessionId,
+				userId: user.id,
+				checkout: context.checkout,
+				invokedBy: user.id,
+			});
+			queued(chat, server, room);
+		} else {
+			startRun(
+				{ ...context, invokedBy: user.id },
+				user.login,
+				text,
+				undefined,
+				context.claimantSessionId,
+				false,
+				{ entryId: entry.id, userId: user.id },
+			);
+		}
+		return undefined;
+	};
+	let accepted = chat.sending.then(post, post);
+	let completed = accepted.finally(() => chat.pendingSends--);
+	chat.sending = completed.then(() => {}, () => {});
 	return completed;
 }
 
@@ -851,6 +926,9 @@ async function repositorySession(
 		context.room,
 		claimantSessionId,
 	);
+	if (context.invokedBy && owner.user.id !== context.invokedBy) {
+		throw new Error("The local Planner owner changed. Invoke the Planner again after signing in.");
+	}
 	if (context.ownerAvailable) void context.ownerAvailable().catch(() => {});
 	let { chat, auth } = context;
 	let lifecycle = chat.lifecycle;
@@ -1032,7 +1110,7 @@ async function run(
 		];
 		retainReferences(chat, promptReferences);
 		let available = promptReferences.filter(reference => chat.referenceCache.has(reference.id));
-		let prompt = compose(backscroll, handle, text, references, available);
+		let prompt = compose(backscroll, handle, text, references, available, !!context.invokedBy);
 
 		let result = await opened.session.stream(
 			prompt,
@@ -1095,9 +1173,9 @@ async function run(
 		if (chat.closed) return;
 		queued(chat, server, room);
 		let entry = next.message ? chat.entries.find(item => item.id === next.id) : undefined;
-		if (entry) announce(server, room, entry);
+		if (entry && !next.posted) announce(server, room, entry);
 		await run(
-			context,
+			{ ...context, checkout: next.checkout, invokedBy: next.invokedBy },
 			next.handle,
 			next.text,
 			next.thread,
@@ -1143,7 +1221,7 @@ function startRun(
 export function pending(chat: Chat): Waiting | undefined {
 	let next = chat.waiting.shift();
 	while (next?.spent?.()) next = chat.waiting.shift();
-	if (next?.message) {
+	if (next?.message && !next.posted) {
 		let entry: MemberEntry = {
 			id: next.id,
 			author: { kind: "member", handle: next.handle },

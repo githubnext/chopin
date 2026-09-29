@@ -1,4 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { ulid } from "@chopin/dialect";
 
@@ -24,6 +27,7 @@ import type {
 } from "../github/client";
 import type { CreateDocumentInput } from "../mcp";
 import type { Socket, SocketData } from "../wire";
+import type { PlannerInvocation } from "./hosted";
 
 let creation: CreateDocumentInput = {
 	idempotencyKey: "create-plan-1",
@@ -204,6 +208,175 @@ async function plan(context: ReturnType<typeof setup>) {
 }
 
 describe("the hosted MCP adapter", () => {
+	it("invokes only for a live local login of the MCP caller and verifies a supplied checkout", async () => {
+		let context = setup();
+		context.auth.config.local = {
+			installation: "local",
+			credentialsDir: "/tmp/unused",
+			port: 8795,
+		};
+		context.github.repositoryValue.permissions.push = true;
+		let opened = await plan(context);
+		let started: PlannerInvocation[] = [];
+		let adapter = hosted(context.auth, undefined, {
+			async invokePlanner(input) {
+				started.push(input);
+				return undefined;
+			},
+		});
+		let caller = (await adapter.caller(request("Bearer allowed")))!;
+		let input = { id: opened.channel.id, instruction: "  Review this.\n" };
+		try {
+			expect(hosted(context.auth).invoke).toBeUndefined();
+			expect(await adapter.invoke!.invoke(caller, input)).toEqual({
+				kind: "refused",
+				code: "planner-owner-unavailable",
+			});
+			await context.storage.users.put({
+				id: "U_other",
+				login: "other",
+				avatarUrl: "",
+				now: context.now,
+			});
+			await context.auth.sessions.issue("U_other", grant("another-browser"));
+			expect(await adapter.invoke!.invoke(caller, input)).toEqual({
+				kind: "refused",
+				code: "planner-owner-unavailable",
+			});
+			let session = await context.auth.sessions.issue(caller.user.id, grant("browser-token"));
+			expect(await adapter.invoke!.invoke(caller, { ...input, checkout: "/does-not-exist" }))
+				.toEqual({ kind: "refused", code: "checkout-unverified" });
+			expect(started).toEqual([]);
+			let result = await adapter.invoke!.invoke(caller, input);
+			expect(result).toEqual({
+				kind: "invoked",
+				document: {
+					id: opened.channel.id,
+					title: opened.channel.title,
+					url: "https://chopin.test/documents/octo-org/score/release-readiness",
+				},
+			});
+			expect(started).toHaveLength(1);
+			expect(started[0]).toMatchObject({
+				instruction: input.instruction,
+				session: { session: { id: session.id }, user: { id: caller.user.id } },
+			});
+			expect(started[0]!.checkout).toBeUndefined();
+		} finally {
+			await Service.close(opened.plan);
+		}
+	});
+
+	it("passes a matching checkout and local session through a URL invocation", async () => {
+		let context = setup();
+		context.auth.config.local = {
+			installation: "local",
+			credentialsDir: "/tmp/unused",
+			port: 8795,
+		};
+		context.github.repositoryValue.permissions.admin = true;
+		let opened = await plan(context);
+		let checkout = await mkdtemp(join(tmpdir(), "chopin-mcp-checkout-"));
+		let started: PlannerInvocation[] = [];
+		let adapter = hosted(context.auth, undefined, {
+			async invokePlanner(input) {
+				started.push(input);
+				return undefined;
+			},
+		});
+		try {
+			let caller = (await adapter.caller(request("Bearer allowed")))!;
+			let session = await context.auth.sessions.issue(caller.user.id, grant("local-browser-token"));
+			for (
+				let args of [["init", "--quiet"], [
+					"remote",
+					"add",
+					"origin",
+					"workgit:other/repository.git",
+				]]
+			) {
+				let git = Bun.spawn(["git", "-C", checkout, ...args], { stdout: "pipe", stderr: "pipe" });
+				expect(await git.exited).toBe(0);
+			}
+			let input = {
+				id: "https://chopin.test/documents/octo-org/score/release-readiness",
+				instruction: "Review",
+				checkout,
+			};
+			expect(await adapter.invoke!.invoke(caller, input)).toEqual({
+				kind: "refused",
+				code: "checkout-unverified",
+			});
+			expect(started).toHaveLength(0);
+			let git = Bun.spawn([
+				"git",
+				"-C",
+				checkout,
+				"remote",
+				"set-url",
+				"origin",
+				"workgit:octo-org/score.git",
+			], { stdout: "pipe", stderr: "pipe" });
+			expect(await git.exited).toBe(0);
+			expect(await adapter.invoke!.invoke(caller, input)).toMatchObject({
+				kind: "invoked",
+				document: { id: opened.channel.id, url: input.id },
+			});
+			expect(started).toHaveLength(1);
+			expect(started[0]).toMatchObject({
+				checkout: await realpath(checkout),
+				instruction: input.instruction,
+				session: { session: { id: session.id } },
+			});
+		} finally {
+			await Service.close(opened.plan);
+			await rm(checkout, { recursive: true, force: true });
+		}
+	});
+
+	it("refuses unavailable, forbidden, archived and deleting documents before starting a Planner", async () => {
+		let context = setup();
+		let opened = await plan(context);
+		let calls = 0;
+		let deleting = false;
+		let callbacks = {
+			async invokePlanner() {
+				calls++;
+				return undefined;
+			},
+			isChannelDeleting: () => deleting,
+		};
+		expect(hosted(context.auth, undefined, callbacks).invoke).toBeUndefined();
+		context.auth.config.local = {
+			installation: "local",
+			credentialsDir: "/tmp/unused",
+			port: 8795,
+		};
+		let adapter = hosted(context.auth, undefined, callbacks);
+		let caller = (await adapter.caller(request("Bearer allowed")))!;
+		let invoke = (id = opened.channel.id) =>
+			adapter.invoke!.invoke(caller, { id, instruction: "Review" });
+		try {
+			expect(await invoke(crypto.randomUUID())).toEqual({
+				kind: "refused",
+				code: "document-unavailable",
+			});
+			expect(await invoke()).toEqual({ kind: "refused", code: "repository-forbidden" });
+			context.github.repositoryValue.permissions.push = true;
+			context.github.repositoryValue.permissions.pull = false;
+			expect(await invoke()).toEqual({ kind: "refused", code: "repository-forbidden" });
+			context.github.repositoryValue.permissions.pull = true;
+			deleting = true;
+			expect(await invoke()).toEqual({ kind: "refused", code: "document-unavailable" });
+			deleting = false;
+			await context.storage.channels.archive({ id: opened.channel.id, now: context.now });
+			expect(await invoke()).toEqual({ kind: "refused", code: "document-archived" });
+			expect(calls).toBe(0);
+		} finally {
+			await Service.close(opened.plan);
+		}
+	});
+
 	it("accepts exactly one bearer token and validates its GitHub identity per request", async () => {
 		let { auth, github } = setup();
 		let adapter = hosted(auth);

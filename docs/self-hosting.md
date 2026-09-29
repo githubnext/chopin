@@ -453,6 +453,13 @@ Cancellation or timeout withdraws pending cards and never approves an action.
 See [Full Atomic Planner](hosted-agent.md#full-atomic-planner-in-local-mode)
 for mapping, resource loading, persistence, and workflow restart boundaries.
 
+This mode also exposes the MCP
+[`invoke_planner` handoff](local-agent-mcp.md#hand-an-instruction-to-the-local-planner).
+Sign in locally as the MCP caller before using it. A supplied `checkout` is verified
+before the instruction is posted; an invalid explicit path refuses the invocation.
+The tool returns a document URL immediately while the Planner continues in Chat
+and asks questions in Decisions.
+
 ## First-start smoke test
 
 Startup validates configuration, database connectivity, migration history, the

@@ -64,6 +64,7 @@ describe("the MCP document protocol", () => {
 			rename: { rename: unavailable },
 			archive: { archive: unavailable },
 			restore: { restore: unavailable },
+			invoke: { invoke: async () => ({ kind: "refused", code: "planner-unavailable" }) },
 			implementations: {
 				readImplementation: async () => undefined,
 				startImplementation: unavailable,
