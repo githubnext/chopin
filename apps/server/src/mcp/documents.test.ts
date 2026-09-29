@@ -50,7 +50,37 @@ async function json(response: Response): Promise<Record<string, unknown>> {
 	return await response.json() as Record<string, unknown>;
 }
 
+async function unavailable() {
+	return { kind: "unavailable" as const };
+}
+
 describe("the MCP document protocol", () => {
+	it("exposes only top-level object output schemas for every tool", async () => {
+		let mcp = handler({
+			caller: () => "octocat",
+			documents: reader(),
+			create: { create: unavailable },
+			update: { update: unavailable },
+			rename: { rename: unavailable },
+			archive: { archive: unavailable },
+			restore: { restore: unavailable },
+			implementations: {
+				readImplementation: async () => undefined,
+				startImplementation: unavailable,
+				reportLifecycle: unavailable,
+			},
+		});
+		let response = await mcp(request({ jsonrpc: "2.0", id: 1, method: "tools/list" }));
+		let listed = (await response.json()).result.tools as typeof TOOLS;
+		expect(listed).toEqual(TOOLS);
+		for (let tool of [...TOOLS, ...listed]) {
+			expect({ name: tool.name, type: tool.outputSchema.type }).toEqual({
+				name: tool.name,
+				type: "object",
+			});
+		}
+	});
+
 	it("authenticates initialize, lists repository documents, and reads canonical source", async () => {
 		let mcp = endpoint();
 
