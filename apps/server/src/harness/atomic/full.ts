@@ -22,9 +22,15 @@ export type FullPlanner = {
 	/** Called with every change to `runs`. */
 	onRuns?: (runs: PlannerRuns) => void;
 	/** Runs the session's own `workflow` tool without a model turn; set once the session exists. */
-	control?: (params: WorkflowControl) => Promise<void>;
+	control?: (params: WorkflowControl) => Promise<WorkflowControlResult>;
 };
-export type WorkflowControl = { action: "pause"; all: true } | { action: "resume"; runId: string };
+export type WorkflowControl =
+	| { action: "pause"; all: true }
+	| { action: "quit"; runId: string }
+	| { action: "resume"; runId: string };
+
+/** The run-control outcome Atomic reports: `noop` means nothing changed, for example a run whose only stage waits on input. */
+export type WorkflowControlResult = { status: string; message: string };
 
 let planners = new Map<string, FullPlanner>();
 
@@ -45,7 +51,7 @@ export async function controlWorkflows(
 		extensionRunner: { createToolContext(id: string, signal: AbortSignal | undefined): unknown };
 	},
 	params: WorkflowControl,
-): Promise<void> {
+): Promise<WorkflowControlResult> {
 	let tool = session.getToolDefinition("workflow");
 	if (!tool) throw new Error("The Planner session has no workflow tool.");
 	let id = `chopin-${params.action}-${crypto.randomUUID()}`;
@@ -67,9 +73,37 @@ export async function controlWorkflows(
 		session.extensionRunner.createToolContext(id, signal),
 	);
 	let text = resultText(result.content ?? []);
-	let failed = result.isError === true
-		|| /"ok"\s*:\s*false|"status"\s*:\s*"failed"/.test(text);
-	if (failed) throw new Error(`workflow ${params.action} failed: ${text.slice(0, 500)}`);
+	let details = typeof result.details === "object" && result.details !== null
+		? result.details as { status?: unknown; message?: unknown }
+		: {};
+	let status = typeof details.status === "string"
+		? details.status
+		: /"status"\s*:\s*"(\w+)"/.exec(text)?.[1] ?? "";
+	if (result.isError === true || status === "failed" || status === "error") {
+		throw new Error(`workflow ${params.action} failed: ${text.slice(0, 500)}`);
+	}
+	return { status, message: typeof details.message === "string" ? details.message : text };
+}
+
+/**
+ * Pauses every run a Planner session owns. Atomic pauses running and pending
+ * stages only, so a run whose live stage waits on a question has nothing to
+ * pause; it is quit instead, which keeps it resumable, withdraws its question
+ * from Decisions, and asks it again on resume.
+ */
+export async function pauseOwnedRuns(
+	control: (params: WorkflowControl) => Promise<WorkflowControlResult>,
+	live: readonly string[],
+): Promise<void> {
+	let runs = [...live];
+	let paused = await control({ action: "pause", all: true });
+	if (paused.status === "paused") return;
+	for (let runId of runs) {
+		let quit = await control({ action: "quit", runId });
+		if (quit.status !== "paused" && quit.status !== "partial") {
+			throw new Error(`Run ${runId} could not be paused: ${quit.message || paused.message}`);
+		}
+	}
 }
 
 /** Every Atomic Planner session is registered; background workers never are. */
