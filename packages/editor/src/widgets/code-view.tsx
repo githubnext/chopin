@@ -230,7 +230,13 @@ function View({ kind, source, language, meta }: CodeViewProps) {
 	let { File, FileDiff } = renderer;
 
 	return (
-		<div className="plan-code-view" contentEditable={false}>
+		<div
+			className="plan-code-view"
+			contentEditable={false}
+			role="group"
+			aria-label={kind === "diff" ? "Diff preview" : "Code preview"}
+			tabIndex={0}
+		>
 			{patch
 				? patch.map((fileDiff, index) => (
 					<FileDiff

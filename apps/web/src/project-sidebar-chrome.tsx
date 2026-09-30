@@ -6,6 +6,24 @@ export const SIDEBAR_MIN = 250;
 export const SIDEBAR_MAX = 400;
 export const SIDEBAR_STORAGE_KEY = "chopin:pane:projects";
 
+export function ProjectSidebarLoading({ onCollapse }: { onCollapse: () => void }) {
+	return (
+		<div className="project-sidebar text-sm">
+			<div className="project-sidebar-header">
+				<p role="status">Loading projects…</p>
+				<button
+					aria-label="Collapse Projects sidebar"
+					className="btn btn-icon btn-ghost"
+					onClick={onCollapse}
+					type="button"
+				>
+					<img alt="" height="14" src={panelIcon} width="14" />
+				</button>
+			</div>
+		</div>
+	);
+}
+
 export function ProjectSidebarExpandButton(
 	{
 		buttonRef,
