@@ -101,13 +101,13 @@ test("actual execution boundary refuses foreign writes even when a harness keeps
 test("unsupported background jobs cannot open an ordinary writable Planner session", async () => {
 	let context = await openPlan();
 	running(context.plan);
-	context.plan.chat.job = { ...context.plan.chat.job!, kind: "prose", target: "thread" };
+	context.plan.chat.job = { ...context.plan.chat.job!, kind: "unknown" as never, target: "thread" };
 	let called = false;
 	try {
 		let opened = await openPlannerSession({} as never, {
 			room: documentRoom(context),
 			repository: {} as never,
-			instructions: "Background prose",
+			instructions: "Unsupported background kind",
 		}, {
 			githubTools: async () => {
 				called = true;
@@ -118,7 +118,9 @@ test("unsupported background jobs cannot open an ordinary writable Planner sessi
 		if (opened.ok) throw new Error("unsupported job opened a session");
 		expect(opened.error).toMatchObject({ kind: "Unavailable" });
 		if (!("cause" in opened.error)) throw new Error("missing failure cause");
-		expect((opened.error.cause as Error).message).toBe("Background prose tools are not available");
+		expect((opened.error.cause as Error).message).toBe(
+			"Background unknown tools are not available",
+		);
 		expect(called).toBe(false);
 		expect(Room.project(context.plan.document)).toBe("");
 	} finally {

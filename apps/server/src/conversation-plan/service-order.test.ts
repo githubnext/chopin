@@ -43,6 +43,7 @@ test("processor captures plan and initial effects once before reporting dependen
 			"setEffects",
 			"wake",
 			"stop",
+			"idle",
 		]);
 		await processor.accept(entry("captured-plan", "Which auth system?"));
 		expect(planReads).toBe(1);

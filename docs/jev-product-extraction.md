@@ -545,3 +545,67 @@ Next: actual Chat job FIFO and saved-message hook integration, complete card eff
 consumers and remaining scoped job tools. These components are now verified separately,
 but live conversation-to-Planner wiring is still required for the requested backend
 milestone. Remaining whole pipeline callbacks stay assigned to their implementation groups.
+
+The integrated backend now binds saved room messages to the actual conversation
+processor and interpreter, durable sidecar and outbox, card consumers and current
+Chat/Harness Planner runtime. Acceptance persists the transcript and queued work
+before acknowledgement or publication. Correction, scoped-save and explicit retry
+commands use the authenticated member context and existing write/archive guards.
+Configuration enables this path only with `CONVERSATION_PLAN=on`; no application
+instance was activated during extraction.
+
+Actual MemoryStorage integrations exercise card creation, linking, receipts and
+close/open recovery through the real runtime factory. Heading, refinement,
+suggestions and prose jobs execute through the current Harness dispatch and actual
+tools. Their profiles offer read tools plus their own writer; streamed foreign
+writers fail the live boundary. Ordinary Planner turns gain the intended
+`revise_open_decision` tool. Existing Copilot and Pi adapters, ownership and credential
+boundaries remain. The prior unsupported-prose constructor test now checks an unknown
+job kind because prose is supported.
+
+All 62 original card-consumer cases remain. Question durability retains 28 additional
+service callbacks, 18 prose callbacks and six option-source callbacks, alongside
+seven previously retained originals and all nine current service cases. Scoped tools
+retain 57 original cases and seven byte-identical write-prose tests. Chat retains
+16 complete original callbacks. Private test bridges adapt old fixture calls to the
+real current AI SDK tools; no production compatibility adapter was added.
+
+Original prose tests exposed missing relationship metadata, empty-caret handling
+and rebasing against the wrong source. The exact archived room projection,
+reconciliation and restoration functions and Plan relationship snapshots are restored.
+Server rewrites explicitly pass the pre-edit source when rebasing. Existing canonical
+validation and unrelated current room and Plan functions remain source-proved.
+
+Independent review reproduced a post-close card commit while an effect batch was
+held in storage. The processor now exposes an additive idle drain, and runtime stop
+waits for effects, Planner cleanup and card mirroring before document close. Runtime
+replacement also waits for that drain. A second review reproduced overlapping stop
+calls resolving prematurely; repeated calls now share the same drain. Held-commit
+regressions verify both shutdown and replacement against actual card consumers.
+Cancellation clears live Planner write scope immediately; interrupted jobs are durable
+and are not replayed automatically after reopening.
+
+A combined run exposed cached test-fixture cleanup hooks leaving Chat linger timers
+alive and contaminating later Pi cases. Registering the unchanged cleanup hooks in
+each split job suite fixes the fixture isolation; production timers and presence
+handling were not changed. The combined Chat/Pi check then passes 145 cases.
+
+This milestone verifies backend behavior with offline interpreter answers, the current
+Harness using deterministic test streams, and MemoryStorage. It does not establish
+paid-model quality, PostgreSQL deployment behavior or browser behavior. No paid
+inference, database migration, application restart or evaluation dataset import ran.
+Frontend and research command integration and the remaining 122 assigned whole
+pipeline callbacks remain later extraction work; the larger product goal is unfinished.
+
+The broader backend run also caught two existing synthetic fixture assumptions: an
+exact processor API list omitted the additive idle method, and an answered decision
+had no options, which the restored canonical record validator rejects. Only those
+fixtures are corrected; dependency-capture, rewrite, anchor and comment assertions
+and production validation remain intact.
+
+Final integrated backend, Harness, dialect, question and protocol verification passes
+1,935 tests across 294 files with 9,388 assertions and no failures. The two PostgreSQL
+suites are explicitly skipped without a test database. Workspace and E2E TypeScript
+checks pass. CI passes with only two inherited lint warnings and the existing design
+baseline finding. All seven runtime, processor, card, question, scoped-tool, Chat and
+configuration source-parity checks pass after formatting.

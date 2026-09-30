@@ -1,70 +1,22 @@
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 
 import * as Question from "@chopin/question";
 
 import * as Questions from "./questions/service";
 import * as Store from "./questions/store";
 import * as room from "./plan/room";
-import * as Service from "./plan/service";
-import { openPlan } from "./testing/plan";
 
 import type { Server } from "bun";
 import type { Plan } from "./plan/service";
 import type { Socket, SocketData } from "./wire";
 
-let plans: Plan[] = [];
-
-afterEach(async () => {
-	for (let plan of plans) await Service.close(plan);
-	plans = [];
+import { createQuestionServiceFixture } from "./question-service.test-fixtures";
+let plans: Plan[];
+let fixture = createQuestionServiceFixture(() => plans, value => {
+	plans = value;
 });
-
-async function opened(source = ""): Promise<Plan> {
-	let { plan } = await openPlan(source);
-	plans.push(plan);
-	return plan;
-}
-
-function definition(count = 1) {
-	return Questions.identify({
-		questions: Array.from({ length: count }, (_, index) => ({
-			header: `Decision ${index + 1}`,
-			question: `What should decision ${index + 1} be?`,
-			multiple: false,
-			options: [{ label: "Choose this", description: "The selected option." }],
-		})),
-	});
-}
-
-function asking(
-	plan: Plan,
-	server: Server<SocketData>,
-	value: ReturnType<typeof definition>,
-	placement?: Parameters<typeof Questions.ask>[4],
-) {
-	let created = Promise.withResolvers<void>();
-	let waiting = Questions.ask(plan, server, "test", value, placement, created.resolve);
-	return { created: created.promise, waiting };
-}
-
-async function answer(plan: Plan): Promise<void> {
-	for (let record of [...plan.records.values()].toReversed()) {
-		let item = record.definition.questions[0]!;
-		let opened = Store.snapshot(plan.questions, record.id);
-		if (!opened.open) throw new Error("question was not open");
-		let model = Question.crdt.Model.fromBinary(new Uint8Array(opened.model))
-			.fork() as unknown as Question.Model;
-		model.api.val([item.id, "mode"]).set("choices");
-		model.api.val([item.id, "choice"]).set(item.options[0]!.id);
-		let patch = model.api.flush();
-		if (!patch) throw new Error("answer produced no patch");
-		let edited = Store.edit(plan.questions, record.id, [...patch.toBinary()]);
-		if (!edited.open || !edited.accepted) throw new Error("could not save answer");
-		let claimed = Store.claimSubmit(plan.questions, record.id, edited.revision, item.header);
-		if (!claimed.ok) throw new Error("could not settle question");
-		Store.commit(plan.questions, claimed.claim);
-	}
-}
+plans = fixture.plans;
+let { opened, definition, asking, answer } = fixture;
 
 test("a batched ask creates independently addressed decision records and nodes", async () => {
 	let plan = await opened();

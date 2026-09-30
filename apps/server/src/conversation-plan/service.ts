@@ -79,6 +79,15 @@ export function createProcessor(deps: Dependencies) {
 		controller.abort();
 	}
 
+	/** Wait for a stopped processor's already-started effects before closing its document. */
+	async function idle(): Promise<void> {
+		let task = running;
+		while (task) {
+			await task;
+			task = running;
+		}
+	}
+
 	return {
 		accept,
 		afterMessage,
@@ -90,5 +99,6 @@ export function createProcessor(deps: Dependencies) {
 		setEffects,
 		wake,
 		stop,
+		idle,
 	};
 }

@@ -30,6 +30,11 @@ import { instruction } from "@chopin/protocol/address";
 
 import { annotatedText, compose, referenceCatalog, remember } from "./address";
 import { createNotices } from "./notices";
+import { createJobQueue, finishJob, jobReason, type JobTurn, safeProjection } from "./job-queue";
+import { translateJob } from "./job-translate";
+import { watchJobAbort } from "./job-fence";
+import { JOB_TOOLS } from "../agent/job-scope";
+import type { JobOutcome } from "../conversation-plan/jobs";
 export type { Announcer, NoticeInput } from "./notices";
 import { broadcast, fail, reply, tell } from "../wire";
 
@@ -73,7 +78,7 @@ const ACTIVE_TOOLS = new Set(PLANNER_TOOL_NAMES);
  * is only knowable at that moment — and `JSON.stringify` drops it, so the wire
  * shape stays exactly `Wire.Waiting`.
  */
-type Waiting = Wire.Waiting & {
+export type Waiting = Wire.Waiting & {
 	delivery?: Delivery;
 	spent?: () => boolean;
 	/** True when this came from the composer rather than another instruction. */
@@ -84,6 +89,8 @@ type Waiting = Wire.Waiting & {
 	sessionId?: string;
 	/** Verified member identity, retained only for a queued composer message. */
 	userId?: string;
+	/** A queued background turn, resolved only after its scope is cleaned up. */
+	job?: JobTurn;
 };
 
 export type ActiveMemberRequest = {
@@ -109,6 +116,10 @@ export type Chat = {
 	jobOutput?: string;
 	jobFailures?: number;
 	jobFailureCode?: "source-shape";
+	jobCalls?: Map<string, string>;
+	jobToolNames?: ReadonlySet<string>;
+	/** The job shifted from the queue while its handoff save is pending. */
+	handoffJob?: JobTurn;
 	entries: Wire.Entry[];
 	waiting: Waiting[];
 	/** Serializes complete member send acceptance, including asynchronous resolution and persistence. */
@@ -411,6 +422,8 @@ export type Room = {
 	repository: HostedRepository;
 	activeOwner?: () => Promise<ActiveOwnerBinding | undefined>;
 	persist: () => Promise<void>;
+	commitRoomMessage?: (entry: Wire.Entry) => Promise<void>;
+	roomMessagePublished?: () => void;
 	openPlannerSession?: typeof import("../harness/session")["openPlannerSession"];
 	ownerAvailable?: () => Promise<void>;
 	jobs?: JobService;
@@ -506,15 +519,19 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 			...(references?.length ? { references } : {}),
 			delivery: savedDelivery,
 		};
-		chat.entries.push(entry);
+		if (!context.commitRoomMessage) chat.entries.push(entry);
 		try {
-			await context.persist();
+			if (context.commitRoomMessage) await context.commitRoomMessage(entry);
+			else await context.persist();
 		} catch {
-			chat.entries = chat.entries.filter(value => value.id !== entry.id);
+			if (!context.commitRoomMessage) {
+				chat.entries = chat.entries.filter(value => value.id !== entry.id);
+			}
 			return fail(ws, msg.rid, "could not save message");
 		}
 		reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: entry.id, queued: false });
 		announce(server, room, entry);
+		context.roomMessagePublished?.();
 		chat.backscroll = remember(chat.backscroll, {
 			entryId: entry.id,
 			handle,
@@ -682,11 +699,21 @@ export function instruct(
 	return announced instanceof Promise ? announced.then(proceed) : proceed();
 }
 
+let jobState = safeProjection(state);
+let jobQueued = safeProjection(queued);
+let { job, cancelQueuedJobs, stopAfterPersistenceFailure } = createJobQueue({
+	queued: jobQueued,
+	state: jobState,
+	startRun,
+	MAX_QUEUE,
+});
+export { cancelQueuedJobs, job };
+
 /** Withdraw a queued message. Only whoever wrote it may. */
 export function unqueue(context: Room, ws: Socket, msg: Request<Wire.Unqueue>): void {
 	let { chat, room, server } = context;
 	let found = chat.waiting.find(item => item.id === msg.id);
-	if (!found || found.handle !== ws.data.handle) return;
+	if (!found || found.job || found.handle !== ws.data.handle) return;
 	chat.waiting = chat.waiting.filter(item => item.id !== msg.id);
 	queued(chat, server, room);
 }
@@ -730,6 +757,7 @@ export function documentRoom(context: Room): DocumentRoom {
 		anchors: () => Service.anchors(plan, server, room),
 		changes: found => Service.changes(plan, server, room, found),
 		jobs: context.jobs,
+		currentMemberRequest: () => currentMemberRequest(chat),
 		readReference: async (id, repositoryId) => {
 			let reference = chat.referenceCache.get(id);
 			if (!reference) throw new Error("reference is not available in this Planner session");
@@ -918,7 +946,8 @@ async function repositorySession(
 		) throw new Error("The Planner session changed while opening. Try again.");
 		chat.agent = opened;
 		chat.owner = openingOwner;
-		consumeBootstrapBackscroll(chat);
+		if (!chat.job) consumeBootstrapBackscroll(chat);
+		else chat.bootstrapEntries = undefined;
 		return { session: opened, binding };
 	} catch (err) {
 		await opened?.destroy();
@@ -996,15 +1025,19 @@ async function run(
 	reserved = false,
 	member?: MemberRequest,
 	references: Wire.Reference[] = [],
+	jobTurn?: JobTurn,
 ): Promise<void> {
 	let { chat, plan, room, server } = context;
-	if (chat.closed) return;
+	if (chat.closed) {
+		if (jobTurn) finishJob(jobTurn, { status: "failed", reason: "The document closed." });
+		return;
+	}
 
 	if (!reserved) {
 		chat.busy = true;
 		chat.turn = { id: ulid(), handle, started: now(), responded: false };
 		chat.acting = thread;
-		state(chat, server, room);
+		(jobTurn ? jobState : state)(chat, server, room);
 	} else chat.acting = thread;
 
 	chat.activeRequest = member && chat.turn
@@ -1019,6 +1052,17 @@ async function run(
 		}
 		: undefined;
 	chat.messageIds = new Map();
+	if (jobTurn) {
+		chat.job = jobTurn.job;
+		chat.jobOutput = undefined;
+		chat.jobFailures = 0;
+		chat.jobFailureCode = undefined;
+		chat.jobCalls = new Map();
+	}
+	let sendStarted = false;
+	let outcome: JobOutcome | undefined;
+	let persistenceError: unknown;
+	let releaseJobAbort: (() => void) | undefined;
 
 	let opened: { session: PlannerSession; binding: ActiveOwnerBinding } | undefined;
 	let turnController = new AbortController();
@@ -1028,30 +1072,55 @@ async function run(
 		if (chat.agent !== opened.session || turnController.signal.aborted) {
 			throw new Error("The Planner session changed before the turn started. Try again.");
 		}
-		// Drained rather than copied: what the agent has been told once should
-		// not arrive again on the next turn.
-		let backscroll = chat.backscroll;
-		chat.backscroll = [];
-		let promptReferences = [
-			...backscroll.flatMap(said => said.references ?? []),
-			...references,
-		];
-		retainReferences(chat, promptReferences);
-		let available = promptReferences.filter(reference => chat.referenceCache.has(reference.id));
-		let prompt = compose(backscroll, handle, text, references, available);
-
-		let result = await opened.session.stream(
-			prompt,
-			AbortSignal.any([opened.binding.signal, turnController.signal]),
-		);
+		chat.jobToolNames = jobTurn
+			? new Set(opened.session.activeTools ?? PLANNER_TOOL_NAMES)
+			: undefined;
+		let prompt: string;
+		if (jobTurn) {
+			prompt = jobTurn.prompt;
+		} else {
+			// Drained rather than copied: what the agent has been told once should
+			// not arrive again on the next turn.
+			let backscroll = chat.backscroll;
+			chat.backscroll = [];
+			let promptReferences = [
+				...backscroll.flatMap(said => said.references ?? []),
+				...references,
+			];
+			retainReferences(chat, promptReferences);
+			let available = promptReferences.filter(reference => chat.referenceCache.has(reference.id));
+			prompt = compose(backscroll, handle, text, references, available);
+		}
+		sendStarted = true;
+		let signal = AbortSignal.any([opened.binding.signal, turnController.signal]);
+		if (jobTurn) releaseJobAbort = watchJobAbort(chat, jobTurn, signal);
+		let result = await opened.session.stream(prompt, signal);
 		for await (let part of result.fullStream) {
 			translate(context, part);
 			if (turnController.signal.aborted) break;
 		}
+		if (jobTurn && chat.closed) throw new Error("The document closed.");
 		if (chat.interruption) throw new Error(chat.interruption);
+		if (jobTurn && turnController.signal.aborted) throw new Error("The Planner turn was stopped.");
+		if (jobTurn) {
+			outcome = chat.jobOutput === undefined
+				? {
+					status: "failed",
+					reason: chat.jobFailureCode
+						?? `The Planner ended without calling ${JOB_TOOLS[jobTurn.job.kind]}.`,
+				}
+				: { status: "done", output: chat.jobOutput };
+		}
 	} catch (err) {
 		console.error("[chat] turn failed:", err);
-		if (!chat.closed) {
+		if (jobTurn) {
+			outcome = chat.closed
+				? { status: "failed", reason: "The document closed." }
+				: {
+					status: sendStarted || chat.interruption ? "failed" : "skipped",
+					reason: jobReason(err),
+				};
+		} else if (!chat.closed) {
 			say(chat, server, room, {
 				id: ulid(),
 				author: { kind: "system" },
@@ -1061,10 +1130,18 @@ async function run(
 		}
 		chat.interruption = undefined;
 	} finally {
+		releaseJobAbort?.();
 		chat.activeRequest = undefined;
 		chat.turnController = undefined;
 		try {
-			await opened?.session.destroy();
+			if (jobTurn) {
+				try {
+					await opened?.session.destroy();
+				} catch (err) {
+					persistenceError = err;
+					console.error("[chat] could not close a finished turn:", err);
+				}
+			} else await opened?.session.destroy();
 		} finally {
 			opened?.binding.release();
 			if (chat.agent === opened?.session) chat.agent = undefined;
@@ -1074,7 +1151,28 @@ async function run(
 		chat.writing = undefined;
 		chat.tooling = undefined;
 		settle(chat, server, room);
-		if (!chat.closed) await context.persist();
+		if (jobTurn) {
+			chat.job = undefined;
+			chat.jobOutput = undefined;
+			chat.jobFailures = undefined;
+			chat.jobFailureCode = undefined;
+			chat.jobCalls = undefined;
+		}
+		chat.jobToolNames = undefined;
+		try {
+			if (!chat.closed) await context.persist();
+		} catch (err) {
+			persistenceError = err;
+			console.error("[chat] could not save a finished turn:", err);
+		}
+		if (jobTurn) {
+			if (chat.closed) outcome = { status: "failed", reason: "The document closed." };
+			else if (persistenceError) {
+				outcome = { status: "failed", reason: jobReason(persistenceError) };
+			} else if (chat.interruption) {
+				outcome = { status: "failed", reason: jobReason(chat.interruption) };
+			}
+		}
 
 		/*
 		 * The agent's cursor outlives the turn by a moment.
@@ -1094,13 +1192,38 @@ async function run(
 		}
 	}
 
+	if (persistenceError) {
+		stopAfterPersistenceFailure(chat, server, room);
+	}
+	if (jobTurn) {
+		finishJob(jobTurn, outcome ?? { status: "failed", reason: "The Planner turn ended." });
+	}
+
 	if (chat.closed) return;
 	let next = pending(chat);
-	if (next) {
-		await context.persist();
-		if (chat.closed) return;
-		queued(chat, server, room);
-		let entry = next.message ? chat.entries.find(item => item.id === next.id) : undefined;
+	while (next) {
+		if (next.job) chat.handoffJob = next.job;
+		try {
+			await context.persist();
+		} catch (err) {
+			if (chat.handoffJob === next.job) chat.handoffJob = undefined;
+			console.error("[chat] could not save a queued turn:", err);
+			if (next.job) finishJob(next.job, { status: "failed", reason: jobReason(err) });
+			stopAfterPersistenceFailure(chat, server, room);
+			return;
+		}
+		if (chat.handoffJob === next.job) chat.handoffJob = undefined;
+		if (chat.closed) {
+			if (next.job) finishJob(next.job, { status: "failed", reason: "The document closed." });
+			return;
+		}
+		if (next.job?.settled) {
+			next = pending(chat);
+			continue;
+		}
+		(next.job ? jobQueued : queued)(chat, server, room);
+		let nextId = next.id;
+		let entry = next.message ? chat.entries.find(item => item.id === nextId) : undefined;
 		if (entry) announce(server, room, entry);
 		await run(
 			context,
@@ -1111,13 +1234,14 @@ async function run(
 			false,
 			next.message && next.userId ? { entryId: next.id, userId: next.userId } : undefined,
 			next.references,
+			next.job,
 		);
-	} else {
-		chat.busy = false;
-		chat.turn = undefined;
-		chat.acting = undefined;
-		state(chat, server, room);
+		return;
 	}
+	chat.busy = false;
+	chat.turn = undefined;
+	chat.acting = undefined;
+	(jobTurn ? jobState : state)(chat, server, room);
 }
 
 function startRun(
@@ -1129,9 +1253,23 @@ function startRun(
 	reserved = false,
 	member?: MemberRequest,
 	references?: Wire.Reference[],
+	jobTurn?: JobTurn,
 ): void {
-	if (context.chat.closed) return;
-	let running = run(context, handle, text, thread, claimantSessionId, reserved, member, references);
+	if (context.chat.closed) {
+		if (jobTurn) finishJob(jobTurn, { status: "failed", reason: "The document closed." });
+		return;
+	}
+	let running = run(
+		context,
+		handle,
+		text,
+		thread,
+		claimantSessionId,
+		reserved,
+		member,
+		references ?? [],
+		jobTurn,
+	);
 	context.chat.running = running;
 	void running.finally(() => {
 		if (context.chat.running === running) context.chat.running = undefined;
@@ -1166,6 +1304,7 @@ export function pending(chat: Chat): Waiting | undefined {
 /** Project one AI SDK stream part into the shared Conversation. */
 export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 	let { chat, room, server } = context;
+	if (chat.job || chat.jobToolNames) return translateJob(context, part);
 	let ids = chat.messageIds ??= new Map();
 	switch (part.type) {
 		case "finish":
@@ -1335,6 +1474,10 @@ export async function resetAgent(
 	chat.lifecycle++;
 	chat.activeRequest = undefined;
 	if (reason && chat.turnController) chat.interruption = reason;
+	if (chat.job) {
+		chat.job = undefined;
+		chat.jobOutput = undefined;
+	}
 	chat.turnController?.abort();
 	chat.referenceCache.clear();
 	chat.bootstrapEntries = undefined;
@@ -1344,8 +1487,17 @@ export async function resetAgent(
 /** Let go of the session. The conversation is resumable by id. */
 export async function close(chat: Chat): Promise<void> {
 	chat.closed = true;
+	chat.job = undefined;
+	chat.jobOutput = undefined;
 	chat.lifecycle++;
 	chat.activeRequest = undefined;
+	for (let waiting of chat.waiting) {
+		if (waiting.job) finishJob(waiting.job, { status: "failed", reason: "The document closed." });
+	}
+	if (chat.handoffJob) {
+		finishJob(chat.handoffJob, { status: "failed", reason: "The document closed." });
+		chat.handoffJob = undefined;
+	}
 	chat.waiting = [];
 	chat.turnController?.abort();
 	chat.referenceCache.clear();

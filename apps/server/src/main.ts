@@ -16,6 +16,8 @@ import { registerAuthRoutes } from "./auth/routes";
 import * as Chat from "./chat/service";
 import { CHAT_CAPABILITIES, incomingFrame } from "./chat/incoming";
 import { ReferenceService } from "./chat/references";
+import { createConversationRuntime } from "./conversation-plan/runtime";
+import { handleConversationCommand } from "./conversation-plan/commands";
 import { registerChannelRoutes } from "./channels/routes";
 import * as Comments from "./comments/service";
 import { proxy, serve } from "./client";
@@ -88,6 +90,11 @@ let documentLocks = new Map<string, Promise<void>>();
 let documentTransitions = new Map<string, Promise<void>>();
 let archivingChannels = new Set<string>();
 let deletingChannels = new Set<string>();
+let conversationRuntime = createConversationRuntime({
+	config,
+	server: () => server,
+	unavailable: id => archivingChannels.has(id) || deletingChannels.has(id),
+});
 
 function withDocumentLock<T>(channelId: string, action: () => Promise<T>): Promise<T> {
 	let previous = documentLocks.get(channelId) ?? Promise.resolve();
@@ -128,7 +135,15 @@ function presence(server: Server<SocketData>, room: Rooms.Room): void {
 async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Service.Plan> {
 	if (room.closing) await room.closing;
 	if (deletingChannels.has(room.id)) throw new Error("document is unavailable");
-	if (room.plan) return room.plan;
+	if (room.opening) {
+		let opened = await room.opening;
+		conversationRuntime.wake(opened);
+		return opened;
+	}
+	if (room.plan) {
+		conversationRuntime.wake(room.plan);
+		return room.plan;
+	}
 	let backend: Service.Backend = {
 		storage,
 		lease: () => {
@@ -145,8 +160,9 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 		if (deletingChannels.has(room.id)) throw new Error("document is unavailable");
 		if (room.plan) return room.plan;
 		let opened = await Service.open(room.id, backend, server);
-		room.plan = opened;
 		let channel = await storage.channels.get(room.id);
+		room.plan = opened;
+		await conversationRuntime.attach(room, opened, !!channel?.archivedAt);
 		if (!channel?.archivedAt) {
 			if (summaryCoordinator) void summaryCoordinator.ensure(room.id).catch(() => {});
 			if (Inject.enabled()) Inject.ask(opened, server, room.id);
@@ -155,7 +171,9 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 		return opened;
 	});
 	try {
-		return await opening;
+		let opened = await opening;
+		conversationRuntime.wake(opened);
+		return opened;
 	} finally {
 		if (room.opening === opening) room.opening = undefined;
 	}
@@ -163,9 +181,10 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 
 /** A room's Chat, with everything it needs to run a turn. */
 function chat(room: Rooms.Room, ws: Socket): Chat.Room {
-	return {
-		chat: room.plan!.chat,
-		plan: room.plan!,
+	let opened = room.plan!;
+	return conversationRuntime.bind({
+		chat: opened.chat,
+		plan: opened,
 		server,
 		room: room.id,
 		config,
@@ -177,7 +196,7 @@ function chat(room: Rooms.Room, ws: Socket): Chat.Room {
 			name: ws.data.repositoryName,
 			defaultBranch: ws.data.repositoryDefaultBranch,
 		},
-		persist: () => Service.persist(room.plan!),
+		persist: () => Service.persist(opened),
 		activeOwner: () => ownerBindings!.resolve(room.id),
 		ownerAvailable: () => jobRunner?.ownerAvailable(room.id) ?? Promise.resolve(),
 		jobs: config.backgroundJobs ? jobService : undefined,
@@ -201,7 +220,7 @@ function chat(room: Rooms.Room, ws: Socket): Chat.Room {
 				};
 			}
 			: undefined,
-	};
+	});
 }
 
 async function closeRoom(room: Rooms.Room, force = false): Promise<void> {
@@ -210,7 +229,11 @@ async function closeRoom(room: Rooms.Room, force = false): Promise<void> {
 		if (!force && room.members.size > 0) return;
 		let held = room.plan;
 		room.plan = undefined;
-		if (held) await Service.close(held);
+		if (held) {
+			let stopped = conversationRuntime.stop(held);
+			await stopped;
+			await Service.close(held);
+		}
 		if (force || room.members.size === 0) Rooms.forget(room);
 	});
 	room.closing = closing;
@@ -272,6 +295,14 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 				Questions.greet(opened, ws);
 				Comments.greet(opened, ws);
 				Chat.greet(opened.chat, ws);
+				if (config.conversationPlan) {
+					tell(ws, {
+						kind: "conversation-plan:snapshot",
+						ts: 0,
+						state: opened.conversationPlan,
+						jobs: opened.conversationPlanJobs,
+					});
+				}
 			} catch (err) {
 				fail(ws, frame.rid, err instanceof Error ? err.message : "cannot open plan");
 			}
@@ -302,6 +333,19 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			if (room.plan) Chat.unqueue(chat(room, ws), ws, frame);
 			return;
 
+		case "conversation-plan:correct":
+		case "conversation-plan:scoped-choice-save":
+		case "conversation-plan:retry":
+		case "conversation-plan:retry-job":
+			await handleConversationCommand(frame, room, ws, {
+				enabled: !!config.conversationPlan,
+				runtime: conversationRuntime,
+				unavailable: id => archivingChannels.has(id) || deletingChannels.has(id),
+				refreshAccess: () => refreshAccess(ws),
+				chat: () => chat(room, ws),
+			});
+			return;
+
 		case "question:open":
 			if (room.plan) Questions.open(room.plan, ws, frame);
 			return;
@@ -310,12 +354,35 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			if (room.plan) await Questions.edit(room.plan, ws, frame);
 			return;
 
+		case "question:add-option":
+			if (room.plan) await Questions.addOption(room.plan, server, room.id, ws, frame);
+			return;
+
+		case "question:discard":
+			if (room.plan) await Questions.discard(room.plan, server, room.id, ws, frame);
+			return;
+
+		case "question:reopen":
+			if (room.plan) await Questions.reopen(room.plan, server, room.id, ws, frame);
+			return;
+
 		case "question:presence":
 			if (room.plan) Questions.focus(room.plan, ws, frame);
 			return;
 
 		case "question:submit":
-			if (room.plan) await Questions.submit(room.plan, server, room.id, ws, frame);
+			if (room.plan) {
+				let opened = room.plan;
+				let claimant = chat(room, ws);
+				await Questions.submit(
+					opened,
+					server,
+					room.id,
+					ws,
+					frame,
+					intent => conversationRuntime.contexts.remember(opened, intent.trigger, claimant),
+				);
+			}
 			return;
 
 		case "question:cancel":
@@ -637,7 +704,13 @@ function drain(): Promise<void> {
 			if (result.status === "rejected") record(result.reason);
 		}
 		let rooms = await Promise.allSettled(
-			Rooms.all().map(room => room.plan && Service.close(room.plan)),
+			Rooms.all().map(async room => {
+				let opened = room.plan;
+				if (!opened) return;
+				let stopped = conversationRuntime.stop(opened);
+				await stopped;
+				await Service.close(opened);
+			}),
 		);
 		for (let result of rooms) {
 			if (result.status === "rejected") record(result.reason);
@@ -767,7 +840,10 @@ async function archiveChannelLocked(channelId: string, now: Date) {
 		let result = await withDocumentLock(channelId, async () => {
 			let active = Rooms.get(channelId)?.plan;
 			if (active) {
+				let stopped = conversationRuntime.stop(active);
 				await Chat.resetAgent(active.chat, undefined, undefined, "This document was archived.");
+				await stopped;
+				await conversationRuntime.interrupt(active);
 				await Service.drain(active);
 				await Service.persist(active);
 			}
@@ -781,6 +857,11 @@ async function archiveChannelLocked(channelId: string, now: Date) {
 		throw err;
 	} finally {
 		archivingChannels.delete(channelId);
+		let current = Rooms.get(channelId);
+		if (current?.plan) {
+			let channel = await storage.channels.get(channelId);
+			await conversationRuntime.attach(current, current.plan, !!channel?.archivedAt);
+		}
 	}
 }
 
@@ -797,6 +878,8 @@ async function restoreChannelLocked(channelId: string, now: Date) {
 		() => storage.channels.restore({ id: channelId, now }),
 	);
 	summaryCoordinator?.resume(channelId);
+	let current = Rooms.get(channelId);
+	if (current?.plan) await conversationRuntime.attach(current, current.plan, false);
 	announceChannel(result.channel);
 	if (summaryCoordinator) void summaryCoordinator.ensure(channelId).catch(() => {});
 	return result;
@@ -824,7 +907,11 @@ async function deleteChannelLocked(channelId: string): Promise<boolean> {
 			let activeRoom = Rooms.get(channelId);
 			let active = activeRoom?.plan;
 			if (activeRoom) activeRoom.plan = undefined;
-			if (active) await Service.close(active);
+			if (active) {
+				let stopped = conversationRuntime.stop(active);
+				await stopped;
+				await Service.close(active);
+			}
 			return storage.channels.delete(channelId);
 		});
 		if (!deleted) throw new StorageError("missing", `channel ${channelId} does not exist`);

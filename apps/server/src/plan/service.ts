@@ -1180,7 +1180,7 @@ export async function open(
 
 /** Cheap identity of the whole relationship snapshot, for spotting a change. */
 function signature(plan: Plan): string {
-	return JSON.stringify([Questions.anchors(plan), Comments.anchors(plan)]);
+	return JSON.stringify([Questions.anchors(plan), Comments.anchors(plan), Questions.prose(plan)]);
 }
 
 /** Everything a joining client needs to start from. */
@@ -1197,6 +1197,7 @@ export function greet(plan: Plan, ws: Socket, msg: Request<Wire.Open.Ask>): void
 		revision: plan.revision,
 		anchors: Questions.anchors(plan),
 		threads: Comments.anchors(plan),
+		prose: Questions.prose(plan),
 		limits: room.LIMITS,
 		...(hello ? { awareness: encode(hello) } : {}),
 	});
@@ -1495,7 +1496,7 @@ export async function rewrite(
 		plan.mcpUpdates.push(recorded);
 		plan.outlines = candidate.outlines;
 		if (changed) {
-			Questions.rebase(plan);
+			Questions.rebase(plan, before);
 			Questions.invalidate(plan, "plan_changed");
 			Comments.rebase(plan);
 			Comments.invalidate(plan, "plan_changed");
@@ -1609,13 +1610,24 @@ export function anchors(
 	server: Server<SocketData>,
 	roomId: string,
 ): void {
+	let prose = Questions.prose(plan);
 	broadcast(server, roomId, {
 		kind: "plan:anchors",
 		ts: 0,
 		epoch: plan.document.epoch,
 		widgets: Questions.anchors(plan),
 		threads: Comments.anchors(plan),
+		prose,
 	});
+	// Other post-commit callers also rebase prose; repeat metadata so none can
+	// publish a stale collapse state after an edit or rewrite.
+	for (let item of prose) {
+		try {
+			Questions.announce(plan, server, roomId, item.widget);
+		} catch (err) {
+			console.error("[plan] could not announce decided prose metadata:", err);
+		}
+	}
 }
 
 /**

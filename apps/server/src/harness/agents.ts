@@ -5,10 +5,11 @@ import { z } from "zod";
 import { type DocumentRoom, documentTools } from "../agent/tools";
 import { type HostedRepository, repositoryTools } from "../agent/repository";
 import { jobTools, scopedJobTools } from "../agent/job-tools";
-import { WRITE_TOOLS } from "../agent/job-scope";
+import { createScopedTools } from "../agent/scoped-tools";
+import type { ConversationPlan } from "@chopin/protocol";
 import { harnessSelection } from "../config";
 import { GITHUB_TOOL_SCHEMAS } from "./github-tools";
-import { PLANNER_TOOL_NAMES } from "./tool-names";
+import { BACKGROUND_TOOL_NAMES, PLANNER_TOOL_NAMES } from "./tool-names";
 import { harnessFor } from "./harnesses";
 
 import type { HarnessV1 } from "@ai-sdk/harness";
@@ -34,6 +35,7 @@ const plannerTools: ToolSet = {
 	...repositories,
 	...githubPlaceholders,
 	...jobTools,
+	...createScopedTools(),
 };
 export { PLANNER_TOOL_NAMES } from "./tool-names";
 
@@ -46,14 +48,12 @@ type PlannerCallOptions = {
 	model?: string;
 };
 
-export function createPlannerAgent(harness: HarnessV1, profile?: "heading") {
-	let names = profile === "heading"
-		? [...PLANNER_TOOL_NAMES.filter(name => !WRITE_TOOLS.has(name)), "draft_heading"]
-		: PLANNER_TOOL_NAMES;
+export function createPlannerAgent(harness: HarnessV1, profile?: ConversationPlan.JobKind) {
+	let names = profile ? BACKGROUND_TOOL_NAMES[profile] : PLANNER_TOOL_NAMES;
 	return new HarnessAgent({
 		harness,
 		tools: plannerTools,
-		activeTools: names,
+		activeTools: [...names],
 		permissionMode: "allow-reads",
 		callOptionsSchema: z.custom<PlannerCallOptions>(),
 		prepareCall: ({ options, ...rest }) => {
@@ -74,6 +74,8 @@ export function createPlannerAgent(harness: HarnessV1, profile?: "heading") {
 
 export let plannerAgent = createPlannerAgent(harnessFor(harnessSelection()));
 export let headingPlannerAgent = createPlannerAgent(harnessFor(harnessSelection()), "heading");
+export let refinePlannerAgent = createPlannerAgent(harnessFor(harnessSelection()), "refine");
+export let prosePlannerAgent = createPlannerAgent(harnessFor(harnessSelection()), "prose");
 
 type WorkerCallOptions = {
 	model: string;

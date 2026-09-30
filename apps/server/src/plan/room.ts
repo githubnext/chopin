@@ -20,8 +20,9 @@ import * as Y from "yjs";
 import {
 	$createDecisionNode,
 	$createPlanNodes,
-	$exportPlan,
+	$exportPlanTree,
 	$importPlan,
+	assert,
 	exportPlan,
 	limits,
 	parse,
@@ -195,7 +196,13 @@ export function project(target: Document): string {
 	let failure: unknown;
 	target.editor.getEditorState().read(() => {
 		try {
-			source = $exportPlan({ registry: schema() });
+			let tree = $exportPlanTree({ registry: schema() });
+			// Empty root paragraphs hold a shared caret but are not addressable MDX blocks.
+			tree.children = tree.children.filter(node =>
+				node.type !== "paragraph" || node.children.length > 0
+			);
+			assert(tree);
+			source = serialize(tree);
 		} catch (err) {
 			failure = err;
 		}
@@ -281,7 +288,11 @@ export async function restore(
 	try {
 		Y.applyUpdate(restored.doc, checkpoint, REMOTE);
 		await settle();
-		if (project(restored) !== source) {
+		// Older checkpoints serialized caret paragraphs; accept only their exact validated export.
+		if (
+			project(restored) !== source
+			&& exportPlan(restored.editor, { registry: schema() }) !== source
+		) {
 			throw new Error("stored plan source does not match its Yjs checkpoint");
 		}
 
@@ -511,8 +522,8 @@ export function reconcile(
 		let root = $getRoot();
 		let all = root.getChildren();
 
-		// An empty paragraph is a caret affordance, not a block the agent can
-		// address, so it has no place in the mapping and this edit may remove it.
+		// Empty root paragraphs are shared caret positions. They are not
+		// addressable source blocks, but must survive reconciliation by identity.
 		let live = all.filter(node => !($isParagraphNode(node) && node.getChildrenSize() === 0));
 		if (live.length !== before.length) {
 			throw new Error("the plan changed while the edit was being applied");
@@ -531,15 +542,47 @@ export function reconcile(
 		}
 		fresh.forEach((node, index) => nodes.set(node, created[index]!));
 
-		root.splice(
-			0,
-			all.length,
-			after.map(node => {
-				let found = nodes.get(node);
-				if (!found) throw new Error("a plan block has no live node");
-				return found;
-			}),
-		);
+		let ordered = after.map(node => {
+			let found = nodes.get(node);
+			if (!found) throw new Error("a plan block has no live node");
+			return found;
+		});
+		let surviving = new Set(ordered);
+		let caretBefore = new Map<LexicalNode, LexicalNode[]>();
+		let groups = new Map<LexicalNode, LexicalNode[]>();
+		let pending: LexicalNode[] = [];
+		for (let node of all) {
+			if ($isParagraphNode(node) && node.getChildrenSize() === 0) pending.push(node);
+			else {
+				groups.set(node, pending);
+				pending = [];
+			}
+		}
+		let displaced: LexicalNode[] = [];
+		let leading: LexicalNode[] = [];
+		let nextSurvivor: Array<LexicalNode | undefined> = [];
+		let nearest: LexicalNode | undefined;
+		for (let index = live.length - 1; index >= 0; index--) {
+			if (surviving.has(live[index]!)) nearest = live[index];
+			nextSurvivor[index] = nearest;
+		}
+		for (let [index, node] of live.entries()) {
+			let carets = groups.get(node) ?? [];
+			if (!carets.length) continue;
+			if (index === 0) {
+				leading.push(...carets);
+				continue;
+			}
+			let recipient = nextSurvivor[index];
+			if (recipient) caretBefore.set(recipient, [...caretBefore.get(recipient) ?? [], ...carets]);
+			else displaced.push(...carets);
+		}
+		root.splice(0, all.length, [
+			...leading,
+			...ordered.flatMap(node => [...caretBefore.get(node) ?? [], node]),
+			...displaced,
+			...pending,
+		]);
 		return true;
 	});
 }
@@ -613,6 +656,18 @@ export function anchorAt(target: Document, index: number, hash: string): Anchor 
 		key = addressable()[index]?.getKey();
 	});
 	return anchorForKey(target, key, hash);
+}
+
+/** A questionnaire's index in the canonical block address space. */
+export function questionnaireIndex(target: Document, id: string): number | undefined {
+	let found: number | undefined;
+	target.editor.getEditorState().read(() => {
+		let matches = addressable().flatMap((node, index) =>
+			node instanceof QuestionnaireNode && node.getId() === id ? [index] : []
+		);
+		if (matches.length === 1) found = matches[0];
+	});
+	return found;
 }
 
 /**
