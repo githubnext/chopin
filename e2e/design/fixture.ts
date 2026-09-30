@@ -91,6 +91,13 @@ export async function capture(page: Page, target: Locator, name: string, padding
 	await target.evaluate(element =>
 		element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
 	);
+	// Keep fractional layout changes above a specimen from shifting its rasterization.
+	await target.evaluate(element => {
+		let scroller = element.closest<HTMLElement>(".design-audit");
+		if (!scroller) return;
+		let top = element.getBoundingClientRect().top;
+		scroller.scrollTop += top - Math.round(top);
+	});
 	let box = await target.boundingBox();
 	let viewport = page.viewportSize();
 	if (!box || !viewport) throw new Error(`Missing capture bounds: ${name}`);
