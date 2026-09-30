@@ -1497,3 +1497,35 @@ formatting and all source/helper/callback/fixture proofs pass. Independent produ
 and test reviews approve the bounded implementation. CI retains only two inherited
 lint warnings and the existing design baseline. No PostgreSQL, live application,
 browser authentication or provider execution is claimed.
+
+## Preserved scripted interpreter tests
+
+The complete original test-only scripted runner is restored with a local structural
+Tool descriptor replacing its Copilot SDK type import. All nine declarations retain
+their complete bodies, including script bounds, substitution, holds, abort checks and
+identity-owned cleanup. No startup switch, production tool export, profile or Harness
+behavior changes.
+
+All four original test callbacks, their fixtures and cleanup are preserved. Only the
+Chat namespace import redirects to a test bridge. That bridge invokes the actual
+current document and heading tools through scopedJobTools and Chat.documentRoom,
+including real Service locking, publication and persistence. The original script
+refuses ordinary writing and then drafts the heading. Other cases retain missing and
+malformed scripts, a held abort and preservation of replacement job/turn/output state.
+The unchanged tests first failed because the runner module was absent, then passed
+all four cases with sixteen assertions.
+
+This is legacy interpreter and current lower-tool guard evidence. The first original
+script cannot retain its success outcome through the current heading Harness stream:
+an inactive edit_plan call aborts that stream before a later heading call. These tests
+do not change or verify that stream policy, session authentication, deployed storage
+or browser behavior. A separate current Harness script driver remains outstanding,
+alongside deferred application and anatomy coverage; the broader extraction is
+unfinished.
+
+Final verification passes 3,199 offline tests with 14,928 assertions across 532 files;
+two PostgreSQL checks are skipped. Workspace/E2E types, CI, formatting and fresh
+whole-module runner/test preservation proofs pass. Independent review approves the
+bridge and unchanged production boundary. CI retains only two inherited lint warnings
+and the existing design baseline. No application, PostgreSQL, browser authentication
+or provider run is claimed.
