@@ -8,7 +8,7 @@
  * fights the CRDT, and its history would compete with the Yjs undo manager.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
 	addComposerChild$,
 	contentEditableWrapperElement$,
@@ -107,9 +107,17 @@ function Collaboration(options: CollaborationOptions) {
 	let frame = useCellValue(contentEditableWrapperElement$);
 	let [collab, setCollab] = useState<{ binding: Binding; provider: PlanProvider }>();
 
+	// The bind below must run only when the editor identity changes, but it
+	// still needs whichever `options` are current at that moment (and at
+	// unmount, for the callbacks below). A ref carries that latest value in
+	// without making the effect re-run on every options identity change.
+	let optionsRef = useRef(options);
+	optionsRef.current = options;
+
 	useEffect(() => {
 		if (!editor) return;
 
+		let options = optionsRef.current;
 		let doc = new Y.Doc();
 		let provider = new PlanProvider({ ...options, doc });
 		let binding = createYjsBinding({ editor, id: DOC, doc, docMap: new Map([[DOC, doc]]) });
@@ -198,13 +206,14 @@ function Collaboration(options: CollaborationOptions) {
 			// Announce the departure while the transport is still up.
 			leave();
 			provider.disconnect();
-			options.onProvider?.(undefined);
-			options.onBinding?.(undefined);
+			optionsRef.current.onProvider?.(undefined);
+			optionsRef.current.onBinding?.(undefined);
 			doc.destroy();
 			setCollab(undefined);
 		};
-		// The editor identity is what matters; options are read at bind time.
-		// eslint-disable-next-line react-hooks/exhaustive-deps
+		// The editor identity is what matters; `optionsRef` supplies the latest
+		// callbacks at bind and teardown time without making this effect react
+		// to every new `options` identity a parent render creates.
 	}, [editor]);
 
 	useEffect(() => {
