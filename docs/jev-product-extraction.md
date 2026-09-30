@@ -479,3 +479,29 @@ The combined foundation, effects, jobs and card-action run passes 528 tests with
 Next: actual conversation processing, durable sidecar/outbox persistence and Planner
 delivery, with real integrated regressions before a backend milestone claim. Remaining
 whole pipeline callbacks stay explicitly assigned and can be restored in bounded groups.
+
+The complete processor now retains its ten-method public API and original asynchronous
+boundaries across synchronous private factories. All 33 original callback nodes execute
+40 cases. Five real MemoryStorage tests and one capture-order control also pass: message
+acceptance, queued work, analysis, pending effects, receipts and retries survive close/open.
+A failed receipt commit rolls back live and durable receipt state and replays the same
+pending key after reopening. This verifies recovery; effect consumers still own idempotency.
+Eight temporary strict comparisons against the original processor match complete state,
+durable snapshots, publications, errors and method results with identical clock and ID
+entropy. No model provider is called.
+
+The current Plan service now persists and validates conversation state, retries, Planner
+jobs, pending effects, receipts and pending card actions. Interrupted running jobs become
+failed and commit before opening returns; observational reads do not write. Existing
+canonical question validation and current-main authentication, graph and storage behavior
+remain. All twelve selected original Plan persistence callbacks are retained, including
+actual processor acceptance followed by reopening. The existing chat-option provenance
+fixture now creates accepted events rather than inventing an unbacked chat source.
+
+Room/chat consumer activation and actual Planner execution remain pending. This checkpoint
+alone does not satisfy the requested backend milestone. The next parallel slices connect
+Planner delivery and real card consumers, with independent review and integrated recovery
+checks before claiming that milestone.
+
+Combined processor, Plan, conversation and question checks pass 771 tests with 3,738
+assertions. Workspace/E2E types and CI pass with inherited findings only.

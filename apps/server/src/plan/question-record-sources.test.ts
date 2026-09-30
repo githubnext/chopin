@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import * as Service from "./service";
+import { applyInference, initialState } from "../conversation-plan/domain";
 import { draft, legacyRecord, rejected, stored } from "./question-record.test-fixtures";
 
 // Saved option-source checks from archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2,
@@ -28,10 +29,57 @@ function sourced() {
 
 describe("durable option source restoration", () => {
 	it("checks a member's exact UTF-16 quote and preserves its source through close", async () => {
-		let { message, record } = sourced();
-		let context = await stored([record], [draft()], [message]);
+		let { message, source, record } = sourced();
+		let context = await stored(
+			[{
+				...record,
+				optionOrigins: { "saved-a": { origin: "planner", source } },
+			}],
+			[draft()],
+			[message],
+		);
 		let plan = context.plan;
 		try {
+			await Service.exclusive(plan, async () => {
+				let threadId = "source-thread";
+				let state = applyInference(initialState(), {
+					id: "source-opening",
+					type: "thread.opened",
+					threadId,
+					observedThreadVersion: 0,
+					origin: "classifier",
+					actor: { kind: "classifier" },
+					at: message.ts,
+					source: {
+						...source,
+						quote: message.text,
+						start: 0,
+						end: message.text.length,
+						role: "question",
+					},
+					question: message.text,
+				}, message);
+				plan.conversationPlan = applyInference(state, {
+					id: "source-option",
+					type: "option.added",
+					threadId,
+					observedThreadVersion: 1,
+					origin: "classifier",
+					actor: { kind: "classifier" },
+					at: message.ts,
+					source,
+					contribution: {
+						id: "saved-a",
+						text: source.quote,
+						authoring: "quoted",
+						targetId: threadId,
+					},
+				}, message);
+				let saved = plan.records.get("saved-card")!;
+				saved.threadId = threadId;
+				saved.optionOrigins = record.optionOrigins;
+				await Service.persistExclusive(plan);
+			});
 			expect(plan.records.get("saved-card")?.optionOrigins).toEqual(record.optionOrigins);
 		} finally {
 			await Service.close(plan);
