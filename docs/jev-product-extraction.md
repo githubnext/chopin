@@ -1,7 +1,7 @@
 # Jev product extraction — handoff
 
 This is a finite extraction from a preserved prototype, not a verified release or
-classifier-quality fix. The transport and stored-identity foundations are implemented in bounded slices.
+classifier-quality fix. The transport, stored-identity and source-provenance foundations are implemented in bounded slices.
 
 - Product branch: `maggie/jev-chat-product`.
 - Product worktree: `/Users/maggieappleton/.codex/worktrees/jev-chat-product/chopin`.
@@ -192,6 +192,25 @@ Do not import the eval runner/scorer/dataset tree or skip these tests. Original 
 stays archived; reserved examples stay sealed. This adaptation is required before
 claiming those slices' product regression coverage passes independently of eval tooling.
 
-Next bounded pure-state sub-slice: archived conversation namespace and exact source
-provenance validation, before event replay/domain. Keep the namespace outside global
-wire unions until authorized producers/handlers/consumers are ported together.
+## Conversation contract and source provenance slice
+
+Extract the complete archived `ConversationPlan` namespace and `sources.ts` unchanged.
+The public namespace type export preserves all Save, research, correction and event
+cases. Global Incoming/Outgoing unions, session flags and runtime routes are unchanged;
+wire activation waits for authorized producers/handlers/consumers together.
+
+Six focused source tests cover exact UTF-16 spans (including emoji), completed saved
+member/agent messages, source identity, text and author matching, streaming rejection,
+unknown fields, missing fields, bounds and role allowlist. Test-first verification
+failed on the missing module before extraction. Existing handle-length and enumerable
+property shape quirks remain inherited; no classifier or validation behavior was tuned.
+Independent review approved the slice: six source tests passed, 0 failed (53
+assertions), and the protocol type check passed on Bun 1.4.2. The implementer also
+verified the 39 combined source/question tests (152 assertions). Full workspace types,
+formatting and CI passed with the same existing warnings. These checks establish
+standalone provenance validation, not live conversation integration.
+
+Next bounded interpretation sub-slice: exact quote extraction and its four archived
+regression tests. Extract only the five development messages those tests require,
+with archive/source mapping, rather than importing evaluation datasets. Pure event
+replay/domain and durable processing remain later dependencies.
