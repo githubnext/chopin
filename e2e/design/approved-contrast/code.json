@@ -17,7 +17,7 @@
 				"rule": "color-contrast",
 				"target": [
 					[
-						"div[data-plan-language=\"typescript\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"div[data-plan-language=\"typescript\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][data-view=\"file\"] > diffs-container",
 						"span:nth-child(3)"
 					]
 				],
@@ -31,7 +31,7 @@
 				"rule": "color-contrast",
 				"target": [
 					[
-						"div[data-plan-language=\"typescript\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"div[data-plan-language=\"typescript\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][data-view=\"file\"] > diffs-container",
 						"span:nth-child(6)"
 					]
 				],
@@ -45,7 +45,7 @@
 				"rule": "color-contrast",
 				"target": [
 					[
-						"div[data-plan-language=\"typescript\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"div[data-plan-language=\"typescript\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][data-view=\"file\"] > diffs-container",
 						"span:nth-child(10)"
 					]
 				],
@@ -59,7 +59,7 @@
 				"rule": "color-contrast",
 				"target": [
 					[
-						"div[data-plan-language=\"typescript\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"div[data-plan-language=\"typescript\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][data-view=\"file\"] > diffs-container",
 						"span:nth-child(12)"
 					]
 				],
@@ -73,7 +73,7 @@
 				"rule": "color-contrast",
 				"target": [
 					[
-						"div[data-plan-language=\"css\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"div[data-plan-language=\"css\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][data-view=\"file\"] > diffs-container",
 						"span:nth-child(2)"
 					]
 				],
@@ -87,7 +87,7 @@
 				"rule": "color-contrast",
 				"target": [
 					[
-						"div[data-plan-language=\"css\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"div[data-plan-language=\"css\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][data-view=\"file\"] > diffs-container",
 						"span:nth-child(4)"
 					]
 				],
@@ -101,7 +101,7 @@
 				"rule": "color-contrast",
 				"target": [
 					[
-						"div[data-plan-language=\"css\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"div[data-plan-language=\"css\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][data-view=\"file\"] > diffs-container",
 						"span:nth-child(8)"
 					]
 				],
@@ -128,7 +128,7 @@
 				"rule": "color-contrast",
 				"target": [
 					[
-						"div[data-plan-language=\"typescript\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"div[data-plan-language=\"typescript\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][data-view=\"file\"] > diffs-container",
 						"span:nth-child(3)"
 					]
 				],
@@ -142,7 +142,7 @@
 				"rule": "color-contrast",
 				"target": [
 					[
-						"div[data-plan-language=\"typescript\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"div[data-plan-language=\"typescript\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][data-view=\"file\"] > diffs-container",
 						"span:nth-child(6)"
 					]
 				],
@@ -156,7 +156,7 @@
 				"rule": "color-contrast",
 				"target": [
 					[
-						"div[data-plan-language=\"typescript\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"div[data-plan-language=\"typescript\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][data-view=\"file\"] > diffs-container",
 						"span:nth-child(10)"
 					]
 				],
@@ -170,21 +170,7 @@
 				"rule": "color-contrast",
 				"target": [
 					[
-						"div[data-plan-language=\"typescript\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
-						"span:nth-child(12)"
-					]
-				],
-				"html": "<span style=\"color:#1CA1C7\"> 12</span>",
-				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 3.01 (foreground color: #1ca1c7, background color: #ffffff, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
-			}
-		},
-		{
-			"approvedRole": "original pierre-light syntax token",
-			"finding": {
-				"rule": "color-contrast",
-				"target": [
-					[
-						"div[data-plan-language=\"css\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"div[data-plan-language=\"css\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][data-view=\"file\"] > diffs-container",
 						"span:nth-child(2)"
 					]
 				],
@@ -198,7 +184,7 @@
 				"rule": "color-contrast",
 				"target": [
 					[
-						"div[data-plan-language=\"css\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"div[data-plan-language=\"css\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][data-view=\"file\"] > diffs-container",
 						"span:nth-child(4)"
 					]
 				],
@@ -212,7 +198,7 @@
 				"rule": "color-contrast",
 				"target": [
 					[
-						"div[data-plan-language=\"css\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"div[data-plan-language=\"css\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][data-view=\"file\"] > diffs-container",
 						"span:nth-child(8)"
 					]
 				],
