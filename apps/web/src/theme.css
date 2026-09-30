@@ -528,7 +528,7 @@ body {
 }
 
 .chat-composer .field {
-	height: 98px;
+	min-height: 98px;
 	border-color: var(--color-edge);
 	border-radius: var(--radius-lg);
 	box-shadow: var(--shadow-resting);

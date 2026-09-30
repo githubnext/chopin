@@ -37,6 +37,7 @@ import {
 } from "./navigation-model";
 import {
 	ProjectSidebarExpandButton,
+	ProjectSidebarLoading,
 	SIDEBAR_MAX,
 	SIDEBAR_MIN,
 	SIDEBAR_STORAGE_KEY,
@@ -66,7 +67,7 @@ class LazyDialogBoundary extends Component<{ children: ReactNode }, { failed: bo
 	}
 
 	override render() {
-		if (!this.state.failed) return this.props.children;
+		if (!this.state.failed) return <Suspense fallback={null}>{this.props.children}</Suspense>;
 		return (
 			<TerminalAlert className="navigation-error">
 				Could not load this dialog.
@@ -731,6 +732,11 @@ export function NavigationShell(
 		setDrawerOpen(false);
 		requestAnimationFrame(() => drawerOpener.current?.focus({ preventScroll: true }));
 	};
+	let dismissDialog = () => setDialog(undefined);
+	let collapseSidebar = () => {
+		setCollapsed(true);
+		dismissDrawer();
+	};
 	let navigateLink = (event: ReactMouseEvent<HTMLDivElement>) => {
 		if (
 			event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey
@@ -754,7 +760,7 @@ export function NavigationShell(
 		navigate(`${destination.pathname}${destination.search}${destination.hash}`);
 	};
 	let sidebar = (
-		<Suspense fallback={null}>
+		<Suspense fallback={<ProjectSidebarLoading onCollapse={collapseSidebar} />}>
 			<ProjectSidebar
 				accountMenu={accountPresence.phase !== "closed" && (
 					<div
@@ -773,11 +779,7 @@ export function NavigationShell(
 				currentDocumentId={currentDocumentId}
 				onAccount={() => setAccountOpen(open => !open)}
 				onAddProject={() => showDialog("add")}
-				onCollapse={() => {
-					setCollapsed(true);
-					if (drawerOpen) dismissDrawer();
-					else requestAnimationFrame(() => drawerOpener.current?.focus({ preventScroll: true }));
-				}}
+				onCollapse={collapseSidebar}
 				onCreateDocument={project => void createDocument(project)}
 				onDocumentAction={documentAction}
 				onLoadMore={loadMore}
@@ -866,58 +868,50 @@ export function NavigationShell(
 					)}
 				{dialogMotion && presentedDialog === "add" && (
 					<LazyDialogBoundary>
-						<Suspense fallback={null}>
-							<AddProjectDialog
-								added={navigation?.projects ?? []}
-								motion={dialogMotion}
-								onAdded={project => {
-									catalogueRefreshes.current.set(project.repositoryId, Date.now());
-									setFocusProjectId(project.repositoryId);
-									void refresh();
-								}}
-								onDismiss={() => setDialog(undefined)}
-								userId={user.id}
-							/>
-						</Suspense>
+						<AddProjectDialog
+							added={navigation?.projects ?? []}
+							motion={dialogMotion}
+							onAdded={project => {
+								catalogueRefreshes.current.set(project.repositoryId, Date.now());
+								setFocusProjectId(project.repositoryId);
+								void refresh();
+							}}
+							onDismiss={dismissDialog}
+							userId={user.id}
+						/>
 					</LazyDialogBoundary>
 				)}
 				{dialogMotion && presentedDialog === "search" && (
 					<LazyDialogBoundary>
-						<Suspense fallback={null}>
-							<DocumentSearchDialog
-								includeArchived={catalogueMode === "archived"}
-								motion={dialogMotion}
-								onDismiss={() => setDialog(undefined)}
-								onSelect={navigateToDocument}
-								projects={navigation?.projects ?? []}
-							/>
-						</Suspense>
+						<DocumentSearchDialog
+							includeArchived={catalogueMode === "archived"}
+							motion={dialogMotion}
+							onDismiss={dismissDialog}
+							onSelect={navigateToDocument}
+							projects={navigation?.projects ?? []}
+						/>
 					</LazyDialogBoundary>
 				)}
 				{dialogMotion && typeof presentedDialog === "object"
 					&& presentedDialog.type === "rename" && (
 					<LazyDialogBoundary>
-						<Suspense fallback={null}>
-							<RenameDocumentDialog
-								channel={presentedDialog.channel}
-								motion={dialogMotion}
-								onDismiss={() => setDialog(undefined)}
-								onRenamed={acceptChannel}
-							/>
-						</Suspense>
+						<RenameDocumentDialog
+							channel={presentedDialog.channel}
+							motion={dialogMotion}
+							onDismiss={dismissDialog}
+							onRenamed={acceptChannel}
+						/>
 					</LazyDialogBoundary>
 				)}
 				{dialogMotion && typeof presentedDialog === "object"
 					&& presentedDialog.type === "delete" && (
 					<LazyDialogBoundary>
-						<Suspense fallback={null}>
-							<DeleteDocumentDialog
-								channel={presentedDialog.channel}
-								motion={dialogMotion}
-								onDeleted={() => documentDeleted(presentedDialog.channel.id)}
-								onDismiss={() => setDialog(undefined)}
-							/>
-						</Suspense>
+						<DeleteDocumentDialog
+							channel={presentedDialog.channel}
+							motion={dialogMotion}
+							onDeleted={() => documentDeleted(presentedDialog.channel.id)}
+							onDismiss={dismissDialog}
+						/>
 					</LazyDialogBoundary>
 				)}
 			</div>

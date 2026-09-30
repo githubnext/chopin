@@ -312,7 +312,7 @@ export function Chat(
 						aria-disabled={!composerReady || submitting}
 						aria-expanded={referencesEnabled ? pickerOpen : undefined}
 						aria-haspopup={referencesEnabled ? "listbox" : undefined}
-						className="min-h-0 flex-1 w-full resize-none bg-transparent px-4 py-3 text-sm"
+						className="h-14 min-h-14 flex-1 w-full resize-none bg-transparent px-4 py-3 text-sm"
 						readOnly={!composerReady || submitting}
 						role={referencesEnabled ? "combobox" : undefined}
 						onBeforeInput={event => {
@@ -408,7 +408,7 @@ export function Chat(
 
 					<div className="flex items-center justify-end gap-1 px-2 pb-2">
 						{sendError && (
-							<TerminalAlert className="mr-auto min-w-0 truncate text-sm text-destructive-ink">
+							<TerminalAlert className="mr-auto min-w-0 text-sm text-destructive-ink [overflow-wrap:anywhere]">
 								{sendError}
 							</TerminalAlert>
 						)}
