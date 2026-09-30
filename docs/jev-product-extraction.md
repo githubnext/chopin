@@ -988,3 +988,53 @@ warnings and the design baseline. The actual client build succeeds. No database,
 application listener, authentication session, provider request or evaluation run was
 started. These native component checks do not prove durable correction transport,
 Room token expiry, collaborative evidence updates or complete browser integration.
+
+## Live evidence host and Room source lifecycle
+
+The real Room now supplies evidence from its conversation state, linked thread and
+current authoritative card metadata to PlanEditor and the existing questionnaire
+widget. Only visible document-plan cards with open or reopened metadata expose the
+read-only popover. The existing decided/undecided content, editing permissions and
+question motion remain intact. Empty evidence, absent metadata and terminal card
+states refuse the popover. Source actions open the real Chat, preserve source identity
+and use the original token-fenced three-second destination expiry and room reset.
+
+The complete original EvidenceHover and geometry helper are restored, including all
+five original geometry callbacks. Native hover/focus listeners retain the 400 ms open
+and 150 ms close delays, Escape focus return, stationary-pointer suppression after
+Source or Escape, document-scroll dismissal and independent panel scrolling. The
+portal uses shared surface, edge, radius and shadow tokens. Only two existing editor
+owner fingerprints are renewed; every reviewed exception case and reason is unchanged.
+Independent review and full host/component preservation proofs pass.
+
+Nine new isolated native cases exercise actual QuestionnaireCard, EvidenceHover,
+EvidencePopover and Transcript: source highlighting and saved fallback, hover/focus
+lifecycle, narrow and short viewport placement, panel/document scrolling, current
+participant evidence and card metadata transitions. A zero-width narrow fixture was
+traced to the imported document flex geometry; an explicit width and flex:none on the
+isolated fixture host corrected it without changing production layout or weakening any
+original assertion; positive overlap and scrolling checks were added.
+
+Four further native cases render the entire actual RoomWorkspace, Workspace,
+PlanEditor and Chat with their actual stores and Wire. One synchronous observer and
+an append-only private navigation-provider export expose the actual source handlers;
+no production functions or effects are replaced. An inert native EventTarget socket
+supplies locally prepared frames. The cases follow real evidence-to-Source-to-Chat
+navigation, invoke a captured old expiry callback to exercise the actual token fence,
+check the replacement's exact three-second deadline, reset on room identity change,
+and check unmount cleanup. A test-only observer records the actual returned expiry
+handle and native clearTimeout calls; unmount must cancel that exact handle before
+the clock advances. All original callbacks and assertions remain. The suite provides
+no authoritative document snapshot,
+authentication, collaboration or database-persistence claim.
+
+The combined isolated cached-Chromium suite passes 32 cases. Focused component,
+source, icon, widget and geometry verification passes 245 tests with 1,401 assertions.
+Workspace/E2E types, CI, client build and complete binding/callback/source proofs pass.
+CI retains only inherited warnings and the existing design baseline. Evidence, Room
+and crypto-dependent form fixtures fulfill their synthetic HTTPS documents locally;
+the original source/question fixtures use isolated plain pages. All other requests
+are aborted; no app,
+database, auth session, provider call or evaluation run was started. Analysis host
+integration, decided-prose/list evidence and full application collaboration remain
+later work.

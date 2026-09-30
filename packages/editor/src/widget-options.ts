@@ -1,5 +1,6 @@
 import { Cell } from "@mdxeditor/gurx";
 
+import type { ReactNode } from "react";
 import type { CardMetaStore } from "./card-meta";
 import type { Binding } from "@lexical/yjs";
 import type { ChangeStore } from "./changes";
@@ -40,6 +41,7 @@ export type WidgetOptions = {
 	questionMotion?: QuestionStepMotion;
 	questions?: QuestionnaireStore;
 	cardMeta?: CardMetaStore;
+	evidence?: (questionnaireId: string) => ReactNode | null;
 	research?: ResearchStore;
 	researchDrafts?: ResearchDraftStore;
 	threads?: ThreadStore;

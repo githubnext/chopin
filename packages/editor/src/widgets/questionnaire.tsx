@@ -15,6 +15,7 @@ import { useCellValue } from "@mdxeditor/gurx";
 import { Provenance, SidecarCard } from "../card";
 import { useCardMeta } from "../card-meta";
 import { ContentSwapLayer } from "../content-swap";
+import { EvidenceHover } from "./evidence-hover";
 import { widgets$ } from "../widget-options";
 
 import type { Question } from "@chopin/protocol";
@@ -61,6 +62,7 @@ export type QuestionnaireCardProps = {
 	value: Questionnaire;
 	/** Durable lifecycle state can arrive separately from the document node. */
 	meta?: Question.CardMeta;
+	evidence?: ReactNode | null;
 	wire?: Transport;
 	connected?: boolean;
 	/** Whether this viewer may change or resolve the shared draft. */
@@ -78,6 +80,7 @@ export function QuestionnaireCard(
 	{
 		canEdit = true,
 		connected = false,
+		evidence,
 		onQuestionEnter,
 		onQuestionLeave,
 		onQuestionSelect,
@@ -92,7 +95,7 @@ export function QuestionnaireCard(
 	let current = meta?.status ?? cardStatus(value);
 	let pointing = { places, onQuestionEnter, onQuestionLeave, onQuestionSelect };
 
-	return current !== "open" && current !== "reopened"
+	let content = current !== "open" && current !== "reopened"
 		? (
 			<Decided
 				canEdit={canEdit}
@@ -116,6 +119,19 @@ export function QuestionnaireCard(
 				{...pointing}
 			/>
 		);
+	let evidenceActive = (current === "open" || current === "reopened")
+		&& !!value.thread
+		&& (meta?.status === "open" || meta?.status === "reopened")
+		&& !!evidence;
+	return (
+		<EvidenceHover
+			active={evidenceActive}
+			content={evidence ?? null}
+			question={value.questions[0]?.prompt ?? "this decision"}
+		>
+			{content}
+		</EvidenceHover>
+	);
 }
 
 type Pointing = {
@@ -330,11 +346,15 @@ function Decided(
 function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 	let options = useCellValue(widgets$);
 	let meta = useCardMeta(options.cardMeta, value.id);
+	let evidence = value.thread && (meta?.status === "open" || meta?.status === "reopened")
+		? options.evidence?.(value.id)
+		: null;
 
 	return (
 		<QuestionnaireCard
 			canEdit={options.canEdit}
 			connected={options.connected}
+			evidence={evidence}
 			motion={options.questionMotion}
 			meta={meta}
 			onQuestionEnter={question => options.questions?.highlight(value.id, question)}

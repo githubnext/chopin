@@ -8,6 +8,27 @@
 
 @import "./callout.css";
 
+/* Evidence can extend beyond the clipped document column; only its panel takes hits. */
+.plan-evidence-popover {
+	pointer-events: none;
+	position: fixed;
+	inset: 0;
+	z-index: 40;
+}
+
+.plan-evidence-panel {
+	pointer-events: auto;
+	position: fixed;
+	width: min(20rem, calc(100vw - 24px));
+	max-height: calc(100dvh - 24px);
+	overflow-y: auto;
+	border-radius: var(--radius-md);
+	background: var(--color-page);
+	box-shadow: var(--shadow-overlay);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+}
+
 .plan-content [data-research-draft-anchor] {
 	margin-block-end: var(--research-draft-space, 0);
 }

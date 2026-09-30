@@ -19,6 +19,9 @@ import {
 
 import { Chat } from "./chat/chat";
 import { shouldShowResearchActionError, useResearchOfferLinks } from "./chat/research-offer";
+import { evidenceRows, hasEvidence } from "./conversation-plan/evidence";
+import { EvidencePopover } from "./conversation-plan/evidence-popover";
+import { threadForCard } from "./conversation-plan/links";
 import { ConversationPlanStore, useConversationPlan } from "./conversation-plan/store";
 import { rememberChannel } from "./channel-recovery";
 import { decisionAttention, DecisionViewControl } from "./decision-view-control";
@@ -39,6 +42,8 @@ import type { DocumentMetadata } from "./document-actions";
 import type { DocumentAction } from "./document-actions-menu";
 import type { HostedWorkspaceProps } from "./hosted";
 import type { Status } from "./wire";
+import type { ChatDestination } from "./conversation-plan/source";
+import type { SourceDestination } from "./conversation-plan/card-parts";
 import type { WorkspacePresentation } from "./workspace-model";
 
 type ManagedHello = Session.Hello & { archivedAt?: string; canManage: boolean };
@@ -167,6 +172,8 @@ export function RoomWorkspace(
 	}: HostedWorkspaceProps,
 ) {
 	let [wire, setWire] = useState<Wire>();
+	let [sourceDestination, setSourceDestination] = useState<ChatDestination | undefined>(undefined);
+	let sourceToken = useRef(0);
 	let conversationStore = useMemo(() => new ConversationPlanStore(room), [room]);
 	let conversation = useConversationPlan(conversationStore);
 	let {
@@ -342,6 +349,18 @@ export function RoomWorkspace(
 		dispatch({ type: "set-chat", open: false });
 	};
 
+	useEffect(() => {
+		setSourceDestination(undefined);
+	}, [room]);
+	useEffect(() => {
+		if (!sourceDestination) return;
+		let token = sourceDestination.token;
+		let timeout = window.setTimeout(() => {
+			setSourceDestination(current => current?.token === token ? undefined : current);
+		}, 3_000);
+		return () => window.clearTimeout(timeout);
+	}, [sourceDestination]);
+
 	let showDecisionCard = (questionnaireId: string) => {
 		let entry = questions.snapshot().find(item => item.id === questionnaireId);
 		let question = entry?.value.questions[0]?.id;
@@ -352,6 +371,35 @@ export function RoomWorkspace(
 		dispatch({ type: "set-desktop-chat", open });
 		if (!open) dispatch({ type: "set-chat", open: false });
 	};
+
+	let showSource = useCallback((destination: SourceDestination) => {
+		setSourceDestination({ ...destination, token: ++sourceToken.current });
+		if (mode === "split") setDesktopChatOpen(true);
+		else dispatch({ type: "set-chat", open: true });
+	}, [dispatch, mode, setDesktopChatOpen]);
+	let showEvidence = useCallback((questionnaireId: string) => {
+		if (!workspacePresentation.documentVisible || workspacePresentation.documentView !== "plan") {
+			return null;
+		}
+		let state = conversation.enabled ? conversation.state : undefined;
+		let thread = state && threadForCard(state, questionnaireId);
+		let meta = cardMetadata.get(questionnaireId);
+		if (!thread || !meta || (meta.status !== "open" && meta.status !== "reopened")) {
+			return null;
+		}
+		let options = entries.find(entry => entry.id === questionnaireId)
+			?.value.questions[0]?.options;
+		let rows = evidenceRows(thread, meta, options);
+		return hasEvidence(rows) ? <EvidencePopover onSource={showSource} rows={rows} /> : null;
+	}, [
+		cardMetadata,
+		conversation.enabled,
+		conversation.state,
+		entries,
+		showSource,
+		workspacePresentation.documentView,
+		workspacePresentation.documentVisible,
+	]);
 
 	let showPlan = (widget: string, question: string) => {
 		selectDestination("plan");
@@ -568,6 +616,7 @@ export function RoomWorkspace(
 					handle={handle}
 					onActivity={onChatActivity}
 					conversationPlan={conversation.state}
+					sourceDestination={sourceDestination}
 					researchOffers={conversation.enabled
 						? {
 							links: researchLinks.links,
@@ -636,6 +685,7 @@ export function RoomWorkspace(
 			plan={
 				<PlanEditor
 					cardMeta={cardMeta}
+					evidence={showEvidence}
 					commentPresentation={mode === "split" ? "popover" : "sheet"}
 					connection={status === "deleted" ? "closed" : status}
 					key={workspaceArchivedAt ? "archived" : "active"}

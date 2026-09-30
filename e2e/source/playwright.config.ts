@@ -8,6 +8,8 @@ export default defineConfig({
 		"transcript-source.native.ts",
 		"excerpt-correction-lifecycle.native.ts",
 		"excerpt-correction-retry.native.ts",
+		"evidence-hover.native.ts",
+		"room-source.native.ts",
 	],
 	workers: 1,
 	fullyParallel: false,

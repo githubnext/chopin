@@ -24,6 +24,7 @@ import { ResearchDraftStore } from "./research-draft";
 import { register } from "./widgets";
 import { widgetsPlugin } from "./widgets-plugin";
 
+import type { ReactNode } from "react";
 import type { CardMetaStore } from "./card-meta";
 import type { Binding } from "@lexical/yjs";
 import type { MDXEditorMethods } from "@mdxeditor/editor";
@@ -72,6 +73,7 @@ export type PlanEditorProps = {
 	 */
 	questions?: QuestionnaireStore;
 	cardMeta?: CardMetaStore;
+	evidence?: (questionnaireId: string) => ReactNode | null;
 	/** Durable Research Workspace state and actions supplied by the host app. */
 	research?: ResearchStore;
 	/** The same arrangement for comment threads. */
@@ -103,6 +105,7 @@ export function PlanEditor(
 		questionMotion,
 		questions,
 		cardMeta,
+		evidence,
 		readOnly,
 		research,
 		scrollTop,
@@ -260,6 +263,7 @@ export function PlanEditor(
 						questionMotion,
 						questions,
 						cardMeta,
+						evidence,
 						research,
 						researchDrafts,
 						threads,
@@ -281,6 +285,7 @@ export function PlanEditor(
 			binding,
 			questions,
 			cardMeta,
+			evidence,
 			research,
 			researchDrafts,
 			commentPresentation,
