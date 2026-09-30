@@ -448,7 +448,9 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 		};
 		let escape = (event: KeyboardEvent) => {
 			if (event.key !== "Escape") return;
-			event.preventDefault();
+			// A hover preview goes quietly; only a pinned popover owns the key, so
+			// Escape still reaches whatever else (a child document) it would close.
+			if (pointer.pinned) event.preventDefault();
 			dismiss();
 		};
 		document.addEventListener("pointerdown", outside);
