@@ -20,11 +20,3 @@ export let specimens = [
 	{ id: "code", covers: "Real plain and highlighted code previews" },
 	{ id: "table", covers: "Real static editor table and deliberate internal overflow" },
 ] as const;
-
-export let interactions = [
-	"Production document action menu: keyboard open, arrow navigation, Escape, focus return",
-	"Production navigation dialog: initial focus, focus trap, Escape, disabled save, save error",
-	"Shared Select: keyboard open, selection and focus return",
-	"200% root text size: control and prose reflow; normal-size table scroll lane and keyboard access to code previews",
-	"Reduced motion: menu and modal transitions settle without active animations",
-];
