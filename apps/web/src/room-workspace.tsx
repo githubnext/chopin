@@ -127,8 +127,13 @@ export function Header(
 				role="group"
 			>
 				{people.map(handle => (
-					<span className="room-member-face -ml-1.5 first:ml-0" key={handle.toLowerCase()}>
-						<Face handle={handle} ring="ground" size={24} />
+					<span
+						className="room-member-face -ml-1.5 first:ml-0"
+						data-tooltip={handle}
+						data-tooltip-verbatim=""
+						key={handle.toLowerCase()}
+					>
+						<Face handle={handle} ring="ground" size={24} titled={false} />
 					</span>
 				))}
 				{people.length > 3 && (

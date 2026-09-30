@@ -389,7 +389,7 @@
 				1
 			]
 		],
-		"sourceHash": "a893cf76153f551ec623590a097d3a760237d8c1de5ef2e2cc655d8662a55e14"
+		"sourceHash": "8d3ea21719a57e656f7d4b088bc584a0133eeda59676be84b0b0ba79ada63233"
 	},
 	{
 		"file": "packages/editor/src/widgets/code-view.tsx",

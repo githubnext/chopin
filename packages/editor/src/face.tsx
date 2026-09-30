@@ -36,6 +36,8 @@ export type FaceProps = {
 	size?: number;
 	/** The surface behind overlapping faces, so their cover ring does not show. */
 	ring?: "ground" | "page";
+	/** Set false where a design-system tooltip already names the face. */
+	titled?: boolean;
 };
 
 export const FACE_RING_CLASS = {
@@ -43,9 +45,19 @@ export const FACE_RING_CLASS = {
 	page: "ring-2 ring-page",
 } as const;
 
-export function Face({ handle, ring, size = 20 }: FaceProps) {
+export const FACE_RADIUS_CLASS = {
+	small: "rounded-sm",
+	regular: "rounded-md",
+} as const;
+
+/** Small faces need a smaller corner than the default. */
+export function faceCorner(size: number): keyof typeof FACE_RADIUS_CLASS {
+	return size <= 18 ? "small" : "regular";
+}
+
+export function Face({ handle, ring, size = 20, titled = true }: FaceProps) {
 	let [failed, setFailed] = useState(false);
-	let edge = `shrink-0 rounded-md ${ring ? FACE_RING_CLASS[ring] : ""}`;
+	let edge = `shrink-0 ${FACE_RADIUS_CLASS[faceCorner(size)]} ${ring ? FACE_RING_CLASS[ring] : ""}`;
 	let box = { width: size, height: size };
 
 	if (failed) {
@@ -55,7 +67,7 @@ export function Face({ handle, ring, size = 20 }: FaceProps) {
 				className={`block ${edge}`}
 				role="img"
 				style={{ ...box, background: color(handle) }}
-				title={handle}
+				title={titled ? handle : undefined}
 			/>
 		);
 	}
@@ -68,7 +80,7 @@ export function Face({ handle, ring, size = 20 }: FaceProps) {
 			referrerPolicy="no-referrer"
 			src={photograph(handle, size)}
 			style={box}
-			title={handle}
+			title={titled ? handle : undefined}
 		/>
 	);
 }
