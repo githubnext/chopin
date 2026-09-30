@@ -5,7 +5,6 @@ import * as Store from "./store";
 import { asked } from "./store.test-fixtures";
 
 // Original callbacks from archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2.
-// Advisory retitle/editor/suggest callbacks are deferred to the next bounded slice.
 describe("Store.retitle", () => {
 	it("changes one decision question without changing the human draft or option identities", () => {
 		let questions = asked();
@@ -31,6 +30,27 @@ describe("Store.retitle", () => {
 		expect([...entry.model.toBinary()]).toEqual(before);
 		expect(Question.read(entry.model, entry.definition).q?.choice).toBe("a");
 		expect(Store.restore(Store.dump(questions)).open.get("w")?.revision).toBe(2);
+	});
+
+	it("keeps an advisory suggestion tied to the new revision and avoids a repeat bump", () => {
+		let questions = asked();
+		Store.suggest(questions, "w", { optionId: "a", messageIds: ["m1"] });
+		expect(Store.retitle(questions, "w", "Why use Auth0?")).toMatchObject({
+			ok: true,
+			applied: true,
+			revision: 2,
+		});
+		expect(Store.get(questions, "w")?.suggested).toEqual({
+			optionId: "a",
+			messageIds: ["m1"],
+			revision: 2,
+		});
+		expect(Store.retitle(questions, "w", " Why use Auth0? ")).toMatchObject({
+			ok: true,
+			applied: false,
+			revision: 2,
+		});
+		expect(Store.restore(Store.dump(questions)).open.get("w")?.suggested?.revision).toBe(2);
 	});
 
 	it("refuses invalid text, a resolving decision, and a closed decision", () => {

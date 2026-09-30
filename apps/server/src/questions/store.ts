@@ -16,6 +16,8 @@
 
 import * as Question from "@chopin/question";
 
+import { untouched } from "./store-suggestions";
+
 import type { Answer, Definition, Drafts } from "@chopin/question";
 import type {
 	Claim,
@@ -40,6 +42,7 @@ export {
 	revert,
 } from "./store-options";
 export type { AddedOption, Before, Retitled } from "./store-options";
+export { suggest } from "./store-suggestions";
 export type { Claim, Collaborator, Ended, Questions, StoredOpen } from "./store-types";
 
 /** How long a resolved questionnaire is remembered, for late arrivals. */
@@ -56,6 +59,7 @@ export function dump(questions: Questions): StoredOpen[] {
 		...(entry.widget ? { widget: entry.widget } : {}),
 		model: [...entry.model.toBinary()],
 		revision: entry.revision,
+		...(entry.suggested ? { suggested: entry.suggested } : {}),
 	}));
 }
 
@@ -71,12 +75,33 @@ export function restore(entries: StoredOpen[]): Questions {
 			|| entry.model.some(value => !Number.isInteger(value) || value < 0 || value > 255)
 		) Question.reject("Questionnaire model is invalid");
 		let definition = Question.identified(entry.definition);
+		if (entry.suggested !== undefined) {
+			let suggested = entry.suggested;
+			if (
+				!suggested || typeof suggested !== "object" || Array.isArray(suggested)
+				|| Object.keys(suggested).sort().join(",") !== "messageIds,optionId,revision"
+				|| typeof suggested.optionId !== "string"
+				|| !Number.isSafeInteger(suggested.revision) || suggested.revision < 1
+				|| suggested.revision !== entry.revision
+				|| !definition.questions[0]?.options.some(option => option.id === suggested.optionId)
+				|| definition.questions.length !== 1 || definition.questions[0]?.multiple
+				|| !Array.isArray(suggested.messageIds) || suggested.messageIds.length > 16
+				|| suggested.messageIds.some(id => typeof id !== "string" || !id || id.length > 200)
+				|| new Set(suggested.messageIds).size !== suggested.messageIds.length
+			) Question.reject("Questionnaire suggestion is invalid");
+		}
+		let model = Question.restore(entry.model, definition);
+		if (entry.suggested) {
+			let draft = Question.read(model, definition)[definition.questions[0]!.id]!;
+			if (!untouched(draft)) Question.reject("Questionnaire suggestion is invalid");
+		}
 		questions.open.set(entry.id, {
 			id: entry.id,
 			definition,
 			...(entry.widget ? { widget: entry.widget } : {}),
-			model: Question.restore(entry.model, definition),
+			model,
 			revision: entry.revision,
+			...(entry.suggested ? { suggested: entry.suggested } : {}),
 			presence: new Map(),
 			editors: new Set(),
 		});
@@ -279,6 +304,7 @@ export function claimSubmit(
 	id: string,
 	revision: number,
 	resolver: string,
+	suggestedOptionId?: string,
 ): { ok: true; claim: Claim; answers: Answer[]; widget?: string } | SubmitRefusal {
 	let ended = questions.closed.get(id);
 	if (ended) return resolved(ended);
@@ -301,6 +327,17 @@ export function claimSubmit(
 		};
 	}
 
+	if (suggestedOptionId !== undefined) {
+		let question = entry.definition.questions[0];
+		let draft = question && drafts[question.id];
+		if (
+			entry.definition.questions.length !== 1 || !question || question.multiple || !draft
+			|| !untouched(draft) || !entry.suggested
+			|| entry.suggested.optionId !== suggestedOptionId
+			|| !question.options.some(option => option.id === suggestedOptionId)
+		) return { ok: false, reason: "invalid", message: "Suggestion is no longer current" };
+		drafts = { ...drafts, [question.id]: { ...draft, choice: suggestedOptionId } };
+	}
 	let outcome = Question.derive(entry.definition, drafts);
 	if (!outcome.ok) return { ok: false, reason: "invalid", message: outcome.message };
 

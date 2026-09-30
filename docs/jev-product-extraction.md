@@ -187,6 +187,7 @@ and E2E type checks, formatting and CI with the existing warnings listed above.
 | Pending-card drafts        | Whole draft implementation matches archive; restored original empty-card mode assertions and added first-option selection/ID regression. Existing stored modes stay unchanged.                                              | 73 focused tests, 205 assertions          |
 | Shared definitions         | Store restoration and controller Open.Reply use identified definitions; existing wire types cover them. One original Store callback/helper and five new regressions cover stable IDs, pending cards and malformed payloads. | 79 focused tests, 226 assertions          |
 | Store options/lifecycle    | Small acyclic modules preserve archived APIs/types, capture/revert, reopening and editor credit. Nine of 19 original Store callbacks are retained; 17 other core bodies remain unchanged apart from editor initialisation.  | 99 focused tests, 292 assertions          |
+| Store suggestions          | Archived suggestion metadata, restore bounds and explicit submit fallback; all 19 original Store callbacks are retained exactly once across small suites. Existing service callers remain unchanged.                        | 109 focused tests, 348 assertions         |
 
 The combined guard/source/quote run passed 30 tests (242 assertions). Domain/replay
 checks passed 27 tests (109 assertions). The complete extracted foundation and
@@ -240,14 +241,15 @@ D02/m2, D03/m1 and D04/m5 messages with archive SHA, case, step and path. Root a
 reviewer verified text parity, apostrophes and UTF-16 offsets. The other six test
 adaptations remain pending.
 
-Nine of 19 archived Store callbacks are retained across the bounded Store suites;
-the remaining ten cover advisory retitling and suggestions. New Store mutation APIs
-have no service/routes/UI callers yet. Suggestion fields are typed groundwork;
-dump/restore and the suggestion producer remain pending. Capture/revert retains
-references, reservations require caller sequencing, and relabel bounds remain partial.
-The existing stage-before-commit durability gap is unchanged. Server Store
-and controller restoration are tested independently of full sidecar/socket recovery.
+All 19 archived Store callbacks are retained across the bounded Store suites.
+New Store mutation and suggestion APIs have no service/routes/UI callers yet.
+Suggestions persist as metadata; their evidence IDs pass shape checks rather than
+transcript provenance checks. Explicit submit fallback derives a copied draft and
+leaves the shared model unchanged. Capture/revert retains references, reservations
+require caller sequencing, and relabel bounds remain partial. The existing
+stage-before-commit durability gap is unchanged. Server Store and controller
+restoration are tested independently of full sidecar/socket recovery.
 
-Next: Store suggestions and their persistence, then durable record integration. The
-remaining archived correction/review suites follow their dependencies. Durable
-processing, Planner jobs and browser integration remain unimplemented.
+Next: durable record integration. The remaining archived correction/review suites
+follow their dependencies. Durable processing, Planner jobs and browser integration
+remain unimplemented.

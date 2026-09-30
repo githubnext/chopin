@@ -5,7 +5,6 @@ import * as Store from "./store";
 import { asked, legacy } from "./store.test-fixtures";
 
 // Original callbacks from archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2.
-// Advisory retitle/editor/suggest callbacks are deferred to the next bounded slice.
 describe("Store.reopen", () => {
 	it("reuses identity with a fresh draft, no Planner waiter, and no old tombstone", () => {
 		let questions = asked();
