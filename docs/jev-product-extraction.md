@@ -186,13 +186,15 @@ and E2E type checks, formatting and CI with the existing warnings listed above.
 | Record validation          | All 25 original function/constant/type declarations match source syntax trees; seven archived tests are byte-identical. Extracted required dialect MAX_ID=200; added UTF-16 boundary regression.                            | 8 record tests, 29 assertions             |
 | Pending-card drafts        | Whole draft implementation matches archive; restored original empty-card mode assertions and added first-option selection/ID regression. Existing stored modes stay unchanged.                                              | 73 focused tests, 205 assertions          |
 | Shared definitions         | Store restoration and controller Open.Reply use identified definitions; existing wire types cover them. One original Store callback/helper and five new regressions cover stable IDs, pending cards and malformed payloads. | 79 focused tests, 226 assertions          |
+| Store options/lifecycle    | Small acyclic modules preserve archived APIs/types, capture/revert, reopening and editor credit. Nine of 19 original Store callbacks are retained; 17 other core bodies remain unchanged apart from editor initialisation.  | 99 focused tests, 292 assertions          |
 
 The combined guard/source/quote run passed 30 tests (242 assertions). Domain/replay
 checks passed 27 tests (109 assertions). The complete extracted foundation and
 question-package run passed 100 tests, 0 failed (493 assertions, 20.92 seconds). Replay tests
 cover immutable inputs, stale versions, contributions, decisions, deferral/resumption,
-correction target counters, support withdrawals and exact Save lineage. These modules
-remain dormant. Saved evidence, authenticated callers and persistence before
+correction target counters, support withdrawals and exact Save lineage. Conversation
+processing remains dormant; existing question paths use the extracted answer, draft
+and definition validation behavior. Saved evidence, authenticated callers and persistence before
 publication belong to the integration slices. Current question submission returns the
 new IDs but still persists/projects summarised strings; durable ID-backed records
 remain pending. Domain tests preserve saved provenance,
@@ -238,10 +240,14 @@ D02/m2, D03/m1 and D04/m5 messages with archive SHA, case, step and path. Root a
 reviewer verified text parity, apostrophes and UTF-16 offsets. The other six test
 adaptations remain pending.
 
-One of 19 archived Store callbacks is now retained in `store-restore.test.ts`; the
-remaining 18 follow option, reopen, editor and suggestion operations. Server Store
+Nine of 19 archived Store callbacks are retained across the bounded Store suites;
+the remaining ten cover advisory retitling and suggestions. New Store mutation APIs
+have no service/routes/UI callers yet. Suggestion fields are typed groundwork;
+dump/restore and the suggestion producer remain pending. Capture/revert retains
+references, reservations require caller sequencing, and relabel bounds remain partial.
+The existing stage-before-commit durability gap is unchanged. Server Store
 and controller restoration are tested independently of full sidecar/socket recovery.
 
-Next: Store option/lifecycle operations, then durable record integration. The
+Next: Store suggestions and their persistence, then durable record integration. The
 remaining archived correction/review suites follow their dependencies. Durable
 processing, Planner jobs and browser integration remain unimplemented.

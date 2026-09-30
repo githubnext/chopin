@@ -3,19 +3,10 @@ import * as Question from "@chopin/question";
 
 import * as Store from "./store";
 
-// legacy() and the original restoration callback: archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2,
-// apps/server/src/questions/store.test.ts. Remaining archive Store callbacks are deferred.
-function legacy() {
-	return {
-		questions: ["q1", "q2"].map(id => ({
-			id,
-			header: id,
-			question: `${id}?`,
-			multiple: false,
-			options: [{ id: `${id}-a`, label: "One", description: "" }],
-		})),
-	};
-}
+import { legacy } from "./store.test-fixtures";
+
+// Original restoration callback: archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2,
+// apps/server/src/questions/store.test.ts.
 
 describe("Store.restore shared definitions", () => {
 	it("restores a legacy multi-question draft with its original question IDs", () => {

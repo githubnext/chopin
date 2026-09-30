@@ -16,63 +16,34 @@
 
 import * as Question from "@chopin/question";
 
-import type { Answer, Definition, Drafts, Model } from "@chopin/question";
+import type { Answer, Definition, Drafts } from "@chopin/question";
+import type {
+	Claim,
+	Closed,
+	Collaborator,
+	Ended,
+	Open,
+	Questions,
+	StoredOpen,
+} from "./store-types";
+
+export { reopen } from "./store-lifecycle";
+export {
+	addOption,
+	before,
+	relabelOption,
+	releaseEdit,
+	releaseOption,
+	reserveEdit,
+	reserveOption,
+	retitle,
+	revert,
+} from "./store-options";
+export type { AddedOption, Before, Retitled } from "./store-options";
+export type { Claim, Collaborator, Ended, Questions, StoredOpen } from "./store-types";
 
 /** How long a resolved questionnaire is remembered, for late arrivals. */
 const CLOSED_TTL = 5 * 60 * 1_000;
-
-export type Collaborator = {
-	client: string;
-	handle: string;
-	question?: string;
-	field?: "choices" | "custom";
-};
-
-export type Ended =
-	| { status: "answered"; answers: Answer[]; resolver: string }
-	| { status: "cancelled"; resolver: string };
-
-type Open = {
-	id: string;
-	definition: Definition;
-	/** The plan node this belongs to, when it has one. */
-	widget?: string;
-	model: Model;
-	revision: number;
-	presence: Map<string, Collaborator>;
-	/** Set while a resolution is in flight; blocks edits and rival claims. */
-	claim?: "submit" | "cancel";
-	/** Resolves the promise the agent is waiting on. */
-	settle?: (ended: Ended) => void;
-};
-
-type Closed = { result: Ended; revision: number; expires: number };
-
-export type Claim = {
-	id: string;
-	entry: Open;
-	result: Ended;
-};
-
-export type Questions = {
-	open: Map<string, Open>;
-	/**
-	 * Tombstones.
-	 *
-	 * A submit that arrives just after somebody else's would otherwise be told
-	 * the questionnaire never existed, which reads as an error rather than as
-	 * "they got there first".
-	 */
-	closed: Map<string, Closed>;
-};
-
-export type StoredOpen = {
-	id: string;
-	definition: Definition;
-	widget?: string;
-	model: number[];
-	revision: number;
-};
 
 export function create(): Questions {
 	return { open: new Map(), closed: new Map() };
@@ -107,6 +78,7 @@ export function restore(entries: StoredOpen[]): Questions {
 			model: Question.restore(entry.model, definition),
 			revision: entry.revision,
 			presence: new Map(),
+			editors: new Set(),
 		});
 	}
 	return questions;
@@ -154,6 +126,7 @@ export function ask(
 			model,
 			revision: 0,
 			presence: new Map(),
+			editors: new Set(),
 			settle,
 		});
 	});
@@ -208,7 +181,7 @@ export type Edited =
  * `Question.apply`. What is decided here is who may ask: a questionnaire that
  * is resolving takes no more edits, because its answer has already been read.
  */
-export function edit(questions: Questions, id: string, binary: number[]): Edited {
+export function edit(questions: Questions, id: string, binary: number[], editor?: string): Edited {
 	let entry = questions.open.get(id);
 	if (!entry) {
 		let ended = questions.closed.get(id);
@@ -234,6 +207,8 @@ export function edit(questions: Questions, id: string, binary: number[]): Edited
 
 	entry.model = outcome.model;
 	entry.revision++;
+	entry.suggested = undefined;
+	if (editor) entry.editors.add(editor);
 	return { open: true, accepted: true, applied: true, revision: entry.revision };
 }
 
