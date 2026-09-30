@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { Controls } from "./controls";
 import { AuthoredContent, callouts } from "./authored-content";
 import { Foundations } from "./foundations";
+import { InteractiveSpecimens } from "./interactive";
 import { AUDIT_INVENTORY } from "./inventory";
 import { Surfaces } from "./surfaces";
 
@@ -237,12 +238,15 @@ describe("design audit specimens", () => {
 	});
 
 	it("renders every application surface and its meaningful states", () => {
-		let markup = renderToStaticMarkup(createElement(Surfaces));
+		let markup = renderToStaticMarkup(
+			createElement("div", null, createElement(Surfaces), createElement(InteractiveSpecimens)),
+		);
 
 		for (let item of AUDIT_INVENTORY.find(group => group.id === "surfaces")!.items) {
 			expect(markup).toContain(`data-audit-item="${item.id}"`);
 		}
-		expect(markup).toContain('role="dialog"');
+		expect(plate(markup, "dialogs")).toContain('role="group"');
+		expect(plate(markup, "dialogs")).not.toContain('aria-modal="true"');
 		expect(markup).toContain('aria-current="page"');
 		expect(markup).toContain('aria-label="Compact workspace view"');
 		expect(markup).toContain('data-chat-entry="true"');

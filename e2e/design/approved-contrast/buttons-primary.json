@@ -1,0 +1,116 @@
+{
+	"wide": [
+		{
+			"approvedRole": "audit specimen-state label",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div[data-audit-sample=\"primary\"] > .design-audit-control-grid > .design-audit-control-state:nth-child(1) > .design-audit-state"
+				],
+				"html": "<span class=\"design-audit-state\">Default</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit specimen-state label",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div[data-audit-sample=\"primary\"] > .design-audit-control-grid > .design-audit-control-state:nth-child(2) > .design-audit-state"
+				],
+				"html": "<span class=\"design-audit-state\">Hover</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit specimen-state label",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div[data-audit-sample=\"primary\"] > .design-audit-control-grid > .design-audit-control-state:nth-child(3) > .design-audit-state"
+				],
+				"html": "<span class=\"design-audit-state\">Active</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit specimen-state label",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div[data-audit-sample=\"primary\"] > .design-audit-control-grid > .design-audit-control-state:nth-child(4) > .design-audit-state"
+				],
+				"html": "<span class=\"design-audit-state\">Focus</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit specimen-state label",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div[data-audit-sample=\"primary\"] > .design-audit-control-grid > .design-audit-control-state:nth-child(5) > .design-audit-state"
+				],
+				"html": "<span class=\"design-audit-state\">Disabled</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		}
+	],
+	"narrow": [
+		{
+			"approvedRole": "audit specimen-state label",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div[data-audit-sample=\"primary\"] > .design-audit-control-grid > .design-audit-control-state:nth-child(1) > .design-audit-state"
+				],
+				"html": "<span class=\"design-audit-state\">Default</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit specimen-state label",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div[data-audit-sample=\"primary\"] > .design-audit-control-grid > .design-audit-control-state:nth-child(2) > .design-audit-state"
+				],
+				"html": "<span class=\"design-audit-state\">Hover</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit specimen-state label",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div[data-audit-sample=\"primary\"] > .design-audit-control-grid > .design-audit-control-state:nth-child(3) > .design-audit-state"
+				],
+				"html": "<span class=\"design-audit-state\">Active</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit specimen-state label",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div[data-audit-sample=\"primary\"] > .design-audit-control-grid > .design-audit-control-state:nth-child(4) > .design-audit-state"
+				],
+				"html": "<span class=\"design-audit-state\">Focus</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit specimen-state label",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div[data-audit-sample=\"primary\"] > .design-audit-control-grid > .design-audit-control-state:nth-child(5) > .design-audit-state"
+				],
+				"html": "<span class=\"design-audit-state\">Disabled</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		}
+	]
+}

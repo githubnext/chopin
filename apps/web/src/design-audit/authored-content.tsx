@@ -216,7 +216,7 @@ function TableSpecimens() {
 								<th>State</th>
 							</tr>
 							<tr>
-								<td aria-selected="true">Button</td>
+								<td data-selected="true">Button</td>
 								<td>Selected</td>
 							</tr>
 						</tbody>

@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Chopin · What the interface checks tested and found</title>
+		<style>
+		:root {
+			color-scheme: light;
+			--ground: #b7bc9c;
+			--paper: #f7f6f0;
+			--ink: #172d2c;
+			--muted: #53615d;
+			--line: #cdd3c6;
+			--petrol: #125960;
+			--soft: #e7ebe0;
+			--amber: #865b24;
+		}
+		* {
+			box-sizing: border-box;
+		}
+		html {
+			scroll-behavior: smooth;
+		}
+		body {
+			margin: 0;
+			background: var(--ground);
+			color: var(--ink);
+			font: 16px/1.5 Georgia, "Times New Roman", serif;
+		}
+		a {
+			color: var(--petrol);
+			text-underline-offset: 3px;
+		}
+		a:focus-visible {
+			outline: 3px solid var(--petrol);
+			outline-offset: 3px;
+		}
+		.page {
+			max-width: 1180px;
+			margin: 32px auto;
+			background: var(--paper);
+			box-shadow: 0 20px 65px #182e281f;
+		}
+		header {
+			padding: 56px clamp(24px, 6vw, 80px) 48px;
+			border-bottom: 1px solid var(--line);
+			position: relative;
+			overflow: hidden;
+		}
+		header:after {
+			content: "";
+			position: absolute;
+			width: 400px;
+			height: 400px;
+			right: -180px;
+			top: -220px;
+			border: 80px solid #d9dfcf;
+			border-radius: 50%;
+			opacity: 0.7;
+		}
+		.eyebrow, .mono, th, .tag, figcaption, .note {
+			font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+		}
+		.eyebrow {
+			color: var(--petrol);
+			font-size: 12px;
+			letter-spacing: 0.11em;
+			text-transform: uppercase;
+			font-weight: 700;
+		}
+		h1, h2, h3, p {
+			margin-top: 0;
+		}
+		h1 {
+			max-width: 850px;
+			font-size: clamp(42px, 6.2vw, 78px);
+			line-height: 1.02;
+			font-weight: 400;
+			letter-spacing: -0.055em;
+			margin: 22px 0;
+			position: relative;
+			z-index: 1;
+		}
+		.lede {
+			max-width: 710px;
+			color: var(--muted);
+			font-size: 20px;
+			line-height: 1.45;
+			margin: 0;
+			position: relative;
+			z-index: 1;
+		}
+		.overview {
+			max-width: 820px;
+			margin-top: 26px;
+			position: relative;
+			z-index: 1;
+		}
+		.overview p {
+			margin-bottom: 16px;
+		}
+		li {
+			margin-bottom: 12px;
+		}
+		summary {
+			cursor: pointer;
+			font-weight: bold;
+			margin-bottom: 20px;
+		}
+		.meta {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 9px;
+			margin-top: 32px;
+			position: relative;
+			z-index: 1;
+		}
+		.tag {
+			border: 1px solid var(--line);
+			border-radius: 30px;
+			padding: 7px 12px;
+			font-size: 12px;
+			background: #fff9;
+		}
+		.tag.pending {
+			color: var(--amber);
+			background: #f4e8d7;
+			border-color: #dbbd96;
+		}
+		main {
+			padding: 0 clamp(24px, 6vw, 80px) 70px;
+		}
+		section {
+			padding: 45px 0;
+			border-bottom: 1px solid var(--line);
+		}
+		section:last-child {
+			border: 0;
+			padding-bottom: 0;
+		}
+		.section-head {
+			display: grid;
+			grid-template-columns: 190px 1fr;
+			gap: 22px;
+			align-items: start;
+			margin-bottom: 24px;
+		}
+		.section-head .eyebrow {
+			padding-top: 9px;
+		}
+		h2 {
+			font-size: clamp(28px, 3.6vw, 43px);
+			font-weight: 400;
+			line-height: 1.12;
+			letter-spacing: -0.035em;
+			margin-bottom: 0;
+		}
+		h3 {
+			font-size: 20px;
+			line-height: 1.2;
+			font-weight: 400;
+			margin-bottom: 8px;
+		}
+		.measure {
+			max-width: 750px;
+			margin-left: auto;
+		}
+		.measure p {
+			color: var(--muted);
+		}
+		.status-grid {
+			display: grid;
+			grid-template-columns: repeat(3, 1fr);
+			gap: 1px;
+			background: var(--line);
+			border: 1px solid var(--line);
+		}
+		.status-grid article {
+			background: var(--paper);
+			padding: 20px;
+			min-height: 145px;
+		}
+		.status-grid strong {
+			display: block;
+			font: 600 30px/1.1 Georgia, serif;
+			letter-spacing: -0.04em;
+			margin: 15px 0 5px;
+		}
+		.status-grid p {
+			margin: 0;
+			color: var(--muted);
+			font-size: 14px;
+		}
+		.flow {
+			width: 100%;
+			height: auto;
+			background: var(--soft);
+			border: 1px solid var(--line);
+			display: block;
+		}
+		.flow text {
+			font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+			fill: var(--ink);
+		}
+		.flow .small {
+			font-size: 11px;
+			fill: var(--muted);
+		}
+		.flow .title {
+			font-size: 15px;
+			font-weight: 700;
+		}
+		.flow .box {
+			fill: var(--paper);
+			stroke: #b7c6ba;
+		}
+		.flow .accent {
+			fill: var(--petrol);
+			stroke: var(--petrol);
+		}
+		.flow .white {
+			fill: #fff;
+		}
+		.flow .arrow {
+			stroke: var(--petrol);
+			stroke-width: 2;
+			fill: none;
+		}
+		.gallery {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 20px;
+		}
+		figure {
+			margin: 0;
+			min-width: 0;
+			background: #fff;
+			border: 1px solid var(--line);
+			padding: 10px;
+		}
+		figure img {
+			display: block;
+			width: 100%;
+			height: 290px;
+			object-fit: contain;
+			object-position: top;
+			background: #f8f8f6;
+		}
+		figcaption {
+			font-size: 12px;
+			padding: 11px 4px 2px;
+			color: var(--muted);
+		}
+		.specimen-pair {
+			display: grid;
+			grid-template-columns: 1.7fr 0.7fr;
+			gap: 10px;
+		}
+		.specimen-pair img {
+			height: 305px;
+		}
+		.proof {
+			display: grid;
+			grid-template-columns: repeat(3, 1fr);
+			gap: 10px;
+		}
+		.proof img {
+			height: 190px;
+		}
+		table {
+			width: 100%;
+			border-collapse: collapse;
+			font-size: 14px;
+		}
+		th {
+			text-transform: uppercase;
+			letter-spacing: 0.07em;
+			color: var(--muted);
+			font-size: 11px;
+			text-align: left;
+		}
+		td, th {
+			padding: 13px 10px;
+			border-bottom: 1px solid var(--line);
+			vertical-align: top;
+		}
+		td:first-child {
+			white-space: normal;
+		}
+		.callout {
+			border-left: 4px solid var(--petrol);
+			background: var(--soft);
+			padding: 18px 22px;
+			margin-top: 20px;
+		}
+		.callout p:last-child {
+			margin-bottom: 0;
+		}
+		.note {
+			color: var(--muted);
+			font-size: 12px;
+		}
+		footer {
+			padding: 26px clamp(24px, 6vw, 80px);
+			border-top: 1px solid var(--line);
+			display: flex;
+			justify-content: space-between;
+			gap: 20px;
+			color: var(--muted);
+			font-size: 12px;
+		}
+		@media (max-width: 750px) {
+			.page {
+				margin: 0;
+			}
+			header {
+				padding-top: 38px;
+			}
+			.section-head {
+				grid-template-columns: 1fr;
+				gap: 8px;
+			}
+			.status-grid, .gallery {
+				grid-template-columns: 1fr;
+			}
+			.status-grid article {
+				min-height: 0;
+			}
+			.proof {
+				grid-template-columns: 1fr;
+			}
+			.proof img {
+				height: 220px;
+			}
+			td:first-child {
+				white-space: normal;
+			}
+			.flow {
+				min-width: 690px;
+			}
+			.flow-wrap {
+				overflow: auto;
+			}
+			footer {
+				display: block;
+			}
+		}
+		</style>
+	</head>
+	<body>
+		<div class="page">
+			<header>
+				<div class="eyebrow">Chopin / what we tested and learned / 29 September 2026</div>
+				<h1>Catching interface problems before release</h1>
+				<p class="lede">
+					<strong>The goal:</strong> catch changes that make Chopin harder to read or use, before
+					those changes reach users.
+				</p>
+				<div class="overview">
+					<p>
+						<strong>What I tested:</strong> selected examples of Chopin’s text, buttons, forms,
+						conversation, document content, menus and pop-up windows. A browser opened them at a
+						wide desktop size and a narrow phone-like size, took pictures, checked readability rules
+						and operated controls with the keyboard.
+					</p>
+					<p>
+						<strong>What I found:</strong> the checks flagged faint conversation details, some code
+						colours and the Delete button. You chose to preserve their original appearance and the
+						quiet labels on the example page. These are acknowledged contrast tradeoffs, not colour
+						problems we have “fixed”. We also found and fixed a separate problem: keyboard users
+						could not easily reach and scroll code previews.
+					</p>
+					<p>
+						<strong>What we have now:</strong> 38 interface checks, eight checks that the colour
+						exceptions stay narrow, and 32 reference pictures. The checks record your approved
+						colour choices while still rejecting unexpected problems. <strong>All 46 checks passed
+							locally with the restored colours.</strong> The latest GitHub results are linked
+						below.
+					</p>
+					<p>
+						<strong>What this does not mean:</strong> we have not tested every screen, proved the
+						whole app is accessible, or established that its design is good. The work is in <a
+							href="https://github.com/githubnext/chopin/pull/209"
+						>proposed change #209</a>, which was still awaiting merge when I checked on 29
+						September.
+					</p>
+				</div>
+			</header>
+			<main>
+				<section>
+					<div class="section-head">
+						<div class="eyebrow">01 / the tests</div>
+						<h2>What did I actually ask the browser to do?</h2>
+					</div>
+					<p>
+						The tests use a dedicated example page built mostly from the same components as Chopin.
+						This lets us examine particular states, such as an open menu or a failed save, without
+						logging in or creating a real document.
+					</p>
+					<table>
+						<thead>
+							<tr>
+								<th>Question</th>
+								<th>What the test does</th>
+								<th>Result</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td>Has the appearance changed?</td>
+								<td>
+									Takes pictures of text, status labels, buttons, fields, conversation, note boxes,
+									code and tables, plus open menus and pop-up windows. Later runs compare new
+									pictures with the reviewed references and flag differences for inspection.
+								</td>
+								<td>
+									All 32 reference pictures have been refreshed from the current interface; changed
+									pictures were visually reviewed. GitHub will compare against these saved
+									references.
+								</td>
+							</tr>
+							<tr>
+								<td>Are there common accessibility problems?</td>
+								<td>
+									Checks each pictured state for problems such as text that is too faint against its
+									background, controls without a name that assistive software can announce, and
+									misleading structural labels.
+								</td>
+								<td>
+									Approved contrast shortfalls remain visible in the results. The revised checks
+									passed, including tests proving that unexpected findings still fail.
+								</td>
+							</tr>
+							<tr>
+								<td>Can you use the controls without a mouse?</td>
+								<td>
+									Opens the document menu, moves between options with arrow keys, opens the rename
+									window, moves between its controls with Tab and closes it with Escape. Checks that
+									the button that opened it becomes the active keyboard control again. Also chooses
+									an item in a dropdown.
+								</td>
+								<td>These keyboard sequences passed at both widths.</td>
+							</tr>
+							<tr>
+								<td>Do empty and failed saves behave as expected?</td>
+								<td>
+									Clears the title to check that Save becomes unavailable, then simulates a failed
+									rename to check that an error appears and the field is marked as having a problem.
+								</td>
+								<td>
+									Both states behaved as expected. This tests the local example, not an actual
+									server save.
+								</td>
+							</tr>
+							<tr>
+								<td>Can content still be read when space is limited?</td>
+								<td>
+									Doubles the page’s base text size and checks that selected fields, note boxes and
+									document-action controls fit their containers. Separately checks that a wide table
+									and narrow code preview can scroll using the keyboard.
+								</td>
+								<td>
+									Those checks passed. Wide code and tables deliberately scroll sideways; showing
+									only part of them at once is expected.
+								</td>
+							</tr>
+							<tr>
+								<td>Does the reduced-motion preference work?</td>
+								<td>
+									Enables the browser preference for less motion, then opens the menu and rename
+									window and checks that their transitions are effectively immediate.
+								</td>
+								<td>The tested controls respected that preference.</td>
+							</tr>
+						</tbody>
+					</table>
+					<p class="callout">
+						<strong>What the numbers mean:</strong> the same 19 test cases run at two widths, giving
+						38 checks. Eight further checks deliberately introduce mistakes to prove the colour
+						exceptions do not hide them, bringing the total to 46. The interface checks produce 16
+						reference pictures at each width, giving 32 pictures. These are counts of test cases and
+						pictures, not counts of screens covered or bugs found.
+					</p>
+				</section>
+				<section>
+					<div class="section-head">
+						<div class="eyebrow">02 / findings</div>
+						<h2>What needed repair, and what was a design choice</h2>
+					</div>
+					<table>
+						<thead>
+							<tr>
+								<th>Problem found</th>
+								<th>Why it matters</th>
+								<th>What changed</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td>Some colours fell below the automated contrast target</td>
+								<td>
+									Labels on red action buttons, conversation timestamps and queued messages, and
+									several colours in code previews did not meet the contrast check. That can make
+									them harder to read.
+								</td>
+								<td>
+									The original colours and quieter secondary text are restored, as you requested.
+									Their contrast warnings remain recorded as deliberate design choices. The tests
+									still reject new or changed findings; they do not treat all faint text as
+									acceptable.
+								</td>
+							</tr>
+							<tr>
+								<td>Code previews needed keyboard access</td>
+								<td>
+									A narrow code block can contain text beyond the right-hand edge. A keyboard user
+									needs to be able to reach the preview and scroll it.
+								</td>
+								<td>
+									The preview can become the active keyboard control, shows a visible outline, and
+									passed the narrow-width scrolling check.
+								</td>
+							</tr>
+							<tr>
+								<td>Some accessibility labels were misleading</td>
+								<td>
+									The example page described several static illustrations as active pop-up windows.
+									An initial code-preview fix also labelled several code boxes as major page regions
+									with identical names.
+								</td>
+								<td>
+									Those labels were corrected so they describe the elements accurately. Neither
+									finding was left as an ignored test failure.
+								</td>
+							</tr>
+						</tbody>
+					</table>
+					<p>
+						The keyboard, focus, scrolling and layout repairs remain. The colour restoration is
+						coordinated with the separate interface-repair work. The report will distinguish
+						accepted contrast tradeoffs from unexpected test failures.
+					</p>
+					<figure>
+						<a href="../../e2e/design/snapshots/wide/buttons-destructive.png"><img
+								src="../../e2e/design/snapshots/wide/buttons-destructive.png"
+								alt="The original Delete-button red retained after visual review"
+							></a><figcaption>
+							Retained by choice: the normal and focused buttons measure about 4.20:1 with white
+							labels. Hover and pressed states remain distinct. This is an acknowledged contrast
+							shortfall.
+						</figcaption>
+					</figure>
+					<p>
+						<strong>We also found problems in the tests themselves.</strong> An early narrow
+						screenshot cut off part of a button example, and content still loading above a table
+						moved it during capture. I split oversized examples into smaller pictures and made the
+						browser wait for content to finish loading. Those were capture problems, not evidence
+						that the app’s table was broken.
+					</p>
+					<p>
+						<strong>What we learned:</strong> looking at the rendered interface revealed readability
+						and keyboard problems that source-code checks alone had not settled. But the test setup
+						also needs scrutiny: a bad screenshot can create a misleading result.
+					</p>
+				</section>
+				<section>
+					<div class="section-head">
+						<div class="eyebrow">03 / the evidence</div>
+						<h2>Examples of what was inspected</h2>
+					</div>
+					<p>
+						These pictures show the states covered by the tests, not before-and-after comparisons.
+						The conversation and code pictures now show the restored colours. All 46 local browser
+						checks passed after the restoration.
+					</p>
+					<div class="gallery">
+						<figure>
+							<a href="../../e2e/design/snapshots/narrow/chat.png"><img
+									src="../../e2e/design/snapshots/narrow/chat.png"
+									alt="Narrow conversation example showing timestamps, a queued message and a send error"
+								></a><figcaption>
+								Restored colours. Conversation: the checks include timestamps and the queued
+								message. The message-entry area is an illustration, so this picture does not prove
+								sending a message works.
+							</figcaption>
+						</figure>
+						<figure>
+							<a href="../../e2e/design/snapshots/wide/code.png"><img
+									src="../../e2e/design/snapshots/wide/code.png"
+									alt="Code previews with the original colour palette restored"
+								></a><figcaption>
+								Restored original code colours. The measured contrast shortfalls are accepted by
+								choice. A separate keyboard test checks that a narrow preview can scroll.
+							</figcaption>
+						</figure>
+						<figure>
+							<a href="../../e2e/design/snapshots/narrow/dialog-error.png"><img
+									src="../../e2e/design/snapshots/narrow/dialog-error.png"
+									alt="Rename window showing a simulated save error"
+								></a><figcaption>
+								Rename window: a simulated failure shows an error and marks the title field as
+								invalid. Keyboard tests also check entering and leaving this window.
+							</figcaption>
+						</figure>
+						<figure>
+							<a href="../../e2e/design/snapshots/wide/menu-focus.png"><img
+									src="../../e2e/design/snapshots/wide/menu-focus.png"
+									alt="Document menu with a visible outline around the Archive option"
+								></a><figcaption>
+								Document menu: the outline shows which action will respond to the keyboard. The test
+								moves between actions and closes the menu with Escape.
+							</figcaption>
+						</figure>
+					</div>
+				</section>
+				<section>
+					<div class="section-head">
+						<div class="eyebrow">04 / checking the checks</div>
+						<h2>Can the tests actually catch mistakes?</h2>
+					</div>
+					<p>
+						A test that always passes is not useful. To check that these tests could catch a
+						problem, I temporarily changed a menu’s colour and removed the name from a menu action.
+					</p>
+					<div class="proof">
+						<figure>
+							<img src="probe-menu-focus-expected.png" alt="Original menu appearance"><figcaption>
+								1. The original picture
+							</figcaption>
+						</figure>
+						<figure>
+							<img
+								src="probe-menu-focus-actual.png"
+								alt="Menu with a deliberately changed colour"
+							><figcaption>2. The deliberate colour change</figcaption>
+						</figure>
+						<figure>
+							<img
+								src="probe-menu-focus-diff.png"
+								alt="Comparison image marking the pixels that changed"
+							><figcaption>3. The test highlighted the difference and failed</figcaption>
+						</figure>
+					</div>
+					<p>
+						The missing action name also caused the accessibility check to fail. Both deliberate
+						defects were then removed. This shows that the checks caught those two specific
+						mistakes; it does not prove they will catch every possible design or accessibility
+						problem.
+					</p>
+					<p>
+						After adding the colour exceptions, I ran four more deliberate mistakes at each width:
+						faint new primary text, a changed code colour, an approved finding disappearing, and an
+						unnamed button. All eight were rejected as intended. These checks are now part of the
+						regular suite, so preserving quiet secondary text does not mean accepting any new
+						problem.
+					</p>
+				</section>
+				<section>
+					<div class="section-head">
+						<div class="eyebrow">05 / outcome and limits</div>
+						<h2>What have we achieved—and what remains?</h2>
+					</div>
+					<p>
+						<strong>Built:</strong> reusable browser checks for the selected examples, reviewed
+						reference pictures, and a way to show a reviewer what changed when a test fails. The
+						proposed change adds these checks to GitHub’s automatic checks on future code changes.
+					</p>
+					<p>
+						<strong>Run successfully:</strong> all 46 browser checks passed locally after the colour
+						restoration. GitHub reruns them against the saved pictures and also runs the existing
+						application tests. Open <a href="https://github.com/githubnext/chopin/pull/209/checks"
+						>Latest checks</a> for the current proposed change’s results.
+					</p>
+					<p>
+						<strong>Still awaiting integration:</strong> change #209 is open. Its proposed testing
+						workflow is not yet part of the main branch through this change. It also needs to be
+						combined with the related work and tested again after that combination.
+					</p>
+					<ul>
+						<li>
+							<strong>Coverage is selective.</strong> These examples do not cover every screen,
+							state or user journey. Much of the page uses real components; the message composer and
+							table-toolbar illustrations do not test real editing behaviour.
+						</li>
+						<li>
+							<strong>A narrow browser window is not a phone test.</strong> The checks used one
+							browser engine at desktop-like and phone-like widths. They do not establish
+							compatibility with Safari, Firefox, touch interaction or actual mobile devices.
+						</li>
+						<li>
+							<strong>Accessibility still needs human testing.</strong> No screen-reader user study
+							or complete accessibility audit was performed. A clean automatic scan covers only the
+							rules that tool can check in the states we showed it.
+						</li>
+						<li>
+							<strong>Pictures cannot judge design quality.</strong> A comparison can flag changed
+							spacing or colours. A person must decide whether a change is intentional, attractive
+							and useful before accepting a new reference picture.
+						</li>
+					</ul>
+					<p class="callout">
+						<strong>The practical gain:</strong> we now have a repeatable way to catch certain
+						interface mistakes and make unexpected visual changes visible during review. We still
+						need design judgement, broader coverage and human accessibility testing.
+					</p>
+				</section>
+				<section>
+					<div class="section-head">
+						<div class="eyebrow">06 / optional detail</div>
+						<h2>Technical evidence and next steps</h2>
+					</div>
+					<details>
+						<summary>Open implementation details, test results and source links</summary>
+						<p>
+							Recorded contrast: Delete labels 4.20:1; timestamps/tool details 4.43:1; queued text
+							2.21–2.64:1; measured code tokens 2.14–3.27:1; supplementary audit labels 4.12:1. The
+							scan target is 4.5:1. Higher numbers mean a stronger difference between text and
+							background. These are accepted shortfalls, not claims that the target is met. <a
+								href="contrast-decision.md"
+							>See the measured decision record and rejection tests.</a>
+						</p>
+						<p>
+							The browser automation tool is Playwright; the automatic accessibility checker is axe.
+							Screenshots are taken in a fixed Linux environment, with the same browser and fonts
+							locally and on GitHub, to reduce differences caused by the testing machine.
+						</p>
+						<p>
+							Versions: Bun 1.4.2, Playwright 1.62.1, axe 4.13.0. Viewports: 1440 × 1000 and 390 ×
+							844. The revised policy accepts only explicitly approved colour findings, including
+							their measured colours, text size, markup and count. Other findings, changed
+							measurements and stale exceptions fail. No screenshot masks are used. The
+							text-enlargement test changes the base text size; it is not a full browser-zoom test.
+						</p>
+						<p>
+							The original 28 September GitHub run, before the colour decision, tested source plus
+							report commit <code>faaa6563</code>: 38 design checks passed in 2.6 minutes; their
+							full step, including setup, took 3 minutes 34 seconds. The 240 existing system tests
+							passed in 4.2 minutes. The separate validation and production-container jobs passed
+							too.
+						</p>
+						<p>
+							Locally, 1,658 unit tests passed, with two database-dependent suites skipped; database
+							contract tests passed on GitHub. The production build check confirmed that this
+							development-only example page is not bundled into the shipped app.
+						</p>
+						<p>
+							Review/integration note: the planned order is #207, #208, then #209. These changes
+							share some fixes. After combining them, the reviewed source-file acknowledgement needs
+							updating and the combined checks need another run. Passing each branch separately is
+							not evidence that their combination passes.
+						</p>
+						<ul>
+							<li>
+								<a href="https://github.com/githubnext/chopin/pull/209">Proposed change #209</a> ·
+								<a href="https://github.com/githubnext/chopin/actions/runs/36480620434"
+								>Completed GitHub test run</a> · <a
+									href="https://github.com/githubnext/chopin/pull/209/checks"
+								>Latest checks</a>
+							</li>
+							<li>
+								<a href="../../e2e/design/coverage.ts">List of covered examples</a> · <a
+									href="../../e2e/design/README.md"
+								>How to run the tests and review pictures</a>
+							</li>
+							<li>
+								<a href="../../e2e/design/snapshots/wide/">All wide reference pictures</a> · <a
+									href="../../e2e/design/snapshots/narrow/"
+								>All narrow reference pictures</a>
+							</li>
+							<li>
+								<a href="findings.md">Detailed findings</a> · <a href="probe-accessibility.md"
+								>Recorded missing-name failure</a>
+							</li>
+						</ul>
+					</details>
+				</section>
+			</main>
+			<footer>
+				<span>Chopin · interface checks</span><span>Earlier tests completed 28 September; restored
+					colours verified by 46 local checks on 29 September 2026. Latest GitHub results linked
+					above.</span>
+			</footer>
+		</div>
+	</body>
+</html>

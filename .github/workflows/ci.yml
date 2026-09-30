@@ -108,11 +108,17 @@ jobs:
       # Chromium's shared libraries, so do not make E2E depend on its apt mirror.
       - run: bun node_modules/@playwright/test/cli.js install chromium
 
+      - name: Rendered design quality (Linux Chromium)
+        run: bun run design:browser
+
       # Builds the client, then runs it. The build is deliberately here rather
       # than inside the Playwright config: web servers start before any global
       # setup, so a build racing them would leave the suite on the previous
       # bundle — green, about code nobody changed.
       - run: bun run e2e
+
+      - name: Verify design audit stays out of production
+        run: bun scripts/check-design-production.ts
 
       # Only on failure, and only the parts worth reading. `test-results`
       # carries the traces; the report is the thing that indexes them.

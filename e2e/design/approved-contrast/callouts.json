@@ -1,0 +1,28 @@
+{
+	"wide": [
+		{
+			"approvedRole": "audit source-path label",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"section[data-audit-item=\"callouts\"] > header > .design-audit-source"
+				],
+				"html": "<code class=\"design-audit-source\">packages/editor/src/widgets/callout.tsx</code>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		}
+	],
+	"narrow": [
+		{
+			"approvedRole": "audit source-path label",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"section[data-audit-item=\"callouts\"] > header > .design-audit-source"
+				],
+				"html": "<code class=\"design-audit-source\">packages/editor/src/widgets/callout.tsx</code>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		}
+	]
+}

@@ -20,9 +20,12 @@
 		"types": "bun --filter '*' types && tsgo --noEmit --skipLibCheck -p e2e",
 		"e2e": "bun scripts/e2e.ts",
 		"e2e:ui": "bun scripts/e2e.ts --ui",
-		"e2e:browsers": "bun node_modules/@playwright/test/cli.js install chromium"
+		"e2e:browsers": "bun node_modules/@playwright/test/cli.js install chromium",
+		"design:test": "bun node_modules/@playwright/test/cli.js test --config e2e/design/playwright.config.ts",
+		"design:browser": "bun scripts/design-browser.ts"
 	},
 	"devDependencies": {
+		"@axe-core/playwright": "4.13.0",
 		"@babel/parser": "7.29.7",
 		"@playwright/test": "1.62.1",
 		"@types/bun": "catalog:bun",

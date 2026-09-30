@@ -1,0 +1,292 @@
+{
+	"wide": [
+		{
+			"approvedRole": "audit source-path label",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"section[data-audit-item=\"typography\"] > header > .design-audit-source"
+				],
+				"html": "<code class=\"design-audit-source\">packages/visuals/theme.css</code>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(1) > .design-audit-type-label > span"
+				],
+				"html": "<span>Compact controls</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(1) > .design-audit-type-label > code"
+				],
+				"html": "<code>12–12.3px · step −2</code>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(2) > .design-audit-type-label > span"
+				],
+				"html": "<span>Interface and chat</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(2) > .design-audit-type-label > code"
+				],
+				"html": "<code>13.4–14px · step −1</code>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(3) > .design-audit-type-label > span"
+				],
+				"html": "<span>Document prose</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(3) > .design-audit-type-label > code"
+				],
+				"html": "<code>15–16px · step 0</code>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(4) > .design-audit-type-label > span"
+				],
+				"html": "<span>Subheading</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(4) > .design-audit-type-label > code"
+				],
+				"html": "<code>18.8–20.8px · step +2</code>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(5) > .design-audit-type-label > span"
+				],
+				"html": "<span>Section heading</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(5) > .design-audit-type-label > code"
+				],
+				"html": "<code>23.6–27px · step +4</code>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(6) > .design-audit-type-label > span"
+				],
+				"html": "<span>Document title</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(6) > .design-audit-type-label > code"
+				],
+				"html": "<code>33.2–40px · step +7</code>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		}
+	],
+	"narrow": [
+		{
+			"approvedRole": "audit source-path label",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"section[data-audit-item=\"typography\"] > header > .design-audit-source"
+				],
+				"html": "<code class=\"design-audit-source\">packages/visuals/theme.css</code>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(1) > .design-audit-type-label > span"
+				],
+				"html": "<span>Compact controls</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(1) > .design-audit-type-label > code"
+				],
+				"html": "<code>12–12.3px · step −2</code>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(2) > .design-audit-type-label > span"
+				],
+				"html": "<span>Interface and chat</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(2) > .design-audit-type-label > code"
+				],
+				"html": "<code>13.4–14px · step −1</code>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(3) > .design-audit-type-label > span"
+				],
+				"html": "<span>Document prose</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(3) > .design-audit-type-label > code"
+				],
+				"html": "<code>15–16px · step 0</code>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(4) > .design-audit-type-label > span"
+				],
+				"html": "<span>Subheading</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(4) > .design-audit-type-label > code"
+				],
+				"html": "<code>18.8–20.8px · step +2</code>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(5) > .design-audit-type-label > span"
+				],
+				"html": "<span>Section heading</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(5) > .design-audit-type-label > code"
+				],
+				"html": "<code>23.6–27px · step +4</code>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(6) > .design-audit-type-label > span"
+				],
+				"html": "<span>Document title</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "audit type-scale metadata",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"div:nth-child(6) > .design-audit-type-label > code"
+				],
+				"html": "<code>33.2–40px · step +7</code>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		}
+	]
+}
