@@ -49,6 +49,7 @@ export type WidgetOptions = {
 	changes?: ChangeStore;
 	wire?: Transport;
 	connected?: boolean;
+	synced?: boolean;
 	canEdit?: boolean;
 };
 

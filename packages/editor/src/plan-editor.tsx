@@ -275,6 +275,7 @@ export function PlanEditor(
 						wire,
 						connected: !offline,
 						canEdit: !readOnly,
+						synced: state.synced,
 					}),
 				]
 				: [],
@@ -300,6 +301,7 @@ export function PlanEditor(
 			changes,
 			offline,
 			readOnly,
+			state.synced,
 		],
 	);
 

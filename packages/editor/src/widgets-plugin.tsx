@@ -25,6 +25,7 @@ import { ThreadObserver } from "./threads";
 import { Toolbar } from "./toolbar";
 import {
 	CalloutPlugin,
+	CardGapPlugin,
 	DecisionDeletionPlugin,
 	DiscardedNavigationPlugin,
 	EnterPlugin,
@@ -96,6 +97,7 @@ export const widgetsPlugin = realmPlugin<WidgetOptions>({
 		}
 		realm.pub(addComposerChild$, TabsPlugin);
 		realm.pub(addComposerChild$, DiscardedNavigationPlugin);
+		realm.pub(addComposerChild$, CardGapPlugin);
 		realm.pub(addComposerChild$, PreviewPlugin);
 		realm.pub(addComposerChild$, CalloutPlugin);
 		realm.pub(addComposerChild$, EnterPlugin);

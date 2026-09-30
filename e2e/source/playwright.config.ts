@@ -15,6 +15,7 @@ export default defineConfig({
 		"decision-reader.native.ts",
 		"collapse-deletion.native.ts",
 		"open-card.native.ts",
+		"card-gap.native.ts",
 	],
 	workers: 1,
 	fullyParallel: false,

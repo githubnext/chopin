@@ -1271,3 +1271,60 @@ metadata and native reviews find no issues. CI retains only the inherited two li
 warnings and existing design baseline. The broader extraction remains unfinished;
 card-gap normalization and legacy Planner-thread backfill are audited next boundaries,
 with original full-application and deferred anatomy coverage still outstanding.
+
+## Canonical card gaps
+
+The complete original card-gap module and its headless callback are restored byte-exact.
+Only consecutive empty paragraphs bounded by questionnaire or decision nodes compact,
+retaining the first editable blank. Prose and outer blanks survive. A collapsed caret
+protects its own run while other runs may compact; a noncollapsed range defers every
+run until selection changes. The original callback and adjacent navigation suite pass
+three tests with eight assertions.
+
+The plugin mounts immediately after DiscardedNavigation through one facade export,
+import and composer-child registration. It reads the original canEdit, connected and
+synced gates. The existing provider's sync state now reaches WidgetOptions and the
+PlanEditor plugin parameters, with the same state included in the existing memo's
+dependencies. Realm updates propagate changed flags and retire the registered root
+transform and selection command when a gate closes or the plugin unmounts. Current
+provider, auth, reset, room and all other editor behavior survive source subtraction.
+The original plugin has no separate busy guard; this slice does not add one.
+
+No CSS, theme or new design exception is needed. Only the existing PlanEditor wrapper's
+fingerprint changes; its cases and reason and all other records stay intact. Exact
+archive bytes and whole-current-module proofs cover the module, callback, widget
+facade/plugin, WidgetOptions and PlanEditor after the declared additions.
+
+Seven new native cases mount the actual archived plugin with real Lexical, both card
+node types, a local Yjs binding and the shared widget realm. False writer, connection
+and sync flags preserve thirteen canonical blocks; enabling the gate reduces them to
+ten while retaining the original card, prose and outer-blank keys. Native selection
+changes release a protected caret run and a noncollapsed range. Disconnect and plugin
+unmount tests first preserve a deferred run, then reseed while disabled to prove both
+the old selection command and root transform are retired; reconnect/remount compacts.
+
+The snapshots encode and apply real Yjs updates into a new document. Ordered shared
+block types match Lexical, paragraph counts change from nine to six, and complete
+card state/text survives both compaction and the round trip. The initial fixture used
+an unavailable Yjs getter, corrected to the installed API. A stronger snapshot then
+returned a raw shared Y.Map with internal document cycles, causing pathological test
+runner memory use. Only that owned runner was stopped. The final snapshot uses the
+actual map's canonical toJSON data and rejects unexpected state types; every structural
+and payload assertion remains. No production workaround or weakened assertion was used.
+
+These checks use an isolated local binding, controlled widget flags and inert awareness,
+not the complete PlanProvider, authenticated socket, server persistence or remote
+collaboration. Provider-to-PlanEditor-to-realm wiring is separately preserved and
+verified by source inspection. Each case checks native and Lexical errors, consumes
+both actual built stylesheets, fulfills one local secure standards-mode page, and
+aborts every other request. Original full-application callbacks remain separately
+assigned and deferred.
+
+Final verification passes 3,142 offline tests with 14,571 assertions across 521 files;
+two PostgreSQL checks are skipped. The complete cached-Chromium runner passes all
+seventy-one isolated cases against the final rebuilt styles, including all seven
+strengthened gap cases. Workspace/E2E types, CI, build, formatting and source/fixture/
+callback retention proofs pass. Independent source, sync, metadata and native reviews
+find no issues. CI retains only two inherited lint warnings and the existing design
+baseline. Legacy Planner-thread backfill and the remaining full-application/anatomy
+boundaries remain outstanding; the broader extraction is unfinished.
