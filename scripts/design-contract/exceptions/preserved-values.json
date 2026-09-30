@@ -391,5 +391,99 @@
 				1
 			]
 		]
+	},
+	{
+		"file": "packages/editor/src/styles.css",
+		"reason": "Research status dot is a continuous breathing indicator; its 1.4s cadence and growing ring express bespoke status motion, not a themed duration or surface elevation.",
+		"cases": [
+			[
+				"motion",
+				"animation",
+				"plan-research-pulse 1.4s var(--ease-out) infinite",
+				"CSS > .plan-research-dot",
+				1
+			],
+			[
+				"shadow",
+				"box-shadow",
+				"0 0 0 0 color-mix(in oklch, var(--color-brand) 45%, transparent)",
+				"CSS > @keyframes plan-research-pulse > 0%",
+				1
+			],
+			[
+				"shadow",
+				"box-shadow",
+				"0 0 0 0.375rem transparent",
+				"CSS > @keyframes plan-research-pulse > 100%",
+				1
+			]
+		]
+	},
+	{
+		"file": "packages/editor/src/styles.css",
+		"reason": "Progress track fill and its shimmer sheen use bespoke timings and a literal highlight independent of the shared step scale and color roles; they express in-progress motion, not a themed duration or surface color.",
+		"cases": [
+			[
+				"motion",
+				"transition",
+				"background-color 500ms var(--ease-out)",
+				"CSS > .plan-research-track span",
+				1
+			],
+			[
+				"color",
+				"background",
+				"linear-gradient(\n\t\t90deg,\n\t\ttransparent 0%,\n\t\tcolor-mix(in oklch, white 70%, transparent) 50%,\n\t\ttransparent 100%\n\t)",
+				"CSS > .plan-research-track span::after",
+				1
+			],
+			[
+				"motion",
+				"animation",
+				"plan-research-sheen 1.6s linear infinite",
+				"CSS > .plan-research-track span::after",
+				1
+			],
+			[
+				"motion",
+				"transition",
+				"opacity 400ms var(--ease-out)",
+				"CSS > .plan-research-track span::after",
+				1
+			]
+		]
+	},
+	{
+		"file": "packages/editor/src/styles.css",
+		"reason": "Crossfade entrance and exit durations are tuned to the swap's own content-replacement feel; no shared duration matches this bespoke choreography.",
+		"cases": [
+			[
+				"motion",
+				"animation",
+				"plan-research-swap-in 360ms var(--ease-out) var(--duration-fast) both",
+				"CSS > .plan-research-swap > span",
+				1
+			],
+			[
+				"motion",
+				"animation",
+				"plan-research-swap-out 240ms var(--ease-out) both",
+				"CSS > .plan-research-swap > span[data-leaving]",
+				1
+			]
+		]
+	},
+	{
+		"file": "packages/editor/src/styles.css",
+		"reason": "Fold's grid-row and opacity durations are tuned together for a non-jumping height reveal; no shared duration matches this bespoke choreography.",
+		"cases": [
+			[
+				"motion",
+				"transition",
+				"grid-template-rows 420ms var(--ease-out), opacity 300ms var(--ease-out)",
+				"CSS > .plan-research-fold",
+				1
+			]
+		]
 	}
 ]

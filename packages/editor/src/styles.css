@@ -202,7 +202,7 @@
 	position: relative;
 	overflow: hidden;
 	height: 0.3125rem;
-	border-radius: 9999px;
+	border-radius: var(--radius-full);
 	background: var(--color-selected);
 	transition: background-color 500ms var(--ease-out);
 }
@@ -232,7 +232,7 @@
 
 .plan-research-track span[data-state="now"]::after {
 	opacity: 1;
-	transition-delay: 200ms;
+	transition-delay: var(--duration-base);
 }
 
 @keyframes plan-research-sheen {
@@ -257,7 +257,7 @@
 
 .plan-research-swap > span {
 	grid-area: 1 / 1;
-	animation: plan-research-swap-in 360ms var(--ease-out) 120ms both;
+	animation: plan-research-swap-in 360ms var(--ease-out) var(--duration-fast) both;
 }
 
 .plan-research-swap > span[data-initial] {
@@ -306,7 +306,7 @@
 .plan-research-fold[data-open] {
 	grid-template-rows: 1fr;
 	opacity: 1;
-	transition-delay: 120ms;
+	transition-delay: var(--duration-fast);
 }
 
 .plan-research-fold > div {
