@@ -37,7 +37,12 @@ and diff colours, supplementary audit-page labels in their quaternary role, and
 original destructive red. Preserve those choices; do not
 promote them to darker roles just to make a contrast audit pass.
 
-Keep browser contrast findings visible. Tests may acknowledge only the approved
+Browser screenshot and contrast-report comparisons are optional review tools;
+run `bun run design:browser` when reviewing appearance. Required CI retains token
+checks and `bun run design:behavior` for keyboard, focus, motion and layout behaviour.
+See [rendered design checks](../e2e/design/README.md).
+
+Keep browser contrast findings visible. Optional visual tests may acknowledge only the approved
 roles and states, with a reason and measured evidence. Unexpected findings and
 changes outside that scope must still fail. Do not disable contrast checking for
 an entire page or hide accepted findings behind a claim of universal AA compliance.
