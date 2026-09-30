@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { derive, incomplete, summarize } from "./answer";
 import { answered, assertPatch, create, read } from "./draft";
 import * as limits from "./limits";
+import { identified } from "./index";
 import { normalize, QuestionError } from "./schema";
 
 import type { Definition } from "./schema";
@@ -60,6 +61,206 @@ describe("normalize", () => {
 
 	it("requires multiple to be a boolean", () => {
 		expect(() => normalize(tool({ multiple: "yes" }))).toThrow(/must be a boolean/);
+	});
+});
+
+describe("identified", () => {
+	it("preserves stored IDs, text, and order without copying the definition", () => {
+		let source = {
+			questions: [{
+				id: "question-z",
+				header: "  Rollout  ",
+				question: "How?",
+				multiple: false,
+				options: [
+					{ id: "option-z", label: "Canary", description: "" },
+					{ id: "option-a", label: "Blue-green", description: "" },
+				],
+			}, {
+				id: "question-a",
+				header: "Timing",
+				question: "When?",
+				multiple: false,
+				options: [{ id: "option-t", label: "Today", description: "" }],
+			}],
+		};
+		let before = structuredClone(source);
+		expect(identified(source)).toBe(source);
+		expect(source).toEqual(before);
+		expect(source.questions.map(question => question.id)).toEqual(["question-z", "question-a"]);
+		expect(source.questions[0]!.options.map(option => option.id)).toEqual(["option-z", "option-a"]);
+	});
+	it("accepts a pending single-choice card with no quoted options but keeps tool input strict", () => {
+		let pending = {
+			questions: [{
+				id: "q1",
+				header: "Auth",
+				question: "What auth system should we use?",
+				multiple: false,
+				options: [],
+			}],
+		};
+		expect(identified(pending)).toBe(pending);
+		expect(() => normalize(tool({ options: [] }))).toThrow(/at least one option/);
+		expect(() =>
+			identified({
+				questions: [{ ...pending.questions[0], multiple: true }],
+			})
+		).toThrow(/invalid options/);
+	});
+
+	it("keeps stable IDs and refuses oversized raw values with surrounding spaces", () => {
+		let source = {
+			questions: [{
+				id: "q1",
+				header: "Rollout",
+				question: "How?",
+				multiple: false,
+				options: [{ id: "o1", label: "Canary", description: "" }],
+			}],
+		};
+		expect(identified(source)).toBe(source);
+		expect(() =>
+			identified({
+				questions: [{ ...source.questions[0], id: ` ${"q".repeat(limits.MAX_CALL_ID)} ` }],
+			})
+		).toThrow(/exceeds/);
+		expect(() =>
+			identified({
+				questions: [{ ...source.questions[0], header: ` ${"x".repeat(limits.MAX_HEADER)} ` }],
+			})
+		).toThrow(/exceeds/);
+		expect(() =>
+			identified({
+				questions: [{
+					...source.questions[0],
+					options: [{
+						...source.questions[0]!.options[0],
+						label: ` ${"x".repeat(limits.MAX_LABEL)} `,
+					}],
+				}],
+			})
+		).toThrow(/exceeds/);
+	});
+
+	it("rejects duplicate question IDs and option IDs across the questionnaire", () => {
+		let question = {
+			id: "q1",
+			header: "Rollout",
+			question: "How?",
+			multiple: false,
+			options: [{ id: "o1", label: "Canary", description: "" }],
+		};
+		expect(() => identified({ questions: [question, { ...question }] }))
+			.toThrow(/duplicate question IDs/);
+		expect(() => identified({ questions: [question, { ...question, id: "q2" }] }))
+			.toThrow(/duplicate option IDs/);
+		expect(() =>
+			identified({
+				questions: [{ ...question, options: [...question.options, ...question.options] }],
+			})
+		)
+			.toThrow(/duplicate option IDs/);
+	});
+
+	it("rejects unknown fields at every stored definition level", () => {
+		let question = {
+			id: "q1",
+			header: "Rollout",
+			question: "How?",
+			multiple: false,
+			options: [{ id: "o1", label: "Canary", description: "" }],
+		};
+		for (
+			let source of [
+				{ questions: [question], extra: true },
+				{ questions: [{ ...question, extra: true }] },
+				{ questions: [{ ...question, options: [{ ...question.options[0], extra: true }] }] },
+			]
+		) expect(() => identified(source)).toThrow(/invalid fields/);
+	});
+
+	it("enforces question and option counts and rejects empty options for multiple questions", () => {
+		let question = {
+			id: "q1",
+			header: "Rollout",
+			question: "How?",
+			multiple: false,
+			options: [{ id: "o1", label: "Canary", description: "" }],
+		};
+		let questions = Array.from({ length: limits.MAX_QUESTIONS }, (_, index) => ({
+			...question,
+			id: `q${index}`,
+			options: [{ ...question.options[0], id: `o${index}` }],
+		}));
+		expect(identified({ questions }).questions).toHaveLength(limits.MAX_QUESTIONS);
+		expect(() => identified({ questions: [] })).toThrow(/invalid question count/);
+		expect(() => identified({ questions: [...questions, { ...question, id: "extra" }] }))
+			.toThrow(/invalid question count/);
+		let options = Array.from({ length: limits.MAX_OPTIONS }, (_, index) => ({
+			...question.options[0],
+			id: `o${index}`,
+		}));
+		expect(identified({ questions: [{ ...question, options }] }).questions[0]!.options)
+			.toHaveLength(limits.MAX_OPTIONS);
+		expect(() =>
+			identified({
+				questions: [{
+					...question,
+					options: [...options, { id: "extra", label: "Extra", description: "" }],
+				}],
+			})
+		)
+			.toThrow(/invalid options/);
+		expect(() =>
+			identified({ questions: [{ ...question, options: [] }, { ...question, id: "q2" }] })
+		)
+			.toThrow(/invalid options/);
+		expect(() => identified({ questions: [{ ...question, multiple: "yes" }] }))
+			.toThrow(/invalid options/);
+	});
+
+	it("bounds every raw text field and rejects blank identifiers and required text", () => {
+		let question = {
+			id: "q1",
+			header: "Rollout",
+			question: "How?",
+			multiple: false,
+			options: [{ id: "o1", label: "Canary", description: "" }],
+		};
+		for (
+			let [field, maximum] of [
+				["id", limits.MAX_CALL_ID],
+				["header", limits.MAX_HEADER],
+				["question", limits.MAX_QUESTION],
+			] as const
+		) {
+			expect(() => identified({ questions: [{ ...question, [field]: " " }] })).toThrow(
+				QuestionError,
+			);
+			expect(() =>
+				identified({ questions: [{ ...question, [field]: ` ${"x".repeat(maximum)} ` }] })
+			)
+				.toThrow(/exceeds/);
+		}
+		for (
+			let [field, maximum] of [
+				["id", limits.MAX_CALL_ID],
+				["label", limits.MAX_LABEL],
+				["description", limits.MAX_DESCRIPTION],
+			] as const
+		) {
+			let options = [{ ...question.options[0], [field]: ` ${"x".repeat(maximum)} ` }];
+			expect(() => identified({ questions: [{ ...question, options }] })).toThrow(/exceeds/);
+			if (field !== "description") {
+				expect(() =>
+					identified({
+						questions: [{ ...question, options: [{ ...question.options[0], [field]: " " }] }],
+					})
+				)
+					.toThrow(QuestionError);
+			}
+		}
 	});
 });
 

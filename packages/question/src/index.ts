@@ -12,7 +12,7 @@
 
 export * as limits from "./limits";
 
-export { assertCallId, decision, normalize, QuestionError, reject } from "./schema";
+export { assertCallId, decision, identified, normalize, QuestionError, reject } from "./schema";
 export type { Answer, DecisionDefinition, Definition, Item, Option } from "./schema";
 
 export { answered, apply, assertPatch, create, read, restore } from "./draft";

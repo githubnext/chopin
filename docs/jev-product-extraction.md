@@ -1,7 +1,7 @@
-# Jev product extraction — first milestone
+# Jev product extraction — handoff
 
 This is a finite extraction from a preserved prototype, not a verified release or
-classifier-quality fix. Only the transport foundation is implemented in this milestone.
+classifier-quality fix. The transport and stored-identity foundations are implemented in bounded slices.
 
 - Product branch: `maggie/jev-chat-product`.
 - Product worktree: `/Users/maggieappleton/.codex/worktrees/jev-chat-product/chopin`.
@@ -159,5 +159,39 @@ measurement, a quality baseline, or a verified release of the preserved prototyp
 
 No push, merge, paid calls, new database, migration execution, credential copies,
 port-8787 handoff, app restart or other-worktree mutation is part of this milestone.
-The old automatic goal remains paused. Next bounded slice: stored decision identity
-(step 2), with question-package tests only.
+The old automatic goal remains paused. Continued work below belongs to this product
+extraction chat; it does not resume the old prototype goal.
+
+## Stored decision identity slice
+
+Extract `storedText()` and `identified()` unchanged from the preserved schema and
+export the validator publicly. It validates durable IDs, order and raw text lengths
+without re-keying, trimming, freezing or mutating a definition. Current `normalize()`,
+shared drafts and answer derivation retain their existing behavior.
+
+The two archived validator tests are retained with the pending-card validator portion.
+Its draft-mode and unanswered-derive assertions depend on the later draft slice and
+remain explicitly pending; changing draft behavior here would exceed this boundary.
+Five additional tests cover stable IDs/order/identity, duplicate IDs across questions,
+unknown fields, counts, and every raw text field. Test-first verification failed on the
+missing public export, then passed after extraction. Independent review approved the
+slice: 33 question-package tests passed, 0 failed (99 assertions), on Bun 1.4.2.
+Full workspace types passed; formatting and CI checks passed with existing warnings.
+The validator has no runtime consumers yet; durable restoration integration is pending.
+
+## Product tests with eval dependencies
+
+Seven archived product tests currently read eval development fixtures or helpers:
+`d01-provenance-acceptance.test.ts`, `d01-scoped-endorsement.test.ts`,
+`d02-deferral-domain.test.ts`, `d02-deferral-effects.test.ts`,
+`d02-team-deferral.test.ts`, `d19-flow.test.ts`, and `quotes.test.ts` under
+`apps/server/src/conversation-plan/`. Keep their assertions with the product slices.
+Extract only the test messages, injected model replies and narrow state observations
+needed by those assertions into product test fixtures/helpers with source provenance.
+Do not import the eval runner/scorer/dataset tree or skip these tests. Original material
+stays archived; reserved examples stay sealed. This adaptation is required before
+claiming those slices' product regression coverage passes independently of eval tooling.
+
+Next bounded pure-state sub-slice: archived conversation namespace and exact source
+provenance validation, before event replay/domain. Keep the namespace outside global
+wire unions until authorized producers/handlers/consumers are ported together.
