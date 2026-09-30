@@ -18,32 +18,32 @@ colors:
   chat-divider: "rgb(0 0 0 / 9%)"
 typography:
   document-title:
-    fontFamily: "Inter Variable, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: '"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
     fontSize: "var(--text-2xl)"
     fontWeight: 600
     lineHeight: 1.15
   section-heading:
-    fontFamily: "Inter Variable, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: '"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
     fontSize: "var(--text-xl)"
     fontWeight: 600
     lineHeight: 1.25
   subheading:
-    fontFamily: "Inter Variable, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: '"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
     fontSize: "var(--text-lg)"
     fontWeight: 600
     lineHeight: 1.4
   document-body:
-    fontFamily: "Inter Variable, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: '"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
     fontSize: "var(--text-base)"
     fontWeight: 400
     lineHeight: 1.6
   chrome:
-    fontFamily: "Inter Variable, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: '"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
     fontSize: "var(--text-sm)"
     fontWeight: 400
     lineHeight: 1.5
   compact:
-    fontFamily: "Inter Variable, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: '"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
     fontSize: "var(--text-xs)"
     fontWeight: 400
     lineHeight: 1.35
@@ -107,7 +107,7 @@ Chopin feels calm, precise, and collaborative. The authored document is the visu
 - Petrol marks actions, links, focus, and presence; semantic colors identify outcomes.
 - Controls are quiet, legible, and purposeful. Depth gives layers subtle separation.
 
-The implementation is the authority for values: `../../packages/visuals/theme.css` owns shared tokens, while `src/theme.css`, `src/navigation.css`, and `../../packages/editor/src/styles.css` apply them. The frontmatter records the most reused values; it is not a replacement for those source files.
+The implementation is the authority for values: `../../packages/visuals/theme.css` owns shared tokens, while `src/theme.css`, `src/navigation.css`, and `../../packages/editor/src/styles.css` apply them. The frontmatter records the most reused values; it is not a replacement for those source files. `scripts/check-design-record.ts` compares the structured subset against the shared theme, including explicit aliases. Two contextual values are checked against their owning selectors: Chat's divider in `.workspace-frame .workspace-chat-panel`, and prose leading in `.plan .plan-content`. Prose leading is deliberately 1.6 while the paired base UI token remains 1.5. The sidecar's color values, shadows, and motion entries are checked too; generated dates and illustrative tonal ramps do not establish authority. See [the design contract guide](../../docs/design-contract.md) for the exact scope and change workflow.
 
 ## Colors
 
@@ -119,9 +119,13 @@ The implementation is the authority for values: `../../packages/visuals/theme.cs
 
 - **White page** carries the authored document and raised controls.
 - **Warm olive ground** frames the workspace. Lighter inset and selected roles separate nearby surfaces without adding another accent.
-- **Ink** has primary, secondary, and tertiary text roles; use the role that preserves the intended hierarchy and legibility.
+- **Ink** has primary, secondary, tertiary, and quaternary text roles; use the role that preserves the intended hierarchy and legibility.
 
 Success, warning, and destructive colors communicate state. Their full surface, graphic, icon, and text pairs remain defined in the shared theme.
+
+The original destructive button red is an intentional visual exception: white text on its default state measures about 4.20:1, below the usual 4.5:1 AA target. Keep this red for its aesthetic character. The hover and pressed colors remain distinct and above 4.5:1.
+
+**The Contrast Hierarchy Rule.** Prefer AA contrast for primary content and controls, but do not treat it as a universal requirement for every text role. Preserve the approved visual hierarchy: timestamps and secondary conversation metadata use their original quiet roles; queued messages and loading/tool status keep their original muted roles and opacity; code and diff previews retain the original pierre-light palette and selection treatment. These are deliberate visual exceptions, alongside the original destructive button red. Do not darken these roles automatically to satisfy a contrast audit. Record measured findings honestly and keep exceptions scoped to the approved roles and states; new exceptions require a deliberate design decision. Token use, the fluid type scale, keyboard access, focus, and layout checks remain enforced.
 
 **The One Accent Rule.** New action and focus treatments use the established petrol roles. New raw color values require a change to the shared theme, not a local copy.
 

@@ -1,0 +1,324 @@
+[
+	{
+		"file": "apps/web/src/document-workspace-host.tsx",
+		"reason": "Workspace assembly supplies document/session callbacks and data, not design values; scanner does not execute the workspaceProps function.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"workspaceProps(\n\t\t\t\t\tloaded.parent,\n\t\t\t\t\tagent,\n\t\t\t\t\tuser,\n\t\t\t\t\tchildVisible\n\t\t\t\t\t\t? { childLabel, onChildClose: closeChild, type: \"parent-with-child\" }\n\t\t\t\t\t\t: { type: \"document\" },\n\t\t\t\t\tparentMetadataChanged,\n\t\t\t\t)",
+				"unresolved JSX props > DocumentWorkspaceHost > parent > <RoomWorkspace>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"workspaceProps(\n\t\t\t\t\t\tloaded.child,\n\t\t\t\t\t\tagent,\n\t\t\t\t\t\tuser,\n\t\t\t\t\t\t{ label: loaded.child.channel.title, onClose: closeChild, type: \"child\" },\n\t\t\t\t\t\tchildMetadataChanged,\n\t\t\t\t\t)",
+				"unresolved JSX props > DocumentWorkspaceHost > child > <RoomWorkspace>",
+				1
+			]
+		],
+		"sourceHash": "d42348377f10de0b15c2832577625079f62e0e99709010dd9233293fe7638139"
+	},
+	{
+		"file": "apps/web/src/document-rename.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > DocumentRename > <form>",
+				1
+			]
+		],
+		"sourceHash": "f4ec8e83f5ebcaa77846909abf5285f60591c6b617ad23afc4b09780996d3112"
+	},
+	{
+		"file": "apps/web/src/chat/markdown.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > MessageMarkdown > <div>",
+				1
+			]
+		],
+		"sourceHash": "9261461af068e89ab69e28e8a5bc49dc0e4edf78d1a3d070bd5f2028246e2064"
+	},
+	{
+		"file": "apps/web/src/project-sidebar.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > NavigationIcon > <img>",
+				1
+			]
+		],
+		"sourceHash": "267cbde8513e5e17819220399f677d41dc9d6a1eabbeeb044dd55c70eb99b89b"
+	},
+	{
+		"file": "apps/web/src/design-audit/icons.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > IconCatalogue > <Glyph>",
+				1
+			]
+		],
+		"sourceHash": "e0f644a2d95da4b6cf949f71f2c5d746fd36c3499a0bc71ba529f25a114e1b81"
+	},
+	{
+		"file": "apps/web/src/design-audit/controls.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > ButtonRow > <button>",
+				1
+			]
+		],
+		"sourceHash": "9b5a71d5ac0c6e098e8196ad45dbbd8048d1b30fa962cbd48164271604fdf7a4"
+	},
+	{
+		"file": "apps/web/src/document-actions-menu.tsx",
+		"reason": "Anchored presence supplies measured popup coordinates/visibility, not design token values.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"presence.value",
+				"unresolved style > DocumentActionsMenu > <div>",
+				1
+			]
+		],
+		"sourceHash": "92f3f213572e94e5a7aedd89d39b2009fdfe62e86c1462ed45901a4995f94570"
+	},
+	{
+		"file": "apps/web/src/document-actions-menu.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > DocumentActionsMenu > <button>",
+				1
+			]
+		],
+		"sourceHash": "92f3f213572e94e5a7aedd89d39b2009fdfe62e86c1462ed45901a4995f94570"
+	},
+	{
+		"file": "apps/web/src/document-actions-menu.tsx",
+		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"motion.className",
+				"class > DocumentActionsMenu > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"presence.className",
+				"class > DocumentActionsMenu > <div>",
+				1
+			]
+		],
+		"sourceHash": "92f3f213572e94e5a7aedd89d39b2009fdfe62e86c1462ed45901a4995f94570"
+	},
+	{
+		"file": "apps/web/src/terminal-alert.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > TerminalAlert > <div>",
+				1
+			]
+		],
+		"sourceHash": "0b1513f4339bb6fe2acbfe690f4965c7be28832bf76be467ee625da1f1c231ea"
+	},
+	{
+		"file": "apps/web/src/navigation-shell.tsx",
+		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"motion.className",
+				"class > NavigationDrawer > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"accountPresence.className",
+				"class > NavigationShell > sidebar > <ProjectSidebar> > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"sidebarMotion.className",
+				"class > NavigationShell > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"sidebarPresence.className",
+				"class > NavigationShell > <div>",
+				1
+			]
+		],
+		"sourceHash": "b7a0bcdb185c2345d218bf9b567f6f971fc3bd7219aea57f088fb22ff82e00cc"
+	},
+	{
+		"file": "apps/web/src/viewport.ts",
+		"reason": "Viewport adapter writes browser-measured --app-* geometry and keyboard insets; dynamic custom-property names are intentionally restricted by that adapter.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"value",
+				"DOM setProperty > document.documentElement.style.setProperty > useVisualViewport > update",
+				1
+			]
+		],
+		"sourceHash": "7c8d8e38b981d970cdb940da6e183da9bbdb6ff3e1268c2ee533d29ba1aa8888"
+	},
+	{
+		"file": "apps/web/src/workspace.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > ChatToggle > <button>",
+				1
+			]
+		],
+		"sourceHash": "15353a61ce445c0af8ad58b6455dcf192942e3135e5fb56b51602eb5ecb26f82"
+	},
+	{
+		"file": "apps/web/src/workspace.tsx",
+		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"feedback",
+				"class > ChatToggle > <span>",
+				2
+			],
+			[
+				"dynamic",
+				"class",
+				"feedback",
+				"class > ChatToggle > <img>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"chatPresence.className",
+				"class > Workspace > <aside>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"motionContract(\"feedback\").className",
+				"class > Workspace > <span>",
+				2
+			]
+		],
+		"sourceHash": "15353a61ce445c0af8ad58b6455dcf192942e3135e5fb56b51602eb5ecb26f82"
+	},
+	{
+		"file": "apps/web/src/navigation-dialog.tsx",
+		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"motion.className",
+				"class > NavigationDialog > <div>",
+				1
+			]
+		],
+		"sourceHash": "548439acad5973843fc7c4c1502f3646e50cff02cd5517a8caf6afdf6d7e82d6"
+	},
+	{
+		"file": "apps/web/src/repository-picker.tsx",
+		"reason": "Anchored picker position comes from measured viewport placement; presentation roles are supplied by separately checked CSS.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"position",
+				"unresolved style > RepositoryPicker > popup > <div>",
+				1
+			]
+		],
+		"sourceHash": "2faf001a9706655858f27b51818f9ea53bd3593aa53b77233ae61debe23cb8df"
+	},
+	{
+		"file": "apps/web/src/repository-picker.tsx",
+		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"popupPresence.className",
+				"class > RepositoryPicker > popup > <div>",
+				1
+			]
+		],
+		"sourceHash": "2faf001a9706655858f27b51818f9ea53bd3593aa53b77233ae61debe23cb8df"
+	},
+	{
+		"file": "apps/web/src/document-picker.tsx",
+		"reason": "Anchored picker position comes from measured viewport placement; presentation roles are supplied by separately checked CSS.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"position",
+				"unresolved style > DocumentPicker > popup > <div>",
+				1
+			]
+		],
+		"sourceHash": "e9796d7c5c66ea469a4fffa8976d341f22ef4e67b6a256fbf693de763b9a4a55"
+	},
+	{
+		"file": "apps/web/src/document-picker.tsx",
+		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"popupPresence.className",
+				"class > DocumentPicker > popup > <div>",
+				1
+			]
+		],
+		"sourceHash": "e9796d7c5c66ea469a4fffa8976d341f22ef4e67b6a256fbf693de763b9a4a55"
+	}
+]

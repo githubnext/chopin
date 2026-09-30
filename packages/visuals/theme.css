@@ -153,6 +153,7 @@
 	--radius-md: 0.375rem; /* 6px — cards, inputs, callouts, code blocks */
 	--radius-lg: 0.5rem; /* 8px — popovers and panels */
 	--radius-xl: 0.625rem; /* 10px — the document page */
+	--radius-full: 9999px; /* saturated pill rounding */
 
 	/*
 	 * Warm-tinted depth, copied from the settled Figma shadow table.

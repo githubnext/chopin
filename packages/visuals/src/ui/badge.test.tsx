@@ -72,7 +72,7 @@ test("uses token-only compact pill styles with bounded label truncation", async 
 		"padding: var(--spacing) calc(var(--spacing) * 2.5) var(--spacing) calc(var(--spacing) * 2);",
 	);
 	expect(css).toContain("overflow: hidden;");
-	expect(css).toContain("border-radius: 999px;");
+	expect(css).toContain("border-radius: var(--radius-full);");
 	expect(css).toContain("background: var(--cv-semantic-surface);");
 	expect(css).toContain("border: var(--edge-width) solid");
 	expect(css).toContain(

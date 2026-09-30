@@ -136,7 +136,7 @@
 	width: 0.5rem;
 	height: 0.5rem;
 	flex: none;
-	border-radius: 9999px;
+	border-radius: var(--radius-full);
 	background-color: var(--color-brand);
 
 	&::after {

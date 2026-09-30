@@ -1,0 +1,10 @@
+{
+	"schemaVersion": 1,
+	"files": [
+		"exceptions/assets.json",
+		"exceptions/dynamic-editor.json",
+		"exceptions/dynamic-packages.json",
+		"exceptions/dynamic-web.json",
+		"exceptions/preserved-values.json"
+	]
+}
