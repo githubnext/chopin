@@ -190,6 +190,7 @@ function Undecided(
 				errorClassName="editor-motion-feedback"
 				onCancel={editable ? state.cancel : undefined}
 				onChange={editable ? state.change : undefined}
+				onQuestionFocus={editable ? state.focusQuestion : undefined}
 				onSubmit={editable ? state.submit : undefined}
 				renderPeople={people => <PresenceFaces handles={people.map(person => person.handle)} />}
 				renderStep={motion
