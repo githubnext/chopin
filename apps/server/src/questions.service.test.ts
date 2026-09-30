@@ -119,12 +119,20 @@ test("a batched ask creates independently addressed decision records and nodes",
 		{
 			status: "answered",
 			resolver: "Storage",
-			answers: [{ question: "Where should room state live?", choices: ["MDX on disk"] }],
+			answers: [{
+				question: "Where should room state live?",
+				choices: ["MDX on disk"],
+				optionIds: [records[0]!.definition.questions[0]!.options[0]!.id],
+			}],
 		},
 		{
 			status: "answered",
 			resolver: "Scope",
-			answers: [{ question: "What belongs in the first cut?", choices: ["Anchors"] }],
+			answers: [{
+				question: "What belongs in the first cut?",
+				choices: ["Anchors"],
+				optionIds: [records[1]!.definition.questions[0]!.options[0]!.id],
+			}],
 		},
 	]);
 });

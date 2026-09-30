@@ -318,7 +318,7 @@ describe("draft", () => {
 describe("derive", () => {
 	let definition = normalize(tool());
 
-	it("returns the chosen labels, not identifiers", () => {
+	it("returns the chosen labels and option identifiers", () => {
 		let outcome = derive(definition, {
 			q0: { mode: "choices", choice: "o0", options: {}, custom: "" },
 		});
@@ -326,7 +326,7 @@ describe("derive", () => {
 		expect(outcome.ok).toBe(true);
 		if (!outcome.ok) return;
 		expect(outcome.answers).toEqual([
-			{ question: "How should we deploy?", choices: ["Canary"] },
+			{ question: "How should we deploy?", choices: ["Canary"], optionIds: ["o0"] },
 		]);
 	});
 
@@ -360,6 +360,7 @@ describe("derive", () => {
 		expect(outcome.ok).toBe(true);
 		if (!outcome.ok) return;
 		expect(outcome.answers[0]!.choices).toEqual(["Canary", "Blue-green"]);
+		expect(outcome.answers[0]!.optionIds).toEqual(["o0", "o1"]);
 	});
 
 	it("reports the first unanswered question", () => {

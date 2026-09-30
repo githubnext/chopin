@@ -72,13 +72,13 @@ export declare namespace Question {
 	/**
 	 * A decided answer.
 	 *
-	 * Carries the question text and the chosen labels rather than identifiers,
-	 * so it still reads as prose to an agent, and still means something in a
-	 * transcript after the definition it came from is gone.
+	 * Carries readable labels for the agent and option ids for durable decisions.
 	 */
 	export type Answer = {
 		question: string;
 		choices?: string[];
+		/** Ids of the chosen options, alongside their labels. */
+		optionIds?: string[];
 		custom?: string;
 	};
 
