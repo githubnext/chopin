@@ -57,6 +57,8 @@ import type { Points } from "./passage";
 export type Owner = "questions" | "comments";
 
 const NAME = "plan-related";
+/** Prose a decision produced is washed in the decision's own (success) tone. */
+const DECISION_NAME = "plan-decision";
 
 /**
  * How long a pin stays up.
@@ -83,8 +85,14 @@ let lapsing: ReturnType<typeof setTimeout> | undefined;
  * it, are the parts of this worth testing and the parts that need no browser.
  */
 export function union(): Points[] {
-	let hover = [...wanted.values()].flat();
-	return hover.length > 0 ? hover : pinned?.places ?? [];
+	return layers().flatMap(([, places]) => places);
+}
+
+/** `union`, still divided by the store that asked, so each can keep its own tone. */
+function layers(): [Owner, Points[]][] {
+	let hover = [...wanted].filter(([, places]) => places.length > 0);
+	if (hover.length > 0) return hover;
+	return pinned ? [[pinned.owner, pinned.places]] : [];
 }
 
 function available(): boolean {
@@ -193,7 +201,10 @@ export function unpin(editor?: LexicalEditor, owner?: Owner): void {
 export function clear(editor?: LexicalEditor): void {
 	wanted.clear();
 	release();
-	if (available()) CSS.highlights.delete(NAME);
+	if (available()) {
+		CSS.highlights.delete(NAME);
+		CSS.highlights.delete(DECISION_NAME);
+	}
 	if (editor) outline(editor, []);
 }
 
@@ -207,16 +218,20 @@ function release(): void {
 function render(editor: LexicalEditor): void {
 	if (!available()) return fallback(editor);
 
-	let ranges: Range[] = [];
+	let ranges: { [name: string]: Range[] } = { [NAME]: [], [DECISION_NAME]: [] };
 	editor.getEditorState().read(() => {
-		for (let points of union()) {
-			let range = $rangeOf(editor, points);
-			if (range) ranges.push(range);
+		for (let [owner, places] of layers()) {
+			for (let points of places) {
+				let range = $rangeOf(editor, points);
+				if (range) ranges[owner === "questions" ? DECISION_NAME : NAME]!.push(range);
+			}
 		}
 	});
 
-	if (ranges.length === 0) CSS.highlights.delete(NAME);
-	else CSS.highlights.set(NAME, new Highlight(...ranges));
+	for (let [name, found] of Object.entries(ranges)) {
+		if (found.length === 0) CSS.highlights.delete(name);
+		else CSS.highlights.set(name, new Highlight(...found));
+	}
 }
 
 /** Blocks currently outlined by the fallback, so they can be un-outlined. */

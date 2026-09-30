@@ -238,6 +238,41 @@
 		"sourceHash": "c60690040f4b0911e23027b7b975596e0db27e2d4e20c4ec4ce3f1955c5b81e8"
 	},
 	{
+		"file": "packages/editor/src/resolved-layer.tsx",
+		"reason": "Decision marker and popover style is measured anchor geometry, sized from the first anchored block; browser positioning remains outside static token evaluation.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"current.style",
+				"unresolved style > Surface > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"markerStyle(marker, lineHeight, hit, inset)",
+				"unresolved style > ResolvedLayer > <button>",
+				1
+			]
+		],
+		"sourceHash": "c4dcca9cf781f0f59d57c8e1db409b743eea5b3c7eb60d696fde3fc32ac6f37f"
+	},
+	{
+		"file": "packages/editor/src/resolved-layer.tsx",
+		"reason": "Motion/presence contract returns finite semantic state classes (is-open, is-closing); imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"presence.className",
+				"class > Surface > <div>",
+				1
+			]
+		],
+		"sourceHash": "c4dcca9cf781f0f59d57c8e1db409b743eea5b3c7eb60d696fde3fc32ac6f37f"
+	},
+	{
 		"file": "packages/editor/src/table/rails.tsx",
 		"reason": "Table rail style is computed viewport geometry (position, size, transform); token policy deliberately does not ban measured dimensions.",
 		"cases": [
@@ -389,7 +424,7 @@
 				1
 			]
 		],
-		"sourceHash": "0f70c895629e5bbbbbb90fdcf48fbd28287c74fff034b6e9834a26a7c423127e"
+		"sourceHash": "57762a66f2046b26f1c87547bf45bb21e73eb1c37deda3dcb376ba7056f10b10"
 	},
 	{
 		"file": "packages/editor/src/widgets/code-view.tsx",
