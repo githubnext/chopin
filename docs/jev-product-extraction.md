@@ -1443,3 +1443,57 @@ passes twenty-three cases with 207 assertions. Workspace/E2E types, CI, formatti
 whole-source and whole-callback proofs pass, with independent production and test
 reviews approved. CI retains only two inherited lint warnings and the existing design
 baseline. No live application, PostgreSQL, authentication or provider run is claimed.
+
+## Browser projection preservation and research authority
+
+The complete original projection module and room Applied/apply boundary are restored.
+Browser updates compare serialized Questionnaire, Decision and Research snapshots
+before and after applying the batch. Existing components may move unchanged, while
+creation, removal or alteration is refused. Missing or duplicate protected identities
+fail closed. Research additions and removals have explicit request/job authority
+exceptions; accepted changes travel into the fenced storage commit for revalidation.
+This compares document snapshots. It does not reconstruct Questionnaire or Decision
+components from authoritative sidecar records, so that separate cross-check gap remains.
+
+Service restores the complete original commit, commitHosted, rejection-reset and two
+prose-metadata helper declarations. A late ResearchProjectionConflict restores the
+previous revision, question records and comment threads, then uses the same durable
+fresh-epoch reset as an invalid batch. No acknowledgement or update relay precedes
+the commit. Prose orphan metadata publishes after the reset commits and broadcasts.
+Current lease failure, archive, checkpoint, metadata, MCP and implementation behavior
+survives whole-module subtraction. The existing staged-publication notification flag
+is preserved with one empty research-change argument; server-authored mutations keep
+their current path.
+
+Nine whole original registrations retain eighteen runtime cases and their complete
+terminal-state, projection-kind and remove/alter tables. Twelve fixture helpers are
+restored in small leaves; two existing extracted helpers are reused. Real question
+edit/submission, accepted comment decisions, Yjs batches, Memory commits and close/
+reopen behavior are exercised without a strict-restore or fixture adaptation. The
+initial unchanged tests reproduced thirteen failures. All eighteen now pass, including
+a job failing after validation but before commit, active-request removal refusal,
+terminal removal, combined prose/projection rejection and unchanged component moves.
+
+An existing durable-before-ack test used a browser-created Decision, now correctly
+forbidden. Its complete archived ordinary-prose callback is restored once, including
+all existing acknowledgement, stored-update, revision and derived-notification
+assertions. No guard or assertion is weakened. Twelve additional parser-backed cases
+check nested/malformed identities, kind/payload changes, movement and exact authorized
+Research IDs. They supplement the real submission cases rather than replacing them.
+
+Whole-current room, Service and persistence-test proofs permit only the declared
+boundary changes, imports and callback replacement. Complete original helpers,
+callbacks and enclosing loop tables are compared against fresh Git sources. These
+checks use Memory storage, synthetic sockets and actual Yjs/Service.submit; they do
+not establish real browser, socket authorization or PostgreSQL execution. No client
+or styles change, and prior isolated native cases are not rerun. Original application
+coverage, scripted Harness adaptation and deferred anatomy remain outstanding;
+the broader extraction is unfinished.
+
+Final verification passes 3,195 offline tests with 14,912 assertions across 531 files;
+two PostgreSQL checks are skipped. The combined focused persistence/room/original/
+pure suite passes forty-nine cases with 181 assertions. Workspace/E2E types, CI,
+formatting and all source/helper/callback/fixture proofs pass. Independent production
+and test reviews approve the bounded implementation. CI retains only two inherited
+lint warnings and the existing design baseline. No PostgreSQL, live application,
+browser authentication or provider execution is claimed.

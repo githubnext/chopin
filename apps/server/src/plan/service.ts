@@ -14,6 +14,7 @@ import * as Y from "yjs";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 
+import { ULID } from "@chopin/dialect";
 import { MENTION } from "@chopin/protocol/address";
 import * as Question from "@chopin/question";
 
@@ -42,7 +43,14 @@ import type { Presence } from "./presence";
 import type { Document } from "./room";
 import type { Block } from "./edit";
 import type { Brief, CreationOrigin } from "../mcp";
-import type { InitialChannel, JsonValue, Lease, StoredChannel } from "../storage/model";
+import { researchProjectionAllowed, ResearchProjectionConflict } from "../storage/model";
+import type {
+	InitialChannel,
+	JsonValue,
+	Lease,
+	ResearchProjectionChange,
+	StoredChannel,
+} from "../storage/model";
 import type { StorageAdapter } from "../storage/port";
 import type { PendingCardAction } from "../questions/card-actions";
 import type { ClaimInput, ClaimResult, Graph, Run } from "../tasks/graphs";
@@ -754,6 +762,7 @@ async function commitHosted(
 	operationId: string,
 	captured: Captured,
 	allowArchived = false,
+	researchProjections: ResearchProjectionChange[] = [],
 	notifyDocumentPersisted = true,
 ): Promise<void> {
 	let durable = plan.persistence;
@@ -773,6 +782,7 @@ async function commitHosted(
 			sidecar: captured.sidecar,
 			events: [],
 			now: new Date(),
+			...(researchProjections.length > 0 ? { researchProjections } : {}),
 			...(allowArchived ? { allowArchived: true } : {}),
 		});
 		if (!result.repeated) {
@@ -816,7 +826,7 @@ async function commitHosted(
 		}
 		scheduleCheckpoint(plan);
 	} catch (err) {
-		durable.fatal(err);
+		if (!(err instanceof ResearchProjectionConflict)) durable.fatal(err);
 		throw err;
 	}
 }
@@ -1183,6 +1193,21 @@ function signature(plan: Plan): string {
 	return JSON.stringify([Questions.anchors(plan), Comments.anchors(plan), Questions.prose(plan)]);
 }
 
+function proseOrphans(plan: Plan): Map<string, boolean> {
+	return new Map(Questions.prose(plan).map(item => [item.widget, item.orphaned]));
+}
+
+function announceProseChanges(plan: Plan, before: Map<string, boolean>): void {
+	for (let item of Questions.prose(plan)) {
+		if (before.get(item.widget) === item.orphaned) continue;
+		try {
+			Questions.announce(plan, plan.server, plan.id, item.widget);
+		} catch (err) {
+			console.error("[plan] could not announce decided prose metadata:", err);
+		}
+	}
+}
+
 /** Everything a joining client needs to start from. */
 export function greet(plan: Plan, ws: Socket, msg: Request<Wire.Open.Ask>): void {
 	let resume = msg.epoch === plan.document.epoch && msg.vector ? decode(msg.vector) : undefined;
@@ -1247,6 +1272,52 @@ function schedule(plan: Plan): void {
 	}, GROUP_MS);
 }
 
+async function rejectBatch(plan: Plan, batch: Queued[], issues: string[]): Promise<void> {
+	console.warn("[plan] rejected batch:", issues.join(", "));
+	let proseBefore = proseOrphans(plan);
+
+	let now = Date.now();
+	for (let item of batch) {
+		let gauge = meter(plan, item.ws);
+		gauge.invalid = [...recent(gauge.invalid, INVALID_WINDOW_MS), now];
+		if (gauge.invalid.length >= INVALID_LIMIT) {
+			item.ws.close(ABUSIVE, "repeated invalid plan updates");
+		}
+	}
+
+	let rebuilt = await room.rebuild(plan.document);
+	plan.document = rebuilt;
+	// Cursors describe positions in a history that no longer exists. The
+	// agent's is in there too, and the interval repeating it would outlive
+	// the presence it repeats.
+	clearInterval(plan.attention);
+	plan.attention = undefined;
+	presence.destroy(plan.presence);
+	plan.presence = presence.create();
+	// So do anchors and passages, and unlike a cursor nobody re-announces
+	// them. Without this every highlight in the room stays dark until the
+	// agent happens to edit.
+	//
+	// Guarded because the `plan:reset` below is what tells everyone to
+	// re-open. A throw here would strand the whole room on an epoch that no
+	// longer exists, to save some highlights that are already stale.
+	try {
+		Questions.rebase(plan);
+		Comments.rebase(plan);
+	} catch (err) {
+		console.error("[plan] could not carry anchors onto the rebuilt document:", err);
+	}
+	await replaceHosted(plan, `epoch:${rebuilt.epoch}`, capture(plan));
+
+	broadcast(plan.server, plan.id, {
+		kind: "plan:reset",
+		ts: 0,
+		epoch: rebuilt.epoch,
+		reason: "rebuilt",
+	});
+	announceProseChanges(plan, proseBefore);
+}
+
 /**
  * Apply one batch.
  *
@@ -1259,55 +1330,34 @@ async function commit(plan: Plan): Promise<void> {
 	if (batch.length === 0) return;
 	plan.queue = [];
 
-	let outcome = await room.apply(plan.document, batch.map(item => item.update));
+	let outcome = await room.apply(
+		plan.document,
+		batch.map(item => item.update),
+		async (id, action) => {
+			if (!ULID.test(id)) return false;
+			let request = await plan.persistence.storage.research.get(plan.id, id);
+			let initial = request?.turns.find(turn => turn.kind === "initial");
+			let jobId = initial?.answerJobId ?? initial?.evidenceJobId;
+			let job = jobId ? await plan.persistence.storage.jobs.get(plan.id, jobId) : undefined;
+			return researchProjectionAllowed(
+				plan.id,
+				{ id, action },
+				request?.workspace,
+				initial,
+				job?.job,
+			);
+		},
+	);
 
 	if (!outcome.ok) {
-		console.warn("[plan] rejected batch:", outcome.issues.join(", "));
-
-		let now = Date.now();
-		for (let item of batch) {
-			let gauge = meter(plan, item.ws);
-			gauge.invalid = [...recent(gauge.invalid, INVALID_WINDOW_MS), now];
-			if (gauge.invalid.length >= INVALID_LIMIT) {
-				item.ws.close(ABUSIVE, "repeated invalid plan updates");
-			}
-		}
-
-		let rebuilt = await room.rebuild(plan.document);
-		plan.document = rebuilt;
-		// Cursors describe positions in a history that no longer exists. The
-		// agent's is in there too, and the interval repeating it would outlive
-		// the presence it repeats.
-		clearInterval(plan.attention);
-		plan.attention = undefined;
-		presence.destroy(plan.presence);
-		plan.presence = presence.create();
-		// So do anchors and passages, and unlike a cursor nobody re-announces
-		// them. Without this every highlight in the room stays dark until the
-		// agent happens to edit.
-		//
-		// Guarded because the `plan:reset` below is what tells everyone to
-		// re-open. A throw here would strand the whole room on an epoch that no
-		// longer exists, to save some highlights that are already stale.
-		try {
-			Questions.rebase(plan);
-			Comments.rebase(plan);
-		} catch (err) {
-			console.error("[plan] could not carry anchors onto the rebuilt document:", err);
-		}
-		await replaceHosted(plan, `epoch:${rebuilt.epoch}`, capture(plan));
-
-		broadcast(plan.server, plan.id, {
-			kind: "plan:reset",
-			ts: 0,
-			epoch: rebuilt.epoch,
-			reason: "rebuilt",
-		});
+		await rejectBatch(plan, batch, outcome.issues);
 		return;
 	}
 
 	let relationshipsChanged = false;
 	let before = signature(plan);
+	let previousRecords = new Map(plan.records);
+	let previousThreads = new Map(plan.threads);
 	try {
 		Questions.rebase(plan);
 		Comments.rebase(plan);
@@ -1315,12 +1365,29 @@ async function commit(plan: Plan): Promise<void> {
 	} catch (err) {
 		console.error("[plan] could not carry anchors forward:", err);
 	}
+	let previousRevision = plan.revision;
 	if (room.project(plan.document) !== plan.persistence.committedSource) plan.revision++;
 	let merged = Y.mergeUpdates(batch.map(item => item.update));
 	let operationId = `plan:${plan.document.epoch}:${
 		createHash("sha256").update(merged).digest("hex")
 	}`;
-	await commitHosted(plan, merged, operationId, capture(plan));
+	try {
+		await commitHosted(
+			plan,
+			merged,
+			operationId,
+			capture(plan),
+			false,
+			outcome.researchProjections,
+		);
+	} catch (err) {
+		if (!(err instanceof ResearchProjectionConflict)) throw err;
+		plan.revision = previousRevision;
+		plan.records = previousRecords;
+		plan.threads = previousThreads;
+		await rejectBatch(plan, batch, ["research-reference-conflict"]);
+		return;
+	}
 
 	for (let item of batch) {
 		reply(item.ws, item.rid, {
@@ -1409,6 +1476,7 @@ export async function publishStaged(
 		operationId,
 		capture(candidate),
 		false,
+		[],
 		options?.notifyDocumentPersisted !== false,
 	);
 	if (mutation) {

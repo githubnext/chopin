@@ -35,6 +35,11 @@ import {
 	ulid,
 } from "@chopin/dialect";
 import { $getAnchorAndFocusForUserState } from "@lexical/yjs";
+import {
+	newResearchProjections,
+	protectProjections,
+	removedResearchProjections,
+} from "./projections";
 import * as Questionnaires from "./questionnaires";
 import { createCardProjections, QuestionnaireProjectionError } from "./card-projections";
 export { QuestionnaireProjectionError } from "./card-projections";
@@ -48,6 +53,7 @@ import {
 	$nodesOfType,
 } from "lexical";
 
+import type { ResearchProjectionChange } from "../storage/model";
 import type { Binding, Provider } from "@lexical/yjs";
 import type { LexicalEditor, LexicalNode } from "lexical";
 import type { Root, RootContent } from "mdast";
@@ -334,7 +340,7 @@ export function mark(target: Document): void {
 }
 
 export type Applied =
-	| { ok: true; seq: number }
+	| { ok: true; seq: number; researchProjections: ResearchProjectionChange[] }
 	| { ok: false; issues: string[] };
 
 /**
@@ -344,21 +350,50 @@ export type Applied =
  * document proves the shared tree still serialises to something the dialect
  * accepts, and doing that per keystroke would be absurd.
  */
-export async function apply(target: Document, updates: Uint8Array[]): Promise<Applied> {
-	if (updates.length === 0) return { ok: true, seq: target.seq };
+export async function apply(
+	target: Document,
+	updates: Uint8Array[],
+	authorizeResearch?: (id: string, action: "add" | "remove") => Promise<boolean>,
+): Promise<Applied> {
+	if (updates.length === 0) return { ok: true, seq: target.seq, researchProjections: [] };
+	let before = parse(project(target)).children;
+	let researchProjections: ResearchProjectionChange[] = [];
 
 	for (let update of updates) Y.applyUpdate(target.doc, update, REMOTE);
 	await settle();
 
 	try {
-		project(target);
+		let after = parse(project(target)).children;
+		let added = new Set<string>();
+		let removed = new Set<string>();
+		for (
+			let [action, ids, allowed] of [
+				["add", newResearchProjections(before, after), added],
+				["remove", removedResearchProjections(before, after), removed],
+			] as const
+		) {
+			for (let id of ids) {
+				let authorized = false;
+				try {
+					authorized = !!authorizeResearch && await authorizeResearch(id, action);
+				} catch {
+					return { ok: false, issues: ["research-reference-unverified"] };
+				}
+				if (!authorized) return { ok: false, issues: ["protected-projection"] };
+				allowed.add(id);
+				researchProjections.push({ id, action });
+			}
+		}
+		if (protectProjections(before, after, added, removed)) {
+			return { ok: false, issues: ["protected-projection"] };
+		}
 	} catch (err) {
 		if (!(err instanceof PlanValidationError)) throw err;
 		return { ok: false, issues: err.issues.map(issue => issue.code) };
 	}
 
 	target.seq += updates.length;
-	return { ok: true, seq: target.seq };
+	return { ok: true, seq: target.seq, researchProjections };
 }
 
 /**
