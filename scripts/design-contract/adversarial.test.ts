@@ -3,25 +3,11 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { classProblems } from "./classes";
-import { declarationProblem, type TokenPolicy } from "./policy";
+import type { TokenPolicy } from "./policy";
 import { applyExceptions, inspect, scan } from "./scan";
 import { extractSource } from "./source";
 
-let policy: TokenPolicy = {
-	canonical: new Map(Object.entries({
-		"--font-sans": "Inter, sans-serif",
-		"--text-sm": "clamp(.8rem, 1vw, .9rem)",
-		"--text-sm--line-height": "1.5",
-		"--color-brand": "oklch(.5 .1 210)",
-		"--radius-md": ".375rem",
-		"--duration-fast": "120ms",
-		"--ease-out": "cubic-bezier(.2, 0, 0, 1)",
-	})),
-	aliases: new Map([["--prose-size", ["var(--text-sm)"]]]),
-};
-let problem = (property: string, value: string) =>
-	declarationProblem({ property, value, line: 1, context: "CSS" }, policy);
+let policy: TokenPolicy = { canonical: new Map(), aliases: new Map() };
 
 function fixture(files: Record<string, string>, check: (root: string) => void) {
 	let root = mkdtempSync(join(tmpdir(), "chopin-contract-adversarial-"));
@@ -36,45 +22,9 @@ function fixture(files: Record<string, string>, check: (root: string) => void) {
 }
 
 describe("adversarial contract coverage", () => {
-	test("rejects an unapproved font fallback and literal colour hidden in a mix", () => {
-		expect(problem("font-family", "var(--font-sans), Arial")).toBeDefined();
-		expect(problem("font-family", "var(--font-sans, Arial)")).toBeDefined();
-		expect(problem("background", "color-mix(in srgb, var(--color-brand) 70%, #f00)")).toBeDefined();
-	});
-
 	test("escaped CSS spelling still exposes a literal", () => {
 		let source = String.raw`.item { c\6flor: r\65 d; transition: opacity 1\73  ease; }`;
 		expect(inspect("sample.css", extractSource("sample.css", source), policy)).toHaveLength(2);
-	});
-
-	test("token-based arbitrary colours retain legitimate Tailwind opacity modifiers", () => {
-		for (
-			let value of [
-				"bg-[var(--color-brand)]/50",
-				"text-[color:var(--color-brand)]/[.45]",
-				"hover:bg-(--color-brand)/25",
-			]
-		) {
-			expect(classProblems(value, policy), value).toEqual([]);
-		}
-	});
-
-	test("colour-bearing utility prefixes cannot hide raw arbitrary colours", () => {
-		for (
-			let value of ["from-[#f00]", "via-[red]", "to-[#fff]", "ring-offset-[#f00]", "divide-[#f00]"]
-		) {
-			expect(classProblems(value, policy), value).toHaveLength(1);
-		}
-	});
-
-	test("shadow utility variants cannot hide raw arbitrary shadows", () => {
-		for (let value of ["inset-shadow-[0_1px_2px_red]", "drop-shadow-[0_1px_2px_red]"]) {
-			expect(classProblems(value, policy), value).toHaveLength(1);
-		}
-	});
-
-	test("a shorthand may use a proven local alias to the named size role", () => {
-		expect(problem("font", "400 var(--prose-size)/1.5 var(--font-sans)")).toBeUndefined();
 	});
 
 	test("local declarations cannot redefine an approved token as a raw literal", () => {

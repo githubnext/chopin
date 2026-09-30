@@ -32,9 +32,12 @@ describe("property-aware design policy", () => {
 				["font-size", "var(--text-sm, 14px)"],
 				["font", "500 14px Inter"],
 				["font-family", "Arial"],
+				["font-family", "var(--font-sans), Arial"],
+				["font-family", "var(--font-sans, Arial)"],
 				["color", "red"],
 				["color", "#fff"],
 				["background", "rgb(0 0 0 / 9%)"],
+				["background", "color-mix(in srgb, var(--color-brand) 70%, #f00)"],
 				["border", "1px solid blue"],
 				["fill", "hsl(0 0% 0%)"],
 				["border-radius", "6px"],
@@ -63,6 +66,7 @@ describe("property-aware design policy", () => {
 				["font-size", "var(--plan-body)"],
 				["font-family", "var(--font-mono)"],
 				["font", "500 var(--text-sm) / var(--text-sm--line-height) var(--font-sans)"],
+				["font", "400 var(--plan-body)/1.5 var(--font-sans)"],
 				["color", "inherit"],
 				["fill", "none"],
 				["border", "1px solid var(--color-brand)"],
@@ -108,6 +112,13 @@ describe("property-aware design policy", () => {
 				"animate-[spin_1s_ease-in]",
 				"-delay-100",
 				"text-(length:--oops)",
+				"from-[#f00]",
+				"via-[red]",
+				"to-[#fff]",
+				"ring-offset-[#f00]",
+				"divide-[#f00]",
+				"inset-shadow-[0_1px_2px_red]",
+				"drop-shadow-[0_1px_2px_red]",
 			]
 		) {
 			expect(classProblems(value, policy), value).toHaveLength(1);
@@ -127,6 +138,9 @@ describe("property-aware design policy", () => {
 				"[border-radius:var(--radius-md)]",
 				"w-[42px]",
 				"border-2",
+				"bg-[var(--color-brand)]/50",
+				"text-[color:var(--color-brand)]/[.45]",
+				"hover:bg-(--color-brand)/25",
 			]
 		) {
 			expect(classProblems(value, policy), value).toEqual([]);
