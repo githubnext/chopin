@@ -440,3 +440,93 @@ test("a redefined open question survives dump and restore with its older draft",
 	if (claimed.ok) Store.commit(plan.questions, claimed.claim);
 	await asked.waiting;
 });
+
+test("concurrent appends with one key add one option; with one label add one option", async () => {
+	let plan = await opened();
+	let server = { publish() {} } as unknown as Server<SocketData>;
+	let asked = asking(plan, server, definition());
+	await asked.created;
+	let id = [...plan.records.keys()][0]!;
+	let ana = member("ana");
+	let bo = member("bo");
+
+	await Promise.all([
+		adding(plan, server, ana.ws, id, "Same key", "key-same-0001"),
+		adding(plan, server, bo.ws, id, "Same key", "key-same-0001"),
+		adding(plan, server, ana.ws, id, "Same label", "key-label-0001"),
+		adding(plan, server, bo.ws, id, "same LABEL", "key-label-0002"),
+	]);
+
+	let labels = plan.records.get(id)!.definition.questions[0].options.map(option => option.label);
+	expect(labels).toEqual(["Choose this", "Same key", "Same label"]);
+	expect(Object.keys(plan.records.get(id)!.appended!)).toHaveLength(2);
+	expect((bo.sent.at(-1) as { reason?: string }).reason).toBe("duplicate");
+	let claimed = Store.claimCancel(plan.questions, id, "ana");
+	if (claimed.ok) Store.commit(plan.questions, claimed.claim);
+	await asked.waiting;
+});
+
+test("an implementation claimed while an append waits leaves the room untouched", async () => {
+	let plan = await opened();
+	let server = { publish() {} } as unknown as Server<SocketData>;
+	let asked = asking(plan, server, definition());
+	await asked.created;
+	let id = [...plan.records.keys()][0]!;
+	let { ws, sent } = member();
+	let before = room.project(plan.document);
+
+	let release = Promise.withResolvers<void>();
+	let held = Service.exclusive(plan, () => release.promise);
+	let pending = adding(plan, server, ws, id, "Late", "key-late-0001");
+	plan.claiming = true;
+	release.resolve();
+	await held;
+	await pending;
+	plan.claiming = false;
+
+	expect(sent.at(-1)).toMatchObject({ ok: false, reason: "implementation" });
+	expect(room.project(plan.document)).toBe(before);
+	expect(plan.records.get(id)!.definition.questions[0].options).toHaveLength(1);
+	expect(plan.records.get(id)!.appended).toBeUndefined();
+	let claimed = Store.claimCancel(plan.questions, id, "ana");
+	if (claimed.ok) Store.commit(plan.questions, claimed.claim);
+	await asked.waiting;
+});
+
+test("a failed commit restores the record and the open definition, and nobody is told", async () => {
+	let plan = await opened();
+	let published: Array<{ kind: string }> = [];
+	let server = {
+		publish(_topic: string, raw: string) {
+			published.push(JSON.parse(raw));
+		},
+	} as unknown as Server<SocketData>;
+	let asked = asking(plan, server, definition());
+	await asked.created;
+	let id = [...plan.records.keys()][0]!;
+	let { ws, sent } = member();
+	published.length = 0;
+
+	let original = plan.persistence.storage.collaboration.commit;
+	let fatal = plan.persistence.fatal;
+	plan.persistence.fatal = () => {};
+	plan.persistence.storage.collaboration.commit = () => Promise.reject(new Error("disk full"));
+	let quiet = console.error;
+	console.error = () => {};
+	try {
+		await adding(plan, server, ws, id, "Lost", "key-lost-0001");
+	} finally {
+		console.error = quiet;
+		plan.persistence.storage.collaboration.commit = original;
+		plan.persistence.fatal = fatal;
+	}
+
+	expect(sent.at(-1)).toMatchObject({ kind: "session:error" });
+	expect(published).toEqual([]);
+	expect(plan.records.get(id)!.definition.questions[0].options).toHaveLength(1);
+	expect(plan.records.get(id)!.appended).toBeUndefined();
+	expect(Store.get(plan.questions, id)!.definition.questions[0].options).toHaveLength(1);
+	let claimed = Store.claimCancel(plan.questions, id, "ana");
+	if (claimed.ok) Store.commit(plan.questions, claimed.claim);
+	await asked.waiting;
+});
