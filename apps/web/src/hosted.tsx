@@ -465,6 +465,7 @@ export function HostedApp(
 	{ agent, user }: { agent: boolean; user: Api.User },
 ) {
 	let [route, setRoute] = useState(() => hostedRoute(location.pathname));
+	let [navigationRevision, setNavigationRevision] = useState(0);
 	let hostedRouteRef = useRef(route);
 	hostedRouteRef.current = route;
 	let childOpener = useRef<ResearchOpener | undefined>(undefined);
@@ -497,6 +498,7 @@ export function HostedApp(
 		let next = `${target.pathname}${target.search}${target.hash}`;
 		let current = `${location.pathname}${location.search}${location.hash}`;
 		if (next === current) return;
+		setNavigationRevision(value => value + 1);
 		childRouteChanged(target.pathname);
 		let nextRoute = hostedRoute(target.pathname);
 		if (options.replace) history.replaceState(history.state, "", next);
@@ -596,6 +598,7 @@ export function HostedApp(
 
 	useEffect(() => {
 		let changed = () => {
+			setNavigationRevision(value => value + 1);
 			childRouteChanged(location.pathname);
 			setRoute(hostedRoute(location.pathname));
 		};
@@ -632,7 +635,12 @@ export function HostedApp(
 			break;
 	}
 	return (
-		<NavigationShell navigate={navigate} route={route} user={user}>
+		<NavigationShell
+			navigate={navigate}
+			navigationRevision={navigationRevision}
+			route={route}
+			user={user}
+		>
 			{workspace}
 		</NavigationShell>
 	);

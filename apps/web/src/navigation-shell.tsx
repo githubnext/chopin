@@ -245,11 +245,13 @@ export function NavigationShell(
 	{
 		children,
 		navigate,
+		navigationRevision,
 		route,
 		user,
 	}: {
 		children?: ReactNode;
 		navigate: Navigate;
+		navigationRevision: number;
 		route: NavigationRoute;
 		user: Api.User;
 	},
@@ -521,6 +523,7 @@ export function NavigationShell(
 
 	let creation = useDocumentCreation({
 		routeKey,
+		navigationRevision,
 		onCreated: upsertDocument,
 		onNavigate: navigateToDocument,
 		onAccessChanged: () => void refresh(),
