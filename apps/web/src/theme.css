@@ -627,7 +627,7 @@ body {
 	padding-block: 0.5rem;
 }
 
-.question-custom-answer {
+.question-field {
 	scroll-margin-block-end: calc(var(--keyboard-inset, 0px) + 1rem);
 }
 
@@ -819,6 +819,33 @@ label.question-option:has(.question-input:not(:disabled)) {
 .question-add:hover .question-text,
 .question-add:hover .question-key {
 	color: var(--color-text-secondary);
+}
+
+/* The add row is a real button, not a label around a hidden input. */
+button.question-add {
+	inline-size: 100%;
+	border: 0;
+	background: transparent;
+	text-align: start;
+	cursor: pointer;
+}
+
+button.question-add:not(:disabled):hover {
+	background: var(--color-hover);
+}
+
+button.question-add:focus-visible {
+	outline: var(--focus-ring-width) solid var(--focus-ring-color);
+	outline-offset: var(--focus-ring-offset);
+}
+
+button.question-add:disabled {
+	cursor: default;
+}
+
+/* The new option, shown before the server confirms it. */
+.question-pending {
+	opacity: 0.6;
 }
 
 .question-adding {

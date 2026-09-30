@@ -12,6 +12,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { CheckIcon, ChevronIcon, DecisionIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 
+import { MAX_LABEL, MAX_SHARED_OPTIONS } from "../limits";
 import { answered } from "../draft";
 
 import type { ReactNode } from "react";
@@ -25,6 +26,8 @@ export type Collaborator = {
 	question?: string;
 };
 
+export type AddOptionResult = { ok: true } | { ok: false; message: string };
+
 export type QuestionStepRenderProps = {
 	children: ReactNode;
 	question: string;
@@ -37,6 +40,11 @@ export type QuestionViewProps = {
 	onChange?: (question: string, change: Partial<Draft>) => void;
 	onSubmit?: () => void;
 	onCancel?: () => void;
+	/**
+	 * Append an option for everyone. Absent where the viewer may not write; the
+	 * row is then shown disabled. Resolves once the server has made it durable.
+	 */
+	onAddOption?: (question: string, label: string) => Promise<AddOptionResult>;
 	disabled?: boolean;
 	submitting?: boolean;
 	status?: "open" | "answered" | "cancelled";
@@ -179,28 +187,64 @@ function Choices(
 	);
 }
 
-/** The last row: a prompt to add an option, which becomes the field for it. */
-function Custom(
-	{ question, draft, disabled, name, onChange }: {
+/**
+ * An open draft that was already in free-text mode before options became
+ * shared. Shown as the selected row it was; choosing any option leaves it, and
+ * nothing new can enter this mode.
+ */
+function LegacyCustom(
+	{ question, draft, name }: { question: Item; draft: Draft; name: string },
+) {
+	return (
+		<label className="question-choice-row question-option">
+			<input
+				type={question.multiple ? "checkbox" : "radio"}
+				name={question.multiple ? undefined : name}
+				checked
+				onChange={() => {}}
+				className="question-input"
+			/>
+			<Key>{letter(question.options.length)}</Key>
+			<span className="question-text">
+				<span className="question-label">{draft.custom.trim()}</span>
+			</span>
+			<span aria-hidden="true" className="question-check">
+				<CheckIcon />
+			</span>
+		</label>
+	);
+}
+
+/**
+ * The last row: a prompt to add an option, which becomes the field for it.
+ *
+ * Enter adds it for everyone, Escape cancels. The new row is shown straight
+ * away, dimmed, until the server confirms it; a rejection reopens the field
+ * with the text intact.
+ */
+function AddOption(
+	{ question, offset, disabled, onAdd, onFailed }: {
 		question: Item;
-		draft: Draft | undefined;
+		/** Rows already shown below the options, such as a legacy custom answer. */
+		offset: number;
 		disabled: boolean;
-		name: string;
-		onChange?: (change: Partial<Draft>) => void;
+		onAdd?: (label: string) => Promise<AddOptionResult>;
+		onFailed: (message: string | undefined) => void;
 	},
 ) {
-	let active = draft?.mode === "custom";
-	let textarea = useRef<HTMLTextAreaElement>(null);
-	let row = useRef<HTMLInputElement>(null);
-	let focusOnReveal = useRef(false);
-	let focusOnClose = useRef(false);
+	let [text, setText] = useState<string | null>(null);
+	let [pending, setPending] = useState<string | null>(null);
+	let input = useRef<HTMLInputElement>(null);
+	let trigger = useRef<HTMLButtonElement>(null);
+	let focus = useRef<"field" | "trigger">(undefined);
+	let letterIndex = question.options.length + offset;
 
 	useEffect(() => {
-		if (active && focusOnReveal.current) textarea.current?.focus();
-		else if (!active && focusOnClose.current) row.current?.focus();
-		focusOnReveal.current = false;
-		focusOnClose.current = false;
-	}, [active]);
+		let target = focus.current;
+		focus.current = undefined;
+		if (target === "field") input.current?.focus();
+		else if (target === "trigger") trigger.current?.focus();
+	});
 
 	useEffect(() => {
 		let viewport = window.visualViewport;
@@ -209,7 +253,7 @@ function Custom(
 		let reveal = () => {
 			let previous = height;
 			height = viewport.height;
-			let control = textarea.current;
+			let control = input.current;
 			if (height >= previous || document.activeElement !== control || !control) return;
 			let bounds = control.getBoundingClientRect();
 			let top = viewport.offsetTop;
@@ -222,53 +266,99 @@ function Custom(
 		return () => viewport.removeEventListener("resize", reveal);
 	}, []);
 
-	if (!active) {
+	let add = async () => {
+		let label = text?.trim();
+		if (!label || !onAdd || pending !== null) return;
+		setPending(label);
+		onFailed(undefined);
+		let result: AddOptionResult;
+		try {
+			result = await onAdd(label);
+		} catch {
+			result = { ok: false, message: "Could not add this option." };
+		}
+		setPending(null);
+		if (result.ok) {
+			setText(null);
+			focus.current = "trigger";
+		} else {
+			onFailed(result.message);
+			focus.current = "field";
+		}
+	};
+
+	// Until the server confirms, the new row stands where the field was. If the
+	// broadcast beat the acknowledgement, the real row is already listed above.
+	if (pending !== null) {
+		let known = question.options.some(option =>
+			option.label.trim().toLowerCase() === pending.toLowerCase()
+		);
+		if (known) return null;
 		return (
-			<label className="question-choice-row question-option question-add">
-				<input
-					type={question.multiple ? "checkbox" : "radio"}
-					name={question.multiple ? undefined : name}
-					checked={false}
-					disabled={disabled}
-					aria-label="Add an option"
-					ref={row}
-					onChange={() => {
-						focusOnReveal.current = true;
-						onChange?.({ mode: "custom" });
-					}}
-					className="question-input"
-				/>
+			<div aria-busy="true" className="question-choice-row question-option question-pending">
+				<Key>{letter(letterIndex)}</Key>
+				<span className="question-text">
+					<span className="question-label">{pending}</span>
+				</span>
+				<span className="sr-only" role="status">Adding option</span>
+			</div>
+		);
+	}
+
+	if (text === null) {
+		return (
+			<button
+				type="button"
+				className="question-choice-row question-option question-add"
+				data-press="wide"
+				disabled={disabled || !onAdd}
+				onClick={() => {
+					focus.current = "field";
+					setText("");
+				}}
+				ref={trigger}
+			>
 				<Key>
 					<PlusIcon />
 				</Key>
 				<span className="question-text">Add an option</span>
-			</label>
+			</button>
 		);
 	}
 
 	return (
 		<div className="question-choice-row question-option question-adding">
-			<Key>{letter(question.options.length)}</Key>
-			<textarea
-				rows={1}
-				maxLength={4000}
-				value={draft?.custom ?? ""}
+			<Key>{letter(letterIndex)}</Key>
+			<input
+				aria-label="New option"
+				autoComplete="off"
+				className="question-field"
 				disabled={disabled}
-				aria-label="Add an option"
-				placeholder="Add an option"
-				onChange={event => onChange?.({ custom: event.currentTarget.value })}
+				maxLength={MAX_LABEL}
+				onBlur={() => {
+					// Only an empty field collapses by itself. Typed text is kept, because
+					// adding an option is visible to everyone and should be deliberate.
+					if (!text.trim()) setText(null);
+				}}
+				onChange={event => {
+					setText(event.currentTarget.value);
+					onFailed(undefined);
+				}}
 				onKeyDown={event => {
 					if (event.key === "Escape") {
-						// Closing removes the focused field; hand focus back to its row.
-						focusOnClose.current = true;
-						onChange?.({ mode: "choices" });
-					} else if (event.key === "Enter" && !event.shiftKey) {
 						event.preventDefault();
-						event.currentTarget.blur();
+						event.stopPropagation();
+						setText(null);
+						onFailed(undefined);
+						focus.current = "trigger";
+					} else if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+						event.preventDefault();
+						void add();
 					}
 				}}
-				className="question-custom-answer question-field"
-				ref={textarea}
+				placeholder="Add an option"
+				ref={input}
+				value={text}
 			/>
 		</div>
 	);
@@ -402,6 +492,26 @@ function Cancelled({ resolver }: { resolver?: string }) {
 	);
 }
 
+function Callout(
+	{ feedback, message, title }: { feedback?: string; message: string; title: string },
+) {
+	return (
+		<div
+			className={`plan-research-callout question-callout${feedback ? ` ${feedback}` : ""}`}
+			data-motion-feedback={feedback ? "alert" : undefined}
+			role="alert"
+		>
+			<span aria-hidden="true" className="plan-research-badge">
+				<WarningIcon />
+			</span>
+			<p>
+				<strong>{title}</strong>
+				{message}
+			</p>
+		</div>
+	);
+}
+
 export function QuestionView(props: QuestionViewProps) {
 	let {
 		definition,
@@ -409,6 +519,7 @@ export function QuestionView(props: QuestionViewProps) {
 		onChange,
 		onSubmit,
 		onCancel,
+		onAddOption,
 		disabled = false,
 		submitting = false,
 		status = "open",
@@ -441,6 +552,7 @@ export function QuestionView(props: QuestionViewProps) {
 	let focusing = useRef(onQuestionFocus);
 	focusing.current = onQuestionFocus;
 	useEffect(() => () => focusing.current?.(undefined), [active]);
+	let [addError, setAddError] = useState<string>();
 	let previous = useRef<HTMLButtonElement>(null);
 	let next = useRef<HTMLButtonElement>(null);
 	let primary = useRef<HTMLButtonElement>(null);
@@ -497,6 +609,7 @@ export function QuestionView(props: QuestionViewProps) {
 		let question = definition.questions[index + offset];
 		if (!question) return;
 		setActive(question.id);
+		setAddError(undefined);
 		let arrived = index + offset;
 		if (from) refocus.current = "primary";
 		else if (arrived === 0) refocus.current = "next";
@@ -569,13 +682,27 @@ export function QuestionView(props: QuestionViewProps) {
 								onChange={change =>
 									onChange?.(current.id, change)}
 							/>
-							<Custom
-								question={current}
-								draft={drafts[current.id]}
-								disabled={disabled}
-								name={`${base}-${current.id}`}
-								onChange={change => onChange?.(current.id, change)}
-							/>
+							{drafts[current.id]?.mode === "custom" && drafts[current.id]!.custom.trim() && (
+								<LegacyCustom
+									question={current}
+									draft={drafts[current.id]!}
+									name={`${base}-${current.id}`}
+								/>
+							)}
+							{current.options.length < MAX_SHARED_OPTIONS && (
+								<AddOption
+									key={current.id}
+									question={current}
+									offset={drafts[current.id]?.mode === "custom" && drafts[current.id]!.custom.trim()
+										? 1
+										: 0}
+									disabled={disabled}
+									onAdd={onAddOption
+										? label => onAddOption(current.id, label)
+										: undefined}
+									onFailed={setAddError}
+								/>
+							)}
 						</fieldset>
 					</section>
 				);
@@ -583,22 +710,13 @@ export function QuestionView(props: QuestionViewProps) {
 				return renderStep ? renderStep({ children: panel, question: current.id }) : panel;
 			})()}
 
+			{addError && <Callout title="Couldn’t add option" message={addError} />}
 			{error && (
-				<div
-					className={`plan-research-callout question-callout${
-						errorClassName ? ` ${errorClassName}` : ""
-					}`}
-					data-motion-feedback={errorClassName ? "alert" : undefined}
-					role="alert"
-				>
-					<span aria-hidden="true" className="plan-research-badge">
-						<WarningIcon />
-					</span>
-					<p>
-						<strong>Couldn’t save</strong>
-						{error}
-					</p>
-				</div>
+				<Callout
+					feedback={errorClassName}
+					message={error}
+					title="Couldn’t save"
+				/>
 			)}
 
 			{(onSubmit || onCancel || multiple) && (

@@ -106,15 +106,39 @@ test("options carry letter tiles and the last row offers to add one", () => {
 	expect(markup).not.toContain("Write a custom answer");
 });
 
-test("an existing custom answer opens the add row as a field with the next letter", () => {
+test("an existing custom answer still renders, as a selected row before the add row", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionView, {
 		definition: { questions: [ROLLOUT] },
 		drafts: { rollout: { mode: "custom", choice: "", options: {}, custom: "Opt-in beta" } },
+		onAddOption: async () => ({ ok: true as const }),
 	}));
 
-	expect(markup).toContain("<textarea");
+	expect(markup).not.toContain("<textarea");
 	expect(markup).toContain("Opt-in beta");
 	expect(markup).toContain(">C<");
+	expect(markup.indexOf("Opt-in beta")).toBeLessThan(markup.lastIndexOf("Add an option"));
+	expect(markup).toContain('checked=""');
+});
+
+test("the add row is disabled without a handler and hidden at the option limit", () => {
+	let view = (options: typeof ROLLOUT.options, onAddOption?: () => Promise<{ ok: true }>) =>
+		renderToStaticMarkup(createElement(QuestionView, {
+			definition: { questions: [{ ...ROLLOUT, options }] },
+			drafts: {},
+			onAddOption,
+		}));
+
+	expect(view(ROLLOUT.options)).toMatch(/question-add"[^>]*disabled/);
+	expect(view(ROLLOUT.options, async () => ({ ok: true }))).not.toMatch(
+		/question-add"[^>]*disabled/,
+	);
+
+	let full = Array.from({ length: 10 }, (_, index) => ({
+		id: `o${index}`,
+		label: `Option ${index}`,
+		description: "",
+	}));
+	expect(view(full, async () => ({ ok: true }))).not.toContain("Add an option");
 });
 
 test("a multiple-choice question says so once, under its title", () => {

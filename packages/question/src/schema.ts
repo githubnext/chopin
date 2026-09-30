@@ -191,7 +191,11 @@ export function appendOption(
 	let option: Option = Object.freeze({ id, label, description });
 	let options = Object.freeze([...item.options, option]);
 	let next = Object.freeze({ ...item, options }) as Item;
-	return { ok: true, option, definition: Object.freeze({ questions: Object.freeze([next]) }) as DecisionDefinition };
+	return {
+		ok: true,
+		option,
+		definition: Object.freeze({ questions: Object.freeze([next]) }) as DecisionDefinition,
+	};
 }
 
 /** Reject a tool call id that could not have come from the SDK. */

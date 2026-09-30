@@ -27,8 +27,8 @@
 			[
 				"dynamic",
 				"class",
-				"errorClassName",
-				"class > QuestionView > <div>",
+				"feedback",
+				"class > Callout > <div>",
 				1
 			]
 		],

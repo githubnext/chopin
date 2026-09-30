@@ -2,9 +2,9 @@
  * Durable questionnaires.
  *
  * Unlike the other containers this is atomic. A questionnaire's definition is
- * immutable once created, and its answer is owned by the sidecar record rather
- * than by the document, so there is nothing inside it for two people to edit
- * concurrently. Modelling it as a decorator keeps it selectable, movable and
+ * fixed once created apart from options the server appends while it is open,
+ * and its answer is owned by the sidecar record rather than by the document, so
+ * there is nothing inside it for two people to edit concurrently. Modelling it as a decorator keeps it selectable, movable and
  * deletable as one unit while making its contents unwritable by construction.
  *
  * The `<Answer>` written into source is a projection for readability. The
