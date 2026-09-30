@@ -183,6 +183,7 @@ and E2E type checks, formatting and CI with the existing warnings listed above.
 | Card and Save regressions  | All 17 original card tests and helpers match source syntax trees; four scoped Save tests are byte-identical. Card authority and exact support lineage remain unchanged.                                 | 21 tests, 71 assertions                   |
 | Option growth              | Byte-identical archived helper and six original tests; limit/export additions only. Cloned drafts keep existing selections and labels grow in order.                                                    | 39 question tests, 110 assertions         |
 | Answer identifiers         | Archived derivation adds IDs alongside labels from the same ordered selection; optional protocol field retains old answers. Custom answers and summaries stay unchanged.                                | 64 question/service tests, 171 assertions |
+| Record validation          | All 25 original function/constant/type declarations match source syntax trees; seven archived tests are byte-identical. Extracted required dialect MAX_ID=200; added UTF-16 boundary regression.        | 8 record tests, 29 assertions             |
 
 The combined guard/source/quote run passed 30 tests (242 assertions). Domain/replay
 checks passed 27 tests (109 assertions). The complete extracted foundation and
@@ -199,6 +200,9 @@ Inherited behavior stays visible:
 
 - Option growth assumes a valid single-question definition/model and a caller-supplied
   unique durable ID. Its label limit and 10-option cap do not validate IDs.
+- Record normalisation preserves unknown top-level fields and shallow nested references.
+  Definition, anchors, current-answer completeness and some string bounds remain
+  partial checks; source shape/ref matching does not prove saved Chat provenance.
 - Stored empty single-choice definitions are valid. Main still starts empty drafts
   in `custom`; the archived `choices` default and unanswered assertions are deferred
   to the draft slice.
@@ -230,6 +234,6 @@ D02/m2, D03/m1 and D04/m5 messages with archive SHA, case, step and path. Root a
 reviewer verified text parity, apostrophes and UTF-16 offsets. The other six test
 adaptations remain pending.
 
-Next: durable record validation. The
+Next: pending-card draft defaults, then durable record/store integration. The
 remaining archived correction/review suites follow their dependencies. Durable
 processing, Planner jobs and browser integration remain unimplemented.
