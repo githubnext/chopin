@@ -882,3 +882,36 @@ corrected without changing their bodies or assertions. Unique pipeline retention
 warnings/design baseline only. Independent review and complete source/callback/table
 proofs pass after formatting. Only two reviewed existing owner hashes change;
 exception cases are unchanged. No interpretation policy was changed.
+
+The final five clarification and dual-role registrations and their complete original
+helper are restored. All 140 original pipeline registrations are now retained exactly
+once, including complete parameter tables and assertions. No interpretation policy,
+confidence gate, dataset or scoring behavior was changed.
+
+The original 58-line source-highlight leaf is restored byte-for-byte. Seven isolated
+Chromium cases exercise native ranges, nested text nodes, UTF-16 emoji offsets,
+raw/rendered/quote refusal, exact owner identity, replacement and cleanup, and missing
+CSS Highlights support. Three native QuestionView cases exercise separate Cancel and
+Discard confirmations, Keep restoration, controlled submitting, disabled controls and
+read-only presentation. The ten tests bundle actual components into plain pages with
+all network requests blocked. They use a standalone native-file configuration; no
+application, database or existing E2E configuration is started or changed. Run them
+with `bun --bun node_modules/@playwright/test/cli.js test --config e2e/source/playwright.config.ts`.
+Source-navigation wiring, paint styling, product scrolling, expiry and annotation
+panel geometry remain later work; these tests establish leaf/component contracts.
+
+Full verification identified and corrected two bounded current-design mismatches:
+the research-offer SearchIcon now uses the current 14-pixel size instead of the
+archive's 16; the standard-button audit follows the explicit confirmation intents
+and checks both Keep controls with an exact count and all original style checks.
+A new audit regression rejects a wrong second control and missing or extra controls.
+Independent review confirms the sole icon substitution, unchanged eight original
+offer callbacks, and unchanged remaining token assertions and action definitions.
+
+Final serial combined verification passes 2,947 tests with 13,586 assertions across
+478 files, with no failures; two PostgreSQL suites skip without a database. An earlier
+combined run timed out on an unchanged Pi stub contract; all nine isolated Pi tests
+and the final full run pass with the original timeout and unchanged Harness code.
+All ten native Chromium tests, full workspace/E2E types and CI pass. Exact pipeline,
+source-leaf and bounded design-adaptation proofs pass after formatting. The two
+inherited lint warnings and existing design baseline finding remain unchanged.

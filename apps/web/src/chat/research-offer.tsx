@@ -241,7 +241,7 @@ export function ResearchOfferCard(
 			role="group"
 		>
 			<div className="flex items-start gap-2">
-				<SearchIcon aria-hidden="true" className="mt-0.5 shrink-0 text-text-tertiary" size={16} />
+				<SearchIcon aria-hidden="true" className="mt-0.5 shrink-0 text-text-tertiary" size={14} />
 				<p className="m-0 min-w-0 whitespace-pre-wrap break-words text-sm text-text-primary">
 					{offer.brief}
 				</p>
