@@ -5,6 +5,7 @@ export default defineConfig({
 	testMatch: [
 		"source-highlight.native.ts",
 		"question-actions.native.ts",
+		"question-terminal-origin.native.ts",
 		"transcript-source.native.ts",
 		"excerpt-correction-lifecycle.native.ts",
 		"excerpt-correction-retry.native.ts",

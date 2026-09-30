@@ -58,7 +58,7 @@ export type QuestionViewProps = {
 	previous?: PreviousAnswer | Record<string, PreviousAnswer>;
 	disabled?: boolean;
 	submitting?: boolean;
-	status?: "open" | "answered" | "cancelled";
+	status?: "open" | "answered" | "cancelled" | "discarded";
 	/** Shown instead of controls once the questionnaire has resolved. */
 	answers?: Answer[];
 	resolver?: string;
@@ -141,12 +141,13 @@ function DecisionHeading({ refining }: { refining?: boolean } = {}) {
 }
 
 function Choices(
-	{ question, draft, disabled, name, onChange }: {
+	{ question, draft, disabled, name, onChange, suggestedOptionId }: {
 		question: Item;
 		draft: Draft | undefined;
 		disabled: boolean;
 		name: string;
 		onChange?: (change: Partial<Draft>) => void;
+		suggestedOptionId?: string;
 	},
 ) {
 	let custom = draft?.mode === "custom";
@@ -186,6 +187,9 @@ function Choices(
 						/>
 						<span className="min-w-0">
 							<span className="font-medium text-text-primary">{option.label}</span>
+							{!custom && selected && option.id === suggestedOptionId && (
+								<span className="text-sm text-text-tertiary">{" from chat"}</span>
+							)}
 							{option.description && (
 								<span className="block text-sm text-text-secondary">{option.description}</span>
 							)}
@@ -392,6 +396,19 @@ function Cancelled({ resolver }: { resolver?: string }) {
 	);
 }
 
+function Discarded({ definition, resolver }: { definition: Definition; resolver?: string }) {
+	let questions = definition.questions.map(question => question.question).join(", ");
+	let discarded = resolver && resolver !== "system" ? `Discarded by @${resolver}` : "Discarded";
+	return (
+		<div className="px-3 py-2.5">
+			<p className="m-0 text-sm text-text-secondary">
+				{discarded}
+				{questions ? ` — ${questions}` : ""}
+			</p>
+		</div>
+	);
+}
+
 export function QuestionView(props: QuestionViewProps) {
 	let {
 		definition,
@@ -488,6 +505,16 @@ export function QuestionView(props: QuestionViewProps) {
 			suggestionEdits.answer || suggestionEdits.composer,
 		)
 		: { draft: drafts[current.id] };
+
+	if (status === "discarded") {
+		return (
+			<div>
+				{single && <DecisionHeading />}
+				{aside}
+				<Discarded definition={definition} resolver={resolver} />
+			</div>
+		);
+	}
 
 	// A cancelled questionnaire has no answers, so it must be matched on status
 	// alone — falling through would offer an editable form for a dead question.
@@ -664,6 +691,7 @@ export function QuestionView(props: QuestionViewProps) {
 						</Related>
 
 						<Choices
+							suggestedOptionId={projection.suggestion?.optionId}
 							question={current}
 							draft={projection.draft}
 							disabled={disabled}

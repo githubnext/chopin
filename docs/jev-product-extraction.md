@@ -1584,3 +1584,58 @@ stop behavior. CI retains only two inherited lint warnings and the existing desi
 baseline. No real authentication, application, PostgreSQL or provider run is claimed.
 Application/browser harness activation, other scripted profile coverage and deferred
 anatomy remain outstanding; the broader extraction is unfinished.
+
+## Discarded summaries and suggestion attribution
+
+A remaining product audit found two semantic gaps within the preserved current
+card layout. The editor mapped authoritative discarded metadata to the view's
+cancelled status, producing contradictory Discarded/Cancelled copy. QuestionView
+also projected a conversation suggestion into its selected row without showing
+where that suggestion came from.
+
+QuestionView now has a local discarded presentation state. The actual editor
+producer changes only that status branch. Its terminal summary names the definition's
+questions and resolver; absent/system resolvers simply show Discarded, without
+claiming the question was never answered. Genuine cancellation retains its complete
+existing helper and copy. Both terminal paths omit answer controls and resolved
+actions. Wire, record and document lifecycle states do not change.
+
+The existing option row displays from chat only for the current projected suggestion.
+It uses the same text role and muted color as the current design. Raw suggestions,
+invalid options, multi-question/multiple-choice cards, human choices and custom
+answers do not acquire that attribution. Projection remains read-only; a human
+edit hides the label until the existing suggestion lifecycle is cleared.
+
+New SSR cases reproduced both gaps before implementation. They exercise the actual
+QuestionView and metadata-driven QuestionnaireCard, including resolver precedence,
+question identity, terminal action suppression and unchanged draft objects. Three
+isolated native cases use the actual components and compiled production styles,
+real input events and suggestion lifecycle, plus a discarded/cancelled gallery.
+The page is a synthetic secure standards-mode fixture; all other requests are
+aborted. Cancellation uses its real QuestionView contract, not a fabricated dialect
+card status. These checks do not establish application, socket or storage execution.
+
+Fresh whole-current-module proofs allow only the local view discriminator, discarded
+helper/branch, private choice label/parameter and projected pass-through; the editor
+proof permits exactly one status string branch. Existing hooks, controls, classes,
+metadata authority, presence and mutation behavior remain unchanged. The six original
+view callbacks, contiguous actor-HTML expectation and full application callbacks
+remain whole and deferred where their old status, labels or anatomy conflict with
+current semantics. These new cases do not replace or claim retention of those units.
+
+Formatting initially removed the origin label's leading space. An explicit string
+expression now preserves the separator; additive SSR and native accessible-name
+assertions reject the glued label. A reconstructed stripped-separator variant fails
+the strengthened SSR case. The seven existing dynamic design findings were reviewed
+against their unchanged finite producers; only three owner fingerprints were renewed.
+All 221 exception occurrences, reasons and counts remain unchanged.
+
+Final verification passes 3,225 offline tests with 15,089 assertions across 537 files;
+two PostgreSQL checks are skipped. The ten focused SSR cases pass with 61 assertions.
+All 74 isolated native cases pass against the freshly built client, including three
+new terminal/origin cases; the final gallery was visually inspected. Workspace/E2E
+types, CI, formatting, fresh whole-module and complete new-test proofs, and the exact
+design-renewal proof pass. CI retains two inherited lint warnings and its existing
+design baseline. No application server, PostgreSQL, authentication or paid provider
+run is claimed. Deferred original callbacks and application Harness activation remain
+outstanding; this is one product correction within the unfinished extraction.

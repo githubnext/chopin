@@ -389,7 +389,7 @@
 				1
 			]
 		],
-		"sourceHash": "f90f31c8996286b1e131364de7a70eae5d2c851ba9a6a3a9aa99b9da4fccdb27"
+		"sourceHash": "33bd0e40b9efb9e47a3cf4ff32baedf67db60fcc3dee63588e0acf8922abea0d"
 	},
 	{
 		"file": "packages/editor/src/widgets/code-view.tsx",
@@ -480,6 +480,6 @@
 				1
 			]
 		],
-		"sourceHash": "f90f31c8996286b1e131364de7a70eae5d2c851ba9a6a3a9aa99b9da4fccdb27"
+		"sourceHash": "33bd0e40b9efb9e47a3cf4ff32baedf67db60fcc3dee63588e0acf8922abea0d"
 	}
 ]

@@ -504,7 +504,7 @@ function Decided(
 				onDiscard={editable ? () => request("question:discard") : undefined}
 				onReopen={editable ? () => request("question:reopen") : undefined}
 				resolver={discarded ? meta?.resolver : undefined}
-				status={discarded ? "cancelled" : "answered"}
+				status={discarded ? "discarded" : "answered"}
 				submitting={submitting}
 				{...pointing}
 			/>
