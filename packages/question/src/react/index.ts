@@ -5,6 +5,7 @@
  * helpers without pulling React into a headless process.
  */
 
+export { ChosenList } from "./chosen-list";
 export { projectSuggestion, reduceSuggestionEditState } from "./project-suggestion";
 export type {
 	SuggestionEditAction,

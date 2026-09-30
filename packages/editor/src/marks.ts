@@ -54,9 +54,27 @@ import type { LexicalEditor } from "lexical";
 import type { Points } from "./passage";
 
 /** Which store a mark came from. */
-export type Owner = "questions" | "comments";
+export type Owner = "questions" | "comments" | "decisions";
 
 const NAME = "plan-related";
+const DECIDED = "plan-decided";
+
+/** CSS Highlights is document-wide, so each mounted editor owns only its ranges. */
+const decided = new Map<LexicalEditor, Range[]>();
+
+export function decidedRanges(): Range[] {
+	return [...decided.values()].flat();
+}
+
+/** Replace one editor's decided ranges and publish the union. */
+export function paintDecided(editor: LexicalEditor, ranges: Range[]): void {
+	if (ranges.length === 0) decided.delete(editor);
+	else decided.set(editor, ranges);
+	if (!available()) return;
+	let all = decidedRanges();
+	if (all.length === 0) CSS.highlights.delete(DECIDED);
+	else CSS.highlights.set(DECIDED, new Highlight(...all));
+}
 
 /**
  * How long a pin stays up.
@@ -83,7 +101,8 @@ let lapsing: ReturnType<typeof setTimeout> | undefined;
  * it, are the parts of this worth testing and the parts that need no browser.
  */
 export function union(): Points[] {
-	let hover = [...wanted.values()].flat();
+	let hover = [...wanted.entries()].filter(([owner]) => owner !== "decisions")
+		.flatMap(([, places]) => places);
 	return hover.length > 0 ? hover : pinned?.places ?? [];
 }
 
@@ -109,6 +128,17 @@ export function $rangeOf(editor: LexicalEditor, points: Points): Range | null {
  */
 export function paint(editor: LexicalEditor, owner: Owner, places: Points[]): void {
 	try {
+		if (owner === "decisions") {
+			let ranges: Range[] = [];
+			editor.getEditorState().read(() => {
+				for (let points of places) {
+					let range = $rangeOf(editor, points);
+					if (range) ranges.push(range);
+				}
+			});
+			paintDecided(editor, ranges);
+			return;
+		}
 		wanted.set(owner, places);
 		render(editor);
 	} catch (err) {
@@ -143,6 +173,7 @@ export function pin(
 	places: Points[],
 	linger = LINGER,
 ): void {
+	if (owner === "decisions") return;
 	try {
 		if (lapsing !== undefined) clearTimeout(lapsing);
 		pinned = { owner, places };
@@ -194,7 +225,13 @@ export function clear(editor?: LexicalEditor): void {
 	wanted.clear();
 	release();
 	if (available()) CSS.highlights.delete(NAME);
-	if (editor) outline(editor, []);
+	if (editor) {
+		paintDecided(editor, []);
+		outline(editor, []);
+	} else {
+		decided.clear();
+		if (available()) CSS.highlights.delete(DECIDED);
+	}
 }
 
 function release(): void {

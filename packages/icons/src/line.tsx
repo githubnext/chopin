@@ -64,6 +64,15 @@ export function DecisionIcon(props: IconProps) {
 	);
 }
 
+export function ClockIcon(props: IconProps) {
+	return (
+		<LineIcon title="clock" {...props}>
+			<circle cx="9" cy="9" r="7.25" />
+			<polyline points="9 4.75 9 9 12.25 11.25" />
+		</LineIcon>
+	);
+}
+
 export function InfoIcon(props: IconProps) {
 	return (
 		<LineIcon title="circle-info" {...props}>

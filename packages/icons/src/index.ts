@@ -3,6 +3,7 @@ export {
 	ArrowUpIcon,
 	CheckIcon,
 	ChevronIcon,
+	ClockIcon,
 	CloseIcon,
 	CodeIcon,
 	DecisionIcon,

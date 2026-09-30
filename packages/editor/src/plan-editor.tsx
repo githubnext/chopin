@@ -73,6 +73,8 @@ export type PlanEditorProps = {
 	 */
 	questions?: QuestionnaireStore;
 	cardMeta?: CardMetaStore;
+	/** Open the chat message that started a conversation decision. */
+	onCardSource?: (questionnaireId: string) => void;
 	evidence?: (questionnaireId: string) => ReactNode | null;
 	/** Durable Research Workspace state and actions supplied by the host app. */
 	research?: ResearchStore;
@@ -105,6 +107,7 @@ export function PlanEditor(
 		questionMotion,
 		questions,
 		cardMeta,
+		onCardSource,
 		evidence,
 		readOnly,
 		research,
@@ -263,6 +266,7 @@ export function PlanEditor(
 						questionMotion,
 						questions,
 						cardMeta,
+						onCardSource,
 						evidence,
 						research,
 						researchDrafts,
@@ -285,6 +289,7 @@ export function PlanEditor(
 			binding,
 			questions,
 			cardMeta,
+			onCardSource,
 			evidence,
 			research,
 			researchDrafts,

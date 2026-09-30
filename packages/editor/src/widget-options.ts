@@ -41,6 +41,7 @@ export type WidgetOptions = {
 	questionMotion?: QuestionStepMotion;
 	questions?: QuestionnaireStore;
 	cardMeta?: CardMetaStore;
+	onCardSource?: (questionnaireId: string) => void;
 	evidence?: (questionnaireId: string) => ReactNode | null;
 	research?: ResearchStore;
 	researchDrafts?: ResearchDraftStore;

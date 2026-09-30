@@ -379,6 +379,11 @@ export function RoomWorkspace(
 		if (mode === "split") setDesktopChatOpen(true);
 		else dispatch({ type: "set-chat", open: true });
 	}, [dispatch, mode, setDesktopChatOpen]);
+	let showCardSource = useCallback((questionnaireId: string) => {
+		let thread = conversation.state && threadForCard(conversation.state, questionnaireId);
+		let source = thread?.questionSources[0];
+		if (thread && source) showSource({ source, itemId: thread.id });
+	}, [conversation.state, showSource]);
 	let showEvidence = useCallback((questionnaireId: string) => {
 		if (!workspacePresentation.documentVisible || workspacePresentation.documentView !== "plan") {
 			return null;
@@ -737,6 +742,7 @@ export function RoomWorkspace(
 				<PlanEditor
 					cardMeta={cardMeta}
 					evidence={showEvidence}
+					onCardSource={showCardSource}
 					commentPresentation={mode === "split" ? "popover" : "sheet"}
 					connection={status === "deleted" ? "closed" : status}
 					key={workspaceArchivedAt ? "archived" : "active"}

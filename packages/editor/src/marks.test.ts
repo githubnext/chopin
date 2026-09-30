@@ -17,7 +17,7 @@
 
 import { afterEach, describe, expect, it } from "bun:test";
 
-import { clear, holds, paint, pin, union, unpin } from "./marks";
+import { clear, decidedRanges, holds, paint, paintDecided, pin, union, unpin } from "./marks";
 
 import type { LexicalEditor } from "lexical";
 import type { Points } from "./passage";
@@ -186,5 +186,34 @@ describe("being sent somewhere", () => {
 
 		expect(union()).toEqual([]);
 		expect(holds("comments")).toBe(false);
+	});
+});
+
+describe("decided wash", () => {
+	it("keeps decisions separate from related marks and their pin", () => {
+		pin(editor, "comments", [points("comment")]);
+		paint(editor, "decisions", []);
+		pin(editor, "decisions", [points("decision")]);
+
+		expect(union()).toEqual([points("comment")]);
+		expect(holds("comments")).toBe(true);
+		expect(holds("decisions")).toBe(false);
+	});
+
+	it("keeps each mounted editor's ranges when another editor repaints or clears", () => {
+		let parent = { ...editor } as LexicalEditor;
+		let child = { ...editor } as LexicalEditor;
+		let parentRange = {} as Range;
+		let childRange = {} as Range;
+
+		paintDecided(parent, [parentRange]);
+		paintDecided(child, [childRange]);
+		expect(decidedRanges()).toEqual([parentRange, childRange]);
+
+		clear(child);
+		expect(decidedRanges()).toEqual([parentRange]);
+
+		clear();
+		expect(decidedRanges()).toEqual([]);
 	});
 });

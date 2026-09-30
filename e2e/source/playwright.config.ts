@@ -12,6 +12,7 @@ export default defineConfig({
 		"room-source.native.ts",
 		"analysis-host.native.ts",
 		"analysis-host-retries.native.ts",
+		"decision-reader.native.ts",
 	],
 	workers: 1,
 	fullyParallel: false,

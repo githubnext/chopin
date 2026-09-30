@@ -18,6 +18,7 @@ import { addComposerChild$, realmPlugin } from "@mdxeditor/editor";
 
 import { ChangeObserver } from "./changes-observer";
 import { CommentLayer } from "./comment-layer";
+import { DecisionLayer } from "./decision-layer";
 import { QuestionnaireObserver } from "./questionnaires";
 import { TableChrome } from "./table/chrome";
 import { ThreadObserver } from "./threads";
@@ -80,6 +81,7 @@ export const widgetsPlugin = realmPlugin<WidgetOptions>({
 		if (params?.questions) {
 			let store = params.questions;
 			realm.pub(addComposerChild$, () => <QuestionnaireObserver store={store} />);
+			realm.pub(addComposerChild$, () => <DecisionLayer store={store} />);
 		}
 		if (params?.threads) {
 			let store = params.threads;

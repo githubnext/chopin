@@ -1098,3 +1098,64 @@ types, CI, client build, formatting and whole source/fixture/callback proofs pas
 retains only the inherited warnings and existing design baseline. The broader product
 extraction remains unfinished; decided-prose annotations and complete application
 transport/collaboration browser coverage remain later work.
+
+## Decided-prose reader controls
+
+The complete original decision layer, placement hook and pin owner are restored, with
+natural formatter, summary/dialog and ChosenList leaves. All seven original format and
+surface callbacks, three pin callbacks and two decision geometry callbacks remain
+whole. The two original mark ownership tests and complete archived mark implementation
+are restored. Source subtraction proofs preserve the entire current geometry suite,
+editor/options/plugin bridge, question exports and Room around the declared additions.
+
+The layer mounts beside Lexical's editable document through the existing question
+plugin. Genuine prose targets and authoritative CardMeta determine marker admission.
+The real Room source callback resolves the conversation thread's first question source
+and uses existing token-fenced source navigation. Readers can inspect and pin decisions;
+mutation requests still require a connected wire, write permission, editable Lexical
+state and the current owned pin. Pending requests serialize locally, and stale replies
+cannot restore chrome after new intent, another editor's claim, hide or unmount.
+
+The full original reader CSS, narrow document lane, leading-gutter geometry and decided
+prose wash are restored. The only style adaptation replaces the circular marker's
+50-percent radius with the current radius-full token. Existing wide authored surfaces
+and all other current CSS remain byte-identical after subtraction. Existing motion
+aliases use current shared tokens. Three counted, source-hashed exceptions cover only
+measured marker/panel geometry and finite transition-presence classes. Only the existing
+PlanEditor wrapper fingerprint changes. The original ClockIcon and its public export
+are restored with one exact SVG-prop forwarding case; prior icon declarations and
+manifest records are preserved.
+
+This slice leaves the current answered inline questionnaire intact. Collapsing that
+card and confirming deletion are separate original behaviors still assigned whole;
+the richer current card, Cancel wording and permission checks are preserved. The eleven
+original full-application decision-prose browser callbacks remain whole and deferred,
+including actual application authentication, authoritative room collaboration,
+Planner work and database persistence. Focused native reader evidence does not replace
+those callbacks or establish the complete Room-to-server transport.
+The isolated source action checks delivery to an injected callback, while actual Room
+source navigation is verified by preserved wiring. Held mutation checks use a fake
+transport to exercise the real layer's request fences, not a durable server mutation.
+
+Eight new native cases mount the unchanged DecisionLayer with real Lexical, Yjs relative
+anchors, questionnaire and metadata stores, and the shared widget realm. They cover
+paragraph hover and stationary-pointer Escape, marker focus/pin/return, read-only source
+callback delivery, narrow measured placement, scrolling and offscreen retirement,
+hidden-host wash cleanup, unmount, two-editor wash union and one global pin, and
+serialized requests with stale-intent rejection. Every case checks browser and Lexical
+errors. These are new focused callbacks; all eleven original application callbacks
+remain assigned whole.
+
+The initial fixture needed the separately built lazy editor stylesheet in addition to
+the index stylesheet. Review also added the actual plan ancestor, so production text
+measure and marker-lane CSS apply, a precise recorded-request type, per-case error
+assertions and a zero-wash check during hiding. The final runner passes all 49 isolated
+cached-Chromium cases, including all eight complete strengthened reader callbacks.
+Only one local standards-mode secure page is fulfilled; every other request is aborted.
+No application, database, auth session, provider or evaluation run is started.
+
+Full offline verification passes 3,113 tests with 14,456 assertions across 513 files;
+the two PostgreSQL checks are skipped. Workspace/E2E types, CI, client build, formatting,
+whole-source/fixture/callback retention proofs and independent reader/host/CSS/metadata
+reviews pass. CI retains the two inherited lint warnings and existing design baseline.
+This is a reader checkpoint, not completion of the broader product extraction.
