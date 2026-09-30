@@ -348,3 +348,78 @@ test("the marker follows an edit above its prose", async ({ join, seed }) => {
 	let box = (await marker(page, "Two weeks").boundingBox())!;
 	expect(Math.abs(box.y + box.height / 2 - (line.y + 16))).toBeLessThan(14);
 });
+
+/** Home and End do not move the caret on macOS; Cmd with the arrow does. */
+function lineEdge(page: Page, key: "Home" | "End") {
+	if (process.platform !== "darwin") return page.keyboard.press(key);
+	return page.keyboard.press(key === "End" ? "Meta+ArrowRight" : "Meta+ArrowLeft");
+}
+
+function paragraph(page: Page, text: string) {
+	return content(page).locator("p").filter({ hasText: text });
+}
+
+test("arrowing down past a collapsed decision lands in the next paragraph and types there", async ({ join, seed }) => {
+	await seed(SOURCE, STATE);
+	let page = await join("ana");
+	await open(page);
+
+	await prose(page, FIRST).click();
+	await lineEdge(page, "End");
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.type("xyz");
+	await expect(content(page)).not.toContainText("zyx");
+	// The column is kept, so the text lands inside the paragraph after the hidden card.
+	let landed = paragraph(page, "xyz");
+	await expect(landed).toHaveCount(1);
+	await expect(landed).toContainText("After two weeks");
+	await expect(landed).toContainText("widen it.");
+	await expect(prose(page, FIRST)).toBeVisible();
+});
+
+test("arrowing up past a collapsed decision lands in the previous paragraph", async ({ join, seed }) => {
+	await seed(SOURCE, STATE);
+	let page = await join("ana");
+	await open(page);
+
+	await prose(page, SECOND).click();
+	await lineEdge(page, "Home");
+	await page.keyboard.press("ArrowUp");
+	await page.keyboard.type("xyz");
+	await expect(paragraph(page, FIRST)).toContainText("xyz");
+	await expect(paragraph(page, SECOND)).not.toContainText("xyz");
+});
+
+test("arrowing right or left across a collapsed decision crosses it", async ({ join, seed }) => {
+	await seed(SOURCE, STATE);
+	let page = await join("ana");
+	await open(page);
+
+	await prose(page, FIRST).click();
+	await lineEdge(page, "End");
+	await page.keyboard.press("ArrowRight");
+	await page.keyboard.type("xyz");
+	await expect(paragraph(page, "xyzAfter two weeks")).toHaveCount(1);
+	// Three characters back to the start of the paragraph, one more across the card.
+	for (let press = 0; press < 4; press++) await page.keyboard.press("ArrowLeft");
+	await page.keyboard.type("Q");
+	await expect(paragraph(page, `${FIRST}Q`)).toHaveCount(1);
+	await expect(content(page)).not.toContainText("zyx");
+});
+
+test("typing with a visible decision card selected never lands at the document start", async ({ join, seed }) => {
+	let orphan = {
+		...STATE.questions[0]!,
+		anchors: { widget: WIDGET_A, questions: { [QUESTION_A]: { anchors: [], pending: false } } },
+	};
+	await seed(SOURCE, { revision: 1, questions: [orphan, STATE.questions[1]] });
+	let page = await join("ana");
+	await open(page, "Two weeks");
+
+	await prose(page, FIRST).click();
+	await lineEdge(page, "End");
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.type("xyz");
+	await expect(content(page)).not.toContainText("zyx");
+	await expect(content(page).locator("p").first()).toHaveText(FIRST);
+});

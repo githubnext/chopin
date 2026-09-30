@@ -29,6 +29,7 @@ export function register(): void {
 }
 
 export { CalloutPlugin } from "./callout";
+export { DecoratorSelectionPlugin } from "./decorator-selection";
 export { EnterPlugin } from "./enter";
 export { QuestionnaireCard } from "./questionnaire";
 export type { QuestionnaireCardProps } from "./questionnaire";
