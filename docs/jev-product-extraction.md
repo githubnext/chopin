@@ -848,3 +848,19 @@ Full workspace/E2E types and CI pass with the inherited warnings and design base
 only. Only two independently reviewed existing component source hashes are renewed;
 all exception cases remain unchanged. Whole callback, table, helper and additive
 integration proofs pass after formatting. No interpretation policy was changed.
+
+The original single-card refining signal is restored through authoritative metadata:
+an open card displays the Planner status note and its exact refining attribute.
+Terminal cards and legacy multi-question cards retain their original scope. Current
+heading, layout, actions and caption remain preserved. One whole original callback
+brings QuestionView retention to 20 of 27, with seven still assigned to later surfaces.
+
+Fourteen further whole recovery/card-option registrations retain complete repair,
+alternative, ambiguity, ownership, grouping and refusal tables. Four original helper
+and table declarations are restored once in natural private fixtures. They execute
+31 cases; unique pipeline retention is 123 of 140, with 17 remaining. The focused
+question/editor/pipeline run passes 460 tests with 1,258 assertions. Full workspace/E2E
+types and CI pass with inherited warnings and design baseline only. Independent
+review and exact callback/table/helper/integration proofs pass after formatting;
+only two existing reviewed source hashes change, with every exception case retained.
+No interpretation policy was changed. Mounted browser behavior remains unverified.

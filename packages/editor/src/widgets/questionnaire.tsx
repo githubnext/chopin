@@ -216,6 +216,7 @@ function Undecided(
 				error={state.error}
 				errorClassName="editor-motion-feedback"
 				suggested={meta?.suggested}
+				refining={meta?.refining}
 				previous={previous}
 				showActions
 				onAddOption={editable ? state.addOption : undefined}

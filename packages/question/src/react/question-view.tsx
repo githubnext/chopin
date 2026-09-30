@@ -79,6 +79,8 @@ export type QuestionViewProps = {
 	error?: string;
 	/** Host-owned presentation class for an error entering the view. */
 	errorClassName?: string;
+	/** The Planner is updating this open decision card. */
+	refining?: boolean;
 	/** Rendered beside the heading; hosts use it for counts and provenance. */
 	aside?: ReactNode;
 	/** Lets a host retain bounded steps for presentation without owning question state. */
@@ -119,12 +121,22 @@ function Badges({ people }: { people: Collaborator[] }) {
 	);
 }
 
-function DecisionHeading() {
+function DecisionHeading({ refining }: { refining?: boolean } = {}) {
 	return (
-		<header className="flex items-center gap-2 px-3 py-2.5 hairline-b">
-			<CheckIcon aria-hidden="true" size={14} />
-			<span className="text-sm font-medium text-text-primary">Decision</span>
-		</header>
+		<>
+			<header
+				data-refining={refining ? "true" : undefined}
+				className="flex items-center gap-2 px-3 py-2.5 hairline-b"
+			>
+				<CheckIcon aria-hidden="true" size={14} />
+				<span className="text-sm font-medium text-text-primary">Decision</span>
+			</header>
+			{refining && (
+				<p className="m-0 px-4 pt-1 text-sm text-text-tertiary" role="status">
+					Chopin is refining…
+				</p>
+			)}
+		</>
 	);
 }
 
@@ -401,6 +413,7 @@ export function QuestionView(props: QuestionViewProps) {
 		collaborators = [],
 		error,
 		errorClassName,
+		refining,
 		aside,
 		places,
 		onQuestionEnter,
@@ -546,7 +559,7 @@ export function QuestionView(props: QuestionViewProps) {
 
 	return (
 		<div>
-			{single && <DecisionHeading />}
+			{single && <DecisionHeading refining={refining} />}
 			{multiple && (
 				<div
 					ref={tabs}
