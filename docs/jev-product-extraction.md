@@ -1215,3 +1215,59 @@ new callbacks. Workspace/E2E types, CI, client build, formatting and whole-sourc
 retention proofs pass. Independent collapse and fixture reviews find no issues.
 CI retains only the two inherited lint warnings and existing design baseline.
 This is another bounded product checkpoint; the broader extraction remains unfinished.
+
+## Open-card people and conversation source
+
+The complete original People function and durable-before-live handle merge are restored.
+Faces deduplicate, cap at eight, and show overflow while the accessible group retains
+all handles. The original durable-people callback at archive line 246 and shared
+fixtures remain whole and unique. Five additional source/people cases cover saved-thread
+and callback admission, read-only navigation controls, overflow and current resolved
+list provenance. Current questionnaire and Decisions suites pass fifty tests with
+159 assertions. The whole current questionnaire module is preserved by AST subtraction
+of the declared additions.
+
+InlineQuestionnaire forwards the real existing onCardSource option through the current
+QuestionnaireCard and Undecided. Source requires authoritative metadata's thread and a
+callback and delivers the actual card ID. The existing Room handler resolves that card's
+conversation thread and first saved question source, then uses current token-fenced
+source navigation. No Room, QuestionView, CSS or icon implementation changes are needed.
+The only original-source adaptations are using the existing QuestionView.aside slot for
+the complete Source/People subtree and the current canonical icon-button role. Current
+Cancel/Save answer, provenance, metadata precedence, evidence, shared draft, motion and
+permission paths survive unchanged. The Decisions list has no Source callback, matching
+the archive's scope; this slice does not add one.
+
+The original card anatomy/caption callbacks at archive lines 286, 471 and 484 remain
+whole and deferred. They are not rewritten to fit the current heading and controls.
+The actor callback at line 301 and eleven full-application decided-prose browser
+callbacks likewise remain deferred. This slice adds no design exceptions: only the two
+existing questionnaire owner fingerprints change, with all cases and reasons retained.
+
+Four new native callbacks mount the actual InlineQuestionnaire renderer in an auxiliary
+Lexical host sharing the real Room questionnaire/metadata stores and showCardSource
+callback. The saved conversation and chat frames enter the existing inert Room wire;
+Source clicks reach actual Chat/Transcript source highlighting. Two legitimate saved
+question sources distinguish first-source ordering, and changing the card proves
+current ID delivery and replacement-token behavior. Read-only controls remain absent
+or disabled. Live presence joins durable people without duplicate faces, preserves all
+accessible handles, reports overflow, and retires removed live peers. Missing thread
+or callback removes Source. Every case checks browser and Lexical errors.
+
+This is an auxiliary Lexical host, not the complete Room document editor or Yjs provider
+transport. Its controlled bridge permits only exact known question-open reads and
+presence-release frames; unexpected writes fail. It does not establish authentication,
+server durability or complete network collaboration. The fixture fulfills one local
+secure standards-mode page, aborts all other requests, and consumes both actual built
+stylesheets. Initial fixture failures involved incomplete metadata, current read-only
+control expectations, and Node-only editor import resolution. The final fixture resolves
+only its appended imports through the actual packages' browser exports. Production
+logic was not changed to accommodate those failures.
+
+Final verification passes all fifty focused unit cases and all sixty-four isolated
+cached-Chromium cases against the final build. Workspace/E2E types, CI, build,
+formatting and whole-source/callback/fixture proofs pass. Independent production,
+metadata and native reviews find no issues. CI retains only the inherited two lint
+warnings and existing design baseline. The broader extraction remains unfinished;
+card-gap normalization and legacy Planner-thread backfill are audited next boundaries,
+with original full-application and deferred anatomy coverage still outstanding.

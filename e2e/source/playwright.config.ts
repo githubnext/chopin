@@ -14,6 +14,7 @@ export default defineConfig({
 		"analysis-host-retries.native.ts",
 		"decision-reader.native.ts",
 		"collapse-deletion.native.ts",
+		"open-card.native.ts",
 	],
 	workers: 1,
 	fullyParallel: false,

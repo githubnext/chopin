@@ -9,7 +9,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { cardStatus } from "@chopin/dialect";
-import { DecisionIcon } from "@chopin/icons";
+import { DecisionIcon, MessageForwardIcon } from "@chopin/icons";
 import { QuestionView, useQuestionnaire } from "@chopin/question/react";
 import { useCellValue } from "@mdxeditor/gurx";
 
@@ -17,6 +17,7 @@ import { Provenance, SidecarCard } from "../card";
 import { useCardMeta } from "../card-meta";
 import { ContentSwapLayer } from "../content-swap";
 import { EvidenceHover } from "./evidence-hover";
+import { Face } from "../face";
 import { widgets$ } from "../widget-options";
 import { useTransitionPresence } from "../transition-presence";
 
@@ -66,6 +67,7 @@ export type QuestionnaireCardProps = {
 	meta?: Question.CardMeta;
 	presentation?: "inline" | "list";
 	motionImmediately?: () => boolean;
+	onCardSource?: (questionnaireId: string) => void;
 	evidence?: ReactNode | null;
 	wire?: Transport;
 	connected?: boolean;
@@ -102,6 +104,7 @@ export function QuestionnaireCard(
 		connected = false,
 		evidence,
 		motionImmediately,
+		onCardSource,
 		presentation = "inline",
 		onQuestionEnter,
 		onQuestionLeave,
@@ -146,6 +149,7 @@ export function QuestionnaireCard(
 		)
 		: (
 			<Undecided
+				onCardSource={onCardSource}
 				canEdit={canEdit}
 				connected={connected}
 				motion={motion}
@@ -194,6 +198,30 @@ type Pointing = {
 };
 
 type QuestionStep = { children: ReactNode; question: string };
+
+/** Who is in this decision, overlapping, at most eight. */
+function People({ handles }: { handles: string[] }) {
+	let unique = [...new Set(handles)];
+	if (unique.length === 0) return null;
+	let shown = unique.slice(0, 8);
+
+	return (
+		<span
+			aria-label={`In this decision: ${unique.join(", ")}`}
+			className="flex items-center"
+			role="group"
+		>
+			{shown.map((handle, index) => (
+				<span className={index > 0 ? "-ml-1.5" : ""} key={handle}>
+					<Face handle={handle} ring="page" size={22} />
+				</span>
+			))}
+			{unique.length > 8 && (
+				<span className="ml-1 text-sm text-text-tertiary tabular-nums">+{unique.length - 8}</span>
+			)}
+		</span>
+	);
+}
 
 function QuestionStepSwap(
 	{ children, motion, question }: {
@@ -246,12 +274,13 @@ function QuestionStepSwap(
 }
 
 function Undecided(
-	{ canEdit, connected, meta, motion, value, wire, ...pointing }:
+	{ canEdit, connected, meta, motion, onCardSource, value, wire, ...pointing }:
 		& {
 			canEdit: boolean;
 			connected: boolean;
 			meta?: Question.CardMeta;
 			motion?: QuestionStepMotion;
+			onCardSource?: (questionnaireId: string) => void;
 			value: Questionnaire;
 			wire?: Transport;
 		}
@@ -267,6 +296,12 @@ function Undecided(
 	let answerable = connected && !!state.definition;
 	let editable = canEdit && answerable;
 	let previous = previousAnswers(value);
+	let people = [
+		...new Set([
+			...(meta?.involved ?? []),
+			...state.collaborators.map(person => person.handle),
+		]),
+	];
 
 	return (
 		<SidecarCard
@@ -275,6 +310,21 @@ function Undecided(
 			padded={false}
 		>
 			<QuestionView
+				aside={
+					<span className="flex items-center gap-2">
+						{meta?.thread && onCardSource && (
+							<button
+								aria-label="Show source in chat"
+								className="btn btn-icon btn-ghost"
+								onClick={() => onCardSource(value.id)}
+								type="button"
+							>
+								<MessageForwardIcon aria-hidden="true" size={14} />
+							</button>
+						)}
+						<People handles={people} />
+					</span>
+				}
 				collaborators={state.collaborators}
 				definition={state.definition ?? definition(value)}
 				// A draft that has not synced cannot be edited without discarding
@@ -476,6 +526,7 @@ function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 			evidence={evidence}
 			motion={options.questionMotion}
 			motionImmediately={options.motionImmediately}
+			onCardSource={options.onCardSource}
 			meta={meta}
 			onQuestionEnter={question => options.questions?.highlight(value.id, question)}
 			onQuestionLeave={() => options.questions?.clear()}
