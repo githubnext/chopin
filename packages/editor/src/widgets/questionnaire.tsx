@@ -221,6 +221,7 @@ function Undecided(
 				showActions
 				onAddOption={editable ? state.addOption : undefined}
 				onCancel={editable ? state.cancel : undefined}
+				onDiscard={editable ? state.discard : undefined}
 				onChange={editable ? state.change : undefined}
 				onSubmit={editable ? state.submit : undefined}
 				renderStep={motion

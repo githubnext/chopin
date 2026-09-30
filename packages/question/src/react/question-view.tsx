@@ -453,7 +453,7 @@ export function QuestionView(props: QuestionViewProps) {
 	if (active !== selected) setActive(active);
 	// Cancelling cannot be undone and the agent is waiting, so it takes a
 	// second, deliberate click rather than a modal nobody reads.
-	let [confirming, setConfirming] = useState(false);
+	let [confirming, setConfirming] = useState<"cancel" | "discard">();
 	let tabs = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
@@ -711,21 +711,45 @@ export function QuestionView(props: QuestionViewProps) {
 				</p>
 			)}
 
-			{(onSubmit || onCancel || multiple) && (
+			{(onSubmit || onCancel || onDiscard || multiple) && (
 				<footer className="question-actions flex flex-wrap items-center justify-end gap-2 px-3 py-2 hairline-t">
 					{multiple && !confirming && (
 						<p className="m-0 mr-auto text-sm text-text-tertiary tabular-nums">
 							{index + 1} of {definition.questions.length} · {unanswered} unanswered
 						</p>
 					)}
-					{onCancel && confirming && (
+					{onDiscard && confirming === "discard" && (
+						<>
+							<p className="m-0 mr-auto text-sm text-text-secondary">
+								Discard this decision?
+							</p>
+							<button
+								type="button"
+								onClick={() => setConfirming(undefined)}
+								disabled={submitting}
+								className="btn btn-sm btn-secondary"
+							>
+								Keep it
+							</button>
+							<button
+								type="button"
+								onClick={onDiscard}
+								disabled={disabled || submitting}
+								className="btn btn-sm btn-destructive"
+							>
+								<CloseIcon aria-hidden="true" size={14} />
+								{submitting ? "Discarding…" : "Discard decision"}
+							</button>
+						</>
+					)}
+					{onCancel && confirming === "cancel" && (
 						<>
 							<p className="m-0 mr-auto text-sm text-text-secondary">
 								Cancel without answering?
 							</p>
 							<button
 								type="button"
-								onClick={() => setConfirming(false)}
+								onClick={() => setConfirming(undefined)}
 								disabled={submitting}
 								className="btn btn-sm btn-secondary"
 							>
@@ -754,12 +778,23 @@ export function QuestionView(props: QuestionViewProps) {
 					{onCancel && !confirming && (
 						<button
 							type="button"
-							onClick={() => setConfirming(true)}
+							onClick={() => setConfirming("cancel")}
 							disabled={disabled || submitting}
 							className="btn btn-sm btn-secondary"
 						>
 							<CloseIcon aria-hidden="true" size={14} />
 							Cancel
+						</button>
+					)}
+					{onDiscard && !confirming && (
+						<button
+							type="button"
+							onClick={() => setConfirming("discard")}
+							disabled={disabled || submitting || !onDiscard}
+							className="btn btn-sm btn-secondary"
+						>
+							<CloseIcon aria-hidden="true" size={14} />
+							Discard
 						</button>
 					)}
 					{multiple && !confirming && !last && (

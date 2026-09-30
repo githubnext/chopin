@@ -864,3 +864,21 @@ types and CI pass with inherited warnings and design baseline only. Independent
 review and exact callback/table/helper/integration proofs pass after formatting;
 only two existing reviewed source hashes change, with every exception case retained.
 No interpretation policy was changed. Mounted browser behavior remains unverified.
+
+Open cards now forward the existing shared controller Discard command under the same
+writer/connection guard as Cancel. The original Discard confirmation is restored,
+with explicit cancel/discard intent so the preserved Cancel confirmation stays
+separate. Current navigation, Save, caption, layout and terminal metadata authority
+remain unchanged. One whole original stepper callback and two compatibility controls
+bring QuestionView retention to 21 of 27, with six whole callbacks still assigned.
+Native click and confirmation behavior remains unverified at this checkpoint.
+
+Twelve further whole scoped-choice and contrastive registrations retain complete
+proposal, conditional, ownership, duplicate and refusal cases. Four exact helper
+functions are restored once in two natural fixtures; a missing fixture import was
+corrected without changing their bodies or assertions. Unique pipeline retention is
+135 of 140, with five remaining. The focused question/editor/pipeline run passes
+444 tests with 1,262 assertions. Full workspace/E2E types and CI pass, with inherited
+warnings/design baseline only. Independent review and complete source/callback/table
+proofs pass after formatting. Only two reviewed existing owner hashes change;
+exception cases are unchanged. No interpretation policy was changed.
