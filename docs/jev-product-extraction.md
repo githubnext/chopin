@@ -703,3 +703,11 @@ suites are explicitly skipped without a database. Workspace and E2E TypeScript
 checks pass. CI passes with only two inherited lint warnings and the existing
 design baseline finding. All eleven research, placement, processor, browser Save,
 controller, editor and callback-preservation checks pass after formatting.
+
+The next bounded slice restores the exact suggestion-edit reducer and its two whole
+original callbacks. Cancelling option composition restores an advisory suggestion
+without undoing a human answer edit; text entered before a suggestion continues to
+suppress replacement. All existing projection types, function, fixtures and tests
+remain unchanged. The full question package passes 61 tests with 214 assertions;
+focused reducer/projection coverage passes four tests with 20 assertions. Question
+view rendering and card-host wiring remain separate subsequent work.

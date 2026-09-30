@@ -5,8 +5,13 @@
  * helpers without pulling React into a headless process.
  */
 
-export { projectSuggestion } from "./project-suggestion";
-export type { SuggestionProjection, VisibleSuggestion } from "./project-suggestion";
+export { projectSuggestion, reduceSuggestionEditState } from "./project-suggestion";
+export type {
+	SuggestionEditAction,
+	SuggestionEditState,
+	SuggestionProjection,
+	VisibleSuggestion,
+} from "./project-suggestion";
 export { QuestionView } from "./question-view";
 export type { Collaborator, QuestionStepRenderProps, QuestionViewProps } from "./question-view";
 export { forget, useQuestionnaire } from "./use-questionnaire";

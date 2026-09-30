@@ -34,3 +34,60 @@ export function projectSuggestion(
 		suggestion,
 	};
 }
+
+// Exact archive446a9779a937fa5be7cd3eb52fd7f3023d691ed2 suggestion edit lifecycle.
+export type SuggestionEditState = {
+	answer: boolean;
+	composer: boolean;
+	composerGeneration?: number;
+	suggestionPresent: boolean;
+	suggestionGeneration: number;
+};
+
+export type SuggestionEditAction =
+	| { type: "answer-edited" }
+	| { type: "composer-edited" }
+	| { type: "composer-cancelled" }
+	| { type: "composer-committed" }
+	| { type: "suggestion-visible" }
+	| { type: "suggestion-cleared" };
+
+export function reduceSuggestionEditState(
+	state: SuggestionEditState,
+	action: SuggestionEditAction,
+): SuggestionEditState {
+	switch (action.type) {
+		case "answer-edited":
+			return { ...state, answer: true };
+		case "composer-edited":
+			return {
+				...state,
+				composer: true,
+				composerGeneration: state.suggestionGeneration,
+			};
+		case "composer-cancelled":
+			return { ...state, composer: false, composerGeneration: undefined };
+		case "composer-committed":
+			if (!state.composer) return state;
+			return {
+				...state,
+				answer: state.answer || (
+					state.suggestionPresent
+					&& state.composerGeneration === state.suggestionGeneration
+				),
+				composer: false,
+				composerGeneration: undefined,
+			};
+		case "suggestion-visible":
+			return { ...state, suggestionPresent: true };
+		case "suggestion-cleared":
+			return {
+				...state,
+				answer: false,
+				suggestionPresent: false,
+				suggestionGeneration: state.suggestionPresent
+					? state.suggestionGeneration + 1
+					: state.suggestionGeneration,
+			};
+	}
+}
