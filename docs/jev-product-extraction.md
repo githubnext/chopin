@@ -198,6 +198,7 @@ and E2E type checks, formatting and CI with the existing warnings listed above.
 | Candidate entry and role         | All six entry and 33 role statements retain original conditions and order, with eight candidate-loop continues mapped to undefined skips. Captured references, group retargeting, consumed labels, partial opening writes and selected-target preservation are covered. | 251 conversation tests, 1,191 assertions  |
 | Candidate factories/verification | Exact source/base declarations and eight early verification/condition statements retain capture timing and handled skips. Active-local working reads, valid deferred-domain histories, partial resume writes and cached spike labels are covered.                       | 266 conversation tests, 1,288 assertions  |
 | Scoped and new-choice handlers   | All seven original statements preserve order, with exactly five handled skips. Scoped captures and labels, replay-valid histories, active-local factories, staged version overrides and partial push failures are covered.                                              | 293 conversation tests, 1,484 assertions  |
+| Withdrawal, agreement, question  | Three exact ordinary-role consequent bodies preserve statement order and three handled skips. Captured withdrawal ownership, current effective pending, raw option answers, question thresholds and target assignment before/after factory evaluation are covered.      | 316 conversation tests, 1,629 assertions  |
 
 The combined guard/source/quote run passed 30 tests (242 assertions). Domain/replay
 checks passed 27 tests (109 assertions). The complete extracted foundation and
@@ -327,7 +328,21 @@ only after both pushes. Valid card, scoped-proposal and settlement histories rep
 synthetic prior-batch cap fixtures do not claim replay consistency. No complete original
 pipeline callback has been replaced by these bounded tests.
 
-Next: ordinary candidate proposals and later dispatch. Preserve shared
+Withdrawal, agreement and question branches retain their whole original consequent
+bodies, with exactly three outer-loop continues mapped to handled skips. Handlers are
+called only for their matching captured role; a returned object with no proposed event
+progresses to the original no-proposal guard, whose continue bypasses the ordinary
+loop-bottom cap. That guard remains assigned to the later dispatcher. Stopped
+observations match two withdrawal
+progressions and five handled skips, four agreement progressions, and three question
+progressions and two handled skips. Five mirrored factory/source failures and two
+synthetic cached-question/group controls are verified separately. The baseline stops
+after the whole role chain, before its original no-proposal guard and application.
+Live snapshots preserve target/proposal write timing even when event construction
+throws. Saved discard and settlement histories replay; no event is applied by these
+handlers. Remaining original full-policy callbacks stay assigned whole.
+
+Next: contribution, stance and resolution proposals and later dispatch. Preserve shared
 candidate state, local capture timing, continuation and event-limit checks, and
 partial events retained after follow-up failure. Keep the original public interface
 and compare original offline fixtures before publishing the dispatcher.
