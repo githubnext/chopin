@@ -711,3 +711,27 @@ suppress replacement. All existing projection types, function, fixtures and test
 remain unchanged. The full question package passes 61 tests with 214 assertions;
 focused reducer/projection coverage passes four tests with 20 assertions. Question
 view rendering and card-host wiring remain separate subsequent work.
+
+Seven further whole pipeline lifecycle callbacks are restored with their exact
+shared helpers. They cover deliberate re-raise after discard, refusing settlement
+of a decided target, human reopening review and preservation of earlier decisions.
+The focused group passes seven tests with 25 assertions. Pipeline ownership is now
+34 of 140 whole callbacks, with 106 assigned to subsequent groups.
+
+QuestionView now projects the original advisory suggestion into its existing
+controls without changing the shared draft. Human edits retain priority; Save
+forwards the exact displayed option/revision snapshot and single-card readiness
+uses the displayed draft. Current layout, cancellation, labels, error motion,
+scrolling and host step rendering remain. The original rationale callback is
+retained whole; the original anatomy and `Save` caption assertions remain deferred
+to their applicable card surface instead of weakening them for `Save answer`.
+The original AUTH fixture now has one shared declaration. The question package
+passes 69 tests with 236 assertions; SSR coverage is not mounted browser evidence.
+The existing three class-forwarding cases are unchanged; only their reviewed
+QuestionView owner hash is renewed. Metadata-aware card hosts remain later work.
+
+The original optional conversation configuration block is restored in `.env.example`.
+Self-hosting lists its implemented flag, model alias, timeout and server-side key.
+Current Planner model, Harness, local sign-in, credentials and deployment defaults
+remain. Compose files are unchanged in this slice; container forwarding remains a
+separate configuration review. No service was activated by editing examples.

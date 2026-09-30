@@ -1,18 +1,7 @@
 import { expect, test } from "bun:test";
 import { projectSuggestion, reduceSuggestionEditState } from "./project-suggestion";
 
-const AUTH = {
-	questions: [{
-		id: "q",
-		header: "Auth",
-		question: "What auth system should we use?",
-		multiple: false,
-		options: [
-			{ id: "a", label: "Auth0", description: "" },
-			{ id: "b", label: "GitHub Apps", description: "" },
-		],
-	}],
-};
+import { AUTH } from "./question-view.test-fixtures";
 
 test("a visible suggestion preserves its exact revision snapshot", () => {
 	let draft = {

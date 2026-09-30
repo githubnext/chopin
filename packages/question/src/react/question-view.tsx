@@ -9,14 +9,16 @@
  * as they arrive rather than tracking local state.
  */
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useReducer, useRef, useState } from "react";
 import { CheckIcon, CloseIcon } from "@chopin/icons";
 
 import { answered } from "../draft";
+import { projectSuggestion, reduceSuggestionEditState } from "./project-suggestion";
 
 import type { KeyboardEvent, ReactNode } from "react";
 import type { Draft, Drafts } from "../draft";
 import type { Answer, Definition, Item } from "../schema";
+import type { VisibleSuggestion } from "./project-suggestion";
 
 export type Collaborator = {
 	/** Stable per connection, so one person on two devices shows twice. */
@@ -35,7 +37,9 @@ export type QuestionViewProps = {
 	drafts: Drafts;
 	/** Absent once resolved: a decision is not re-opened, a new question is asked. */
 	onChange?: (question: string, change: Partial<Draft>) => void;
-	onSubmit?: () => void;
+	onSubmit?: (visibleSuggestion?: VisibleSuggestion) => void;
+	/** The current advisory card option; it never changes the shared draft. */
+	suggested?: VisibleSuggestion;
 	onCancel?: () => void;
 	disabled?: boolean;
 	submitting?: boolean;
@@ -372,7 +376,22 @@ export function QuestionView(props: QuestionViewProps) {
 		onQuestionLeave,
 		onQuestionSelect,
 		renderStep,
+		suggested,
 	} = props;
+
+	let [suggestionEdits, dispatchSuggestionEdit] = useReducer(reduceSuggestionEditState, {
+		answer: false,
+		composer: false,
+		suggestionPresent: false,
+		suggestionGeneration: 0,
+	});
+	useEffect(() => {
+		// A missing suggestion starts a new lifecycle; revision changes stay in the same one.
+		dispatchSuggestionEdit({ type: suggested ? "suggestion-visible" : "suggestion-cleared" });
+	}, [suggested]);
+	let markHumanEdit = () => {
+		if (suggested) dispatchSuggestionEdit({ type: "answer-edited" });
+	};
 
 	let base = useId();
 	let single = definition.questions.length === 1;
@@ -380,6 +399,7 @@ export function QuestionView(props: QuestionViewProps) {
 	let current = currentQuestion(definition, selected);
 	let active = current.id;
 	let panelId = `${base}-panel-${active}`;
+
 	if (active !== selected) setActive(active);
 	// Cancelling cannot be undone and the agent is waiting, so it takes a
 	// second, deliberate click rather than a modal nobody reads.
@@ -409,6 +429,15 @@ export function QuestionView(props: QuestionViewProps) {
 		tabs.current?.querySelector<HTMLElement>(`#${CSS.escape(`${base}-tab-${question.id}`)}`)
 			?.focus();
 	}, [definition, base]);
+
+	let projection = single
+		? projectSuggestion(
+			current,
+			drafts[current.id],
+			suggested,
+			suggestionEdits.answer || suggestionEdits.composer,
+		)
+		: { draft: drafts[current.id] };
 
 	// A cancelled questionnaire has no answers, so it must be matched on status
 	// alone — falling through would offer an editable form for a dead question.
@@ -556,18 +585,24 @@ export function QuestionView(props: QuestionViewProps) {
 
 						<Choices
 							question={current}
-							draft={drafts[current.id]}
+							draft={projection.draft}
 							disabled={disabled}
 							name={`${base}-${current.id}`}
-							onChange={change => onChange?.(current.id, change)}
+							onChange={change => {
+								if (single) markHumanEdit();
+								onChange?.(current.id, change);
+							}}
 						/>
 
 						<Custom
 							question={current}
-							draft={drafts[current.id]}
+							draft={projection.draft}
 							disabled={disabled}
 							name={`${base}-${current.id}`}
-							onChange={change => onChange?.(current.id, change)}
+							onChange={change => {
+								if (single) markHumanEdit();
+								onChange?.(current.id, change);
+							}}
 						/>
 					</section>
 				);
@@ -650,8 +685,8 @@ export function QuestionView(props: QuestionViewProps) {
 					{onSubmit && !confirming && (!multiple || last) && (
 						<button
 							type="button"
-							onClick={onSubmit}
-							disabled={disabled || submitting}
+							onClick={() => onSubmit?.(single ? projection.suggestion : undefined)}
+							disabled={disabled || submitting || (single && !answered(current, projection.draft))}
 							className="btn btn-sm btn-primary"
 						>
 							<CheckIcon
