@@ -158,7 +158,21 @@
 				1
 			]
 		],
-		"sourceHash": "9771a14a23f11d99d1c5c0c137b435586b9f11c9d08a1dd1a89348e62c2e95d3"
+		"sourceHash": "d428e68e8ef7e270474d5f42b6900891f2126073e33ab00a4716d8b38b5cc431"
+	},
+	{
+		"file": "packages/editor/src/widgets/research-motion.tsx",
+		"reason": "Swap composes a static base class with an optional caller-forwarded className, the same forwarding boundary already reviewed for ButtonRow; static call-site classes are scanned, so only this exact merge needs review.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > Swap > <span>",
+				1
+			]
+		],
+		"sourceHash": "5e956c7775dcb11530728827506d7a3b97bfa39b0c3d7f7a3353e4cb14654a0e"
 	},
 	{
 		"file": "packages/editor/src/comment-layer.tsx",
