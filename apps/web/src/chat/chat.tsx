@@ -37,6 +37,7 @@ import {
 import { Transcript } from "./transcript";
 import { TerminalAlert } from "../terminal-alert";
 import plannerStop from "../assets/icons/planner-stop.svg";
+import plannerResume from "../assets/icons/planner-resume.svg";
 
 import type { Chat as Wire } from "@chopin/protocol";
 import type { Repository } from "../api";
@@ -57,6 +58,15 @@ export type ChatProps = {
 	onActivity?: (event: { type: "message" | "working"; busy: boolean }) => void;
 };
 
+/** "1 workflow running", "2 workflows paused", or both. */
+export function runsLabel(runs: Wire.Runs): string {
+	let count = (n: number, word: string) => `${n} ${n === 1 ? "workflow" : "workflows"} ${word}`;
+	return [
+		runs.active ? count(runs.active, "running") : "",
+		runs.paused ? count(runs.paused, "paused") : "",
+	].filter(Boolean).join(" · ");
+}
+
 export function Chat(
 	{
 		active = true,
@@ -75,6 +85,7 @@ export function Chat(
 	let [queue, setQueue] = useState<Wire.Waiting[]>([]);
 	let [busy, setBusy] = useState(false);
 	let [turn, setTurn] = useState<Wire.Turn>();
+	let [runs, setRuns] = useState<Wire.Runs>();
 	let [draft, setDraft] = useState<ComposerDraft>({
 		text: "",
 		references: [],
@@ -142,6 +153,7 @@ export function Chat(
 				setBusy(frame.busy);
 				reportedBusy.current = frame.busy;
 				setTurn(frame.turn);
+				setRuns(frame.runs);
 				// History is not unread, but a turn already in progress still needs
 				// a signal outside a closed Chat destination.
 				activity.current?.({ type: "working", busy: frame.busy });
@@ -192,6 +204,7 @@ export function Chat(
 				reportedBusy.current = frame.busy;
 				setBusy(frame.busy);
 				setTurn(frame.turn);
+				setRuns(frame.runs);
 			}),
 			wire.on<Wire.Queue>("chat:queue", frame => setQueue(frame.waiting)),
 		];
@@ -407,12 +420,21 @@ export function Chat(
 					/>
 
 					<div className="flex items-center justify-end gap-1 px-2 pb-2">
-						{sendError && (
-							<TerminalAlert className="mr-auto min-w-0 text-sm text-destructive-ink [overflow-wrap:anywhere]">
-								{sendError}
-							</TerminalAlert>
-						)}
-						{agent && busy && (
+						{sendError
+							? (
+								<TerminalAlert className="mr-auto min-w-0 text-sm text-destructive-ink [overflow-wrap:anywhere]">
+									{sendError}
+								</TerminalAlert>
+							)
+							: agent && runs && (
+								<span
+									className="mr-auto min-w-0 truncate text-sm text-text-quaternary tabular-nums"
+									data-chat-runs={runs.active ? "active" : "paused"}
+								>
+									{runsLabel(runs)}
+								</span>
+							)}
+						{agent && (busy || !!runs?.active) && (
 							<button
 								aria-label="Stop Planner"
 								className="btn btn-icon btn-secondary"
@@ -421,6 +443,17 @@ export function Chat(
 								type="button"
 							>
 								<img alt="" className="size-[14px]" src={plannerStop} />
+							</button>
+						)}
+						{agent && !busy && !runs?.active && !!runs?.paused && (
+							<button
+								aria-label="Resume Planner"
+								className="btn btn-icon btn-secondary"
+								onClick={() => wire?.send("chat:resume")}
+								title="Resume Planner"
+								type="button"
+							>
+								<img alt="" className="size-[14px]" src={plannerResume} />
 							</button>
 						)}
 						<SendAction

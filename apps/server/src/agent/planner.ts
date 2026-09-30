@@ -249,8 +249,8 @@ and cannot change GitHub. Ground the plan in what those reading tools return.`;
 		? `Your working directory, ${workspace.cwd}, is a local checkout of ${repository}
 verified against its origin. Its branch and working tree may differ from what the
 repository tools read.`
-		: `Your working directory, ${workspace.cwd}, is a scratch directory Chopin created
-empty for this document. It is not a checkout and holds no repository files, so read
+		: `Your working directory, ${workspace.cwd}, is a scratch directory Chopin keeps for
+this document. It is not a checkout and holds no repository files, so read
 ${repository} through the repository tools.`;
 	let questions =
 		`\`ask_user_question\` and \`workflow\` questions appear to the document's members as

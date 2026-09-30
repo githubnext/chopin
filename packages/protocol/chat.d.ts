@@ -14,6 +14,7 @@ export declare namespace Chat {
 	export type Incoming =
 		| Request<Send>
 		| Request<Abort>
+		| Request<Resume>
 		| Request<Unqueue>;
 
 	export type Outgoing = History | Message | Delta | Tool | State | Queue | Sent;
@@ -87,11 +88,15 @@ export declare namespace Chat {
 		responded: boolean;
 	};
 
+	/** Workflow runs the Planner is still carrying after its turn: live, and paused. */
+	export type Runs = { active: number; paused: number };
+
 	/** Everything said so far, sent on join. */
 	export type History = KIND<"chat:history"> & {
 		entries: Entry[];
 		busy: boolean;
 		turn?: Turn;
+		runs?: Runs;
 		queued: Waiting[];
 	};
 
@@ -104,10 +109,11 @@ export declare namespace Chat {
 	/** A tool call starting, or finishing. */
 	export type Tool = KIND<"chat:tool"> & { entry: string; activity: Activity };
 
-	/** Whether a turn is running, and for whom. */
+	/** Whether a turn is running, and for whom, and any workflow runs outliving it. */
 	export type State = KIND<"chat:state"> & {
 		busy: boolean;
 		turn?: Turn;
+		runs?: Runs;
 	};
 
 	/** A message waiting for the current turn to end. */
@@ -138,8 +144,14 @@ export declare namespace Chat {
 	/** The member message or queue entry is accepted by the server. */
 	export type Sent = KIND<"chat:send"> & { id: string; queued: boolean };
 
-	/** Stop the running turn. Anyone may; the transcript records who did. */
+	/**
+	 * Stop the running turn and pause the Planner's workflow runs. Anyone may;
+	 * the transcript records who did.
+	 */
 	export type Abort = KIND<"chat:abort">;
+
+	/** Resume the workflow runs the Planner paused. Anyone may; the transcript records who did. */
+	export type Resume = KIND<"chat:resume">;
 
 	/** Withdraw a queued message. Only its author may. */
 	export type Unqueue = KIND<"chat:unqueue"> & { id: string };

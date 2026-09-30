@@ -116,8 +116,12 @@ export type Chat = {
 	pendingSends: number;
 	/** Per-turn owner for revocation and credential rotation fencing. */
 	openingOwner?: { sessionId: string; generation: number; revision: number };
-	/** Current disposable session; never reused by the next turn. */
+	/** Current session. Disposable per turn, except a full Planner session kept while it owns workflow runs. */
 	agent?: PlannerSession;
+	/** The Planner session kept past its turn, with its owner binding, until its workflow runs finish. */
+	retained?: Retained;
+	/** Live and paused workflow runs of the retained session. */
+	runs?: Wire.Runs;
 	turnController?: AbortController;
 	/** Fences a turn invalidated while opening or streaming. */
 	lifecycle: number;
@@ -343,6 +347,7 @@ function state(chat: Chat, server: Server<SocketData>, room: string): void {
 		ts: 0,
 		busy: chat.busy,
 		...(chat.turn ? { turn: chat.turn } : {}),
+		...(chat.runs ? { runs: chat.runs } : {}),
 	});
 }
 
@@ -395,6 +400,7 @@ export function greet(chat: Chat, ws: Socket): void {
 		entries: chat.entries.map(publicEntry),
 		busy: chat.busy,
 		...(chat.turn ? { turn: chat.turn } : {}),
+		...(chat.runs ? { runs: chat.runs } : {}),
 		queued: visible(chat),
 	});
 }
@@ -427,6 +433,14 @@ export type Room = {
 		text: string;
 		question: string;
 	}) => Promise<ResearchWorkspaceRequest>;
+	/** Keeps the room loaded while a retained Planner still owns workflow runs; returns the release. */
+	hold?: () => () => void;
+};
+
+type Retained = {
+	session: PlannerSession;
+	binding: ActiveOwnerBinding;
+	release: () => Promise<void>;
 };
 
 /**
@@ -774,17 +788,109 @@ export function unqueue(context: Room, ws: Socket, msg: Request<Wire.Unqueue>): 
 	queued(chat, server, room);
 }
 
-/** Stop the running turn. Anyone may, and the transcript says who did. */
+/**
+ * Stop the running turn and pause the Planner's workflow runs, so both hold
+ * until someone resumes them. Anyone may, and the transcript says who did.
+ */
 export async function abort(context: Room, ws: Socket): Promise<void> {
 	let { chat, room, server } = context;
-	if (!chat.busy || !chat.turnController) return;
-	chat.turnController.abort();
+	let turn = chat.busy ? chat.turnController : undefined;
+	let session = chat.retained?.session ?? chat.agent;
+	let live = (session?.runs?.()?.active.length ?? 0) > 0;
+	if (!turn && !live) return;
+	turn?.abort();
+	let paused = false;
+	if (live && session?.pauseRuns) {
+		try {
+			await session.pauseRuns();
+			paused = true;
+		} catch (err) {
+			console.error("[chat] pausing workflow runs failed:", err);
+		}
+	}
 	say(chat, server, room, {
 		id: ulid(),
 		author: { kind: "system" },
-		text: `@${ws.data.handle} stopped the turn.`,
+		text: paused
+			? `@${ws.data.handle} stopped the Planner and paused its workflows.`
+			: `@${ws.data.handle} stopped the turn.`,
 		ts: now(),
 	});
+}
+
+/** Resume the workflow runs the Planner paused. Anyone may, and the transcript says who did. */
+export async function resume(context: Room, ws: Socket): Promise<void> {
+	let { chat, room, server } = context;
+	let session = chat.retained?.session;
+	if (!session?.resumeRuns || !session.runs?.()?.paused.length) return;
+	let text = `@${ws.data.handle} resumed the Planner's workflows.`;
+	try {
+		await session.resumeRuns();
+	} catch (err) {
+		console.error("[chat] resuming workflow runs failed:", err);
+		text = "The Planner's workflows could not be resumed.";
+	}
+	say(chat, server, room, { id: ulid(), author: { kind: "system" }, text, ts: now() });
+}
+
+function publishRuns(
+	context: Room,
+	runs: { active: string[]; paused: string[] } | undefined,
+): void {
+	let { chat, room, server } = context;
+	chat.runs = runs && (runs.active.length || runs.paused.length)
+		? { active: runs.active.length, paused: runs.paused.length }
+		: undefined;
+	state(chat, server, room);
+}
+
+/**
+ * Keep a Planner session that still owns workflow runs instead of destroying
+ * it with its turn: the runs belong to the session, and the next turn reuses
+ * it so the Planner can still see and steer them. It is let go once every run
+ * has finished, when its owner binding ends, or when the chat closes.
+ */
+function retain(
+	context: Room,
+	opened: { session: PlannerSession; binding: ActiveOwnerBinding },
+): boolean {
+	let { chat } = context;
+	let runs = opened.session.runs?.();
+	if (chat.retained && chat.retained.session !== opened.session) return false;
+	if (!runs || !(runs.active.length || runs.paused.length) || opened.binding.signal.aborted) {
+		return false;
+	}
+	if (!chat.retained) {
+		let unhold = context.hold?.();
+		let stopWatching = opened.session.watchRuns?.(next => {
+			publishRuns(context, next);
+			if (!chat.busy && !next.active.length && !next.paused.length) void chat.retained?.release();
+		});
+		let released: Promise<void> | undefined;
+		let retained: Retained = {
+			...opened,
+			release: () =>
+				released ??= (async () => {
+					if (chat.retained === retained) chat.retained = undefined;
+					stopWatching?.();
+					opened.binding.signal.removeEventListener("abort", ended);
+					try {
+						await opened.session.destroy();
+					} finally {
+						opened.binding.release();
+						unhold?.();
+						if (chat.agent === opened.session) chat.agent = undefined;
+						if (!chat.busy) chat.owner = undefined;
+						publishRuns(context, undefined);
+					}
+				})(),
+		};
+		let ended = () => void retained.release();
+		opened.binding.signal.addEventListener("abort", ended, { once: true });
+		chat.retained = retained;
+	}
+	publishRuns(context, runs);
+	return true;
 }
 
 function currentMemberRequest(chat: Chat): ActiveMemberRequest | undefined {
@@ -938,6 +1044,14 @@ async function repositorySession(
 	currentEntryId?: string,
 	currentReferences: Wire.Reference[] = [],
 ): Promise<{ session: PlannerSession; binding: ActiveOwnerBinding }> {
+	let retained = context.chat.retained;
+	if (retained) {
+		if (!retained.binding.signal.aborted && await retained.binding.revalidate()) {
+			context.chat.agent = retained.session;
+			return { session: retained.session, binding: retained.binding };
+		}
+		await retained.release();
+	}
 	let { ownership, owner, repository } = await resolveOwner(
 		context.auth,
 		context.repository,
@@ -1153,12 +1267,16 @@ async function run(
 	} finally {
 		chat.activeRequest = undefined;
 		chat.turnController = undefined;
-		try {
-			await opened?.session.destroy();
-		} finally {
-			opened?.binding.release();
-			if (chat.agent === opened?.session) chat.agent = undefined;
-			chat.owner = undefined;
+		let kept = !!opened && !chat.closed && retain(context, opened);
+		if (!kept) {
+			try {
+				if (chat.retained?.session === opened?.session) await chat.retained?.release();
+				else await opened?.session.destroy();
+			} finally {
+				opened?.binding.release();
+				if (chat.agent === opened?.session) chat.agent = undefined;
+				chat.owner = undefined;
+			}
 		}
 		chat.messageIds = undefined;
 		chat.writing = undefined;
@@ -1444,4 +1562,5 @@ export async function close(chat: Chat): Promise<void> {
 	clearTimeout(chat.lingering);
 	chat.lingering = undefined;
 	await Promise.all([chat.sending, chat.running]);
+	await chat.retained?.release();
 }

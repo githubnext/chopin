@@ -215,11 +215,13 @@ for the document, whether started from the browser or through MCP, re-verifies
 the remembered path before using it. The check establishes repository
 coordinates, not remote-host authenticity, and it does not confine the shell.
 
-Without a remembered checkout that still verifies, the session runs in an empty
-working directory that Chopin creates for that document alone under the operating
-system's temporary directory, with mode `0700`. It is never shared with another
-document, keeps what the Planner writes there for later sessions of the same
-document, and is removed when the server shuts down cleanly. The session has the
+Without a remembered checkout that still verifies, the session runs in a directory Chopin keeps for that document alone under its per-user state
+directory (`$XDG_STATE_HOME/chopin/planner/<document id>`, defaulting to
+`~/.local/state`; `~/Library/Application Support/Chopin/planner` on macOS;
+`%LOCALAPPDATA%\Chopin\planner` on Windows), with mode `0700`. It is never shared
+with another document, keeps what the Planner and its workflows write there
+across later sessions and server restarts, and is not placed in the shared
+temporary directory. A symlink or file at that path is refused. The session has the
 same tools either way; the Planner is told whether it is in a checkout or in an
 empty directory without repository files, and its repository tools remain
 available.
