@@ -189,6 +189,7 @@ and E2E type checks, formatting and CI with the existing warnings listed above.
 | Store options/lifecycle    | Small acyclic modules preserve archived APIs/types, capture/revert, reopening and editor credit. Nine of 19 original Store callbacks are retained; 17 other core bodies remain unchanged apart from editor initialisation.                  | 99 focused tests, 292 assertions          |
 | Store suggestions          | Archived suggestion metadata, restore bounds and explicit submit fallback; all 47 Store declarations and 19 original callbacks are retained exactly once across small suites. Existing service callers remain unchanged.                    | 109 focused tests, 348 assertions         |
 | Durable record restore     | Canonical record defaults, matching saved definitions/drafts and transcript-checked option sources are integrated into current sidecar restoration. Ten memory persistence regressions; current metadata and mutation bodies remain intact. | 129 focused tests, 417 assertions         |
+| Request builders           | All 18 archived declarations and exact prompts are split across acyclic modules. Thirteen original builder callbacks and nine fixture declarations are retained; two interpreter cases remain assigned to their dependency slice.           | 111 conversation tests, 580 assertions    |
 
 The combined guard/source/quote run passed 30 tests (242 assertions). Domain/replay
 checks passed 27 tests (109 assertions). The complete extracted foundation and
@@ -248,8 +249,8 @@ Suggestions persist as metadata; their evidence IDs pass shape checks rather tha
 transcript provenance checks. Explicit submit fallback derives a copied draft and
 leaves the shared model unchanged. Capture/revert retains references, reservations
 require caller sequencing, and relabel bounds remain partial. The existing
-stage-before-commit durability gap is unchanged. Server Store suggestions and canonical records now round-trip through the memory
-sidecar open/close path. Controller restoration remains independently tested;
+stage-before-commit durability gap is unchanged. Server Store suggestions and
+canonical records now round-trip through the memory sidecar open/close path. Controller restoration remains independently tested;
 PostgreSQL and socket recovery have not been run. Synthetic anchor fixtures gained
 required canonical fields and one valid saved option; every original assertion stays.
 New Planner asks initialize canonical collections, while existing text-answer
@@ -257,6 +258,12 @@ submission and history/choice mutations remain unchanged. Saved option sources a
 checked against completed transcript text and authors, without claiming thread/event
 authority.
 
-Next: bounded interpretation request builders, followed by policy and processing.
-The remaining archived correction/review suites follow their dependencies. Durable processing, Planner jobs and browser integration
-remain unimplemented.
+Request builders retain the original 12-thread, 32-option and 23,500-character
+context bounds and reserved IDs. Duplicate comparisons depend on the caller's saved
+message prefix, excluding later, source-free, streaming and system evidence.
+No request builder calls the model. The final parameterized `questions.test.ts`
+interpreter callback (two cases) remains owned by policy/interpreter integration;
+it has not been replaced with a skipped test.
+
+Next: remaining pure correction/review regressions, then exact policy/interpreter
+and durable processing. Planner jobs and browser integration remain unimplemented.
