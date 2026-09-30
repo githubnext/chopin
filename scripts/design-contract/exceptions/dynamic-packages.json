@@ -205,9 +205,16 @@
 				"props",
 				"unresolved JSX props > DecisionIcon > <LineIcon>",
 				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > MessageForwardIcon > <LineIcon>",
+				1
 			]
 		],
-		"sourceHash": "395805db3113280090d3c6c652cfb28e2ff1f7ff12ec613cfdefe1b3d24e972a"
+		"sourceHash": "fb0f6eabcb15ca597044d0c0285ebcb6f274cafc3e055bfae7c0db3769c99404"
 	},
 	{
 		"file": "packages/visuals/src/ui/mini-bars.tsx",

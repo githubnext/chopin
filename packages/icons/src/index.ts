@@ -9,6 +9,7 @@ export {
 	InfoIcon,
 	LightbulbIcon,
 	LinkPlusIcon,
+	MessageForwardIcon,
 	MessageIcon,
 	MessagePlusIcon,
 	PlusIcon,

@@ -915,3 +915,20 @@ and the final full run pass with the original timeout and unchanged Harness code
 All ten native Chromium tests, full workspace/E2E types and CI pass. Exact pipeline,
 source-leaf and bounded design-adaptation proofs pass after formatting. The two
 inherited lint warnings and existing design baseline finding remain unchanged.
+
+The original evidence popover, source helpers and all five complete rendering callbacks
+are restored. Rows show current participant stances, sourced reasons/constraints and
+the exact Planner rationale/quote guards. Avatar display caps at eight while naming
+all participants accessibly. Source actions preserve the original source/item identity;
+the popover offers no answer or decision mutation. The helper uses the current text-xs
+role instead of the archive's fixed 11-pixel label. Runtime host/source-navigation and
+popover geometry integration remain later work.
+
+Actual rendering first exposed the missing shared MessageForwardIcon export; its
+complete original wrapper and public export are now restored with the current LineIcon
+and default 14-pixel sizing. Independent review approves one exact typed forwarding
+case in the existing icon owner and renewal of only that source fingerprint; all old
+cases and reasons remain. The focused evidence/icon/design run passes 70 tests with
+906 assertions. Full workspace/E2E types and CI pass with inherited warnings/design
+baseline only. Original component, fixture, callback and icon preservation proofs pass
+after formatting, with only the declared source-label typography adaptation.
