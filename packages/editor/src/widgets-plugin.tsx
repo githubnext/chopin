@@ -25,6 +25,7 @@ import { ThreadObserver } from "./threads";
 import { Toolbar } from "./toolbar";
 import {
 	CalloutPlugin,
+	DecoratorSelectionPlugin,
 	EnterPlugin,
 	PreviewPlugin,
 	ResearchDeletionPlugin,
@@ -96,6 +97,7 @@ export const widgetsPlugin = realmPlugin<WidgetOptions>({
 		realm.pub(addComposerChild$, PreviewPlugin);
 		realm.pub(addComposerChild$, CalloutPlugin);
 		realm.pub(addComposerChild$, EnterPlugin);
+		realm.pub(addComposerChild$, DecoratorSelectionPlugin);
 		realm.pub(addComposerChild$, ResearchDeletionPlugin);
 		// Link nodes live inside Lexical's contenteditable root, where a normal
 		// browser click changes the selection instead of following the anchor.
