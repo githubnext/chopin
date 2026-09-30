@@ -232,6 +232,15 @@ test("a fence that is not a patch is drawn as the text it is", async ({ join, se
 	await expect(content(page).locator("[data-diff]")).toHaveCount(0);
 });
 
+test("an invalid diff keeps its authored filename", async ({ join, seed }) => {
+	await seed('```diff title="broken.patch"\nnot a patch\n```\n');
+	let page = await join("ana");
+
+	await expect(content(page).locator("[data-file]")).toBeVisible();
+	await expect(content(page).getByText("broken.patch", { exact: true })).toBeVisible();
+	await expect(content(page).locator("[data-diff]")).toHaveCount(0);
+});
+
 test("enter is a newline in a fence, and twice over is the way out", async ({ join, room }) => {
 	let page = await join("ana");
 
@@ -391,4 +400,22 @@ test("the language menu is a keyboard-operable listbox", async ({ join, room, se
 	await expect(content(page).getByRole("button", { name: /^Code language: (?!TypeScript)/ }))
 		.toBeVisible();
 	await written(page, room, /^```(?!typescript$)\S+$/m);
+});
+
+test("the language menu takes focus before the next animation frame", async ({ join, seed }) => {
+	await seed("```typescript\nlet total = 1;\n```\n");
+	let page = await join("ana");
+	let trigger = content(page).getByRole("button", { name: "Code language: TypeScript" });
+	let list = page.getByRole("listbox", { name: "Code language" });
+
+	await page.clock.install();
+	await page.clock.pauseAt(new Date());
+	await trigger.focus();
+	await page.keyboard.press("ArrowDown");
+	await expect(list).toBeFocused();
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("Enter");
+	await page.clock.resume();
+	await expect(content(page).getByRole("button", { name: "Code language: XML", exact: true }))
+		.toBeVisible();
 });
