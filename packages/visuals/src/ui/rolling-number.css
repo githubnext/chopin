@@ -1,0 +1,36 @@
+.cv-rolling-number {
+	position: relative;
+	display: inline-flex;
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+}
+
+.cv-rolling-number-label {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+.cv-rolling-number-digit {
+	display: inline-block;
+	height: 1em;
+	overflow: hidden;
+	/* Softens the top and bottom edges so a moving column fades rather than clips. */
+	mask-image: linear-gradient(transparent, black 15%, black 85%, transparent);
+}
+
+.cv-rolling-number-column {
+	display: flex;
+	flex-direction: column;
+	transform: translateY(calc(var(--cv-rolling-digit, 0) * -1em));
+	transition: transform var(--duration-linger) var(--motion-smooth-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.cv-rolling-number-column {
+		transition: none;
+	}
+}

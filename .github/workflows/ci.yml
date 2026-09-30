@@ -108,8 +108,8 @@ jobs:
       # Chromium's shared libraries, so do not make E2E depend on its apt mirror.
       - run: bun node_modules/@playwright/test/cli.js install chromium
 
-      - name: Rendered design quality (Linux Chromium)
-        run: bun run design:browser
+      - name: Design behaviour (keyboard, focus, motion, and scrolling)
+        run: bun run design:behavior
 
       # Builds the client, then runs it. The build is deliberately here rather
       # than inside the Playwright config: web servers start before any global

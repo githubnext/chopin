@@ -38,8 +38,7 @@ describe("the Figma navigation chrome", () => {
 	test("uses a pen for document creation and a plus for adding a Project", () => {
 		let markup = renderToStaticMarkup(createElement(ProjectSidebar, {
 			canCreateDocument: true,
-			creatingNewDocument: false,
-			creatingProjectIds: new Set<string>(),
+			pendingCreations: new Map(),
 			onAccount: () => {},
 			onAddProject: () => {},
 			onCollapse: () => {},
@@ -104,8 +103,7 @@ describe("the Figma navigation chrome", () => {
 	test("exposes whether the account menu is open", () => {
 		let props = {
 			canCreateDocument: false,
-			creatingNewDocument: false,
-			creatingProjectIds: new Set<string>(),
+			pendingCreations: new Map(),
 			onAccount: () => {},
 			onAddProject: () => {},
 			onCollapse: () => {},
@@ -132,8 +130,7 @@ describe("the Figma navigation chrome", () => {
 	test("offers explicit pagination when a Project has more documents", () => {
 		let markup = renderToStaticMarkup(createElement(ProjectSidebar, {
 			canCreateDocument: true,
-			creatingNewDocument: false,
-			creatingProjectIds: new Set<string>(),
+			pendingCreations: new Map(),
 			onAccount: () => {},
 			onAddProject: () => {},
 			onCollapse: () => {},
@@ -158,6 +155,7 @@ describe("the Figma navigation chrome", () => {
 		}));
 
 		expect(markup).toContain('aria-label="Load more documents in testing-sql-transcripts"');
+		expect(markup).not.toContain("No documents yet.");
 	});
 
 	test("keeps the document header to one project icon and document trigger", () => {
