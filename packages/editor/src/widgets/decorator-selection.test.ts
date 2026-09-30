@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { createHeadlessEditor } from "@lexical/headless";
 import {
+	$createNodeSelection,
 	$createParagraphNode,
 	$createTextNode,
 	$getRoot,
@@ -9,11 +10,12 @@ import {
 	$isNodeSelection,
 	$isRangeSelection,
 	$isTextNode,
+	$setSelection,
 } from "lexical";
 
 import { $createQuestionnaireNode, registry } from "@chopin/dialect";
 
-import { $skipHidden, skip } from "./decorator-selection";
+import { $deleteAcross, $releaseHidden, $skipHidden, skip } from "./decorator-selection";
 
 import type { LexicalEditor } from "lexical";
 
@@ -90,4 +92,60 @@ test("a visible card is left to Lexical, and a mid-block caret is untouched", ()
 	}, { discrete: true });
 	expect(press(editor, "next", false, true)).toBeUndefined();
 	expect(caret(editor)).toEqual({ text: "Before", offset: 2 });
+});
+
+function types(editor: LexicalEditor): string[] {
+	return editor.read(() => $getRoot().getChildren().map(node => node.getType()));
+}
+
+test("Backspace at the start of the block after a hidden card joins the paragraphs around it", () => {
+	let editor = build();
+	editor.update(() => {
+		let after = $getRoot().getLastChild();
+		if ($isElementNode(after)) after.selectStart();
+	}, { discrete: true });
+	editor.update(() => {
+		expect($deleteAcross("previous", () => true)).toBe(true);
+	}, { discrete: true });
+	expect(types(editor)).toEqual(["paragraph", "plan-questionnaire"]);
+	expect(editor.read(() => $getRoot().getFirstChild()?.getTextContent())).toBe("BeforeAfter");
+	// The caret is at the join, inside the merged text.
+	expect(caret(editor)).toEqual({ text: "BeforeAfter", offset: 6 });
+});
+
+test("Delete at the end of the block before a hidden card joins the next paragraph", () => {
+	let editor = build();
+	editor.update(() => {
+		expect($deleteAcross("next", () => true)).toBe(true);
+	}, { discrete: true });
+	expect(types(editor)).toEqual(["paragraph", "plan-questionnaire"]);
+	expect(editor.read(() => $getRoot().getFirstChild()?.getTextContent())).toBe("BeforeAfter");
+});
+
+test("a visible card is left to Lexical for Backspace and Delete", () => {
+	let editor = build();
+	editor.update(() => {
+		expect($deleteAcross("next", () => false)).toBe(false);
+	}, { discrete: true });
+	expect(types(editor)).toEqual(["paragraph", "plan-questionnaire", "paragraph"]);
+});
+
+test("a hidden card in a node selection is handed on to the next text block", () => {
+	let editor = build();
+	editor.update(() => {
+		let card = $getRoot().getChildren()[1]!;
+		let nodes = $createNodeSelection();
+		nodes.add(card.getKey());
+		$setSelection(nodes);
+		expect($releaseHidden("next", () => true)).toBe(true);
+	}, { discrete: true });
+	expect(caret(editor)).toEqual({ text: "After", offset: 0 });
+	editor.update(() => {
+		let card = $getRoot().getChildren()[1]!;
+		let nodes = $createNodeSelection();
+		nodes.add(card.getKey());
+		$setSelection(nodes);
+		// A visible card is never released.
+		expect($releaseHidden("next", () => false)).toBe(false);
+	}, { discrete: true });
 });
