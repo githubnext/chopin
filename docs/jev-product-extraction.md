@@ -1394,3 +1394,52 @@ retains only the two inherited lint warnings and existing design baseline. This 
 slice changes no browser code or styles; the prior seventy-one isolated native cases
 are not rerun. Original opening/join, full-application and deferred anatomy boundaries
 remain outstanding, and the broader extraction remains unfinished.
+
+## Conversation opening and joined snapshots
+
+The three remaining archived opening helpers and the complete original opening test
+module are restored. Four whole callback registrations retain all five runtime cases,
+including the delayed/failing commit table and every fixture, assertion and cleanup.
+Current publishOpenedPlan and preparation/abort behavior survive unchanged.
+
+Joining now reads the document, questions, comments, transcript and conversation/jobs
+snapshot under the actual document mutation lock. A live room, plan, member and socket
+predicate runs inside that lock, refusing stale joins before sending any snapshot.
+Read-only and archived members can still read. Sending waits for the complete shared
+opening promise, including current asynchronous runtime attachment, then rechecks
+existing authorization and write access and refuses stale, closed, archiving or
+closing targets. Missing or failed opening returns an explicit failure. The existing
+receive authorization preamble and Chat.send implementation remain unchanged.
+
+Archive recovery now waits outside the document lock and rechecks live identity after
+channel lookup. The complete original recoverOpenedPlan helper waits only while a plan
+is absent; current main publishes before its asynchronous attachment finishes. A
+narrow recoverAttachedPlan wrapper therefore settles any shared opening first, also
+when the plan is already published, before invoking original recovery. It catches
+only opening rejection so that recovery can retain a useful published plan without
+replacing the archive outcome. Current Harness, runtime attachment, owner credentials,
+backfill, cleanup, archive mutation and storage behavior remain unchanged.
+
+Four additional Memory cases exercise actual helpers, Chat, runtime and storage.
+A queued greeting sends no frames after its target is retired. Actual replacement
+attachment is held on an old processor's idle drain at the injected interpreter
+boundary; both sending and recovery wait for that drain. Sending then uses the real
+runtime binding and commits transcript and pending queue identity. Recovery performs
+no additional attachment while opening is held. Rejected opening tolerates a useful
+published plan, no plan and no room. Injected inference never calls a model provider.
+
+These tests supply room/opening promises and callbacks, not main's real socket,
+authentication or archive route. Caller await order, access checks and live predicates
+are separately source-reviewed and covered by whole-current-module AST subtraction.
+Original declarations and complete tests are compared with fresh Git objects; all
+four new callbacks survive formatting as complete programs. No browser code or styles
+change, so prior isolated native cases are not rerun. Browser projection protection
+and original full-application/deferred anatomy coverage remain outstanding; the
+broader extraction is unfinished.
+
+Final verification passes 3,165 offline tests with 14,778 assertions across 526 files;
+two PostgreSQL checks are skipped. The complete focused opening/backfill/cleanup suite
+passes twenty-three cases with 207 assertions. Workspace/E2E types, CI, formatting,
+whole-source and whole-callback proofs pass, with independent production and test
+reviews approved. CI retains only two inherited lint warnings and the existing design
+baseline. No live application, PostgreSQL, authentication or provider run is claimed.

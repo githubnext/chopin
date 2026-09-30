@@ -17,7 +17,12 @@ import * as Chat from "./chat/service";
 import { CHAT_CAPABILITIES, incomingFrame } from "./chat/incoming";
 import { ReferenceService } from "./chat/references";
 import { createConversationRuntime } from "./conversation-plan/runtime";
-import { prepareOpenedPlan } from "./conversation-plan/service-opening";
+import {
+	greetJoinedPlan,
+	prepareOpenedPlan,
+	readyPlan,
+	recoverAttachedPlan,
+} from "./conversation-plan/service-opening";
 import { handleConversationCommand } from "./conversation-plan/commands";
 import { handleResearchCommand } from "./conversation-plan/research-commands";
 import { startAcceptedResearch } from "./conversation-plan/accepted-research";
@@ -354,20 +359,17 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 		case "plan:open": {
 			try {
 				let opened = await plan(room, server);
-				Service.greet(opened, ws, frame);
-				// Anything still unanswered, so a joiner sees the sidecar the
-				// others are already looking at, and everything said so far.
-				Questions.greet(opened, ws);
-				Comments.greet(opened, ws);
-				Chat.greet(opened.chat, ws);
-				if (config.conversationPlan) {
-					tell(ws, {
-						kind: "conversation-plan:snapshot",
-						ts: 0,
-						state: opened.conversationPlan,
-						jobs: opened.conversationPlanJobs,
-					});
-				}
+				await greetJoinedPlan(
+					opened,
+					ws,
+					frame,
+					!!config.conversationPlan,
+					() =>
+						Rooms.get(room.id) === room && room.plan === opened
+						&& !room.closing && !deletingChannels.has(room.id)
+						&& !ws.data.closed && ws.data.room === room.id
+						&& room.members.get(ws.data.client) === ws,
+				);
 			} catch (err) {
 				fail(ws, frame.rid, err instanceof Error ? err.message : "cannot open plan");
 			}
@@ -387,7 +389,39 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			return;
 
 		case "chat:send":
-			if (room.plan) await Chat.send(chat(room, ws), ws, frame);
+			try {
+				let opened = await readyPlan(room);
+				if (!opened) {
+					fail(ws, frame.rid, "document is unavailable");
+					return;
+				}
+				let access = await refreshAccess(ws);
+				if (access === "unavailable") {
+					fail(ws, frame.rid, "authorization is temporarily unavailable");
+					return;
+				}
+				if (access === "denied") {
+					fail(ws, frame.rid, "authorization expired");
+					ws.close(4403, "authorization expired");
+					return;
+				}
+				if (!ws.data.canEdit) {
+					fail(ws, frame.rid, "repository write access is required");
+					return;
+				}
+				if (
+					Rooms.get(room.id) !== room || room.plan !== opened
+					|| room.closing || archivingChannels.has(room.id) || deletingChannels.has(room.id)
+					|| ws.data.closed || ws.data.room !== room.id
+					|| room.members.get(ws.data.client) !== ws
+				) {
+					fail(ws, frame.rid, "document is unavailable");
+					return;
+				}
+				await Chat.send(chat(room, ws), ws, frame);
+			} catch (error) {
+				fail(ws, frame.rid, error instanceof Error ? error.message : "cannot send message");
+			}
 			return;
 
 		case "chat:abort":
@@ -935,9 +969,15 @@ async function archiveChannelLocked(channelId: string, now: Date) {
 	} finally {
 		archivingChannels.delete(channelId);
 		let current = Rooms.get(channelId);
-		if (current?.plan) {
+		let opened = await recoverAttachedPlan(current);
+		if (current && opened) {
 			let channel = await storage.channels.get(channelId);
-			await conversationRuntime.attach(current, current.plan, !!channel?.archivedAt);
+			if (
+				Rooms.get(channelId) === current && current.plan === opened
+				&& !current.closing && !deletingChannels.has(channelId)
+			) {
+				await conversationRuntime.attach(current, opened, !!channel?.archivedAt);
+			}
 		}
 	}
 }
