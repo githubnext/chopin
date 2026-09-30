@@ -4,8 +4,11 @@ import { approvedContrast } from "./approved-contrast";
 
 import type { Locator, Page, TestInfo } from "@playwright/test";
 
-export let test = base.extend({
-	page: async ({ page }, use) => {
+export type DesignOptions = { visualReview: boolean };
+
+export let test = base.extend<DesignOptions>({
+	visualReview: [true, { option: true }],
+	page: async ({ page, visualReview }, use) => {
 		// All authored content is fixed. Network images are deterministic local SVG fixtures;
 		// the deliberately unavailable image remains a failed request.
 		await page.route(
@@ -21,21 +24,23 @@ export let test = base.extend({
 		await page.goto("/design-audit");
 		await expect(page.getByRole("heading", { name: "Chopin design audit", exact: true }))
 			.toBeVisible();
-		// Late diagram/math/code rendering above the last plate changes its scroll position.
-		// Wait for those real renderers, not an arbitrary delay or a clipped screenshot.
-		await expect(page.locator('[data-audit-item="diagram"] .plan-diagram svg')).toBeVisible();
-		await expect(page.locator('[data-audit-item="diagram"] [data-plan-error]')).toBeVisible();
-		await expect(page.locator('[data-audit-item="formula"] .katex')).toHaveCount(2);
-		await expect(page.locator('[data-audit-item="code"] diffs-container pre')).toHaveCount(2);
-		// The catalogue's later image plate uses native lazy loading. Load its fixed fixtures
-		// now so scrolling to the table does not replace placeholders underneath capture.
-		await page.locator("img[loading=lazy]").evaluateAll(images => {
-			for (let image of images) (image as HTMLImageElement).loading = "eager";
-		});
-		await expect.poll(() =>
-			page.evaluate(() => [...document.images].every(image => image.complete))
-		)
-			.toBe(true);
+		if (visualReview) {
+			// Late diagram/math/code rendering above the last plate changes its scroll position.
+			// Wait for those real renderers, not an arbitrary delay or a clipped screenshot.
+			await expect(page.locator('[data-audit-item="diagram"] .plan-diagram svg')).toBeVisible();
+			await expect(page.locator('[data-audit-item="diagram"] [data-plan-error]')).toBeVisible();
+			await expect(page.locator('[data-audit-item="formula"] .katex')).toHaveCount(2);
+			await expect(page.locator('[data-audit-item="code"] diffs-container pre')).toHaveCount(2);
+			// The catalogue's later image plate uses native lazy loading. Load its fixed fixtures
+			// now so scrolling to the table does not replace placeholders underneath capture.
+			await page.locator("img[loading=lazy]").evaluateAll(images => {
+				for (let image of images) (image as HTMLImageElement).loading = "eager";
+			});
+			await expect.poll(() =>
+				page.evaluate(() => [...document.images].every(image => image.complete))
+			)
+				.toBe(true);
+		}
 		await page.evaluate(async () => {
 			await document.fonts.ready;
 			await document.fonts.load('400 16px "Inter Variable"');
