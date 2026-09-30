@@ -1,0 +1,288 @@
+snapshot_path	owner	feature	disposition
+.env.example	product	configuration	selective merge with current main; retain all relevant tests
+apps/server/src/agent/decision-prose.test.ts	product	planner-tools	selective merge with current main; retain all relevant tests
+apps/server/src/agent/decision-prose.ts	product	planner-tools	selective merge with current main; retain all relevant tests
+apps/server/src/agent/heading-tool.test.ts	product	planner-tools	selective merge with current main; retain all relevant tests
+apps/server/src/agent/heading-tool.ts	product	planner-tools	selective merge with current main; retain all relevant tests
+apps/server/src/agent/job-scope.test.ts	product	planner-tools	selective merge with current main; retain all relevant tests
+apps/server/src/agent/job-scope.ts	product	planner-tools	selective merge with current main; retain all relevant tests
+apps/server/src/agent/planner.test.ts	product	planner-tools	selective merge with current main; retain all relevant tests
+apps/server/src/agent/planner.ts	product	planner-tools	selective merge with current main; retain all relevant tests
+apps/server/src/agent/refine-tool.test.ts	product	planner-tools	selective merge with current main; retain all relevant tests
+apps/server/src/agent/refine-tool.ts	product	planner-tools	selective merge with current main; retain all relevant tests
+apps/server/src/agent/revise-open-decision.test.ts	product	planner-tools	selective merge with current main; retain all relevant tests
+apps/server/src/agent/revise-open-decision.ts	product	planner-tools	selective merge with current main; retain all relevant tests
+apps/server/src/agent/tools.test.ts	product	planner-tools	selective merge with current main; retain all relevant tests
+apps/server/src/agent/tools.ts	product	planner-tools	selective merge with current main; retain all relevant tests
+apps/server/src/chat/address.test.ts	product	chat-notices-jobs	selective merge with current main; retain all relevant tests
+apps/server/src/chat/address.ts	product	chat-notices-jobs	selective merge with current main; retain all relevant tests
+apps/server/src/chat/job.test.ts	product	chat-notices-jobs	selective merge with current main; retain all relevant tests
+apps/server/src/chat/notice.test.ts	product	chat-notices-jobs	selective merge with current main; retain all relevant tests
+apps/server/src/chat/queue.test.ts	product	chat-notices-jobs	selective merge with current main; retain all relevant tests
+apps/server/src/chat/references.test.ts	product	chat-notices-jobs	selective merge with current main; retain all relevant tests
+apps/server/src/chat/references.ts	product	chat-notices-jobs	selective merge with current main; retain all relevant tests
+apps/server/src/chat/service.test.ts	product	chat-notices-jobs	selective merge with current main; retain all relevant tests
+apps/server/src/chat/service.ts	product	chat-notices-jobs	selective merge with current main; retain all relevant tests
+apps/server/src/config.test.ts	product	configuration	selective merge with current main; retain all relevant tests
+apps/server/src/config.ts	product	configuration	selective merge with current main; retain all relevant tests
+apps/server/src/conversation-plan/cards-domain.test.ts	product	card-effects	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/cards.test.ts	product	card-effects	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/cards.ts	product	card-effects	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/corrections.test.ts	product	domain-processing	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/d01-provenance-acceptance.test.ts	product	save-support-regressions	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/d01-provenance.test.ts	product	save-support-regressions	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/d01-scoped-endorsement.test.ts	product	save-support-regressions	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/d02-deferral-domain.test.ts	product	save-support-regressions	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/d02-deferral-effects.test.ts	product	save-support-regressions	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/d02-team-deferral.test.ts	product	save-support-regressions	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/d19-flow.test.ts	product	save-support-regressions	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/domain.test.ts	product	domain-processing	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/domain.ts	product	domain-processing	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/effects.test.ts	product	card-effects	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/effects.ts	product	card-effects	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/events.ts	product	domain-processing	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/interpret.test.ts	product	interpretation-policy	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/interpret.ts	product	interpretation-policy	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/jev.test.ts	product	transport	first slice
+apps/server/src/conversation-plan/jev.ts	product	transport	first slice
+apps/server/src/conversation-plan/job-context.test.ts	product	planner-jobs	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/job-context.ts	product	planner-jobs	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/job-prompts.test.ts	product	planner-jobs	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/job-prompts.ts	product	planner-jobs	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/jobs.test.ts	product	planner-jobs	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/jobs.ts	product	planner-jobs	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/linked-card-choice.test.ts	product	save-support-regressions	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/pending-withdrawal.test.ts	product	save-support-regressions	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/pipeline.test.ts	product	interpretation-policy	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/planner-jobs.test.ts	product	planner-jobs	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/planner-jobs.ts	product	planner-jobs	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/policy.test.ts	product	interpretation-policy	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/policy.ts	product	interpretation-policy	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/preference.test.ts	product	save-support-regressions	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/preference.ts	product	save-support-regressions	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/prose-job.test.ts	product	planner-jobs	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/prose-job.ts	product	planner-jobs	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/qualified-choice.test.ts	product	save-support-regressions	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/questions.test.ts	product	interpretation-policy	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/questions.ts	product	interpretation-policy	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/quote-budget.ts	product	interpretation-policy	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/quotes.test.ts	product	interpretation-policy	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/quotes.ts	product	interpretation-policy	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/research-consent.service.test.ts	product	research-offers	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/research-offer-detection.test.ts	product	research-offers	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/research-offers.test.ts	product	research-offers	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/research-task-snapshot.test.ts	product	research-offers	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/review.test.ts	product	domain-processing	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/save-command.test.ts	product	save-support-regressions	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/save-command.ts	product	save-support-regressions	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/scoped-save-validation.test.ts	product	save-support-regressions	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/scripted-runner.test.ts	product	planner-regression-harness	adapt test-only harness to current Planner
+apps/server/src/conversation-plan/scripted-runner.ts	product	planner-regression-harness	adapt test-only harness to current Planner
+apps/server/src/conversation-plan/service-opening.test.ts	product	research-offers	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/service-opening.ts	product	research-offers	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/service.test.ts	product	domain-processing	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/service.ts	product	domain-processing	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/sources.ts	product	domain-processing	selective port with all product regressions; preserve policy
+apps/server/src/conversation-plan/validation.ts	product	domain-processing	selective port with all product regressions; preserve policy
+apps/server/src/jobs/runner.test.ts	product	integration-review	selective merge with current main; retain all relevant tests
+apps/server/src/jobs/runner.ts	product	integration-review	selective merge with current main; retain all relevant tests
+apps/server/src/main.ts	product	runtime-wiring	selective merge with current main; retain all relevant tests
+apps/server/src/mcp/update-lifecycle.test.ts	product	integration-regressions	selective merge with current main; retain all relevant tests
+apps/server/src/plan/edit.ts	product	sidecar-projections	selective merge with current main; retain all relevant tests
+apps/server/src/plan/persistence.test.ts	product	sidecar-projections	selective merge with current main; retain all relevant tests
+apps/server/src/plan/planner-jobs.test.ts	product	sidecar-projections	selective merge with current main; retain all relevant tests
+apps/server/src/plan/projections.ts	product	sidecar-projections	selective merge with current main; retain all relevant tests
+apps/server/src/plan/questionnaires.ts	product	sidecar-projections	selective merge with current main; retain all relevant tests
+apps/server/src/plan/room.test.ts	product	sidecar-projections	selective merge with current main; retain all relevant tests
+apps/server/src/plan/room.ts	product	sidecar-projections	selective merge with current main; retain all relevant tests
+apps/server/src/plan/service.ts	product	sidecar-projections	selective merge with current main; retain all relevant tests
+apps/server/src/questions.anchors.test.ts	product	decision-records	selective merge with current main; retain all relevant tests
+apps/server/src/questions.card-meta.test.ts	product	decision-records	selective merge with current main; retain all relevant tests
+apps/server/src/questions.service.test.ts	product	decision-records	selective merge with current main; retain all relevant tests
+apps/server/src/questions/anchors.test.ts	product	decision-records	selective merge with current main; retain all relevant tests
+apps/server/src/questions/anchors.ts	product	decision-records	selective merge with current main; retain all relevant tests
+apps/server/src/questions/backfill.test.ts	product	decision-records	selective merge with current main; retain all relevant tests
+apps/server/src/questions/backfill.ts	product	decision-records	selective merge with current main; retain all relevant tests
+apps/server/src/questions/card-actions.test.ts	product	decision-records	selective merge with current main; retain all relevant tests
+apps/server/src/questions/card-actions.ts	product	decision-records	selective merge with current main; retain all relevant tests
+apps/server/src/questions/conversation-card.service.test.ts	product	decision-records	selective merge with current main; retain all relevant tests
+apps/server/src/questions/option-match.ts	product	decision-records	selective merge with current main; retain all relevant tests
+apps/server/src/questions/prose.test.ts	product	decision-records	selective merge with current main; retain all relevant tests
+apps/server/src/questions/prose.ts	product	decision-records	selective merge with current main; retain all relevant tests
+apps/server/src/questions/question-option-source.test.ts	product	decision-records	selective merge with current main; retain all relevant tests
+apps/server/src/questions/records.reopen.test.ts	product	decision-records	selective merge with current main; retain all relevant tests
+apps/server/src/questions/records.ts	product	decision-records	selective merge with current main; retain all relevant tests
+apps/server/src/questions/reopen.test.ts	product	decision-records	selective merge with current main; retain all relevant tests
+apps/server/src/questions/service.ts	product	decision-records	selective merge with current main; retain all relevant tests
+apps/server/src/questions/store.test.ts	product	decision-records	selective merge with current main; retain all relevant tests
+apps/server/src/questions/store.ts	product	decision-records	selective merge with current main; retain all relevant tests
+apps/server/src/questions/write-prose.test.ts	product	decision-records	selective merge with current main; retain all relevant tests
+apps/server/src/questions/write-prose.ts	product	decision-records	selective merge with current main; retain all relevant tests
+apps/server/src/research/service.test.ts	product	research-offers	selective merge with current main; retain all relevant tests
+apps/server/src/research/service.ts	product	research-offers	selective merge with current main; retain all relevant tests
+apps/server/src/socket/authorization.test.ts	product	authorization	selective merge with current main; retain all relevant tests
+apps/server/src/socket/authorization.ts	product	authorization	selective merge with current main; retain all relevant tests
+apps/server/src/storage/contract.ts	product	persistence	selective merge with current main; retain all relevant tests
+apps/server/src/storage/memory/adapter.ts	product	persistence	selective merge with current main; retain all relevant tests
+apps/server/src/storage/memory/research.ts	product	persistence	selective merge with current main; retain all relevant tests
+apps/server/src/storage/model.ts	product	persistence	selective merge with current main; retain all relevant tests
+apps/server/src/storage/port.ts	product	persistence	selective merge with current main; retain all relevant tests
+apps/server/src/storage/postgres/adapter.test.ts	product	persistence	selective merge with current main; retain all relevant tests
+apps/server/src/storage/postgres/adapter.ts	product	persistence	selective merge with current main; retain all relevant tests
+apps/server/src/storage/postgres/migrations.ts	product	persistence	selective merge with current main; retain all relevant tests
+apps/server/src/storage/postgres/migrations/015_planner_inline_reference.sql	product	persistence	selective merge with current main; retain all relevant tests
+apps/server/src/storage/postgres/research.ts	product	persistence	selective merge with current main; retain all relevant tests
+apps/server/src/storage/postgres/startup.test.ts	product	persistence	selective merge with current main; retain all relevant tests
+apps/server/src/tasks/plan-graphs.test.ts	product	integration-regressions	selective merge with current main; retain all relevant tests
+apps/server/src/tasks/plan-graphs.ts	product	integration-regressions	selective merge with current main; retain all relevant tests
+apps/server/src/testing/plan.ts	product	integration-regressions	selective merge with current main; retain all relevant tests
+apps/web/package.json	product	dependency-metadata	selective merge with current main; retain all relevant tests
+apps/web/src/chat/chat.tsx	product	chat-transcript	selective merge with current main; retain all relevant tests
+apps/web/src/chat/decision-entry.test.tsx	product	save-suggestion-ui	selective merge with current main; retain all relevant tests
+apps/web/src/chat/decision-entry.tsx	product	save-suggestion-ui	selective merge with current main; retain all relevant tests
+apps/web/src/chat/markdown.test.ts	product	chat-transcript	selective merge with current main; retain all relevant tests
+apps/web/src/chat/model.test.ts	product	chat-transcript	selective merge with current main; retain all relevant tests
+apps/web/src/chat/model.ts	product	chat-transcript	selective merge with current main; retain all relevant tests
+apps/web/src/chat/references.ts	product	chat-transcript	selective merge with current main; retain all relevant tests
+apps/web/src/chat/research-offer.test.ts	product	research-offer-ui	selective merge with current main; retain all relevant tests
+apps/web/src/chat/research-offer.tsx	product	research-offer-ui	selective merge with current main; retain all relevant tests
+apps/web/src/chat/scoped-choice-entry.tsx	product	save-suggestion-ui	selective merge with current main; retain all relevant tests
+apps/web/src/chat/transcript.test.tsx	product	chat-transcript	selective merge with current main; retain all relevant tests
+apps/web/src/chat/transcript.tsx	product	chat-transcript	selective merge with current main; retain all relevant tests
+apps/web/src/conversation-plan/analysis-overview.test.tsx	product	analysis-annotations	selective merge with current main; retain all relevant tests
+apps/web/src/conversation-plan/analysis-overview.tsx	product	analysis-annotations	selective merge with current main; retain all relevant tests
+apps/web/src/conversation-plan/card-parts.tsx	product	analysis-annotations	selective merge with current main; retain all relevant tests
+apps/web/src/conversation-plan/evidence-popover.test.tsx	product	analysis-annotations	selective merge with current main; retain all relevant tests
+apps/web/src/conversation-plan/evidence-popover.tsx	product	analysis-annotations	selective merge with current main; retain all relevant tests
+apps/web/src/conversation-plan/evidence.test.ts	product	analysis-annotations	selective merge with current main; retain all relevant tests
+apps/web/src/conversation-plan/evidence.ts	product	analysis-annotations	selective merge with current main; retain all relevant tests
+apps/web/src/conversation-plan/links.test.ts	product	analysis-annotations	selective merge with current main; retain all relevant tests
+apps/web/src/conversation-plan/links.ts	product	analysis-annotations	selective merge with current main; retain all relevant tests
+apps/web/src/conversation-plan/markers.test.tsx	product	analysis-annotations	selective merge with current main; retain all relevant tests
+apps/web/src/conversation-plan/markers.tsx	product	analysis-annotations	selective merge with current main; retain all relevant tests
+apps/web/src/conversation-plan/source.css	product	analysis-annotations	selective merge with current main; retain all relevant tests
+apps/web/src/conversation-plan/source.ts	product	analysis-annotations	selective merge with current main; retain all relevant tests
+apps/web/src/conversation-plan/store.test.ts	product	analysis-annotations	selective merge with current main; retain all relevant tests
+apps/web/src/conversation-plan/store.ts	product	analysis-annotations	selective merge with current main; retain all relevant tests
+apps/web/src/design-audit/icons.tsx	product	chat-first-layout	selective merge with current main; retain all relevant tests
+apps/web/src/resizable-pane.test.ts	product	chat-first-layout	selective merge with current main; retain all relevant tests
+apps/web/src/resizable-pane.tsx	product	chat-first-layout	selective merge with current main; retain all relevant tests
+apps/web/src/room-workspace.tsx	product	chat-first-layout	selective merge with current main; retain all relevant tests
+apps/web/src/theme.css	product	chat-first-layout	selective merge with current main; retain all relevant tests
+apps/web/src/tokens.test.ts	product	chat-first-layout	selective merge with current main; retain all relevant tests
+apps/web/src/workspace-model.test.ts	product	chat-first-layout	selective merge with current main; retain all relevant tests
+apps/web/src/workspace-model.ts	product	chat-first-layout	selective merge with current main; retain all relevant tests
+apps/web/src/workspace.tsx	product	chat-first-layout	selective merge with current main; retain all relevant tests
+docs/self-hosting.md	product	configuration	selective merge with current main; retain all relevant tests
+e2e/chat-references.e2e.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/conversation-plan-jobs.e2e.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/conversation-plan-layout.e2e.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/conversation-plan-prompts.e2e.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/conversation-plan-runtime.e2e.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/conversation-plan-stress.e2e.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/conversation-plan-ui.e2e.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/database.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/decision-anchor-stress.e2e.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/decision-evidence.e2e.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/decision-prose.e2e.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/editing.e2e.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/github.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/jev-control.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/jev-process.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/jev-wire.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/jev.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/planner-jobs.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/playwright.config.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/research-child-documents.e2e.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/research-child-surface.e2e.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/research-offer-fixtures.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/research-offers-ui.e2e.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/research-offers.e2e.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/responsive-content.e2e.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/responsive-decisions.e2e.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/responsive-workspace.e2e.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/sidecar-card-states.e2e.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/sidecar-navigation.e2e.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/sidecar.e2e.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+e2e/smoke.e2e.ts	product	browser-regressions	selective merge with current main; retain all relevant tests
+packages/dialect/src/dialect.test.ts	product	decision-dialect	selective merge with current main; retain all relevant tests
+packages/dialect/src/dialect.ts	product	decision-dialect	selective merge with current main; retain all relevant tests
+packages/dialect/src/index.ts	product	decision-dialect	selective merge with current main; retain all relevant tests
+packages/dialect/src/limits.ts	product	decision-dialect	selective merge with current main; retain all relevant tests
+packages/dialect/src/nodes/questionnaire.test.ts	product	decision-dialect	selective merge with current main; retain all relevant tests
+packages/dialect/src/nodes/questionnaire.ts	product	decision-dialect	selective merge with current main; retain all relevant tests
+packages/dialect/src/validate.ts	product	decision-dialect	selective merge with current main; retain all relevant tests
+packages/editor/src/card-meta.test.ts	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/card-meta.ts	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/comment-geometry.test.ts	product	document-annotations	selective merge with current main; retain all relevant tests
+packages/editor/src/comment-geometry.ts	product	document-annotations	selective merge with current main; retain all relevant tests
+packages/editor/src/decision-format.test.ts	product	document-annotations	selective merge with current main; retain all relevant tests
+packages/editor/src/decision-format.ts	product	document-annotations	selective merge with current main; retain all relevant tests
+packages/editor/src/decision-layer.tsx	product	document-annotations	selective merge with current main; retain all relevant tests
+packages/editor/src/decision-pin.test.ts	product	document-annotations	selective merge with current main; retain all relevant tests
+packages/editor/src/decision-pin.ts	product	document-annotations	selective merge with current main; retain all relevant tests
+packages/editor/src/decision-placement.ts	product	document-annotations	selective merge with current main; retain all relevant tests
+packages/editor/src/decision-state.test.ts	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/decision-state.ts	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/decision-surface.test.tsx	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/decision-surface.tsx	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/decisions.test.tsx	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/decisions.tsx	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/evidence-geometry.test.ts	product	document-annotations	selective merge with current main; retain all relevant tests
+packages/editor/src/evidence-geometry.ts	product	document-annotations	selective merge with current main; retain all relevant tests
+packages/editor/src/index.ts	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/marks.test.ts	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/marks.ts	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/plan-editor.tsx	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/provider.test.ts	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/provider.ts	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/questionnaires.test.ts	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/questionnaires.ts	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/styles.css	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/widget-options.ts	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/widgets-plugin.tsx	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/widgets/card-gap.test.ts	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/widgets/card-gap.tsx	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/widgets/decision-deletion.tsx	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/widgets/discarded-navigation-boundary.ts	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/widgets/discarded-navigation.test.ts	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/widgets/discarded-navigation.tsx	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/widgets/evidence-hover.tsx	product	document-annotations	selective merge with current main; retain all relevant tests
+packages/editor/src/widgets/index.ts	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/widgets/questionnaire.test.tsx	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/editor/src/widgets/questionnaire.tsx	product	decision-editor	selective merge with current main; retain all relevant tests
+packages/icons/src/index.ts	product	card-icons	selective merge with current main; retain all relevant tests
+packages/icons/src/line.tsx	product	card-icons	selective merge with current main; retain all relevant tests
+packages/protocol/chat.d.ts	product	wire-contract	selective merge with current main; retain all relevant tests
+packages/protocol/conversation-plan.d.ts	product	wire-contract	selective merge with current main; retain all relevant tests
+packages/protocol/index.d.ts	product	wire-contract	selective merge with current main; retain all relevant tests
+packages/protocol/plan.d.ts	product	wire-contract	selective merge with current main; retain all relevant tests
+packages/protocol/question.d.ts	product	wire-contract	selective merge with current main; retain all relevant tests
+packages/question/src/answer.ts	product	decision-definition-draft	selective merge with current main; retain all relevant tests
+packages/question/src/draft.ts	product	decision-definition-draft	selective merge with current main; retain all relevant tests
+packages/question/src/index.ts	product	decision-definition-draft	selective merge with current main; retain all relevant tests
+packages/question/src/limits.ts	product	decision-definition-draft	selective merge with current main; retain all relevant tests
+packages/question/src/options.test.ts	product	decision-definition-draft	selective merge with current main; retain all relevant tests
+packages/question/src/options.ts	product	decision-definition-draft	selective merge with current main; retain all relevant tests
+packages/question/src/question.test.ts	product	decision-definition-draft	selective merge with current main; retain all relevant tests
+packages/question/src/react/decision-parts.tsx	product	decision-definition-draft	selective merge with current main; retain all relevant tests
+packages/question/src/react/index.ts	product	decision-definition-draft	selective merge with current main; retain all relevant tests
+packages/question/src/react/question-view.test.ts	product	decision-definition-draft	selective merge with current main; retain all relevant tests
+packages/question/src/react/question-view.tsx	product	decision-definition-draft	selective merge with current main; retain all relevant tests
+packages/question/src/react/use-questionnaire.test.ts	product	decision-definition-draft	selective merge with current main; retain all relevant tests
+packages/question/src/react/use-questionnaire.ts	product	decision-definition-draft	selective merge with current main; retain all relevant tests
+packages/question/src/schema.ts	product	decision-definition-draft	selective merge with current main; retain all relevant tests
+scripts/check-jev.ts	eval-hub	runner-scoring-demo	defer; preserve original in archive
+scripts/conversation-plan-demo.ts	eval-hub	runner-scoring-demo	defer; preserve original in archive
+scripts/evaluate-card-quality-core.test.ts	eval-hub	runner-scoring-demo	defer; preserve original in archive
+scripts/evaluate-card-quality-core.ts	eval-hub	runner-scoring-demo	defer; preserve original in archive
+scripts/evaluate-card-quality-jev.test.ts	eval-hub	runner-scoring-demo	defer; preserve original in archive
+scripts/evaluate-card-quality-jev.ts	eval-hub	runner-scoring-demo	defer; preserve original in archive
+scripts/evaluate-card-quality-seed.ts	eval-hub	runner-scoring-demo	defer; preserve original in archive
+scripts/evaluate-card-quality.ts	eval-hub	runner-scoring-demo	defer; preserve original in archive
+scripts/evaluate-jev-core.test.ts	eval-hub	runner-scoring-demo	defer; preserve original in archive
+scripts/evaluate-jev-core.ts	eval-hub	runner-scoring-demo	defer; preserve original in archive
+scripts/evaluate-jev-stress.ts	eval-hub	runner-scoring-demo	defer; preserve original in archive
+scripts/evaluate-jev.ts	eval-hub	runner-scoring-demo	defer; preserve original in archive
+scripts/export-card-quality-snapshot.test.ts	eval-hub	runner-scoring-demo	defer; preserve original in archive
+scripts/export-card-quality-snapshot.ts	eval-hub	runner-scoring-demo	defer; preserve original in archive
