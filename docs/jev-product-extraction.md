@@ -201,6 +201,7 @@ and E2E type checks, formatting and CI with the existing warnings listed above.
 | Withdrawal, agreement, question  | Three exact ordinary-role consequent bodies preserve statement order and three handled skips. Captured withdrawal ownership, current effective pending, raw option answers, question thresholds and target assignment before/after factory evaluation are covered.      | 316 conversation tests, 1,629 assertions  |
 | Contribution proposals           | Eight exact consequent statements preserve order and four handled skips. Fresh card lookups, captured contribution/pending targets, role-specific quote filters, duplicate exemption, relation omission and construction timing are covered.                            | 343 conversation tests, 1,821 assertions  |
 | Support and objection proposals  | Two exact consequent statements preserve order and two handled skips. Captured card uniqueness and option fallback, material reopening, current scoped history, historical agreement after withdrawal and partial review publication are covered.                       | 377 conversation tests, 2,028 assertions  |
+| Resolution and reopening         | Fourteen resolution statements and one reopening conditional retain six handled skips. Credibility, fresh chosen/card lookup, captured targets, pending conflicts, staged linked-card construction and partial publication are covered.                                 | 411 conversation tests, 2,271 assertions  |
 
 The combined guard/source/quote run passed 30 tests (242 assertions). Domain/replay
 checks passed 27 tests (109 assertions). The complete extracted foundation and
@@ -371,7 +372,22 @@ claiming direct equality of the inaccessible product proposal local. Matching-ro
 wrappers retain the original branch type narrowing. No event is applied and no
 full-policy callback is replaced.
 
-Next: resolution and reopening proposals and later dispatch. Preserve shared
+Resolution and explicit reopening retain fourteen statements and one whole conditional,
+with six handled skips. Stopped observations match three resolution progressions and
+nine handled results, and three reopening progressions. Seven capture/seed controls
+(one progression and six handled results, including the seeded reopening duplicate)
+and twelve mirrored construction, validation and publication failures are counted
+separately. The discarded-frame control explicitly replaces the captured frame in
+the temporary baseline; the original prefix skips an initially discarded target.
+Linked-card choices stage construction, preserve the original-version base with the
+staged-version override, and assign applied working before event and ID pushes. A
+second inference failure retains original working; later push failure retains applied
+working and partial publication. This path provides no rollback after publication.
+Explicit reopening preserves proposal-before-review ordering. Ordinary application,
+the no-proposal guard and loop-bottom cap remain unimplemented. Whole original
+full-policy callbacks remain assigned to the eventual dispatcher.
+
+Next: ordinary application, follow-ups and the remaining dispatcher. Preserve shared
 candidate state, local capture timing, continuation and event-limit checks, and
 partial events retained after follow-up failure. Keep the original public interface
 and compare original offline fixtures before publishing the dispatcher.
