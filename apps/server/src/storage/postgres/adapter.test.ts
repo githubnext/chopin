@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { documentSlug } from "../../channels/slug";
 import { storageContract } from "../contract";
 import { StorageError } from "../errors";
+import { ResearchProjectionConflict } from "../model";
+import { contractId, userAndChannel } from "../contract-support";
 import { PostgresStorage } from "./adapter";
 import { migrate, verifyMigrations } from "./migrations";
 import { backfillDocumentSlugs } from "./migrations/002_document_slugs";
@@ -345,6 +347,136 @@ if (url) {
 		}
 	});
 
+	it("serializes a Research projection commit behind a concurrent job failure", async () => {
+		let storage = new PostgresStorage(url);
+		let sql = new SQL(url);
+		let locked = Promise.withResolvers<void>();
+		let release = Promise.withResolvers<void>();
+		let blocker: Promise<void> | undefined;
+		try {
+			await storage.migrate();
+			let { channelId, userId, lease } = await userAndChannel(storage);
+			let jobLease = await storage.leases.acquire(
+				contractId("research-job-writer"),
+				contractId("research-worker"),
+				60_000,
+			);
+			if (!jobLease) throw new Error("test could not acquire a job storage lease");
+			let now = new Date();
+			let workspaceId = contractId("inline-research");
+			let started = await storage.research.start({
+				id: workspaceId,
+				channelId,
+				title: "Inline research",
+				question: "What changed?",
+				origin: "inline",
+				createdBy: userId,
+				turnId: contractId("initial-turn"),
+				messageId: contractId("initial-message"),
+				requestId: contractId("initial-request"),
+				idempotencyKey: contractId("research-start"),
+				fingerprint: contractId("research-fingerprint"),
+				now,
+				lease,
+			});
+			let job = await storage.jobs.enqueue({
+				id: contractId("research-answer"),
+				channelId,
+				type: "research-answer",
+				version: 1,
+				origin: "user",
+				targetKey: `research-answer:workspace:${workspaceId}:turn:${started.turn.id}:answer`,
+				idempotencyKey: contractId("research-enqueue"),
+				fingerprint: contractId("research-job-fingerprint"),
+				input: { question: "What changed?" },
+				availableAt: now,
+				now,
+				lease: jobLease,
+			});
+			await storage.research.linkJob({
+				channelId,
+				workspaceId,
+				turnId: started.turn.id,
+				role: "answer",
+				jobId: job.job.id,
+				now,
+				lease: jobLease,
+			});
+			let [claimed] = await storage.jobs.claim({
+				channelId,
+				claimOwner: contractId("worker"),
+				count: 1,
+				ttlMs: 60_000,
+				now: new Date(now.getTime() + 1),
+				lease: jobLease,
+			});
+			if (!claimed) throw new Error("Research answer job was not claimable");
+			let initial = await storage.collaboration.load(channelId, now);
+			if (!initial) throw new Error("Research parent channel could not be loaded");
+
+			blocker = sql.begin(async transaction => {
+				await transaction`SELECT id FROM background_jobs WHERE id = ${job.job.id} FOR UPDATE`;
+				locked.resolve();
+				await release.promise;
+			});
+			await locked.promise;
+
+			let failed = storage.jobs.fail({
+				channelId,
+				jobId: job.job.id,
+				claimOwner: claimed.claimOwner!,
+				claimGeneration: claimed.claimGeneration,
+				reason: "test failure",
+				now: new Date(now.getTime() + 2),
+				lease: jobLease,
+			});
+			let waitForLockWaiters = async (expected: number) => {
+				let deadline = Date.now() + 3_000;
+				while (Date.now() < deadline) {
+					let [row] = await sql<{ count: number }[]>`
+						SELECT count(*)::int AS count
+						FROM pg_stat_activity
+						WHERE datname = current_database()
+							AND wait_event_type = 'Lock'
+							AND query ILIKE '%FROM background_jobs%'
+							AND query ILIKE '%FOR UPDATE%'
+					`;
+					if (row?.count === expected) return;
+					await Bun.sleep(10);
+				}
+				throw new Error(`expected ${expected} Research row-lock waiters`);
+			};
+			await waitForLockWaiters(1);
+
+			let committing = storage.collaboration.commit({
+				channelId,
+				lease,
+				expectedRevision: initial.channel.revision,
+				operationId: contractId("research-projection-race"),
+				epoch: "research-race-epoch",
+				update: new Uint8Array([1]),
+				sidecar: { revision: 1 },
+				events: [],
+				now,
+				researchProjections: [{ id: workspaceId, action: "add" }],
+			});
+			await waitForLockWaiters(2);
+			release.resolve();
+			await blocker;
+			expect((await failed).state).toBe("failed");
+			await expect(committing).rejects.toBeInstanceOf(ResearchProjectionConflict);
+
+			let saved = await storage.collaboration.load(channelId, now);
+			expect(saved?.channel.revision).toBe(initial.channel.revision);
+			expect(saved?.updates).toHaveLength(0);
+		} finally {
+			release.resolve();
+			await blocker?.catch(() => {});
+			await storage.close();
+			await sql.close();
+		}
+	});
+
 	it("backfills unique readable slugs for channels created before the slug migration", async () => {
 		let sql = new SQL(url);
 		let schema = `slug_migration_${crypto.randomUUID().replaceAll("-", "")}`;
@@ -464,6 +596,7 @@ if (url) {
 				"012_child_channels",
 				"013_research_child_publication",
 				"014_inline_research",
+				"015_planner_inline_reference",
 			]);
 			expect(await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`)
 				.toEqual([

@@ -20,6 +20,7 @@ import * as Y from "yjs";
 import {
 	$createDecisionNode,
 	$createPlanNodes,
+	$createResearchNode,
 	$exportPlanTree,
 	$importPlan,
 	assert,
@@ -29,6 +30,7 @@ import {
 	PlanValidationError,
 	QuestionnaireNode,
 	registry as buildRegistry,
+	ResearchNode,
 	serialize,
 	ulid,
 } from "@chopin/dialect";
@@ -1069,4 +1071,12 @@ export function rebasePassage(target: Document, passage: Passage): Passage {
 	} catch {
 		return { ...passage, blocks, drifted: true };
 	}
+}
+
+export function insertResearch(target: Document, id: string): Mutation | undefined {
+	return mutate(target, () => {
+		if ($nodesOfType(ResearchNode).some(node => node.getId() === id)) return false;
+		$getRoot().append($createResearchNode(id));
+		return true;
+	});
 }

@@ -1767,3 +1767,29 @@ export function source(plan: Plan): string {
 export function size(plan: Plan): number {
 	return Y.encodeStateAsUpdate(plan.document.doc).byteLength;
 }
+
+export function placeResearchReference(plan: Plan, id: string): Promise<"placed" | "deferred"> {
+	return exclusive(plan, async () => {
+		if (implementationActive(plan)) return "deferred";
+		let document = await room.restore(
+			plan.document.epoch,
+			Y.encodeStateAsUpdate(plan.document.doc),
+			room.project(plan.document),
+			[],
+		);
+		document.seq = plan.document.seq;
+		try {
+			let mutation = room.insertResearch(document, id);
+			if (!mutation) return "placed";
+			try {
+				await publishStaged(plan, plan.server, plan.id, { ...plan, document }, mutation);
+			} catch (err) {
+				if (err instanceof ImplementationActiveError) return "deferred";
+				throw err;
+			}
+			return "placed";
+		} finally {
+			document.doc.destroy();
+		}
+	});
+}

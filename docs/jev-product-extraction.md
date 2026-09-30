@@ -609,3 +609,55 @@ suites are explicitly skipped without a test database. Workspace and E2E TypeScr
 checks pass. CI passes with only two inherited lint warnings and the existing design
 baseline finding. All seven runtime, processor, card, question, scoped-tool, Chat and
 configuration source-parity checks pass after formatting.
+
+Research consent now reaches the current server runtime. Two whole original socket
+command cases retain writer/archive checks, authenticated consent and forced access
+refresh for observational link lookup. The accepted-offer executor rechecks the live
+requester and current process owner before start and again before enqueue. Existing
+Chat research creation now uses the same durable inline placement path. Explicit
+startup and restore recovery retain pending-reference identity; shutdown awaits an
+in-flight recovery before closing documents. Reads do not launch recovery or work.
+
+Research service and storage preserve 279 archived declarations, including 258
+unchanged ancestor declarations. Nineteen additional whole original service/storage
+callbacks and all original helper/table data remain. Both providers validate Research
+projections inside the fenced document commit. Migration 015 and the original
+PostgreSQL race/startup regressions are retained as source only; no migration or
+PostgreSQL test ran. Four complete original Plan placement callbacks exercise held,
+failed and repeated commits and the implementation guard. All 137 existing Plan/room
+declarations remain unchanged alongside the two original placement functions.
+
+Eleven new integrations connect the actual processor, consent executor, current owner
+resolution, real issued sessions, ResearchWorkspaceService, JobService, Plan placement
+and MemoryStorage. They verify frozen consent identity, reference and placed-marker
+commit before enqueue, held/failed publication, idempotent consent and lookup, actual
+owner revocation between placement and enqueue, resume by a second authenticated
+member without changing the original actor, and writer/archive/read-access gates.
+No research worker or model provider executes in these tests.
+
+Nine further whole linked-card and ordinary-Save pipeline callbacks are retained unchanged. Pipeline
+ownership is now 27 of 140 callback nodes; 113 remain assigned to later slices. A new
+actual runtime test separately verifies conversation interpretation, a linked human
+option, advisory prompt, human Save, commit-before-acknowledgement, card mirroring and
+close/open recovery. Bypassing its held commit makes the durable-state assertion fail.
+This test does not change the retained CP-063/D19 policy behavior.
+
+Independent review reproduced two shutdown races through the actual current runtime.
+A research host tool could wait behind the document lock held by close while close
+waited for Chat. Placement now checks room closing before requesting that lock and
+again inside it, and refuses already-closing Plan persistence. The real Harness
+regression verifies close completes, the same durable request remains pending and
+no evidence job is queued.
+
+A consent command could also commit its delivery receipt after processor idle and
+Plan close. A separate in-flight set now tracks public asynchronous commands without
+changing their original bodies, awaits or returned promises. Idle drains commands
+and the existing effects loop until both settle. The held-callback regression verifies
+the receipt commits before close and survives reopening, with no after-close commit.
+Both original failures were reproduced before the fixes; independent review approves
+these narrow lifecycle changes. All 29 original processor awaits remain intact.
+
+Fresh focused lifecycle verification passes eight tests with 42 assertions. The
+combined checkpoint also passes workspace and E2E types and CI. PostgreSQL
+regressions remain source-only; runtime coverage uses MemoryStorage and offline
+Harness streams. No application instance, paid model or evaluation runner ran.

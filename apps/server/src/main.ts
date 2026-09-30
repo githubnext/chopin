@@ -18,6 +18,8 @@ import { CHAT_CAPABILITIES, incomingFrame } from "./chat/incoming";
 import { ReferenceService } from "./chat/references";
 import { createConversationRuntime } from "./conversation-plan/runtime";
 import { handleConversationCommand } from "./conversation-plan/commands";
+import { handleResearchCommand } from "./conversation-plan/research-commands";
+import { startAcceptedResearch } from "./conversation-plan/accepted-research";
 import { registerChannelRoutes } from "./channels/routes";
 import * as Comments from "./comments/service";
 import { proxy, serve } from "./client";
@@ -39,9 +41,11 @@ import * as Inject from "./questions/inject";
 import * as Marks from "./comments/inject";
 import * as Questions from "./questions/service";
 import { registerResearchWorkspaceRoutes } from "./research/routes";
-import { ResearchWorkspaceService } from "./research/service";
+import { ResearchWorkspaceError, ResearchWorkspaceService } from "./research/service";
+import { placeResearchReference as placeResearch } from "./research/placement";
 import * as Rooms from "./rooms";
 import { admit } from "./socket/admission";
+import { refreshAuthorization } from "./socket/authorization";
 import { StorageError } from "./storage/errors";
 import { createStorage } from "./storage/registry";
 import { broadcast, fail, relay, reply, tell, topic } from "./wire";
@@ -72,6 +76,7 @@ const LEASE_RENEW_MS = 10_000;
 const LEASE_SAFETY_MS = 5_000;
 const SESSION_CLEANUP_MS = 5 * 60_000;
 const ACCESS_RECHECK_MS = 60_000;
+const RESEARCH_RECOVERY_RETRY_MS = 10_000;
 
 let server: Server<SocketData>;
 let heldLease: Lease | undefined;
@@ -83,6 +88,8 @@ let cleaningSessions: Promise<void> | undefined;
 let ownerBindings: ActiveOwnerBindings | undefined;
 let jobRunner: JobRunner | undefined;
 let researchService: ResearchWorkspaceService | undefined;
+let researchRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
+let recoveringResearch: Promise<void> | undefined;
 let referenceService: ReferenceService | undefined;
 let summaryCoordinator: DocumentSummaryCoordinator | undefined;
 let descriptionProjector: DocumentDescriptionProjector | undefined;
@@ -126,6 +133,58 @@ function presence(server: Server<SocketData>, room: Rooms.Room): void {
 	});
 }
 
+function documentBackend(): Service.Backend {
+	return {
+		storage,
+		lease: () => {
+			if (!heldLease) throw new Error("storage writer lease is unavailable");
+			return heldLease;
+		},
+		fatal: err => {
+			console.error("chopin: plan persistence failed -", err);
+			signal();
+		},
+		onDocumentPersisted: target => summaryCoordinator?.schedule(target),
+	};
+}
+
+function placeResearchReference(
+	channelId: string,
+	workspaceId: string,
+): Promise<"placed" | "deferred"> {
+	return placeResearch(channelId, workspaceId, {
+		get: Rooms.get,
+		exclusive: withDocumentLock,
+		detached: async (id, action) => {
+			let detached = await Service.open(id, documentBackend(), server);
+			try {
+				return await action(detached);
+			} finally {
+				await Service.close(detached);
+			}
+		},
+	});
+}
+
+function scheduleResearchRecovery(deferred: number): void {
+	if (deferred === 0 || researchRecoveryTimer || draining) return;
+	researchRecoveryTimer = setTimeout(() => {
+		researchRecoveryTimer = undefined;
+		if (draining) return;
+		recoveringResearch = researchService!.recoverPendingPlannerInline(placeResearchReference).then(
+			result => {
+				scheduleResearchRecovery(result.deferred);
+			},
+			err => {
+				console.error("chopin: research reference recovery failed -", err);
+				signal();
+			},
+		).finally(() => {
+			recoveringResearch = undefined;
+		});
+	}, RESEARCH_RECOVERY_RETRY_MS);
+}
+
 /**
  * Attach the document to a room, once.
  *
@@ -144,18 +203,7 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 		conversationRuntime.wake(room.plan);
 		return room.plan;
 	}
-	let backend: Service.Backend = {
-		storage,
-		lease: () => {
-			if (!heldLease) throw new Error("storage writer lease is unavailable");
-			return heldLease;
-		},
-		fatal: err => {
-			console.error("chopin: plan persistence failed -", err);
-			signal();
-		},
-		onDocumentPersisted: target => summaryCoordinator?.schedule(target),
-	};
+	let backend = documentBackend();
 	let opening = room.opening ??= withDocumentLock(room.id, async () => {
 		if (deletingChannels.has(room.id)) throw new Error("document is unavailable");
 		if (room.plan) return room.plan;
@@ -205,14 +253,23 @@ function chat(room: Rooms.Room, ws: Socket): Chat.Room {
 			? async request => {
 				let service = researchService;
 				if (!service) throw new Error("research workspaces are unavailable");
-				let created = await service.startPlanner({
-					channelId: room.id,
-					question: request.question,
-					originMessageId: request.entryId,
-					requestedBy: request.userId,
-					requestedByHandle: request.handle,
-					beforeStart: () => jobRunner?.ownerAvailable(room.id) ?? Promise.resolve(),
-				});
+				let created;
+				try {
+					created = await service.startPlannerInline({
+						channelId: room.id,
+						question: request.question,
+						originMessageId: request.entryId,
+						requestedBy: request.userId,
+						requestedByHandle: request.handle,
+						beforeStart: () => jobRunner?.ownerAvailable(room.id) ?? Promise.resolve(),
+						placeReference: id => placeResearchReference(room.id, id),
+					});
+				} catch (err) {
+					if (err instanceof ResearchWorkspaceError && err.code === "not-ready") {
+						scheduleResearchRecovery(1);
+					}
+					throw err;
+				}
 				return {
 					workspaceId: created.request.id,
 					state: created.request.state,
@@ -346,6 +403,27 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			});
 			return;
 
+		case "conversation-plan:research":
+		case "conversation-plan:research-link":
+			await handleResearchCommand(frame, room, ws, {
+				enabled: !!config.conversationPlan,
+				runtime: conversationRuntime,
+				research: () => researchService,
+				unavailable: id => archivingChannels.has(id) || deletingChannels.has(id),
+				refreshAccess,
+				start: (current, socket, opened, offer) =>
+					startAcceptedResearch(current, socket, opened, offer, {
+						research: () => researchService,
+						auth: hostedAuth,
+						refreshAccess,
+						unavailable: id => archivingChannels.has(id) || deletingChannels.has(id),
+						ownerAvailable: id => jobRunner?.ownerAvailable(id) ?? Promise.resolve(),
+						placeReference: placeResearchReference,
+						scheduleRecovery: scheduleResearchRecovery,
+					}),
+			});
+			return;
+
 		case "question:open":
 			if (room.plan) Questions.open(room.plan, ws, frame);
 			return;
@@ -446,28 +524,17 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 	}
 }
 
-const VIEWER_ALLOWED = new Set(["session:ping", "plan:open", "plan:close", "job:list", "job:get"]);
+const VIEWER_ALLOWED = new Set([
+	"session:ping",
+	"plan:open",
+	"plan:close",
+	"job:list",
+	"job:get",
+	"conversation-plan:research-link",
+]);
 
 async function refreshAccess(ws: Socket, forceGitHub = false): Promise<AuthorizationResult> {
-	let data = ws.data;
-	if (data.closed) return "denied";
-	if (data.authorizationRefresh) {
-		let result = await data.authorizationRefresh;
-		if (
-			result !== "allowed"
-			|| !forceGitHub
-			|| Date.now() - (data.accessCheckedAt ?? 0) < ACCESS_RECHECK_MS
-		) {
-			return result;
-		}
-	}
-	let refresh = checkAccess(ws, forceGitHub);
-	data.authorizationRefresh = refresh;
-	try {
-		return await refresh;
-	} finally {
-		if (data.authorizationRefresh === refresh) data.authorizationRefresh = undefined;
-	}
+	return refreshAuthorization(ws.data, forceGitHub, forced => checkAccess(ws, forced));
 }
 
 function applyChannelAccess(
@@ -699,6 +766,8 @@ function drain(): Promise<void> {
 			}
 		};
 		await attempt(() => server.stop(true));
+		if (researchRecoveryTimer) clearTimeout(researchRecoveryTimer);
+		if (recoveringResearch) await attempt(() => recoveringResearch!);
 		if (sessionCleanup) clearInterval(sessionCleanup);
 		for (let result of await Promise.allSettled([cleaningSessions])) {
 			if (result.status === "rejected") record(result.reason);
@@ -877,6 +946,11 @@ async function restoreChannelLocked(channelId: string, now: Date) {
 		channelId,
 		() => storage.channels.restore({ id: channelId, now }),
 	);
+	let recovery = await researchService?.recoverPendingPlannerInline(
+		placeResearchReference,
+		channelId,
+	);
+	scheduleResearchRecovery(recovery?.deferred ?? 0);
 	summaryCoordinator?.resume(channelId);
 	let current = Rooms.get(channelId);
 	if (current?.plan) await conversationRuntime.attach(current, current.plan, false);
@@ -979,6 +1053,32 @@ function announceResearchChanged(channelId: string, workspaceId: string, revisio
 		ts: 0,
 		workspaceId,
 		revision,
+	});
+}
+
+function announceResearchTerminal(channelId: string, id: string, text: string): Promise<void> {
+	return withDocumentLock(channelId, async () => {
+		let active = Rooms.get(channelId)?.plan;
+		if (active) {
+			let existing = active.chat.entries.find(entry => entry.id === id);
+			await Chat.noticeOnce(
+				{ chat: active.chat, plan: active, server, room: channelId },
+				id,
+				existing?.text ?? text,
+			);
+			return;
+		}
+		let detached = await Service.open(channelId, documentBackend(), server);
+		try {
+			let existing = detached.chat.entries.find(entry => entry.id === id);
+			await Chat.noticeOnce(
+				{ chat: detached.chat, plan: detached, server, room: channelId },
+				id,
+				existing?.text ?? text,
+			);
+		} finally {
+			await Service.close(detached);
+		}
 	});
 }
 
@@ -1122,6 +1222,7 @@ researchService = new ResearchWorkspaceService({
 	},
 	current: currentDocumentTarget,
 	publish: announceResearchChanged,
+	terminalNotice: announceResearchTerminal,
 });
 referenceService = new ReferenceService({
 	storage,
@@ -1260,10 +1361,16 @@ leaseRenewal = setInterval(renewLease, LEASE_RENEW_MS);
 cleanSessions();
 sessionCleanup = setInterval(cleanSessions, SESSION_CLEANUP_MS);
 
+let listening: Server<SocketData> | undefined;
 try {
-	server = listen();
+	server = listening = listen();
+	let recovery = await researchService.recoverPendingPlannerInline(placeResearchReference);
+	scheduleResearchRecovery(recovery.deferred);
+	await researchService.recoverTerminalPlannerInline();
 	jobRunner.start();
 } catch (err) {
+	if (listening) await listening.stop(true).catch(() => {});
+	if (researchRecoveryTimer) clearTimeout(researchRecoveryTimer);
 	if (sessionCleanup) clearInterval(sessionCleanup);
 	if (leaseRenewal) clearInterval(leaseRenewal);
 	if (leaseWatchdog) clearTimeout(leaseWatchdog);

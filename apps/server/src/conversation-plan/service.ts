@@ -17,6 +17,7 @@ export function createProcessor(deps: Dependencies) {
 	let stopped = false;
 	let controller = new AbortController();
 	let running: Promise<void> | undefined;
+	let commands = new Set<Promise<unknown>>();
 	let wakeRequested = false;
 	let effectCommands = deps.effects;
 	let report = deps.onError ?? ((error: unknown) => console.error("[conversation-plan]", error));
@@ -79,23 +80,33 @@ export function createProcessor(deps: Dependencies) {
 		controller.abort();
 	}
 
-	/** Wait for a stopped processor's already-started effects before closing its document. */
+	function track<Args extends unknown[], Result>(action: (...args: Args) => Promise<Result>) {
+		return (...args: Args): Promise<Result> => {
+			let task = action(...args);
+			commands.add(task);
+			let settled = () => commands.delete(task);
+			void task.then(settled, settled);
+			return task;
+		};
+	}
+
+	/** Drain admitted commands and effects before closing their document. */
 	async function idle(): Promise<void> {
-		let task = running;
-		while (task) {
-			await task;
-			task = running;
+		let tasks = [...commands, ...(running ? [running] : [])];
+		while (tasks.length > 0) {
+			await Promise.allSettled(tasks);
+			tasks = [...commands, ...(running ? [running] : [])];
 		}
 	}
 
 	return {
-		accept,
+		accept: track(accept),
 		afterMessage,
-		correct,
-		saveScopedChoice,
-		researchConsent,
-		record,
-		retry,
+		correct: track(correct),
+		saveScopedChoice: track(saveScopedChoice),
+		researchConsent: track(researchConsent),
+		record: track(record),
+		retry: track(retry),
 		setEffects,
 		wake,
 		stop,
