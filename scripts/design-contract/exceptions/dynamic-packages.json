@@ -22,10 +22,24 @@
 				"class",
 				"errorClassName",
 				"class > QuestionView > <p>",
+				2
+			]
+		],
+		"sourceHash": "2277b23028e0d32d42db7d39e415c7ac4070836ac32c3e9b3d18fb053f01a65a"
+	},
+	{
+		"file": "packages/question/src/react/resolved-actions.tsx",
+		"reason": "Typed lifecycle footer forwards caller class names; static call-site classes remain scanned at their owner.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > ResolvedActions > <footer>",
 				1
 			]
 		],
-		"sourceHash": "cc53750d677cfff5040520cb8d8ad316a88f184bbc2a4df1d1bf8558728ecd86"
+		"sourceHash": "e73b8467dde57d40dbd6f9944640601586cf4601b35c02ee7dde248da405af59"
 	},
 	{
 		"file": "packages/icons/src/icon.tsx",

@@ -15,6 +15,7 @@ import { CheckIcon, CloseIcon } from "@chopin/icons";
 import { answered } from "../draft";
 import * as limits from "../limits";
 import { AddOption } from "./add-option";
+import { ResolvedActions } from "./resolved-actions";
 import { projectSuggestion, reduceSuggestionEditState } from "./project-suggestion";
 
 import type { KeyboardEvent, ReactNode } from "react";
@@ -48,6 +49,9 @@ export type QuestionViewProps = {
 	onAddOption?: (label: string) => Promise<{ ok: true } | { ok: false; message: string }>;
 	maxOptions?: number;
 	onCancel?: () => void;
+	onDiscard?: () => void;
+	/** Reopen a resolved decision without opening a shared draft in this view. */
+	onReopen?: () => void;
 	disabled?: boolean;
 	submitting?: boolean;
 	status?: "open" | "answered" | "cancelled";
@@ -370,6 +374,8 @@ export function QuestionView(props: QuestionViewProps) {
 		onChange,
 		onSubmit,
 		onCancel,
+		onDiscard,
+		onReopen,
 		onAddOption,
 		maxOptions = limits.MAX_DECISION_OPTIONS,
 		disabled = false,
@@ -467,19 +473,41 @@ export function QuestionView(props: QuestionViewProps) {
 		);
 	}
 
-	if (status !== "open" && answers) {
+	if (status !== "open") {
 		return (
 			<div>
 				{single && <DecisionHeading />}
 				{aside}
-				<Resolved
-					answers={answers}
-					definition={definition}
-					resolver={resolver}
-					places={places}
-					onQuestionEnter={onQuestionEnter}
-					onQuestionLeave={onQuestionLeave}
-					onQuestionSelect={onQuestionSelect}
+				{answers
+					? (
+						<Resolved
+							answers={answers}
+							definition={definition}
+							resolver={resolver}
+							places={places}
+							onQuestionEnter={onQuestionEnter}
+							onQuestionLeave={onQuestionLeave}
+							onQuestionSelect={onQuestionSelect}
+						/>
+					)
+					: <p className="m-0 px-3 py-2.5 text-sm text-text-secondary">Saved decision</p>}
+				{error && (
+					<p
+						className={`${
+							errorClassName ? `${errorClassName} ` : ""
+						}px-3 pb-2 text-sm text-destructive-ink`}
+						data-motion-feedback={errorClassName ? "alert" : undefined}
+						role="alert"
+					>
+						{error}
+					</p>
+				)}
+				<ResolvedActions
+					className="question-actions flex flex-wrap items-center justify-end gap-2 px-3 py-2 hairline-t"
+					disabled={disabled}
+					onDiscard={onDiscard}
+					onReopen={onReopen}
+					submitting={submitting}
 				/>
 			</div>
 		);

@@ -95,9 +95,12 @@ export function QuestionnaireCard(
 	return current !== "open" && current !== "reopened"
 		? (
 			<Decided
+				canEdit={canEdit}
+				connected={connected}
+				wire={wire}
 				discarded={current === "discarded"}
 				meta={meta}
-				resolved={resolved ?? []}
+				resolved={resolved}
 				value={value}
 				{...pointing}
 			/>
@@ -233,13 +236,46 @@ function Undecided(
 }
 
 function Decided(
-	{ discarded, meta, resolved, value, ...pointing }: {
+	{ canEdit, connected, discarded, meta, resolved, value, wire, ...pointing }: {
+		canEdit: boolean;
+		connected: boolean;
 		discarded: boolean;
 		meta?: Question.CardMeta;
-		resolved: Answer[];
+		resolved: Answer[] | undefined;
 		value: Questionnaire;
+		wire?: Transport;
 	} & Pointing,
 ) {
+	let [error, setError] = useState<string>();
+	let [submitting, setSubmitting] = useState(false);
+	let pending = useRef(false);
+	let editable = canEdit && connected && !!wire && !discarded;
+	let request = (kind: "question:reopen" | "question:discard") => {
+		if (!wire || pending.current) return;
+		pending.current = true;
+		setSubmitting(true);
+		setError(undefined);
+		void wire.ask(kind, { id: value.id })
+			.then((reply: unknown) => {
+				if ((reply as { ok?: boolean }).ok) return;
+				setError(
+					kind === "question:reopen"
+						? "Could not reopen it. Try again."
+						: "Could not discard this decision.",
+				);
+			})
+			.catch(() =>
+				setError(
+					kind === "question:reopen"
+						? "Could not reopen it. Try again."
+						: "Could not discard this decision.",
+				)
+			)
+			.finally(() => {
+				pending.current = false;
+				setSubmitting(false);
+			});
+	};
 	return (
 		<SidecarCard
 			data-plan-sidecar-questionnaire={value.id}
@@ -258,10 +294,15 @@ function Decided(
 			<QuestionView
 				answers={resolved}
 				definition={definition(value)}
-				disabled
+				disabled={!editable}
 				drafts={{}}
+				error={error}
+				errorClassName="editor-motion-feedback"
+				onDiscard={editable ? () => request("question:discard") : undefined}
+				onReopen={editable ? () => request("question:reopen") : undefined}
 				resolver={discarded ? meta?.resolver : undefined}
 				status={discarded ? "cancelled" : "answered"}
+				submitting={submitting}
 				{...pointing}
 			/>
 		</SidecarCard>

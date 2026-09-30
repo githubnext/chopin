@@ -812,3 +812,22 @@ is 80 of 140 callbacks, with 60 remaining. The focused evidence/pipeline run pas
 20 tests with 134 assertions. Full workspace/E2E types and CI pass with the inherited
 warnings/baseline only; producer, complete callback, table and helper proofs pass
 after formatting. No interpretation policy was changed.
+
+The original terminal Reopen/Discard control leaf and four whole view callbacks
+are restored. Explicit requests retain the original duplicate-request fence and
+writer/connection/discard guards; metadata continues to own lifecycle transitions
+and attribution. Missing terminal answers render Saved decision instead of inputs.
+Current open-state layout, Cancel, error motion and Save caption are preserved.
+QuestionView retention is 16 of 27 callbacks, with 11 still assigned. The original
+editor presentation-list callback remains deferred whole; no ignored compatibility
+prop was introduced. The inherited request helper has no new generation fence.
+
+Fifteen further whole source/fallback registrations retain complete parameter
+tables, exact UTF-16 clauses, pending qualifiers, context and D01 recovery gates.
+They execute 30 cases; unique pipeline retention is 95 of 140, with 45 remaining.
+The focused view/card/pipeline run passes 125 tests with 432 assertions. Full
+workspace/E2E types and CI pass with inherited warnings/baseline only. Design review
+adds one exact owner-hashed lifecycle footer forwarding case and updates the existing
+error-class case count for its terminal use; all other cases remain. Source, callback,
+table and request-helper proofs pass after formatting. Mounted browser behavior
+remains unverified.
