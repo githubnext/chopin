@@ -294,6 +294,34 @@
 		"sourceHash": "234021af7158e8dafcb6c05e59ea73e1cc067c9c58f4fcd23f4d52a8164a8c5e"
 	},
 	{
+		"file": "packages/visuals/src/ui/rolling-number.tsx",
+		"reason": "Public visual primitive forwards typed DOM/Base UI props. Literal style/class call sites remain scanned; runtime caller values need browser review.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > RollingNumber > <span>",
+				1
+			]
+		],
+		"sourceHash": "dc96f6ff07c5d637d9d90fcb0d3b5ba6924ae57c8f78b9494a6ef37b6d173a53"
+	},
+	{
+		"file": "packages/visuals/src/ui/rolling-number.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"[\"cv-rolling-number\", className].filter(Boolean)",
+				"class > RollingNumber > <span>",
+				1
+			]
+		],
+		"sourceHash": "dc96f6ff07c5d637d9d90fcb0d3b5ba6924ae57c8f78b9494a6ef37b6d173a53"
+	},
+	{
 		"file": "packages/visuals/src/ui/badge.tsx",
 		"reason": "Public visual primitive forwards typed DOM/Base UI props. Literal style/class call sites remain scanned; runtime caller values need browser review.",
 		"cases": [
