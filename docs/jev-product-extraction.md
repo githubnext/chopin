@@ -1,7 +1,8 @@
 # Jev product extraction — handoff
 
 This is a finite extraction from a preserved prototype, not a verified release or
-classifier-quality fix. The transport, stored-identity, source-provenance and quote foundations are implemented in bounded slices.
+classifier-quality fix. The transport, stable identity, provenance, validation and replay foundations are
+implemented in bounded slices.
 
 - Product branch: `maggie/jev-chat-product`.
 - Product worktree: `/Users/maggieappleton/.codex/worktrees/jev-chat-product/chopin`.
@@ -254,4 +255,23 @@ Inherited gaps remain: thread contents and event-ID uniqueness are unchecked; ch
 membership uses inherited properties. Outcome references use analysis IDs rather
 than proving accepted replay authority. These guards do not establish consent,
 saved-message provenance or replay correctness. Formatting and CI retain the same
-existing warnings. Next: bounded event replay modules, then the domain and persistence.
+existing warnings.
+
+## Accepted-event replay slice
+
+The dispatcher retains the archived opening, clone, deduplication and counter order.
+Four bounded modules contain all 21 original case bodies; support helpers and
+`preference.ts` preserve the archived behavior. Root syntax-tree comparison verifies
+those cases, helpers, preamble and counters; independent review checks the routing.
+
+Nine focused tests passed, 0 failed (51 assertions), covering immutable inputs,
+stale versions, contributions, decisions, deferral/resumption, correction target
+counters, support withdrawals and exact Save lineage. Full workspace types,
+formatting and CI passed on Bun 1.4.2 with existing warnings. Original domain tests
+remain assigned to the next domain slice. Replay is still dormant: callers must
+validate saved evidence and persist returned state before publication.
+
+Inherited behavior remains: duplicate IDs return before validating changed bodies;
+opening shares unchanged prior objects; legacy candidate confirmation retains pending
+proposals. A scoped Save remains provisional with its evidence retained, as intended.
+Next: pure domain restoration, analysis completion and human correction transitions.
