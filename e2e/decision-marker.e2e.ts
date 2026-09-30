@@ -14,7 +14,7 @@ import { createHash } from "node:crypto";
 
 import { authenticate, content, expect, roomPath, test } from "./room";
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 const FIRST = "The rollout goes team by team, starting with the docs team.";
 const SECOND = "After two weeks we review the pilot and decide whether to widen it.";
@@ -349,10 +349,10 @@ test("the marker follows an edit above its prose", async ({ join, seed }) => {
 	expect(Math.abs(box.y + box.height / 2 - (line.y + 16))).toBeLessThan(14);
 });
 
-/** Home and End do not move the caret on macOS; Cmd with the arrow does. */
-function lineEdge(page: Page, key: "Home" | "End") {
-	if (process.platform !== "darwin") return page.keyboard.press(key);
-	return page.keyboard.press(key === "End" ? "Meta+ArrowRight" : "Meta+ArrowLeft");
+/** Home and End do not move the caret on macOS, so put it at the edge with the pointer. */
+async function clickEdge(block: Locator, edge: "start" | "end") {
+	let box = (await block.boundingBox())!;
+	await block.click({ position: { x: edge === "start" ? 1 : box.width - 1, y: 8 } });
 }
 
 function paragraph(page: Page, text: string) {
@@ -364,8 +364,7 @@ test("arrowing down past a collapsed decision lands in the next paragraph and ty
 	let page = await join("ana");
 	await open(page);
 
-	await prose(page, FIRST).click();
-	await lineEdge(page, "End");
+	await clickEdge(prose(page, FIRST), "end");
 	await page.keyboard.press("ArrowDown");
 	await page.keyboard.type("xyz");
 	await expect(content(page)).not.toContainText("zyx");
@@ -382,8 +381,7 @@ test("arrowing up past a collapsed decision lands in the previous paragraph", as
 	let page = await join("ana");
 	await open(page);
 
-	await prose(page, SECOND).click();
-	await lineEdge(page, "Home");
+	await clickEdge(prose(page, SECOND), "start");
 	await page.keyboard.press("ArrowUp");
 	await page.keyboard.type("xyz");
 	await expect(paragraph(page, FIRST)).toContainText("xyz");
@@ -395,8 +393,7 @@ test("arrowing right or left across a collapsed decision crosses it", async ({ j
 	let page = await join("ana");
 	await open(page);
 
-	await prose(page, FIRST).click();
-	await lineEdge(page, "End");
+	await clickEdge(prose(page, FIRST), "end");
 	await page.keyboard.press("ArrowRight");
 	await page.keyboard.type("xyz");
 	await expect(paragraph(page, "xyzAfter two weeks")).toHaveCount(1);
@@ -416,10 +413,64 @@ test("typing with a visible decision card selected never lands at the document s
 	let page = await join("ana");
 	await open(page, "Two weeks");
 
-	await prose(page, FIRST).click();
-	await lineEdge(page, "End");
+	await clickEdge(prose(page, FIRST), "end");
 	await page.keyboard.press("ArrowDown");
 	await page.keyboard.type("xyz");
 	await expect(content(page)).not.toContainText("zyx");
 	await expect(content(page).locator("p").first()).toHaveText(FIRST);
+});
+
+const hiddenCard = (page: Page, widget: string) =>
+	page.locator(`[data-plan-collapsed][data-plan-sidecar-questionnaire="${widget}"]`);
+
+test("Backspace beside a collapsed decision joins the text blocks and keeps it", async ({ join, seed }) => {
+	await seed(SOURCE, STATE);
+	let page = await join("ana");
+	await open(page);
+
+	await clickEdge(prose(page, SECOND), "start");
+	await page.keyboard.press("Backspace");
+	await expect(paragraph(page, `${FIRST}${SECOND}`)).toHaveCount(1);
+	await expect(hiddenCard(page, WIDGET_A)).toHaveCount(1);
+	// The caret is at the join, so typing lands there.
+	await page.keyboard.type("Q");
+	await expect(paragraph(page, `${FIRST}Q${SECOND}`)).toHaveCount(1);
+	await expect(hiddenCard(page, WIDGET_A)).toHaveCount(1);
+});
+
+test("Delete at the end of the block before a collapsed decision joins the next block", async ({ join, seed }) => {
+	await seed(SOURCE, STATE);
+	let page = await join("ana");
+	await open(page);
+
+	await clickEdge(prose(page, FIRST), "end");
+	await page.keyboard.press("Delete");
+	await expect(paragraph(page, `${FIRST}${SECOND}`)).toHaveCount(1);
+	await expect(hiddenCard(page, WIDGET_A)).toHaveCount(1);
+});
+
+test("arrowing down onto a visible card that follows a collapsed one selects the visible card", async ({ join, seed }) => {
+	let orphan = {
+		...STATE.questions[1]!,
+		anchors: { widget: WIDGET_B, questions: { [QUESTION_B]: { anchors: [], pending: false } } },
+	};
+	let source = `${FIRST}\n\n`
+		+ questionnaire(WIDGET_A, QUESTION_A, "How should we roll this out?", LABELS_A, "Team by team")
+		+ `\n`
+		+ questionnaire(WIDGET_B, QUESTION_B, "How long is the pilot?", LABELS_B, "Two weeks")
+		+ `\n${SECOND}\n\n${"Padding paragraph.\n\n".repeat(60)}`;
+	await seed(source, { revision: 1, questions: [STATE.questions[0], orphan] });
+	let page = await join("ana");
+	await open(page);
+
+	await clickEdge(prose(page, FIRST), "end");
+	await page.keyboard.press("ArrowDown");
+	// Deleting the selection removes whatever it is: only the visible card may go.
+	await page.keyboard.press("Backspace");
+	await expect(
+		page.locator(
+			`[data-document-view="plan"] article[data-plan-sidecar-questionnaire="${WIDGET_B}"]`,
+		),
+	).toHaveCount(0);
+	await expect(hiddenCard(page, WIDGET_A)).toHaveCount(1);
 });
