@@ -661,3 +661,45 @@ Fresh focused lifecycle verification passes eight tests with 42 assertions. The
 combined checkpoint also passes workspace and E2E types and CI. PostgreSQL
 regressions remain source-only; runtime coverage uses MemoryStorage and offline
 Harness streams. No application instance, paid model or evaluation runner ran.
+
+The original Conversation Save prompts now receive live questionnaire definitions,
+card status/generation metadata and the room's conversation state. The restored
+latest-prompt routing preserves ordinary message grouping, tools, composer, layout
+and current authorization. Stores reset when the room or connection changes. Six
+whole original transcript/model callbacks remain alongside current tests.
+
+The scoped prompt initially trusted the conversation's contribution summary as its
+option list. Review reproduced a valid canonical card option missing from that
+summary, which disabled Save. The prompt now checks the current card definition,
+unique option ID and exact proposal label, while preserving every other original
+proposal, version, generation, support and status guard and the complete Save body.
+Twelve regressions cover valid options and missing, stale, renamed or duplicate
+canonical options. The actual transcript passes the current card snapshot.
+
+Questionnaire transport preserves all original submit, shared draft, generation,
+reopen and deferred teardown behavior, together with current cancellation. A
+reproduced failed-cancel teardown leak is fixed by settling unobserved cleanup in
+cancel's finalizer. The natural controller owns the private state; the public hook
+keeps shared caches and existing exports. Suggestion projection is retained as a
+pure leaf; the larger QuestionView and remaining card surface are later work.
+
+Editor metadata, unanswered counts, document-content checks and prose bindings
+retain their complete original functions and callbacks. Existing editor geometry,
+selection and display behavior remain. Save components use the current typography
+roles. The original DecisionIcon follows the existing typed LineIcon boundary;
+its one reviewed forwarding exception and owner hash are the only design-contract
+manifest additions. The web package directly declares its new question dependency.
+
+This checkpoint covers server and pure/SSR browser-side behavior. PostgreSQL
+regressions and migration 015 are retained but were not executed. No browser
+session, database migration, application restart, paid inference or evaluation
+runner was used. Remaining pipeline callbacks, QuestionView/card interactions,
+conversation analysis and research-offer surfaces, and deployment configuration
+remain extraction work. The overall product goal is unfinished.
+
+The combined server, web, dialect, question, protocol, editor and icon run passes
+2,710 tests across 410 files with 12,639 assertions and no failures; two PostgreSQL
+suites are explicitly skipped without a database. Workspace and E2E TypeScript
+checks pass. CI passes with only two inherited lint warnings and the existing
+design baseline finding. All eleven research, placement, processor, browser Save,
+controller, editor and callback-preservation checks pass after formatting.

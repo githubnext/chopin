@@ -16,7 +16,7 @@ import { useEffect } from "react";
 
 import { $isDecisionNode, $isQuestionnaireNode, QuestionnaireNode } from "@chopin/dialect";
 
-import { counts, relate } from "./anchors";
+import { counts, relate, resolve } from "./anchors";
 import { holds, paint, pin, unpin } from "./marks";
 import { $blockPoints } from "./passage";
 import { scrollToKey } from "./scroll";
@@ -65,6 +65,9 @@ export class QuestionnaireStore {
 	#binding: Binding | undefined;
 	#editor: LexicalEditor | undefined;
 	#related: Related[] = [];
+	#proseSnapshot: Plan.ProseAnchors[] | undefined;
+	#prose: Array<{ widget: string; key: string }> = [];
+	#hasBound = false;
 	/**
 	 * Which decision the reader last asked to be taken to, and how far along
 	 * it. Never cleared: whether it is still live is the pin's answer.
@@ -98,13 +101,79 @@ export class QuestionnaireStore {
 	attach(editor: LexicalEditor | undefined): void {
 		// Everything, not just the preview: a pin outlives the pointer but it
 		// cannot outlive the document it names.
-		if (!editor && this.#editor) this.release();
+		if (this.#editor && this.#editor !== editor) {
+			this.release();
+			this.bind(undefined);
+		}
 		this.#editor = editor;
 	}
 
 	/** The Yjs binding, so a relative position can be turned into a node key. */
 	bind(binding: Binding | undefined): void {
+		if (binding && binding === this.#binding) return;
+		if (this.#binding || !binding) {
+			this.#proseSnapshot = undefined;
+			this.#publishProse([]);
+		}
 		this.#binding = binding;
+		this.#hasBound = true;
+		this.refreshProse();
+	}
+
+	/** The paragraph each decided card became, resolved against this binding. */
+	prose(snapshot: Plan.ProseAnchors[]): void {
+		// An old provider can finish after teardown. Only the first binding may
+		// accept a snapshot before it exists; later bindings need a fresh one.
+		if (!this.#binding && this.#hasBound) return;
+		this.#proseSnapshot = snapshot;
+		this.refreshProse();
+	}
+
+	proseKey(widget: string): string | undefined {
+		return this.#prose.find(item => item.widget === widget)?.key;
+	}
+
+	proseTargets(): Array<{ widget: string; key: string }> {
+		return this.#prose;
+	}
+
+	/** Re-resolve retained anchors after Lexical catches up to a Yjs update. */
+	refreshProse(): void {
+		let binding = this.#binding;
+		let snapshot = this.#proseSnapshot;
+		if (!binding || !snapshot) return;
+		try {
+			let next: Array<{ widget: string; key: string; order: number }> = [];
+			binding.editor.getEditorState().read(() => {
+				let order = new Map(
+					$getRoot().getChildren().flatMap((node, index) =>
+						$isParagraphNode(node) ? [[node.getKey(), index] as const] : []
+					),
+				);
+				for (let item of snapshot) {
+					if (item.orphaned) continue;
+					let key = item.anchors.map(anchor => resolve(binding, anchor))
+						.find(value => value !== undefined && order.has(value));
+					if (key) next.push({ widget: item.widget, key, order: order.get(key)! });
+				}
+			});
+			next.sort((a, b) => a.order - b.order);
+			this.#publishProse(next.map(({ widget, key }) => ({ widget, key })));
+		} catch (err) {
+			console.error("[plan] could not resolve decided prose:", err);
+			this.#publishProse([]);
+		}
+	}
+
+	#publishProse(next: Array<{ widget: string; key: string }>): void {
+		if (
+			next.length === this.#prose.length
+			&& next.every((item, index) =>
+				item.widget === this.#prose[index]?.widget && item.key === this.#prose[index]?.key
+			)
+		) return;
+		this.#prose = next;
+		for (let listener of this.#listeners) listener();
 	}
 
 	/**
@@ -225,7 +294,10 @@ export function QuestionnaireObserver({ store }: { store: QuestionnaireStore }) 
 
 	useEffect(() => {
 		store.attach(editor);
-		let read = () => editor.getEditorState().read(() => store.set(collectPlanState()));
+		let read = () => {
+			editor.getEditorState().read(() => store.set(collectPlanState()));
+			store.refreshProse();
+		};
 		read();
 		let off = editor.registerUpdateListener(read);
 		return () => {

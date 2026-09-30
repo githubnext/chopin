@@ -184,9 +184,16 @@
 				"props",
 				"unresolved JSX props > MessagePlusIcon > <LineIcon>",
 				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > DecisionIcon > <LineIcon>",
+				1
 			]
 		],
-		"sourceHash": "0dfd0723e90646836446c9017f7dab49c8f2412c75d5d0753fa33cfd265b7f04"
+		"sourceHash": "395805db3113280090d3c6c652cfb28e2ff1f7ff12ec613cfdefe1b3d24e972a"
 	},
 	{
 		"file": "packages/visuals/src/ui/mini-bars.tsx",

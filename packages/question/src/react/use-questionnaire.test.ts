@@ -2,20 +2,9 @@ import { describe, expect, it } from "bun:test";
 
 import { create, normalize } from "../index";
 import { QuestionnaireController } from "./use-questionnaire";
+import { DEFINITION } from "./use-questionnaire.test-fixtures";
 
 import type { Transport } from "./use-questionnaire";
-
-const DEFINITION = normalize({
-	questions: [{
-		header: "Rollout",
-		question: "How should we deploy?",
-		multiple: false,
-		options: [
-			{ label: "Canary", description: "Small percentage first." },
-			{ label: "Blue-green", description: "" },
-		],
-	}],
-});
 
 const QUESTIONNAIRE = normalize({
 	questions: [

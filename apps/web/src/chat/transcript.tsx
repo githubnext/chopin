@@ -1,17 +1,36 @@
 /** The shared chat, grouped for reading rather than event delivery. */
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { ChevronIcon, CloseIcon, LoaderIcon, SignInIcon } from "@chopin/icons";
 
-import { AgentFace, Face, MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
+import {
+	AgentFace,
+	Face,
+	MotionDisclosure,
+	MotionDisclosureIcon,
+	useCardMeta,
+} from "@chopin/editor";
 
 import { MessageMarkdown } from "./markdown";
 import { capitalize, displayText, duration, group, summarize, toolCopy } from "./model";
 import { motionContract } from "../motion-contract";
 import { motionImmediately } from "../motion-input";
 
-import type { Chat } from "@chopin/protocol";
+import type { Chat, ConversationPlan } from "@chopin/protocol";
 import type { Group, Message } from "./model";
+import type { CardMetaStore, QuestionnaireStore } from "@chopin/editor";
+import type { Transport } from "@chopin/question/react";
+import { ActivityLine, DecisionPrompt } from "./decision-entry";
+import { ScopedChoicePrompt } from "./scoped-choice-entry";
+
+export type TranscriptDecisions = {
+	questions: QuestionnaireStore;
+	meta: CardMetaStore;
+	wire?: Transport;
+	connected: boolean;
+	canEdit: boolean;
+	onOpenCard: (questionnaireId: string) => void;
+};
 
 function when(ts: number): string {
 	return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -105,6 +124,59 @@ function SystemEntry({ item }: { item: Extract<Group, { kind: "system" }> }) {
 	);
 }
 
+function DecisionSystemEntry(
+	{ conversationPlan, decisions, item, latest }: {
+		conversationPlan?: ConversationPlan.State;
+		decisions: TranscriptDecisions;
+		item: Extract<Group, { kind: "system" }> & { decision: NonNullable<Chat.Entry["decision"]> };
+		latest: boolean;
+	},
+) {
+	let id = item.decision.questionnaireId;
+	let values = useSyncExternalStore(
+		decisions.questions.subscribe,
+		decisions.questions.snapshot,
+		decisions.questions.snapshot,
+	);
+	let value = values.find(entry => entry.id === id)?.value;
+	let meta = useCardMeta(decisions.meta, id);
+	let entry: Chat.Entry & { decision: NonNullable<Chat.Entry["decision"]> } = {
+		id: item.id,
+		author: { kind: "system" },
+		text: item.text,
+		ts: item.ts!,
+		decision: item.decision,
+	};
+	let props = {
+		entry,
+		latest,
+		value,
+		meta,
+		wire: decisions.wire,
+		connected: decisions.connected,
+		canEdit: decisions.canEdit,
+		onOpenCard: decisions.onOpenCard,
+	};
+
+	if (entry.decision.kind === "scoped-choice") {
+		return (
+			<ScopedChoicePrompt
+				canEdit={decisions.canEdit}
+				connected={decisions.connected}
+				decision={entry.decision}
+				latest={latest}
+				meta={meta}
+				state={conversationPlan}
+				value={value}
+				wire={decisions.wire}
+			/>
+		);
+	}
+	return entry.decision.kind === "prompt"
+		? <DecisionPrompt {...props} />
+		: <ActivityLine {...props} />;
+}
+
 function MessageBody(
 	{ handle, message, onWithdraw }: {
 		handle: string;
@@ -189,6 +261,8 @@ function MessageGroup(
 export function Transcript(
 	{
 		active,
+		conversationPlan,
+		decisions,
 		entries,
 		handle,
 		onWithdraw,
@@ -196,6 +270,9 @@ export function Transcript(
 		working,
 	}: {
 		active: boolean;
+		canEdit?: boolean;
+		conversationPlan?: ConversationPlan.State;
+		decisions?: TranscriptDecisions;
 		entries: Chat.Entry[];
 		handle: string;
 		onWithdraw: (id: string) => void;
@@ -206,6 +283,16 @@ export function Transcript(
 	let bottom = useRef<HTMLDivElement>(null);
 	let pinned = useRef(true);
 	let groups = group(entries, queued, working);
+	let latestPrompt = new Map<string, string>();
+	let latestScoped = new Map<string, string>();
+	for (let entry of entries) {
+		if (entry.decision?.kind === "prompt") {
+			latestPrompt.set(entry.decision.questionnaireId, entry.id);
+		}
+		if (entry.decision?.kind === "scoped-choice") {
+			latestScoped.set(entry.decision.proposalId, entry.id);
+		}
+	}
 
 	useEffect(() => {
 		if (active && pinned.current) bottom.current?.scrollIntoView({ block: "end" });
@@ -227,7 +314,23 @@ export function Transcript(
 			>
 				{groups.map(item =>
 					item.kind === "system"
-						? <SystemEntry item={item} key={item.id} />
+						? decisions && item.decision && item.ts !== undefined
+							? (
+								<DecisionSystemEntry
+									conversationPlan={conversationPlan}
+									decisions={decisions}
+									item={item as Extract<Group, { kind: "system" }> & {
+										decision: NonNullable<Chat.Entry["decision"]>;
+									}}
+									key={item.id}
+									latest={item.decision.kind === "prompt"
+										? latestPrompt.get(item.decision.questionnaireId) === item.id
+										: item.decision.kind === "scoped-choice"
+										? latestScoped.get(item.decision.proposalId) === item.id
+										: true}
+								/>
+							)
+							: <SystemEntry item={item} key={item.id} />
 						: (
 							<MessageGroup
 								group={item}

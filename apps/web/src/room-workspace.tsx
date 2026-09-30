@@ -3,6 +3,7 @@ import { documentPath } from "@chopin/protocol/document-url";
 import { ChevronIcon, DocumentIcon } from "@chopin/icons";
 import {
 	advanceDecisionView,
+	CardMetaStore,
 	countUnanswered,
 	cursor,
 	Decisions,
@@ -17,6 +18,7 @@ import {
 } from "@chopin/editor";
 
 import { Chat } from "./chat/chat";
+import { ConversationPlanStore, useConversationPlan } from "./conversation-plan/store";
 import { rememberChannel } from "./channel-recovery";
 import { decisionAttention, DecisionViewControl } from "./decision-view-control";
 import { newestDocumentMetadata } from "./document-actions";
@@ -164,6 +166,8 @@ export function RoomWorkspace(
 	}: HostedWorkspaceProps,
 ) {
 	let [wire, setWire] = useState<Wire>();
+	let conversationStore = useMemo(() => new ConversationPlanStore(room), [room]);
+	let conversation = useConversationPlan(conversationStore);
 	let {
 		onDocumentAction,
 		onDocumentChanged,
@@ -201,6 +205,7 @@ export function RoomWorkspace(
 	let researchEnabled = profile.research;
 	let [workspace, dispatch] = useWorkspaceState(profile);
 	let [questions] = useState(() => new QuestionnaireStore());
+	let [cardMeta] = useState(() => new CardMetaStore());
 	let [threads] = useState(() => new ThreadStore());
 	let research = useMemo(
 		() =>
@@ -307,6 +312,12 @@ export function RoomWorkspace(
 		dispatch({ type: "set-chat", open: false });
 	};
 
+	let showDecisionCard = (questionnaireId: string) => {
+		let entry = questions.snapshot().find(item => item.id === questionnaireId);
+		let question = entry?.value.questions[0]?.id;
+		if (entry && question) showPlan(entry.id, question);
+	};
+
 	let setDesktopChatOpen = (open: boolean) => {
 		dispatch({ type: "set-desktop-chat", open });
 		if (!open) dispatch({ type: "set-chat", open: false });
@@ -354,6 +365,7 @@ export function RoomWorkspace(
 	useEffect(() => () => research.reset(), [research]);
 
 	useEffect(() => {
+		cardMeta.listen(undefined);
 		let socket = new Wire({
 			channelId: room,
 			onAuthenticationRequired: () => location.reload(),
@@ -362,12 +374,17 @@ export function RoomWorkspace(
 				onDocumentDeleted(room);
 			},
 			onStatus: next => {
+				if (next === "connected") {
+					conversationStore.reset();
+					cardMeta.listen(undefined);
+				}
 				setStatus(next);
 			},
 		});
 		setWire(socket);
 
 		let off = [
+			conversationStore.listen(socket),
 			socket.on<ManagedHello>("session:hello", frame => {
 				let editable = frame.canEdit && !frame.archivedAt;
 				let accessChanged = latestCanEdit.current !== editable
@@ -406,10 +423,12 @@ export function RoomWorkspace(
 				if (researchEnabled) research.invalidate(frame.workspaceId);
 			}),
 			threads.listen(socket),
+			cardMeta.listen(socket),
 		];
 
 		return () => {
 			for (let unsubscribe of off) unsubscribe();
+			cardMeta.listen(undefined);
 			socket.dispose();
 			setWire(undefined);
 		};
@@ -422,6 +441,8 @@ export function RoomWorkspace(
 		room,
 		profile.surface,
 		threads,
+		cardMeta,
+		conversationStore,
 		updateMetadata,
 	]);
 
@@ -444,6 +465,15 @@ export function RoomWorkspace(
 					connected={status === "connected" && workspaceCanEdit}
 					handle={handle}
 					onActivity={onChatActivity}
+					conversationPlan={conversation.state}
+					decisions={{
+						questions,
+						meta: cardMeta,
+						wire,
+						connected: status === "connected",
+						canEdit: workspaceCanEdit,
+						onOpenCard: showDecisionCard,
+					}}
 					referencesEnabled={chatReferences.wire === wire && chatReferences.enabled}
 					repository={repository}
 					room={room}

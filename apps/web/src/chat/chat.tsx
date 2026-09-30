@@ -35,10 +35,11 @@ import {
 	reviseComposerDraft,
 } from "./references";
 import { Transcript } from "./transcript";
+import type { TranscriptDecisions } from "./transcript";
 import { TerminalAlert } from "../terminal-alert";
 import plannerStop from "../assets/icons/planner-stop.svg";
 
-import type { Chat as Wire } from "@chopin/protocol";
+import type { Chat as Wire, ConversationPlan } from "@chopin/protocol";
 import type { Repository } from "../api";
 import type { ComposerDraft, ReferenceTarget } from "./references";
 import type { Wire as Socket } from "../wire";
@@ -55,6 +56,8 @@ export type ChatProps = {
 	agent?: boolean;
 	active?: boolean;
 	onActivity?: (event: { type: "message" | "working"; busy: boolean }) => void;
+	conversationPlan?: ConversationPlan.State;
+	decisions?: TranscriptDecisions;
 };
 
 export function Chat(
@@ -64,6 +67,8 @@ export function Chat(
 		connected,
 		handle,
 		onActivity,
+		conversationPlan,
+		decisions,
 		referencesEnabled,
 		repository,
 		room,
@@ -275,6 +280,8 @@ export function Chat(
 		<div className="flex h-full min-h-0 flex-col">
 			<Transcript
 				active={active}
+				conversationPlan={conversationPlan}
+				decisions={decisions}
 				entries={entries}
 				handle={handle}
 				onWithdraw={id => wire?.send("chat:unqueue", { id })}
