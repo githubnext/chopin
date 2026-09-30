@@ -14,8 +14,10 @@ export type BundleItem = {
 export type InitialJavaScript = { files: string[]; gzip: number; raw: number };
 export type JavaScriptBudget = { gzip: number; raw: number };
 
+// Raised from 80_000 for the keyboard-only focus ring and its steadier focus
+// trap (MutationObserver-based recovery); both are real, load-bearing code.
 export const INITIAL_JAVASCRIPT_BUDGET: JavaScriptBudget = {
-	gzip: 80_000,
+	gzip: 80_500,
 	raw: 255_000,
 };
 
