@@ -448,6 +448,7 @@ export function RoomWorkspace(
 					connected={status === "connected" && workspaceCanEdit}
 					handle={handle}
 					onActivity={onChatActivity}
+					onShowDecisions={() => selectDestination("decisions")}
 					referencesEnabled={chatReferences.wire === wire && chatReferences.enabled}
 					repository={repository}
 					room={room}

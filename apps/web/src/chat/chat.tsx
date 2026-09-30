@@ -34,6 +34,7 @@ import {
 	referenceTriggerKey,
 	reviseComposerDraft,
 } from "./references";
+import { RunCard } from "./run-card";
 import { Transcript } from "./transcript";
 import { TerminalAlert } from "../terminal-alert";
 import plannerStop from "../assets/icons/planner-stop.svg";
@@ -56,15 +57,17 @@ export type ChatProps = {
 	agent?: boolean;
 	active?: boolean;
 	onActivity?: (event: { type: "message" | "working"; busy: boolean }) => void;
+	/** Opens Decisions, where a waiting workflow's questions are. */
+	onShowDecisions?: () => void;
 };
 
-/** "1 workflow running", "2 workflows paused", or both. */
-export function runsLabel(runs: Wire.Runs): string {
-	let count = (n: number, word: string) => `${n} ${n === 1 ? "workflow" : "workflows"} ${word}`;
-	return [
-		runs.active ? count(runs.active, "running") : "",
-		runs.paused ? count(runs.paused, "paused") : "",
-	].filter(Boolean).join(" · ");
+/** How many runs are still live, and how many are paused and resumable. */
+export function runCounts(runs: Wire.Runs | undefined): { active: number; paused: number } {
+	let list = runs ?? [];
+	return {
+		active: list.filter(run => run.status === "running" || run.status === "waiting").length,
+		paused: list.filter(run => run.status === "paused").length,
+	};
 }
 
 export function Chat(
@@ -74,6 +77,7 @@ export function Chat(
 		connected,
 		handle,
 		onActivity,
+		onShowDecisions,
 		referencesEnabled,
 		repository,
 		room,
@@ -86,6 +90,7 @@ export function Chat(
 	let [busy, setBusy] = useState(false);
 	let [turn, setTurn] = useState<Wire.Turn>();
 	let [runs, setRuns] = useState<Wire.Runs>();
+	let counts = runCounts(runs);
 	let [draft, setDraft] = useState<ComposerDraft>({
 		text: "",
 		references: [],
@@ -297,6 +302,12 @@ export function Chat(
 					: undefined}
 			/>
 
+			{agent && !!runs?.length && (
+				<div className="flex shrink-0 flex-col gap-2 px-2.5 pb-2" data-chat-runs="">
+					{runs.map(run => <RunCard key={run.id} onShowDecisions={onShowDecisions} run={run} />)}
+				</div>
+			)}
+
 			<div className="chat-composer relative shrink-0 px-2.5 pb-2.5">
 				{pickerOpen && trigger && (
 					<ReferencePicker
@@ -420,21 +431,12 @@ export function Chat(
 					/>
 
 					<div className="flex items-center justify-end gap-1 px-2 pb-2">
-						{sendError
-							? (
-								<TerminalAlert className="mr-auto min-w-0 text-sm text-destructive-ink [overflow-wrap:anywhere]">
-									{sendError}
-								</TerminalAlert>
-							)
-							: agent && runs && (
-								<span
-									className="mr-auto min-w-0 truncate text-sm text-text-quaternary tabular-nums"
-									data-chat-runs={runs.active ? "active" : "paused"}
-								>
-									{runsLabel(runs)}
-								</span>
-							)}
-						{agent && (busy || !!runs?.active) && (
+						{sendError && (
+							<TerminalAlert className="mr-auto min-w-0 text-sm text-destructive-ink [overflow-wrap:anywhere]">
+								{sendError}
+							</TerminalAlert>
+						)}
+						{agent && (busy || counts.active > 0) && (
 							<button
 								aria-label="Stop Planner"
 								className="btn btn-icon btn-secondary"
@@ -445,7 +447,7 @@ export function Chat(
 								<img alt="" className="size-[14px]" src={plannerStop} />
 							</button>
 						)}
-						{agent && !busy && !runs?.active && !!runs?.paused && (
+						{agent && !busy && !counts.active && counts.paused > 0 && (
 							<button
 								aria-label="Resume Planner"
 								className="btn btn-icon btn-secondary"

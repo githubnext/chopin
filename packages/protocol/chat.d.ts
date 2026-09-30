@@ -88,8 +88,39 @@ export declare namespace Chat {
 		responded: boolean;
 	};
 
-	/** Workflow runs the Planner is still carrying after its turn: live, and paused. */
-	export type Runs = { active: number; paused: number };
+	/** One stage of a workflow run, in the order the run reached it. */
+	export type RunStage = {
+		id: string;
+		name: string;
+		status:
+			| "pending"
+			| "running"
+			| "awaiting_input"
+			| "paused"
+			| "blocked"
+			| "completed"
+			| "failed"
+			| "skipped";
+		/** Seconds since the epoch. */
+		started?: number;
+		ended?: number;
+	};
+
+	/** An Atomic workflow run the Planner started and still carries after its turn. */
+	export type Run = {
+		id: string;
+		name: string;
+		status: "running" | "waiting" | "paused" | "finished" | "failed" | "stopped";
+		/** Seconds since the epoch. */
+		started: number;
+		updated: number;
+		ended?: number;
+		stages: RunStage[];
+		/** Decisions questions the run is waiting on. */
+		waiting: number;
+	};
+
+	export type Runs = Run[];
 
 	/** Everything said so far, sent on join. */
 	export type History = KIND<"chat:history"> & {

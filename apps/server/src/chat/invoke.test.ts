@@ -16,6 +16,7 @@ import * as Chat from "./service";
 
 import type { Server } from "bun";
 import type { ActiveOwnerBinding } from "../agent/active-owner";
+import type { Chat as Wire } from "@chopin/protocol";
 import type { HostedAuth } from "../auth/routes";
 import type { Config } from "../config";
 import type { GitHub } from "../github/client";
@@ -419,10 +420,31 @@ test("HARNESS=atomic runs every Planner session full in hosted and local configu
 	}
 });
 
+type Runs = { active: string[]; paused: string[]; cards: Wire.Run[] };
+
+function card(status: Wire.Run["status"]): Wire.Run {
+	let ended = status === "finished" || status === "failed" || status === "stopped";
+	return {
+		id: "run-1",
+		name: "plan-review",
+		status,
+		started: 1_000,
+		updated: 1_600,
+		...(ended ? { ended: 1_600 } : {}),
+		stages: [{
+			id: "run-1:draft",
+			name: "draft-1",
+			status: status === "waiting" ? "awaiting_input" : ended ? "completed" : "running",
+			started: 1_000,
+		}],
+		waiting: status === "waiting" ? 1 : 0,
+	};
+}
+
 /** A Planner session that owns workflow runs, driven by the test. */
 function runningSession() {
-	let runs = { active: ["run-1"], paused: [] as string[] };
-	let listeners = new Set<(runs: { active: string[]; paused: string[] }) => void>();
+	let runs: Runs = { active: ["run-1"], paused: [], cards: [card("running")] };
+	let listeners = new Set<(runs: Runs) => void>();
 	let calls: string[] = [];
 	let session = {
 		async stream(prompt: string) {
@@ -437,7 +459,7 @@ function runningSession() {
 			calls.push("destroy");
 		},
 		runs: () => runs,
-		watchRuns(listener: (runs: { active: string[]; paused: string[] }) => void) {
+		watchRuns(listener: (runs: Runs) => void) {
 			listeners.add(listener);
 			return () => listeners.delete(listener);
 		},
@@ -451,7 +473,7 @@ function runningSession() {
 	return {
 		session,
 		calls,
-		set(next: { active: string[]; paused: string[] }) {
+		set(next: Runs) {
 			runs = next;
 			for (let listener of listeners) listener(next);
 		},
@@ -473,27 +495,34 @@ test("a Planner that still owns workflow runs outlives its turn, pauses, resumes
 	};
 	let ws = { data: { handle: "ana" } } as unknown as Socket;
 	let said = () => context.chat.entries.at(-1)?.text;
-	let runs = () => events.filter(event => event.kind === "chat:state").at(-1)?.runs;
+	let runs = () => (events.filter(event => event.kind === "chat:state").at(-1)?.runs as
+		| Wire.Run[]
+		| undefined);
 
 	expect(await Chat.invoke(context, user, "Run the workflow")).toBeUndefined();
 	await context.chat.running;
 	expect(planner.calls).toEqual(["stream @ana: Run the workflow"]);
 	expect(context.chat.busy).toBe(false);
-	expect(context.chat.runs).toEqual({ active: 1, paused: 0 });
-	expect(runs()).toEqual({ active: 1, paused: 0 });
+	expect(context.chat.runs).toEqual([card("running")]);
+	expect(runs()).toEqual([card("running")]);
 	expect(holds).toBe(1);
 
 	await Chat.abort(context, ws);
 	expect(planner.calls.at(-1)).toBe("pause");
 	expect(said()).toBe("@ana stopped the Planner and paused its workflows.");
-	planner.set({ active: [], paused: ["run-1"] });
-	expect(runs()).toEqual({ active: 0, paused: 1 });
+	planner.set({ active: [], paused: ["run-1"], cards: [card("paused")] });
+	expect(runs()?.map(run => run.status)).toEqual(["paused"]);
 	expect(planner.calls).not.toContain("destroy");
 
 	await Chat.resume(context, ws);
 	expect(planner.calls.at(-1)).toBe("resume");
 	expect(said()).toBe("@ana resumed the Planner's workflows.");
-	planner.set({ active: ["run-1"], paused: [] });
+	planner.set({ active: ["run-1"], paused: [], cards: [card("waiting")] });
+	expect(runs()?.[0]).toMatchObject({
+		status: "waiting",
+		waiting: 1,
+		stages: [{ status: "awaiting_input" }],
+	});
 
 	expect(await Chat.invoke(context, user, "How is it going?")).toBeUndefined();
 	await context.chat.running;
@@ -501,7 +530,9 @@ test("a Planner that still owns workflow runs outlives its turn, pauses, resumes
 	expect(planner.calls.filter(call => call.startsWith("stream"))).toHaveLength(2);
 	expect(planner.calls).not.toContain("destroy");
 
-	planner.set({ active: [], paused: [] });
+	planner.set({ active: [], paused: [], cards: [card("finished")] });
+	expect(context.chat.entries.some(entry => entry.text === "plan-review finished after 10 min."))
+		.toBe(true);
 	await new Promise(resolve => setTimeout(resolve, 0));
 	expect(planner.calls.at(-1)).toBe("destroy");
 	expect(context.chat.retained).toBeUndefined();
@@ -533,7 +564,10 @@ test("a retained Planner is let go when its owner's binding ends, and sessions w
 	expect(context.chat.retained).toBeUndefined();
 	expect(planner.calls.at(-1)).toBe("destroy");
 
-	let quiet = { ...runningSession().session, runs: () => ({ active: [], paused: [] }) };
+	let quiet = {
+		...runningSession().session,
+		runs: (): Runs => ({ active: [], paused: [], cards: [] }),
+	};
 	let destroyed = 0;
 	quiet.destroy = async () => {
 		destroyed++;
