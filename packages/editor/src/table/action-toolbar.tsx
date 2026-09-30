@@ -151,6 +151,7 @@ export function TableActionToolbar(
 				<button
 					aria-expanded={group === "add"}
 					className={button}
+					data-press="small"
 					onClick={() => show("add")}
 					type="button"
 				>
@@ -159,6 +160,7 @@ export function TableActionToolbar(
 				<button
 					aria-expanded={group === "remove"}
 					className={button}
+					data-press="small"
 					onClick={() => show("remove")}
 					type="button"
 				>
@@ -167,6 +169,7 @@ export function TableActionToolbar(
 				<button
 					aria-expanded={group === "move"}
 					className={button}
+					data-press="small"
 					onClick={() => show("move")}
 					type="button"
 				>
@@ -175,6 +178,7 @@ export function TableActionToolbar(
 				<button
 					aria-label={`Align column ${column + 1}, currently ${alignmentLabel(align)}`}
 					className={button}
+					data-press="small"
 					onClick={() => act(() => $setAlign(table.key, column, nextAlign(align)))}
 					type="button"
 				>
@@ -186,6 +190,7 @@ export function TableActionToolbar(
 				<div aria-label="Add table actions" className="plan-table-action-panel" role="group">
 					<button
 						className={button}
+						data-press="small"
 						disabled={!available.addRowBefore}
 						onClick={() =>
 							act(() =>
@@ -197,6 +202,7 @@ export function TableActionToolbar(
 					</button>
 					<button
 						className={button}
+						data-press="small"
 						disabled={!available.addRowAfter}
 						onClick={() => act(() => $addRow(table.key, row + 1))}
 						type="button"
@@ -205,6 +211,7 @@ export function TableActionToolbar(
 					</button>
 					<button
 						className={button}
+						data-press="small"
 						disabled={!available.addColumn}
 						onClick={() => act(() => $addColumn(table.key, column))}
 						type="button"
@@ -213,6 +220,7 @@ export function TableActionToolbar(
 					</button>
 					<button
 						className={button}
+						data-press="small"
 						disabled={!available.addColumn}
 						onClick={() => act(() => $addColumn(table.key, column + 1))}
 						type="button"
@@ -226,6 +234,7 @@ export function TableActionToolbar(
 				<div aria-label="Remove table actions" className="plan-table-action-panel" role="group">
 					<button
 						className={button}
+						data-press="small"
 						disabled={!available.removeRow}
 						onClick={() =>
 							act(() =>
@@ -237,6 +246,7 @@ export function TableActionToolbar(
 					</button>
 					<button
 						className={button}
+						data-press="small"
 						disabled={!available.removeColumn}
 						onClick={() => act(() => $removeColumn(table.key, column))}
 						type="button"
@@ -250,6 +260,7 @@ export function TableActionToolbar(
 				<div aria-label="Move table actions" className="plan-table-action-panel" role="group">
 					<button
 						className={button}
+						data-press="small"
 						disabled={!available.moveRowUp}
 						onClick={() =>
 							act(() =>
@@ -261,6 +272,7 @@ export function TableActionToolbar(
 					</button>
 					<button
 						className={button}
+						data-press="small"
 						disabled={!available.moveRowDown}
 						onClick={() => act(() => $moveRow(table.key, row, row + 1))}
 						type="button"
@@ -269,6 +281,7 @@ export function TableActionToolbar(
 					</button>
 					<button
 						className={button}
+						data-press="small"
 						disabled={!available.moveColumnLeft}
 						onClick={() => act(() => $moveColumn(table.key, column, column - 1))}
 						type="button"
@@ -277,6 +290,7 @@ export function TableActionToolbar(
 					</button>
 					<button
 						className={button}
+						data-press="small"
 						disabled={!available.moveColumnRight}
 						onClick={() => act(() => $moveColumn(table.key, column, column + 1))}
 						type="button"

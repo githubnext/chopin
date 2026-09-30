@@ -710,17 +710,23 @@ body {
 	transition: scale var(--duration-fast) var(--ease-out);
 }
 
+/*
+ * The scale is a proportion, so the default is subtle: 4% of a full-width row
+ * is several pixels at each edge and reads as jumping, where 4% of a 28px
+ * toolbar cell is the one pixel that is wanted. Small controls opt in to the
+ * stronger press with `.btn-icon`, `.btn-sm`, or `data-press="small"`; a
+ * full-screen backdrop opts out with `data-press="none"`.
+ */
 @media (prefers-reduced-motion: no-preference) {
 	:where(button, [role="button"]):not(:disabled):active {
+		scale: 0.99;
+	}
+
+	:where(button, [role="button"]):where(.btn-icon, .btn-sm, [data-press="small"]):not(:disabled):active {
 		scale: 0.96;
 	}
 
-	/*
-	 * A proportion, so a row needs a smaller one: 4% of a full-width row is
-	 * several pixels at each edge and reads as jumping, where 4% of a 28px
-	 * toolbar cell is the one pixel that is wanted.
-	 */
-	:where(button, [role="button"])[data-press="wide"]:not(:disabled):active {
-		scale: 0.99;
+	:where(button, [role="button"])[data-press="none"]:not(:disabled):active {
+		scale: none;
 	}
 }

@@ -41,6 +41,7 @@ export function NavigationDialog(
 			<button
 				aria-label={`Close ${title}`}
 				className="navigation-modal-backdrop"
+				data-press="none"
 				onClick={onDismiss}
 				type="button"
 			/>
