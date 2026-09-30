@@ -12,6 +12,7 @@ const STATUS: Record<Wire.Run["status"], string> = {
 	waiting: "waiting on Decisions",
 	paused: "paused",
 	finished: "finished",
+	blocked: "blocked",
 	failed: "failed",
 	stopped: "stopped",
 };
@@ -73,6 +74,8 @@ function StageGlyph({ status }: { status: Wire.RunStage["status"] }) {
 
 export function RunCard({ run, onShowDecisions }: { run: Wire.Run; onShowDecisions?: () => void }) {
 	let live = run.status === "running" || run.status === "waiting";
+	let ended = !live && run.status !== "paused";
+	let [expanded, setExpanded] = useState(false);
 	let now = useNow(live);
 	let end = run.ended ?? (live ? now : run.updated);
 	let hidden = Math.max(0, run.stages.length - SHOWN_STAGES);
@@ -98,37 +101,51 @@ export function RunCard({ run, onShowDecisions }: { run: Wire.Run; onShowDecisio
 				<span className="ml-auto shrink-0 text-text-quaternary tabular-nums">
 					{elapsed(end - run.started)}
 				</span>
-			</div>
-			<ol className="mt-1 flex flex-col gap-0.5">
-				{hidden > 0 && <li className="pl-6 text-text-quaternary tabular-nums">+{hidden} earlier
-				</li>}
-				{stages.map(stage => (
-					<li
-						className={`flex min-w-0 items-center gap-2 ${
-							stage.status === "completed" || stage.status === "skipped"
-								? "text-text-quaternary"
-								: ""
-						}`}
-						data-run-stage={stage.status}
-						key={stage.id}
+				{ended && run.stages.length > 0 && (
+					<button
+						aria-expanded={expanded}
+						className="btn btn-sm btn-ghost -mr-2 shrink-0 text-text-tertiary tabular-nums"
+						data-run-stages-toggle=""
+						onClick={() => setExpanded(open => !open)}
+						type="button"
 					>
-						<StageGlyph status={stage.status} />
-						<span className="min-w-0 truncate font-mono">{stage.name}</span>
-						<span
-							className={stage.status === "awaiting_input"
-								? "text-warning-ink"
-								: "text-text-tertiary"}
+						{run.stages.length} {run.stages.length === 1 ? "stage" : "stages"}
+					</button>
+				)}
+			</div>
+			{(!ended || expanded) && (
+				<ol className="mt-1 flex flex-col gap-0.5">
+					{hidden > 0 && (
+						<li className="pl-6 text-text-quaternary tabular-nums">+{hidden} earlier</li>
+					)}
+					{stages.map(stage => (
+						<li
+							className={`flex min-w-0 items-center gap-2 ${
+								stage.status === "completed" || stage.status === "skipped"
+									? "text-text-quaternary"
+									: ""
+							}`}
+							data-run-stage={stage.status}
+							key={stage.id}
 						>
-							{STAGE[stage.status]}
-						</span>
-						{stage.started !== undefined && (
-							<span className="ml-auto shrink-0 text-text-quaternary tabular-nums">
-								{elapsed((stage.ended ?? (live ? now : run.updated)) - stage.started)}
+							<StageGlyph status={stage.status} />
+							<span className="min-w-0 truncate font-mono">{stage.name}</span>
+							<span
+								className={stage.status === "awaiting_input"
+									? "text-warning-ink"
+									: "text-text-tertiary"}
+							>
+								{STAGE[stage.status]}
 							</span>
-						)}
-					</li>
-				))}
-			</ol>
+							{stage.started !== undefined && (
+								<span className="ml-auto shrink-0 text-text-quaternary tabular-nums">
+									{elapsed((stage.ended ?? (live ? now : run.updated)) - stage.started)}
+								</span>
+							)}
+						</li>
+					))}
+				</ol>
+			)}
 			{run.waiting > 0 && (
 				<button
 					className="btn btn-sm btn-ghost mt-1 -ml-2 text-warning-ink"
