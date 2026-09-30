@@ -165,3 +165,22 @@ export function MessagePlusIcon(props: IconProps) {
 		</LineIcon>
 	);
 }
+
+export function ClockIcon(props: IconProps) {
+	return (
+		<LineIcon title="clock" {...props}>
+			<circle cx="9" cy="9" r="7.25" />
+			<polyline points="9 4.75 9 9 12.25 11.25" />
+		</LineIcon>
+	);
+}
+
+/** Reserved for "Show in chat" on the resolved-decision popover; no data drives it yet. */
+export function MessageForwardIcon(props: IconProps) {
+	return (
+		<LineIcon title="message-forward" {...props}>
+			<path d="M10.25,9.25H2.878c-.616,0-1.109,.556-.989,1.16,.158,.789,.444,1.532,.834,2.207,.43,.806-.053,2.712-.973,3.633,1.25,.068,2.897-.497,3.633-.973,.489,.282,1.264,.656,2.279,.848,.832,.157,1.714,.171,2.623,.013,2.902-.504,5.27-2.806,5.827-5.699,.891-4.636-2.637-8.689-7.111-8.689C5.781,1.75,3.053,3.847,2.106,6.75" />
+			<polyline points="7.75 6.5 10.5 9.25 7.75 12" />
+		</LineIcon>
+	);
+}

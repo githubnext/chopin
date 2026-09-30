@@ -14,6 +14,7 @@ import { useCellValue } from "@mdxeditor/gurx";
 import { Provenance, SidecarCard } from "../card";
 import { ContentSwapLayer } from "../content-swap";
 import { PresenceFaces } from "../presence-faces";
+import { useRelations } from "../questionnaires";
 import { widgets$ } from "../widget-options";
 
 import type { ReactNode } from "react";
@@ -233,8 +234,32 @@ function Decided(
 	);
 }
 
+/**
+ * Whether a resolved decision is carried entirely by a margin marker.
+ *
+ * Only when every question has prose to sit beside. Pending, deliberately
+ * empty and orphaned decisions have nowhere to put a marker, so they keep a
+ * compact card rather than vanishing from the plan.
+ */
+export function carriedByMarkers(
+	value: Questionnaire,
+	places: { [question: string]: number } | undefined,
+): boolean {
+	return !!places
+		&& value.questions.length > 0
+		&& value.questions.every(question =>
+			question.answer !== undefined && (places[question.id] ?? 0) > 0
+		);
+}
+
 function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 	let options = useCellValue(widgets$);
+	// Re-render when anchors arrive: whether the card collapses depends on them.
+	useRelations(options.questions);
+	let places = options.questions?.counts(value.id);
+	if (carriedByMarkers(value, places)) {
+		return <div data-plan-collapsed="" data-plan-sidecar-questionnaire={value.id} hidden />;
+	}
 
 	return (
 		<QuestionnaireCard
@@ -244,7 +269,7 @@ function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 			onQuestionEnter={question => options.questions?.highlight(value.id, question)}
 			onQuestionLeave={() => options.questions?.clear()}
 			onQuestionSelect={question => options.questions?.reveal(value.id, question)}
-			places={options.questions?.counts(value.id)}
+			places={places}
 			value={value}
 			wire={options.wire}
 		/>
