@@ -31,6 +31,15 @@ import * as Service from "../plan/service";
 import type { Plan } from "../plan/service";
 import type { Socket, SocketData } from "../wire";
 import type { Ended, Questions } from "./store";
+import type { Record } from "./records";
+
+export {
+	isOpenStatus,
+	matchesQuestionSource,
+	normalizeRecord,
+	questionMentionsOption,
+} from "./records";
+export type { DecisionEntry, OptionOrigin, Record } from "./records";
 
 export type { Questions } from "./store";
 
@@ -62,20 +71,6 @@ export function identify(raw: unknown): Definition {
 		})),
 	};
 }
-
-/** A questionnaire as it is stored beside the plan, so it survives a restart. */
-export type Record = {
-	id: string;
-	definition: Definition;
-	status: "open" | "answered" | "cancelled";
-	/** Question id to the answer as it reads, for projection into the plan. */
-	answers?: { [question: string]: string };
-	resolver?: string;
-	/** When it was settled, Unix seconds. Absent on one settled before we recorded it. */
-	at?: number;
-	/** Where in the prose each of its decisions lives. */
-	anchors?: Wired.WidgetAnchors;
-};
 
 function decide(
 	entry: { status: "answered"; answers: Answer[] } | { status: "cancelled" },
@@ -131,7 +126,15 @@ export async function ask(
 					})),
 				}],
 			};
-			let record: Record = { id, definition: single, status: "open" };
+			let record: Record = {
+				id,
+				definition: single,
+				status: "open",
+				origin: "planner",
+				history: [],
+				optionOrigins: {},
+				editors: [],
+			};
 			if (anchors) {
 				record.anchors = Anchors.set(Anchors.read(record), question.id, anchors[index]!);
 			}

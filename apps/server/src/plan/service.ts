@@ -14,6 +14,9 @@ import * as Y from "yjs";
 import { createHash } from "node:crypto";
 
 import { MENTION } from "@chopin/protocol/address";
+import * as Question from "@chopin/question";
+
+import { validateSource } from "../conversation-plan/sources";
 
 import * as presence from "./presence";
 import * as edit from "./edit";
@@ -344,6 +347,16 @@ function legacyCreation(
 	return creation({ brief, origin });
 }
 
+function definitionShape(value: Question.Definition) {
+	return value.questions.map(question => [
+		question.id,
+		question.header,
+		question.question,
+		question.multiple,
+		question.options.map(option => [option.id, option.label, option.description]),
+	]);
+}
+
 function restoredState(
 	value: JsonValue,
 	pristine: boolean,
@@ -416,18 +429,24 @@ function restoredState(
 	}
 	let lifecycle = hasLifecycle ? restoredLifecycle : undefined;
 	let questions = objects(item.questions, "question record");
-	for (let question of questions) {
-		if (
-			(question.status !== "open" && question.status !== "answered"
-				&& question.status !== "cancelled")
-			|| !question.definition
-			|| typeof question.definition !== "object"
-			|| Array.isArray(question.definition)
-		) throw new Error("hosted channel has an invalid question record");
-	}
+	let records = questions.map(question => Questions.normalizeRecord(question));
 	let openQuestions = objects(item.openQuestions, "open questionnaire");
+	let recordIds = new Set(records.map(record => record.id));
 	let openIds = new Set(openQuestions.map(entry => entry.id as string));
-	if (questions.some(record => (record.status === "open") !== openIds.has(record.id as string))) {
+	let definitions = new Map(
+		records.map(record => [record.id, Question.identified(record.definition)]),
+	);
+	if (
+		[...openIds].some(id => !recordIds.has(id))
+		|| records.some(record => Questions.isOpenStatus(record.status) !== openIds.has(record.id))
+		|| openQuestions.some(entry => {
+			let record = definitions.get(entry.id as string);
+			if (!record) return true;
+			let draft = Question.identified(entry.definition);
+			return JSON.stringify(definitionShape(record))
+				!== JSON.stringify(definitionShape(draft));
+		})
+	) {
 		throw new Error("hosted channel question records disagree with their drafts");
 	}
 	let threads = objects(item.threads, "comment thread");
@@ -441,6 +460,19 @@ function restoredState(
 		) throw new Error("hosted channel has an invalid comment thread");
 	}
 	let transcript = objects(item.transcript, "transcript entry");
+	let savedMessages = new Map(transcript.map(entry => [entry.id, entry]));
+	for (let record of records) {
+		for (let origin of Object.values(record.optionOrigins)) {
+			if (!origin.source) continue;
+			let message = savedMessages.get(origin.source.messageId);
+			if (!message) throw new Error("hosted channel has option source without a message");
+			try {
+				validateSource(origin.source, message as Chat.Chat["entries"][number]);
+			} catch (err) {
+				throw new Error("hosted channel has invalid option source", { cause: err });
+			}
+		}
+	}
 	let referenceIds = new Set<string>();
 	for (let entry of transcript) {
 		if (
@@ -482,7 +514,7 @@ function restoredState(
 		...(execution ? { execution } : {}),
 		...(lifecycle ? { lifecycle } : {}),
 		...(mcpUpdates.length > 0 ? { mcpUpdates } : {}),
-		questions: questions as never[],
+		questions: records,
 		openQuestions: openQuestions as unknown as Questions.StoredOpen[],
 		threads: threads as never[],
 		transcript: transcript as unknown as Chat.Chat["entries"],
@@ -944,7 +976,9 @@ export async function open(
 		comments: Comments.create(),
 		chat: Chat.restore(sidecar.transcript),
 		outlines: new Map(),
-		records: new Map(sidecar.questions.map(record => [record.id, record])),
+		records: new Map(
+			sidecar.questions.map(record => [record.id, Questions.normalizeRecord(record)]),
+		),
 		threads: new Map(sidecar.threads.map(record => [record.id, record])),
 		revision: sidecar.revision,
 		graph: sidecar.graph,
