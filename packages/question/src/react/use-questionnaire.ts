@@ -17,7 +17,7 @@ import { crdt } from "../draft";
 import { decision } from "../schema";
 
 import type { DecisionDefinition, Definition, Drafts } from "../index";
-import type { Collaborator } from "./question-view";
+import type { AddOptionResult, Collaborator } from "./question-view";
 
 type Unsubscribe = () => void;
 
@@ -43,11 +43,14 @@ export type QuestionnaireState = {
 	submit: () => void;
 	/** Decline to answer. Terminal — the agent stops waiting. */
 	cancel: () => void;
+	/** Append an option for everyone; resolves once the server has made it durable. */
+	addOption: (question: string, label: string) => Promise<AddOptionResult>;
 	/** Set when submission stopped on an unanswered question. */
 	focus: string | undefined;
 };
 
 type Snapshot = Omit<QuestionnaireState, "change" | "focusQuestion" | "submit" | "cancel"> & {
+type Snapshot = Omit<QuestionnaireState, "change" | "submit" | "cancel" | "addOption"> & {
 	closed: boolean;
 };
 type Model = crdt.Model<crdt.JsonNode<Drafts>>;
@@ -120,6 +123,8 @@ export class QuestionnaireController {
 	#focus = new FocusReporter(question => {
 		this.bridge?.send("question:presence", { id: this.id, ...(question ? { question } : {}) });
 	});
+	/** The last add request, so a retry of the same text repeats its key. */
+	#adding: { question: string; label: string; key: string } | undefined;
 
 	constructor(
 		bridge: Transport | undefined,
@@ -188,8 +193,15 @@ export class QuestionnaireController {
 			}
 			if (patch.options !== undefined) {
 				doc.api.val([question, "mode"]).set("choices");
+				let held = (doc.view() as Drafts)[question]?.options ?? {};
 				for (let [option, value] of Object.entries(patch.options as Record<string, boolean>)) {
-					doc.api.val([question, "options", option]).set(value);
+					// An option appended after this draft began has no register yet.
+					if (Object.hasOwn(held, option)) doc.api.val([question, "options", option]).set(value);
+					else {
+						doc.api.obj([question, "options"]).set({
+							[option]: crdt.schema.val(crdt.schema.con(value)),
+						});
+					}
 				}
 			}
 			if (patch.custom !== undefined) {
@@ -283,6 +295,54 @@ export class QuestionnaireController {
 			});
 	};
 
+	addOption = async (question: string, label: string): Promise<AddOptionResult> => {
+		if (!this.bridge || this.#snapshot.closed || this.#terminal) {
+			return { ok: false, message: "This question is no longer open." };
+		}
+		// A retry of the same text after a lost reply must not add a second option.
+		let last = this.#adding;
+		let key = last && last.question === question && last.label === label
+			? last.key
+			: crypto.randomUUID();
+		this.#adding = { question, label, key };
+
+		let reply: {
+			ok?: boolean;
+			message?: string;
+			definition?: Definition;
+		};
+		try {
+			reply = await this.bridge.ask("question:option", {
+				id: this.id,
+				question,
+				key,
+				label,
+			}) as never;
+		} catch {
+			return { ok: false, message: "Could not add this option. Try again." };
+		}
+		if (!reply.ok) return { ok: false, message: reply.message ?? "Could not add this option." };
+		this.#adding = undefined;
+		if (reply.definition) this.#redefine(reply.definition);
+		return { ok: true };
+	};
+
+	/** Take the server's definition when it has gained options. */
+	#redefine(next: Definition): void {
+		let current = this.#definition ?? this.#snapshot.definition;
+		let added = next.questions[0]?.options.length ?? 0;
+		let held = current?.questions[0]?.options.length ?? 0;
+		// Only ever forward: a late duplicate must not erase a newer option.
+		if (added <= held) return;
+		try {
+			let definition = decision(next);
+			if (this.#definition) this.#definition = definition;
+			this.#set({ definition });
+		} catch {
+			// A definition the domain rejects is ignored; the next open resyncs.
+		}
+	}
+
 	forget(): void {
 		this.#close();
 	}
@@ -358,6 +418,10 @@ export class QuestionnaireController {
 				let person = normalize(event);
 				let next = this.#snapshot.collaborators.filter(item => item.client !== person.client);
 				this.#set({ collaborators: event.question ? [...next, person] : next });
+			}),
+			channel.on("question:option-added", (raw: never) => {
+				let event = raw as unknown as { id: string; definition?: Definition };
+				if (event.id === this.id && event.definition) this.#redefine(event.definition);
 			}),
 			channel.on("question:resolved", (raw: never) => {
 				let event = raw as unknown as { id: string };
@@ -537,5 +601,6 @@ export function useQuestionnaire(options: QuestionnaireOptions): QuestionnaireSt
 		focusQuestion: controller.focusQuestion,
 		submit: controller.submit,
 		cancel: controller.cancel,
+		addOption: controller.addOption,
 	};
 }

@@ -1,8 +1,8 @@
 /**
  * A questionnaire, as the decisions pane shows it.
  *
- * The definition is immutable and the answer is owned by the server's record,
- * so this never writes to the document — an agent rewriting the plan cannot
+ * The definition only ever grows by appended options and the answer is owned by
+ * the server's record, so this never writes to the document — an agent rewriting the plan cannot
  * overwrite a decision. What the plan node carries is a projection, kept so
  * the source reads correctly on its own.
  */
@@ -188,6 +188,7 @@ function Undecided(
 				drafts={state.drafts}
 				error={state.error}
 				errorClassName="editor-motion-feedback"
+				onAddOption={editable ? state.addOption : undefined}
 				onCancel={editable ? state.cancel : undefined}
 				onChange={editable ? state.change : undefined}
 				onQuestionFocus={editable ? state.focusQuestion : undefined}
