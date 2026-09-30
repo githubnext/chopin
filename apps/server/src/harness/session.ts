@@ -2,7 +2,12 @@ import { createJustBashNetworkSandboxSession } from "@ai-sdk/sandbox-just-bash";
 import { plannerAgent } from "./agents";
 import { githubTools, type GitHubToolsError, type Result } from "./github-tools";
 import { registerCredential } from "./harnesses";
-import { type FullPlanner, type PlannerRuns, registerFullPlanner } from "./atomic/full";
+import {
+	type FullPlanner,
+	type PlannerRuns,
+	registerFullPlanner,
+	type WorkflowControl,
+} from "./atomic/full";
 import { createHumanInput } from "./atomic/human-input";
 import { type PlannerWorkspace, plannerWorkspace } from "./atomic/workspace";
 
@@ -123,27 +128,27 @@ export async function openPlannerSession(
 		let active = session;
 		let release = unregister;
 		let stopped: Promise<void> | undefined;
-		let command = async (text: string) => {
-			if (!planner?.command) throw new Error("The Planner has no live Atomic session to control.");
-			await planner.command(text);
+		let control = async (params: WorkflowControl) => {
+			if (!planner?.control) throw new Error("The Planner has no live Atomic session to control.");
+			await planner.control(params);
 		};
-		let control = planner
+		let runControl = planner
 			? {
 				runs: () => planner.runs,
 				watchRuns: (listener: (runs: PlannerRuns) => void) => {
 					listeners.add(listener);
 					return () => listeners.delete(listener);
 				},
-				pauseRuns: () => command("/workflow pause --all --yes"),
+				pauseRuns: () => control({ action: "pause", all: true }),
 				resumeRuns: async () => {
-					for (let runId of planner.runs?.paused ?? []) await command(`/workflow resume ${runId}`);
+					for (let runId of planner.runs?.paused ?? []) await control({ action: "resume", runId });
 				},
 			}
 			: {};
 		return {
 			ok: true,
 			value: {
-				...control,
+				...runControl,
 				stream: (prompt, abortSignal) =>
 					agent.stream({
 						session: active,
