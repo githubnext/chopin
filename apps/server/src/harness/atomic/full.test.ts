@@ -10,7 +10,7 @@ import {
 	ATOMIC_RESULT_TOOL_NAME,
 	createAtomicAdapter,
 } from "./adapter";
-import { registerFullPlanner } from "./full";
+import { classifyRuns, registerFullPlanner } from "./full";
 import { startStubModelServer } from "../pi/model-stub";
 import { hostInputRoom } from "../../testing/decisions";
 import type { HostInput, QuestionParams } from "@bastani/atomic";
@@ -305,4 +305,24 @@ test("worker sessions stay isolated, even beside a full Planner session on the s
 	expect(beside.workerRequests).toHaveLength(1);
 	expect(beside.workerRequests[0]!.toolNames).toEqual(["host_tool"]);
 	expect(beside.workerRequests[0]!.system).toBe("CHOPIN-INSTRUCTIONS-MARKER");
+});
+
+test("working and blocked runs are live, paused idle runs are paused, and finished runs are neither", () => {
+	let root = (rootRunId: string, state: "working" | "idle" | "blocked", reason: string) =>
+		({
+			rootRunId,
+			ownerSessionId: "session",
+			state,
+			reason,
+			activeExecutionCount: 0,
+			actionableBlockCount: 0,
+			needsAttention: false,
+		}) as Parameters<typeof classifyRuns>[0] extends Iterable<infer T> ? T : never;
+	expect(classifyRuns([
+		root("drafting", "working", "executing"),
+		root("asking", "blocked", "awaiting_input"),
+		root("held", "idle", "paused"),
+		root("done", "idle", "quiescent"),
+	])).toEqual({ active: ["drafting", "asking"], paused: ["held"] });
+	expect(classifyRuns([])).toEqual({ active: [], paused: [] });
 });

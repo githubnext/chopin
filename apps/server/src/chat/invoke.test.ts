@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtemp, readdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,7 +7,7 @@ import { ActiveOwnerBindings } from "../agent/active-owner";
 import { Admission } from "../auth/admission";
 import { Sessions } from "../auth/session";
 import { fullPlanner } from "../harness/atomic/full";
-import { removeWorkspaces } from "../harness/atomic/workspace";
+import { forgetWorkspaces } from "../harness/atomic/workspace";
 import { openPlannerSession } from "../harness/session";
 import * as Plan from "../plan/service";
 import { MemoryStorage } from "../storage/memory/adapter";
@@ -15,6 +15,7 @@ import { configured, LOCAL } from "../testing/config";
 import * as Chat from "./service";
 
 import type { Server } from "bun";
+import type { ActiveOwnerBinding } from "../agent/active-owner";
 import type { HostedAuth } from "../auth/routes";
 import type { Config } from "../config";
 import type { GitHub } from "../github/client";
@@ -23,9 +24,17 @@ import type { Socket, SocketData } from "../wire";
 const ATOMIC = { HARNESS: "atomic", HARNESS_AUTH: "ai-gateway", MODEL: "stub/model" };
 
 let cleanups: Array<() => Promise<void>> = [];
+let previousState = process.env.XDG_STATE_HOME;
+beforeEach(async () => {
+	let state = await mkdtemp(join(tmpdir(), "chopin-invoke-state-"));
+	process.env.XDG_STATE_HOME = state;
+	cleanups.push(() => rm(state, { recursive: true, force: true }));
+});
 afterEach(async () => {
 	for (let cleanup of cleanups.splice(0)) await cleanup();
-	await removeWorkspaces();
+	forgetWorkspaces();
+	if (previousState === undefined) delete process.env.XDG_STATE_HOME;
+	else process.env.XDG_STATE_HOME = previousState;
 });
 
 function grant(accessToken: string) {
@@ -408,4 +417,171 @@ test("HARNESS=atomic runs every Planner session full in hosted and local configu
 			expect(turn.instructions.includes("proceed on your best judgement")).toBe(full);
 		}
 	}
+});
+
+/** A Planner session that owns workflow runs, driven by the test. */
+function runningSession() {
+	let runs = { active: ["run-1"], paused: [] as string[] };
+	let listeners = new Set<(runs: { active: string[]; paused: string[] }) => void>();
+	let calls: string[] = [];
+	let session = {
+		async stream(prompt: string) {
+			calls.push(`stream ${prompt}`);
+			return {
+				fullStream: (async function*() {
+					yield { type: "finish" };
+				})(),
+			} as never;
+		},
+		async destroy() {
+			calls.push("destroy");
+		},
+		runs: () => runs,
+		watchRuns(listener: (runs: { active: string[]; paused: string[] }) => void) {
+			listeners.add(listener);
+			return () => listeners.delete(listener);
+		},
+		async pauseRuns() {
+			calls.push("pause");
+		},
+		async resumeRuns() {
+			calls.push("resume");
+		},
+	};
+	return {
+		session,
+		calls,
+		set(next: { active: string[]; paused: string[] }) {
+			runs = next;
+			for (let listener of listeners) listener(next);
+		},
+	};
+}
+
+test("a Planner that still owns workflow runs outlives its turn, pauses, resumes, and is let go when they finish", async () => {
+	let { context, events, user } = await setup(configured(ATOMIC));
+	let planner = runningSession();
+	let opened = 0;
+	context.openPlannerSession = async () => {
+		opened++;
+		return { ok: true, value: planner.session };
+	};
+	let holds = 0;
+	context.hold = () => {
+		holds++;
+		return () => holds--;
+	};
+	let ws = { data: { handle: "ana" } } as unknown as Socket;
+	let said = () => context.chat.entries.at(-1)?.text;
+	let runs = () => events.filter(event => event.kind === "chat:state").at(-1)?.runs;
+
+	expect(await Chat.invoke(context, user, "Run the workflow")).toBeUndefined();
+	await context.chat.running;
+	expect(planner.calls).toEqual(["stream @ana: Run the workflow"]);
+	expect(context.chat.busy).toBe(false);
+	expect(context.chat.runs).toEqual({ active: 1, paused: 0 });
+	expect(runs()).toEqual({ active: 1, paused: 0 });
+	expect(holds).toBe(1);
+
+	await Chat.abort(context, ws);
+	expect(planner.calls.at(-1)).toBe("pause");
+	expect(said()).toBe("@ana stopped the Planner and paused its workflows.");
+	planner.set({ active: [], paused: ["run-1"] });
+	expect(runs()).toEqual({ active: 0, paused: 1 });
+	expect(planner.calls).not.toContain("destroy");
+
+	await Chat.resume(context, ws);
+	expect(planner.calls.at(-1)).toBe("resume");
+	expect(said()).toBe("@ana resumed the Planner's workflows.");
+	planner.set({ active: ["run-1"], paused: [] });
+
+	expect(await Chat.invoke(context, user, "How is it going?")).toBeUndefined();
+	await context.chat.running;
+	expect(opened).toBe(1);
+	expect(planner.calls.filter(call => call.startsWith("stream"))).toHaveLength(2);
+	expect(planner.calls).not.toContain("destroy");
+
+	planner.set({ active: [], paused: [] });
+	await new Promise(resolve => setTimeout(resolve, 0));
+	expect(planner.calls.at(-1)).toBe("destroy");
+	expect(context.chat.retained).toBeUndefined();
+	expect(context.chat.runs).toBeUndefined();
+	expect(runs()).toBeUndefined();
+	expect(holds).toBe(0);
+
+	await Chat.resume(context, ws);
+	await Chat.abort(context, ws);
+	expect(planner.calls.at(-1)).toBe("destroy");
+});
+
+test("a background job while a Planner is retained runs in its own session and leaves the retained one, and its references, alone", async () => {
+	let { context, user } = await setup(configured(ATOMIC));
+	let planner = runningSession();
+	let jobSession = runningSession();
+	let openedFor: Array<string | undefined> = [];
+	context.openPlannerSession = async () => {
+		openedFor.push(context.chat.job?.kind);
+		return { ok: true, value: openedFor.length === 1 ? planner.session : jobSession.session };
+	};
+	expect(await Chat.invoke(context, user, "Run the workflow")).toBeUndefined();
+	await context.chat.running;
+	await new Promise(resolve => setTimeout(resolve, 0));
+	let retained = context.chat.retained;
+	expect(retained?.session).toBe(planner.session);
+	let mentioned = { id: "ref-1" } as never;
+	context.chat.referenceCache.set("ref-1", mentioned);
+
+	await Chat.job(
+		context,
+		{
+			id: "refine:W1:m1",
+			kind: "refine",
+			target: "W1",
+			trigger: "m1",
+			status: "running",
+			attempts: 0,
+			at: "2026-09-25T10:00:00.000Z",
+		},
+		"JOB PROMPT",
+		context.claimantSessionId ?? "session",
+	);
+	await new Promise(resolve => setTimeout(resolve, 0));
+
+	expect(openedFor).toEqual([undefined, "refine"]);
+	expect(planner.calls).toEqual(["stream @ana: Run the workflow"]);
+	expect(jobSession.calls).toEqual(["stream JOB PROMPT", "destroy"]);
+	expect(context.chat.retained).toBe(retained);
+	expect(context.chat.agent).toBe(planner.session);
+	expect(context.chat.referenceCache.get("ref-1")).toBe(mentioned);
+});
+
+test("a retained Planner is let go when its owner's binding ends, and sessions without runs still end with their turn", async () => {
+	let { context, user } = await setup(configured(ATOMIC));
+	let planner = runningSession();
+	let bindings: ActiveOwnerBinding[] = [];
+	let resolve = context.activeOwner!;
+	context.activeOwner = async () => {
+		let binding = await resolve();
+		if (binding) bindings.push(binding);
+		return binding;
+	};
+	context.openPlannerSession = async () => ({ ok: true, value: planner.session });
+	expect(await Chat.invoke(context, user, "Run the workflow")).toBeUndefined();
+	await context.chat.running;
+	expect(context.chat.retained).toBeDefined();
+	bindings[0]!.release();
+	await new Promise(resolve => setTimeout(resolve, 0));
+	expect(context.chat.retained).toBeUndefined();
+	expect(planner.calls.at(-1)).toBe("destroy");
+
+	let quiet = { ...runningSession().session, runs: () => ({ active: [], paused: [] }) };
+	let destroyed = 0;
+	quiet.destroy = async () => {
+		destroyed++;
+	};
+	context.openPlannerSession = async () => ({ ok: true, value: quiet });
+	expect(await Chat.invoke(context, user, "Just answer")).toBeUndefined();
+	await context.chat.running;
+	expect(destroyed).toBe(1);
+	expect(context.chat.retained).toBeUndefined();
 });

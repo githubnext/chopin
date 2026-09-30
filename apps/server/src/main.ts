@@ -270,6 +270,13 @@ function conversation(
 		ownerAvailable: () => jobRunner?.ownerAvailable(room.id) ?? Promise.resolve(),
 		jobs: config.backgroundJobs ? jobService : undefined,
 		references: referenceService,
+		hold: () => {
+			let held = Rooms.hold(room.id);
+			return () => {
+				held.release();
+				evict(held.room);
+			};
+		},
 		createResearch: config.agent
 			? async request => {
 				let service = researchService;
@@ -434,6 +441,10 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 
 		case "chat:abort":
 			if (room.plan) await Chat.abort(chat(room, ws), ws);
+			return;
+
+		case "chat:resume":
+			if (room.plan) await Chat.resume(chat(room, ws), ws);
 			return;
 
 		case "chat:unqueue":

@@ -1,10 +1,10 @@
-import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtemp, readdir, realpath, rm, stat } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { mkdir, mkdtemp, readdir, realpath, rm, stat, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { openPlannerSession } from "./session";
 import { fullPlanner } from "./atomic/full";
-import { rememberCheckout, removeWorkspaces } from "./atomic/workspace";
+import { forgetWorkspaces, rememberCheckout, stateDirectory } from "./atomic/workspace";
 import { plannerInstructions } from "../agent/planner";
 
 import type { ActiveOwnerBinding } from "../agent/active-owner";
@@ -120,8 +120,16 @@ describe("openPlannerSession", () => {
 
 describe("Planner workspaces", () => {
 	let roots: string[] = [];
+	let previousState = process.env.XDG_STATE_HOME;
+	beforeEach(async () => {
+		let state = await mkdtemp(join(tmpdir(), "chopin-planner-state-"));
+		roots.push(state);
+		process.env.XDG_STATE_HOME = state;
+	});
 	afterEach(async () => {
-		await removeWorkspaces();
+		forgetWorkspaces();
+		if (previousState === undefined) delete process.env.XDG_STATE_HOME;
+		else process.env.XDG_STATE_HOME = previousState;
 		for (let root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 	});
 
@@ -185,27 +193,40 @@ describe("Planner workspaces", () => {
 		let fallback = await open("channel", "atomic");
 		expect(fallback.registered?.cwd).not.toBe(path);
 		expect(await readdir(fallback.registered!.cwd)).toEqual([]);
-		expect(fallback.instructions).toContain("scratch directory Chopin created");
+		expect(fallback.instructions).toContain("scratch directory Chopin keeps");
 	});
 
-	it("gives each atomic channel without a checkout its own empty, private directory", async () => {
+	it("gives each atomic channel without a checkout its own private directory that outlives shutdown", async () => {
 		let first = await open("first", "atomic");
 		let again = await open("first", "atomic");
 		let second = await open("second", "atomic");
 		expect(again.registered?.cwd).toBe(first.registered!.cwd);
 		expect(second.registered?.cwd).not.toBe(first.registered!.cwd);
-		for (let { registered, instructions } of [first, second]) {
+		for (
+			let [name, { registered, instructions }] of [["first", first], ["second", second]] as const
+		) {
 			let cwd = registered!.cwd;
+			if (process.platform === "linux") expect(cwd).toBe(join(stateDirectory(), "planner", name));
 			expect((await stat(cwd)).mode & 0o777).toBe(0o700);
 			expect(await readdir(cwd)).toEqual([]);
 			expect(registered?.humanInput.questionnaire).toBeFunction();
-			expect(instructions).toContain(`${cwd}, is a scratch directory Chopin created`);
+			expect(instructions).toContain(`${cwd}, is a scratch directory Chopin keeps`);
 			expect(instructions).toContain("holds no repository files");
 			expect(instructions).toContain("`read_repository_file`");
 			expect(instructions).toContain("proceed on your best judgement");
 		}
-		await removeWorkspaces();
-		expect(await stat(first.registered!.cwd).catch(() => undefined)).toBeUndefined();
+		forgetWorkspaces();
+		expect((await stat(first.registered!.cwd)).isDirectory()).toBe(true);
+		expect((await open("first", "atomic")).registered?.cwd).toBe(first.registered!.cwd);
+	});
+
+	it("refuses a symlink planted where a channel's directory belongs", async () => {
+		if (process.platform !== "linux") return;
+		let target = await mkdtemp(join(tmpdir(), "chopin-planner-target-"));
+		roots.push(target);
+		await mkdir(join(stateDirectory(), "planner"), { recursive: true });
+		await symlink(target, join(stateDirectory(), "planner", "planted"));
+		await expect(open("planted", "atomic")).rejects.toThrow();
 	});
 
 	it("keeps copilot-sdk and pi Planner sessions isolated, whatever the channel remembers", async () => {
