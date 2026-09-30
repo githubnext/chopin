@@ -111,28 +111,39 @@ async function renderMath(source: string, inline: boolean): Promise<string> {
 }
 
 async function renderMermaid(key: string, source: string): Promise<string> {
-	let mermaid = await import("mermaid");
-	mermaid.default.initialize({
-		startOnLoad: false,
-		// Its own error drawing is a temporary full-page SVG appended to body,
-		// and a parse failure throws before Mermaid removes it. The preview below
-		// already presents the error beside the source that caused it.
-		suppressErrorRendering: true,
-		// Diagrams come from collaborators and agents, so scripts, click
-		// handlers and HTML labels stay off.
-		securityLevel: "strict",
-		htmlLabels: false,
-		theme: "neutral",
-	});
+	let [mermaid, { mermaidConfig, refineDiagram }] = await Promise.all([
+		import("mermaid"),
+		import("./mermaid-theme"),
+	]);
+	mermaid.default.initialize(mermaidConfig());
 	let { svg } = await mermaid.default.render(`ace-mermaid-${key}`, source);
-	let parsed = new DOMParser().parseFromString(svg, "image/svg+xml");
-	let root = parsed.documentElement;
+
+	/*
+	 * The theme's last touches measure the drawing, which only works in a
+	 * laid-out document. Stage a hidden copy, refine it, and keep the result
+	 * as a string: the preview slot has a single owner, and it takes markup.
+	 */
+	let stage = document.createElement("div");
+	stage.setAttribute("aria-hidden", "true");
+	stage.style.position = "fixed";
+	stage.style.visibility = "hidden";
+	stage.style.pointerEvents = "none";
+	stage.innerHTML = svg;
+	document.body.append(stage);
+	let root = stage.querySelector("svg");
+	try {
+		if (!root) return svg;
+		refineDiagram(root);
+	} finally {
+		stage.remove();
+	}
+
 	let viewBox = root.getAttribute("viewBox")?.trim().split(/[\s,]+/).map(Number);
-	if (root.localName !== "svg" || viewBox?.length !== 4) return svg;
+	if (viewBox?.length !== 4) return root.outerHTML;
 	let width = viewBox[2]!;
 	let height = viewBox[3]!;
 	if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-		return svg;
+		return root.outerHTML;
 	}
 
 	/*
