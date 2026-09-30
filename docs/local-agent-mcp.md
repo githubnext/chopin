@@ -141,6 +141,12 @@ Refusals return an object with `code`:
 - `document-unavailable`, `document-archived`, and `repository-forbidden` retain
   their ordinary document/access meanings.
 
+Document titles are unique within a repository, ignoring case. `create_document`
+returns `title-taken` when the repository already has a document with that title;
+choose another title and retry under a new idempotency key. `idempotency-conflict`
+means the same key was reused with a different request, and validation failures
+return `issues`. Every one of these outcomes matches the tool's output schema.
+
 ## Document URLs and IDs
 
 The `url` returned by `create_document` is the readable canonical route:
