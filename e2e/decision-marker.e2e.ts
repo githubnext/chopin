@@ -332,3 +332,19 @@ test("a decision with no prose keeps a compact card instead of a marker", async 
 	).toBeVisible();
 	await expect(marker(page, "Two weeks")).toBeVisible();
 });
+
+test("the marker follows an edit above its prose", async ({ join, seed }) => {
+	await seed(SOURCE, STATE);
+	let page = await join("ana");
+	await open(page);
+
+	let before = (await marker(page, "Two weeks").boundingBox())!;
+	await prose(page, FIRST).click();
+	await page.keyboard.press("Home");
+	for (let line = 0; line < 3; line++) await page.keyboard.press("Enter");
+	await expect.poll(async () => (await marker(page, "Two weeks").boundingBox())!.y)
+		.toBeGreaterThan(before.y + 20);
+	let line = (await prose(page, SECOND).boundingBox())!;
+	let box = (await marker(page, "Two weeks").boundingBox())!;
+	expect(Math.abs(box.y + box.height / 2 - (line.y + 16))).toBeLessThan(14);
+});
