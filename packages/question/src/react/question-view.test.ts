@@ -77,3 +77,81 @@ test("a host can present an error as motion feedback", () => {
 	expect(markup).toContain('role="alert"');
 	expect(markup).toContain('data-motion-feedback="alert"');
 });
+
+const ROLLOUT = {
+	id: "rollout",
+	header: "Rollout",
+	question: "How should we roll this out?",
+	multiple: false,
+	options: [
+		{ id: "all", label: "All at once", description: "Everyone moves on the same day" },
+		{ id: "team", label: "Team by team", description: "" },
+	],
+};
+
+test("options carry letter tiles and the last row offers to add one", () => {
+	let markup = renderToStaticMarkup(createElement(QuestionView, {
+		definition: { questions: [ROLLOUT] },
+		drafts: {},
+		onCancel() {},
+		onSubmit() {},
+	}));
+
+	expect(markup).toContain(">A<");
+	expect(markup).toContain(">B<");
+	expect(markup.lastIndexOf("Add an option")).toBeGreaterThan(markup.indexOf("Team by team"));
+	expect(markup).toContain(">Discard<");
+	expect(markup).toContain(">Save<");
+	expect(markup).not.toContain("Choose any");
+	expect(markup).not.toContain("Write a custom answer");
+});
+
+test("an existing custom answer opens the add row as a field with the next letter", () => {
+	let markup = renderToStaticMarkup(createElement(QuestionView, {
+		definition: { questions: [ROLLOUT] },
+		drafts: { rollout: { mode: "custom", choice: "", options: {}, custom: "Opt-in beta" } },
+	}));
+
+	expect(markup).toContain("<textarea");
+	expect(markup).toContain("Opt-in beta");
+	expect(markup).toContain(">C<");
+});
+
+test("a multiple-choice question says so once, under its title", () => {
+	let markup = renderToStaticMarkup(createElement(QuestionView, {
+		definition: { questions: [{ ...ROLLOUT, multiple: true }] },
+		drafts: {},
+	}));
+
+	expect(markup.match(/Choose any/g)).toHaveLength(1);
+	expect(markup).toContain('type="checkbox"');
+});
+
+test("several questions use a stepper, and only the last one saves", () => {
+	let second = { ...ROLLOUT, id: "pilot", header: "Pilot team", question: "Who pilots it?" };
+	let markup = renderToStaticMarkup(createElement(QuestionView, {
+		definition: { questions: [ROLLOUT, second] },
+		drafts: {},
+		onSubmit() {},
+	}));
+
+	expect(markup).not.toContain('role="tablist"');
+	expect(markup).toContain("Rollout");
+	expect(markup).toContain("1/2");
+	expect(markup).toContain(">Next<");
+	expect(markup).not.toContain(">Save<");
+});
+
+test("a failed save explains itself in a callout and offers another try", () => {
+	let markup = renderToStaticMarkup(createElement(QuestionView, {
+		definition: { questions: [ROLLOUT] },
+		drafts: {},
+		error: "Check your connection and try again.",
+		onSubmit() {},
+	}));
+
+	expect(markup).toContain("Couldn’t save");
+	expect(markup).toContain("Check your connection and try again.");
+	expect(markup).toContain('role="alert"');
+	expect(markup).toContain("Try again");
+});

@@ -616,7 +616,6 @@ body {
 :root[data-plan-coarse-pointer] .repository-picker-search,
 :root[data-plan-coarse-pointer] .channel-create-input,
 :root[data-plan-coarse-pointer] [data-hosted] .btn,
-:root[data-plan-coarse-pointer] .question-tab,
 :root[data-plan-coarse-pointer] .question-choice-row,
 :root[data-plan-coarse-pointer] .question-actions button,
 :root[data-plan-coarse-pointer] :where(button, [role="button"])[data-press="wide"] {
@@ -630,6 +629,312 @@ body {
 
 .question-custom-answer {
 	scroll-margin-block-end: calc(var(--keyboard-inset, 0px) + 1rem);
+}
+
+/* The decision card: a question, lettered options, and a quiet footer. */
+.question-card {
+	padding: 1rem 0.5rem 0.75rem;
+}
+
+/* Coloured icon holders: the global icon colour would otherwise win. */
+:is(.question-mark, .question-check) [data-nucleo-icon],
+.question-callout .plan-research-badge [data-nucleo-icon] {
+	color: inherit;
+}
+
+.question-head {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.625rem;
+	padding-inline: 0.5rem;
+}
+
+.question-mark {
+	display: grid;
+	flex: none;
+	place-items: center;
+	inline-size: 1.5rem;
+	block-size: 1.5rem;
+	border-radius: var(--radius-full);
+	background: var(--color-success-wash);
+	color: var(--color-success);
+}
+
+.question-head-text {
+	flex: 1;
+	min-width: 0;
+}
+
+.question-title {
+	/* Centre the first line on the 1.5rem mark, then lift 2px optically. */
+	margin: calc((1.5rem - 1lh) / 2 - 0.125rem) 0 0;
+	font-size: var(--text-base);
+	line-height: var(--text-lg--line-height);
+	font-weight: 600;
+	color: var(--color-text-primary);
+	overflow-wrap: break-word;
+	text-wrap: pretty;
+}
+
+.question-title-link {
+	font: inherit;
+}
+
+.question-hint {
+	margin: 0.125rem 0 0;
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	color: var(--color-text-tertiary);
+}
+
+.question-options {
+	display: grid;
+	gap: 0.125rem;
+	min-width: 0;
+	margin: 0.75rem 0 0;
+	padding: 0;
+	border: 0;
+}
+
+.question-option {
+	position: relative;
+	display: flex;
+	align-items: flex-start;
+	gap: 0.625rem;
+	padding: 0.375rem 0.75rem 0.375rem 0.5rem;
+	border-radius: var(--radius-md);
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+	transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+/* The native control stays focusable but unseen; its label row is the target. */
+.question-input {
+	appearance: none;
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-start: 0;
+	inline-size: 1px;
+	block-size: 1px;
+	margin: 0;
+	opacity: 0;
+}
+
+label.question-option:has(.question-input:not(:disabled)) {
+	cursor: pointer;
+}
+
+.question-option:has(.question-input:focus-visible) {
+	outline: var(--focus-ring-width) solid var(--focus-ring-color);
+	outline-offset: var(--focus-ring-offset);
+}
+
+.question-option:has(.question-input:not(:disabled)):hover {
+	background: var(--color-hover);
+}
+
+.question-option:has(.question-input:checked),
+.question-option:has(.question-input:checked:not(:disabled)):hover {
+	background: var(--color-brand-wash);
+}
+
+/* A one-line slot (inherits the label's line height) holding a small tile. */
+.question-key {
+	display: flex;
+	flex: none;
+	align-items: center;
+	block-size: 1lh;
+}
+
+/* Same 1.5rem as the header mark, so option text shares the title's left edge. */
+.question-key > span {
+	display: grid;
+	place-items: center;
+	inline-size: 1.5rem;
+	block-size: 1.5rem;
+	border-radius: var(--radius-sm);
+	background: var(--color-gray-150);
+	font-size: var(--text-xs);
+	line-height: 1;
+	font-weight: 500;
+	color: var(--color-text-secondary);
+	transition:
+		background-color var(--duration-fast) var(--ease-out),
+		color var(--duration-fast) var(--ease-out);
+}
+
+.question-option:has(.question-input:checked) .question-key > span {
+	background: var(--color-brand);
+	color: var(--color-white);
+}
+
+/* With a description below, the tile sits 4px under the label's centre (optical). */
+.question-option:has(.question-desc) .question-key > span {
+	translate: 0 0.25rem;
+}
+
+.question-text {
+	display: grid;
+	flex: 1;
+	min-width: 0;
+}
+
+.question-label {
+	font-weight: 500;
+	color: var(--color-text-primary);
+}
+
+.question-desc {
+	color: var(--color-text-secondary);
+}
+
+.question-check {
+	flex: none;
+	display: grid;
+	block-size: 1lh;
+	place-items: center;
+	color: var(--color-brand);
+	opacity: 0;
+	transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.question-option:has(.question-input:checked) .question-check {
+	opacity: 1;
+}
+
+.question-add,
+.question-add .question-key {
+	color: var(--color-text-tertiary);
+}
+
+.question-add .question-key > span {
+	background: var(--color-inset);
+}
+
+:is(.question-add, .question-adding) {
+	align-items: center;
+	padding-block: 0.5rem;
+}
+
+.question-add:hover .question-text,
+.question-add:hover .question-key {
+	color: var(--color-text-secondary);
+}
+
+.question-adding {
+	outline: var(--edge-width) solid var(--color-control-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+}
+
+.question-adding:focus-within {
+	outline-color: var(--color-brand);
+}
+
+.question-field {
+	flex: 1;
+	min-width: 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	font: inherit;
+	color: var(--color-text-primary);
+	outline: none;
+	resize: none;
+	field-sizing: content;
+}
+
+.question-field:focus-visible {
+	outline: none;
+}
+
+.question-field::placeholder {
+	color: var(--color-text-tertiary);
+}
+
+.question-card[data-saving] .question-options {
+	opacity: 0.6;
+}
+
+/* Matches the research card: danger badge beside pale-red callout text. */
+.question-callout {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.5rem;
+	margin: 0.5rem 0.5rem 0;
+	padding: 0.5rem 0.625rem 0.5rem 0.5rem;
+}
+
+.question-callout p {
+	display: grid;
+}
+
+.question-callout strong {
+	font-weight: 500;
+}
+
+.question-actions {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 0.375rem;
+	margin-block-start: 0.75rem;
+	padding-inline: 0.5rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.question-actions > * {
+		animation: question-fade var(--duration-fast) var(--ease-out);
+	}
+}
+
+@keyframes question-fade {
+	from {
+		opacity: 0;
+	}
+}
+
+/* Discard confirm: the footer swaps in place and fades in. */
+.question-confirm {
+	margin-inline-end: auto;
+	font-size: var(--text-sm);
+	font-weight: 500;
+	color: var(--color-text-primary);
+}
+
+/* Footer stepper, left: ‹ question name n/m ›, 28px carets and --text-sm. */
+.question-stepper {
+	display: inline-flex;
+	min-width: 0;
+	align-items: center;
+	gap: 0.125rem;
+	margin-inline: -0.375rem auto;
+}
+
+/* 28px button, 16px chevron: drop btn-icon's padding so the icon isn't squeezed. */
+.question-caret {
+	padding: 0;
+}
+
+.question-caret[data-flip] [data-nucleo-icon] {
+	rotate: 180deg;
+}
+
+.question-count {
+	display: inline-flex;
+	min-width: 0;
+	gap: 0.375rem;
+	padding-inline: 0.125rem;
+	font-size: var(--text-sm);
+	color: var(--color-text-tertiary);
+	font-variant-numeric: tabular-nums;
+}
+
+.question-count strong {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-weight: 500;
+	color: var(--color-text-primary);
 }
 
 /*
