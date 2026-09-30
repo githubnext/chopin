@@ -204,6 +204,7 @@ and E2E type checks, formatting and CI with the existing warnings listed above.
 | Resolution and reopening         | Fourteen resolution statements and one reopening conditional retain six handled skips. Credibility, fresh chosen/card lookup, captured targets, pending conflicts, staged linked-card construction and partial publication are covered.                                                                     | 411 conversation tests, 2,271 assertions  |
 | Ordinary application             | The exact whole try/catch retains main application, raw pending deferral, distinct-supporter leaning and agreement follow-ups. Active-local versions, original support caps, uncapped constraint deferral and partial publication after caught failure are covered.                                         | 440 conversation tests, 2,490 assertions  |
 | Complete pure policy             | Final fallback, bounded gate and result retain three whole nodes. All seven proposal route conditions, original candidate-loop binding, no-proposal continue and loop-bottom break preserve exact source tests and order. Complete offline public outputs and separately seeded final failures are covered. | 474 conversation tests, 2,606 assertions  |
+| Pure interpreter                 | The original research guard, request await and catch remain in main. Synchronous offer selection preserves the original model conditional, seven types/helpers, targeting batch order and failure handling. Six whole pipeline callbacks, deferred question loop and original D19 suite are restored.       | 485 conversation tests, 2,650 assertions  |
 
 The combined guard/source/quote run passed 30 tests (242 assertions). Domain/replay
 checks passed 27 tests (109 assertions). The complete extracted foundation and
@@ -435,6 +436,29 @@ runner without rewriting them. The original public exports remain PolicyInput,
 PolicyResult, optionIdFor, bareEditorClarificationThread and planEvents. No runtime
 caller, configuration, paid provider or service activation is added.
 
-Next: bounded original interpreter and policy regression groups, followed by remaining
-pure/provider boundaries and runtime integration. Preserve whole callback ownership
-and compare complete offline outputs before adding consumers.
+The pure interpreter now retains eight outer statements, 25 nonresearch try statements,
+original catches, research guard/request await and all seven type/helper declarations.
+Only the whole model-checked offer-selection conditional moves into a synchronous
+private helper at the same source position. The original await boundaries are unchanged;
+member-source narrowing is a wrapper-only type assertion. Both false-guard and eligible
+research scheduling regressions pass; temporary extra-await negative controls fail with
+zero targeting calls at the observation point instead of one.
+
+Six additional whole pipeline callbacks are retained, bringing ownership to 15 of 140
+nodes with 125 explicitly deferred. The final original question interpreter outer loop
+is preserved once and executes both cases, completing all 14 question callback nodes
+and 15 executed cases. The original 123-line D19 fourth-candidate policy suite is
+byte-identical under its new filename. Exact fixture helpers are reused where already
+retained, and five new archive declarations preserve their bodies unchanged.
+
+Independent review compares 30 strict complete interpretation outputs, request traces
+and replies against the complete original interpreter and original policy: 15 research
+offers, five failed interpretations and 12 events. Four dispatch-order controls also
+match. These cases use replay-valid histories and injected transport, without stage
+seeds; only existing numeric analysis latency is normalized. Input mutations and own
+property presence are checked. Research model mismatch/failure remains silent and
+records no research analysis pass. No runtime consumer or paid transport is activated.
+
+Next: effects, conversation processing, durable persistence and Planner integration,
+with real integrated regressions before a backend milestone claim. Remaining whole
+pipeline callbacks stay explicitly assigned and can be restored in bounded groups.
