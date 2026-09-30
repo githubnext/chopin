@@ -14,9 +14,9 @@ import { useEffect, useRef, useSyncExternalStore } from "react";
 
 import { derive } from "../answer";
 import { crdt } from "../draft";
-import { decision } from "../schema";
+import { identified } from "../schema";
 
-import type { DecisionDefinition, Definition, Drafts } from "../index";
+import type { Definition, Drafts } from "../index";
 import type { Collaborator } from "./question-view";
 
 type Unsubscribe = () => void;
@@ -73,7 +73,7 @@ export class QuestionnaireController {
 	#listeners = new Set<() => void>();
 	#teardown: Unsubscribe[] = [];
 	#model: Model | undefined;
-	#definition: DecisionDefinition | undefined;
+	#definition: Definition | undefined;
 	#revision = 0;
 	#outbox: number[][] = [];
 	#pending = Promise.resolve();
@@ -340,9 +340,9 @@ export class QuestionnaireController {
 
 		if (!this.#valid(generation)) return;
 		if (!reply.open) return this.#close();
-		let definition: DecisionDefinition;
+		let definition: Definition;
 		try {
-			definition = decision(reply.definition!);
+			definition = identified(reply.definition!);
 		} catch {
 			this.#set({ syncing: false, error: "Unable to sync shared answers." });
 			return;

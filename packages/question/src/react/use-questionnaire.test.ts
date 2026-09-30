@@ -91,7 +91,7 @@ function transport(definition = DEFINITION) {
 }
 
 describe("QuestionnaireController", () => {
-	it("rejects a questionnaire returned for an independent decision record", async () => {
+	it("rejects duplicate durable option IDs across questionnaire questions", async () => {
 		let bridge = transport(QUESTIONNAIRE);
 		let controller = new QuestionnaireController(
 			bridge.value,

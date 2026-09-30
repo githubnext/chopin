@@ -16,7 +16,7 @@
 
 import * as Question from "@chopin/question";
 
-import type { Answer, DecisionDefinition, Definition, Drafts, Model } from "@chopin/question";
+import type { Answer, Definition, Drafts, Model } from "@chopin/question";
 
 /** How long a resolved questionnaire is remembered, for late arrivals. */
 const CLOSED_TTL = 5 * 60 * 1_000;
@@ -34,7 +34,7 @@ export type Ended =
 
 type Open = {
 	id: string;
-	definition: DecisionDefinition;
+	definition: Definition;
 	/** The plan node this belongs to, when it has one. */
 	widget?: string;
 	model: Model;
@@ -68,7 +68,7 @@ export type Questions = {
 
 export type StoredOpen = {
 	id: string;
-	definition: DecisionDefinition;
+	definition: Definition;
 	widget?: string;
 	model: number[];
 	revision: number;
@@ -99,7 +99,7 @@ export function restore(entries: StoredOpen[]): Questions {
 			!Array.isArray(entry.model)
 			|| entry.model.some(value => !Number.isInteger(value) || value < 0 || value > 255)
 		) Question.reject("Questionnaire model is invalid");
-		let definition = Question.decision(entry.definition);
+		let definition = Question.identified(entry.definition);
 		questions.open.set(entry.id, {
 			id: entry.id,
 			definition,
@@ -166,7 +166,7 @@ export function get(questions: Questions, id: string): Open | undefined {
 /** Everything still open, for a client that has just joined. */
 export function outstanding(
 	questions: Questions,
-): Array<{ id: string; definition: DecisionDefinition; widget?: string }> {
+): Array<{ id: string; definition: Definition; widget?: string }> {
 	return [...questions.open.values()].map(entry => ({
 		id: entry.id,
 		definition: entry.definition,
@@ -177,7 +177,7 @@ export function outstanding(
 export type Opened =
 	| {
 		open: true;
-		definition: DecisionDefinition;
+		definition: Definition;
 		model: number[];
 		revision: number;
 		presence: Collaborator[];
