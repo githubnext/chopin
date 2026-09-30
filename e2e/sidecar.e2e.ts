@@ -747,18 +747,36 @@ test("a rejected save is announced as an alert with motion feedback", async ({ j
 test("people on a decision are faces with verbatim handle tooltips", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
+	// Peers' presence frames are injected: no client sends question focus yet.
+	let send: ((frame: Record<string, unknown>) => void) | undefined;
+	let question: string | undefined;
+	await page.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		send = frame => route.send(JSON.stringify(frame));
+		route.onMessage(message => server.send(message));
+		server.onMessage(message => {
+			route.send(message);
+			if (typeof message !== "string") return;
+			let frame = JSON.parse(message) as {
+				kind?: string;
+				definition?: { questions: { id: string; question: string }[] };
+			};
+			let first = frame.definition?.questions[0];
+			if (first?.question === "Where should room state live?") question = first.id;
+		});
+	});
+	await page.reload();
 	await page.getByRole("button", { name: /^Decisions/ }).click();
 	let card = questionnaire(page).filter({
 		has: page.getByRole("heading", { name: "Where should room state live?" }),
 	});
+	await expect(card).toBeVisible();
+	await expect.poll(() => question).toBeTruthy();
+	let id = await card.getAttribute("data-plan-sidecar-questionnaire");
 
 	// Four peers on the same question: three faces and a "+1".
 	for (let handle of ["Bo", "cy", "Di", "ed"]) {
-		let peer = await join(handle);
-		await peer.getByRole("button", { name: /^Decisions/ }).click();
-		await questionnaire(peer).filter({
-			has: peer.getByRole("heading", { name: "Where should room state live?" }),
-		}).getByRole("radio", { name: /On disk as MDX/ }).focus();
+		send?.({ kind: "question:presence", ts: 0, id, question, client: `c-${handle}`, handle });
 	}
 
 	let people = card.getByRole("group", { name: /^Editing this question/ });
@@ -770,15 +788,15 @@ test("people on a decision are faces with verbatim handle tooltips", async ({ jo
 	let tooltip = page.locator("[data-icon-tooltip]");
 	await people.getByRole("img").first().hover();
 	await expect(tooltip).toBeVisible();
-	await expect(tooltip).toHaveText(/^(Bo|cy|Di|ed)$/);
+	await expect(tooltip).toHaveText("Bo");
 
 	await more.hover();
-	await expect(tooltip).toBeVisible();
-	await expect(tooltip).toHaveText(/^(Bo|cy|Di|ed)$/);
+	await expect(tooltip).toHaveText("ed");
 	expect(
-		await people.getByRole("img").evaluateAll(nodes => nodes.map(n => n.getAttribute("title"))),
-	)
-		.toEqual([null, null, null]);
+		await people.getByRole("img").evaluateAll(nodes =>
+			nodes.map(node => node.getAttribute("title"))
+		),
+	).toEqual([null, null, null]);
 });
 
 test("discarding asks first", async ({ join, seed }) => {
