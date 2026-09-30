@@ -225,8 +225,21 @@ Bun 1.4.2. Full workspace types, formatting and CI passed with existing warnings
 This resolves `quotes.test.ts`'s eval fixture dependency; the other six listed product
 test adaptations remain pending. No parsing rules or classifier policy changed.
 
-Next bounded pure-state sub-slice: event/correction shape validation. Keep its archived
-function bodies and strictness, extracting event and correction modules plus shared
-field guards behind the existing `validation.ts` entry point. This preserves behavior
-while avoiding importing the entire 855-line validation file at once. Research/state
-validators, event replay/domain and durable processing remain later dependencies.
+## Event and correction validation slice
+
+The archived guard functions now live in `event-validation.ts`,
+`correction-validation.ts` and the leaf `validation-fields.ts`; `validation.ts`
+reexports their original public APIs and five bounds. Dependencies are acyclic.
+Independent review and root syntax-tree comparison verified all 11 function bodies
+and five constants against the archive; every event/correction case remains.
+
+Independent Bun 1.4.2 tests: 7 passed, 0 failed (88 assertions). Full workspace types
+passed. These checks exercise field guards, explicit/human/source requirements,
+bounds, correction variants and scoped support identities. They do not establish
+saved-message provenance or replayed domain validity. The inherited `card.corrected`
+acceptance of `add-excerpt`, despite its narrower protocol union, remains unchanged.
+Research/state validators are still pending rather than silently omitted.
+
+Next bounded pure-state sub-slice: research-offer and snapshot guards in separate
+modules, preserving the remaining archived validator functions through the façade.
+Event replay/domain and durable processing follow those guards.
