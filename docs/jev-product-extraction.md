@@ -932,3 +932,20 @@ cases and reasons remain. The focused evidence/icon/design run passes 70 tests w
 906 assertions. Full workspace/E2E types and CI pass with inherited warnings/design
 baseline only. Original component, fixture, callback and icon preservation proofs pass
 after formatting, with only the declared source-label typography adaptation.
+
+## Analysis overview and excerpt-correction components
+
+The complete original AnalysisOverview and ExcerptCorrection functions, action type,
+answer helpers and sole original rendering callback are restored across five small
+files. Corrections retain linked-card eligibility, bounded unique source text, existing
+subspan checks, option membership, expected thread version and stable action identity
+when retrying an unchanged request. Read-only and missing-callback guards remain.
+
+Current-style substitutions replace eighteen fixed typography classes, four handmade
+field classes, one decorative check with the shared 14-pixel icon, and one separator
+with the shared hairline role. Every other original declaration and callback remains
+intact. Independent review approves these exact changes. Focused verification passes
+63 tests with 738 assertions; workspace/E2E types and CI pass. CI retains only the
+inherited lint warnings and design baseline. Formatting and fresh archive-preservation
+proofs pass. Runtime transcript wiring and native form interaction remain later work;
+this component slice does not establish server persistence or collaboration behavior.
