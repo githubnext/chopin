@@ -197,6 +197,7 @@ and E2E type checks, formatting and CI with the existing warnings listed above.
 | Candidate setup                  | All six original statements retain order and captured inputs; four private mutable run fields are cached, with the prior-choice map local. Grouping, distinct known/linked/novel choices, evidence thresholds, fresh sets and input-state provenance are covered.       | 224 conversation tests, 1,035 assertions  |
 | Candidate entry and role         | All six entry and 33 role statements retain original conditions and order, with eight candidate-loop continues mapped to undefined skips. Captured references, group retargeting, consumed labels, partial opening writes and selected-target preservation are covered. | 251 conversation tests, 1,191 assertions  |
 | Candidate factories/verification | Exact source/base declarations and eight early verification/condition statements retain capture timing and handled skips. Active-local working reads, valid deferred-domain histories, partial resume writes and cached spike labels are covered.                       | 266 conversation tests, 1,288 assertions  |
+| Scoped and new-choice handlers   | All seven original statements preserve order, with exactly five handled skips. Scoped captures and labels, replay-valid histories, active-local factories, staged version overrides and partial push failures are covered.                                              | 293 conversation tests, 1,484 assertions  |
 
 The combined guard/source/quote run passed 30 tests (242 assertions). Domain/replay
 checks passed 27 tests (109 assertions). The complete extracted foundation and
@@ -314,9 +315,19 @@ outputs and eight base outputs match the archived closures. Early verification c
 match four progressions and three handled skips; two mirrored push failures and two
 independent quote-read controls are counted separately. Valid settlement histories
 replay before and after resume. Continuation carries only the cached spike label,
-not a base closure bound to the finished handler. Scoped handlers remain unimplemented.
+not a base closure bound to the finished handler.
 
-Next: scoped candidate handlers and later dispatch. Preserve shared
+Scoped assent, proposal and direct new-choice handlers retain seven whole statements
+and five handled skips. Stopped-boundary observations match seven assent progressions
+and two handled skips, two proposal progressions and three handled skips, and one
+new-choice progression and five handled skips. Six mirrored push failures, one source-read
+failure and one synthetic cached-label override are verified separately. Scoped writes
+retain applied working before pushes; new choices publish their locally staged working
+only after both pushes. Valid card, scoped-proposal and settlement histories replay;
+synthetic prior-batch cap fixtures do not claim replay consistency. No complete original
+pipeline callback has been replaced by these bounded tests.
+
+Next: ordinary candidate proposals and later dispatch. Preserve shared
 candidate state, local capture timing, continuation and event-limit checks, and
 partial events retained after follow-up failure. Keep the original public interface
 and compare original offline fixtures before publishing the dispatcher.
