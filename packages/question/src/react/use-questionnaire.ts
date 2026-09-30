@@ -49,10 +49,11 @@ export type QuestionnaireState = {
 	focus: string | undefined;
 };
 
-type Snapshot = Omit<QuestionnaireState, "change" | "focusQuestion" | "submit" | "cancel"> & {
-type Snapshot = Omit<QuestionnaireState, "change" | "submit" | "cancel" | "addOption"> & {
-	closed: boolean;
-};
+type Snapshot =
+	& Omit<QuestionnaireState, "change" | "focusQuestion" | "submit" | "cancel" | "addOption">
+	& {
+		closed: boolean;
+	};
 type Model = crdt.Model<crdt.JsonNode<Drafts>>;
 
 const EMPTY_DRAFTS: Drafts = Object.freeze({});

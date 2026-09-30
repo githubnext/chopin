@@ -377,6 +377,20 @@ export async function addOption(
 	let outcome: Wire.AddOption.Reply | undefined;
 	let added: Wire.OptionAdded | undefined;
 	await Service.exclusive(plan, async () => {
+		// An implementation may have claimed the plan while this waited in the
+		// queue. Refuse before touching the live document: `publish` would throw
+		// after the Yjs mutation, leaving the room ahead of its durable state.
+		if (Service.implementationActive(plan)) {
+			outcome = {
+				kind: "question:option",
+				ts: 0,
+				id: msg.id,
+				ok: false,
+				reason: "implementation",
+				message: "An implementation is running; decisions cannot change",
+			};
+			return;
+		}
 		let record = plan.records.get(msg.id);
 		let entry = Store.get(plan.questions, msg.id);
 		if (!record || !entry || record.status !== "open") {
