@@ -4,7 +4,10 @@
  * A definition comes from an agent tool call, so it is untrusted input: this
  * module is what turns it into something the rest of the system can rely on.
  * Definitions are frozen once accepted — an answer only means anything against
- * the exact question that was asked.
+ * the exact question that was asked. The single exception is `appendOption`:
+ * while a question is open, members may add options. That never changes the
+ * meaning of an existing option or of a choice already made, and each append
+ * yields a new frozen definition rather than mutating the old one.
  */
 
 import * as limits from "./limits";
@@ -127,6 +130,68 @@ export function decision(definition: Definition): DecisionDefinition {
 		fail("A decision record must contain exactly one question");
 	}
 	return definition as DecisionDefinition;
+}
+
+export type Appended =
+	| { ok: true; definition: DecisionDefinition; option: Option }
+	| {
+		ok: false;
+		reason: "invalid" | "duplicate" | "full";
+		message: string;
+	};
+
+const KEY = /^[A-Za-z0-9_-]{8,64}$/;
+
+/**
+ * Append one option to a decision's only question.
+ *
+ * Pure: the caller mints `id`, persists the result, and decides who may call
+ * this. Validation happens here so the server and any client that wants to
+ * warn early apply identical bounds.
+ */
+export function appendOption(
+	definition: DecisionDefinition,
+	input: { question: string; key: string; label: unknown; description?: unknown },
+	id: string,
+): Appended {
+	let [item] = definition.questions;
+	if (!item || item.id !== input.question) {
+		return { ok: false, reason: "invalid", message: "Unknown question" };
+	}
+	if (typeof input.key !== "string" || !KEY.test(input.key)) {
+		return { ok: false, reason: "invalid", message: "Option request key is invalid" };
+	}
+
+	let label: string;
+	let description: string;
+	try {
+		label = text(input.label, "Option", limits.MAX_LABEL);
+		description = input.description === undefined
+			? ""
+			: text(input.description, "Option description", limits.MAX_DESCRIPTION, true);
+	} catch (err) {
+		return { ok: false, reason: "invalid", message: (err as Error).message };
+	}
+
+	let folded = label.toLowerCase();
+	if (item.options.some(option => option.label.trim().toLowerCase() === folded)) {
+		return { ok: false, reason: "duplicate", message: "That option already exists" };
+	}
+	if (item.options.length >= limits.MAX_SHARED_OPTIONS) {
+		return {
+			ok: false,
+			reason: "full",
+			message: `A question can have at most ${limits.MAX_SHARED_OPTIONS} options`,
+		};
+	}
+	if (item.options.some(option => option.id === id)) {
+		return { ok: false, reason: "invalid", message: "Option id is already in use" };
+	}
+
+	let option: Option = Object.freeze({ id, label, description });
+	let options = Object.freeze([...item.options, option]);
+	let next = Object.freeze({ ...item, options }) as Item;
+	return { ok: true, option, definition: Object.freeze({ questions: Object.freeze([next]) }) as DecisionDefinition };
 }
 
 /** Reject a tool call id that could not have come from the SDK. */
