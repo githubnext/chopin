@@ -649,7 +649,63 @@ test("decision cards save independently with progressive custom answers", async 
 	let custom = scope.getByRole("textbox", { name: "Add an option" });
 	await expect(custom).toBeFocused();
 	let saveScope = scope.getByRole("button", { name: "Save", exact: true });
-	await saveScope.hover();
+	await expect(saveScope).toBeDisabled();
+	await custom.fill("Only collaborative anchors");
+	await scope.getByRole("checkbox", { name: "Anchors" }).check();
+	await expect(custom).toHaveCount(0);
+	await customChoice.click();
+	custom = scope.getByRole("textbox", { name: "Add an option" });
+	await expect(custom).toHaveValue("Only collaborative anchors");
+	await expect(custom).toBeFocused();
+	await scope.getByRole("button", { name: "Save", exact: true }).click();
+	await expect(questionnaire(page).filter({ hasText: "Which of these belong in the first cut?" }))
+		.toContainText("Only collaborative anchors");
+});
+
+test("Save and Next wait for a chosen answer", async ({ join, seed }) => {
+	await seed(PROSE);
+	let page = await join("ana");
+	await page.getByRole("button", { name: /^Decisions/ }).click();
+	let card = questionnaire(page).filter({
+		has: page.getByRole("heading", { name: "Which of these belong in the first cut?" }),
+	});
+	let save = card.getByRole("button", { name: "Save", exact: true });
+
+	await expect(save).toBeDisabled();
+	await card.getByRole("checkbox", { name: "Anchors" }).check();
+	await expect(save).toBeEnabled();
+	await card.getByRole("checkbox", { name: "Anchors" }).uncheck();
+	await expect(save).toBeDisabled();
+	await expect(card).not.toContainText("Answered by");
+});
+
+test("a rejected save is announced as an alert with motion feedback", async ({ join, page, seed }) => {
+	await page.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		route.onMessage(message => {
+			let frame = typeof message === "string" ? JSON.parse(message) as Record<string, unknown> : {};
+			// The server stays authoritative for everything but this one refusal.
+			if (frame.kind !== "question:submit") return server.send(message);
+			route.send(JSON.stringify({
+				kind: "question:submit",
+				rid: frame.rid,
+				id: frame.id,
+				ok: false,
+				reason: "invalid",
+				message: "Scope could not be saved.",
+			}));
+		});
+		server.onMessage(message => route.send(message));
+	});
+	await seed(PROSE);
+	await join("ana");
+	await page.getByRole("button", { name: /^Decisions/ }).click();
+	let card = questionnaire(page).filter({
+		has: page.getByRole("heading", { name: "Which of these belong in the first cut?" }),
+	});
+	await card.getByRole("checkbox", { name: "Anchors" }).check();
+	let save = card.getByRole("button", { name: "Save", exact: true });
+	await save.hover();
 	await page.evaluate(() => {
 		let record = { starts: 0 };
 		Reflect.set(window, "__feedbackAlertTransitions", record);
@@ -660,9 +716,12 @@ test("decision cards save independently with progressive custom answers", async 
 			) record.starts++;
 		}, true);
 	});
-	await saveScope.click();
-	let alert = scope.getByRole("alert");
+	await save.click();
+
+	let alert = card.getByRole("alert");
 	await expect(alert).toBeVisible();
+	await expect(alert).toContainText("Couldn’t save");
+	await expect(alert).toContainText("Scope could not be saved.");
 	expect(
 		await alert.evaluate(element =>
 			getComputedStyle(element).transitionDuration.split(",").some(duration =>
@@ -676,29 +735,7 @@ test("decision cards save independently with progressive custom answers", async 
 			return record.starts > 0;
 		})
 	).toBe(true);
-	await custom.fill("Only collaborative anchors");
-	await scope.getByRole("checkbox", { name: "Anchors" }).check();
-	await expect(custom).toHaveCount(0);
-	await customChoice.click();
-	custom = scope.getByRole("textbox", { name: "Add an option" });
-	await expect(custom).toHaveValue("Only collaborative anchors");
-	await expect(custom).toBeFocused();
-	await scope.getByRole("button", { name: "Save", exact: true }).click();
-	await expect(questionnaire(page).filter({ hasText: "Which of these belong in the first cut?" }))
-		.toContainText("Only collaborative anchors");
-});
-
-test("an unanswered decision reports its own validation error", async ({ join, seed }) => {
-	await seed(PROSE);
-	let page = await join("ana");
-	await page.getByRole("button", { name: /^Decisions/ }).click();
-	let card = questionnaire(page).filter({
-		has: page.getByRole("heading", { name: "Which of these belong in the first cut?" }),
-	});
-
-	await card.getByRole("button", { name: "Save", exact: true }).click();
-
-	await expect(card.getByRole("alert")).toBeVisible();
+	await expect(card.getByRole("button", { name: "Try again" })).toBeEnabled();
 	await expect(card).not.toContainText("Answered by");
 });
 

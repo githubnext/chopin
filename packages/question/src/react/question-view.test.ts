@@ -155,3 +155,49 @@ test("a failed save explains itself in a callout and offers another try", () => 
 	expect(markup).toContain('role="alert"');
 	expect(markup).toContain("Try again");
 });
+
+function button(markup: string, label: string): string {
+	let match = markup.match(new RegExp(`<button[^>]*>${label}</button>`));
+	if (!match) throw new Error(`No ${label} button`);
+	return match[0];
+}
+
+let ALL = { mode: "choices", choice: "all", options: {}, custom: "" } as const;
+
+test("Save waits for an answer, and a blank custom answer is not one", () => {
+	let render = (drafts: Parameters<typeof QuestionView>[0]["drafts"]) =>
+		renderToStaticMarkup(createElement(QuestionView, {
+			definition: { questions: [ROLLOUT] },
+			drafts,
+			onChange() {},
+			onSubmit() {},
+		}));
+
+	expect(button(render({}), "Save")).toContain("disabled");
+	expect(button(render({ rollout: { ...ALL, mode: "custom", choice: "", custom: "  " } }), "Save"))
+		.toContain("disabled");
+	expect(button(render({ rollout: ALL }), "Save")).not.toContain("disabled");
+	expect(
+		button(render({ rollout: { ...ALL, mode: "custom", choice: "", custom: "Beta" } }), "Save"),
+	)
+		.not.toContain("disabled");
+});
+
+test("Next waits for an answer to the current question, but not in a read-only view", () => {
+	let second = { ...ROLLOUT, id: "pilot", header: "Pilot team", question: "Who pilots it?" };
+	let definition = { questions: [ROLLOUT, second] };
+	let editing = (drafts: Parameters<typeof QuestionView>[0]["drafts"]) =>
+		renderToStaticMarkup(createElement(QuestionView, {
+			definition,
+			drafts,
+			onChange() {},
+			onSubmit() {},
+		}));
+
+	expect(button(editing({}), "Next")).toContain("disabled");
+	expect(button(editing({ rollout: ALL }), "Next")).not.toContain("disabled");
+	expect(button(
+		renderToStaticMarkup(createElement(QuestionView, { definition, drafts: {} })),
+		"Next",
+	)).not.toContain("disabled");
+});

@@ -12,6 +12,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { CheckIcon, ChevronIcon, DecisionIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 
+import { answered } from "../draft";
+
 import type { ReactNode } from "react";
 import type { Draft, Drafts } from "../draft";
 import type { Answer, Definition, Item } from "../schema";
@@ -415,7 +417,8 @@ export function QuestionView(props: QuestionViewProps) {
 	let [confirming, setConfirming] = useState(false);
 	let previous = useRef<HTMLButtonElement>(null);
 	let next = useRef<HTMLButtonElement>(null);
-	let refocus = useRef<"previous" | "next">(undefined);
+	let primary = useRef<HTMLButtonElement>(null);
+	let refocus = useRef<"previous" | "next" | "primary">(undefined);
 
 	// At either end the activated caret disables. Keep focus inside the stepper
 	// so the new question is reached instead of dropping to the body.
@@ -424,6 +427,7 @@ export function QuestionView(props: QuestionViewProps) {
 		refocus.current = undefined;
 		if (target === "previous") previous.current?.focus();
 		else if (target === "next") next.current?.focus();
+		else if (target === "primary") primary.current?.focus();
 	}, [active]);
 
 	// A cancelled questionnaire has no answers, so it must be matched on status
@@ -460,12 +464,16 @@ export function QuestionView(props: QuestionViewProps) {
 	let index = definition.questions.findIndex(question => question.id === active);
 	let total = definition.questions.length;
 	let last = index === total - 1;
-	let step = (offset: number) => {
+	// Nothing chosen, nothing to save or move on with. Read-only hosts have no
+	// drafts to fill, so they keep free navigation.
+	let ready = answered(current, drafts[current.id]);
+	let step = (offset: number, from?: "primary") => {
 		let question = definition.questions[index + offset];
 		if (!question) return;
 		setActive(question.id);
 		let arrived = index + offset;
-		if (arrived === 0) refocus.current = "next";
+		if (from) refocus.current = "primary";
+		else if (arrived === 0) refocus.current = "next";
 		else if (arrived === total - 1) refocus.current = "previous";
 	};
 	let titleId = `${base}-title-${active}`;
@@ -629,8 +637,10 @@ export function QuestionView(props: QuestionViewProps) {
 								{multiple && !last && (
 									<button
 										type="button"
-										onClick={() => step(1)}
+										onClick={() => step(1, "primary")}
+										disabled={!!onChange && !ready}
 										className="btn btn-sm btn-primary"
+										ref={primary}
 									>
 										Next
 									</button>
@@ -639,8 +649,9 @@ export function QuestionView(props: QuestionViewProps) {
 									<button
 										type="button"
 										onClick={onSubmit}
-										disabled={disabled || submitting}
+										disabled={disabled || submitting || !ready}
 										className="btn btn-sm btn-primary"
+										ref={primary}
 									>
 										{submitting ? "Saving…" : error ? "Try again" : "Save"}
 									</button>
