@@ -98,6 +98,13 @@
 				"dynamic",
 				"*",
 				"props",
+				"unresolved JSX props > CodeIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
 				"unresolved JSX props > MessageIcon > <LineIcon>",
 				1
 			],
@@ -179,7 +186,7 @@
 				1
 			]
 		],
-		"sourceHash": "1ffdb49ab89b9eb184daea168c73a7c7c9286e09f2ad51d7ee6f7b72091e5230"
+		"sourceHash": "0dfd0723e90646836446c9017f7dab49c8f2412c75d5d0753fa33cfd265b7f04"
 	},
 	{
 		"file": "packages/visuals/src/ui/mini-bars.tsx",

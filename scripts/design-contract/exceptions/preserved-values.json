@@ -282,6 +282,13 @@
 				"ui-monospace, SFMono-Regular, monospace",
 				"CSS > .plan-content [data-plan-source]",
 				1
+			],
+			[
+				"typography",
+				"font-family",
+				"ui-monospace, SFMono-Regular, monospace",
+				"CSS > .plan-content .planCode .plan-code-view[data-view=\"file\"]",
+				1
 			]
 		]
 	},
