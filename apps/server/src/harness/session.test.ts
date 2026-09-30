@@ -174,7 +174,7 @@ describe("Planner workspaces", () => {
 			expect({ attempt, cwd: registered?.cwd }).toEqual({ attempt, cwd: path });
 			expect(registered?.humanInput.questionnaire).toBeFunction();
 			expect(instructions).toContain(`${path}, is a local checkout of owner/repo`);
-			expect(instructions).toContain("This is a full Atomic session");
+			expect(instructions).toContain("proceed on your best judgement");
 			expect(instructions).not.toContain("You have no shell");
 		}
 		let git = Bun.spawn(["git", "-C", path, "remote", "set-url", "origin", "workgit:other/repo"], {
@@ -202,7 +202,7 @@ describe("Planner workspaces", () => {
 			expect(instructions).toContain(`${cwd}, is a scratch directory Chopin created`);
 			expect(instructions).toContain("holds no repository files");
 			expect(instructions).toContain("`read_repository_file`");
-			expect(instructions).toContain("This is a full Atomic session");
+			expect(instructions).toContain("proceed on your best judgement");
 		}
 		await removeWorkspaces();
 		expect(await stat(first.registered!.cwd).catch(() => undefined)).toBeUndefined();
@@ -214,7 +214,7 @@ describe("Planner workspaces", () => {
 			let { registered, instructions } = await open("channel", harness);
 			expect(registered).toBeUndefined();
 			expect(instructions).toContain("You have no shell");
-			expect(instructions).not.toContain("full Atomic session");
+			expect(instructions).not.toContain("proceed on your best judgement");
 		}
 	});
 });
