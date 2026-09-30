@@ -1529,3 +1529,58 @@ whole-module runner/test preservation proofs pass. Independent review approves t
 bridge and unchanged production boundary. CI retains only two inherited lint warnings
 and the existing design baseline. No application, PostgreSQL, browser authentication
 or provider run is claimed.
+
+## Scripted current Harness integration
+
+A separate test-only HarnessV1 driver now supplies scripted model calls to actual
+Chat.job, openPlannerSession, current static heading tools and the SDK dispatcher.
+The driver captures a concrete fixture document and current job/turn identities;
+it never invokes tool handlers or writes Chat ownership fields. Session ownership
+uses real Memory Sessions and ActiveOwnerBindings with injected repository access.
+No application startup switch, production profile, runtime or configuration changes.
+
+The eight complete archived parser/substitution/hold declarations move once into a
+shared private test helper. The legacy runner's entire function body and all four
+original callbacks remain unchanged. A bounded throwing readScript loader serves
+the new driver. Ten helper cases cover exact call shape, sixteen-call limit, original
+string-length size semantics, malformed/missing files, depth, release and abort.
+Fresh group reconstruction checks both archive and prior checkpoint source.
+
+Current integration cases verify a heading's durable source at SDK result submission
+and after close/reopen, inactive edit_plan refusal with no heading result or document
+update, held-script cancellation and an abort during a held result observer. The
+script can attempt another model-side call before Chat consumes the refusal. Tests
+retain that adversarial sequence and check actual failed outcome, denied execution,
+unchanged stored/live source and absent publication. The driver does not filter
+calls, insert pacing or stop on denied results to manufacture the boundary outcome.
+These are direct Chat.job cases, not processor/coordinator or application tests.
+
+The SDK requires an internal working-directory setup request when opening a session.
+The fake sandbox simulates only its exact mkdir command, exact single WORK_DIR
+binding and directory derived from the registered session identity. It records one
+setup request and rejects any other command. Nothing executes on the host. Offered
+tool names match the current heading profile; the unused earlier fake never starts.
+Session, sandbox and credential cleanup are checked exactly once.
+
+The driver retains script-worker and result-observer promises through shutdown,
+shares repeated destruction and wakes held scripts through local cancellation.
+The modern SDK already waits for a held observer, so its integration case alone is
+not evidence for the driver drain fix. A separate direct Harness contract regression
+checks that boundary against a reconstructed earlier driver. The earlier variant
+finishes while its observer is held; the fixed contract waits for release. A second
+contract case stops an actual hold without aborting the caller signal. Replacing only
+local hold cancellation with the caller signal reproduces failure; the fixed driver
+drains and preserves the supplied job/turn identities. Direct contract cases do not
+execute the SDK or authenticate a session. Both always await destruction in cleanup.
+
+Final verification passes 3,215 offline tests with 15,024 assertions across 535 files;
+two PostgreSQL checks are skipped. The focused legacy/helper/current-Harness/direct-
+contract suite passes twenty cases with 112 assertions. Workspace/E2E types, CI,
+formatting, fresh archive/checkpoint group reconstruction, legacy callback and frozen
+new-module proofs pass. The group proof accounts for the formatter's exact import
+specifier order at the declared relocation seam. Independent reviews approve the
+implementation and additionally verify observer-error propagation and direct held
+stop behavior. CI retains only two inherited lint warnings and the existing design
+baseline. No real authentication, application, PostgreSQL or provider run is claimed.
+Application/browser harness activation, other scripted profile coverage and deferred
+anatomy remain outstanding; the broader extraction is unfinished.
