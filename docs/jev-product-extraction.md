@@ -205,6 +205,9 @@ and E2E type checks, formatting and CI with the existing warnings listed above.
 | Ordinary application             | The exact whole try/catch retains main application, raw pending deferral, distinct-supporter leaning and agreement follow-ups. Active-local versions, original support caps, uncapped constraint deferral and partial publication after caught failure are covered.                                         | 440 conversation tests, 2,490 assertions  |
 | Complete pure policy             | Final fallback, bounded gate and result retain three whole nodes. All seven proposal route conditions, original candidate-loop binding, no-proposal continue and loop-bottom break preserve exact source tests and order. Complete offline public outputs and separately seeded final failures are covered. | 474 conversation tests, 2,606 assertions  |
 | Pure interpreter                 | The original research guard, request await and catch remain in main. Synchronous offer selection preserves the original model conditional, seven types/helpers, targeting batch order and failure handling. Six whole pipeline callbacks, deferred question loop and original D19 suite are restored.       | 485 conversation tests, 2,650 assertions  |
+| Pure effects                     | Fourteen exact archived declarations across six acyclic modules preserve projection, strict outbox restoration, recovery and ordered retry delivery. All 25 original callbacks and three whole interpreter/effects pipeline callbacks are retained.                                                         | 28 focused tests, 118 assertions          |
+| Planner job state                | The 189-line module is byte-identical; all 22 original declarations and 12 whole callbacks retain deduplication, coalescing, retries, interrupted-job restoration and strict bounds. No Planner delivery is activated.                                                                                      | 12 focused tests, 85 assertions           |
+| Durable card actions             | The 159-line model and complete original test file are retained; the exact CardEvent type moves into a private leaf with a type-only import redirect. Generations, identities, copied choices, UTF-16 truncation and strict queue bounds remain unchanged.                                                  | 3 focused tests, 13 assertions            |
 
 The combined guard/source/quote run passed 30 tests (242 assertions). Domain/replay
 checks passed 27 tests (109 assertions). The complete extracted foundation and
@@ -459,6 +462,20 @@ seeds; only existing numeric analysis latency is normalized. Input mutations and
 property presence are checked. Research model mismatch/failure remains silent and
 records no research analysis pass. No runtime consumer or paid transport is activated.
 
-Next: effects, conversation processing, durable persistence and Planner integration,
-with real integrated regressions before a backend milestone claim. Remaining whole
-pipeline callbacks stay explicitly assigned and can be restored in bounded groups.
+The complete pure effects API retains all fourteen original declarations and eleven
+fixture declarations once across small modules and suites. Its 25 whole tests and
+three interpreter/effects bridge callbacks preserve ordered delivery, per-thread failure
+blocking, receipt timing, retryable targets and explicit research omission. Pipeline
+ownership is now 18 of 140 whole nodes, with 122 assigned to later groups.
+
+The Planner job-state module is byte-identical and all twelve original callbacks remain.
+The durable card-action model retains its complete source and three-test suite; only a
+type-only import points to the unchanged CardEvent alias extracted into a private leaf.
+These are complete pure boundaries, with no room, service or Planner consumer activated.
+
+The combined foundation, effects, jobs and card-action run passes 528 tests with
+2,866 assertions. Workspace/E2E types and CI pass with inherited findings only.
+
+Next: actual conversation processing, durable sidecar/outbox persistence and Planner
+delivery, with real integrated regressions before a backend milestone claim. Remaining
+whole pipeline callbacks stay explicitly assigned and can be restored in bounded groups.
