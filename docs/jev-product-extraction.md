@@ -1,7 +1,7 @@
 # Jev product extraction — handoff
 
 This is a finite extraction from a preserved prototype, not a verified release or
-classifier-quality fix. The transport, stored-identity and source-provenance foundations are implemented in bounded slices.
+classifier-quality fix. The transport, stored-identity, source-provenance and quote foundations are implemented in bounded slices.
 
 - Product branch: `maggie/jev-chat-product`.
 - Product worktree: `/Users/maggieappleton/.codex/worktrees/jev-chat-product/chopin`.
@@ -210,7 +210,23 @@ verified the 39 combined source/question tests (152 assertions). Full workspace 
 formatting and CI passed with the same existing warnings. These checks establish
 standalone provenance validation, not live conversation integration.
 
-Next bounded interpretation sub-slice: exact quote extraction and its four archived
-regression tests. Extract only the five development messages those tests require,
-with archive/source mapping, rather than importing evaluation datasets. Pure event
-replay/domain and durable processing remain later dependencies.
+## Exact quote extraction slice
+
+The parser and quote budget are byte-identical to the archive. All four original
+quote test bodies and assertions remain; five exact development messages now live in
+`quotes.test-fixtures.ts` with archive SHA, case, step and source path. No labels,
+scoring or dataset imports accompany them. Root and reviewer checked text parity,
+including apostrophes and UTF-16 offsets. A fifth regression verifies that four
+candidates succeed and a fifth throws rather than silently losing source evidence.
+
+Test-first verification failed on the missing parser module before extraction.
+Independent review approved the slice: 5 tests passed, 0 failed (20 assertions), on
+Bun 1.4.2. Full workspace types, formatting and CI passed with existing warnings.
+This resolves `quotes.test.ts`'s eval fixture dependency; the other six listed product
+test adaptations remain pending. No parsing rules or classifier policy changed.
+
+Next bounded pure-state sub-slice: event/correction shape validation. Keep its archived
+function bodies and strictness, extracting event and correction modules plus shared
+field guards behind the existing `validation.ts` entry point. This preserves behavior
+while avoiding importing the entire 855-line validation file at once. Research/state
+validators, event replay/domain and durable processing remain later dependencies.
