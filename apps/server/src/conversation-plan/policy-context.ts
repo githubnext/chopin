@@ -24,6 +24,7 @@ export type PolicyContext = {
 	working: State;
 	selectedTarget: string | undefined;
 	facts?: DirectFacts;
+	directQuestion?: boolean;
 	quotedOption?: (
 		candidate: QuoteCandidate,
 		index: number,

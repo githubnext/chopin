@@ -193,6 +193,7 @@ and E2E type checks, formatting and CI with the existing warnings listed above.
 | Review/correction coverage | All 19 original callbacks and 18 actor/helper declarations are retained, including the complete three-case excerpt table. Twenty-one cases exercise existing pure behavior; production is unchanged.                                                                  | 132 conversation tests, 669 assertions    |
 | Policy leaves              | All 24 archived helper/type/constant declarations are retained across five small acyclic modules. One exact pipeline callback verifies deterministic ULID identity and Unix-second encoding. No policy dispatcher or placeholder exists yet.                          | 133 conversation tests, 673 assertions    |
 | Initial policy terminals   | All 20 original preamble/fact/gate statements are retained with ordered internal calls; one unset initializer is explicitly undefined for lint. Three whole pipeline callbacks cover 18 cases; bounded regressions cover ordering, staging, capture and continuation. | 171 conversation tests, 801 assertions    |
+| Remaining policy terminals | All 13 original statements through the purpose/final-question gate are retained across four stages and an ordered runner. Five whole pipeline callbacks remain exact; working writeback, local staging, cached captures and explicit continuation are covered.        | 192 conversation tests, 924 assertions    |
 
 The combined guard/source/quote run passed 30 tests (242 assertions). Domain/replay
 checks passed 27 tests (109 assertions). The complete extracted foundation and
@@ -286,7 +287,12 @@ Thirty-one terminal results match the preserved offline policy, with two explici
 continuation comparisons and input-mutation checks. These checks cover this prefix,
 not the complete policy. Synthetic cap fixtures do not claim replay consistency.
 
-Next: remaining ordered terminal stages, then candidate dispatch. Preserve shared
+The remaining four terminal stages retain all 13 original statements and five whole
+pipeline callbacks. Offline checks match 30 terminal outputs and four continuation
+states, including input-mutation checks. Three injected quoted-option failures and
+one changed-message capture regression are verified separately.
+
+Next: candidate setup, then candidate dispatch. Preserve shared
 candidate state, local capture timing, continuation and event-limit checks, and
 partial events retained after follow-up failure. Keep the original public interface
 and compare original offline fixtures before publishing the dispatcher.
