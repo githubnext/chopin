@@ -5,6 +5,7 @@ import { githubTools, type GitHubToolsError, type Result } from "./github-tools"
 import { registerCredential } from "./harnesses";
 import {
 	type FullPlanner,
+	pauseOwnedRuns,
 	type PlannerRuns,
 	registerFullPlanner,
 	type WorkflowControl,
@@ -151,9 +152,9 @@ export async function openPlannerSession(
 		let active = session;
 		let release = unregister;
 		let stopped: Promise<void> | undefined;
-		let control = async (params: WorkflowControl) => {
+		let control = (params: WorkflowControl) => {
 			if (!planner?.control) throw new Error("The Planner has no live Atomic session to control.");
-			await planner.control(params);
+			return planner.control(params);
 		};
 		let runControl = planner
 			? {
@@ -162,7 +163,7 @@ export async function openPlannerSession(
 					listeners.add(listener);
 					return () => listeners.delete(listener);
 				},
-				pauseRuns: () => control({ action: "pause", all: true }),
+				pauseRuns: () => pauseOwnedRuns(control, planner.runs?.active ?? []),
 				resumeRuns: async () => {
 					for (let runId of planner.runs?.paused ?? []) await control({ action: "resume", runId });
 				},

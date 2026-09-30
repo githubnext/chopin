@@ -10,7 +10,13 @@ import {
 	ATOMIC_RESULT_TOOL_NAME,
 	createAtomicAdapter,
 } from "./adapter";
-import { classifyRuns, controlWorkflows, registerFullPlanner } from "./full";
+import {
+	classifyRuns,
+	controlWorkflows,
+	pauseOwnedRuns,
+	registerFullPlanner,
+	type WorkflowControl,
+} from "./full";
 import { startStubModelServer } from "../pi/model-stub";
 import { hostInputRoom } from "../../testing/decisions";
 import type { HostInput, QuestionParams } from "@bastani/atomic";
@@ -422,8 +428,9 @@ test("run cards fold lifecycle events into ordered stages, Decisions waits, and 
 
 test("run control calls the session's workflow tool with a real tool context and surfaces failures", async () => {
 	let calls: { params: unknown; ctx: unknown; aborted: boolean }[] = [];
-	let reply: { content: { type: string; text: string }[]; isError?: boolean } = {
+	let reply: { content: { type: string; text: string }[]; isError?: boolean; details?: unknown } = {
 		content: [{ type: "text", text: "Paused 1 run(s)." }],
+		details: { action: "pause", status: "paused", message: "Paused 1 run(s)." },
 	};
 	let session = {
 		getToolDefinition: (name: string) =>
@@ -443,7 +450,10 @@ test("run control calls the session's workflow tool with a real tool context and
 				: undefined,
 		extensionRunner: { createToolContext: (id: string) => ({ toolCallId: id }) },
 	};
-	await controlWorkflows(session, { action: "pause", all: true });
+	expect(await controlWorkflows(session, { action: "pause", all: true })).toEqual({
+		status: "paused",
+		message: "Paused 1 run(s).",
+	});
 	await controlWorkflows(session, { action: "resume", runId: "run-1" });
 	expect(calls.map(call => call.params)).toEqual([{ action: "pause", all: true }, {
 		action: "resume",
@@ -465,4 +475,30 @@ test("run control calls the session's workflow tool with a real tool context and
 		}),
 	)
 		.rejects.toThrow("no workflow tool");
+});
+
+test("pausing quits a run whose live stage waits on a question, and fails when nothing can stop it", async () => {
+	let calls: WorkflowControl[] = [];
+	let outcomes: Record<string, string> = { pause: "paused" };
+	let control = async (params: WorkflowControl) => {
+		calls.push(params);
+		return {
+			status: outcomes[params.action] ?? "noop",
+			message: `${params.action} ${outcomes[params.action] ?? "noop"}`,
+		};
+	};
+	await pauseOwnedRuns(control, ["run-1"]);
+	expect(calls).toEqual([{ action: "pause", all: true }]);
+
+	calls = [];
+	outcomes = { pause: "noop", quit: "paused" };
+	await pauseOwnedRuns(control, ["run-1", "run-2"]);
+	expect(calls).toEqual([
+		{ action: "pause", all: true },
+		{ action: "quit", runId: "run-1" },
+		{ action: "quit", runId: "run-2" },
+	]);
+
+	outcomes = { pause: "noop", quit: "noop" };
+	await expect(pauseOwnedRuns(control, ["run-1"])).rejects.toThrow("Run run-1 could not be paused");
 });
