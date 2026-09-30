@@ -157,7 +157,7 @@ export async function openPlannerSession(
 					listeners.add(listener);
 					return () => listeners.delete(listener);
 				},
-				pauseRuns: () => command("/workflow pause --all"),
+				pauseRuns: () => command("/workflow pause --all --yes"),
 				resumeRuns: async () => {
 					for (let runId of planner.runs?.paused ?? []) await command(`/workflow resume ${runId}`);
 				},

@@ -871,14 +871,36 @@ export async function resume(context: Room, ws: Socket): Promise<void> {
 	say(chat, server, room, { id: ulid(), author: { kind: "system" }, text, ts: now() });
 }
 
+const ENDED_RUN: Partial<Record<Wire.Run["status"], string>> = {
+	finished: "finished",
+	failed: "failed",
+	stopped: "was stopped",
+};
+
+/**
+ * Show the retained session's runs, and say once in the transcript when one
+ * ends, so the record outlives the card.
+ */
 function publishRuns(
 	context: Room,
-	runs: { active: string[]; paused: string[] } | undefined,
+	runs: { active: string[]; paused: string[]; cards?: Wire.Run[] } | undefined,
 ): void {
 	let { chat, room, server } = context;
-	chat.runs = runs && (runs.active.length || runs.paused.length)
-		? { active: runs.active.length, paused: runs.paused.length }
-		: undefined;
+	let before = new Map((chat.runs ?? []).map(run => [run.id, run.status]));
+	let cards = runs?.cards ?? [];
+	for (let run of cards) {
+		let ended = ENDED_RUN[run.status];
+		let previous = before.get(run.id);
+		if (!ended || !previous || ENDED_RUN[previous]) continue;
+		let minutes = Math.max(1, Math.round(((run.ended ?? run.updated) - run.started) / 60));
+		say(chat, server, room, {
+			id: ulid(),
+			author: { kind: "system" },
+			text: `${run.name} ${ended} after ${minutes} min.`,
+			ts: now(),
+		});
+	}
+	chat.runs = runs && (runs.active.length || runs.paused.length) ? cards : undefined;
 	state(chat, server, room);
 }
 

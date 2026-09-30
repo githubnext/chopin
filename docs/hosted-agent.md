@@ -274,8 +274,11 @@ and its owner binding, and keeps the document loaded, until every run has
 finished. The next turn reuses that session, so the Planner can still see and
 steer its runs over Intercom; people steer through Chat and Decisions, never a
 stage directly. **Stop Planner** also pauses the session's live runs, resumably,
-and **Resume Planner** resumes the runs it paused. Chat shows how many runs are
-running or paused. The session is let go when its runs finish, when its owner
+and **Resume Planner** resumes the runs it paused. Chat shows a card for each
+run: its name, status (running, waiting on Decisions, paused, or ended), elapsed
+time, every stage it has reached with its status and duration, and a link to the
+Decisions it is waiting on. When a run ends, Chat records a line saying how it
+ended and how long it took. The session is let go when its runs finish, when its owner
 binding ends, or when the document closes; run state is durable in Atomic's
 workflow store, so runs interrupted that way can be resumed from a later
 session.
