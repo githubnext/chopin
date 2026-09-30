@@ -14,7 +14,7 @@
 import { authenticate, content, expect, test } from "./room";
 import { storedQuestion } from "../apps/server/src/testing/plan";
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 /** Long enough to be marked: the injector wants twenty characters. */
 const PROSE = "Room state lives on disk as MDX beside the transcript.\n";
@@ -773,12 +773,23 @@ test("people on a decision are faces with verbatim handle tooltips", async ({ jo
 	await expect(more).toBeVisible();
 	await expect(ana.card).not.toContainText("@Bo");
 
+	// The tooltip hides on any scroll, and scroll events arrive a frame after the
+	// scroll itself. Settle the page first, then arrive with real pointer movement.
 	let tooltip = ana.page.locator("[data-icon-tooltip]");
-	await people.getByRole("img").first().hover();
-	await expect(tooltip).toBeVisible();
+	let settleThenHover = async (target: Locator) => {
+		await target.scrollIntoViewIfNeeded();
+		await ana.page.evaluate(() =>
+			new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done())))
+		);
+		let box = (await target.boundingBox())!;
+		await ana.page.mouse.move(0, 0);
+		await ana.page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 8 });
+	};
+	await settleThenHover(people.getByRole("img").first());
+	await expect(tooltip).toHaveAttribute("data-visible", "");
 	await expect(tooltip).toHaveText("Bo");
 
-	await more.hover();
+	await settleThenHover(more);
 	await expect(tooltip).toHaveText("ed");
 	expect(
 		await people.getByRole("img").evaluateAll(nodes =>
