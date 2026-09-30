@@ -1650,6 +1650,69 @@
 	padding-inline: 0.75rem;
 }
 
+/* Diagram error callout. */
+.plan-content .planCode [data-plan-preview] [data-plan-error]:has(.plan-error-badge) {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.625rem;
+	margin: 0.75rem;
+	padding: 0.625rem 0.75rem;
+	border-radius: var(--radius-md);
+	background: var(--color-ruby-2);
+}
+
+.plan-content .plan-error-badge {
+	display: grid;
+	flex-shrink: 0;
+	place-items: center;
+	width: 1.5rem;
+	height: 1.5rem;
+	border-radius: 50%;
+	background: var(--color-danger-surface);
+	color: var(--color-destructive);
+}
+
+.plan-content .plan-error-badge [data-nucleo-icon] {
+	color: inherit;
+}
+
+.plan-content .plan-error-text {
+	min-width: 0;
+}
+
+.plan-content .plan-error-title {
+	display: block;
+	font-size: var(--text-sm);
+	font-weight: 600;
+	color: var(--color-destructive-ink);
+}
+
+.plan-content .plan-error-message {
+	margin: 0.125rem 0 0;
+	font-size: var(--text-sm);
+	color: var(--color-destructive-ink);
+	overflow-wrap: anywhere;
+	line-height: var(--text-sm--line-height);
+}
+
+.plan-content .plan-error-detail {
+	margin: 0.5rem 0 0;
+	padding: 0;
+	overflow-x: auto;
+	background: transparent;
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	color: var(--color-destructive-ink);
+}
+
+.plan-content .plan-error-expected {
+	margin: 0.375rem 0 0;
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+	color: var(--color-destructive-ink);
+	overflow-wrap: anywhere;
+}
+
 .plan-content .plan-code-title {
 	min-width: 0;
 	overflow: hidden;

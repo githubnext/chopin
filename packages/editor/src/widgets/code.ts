@@ -251,3 +251,25 @@ export function languageOptions(language: string): (readonly [string, string])[]
 		...LANGUAGES,
 	];
 }
+
+/**
+ * Mermaid's failure message, split into the parts worth showing. Mermaid
+ * quotes the whole source back after "for text:" on an unknown type; the
+ * source is already on screen, so only the sentence is kept. Anything that
+ * matches no known shape falls back to the raw first line.
+ */
+export function describeDiagramError(
+	message: string,
+): { summary: string; excerpt: string; expected: string } {
+	if (message.startsWith("No diagram type detected")) {
+		return { summary: "The diagram type is not recognised.", excerpt: "", expected: "" };
+	}
+	let lines = message.split(/\r?\n/);
+	// An error at the very start of the source has no dashes before its caret.
+	let caret = lines.findIndex((line, index) => index > 1 && /^-*\^$/.test(line));
+	return {
+		summary: (lines[0] || "The diagram could not be parsed.").replace(/:\s*$/, ""),
+		excerpt: caret > 0 ? lines.slice(caret - 1, caret + 1).join("\n") : "",
+		expected: lines.slice(caret > 0 ? caret + 1 : 1).join(" ").trim(),
+	};
+}

@@ -36,10 +36,10 @@ import {
 import { $isCodeBlockNode, $isMathNode } from "@chopin/dialect";
 
 import { enclosing, remember } from "../collapse";
-import { kindOf, languageOptions, titleOf } from "./code";
+import { describeDiagramError, kindOf, languageOptions, titleOf } from "./code";
 import { CodeView } from "./code-view";
 import { LanguageMenu } from "./language-menu";
-import { CodeIcon } from "@chopin/icons";
+import { CodeIcon, WarningIcon } from "@chopin/icons";
 
 import type { ElementNode, LexicalEditor } from "lexical";
 import type { Kind } from "./code";
@@ -335,9 +335,31 @@ function Preview(
 	);
 }
 
+/**
+ * Not a live region: the diagram re-renders on every keystroke, and each
+ * intermediate error would be announced.
+ */
+function DiagramError({ message }: { message: string }) {
+	let { summary, excerpt, expected } = describeDiagramError(message);
+	return (
+		<div data-plan-error="">
+			<span aria-hidden="true" className="plan-error-badge">
+				<WarningIcon size={14} />
+			</span>
+			<div className="plan-error-text">
+				<strong className="plan-error-title">This diagram could not be drawn</strong>
+				<p className="plan-error-message">{summary}</p>
+				{excerpt && <pre className="plan-error-detail">{excerpt}</pre>}
+				{expected && <p className="plan-error-expected">{expected}</p>}
+			</div>
+		</div>
+	);
+}
+
 function Rendered(
 	{ block, html, error }: { block: Block; html: string | undefined; error: string | undefined },
 ) {
+	if (error && block.kind === "mermaid") return <DiagramError message={error} />;
 	if (error) return <div data-plan-error="">{error}</div>;
 	if (!block.source.trim()) return null;
 

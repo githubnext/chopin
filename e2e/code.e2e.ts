@@ -175,7 +175,10 @@ test("an invalid diagram leaves its error inside the fence", async ({ join, seed
 	await seed("```mermaid\nflowchart LR\nA[raw MemEntry[]]\n```\n");
 	let page = await join("ana");
 
-	await expect(content(page).locator("[data-plan-error]")).toBeVisible();
+	let error = content(page).locator("[data-plan-error]");
+	await expect(error).toBeVisible();
+	await expect(error.getByText("This diagram could not be drawn")).toBeVisible();
+	await expect(error.locator(".plan-error-message")).not.toBeEmpty();
 	await expect(
 		page.locator("body > div").filter({ hasText: "Syntax error in text" }),
 	).toHaveCount(0);
