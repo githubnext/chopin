@@ -21,6 +21,9 @@ export type { Applied, Draft, Drafts, Mode, Model } from "./draft";
 export { derive, incomplete, summarize } from "./answer";
 export type { Outcome } from "./answer";
 
+export { addOption } from "./options";
+export type { Added } from "./options";
+
 /**
  * The CRDT itself.
  *

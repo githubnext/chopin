@@ -7,6 +7,8 @@
 
 export const MAX_QUESTIONS = 10;
 export const MAX_OPTIONS = 20;
+/** Options a person may grow a decision card to. */
+export const MAX_DECISION_OPTIONS = 10;
 export const MAX_HEADER = 80;
 export const MAX_QUESTION = 1_000;
 export const MAX_LABEL = 200;
