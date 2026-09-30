@@ -856,7 +856,7 @@ label.question-option:has(.question-input:not(:disabled)) {
 }
 
 /* Matches the research card: danger badge beside pale-red callout text. */
-.question-callout {
+.plan-research-callout.question-callout {
 	display: flex;
 	align-items: flex-start;
 	gap: 0.5rem;
