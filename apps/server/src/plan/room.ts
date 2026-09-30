@@ -36,7 +36,7 @@ import {
 } from "@chopin/dialect";
 import { $getAnchorAndFocusForUserState } from "@lexical/yjs";
 import * as Questionnaires from "./questionnaires";
-import { createCardProjections } from "./card-projections";
+import { createCardProjections, QuestionnaireProjectionError } from "./card-projections";
 export { QuestionnaireProjectionError } from "./card-projections";
 export type { CardChange } from "./card-projections";
 import {
@@ -438,6 +438,36 @@ function mutate(target: Document, change: () => boolean): Mutation | undefined {
 }
 
 export type QuestionnaireInsertion = Questionnaires.QuestionnaireInsertion;
+
+/** Snapshot visible card projections for a startup migration. */
+export function questionnaireProjections(target: Document): Questionnaire[] {
+	let values: Questionnaire[] = [];
+	target.editor.getEditorState().read(() => {
+		values = $nodesOfType(QuestionnaireNode).map(node => structuredClone(node.getQuestionnaire()));
+	});
+	return values;
+}
+
+/** Add thread links to previously unlinked visible cards in one document update. */
+export function linkQuestionnaireThreads(
+	target: Document,
+	links: Array<{ id: string; threadId: string }>,
+): Mutation | undefined {
+	return mutate(target, () => {
+		let nodes = $nodesOfType(QuestionnaireNode);
+		for (let link of links) {
+			let matches = nodes.filter(node => node.getId() === link.id);
+			if (matches.length !== 1 || matches[0]!.getQuestionnaire().thread) {
+				throw new QuestionnaireProjectionError("Card is not available for linking");
+			}
+		}
+		for (let link of links) {
+			let node = nodes.find(node => node.getId() === link.id)!;
+			node.setQuestionnaire({ ...node.getQuestionnaire(), thread: link.threadId });
+		}
+		return links.length > 0;
+	});
+}
 
 export function insertQuestionnaires(
 	target: Document,

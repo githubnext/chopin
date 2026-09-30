@@ -17,6 +17,7 @@ import * as Chat from "./chat/service";
 import { CHAT_CAPABILITIES, incomingFrame } from "./chat/incoming";
 import { ReferenceService } from "./chat/references";
 import { createConversationRuntime } from "./conversation-plan/runtime";
+import { prepareOpenedPlan } from "./conversation-plan/service-opening";
 import { handleConversationCommand } from "./conversation-plan/commands";
 import { handleResearchCommand } from "./conversation-plan/research-commands";
 import { startAcceptedResearch } from "./conversation-plan/accepted-research";
@@ -40,6 +41,7 @@ import * as Service from "./plan/service";
 import * as Inject from "./questions/inject";
 import * as Marks from "./comments/inject";
 import * as Questions from "./questions/service";
+import { backfillPlannerAskThreads } from "./questions/backfill";
 import { registerResearchWorkspaceRoutes } from "./research/routes";
 import { ResearchWorkspaceError, ResearchWorkspaceService } from "./research/service";
 import { placeResearchReference as placeResearch } from "./research/placement";
@@ -208,8 +210,14 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 		if (deletingChannels.has(room.id)) throw new Error("document is unavailable");
 		if (room.plan) return room.plan;
 		let opened = await Service.open(room.id, backend, server);
-		let channel = await storage.channels.get(room.id);
-		room.plan = opened;
+		let channel: ChannelRecord | undefined;
+		await prepareOpenedPlan(room, opened, async () => {
+			channel = await storage.channels.get(room.id);
+			if (room.closing) throw new Error("document is unavailable");
+			if (config.conversationPlan && !channel?.archivedAt) {
+				await backfillPlannerAskThreads(opened);
+			}
+		});
 		await conversationRuntime.attach(room, opened, !!channel?.archivedAt);
 		if (!channel?.archivedAt) {
 			if (summaryCoordinator) void summaryCoordinator.ensure(room.id).catch(() => {});

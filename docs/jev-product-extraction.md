@@ -1328,3 +1328,69 @@ callback retention proofs pass. Independent source, sync, metadata and native re
 find no issues. CI retains only two inherited lint warnings and the existing design
 baseline. Legacy Planner-thread backfill and the remaining full-application/anatomy
 boundaries remain outstanding; the broader extraction is unfinished.
+
+## Legacy Planner-card backfill
+
+The complete archived backfill module and all six original test callbacks, fixtures,
+helpers and cleanup are restored. The two original room helpers snapshot card
+projections and validate unique, still-unlinked cards before adding thread attributes.
+Only those helpers and their existing projection-error binding change the room module.
+
+Eligibility remains narrow: one open Planner-origin question with no decision history,
+existing thread, human/chat option provenance or conflicting visible projection.
+Question text, IDs and ordered options must match exactly. Deterministic card-derived
+thread IDs and source-free, zero-time events make repeated migration idempotent.
+Collisions and conversation limits skip unsafe candidates. The real fenced staged
+commit precedes live document, record and conversation publication and suppresses
+unnecessary derived-document notifications. No Planner jobs or effects are enqueued.
+
+First-open integration runs only when the conversation prototype is enabled and the
+channel is not archived. Channel lookup and backfill belong to preparation before room
+exposure. Closing intent is checked before preparation, after awaited lookup before
+migration and immediately before synchronous exposure. Existing document locking,
+opening singleflight, deletion admission and asynchronous runtime attachment remain
+unchanged. Detached Service.open calls, including observational research reads, do not
+perform this migration. The original generic publication helper is preserved whole;
+its other archived opening/join helpers and original tests remain separately deferred.
+
+A successfully restored document that preparation never exposed now has a narrow
+abortOpening cleanup path. It stops timers, marks closing, drains chat and pending
+flushes and always disposes question, presence and Yjs resources, without another
+commit or checkpoint. Ordinary Service.open and Service.close bodies remain unchanged.
+A preparation error remains the rejection; a cleanup error is included only if both
+fail. This resource-only path is for privately owned opening objects, not normal
+published-document shutdown.
+
+An additional real Memory-backed test exercises the existing implementation-claim
+flag guard, then closes, reopens and retries the unlinked card. It does not construct
+an approved implementation run or establish that lifecycle. Producer-level locking
+has no general post-close admission guard; migration safety here depends on the
+first-open ownership boundary. A commit already admitted when closing begins may
+settle durably. Closing prevents subsequent room exposure rather than rolling back
+that admitted commit.
+
+Seven additional Memory lifecycle cases use real restoration, fenced backfill commits,
+channel lookup and cleanup. They hold a commit to prove shared opening consumers and
+attachment see only committed state; hold lookup to prevent migration admission after
+close intent; and restore storage after both one-shot and persistent faults to retry.
+Persistent failure disposes questions, presence, chat and the Yjs document with exactly
+one failed migration commit and no cleanup commit. One- and two-hop microtask cases
+expose the original guard-to-publication gap; the real old wrapper failed the ordering
+assertion, and synchronous final guard/exposure passes. Publication that already
+preceded close intent is allowed to finish and uses ordinary queued close.
+
+The fixtures share opening promises and simulate queued close plus attachment callbacks.
+They do not import or start main, execute its socket admission, authenticate a browser
+or prove PostgreSQL behavior. The actual main guard order and retained lock/singleflight/
+async attachment are covered separately by whole-source inspection and AST subtraction.
+Original source and test retention proofs compare fresh Git objects; all seven new
+callbacks and their fixture also survive formatting as complete programs.
+
+Final verification passes 3,156 offline tests with 14,730 assertions across 524 files;
+two PostgreSQL checks are skipped. The focused migration/lifecycle suite passes fourteen
+cases with 159 assertions. Workspace/E2E types, CI, formatting and source/callback
+retention proofs pass. Independent reviews approve the bounded implementation. CI
+retains only the two inherited lint warnings and existing design baseline. This server
+slice changes no browser code or styles; the prior seventy-one isolated native cases
+are not rerun. Original opening/join, full-application and deferred anatomy boundaries
+remain outstanding, and the broader extraction remains unfinished.

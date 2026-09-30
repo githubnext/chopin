@@ -1741,6 +1741,34 @@ export function departed(plan: Plan, ws: Socket): void {
 	});
 }
 
+/** Release a successfully opened document that has never been exposed to a room. */
+export async function abortOpening(plan: Plan): Promise<void> {
+	if (plan.timer) clearTimeout(plan.timer);
+	clearInterval(plan.attention);
+	let persistence = plan.persistence;
+	persistence.closing = true;
+	if (persistence.checkpointTimer) clearTimeout(persistence.checkpointTimer);
+	persistence.checkpointTimer = undefined;
+	try {
+		let results = await Promise.allSettled([Chat.close(plan.chat), plan.flushing]);
+		let failed = results.filter(result => result.status === "rejected");
+		if (failed.length === 1) throw failed[0]!.reason;
+		if (failed.length > 1) {
+			throw new AggregateError(failed.map(result => result.reason), "document cleanup failed");
+		}
+	} finally {
+		try {
+			Questions.shutdown(plan.questions);
+		} finally {
+			try {
+				presence.destroy(plan.presence);
+			} finally {
+				plan.document.doc.destroy();
+			}
+		}
+	}
+}
+
 /** Write anything outstanding and let go. */
 export async function close(plan: Plan): Promise<void> {
 	if (plan.timer) clearTimeout(plan.timer);
