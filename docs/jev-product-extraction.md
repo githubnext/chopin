@@ -194,6 +194,7 @@ and E2E type checks, formatting and CI with the existing warnings listed above.
 | Policy leaves              | All 24 archived helper/type/constant declarations are retained across five small acyclic modules. One exact pipeline callback verifies deterministic ULID identity and Unix-second encoding. No policy dispatcher or placeholder exists yet.                          | 133 conversation tests, 673 assertions    |
 | Initial policy terminals   | All 20 original preamble/fact/gate statements are retained with ordered internal calls; one unset initializer is explicitly undefined for lint. Three whole pipeline callbacks cover 18 cases; bounded regressions cover ordering, staging, capture and continuation. | 171 conversation tests, 801 assertions    |
 | Remaining policy terminals | All 13 original statements through the purpose/final-question gate are retained across four stages and an ordered runner. Five whole pipeline callbacks remain exact; working writeback, local staging, cached captures and explicit continuation are covered.        | 192 conversation tests, 924 assertions    |
+| Candidate setup            | All six original statements retain order and captured inputs; four private mutable run fields are cached, with the prior-choice map local. Grouping, distinct known/linked/novel choices, evidence thresholds, fresh sets and input-state provenance are covered.     | 224 conversation tests, 1,035 assertions  |
 
 The combined guard/source/quote run passed 30 tests (242 assertions). Domain/replay
 checks passed 27 tests (109 assertions). The complete extracted foundation and
@@ -292,7 +293,13 @@ pipeline callbacks. Offline checks match 30 terminal outputs and four continuati
 states, including input-mutation checks. Three injected quoted-option failures and
 one changed-message capture regression are verified separately.
 
-Next: candidate setup, then candidate dispatch. Preserve shared
+Candidate setup retains six whole statements and four private run fields. Thirty-three
+reached offline observations match the archived locals, including insertion order,
+fresh sets, captured-message behavior and setup input-mutation checks. A synthetic
+cached-label override is verified separately. The original full-policy callbacks
+remain assigned to later dispatch slices; setup tests do not replace their assertions.
+
+Next: candidate dispatch. Preserve shared
 candidate state, local capture timing, continuation and event-limit checks, and
 partial events retained after follow-up failure. Keep the original public interface
 and compare original offline fixtures before publishing the dispatcher.

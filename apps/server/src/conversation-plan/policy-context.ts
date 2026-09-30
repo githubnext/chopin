@@ -13,6 +13,12 @@ export type DirectFacts = {
 	directBounds: boolean;
 	topicThreeWay: boolean;
 };
+export type CandidateRun = {
+	seenOptionLabels: Set<string>;
+	sequentialChoiceQuestions: boolean;
+	optionGroup: string | undefined;
+	competingMessageTargets: Set<string>;
+};
 export type PolicyContext = {
 	input: PolicyInput;
 	channelId: string;
@@ -24,6 +30,7 @@ export type PolicyContext = {
 	working: State;
 	selectedTarget: string | undefined;
 	facts?: DirectFacts;
+	candidateRun?: CandidateRun;
 	directQuestion?: boolean;
 	quotedOption?: (
 		candidate: QuoteCandidate,
