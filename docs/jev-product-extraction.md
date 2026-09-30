@@ -200,6 +200,7 @@ and E2E type checks, formatting and CI with the existing warnings listed above.
 | Scoped and new-choice handlers   | All seven original statements preserve order, with exactly five handled skips. Scoped captures and labels, replay-valid histories, active-local factories, staged version overrides and partial push failures are covered.                                              | 293 conversation tests, 1,484 assertions  |
 | Withdrawal, agreement, question  | Three exact ordinary-role consequent bodies preserve statement order and three handled skips. Captured withdrawal ownership, current effective pending, raw option answers, question thresholds and target assignment before/after factory evaluation are covered.      | 316 conversation tests, 1,629 assertions  |
 | Contribution proposals           | Eight exact consequent statements preserve order and four handled skips. Fresh card lookups, captured contribution/pending targets, role-specific quote filters, duplicate exemption, relation omission and construction timing are covered.                            | 343 conversation tests, 1,821 assertions  |
+| Support and objection proposals  | Two exact consequent statements preserve order and two handled skips. Captured card uniqueness and option fallback, material reopening, current scoped history, historical agreement after withdrawal and partial review publication are covered.                       | 377 conversation tests, 2,028 assertions  |
 
 The combined guard/source/quote run passed 30 tests (242 assertions). Domain/replay
 checks passed 27 tests (109 assertions). The complete extracted foundation and
@@ -356,7 +357,21 @@ These handlers apply no event; the original no-proposal guard, application and l
 cap remain assigned to later slices. Original full-policy callbacks remain assigned
 whole.
 
-Next: stance and resolution proposals and later dispatch. Preserve shared
+Support and objection proposals retain two whole statements and two handled skips.
+Twenty-two progressions and one handled skip match the stopped archived role chain;
+six synthetic capture/review controls, separate base/source/text failures and two
+mirrored review-push failures are counted separately. Replay-valid decided and scoped
+agreement histories cover the 0.68 material-objection threshold and captured card
+uniqueness, including bidirectional substring collisions and exact contribution text.
+Scoped objection ownership still accepts an earlier agreement after active support
+withdrawal; this inherited rule has not been strengthened. Support always leaves the
+scoped proposal link null. Source parity proves proposal assignment precedes review
+publication; thrown-push comparisons cover observable partial writes and error, without
+claiming direct equality of the inaccessible product proposal local. Matching-role
+wrappers retain the original branch type narrowing. No event is applied and no
+full-policy callback is replaced.
+
+Next: resolution and reopening proposals and later dispatch. Preserve shared
 candidate state, local capture timing, continuation and event-limit checks, and
 partial events retained after follow-up failure. Keep the original public interface
 and compare original offline fixtures before publishing the dispatcher.
