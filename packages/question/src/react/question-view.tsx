@@ -45,6 +45,8 @@ export type QuestionViewProps = {
 	resolver?: string;
 	onQuestionEnter?: (question: string) => void;
 	onQuestionLeave?: (question: string) => void;
+	/** Focus entered the open question (its id) or left it (undefined): presence for others. */
+	onQuestionFocus?: (question: string | undefined) => void;
 	/** Goes to the prose the decision lives in. */
 	onQuestionSelect?: (question: string) => void;
 	/**
@@ -420,6 +422,7 @@ export function QuestionView(props: QuestionViewProps) {
 		places,
 		onQuestionEnter,
 		onQuestionLeave,
+		onQuestionFocus,
 		onQuestionSelect,
 		renderStep,
 	} = props;
@@ -434,6 +437,10 @@ export function QuestionView(props: QuestionViewProps) {
 	// Discarding cannot be undone and the agent is waiting, so it takes a
 	// second, deliberate click rather than a modal nobody reads.
 	let [confirming, setConfirming] = useState(false);
+	// Presence follows the current question and ends when it changes or the card goes.
+	let focusing = useRef(onQuestionFocus);
+	focusing.current = onQuestionFocus;
+	useEffect(() => () => focusing.current?.(undefined), [active]);
 	let previous = useRef<HTMLButtonElement>(null);
 	let next = useRef<HTMLButtonElement>(null);
 	let primary = useRef<HTMLButtonElement>(null);
@@ -511,12 +518,15 @@ export function QuestionView(props: QuestionViewProps) {
 						onMouseLeave={event =>
 							!event.currentTarget.contains(document.activeElement)
 							&& onQuestionLeave?.(current.id)}
-						onFocusCapture={() =>
-							onQuestionEnter?.(current.id)}
-						onBlurCapture={event =>
-							!event.currentTarget.contains(event.relatedTarget)
-							&& !event.currentTarget.matches(":hover")
-							&& onQuestionLeave?.(current.id)}
+						onFocusCapture={() => {
+							onQuestionEnter?.(current.id);
+							onQuestionFocus?.(current.id);
+						}}
+						onBlurCapture={event => {
+							if (event.currentTarget.contains(event.relatedTarget)) return;
+							onQuestionFocus?.(undefined);
+							if (!event.currentTarget.matches(":hover")) onQuestionLeave?.(current.id);
+						}}
 					>
 						<header className="question-head">
 							<span className="question-mark" title="Decision">

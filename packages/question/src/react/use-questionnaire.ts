@@ -38,6 +38,8 @@ export type QuestionnaireState = {
 	/** Validation or synchronisation problem, shown to the user. */
 	error: string | undefined;
 	change: (question: string, change: Record<string, unknown>) => void;
+	/** Tell the room which question this person is working on. */
+	focusQuestion: (question: string | undefined) => void;
 	submit: () => void;
 	/** Decline to answer. Terminal — the agent stops waiting. */
 	cancel: () => void;
@@ -45,7 +47,7 @@ export type QuestionnaireState = {
 	focus: string | undefined;
 };
 
-type Snapshot = Omit<QuestionnaireState, "change" | "submit" | "cancel"> & {
+type Snapshot = Omit<QuestionnaireState, "change" | "focusQuestion" | "submit" | "cancel"> & {
 	closed: boolean;
 };
 type Model = crdt.Model<crdt.JsonNode<Drafts>>;
@@ -65,6 +67,39 @@ function normalize(person: {
 	};
 }
 
+/**
+ * Says which question this connection is working on, once per change.
+ *
+ * Focus moves between questions, not keystrokes, so deduping against what the
+ * server last heard is all the throttling needed. The wanted question survives
+ * a reconnect and is resent when the draft reopens.
+ */
+export class FocusReporter {
+	#wanted: string | undefined;
+	#sent: string | undefined;
+	#online = false;
+
+	constructor(private readonly send: (question: string | undefined) => void) {}
+
+	set(question: string | undefined): void {
+		this.#wanted = question;
+		this.#flush();
+	}
+
+	/** The draft is open (true) or gone (false); the server forgets us when it is gone. */
+	online(online: boolean): void {
+		this.#online = online;
+		this.#sent = undefined;
+		this.#flush();
+	}
+
+	#flush(): void {
+		if (!this.#online || this.#wanted === this.#sent) return;
+		this.#sent = this.#wanted;
+		this.send(this.#wanted);
+	}
+}
+
 export class QuestionnaireController {
 	readonly id: string;
 	readonly bridge: Transport | undefined;
@@ -82,6 +117,9 @@ export class QuestionnaireController {
 	#connected: boolean;
 	#active = false;
 	#terminal = false;
+	#focus = new FocusReporter(question => {
+		this.bridge?.send("question:presence", { id: this.id, ...(question ? { question } : {}) });
+	});
 
 	constructor(
 		bridge: Transport | undefined,
@@ -162,6 +200,11 @@ export class QuestionnaireController {
 		});
 	};
 
+	/** Report the question this person is working on; undefined when they leave it. */
+	focusQuestion = (question: string | undefined): void => {
+		this.#focus.set(this.#terminal ? undefined : question);
+	};
+
 	submit = (): void => {
 		let definition = this.#definition;
 		let doc = this.#model;
@@ -180,6 +223,7 @@ export class QuestionnaireController {
 		}
 
 		this.#terminal = true;
+		this.#focus.set(undefined);
 		this.#set({ submitting: true, error: undefined });
 		let submit = async () => {
 			// The CRDT batches its change callback into a microtask. Let the final
@@ -218,6 +262,7 @@ export class QuestionnaireController {
 			return;
 		}
 		this.#terminal = true;
+		this.#focus.set(undefined);
 		this.#set({ submitting: true, error: undefined });
 
 		void this.bridge.ask("question:cancel", { id: this.id })
@@ -265,6 +310,8 @@ export class QuestionnaireController {
 		for (let off of this.#teardown.splice(0)) off();
 		this.#model = undefined;
 		this.#definition = undefined;
+		this.#focus.online(false);
+		if (presence) this.#focus.set(undefined);
 		if (presence && this.bridge && this.#connected) {
 			this.bridge.send("question:presence", { id: this.id });
 		}
@@ -401,6 +448,7 @@ export class QuestionnaireController {
 		this.#model = doc;
 		this.#definition = definition;
 		for (let patch of this.#outbox) send(patch);
+		this.#focus.online(true);
 
 		this.#set({
 			definition,
@@ -486,6 +534,7 @@ export function useQuestionnaire(options: QuestionnaireOptions): QuestionnaireSt
 		error: snapshot.error,
 		focus: snapshot.focus,
 		change: controller.change,
+		focusQuestion: controller.focusQuestion,
 		submit: controller.submit,
 		cancel: controller.cancel,
 	};

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { create, normalize } from "../index";
-import { QuestionnaireController } from "./use-questionnaire";
+import { FocusReporter, QuestionnaireController } from "./use-questionnaire";
 
 import type { Transport } from "./use-questionnaire";
 
@@ -41,6 +41,7 @@ function transport(definition = DEFINITION) {
 	let submitIds: string[] = [];
 	let submitRevisions: number[] = [];
 	let presence = 0;
+	let frames: Array<Record<string, unknown>> = [];
 	let handlers = new Map<string, Set<(event: never) => void>>();
 	let model = create(definition);
 
@@ -68,8 +69,11 @@ function transport(definition = DEFINITION) {
 			}
 			throw new Error(`Unexpected ${kind}`);
 		},
-		send(kind: string) {
-			if (kind === "question:presence") presence++;
+		send(kind: string, payload: Record<string, unknown>) {
+			if (kind === "question:presence") {
+				presence++;
+				frames.push(payload);
+			}
 		},
 		on(kind: string, handler: (event: never) => void) {
 			let set = handlers.get(kind);
@@ -87,6 +91,7 @@ function transport(definition = DEFINITION) {
 		submitIds: () => submitIds,
 		submitRevisions: () => submitRevisions,
 		presence: () => presence,
+		frames: () => frames,
 	};
 }
 
@@ -208,5 +213,44 @@ describe("QuestionnaireController", () => {
 		expect(bridge.opens()).toBe(1);
 		expect(bridge.presence()).toBe(0);
 		second();
+	});
+});
+
+describe("question presence", () => {
+	it("announces the focused question once opened, then clears on submit", async () => {
+		let bridge = transport();
+		let controller = new QuestionnaireController(bridge.value, "question-1", DEFINITION, true);
+		let off = controller.subscribe(() => {});
+		controller.focusQuestion("q1");
+		expect(bridge.frames()).toEqual([]);
+		await new Promise(resolve => setTimeout(resolve, 0));
+		controller.focusQuestion("q1");
+		expect(bridge.frames()).toEqual([{ id: "question-1", question: "q1" }]);
+		controller.focusQuestion(undefined);
+		expect(bridge.frames()).toEqual([{ id: "question-1", question: "q1" }, { id: "question-1" }]);
+		off();
+	});
+});
+
+describe("FocusReporter", () => {
+	it("sends once per change, waits until online, and resends after a reconnect", () => {
+		let sent: Array<string | undefined> = [];
+		let reporter = new FocusReporter(question => sent.push(question));
+
+		reporter.set("a");
+		expect(sent).toEqual([]);
+		reporter.online(true);
+		reporter.set("a");
+		reporter.set("a");
+		reporter.set("b");
+		reporter.set(undefined);
+		reporter.set(undefined);
+		expect(sent).toEqual(["a", "b", undefined]);
+
+		reporter.set("b");
+		reporter.online(false);
+		reporter.set("c");
+		reporter.online(true);
+		expect(sent.slice(3)).toEqual(["b", "c"]);
 	});
 });
