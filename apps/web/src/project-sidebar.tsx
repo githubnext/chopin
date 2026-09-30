@@ -15,6 +15,7 @@ import { ArchiveIcon, ChevronIcon, DocumentIcon, SearchIcon } from "@chopin/icon
 import type * as Api from "./api";
 import type { DocumentAction } from "./document-actions-menu";
 import type { ProjectDocuments } from "./document-actions";
+import type { DocumentCreationPhase } from "./use-document-creation";
 import type { ReactNode } from "react";
 
 export function NavigationIcon(
@@ -55,7 +56,7 @@ export function documentGroups(
 function Project(
 	{
 		archiveMode,
-		creatingProjectIds,
+		pendingCreations,
 		currentDocumentId,
 		entry,
 		expanded,
@@ -65,7 +66,7 @@ function Project(
 		onToggle,
 	}: {
 		archiveMode: boolean;
-		creatingProjectIds: ReadonlySet<string>;
+		pendingCreations: ReadonlyMap<string, DocumentCreationPhase>;
 		currentDocumentId?: string;
 		entry: ProjectDocuments;
 		expanded: boolean;
@@ -79,11 +80,27 @@ function Project(
 	let groups = documentGroups(documents.channels, archiveMode);
 	let label = project.repository?.name ?? project.repositoryName;
 	let canManage = canManageProject(project);
-	let creating = creatingProjectIds.has(project.repositoryId);
+	let phase = pendingCreations.get(project.repositoryId);
 	let contentId = useId();
 	let collapseMotion = motionContract("collapse");
 	let projectContent = (
 		<>
+			{!archiveMode && documents.status === "ready" && documents.channels.length === 0
+				&& !documents.nextCursor && (
+				<div className="project-sidebar-empty">
+					<p>No documents yet.</p>
+					{project.available && canManage && (
+						<button
+							className="project-sidebar-empty-action"
+							disabled={!!phase}
+							onClick={() => onCreateDocument(project)}
+							type="button"
+						>
+							Create document
+						</button>
+					)}
+				</div>
+			)}
 			{documents.status === "unavailable" && (
 				<p className="project-sidebar-status" role="status">Access unavailable</p>
 			)}
@@ -229,16 +246,21 @@ function Project(
 				</button>
 				{!archiveMode && project.available && canManage && (
 					<button
+						aria-busy={!!phase}
 						aria-label={`New document in ${label}`}
-						className="project-sidebar-action"
+						className={`project-sidebar-action ${phase ? "project-sidebar-action-pending" : ""}`}
 						data-tooltip="New Document"
-						disabled={creating}
+						disabled={!!phase}
 						onClick={() => onCreateDocument(project)}
+						title={`New document in ${label}`}
 						type="button"
 					>
 						<NavigationIcon src={newDocumentIcon} />
 					</button>
 				)}
+			</div>
+			<div className={phase ? "project-sidebar-status" : undefined} role="status">
+				{phase === "creating" ? "Creating document…" : phase ? "Opening document…" : ""}
 			</div>
 			<MotionDisclosure
 				id={contentId}
@@ -258,8 +280,8 @@ export function ProjectSidebar(
 		accountMenu,
 		accountMenuOpen,
 		canCreateDocument,
-		creatingNewDocument,
-		creatingProjectIds,
+		newDocumentPhase,
+		pendingCreations,
 		currentDocumentId,
 		onAccount,
 		onAddProject,
@@ -278,8 +300,8 @@ export function ProjectSidebar(
 		accountMenuOpen?: boolean;
 		canCreateDocument: boolean;
 		catalogueMode: "active" | "archived";
-		creatingNewDocument: boolean;
-		creatingProjectIds: ReadonlySet<string>;
+		newDocumentPhase?: DocumentCreationPhase | "loading";
+		pendingCreations: ReadonlyMap<string, DocumentCreationPhase>;
 		currentDocumentId?: string;
 		onAccount: () => void;
 		onAddProject: () => void;
@@ -320,13 +342,23 @@ export function ProjectSidebar(
 				: (
 					<>
 						<button
+							aria-busy={!!newDocumentPhase}
+							aria-label="New document"
 							className="project-sidebar-primary-action"
-							disabled={!canCreateDocument || creatingNewDocument}
+							disabled={!canCreateDocument || !!newDocumentPhase}
 							onClick={onNewDocument}
 							type="button"
 						>
 							<NavigationIcon src={newDocumentIcon} />
-							<span>New document</span>
+							<span>
+								{newDocumentPhase === "creating"
+									? "Creating document…"
+									: newDocumentPhase === "opening"
+									? "Opening document…"
+									: newDocumentPhase === "loading"
+									? "Loading projects…"
+									: "New document"}
+							</span>
 						</button>
 						<button
 							className="project-sidebar-primary-action"
@@ -398,7 +430,7 @@ export function ProjectSidebar(
 							.map(entry => (
 								<Project
 									archiveMode={archiveMode}
-									creatingProjectIds={creatingProjectIds}
+									pendingCreations={pendingCreations}
 									currentDocumentId={currentDocumentId}
 									entry={entry}
 									expanded={!collapsedProjectIds.has(entry.project.repositoryId)}

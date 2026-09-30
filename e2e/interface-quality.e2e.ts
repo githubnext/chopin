@@ -25,7 +25,8 @@ test("Projects explains its first lazy load and remains dismissible", async ({ j
 		let opener = page.getByRole("button", { name: "Open Projects sidebar" });
 		await opener.click();
 		let drawer = page.getByRole("dialog", { name: "Projects", exact: true });
-		await expect(drawer.getByRole("status")).toContainText("Loading projects");
+		let loading = drawer.getByRole("status").filter({ hasText: "Loading projects" });
+		await expect(loading).toBeVisible();
 		await drawer.getByRole("button", { name: "Collapse Projects sidebar" }).click();
 		await expect(drawer).toBeHidden();
 		await expect(opener).toBeFocused();
@@ -33,7 +34,7 @@ test("Projects explains its first lazy load and remains dismissible", async ({ j
 		await expect(drawer.getByRole("button", { name: "Collapse Projects sidebar" })).toBeFocused();
 		release.resolve();
 		await expect(drawer.getByRole("navigation", { name: "Projects" })).toBeVisible();
-		await expect(drawer.getByRole("status")).toHaveCount(0);
+		await expect(loading).toHaveCount(0);
 		await expect.poll(() => drawer.evaluate(element => element.contains(document.activeElement)))
 			.toBe(true);
 		await page.keyboard.press("Escape");
