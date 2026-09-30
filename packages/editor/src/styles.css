@@ -1474,20 +1474,8 @@
 	--diffs-tab-size: 2;
 	--diffs-header-font-family: var(--font-sans);
 
-	/*
-	 * A hairline rather than a fill. The renderer paints its own background from
-	 * the syntax theme, and a second one behind it would show at the edges as
-	 * a rim of the wrong grey — but with neither, a snippet on a white page
-	 * has nothing to say where it starts.
-	 */
 	max-inline-size: 100%;
 	overflow-x: auto;
-	border-radius: var(--radius-md);
-}
-
-:where(.plan-content .plan-code-view) {
-	outline: var(--edge-width) solid var(--color-edge);
-	outline-offset: calc(-1 * var(--edge-width));
 }
 
 /* The renderer's shadow root owns syntax painting; this host supplies the
@@ -1589,6 +1577,92 @@
 	display: block;
 	max-width: none;
 	margin-inline: auto;
+}
+
+/*
+ * A code block is one box: header, rendered code, source. A border rather than
+ * an outline, because the renderer paints over an inset outline.
+ */
+.plan-content .planCode {
+	display: flex;
+	flex-direction: column;
+	margin-block: 1em;
+	overflow: hidden;
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+}
+
+.plan-content .planCode [data-plan-chrome="block"] {
+	order: -1;
+	padding: 0.25rem;
+	border-block-end: var(--edge-width) solid var(--color-edge);
+	background: var(--color-inset);
+}
+
+.plan-content .plan-code-toggle[aria-expanded="true"] {
+	background: var(--color-brand-wash);
+	color: var(--color-brand);
+}
+
+/* A global icon colour rule would otherwise keep the icon grey. */
+.plan-content .plan-code-toggle[aria-expanded="true"] [data-nucleo-icon] {
+	color: inherit;
+}
+
+.plan-content .plan-code-language-label {
+	padding-inline: 0.5rem;
+	font-size: var(--text-sm);
+	color: var(--color-text-tertiary);
+}
+
+.plan-content .planCode .plan-code-view {
+	border-radius: 0;
+}
+
+/*
+ * One left edge for every line of text in the block: the language label,
+ * rendered code, and source all start 0.75rem in. The renderer pads each line
+ * by 1ch inside its shadow root, so its wrapper supplies the remainder in the
+ * same monospace face. Diffs keep their gutter, which is its own column.
+ */
+.plan-content .planCode .plan-code-view[data-view="file"] {
+	/* The renderer adds 8px above its code and 8px below; make both 0.75rem. */
+	padding-block: calc(0.75rem - 8px);
+	padding-inline-start: calc(0.75rem - 1ch);
+	font-family: ui-monospace, SFMono-Regular, monospace;
+	font-size: var(--text-sm);
+}
+
+.plan-content .planCode [data-plan-source] {
+	margin: 0;
+	padding-inline: 0.75rem;
+	border-radius: 0;
+	background: var(--color-page);
+}
+
+.plan-content .planCode [data-plan-preview]:not(:empty) ~ [data-plan-source] {
+	border-block-start: var(--edge-width) solid var(--color-edge);
+	background: var(--color-inset);
+}
+
+.plan-content .planCode [data-plan-preview] :is(.plan-diagram, [data-plan-error]) {
+	padding-inline: 0.75rem;
+}
+
+.plan-content .plan-code-title {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--text-sm);
+	color: var(--color-text-secondary);
+}
+
+.plan-content .plan-code-title::before {
+	content: "·";
+	margin-inline: 0.125rem 0.375rem;
+	color: var(--color-text-quaternary);
 }
 
 /* Tabs ------------------------------------------------------------------- */

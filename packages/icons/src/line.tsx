@@ -19,6 +19,15 @@ export function ChevronIcon(props: IconProps) {
 	);
 }
 
+export function CodeIcon(props: IconProps) {
+	return (
+		<LineIcon title="code" {...props}>
+			<polyline points="5.75 4.75 1.75 9 5.75 13.25" />
+			<polyline points="12.25 4.75 16.25 9 12.25 13.25" />
+		</LineIcon>
+	);
+}
+
 export function MessageIcon(props: IconProps) {
 	return (
 		<LineIcon title="msg" {...props}>

@@ -191,14 +191,13 @@ function View({ kind, source, language, meta }: CodeViewProps) {
 		() => ({
 			theme: THEME,
 			themeType: "light" as const,
-			// A snippet's identity is its language, and the control beside it
-			// already says that. A snippet quoting a file has a second one.
-			disableFileHeader: !titled(meta),
+			// A diff's fallback has no title in the block's own header.
+			disableFileHeader: kind !== "diff" || !titled(meta),
 			disableLineNumbers: true,
 			overflow: "scroll" as const,
 			disableWorkerPool: true,
 		}),
-		[meta],
+		[kind, meta],
 	);
 
 	let diffOptions = useMemo(
@@ -235,6 +234,7 @@ function View({ kind, source, language, meta }: CodeViewProps) {
 			contentEditable={false}
 			role="group"
 			aria-label={kind === "diff" ? "Diff preview" : "Code preview"}
+			data-view={patch ? "diff" : "file"}
 			tabIndex={0}
 		>
 			{patch

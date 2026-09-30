@@ -16,9 +16,15 @@
 import { content, expect, test, written } from "./room";
 import { expectNoHorizontalOverflow } from "./responsive";
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 let MENU = { name: "Insert block" };
+
+/** The language control is a button that opens a listbox. */
+async function chooseLanguage(scope: Locator, from: string, to: string) {
+	await scope.getByRole("button", { name: `Code language: ${from}` }).click();
+	await scope.page().getByRole("option", { name: to, exact: true }).click();
+}
 
 /** A fence with the counts a person or a model actually writes. */
 const PATCH = `\`\`\`diff
@@ -183,7 +189,7 @@ test("naming a fence colours it, and the name reaches the file", async ({ join, 
 	// an uncoloured original is two of the same thing.
 	await expect(content(page).locator("[data-file]")).toHaveCount(0);
 
-	await content(page).getByRole("combobox", { name: "Code language" }).selectOption("typescript");
+	await chooseLanguage(content(page), "Plain text", "TypeScript");
 
 	await expect(content(page).locator("[data-file]")).toBeVisible();
 	await expect.poll(() => colours(page)).toBeGreaterThan(1);
@@ -223,6 +229,15 @@ test("a fence that is not a patch is drawn as the text it is", async ({ join, se
 	// to a file: there is no file, no line numbers and no hunk here, and
 	// inventing them would put all three in the reader's head.
 	await expect(content(page).locator("[data-file]")).toBeVisible();
+	await expect(content(page).locator("[data-diff]")).toHaveCount(0);
+});
+
+test("an invalid diff keeps its authored filename", async ({ join, seed }) => {
+	await seed('```diff title="broken.patch"\nnot a patch\n```\n');
+	let page = await join("ana");
+
+	await expect(content(page).locator("[data-file]")).toBeVisible();
+	await expect(content(page).getByText("broken.patch", { exact: true })).toBeVisible();
 	await expect(content(page).locator("[data-diff]")).toHaveCount(0);
 });
 
@@ -321,13 +336,13 @@ test("a language chosen by one is a change for everyone", async ({ join, room, s
 
 	await expect(content(bo).locator("[data-file]")).toHaveCount(0);
 
-	await content(ana).getByRole("combobox", { name: "Code language" }).selectOption("typescript");
+	await chooseLanguage(content(ana), "Plain text", "TypeScript");
 
 	// The language is a property of the fence rather than a way of looking at
 	// it, so it travels: the other reader's copy is coloured too, and their
 	// control says what it now is.
-	await expect(content(bo).getByRole("combobox", { name: "Code language" }))
-		.toHaveValue("typescript");
+	await expect(content(bo).getByRole("button", { name: "Code language: TypeScript" }))
+		.toBeVisible();
 	await expect(content(bo).locator("[data-file]")).toBeVisible();
 	await expect.poll(() => colours(bo)).toBeGreaterThan(1);
 
@@ -348,4 +363,59 @@ test("showing the source leaves everybody else's hidden", async ({ join, seed })
 	// person, who should keep reading the preview.
 	await expect(content(bo).locator("[data-plan-source]")).toBeHidden();
 	await expect(content(bo).getByRole("button", { name: "Show source" })).toBeVisible();
+});
+
+test("the language menu is a keyboard-operable listbox", async ({ join, room, seed }) => {
+	await seed("```typescript\nlet total = 1;\n```\n");
+	let page = await join("ana");
+	let trigger = content(page).getByRole("button", { name: "Code language: TypeScript" });
+	let list = page.getByRole("listbox", { name: "Code language" });
+
+	await trigger.focus();
+	await page.keyboard.press("ArrowDown");
+	await expect(list).toBeVisible();
+
+	await page.keyboard.press("Escape");
+	await expect(list).toBeHidden();
+	await expect(trigger).toBeFocused();
+
+	await trigger.click();
+	await expect(list).toBeVisible();
+	await page.mouse.click(5, 5);
+	await expect(list).toBeHidden();
+
+	// Tab from the open menu continues from the trigger, not from the end of the page.
+	await trigger.focus();
+	await page.keyboard.press("ArrowDown");
+	await expect(list).toBeVisible();
+	await page.keyboard.press("Tab");
+	await expect(list).toBeHidden();
+	await expect(content(page).getByRole("button", { name: "Show source" })).toBeFocused();
+
+	await trigger.focus();
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("Enter");
+	await expect(list).toBeHidden();
+	await expect(content(page).getByRole("button", { name: /^Code language: (?!TypeScript)/ }))
+		.toBeVisible();
+	await written(page, room, /^```(?!typescript$)\S+$/m);
+});
+
+test("the language menu takes focus before the next animation frame", async ({ join, seed }) => {
+	await seed("```typescript\nlet total = 1;\n```\n");
+	let page = await join("ana");
+	let trigger = content(page).getByRole("button", { name: "Code language: TypeScript" });
+	let list = page.getByRole("listbox", { name: "Code language" });
+
+	await page.clock.install();
+	await page.clock.pauseAt(new Date());
+	await trigger.focus();
+	await page.keyboard.press("ArrowDown");
+	await expect(list).toBeFocused();
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("Enter");
+	await page.clock.resume();
+	await expect(content(page).getByRole("button", { name: "Code language: XML", exact: true }))
+		.toBeVisible();
 });

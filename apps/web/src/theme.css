@@ -656,6 +656,11 @@ body {
 	outline: none;
 }
 
+/* A listbox holds the keyboard's place on its highlighted option instead. */
+:where(.plan-language-menu[role="listbox"]):focus-visible {
+	outline: none;
+}
+
 /* The editable plan has a live caret, so a second focus marker is redundant. */
 :where(.focus-caret):focus-visible {
 	outline: none;

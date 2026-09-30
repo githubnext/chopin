@@ -9,7 +9,7 @@
 import { describe, expect, it } from "bun:test";
 import { DIFF_LANGUAGE, MERMAID_LANGUAGE } from "@chopin/dialect";
 
-import { fileNameOf, kindOf, LANGUAGES, repaired, titled, titleOf } from "./code";
+import { fileNameOf, kindOf, languageOptions, LANGUAGES, repaired, titled, titleOf } from "./code";
 
 describe("what a fence is", () => {
 	it("tells the two rendered languages apart from ordinary code", () => {
@@ -200,5 +200,19 @@ describe("repairing a patch on the way to the renderer", () => {
 	it("does not read the last newline as an unchanged line", () => {
 		let patch = "--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n-a\n+b\n";
 		expect(repaired(patch)).toBe("--- x.ts\n+++ x.ts\n@@ -1,1 +1,1 @@\n-a\n+b\n");
+	});
+});
+
+describe("languageOptions", () => {
+	it("starts with plain text and lists every language once", () => {
+		let options = languageOptions("typescript");
+		expect(options[0]).toEqual(["", "Plain text"]);
+		expect(options).toHaveLength(LANGUAGES.length + 1);
+	});
+
+	it("keeps an unlisted language selectable, right after plain text", () => {
+		let options = languageOptions("brainfuck");
+		expect(options[1]).toEqual(["brainfuck", "brainfuck"]);
+		expect(options).toHaveLength(LANGUAGES.length + 2);
 	});
 });

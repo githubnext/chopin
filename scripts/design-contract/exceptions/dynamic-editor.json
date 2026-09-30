@@ -403,7 +403,7 @@
 				1
 			]
 		],
-		"sourceHash": "b9416648f69f9c460e69c83d164c7cacbd43b396d6e78e8cc4af30804d091d7d"
+		"sourceHash": "c336f006257672b5930becbe3c246a862dbf0311483cde1992c329a6f723e5d1"
 	},
 	{
 		"file": "packages/editor/src/changes.ts",
@@ -418,5 +418,26 @@
 			]
 		],
 		"sourceHash": "e14622f16d62dca66486a913fec462b1d5380c732c6f04b63e713c877302ded9"
+	},
+	{
+		"file": "packages/editor/src/widgets/language-menu.tsx",
+		"reason": "Language listbox portal measures its trigger's rect to place and flip itself; the style boundary is geometry owned by the browser, and its motion/presence contract returns finite semantic state classes reviewed at this exact boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"position",
+				"unresolved style > LanguageMenu > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"presence.className",
+				"class > LanguageMenu > <div>",
+				1
+			]
+		],
+		"sourceHash": "ed1b5eb9ac3c88e823d46d5af6a43c5d21acffe81577e07f739a4a5701c81f73"
 	}
 ]
