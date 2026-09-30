@@ -6,6 +6,8 @@ export { MiniBars } from "./ui/mini-bars";
 export type { MiniBarsProps } from "./ui/mini-bars";
 export { ProgressBar } from "./ui/progress-bar";
 export type { ProgressBarProps } from "./ui/progress-bar";
+export { RollingNumber } from "./ui/rolling-number";
+export type { RollingNumberProps } from "./ui/rolling-number";
 export { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 export type { SemanticTone } from "./ui/semantic-tone";
 export { Sparkline } from "./ui/sparkline";
