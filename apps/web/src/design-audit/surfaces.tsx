@@ -260,6 +260,20 @@ function WorkflowRuns() {
 						{ id: "r:draft-2", name: "draft-2", status: "paused", started: 1_620 },
 					])}
 				/>
+				<StateLabel>Blocked</StateLabel>
+				<RunCard
+					run={{
+						...run(
+							"blocked",
+							RUN_STAGES.map(stage => ({
+								...stage,
+								status: "completed",
+								ended: stage.ended ?? 2_100,
+							})),
+						),
+						ended: 2_100,
+					}}
+				/>
 				<StateLabel>Finished</StateLabel>
 				<RunCard
 					run={run(

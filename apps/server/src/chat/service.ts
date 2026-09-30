@@ -873,12 +873,13 @@ export async function resume(context: Room, ws: Socket): Promise<void> {
 
 const ENDED_RUN: Partial<Record<Wire.Run["status"], string>> = {
 	finished: "finished",
+	blocked: "ended blocked",
 	failed: "failed",
 	stopped: "was stopped",
 };
 
 /**
- * Show the retained session's runs, and say once in the transcript when one
+ * Show the retained session's runs, keeping ended ones as summary cards, and say once in the transcript when one
  * ends, so the record outlives the card.
  */
 function publishRuns(
@@ -887,7 +888,7 @@ function publishRuns(
 ): void {
 	let { chat, room, server } = context;
 	let before = new Map((chat.runs ?? []).map(run => [run.id, run.status]));
-	let cards = runs?.cards ?? [];
+	let cards = runs?.cards ?? (chat.runs ?? []).filter(run => ENDED_RUN[run.status]);
 	for (let run of cards) {
 		let ended = ENDED_RUN[run.status];
 		let previous = before.get(run.id);
@@ -900,7 +901,7 @@ function publishRuns(
 			ts: now(),
 		});
 	}
-	chat.runs = runs && (runs.active.length || runs.paused.length) ? cards : undefined;
+	chat.runs = cards.length ? cards : undefined;
 	state(chat, server, room);
 }
 

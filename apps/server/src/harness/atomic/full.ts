@@ -135,7 +135,7 @@ const ENDED: Record<string, Wire.Run["status"] | undefined> = {
 	completed: "finished",
 	skipped: "finished",
 	failed: "failed",
-	blocked: "failed",
+	blocked: "blocked",
 	killed: "stopped",
 	cancelled: "stopped",
 };
@@ -167,7 +167,10 @@ export function foldLifecycle(
 	let target = event.target;
 	if (target.kind === "run" && target.runId === event.rootRunId) {
 		card.status = ENDED[target.status] ?? (target.status === "paused" ? "paused" : "running");
-		if (card.status === "finished" || card.status === "failed" || card.status === "stopped") {
+		if (
+			card.status === "finished" || card.status === "blocked" || card.status === "failed"
+			|| card.status === "stopped"
+		) {
 			card.ended = seconds;
 		} else delete card.ended;
 	} else if (target.kind === "stage") {
