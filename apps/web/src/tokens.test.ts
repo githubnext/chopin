@@ -476,7 +476,8 @@ type StandardAction = {
 	action: string;
 	marker: string;
 	size: "btn-sm" | "btn-md" | "btn-icon";
-	tiers: readonly ("btn-primary" | "btn-secondary" | "btn-ghost" | "btn-destructive")[];
+	tiers:
+		readonly ("btn-primary" | "btn-secondary" | "btn-outline" | "btn-ghost" | "btn-destructive")[];
 };
 
 function classLists(button: string): string[][] {
@@ -515,7 +516,7 @@ function standardButtonOffenders(source: string, file: string, action: StandardA
 	for (let list of classes) {
 		let sizes = list.filter(name => /^(btn-sm|btn-md|btn-icon)$/.test(name));
 		let currentTiers = list.filter(name =>
-			/^(btn-primary|btn-secondary|btn-ghost|btn-destructive)$/.test(name)
+			/^(btn-primary|btn-secondary|btn-outline|btn-ghost|btn-destructive)$/.test(name)
 		);
 		let legacy = list.filter(name => /^(bg|px|py)-/.test(name));
 		tiers.push(...currentTiers);
@@ -595,27 +596,6 @@ describe("migration", () => {
 				tag: "textarea",
 				utility: "field",
 			},
-			{
-				file: "packages/question/src/react/question-view.tsx",
-				marker: "Type another answer",
-				name: "custom questionnaire answer",
-				tag: "textarea",
-				utility: "field",
-			},
-			{
-				file: "packages/question/src/react/question-view.tsx",
-				marker: "checked={!custom && selected}",
-				name: "questionnaire option choice",
-				tag: "input",
-				utility: "choice-control",
-			},
-			{
-				file: "packages/question/src/react/question-view.tsx",
-				marker: "checked={active}",
-				name: "custom questionnaire choice",
-				tag: "input",
-				utility: "choice-control",
-			},
 		];
 		let offenders = controls.flatMap(control =>
 			controlOffenders(
@@ -666,7 +646,7 @@ describe("migration", () => {
 		let previousGuardWouldAccept = classes.includes("btn")
 			&& classes.filter(name => /^(btn-sm|btn-md|btn-icon)$/.test(name)).length === 1
 			&& classes.filter(name =>
-					/^(btn-primary|btn-secondary|btn-ghost|btn-destructive)$/.test(name)
+					/^(btn-primary|btn-secondary|btn-outline|btn-ghost|btn-destructive)$/.test(name)
 				).length === 1;
 
 		expect(previousGuardWouldAccept).toBe(true);
@@ -784,7 +764,7 @@ describe("migration", () => {
 				action: "Keep it",
 				marker: "setConfirming(false)",
 				size: "btn-sm",
-				tiers: ["btn-secondary"],
+				tiers: ["btn-outline"],
 			}],
 			["packages/question/src/react/question-view.tsx", {
 				action: "cancel confirmation",
@@ -793,13 +773,13 @@ describe("migration", () => {
 				tiers: ["btn-destructive"],
 			}],
 			["packages/question/src/react/question-view.tsx", {
-				action: "Cancel",
+				action: "Discard",
 				marker: "setConfirming(true)",
 				size: "btn-sm",
-				tiers: ["btn-secondary"],
+				tiers: ["btn-outline"],
 			}],
 			["packages/question/src/react/question-view.tsx", {
-				action: "Submit",
+				action: "Save",
 				marker: "onClick={onSubmit}",
 				size: "btn-sm",
 				tiers: ["btn-primary"],

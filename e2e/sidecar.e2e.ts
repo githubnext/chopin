@@ -110,9 +110,11 @@ test("question step swaps overlap only for pointer input", async ({ join, seed }
 	let outgoing = stack.locator(
 		':scope > [data-content-swap-state="outgoing"]:not([hidden])',
 	);
-	let scope = card.getByRole("tab", { name: "Scope" });
+	let next = card.getByRole("button", { name: "Next question" });
+	let previous = card.getByRole("button", { name: "Previous question" });
+	let count = card.getByText("2/2");
 
-	await scope.click();
+	await next.click();
 	await expect(visible).toHaveCount(2);
 	await expect(stack.locator(":scope > [data-content-swap-state]:not([hidden]):not([inert])"))
 		.toHaveCount(1);
@@ -140,14 +142,12 @@ test("question step swaps overlap only for pointer input", async ({ join, seed }
 	expect(accessibility).toEqual({ duplicateIds: [], invalidReferences: [] });
 	await expect(visible).toHaveCount(1);
 
-	await scope.focus();
-	await page.keyboard.press("ArrowLeft");
+	await expect(previous).toBeFocused();
+	await previous.click();
 	await expect(visible).toHaveCount(1);
 	await expect(outgoing).toHaveCount(0);
-	await expect(card.getByRole("tab", { name: "Rollout" })).toHaveAttribute(
-		"aria-selected",
-		"true",
-	);
+	await expect(card.getByText("1/2")).toBeVisible();
+	await expect(card.getByRole("heading", { name: "How should we deploy?" })).toBeVisible();
 
 	await page.emulateMedia({ reducedMotion: "reduce" });
 	await stack.evaluate(root => {
@@ -164,7 +164,7 @@ test("question step swaps overlap only for pointer input", async ({ join, seed }
 		Reflect.set(window, "__questionStepObserver", observer);
 		recordActiveCount();
 	});
-	await scope.click();
+	await next.click();
 	await expect(visible).toHaveCount(1);
 	let activeCounts = await page.evaluate(() => {
 		let observer = Reflect.get(window, "__questionStepObserver") as MutationObserver;
@@ -172,7 +172,8 @@ test("question step swaps overlap only for pointer input", async ({ join, seed }
 		return Reflect.get(window, "__questionStepActiveCounts") as number[];
 	});
 	expect(activeCounts).not.toContain(0);
-	await expect(scope).toHaveAttribute("aria-selected", "true");
+	await expect(count).toBeVisible();
+	await expect(card.getByRole("heading", { name: "What belongs in the first cut?" })).toBeVisible();
 });
 
 async function rewriteFirstBlock(page: import("@playwright/test").Page, value: string) {
@@ -262,7 +263,9 @@ test(
 
 		await decisions.click();
 		await expect(questionnaire(page)).toHaveCount(2);
-		await expect(questionnaire(page).getByRole("heading", { name: "Storage" })).toBeVisible();
+		await expect(
+			questionnaire(page).getByRole("heading", { name: "Where should room state live?" }),
+		).toBeVisible();
 		await expect(page.locator('[data-document-view="decisions"] [data-plan-sidecar-thread]'))
 			.toHaveCount(0);
 	},
@@ -278,8 +281,10 @@ test(
 			.toHaveAttribute("aria-pressed", "true");
 		let card = questionnaire(page);
 		await expect(card).toHaveCount(2);
-		await expect(card.getByRole("heading", { name: "Storage" })).toBeVisible();
-		await expect(card.getByRole("heading", { name: "Scope" })).toBeVisible();
+		await expect(card.getByRole("heading", { name: "Where should room state live?" }))
+			.toBeVisible();
+		await expect(card.getByRole("heading", { name: "Which of these belong in the first cut?" }))
+			.toBeVisible();
 		await expect(card.getByRole("tablist")).toHaveCount(0);
 	},
 );
@@ -547,21 +552,22 @@ test("decision cards save independently with progressive custom answers", async 
 	await seed(PROSE);
 	let page = await join("ana");
 	await page.getByRole("button", { name: /^Decisions/ }).click();
-	let storage = questionnaire(page).filter({ has: page.getByRole("heading", { name: "Storage" }) });
-	let scope = questionnaire(page).filter({ has: page.getByRole("heading", { name: "Scope" }) });
-	let saveStorage = storage.getByRole("button", { name: "Save answer" });
+	let storage = questionnaire(page).filter({
+		has: page.getByRole("heading", { name: "Where should room state live?" }),
+	});
+	let scope = questionnaire(page).filter({
+		has: page.getByRole("heading", { name: "Which of these belong in the first cut?" }),
+	});
+	let saveStorage = storage.getByRole("button", { name: "Save", exact: true });
 
-	await expect(storage.getByRole("textbox", { name: /Custom answer for/ })).toHaveCount(0);
-	await expect(scope.getByRole("textbox", { name: /Custom answer for/ })).toHaveCount(0);
-	let check = saveStorage.locator('svg[data-plan-icon="check"]');
-	await expect(check).toHaveCount(1);
-	await expect(check).toHaveAttribute("aria-hidden", "true");
+	await expect(storage.getByRole("textbox", { name: "Add an option" })).toHaveCount(0);
+	await expect(scope.getByRole("textbox", { name: "Add an option" })).toHaveCount(0);
 
 	await storage.getByRole("radio", { name: /On disk as MDX/ }).check();
 	await saveStorage.click();
 	await expect(scope).toBeVisible();
 	await expect(scope).toBeFocused();
-	await expect(scope.getByRole("button", { name: "Save answer" })).toBeVisible();
+	await expect(scope.getByRole("button", { name: "Save", exact: true })).toBeVisible();
 	await expect(scope).not.toContainText("Answered by");
 	await expect(scope.getByRole("checkbox", { name: "Anchors" })).not.toBeChecked();
 
@@ -602,7 +608,7 @@ test("decision cards save independently with progressive custom answers", async 
 	let resolved = questionnaire(page).filter({ hasText: "Where should room state live?" });
 	await expect(resolved).toContainText("On disk as MDX");
 	await expect(resolved).toContainText("Answered by @ana");
-	await expect(resolved.getByRole("button", { name: "Save answer" })).toHaveCount(0);
+	await expect(resolved.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
 	let iconStarts = await page.evaluate(() => {
 		let record = Reflect.get(window, "__feedbackIconTransitions") as { starts: number };
 		return record.starts;
@@ -637,12 +643,12 @@ test("decision cards save independently with progressive custom answers", async 
 	await expect(history).not.toHaveAttribute("aria-controls");
 	await expect(historyContent).toHaveCount(0);
 
-	let customChoice = scope.getByRole("checkbox", { name: "Write a custom answer" });
+	let customChoice = scope.getByRole("checkbox", { name: "Add an option" });
 	await customChoice.focus();
 	await page.keyboard.press("Space");
-	let custom = scope.getByRole("textbox", { name: "Custom answer for Scope" });
+	let custom = scope.getByRole("textbox", { name: "Add an option" });
 	await expect(custom).toBeFocused();
-	let saveScope = scope.getByRole("button", { name: "Save answer" });
+	let saveScope = scope.getByRole("button", { name: "Save", exact: true });
 	await saveScope.hover();
 	await page.evaluate(() => {
 		let record = { starts: 0 };
@@ -673,11 +679,11 @@ test("decision cards save independently with progressive custom answers", async 
 	await custom.fill("Only collaborative anchors");
 	await scope.getByRole("checkbox", { name: "Anchors" }).check();
 	await expect(custom).toHaveCount(0);
-	await customChoice.check();
-	custom = scope.getByRole("textbox", { name: "Custom answer for Scope" });
+	await customChoice.click();
+	custom = scope.getByRole("textbox", { name: "Add an option" });
 	await expect(custom).toHaveValue("Only collaborative anchors");
 	await expect(custom).toBeFocused();
-	await scope.getByRole("button", { name: "Save answer" }).click();
+	await scope.getByRole("button", { name: "Save", exact: true }).click();
 	await expect(questionnaire(page).filter({ hasText: "Which of these belong in the first cut?" }))
 		.toContainText("Only collaborative anchors");
 });
@@ -686,26 +692,31 @@ test("an unanswered decision reports its own validation error", async ({ join, s
 	await seed(PROSE);
 	let page = await join("ana");
 	await page.getByRole("button", { name: /^Decisions/ }).click();
-	let card = questionnaire(page).filter({ has: page.getByRole("heading", { name: "Scope" }) });
+	let card = questionnaire(page).filter({
+		has: page.getByRole("heading", { name: "Which of these belong in the first cut?" }),
+	});
 
-	await card.getByRole("button", { name: "Save answer" }).click();
+	await card.getByRole("button", { name: "Save", exact: true }).click();
 
 	await expect(card.getByRole("alert")).toBeVisible();
 	await expect(card).not.toContainText("Answered by");
 });
 
-test("cancelling asks first", async ({ join, seed }) => {
+test("discarding asks first", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
 	await page.getByRole("button", { name: /^Decisions/ }).click();
-	let card = questionnaire(page).filter({ has: page.getByRole("heading", { name: "Scope" }) });
+	let card = questionnaire(page).filter({
+		has: page.getByRole("heading", { name: "Which of these belong in the first cut?" }),
+	});
 
-	await card.getByRole("button", { name: "Cancel" }).click();
+	await card.getByRole("button", { name: "Discard", exact: true }).click();
 
+	await expect(card.getByText("Discard this decision?")).toBeVisible();
 	let keep = card.getByRole("button", { name: "Keep it" });
 	await expect(keep).toBeVisible();
 	await keep.click();
-	await expect(card.getByRole("button", { name: "Save answer" })).toBeVisible();
+	await expect(card.getByRole("button", { name: "Save", exact: true })).toBeVisible();
 });
 
 test("a marked passage has document chrome with a hover preview", async ({ join, seed }) => {

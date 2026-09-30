@@ -9,12 +9,10 @@
  * as they arrive rather than tracking local state.
  */
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { CheckIcon, CloseIcon } from "@chopin/icons";
+import { useEffect, useId, useRef, useState } from "react";
+import { CheckIcon, ChevronIcon, DecisionIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 
-import { answered } from "../draft";
-
-import type { KeyboardEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { Draft, Drafts } from "../draft";
 import type { Answer, Definition, Item } from "../schema";
 
@@ -99,6 +97,19 @@ function DecisionHeading() {
 	);
 }
 
+function letter(index: number): string {
+	return String.fromCharCode(65 + index);
+}
+
+/** A line-tall slot, so the tile centres on the label's first line, not the whole row. */
+function Key({ children }: { children: ReactNode }) {
+	return (
+		<span aria-hidden="true" className="question-key">
+			<span>{children}</span>
+		</span>
+	);
+}
+
 function Choices(
 	{ question, draft, disabled, name, onChange }: {
 		question: Item;
@@ -111,19 +122,14 @@ function Choices(
 	let custom = draft?.mode === "custom";
 
 	return (
-		<fieldset disabled={disabled} className="m-0 border-0 p-0">
-			<legend className="sr-only">{question.header}</legend>
-
-			{question.options.map(option => {
+		<>
+			{question.options.map((option, index) => {
 				let selected = question.multiple
 					? !!draft?.options[option.id]
 					: draft?.choice === option.id;
 
 				return (
-					<label
-						key={option.id}
-						className="question-choice-row flex min-w-0 items-start gap-2 rounded-md px-1 py-1.5 text-sm hover:bg-hover"
-					>
+					<label key={option.id} className="question-choice-row question-option">
 						<input
 							type={question.multiple ? "checkbox" : "radio"}
 							name={question.multiple ? undefined : name}
@@ -141,21 +147,24 @@ function Choices(
 										: { mode: "choices", choice: option.id },
 								);
 							}}
-							className="mt-0.5 size-[18px] shrink-0 choice-control"
+							className="question-input"
 						/>
-						<span className="min-w-0">
-							<span className="font-medium text-text-primary">{option.label}</span>
-							{option.description && (
-								<span className="block text-sm text-text-secondary">{option.description}</span>
-							)}
+						<Key>{letter(index)}</Key>
+						<span className="question-text">
+							<span className="question-label">{option.label}</span>
+							{option.description && <span className="question-desc">{option.description}</span>}
+						</span>
+						<span aria-hidden="true" className="question-check">
+							<CheckIcon />
 						</span>
 					</label>
 				);
 			})}
-		</fieldset>
+		</>
 	);
 }
 
+/** The last row: a prompt to add an option, which becomes the field for it. */
 function Custom(
 	{ question, draft, disabled, name, onChange }: {
 		question: Item;
@@ -195,36 +204,50 @@ function Custom(
 		return () => viewport.removeEventListener("resize", reveal);
 	}, []);
 
-	return (
-		<div className="mt-2">
-			<label className="question-choice-row flex min-w-0 items-start gap-2 rounded-md px-1 text-sm hover:bg-hover">
+	if (!active) {
+		return (
+			<label className="question-choice-row question-option question-add">
 				<input
 					type={question.multiple ? "checkbox" : "radio"}
 					name={question.multiple ? undefined : name}
-					checked={active}
+					checked={false}
 					disabled={disabled}
-					onChange={event => {
-						focusOnReveal.current = event.currentTarget.checked;
-						onChange?.({ mode: event.currentTarget.checked ? "custom" : "choices" });
+					aria-label="Add an option"
+					onChange={() => {
+						focusOnReveal.current = true;
+						onChange?.({ mode: "custom" });
 					}}
-					className="mt-0.5 size-[18px] shrink-0 choice-control"
+					className="question-input"
 				/>
-				<span className="font-medium">Write a custom answer</span>
+				<Key>
+					<PlusIcon />
+				</Key>
+				<span className="question-text">Add an option</span>
 			</label>
+		);
+	}
 
-			{active && (
-				<textarea
-					rows={2}
-					maxLength={4000}
-					value={draft?.custom ?? ""}
-					disabled={disabled}
-					aria-label={`Custom answer for ${question.header}`}
-					placeholder="Type another answer"
-					onChange={event => onChange?.({ custom: event.currentTarget.value })}
-					className="question-custom-answer field mt-1.5 min-h-16 w-full resize-y px-2.5 py-2 text-sm transition placeholder:text-text-tertiary disabled:cursor-not-allowed"
-					ref={textarea}
-				/>
-			)}
+	return (
+		<div className="question-choice-row question-option question-adding">
+			<Key>{letter(question.options.length)}</Key>
+			<textarea
+				rows={1}
+				maxLength={4000}
+				value={draft?.custom ?? ""}
+				disabled={disabled}
+				aria-label="Add an option"
+				placeholder="Add an option"
+				onChange={event => onChange?.({ custom: event.currentTarget.value })}
+				onKeyDown={event => {
+					if (event.key === "Escape") onChange?.({ mode: "choices" });
+					else if (event.key === "Enter" && !event.shiftKey) {
+						event.preventDefault();
+						event.currentTarget.blur();
+					}
+				}}
+				className="question-custom-answer question-field"
+				ref={textarea}
+			/>
 		</div>
 	);
 }
@@ -251,18 +274,24 @@ const LINK = "flex w-full cursor-pointer items-start justify-between gap-2 round
  * cannot see it.
  */
 function Related(
-	{ id, count, label, className, children, onEnter, onLeave, onSelect }: {
+	{ id, count, label, className, children, inline, onEnter, onLeave, onSelect }: {
 		id: string | undefined;
 		count: number;
 		label: string;
 		className: string;
 		children: ReactNode;
+		/** Sits inside a heading, so the unlinked form must be phrasing content. */
+		inline?: boolean;
 		onEnter?: QuestionViewProps["onQuestionEnter"];
 		onLeave?: QuestionViewProps["onQuestionLeave"];
 		onSelect?: QuestionViewProps["onQuestionSelect"];
 	},
 ) {
-	if (!id || count === 0) return <div className={className}>{children}</div>;
+	if (!id || count === 0) {
+		return inline
+			? <span className={className}>{children}</span>
+			: <div className={className}>{children}</div>;
+	}
 
 	return (
 		<button
@@ -381,34 +410,21 @@ export function QuestionView(props: QuestionViewProps) {
 	let active = current.id;
 	let panelId = `${base}-panel-${active}`;
 	if (active !== selected) setActive(active);
-	// Cancelling cannot be undone and the agent is waiting, so it takes a
+	// Discarding cannot be undone and the agent is waiting, so it takes a
 	// second, deliberate click rather than a modal nobody reads.
 	let [confirming, setConfirming] = useState(false);
-	let tabs = useRef<HTMLDivElement>(null);
+	let previous = useRef<HTMLButtonElement>(null);
+	let next = useRef<HTMLButtonElement>(null);
+	let refocus = useRef<"previous" | "next">(undefined);
 
+	// At either end the activated caret disables. Keep focus inside the stepper
+	// so the new question is reached instead of dropping to the body.
 	useEffect(() => {
-		if (!active) return;
-		tabs.current?.querySelector<HTMLElement>(`#${CSS.escape(`${base}-tab-${active}`)}`)
-			?.scrollIntoView({ block: "nearest", inline: "nearest" });
-	}, [active, base]);
-
-	let move = useCallback((event: KeyboardEvent, index: number) => {
-		let total = definition.questions.length;
-		let next = index;
-
-		if (event.key === "ArrowRight") next = (index + 1) % total;
-		else if (event.key === "ArrowLeft") next = (index - 1 + total) % total;
-		else if (event.key === "Home") next = 0;
-		else if (event.key === "End") next = total - 1;
-		else return;
-
-		event.preventDefault();
-		let question = definition.questions[next];
-		if (!question) return;
-		setActive(question.id);
-		tabs.current?.querySelector<HTMLElement>(`#${CSS.escape(`${base}-tab-${question.id}`)}`)
-			?.focus();
-	}, [definition, base]);
+		let target = refocus.current;
+		refocus.current = undefined;
+		if (target === "previous") previous.current?.focus();
+		else if (target === "next") next.current?.focus();
+	}, [active]);
 
 	// A cancelled questionnaire has no answers, so it must be matched on status
 	// alone — falling through would offer an editable form for a dead question.
@@ -442,133 +458,82 @@ export function QuestionView(props: QuestionViewProps) {
 
 	let multiple = !single;
 	let index = definition.questions.findIndex(question => question.id === active);
-	let last = index === definition.questions.length - 1;
-	let unanswered = definition.questions.filter(question => !answered(question, drafts[question.id]))
-		.length;
+	let total = definition.questions.length;
+	let last = index === total - 1;
 	let step = (offset: number) => {
 		let question = definition.questions[index + offset];
 		if (!question) return;
 		setActive(question.id);
-		// At either end the activated navigation button disappears. Move focus
-		// to the selected tab so the new question is named instead of dropping
-		// focus to the document body.
-		tabs.current?.querySelector<HTMLElement>(`#${CSS.escape(`${base}-tab-${question.id}`)}`)
-			?.focus();
+		let arrived = index + offset;
+		if (arrived === 0) refocus.current = "next";
+		else if (arrived === total - 1) refocus.current = "previous";
 	};
+	let titleId = `${base}-title-${active}`;
 
 	return (
-		<div>
-			{single && <DecisionHeading />}
-			{multiple && (
-				<div
-					ref={tabs}
-					role="tablist"
-					aria-label="Questions"
-					data-focus-boundary=""
-					className="flex gap-1 overflow-x-auto px-2 pt-2 hairline-b"
-				>
-					{definition.questions.map((question, index) => {
-						let done = answered(question, drafts[question.id]);
-						let people = collaborators.filter(person => person.question === question.id);
-
-						return (
-							<button
-								key={question.id}
-								data-ace-question-id={question.id}
-								id={`${base}-tab-${question.id}`}
-								type="button"
-								role="tab"
-								aria-selected={question.id === active}
-								aria-controls={question.id === active ? `${base}-panel-${question.id}` : undefined}
-								aria-label={done ? `${question.header}, answered` : question.header}
-								tabIndex={question.id === active ? 0 : -1}
-								// Switching question, and only that. A tab used to ask to be
-								// taken to the question's prose as well, which read as
-								// intentional for as long as nothing was listening — wired
-								// up, it scrolls the plan out from under a reader who was
-								// stepping through the tabs to read them. Hovering a tab
-								// already lights where its decision lives, and the panel
-								// below carries the control that says "show in plan".
-								onClick={() => setActive(question.id)}
-								onMouseEnter={() => onQuestionEnter?.(question.id)}
-								onMouseLeave={event =>
-									event.currentTarget !== document.activeElement
-									&& onQuestionLeave?.(question.id)}
-								onFocus={() => onQuestionEnter?.(question.id)}
-								onBlur={event =>
-									!event.currentTarget.matches(":hover") && onQuestionLeave?.(question.id)}
-								onKeyDown={event => move(event, index)}
-								className={`question-tab max-w-64 shrink-0 rounded-t-md px-2.5 py-1 text-left text-sm leading-tight font-medium whitespace-normal transition ${
-									question.id === active
-										? "bg-selected text-text-primary"
-										: "text-text-tertiary hover:text-text-primary"
-								}`}
-							>
-								<span aria-hidden="true">{done ? "✓" : index + 1}</span> {question.header}
-								{people.length > 0 && (
-									<span className="ml-1 text-sm text-text-tertiary tabular-nums">
-										{people.length}
-									</span>
-								)}
-							</button>
-						);
-					})}
-				</div>
-			)}
-
+		<div aria-busy={submitting} className="question-card" data-saving={submitting ? "" : undefined}>
 			{aside}
 
 			{(() => {
 				let panel = (
 					<section
-						aria-labelledby={multiple ? `${base}-tab-${current.id}` : undefined}
+						aria-labelledby={titleId}
 						data-ace-question-id={current.id}
 						id={panelId}
-						role={multiple ? "tabpanel" : undefined}
-						className="px-3 py-2.5"
 						onMouseEnter={() => onQuestionEnter?.(current.id)}
 						onMouseLeave={event =>
 							!event.currentTarget.contains(document.activeElement)
 							&& onQuestionLeave?.(current.id)}
-						onFocusCapture={() => onQuestionEnter?.(current.id)}
+						onFocusCapture={() =>
+							onQuestionEnter?.(current.id)}
 						onBlurCapture={event =>
 							!event.currentTarget.contains(event.relatedTarget)
 							&& !event.currentTarget.matches(":hover")
 							&& onQuestionLeave?.(current.id)}
 					>
-						<header className="flex min-w-0 flex-wrap items-baseline justify-between gap-2">
-							<h4 className="m-0 min-w-0 break-words text-sm font-semibold text-text-primary">
-								{current.header}
-							</h4>
-							<Badges people={collaborators.filter(person => person.question === current.id)} />
+						<header className="question-head">
+							<span className="question-mark" title="Decision">
+								<DecisionIcon />
+							</span>
+							<div className="question-head-text">
+								<h4 className="question-title" id={titleId}>
+									<Related
+										id={current.id}
+										count={places?.[current.id] ?? 0}
+										label={current.question}
+										className="question-title-link"
+										inline
+										onSelect={onQuestionSelect}
+									>
+										{current.question}
+									</Related>
+								</h4>
+								{current.multiple && <p className="question-hint">Choose any</p>}
+							</div>
+							<Badges
+								people={collaborators.filter(person =>
+									person.question === current.id
+								)}
+							/>
 						</header>
 
-						{/* Never the whole panel: below this is a form. */}
-						<Related
-							id={current.id}
-							count={places?.[current.id] ?? 0}
-							label={current.question}
-							className="mt-1 mb-2"
-							onSelect={onQuestionSelect}
-						>
-							<p className="m-0 text-sm text-text-secondary">{current.question}</p>
-						</Related>
-
-						<Choices
-							question={current}
-							draft={drafts[current.id]}
-							disabled={disabled}
-							name={`${base}-${current.id}`}
-							onChange={change => onChange?.(current.id, change)}
-						/>
-
-						<Custom
-							question={current}
-							draft={drafts[current.id]}
-							disabled={disabled}
-							name={`${base}-${current.id}`}
-							onChange={change => onChange?.(current.id, change)}
-						/>
+						<fieldset disabled={disabled} className="question-options">
+							<legend className="sr-only">{current.header}</legend>
+							<Choices
+								question={current}
+								draft={drafts[current.id]}
+								disabled={disabled}
+								name={`${base}-${current.id}`}
+								onChange={change => onChange?.(current.id, change)}
+							/>
+							<Custom
+								question={current}
+								draft={drafts[current.id]}
+								disabled={disabled}
+								name={`${base}-${current.id}`}
+								onChange={change => onChange?.(current.id, change)}
+							/>
+						</fieldset>
 					</section>
 				);
 
@@ -576,94 +541,112 @@ export function QuestionView(props: QuestionViewProps) {
 			})()}
 
 			{error && (
-				<p
-					className={`${
-						errorClassName ? `${errorClassName} ` : ""
-					}px-3 pb-2 text-sm text-destructive-ink`}
+				<div
+					className={`plan-research-callout question-callout${
+						errorClassName ? ` ${errorClassName}` : ""
+					}`}
 					data-motion-feedback={errorClassName ? "alert" : undefined}
 					role="alert"
 				>
-					{error}
-				</p>
+					<span aria-hidden="true" className="plan-research-badge">
+						<WarningIcon />
+					</span>
+					<p>
+						<strong>Couldn’t save</strong>
+						{error}
+					</p>
+				</div>
 			)}
 
 			{(onSubmit || onCancel || multiple) && (
-				<footer className="question-actions flex flex-wrap items-center justify-end gap-2 px-3 py-2 hairline-t">
-					{multiple && !confirming && (
-						<p className="m-0 mr-auto text-sm text-text-tertiary tabular-nums">
-							{index + 1} of {definition.questions.length} · {unanswered} unanswered
-						</p>
-					)}
-					{onCancel && confirming && (
-						<>
-							<p className="m-0 mr-auto text-sm text-text-secondary">
-								Cancel without answering?
-							</p>
-							<button
-								type="button"
-								onClick={() => setConfirming(false)}
-								disabled={submitting}
-								className="btn btn-sm btn-secondary"
-							>
-								Keep it
-							</button>
-							<button
-								type="button"
-								onClick={onCancel}
-								disabled={disabled || submitting}
-								className="btn btn-sm btn-destructive"
-							>
-								<CloseIcon aria-hidden="true" size={14} />
-								{submitting ? "Cancelling…" : "Yes, cancel"}
-							</button>
-						</>
-					)}
-					{multiple && !confirming && index > 0 && (
-						<button
-							type="button"
-							onClick={() => step(-1)}
-							className="btn btn-sm btn-secondary"
-						>
-							Back
-						</button>
-					)}
-					{onCancel && !confirming && (
-						<button
-							type="button"
-							onClick={() => setConfirming(true)}
-							disabled={disabled || submitting}
-							className="btn btn-sm btn-secondary"
-						>
-							<CloseIcon aria-hidden="true" size={14} />
-							Cancel
-						</button>
-					)}
-					{multiple && !confirming && !last && (
-						<button
-							type="button"
-							onClick={() => step(1)}
-							className="btn btn-sm btn-primary"
-						>
-							Next
-						</button>
-					)}
-					{onSubmit && !confirming && (!multiple || last) && (
-						<button
-							type="button"
-							onClick={onSubmit}
-							disabled={disabled || submitting}
-							className="btn btn-sm btn-primary"
-						>
-							<CheckIcon
-								aria-hidden="true"
-								data-plan-icon="check"
-								size={14}
-							/>
-							{submitting
-								? (single ? "Saving…" : "Submitting…")
-								: (single ? "Save answer" : "Submit")}
-						</button>
-					)}
+				<footer
+					className="question-actions"
+					data-confirm={onCancel && confirming ? "" : undefined}
+				>
+					{onCancel && confirming
+						? (
+							<>
+								<span className="question-confirm">Discard this decision?</span>
+								<button
+									type="button"
+									onClick={() => setConfirming(false)}
+									disabled={submitting}
+									className="btn btn-sm btn-outline"
+								>
+									Keep it
+								</button>
+								<button
+									type="button"
+									onClick={onCancel}
+									disabled={disabled || submitting}
+									className="btn btn-sm btn-destructive"
+								>
+									{submitting ? "Discarding…" : "Discard"}
+								</button>
+							</>
+						)
+						: (
+							<>
+								{multiple && (
+									<div role="group" aria-label="Questions" className="question-stepper">
+										<button
+											type="button"
+											aria-label="Previous question"
+											className="btn btn-icon btn-ghost question-caret"
+											data-flip=""
+											disabled={index === 0}
+											onClick={() => step(-1)}
+											ref={previous}
+										>
+											<ChevronIcon size={16} />
+										</button>
+										<span className="question-count" aria-live="polite">
+											<strong>{current.header}</strong>
+											{index + 1}/{total}
+										</span>
+										<button
+											type="button"
+											aria-label="Next question"
+											className="btn btn-icon btn-ghost question-caret"
+											disabled={last}
+											onClick={() => step(1)}
+											ref={next}
+										>
+											<ChevronIcon size={16} />
+										</button>
+									</div>
+								)}
+								{onCancel && (
+									<button
+										type="button"
+										onClick={() => setConfirming(true)}
+										disabled={disabled || submitting}
+										className="btn btn-sm btn-outline"
+									>
+										Discard
+									</button>
+								)}
+								{multiple && !last && (
+									<button
+										type="button"
+										onClick={() => step(1)}
+										className="btn btn-sm btn-primary"
+									>
+										Next
+									</button>
+								)}
+								{onSubmit && (!multiple || last) && (
+									<button
+										type="button"
+										onClick={onSubmit}
+										disabled={disabled || submitting}
+										className="btn btn-sm btn-primary"
+									>
+										{submitting ? "Saving…" : error ? "Try again" : "Save"}
+									</button>
+								)}
+							</>
+						)}
 				</footer>
 			)}
 		</div>

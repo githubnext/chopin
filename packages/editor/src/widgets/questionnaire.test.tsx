@@ -15,7 +15,7 @@ const SINGLE = {
 	}],
 };
 
-test("a single decision renders as a saveable card without tabs", () => {
+test("a single decision renders as a saveable card without a stepper", () => {
 	let markup = renderToStaticMarkup(
 		createElement(QuestionView, {
 			definition: SINGLE,
@@ -24,14 +24,15 @@ test("a single decision renders as a saveable card without tabs", () => {
 		}),
 	);
 
-	expect(markup).toContain("Decision");
-	expect(markup).toContain("Save answer");
-	expect(markup).toContain('data-plan-icon="check"');
-	expect(markup).toContain('aria-hidden="true"');
-	expect(markup).not.toContain('role="tablist"');
+	expect(markup).toContain("Where should room state live?");
+	expect(markup).toContain("Add an option");
+	expect(markup).toContain(">Save<");
+	expect(markup).not.toContain("Save answer");
+	expect(markup).not.toContain("Questions");
+	expect(markup).not.toContain(">Next<");
 });
 
-test("a stored multi-question questionnaire keeps its tabbed compatibility view", () => {
+test("a stored multi-question questionnaire keeps its stepper compatibility view", () => {
 	let markup = renderToStaticMarkup(
 		createElement(QuestionView, {
 			definition: {
@@ -51,8 +52,11 @@ test("a stored multi-question questionnaire keeps its tabbed compatibility view"
 		}),
 	);
 
-	expect(markup).toContain('role="tablist"');
-	expect(markup).toContain("Scope");
+	expect(markup).not.toContain('role="tablist"');
+	expect(markup).toContain("Previous question");
+	expect(markup).toContain("Storage");
+	expect(markup).toContain("1/2");
+	expect(markup).toContain(">Next<");
 });
 
 test("a stored unanswered questionnaire keeps its compatibility view without a live record", () => {
@@ -82,11 +86,11 @@ test("a stored unanswered questionnaire keeps its compatibility view without a l
 		}),
 	);
 
-	expect(markup).toContain('role="tablist"');
+	expect(markup).not.toContain('role="tablist"');
 	expect(markup).toContain("disabled");
 	expect(markup).toContain("Next");
-	expect(markup).not.toContain("Save answer");
-	expect(markup).not.toContain("Cancel");
+	expect(markup).not.toContain(">Save<");
+	expect(markup).not.toContain("Discard");
 });
 
 test("a host motion contract owns the active question step", () => {
@@ -148,6 +152,6 @@ test("a read-only decision remains linked but has no answer actions", () => {
 
 	expect(markup).toContain("show in plan");
 	expect(markup).toContain("disabled");
-	expect(markup).not.toContain("Save answer");
-	expect(markup).not.toContain("Cancel");
+	expect(markup).not.toContain(">Save<");
+	expect(markup).not.toContain("Discard");
 });

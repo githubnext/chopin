@@ -44,6 +44,17 @@ export function CheckIcon(props: IconProps) {
 	);
 }
 
+export function DecisionIcon(props: IconProps) {
+	return (
+		<LineIcon title="decision" {...props}>
+			<polyline points="12.75 2.75 15.25 5.25 12.75 7.75" />
+			<path d="M2.75 12.75h2.1c1.1 0 2.12-.58 2.69-1.52l2.92-4.96c.57-.94 1.59-1.52 2.69-1.52h2.1" />
+			<polyline points="12.75 10.25 15.25 12.75 12.75 15.25" />
+			<path d="M2.75 5.25h2.1c1.1 0 2.12.58 2.69 1.52M10.46 11.23c.57.94 1.59 1.52 2.69 1.52h2.1" />
+		</LineIcon>
+	);
+}
+
 export function InfoIcon(props: IconProps) {
 	return (
 		<LineIcon title="circle-info" {...props}>

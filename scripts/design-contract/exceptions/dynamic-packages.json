@@ -20,12 +20,19 @@
 			[
 				"dynamic",
 				"class",
+				"className",
+				"class > Related > <span>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
 				"errorClassName",
-				"class > QuestionView > <p>",
+				"class > QuestionView > <div>",
 				1
 			]
 		],
-		"sourceHash": "62f6aad113b4705b04c54a14db97a28ea0cccb2fefdb810d3c0d59539e4f69d6"
+		"sourceHash": "da4c57bf8133585e245f6a448ab85e329138b297bfeec1863dac9af4cfdafc5d"
 	},
 	{
 		"file": "packages/icons/src/icon.tsx",
@@ -99,6 +106,13 @@
 				"*",
 				"props",
 				"unresolved JSX props > CodeIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > DecisionIcon > <LineIcon>",
 				1
 			],
 			[
@@ -186,7 +200,7 @@
 				1
 			]
 		],
-		"sourceHash": "0dfd0723e90646836446c9017f7dab49c8f2412c75d5d0753fa33cfd265b7f04"
+		"sourceHash": "395805db3113280090d3c6c652cfb28e2ff1f7ff12ec613cfdefe1b3d24e972a"
 	},
 	{
 		"file": "packages/visuals/src/ui/mini-bars.tsx",
