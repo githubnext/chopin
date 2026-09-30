@@ -2011,3 +2011,23 @@
 	white-space: nowrap;
 	text-overflow: ellipsis;
 }
+
+/* Presence on a decision card: aligned to the 1.5rem mark beside the title. */
+.presence-faces {
+	display: flex;
+	flex: none;
+	align-items: center;
+	block-size: 1.5rem;
+}
+
+.presence-face + .presence-face {
+	margin-inline-start: -0.375rem;
+}
+
+.presence-more {
+	margin-inline-start: 0.25rem;
+	font-size: var(--text-xs);
+	font-weight: 600;
+	color: var(--color-text-tertiary);
+	font-variant-numeric: tabular-nums;
+}

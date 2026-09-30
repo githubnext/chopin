@@ -744,6 +744,43 @@ test("a rejected save is announced as an alert with motion feedback", async ({ j
 	await expect(card).not.toContainText("Answered by");
 });
 
+test("people on a decision are faces with verbatim handle tooltips", async ({ join, seed }) => {
+	await seed(PROSE);
+	let page = await join("ana");
+	await page.getByRole("button", { name: /^Decisions/ }).click();
+	let card = questionnaire(page).filter({
+		has: page.getByRole("heading", { name: "Where should room state live?" }),
+	});
+
+	// Four peers on the same question: three faces and a "+1".
+	for (let handle of ["Bo", "cy", "Di", "ed"]) {
+		let peer = await join(handle);
+		await peer.getByRole("button", { name: /^Decisions/ }).click();
+		await questionnaire(peer).filter({
+			has: peer.getByRole("heading", { name: "Where should room state live?" }),
+		}).getByRole("radio", { name: /On disk as MDX/ }).focus();
+	}
+
+	let people = card.getByRole("group", { name: /^Editing this question/ });
+	await expect(people.getByRole("img")).toHaveCount(3);
+	let more = people.getByText("+1");
+	await expect(more).toBeVisible();
+	await expect(card).not.toContainText("@Bo");
+
+	let tooltip = page.locator("[data-icon-tooltip]");
+	await people.getByRole("img").first().hover();
+	await expect(tooltip).toBeVisible();
+	await expect(tooltip).toHaveText(/^(Bo|cy|Di|ed)$/);
+
+	await more.hover();
+	await expect(tooltip).toBeVisible();
+	await expect(tooltip).toHaveText(/^(Bo|cy|Di|ed)$/);
+	expect(
+		await people.getByRole("img").evaluateAll(nodes => nodes.map(n => n.getAttribute("title"))),
+	)
+		.toEqual([null, null, null]);
+});
+
 test("discarding asks first", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");

@@ -56,6 +56,11 @@ export type QuestionViewProps = {
 	 */
 	places?: Record<string, number>;
 	collaborators?: Collaborator[];
+	/**
+	 * Replaces the `@handle` pills for people on the current question. The view
+	 * cannot draw faces itself, so the host supplies them.
+	 */
+	renderPeople?: (people: Collaborator[]) => ReactNode;
 	/** Validation or synchronisation problem, announced to assistive tech. */
 	error?: string;
 	/** Host-owned presentation class for an error entering the view. */
@@ -88,6 +93,12 @@ function Badges({ people }: { people: Collaborator[] }) {
 			))}
 		</span>
 	);
+}
+
+function Presence(
+	{ people, render }: { people: Collaborator[]; render?: (people: Collaborator[]) => ReactNode },
+) {
+	return render ? render(people) : <Badges people={people} />;
 }
 
 function DecisionHeading() {
@@ -402,6 +413,7 @@ export function QuestionView(props: QuestionViewProps) {
 		answers,
 		resolver,
 		collaborators = [],
+		renderPeople,
 		error,
 		errorClassName,
 		aside,
@@ -525,10 +537,11 @@ export function QuestionView(props: QuestionViewProps) {
 								</h4>
 								{current.multiple && <p className="question-hint">Choose any</p>}
 							</div>
-							<Badges
+							<Presence
 								people={collaborators.filter(person =>
 									person.question === current.id
 								)}
+								render={renderPeople}
 							/>
 						</header>
 

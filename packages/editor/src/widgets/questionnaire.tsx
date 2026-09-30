@@ -13,6 +13,7 @@ import { useCellValue } from "@mdxeditor/gurx";
 
 import { Provenance, SidecarCard } from "../card";
 import { ContentSwapLayer } from "../content-swap";
+import { PresenceFaces } from "../presence-faces";
 import { widgets$ } from "../widget-options";
 
 import type { ReactNode } from "react";
@@ -190,6 +191,7 @@ function Undecided(
 				onCancel={editable ? state.cancel : undefined}
 				onChange={editable ? state.change : undefined}
 				onSubmit={editable ? state.submit : undefined}
+				renderPeople={people => <PresenceFaces handles={people.map(person => person.handle)} />}
 				renderStep={motion
 					? ({ children, question }) => (
 						<QuestionStepSwap motion={motion} question={question}>
