@@ -1,5 +1,5 @@
 import { createJustBashNetworkSandboxSession } from "@ai-sdk/sandbox-just-bash";
-import { plannerAgent } from "./agents";
+import { headingPlannerAgent, plannerAgent } from "./agents";
 import { githubTools, type GitHubToolsError, type Result } from "./github-tools";
 import { registerCredential } from "./harnesses";
 
@@ -32,6 +32,7 @@ export type PlannerSession = {
 
 export type PlannerSessionDependencies = {
 	agent?: PlannerAgent;
+	headingAgent?: PlannerAgent;
 	githubTools?: typeof githubTools;
 	createSandbox?: () => Promise<Sandbox>;
 	registerCredential?: typeof registerCredential;
@@ -43,6 +44,16 @@ export async function openPlannerSession(
 	channel: PlannerChannel,
 	deps: PlannerSessionDependencies = {},
 ): Promise<Result<PlannerSession, OpenError>> {
+	let job = channel.room.plan.chat?.job;
+	if (job && job.kind !== "heading") {
+		return {
+			ok: false,
+			error: {
+				kind: "Unavailable",
+				cause: new Error(`Background ${job.kind} tools are not available`),
+			},
+		};
+	}
 	try {
 		if (owner.signal.aborted || !await owner.revalidate()) {
 			return {
@@ -73,7 +84,8 @@ export async function openPlannerSession(
 		if (owner.signal.aborted) throw new Error("Planner owner unavailable");
 		let sessionId = crypto.randomUUID();
 		unregister = (deps.registerCredential ?? registerCredential)(sessionId, owner.currentToken);
-		let agent = deps.agent ?? plannerAgent;
+		let agent = deps.agent
+			?? (job ? deps.headingAgent ?? headingPlannerAgent : plannerAgent);
 		let opening = agent.createSession({ sessionId, sandboxSession: sandbox });
 		let deadline = new Promise<never>((_, reject) => {
 			timeout = setTimeout(

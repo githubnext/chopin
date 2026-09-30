@@ -505,3 +505,43 @@ checks before claiming that milestone.
 
 Combined processor, Plan, conversation and question checks pass 771 tests with 3,738
 assertions. Workspace/E2E types and CI pass with inherited findings only.
+
+The complete Planner delivery coordinator, context selection, prompts and prose-intent
+helpers retain all 47 original callbacks. Four real MemoryStorage integrations connect
+the actual processor and interpreter to durable enqueueing. Receipts and running state
+commit before the scripted runner executes; completion and activity persist together.
+Failed enqueueing retains the pending effect, explicit retry preserves job identity, and
+stopped running work becomes interrupted on reopening without automatic replay.
+
+Card projection prerequisites now preserve thread/status, chosen IDs and previous-choice
+history through the restricted dialect and Lexical serialization. All 25 original node
+callbacks and twelve original room projection callbacks remain. Protocol additions retain
+current consumers and the existing cancellation API. A broad schema rewrite was rejected
+by automatic approval review; bounded patches were approved after proving unrelated
+validation rules unchanged. No rejected source write executed.
+
+Staged publication commits the candidate document and sidecar before adopting or
+broadcasting their state. Four new storage tests cover held and rejected commits,
+reopening, the implementation guard and default-preserving notification suppression.
+This evidence covers document and receipt isolation; the fixture does not change records
+or drafts. Ten whole original notice tests cover rollback, ordering, stable IDs and
+reopening. Notice metadata validation and accepted scoped-evidence checks are retained.
+Ordinary instruction notices preserve the current persistence callback and queue behavior.
+
+The original heading and job-scope functions retain all fourteen original callbacks.
+Three new tests execute the actual heading tool through the current Harness and storage,
+verify the live write boundary, and reject unsupported job kinds. The installed Harness
+requires constructor-specific active tools, so the heading profile offers read tools and
+its own writer. Ordinary Planner tool names remain unchanged; Copilot and Pi adapters,
+ownership, credentials and disposable-session cleanup retain their current lifecycle.
+A temporary negative control confirms that disabling the live refusal makes the foreign
+write test fail. No paid inference is used.
+
+The combined affected backend, Harness, dialect and question run passes 1,267 tests with
+5,623 assertions. Workspace/E2E types and CI pass with inherited findings only. The Pi
+contract uses its existing disposable loopback stub, with nine passing contract cases.
+
+Next: actual Chat job FIFO and saved-message hook integration, complete card effect
+consumers and remaining scoped job tools. These components are now verified separately,
+but live conversation-to-Planner wiring is still required for the requested backend
+milestone. Remaining whole pipeline callbacks stay assigned to their implementation groups.

@@ -29,11 +29,13 @@ import * as Service from "../plan/service";
 import { instruction } from "@chopin/protocol/address";
 
 import { annotatedText, compose, referenceCatalog, remember } from "./address";
+import { createNotices } from "./notices";
+export type { Announcer, NoticeInput } from "./notices";
 import { broadcast, fail, reply, tell } from "../wire";
 
 import type { Server } from "bun";
 import type { TextStreamPart, ToolSet } from "ai";
-import type { Chat as Wire, Request } from "@chopin/protocol";
+import type { Chat as Wire, ConversationPlan, Request } from "@chopin/protocol";
 import type { Config } from "../config";
 import type { HostedAuth } from "../auth/routes";
 import type { HostedRepository } from "../agent/repository";
@@ -103,6 +105,10 @@ export type Instruction = {
 };
 
 export type Chat = {
+	job?: ConversationPlan.Job;
+	jobOutput?: string;
+	jobFailures?: number;
+	jobFailureCode?: "source-shape";
 	entries: Wire.Entry[];
 	waiting: Waiting[];
 	/** Serializes complete member send acceptance, including asynchronous resolution and persistence. */
@@ -606,7 +612,12 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 }
 
 /** Say something in the transcript without asking the agent for anything. */
-export function notice(context: Room, text: string): void | Promise<void> {
+export let { notice, noticeOnce, noticeExclusive, refreshNoticeExclusive } = createNotices({
+	now,
+	announce,
+});
+
+function instructionNotice(context: Room, text: string): void | Promise<void> {
 	let { chat, room, server } = context;
 	let entry: Wire.Entry = { id: ulid(), author: { kind: "system" }, text, ts: now() };
 	chat.entries.push(entry);
@@ -667,7 +678,7 @@ export function instruct(
 
 		startRun(context, handle, text, about.thread, context.claimantSessionId);
 	};
-	let announced = notice(context, said);
+	let announced = instructionNotice(context, said);
 	return announced instanceof Promise ? announced.then(proceed) : proceed();
 }
 

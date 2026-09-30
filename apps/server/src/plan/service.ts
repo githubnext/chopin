@@ -22,6 +22,7 @@ import { restoreState as restoreConversationPlan } from "../conversation-plan/do
 import { type Effect, restoreEffectOutbox } from "../conversation-plan/effects";
 import * as Jobs from "../conversation-plan/jobs";
 import { restorePendingCardActions } from "../questions/card-actions";
+import { validateNotice, validateScopedNotices } from "./notice-validation";
 
 import * as presence from "./presence";
 import * as edit from "./edit";
@@ -528,6 +529,7 @@ function restoredState(
 			|| typeof entry.author !== "object"
 			|| Array.isArray(entry.author)
 		) throw new Error("hosted channel has an invalid transcript entry");
+		validateNotice(entry, savedMessages);
 		if (Object.hasOwn(entry, "references")) {
 			let author = entry.author as Record<string, JsonValue>;
 			if (author.kind !== "member") {
@@ -555,6 +557,7 @@ function restoredState(
 		item.conversationPlan,
 		transcript as unknown as Chat.Chat["entries"],
 	);
+	validateScopedNotices(transcript as unknown as Chat.Chat["entries"], conversationPlan, records);
 	for (let record of records) {
 		for (let [optionId, origin] of Object.entries(record.optionOrigins)) {
 			if (
@@ -751,6 +754,7 @@ async function commitHosted(
 	operationId: string,
 	captured: Captured,
 	allowArchived = false,
+	notifyDocumentPersisted = true,
 ): Promise<void> {
 	let durable = plan.persistence;
 	if (!update && captured.sidecarText === durable.lastSidecar) {
@@ -798,7 +802,7 @@ async function commitHosted(
 		if (plan.document.epoch === captured.epoch) {
 			plan.document.checkpoint = new Uint8Array(captured.document);
 		}
-		if (update && sourceChanged && durable.onDocumentPersisted) {
+		if (update && sourceChanged && notifyDocumentPersisted && durable.onDocumentPersisted) {
 			try {
 				durable.onDocumentPersisted({
 					channelId: durable.channelId,
@@ -1368,6 +1372,69 @@ export async function publish(
 		});
 	} catch (err) {
 		console.error("[plan] could not broadcast a persisted update:", err);
+	}
+}
+
+class ImplementationActiveError extends Error {
+	constructor() {
+		super("implementation is active");
+	}
+}
+
+/** Commit a staged document and sidecar before bringing the live room forward. */
+export async function publishStaged(
+	plan: Plan,
+	server: Server<SocketData>,
+	roomId: string,
+	candidate: Plan,
+	mutation?: room.Mutation,
+	options?: { notifyDocumentPersisted?: boolean },
+): Promise<void> {
+	if (implementationActive(plan)) throw new ImplementationActiveError();
+	let source = room.project(candidate.document);
+	if (!mutation && source !== room.project(plan.document)) {
+		throw new Error("staged document changed without a mutation");
+	}
+	if (mutation) candidate.document.seq++;
+	if (source !== plan.persistence.committedSource) candidate.revision++;
+	let operationId = mutation
+		? `server:${candidate.document.epoch}:${
+			createHash("sha256").update(mutation.update).digest("hex")
+		}`
+		: `state:${crypto.randomUUID()}`;
+	await commitHosted(
+		plan,
+		mutation?.update,
+		operationId,
+		capture(candidate),
+		false,
+		options?.notifyDocumentPersisted !== false,
+	);
+	if (mutation) {
+		Y.applyUpdate(plan.document.doc, mutation.update);
+		await room.settle();
+	}
+	plan.document.seq = candidate.document.seq;
+	plan.revision = candidate.revision;
+	plan.records = candidate.records;
+	plan.threads = candidate.threads;
+	plan.questions = candidate.questions;
+	plan.conversationPlan = candidate.conversationPlan;
+	plan.pendingCardActions = candidate.pendingCardActions;
+	plan.conversationPlanPendingEffects = candidate.conversationPlanPendingEffects;
+	plan.conversationPlanEffects = candidate.conversationPlanEffects;
+	if (mutation) {
+		try {
+			broadcast(server, roomId, {
+				kind: "plan:update",
+				ts: 0,
+				epoch: plan.document.epoch,
+				update: encode(mutation.update),
+				seq: plan.document.seq,
+			});
+		} catch (err) {
+			console.error("[plan] could not broadcast a persisted update:", err);
+		}
 	}
 }
 

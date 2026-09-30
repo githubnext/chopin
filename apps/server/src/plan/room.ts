@@ -33,6 +33,9 @@ import {
 } from "@chopin/dialect";
 import { $getAnchorAndFocusForUserState } from "@lexical/yjs";
 import * as Questionnaires from "./questionnaires";
+import { createCardProjections } from "./card-projections";
+export { QuestionnaireProjectionError } from "./card-projections";
+export type { CardChange } from "./card-projections";
 import {
 	$createParagraphNode,
 	$getNodeByKey,
@@ -472,31 +475,8 @@ export function insertDecision(target: Document, value: Decision): Mutation | un
  * on its own. A discrepancy means the projection is stale, never that the
  * document has decided something different.
  */
-export function projectAnswer(
-	target: Document,
-	id: string,
-	answers: Record<string, string>,
-	settled?: { by: string; at: string },
-): Mutation | undefined {
-	return mutate(target, () => {
-		let found = false;
-		for (let node of $nodesOfType(QuestionnaireNode)) {
-			if (node.getId() !== id) continue;
-			found = true;
-			let value = node.getQuestionnaire();
-			node.setQuestionnaire({
-				...value,
-				// Resolution belongs to the questionnaire, not each answer.
-				...(settled ? { by: settled.by, at: settled.at } : {}),
-				questions: value.questions.map(question => {
-					let answer = answers[question.id];
-					return answer === undefined ? question : { ...question, answer };
-				}),
-			});
-		}
-		return found;
-	});
-}
+export let { projectAnswer, projectCard, hasQuestionnaire, projectOptions, projectPrompt } =
+	createCardProjections(mutate);
 
 /** Take a questionnaire out of the plan, leaving its record as history. */
 export function removeQuestionnaire(target: Document, id: string): Mutation | undefined {
@@ -599,6 +579,16 @@ export function hasProse(target: Document): boolean {
 	return parse(project(target)).children.some(node =>
 		node.type !== "mdxJsxFlowElement"
 		|| (node.name !== "Questionnaire" && node.name !== "Decision")
+	);
+}
+
+export function headingAllowed(target: Document): boolean {
+	let blocks = parse(project(target)).children;
+	let placeholder = blocks[0]?.type === "heading" && blocks[0].depth === 1
+		&& blocks[0].children.length === 0;
+	return blocks.slice(placeholder ? 1 : 0).every(node =>
+		node.type === "mdxJsxFlowElement"
+		&& (node.name === "Questionnaire" || node.name === "Decision")
 	);
 }
 
