@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { documentPath } from "@chopin/protocol/document-url";
 import { ChevronIcon, DocumentIcon } from "@chopin/icons";
 import {
@@ -219,7 +219,8 @@ export function RoomWorkspace(
 	let [reveal, setReveal] = useState<{ widget: string; token: number }>();
 	let [planScrollTop, setPlanScrollTop] = useState(0);
 	let entries = useQuestionnaires(questions);
-	let unanswered = countUnanswered(entries);
+	let cardMetadata = useSyncExternalStore(cardMeta.subscribe, cardMeta.snapshot, cardMeta.snapshot);
+	let unanswered = countUnanswered(entries, cardMetadata);
 	let hasPlanContent = useHasPlanContent(questions);
 	let [decisionView, setDecisionView] = useState<DecisionViewState>(() => {
 		let stored = localStorage.getItem("chopin:view:document");
@@ -508,6 +509,8 @@ export function RoomWorkspace(
 			onDestination={selectDestination}
 			decisions={
 				<Decisions
+					cardMeta={cardMeta}
+					canEdit={workspaceCanEdit}
 					connected={status === "connected" && workspaceCanEdit}
 					headingId={workspaceIds.heading.decisions}
 					motion={motionContract("collapse")}
@@ -521,6 +524,7 @@ export function RoomWorkspace(
 			}
 			plan={
 				<PlanEditor
+					cardMeta={cardMeta}
 					commentPresentation={mode === "split" ? "popover" : "sheet"}
 					connection={status === "deleted" ? "closed" : status}
 					key={workspaceArchivedAt ? "archived" : "active"}

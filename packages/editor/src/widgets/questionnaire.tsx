@@ -8,13 +8,16 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { cardStatus } from "@chopin/dialect";
 import { QuestionView, useQuestionnaire } from "@chopin/question/react";
 import { useCellValue } from "@mdxeditor/gurx";
 
 import { Provenance, SidecarCard } from "../card";
+import { useCardMeta } from "../card-meta";
 import { ContentSwapLayer } from "../content-swap";
 import { widgets$ } from "../widget-options";
 
+import type { Question } from "@chopin/protocol";
 import type { ReactNode } from "react";
 import type { Transport } from "@chopin/question/react";
 import type { Answer } from "@chopin/question";
@@ -24,10 +27,17 @@ import type { QuestionStepMotion } from "../widget-options";
 /** The plan stores the chosen text; the shared view wants answer records. */
 function answers(value: Questionnaire): Answer[] | undefined {
 	if (value.questions.some(question => question.answer === undefined)) return undefined;
-	return value.questions.map(question => ({
-		question: question.prompt,
-		custom: question.answer ?? "",
-	}));
+	return value.questions.map(question =>
+		question.choices?.length
+			? {
+				question: question.prompt,
+				choices: question.options
+					.filter(option => question.choices!.includes(option.id))
+					.map(option => option.label),
+				optionIds: question.choices,
+			}
+			: { question: question.prompt, custom: question.answer ?? "" }
+	);
 }
 
 /** The document calls the question text `prompt`; the domain calls it `question`. */
@@ -49,6 +59,8 @@ function definition(value: Questionnaire) {
 
 export type QuestionnaireCardProps = {
 	value: Questionnaire;
+	/** Durable lifecycle state can arrive separately from the document node. */
+	meta?: Question.CardMeta;
 	wire?: Transport;
 	connected?: boolean;
 	/** Whether this viewer may change or resolve the shared draft. */
@@ -70,21 +82,32 @@ export function QuestionnaireCard(
 		onQuestionLeave,
 		onQuestionSelect,
 		motion,
+		meta,
 		places,
 		value,
 		wire,
 	}: QuestionnaireCardProps,
 ) {
 	let resolved = answers(value);
+	let current = meta?.status ?? cardStatus(value);
 	let pointing = { places, onQuestionEnter, onQuestionLeave, onQuestionSelect };
 
-	return resolved
-		? <Decided resolved={resolved} value={value} {...pointing} />
+	return current !== "open" && current !== "reopened"
+		? (
+			<Decided
+				discarded={current === "discarded"}
+				meta={meta}
+				resolved={resolved ?? []}
+				value={value}
+				{...pointing}
+			/>
+		)
 		: (
 			<Undecided
 				canEdit={canEdit}
 				connected={connected}
 				motion={motion}
+				meta={meta}
 				value={value}
 				wire={wire}
 				{...pointing}
@@ -152,10 +175,11 @@ function QuestionStepSwap(
 }
 
 function Undecided(
-	{ canEdit, connected, motion, value, wire, ...pointing }:
+	{ canEdit, connected, meta, motion, value, wire, ...pointing }:
 		& {
 			canEdit: boolean;
 			connected: boolean;
+			meta?: Question.CardMeta;
 			motion?: QuestionStepMotion;
 			value: Questionnaire;
 			wire?: Transport;
@@ -187,6 +211,7 @@ function Undecided(
 				drafts={state.drafts}
 				error={state.error}
 				errorClassName="editor-motion-feedback"
+				suggested={meta?.suggested}
 				onCancel={editable ? state.cancel : undefined}
 				onChange={editable ? state.change : undefined}
 				onSubmit={editable ? state.submit : undefined}
@@ -206,7 +231,12 @@ function Undecided(
 }
 
 function Decided(
-	{ resolved, value, ...pointing }: { resolved: Answer[]; value: Questionnaire } & Pointing,
+	{ discarded, meta, resolved, value, ...pointing }: {
+		discarded: boolean;
+		meta?: Question.CardMeta;
+		resolved: Answer[];
+		value: Questionnaire;
+	} & Pointing,
 ) {
 	return (
 		<SidecarCard
@@ -214,15 +244,22 @@ function Decided(
 			label={value.questions.length === 1 ? "Decision" : "Question"}
 			padded={false}
 			settled
-			// Read provenance from the durable node so late joiners see it.
-			status={<Provenance at={value.at} by={value.by} verb="Answered" />}
+			// Metadata owns lifecycle attribution; older nodes retain their document fallback.
+			status={
+				<Provenance
+					at={meta ? meta.decidedAt : value.at}
+					by={meta ? meta.resolver : value.by}
+					verb={discarded ? "Discarded" : "Answered"}
+				/>
+			}
 		>
 			<QuestionView
 				answers={resolved}
 				definition={definition(value)}
 				disabled
 				drafts={{}}
-				status="answered"
+				resolver={discarded ? meta?.resolver : undefined}
+				status={discarded ? "cancelled" : "answered"}
 				{...pointing}
 			/>
 		</SidecarCard>
@@ -231,12 +268,14 @@ function Decided(
 
 function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 	let options = useCellValue(widgets$);
+	let meta = useCardMeta(options.cardMeta, value.id);
 
 	return (
 		<QuestionnaireCard
 			canEdit={options.canEdit}
 			connected={options.connected}
 			motion={options.questionMotion}
+			meta={meta}
 			onQuestionEnter={question => options.questions?.highlight(value.id, question)}
 			onQuestionLeave={() => options.questions?.clear()}
 			onQuestionSelect={question => options.questions?.reveal(value.id, question)}

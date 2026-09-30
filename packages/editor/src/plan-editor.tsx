@@ -24,6 +24,7 @@ import { ResearchDraftStore } from "./research-draft";
 import { register } from "./widgets";
 import { widgetsPlugin } from "./widgets-plugin";
 
+import type { CardMetaStore } from "./card-meta";
 import type { Binding } from "@lexical/yjs";
 import type { MDXEditorMethods } from "@mdxeditor/editor";
 import type { Plan } from "@chopin/protocol";
@@ -70,6 +71,7 @@ export type PlanEditorProps = {
 	 * editor, while the observer that finds them has to run inside it.
 	 */
 	questions?: QuestionnaireStore;
+	cardMeta?: CardMetaStore;
 	/** Durable Research Workspace state and actions supplied by the host app. */
 	research?: ResearchStore;
 	/** The same arrangement for comment threads. */
@@ -100,6 +102,7 @@ export function PlanEditor(
 		onScrollTop,
 		questionMotion,
 		questions,
+		cardMeta,
 		readOnly,
 		research,
 		scrollTop,
@@ -256,6 +259,7 @@ export function PlanEditor(
 						motionImmediately,
 						questionMotion,
 						questions,
+						cardMeta,
 						research,
 						researchDrafts,
 						threads,
@@ -276,6 +280,7 @@ export function PlanEditor(
 			onChanges,
 			binding,
 			questions,
+			cardMeta,
 			research,
 			researchDrafts,
 			commentPresentation,

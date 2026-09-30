@@ -4,7 +4,7 @@ This is a finite extraction from a preserved prototype, not a verified release o
 classifier-quality fix. The transport, stable identity, provenance, validation and replay foundations are
 implemented in bounded slices.
 
-- Product branch: `maggie/jev-chat-product`.
+- Product branch: `Maggie/jev-chat-product` (existing canonical Git reference casing).
 - Product worktree: `/Users/maggieappleton/.codex/worktrees/jev-chat-product/chopin`.
 - Current-main base: `9a5ac1d0947a0422d3607c876296fe849362188d` (Bun 1.4.2).
 - Preserved source: `maggie/archive-jev-prototype-20260930`,
@@ -743,3 +743,26 @@ keeps the server's 30-second default: forwarding an unset optional value as an e
 string would fail the retained strict timeout validation. Self-hosting explains the
 explicit override boundary. Five Compose/configuration tests pass with 54 assertions;
 no container, service or database was started.
+
+The next card-host slice connects the existing room metadata store to inline cards,
+Decisions and the unanswered badge. Authoritative reopened status overrides delayed
+answered nodes; terminal cards remain non-editable before answer projection arrives.
+Discarded cards render cancellation and their recorded resolver without borrowing an
+earlier node actor or time. Chosen IDs resolve through current canonical labels;
+legacy custom answers retain their original text. Existing layout, Cancel, step
+motion, history and controller lifecycle are preserved. The workspace passes its
+edit permission explicitly; standalone Decisions retains its previous default.
+
+Two whole original card callbacks and their shared fixtures are restored. Eight
+whole provenance pipeline callbacks cover sourced agreement, retraction, concerns
+and direct pending-option support using the public planEvents entry point. Unique
+pipeline retention is 42 of 140 callbacks, with 98 remaining. The existing design
+exceptions retain all cases; only two reviewed owner hashes change. One design-test
+locator now follows the suggestion-forwarding Save callback, preserving its button
+size and tier assertions. Mounted browser behavior remains unverified.
+
+The frozen metadata/provenance checkpoint passes 2,747 combined tests with 12,801
+assertions across 420 files and no failures. Two PostgreSQL suites skip without a
+database. Full workspace/E2E type checks and CI pass, retaining only the two inherited
+lint warnings and the existing design baseline finding. Exact callback, component
+and RoomWorkspace source-preservation proofs pass after formatting.

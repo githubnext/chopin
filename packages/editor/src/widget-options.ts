@@ -1,5 +1,6 @@
 import { Cell } from "@mdxeditor/gurx";
 
+import type { CardMetaStore } from "./card-meta";
 import type { Binding } from "@lexical/yjs";
 import type { ChangeStore } from "./changes";
 import type { ContentSwapMotion } from "./content-swap";
@@ -38,6 +39,7 @@ export type WidgetOptions = {
 	motionImmediately?: () => boolean;
 	questionMotion?: QuestionStepMotion;
 	questions?: QuestionnaireStore;
+	cardMeta?: CardMetaStore;
 	research?: ResearchStore;
 	researchDrafts?: ResearchDraftStore;
 	threads?: ThreadStore;

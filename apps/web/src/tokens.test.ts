@@ -800,7 +800,7 @@ describe("migration", () => {
 			}],
 			["packages/question/src/react/question-view.tsx", {
 				action: "Submit",
-				marker: "onClick={onSubmit}",
+				marker: "onClick={() => onSubmit?.(single ? projection.suggestion : undefined)}",
 				size: "btn-sm",
 				tiers: ["btn-primary"],
 			}],
