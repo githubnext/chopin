@@ -163,115 +163,63 @@ port-8787 handoff, app restart or other-worktree mutation is part of this milest
 The old automatic goal remains paused. Continued work below belongs to this product
 extraction chat; it does not resume the old prototype goal.
 
-## Stored decision identity slice
+## Reviewed foundation slices
 
-Extract `storedText()` and `identified()` unchanged from the preserved schema and
-export the validator publicly. It validates durable IDs, order and raw text lengths
-without re-keying, trimming, freezing or mutating a definition. Current `normalize()`,
-shared drafts and answer derivation retain their existing behavior.
+Each slice has a separate implementer and independent reviewer. Missing-module or
+missing-export checks failed before extraction, then passed. The table records the
+independent focused results on Bun 1.4.2; every slice also passed full workspace
+and E2E type checks, formatting and CI with the existing warnings listed above.
 
-The two archived validator tests are retained with the pending-card validator portion.
-Its draft-mode and unanswered-derive assertions depend on the later draft slice and
-remain explicitly pending; changing draft behavior here would exceed this boundary.
-Five additional tests cover stable IDs/order/identity, duplicate IDs across questions,
-unknown fields, counts, and every raw text field. Test-first verification failed on the
-missing public export, then passed after extraction. Independent review approved the
-slice: 33 question-package tests passed, 0 failed (99 assertions), on Bun 1.4.2.
-Full workspace types passed; formatting and CI checks passed with existing warnings.
-The validator has no runtime consumers yet; durable restoration integration is pending.
+| Slice                    | Preserved behavior and evidence                                                                                                                                                                         | Focused result                   |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| Stored identity          | Original `storedText()`/`identified()` and public export; IDs, order and raw strings survive without mutation. Normalisation and draft behavior stay current.                                           | 33 question tests, 99 assertions |
+| Contract and sources     | Complete archived `ConversationPlan` namespace, type export and `sources.ts`; exact UTF-16 spans, saved author/text identity and completed messages. Global wire unions and session flags stay current. | 6 source tests, 53 assertions    |
+| Quotes                   | Byte-identical parser/budget, all four original test bodies, plus explicit fifth-candidate rejection. Five exact development messages have source provenance.                                           | 5 tests, 20 assertions           |
+| Event/correction guards  | Original functions in bounded modules with an acyclic façade; all event and correction cases remain.                                                                                                    | 7 tests, 88 assertions           |
+| Research/snapshot guards | Completes the original validation façade. Root syntax-tree proof: all 17 original functions and six constants occur once and match.                                                                     | 12 tests, 81 assertions          |
+| Accepted-event replay    | All 21 original case bodies, support functions, opening/preamble and counters match source syntax trees; `preference.ts` is byte-identical. Routing covers each case once.                              | 9 tests, 51 assertions           |
+
+The combined guard/source/quote run passed 30 tests (242 assertions). Domain/replay
+checks passed 27 tests (109 assertions). The complete extracted foundation and
+question-package run passed 100 tests, 0 failed (493 assertions, 20.92 seconds). Replay tests
+cover immutable inputs, stale versions, contributions, decisions, deferral/resumption,
+correction target counters, support withdrawals and exact Save lineage. These modules
+remain dormant. Saved evidence, authenticated callers and persistence before
+publication belong to the integration slices. Domain tests preserve saved provenance,
+replay restoration, correction retries, card authority and atomic analysis completion.
+
+Inherited behavior stays visible:
+
+- Stored empty single-choice definitions are valid. Main still starts empty drafts
+  in `custom`; the archived `choices` default and unanswered assertions are deferred
+  to the draft slice.
+- Source guards retain uncapped handles and unusual enumerable-property shape quirks;
+  ordinary JSON arrays fail. Shape checks do not prove saved provenance.
+- `card.corrected` accepts `add-excerpt` despite its narrower protocol union.
+- Snapshot guards do not check thread contents or event-ID uniqueness. Choice
+  membership uses inherited properties; outcome IDs reference analysis records rather
+  than proving accepted replay. Research shape checks do not authorise consent.
+- Duplicate event IDs return before checking changed bodies. Opening shares unchanged
+  prior objects; legacy candidate confirmation retains pending proposals.
+- Scoped Save stays provisional with its evidence retained, as intended.
+- Restore checks saved text only when a transcript is supplied. Research action retries
+  compare identity while ignoring changed timestamps; transitions grant no execution authority.
 
 ## Product tests with eval dependencies
 
-Seven archived product tests currently read eval development fixtures or helpers:
+Seven archived product tests read eval development fixtures or helpers:
 `d01-provenance-acceptance.test.ts`, `d01-scoped-endorsement.test.ts`,
 `d02-deferral-domain.test.ts`, `d02-deferral-effects.test.ts`,
 `d02-team-deferral.test.ts`, `d19-flow.test.ts`, and `quotes.test.ts` under
-`apps/server/src/conversation-plan/`. Keep their assertions with the product slices.
-Extract only the test messages, injected model replies and narrow state observations
-needed by those assertions into product test fixtures/helpers with source provenance.
-Do not import the eval runner/scorer/dataset tree or skip these tests. Original material
-stays archived; reserved examples stay sealed. This adaptation is required before
-claiming those slices' product regression coverage passes independently of eval tooling.
+`apps/server/src/conversation-plan/`. Keep every assertion with its product slice.
+Extract only the required messages, injected replies and narrow state observations
+into product test fixtures/helpers with source provenance. Do not import runner,
+scorer or dataset trees, or skip these tests. Reserved examples stay sealed.
 
-## Conversation contract and source provenance slice
+The quote dependency is resolved: `quotes.test-fixtures.ts` contains exact D19/m1,m2,
+D02/m2, D03/m1 and D04/m5 messages with archive SHA, case, step and path. Root and
+reviewer verified text parity, apostrophes and UTF-16 offsets. The other six test
+adaptations remain pending.
 
-Extract the complete archived `ConversationPlan` namespace and `sources.ts` unchanged.
-The public namespace type export preserves all Save, research, correction and event
-cases. Global Incoming/Outgoing unions, session flags and runtime routes are unchanged;
-wire activation waits for authorized producers/handlers/consumers together.
-
-Six focused source tests cover exact UTF-16 spans (including emoji), completed saved
-member/agent messages, source identity, text and author matching, streaming rejection,
-unknown fields, missing fields, bounds and role allowlist. Test-first verification
-failed on the missing module before extraction. Existing handle-length and enumerable
-property shape quirks remain inherited; no classifier or validation behavior was tuned.
-Independent review approved the slice: six source tests passed, 0 failed (53
-assertions), and the protocol type check passed on Bun 1.4.2. The implementer also
-verified the 39 combined source/question tests (152 assertions). Full workspace types,
-formatting and CI passed with the same existing warnings. These checks establish
-standalone provenance validation, not live conversation integration.
-
-## Exact quote extraction slice
-
-The parser and quote budget are byte-identical to the archive. All four original
-quote test bodies and assertions remain; five exact development messages now live in
-`quotes.test-fixtures.ts` with archive SHA, case, step and source path. No labels,
-scoring or dataset imports accompany them. Root and reviewer checked text parity,
-including apostrophes and UTF-16 offsets. A fifth regression verifies that four
-candidates succeed and a fifth throws rather than silently losing source evidence.
-
-Test-first verification failed on the missing parser module before extraction.
-Independent review approved the slice: 5 tests passed, 0 failed (20 assertions), on
-Bun 1.4.2. Full workspace types, formatting and CI passed with existing warnings.
-This resolves `quotes.test.ts`'s eval fixture dependency; the other six listed product
-test adaptations remain pending. No parsing rules or classifier policy changed.
-
-## Event and correction validation slice
-
-The archived guard functions now live in `event-validation.ts`,
-`correction-validation.ts` and the leaf `validation-fields.ts`; `validation.ts`
-reexports their original public APIs and five bounds. Dependencies are acyclic.
-Independent review and root syntax-tree comparison verified all 11 function bodies
-and five constants against the archive; every event/correction case remains.
-
-Independent Bun 1.4.2 tests: 7 passed, 0 failed (88 assertions). Full workspace types
-passed. These checks exercise field guards, explicit/human/source requirements,
-bounds, correction variants and scoped support identities. They do not establish
-saved-message provenance or replayed domain validity. The inherited `card.corrected`
-acceptance of `add-excerpt`, despite its narrower protocol union, remains unchanged.
-The remaining research/state validators are extracted in the following slice.
-
-## Research-offer and snapshot validation slice
-
-`research-validation.ts` and `state-validation.ts` complete the original validation
-façade. All 17 archived functions and six constants match the source syntax trees;
-no policy or runtime behavior changed. Independent review approved the slice:
-12 focused tests passed, 0 failed (81 assertions). The combined guard/source/quote
-run passed 30 tests (242 assertions); full workspace types passed on Bun 1.4.2.
-
-Research tests preserve exact briefs, named option snapshots and code-owned focus.
-Snapshot tests cover queue identities, bounds, analysis distributions and offer links.
-Inherited gaps remain: thread contents and event-ID uniqueness are unchecked; choice
-membership uses inherited properties. Outcome references use analysis IDs rather
-than proving accepted replay authority. These guards do not establish consent,
-saved-message provenance or replay correctness. Formatting and CI retain the same
-existing warnings.
-
-## Accepted-event replay slice
-
-The dispatcher retains the archived opening, clone, deduplication and counter order.
-Four bounded modules contain all 21 original case bodies; support helpers and
-`preference.ts` preserve the archived behavior. Root syntax-tree comparison verifies
-those cases, helpers, preamble and counters; independent review checks the routing.
-
-Nine focused tests passed, 0 failed (51 assertions), covering immutable inputs,
-stale versions, contributions, decisions, deferral/resumption, correction target
-counters, support withdrawals and exact Save lineage. Full workspace types,
-formatting and CI passed on Bun 1.4.2 with existing warnings. Original domain tests
-remain assigned to the next domain slice. Replay is still dormant: callers must
-validate saved evidence and persist returned state before publication.
-
-Inherited behavior remains: duplicate IDs return before validating changed bodies;
-opening shares unchanged prior objects; legacy candidate confirmation retains pending
-proposals. A scoped Save remains provisional with its evidence retained, as intended.
-Next: pure domain restoration, analysis completion and human correction transitions.
+Next: original research-offer domain regressions, then stable card definitions and
+records. Durable processing, Planner jobs and browser integration remain unimplemented.
