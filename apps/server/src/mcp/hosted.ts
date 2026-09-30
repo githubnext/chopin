@@ -508,9 +508,9 @@ export function hosted(
 					if (!(err instanceof StorageError) || err.failure !== "conflict") throw err;
 					if (callbacks.isChannelDeleting?.(id)) return { kind: "unavailable" };
 					let stored = await auth.storage.collaboration.load(id, auth.clock());
-					if (!stored || stored.channel.repositoryId !== repository.id) {
-						return { kind: "conflict" };
-					}
+					// Nothing stored under this key's id: the repository already has a document with this title.
+					if (!stored) return { kind: "title-taken" };
+					if (stored.channel.repositoryId !== repository.id) return { kind: "conflict" };
 					let restored = await Plan.readStored(stored);
 					if (
 						!restored.creation

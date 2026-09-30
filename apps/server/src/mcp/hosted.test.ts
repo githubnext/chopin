@@ -716,6 +716,28 @@ describe("the hosted MCP adapter", () => {
 		).toEqual({ kind: "conflict" });
 	});
 
+	it("reports a title the repository already uses as title-taken, not an idempotency conflict", async () => {
+		let context = setup();
+		context.github.repositoryValue = {
+			...context.github.repositoryValue,
+			permissions: { pull: true, push: true, admin: false },
+		};
+		let adapter = hosted(context.auth);
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller) throw new Error("test caller was not authenticated");
+		if (!adapter.create) throw new Error("hosted creation adapter is unavailable");
+		await adapter.create.create(caller, creation);
+
+		expect(
+			await adapter.create.create(caller, {
+				...creation,
+				idempotencyKey: "another-request",
+				fingerprint: "another-request",
+				title: creation.title.toUpperCase(),
+			}),
+		).toEqual({ kind: "title-taken" });
+	});
+
 	it("reconstructs a stored checkpoint and journal with the validated plan revision", async () => {
 		let context = setup();
 		let opened = await plan(context);
