@@ -35,6 +35,8 @@ export type QuestionStepRenderProps = {
 	question: string;
 };
 
+export type PreviousAnswer = { labels: string[]; by: string };
+
 export type QuestionViewProps = {
 	definition: Definition;
 	drafts: Drafts;
@@ -52,6 +54,8 @@ export type QuestionViewProps = {
 	onDiscard?: () => void;
 	/** Reopen a resolved decision without opening a shared draft in this view. */
 	onReopen?: () => void;
+	/** The answer a reopened decision replaces, keyed for legacy multi-question cards. */
+	previous?: PreviousAnswer | Record<string, PreviousAnswer>;
 	disabled?: boolean;
 	submitting?: boolean;
 	status?: "open" | "answered" | "cancelled";
@@ -86,6 +90,16 @@ export function currentQuestion(
 	active: string | undefined,
 ): Item {
 	return definition.questions.find(question => question.id === active) ?? definition.questions[0]!;
+}
+
+/** Find a previous decision without applying one question's answer to another. */
+export function previousFor(
+	previous: QuestionViewProps["previous"],
+	question: string,
+): PreviousAnswer | undefined {
+	if (!previous) return undefined;
+	if (Array.isArray((previous as PreviousAnswer).labels)) return previous as PreviousAnswer;
+	return (previous as Record<string, PreviousAnswer>)[question];
 }
 
 function Badges({ people }: { people: Collaborator[] }) {
@@ -376,6 +390,7 @@ export function QuestionView(props: QuestionViewProps) {
 		onCancel,
 		onDiscard,
 		onReopen,
+		previous,
 		onAddOption,
 		maxOptions = limits.MAX_DECISION_OPTIONS,
 		disabled = false,
@@ -615,6 +630,14 @@ export function QuestionView(props: QuestionViewProps) {
 							</h4>
 							<Badges people={collaborators.filter(person => person.question === current.id)} />
 						</header>
+						{(() => {
+							let replaced = previousFor(previous, current.id);
+							return replaced && (
+								<p className="m-0 mt-1 text-sm text-text-tertiary">
+									Previously: {replaced.labels.join(", ")} · @{replaced.by}
+								</p>
+							);
+						})()}
 
 						{/* Never the whole panel: below this is a form. */}
 						<Related

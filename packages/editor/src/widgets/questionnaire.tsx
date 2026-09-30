@@ -198,6 +198,7 @@ function Undecided(
 
 	let answerable = connected && !!state.definition;
 	let editable = canEdit && answerable;
+	let previous = previousAnswers(value);
 
 	return (
 		<SidecarCard
@@ -215,6 +216,7 @@ function Undecided(
 				error={state.error}
 				errorClassName="editor-motion-feedback"
 				suggested={meta?.suggested}
+				previous={previous}
 				showActions
 				onAddOption={editable ? state.addOption : undefined}
 				onCancel={editable ? state.cancel : undefined}
@@ -233,6 +235,20 @@ function Undecided(
 			/>
 		</SidecarCard>
 	);
+}
+
+function previousAnswers(value: Questionnaire) {
+	let previous: Record<string, { labels: string[]; by: string }> = {};
+	for (let question of value.questions) {
+		if (!question.previous) continue;
+		let labels = question.previous.choices.flatMap(id => {
+			let option = question.options.find(candidate => candidate.id === id);
+			return option ? [option.label] : [];
+		});
+		if (labels.length === 0 && question.previous.value) labels = [question.previous.value];
+		previous[question.id] = { labels, by: question.previous.by };
+	}
+	return Object.keys(previous).length === 0 ? undefined : previous;
 }
 
 function Decided(

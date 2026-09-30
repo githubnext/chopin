@@ -831,3 +831,20 @@ adds one exact owner-hashed lifecycle footer forwarding case and updates the exi
 error-class case count for its terminal use; all other cases remain. Source, callback,
 table and request-helper proofs pass after formatting. Mounted browser behavior
 remains unverified.
+
+The original previous-answer projection and four whole callbacks are restored.
+Reopened cards show their recorded previous labels and actor, keyed by question for
+legacy multi-question cards. Durable previous choices resolve through canonical
+labels with the original custom-text fallback. Metadata remains the lifecycle and
+permission authority; current layout, actions and Save caption are preserved.
+QuestionView retention is 19 of 27 callbacks, with eight still assigned to later
+surfaces. Mounted browser behavior remains unverified.
+
+Fourteen further whole reply/options registrations retain complete malformed and
+unsafe tables, dense-state restoration, named products, candidate gates and limits.
+They execute 47 cases; unique pipeline retention is 109 of 140, with 31 remaining.
+The focused question/editor/pipeline run passes 475 tests with 1,262 assertions.
+Full workspace/E2E types and CI pass with the inherited warnings and design baseline
+only. Only two independently reviewed existing component source hashes are renewed;
+all exception cases remain unchanged. Whole callback, table, helper and additive
+integration proofs pass after formatting. No interpretation policy was changed.
