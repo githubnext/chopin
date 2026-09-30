@@ -10,7 +10,7 @@ import {
 	ATOMIC_RESULT_TOOL_NAME,
 	createAtomicAdapter,
 } from "./adapter";
-import { classifyRuns, registerFullPlanner } from "./full";
+import { classifyRuns, controlWorkflows, registerFullPlanner } from "./full";
 import { startStubModelServer } from "../pi/model-stub";
 import { hostInputRoom } from "../../testing/decisions";
 import type { HostInput, QuestionParams } from "@bastani/atomic";
@@ -418,4 +418,51 @@ test("run cards fold lifecycle events into ordered stages, Decisions waits, and 
 		status: "finished",
 		ended: 900,
 	});
+});
+
+test("run control calls the session's workflow tool with a real tool context and surfaces failures", async () => {
+	let calls: { params: unknown; ctx: unknown; aborted: boolean }[] = [];
+	let reply: { content: { type: string; text: string }[]; isError?: boolean } = {
+		content: [{ type: "text", text: "Paused 1 run(s)." }],
+	};
+	let session = {
+		getToolDefinition: (name: string) =>
+			name === "workflow"
+				? {
+					execute: (async (
+						_id: string,
+						params: unknown,
+						signal: AbortSignal,
+						_update: unknown,
+						ctx: unknown,
+					) => {
+						calls.push({ params, ctx, aborted: signal.aborted });
+						return reply;
+					}) as never,
+				}
+				: undefined,
+		extensionRunner: { createToolContext: (id: string) => ({ toolCallId: id }) },
+	};
+	await controlWorkflows(session, { action: "pause", all: true });
+	await controlWorkflows(session, { action: "resume", runId: "run-1" });
+	expect(calls.map(call => call.params)).toEqual([{ action: "pause", all: true }, {
+		action: "resume",
+		runId: "run-1",
+	}]);
+	expect(
+		calls.every(call =>
+			!call.aborted && typeof (call.ctx as { toolCallId: string }).toolCallId === "string"
+		),
+	).toBe(true);
+	reply = { content: [{ type: "text", text: "Run not found" }], isError: true };
+	await expect(controlWorkflows(session, { action: "resume", runId: "gone" })).rejects.toThrow(
+		"Run not found",
+	);
+	await expect(
+		controlWorkflows({ ...session, getToolDefinition: () => undefined }, {
+			action: "pause",
+			all: true,
+		}),
+	)
+		.rejects.toThrow("no workflow tool");
 });

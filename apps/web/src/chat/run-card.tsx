@@ -1,7 +1,7 @@
 /** A Planner-launched workflow run: is it alive, what is it doing, does it need anyone. */
 
 import { useEffect, useState } from "react";
-import { CheckIcon, CloseIcon, LoaderIcon, WarningIcon } from "@chopin/icons";
+import { CheckIcon, CloseIcon, WarningIcon } from "@chopin/icons";
 
 import type { Chat as Wire } from "@chopin/protocol";
 
@@ -46,9 +46,14 @@ function useNow(live: boolean): number {
 	return now;
 }
 
+/** A dot that pulses while work is live; it stays still under reduced motion. */
+function RunPulse() {
+	return <span aria-hidden="true" className="run-pulse" data-run-pulse="" />;
+}
+
 function StageGlyph({ status }: { status: Wire.RunStage["status"] }) {
 	if (status === "running") {
-		return <LoaderIcon aria-hidden="true" className="chat-tool-loader" size={14} />;
+		return <RunPulse />;
 	}
 	if (status === "completed") {
 		return <CheckIcon aria-hidden="true" className="text-success-ink" size={14} />;
@@ -81,7 +86,7 @@ export function RunCard({ run, onShowDecisions }: { run: Wire.Run; onShowDecisio
 		>
 			<div className="flex min-w-0 items-center gap-2">
 				{live
-					? <LoaderIcon aria-hidden="true" className="chat-tool-loader" size={14} />
+					? <RunPulse />
 					: <span aria-hidden="true" className="inline-block size-[14px]" />}
 				<span className="min-w-0 truncate font-mono text-text-secondary">{run.name}</span>
 				<span

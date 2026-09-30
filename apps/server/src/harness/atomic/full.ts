@@ -21,10 +21,56 @@ export type FullPlanner = {
 	runs?: PlannerRuns;
 	/** Called with every change to `runs`. */
 	onRuns?: (runs: PlannerRuns) => void;
-	/** Runs a slash command in the live session without a model turn; set once the session exists. */
-	command?: (text: string) => Promise<void>;
+	/** Runs the session's own `workflow` tool without a model turn; set once the session exists. */
+	control?: (params: WorkflowControl) => Promise<void>;
 };
+export type WorkflowControl = { action: "pause"; all: true } | { action: "resume"; runId: string };
+
 let planners = new Map<string, FullPlanner>();
+
+/** The text of a tool result, for errors. */
+function resultText(content: readonly { type: string; text?: string }[]): string {
+	return content.map(part => part.type === "text" ? part.text ?? "" : "").join("\n").trim();
+}
+
+/**
+ * Runs one run-control action through the session's `workflow` tool with a real
+ * tool context, so the outcome comes back as a result rather than a UI notice.
+ */
+export async function controlWorkflows(
+	session: {
+		getToolDefinition(
+			name: string,
+		): { execute: (...args: never[]) => Promise<unknown> } | undefined;
+		extensionRunner: { createToolContext(id: string, signal: AbortSignal | undefined): unknown };
+	},
+	params: WorkflowControl,
+): Promise<void> {
+	let tool = session.getToolDefinition("workflow");
+	if (!tool) throw new Error("The Planner session has no workflow tool.");
+	let id = `chopin-${params.action}-${crypto.randomUUID()}`;
+	let signal = AbortSignal.timeout(30_000);
+	let execute = tool.execute as (
+		id: string,
+		params: WorkflowControl,
+		signal: AbortSignal,
+		onUpdate: undefined,
+		ctx: unknown,
+	) => Promise<
+		{ content?: { type: string; text?: string }[]; isError?: boolean; details?: unknown }
+	>;
+	let result = await execute(
+		id,
+		params,
+		signal,
+		undefined,
+		session.extensionRunner.createToolContext(id, signal),
+	);
+	let text = resultText(result.content ?? []);
+	let failed = result.isError === true
+		|| /"ok"\s*:\s*false|"status"\s*:\s*"failed"/.test(text);
+	if (failed) throw new Error(`workflow ${params.action} failed: ${text.slice(0, 500)}`);
+}
 
 /** Every Atomic Planner session is registered; background workers never are. */
 export function registerFullPlanner(sessionId: string, planner: FullPlanner): () => void {
