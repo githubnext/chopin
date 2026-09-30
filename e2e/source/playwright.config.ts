@@ -2,7 +2,13 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
 	testDir: ".",
-	testMatch: ["source-highlight.native.ts", "question-actions.native.ts"],
+	testMatch: [
+		"source-highlight.native.ts",
+		"question-actions.native.ts",
+		"transcript-source.native.ts",
+		"excerpt-correction-lifecycle.native.ts",
+		"excerpt-correction-retry.native.ts",
+	],
 	workers: 1,
 	fullyParallel: false,
 	retries: 0,

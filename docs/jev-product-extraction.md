@@ -949,3 +949,42 @@ intact. Independent review approves these exact changes. Focused verification pa
 inherited lint warnings and design baseline. Formatting and fresh archive-preservation
 proofs pass. Runtime transcript wiring and native form interaction remain later work;
 this component slice does not establish server persistence or collaboration behavior.
+
+## Transcript source navigation and native correction checks
+
+Chat now forwards source destinations to the real Transcript. The original navigation
+uses a per-transcript highlight owner, scrolls a found message into view, and checks
+its exact saved UTF-16 quote against raw and rendered text. Changed text and Markdown
+that differs from saved raw text conservatively refuse exact highlighting while
+retaining the source preview. Destination replacement, clearing, inactivity and
+unmount clean up only that owner's range and marker. Existing manual bottom pinning,
+Markdown, streaming, decision/research controls and withdrawal behavior are preserved.
+The original effect reacts to active/destination changes, not entries-only changes;
+this slice makes no late-arrival or entries-only revalidation claim. Room source
+production, expiry and evidence-host integration remain later work.
+
+Independent source proof preserves the whole current Chat/Transcript AST after the
+exact additive archived navigation seams. The source-preview label uses current
+text-xs, and highlight decoration uses shared brand tokens without literal fallback
+colors. The client build retains the highlight rule; its CSS compiler warns about the
+supported functional highlight pseudo-element, and the existing chunk-size warning
+remains. No design exception was added. One fixture-only emoji representation uses
+a Unicode escape; its cooked bytes, offsets and all callback assertions are identical.
+
+The isolated cached-Chromium suite now passes 19 cases: seven exact source-leaf cases,
+three question lifecycle cases, four actual Transcript navigation/scroll cases and
+five actual ExcerptCorrection form cases. The form covers native focus, active-card
+eligibility, held submission, read-only/missing callback guards, exact payload fields,
+unchanged retry identity, rejected/ambiguous source text and option-target clearing.
+Its initial blank-page failure was traced to unavailable native crypto.randomUUID;
+the fixture now fulfills one synthetic HTTPS document locally, aborts all other
+requests and checks the native secure context. No UUID polyfill or application server
+is used. All complete fixture bodies and native callbacks survive the module-binding
+adaptation, and the two prior native suites remain byte-identical.
+
+Final focused verification passes 153 tests with 1,049 assertions. Workspace/E2E types,
+CI, formatting and source/fixture preservation proofs pass. CI retains only inherited
+warnings and the design baseline. The actual client build succeeds. No database,
+application listener, authentication session, provider request or evaluation run was
+started. These native component checks do not prove durable correction transport,
+Room token expiry, collaborative evidence updates or complete browser integration.

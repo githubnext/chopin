@@ -13,6 +13,8 @@ import {
 
 import { MessageMarkdown } from "./markdown";
 import { capitalize, displayText, duration, group, summarize, toolCopy } from "./model";
+import { clearSourceHighlight, highlightSource } from "../conversation-plan/source";
+import type { ChatDestination } from "../conversation-plan/source";
 import { motionContract } from "../motion-contract";
 import { motionImmediately } from "../motion-input";
 
@@ -26,6 +28,7 @@ import { ResearchOfferCard } from "./research-offer";
 import type { ResearchOfferControls } from "./research-offer";
 
 type PlanMarkers = {
+	sourceDestination?: ChatDestination;
 	conversationPlan?: ConversationPlan.State;
 	researchOffers?: ResearchOfferControls;
 };
@@ -197,12 +200,16 @@ function MessageBody(
 
 	return (
 		<div
+			className={markers.sourceDestination?.source.messageId === message.id
+				? "rounded-md bg-inset px-1"
+				: undefined}
 			data-chat-message-id={message.id}
+			data-chat-raw={message.text}
 			data-chat-state={message.working ? "working" : undefined}
 		>
 			{text && (
 				<div className="flex items-start gap-1">
-					<div className="min-w-0 flex-1">
+					<div className="min-w-0 flex-1" data-chat-message-text>
 						<MessageMarkdown
 							className="break-words text-chat-body [overflow-wrap:anywhere]"
 							references={message.references}
@@ -231,6 +238,11 @@ function MessageBody(
 				.map(offer => (
 					<ResearchOfferCard controls={markers.researchOffers!} key={offer.id} offer={offer} />
 				))}
+			{markers.sourceDestination?.source.messageId === message.id && (
+				<p className="m-0 mt-1 text-xs text-text-secondary" data-source-preview>
+					Source: “{markers.sourceDestination.source.quote}”
+				</p>
+			)}
 		</div>
 	);
 }
@@ -269,6 +281,7 @@ function MessageGroup(
 					<MessageBody
 						conversationPlan={markers.conversationPlan}
 						researchOffers={markers.researchOffers}
+						sourceDestination={markers.sourceDestination}
 						handle={handle}
 						key={message.id}
 						message={message}
@@ -290,6 +303,7 @@ export function Transcript(
 		handle,
 		onWithdraw,
 		queued,
+		sourceDestination,
 		working,
 	}: {
 		active: boolean;
@@ -302,10 +316,13 @@ export function Transcript(
 		onWithdraw: (id: string) => void;
 		queued: Chat.Waiting[];
 		working?: Pick<Chat.Turn, "id" | "started">;
+		sourceDestination?: ChatDestination;
 	},
 ) {
 	let bottom = useRef<HTMLDivElement>(null);
+	let scroller = useRef<HTMLDivElement>(null);
 	let pinned = useRef(true);
+	let sourceOwner = useRef({});
 	let groups = group(entries, queued, working);
 	let latestPrompt = new Map<string, string>();
 	let latestScoped = new Map<string, string>();
@@ -322,10 +339,28 @@ export function Transcript(
 		if (active && pinned.current) bottom.current?.scrollIntoView({ block: "end" });
 	}, [active, entries, queued]);
 
+	useEffect(() => {
+		if (!active || !sourceDestination) return;
+		let message = Array.from(
+			scroller.current?.querySelectorAll<HTMLElement>("[data-chat-message-id]") ?? [],
+		)
+			.find(element => element.dataset.chatMessageId === sourceDestination.source.messageId);
+		if (!message) return;
+		pinned.current = false;
+		message.scrollIntoView({ block: "center", inline: "nearest" });
+		let exact = highlightSource(sourceOwner.current, message, sourceDestination.source);
+		message.dataset.sourceExact = String(exact);
+		return () => {
+			clearSourceHighlight(sourceOwner.current);
+			delete message.dataset.sourceExact;
+		};
+	}, [active, sourceDestination]);
+
 	return (
 		<div
 			className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto p-3"
 			data-focus-boundary=""
+			ref={scroller}
 			onScroll={event => {
 				let element = event.currentTarget;
 				let distance = element.scrollHeight - element.scrollTop - element.clientHeight;
@@ -363,6 +398,7 @@ export function Transcript(
 								handle={handle}
 								key={`${item.queued ? "queued" : "sent"}-${item.messages[0]!.id}`}
 								onWithdraw={onWithdraw}
+								sourceDestination={sourceDestination}
 							/>
 						)
 				)}
