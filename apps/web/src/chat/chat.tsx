@@ -36,6 +36,7 @@ import {
 } from "./references";
 import { Transcript } from "./transcript";
 import type { TranscriptDecisions } from "./transcript";
+import type { ResearchOfferControls } from "./research-offer";
 import { TerminalAlert } from "../terminal-alert";
 import plannerStop from "../assets/icons/planner-stop.svg";
 
@@ -58,6 +59,7 @@ export type ChatProps = {
 	onActivity?: (event: { type: "message" | "working"; busy: boolean }) => void;
 	conversationPlan?: ConversationPlan.State;
 	decisions?: TranscriptDecisions;
+	researchOffers?: ResearchOfferControls;
 };
 
 export function Chat(
@@ -69,6 +71,7 @@ export function Chat(
 		onActivity,
 		conversationPlan,
 		decisions,
+		researchOffers,
 		referencesEnabled,
 		repository,
 		room,
@@ -282,6 +285,7 @@ export function Chat(
 				active={active}
 				conversationPlan={conversationPlan}
 				decisions={decisions}
+				researchOffers={researchOffers}
 				entries={entries}
 				handle={handle}
 				onWithdraw={id => wire?.send("chat:unqueue", { id })}

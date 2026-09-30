@@ -18,6 +18,7 @@ import {
 } from "@chopin/editor";
 
 import { Chat } from "./chat/chat";
+import { shouldShowResearchActionError, useResearchOfferLinks } from "./chat/research-offer";
 import { ConversationPlanStore, useConversationPlan } from "./conversation-plan/store";
 import { rememberChannel } from "./channel-recovery";
 import { decisionAttention, DecisionViewControl } from "./decision-view-control";
@@ -32,7 +33,7 @@ import { Wire } from "./wire";
 import { useWorkspaceIds, useWorkspaceMode, useWorkspaceState, Workspace } from "./workspace";
 import { initialDocumentView, presentWorkspace, workspaceProfile } from "./workspace-model";
 
-import type { Research, Session } from "@chopin/protocol";
+import type { ConversationPlan, Research, Session } from "@chopin/protocol";
 import type { DecisionView, DecisionViewState } from "@chopin/editor";
 import type { DocumentMetadata } from "./document-actions";
 import type { DocumentAction } from "./document-actions-menu";
@@ -216,6 +217,34 @@ export function RoomWorkspace(
 			}),
 		[onResearchChildOpen, onResearchChildPublished, room],
 	);
+	let researchLinks = useResearchOfferLinks(
+		wire,
+		status === "connected",
+		conversation.state?.researchOffers ?? [],
+	);
+	let latestResearchLinks = useRef(researchLinks.links);
+	latestResearchLinks.current = researchLinks.links;
+	let pendingResearchActions = useRef(new Set<string>());
+	let researchActionScope = useRef({
+		room,
+		wire,
+		connected: status === "connected",
+		generation: 0,
+	});
+	if (
+		researchActionScope.current.room !== room
+		|| researchActionScope.current.wire !== wire
+		|| researchActionScope.current.connected !== (status === "connected")
+	) {
+		researchActionScope.current = {
+			room,
+			wire,
+			connected: status === "connected",
+			generation: researchActionScope.current.generation + 1,
+		};
+	}
+	let [researchBusy, setResearchBusy] = useState<ReadonlySet<string>>(new Set());
+	let [researchErrors, setResearchErrors] = useState<Record<string, string>>({});
 	let [reveal, setReveal] = useState<{ widget: string; token: number }>();
 	let [planScrollTop, setPlanScrollTop] = useState(0);
 	let entries = useQuestionnaires(questions);
@@ -364,6 +393,21 @@ export function RoomWorkspace(
 	}, [archivedAt, description, descriptionRevision, label, room, slug, updatedAt]);
 
 	useEffect(() => () => research.reset(), [research]);
+	useEffect(() => {
+		pendingResearchActions.current.clear();
+		setResearchBusy(new Set());
+		setResearchErrors({});
+	}, [room, wire, status === "connected"]);
+	useEffect(() => setResearchErrors({}), [conversation.state?.revision]);
+	useEffect(() => {
+		setResearchErrors(current => {
+			let next = Object.fromEntries(
+				Object.entries(current)
+					.filter(([id]) => researchLinks.links[id]?.status !== "linked"),
+			);
+			return Object.keys(next).length === Object.keys(current).length ? current : next;
+		});
+	}, [researchLinks.links]);
 
 	useEffect(() => {
 		cardMeta.listen(undefined);
@@ -449,6 +493,63 @@ export function RoomWorkspace(
 
 	let workspaceArchivedAt = archivedAt ?? metadata.archivedAt;
 	let workspaceCanEdit = effectiveCanEdit && !workspaceArchivedAt;
+	let actOnResearchOffer = (
+		offerId: string,
+		choice: "research" | "dismiss" | "resume",
+	) => {
+		if (!wire?.connected || status !== "connected" || !workspaceCanEdit) return;
+		let offer = conversationStore.get().state?.researchOffers?.find(item => item.id === offerId);
+		if (
+			!offer || (choice === "resume" ? offer.status !== "accepted" : offer.status !== "offered")
+		) {
+			return;
+		}
+		if (
+			choice === "resume"
+			&& latestResearchLinks.current[offerId]?.status !== "pending"
+			&& latestResearchLinks.current[offerId]?.status !== "unlinked"
+		) return;
+		if (pendingResearchActions.current.has(offerId)) return;
+		pendingResearchActions.current.add(offerId);
+		setResearchBusy(new Set(pendingResearchActions.current));
+		setResearchErrors(current => {
+			let next = { ...current };
+			delete next[offerId];
+			return next;
+		});
+		let payload = choice === "resume"
+			? { offerId, choice }
+			: { offerId, choice, actionId: crypto.randomUUID() };
+		let generation = researchActionScope.current.generation;
+		let currentScope = () => researchActionScope.current.generation === generation;
+		void wire.ask<ConversationPlan.ResearchConsentResult>(
+			"conversation-plan:research",
+			payload,
+		).then(result => {
+			if (!currentScope()) return;
+			if (result.offerId !== offerId) throw new Error("research action did not match the offer");
+			if (result.status === "accepted") researchLinks.refresh(offerId, true);
+		}).catch(() => {
+			if (!currentScope()) return;
+			let currentOffer = conversationStore.get().state?.researchOffers
+				?.find(item => item.id === offerId);
+			if (
+				!shouldShowResearchActionError(
+					choice,
+					currentOffer?.status,
+					latestResearchLinks.current[offerId]?.status,
+				)
+			) return;
+			setResearchErrors(current => ({
+				...current,
+				[offerId]: "Research status could not be confirmed. Try again when connected.",
+			}));
+		}).finally(() => {
+			if (!currentScope()) return;
+			pendingResearchActions.current.delete(offerId);
+			setResearchBusy(new Set(pendingResearchActions.current));
+		});
+	};
 	if (deleted) {
 		return (
 			<div className="flex h-full items-center justify-center bg-ground p-4 text-sm text-text-secondary">
@@ -467,6 +568,16 @@ export function RoomWorkspace(
 					handle={handle}
 					onActivity={onChatActivity}
 					conversationPlan={conversation.state}
+					researchOffers={conversation.enabled
+						? {
+							links: researchLinks.links,
+							busy: researchBusy,
+							errors: researchErrors,
+							canAct: status === "connected" && !!wire?.connected && !!workspaceCanEdit,
+							store: research,
+							onAction: actOnResearchOffer,
+						}
+						: undefined}
 					decisions={{
 						questions,
 						meta: cardMeta,

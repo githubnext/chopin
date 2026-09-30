@@ -22,6 +22,13 @@ import type { CardMetaStore, QuestionnaireStore } from "@chopin/editor";
 import type { Transport } from "@chopin/question/react";
 import { ActivityLine, DecisionPrompt } from "./decision-entry";
 import { ScopedChoicePrompt } from "./scoped-choice-entry";
+import { ResearchOfferCard } from "./research-offer";
+import type { ResearchOfferControls } from "./research-offer";
+
+type PlanMarkers = {
+	conversationPlan?: ConversationPlan.State;
+	researchOffers?: ResearchOfferControls;
+};
 
 export type TranscriptDecisions = {
 	questions: QuestionnaireStore;
@@ -178,18 +185,21 @@ function DecisionSystemEntry(
 }
 
 function MessageBody(
-	{ handle, message, onWithdraw }: {
+	{ handle, message, onWithdraw, ...markers }: {
 		handle: string;
 		message: Message;
 		onWithdraw: (id: string) => void;
-	},
+	} & PlanMarkers,
 ) {
 	let text = displayText(message.text) ? message.text : message.author.kind === "member"
 		? "Ask Planner"
 		: "";
 
 	return (
-		<div data-chat-state={message.working ? "working" : undefined}>
+		<div
+			data-chat-message-id={message.id}
+			data-chat-state={message.working ? "working" : undefined}
+		>
 			{text && (
 				<div className="flex items-start gap-1">
 					<div className="min-w-0 flex-1">
@@ -216,16 +226,21 @@ function MessageBody(
 				</div>
 			)}
 			{message.tools && message.tools.length > 0 && <ToolRun tools={message.tools} />}
+			{!message.queued && markers.researchOffers && markers.conversationPlan?.researchOffers
+				?.filter(offer => offer.source.messageId === message.id)
+				.map(offer => (
+					<ResearchOfferCard controls={markers.researchOffers!} key={offer.id} offer={offer} />
+				))}
 		</div>
 	);
 }
 
 function MessageGroup(
-	{ group: item, handle, onWithdraw }: {
+	{ group: item, handle, onWithdraw, ...markers }: {
 		group: Extract<Group, { kind: "messages" }>;
 		handle: string;
 		onWithdraw: (id: string) => void;
-	},
+	} & PlanMarkers,
 ) {
 	let first = item.messages[0]!;
 	let name = item.author.kind === "agent" ? "Planner" : capitalize(item.author.handle);
@@ -251,7 +266,14 @@ function MessageGroup(
 					</span>
 				</div>
 				{item.messages.map(message => (
-					<MessageBody handle={handle} key={message.id} message={message} onWithdraw={onWithdraw} />
+					<MessageBody
+						conversationPlan={markers.conversationPlan}
+						researchOffers={markers.researchOffers}
+						handle={handle}
+						key={message.id}
+						message={message}
+						onWithdraw={onWithdraw}
+					/>
 				))}
 			</div>
 		</div>
@@ -263,6 +285,7 @@ export function Transcript(
 		active,
 		conversationPlan,
 		decisions,
+		researchOffers,
 		entries,
 		handle,
 		onWithdraw,
@@ -273,6 +296,7 @@ export function Transcript(
 		canEdit?: boolean;
 		conversationPlan?: ConversationPlan.State;
 		decisions?: TranscriptDecisions;
+		researchOffers?: ResearchOfferControls;
 		entries: Chat.Entry[];
 		handle: string;
 		onWithdraw: (id: string) => void;
@@ -333,6 +357,8 @@ export function Transcript(
 							: <SystemEntry item={item} key={item.id} />
 						: (
 							<MessageGroup
+								conversationPlan={conversationPlan}
+								researchOffers={researchOffers}
 								group={item}
 								handle={handle}
 								key={`${item.queued ? "queued" : "sent"}-${item.messages[0]!.id}`}

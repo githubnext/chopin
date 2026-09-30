@@ -766,3 +766,18 @@ assertions across 420 files and no failures. Two PostgreSQL suites skip without 
 database. Full workspace/E2E type checks and CI pass, retaining only the two inherited
 lint warnings and the existing design baseline finding. Exact callback, component
 and RoomWorkspace source-preservation proofs pass after formatting.
+
+The original research-offer module and all eight whole test callbacks are restored.
+Offers appear under their exact source message, exclude queued messages and preserve
+the escaped public brief. Read-only link observers retain their bounded retry and
+stale-reply cleanup; they never start or resume research. The explicit workspace
+action retains writer/connection checks, live offer/link checks, duplicate suppression
+and the room/socket/connection generation fence. Current Chat, transcript grouping,
+composer, scrolling, decision entries and authentication behavior are preserved.
+
+Twelve further whole option-provenance pipeline callbacks retain their exact helpers
+and public entry point. Unique retention is 54 of 140 callbacks, with 86 remaining.
+The focused chat, research-store and pipeline run passes 122 tests with 432 assertions.
+Full workspace/E2E types and CI pass with the inherited warnings/baseline only. Whole
+module, callback, controls and three-file integration source proofs pass after
+formatting. Mounted hooks and browser reconnect timing remain unverified.
