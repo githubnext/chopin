@@ -77,6 +77,10 @@ export function LanguageMenu(
 		};
 	}, [open]);
 
+	useLayoutEffect(() => {
+		if (open && position.visibility === "visible") panel.current?.focus({ preventScroll: true });
+	}, [open, position.visibility]);
+
 	// Keep the highlighted option in view as the keyboard moves through a long list.
 	useEffect(() => {
 		if (!open) return;
@@ -98,7 +102,6 @@ export function LanguageMenu(
 	let show = () => {
 		setActiveId(value);
 		setOpen(true);
-		requestAnimationFrame(() => panel.current?.focus());
 	};
 
 	let close = () => {

@@ -403,7 +403,7 @@
 				1
 			]
 		],
-		"sourceHash": "6861f83df54ef5c3df7cb978d1d6d0dc61634d882427168f9d23113b85919cc3"
+		"sourceHash": "c336f006257672b5930becbe3c246a862dbf0311483cde1992c329a6f723e5d1"
 	},
 	{
 		"file": "packages/editor/src/changes.ts",
@@ -438,6 +438,6 @@
 				1
 			]
 		],
-		"sourceHash": "d6499734e75acc3b8d0cafae6d34ad5947e33b101639a740b56c1fde730dbb0e"
+		"sourceHash": "ed1b5eb9ac3c88e823d46d5af6a43c5d21acffe81577e07f739a4a5701c81f73"
 	}
 ]

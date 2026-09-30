@@ -22,7 +22,7 @@
 
 import { Component, useEffect, useMemo, useState } from "react";
 
-import { fileNameOf, repaired } from "./code";
+import { fileNameOf, repaired, titled } from "./code";
 
 import type { ErrorInfo, ReactNode } from "react";
 import type { Kind } from "./code";
@@ -191,13 +191,13 @@ function View({ kind, source, language, meta }: CodeViewProps) {
 		() => ({
 			theme: THEME,
 			themeType: "light" as const,
-			// The block's own header carries the language and any file name.
-			disableFileHeader: true,
+			// A diff's fallback has no title in the block's own header.
+			disableFileHeader: kind !== "diff" || !titled(meta),
 			disableLineNumbers: true,
 			overflow: "scroll" as const,
 			disableWorkerPool: true,
 		}),
-		[],
+		[kind, meta],
 	);
 
 	let diffOptions = useMemo(
