@@ -57,13 +57,26 @@ Classify the intent as `derive-render`, `handle-event`, `reset-or-adjust-state`,
 - Prefer `useSyncExternalStore` for external stores.
 - For data fetching kept in an Effect, handle cancellation or stale responses.
 - For a genuine external synchronization Effect, keep it only when dependencies
-  include every reactive value read by setup or cleanup, cleanup mirrors setup,
-  it tolerates Strict Mode, and it has no dependency suppression.
+  reflect the values that require resynchronization, cleanup mirrors setup, and
+  it tolerates Strict Mode. Treat dependency suppressions as investigation leads,
+  not sufficient evidence of incorrect behavior.
+
+Before changing an Effect, trace its callers and lifecycle. Establish which
+values can actually change while the component remains mounted, including plugin
+initialization, update hooks, and keyed remounts. Identify a concrete failure or
+measurable unnecessary work, its reachable trigger, and how the change resolves
+it. A dependency suppression alone does not justify a PR.
+
+Preserve setup/cleanup ownership: cleanup must release the resources and notify
+the consumers associated with that setup. Explain any intentional callback
+changes. Follow React's ref rules: do not introduce render-time ref assignments
+or hide dependencies behind refs solely to satisfy lint.
 
 Only fix high-confidence violations. Each pull request must contain exactly one
 independent violation, start from the default branch, and use a branch named
 `automation/use-effect/<short-slug>`. Do not stack or combine pull requests.
-Stop after five pull requests; leave remaining findings for a later run.
+Zero findings is a successful run. Five pull requests is a maximum, not a target;
+leave remaining findings for a later run.
 
 Do not change dependency manifests, lockfiles, workflow files, agent
 instructions, or other protected files. Do not create an issue or pull request
@@ -74,7 +87,10 @@ Before proposing each fix, run the narrowest relevant check. Use `bun test` for
 logic covered by unit tests, `bun run types` for TypeScript changes, `bun run ci`
 for formatting and lint-sensitive changes, and `bun run e2e` only when the
 changed Effect alters browser behavior that cannot be covered without a browser.
+Run verification that exercises the claimed failure or measures the unnecessary
+work. Confirm any cited lint rule is enabled. If required tools or checks are
+unavailable, report the limitation and create no PR.
 
 In each draft PR, explain the Effect's location and classification, why the old
-Effect was incorrect, the selected refactor, and the verification command and
-result.
+Effect was incorrect, its reachable trigger, the relevant caller/lifecycle
+evidence, the selected refactor, and the verification command and result.
