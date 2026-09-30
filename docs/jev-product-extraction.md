@@ -221,5 +221,5 @@ D02/m2, D03/m1 and D04/m5 messages with archive SHA, case, step and path. Root a
 reviewer verified text parity, apostrophes and UTF-16 offsets. The other six test
 adaptations remain pending.
 
-Next: original research-offer domain regressions, then stable card definitions and
+Next: the remaining pure card/Save regressions, then stable card definitions and
 records. Durable processing, Planner jobs and browser integration remain unimplemented.
