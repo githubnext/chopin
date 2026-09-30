@@ -190,6 +190,7 @@ and E2E type checks, formatting and CI with the existing warnings listed above.
 | Store suggestions          | Archived suggestion metadata, restore bounds and explicit submit fallback; all 47 Store declarations and 19 original callbacks are retained exactly once across small suites. Existing service callers remain unchanged.                    | 109 focused tests, 348 assertions         |
 | Durable record restore     | Canonical record defaults, matching saved definitions/drafts and transcript-checked option sources are integrated into current sidecar restoration. Ten memory persistence regressions; current metadata and mutation bodies remain intact. | 129 focused tests, 417 assertions         |
 | Request builders           | All 18 archived declarations and exact prompts are split across acyclic modules. Thirteen original builder callbacks and nine fixture declarations are retained; two interpreter cases remain assigned to their dependency slice.           | 111 conversation tests, 580 assertions    |
+| Review/correction coverage | All 19 original callbacks and 18 actor/helper declarations are retained, including the complete three-case excerpt table. Twenty-one cases exercise existing pure behavior; production is unchanged.                                        | 132 conversation tests, 669 assertions    |
 
 The combined guard/source/quote run passed 30 tests (242 assertions). Domain/replay
 checks passed 27 tests (109 assertions). The complete extracted foundation and
@@ -250,7 +251,8 @@ transcript provenance checks. Explicit submit fallback derives a copied draft an
 leaves the shared model unchanged. Capture/revert retains references, reservations
 require caller sequencing, and relabel bounds remain partial. The existing
 stage-before-commit durability gap is unchanged. Server Store suggestions and
-canonical records now round-trip through the memory sidecar open/close path. Controller restoration remains independently tested;
+canonical records now round-trip through the memory sidecar open/close path.
+Controller restoration remains independently tested;
 PostgreSQL and socket recovery have not been run. Synthetic anchor fixtures gained
 required canonical fields and one valid saved option; every original assertion stays.
 New Planner asks initialize canonical collections, while existing text-answer
@@ -265,5 +267,4 @@ No request builder calls the model. The final parameterized `questions.test.ts`
 interpreter callback (two cases) remains owned by policy/interpreter integration;
 it has not been replaced with a skipped test.
 
-Next: remaining pure correction/review regressions, then exact policy/interpreter
-and durable processing. Planner jobs and browser integration remain unimplemented.
+Next: exact policy/interpreter extraction and durable processing. Planner jobs and browser integration remain unimplemented.
