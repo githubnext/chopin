@@ -13,6 +13,8 @@ import { useCallback, useEffect, useId, useReducer, useRef, useState } from "rea
 import { CheckIcon, CloseIcon } from "@chopin/icons";
 
 import { answered } from "../draft";
+import * as limits from "../limits";
+import { AddOption } from "./add-option";
 import { projectSuggestion, reduceSuggestionEditState } from "./project-suggestion";
 
 import type { KeyboardEvent, ReactNode } from "react";
@@ -35,11 +37,16 @@ export type QuestionStepRenderProps = {
 export type QuestionViewProps = {
 	definition: Definition;
 	drafts: Drafts;
+	/** Keeps open-card actions visible when the host withholds mutation callbacks. */
+	showActions?: boolean;
 	/** Absent once resolved: a decision is not re-opened, a new question is asked. */
 	onChange?: (question: string, change: Partial<Draft>) => void;
 	onSubmit?: (visibleSuggestion?: VisibleSuggestion) => void;
 	/** The current advisory card option; it never changes the shared draft. */
 	suggested?: VisibleSuggestion;
+	/** Adds an option through the record that owns this decision. */
+	onAddOption?: (label: string) => Promise<{ ok: true } | { ok: false; message: string }>;
+	maxOptions?: number;
 	onCancel?: () => void;
 	disabled?: boolean;
 	submitting?: boolean;
@@ -359,9 +366,12 @@ export function QuestionView(props: QuestionViewProps) {
 	let {
 		definition,
 		drafts,
+		showActions = false,
 		onChange,
 		onSubmit,
 		onCancel,
+		onAddOption,
+		maxOptions = limits.MAX_DECISION_OPTIONS,
 		disabled = false,
 		submitting = false,
 		status = "open",
@@ -392,6 +402,12 @@ export function QuestionView(props: QuestionViewProps) {
 	let markHumanEdit = () => {
 		if (suggested) dispatchSuggestionEdit({ type: "answer-edited" });
 	};
+
+	let markComposerEdit = () => {
+		dispatchSuggestionEdit({ type: "composer-edited" });
+	};
+	let cancelComposerEdit = () => dispatchSuggestionEdit({ type: "composer-cancelled" });
+	let commitComposerEdit = () => dispatchSuggestionEdit({ type: "composer-committed" });
 
 	let base = useId();
 	let single = definition.questions.length === 1;
@@ -604,6 +620,15 @@ export function QuestionView(props: QuestionViewProps) {
 								onChange?.(current.id, change);
 							}}
 						/>
+						{single && (onAddOption || showActions) && current.options.length < maxOptions && (
+							<AddOption
+								disabled={disabled || !onAddOption}
+								onAdd={onAddOption}
+								onCancel={cancelComposerEdit}
+								onCommit={commitComposerEdit}
+								onEdit={markComposerEdit}
+							/>
+						)}
 					</section>
 				);
 

@@ -212,6 +212,8 @@ function Undecided(
 				error={state.error}
 				errorClassName="editor-motion-feedback"
 				suggested={meta?.suggested}
+				showActions
+				onAddOption={editable ? state.addOption : undefined}
 				onCancel={editable ? state.cancel : undefined}
 				onChange={editable ? state.change : undefined}
 				onSubmit={editable ? state.submit : undefined}

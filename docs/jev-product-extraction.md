@@ -781,3 +781,19 @@ The focused chat, research-store and pipeline run passes 122 tests with 432 asse
 Full workspace/E2E types and CI pass with the inherited warnings/baseline only. Whole
 module, callback, controls and three-file integration source proofs pass after
 formatting. Mounted hooks and browser reconnect timing remain unverified.
+
+The original AddOption composer is restored as a private leaf. Single-card views
+keep their existing Choices, Custom, Cancel, Save caption and layout; adding an
+option forwards through the existing shared controller under the edit guard. The
+original limit, temporary-lock, absent-handler, keyboard-attempt and suggestion
+edit ownership logic is preserved. Four whole original view callbacks are retained,
+bringing that suite to 12 of 27 callbacks with 15 still assigned to later surfaces.
+Browser focus, keyboard and viewport behavior remain unverified.
+
+Fourteen further whole pipeline callbacks cover research quote selection, pending
+targeting, owned recommendations, ambiguity, tentative leaning and mixed source
+ranges. Unique retention is 68 of 140, with 72 remaining. The focused question,
+card and pipeline run passes 101 tests with 356 assertions. Full workspace/E2E
+types and CI pass; only two existing reviewed component owner hashes change,
+with all exception cases retained. Original leaf, callback and integration proofs
+pass after formatting. Existing lint warnings and design baseline remain.
