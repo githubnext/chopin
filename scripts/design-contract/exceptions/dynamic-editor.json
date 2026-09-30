@@ -144,7 +144,7 @@
 				3
 			]
 		],
-		"sourceHash": "9e0f068fcf0162f1e6b70c876295c6cf7cd48dd5e9dfe53cfa5b224b34ced5a2"
+		"sourceHash": "b55b20870116c7b2dcd1d7e7f647b5f08431bc6a2a2c5666e7a4bca6a093a229"
 	},
 	{
 		"file": "packages/editor/src/toolbar/research.tsx",
@@ -284,7 +284,7 @@
 				1
 			]
 		],
-		"sourceHash": "bd86857696930d6350727ecb37e8baedbd462e0e27fcbe0084decfcafc76e984"
+		"sourceHash": "a44190a1773d99a174d57e966a44d08265639c3e0d6237cd753586c63bbdd2dd"
 	},
 	{
 		"file": "packages/editor/src/disclosure-motion.tsx",

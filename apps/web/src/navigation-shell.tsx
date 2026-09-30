@@ -223,6 +223,7 @@ function NavigationDrawer(
 			<button
 				aria-label="Close Projects sidebar"
 				className="navigation-drawer-backdrop"
+				data-press="none"
 				onClick={onDismiss}
 				type="button"
 			/>
