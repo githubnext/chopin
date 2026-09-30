@@ -238,8 +238,20 @@ passed. These checks exercise field guards, explicit/human/source requirements,
 bounds, correction variants and scoped support identities. They do not establish
 saved-message provenance or replayed domain validity. The inherited `card.corrected`
 acceptance of `add-excerpt`, despite its narrower protocol union, remains unchanged.
-Research/state validators are still pending rather than silently omitted.
+The remaining research/state validators are extracted in the following slice.
 
-Next bounded pure-state sub-slice: research-offer and snapshot guards in separate
-modules, preserving the remaining archived validator functions through the façade.
-Event replay/domain and durable processing follow those guards.
+## Research-offer and snapshot validation slice
+
+`research-validation.ts` and `state-validation.ts` complete the original validation
+façade. All 17 archived functions and six constants match the source syntax trees;
+no policy or runtime behavior changed. Independent review approved the slice:
+12 focused tests passed, 0 failed (81 assertions). The combined guard/source/quote
+run passed 30 tests (242 assertions); full workspace types passed on Bun 1.4.2.
+
+Research tests preserve exact briefs, named option snapshots and code-owned focus.
+Snapshot tests cover queue identities, bounds, analysis distributions and offer links.
+Inherited gaps remain: thread contents and event-ID uniqueness are unchecked; choice
+membership uses inherited properties. Outcome references use analysis IDs rather
+than proving accepted replay authority. These guards do not establish consent,
+saved-message provenance or replay correctness. Formatting and CI retain the same
+existing warnings. Next: bounded event replay modules, then the domain and persistence.
