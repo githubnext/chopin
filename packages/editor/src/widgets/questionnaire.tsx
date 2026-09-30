@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { cardStatus } from "@chopin/dialect";
+import { DecisionIcon } from "@chopin/icons";
 import { QuestionView, useQuestionnaire } from "@chopin/question/react";
 import { useCellValue } from "@mdxeditor/gurx";
 
@@ -17,6 +18,7 @@ import { useCardMeta } from "../card-meta";
 import { ContentSwapLayer } from "../content-swap";
 import { EvidenceHover } from "./evidence-hover";
 import { widgets$ } from "../widget-options";
+import { useTransitionPresence } from "../transition-presence";
 
 import type { Question } from "@chopin/protocol";
 import type { ReactNode } from "react";
@@ -62,6 +64,8 @@ export type QuestionnaireCardProps = {
 	value: Questionnaire;
 	/** Durable lifecycle state can arrive separately from the document node. */
 	meta?: Question.CardMeta;
+	presentation?: "inline" | "list";
+	motionImmediately?: () => boolean;
 	evidence?: ReactNode | null;
 	wire?: Transport;
 	connected?: boolean;
@@ -76,11 +80,29 @@ export type QuestionnaireCardProps = {
 	motion?: QuestionStepMotion;
 };
 
+export type CardPresentation = "hidden" | "settled-line" | "resolved" | "open";
+
+export function cardPresentation(
+	value: Questionnaire,
+	meta: Question.CardMeta | undefined,
+	where: "inline" | "list",
+): CardPresentation {
+	let status = meta?.status ?? cardStatus(value);
+	if (status === "open" || status === "reopened") return "open";
+	if (where === "list") return "resolved";
+	if (status === "discarded" || meta?.hasProse) return "hidden";
+	// A card can resolve before its metadata reaches this client. Its document
+	// projection is still a decided card, and all prose-less decisions settle inline.
+	return "settled-line";
+}
+
 export function QuestionnaireCard(
 	{
 		canEdit = true,
 		connected = false,
 		evidence,
+		motionImmediately,
+		presentation = "inline",
 		onQuestionEnter,
 		onQuestionLeave,
 		onQuestionSelect,
@@ -95,7 +117,21 @@ export function QuestionnaireCard(
 	let current = meta?.status ?? cardStatus(value);
 	let pointing = { places, onQuestionEnter, onQuestionLeave, onQuestionSelect };
 
-	let content = current !== "open" && current !== "reopened"
+	let shown = cardPresentation(value, meta, presentation);
+	let immediate = motionImmediately?.() ?? false;
+	let presence = useTransitionPresence(shown === "hidden" ? undefined : value.id, 200, immediate);
+	let lastVisible = useRef<{ id: string; content: ReactNode } | undefined>(undefined);
+	let content = shown === "settled-line"
+		? (
+			<SettledLine
+				canEdit={canEdit}
+				connected={connected}
+				meta={meta}
+				value={value}
+				wire={wire}
+			/>
+		)
+		: shown === "resolved"
 		? (
 			<Decided
 				canEdit={canEdit}
@@ -119,6 +155,15 @@ export function QuestionnaireCard(
 				{...pointing}
 			/>
 		);
+	if (shown !== "hidden") lastVisible.current = { id: value.id, content };
+	let closing = shown === "hidden"
+		&& presence.phase === "closing"
+		&& lastVisible.current?.id === presence.value;
+	if (shown === "hidden" && !closing) {
+		return <div data-plan-sidecar-questionnaire={value.id} data-card-hidden="" hidden />;
+	}
+	if (presentation === "list") return content;
+	let presented = closing ? lastVisible.current!.content : content;
 	let evidenceActive = (current === "open" || current === "reopened")
 		&& !!value.thread
 		&& (meta?.status === "open" || meta?.status === "reopened")
@@ -129,7 +174,14 @@ export function QuestionnaireCard(
 			content={evidence ?? null}
 			question={value.questions[0]?.prompt ?? "this decision"}
 		>
-			{content}
+			<div
+				aria-hidden={closing || undefined}
+				className={`decision-collapse ${presence.className}`}
+				data-decision-collapsing={closing ? presence.value : undefined}
+				inert={closing}
+			>
+				<div className={`min-h-0${closing ? " overflow-hidden" : ""}`}>{presented}</div>
+			</div>
 		</EvidenceHover>
 	);
 }
@@ -269,6 +321,73 @@ function previousAnswers(value: Questionnaire) {
 	return Object.keys(previous).length === 0 ? undefined : previous;
 }
 
+function labels(value: Questionnaire): string[] {
+	return value.questions.flatMap(question => {
+		let selected = question.choices?.flatMap(id => {
+			let option = question.options.find(candidate => candidate.id === id);
+			return option ? [option.label] : [];
+		});
+		return selected?.length ? selected : question.answer ? [question.answer] : [];
+	});
+}
+
+function SettledLine(
+	{ canEdit, connected, meta, value, wire }: {
+		canEdit: boolean;
+		connected: boolean;
+		meta?: Question.CardMeta;
+		value: Questionnaire;
+		wire?: Transport;
+	},
+) {
+	let owner = meta?.owner ?? value.by;
+	let chosen = labels(value);
+	let state = useQuestionnaire({
+		id: value.id,
+		bridge: wire,
+		connected: canEdit && connected,
+		definition: definition(value),
+	});
+	let [error, setError] = useState<string>();
+	let [reopening, setReopening] = useState(false);
+	let reopen = async () => {
+		setError(undefined);
+		setReopening(true);
+		let result = await state.reopen();
+		if (!result.ok) setError(result.message);
+		setReopening(false);
+	};
+	return (
+		<p
+			className="m-0 flex items-center gap-2 text-sm text-text-secondary"
+			data-card-settled=""
+			data-plan-sidecar-questionnaire={value.id}
+		>
+			<DecisionIcon aria-hidden="true" size={14} />
+			<span>
+				Decided: {chosen.length ? chosen.join(", ") : "Saved decision"}
+				{owner ? ` · @${owner}` : ""}
+			</span>
+			{meta?.origin === "conversation" && (
+				<span className="text-text-tertiary">
+					{meta.proseOrphaned ? " · prose removed" : "writing up…"}
+				</span>
+			)}
+			{meta?.proseOrphaned && (
+				<button
+					className="btn btn-sm btn-secondary ml-auto"
+					disabled={!canEdit || !connected || reopening}
+					onClick={() => void reopen()}
+					type="button"
+				>
+					Reopen
+				</button>
+			)}
+			{error && <span className="text-text-tertiary" role="alert">{error}</span>}
+		</p>
+	);
+}
+
 function Decided(
 	{ canEdit, connected, discarded, meta, resolved, value, wire, ...pointing }: {
 		canEdit: boolean;
@@ -356,6 +475,7 @@ function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 			connected={options.connected}
 			evidence={evidence}
 			motion={options.questionMotion}
+			motionImmediately={options.motionImmediately}
 			meta={meta}
 			onQuestionEnter={question => options.questions?.highlight(value.id, question)}
 			onQuestionLeave={() => options.questions?.clear()}

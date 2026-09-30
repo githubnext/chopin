@@ -1159,3 +1159,59 @@ the two PostgreSQL checks are skipped. Workspace/E2E types, CI, client build, fo
 whole-source/fixture/callback retention proofs and independent reader/host/CSS/metadata
 reviews pass. CI retains the two inherited lint warnings and existing design baseline.
 This is a reader checkpoint, not completion of the broader product extraction.
+
+## Answered-card collapse and protected deletion
+
+Inline answered cards now retain the original settled line until their prose is linked,
+then collapse without deleting the underlying document node. Discarded cards hide;
+authoritative open or reopened metadata wins over stale decided projections. Decisions
+uses the actual list presentation to keep its expanded cards. Current provenance,
+Cancel/Save answer controls, evidence, question steps and permission checks remain.
+Thirteen whole original registrations cover twenty cases, including the original list
+callback. Ten existing fixtures now explicitly select list presentation; their assertions
+remain unchanged. The original discarded-actor callback at archive line 301 remains
+whole and deferred: its contiguous raw HTML expectation conflicts with the current
+styled actor span. A native text assertion proves actor attribution but does not replace
+that original callback or claim its restoration.
+
+The four original deletion/navigation files are byte-identical to the archive and mount
+through two additive widget exports and plugin subscriptions. Decided nodes are protected
+against text and node deletion; Backspace beside a hidden linked card moves into its
+actual prose. Discarded navigation skips the hidden node at genuine text boundaries.
+The two original navigation callbacks and their helpers remain whole. This deletion
+behavior has no confirmation dialog or wire mutation. The reader's existing discard
+confirmation remains separately exercised.
+
+The original caret spacing, hidden-host, collapse and reduced-motion CSS is additive;
+all prior CSS survives source subtraction. The sole motion adaptation uses the current
+shared duration/easing tokens, retaining the original 200 ms duration and existing
+50 ms transition cleanup grace. One counted finite-presence class exception is added;
+the existing questionnaire exception changes only its source fingerprint. No other
+exception cases or reasons change.
+
+Eleven new native callbacks use the actual Lexical and Yjs binding, relative prose
+anchors, questionnaire renderer, stores, metadata and deletion/navigation plugins.
+They exercise hidden inline versus expanded list layout, timed inert collapse, reopened
+metadata, pending/error request fences, native Backspace and arrow keys, node/range
+deletion protection, read-only behavior, and discarded actor attribution. A reopened
+negative control permits deletion of the same stale decided node, proving that the
+guard does not simply block every deletion. Each case checks browser and Lexical errors.
+The isolated fixture fulfills one standards-mode secure local page and aborts every
+other request. Its controlled transport accepts only the exact known presence-release
+frame separately from terminal requests. It does not establish server durability,
+authentication or complete application collaboration; the eleven original application
+callbacks remain whole and deferred.
+
+Initial fixture failures exposed an incorrect list permission setup, the existing
+transition cleanup grace, and the real observer's presence-release frame. Native focus
+also legitimately scrolled linked prose out of view; a paint fence and real viewport
+restoration fix that test precondition. Production guards, geometry and timing were
+preserved. Whole-source, fixture and callback proofs pass after global formatting.
+
+Final offline verification passes 3,135 tests with 14,539 assertions across 518 files;
+the two PostgreSQL checks are skipped. The actual combined cached-Chromium runner
+passes all sixty isolated cases against freshly built styles, including all eleven
+new callbacks. Workspace/E2E types, CI, client build, formatting and whole-source
+retention proofs pass. Independent collapse and fixture reviews find no issues.
+CI retains only the two inherited lint warnings and existing design baseline.
+This is another bounded product checkpoint; the broader extraction remains unfinished.

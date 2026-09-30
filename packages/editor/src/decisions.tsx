@@ -160,6 +160,7 @@ export function Decisions(
 				else store.reveal(entry.id, question);
 			}}
 			places={store.counts(entry.id)}
+			presentation="list"
 			value={entry.value}
 			wire={wire}
 		/>

@@ -13,6 +13,7 @@ export default defineConfig({
 		"analysis-host.native.ts",
 		"analysis-host-retries.native.ts",
 		"decision-reader.native.ts",
+		"collapse-deletion.native.ts",
 	],
 	workers: 1,
 	fullyParallel: false,

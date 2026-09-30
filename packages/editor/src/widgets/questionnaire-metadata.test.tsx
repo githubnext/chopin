@@ -47,6 +47,7 @@ test("decided metadata prevents inputs before the answer projection arrives", ()
 
 test("discarded metadata attributes its resolver without retaining the old answer actor", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "list",
 		meta: { ...META, status: "discarded", resolver: "bea" },
 		value: { ...DECIDED, at: "2026-09-01T10:00:00.000Z" },
 	}));
@@ -59,6 +60,7 @@ test("discarded metadata attributes its resolver without retaining the old answe
 
 test("metadata with no terminal actor does not borrow the previous node's actor", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "list",
 		meta: { ...META, status: "discarded" },
 		value: DECIDED,
 	}));
@@ -68,6 +70,7 @@ test("metadata with no terminal actor does not borrow the previous node's actor"
 
 test("decided metadata attributes its recorded resolver instead of a stale node owner", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "list",
 		meta: { ...META, resolver: "bea", decidedAt: 1_000 },
 		value: DECIDED,
 	}));
@@ -77,13 +80,17 @@ test("decided metadata attributes its recorded resolver instead of a stale node 
 });
 
 test("document-only decided cards preserve current provenance", () => {
-	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, { value: DECIDED }));
+	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "list",
+		value: DECIDED,
+	}));
 	expect(markup).toContain("Answered by");
 	expect(markup).toContain("@ana");
 });
 
 test("chosen IDs determine resolved text while preserving the existing card layout", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "list",
 		value: { ...DECIDED, questions: [{ ...DECIDED.questions[0]!, answer: "Old summary" }] },
 	}));
 	expect(markup).toContain("GitHub Apps");

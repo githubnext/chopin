@@ -389,7 +389,7 @@
 				1
 			]
 		],
-		"sourceHash": "4000b8a44d8d1d94531d69ed719c7636ab57ca711607608463e31deb3b987477"
+		"sourceHash": "829d45119b386ee7c9a72e5f0605f8bc774aa5d6dc2e856535d84a8291d64fcf"
 	},
 	{
 		"file": "packages/editor/src/widgets/code-view.tsx",
@@ -467,5 +467,19 @@
 			]
 		],
 		"sourceHash": "493f006637b8323326cce2f802c57749f530b65ff51ee28515237de72061f317"
+	},
+	{
+		"file": "packages/editor/src/widgets/questionnaire.tsx",
+		"reason": "Finite shared transition-presence state classes control the inline card collapse; no caller classes, typography or paint values enter this boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"presence.className",
+				"class > QuestionnaireCard > <div>",
+				1
+			]
+		],
+		"sourceHash": "829d45119b386ee7c9a72e5f0605f8bc774aa5d6dc2e856535d84a8291d64fcf"
 	}
 ]

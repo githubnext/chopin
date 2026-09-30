@@ -29,6 +29,8 @@ export function register(): void {
 }
 
 export { CalloutPlugin } from "./callout";
+export { DecisionDeletionPlugin } from "./decision-deletion";
+export { DiscardedNavigationPlugin } from "./discarded-navigation";
 export { EnterPlugin } from "./enter";
 export { QuestionnaireCard } from "./questionnaire";
 export type { QuestionnaireCardProps } from "./questionnaire";

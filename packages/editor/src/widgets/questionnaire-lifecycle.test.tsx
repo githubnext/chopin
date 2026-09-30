@@ -9,6 +9,7 @@ let wire = { ask: async () => ({ ok: true }) } as never;
 
 test("terminal lifecycle actions require current edit permission and a connected wire", () => {
 	let editable = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "list",
 		canEdit: true,
 		connected: true,
 		meta: META,
@@ -26,6 +27,7 @@ test("terminal lifecycle actions require current edit permission and a connected
 		]
 	) {
 		let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
+			presentation: "list",
 			...permission,
 			meta: META,
 			value: DECIDED,
@@ -37,6 +39,7 @@ test("terminal lifecycle actions require current edit permission and a connected
 
 test("current metadata governs lifecycle actions despite a stale discarded projection", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "list",
 		canEdit: true,
 		connected: true,
 		meta: { ...META, resolver: "bea" },
@@ -52,6 +55,7 @@ test("current metadata governs lifecycle actions despite a stale discarded proje
 
 test("discarded metadata retires lifecycle actions and the old projection actor", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "list",
 		canEdit: true,
 		connected: true,
 		meta: { ...META, status: "discarded", resolver: "bea" },
@@ -68,6 +72,7 @@ test("discarded metadata retires lifecycle actions and the old projection actor"
 
 test("metadata arriving before answer projection shows a saved placeholder and permitted actions", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "list",
 		canEdit: true,
 		connected: true,
 		meta: META,
