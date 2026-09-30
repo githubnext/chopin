@@ -326,3 +326,96 @@ test("working and blocked runs are live, paused idle runs are paused, and finish
 	])).toEqual({ active: ["drafting", "asking"], paused: ["held"] });
 	expect(classifyRuns([])).toEqual({ active: [], paused: [] });
 });
+
+test("run cards fold lifecycle events into ordered stages, Decisions waits, and paused or finished status", async () => {
+	let { foldLifecycle, runCards } = await import("./full");
+	let cards = new Map();
+	let event = (target: object, at: number) =>
+		({
+			type: "workflow_lifecycle",
+			eventId: `e${at}`,
+			cursor: { epoch: "e", revision: at },
+			runId: "run-1",
+			rootRunId: "run-1",
+			ownerSessionId: "session",
+			occurredAt: at * 1000,
+			observedAt: at * 1000,
+			delivery: "live",
+			target,
+		}) as never;
+	foldLifecycle(
+		cards,
+		event({ kind: "run", runId: "run-1", status: "running" }, 100),
+		"plan-review",
+	);
+	foldLifecycle(
+		cards,
+		event(
+			{ kind: "stage", runId: "run-1", stageId: "a", stageName: "draft-1", status: "running" },
+			101,
+		),
+	);
+	foldLifecycle(
+		cards,
+		event({ kind: "prompt", runId: "run-1", stageId: "a", promptId: "p1", status: "opened" }, 160),
+	);
+	foldLifecycle(
+		cards,
+		event({
+			kind: "stage",
+			runId: "run-1",
+			stageId: "a",
+			stageName: "draft-1",
+			status: "awaiting_input",
+		}, 160),
+	);
+	let [waiting] = runCards(cards, { active: ["run-1"], paused: [] });
+	expect(waiting).toMatchObject({
+		id: "run-1",
+		name: "plan-review",
+		status: "waiting",
+		waiting: 1,
+		started: 100,
+		stages: [{ id: "run-1:a", name: "draft-1", status: "awaiting_input", started: 101 }],
+	});
+	expect(runCards(cards, { active: [], paused: ["run-1"] })[0]!.status).toBe("paused");
+	foldLifecycle(
+		cards,
+		event(
+			{ kind: "prompt", runId: "run-1", stageId: "a", promptId: "p1", status: "answered" },
+			200,
+		),
+	);
+	foldLifecycle(
+		cards,
+		event({
+			kind: "stage",
+			runId: "run-1",
+			stageId: "a",
+			stageName: "draft-1",
+			status: "completed",
+		}, 300),
+	);
+	foldLifecycle(
+		cards,
+		event({
+			kind: "stage",
+			runId: "run-1",
+			stageId: "b",
+			stageName: "reviewer-a-1",
+			status: "running",
+		}, 301),
+	);
+	let [running] = runCards(cards, { active: ["run-1"], paused: [] });
+	expect(running!.status).toBe("running");
+	expect(running!.waiting).toBe(0);
+	expect(running!.stages.map(stage => [stage.name, stage.status, stage.ended])).toEqual([
+		["draft-1", "completed", 300],
+		["reviewer-a-1", "running", undefined],
+	]);
+	foldLifecycle(cards, event({ kind: "run", runId: "run-1", status: "completed" }, 900));
+	expect(runCards(cards, { active: [], paused: [] })[0]).toMatchObject({
+		status: "finished",
+		ended: 900,
+	});
+});

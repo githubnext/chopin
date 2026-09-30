@@ -10,6 +10,7 @@ import {
 } from "@chopin/icons";
 
 import { DecisionCard, PlanStatus, SendAction, SidecarCard } from "@chopin/editor";
+import { RunCard } from "../chat/run-card";
 import { Transcript } from "../chat/transcript";
 import { TerminalAlert } from "../terminal-alert";
 import { AuditPlate, StateLabel } from "./frame";
@@ -213,6 +214,68 @@ function Conversation() {
 	);
 }
 
+const RUN_STAGES: Chat.RunStage[] = [
+	{ id: "r:preflight", name: "preflight", status: "completed", started: 1_000, ended: 1_002 },
+	{ id: "r:draft-1", name: "draft-1", status: "completed", started: 1_002, ended: 1_380 },
+	{ id: "r:reviewer-a-1", name: "reviewer-a-1", status: "completed", started: 1_380, ended: 1_620 },
+	{ id: "r:draft-2", name: "draft-2", status: "running", started: 1_620 },
+];
+
+function run(status: Chat.Run["status"], stages: Chat.RunStage[], waiting = 0): Chat.Run {
+	let ended = status === "finished" ? { ended: 2_100 } : {};
+	return {
+		id: `audit-${status}`,
+		name: "plan-review",
+		status,
+		started: 1_000,
+		updated: 2_100,
+		...ended,
+		stages,
+		waiting,
+	};
+}
+
+function WorkflowRuns() {
+	return (
+		<AuditPlate
+			description="A Planner-launched workflow: live stage, Decisions waits, pause, and the finished summary."
+			item="workflow-runs"
+			title="Workflow runs"
+		>
+			<div className="flex flex-col gap-2">
+				<StateLabel>Running</StateLabel>
+				<RunCard run={run("running", RUN_STAGES)} />
+				<StateLabel>Waiting</StateLabel>
+				<RunCard
+					onShowDecisions={() => {}}
+					run={run("waiting", [
+						...RUN_STAGES.slice(0, 3),
+						{ id: "r:draft-2", name: "draft-2", status: "awaiting_input", started: 1_620 },
+					], 2)}
+				/>
+				<StateLabel>Paused</StateLabel>
+				<RunCard
+					run={run("paused", [
+						...RUN_STAGES.slice(0, 3),
+						{ id: "r:draft-2", name: "draft-2", status: "paused", started: 1_620 },
+					])}
+				/>
+				<StateLabel>Finished</StateLabel>
+				<RunCard
+					run={run(
+						"finished",
+						RUN_STAGES.map(stage => ({
+							...stage,
+							status: "completed",
+							ended: stage.ended ?? 2_100,
+						})),
+					)}
+				/>
+			</div>
+		</AuditPlate>
+	);
+}
+
 function Decisions() {
 	return (
 		<>
@@ -394,6 +457,7 @@ export function Surfaces() {
 			<Lists />
 			<Navigation />
 			<Conversation />
+			<WorkflowRuns />
 			<IdentityAndCollaboration />
 			<Decisions />
 			<Feedback />
