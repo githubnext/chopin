@@ -170,14 +170,17 @@ missing-export checks failed before extraction, then passed. The table records t
 independent focused results on Bun 1.4.2; every slice also passed full workspace
 and E2E type checks, formatting and CI with the existing warnings listed above.
 
-| Slice                    | Preserved behavior and evidence                                                                                                                                                                         | Focused result                   |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| Stored identity          | Original `storedText()`/`identified()` and public export; IDs, order and raw strings survive without mutation. Normalisation and draft behavior stay current.                                           | 33 question tests, 99 assertions |
-| Contract and sources     | Complete archived `ConversationPlan` namespace, type export and `sources.ts`; exact UTF-16 spans, saved author/text identity and completed messages. Global wire unions and session flags stay current. | 6 source tests, 53 assertions    |
-| Quotes                   | Byte-identical parser/budget, all four original test bodies, plus explicit fifth-candidate rejection. Five exact development messages have source provenance.                                           | 5 tests, 20 assertions           |
-| Event/correction guards  | Original functions in bounded modules with an acyclic façade; all event and correction cases remain.                                                                                                    | 7 tests, 88 assertions           |
-| Research/snapshot guards | Completes the original validation façade. Root syntax-tree proof: all 17 original functions and six constants occur once and match.                                                                     | 12 tests, 81 assertions          |
-| Accepted-event replay    | All 21 original case bodies, support functions, opening/preamble and counters match source syntax trees; `preference.ts` is byte-identical. Routing covers each case once.                              | 9 tests, 51 assertions           |
+| Slice                      | Preserved behavior and evidence                                                                                                                                                                         | Focused result                   |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| Stored identity            | Original `storedText()`/`identified()` and public export; IDs, order and raw strings survive without mutation. Normalisation and draft behavior stay current.                                           | 33 question tests, 99 assertions |
+| Contract and sources       | Complete archived `ConversationPlan` namespace, type export and `sources.ts`; exact UTF-16 spans, saved author/text identity and completed messages. Global wire unions and session flags stay current. | 6 source tests, 53 assertions    |
+| Quotes                     | Byte-identical parser/budget, all four original test bodies, plus explicit fifth-candidate rejection. Five exact development messages have source provenance.                                           | 5 tests, 20 assertions           |
+| Event/correction guards    | Original functions in bounded modules with an acyclic façade; all event and correction cases remain.                                                                                                    | 7 tests, 88 assertions           |
+| Research/snapshot guards   | Completes the original validation façade. Root syntax-tree proof: all 17 original functions and six constants occur once and match.                                                                     | 12 tests, 81 assertions          |
+| Accepted-event replay      | All 21 original case bodies, support functions, opening/preamble and counters match source syntax trees; `preference.ts` is byte-identical. Routing covers each case once.                              | 9 tests, 51 assertions           |
+| Pure domain                | All 18 archived functions and 18 original test callbacks/helpers match source syntax trees. Small, acyclic modules retain the original 11 public APIs.                                                  | 18 tests, 58 assertions          |
+| Research-offer regressions | All 10 original tests and helper data match source syntax trees across three small suites; no production changes or eval imports.                                                                       | 10 tests, 72 assertions          |
+| Card and Save regressions  | All 17 original card tests and helpers match source syntax trees; four scoped Save tests are byte-identical. Card authority and exact support lineage remain unchanged.                                 | 21 tests, 71 assertions          |
 
 The combined guard/source/quote run passed 30 tests (242 assertions). Domain/replay
 checks passed 27 tests (109 assertions). The complete extracted foundation and
@@ -221,5 +224,6 @@ D02/m2, D03/m1 and D04/m5 messages with archive SHA, case, step and path. Root a
 reviewer verified text parity, apostrophes and UTF-16 offsets. The other six test
 adaptations remain pending.
 
-Next: the remaining pure card/Save regressions, then stable card definitions and
-records. Durable processing, Planner jobs and browser integration remain unimplemented.
+Next: stable card option growth and answer identifiers, then durable records. The
+remaining archived correction/review suites follow their dependencies. Durable
+processing, Planner jobs and browser integration remain unimplemented.
