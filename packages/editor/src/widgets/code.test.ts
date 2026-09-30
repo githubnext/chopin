@@ -9,7 +9,16 @@
 import { describe, expect, it } from "bun:test";
 import { DIFF_LANGUAGE, MERMAID_LANGUAGE } from "@chopin/dialect";
 
-import { fileNameOf, kindOf, languageOptions, LANGUAGES, repaired, titled, titleOf } from "./code";
+import {
+	describeDiagramError,
+	fileNameOf,
+	kindOf,
+	languageOptions,
+	LANGUAGES,
+	repaired,
+	titled,
+	titleOf,
+} from "./code";
 
 describe("what a fence is", () => {
 	it("tells the two rendered languages apart from ordinary code", () => {
@@ -214,5 +223,57 @@ describe("languageOptions", () => {
 		let options = languageOptions("brainfuck");
 		expect(options[1]).toEqual(["brainfuck", "brainfuck"]);
 		expect(options).toHaveLength(LANGUAGES.length + 2);
+	});
+});
+
+describe("describeDiagramError", () => {
+	it("drops the echoed source for an unknown diagram type", () => {
+		let result = describeDiagramError(
+			"No diagram type detected matching given configuration for text: nope\nmore",
+		);
+		expect(result).toEqual({
+			summary: "The diagram type is not recognised.",
+			excerpt: "",
+			expected: "",
+		});
+	});
+
+	it("splits a parse error into summary, excerpt and expectation", () => {
+		let result = describeDiagramError(
+			"Parse error on line 3:\n...a -> b\n-----^\nExpecting '+', '-', 'ACTOR', got 'NEWLINE'",
+		);
+		expect(result.summary).toBe("Parse error on line 3");
+		expect(result.excerpt).toBe("...a -> b\n-----^");
+		expect(result.expected).toBe("Expecting '+', '-', 'ACTOR', got 'NEWLINE'");
+	});
+
+	it("handles a parse error without a caret line", () => {
+		let result = describeDiagramError("Parse error on line 2:\nExpecting 'X'\nfoo");
+		expect(result).toEqual({
+			summary: "Parse error on line 2",
+			excerpt: "",
+			expected: "Expecting 'X' foo",
+		});
+	});
+
+	it("keeps a single-line message as the summary", () => {
+		expect(describeDiagramError("Something odd")).toEqual({
+			summary: "Something odd",
+			excerpt: "",
+			expected: "",
+		});
+	});
+
+	it("handles Windows line endings and a caret with no dashes", () => {
+		let result = describeDiagramError(
+			"Lexical error on line 2. Unrecognized text.\r\n...\r\nA -->\r\n^\r\nExpecting 'X', got 'Y'",
+		);
+		expect(result.summary).toBe("Lexical error on line 2. Unrecognized text.");
+		expect(result.excerpt).toBe("A -->\n^");
+		expect(result.expected).toBe("Expecting 'X', got 'Y'");
+	});
+
+	it("never renders an empty summary", () => {
+		expect(describeDiagramError("").summary).toBe("The diagram could not be parsed.");
 	});
 });
