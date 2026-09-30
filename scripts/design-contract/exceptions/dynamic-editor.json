@@ -403,7 +403,7 @@
 				1
 			]
 		],
-		"sourceHash": "3dcffe7814b9822e297e0e8e4449a2dcb3d01a0dcc10c8a634f50c3b81c3b526"
+		"sourceHash": "b9416648f69f9c460e69c83d164c7cacbd43b396d6e78e8cc4af30804d091d7d"
 	},
 	{
 		"file": "packages/editor/src/changes.ts",

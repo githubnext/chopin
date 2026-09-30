@@ -45,7 +45,7 @@ export function DeleteDocumentDialog(
 			onDismiss={dismiss}
 			title="Delete document permanently?"
 		>
-			<p className="mt-3 text-sm text-text-secondary">
+			<p className="mt-3 text-sm text-text-secondary [overflow-wrap:anywhere]">
 				<strong className="font-semibold text-text-primary">{channel.title}</strong>{" "}
 				will be permanently deleted. This cannot be undone.
 			</p>
