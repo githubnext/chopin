@@ -178,12 +178,15 @@ function Custom(
 ) {
 	let active = draft?.mode === "custom";
 	let textarea = useRef<HTMLTextAreaElement>(null);
+	let row = useRef<HTMLInputElement>(null);
 	let focusOnReveal = useRef(false);
+	let focusOnClose = useRef(false);
 
 	useEffect(() => {
-		if (!active || !focusOnReveal.current) return;
+		if (active && focusOnReveal.current) textarea.current?.focus();
+		else if (!active && focusOnClose.current) row.current?.focus();
 		focusOnReveal.current = false;
-		textarea.current?.focus();
+		focusOnClose.current = false;
 	}, [active]);
 
 	useEffect(() => {
@@ -215,6 +218,7 @@ function Custom(
 					checked={false}
 					disabled={disabled}
 					aria-label="Add an option"
+					ref={row}
 					onChange={() => {
 						focusOnReveal.current = true;
 						onChange?.({ mode: "custom" });
@@ -241,8 +245,11 @@ function Custom(
 				placeholder="Add an option"
 				onChange={event => onChange?.({ custom: event.currentTarget.value })}
 				onKeyDown={event => {
-					if (event.key === "Escape") onChange?.({ mode: "choices" });
-					else if (event.key === "Enter" && !event.shiftKey) {
+					if (event.key === "Escape") {
+						// Closing removes the focused field; hand focus back to its row.
+						focusOnClose.current = true;
+						onChange?.({ mode: "choices" });
+					} else if (event.key === "Enter" && !event.shiftKey) {
 						event.preventDefault();
 						event.currentTarget.blur();
 					}

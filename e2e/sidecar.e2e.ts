@@ -650,6 +650,11 @@ test("decision cards save independently with progressive custom answers", async 
 	await expect(custom).toBeFocused();
 	let saveScope = scope.getByRole("button", { name: "Save", exact: true });
 	await expect(saveScope).toBeDisabled();
+	await custom.press("Escape");
+	await expect(custom).toHaveCount(0);
+	await expect(customChoice).toBeFocused();
+	await customChoice.press("Space");
+	await expect(custom).toBeFocused();
 	await custom.fill("Only collaborative anchors");
 	await scope.getByRole("checkbox", { name: "Anchors" }).check();
 	await expect(custom).toHaveCount(0);
