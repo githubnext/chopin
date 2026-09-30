@@ -1586,6 +1586,7 @@
 .plan-content .planCode {
 	display: flex;
 	flex-direction: column;
+	margin-block: 1em;
 	overflow: hidden;
 	border: var(--edge-width) solid var(--color-edge);
 	border-radius: var(--radius-lg);
