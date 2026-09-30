@@ -523,9 +523,13 @@ export function QuestionView(props: QuestionViewProps) {
 							onQuestionFocus?.(current.id);
 						}}
 						onBlurCapture={event => {
-							if (event.currentTarget.contains(event.relatedTarget)) return;
+							if (event.currentTarget.contains(event.relatedTarget)) {
+								return;
+							}
 							onQuestionFocus?.(undefined);
-							if (!event.currentTarget.matches(":hover")) onQuestionLeave?.(current.id);
+							if (!event.currentTarget.matches(":hover")) {
+								onQuestionLeave?.(current.id);
+							}
 						}}
 					>
 						<header className="question-head">
@@ -562,7 +566,8 @@ export function QuestionView(props: QuestionViewProps) {
 								draft={drafts[current.id]}
 								disabled={disabled}
 								name={`${base}-${current.id}`}
-								onChange={change => onChange?.(current.id, change)}
+								onChange={change =>
+									onChange?.(current.id, change)}
 							/>
 							<Custom
 								question={current}
