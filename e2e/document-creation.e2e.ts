@@ -1,5 +1,5 @@
 import { authenticate, expect, test } from "./room";
-import { createChannel } from "./database";
+import { createChannel, testChannelPath } from "./database";
 
 import type { Page } from "@playwright/test";
 import type { ChannelDetail } from "../apps/web/src/api";
@@ -406,3 +406,38 @@ for (let returnToOrigin of [false, true]) {
 			.toHaveAttribute("aria-current", "page");
 	});
 }
+
+test("canonicalizing the current document does not cancel a pending creation", async ({ baseURL, page }) => {
+	let id = crypto.randomUUID();
+	await createChannel(Number(new URL(baseURL!).port), id);
+	await authenticate(page, `creator-${crypto.randomUUID()}`, baseURL!);
+	await page.request.post("/api/navigation/projects", {
+		data: { owner: "octo-org", repository: "score" },
+		headers: { origin: baseURL! },
+	});
+	let reading = Promise.withResolvers<void>();
+	let releaseRead = Promise.withResolvers<void>();
+	let posted = Promise.withResolvers<ChannelDetail>();
+	let releasePost = Promise.withResolvers<void>();
+	await page.route(`**/api/channels/${id}`, async route => {
+		reading.resolve();
+		await releaseRead.promise;
+		await route.continue();
+	});
+	await page.route("**/api/repositories/octo-org/score/channels", async route => {
+		if (route.request().method() !== "POST") return route.fallback();
+		let response = await route.fetch();
+		posted.resolve(await response.json());
+		await releasePost.promise;
+		await route.fulfill({ response });
+	});
+
+	await page.goto(`/channels/${id}`);
+	await reading.promise;
+	await page.getByRole("button", { name: "New document in score", exact: true }).click();
+	let created = await posted.promise;
+	releaseRead.resolve();
+	await expect(page).toHaveURL(testChannelPath(id));
+	releasePost.resolve();
+	await expect(page).toHaveURL(`/documents/octo-org/score/${created.channel.slug}`);
+});

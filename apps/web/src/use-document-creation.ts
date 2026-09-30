@@ -13,8 +13,9 @@ type Attempt = {
 };
 
 export function useDocumentCreation(
-	{ routeKey, onCreated, onNavigate, onAccessChanged }: {
+	{ routeKey, navigationRevision, onCreated, onNavigate, onAccessChanged }: {
 		routeKey: string;
+		navigationRevision: number;
 		onCreated: (channel: Api.Channel) => void;
 		onNavigate: (documentId: string, path: string) => void;
 		onAccessChanged: () => void;
@@ -24,8 +25,11 @@ export function useDocumentCreation(
 	let [pending, setPending] = useState<ReadonlyMap<string, DocumentCreationPhase>>(() => new Map());
 	let [error, setError] = useState<{ project: Api.NavigationProject; message: string }>();
 	let latest = useRef<Attempt | undefined>(undefined);
-	let location = useRef({ routeKey });
-	if (location.current.routeKey !== routeKey) location.current = { routeKey };
+	// Canonicalizing the same document changes its route key without a navigation.
+	let location = useRef({ routeKey, navigationRevision });
+	if (location.current.navigationRevision !== navigationRevision) {
+		location.current = { routeKey, navigationRevision };
+	} else location.current.routeKey = routeKey;
 	let publish = useCallback(() => {
 		setPending(new Map([...attempts.current].map(([id, attempt]) => [id, attempt.phase])));
 	}, []);
@@ -37,7 +41,7 @@ export function useDocumentCreation(
 
 	useEffect(() => () => {
 		latest.current = undefined;
-		location.current = { routeKey: "" };
+		location.current = { routeKey: "", navigationRevision: -1 };
 	}, []);
 
 	useEffect(() => {

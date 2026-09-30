@@ -63,7 +63,7 @@ test("organization admission rejects outsiders and pending members", async ({ ba
 });
 
 test("an authenticated user adds a Project and creates its first document", async ({ baseURL, page }) => {
-	await authenticate(page, "project-creator", baseURL!);
+	await authenticate(page, `project-creator-${crypto.randomUUID()}`, baseURL!);
 	await page.goto("/");
 
 	let dialog = addProjectDialog(page);
