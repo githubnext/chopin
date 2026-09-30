@@ -7,11 +7,16 @@
 
 export const MAX_QUESTIONS = 10;
 export const MAX_OPTIONS = 20;
+/** The most options a question may hold once members start appending their own. */
+export const MAX_SHARED_OPTIONS = 10;
 export const MAX_HEADER = 80;
 export const MAX_QUESTION = 1_000;
 export const MAX_LABEL = 200;
 export const MAX_DESCRIPTION = 1_000;
 export const MAX_CUSTOM = 4_000;
+
+/** Longest idempotency key for appending an option. */
+export const MAX_KEY = 64;
 
 /** One collaborative edit to the shared draft. */
 export const MAX_PATCH_BYTES = 64 * 1024;

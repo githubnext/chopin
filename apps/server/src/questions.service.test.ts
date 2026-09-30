@@ -286,3 +286,157 @@ test("an active implementation refuses to create a questionnaire", async () => {
 	expect(plan.records.size).toBe(0);
 	expect(room.project(plan.document)).not.toContain("<Questionnaire");
 });
+
+function member(handle = "ana") {
+	let sent: Array<Record<string, unknown>> = [];
+	let ws = {
+		data: { handle, client: `client-${handle}`, room: "test" },
+		send(raw: string) {
+			sent.push(JSON.parse(raw));
+		},
+	} as unknown as Socket;
+	return { ws, sent };
+}
+
+function adding(
+	plan: Plan,
+	server: Server<SocketData>,
+	ws: Socket,
+	id: string,
+	label: string,
+	key = "key-0000-0001",
+) {
+	let question = plan.records.get(id)!.definition.questions[0].id;
+	return Questions.addOption(plan, server, "test", ws, {
+		kind: "question:option",
+		ts: 0,
+		rid: `rid-${key}-${label}`,
+		id,
+		question,
+		key,
+		label,
+	});
+}
+
+test("an appended option is durable in the record, draft store and plan before anyone hears of it", async () => {
+	let plan = await opened();
+	let published: Array<{ kind: string }> = [];
+	let server = {
+		publish(_topic: string, raw: string) {
+			published.push(JSON.parse(raw));
+		},
+	} as unknown as Server<SocketData>;
+	let asked = asking(plan, server, definition());
+	await asked.created;
+	let id = [...plan.records.keys()][0]!;
+	published.length = 0;
+	let { ws, sent } = member();
+
+	await adding(plan, server, ws, id, "  A third way ");
+
+	let reply = sent.at(-1) as { ok: boolean; option: { id: string; label: string } };
+	expect(reply.ok).toBe(true);
+	expect(reply.option.label).toBe("A third way");
+	let item = plan.records.get(id)!.definition.questions[0];
+	let options = item.options;
+	expect(options.map(option => option.label)).toEqual(["Choose this", "A third way"]);
+	expect(Store.get(plan.questions, id)!.definition.questions[0].options).toEqual(options);
+	expect(room.project(plan.document)).toContain("A third way");
+	// Committed, not merely applied in memory.
+	expect(plan.persistence.lastSidecar).toContain("A third way");
+	expect(published.map(frame => frame.kind)).toEqual(["plan:update", "question:option-added"]);
+
+	// Everyone can choose it and the decision reads as the new label.
+	let snapshot = Store.snapshot(plan.questions, id);
+	if (!snapshot.open) throw new Error("not open");
+	let model = Question.crdt.Model.fromBinary(new Uint8Array(snapshot.model))
+		.fork() as unknown as Question.Model;
+	model.api.val([item.id, "choice"]).set(reply.option.id);
+	let edited = Store.edit(plan.questions, id, [...model.api.flush().toBinary()]);
+	if (!edited.open || !edited.accepted) throw new Error("could not choose the option");
+	let claimed = Store.claimSubmit(plan.questions, id, edited.revision, "ana");
+	if (!claimed.ok) throw new Error("could not claim");
+	expect(claimed.answers).toEqual([{ question: item.question, choices: ["A third way"] }]);
+	Store.commit(plan.questions, claimed.claim);
+	await asked.waiting;
+});
+
+test("repeating an option request with the same key returns the same option", async () => {
+	let plan = await opened();
+	let server = { publish() {} } as unknown as Server<SocketData>;
+	let asked = asking(plan, server, definition());
+	await asked.created;
+	let id = [...plan.records.keys()][0]!;
+	let { ws, sent } = member();
+
+	await adding(plan, server, ws, id, "Once");
+	let revision = plan.revision;
+	await adding(plan, server, ws, id, "Once");
+
+	let [first, second] = sent as Array<{ ok: boolean; option: { id: string }; repeated?: boolean }>;
+	expect(second!.option.id).toBe(first!.option.id);
+	expect(second!.repeated).toBe(true);
+	expect(plan.records.get(id)!.definition.questions[0].options).toHaveLength(2);
+	expect(plan.revision).toBe(revision);
+});
+
+test("an option is refused for duplicates, bounds, settled questions and active implementations", async () => {
+	let plan = await opened();
+	let server = { publish() {} } as unknown as Server<SocketData>;
+	let asked = asking(plan, server, definition());
+	await asked.created;
+	let id = [...plan.records.keys()][0]!;
+	let { ws, sent } = member();
+	let last = () => sent.at(-1) as { ok: boolean; reason?: string };
+
+	await adding(plan, server, ws, id, "choose THIS", "key-0000-0002");
+	expect(last()).toMatchObject({ ok: false, reason: "duplicate" });
+	await adding(plan, server, ws, id, "   ", "key-0000-0003");
+	expect(last()).toMatchObject({ ok: false, reason: "invalid" });
+	await adding(plan, server, ws, id, "ok", "no");
+	expect(last()).toMatchObject({ ok: false, reason: "invalid" });
+	expect(plan.records.get(id)!.definition.questions[0].options).toHaveLength(1);
+
+	plan.execution = { id: "run-1" } as never;
+	await adding(plan, server, ws, id, "Blocked", "key-0000-0004");
+	expect(last()).toMatchObject({ ok: false, reason: "implementation" });
+	plan.execution = undefined;
+
+	for (let index = 0; index < Question.limits.MAX_SHARED_OPTIONS - 1; index++) {
+		await adding(plan, server, ws, id, `Extra ${index}`, `key-fill-${index}0000`);
+		expect(last().ok).toBe(true);
+	}
+	await adding(plan, server, ws, id, "Overflow", "key-0000-0005");
+	expect(last()).toMatchObject({ ok: false, reason: "full" });
+
+	let claimed = Store.claimCancel(plan.questions, id, "ana");
+	if (!claimed.ok) throw new Error("could not claim");
+	await adding(plan, server, ws, id, "During", "key-0000-0006");
+	expect(last()).toMatchObject({ ok: false, reason: "resolving" });
+	Store.commit(plan.questions, claimed.claim);
+	await adding(plan, server, ws, id, "After", "key-0000-0007");
+	expect(last()).toMatchObject({ ok: false, reason: "resolved" });
+	await asked.waiting;
+});
+
+test("a redefined open question survives dump and restore with its older draft", async () => {
+	let plan = await opened();
+	let server = { publish() {} } as unknown as Server<SocketData>;
+	let asked = asking(plan, server, definition());
+	await asked.created;
+	let id = [...plan.records.keys()][0]!;
+	let { ws } = member();
+	await adding(plan, server, ws, id, "Restored");
+
+	let restored = Store.restore(JSON.parse(JSON.stringify(Store.dump(plan.questions))));
+	let entry = Store.get(restored, id)!;
+	expect(entry.definition.questions[0].options.map(option => option.label)).toEqual([
+		"Choose this",
+		"Restored",
+	]);
+	expect(Question.read(entry.model, entry.definition)).toBeDefined();
+	Store.shutdown(restored);
+	let claimed = Store.claimCancel(plan.questions, id, "ana");
+	if (claimed.ok) Store.commit(plan.questions, claimed.claim);
+	await asked.waiting;
+});

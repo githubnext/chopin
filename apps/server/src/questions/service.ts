@@ -75,6 +75,11 @@ export type Record = {
 	at?: number;
 	/** Where in the prose each of its decisions lives. */
 	anchors?: Wired.WidgetAnchors;
+	/**
+	 * Option-append idempotency keys to the option each created. Bounded by the
+	 * option limit, and durable so a retry after a restart still finds it.
+	 */
+	appended?: { [key: string]: string };
 };
 
 function decide(
@@ -334,6 +339,161 @@ export async function submit(
 		resolver: ws.data.handle,
 		answers: claimed.answers,
 	});
+}
+
+const ADD_OPTION_REFUSAL: { [reason in "resolved" | "resolving"]: string } = {
+	resolved: "This question has already been decided",
+	resolving: "This question is being decided",
+};
+
+/**
+ * Append an option to an open question, for everyone.
+ *
+ * Ordering follows the rest of this module: the record, the open entry and the
+ * plan projection change together under the plan's exclusive queue, the fenced
+ * commit happens, and only then does anyone hear about it. The shared draft is
+ * not touched, so nothing another member has already chosen can change.
+ */
+export async function addOption(
+	plan: Plan,
+	server: Server<SocketData>,
+	roomId: string,
+	ws: Socket,
+	msg: Request<Wire.AddOption.Ask>,
+): Promise<void> {
+	let refuse = (reason: Wire.AddOption.Refusal, message: string) =>
+		reply(ws, msg.rid, {
+			kind: "question:option",
+			ts: 0,
+			id: msg.id,
+			ok: false,
+			reason,
+			message,
+		});
+	if (Service.implementationActive(plan)) {
+		return refuse("implementation", "An implementation is running; decisions cannot change");
+	}
+
+	let outcome: Wire.AddOption.Reply | undefined;
+	let added: Wire.OptionAdded | undefined;
+	await Service.exclusive(plan, async () => {
+		let record = plan.records.get(msg.id);
+		let entry = Store.get(plan.questions, msg.id);
+		if (!record || !entry || record.status !== "open") {
+			outcome = {
+				kind: "question:option",
+				ts: 0,
+				id: msg.id,
+				ok: false,
+				reason: "resolved",
+				message: ADD_OPTION_REFUSAL.resolved,
+			};
+			return;
+		}
+		let applied = typeof msg.key === "string" && Object.hasOwn(record.appended ?? {}, msg.key)
+			? record.appended![msg.key]
+			: undefined;
+		let existing = applied
+			? entry.definition.questions[0].options.find(option => option.id === applied)
+			: undefined;
+		if (existing) {
+			outcome = {
+				kind: "question:option",
+				ts: 0,
+				id: msg.id,
+				ok: true,
+				option: existing,
+				definition: entry.definition,
+				repeated: true,
+			};
+			return;
+		}
+		if (entry.claim) {
+			outcome = {
+				kind: "question:option",
+				ts: 0,
+				id: msg.id,
+				ok: false,
+				reason: "resolving",
+				message: ADD_OPTION_REFUSAL.resolving,
+			};
+			return;
+		}
+
+		let result = Question.appendOption(entry.definition, {
+			question: msg.question,
+			key: msg.key,
+			label: msg.label,
+			...(msg.description === undefined ? {} : { description: msg.description }),
+		}, ulid());
+		if (!result.ok) {
+			outcome = {
+				kind: "question:option",
+				ts: 0,
+				id: msg.id,
+				ok: false,
+				reason: result.reason,
+				message: result.message,
+			};
+			return;
+		}
+
+		let previous = { record, definition: entry.definition };
+		let mutation: room.Mutation | undefined;
+		try {
+			mutation = room.appendQuestionOption(plan.document, msg.id, msg.question, result.option);
+		} catch (err) {
+			console.error("[questions] could not add the option to the plan:", err);
+			outcome = {
+				kind: "question:option",
+				ts: 0,
+				id: msg.id,
+				ok: false,
+				reason: "invalid",
+				message: "Could not add the option",
+			};
+			return;
+		}
+		plan.records.set(msg.id, {
+			...record,
+			definition: result.definition,
+			appended: { ...record.appended, [msg.key]: result.option.id },
+		});
+		Store.redefine(plan.questions, msg.id, result.definition);
+		try {
+			if (mutation) await Service.publish(plan, server, roomId, mutation);
+			else await Service.persistExclusive(plan);
+		} catch (err) {
+			plan.records.set(msg.id, previous.record);
+			Store.restoreDefinition(plan.questions, msg.id, previous.definition);
+			throw err;
+		}
+		outcome = {
+			kind: "question:option",
+			ts: 0,
+			id: msg.id,
+			ok: true,
+			option: result.option,
+			definition: result.definition,
+		};
+		added = {
+			kind: "question:option-added",
+			ts: 0,
+			id: msg.id,
+			question: msg.question,
+			option: result.option,
+			definition: result.definition,
+			by: ws.data.handle,
+		};
+	}).catch(err => {
+		console.error("[questions] could not save the option:", err);
+		outcome = undefined;
+		added = undefined;
+	});
+
+	if (!outcome) return fail(ws, msg.rid, "could not save the option");
+	reply(ws, msg.rid, outcome);
+	if (added) broadcast(server, roomId, added);
 }
 
 /**
