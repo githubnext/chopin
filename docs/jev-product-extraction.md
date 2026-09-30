@@ -199,6 +199,7 @@ and E2E type checks, formatting and CI with the existing warnings listed above.
 | Candidate factories/verification | Exact source/base declarations and eight early verification/condition statements retain capture timing and handled skips. Active-local working reads, valid deferred-domain histories, partial resume writes and cached spike labels are covered.                       | 266 conversation tests, 1,288 assertions  |
 | Scoped and new-choice handlers   | All seven original statements preserve order, with exactly five handled skips. Scoped captures and labels, replay-valid histories, active-local factories, staged version overrides and partial push failures are covered.                                              | 293 conversation tests, 1,484 assertions  |
 | Withdrawal, agreement, question  | Three exact ordinary-role consequent bodies preserve statement order and three handled skips. Captured withdrawal ownership, current effective pending, raw option answers, question thresholds and target assignment before/after factory evaluation are covered.      | 316 conversation tests, 1,629 assertions  |
+| Contribution proposals           | Eight exact consequent statements preserve order and four handled skips. Fresh card lookups, captured contribution/pending targets, role-specific quote filters, duplicate exemption, relation omission and construction timing are covered.                            | 343 conversation tests, 1,821 assertions  |
 
 The combined guard/source/quote run passed 30 tests (242 assertions). Domain/replay
 checks passed 27 tests (109 assertions). The complete extracted foundation and
@@ -342,7 +343,20 @@ Live snapshots preserve target/proposal write timing even when event constructio
 throws. Saved discard and settlement histories replay; no event is applied by these
 handlers. Remaining original full-policy callbacks stay assigned whole.
 
-Next: contribution, stance and resolution proposals and later dispatch. Preserve shared
+Contribution proposals retain eight whole statements and four handled skips. The
+handler is called only for its captured option, reason or constraint role. Nineteen
+progressions and six handled skips match the stopped archived role chain; five
+synthetic capture/group controls and separate base, source and quoted-text construction
+failures are counted separately. Tests distinguish fresh card-map lookups from captured
+thread contributions and pending qualification. Existing card names require the
+original card identity and unique-name match, and the duplicate threshold retains its
+option-group exemption. Valid histories and proposed contributions replay. Unknown
+relations are omitted, and unsafe quote filters remain limited to option proposals.
+These handlers apply no event; the original no-proposal guard, application and loop
+cap remain assigned to later slices. Original full-policy callbacks remain assigned
+whole.
+
+Next: stance and resolution proposals and later dispatch. Preserve shared
 candidate state, local capture timing, continuation and event-limit checks, and
 partial events retained after follow-up failure. Keep the original public interface
 and compare original offline fixtures before publishing the dispatcher.
