@@ -1,0 +1,224 @@
+{
+	"wide": [
+		{
+			"approvedRole": "audit source-path label",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"section[data-audit-item=\"code\"] > header > .design-audit-source"
+				],
+				"html": "<code class=\"design-audit-source\">packages/editor/src/widgets/code-view.tsx</code>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "original pierre-light syntax token",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					[
+						"div[data-plan-language=\"typescript\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"span:nth-child(3)"
+					]
+				],
+				"html": "<span style=\"color:#D5901C\"> spacing</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 2.68 (foreground color: #d5901c, background color: #ffffff, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "original pierre-light syntax token",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					[
+						"div[data-plan-language=\"typescript\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"span:nth-child(6)"
+					]
+				],
+				"html": "<span style=\"color:#D47628\"> compact</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 3.27 (foreground color: #d47628, background color: #ffffff, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "original pierre-light syntax token",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					[
+						"div[data-plan-language=\"typescript\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"span:nth-child(10)"
+					]
+				],
+				"html": "<span style=\"color:#D47628\"> comfortable</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 3.27 (foreground color: #d47628, background color: #ffffff, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "original pierre-light syntax token",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					[
+						"div[data-plan-language=\"typescript\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"span:nth-child(12)"
+					]
+				],
+				"html": "<span style=\"color:#1CA1C7\"> 12</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 3.01 (foreground color: #1ca1c7, background color: #ffffff, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "original pierre-light syntax token",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					[
+						"div[data-plan-language=\"css\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"span:nth-child(2)"
+					]
+				],
+				"html": "<span style=\"color:#18A46C\">button</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 3.19 (foreground color: #18a46c, background color: #ffffff, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "original pierre-light syntax token",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					[
+						"div[data-plan-language=\"css\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"span:nth-child(4)"
+					]
+				],
+				"html": "<span style=\"color:#08C0EF\"> padding-inline</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 2.14 (foreground color: #08c0ef, background color: #ffffff, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "original pierre-light syntax token",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					[
+						"div[data-plan-language=\"css\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"span:nth-child(8)"
+					]
+				],
+				"html": "<span style=\"color:#D47628\">--space-3</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 3.27 (foreground color: #d47628, background color: #ffffff, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		}
+	],
+	"narrow": [
+		{
+			"approvedRole": "audit source-path label",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					"section[data-audit-item=\"code\"] > header > .design-audit-source"
+				],
+				"html": "<code class=\"design-audit-source\">packages/editor/src/widgets/code-view.tsx</code>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "original pierre-light syntax token",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					[
+						"div[data-plan-language=\"typescript\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"span:nth-child(3)"
+					]
+				],
+				"html": "<span style=\"color:#D5901C\"> spacing</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 2.68 (foreground color: #d5901c, background color: #ffffff, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "original pierre-light syntax token",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					[
+						"div[data-plan-language=\"typescript\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"span:nth-child(6)"
+					]
+				],
+				"html": "<span style=\"color:#D47628\"> compact</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 3.27 (foreground color: #d47628, background color: #ffffff, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "original pierre-light syntax token",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					[
+						"div[data-plan-language=\"typescript\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"span:nth-child(10)"
+					]
+				],
+				"html": "<span style=\"color:#D47628\"> comfortable</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 3.27 (foreground color: #d47628, background color: #ffffff, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "original pierre-light syntax token",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					[
+						"div[data-plan-language=\"typescript\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"span:nth-child(12)"
+					]
+				],
+				"html": "<span style=\"color:#1CA1C7\"> 12</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 3.01 (foreground color: #1ca1c7, background color: #ffffff, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "original pierre-light syntax token",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					[
+						"div[data-plan-language=\"css\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"span:nth-child(2)"
+					]
+				],
+				"html": "<span style=\"color:#18A46C\">button</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 3.19 (foreground color: #18a46c, background color: #ffffff, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "original pierre-light syntax token",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					[
+						"div[data-plan-language=\"css\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"span:nth-child(4)"
+					]
+				],
+				"html": "<span style=\"color:#08C0EF\"> padding-inline</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 2.14 (foreground color: #08c0ef, background color: #ffffff, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		},
+		{
+			"approvedRole": "original pierre-light syntax token",
+			"finding": {
+				"rule": "color-contrast",
+				"target": [
+					[
+						"div[data-plan-language=\"css\"] > div[data-plan-preview=\"\"] > .plan-code-view[aria-label=\"Code preview\"][role=\"group\"] > diffs-container",
+						"span:nth-child(8)"
+					]
+				],
+				"html": "<span style=\"color:#D47628\">--space-3</span>",
+				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 3.27 (foreground color: #d47628, background color: #ffffff, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
+			}
+		}
+	]
+}

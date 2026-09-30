@@ -131,6 +131,12 @@ export const AUDIT_INVENTORY: readonly AuditGroup[] = [
 		label: "Application surfaces",
 		items: [
 			{
+				id: "interactive-document-actions",
+				label: "Interactive document actions",
+				source: "apps/web/src/design-audit/interactive.tsx",
+				states: ["closed", "menu-open", "dialog-open", "error", "archived"],
+			},
+			{
 				id: "dialogs",
 				label: "Dialogs",
 				source: "apps/web/src/navigation-dialog.tsx",

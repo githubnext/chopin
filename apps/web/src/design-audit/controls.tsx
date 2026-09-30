@@ -46,11 +46,11 @@ export function Controls() {
 				title="Buttons"
 			>
 				<div className="design-audit-button-families">
-					<div>
+					<div data-audit-sample="primary">
 						<h4>Primary</h4>
 						<ButtonRow className="btn-primary" label="Create document" />
 					</div>
-					<div>
+					<div data-audit-sample="secondary">
 						<h4>Secondary</h4>
 						<ButtonRow className="btn-secondary" label="Cancel" />
 					</div>
@@ -58,15 +58,15 @@ export function Controls() {
 						<h4>Outline</h4>
 						<ButtonRow className="btn-outline" label="Retry" />
 					</div>
-					<div>
+					<div data-audit-sample="ghost">
 						<h4>Ghost</h4>
 						<ButtonRow className="btn-ghost" label="Learn more" />
 					</div>
-					<div>
+					<div data-audit-sample="destructive">
 						<h4>Destructive</h4>
 						<ButtonRow className="btn-destructive" label="Delete document" />
 					</div>
-					<div className="design-audit-button-sizes">
+					<div className="design-audit-button-sizes" data-audit-sample="sizes">
 						<StateSample state="Medium · 32px high · 12px sides">
 							<button className="btn btn-md btn-primary" type="button">Medium</button>
 						</StateSample>

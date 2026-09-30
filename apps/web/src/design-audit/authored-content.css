@@ -86,7 +86,7 @@
 	text-align: left;
 }
 
-.design-audit-table-states td[aria-selected="true"] {
+.design-audit-table-states td[data-selected="true"] {
 	background: var(--color-selected);
 	outline: var(--focus-ring-width) solid var(--focus-ring-color);
 	outline-offset: calc(-1 * var(--focus-ring-width));

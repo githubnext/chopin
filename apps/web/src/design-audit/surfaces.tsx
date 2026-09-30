@@ -38,7 +38,7 @@ let CHAT_ENTRIES: Chat.Entry[] = [
 function DialogSpecimens() {
 	return (
 		<AuditPlate
-			description="The shared shell shown with ordinary, destructive, busy, and error content."
+			description="Inline visual examples of ordinary, destructive, busy, and error dialog content."
 			item="dialogs"
 			title="Dialogs"
 		>
@@ -47,9 +47,8 @@ function DialogSpecimens() {
 					<StateLabel>Open</StateLabel>
 					<div
 						aria-labelledby="audit-rename-title"
-						aria-modal="true"
 						className="design-audit-dialog"
-						role="dialog"
+						role="group"
 					>
 						<h4 id="audit-rename-title">Rename document</h4>
 						<label>
@@ -65,9 +64,8 @@ function DialogSpecimens() {
 					<StateLabel>Destructive + error</StateLabel>
 					<div
 						aria-labelledby="audit-delete-title"
-						aria-modal="true"
 						className="design-audit-dialog"
-						role="dialog"
+						role="group"
 					>
 						<h4 id="audit-delete-title">Delete document permanently?</h4>
 						<p>
@@ -88,9 +86,8 @@ function DialogSpecimens() {
 					<div
 						aria-busy="true"
 						aria-labelledby="audit-busy-title"
-						aria-modal="true"
 						className="design-audit-dialog"
-						role="dialog"
+						role="group"
 					>
 						<h4 id="audit-busy-title">Rename document</h4>
 						<label>
