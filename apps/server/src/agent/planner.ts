@@ -252,7 +252,8 @@ repository tools read.`
 		: `Your working directory, ${workspace.cwd}, is a scratch directory Chopin created
 empty for this document. It is not a checkout and holds no repository files, so read
 ${repository} through the repository tools.`;
-	let questions = `\`ask_user_question\` and \`workflow\` questions appear to the document's members as
+	let questions =
+		`\`ask_user_question\` and \`workflow\` questions appear to the document's members as
 Decisions. If one expires unanswered, proceed on your best judgement and say what you assumed.`;
 	return [PROMPT, reading, place, questions, bootstrap].filter(Boolean).join("\n\n");
 }
