@@ -746,46 +746,34 @@ test("a rejected save is announced as an alert with motion feedback", async ({ j
 
 test("people on a decision are faces with verbatim handle tooltips", async ({ join, seed }) => {
 	await seed(PROSE);
-	let page = await join("ana");
-	// Peers' presence frames are injected: no client sends question focus yet.
-	let send: ((frame: Record<string, unknown>) => void) | undefined;
-	let question: string | undefined;
-	await page.routeWebSocket("**/ws?**", route => {
-		let server = route.connectToServer();
-		send = frame => route.send(JSON.stringify(frame));
-		route.onMessage(message => server.send(message));
-		server.onMessage(message => {
-			route.send(message);
-			if (typeof message !== "string") return;
-			let frame = JSON.parse(message) as {
-				kind?: string;
-				definition?: { questions: { id: string; question: string }[] };
-			};
-			let first = frame.definition?.questions[0];
-			if (first?.question === "Where should room state live?") question = first.id;
-		});
-	});
-	await page.reload();
-	await page.getByRole("button", { name: /^Decisions/ }).click();
-	let card = questionnaire(page).filter({
-		has: page.getByRole("heading", { name: "Where should room state live?" }),
-	});
-	await expect(card).toBeVisible();
-	await expect.poll(() => question).toBeTruthy();
-	let id = await card.getAttribute("data-plan-sidecar-questionnaire");
+	let title = "Where should room state live?";
+	let open = async (handle: string) => {
+		let page = await join(handle);
+		await page.getByRole("button", { name: /^Decisions/ }).click();
+		let card = questionnaire(page).filter({ has: page.getByRole("heading", { name: title }) });
+		await expect(card).toBeVisible();
+		return { page, card };
+	};
+	let ana = await open("ana");
+	let people = ana.card.getByRole("group", { name: /^Editing this question/ });
+	await expect(people).toHaveCount(0);
 
-	// Four peers on the same question: three faces and a "+1".
+	// Four real peers work on the same question, one after another: three faces and a "+1".
+	let peers = [];
 	for (let handle of ["Bo", "cy", "Di", "ed"]) {
-		send?.({ kind: "question:presence", ts: 0, id, question, client: `c-${handle}`, handle });
+		let peer = await open(handle);
+		await peer.card.getByRole("radio").first().focus();
+		peers.push(peer);
+		await expect(ana.card.getByRole("group", { name: new RegExp(`\\b${handle}\\b`) }))
+			.toBeVisible();
 	}
 
-	let people = card.getByRole("group", { name: /^Editing this question/ });
 	await expect(people.getByRole("img")).toHaveCount(3);
 	let more = people.getByText("+1");
 	await expect(more).toBeVisible();
-	await expect(card).not.toContainText("@Bo");
+	await expect(ana.card).not.toContainText("@Bo");
 
-	let tooltip = page.locator("[data-icon-tooltip]");
+	let tooltip = ana.page.locator("[data-icon-tooltip]");
 	await people.getByRole("img").first().hover();
 	await expect(tooltip).toBeVisible();
 	await expect(tooltip).toHaveText("Bo");
@@ -797,6 +785,13 @@ test("people on a decision are faces with verbatim handle tooltips", async ({ jo
 			nodes.map(node => node.getAttribute("title"))
 		),
 	).toEqual([null, null, null]);
+
+	// Leaving the question clears the face; choosing is the same as being there.
+	await peers[3]!.card.getByRole("radio").first().blur();
+	await expect(more).toHaveCount(0);
+	await peers[0]!.page.close();
+	await expect(people.getByRole("img")).toHaveCount(2);
+	await expect(people).toHaveAttribute("aria-label", "Editing this question: cy, Di");
 });
 
 test("discarding asks first", async ({ join, seed }) => {
