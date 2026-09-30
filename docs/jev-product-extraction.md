@@ -797,3 +797,18 @@ card and pipeline run passes 101 tests with 356 assertions. Full workspace/E2E
 types and CI pass; only two existing reviewed component owner hashes change,
 with all exception cases retained. Original leaf, callback and integration proofs
 pass after formatting. Existing lint warnings and design baseline remain.
+
+The pure evidence projection and its eight complete original callbacks are restored
+byte-for-byte. It groups current supporters, opposers and targeted reasons or
+constraints in card order, keeps general evidence last, and retains the original
+Planner rationale/source fallback. Historical stances, neutral or unknown-option
+stances and empty rationale do not manufacture visible evidence. Popover and source
+highlighting integration remain subsequent work; no browser geometry was exercised.
+
+Twelve further whole pipeline callbacks restore exact question triage, clause
+isolation, causal evidence and commitment safeguards. The two missing original
+commitment helpers are retained once in a natural private fixture. Unique retention
+is 80 of 140 callbacks, with 60 remaining. The focused evidence/pipeline run passes
+20 tests with 134 assertions. Full workspace/E2E types and CI pass with the inherited
+warnings/baseline only; producer, complete callback, table and helper proofs pass
+after formatting. No interpretation policy was changed.
