@@ -10,6 +10,8 @@ export default defineConfig({
 		"excerpt-correction-retry.native.ts",
 		"evidence-hover.native.ts",
 		"room-source.native.ts",
+		"analysis-host.native.ts",
+		"analysis-host-retries.native.ts",
 	],
 	workers: 1,
 	fullyParallel: false,

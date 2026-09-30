@@ -320,5 +320,19 @@
 			]
 		],
 		"sourceHash": "e9796d7c5c66ea469a4fffa8976d341f22ef4e67b6a256fbf693de763b9a4a55"
+	},
+	{
+		"file": "apps/web/src/conversation-plan/markers.tsx",
+		"reason": "Message analysis portal uses measured message, transcript and composer bounds for placement and clipping; this exact browser geometry boundary supplies position, size, visibility and motion origin without semantic color or typography values.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"position",
+				"unresolved style > MessageMarkers > <div>",
+				1
+			]
+		],
+		"sourceHash": "3460186692b3e9f07fdc8346f36fe2b4b05cee706470fb9e8d2c48842b142419"
 	}
 ]

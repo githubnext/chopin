@@ -1038,3 +1038,63 @@ are aborted; no app,
 database, auth session, provider call or evaluation run was started. Analysis host
 integration, decided-prose/list evidence and full application collaboration remain
 later work.
+
+## Conversation analysis host and correction bridge
+
+The complete original MessageMarkers closure and four shared hover declarations are
+restored, with the two original Planner diagnostics functions in their natural small
+module. All seven original rendering callbacks and four helpers remain byte-identical.
+Only four fixed 11-pixel labels use the current text-xs role. The original behavior
+retains accepted-source chips, held-excerpt review, jobs after analysis pruning,
+generation-keyed prose diagnostics, shared hover ownership, pinning, browser placement,
+focus/Tab/Escape handling, serialized job retries and analysis retry identity.
+
+Current Transcript, Chat and Room receive additive original anchor, marker and callback
+bindings. Four whole original Room callbacks forward correction and retry requests to
+real wire.ask and resolve card links through current question state. Existing write,
+archive and connection guards, composer behavior, source navigation and evidence stay
+intact. Independent subtraction proofs retain each complete current host AST and the
+complete archived callbacks; no server or protocol behavior was changed.
+
+The two original analysis-hover CSS rules are restored beside the unchanged current
+source highlight. Their sole style adaptation uses the existing duration-fast and
+ease-out tokens: duration remains 120 ms and easing follows the current role. One
+exact, counted and source-hashed geometry exception covers only the measured portal
+position, size, clipping, visibility and motion origin. Every prior record is unchanged.
+Independent review approves the component, host, CSS and exception boundaries.
+
+Nine additional native cases render actual Transcript, MessageMarkers, AnalysisOverview
+and ExcerptCorrection with real compiled client CSS and controlled parent callbacks.
+They exercise shared hover, native focus/Tab/Escape, pinning, selected Range refusal,
+composer/viewport clipping and out-of-view dismissal, read-only controls, held and
+rejected corrections, version changes and stable/fresh retry IDs. These callbacks are
+new focused evidence; the original full application browser callbacks remain assigned
+whole and deferred, including actual auth, compact Chat Escape ordering, editor caret,
+collaboration and database reopen.
+
+The first native run exposed two fixture assumptions. Locally fulfilled HTML lacked a
+doctype, putting Chromium in quirks mode where the inherited :hover guard did not
+match; standards-mode HTML plus an explicit CSS1Compat guard fixes that precondition.
+The append check was still at the transcript bottom, so existing auto-follow correctly
+scrolled. Native manual scrolling, positive away-from-bottom and viewport checks, and
+waiting for the appended message and paint now exercise the intended unpinned case.
+All nine complete callbacks and original assertions survive these additive setup fixes.
+
+Six additional offline command checks reach the real correction handler, processor,
+fenced MemoryStorage and actual document close/open. Reply-time snapshots capture
+cloned durable state immediately. The checks distinguish the socket actor from the
+saved source author and cover commit before reply/publication, rollback on commit
+failure, restored transcript/state, idempotent retry and four command-local denial
+conditions. Runtime lookup, access refresh and socket delivery use fixture substitutes;
+the correction handler, processor and fenced storage are real. These checks do not
+establish socket admission, GitHub authorization or complete authenticated
+Room-to-server transport. Existing
+correction and memory contracts pass alongside them. No database, application listener,
+provider call, paid inference or evaluation run was used.
+
+Final verification passes 276 focused tests with 1,588 assertions across 37 files and
+all 41 isolated cached-Chromium cases against the final rebuilt styles. Workspace/E2E
+types, CI, client build, formatting and whole source/fixture/callback proofs pass. CI
+retains only the inherited warnings and existing design baseline. The broader product
+extraction remains unfinished; decided-prose annotations and complete application
+transport/collaboration browser coverage remain later work.

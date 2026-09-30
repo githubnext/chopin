@@ -22,6 +22,8 @@ import { shouldShowResearchActionError, useResearchOfferLinks } from "./chat/res
 import { evidenceRows, hasEvidence } from "./conversation-plan/evidence";
 import { EvidencePopover } from "./conversation-plan/evidence-popover";
 import { threadForCard } from "./conversation-plan/links";
+import type { CardLink } from "./conversation-plan/links";
+import type { ExcerptCorrectionAction } from "./conversation-plan/analysis-overview";
 import { ConversationPlanStore, useConversationPlan } from "./conversation-plan/store";
 import { rememberChannel } from "./channel-recovery";
 import { decisionAttention, DecisionViewControl } from "./decision-view-control";
@@ -401,6 +403,50 @@ export function RoomWorkspace(
 		workspacePresentation.documentVisible,
 	]);
 
+	let retryAnalysis = async (messageId: string, actionId: string) => {
+		if (!wire || !workspaceCanEdit) throw new Error("This document is read-only.");
+		try {
+			await wire.ask("conversation-plan:retry", { messageId, actionId });
+		} catch {
+			throw new Error("The message could not be retried. Try again when connected.");
+		}
+	};
+	let addExcerpt = async (action: ExcerptCorrectionAction) => {
+		if (!wire || !workspaceCanEdit || status !== "connected") {
+			throw new Error("This document is read-only or disconnected.");
+		}
+		try {
+			await wire.ask<ConversationPlan.Corrected>("conversation-plan:correct", {
+				actionId: action.actionId,
+				threadId: action.threadId,
+				expectedVersion: action.expectedVersion,
+				change: action.change,
+			});
+		} catch {
+			throw new Error("The excerpt could not be added. Check that the card is still open.");
+		}
+	};
+	let retryJob = async (jobId: string) => {
+		if (!wire || !workspaceCanEdit) throw new Error("This document is read-only.");
+		try {
+			let result = await wire.ask<ConversationPlan.RetriedJob>(
+				"conversation-plan:retry-job",
+				{ jobId },
+			);
+			if (!result.queued) throw new Error("job is no longer retryable");
+		} catch {
+			throw new Error("The Planner job could not be retried. Try again when connected.");
+		}
+	};
+	let showCard = (link: CardLink) => {
+		let thread = conversation.state?.threads.find(item => item.id === link.threadId);
+		let entry = thread?.questionnaireId
+			? questions.snapshot().find(item => item.id === thread.questionnaireId)
+			: undefined;
+		let question = entry?.value.questions[0]?.id;
+		if (entry && question) showPlan(entry.id, question);
+	};
+
 	let showPlan = (widget: string, question: string) => {
 		selectDestination("plan");
 		requestAnimationFrame(() => {
@@ -616,6 +662,11 @@ export function RoomWorkspace(
 					handle={handle}
 					onActivity={onChatActivity}
 					conversationPlan={conversation.state}
+					conversationPlanJobs={conversation.jobs}
+					onCardLink={showCard}
+					onAddExcerpt={addExcerpt}
+					onRetryAnalysis={retryAnalysis}
+					onRetryJob={retryJob}
 					sourceDestination={sourceDestination}
 					researchOffers={conversation.enabled
 						? {

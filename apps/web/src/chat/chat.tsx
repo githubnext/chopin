@@ -36,6 +36,8 @@ import {
 } from "./references";
 import { Transcript } from "./transcript";
 import type { TranscriptDecisions } from "./transcript";
+import type { CardLink } from "../conversation-plan/links";
+import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";
 import type { ChatDestination } from "../conversation-plan/source";
 import type { ResearchOfferControls } from "./research-offer";
 import { TerminalAlert } from "../terminal-alert";
@@ -59,6 +61,11 @@ export type ChatProps = {
 	active?: boolean;
 	onActivity?: (event: { type: "message" | "working"; busy: boolean }) => void;
 	conversationPlan?: ConversationPlan.State;
+	conversationPlanJobs?: ConversationPlan.Job[];
+	onCardLink?: (link: CardLink) => void;
+	onAddExcerpt?: (action: ExcerptCorrectionAction) => Promise<void>;
+	onRetryAnalysis?: (messageId: string, actionId: string) => Promise<void>;
+	onRetryJob?: (jobId: string) => Promise<void>;
 	decisions?: TranscriptDecisions;
 	researchOffers?: ResearchOfferControls;
 	sourceDestination?: ChatDestination;
@@ -72,6 +79,11 @@ export function Chat(
 		handle,
 		onActivity,
 		conversationPlan,
+		conversationPlanJobs,
+		onCardLink,
+		onAddExcerpt,
+		onRetryAnalysis,
+		onRetryJob,
 		decisions,
 		researchOffers,
 		sourceDestination,
@@ -286,6 +298,12 @@ export function Chat(
 		<div className="flex h-full min-h-0 flex-col">
 			<Transcript
 				active={active}
+				canEdit={connected}
+				conversationPlanJobs={conversationPlanJobs}
+				onCardLink={onCardLink}
+				onAddExcerpt={onAddExcerpt}
+				onRetryAnalysis={onRetryAnalysis}
+				onRetryJob={onRetryJob}
 				conversationPlan={conversationPlan}
 				decisions={decisions}
 				researchOffers={researchOffers}

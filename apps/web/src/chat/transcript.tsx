@@ -12,6 +12,9 @@ import {
 } from "@chopin/editor";
 
 import { MessageMarkdown } from "./markdown";
+import { MessageMarkers } from "../conversation-plan/markers";
+import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";
+import type { CardLink } from "../conversation-plan/links";
 import { capitalize, displayText, duration, group, summarize, toolCopy } from "./model";
 import { clearSourceHighlight, highlightSource } from "../conversation-plan/source";
 import type { ChatDestination } from "../conversation-plan/source";
@@ -28,6 +31,12 @@ import { ResearchOfferCard } from "./research-offer";
 import type { ResearchOfferControls } from "./research-offer";
 
 type PlanMarkers = {
+	canEdit?: boolean;
+	conversationPlanJobs?: ConversationPlan.Job[];
+	onCardLink?: (link: CardLink) => void;
+	onAddExcerpt?: (action: ExcerptCorrectionAction) => Promise<void>;
+	onRetryAnalysis?: (messageId: string, actionId: string) => Promise<void>;
+	onRetryJob?: (jobId: string) => Promise<void>;
 	sourceDestination?: ChatDestination;
 	conversationPlan?: ConversationPlan.State;
 	researchOffers?: ResearchOfferControls;
@@ -194,12 +203,14 @@ function MessageBody(
 		onWithdraw: (id: string) => void;
 	} & PlanMarkers,
 ) {
+	let analysisAnchor = useRef<HTMLDivElement>(null);
 	let text = displayText(message.text) ? message.text : message.author.kind === "member"
 		? "Ask Planner"
 		: "";
 
 	return (
 		<div
+			ref={analysisAnchor}
 			className={markers.sourceDestination?.source.messageId === message.id
 				? "rounded-md bg-inset px-1"
 				: undefined}
@@ -243,6 +254,20 @@ function MessageBody(
 					Source: “{markers.sourceDestination.source.quote}”
 				</p>
 			)}
+			{!message.queued && markers.onCardLink && markers.onRetryAnalysis && (
+				<MessageMarkers
+					anchorRef={analysisAnchor}
+					canEdit={!!markers.canEdit}
+					messageId={message.id}
+					messageText={message.text}
+					jobs={markers.conversationPlanJobs}
+					onCard={markers.onCardLink}
+					onAddExcerpt={markers.onAddExcerpt}
+					onRetry={markers.onRetryAnalysis}
+					onRetryJob={markers.onRetryJob}
+					state={markers.conversationPlan}
+				/>
+			)}
 		</div>
 	);
 }
@@ -279,6 +304,12 @@ function MessageGroup(
 				</div>
 				{item.messages.map(message => (
 					<MessageBody
+						canEdit={markers.canEdit}
+						conversationPlanJobs={markers.conversationPlanJobs}
+						onCardLink={markers.onCardLink}
+						onAddExcerpt={markers.onAddExcerpt}
+						onRetryAnalysis={markers.onRetryAnalysis}
+						onRetryJob={markers.onRetryJob}
 						conversationPlan={markers.conversationPlan}
 						researchOffers={markers.researchOffers}
 						sourceDestination={markers.sourceDestination}
@@ -296,11 +327,17 @@ function MessageGroup(
 export function Transcript(
 	{
 		active,
+		canEdit,
 		conversationPlan,
+		conversationPlanJobs,
 		decisions,
 		researchOffers,
 		entries,
 		handle,
+		onCardLink,
+		onAddExcerpt,
+		onRetryAnalysis,
+		onRetryJob,
 		onWithdraw,
 		queued,
 		sourceDestination,
@@ -309,6 +346,11 @@ export function Transcript(
 		active: boolean;
 		canEdit?: boolean;
 		conversationPlan?: ConversationPlan.State;
+		conversationPlanJobs?: ConversationPlan.Job[];
+		onCardLink?: (link: CardLink) => void;
+		onAddExcerpt?: (action: ExcerptCorrectionAction) => Promise<void>;
+		onRetryAnalysis?: (messageId: string, actionId: string) => Promise<void>;
+		onRetryJob?: (jobId: string) => Promise<void>;
 		decisions?: TranscriptDecisions;
 		researchOffers?: ResearchOfferControls;
 		entries: Chat.Entry[];
@@ -392,6 +434,12 @@ export function Transcript(
 							: <SystemEntry item={item} key={item.id} />
 						: (
 							<MessageGroup
+								canEdit={canEdit}
+								conversationPlanJobs={conversationPlanJobs}
+								onCardLink={onCardLink}
+								onAddExcerpt={onAddExcerpt}
+								onRetryAnalysis={onRetryAnalysis}
+								onRetryJob={onRetryJob}
 								conversationPlan={conversationPlan}
 								researchOffers={researchOffers}
 								group={item}
