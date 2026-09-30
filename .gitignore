@@ -32,6 +32,7 @@ e2e/blob-report/
 
 # Generated screenshots and notes from local design audits.
 .design-audit/
+/artifacts/design-browser-ci/
 **/.impeccable/hook.cache.json
 
 # Generated

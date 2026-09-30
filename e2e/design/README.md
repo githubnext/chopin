@@ -52,7 +52,7 @@ traces and axe JSON through its existing seven-day `playwright-report` artifact.
 The route's development guard is also checked against production JS/CSS output by
 `scripts/check-design-production.ts` after the system suite builds the client.
 
-The 38 interface checks are supplemented by eight approval-boundary checks: at each width, a new primary-text contrast defect, changed code colour, stale approved label and unrelated missing control name must all be rejected after the unchanged example passes. These deliberately changed pages are isolated to their test. Total: 46 cases.
+The suite runs 38 interface checks across the two viewport sizes. Each accessibility scan compares the complete set of findings with the exact reviewed record, so additional or changed findings fail and removed findings require review.
 
 ## Approved colour decisions
 
