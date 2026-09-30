@@ -536,8 +536,8 @@ test("a Planner that still owns workflow runs outlives its turn, pauses, resumes
 	await new Promise(resolve => setTimeout(resolve, 0));
 	expect(planner.calls.at(-1)).toBe("destroy");
 	expect(context.chat.retained).toBeUndefined();
-	expect(context.chat.runs).toBeUndefined();
-	expect(runs()).toBeUndefined();
+	expect(context.chat.runs).toEqual([card("finished")]);
+	expect(runs()?.map(run => run.status)).toEqual(["finished"]);
 	expect(holds).toBe(0);
 
 	await Chat.resume(context, ws);

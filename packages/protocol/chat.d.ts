@@ -110,7 +110,7 @@ export declare namespace Chat {
 	export type Run = {
 		id: string;
 		name: string;
-		status: "running" | "waiting" | "paused" | "finished" | "failed" | "stopped";
+		status: "running" | "waiting" | "paused" | "finished" | "blocked" | "failed" | "stopped";
 		/** Seconds since the epoch. */
 		started: number;
 		updated: number;
