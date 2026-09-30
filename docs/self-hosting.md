@@ -199,6 +199,12 @@ the image.
 See [Background jobs and workers](background-jobs.md) for the combined
 `AGENT`, `BACKGROUND_JOBS`, and `WEB_RESEARCH` behavior and recovery model.
 
+The supplied Compose file forwards `CONVERSATION_PLAN`, `JEV_MODEL` and
+`JEV_API_KEY` from the deployment environment. It uses the server's default
+30-second interpretation timeout. To override `JEV_TIMEOUT_MS`, configure it
+explicitly in the service environment; the Compose file does not forward an
+unset optional timeout as an empty value.
+
 Generate the encryption key with:
 
 ```bash

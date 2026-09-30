@@ -735,3 +735,11 @@ Self-hosting lists its implemented flag, model alias, timeout and server-side ke
 Current Planner model, Harness, local sign-in, credentials and deployment defaults
 remain. Compose files are unchanged in this slice; container forwarding remains a
 separate configuration review. No service was activated by editing examples.
+
+The supplied Compose service now forwards the optional conversation flag, model
+alias and server key using direct late-bound references. Every existing environment
+entry and the complete original Compose test callback remain unchanged. The timeout
+keeps the server's 30-second default: forwarding an unset optional value as an empty
+string would fail the retained strict timeout validation. Self-hosting explains the
+explicit override boundary. Five Compose/configuration tests pass with 54 assertions;
+no container, service or database was started.
