@@ -1,9 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
 import { create, read } from "./draft";
+import { derive } from "./answer";
 import * as limits from "./limits";
 import { addOption } from "./options";
-import { decision, normalize } from "./schema";
+import { decision, identified, normalize } from "./schema";
 
 function start(count = 2) {
 	let definition = decision(normalize({
@@ -74,5 +75,32 @@ describe("addOption", () => {
 			ok: false,
 			reason: "full",
 		});
+	});
+});
+
+it("a pending card grows its first option and derives its selected label and ID", () => {
+	let definition = decision(identified({
+		questions: [{
+			id: "pending",
+			header: "Auth",
+			question: "Which system?",
+			multiple: false,
+			options: [],
+		}],
+	}));
+	let model = create(definition);
+	let added = addOption(definition, model, "stable-option", "GitHub Apps");
+	expect(added.ok).toBe(true);
+	if (!added.ok) return;
+	expect(read(added.model, added.definition).pending!.mode).toBe("choices");
+	added.model.api.val(["pending", "choice"]).set("stable-option");
+	added.model.api.flush();
+	expect(derive(added.definition, read(added.model, added.definition))).toEqual({
+		ok: true,
+		answers: [{
+			question: "Which system?",
+			choices: ["GitHub Apps"],
+			optionIds: ["stable-option"],
+		}],
 	});
 });

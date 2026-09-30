@@ -39,9 +39,7 @@ export function create(definition: Definition): Model {
 		}
 
 		questions[question.id] = crdt.schema.obj({
-			mode: crdt.schema.val(
-				crdt.schema.con<Mode>(question.options.length ? "choices" : "custom"),
-			),
+			mode: crdt.schema.val(crdt.schema.con<Mode>("choices")),
 			choice: crdt.schema.val(crdt.schema.con<string | null>(null)),
 			options: crdt.schema.obj(options),
 			// A CRDT string, so two people typing a custom answer merge rather

@@ -101,6 +101,13 @@ describe("identified", () => {
 			}],
 		};
 		expect(identified(pending)).toBe(pending);
+		expect(read(create(pending), pending).q1).toEqual({
+			mode: "choices",
+			choice: null,
+			options: {},
+			custom: "",
+		});
+		expect(derive(pending, read(create(pending), pending)).ok).toBe(false);
 		expect(() => normalize(tool({ options: [] }))).toThrow(/at least one option/);
 		expect(() =>
 			identified({
