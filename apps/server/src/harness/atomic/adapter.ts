@@ -23,7 +23,7 @@ import {
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fullPlanner } from "./full";
+import { fullPlanner, workflowRuns } from "./full";
 
 import type {
 	HarnessV1,
@@ -484,7 +484,10 @@ export function createAtomicAdapter(
 							systemPrompt: ATOMIC_DEFAULT_SYSTEM_PROMPT,
 							appendSystemPrompt: [],
 						}),
-						extensionFactories: [atomicTurnExtension(policy)],
+						extensionFactories: [
+							atomicTurnExtension(policy),
+							...(full ? [workflowRuns(full)] : []),
+						],
 					});
 					await loader.reload();
 					let created = await createAgentSession({
@@ -502,6 +505,11 @@ export function createAtomicAdapter(
 						customTools: turn.tools.map(hostTool),
 					});
 					let session = created.session;
+					if (full) {
+						full.command = async text => {
+							await session.prompt(text);
+						};
+					}
 					let leak = full
 						? undefined
 						: hostLeak(session, created.extensionsResult.extensions.length, hostNames);

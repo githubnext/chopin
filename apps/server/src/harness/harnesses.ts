@@ -1,5 +1,5 @@
 import { ATOMIC_AUTH_MODES, createAtomicAdapter } from "./atomic/adapter";
-import { removeWorkspaces } from "./atomic/workspace";
+import { forgetWorkspaces } from "./atomic/workspace";
 import { createCopilotSdk } from "./copilot-sdk/adapter";
 import { createPiAdapter } from "./pi/adapter";
 
@@ -113,5 +113,5 @@ export async function shutdownHarnesses(): Promise<void> {
 	credentials.clear();
 	await selected?.shutdown();
 	selected = undefined;
-	await removeWorkspaces();
+	forgetWorkspaces();
 }
