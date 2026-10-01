@@ -331,6 +331,15 @@ export async function submit(
 	await Service.exclusive(plan, async () => {
 		let mutation: room.Mutation | undefined;
 		try {
+			// A long answer can push the document past its size limit, after which the
+			// Planner can no longer edit it; check on a copy so a refusal changes nothing.
+			let preview = await room.create(room.project(plan.document));
+			try {
+				room.projectAnswer(preview, msg.id, answers, settled);
+				room.validate(room.project(preview));
+			} finally {
+				preview.doc.destroy();
+			}
 			mutation = room.projectAnswer(plan.document, msg.id, answers, settled);
 		} catch (err) {
 			mutationError = err;
