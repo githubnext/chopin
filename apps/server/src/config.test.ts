@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { delimiter } from "node:path";
 
 import { describe as description } from "./config";
 import { configured, LOCAL, REQUIRED } from "./testing/config";
@@ -106,6 +107,16 @@ describe("configuration", () => {
 				expect(description(configured({ ...isolated, ...mode }))).not.toContain("full Atomic");
 			}
 		}
+	});
+
+	it("splits HARNESS_EXTENSIONS on the path delimiter and names the paths at startup", () => {
+		let atomic = { HARNESS: "atomic", HARNESS_AUTH: "ai-gateway", MODEL: "stub/model" };
+		expect(configured(atomic).harnessExtensions).toEqual([]);
+		expect(description(configured(atomic))).not.toContain("Planner extensions");
+		let paths = ["/opt/first", "/opt/second"];
+		let config = configured({ ...atomic, HARNESS_EXTENSIONS: paths.join(delimiter) + delimiter });
+		expect(config.harnessExtensions).toEqual(paths);
+		expect(description(config)).toContain("Planner extensions: /opt/first, /opt/second");
 	});
 
 	it("requires a valid PostgreSQL URL", () => {
