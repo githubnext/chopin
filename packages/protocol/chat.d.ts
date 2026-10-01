@@ -15,6 +15,8 @@ export declare namespace Chat {
 		| Request<Send>
 		| Request<Abort>
 		| Request<Resume>
+		| Request<PauseRun>
+		| Request<ResumeRun>
 		| Request<Unqueue>;
 
 	export type Outgoing = History | Message | Delta | Tool | State | Queue | Sent;
@@ -140,7 +142,10 @@ export declare namespace Chat {
 		started: number;
 		updated: number;
 		ended?: number;
+		/** The most recent stages, in the order the run reached them. */
 		stages: RunStage[];
+		/** Stages reached before the ones listed. */
+		earlierStages?: number;
 		/** Decisions questions the run is waiting on. */
 		waiting: number;
 	};
@@ -208,6 +213,12 @@ export declare namespace Chat {
 
 	/** Resume the workflow runs the Planner paused. Anyone may; the transcript records who did. */
 	export type Resume = KIND<"chat:resume">;
+
+	/** Pause one workflow run. Anyone may; the transcript records who did. */
+	export type PauseRun = KIND<"chat:pause-run"> & { runId: string };
+
+	/** Resume one paused workflow run. Anyone may; the transcript records who did. */
+	export type ResumeRun = KIND<"chat:resume-run"> & { runId: string };
 
 	/** Withdraw a queued message. Only its author may. */
 	export type Unqueue = KIND<"chat:unqueue"> & { id: string };

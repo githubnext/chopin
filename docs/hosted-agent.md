@@ -278,11 +278,19 @@ through Atomic's session run control, and **Resume Planner** resumes the runs it
 paused. A run waiting on a question pauses too: Atomic withdraws the question
 from Decisions while the run is paused and presents it again on Resume, and an
 answer that arrives during the pause reaches the run only after Resume, so a
-paused run never advances. Chat shows a card for each
-run: its name, status (running, waiting on Decisions, paused, or ended), elapsed
-time, every stage it has reached with its status and duration, and a link to the
-Decisions it is waiting on. When a run ends, Chat records a line saying how it
-ended and how long it took. The session is let go when its runs finish, when its owner
+paused run never advances. Chat shows the session's runs as one stack, one row
+per run: its name, status (running, waiting on Decisions, paused, or ended), and
+elapsed time. Several runs can be live at once. Runs waiting on Decisions come
+first, then running, paused, and ended runs, newest first within each, and more
+than three rows fold behind "more" without ever hiding a waiting run. Only the
+first waiting run, or else the newest live one, shows its stages; any row opens
+on click to show its most recent stages with their status and duration, and a
+waiting row links to its Decisions. Each live row can be paused, and each paused
+row resumed, on its own; Chat records who did. The stack is stored with the
+document, so a reload or restart keeps it; a run that was live when the server
+stopped comes back stopped. Ended rows stay until the next workflow starts in the
+document. When a run ends, Chat also records a line saying how it ended and how
+long it took. The session is let go when its runs finish, when its owner
 binding ends, or when the document closes; run state is durable in Atomic's
 workflow store, so runs interrupted that way can be resumed from a later
 session.

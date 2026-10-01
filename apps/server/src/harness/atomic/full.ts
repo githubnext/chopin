@@ -101,6 +101,9 @@ export function classifyRuns(
 	return runs;
 }
 
+/** Stages kept per run; earlier ones are counted, not listed. */
+const STORED_STAGES = 12;
+
 type Card = Wire.Run & { stageIndex: Map<string, number>; prompts: Set<string> };
 
 const ENDED: Record<string, Wire.Run["status"] | undefined> = {
@@ -121,6 +124,7 @@ export function foldLifecycle(
 	let seconds = Math.floor(event.occurredAt / 1000);
 	let card = cards.get(event.rootRunId);
 	if (!card) {
+		for (let [id, other] of cards) if (other.ended !== undefined) cards.delete(id);
 		card = {
 			id: event.rootRunId,
 			name: name ?? "workflow",
@@ -182,7 +186,14 @@ export function runCards(cards: Map<string, Card>, runs: Omit<PlannerRuns, "card
 			: card.status === "running" || card.status === "waiting"
 			? "finished"
 			: card.status;
-		return { ...card, status, waiting, stages: card.stages.map(stage => ({ ...stage })) };
+		let earlierStages = Math.max(0, card.stages.length - STORED_STAGES);
+		return {
+			...card,
+			status,
+			waiting,
+			stages: card.stages.slice(earlierStages).map(stage => ({ ...stage })),
+			...(earlierStages ? { earlierStages } : {}),
+		};
 	});
 }
 
@@ -205,20 +216,21 @@ export function workflowRuns(planner: FullPlanner): ExtensionFactory {
 		let cards = new Map<string, Card>();
 		let names = new Map<string, string>();
 		let parents = new Map<string, string>();
+		let seen = new Set<string>();
 		planner.rootOf = runId => parents.get(runId) ?? runId;
 		let ready = false;
 		let publish = () => {
 			if (!ready) return;
+			for (let [id, card] of cards) {
+				if (seen.has(id) && !roots.has(id) && card.ended === undefined) {
+					card.status = "finished";
+					card.ended = card.updated;
+				}
+			}
 			let ended = new Set(
 				[...cards.values()].filter(card => card.ended !== undefined).map(card => card.id),
 			);
 			let split = classifyRuns(roots.values(), ended);
-			for (let id of cards.keys()) {
-				if (!split.active.includes(id) && !split.paused.includes(id) && !roots.has(id)) {
-					let card = cards.get(id)!;
-					if (card.status === "running" || card.status === "waiting") card.status = "finished";
-				}
-			}
 			planner.runs = { ...split, cards: runCards(cards, split) };
 			planner.onRuns?.(planner.runs);
 			for (let wake of planner.waiters ?? []) wake();
@@ -232,6 +244,7 @@ export function workflowRuns(planner: FullPlanner): ExtensionFactory {
 					roots = new Map(frame.roots.map(root => [root.rootRunId, root]));
 				} else if (frame.kind === "changed") roots.set(frame.root.rootRunId, frame.root);
 				else roots.delete(frame.rootRunId);
+				for (let id of roots.keys()) seen.add(id);
 				publish();
 			});
 		});

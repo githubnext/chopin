@@ -200,14 +200,17 @@ export function create(): Chat {
 }
 
 /**
- * Come back with what was said before.
+ * Come back with what was said before, and the workflow runs shown then.
  *
  * An entry that was still streaming when the process went away never finished,
  * so the flag is cleared: it is as complete as it is ever going to be, and
- * leaving it set would show a spinner nothing will ever stop.
+ * leaving it set would show a spinner nothing will ever stop. Runs still live
+ * then have no session now, so they come back stopped.
  */
-export function restore(entries: Wire.Entry[]): Chat {
+export function restore(entries: Wire.Entry[], runs?: Wire.Run[]): Chat {
+	let restoredRuns = restoreRuns(runs);
 	return {
+		...(restoredRuns ? { runs: restoredRuns } : {}),
 		entries: entries.map(entry => {
 			let { streaming: _streaming, ...rest } = entry;
 			return rest;
@@ -871,6 +874,33 @@ export async function resume(context: Room, ws: Socket): Promise<void> {
 	say(chat, server, room, { id: ulid(), author: { kind: "system" }, text, ts: now() });
 }
 
+/** Pause or resume one workflow run of the retained Planner. Anyone may, and the transcript says who did. */
+export async function controlRun(
+	context: Room,
+	ws: Socket,
+	frame: { kind: "chat:pause-run" | "chat:resume-run"; runId?: unknown },
+): Promise<void> {
+	let { chat, room, server } = context;
+	let session = chat.retained?.session;
+	let run = typeof frame.runId === "string"
+		? chat.runs?.find(candidate => candidate.id === frame.runId)
+		: undefined;
+	let runs = session?.runs?.();
+	if (!session || !run) return;
+	let pausing = frame.kind === "chat:pause-run";
+	if (pausing ? !runs?.active.includes(run.id) : !runs?.paused.includes(run.id)) return;
+	let control = pausing ? session.pauseRun : session.resumeRun;
+	if (!control) return;
+	let text = `@${ws.data.handle} ${pausing ? "paused" : "resumed"} ${run.name}.`;
+	try {
+		await control(run.id);
+	} catch (err) {
+		console.error(`[chat] ${pausing ? "pausing" : "resuming"} workflow run failed:`, err);
+		text = `${run.name} could not be ${pausing ? "paused" : "resumed"}.`;
+	}
+	say(chat, server, room, { id: ulid(), author: { kind: "system" }, text, ts: now() });
+}
+
 const ENDED_RUN: Partial<Record<Wire.Run["status"], string>> = {
 	finished: "finished",
 	blocked: "ended blocked",
@@ -879,8 +909,35 @@ const ENDED_RUN: Partial<Record<Wire.Run["status"], string>> = {
 };
 
 /**
- * Show the retained session's runs, keeping ended ones as summary cards, and say once in the transcript when one
- * ends, so the record outlives the card.
+ * The run cards Chat shows after the retained session reports `incoming`. Ended
+ * cards stay until a new run starts in the document. With no report, the session
+ * was let go, so a card still marked live becomes stopped.
+ */
+export function mergeRuns(
+	previous: Wire.Run[],
+	incoming: Wire.Run[] | undefined,
+	at: number,
+): Wire.Run[] {
+	if (!incoming) return previous.map(run => ENDED_RUN[run.status] ? run : stopped(run, at));
+	let known = new Set(previous.map(run => run.id));
+	if (incoming.some(run => !known.has(run.id))) return incoming;
+	let reported = new Set(incoming.map(run => run.id));
+	return [...previous.filter(run => ENDED_RUN[run.status] && !reported.has(run.id)), ...incoming];
+}
+
+function stopped(run: Wire.Run, at: number): Wire.Run {
+	return { ...run, status: "stopped", ended: run.ended ?? at, waiting: 0 };
+}
+
+/** Run cards restored with the document; no session survives a reload of the room, so live ones were stopped. */
+export function restoreRuns(runs: Wire.Run[] | undefined): Wire.Run[] | undefined {
+	return runs?.length ? mergeRuns(runs, undefined, now()) : undefined;
+}
+
+/**
+ * Show the session's runs, keeping ended ones as summary cards until the next
+ * run starts, store them with the document so a reload keeps them, and say once
+ * in the transcript when one ends.
  */
 function publishRuns(
 	context: Room,
@@ -888,7 +945,7 @@ function publishRuns(
 ): void {
 	let { chat, room, server } = context;
 	let before = new Map((chat.runs ?? []).map(run => [run.id, run.status]));
-	let cards = runs?.cards ?? (chat.runs ?? []).filter(run => ENDED_RUN[run.status]);
+	let cards = mergeRuns(chat.runs ?? [], runs?.cards, now());
 	for (let run of cards) {
 		let ended = ENDED_RUN[run.status];
 		let previous = before.get(run.id);
@@ -903,6 +960,7 @@ function publishRuns(
 	}
 	chat.runs = cards.length ? cards : undefined;
 	state(chat, server, room);
+	context.persist().catch(err => console.error("[chat] storing workflow runs failed:", err));
 }
 
 /**

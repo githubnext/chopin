@@ -508,3 +508,56 @@ test("a run whose stage waits on a question counts as waiting even without promp
 		waiting: 1,
 	});
 });
+
+test("a new run clears ended cards, keeps live ones, and lists only the twelve most recent stages", async () => {
+	let { foldLifecycle } = await import("./full");
+	let cards = new Map();
+	let event = (rootRunId: string, target: object, at: number) =>
+		({
+			type: "workflow_lifecycle",
+			eventId: `${rootRunId}-${at}`,
+			cursor: { epoch: "e", revision: at },
+			runId: rootRunId,
+			rootRunId,
+			ownerSessionId: "session",
+			occurredAt: at * 1000,
+			observedAt: at * 1000,
+			delivery: "live",
+			target,
+		}) as never;
+	foldLifecycle(
+		cards,
+		event("done", { kind: "run", runId: "done", status: "running" }, 1),
+		"first",
+	);
+	foldLifecycle(cards, event("done", { kind: "run", runId: "done", status: "completed" }, 2));
+	foldLifecycle(
+		cards,
+		event("live", { kind: "run", runId: "live", status: "running" }, 3),
+		"second",
+	);
+	expect([...cards.keys()]).toEqual(["live"]);
+	foldLifecycle(
+		cards,
+		event("other", { kind: "run", runId: "other", status: "running" }, 4),
+		"third",
+	);
+	expect([...cards.keys()]).toEqual(["live", "other"]);
+
+	for (let index = 0; index < 15; index++) {
+		foldLifecycle(
+			cards,
+			event("live", {
+				kind: "stage",
+				runId: "live",
+				stageId: `s${index}`,
+				stageName: `stage-${index}`,
+				status: "completed",
+			}, 10 + index),
+		);
+	}
+	let [card] = runCards(cards, { active: ["live", "other"], paused: [] });
+	expect(card?.stages).toHaveLength(12);
+	expect(card?.stages[0]?.name).toBe("stage-3");
+	expect(card?.earlierStages).toBe(3);
+});

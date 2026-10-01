@@ -51,6 +51,10 @@ export type PlannerSession = {
 	pauseRuns?: () => Promise<void>;
 	/** Resumes the runs this session paused. */
 	resumeRuns?: () => Promise<void>;
+	/** Pauses one run this session owns. */
+	pauseRun?: (runId: string) => Promise<void>;
+	/** Resumes one paused run this session owns. */
+	resumeRun?: (runId: string) => Promise<void>;
 };
 
 export type PlannerSessionDependencies = {
@@ -172,6 +176,12 @@ export async function openPlannerSession(
 				},
 				pauseRuns: () => pauseOwnedRuns(workflows()),
 				resumeRuns: () => resumeOwnedRuns(workflows()),
+				pauseRun: async (runId: string) => {
+					await workflows().pause(runId);
+				},
+				resumeRun: async (runId: string) => {
+					await workflows().resume(runId);
+				},
 			}
 			: {};
 		return {

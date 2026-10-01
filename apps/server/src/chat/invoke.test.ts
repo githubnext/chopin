@@ -469,6 +469,12 @@ function runningSession() {
 		async resumeRuns() {
 			calls.push("resume");
 		},
+		async pauseRun(runId: string) {
+			calls.push(`pause ${runId}`);
+		},
+		async resumeRun(runId: string) {
+			calls.push(`resume ${runId}`);
+		},
 	};
 	return {
 		session,
@@ -618,4 +624,44 @@ test("a retained Planner is let go when its owner's binding ends, and sessions w
 	await context.chat.running;
 	expect(destroyed).toBe(1);
 	expect(context.chat.retained).toBeUndefined();
+});
+
+test("run cards keep ended runs until a new run starts, and a released session's live runs become stopped", () => {
+	let live = card("running");
+	let done = { ...card("finished"), id: "run-0" };
+	expect(Chat.mergeRuns([done], [live], 2_000)).toEqual([live]);
+	expect(Chat.mergeRuns([done, live], [card("waiting")], 2_000)).toEqual([done, card("waiting")]);
+	let released = Chat.mergeRuns([done, card("waiting")], undefined, 2_000);
+	expect(released.map(run => [run.id, run.status, run.waiting])).toEqual([
+		["run-0", "finished", 0],
+		["run-1", "stopped", 0],
+	]);
+	expect(released[1]?.ended).toBe(2_000);
+	expect(Chat.mergeRuns([{ ...card("paused"), ended: undefined }], undefined, 2_000)[0])
+		.toMatchObject({ status: "stopped", ended: 2_000 });
+	expect(Chat.restoreRuns([])).toBeUndefined();
+});
+
+test("one run can be paused and resumed by name while others keep going", async () => {
+	let { context, user } = await setup(configured(ATOMIC));
+	let planner = runningSession();
+	context.openPlannerSession = async () => ({ ok: true, value: planner.session });
+	let ws = { data: { handle: "ana" } } as unknown as Socket;
+	expect(await Chat.invoke(context, user, "Run the workflow")).toBeUndefined();
+	await context.chat.running;
+
+	await Chat.controlRun(context, ws, { kind: "chat:resume-run", runId: "run-1" });
+	await Chat.controlRun(context, ws, { kind: "chat:pause-run", runId: "unknown" });
+	await Chat.controlRun(context, ws, { kind: "chat:pause-run", runId: 7 });
+	expect(planner.calls.filter(call => call.includes("run-1") || call.includes("unknown"))).toEqual(
+		[],
+	);
+
+	await Chat.controlRun(context, ws, { kind: "chat:pause-run", runId: "run-1" });
+	expect(planner.calls.at(-1)).toBe("pause run-1");
+	expect(context.chat.entries.at(-1)?.text).toBe("@ana paused plan-review.");
+	planner.set({ active: [], paused: ["run-1"], cards: [card("paused")] });
+	await Chat.controlRun(context, ws, { kind: "chat:resume-run", runId: "run-1" });
+	expect(planner.calls.at(-1)).toBe("resume run-1");
+	expect(context.chat.entries.at(-1)?.text).toBe("@ana resumed plan-review.");
 });
