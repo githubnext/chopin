@@ -2150,3 +2150,39 @@ extraction caught during review is corrected and its complete bytes are now chec
 No production, unit-test or UI runtime code changes in this slice. The preceding
 3,389 offline and eighty-seven native passes remain historical evidence; they are
 not repeated or represented as fresh execution of these unactivated browser cases.
+
+## Whole evidence and anchor browser regression source
+
+The original evidence and anchor-stress modules are retained in full: 405 and
+393 lines, with thirteen complete callbacks, thirteen helpers, two local types
+and four cleanup/setup hooks. Evidence remains byte-for-byte original. Anchor
+adds only two type-only non-null assertions for the now-optional prose field;
+removing those tokens reconstructs the original bytes, and emitted runtime behavior
+retains the original failure on absent prose. No production protocol is changed.
+Their source includes current evidence stances,
+short-viewport geometry, source navigation and expiring highlights, remote closure,
+accepted-decision CRDT protection, reconnect and clipboard anchor movement.
+
+Two exact Chromium exclusions precede restoration, keeping both suites inactive.
+The six prior exclusions and all other projects remain unchanged; the dedicated
+scripted target still selects only jobs and prose. No suite, helper, preload or
+configuration is imported, listed or evaluated. Source retention and static types
+do not establish application, PostgreSQL, WebSocket or browser execution.
+
+The archived exact Save caption remains intact despite the current Save answer
+caption. Resolving activation and assertion compatibility requires separate work;
+these complete callbacks are preserved rather than weakened. Five original browser
+modules remain absent, and whole application verification remains outstanding.
+The larger product extraction is unfinished.
+
+Fresh full workspace/E2E types, formatting and CI pass, with the same three
+existing lint warnings, 221 reviewed design exceptions and existing design
+baseline. Independent review confirms all complete callbacks and raw source
+boundaries, permitted type-token reconstruction and full runtime AST parity.
+All forty-two preceding browser module bytes remain unchanged. Ordinary selected
+filename sets remain 23/8/1/1, both new suites are rejected by every project,
+and the dedicated configuration remains byte-identical. Removing only the two
+new exclusions reconstructs the preceding normal configuration. No production,
+unit-test or UI runtime code changes in this slice. Earlier 3,389 offline and
+eighty-seven isolated native passes remain historical evidence; no restored
+browser suite is executed or represented as passing.
