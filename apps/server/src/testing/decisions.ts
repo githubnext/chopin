@@ -75,6 +75,21 @@ export async function hostInputRoom(expiresInMs?: number) {
 			throw new Error(frame.message ?? frame.reason);
 		}
 	}
+	/** A member adds an option to the card's first question, the way Decisions offers written answers. */
+	async function addOption(id: string, label: string) {
+		let question = Store.get(plan.questions, id)!.definition.questions[0]!;
+		await Questions.addOption(plan, server, channel.id, ws, {
+			kind: "question:option",
+			rid: "option",
+			ts: 0,
+			id,
+			question: question.id,
+			key: crypto.randomUUID(),
+			label,
+		});
+		refused("option");
+		return Store.get(plan.questions, id)!.definition.questions[0]!.options.length - 1;
+	}
 	async function answer(id: string, value: number[] | string) {
 		let opened = Store.snapshot(plan.questions, id);
 		if (!opened.open) throw new Error("question closed");
@@ -85,10 +100,22 @@ export async function hostInputRoom(expiresInMs?: number) {
 			model.api.val([question.id, "mode"]).set("custom");
 			if (value) model.api.str([question.id, "custom"]).ins(0, value);
 		} else if (question.multiple) {
+			model.api.val([question.id, "mode"]).set("choices");
+			let held =
+				(model.view() as Record<string, { options?: Record<string, boolean> }>)[question.id]
+					?.options ?? {};
 			for (let index of value) {
-				model.api.val([question.id, "options", question.options[index]!.id]).set(true);
+				let option = question.options[index]!.id;
+				// An option appended after the draft began has no register yet, as in the client.
+				if (Object.hasOwn(held, option)) model.api.val([question.id, "options", option]).set(true);
+				else {model.api.obj([question.id, "options"]).set({
+						[option]: Question.crdt.schema.val(Question.crdt.schema.con(true)),
+					});}
 			}
-		} else model.api.val([question.id, "choice"]).set(question.options[value[0]!]!.id);
+		} else {
+			model.api.val([question.id, "mode"]).set("choices");
+			model.api.val([question.id, "choice"]).set(question.options[value[0]!]!.id);
+		}
 		let patch = model.api.flush();
 		if (patch) {
 			await Questions.edit(plan, ws, {
@@ -120,6 +147,7 @@ export async function hostInputRoom(expiresInMs?: number) {
 		options,
 		cards,
 		answer,
+		addOption,
 		ws,
 		server,
 		room,
