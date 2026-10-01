@@ -90,3 +90,16 @@ test("a scripted Planner turn reaches read_plan and list_pull_requests through r
 	await expect(reloadedChat.getByText("Harness parent", { exact: false })).toBeVisible();
 	await expect(reloadedChat.getByText(PULL_REQUESTS[0]!.title, { exact: false })).toBeVisible();
 });
+
+test("the composer says whether a message reaches the Planner or only the room before it is sent", async ({ join }) => {
+	let opened = await join("ana");
+	let chat = chatPane(opened);
+	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
+	let cue = chat.getByRole("status");
+
+	await expect(cue).toHaveCount(0);
+	await draft.fill("should we ask about auth first?");
+	await expect(cue).toHaveText("Room only. Add @chopin to ask the Planner");
+	await draft.fill("@chopin should we ask about auth first?");
+	await expect(cue).toHaveText("Sends to the Planner, which will reply");
+});
