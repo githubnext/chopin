@@ -2546,3 +2546,50 @@ coverage must not be reported as exact archive parity. Accepting documented
 design adaptations or restoring the original contract requires a scope decision;
 these source/native results do not finish the larger extraction. Authentic
 application/persistence verification remains outstanding.
+
+## Contained application runner source
+
+Four new source files prepare one finite authentic application check without
+changing production code, ordinary or dedicated configs, historical helpers,
+test bodies, hooks, package commands or dependencies. The selected original
+read-only collaborator retry case remains whole raw/nested-source exact to the
+archive, including its independent browser context. Selection uses its exact
+filename and a prefix-aware exact title suffix because Playwright joins project,
+file and title names; no listing or target import was used as a probe.
+
+The supervisor requires a clean committed checkout and prebuilt local images,
+uses immutable image/container IDs with nonce ownership labels, and creates one
+fresh network-none PostgreSQL17 container with tmpfs data and generated identity.
+The app joins that captured namespace and mounts only its private report folder.
+No host ports or checkout/credential/socket mounts are declared. Image environment
+entries are cleared; the worker constructs its own allowlisted test environment.
+Uncertain creation, deadline, signal, cleanup or absence failures produce failure.
+App disposal precedes database disposal. This describes source behavior, not an
+executed or verified container boundary.
+
+The image uses pinned Bun/browser tooling, frozen dependencies and a fresh client
+build. Its commit/lock/source/build stamp is checked before target activation.
+Review caught a whole-scripts hash mismatch with the restricted image context;
+all three consumers now use one guarded sourceHash helper selecting only the two
+runner scripts. Sensitive, reserved dataset and artifact paths are excluded before
+stat/read, consistently with the Docker-specific context. The worker preserves
+only its exact test-result tree, rejects nonregular artifacts, and records CLI,
+process-group and listener cleanup independently of application success.
+
+Initial formatting found unsafe-finally cleanup statements and callback polling;
+writers fixed them with explicit disposal and error capture. A final formatting
+edit overlapped a validation run, which CI rejected; all writers were then frozen
+and formatting, explicit script types and CI rerun successfully. Fresh workspace/
+E2E types also pass. Root independently executes sixteen pure ownership/hash/
+namespace-input checks with 63 assertions and two valid/ten rejected supervisor
+argument cases. CI retains the same three existing warnings, 221 reviewed design
+exceptions and existing design baseline. Independent review approves the final
+source boundaries, all prior tracked bytes, unchanged original callback and 1,607
+actual/synthetic pathname comparisons with meaningful exclusion negative controls.
+
+No Docker command, image acquisition/build, application, SQL/migration, browser,
+network probe or provider call has executed for this runner. Pure source checks
+do not prove actual namespace containment, fresh image contents, admission,
+writer lease, persistence or disposal. Image preparation, intentional failure
+cleanup and the unchanged application callback remain separate runtime gates.
+The conflicting historical view contracts and larger extraction remain unresolved.
