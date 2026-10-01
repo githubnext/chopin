@@ -2297,3 +2297,47 @@ remain effective and the dedicated configuration remains byte-identical. Removin
 only the three exclusions reconstructs the preceding normal config. No production,
 unit-test or UI runtime changes occur; earlier offline/native execution remains
 historical evidence, not a passing claim for these unactivated whole callbacks.
+
+## Original research lifecycle and reconnect fixture source
+
+A separate inactive module retains all four original research-child document
+callbacks, including the two missing ready/failed reconnect cases and their
+nested recovery assertions. All original constants, request type and four
+helpers remain complete. The only import adaptation separates shared document
+helpers from the archived durable research fixtures. Existing active research
+callbacks remain unchanged.
+
+A dedicated test-only database module retains the four original pending-request,
+job-state, publication-link and completed-workspace functions, plus their original
+private URL/SQL factory. It reuses the canonical test-channel path helper. The
+current completed-workspace helper has a different fixture contract; both it and
+the entire existing shared database module remain unchanged. Complete original
+SQL statements, planner-origin fields, optional workspace/job identity and
+publication/retry identity are retained as source.
+
+One exact Chromium exclusion precedes the new suite. No suite, fixture, preload
+or configuration is imported, evaluated, listed or invoked; no SQL or database
+is opened. Archived port defaults cover only 8788/8789 and require explicit
+disposable-database mapping, migrations and writer ownership before execution.
+Mechanical fixture writes and publication links do not establish real hosted
+research reconciliation or its atomic commit.
+
+Original stage labels such as Queued and Research ready differ from current
+Waiting to start and Research. Those assertions remain intact pending separate
+compatibility and authentic application verification. Reload, HTTP recovery,
+single child/notice cardinality and failed-state persistence are unexecuted here.
+Other original browser/view units and full system verification remain outstanding;
+the larger extraction remains unfinished.
+
+Fresh full workspace/E2E types, formatting and CI pass with the same three
+existing lint warnings, 221 reviewed design exceptions and existing design
+baseline. Independent review reconstructs the complete original four-case module
+after only the database import split and confirms every retained raw/nested
+callback, helper, type and constant. All seven original fixture declarations
+and nested SQL match; missing/trimmed consumer and SQL-node controls are rejected.
+All forty-nine preceding browser modules, the active research suite and complete
+shared database source remain unchanged. Ordinary filename selections remain
+23/8/1/1; the new suite is rejected in all four projects and thirteen previous
+exclusions remain effective. The dedicated config is byte-identical, and removing
+only the new join reconstructs the preceding normal config. No production or
+current unit-test behavior changes, and no actual research recovery is executed.
