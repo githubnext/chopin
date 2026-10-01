@@ -131,6 +131,8 @@ export default defineConfig({
 				join(ROOT, "e2e/decision-prose.e2e.ts"),
 				join(ROOT, "e2e/conversation-plan-runtime.e2e.ts"),
 				join(ROOT, "e2e/conversation-plan-prompts.e2e.ts"),
+				join(ROOT, "e2e/research-offers.e2e.ts"),
+				join(ROOT, "e2e/research-offers-ui.e2e.ts"),
 				"**/comment-motion.e2e.ts",
 				"**/responsive*.e2e.ts",
 				"**/sidecar.e2e.ts",

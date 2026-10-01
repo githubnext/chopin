@@ -68,6 +68,11 @@ const installations = [
 	},
 ];
 
+// One synthetic principal models an App permission being revoked after socket
+// admission. The test invalidates the same access cache a real setup callback
+// invalidates before asking the server to recheck this identity.
+const revokedViewerRepositoryReads = new Map<string, number>();
+
 function json(value: unknown, init: ResponseInit = {}): Response {
 	return Response.json(value, init);
 }
@@ -160,6 +165,18 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 				available = available.map(value => ({
 					...value,
 					permissions: { ...value.permissions, push: false },
+				}));
+			}
+			if (handle.startsWith("revoked-after-admission-")) {
+				let reads = revokedViewerRepositoryReads.get(handle) ?? 0;
+				revokedViewerRepositoryReads.set(handle, reads + 1);
+				available = available.map(value => ({
+					...value,
+					permissions: {
+						...value.permissions,
+						pull: value.name === "score" ? reads === 0 : value.permissions.pull,
+						push: false,
+					},
 				}));
 			}
 			if (handle === "paged" && url.searchParams.get("page") !== "2") {

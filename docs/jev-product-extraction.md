@@ -2110,3 +2110,43 @@ host/native review approves scope handling and full source preservation. Existin
 ordinary browser runners, server behavior, protocol, persistence and provider
 configuration are unchanged. Whole application and actual spoken delivery are not
 verified, and remaining product extraction requirements are outstanding.
+
+## Whole research browser regression source
+
+Both original research browser modules and their shared fixture are retained
+byte-for-byte: 200, 335 and 245 lines. All four complete test registrations,
+fourteen helpers and four local types remain intact, including the delayed
+correlated-link response, Resume race, viewer denials, reload and child navigation
+assertions. Current dependency exports and static E2E types pass. Fresh full-byte,
+nested-AST and complete source-boundary proofs reject missing callbacks, trimmed
+nested assertions and changed race strings.
+
+The exact archived fake-GitHub revoked-viewer map/comment and listing conditional
+are selectively retained. For that synthetic handle prefix, the first listing
+grants score pull access without push; later listings remove score pull access.
+Current device authentication, creator role handling, accessible repository list,
+ETags and all other provider branches remain unchanged. This is fixture source
+retention, not proof of the server's post-admission authorization recheck.
+
+Two exact Chromium exclusions keep the restored suites out of normal discovery.
+The other projects' selections and four prior exclusions remain unchanged. The
+dedicated scripted configuration still selects only jobs and prose. No restored
+suite/helper or GitHub preload is imported, listed, evaluated or invoked. Source
+checks do not provision PostgreSQL or execute SQL, OAuth, WebSockets, HTTP routes,
+research publication or browser navigation. The helper's database fallback and
+direct writes require explicit disposable-database/lease setup before execution;
+ready-child fixtures remain mechanical publication fixtures. Existing domain and
+isolated native evidence does not replace these whole application callbacks.
+Remaining original browser units and full application verification are outstanding.
+
+Final fresh full types, formatting and CI pass with the same three existing lint
+warnings, 221 reviewed design exceptions and existing design baseline. Independent
+review confirms exact archive bytes/nested bodies, unchanged forty-file ordinary
+selection sets (23/8/1/1), both new suites excluded from every project, and unchanged
+dedicated selection. Removing only the two ignore joins reconstructs the preceding
+normal configuration; removing only the complete map/comment/conditional reconstructs
+the preceding GitHub preload byte-for-byte and by full AST. An incomplete comment
+extraction caught during review is corrected and its complete bytes are now checked.
+No production, unit-test or UI runtime code changes in this slice. The preceding
+3,389 offline and eighty-seven native passes remain historical evidence; they are
+not repeated or represented as fresh execution of these unactivated browser cases.

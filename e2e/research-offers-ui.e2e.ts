@@ -1,0 +1,335 @@
+import { authenticate, expect, openIsolatedRoom, ready, roomPath, test } from "./room";
+import { seedChildChannel } from "./database";
+import {
+	offerSources,
+	researchWorkCounts,
+	saveConversationState,
+	seedRequest,
+} from "./research-offer-fixtures";
+
+import type { Research } from "../packages/protocol/index";
+import type { BrowserContext, Page } from "@playwright/test";
+import type { OfferSpec } from "./research-offer-fixtures";
+
+type SocketFrame = { kind: string; [key: string]: unknown };
+
+function port(baseURL: string): number {
+	return Number(new URL(baseURL).port);
+}
+
+function offerCard(page: Page, offerId: string) {
+	return page.locator(`[data-chat-message-id="source-${offerId}"]`)
+		.getByRole("group", { name: "Research suggestion" });
+}
+
+async function routeResearchNotification(
+	context: BrowserContext,
+	holdInitialLinkResponse = true,
+): Promise<{
+	frames: SocketFrame[];
+	initialLinkHeld: () => boolean;
+	resumeReplyHeld: () => boolean;
+	notify: (workspaceId: string) => void;
+	releaseInitialLink: () => void;
+	failHeldResume: () => void;
+}> {
+	// These test-only timing controls exercise the real observer and a delayed failure handler;
+	// neither frame is evidence of research publication.
+	let frames: SocketFrame[] = [];
+	let send: ((frame: unknown) => void) | undefined;
+	let initialLinkReply: string | undefined;
+	let initialLinkCaptured = false;
+	let resumeRequestId: string | undefined;
+	let heldResumeReply = false;
+	let failResume: ((frame: { kind: string; rid: string; message: string }) => void) | undefined;
+	await context.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		send = frame => route.send(JSON.stringify(frame));
+		route.onMessage(message => {
+			if (typeof message === "string") {
+				try {
+					let frame = JSON.parse(message) as SocketFrame;
+					if (frame.kind === "conversation-plan:research" && frame.choice === "resume") {
+						resumeRequestId = typeof frame.rid === "string" ? frame.rid : undefined;
+					}
+				} catch {
+					// Preserve unrelated binary or non-JSON wire frames.
+				}
+			}
+			server.send(message);
+		});
+		server.onMessage(message => {
+			if (typeof message === "string") {
+				try {
+					let frame = JSON.parse(message) as SocketFrame;
+					frames.push(frame);
+					if (
+						holdInitialLinkResponse
+						&& frame.kind === "conversation-plan:research-link"
+						&& !initialLinkCaptured
+					) {
+						initialLinkCaptured = true;
+						initialLinkReply = message;
+						return;
+					}
+					if (typeof frame.rid === "string" && frame.rid === resumeRequestId) {
+						heldResumeReply = true;
+						return;
+					}
+				} catch {
+					// Preserve unrelated binary or non-JSON wire frames.
+				}
+			}
+			route.send(message);
+		});
+		failResume = frame => route.send(JSON.stringify(frame));
+	});
+	return {
+		frames,
+		initialLinkHeld: () => initialLinkReply !== undefined,
+		resumeReplyHeld: () => heldResumeReply,
+		notify(workspaceId) {
+			if (!send) throw new Error("research notification route is not connected");
+			send({ kind: "research:changed", ts: 0, revision: 1, workspaceId });
+		},
+		releaseInitialLink() {
+			if (!initialLinkReply) throw new Error("initial research-link reply is not held");
+			let reply = initialLinkReply;
+			initialLinkReply = undefined;
+			if (!send) throw new Error("research notification route is not connected");
+			// The route forwards this held correlated reply as a test-only wire frame.
+			send(JSON.parse(reply));
+		},
+		failHeldResume() {
+			if (!resumeRequestId || !heldResumeReply || !failResume) {
+				throw new Error("resume reply is not held");
+			}
+			failResume({
+				kind: "session:error",
+				rid: resumeRequestId,
+				message: "synthetic delayed failure after link",
+			});
+		},
+	};
+}
+
+test("writers can accept or dismiss source-attached offers; viewers only read them", async ({ baseURL, browser, context, join, room, seed }) => {
+	let specs: OfferSpec[] = [
+		{
+			id: "ui-accept",
+			brief: "Review this synthetic cache-retention request exactly as written.",
+			status: "offered",
+		},
+		{
+			id: "ui-dismiss",
+			brief: "Consider this synthetic maintenance-window request.",
+			status: "offered",
+		},
+	];
+	let { state, transcript } = offerSources(specs, "source-author");
+	await seed("# Research offer controls fixture\n", { transcript });
+	await saveConversationState(room, state);
+	let writerCountsBefore = await researchWorkCounts(room);
+	expect(writerCountsBefore).toEqual({ jobs: 0, owners: 0, workspaces: 0 });
+	let socket = await routeResearchNotification(context, false);
+	let writerA = await join("writer-a");
+	let acceptedCardA = offerCard(writerA, "ui-accept");
+	let sourceMessageA = writerA.locator('[data-chat-message-id="source-ui-accept"]');
+	await expect(sourceMessageA).toContainText(specs[0]!.brief);
+	await expect(acceptedCardA.getByText(specs[0]!.brief, { exact: true })).toBeVisible();
+	await expect(acceptedCardA.getByRole("button", { name: "Research", exact: true }))
+		.toBeVisible();
+	await expect(acceptedCardA.getByRole("button", { name: "Dismiss", exact: true }))
+		.toBeVisible();
+	expect(await researchWorkCounts(room)).toEqual(writerCountsBefore);
+
+	let researchButton = acceptedCardA.getByRole("button", { name: "Research", exact: true });
+	await researchButton.focus();
+	await researchButton.press("Enter");
+	await expect.poll(() =>
+		socket.frames.some(frame =>
+			frame.kind === "conversation-plan:research"
+			&& frame.offerId === "ui-accept"
+			&& frame.status === "accepted"
+		)
+	).toBe(true);
+	let acceptedReply = socket.frames.find(frame =>
+		frame.kind === "conversation-plan:research" && frame.offerId === "ui-accept"
+	)!;
+	expect(acceptedReply.execution).toBe("pending-retry");
+	await expect(acceptedCardA).toContainText("Research accepted");
+	let countsAfterAcceptance = await researchWorkCounts(room);
+	expect(countsAfterAcceptance.jobs).toBe(0);
+	expect(countsAfterAcceptance.workspaces).toBe(0);
+	await expect.poll(() =>
+		socket.frames.some(frame =>
+			frame.kind === "conversation-plan:research-link"
+			&& frame.offerId === "ui-accept"
+			&& frame.status === "pending"
+		)
+	).toBe(true);
+
+	let writerB = await join("writer-b");
+	let acceptedCardB = offerCard(writerB, "ui-accept");
+	await expect(acceptedCardB).toContainText("Research accepted");
+	await expect(acceptedCardB.getByRole("button", { name: "Resume", exact: true })).toBeVisible();
+	await writerB.reload();
+	await ready(writerB);
+	acceptedCardB = offerCard(writerB, "ui-accept");
+	await expect(acceptedCardB).toContainText("Research accepted");
+	await expect(acceptedCardB.getByRole("button", { name: "Resume", exact: true })).toBeVisible();
+
+	let countsBeforeDismiss = await researchWorkCounts(room);
+	let dismissedCardA = offerCard(writerA, "ui-dismiss");
+	let dismissButton = dismissedCardA.getByRole("button", { name: "Dismiss", exact: true });
+	await dismissButton.focus();
+	await dismissButton.press("Space");
+	await expect(dismissedCardA).toContainText("Dismissed");
+	expect(await researchWorkCounts(room)).toEqual(countsBeforeDismiss);
+	await writerB.reload();
+	await ready(writerB);
+	let dismissedCardB = offerCard(writerB, "ui-dismiss");
+	await expect(dismissedCardB).toContainText("Dismissed");
+	await expect(dismissedCardB.getByRole("button", { name: "Research", exact: true }))
+		.toHaveCount(0);
+	await expect(dismissedCardB.getByRole("button", { name: "Dismiss", exact: true }))
+		.toHaveCount(0);
+	await expect(offerCard(writerB, "ui-accept")).toContainText("Research accepted");
+
+	let viewerContext = await browser.newContext({ baseURL });
+	try {
+		let readonly = await viewerContext.newPage();
+		await authenticate(readonly, "readonly", baseURL!);
+		await readonly.goto(roomPath(room));
+		for (let offerId of ["ui-accept", "ui-dismiss"]) {
+			let card = offerCard(readonly, offerId);
+			await expect(card).toBeVisible();
+			await expect(card.getByRole("button", { name: "Research", exact: true }))
+				.toHaveCount(0);
+			await expect(card.getByRole("button", { name: "Dismiss", exact: true }))
+				.toHaveCount(0);
+			await expect(card.getByRole("button", { name: "Resume", exact: true }))
+				.toHaveCount(0);
+		}
+		await readonly.reload();
+		await expect(offerCard(readonly, "ui-accept")).toContainText("Research accepted");
+		await expect(offerCard(readonly, "ui-dismiss")).toContainText("Dismissed");
+	} finally {
+		await viewerContext.close();
+	}
+});
+
+test("an accepted link arrives from the room event, reloads, and opens its ready child", async ({ baseURL, browser, room, seed }) => {
+	let spec: OfferSpec = {
+		id: "ui-link-ready",
+		brief: "Inspect this synthetic accepted research request.",
+		status: "accepted",
+	};
+	let handle = "link-writer";
+	let { state, transcript } = offerSources([spec], handle);
+	await seed("# Research offer linked-state fixture\n", { transcript });
+	await saveConversationState(room, state);
+	let socket: Awaited<ReturnType<typeof routeResearchNotification>> | undefined;
+	let isolated = await openIsolatedRoom(
+		browser,
+		baseURL!,
+		room,
+		handle,
+		{},
+		async context => {
+			socket = await routeResearchNotification(context);
+		},
+	);
+	try {
+		let page = isolated.page;
+		let card = offerCard(page, spec.id);
+		await expect(card).toContainText("Research accepted");
+		await expect.poll(() => socket?.initialLinkHeld()).toBe(true);
+		await expect(card.getByRole("button", { name: "Resume", exact: true })).toHaveCount(0);
+		socket!.releaseInitialLink();
+		await expect.poll(() =>
+			socket?.frames.some(frame =>
+				frame.kind === "conversation-plan:research-link"
+				&& frame.offerId === spec.id
+				&& frame.status === "pending"
+			)
+		).toBe(true);
+		await expect(card.getByRole("button", { name: "Resume", exact: true })).toBeVisible();
+		await card.getByRole("button", { name: "Resume", exact: true }).click();
+		await expect.poll(() => socket?.resumeReplyHeld()).toBe(true);
+
+		let workspaceId = await seedRequest(room, spec, "linked", handle);
+		let child = await seedChildChannel(
+			port(baseURL!),
+			room,
+			crypto.randomUUID(),
+			"Synthetic ready research child",
+			"# Synthetic report\n\nThis is a transport fixture, not published research.\n",
+		);
+		let requestReads = 0;
+		let readyView: Research.RequestView = {
+			id: workspaceId,
+			channelId: room,
+			question: spec.brief,
+			sources: [],
+			createdAt: new Date().toISOString(),
+			updatedAt: new Date().toISOString(),
+			state: "completed",
+			stage: "ready",
+			child: {
+				id: child.id,
+				slug: child.slug,
+				sourceCount: 0,
+				summary: "Synthetic ready-child fixture.",
+				title: "Synthetic ready research child",
+			},
+		};
+		// The ID/link is read from the real server; this scripted ready response and child are
+		// mechanical store/navigation fixtures, not evidence of research publication.
+		await page.route(`**/api/channels/${room}/research-requests/**`, async route => {
+			let request = route.request();
+			let path = new URL(request.url()).pathname;
+			if (
+				request.method() === "GET"
+				&& path === `/api/channels/${room}/research-requests/${workspaceId}`
+			) {
+				requestReads++;
+				await route.fulfill({ json: readyView });
+				return;
+			}
+			await route.continue();
+		});
+		if (!socket) throw new Error("research notification route was not installed");
+		socket.notify(workspaceId);
+		await expect.poll(() =>
+			socket?.frames.some(frame =>
+				frame.kind === "conversation-plan:research-link"
+				&& frame.offerId === spec.id
+				&& frame.status === "linked"
+				&& frame.researchRequestId === workspaceId
+			)
+		).toBe(true);
+		await expect(card.getByText("Research ready", { exact: true })).toBeVisible();
+		await expect(card.getByRole("button", { name: "Open research", exact: true }))
+			.toBeVisible();
+		await expect.poll(() => requestReads).toBeGreaterThan(0);
+		await expect(card.getByRole("button", { name: "Resume", exact: true })).toHaveCount(0);
+		await expect(card).toHaveAttribute("aria-busy", "true");
+		// The actual Resume request reached the server; only its reply is delayed until the
+		// authoritative linked state has rendered, then a test-only error exercises the race.
+		socket!.failHeldResume();
+		await expect(card).toHaveAttribute("aria-busy", "false");
+		await expect(card.getByRole("alert")).toHaveCount(0);
+		await expect(card.getByText("Research ready", { exact: true })).toBeVisible();
+
+		await page.reload();
+		await ready(page);
+		card = offerCard(page, spec.id);
+		await expect(card.getByText("Research ready", { exact: true })).toBeVisible();
+		await expect.poll(() => requestReads).toBeGreaterThan(1);
+		await card.getByRole("button", { name: "Open research", exact: true }).click();
+		await expect(page).toHaveURL(`${baseURL}${child.path}`);
+	} finally {
+		await isolated.close();
+	}
+});
