@@ -1980,3 +1980,28 @@ All other preceding tracked blobs remain exact. Original suites, production, pro
 fakes, profiles and ordinary runner/discovery remain unchanged. No UI source changes,
 client build or browser rerun is claimed. The dedicated setup remains inactive; its
 configuration/preloads and original suites are never loaded or executed.
+
+## Whole runtime and prompt browser source
+
+The archived runtime and prompt suites are now restored byte-for-byte: 407 and
+493 lines, respectively, with all seventeen complete test callbacks and eleven
+helpers. Fresh archive comparisons cover complete bytes, nested callback bodies,
+imports and helper declarations. Current direct dependency exports and static
+E2E types pass. The scoped sources, authenticated ownership, exact quotes, UTF-16
+spans, corrections, agreement, reload, focus, Save, Reopen and Discard assertions
+remain intact.
+
+Two exact Chromium discovery exclusions keep these suites inactive. The other
+three projects already select only their explicit suites; the dedicated scripted
+configuration still selects only jobs and decision prose. No configuration,
+preload or restored suite is imported, listed or executed. The original runtime
+Save caption conflict and its separate 8789 process-restart boundary remain
+unresolved. Source retention and static compatibility do not establish passing
+browser behavior or restart containment. Whole application verification and the
+remaining product extraction are still outstanding.
+
+Fresh full workspace types and CI pass after formatting. CI reports three existing
+lint warnings, no errors, the same 221 reviewed design exceptions and existing
+design baseline. The preceding 3,333-test offline result is retained evidence;
+unit tests are not rerun for these inactive source modules and two discovery
+exclusions. No production, unit-test or UI implementation changes in this slice.
