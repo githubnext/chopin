@@ -215,7 +215,14 @@ function Conversation() {
 }
 
 const RUN_STAGES: Chat.RunStage[] = [
-	{ id: "r:preflight", name: "preflight", status: "completed", started: 1_000, ended: 1_002 },
+	{
+		id: "r:preflight",
+		name: "preflight",
+		kind: "tool",
+		status: "completed",
+		started: 1_000,
+		ended: 1_002,
+	},
 	{ id: "r:draft-1", name: "draft-1", status: "completed", started: 1_002, ended: 1_380 },
 	{ id: "r:reviewer-a-1", name: "reviewer-a-1", status: "completed", started: 1_380, ended: 1_620 },
 	{ id: "r:draft-2", name: "draft-2", status: "running", started: 1_620 },

@@ -18,5 +18,6 @@ export {
 	SirenIcon,
 	SparkleIcon,
 	WarningIcon,
+	WrenchIcon,
 } from "./line";
 export { ArchiveIcon, DocumentIcon, LoaderIcon, SearchIcon } from "./system";

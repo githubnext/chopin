@@ -537,6 +537,7 @@ function restoreWorkflowRuns(value: JsonValue | undefined): NonNullable<Chat.Cha
 			|| stages.some(stage =>
 				!stage || typeof stage !== "object" || Array.isArray(stage)
 				|| typeof stage.id !== "string" || typeof stage.name !== "string"
+				|| stage.kind !== undefined && stage.kind !== "tool"
 				|| !RUN_STAGE_STATUSES.has(stage.status as string)
 				|| !seconds(stage.started, true) || !seconds(stage.ended, true)
 			)
