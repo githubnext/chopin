@@ -17,6 +17,7 @@ import {
 	SirenIcon,
 	SparkleIcon,
 	WarningIcon,
+	WrenchIcon,
 } from "@chopin/icons";
 
 import addProject from "../assets/figma/navigation/add-project.svg";
@@ -54,6 +55,7 @@ const NUCLEO_ICONS: readonly IconCatalogueItem[] = [
 	{ className: "rotate-90", icon: ChevronIcon, name: "Chevron down (rotated)" },
 	{ icon: MessageIcon, name: "Message" },
 	{ icon: CheckIcon, name: "Check" },
+	{ icon: WrenchIcon, name: "Wrench" },
 	{ icon: InfoIcon, name: "Info" },
 	{ icon: LightbulbIcon, name: "Lightbulb" },
 	{ icon: PlusIcon, name: "Plus" },

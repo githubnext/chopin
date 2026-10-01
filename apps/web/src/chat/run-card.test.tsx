@@ -87,3 +87,33 @@ test("a concurrent stack opens only the waiting run, offers per-run controls, an
 		markup.indexOf('data-run-status="running"'),
 	);
 });
+
+test("a tool step carries the wrench and says it is a tool step", () => {
+	let tooled = run("demo", "running", 10);
+	tooled.stages = [{
+		id: "demo:t1",
+		name: "prepare",
+		kind: "tool",
+		status: "running",
+		started: 10,
+	}];
+	let markup = renderToStaticMarkup(createElement(RunStack, { runs: [tooled] }));
+	expect(markup).toContain('<span class="sr-only">tool step: </span>prepare');
+	expect(markup).toContain("data-nucleo-icon");
+	let plain = renderToStaticMarkup(
+		createElement(RunStack, { runs: [run("agent", "running", 10)] }),
+	);
+	expect(plain).not.toContain("tool step");
+});
+
+test("runs of the same workflow are told apart by a short run id", () => {
+	let first = { ...run("aaaaaaaa-1111", "running", 10), name: "demo-wait" };
+	let second = { ...run("bbbbbbbb-2222", "running", 20), name: "demo-wait" };
+	let markup = renderToStaticMarkup(
+		createElement(RunStack, { onPause: () => {}, runs: [first, second] }),
+	);
+	expect(markup).toContain('aria-label="Pause demo-wait aaaaaaaa"');
+	expect(markup).toContain('aria-label="Pause demo-wait bbbbbbbb"');
+	let single = renderToStaticMarkup(createElement(RunStack, { onPause: () => {}, runs: [first] }));
+	expect(single).toContain('aria-label="Pause demo-wait"');
+});

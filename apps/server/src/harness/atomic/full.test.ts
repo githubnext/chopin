@@ -561,3 +561,34 @@ test("a new run clears ended cards, keeps live ones, and lists only the twelve m
 	expect(card?.stages[0]?.name).toBe("stage-3");
 	expect(card?.earlierStages).toBe(3);
 });
+
+test("ctx.tool steps appear among the stages, marked as tool steps", async () => {
+	let { foldLifecycle } = await import("./full");
+	let cards = new Map();
+	let event = (target: object, at: number) =>
+		({
+			type: "workflow_lifecycle",
+			eventId: `t${at}`,
+			cursor: { epoch: "e", revision: at },
+			runId: "run-1",
+			rootRunId: "run-1",
+			ownerSessionId: "session",
+			occurredAt: at * 1000,
+			observedAt: at * 1000,
+			delivery: "live",
+			target,
+		}) as never;
+	foldLifecycle(cards, event({ kind: "run", runId: "run-1", status: "running" }, 1), "demo");
+	let tool = (toolNodeId: string, toolName: string, status: string, at: number) =>
+		foldLifecycle(cards, event({ kind: "tool", runId: "run-1", toolNodeId, toolName, status }, at));
+	tool("t1", "prepare", "running", 2);
+	tool("t1", "prepare", "cached", 5);
+	tool("t2", "work", "running", 6);
+	tool("t3", "finish", "cancelled", 7);
+	let [card] = runCards(cards, { active: ["run-1"], paused: [] });
+	expect(card?.stages).toEqual([
+		{ id: "run-1:t1", name: "prepare", kind: "tool", status: "completed", started: 2, ended: 5 },
+		{ id: "run-1:t2", name: "work", kind: "tool", status: "running", started: 6 },
+		{ id: "run-1:t3", name: "finish", kind: "tool", status: "skipped", ended: 7 },
+	]);
+});

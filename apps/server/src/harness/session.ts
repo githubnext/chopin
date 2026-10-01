@@ -38,6 +38,11 @@ export type PlannerChannel = {
 	harness?: string;
 };
 
+/** Atomic answers an action it could not carry out with `noop` or `cancelled`; report it rather than claim success. */
+function applied(outcome: { status: string; message: string }): void {
+	if (outcome.status === "noop" || outcome.status === "cancelled") throw new Error(outcome.message);
+}
+
 export type PlannerSession = {
 	/** Snapshot of the selected current static Planner profile. */
 	activeTools?: readonly string[];
@@ -176,12 +181,8 @@ export async function openPlannerSession(
 				},
 				pauseRuns: () => pauseOwnedRuns(workflows()),
 				resumeRuns: () => resumeOwnedRuns(workflows()),
-				pauseRun: async (runId: string) => {
-					await workflows().pause(runId);
-				},
-				resumeRun: async (runId: string) => {
-					await workflows().resume(runId);
-				},
+				pauseRun: async (runId: string) => applied(await workflows().pause(runId)),
+				resumeRun: async (runId: string) => applied(await workflows().resume(runId)),
 			}
 			: {};
 		return {
