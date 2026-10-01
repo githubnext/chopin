@@ -331,17 +331,27 @@ test("a checkout's project settings add its packages without writing either sett
 	expect(plain.requests[0]!.toolNames).not.toContain("project_tool");
 });
 
-test("operator extension paths add a package's tools, skills, and workflows to Planner sessions only", async () => {
-	let result = await run(true, "workflows", { operatorPackage: true, worker: true });
-	let request = result.requests[0]!;
-	expect(request.toolNames).toContain("operator_package_tool");
-	expect(request.system).toContain("OPERATOR-PACKAGE-SKILL-MARKER");
-	expect(result.requests.at(-1)!.toolResults.join("\n")).toContain("operator-package-workflow");
-	expect(result.workerRequests[0]!.toolNames).not.toContain("operator_package_tool");
+/** The first workflow tool call starts Atomic's durable backend, which falls back slowly without Postgres. */
+const WORKFLOW_TOOL_TIMEOUT_MS = 30_000;
+
+test(
+	"operator extension paths add a package's tools, skills, and workflows to Planner sessions only",
+	async () => {
+		let result = await run(true, "workflows", { operatorPackage: true, worker: true });
+		let request = result.requests[0]!;
+		expect(request.toolNames).toContain("operator_package_tool");
+		expect(request.system).toContain("OPERATOR-PACKAGE-SKILL-MARKER");
+		expect(result.requests.at(-1)!.toolResults.join("\n")).toContain("operator-package-workflow");
+		expect(result.workerRequests[0]!.toolNames).not.toContain("operator_package_tool");
+	},
+	WORKFLOW_TOOL_TIMEOUT_MS,
+);
+
+test("without operator extension paths, Planner sessions have none of that package", async () => {
 	let plain = await run(true, "workflows");
 	expect(plain.requests[0]!.toolNames).not.toContain("operator_package_tool");
 	expect(plain.requests.at(-1)!.toolResults.join("\n")).not.toContain("operator-package-workflow");
-});
+}, WORKFLOW_TOOL_TIMEOUT_MS);
 
 test("free-text Decisions answers to multi-select and preview questions reach the model", async () => {
 	let room = await hostInputRoom();
