@@ -2253,3 +2253,47 @@ and complete prior-file reconstruction after subtracting only the five entries
 and three documentation additions. Existing admission, Harness and entitlement
 wording remains intact; thirty-six public-doc relative links pass exact casing.
 No production, browser or provider behavior changes in this independent slice.
+
+## Whole conversation browser regression source
+
+Direct human approval resolves the prior source-restoration block. The three
+previously absent modules are retained whole: layout (88 lines), conversation
+stress (459 lines) and conversation UI (520 lines). Their twenty-one complete
+callbacks, twelve helpers, nine constants and twelve imports remain intact.
+There are no local types or setup/cleanup hooks. Source includes multi-member
+choices, concurrent message bursts, advisory options, focused Copilot subspans,
+analysis portals and retries, parent/child source scopes, typist selections and
+read-only/archive controls. No original nested assertion is reduced.
+
+Three exact Chromium exclusions precede restoration. The ten previous exclusions
+and other projects remain unchanged, and the dedicated scripted target still
+selects only jobs and prose. No restored module, helper, preload or configuration
+is imported, evaluated, listed or invoked. These are source-retention checks.
+
+Archived 40% Chat width and remembered ratios remain despite the current approved
+304-pixel initial/minimum and 400-pixel maximum sizing. Exact Save selectors also
+remain despite the current Save answer caption. Those compatibility conflicts
+need separate resolution before activation. Stress SQL reads require correctly
+mapped disposable databases; interpretation/authentication, actual child editors,
+CSS Highlights and native portal/selection timing require full application
+verification. No configuration is claimed to satisfy those prerequisites here.
+
+All previously absent original browser paths are now present as source. This
+does not establish complete callback preservation in every already-modified
+browser file or passing application/browser behavior. Original research reconnect,
+sidecar asynchronous editing and other inventoried callback units remain
+outstanding, alongside deferred view anatomy and authentic system verification.
+The larger product extraction remains unfinished.
+
+Fresh full workspace/E2E types, formatting and CI pass with the same three
+existing lint warnings, 221 reviewed design exceptions and existing design
+baseline. Independent review confirms entire original bytes, nested AST and raw
+declarations for all three modules, with missing-helper and trimmed-callback
+negative controls rejected. All forty-six preceding browser module bytes and
+direct dependencies remain unchanged, including the latest configuration-test
+and deployment-doc fixes. Ordinary selected filename sets remain 23/8/1/1;
+all three files are rejected in every project, the ten previous exclusions
+remain effective and the dedicated configuration remains byte-identical. Removing
+only the three exclusions reconstructs the preceding normal config. No production,
+unit-test or UI runtime changes occur; earlier offline/native execution remains
+historical evidence, not a passing claim for these unactivated whole callbacks.
