@@ -65,6 +65,8 @@ let stub = startStubModelServer((prompt, prior) =>
 		? { kind: "tool", name: "ask_user_question", arguments: JSON.stringify(freeText[prompt]) }
 		: prompt === "cwd"
 		? { kind: "tool", name: "bash", arguments: JSON.stringify({ command: "pwd" }) }
+		: prompt === "workflows"
+		? { kind: "tool", name: "workflow", arguments: JSON.stringify({ action: "list" }) }
 		: { kind: "text", text: "Ready." }
 );
 afterAll(stub.stop);
@@ -72,7 +74,7 @@ afterAll(stub.stop);
 async function run(
 	registered: boolean,
 	prompt = "plain",
-	{ host, checkout = true, worker = false, projectPackage = false }: {
+	{ host, checkout = true, worker = false, projectPackage = false, operatorPackage = false }: {
 		host?: HostInput;
 		/** False runs the Planner in an empty directory, as a channel without a checkout does. */
 		checkout?: boolean;
@@ -80,6 +82,8 @@ async function run(
 		worker?: boolean;
 		/** Install a local package through the checkout's `.atomic/settings.json`. */
 		projectPackage?: boolean;
+		/** Load a local package through the operator's extension paths, as `HARNESS_EXTENSIONS` does. */
+		operatorPackage?: boolean;
 	} = {},
 ) {
 	let root = await mkdtemp(join(tmpdir(), "chopin-atomic-full-"));
@@ -87,9 +91,11 @@ async function run(
 	let cwd = join(root, checkout ? "checkout" : "empty");
 	let previous = process.env.ATOMIC_CODING_AGENT_DIR;
 	let received: QuestionParams[] = [];
+	let operatorPackageDir = join(root, "operator-package");
 	let harness = createAtomicAdapter({
 		auth: "ai-gateway",
 		model: "stub/model",
+		extensions: operatorPackage ? [operatorPackageDir] : undefined,
 		providers: {
 			stub: {
 				baseUrl: stub.baseUrl,
@@ -156,6 +162,43 @@ async function run(
 			);
 			await mkdir(join(cwd, ".atomic"), { recursive: true });
 			await writeFile(join(cwd, ".atomic", "settings.json"), JSON.stringify({ packages: [pkg] }));
+		}
+		if (operatorPackage) {
+			await mkdir(join(operatorPackageDir, "skills", "operator-package-marker"), {
+				recursive: true,
+			});
+			await writeFile(
+				join(operatorPackageDir, "package.json"),
+				JSON.stringify({
+					name: "operator-package",
+					type: "module",
+					atomic: {
+						extensions: ["./extension.ts"],
+						skills: ["./skills"],
+						workflows: ["./workflow.ts"],
+					},
+				}),
+			);
+			await writeFile(
+				join(operatorPackageDir, "extension.ts"),
+				`export default api => api.registerTool({name: "operator_package_tool", label: "Operator package", description: "Marker", parameters: {type:"object"}, async execute() { return {content:[{type:"text",text:"operator package"}], details:{}}; }});`,
+			);
+			await writeFile(
+				join(operatorPackageDir, "skills", "operator-package-marker", "SKILL.md"),
+				"---\nname: operator-package-marker\ndescription: OPERATOR-PACKAGE-SKILL-MARKER\n---\nOperator package skill.\n",
+			);
+			await writeFile(
+				join(operatorPackageDir, "workflow.ts"),
+				`import { workflow } from "@bastani/atomic/workflows";
+export default workflow({
+	name: "operator-package-workflow",
+	description: "OPERATOR-PACKAGE-WORKFLOW-MARKER",
+	inputs: {},
+	outputs: {},
+	run: async () => ({}),
+});
+`,
+			);
 		}
 		process.env.ATOMIC_CODING_AGENT_DIR = agentDir;
 		let humanInput: HostInput = host ?? {
@@ -286,6 +329,18 @@ test("a checkout's project settings add its packages without writing either sett
 	expect(JSON.parse(result.files!.project!).packages).toHaveLength(1);
 	let plain = await run(true);
 	expect(plain.requests[0]!.toolNames).not.toContain("project_tool");
+});
+
+test("operator extension paths add a package's tools, skills, and workflows to Planner sessions only", async () => {
+	let result = await run(true, "workflows", { operatorPackage: true, worker: true });
+	let request = result.requests[0]!;
+	expect(request.toolNames).toContain("operator_package_tool");
+	expect(request.system).toContain("OPERATOR-PACKAGE-SKILL-MARKER");
+	expect(result.requests.at(-1)!.toolResults.join("\n")).toContain("operator-package-workflow");
+	expect(result.workerRequests[0]!.toolNames).not.toContain("operator_package_tool");
+	let plain = await run(true, "workflows");
+	expect(plain.requests[0]!.toolNames).not.toContain("operator_package_tool");
+	expect(plain.requests.at(-1)!.toolResults.join("\n")).not.toContain("operator-package-workflow");
 });
 
 test("free-text Decisions answers to multi-select and preview questions reach the model", async () => {

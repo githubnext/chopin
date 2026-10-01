@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { isAbsolute } from "node:path";
+
 import { ATOMIC_AUTH_MODES, createAtomicAdapter } from "./atomic/adapter";
 import { forgetWorkspaces } from "./atomic/workspace";
 import { createCopilotSdk } from "./copilot-sdk/adapter";
@@ -18,10 +21,13 @@ function createPiHarness(settings: { auth?: string }): HarnessV1 & { shutdown():
 }
 
 function createAtomicHarness(
-	settings: { auth?: string },
+	settings: { auth?: string; extensions?: readonly string[] },
 ): HarnessV1 & { shutdown(): Promise<void> } {
 	// Like Pi, Atomic takes neither a GitHub credential nor a credit limit.
-	return createAtomicAdapter({ auth: settings.auth as AtomicAuthMode });
+	return createAtomicAdapter({
+		auth: settings.auth as AtomicAuthMode,
+		extensions: settings.extensions,
+	});
 }
 
 export const harnesses = {
@@ -34,6 +40,7 @@ export const harnesses = {
 		credentials: (id: string) => string | undefined;
 		limits: (id: string) => { maxAiCredits: number } | undefined;
 		auth?: string;
+		extensions?: readonly string[];
 	}) => HarnessV1
 >;
 
@@ -59,14 +66,28 @@ const AUTH_MODES = new Map<string, ReadonlySet<string>>([
 	["atomic", new Set(ATOMIC_AUTH_MODES)],
 ]);
 
+/** Only the atomic Planner loads operator extensions, each an existing absolute path. */
+function checkedExtensions(harness: string, extensions: readonly string[] = []): readonly string[] {
+	if (extensions.length && harness !== "atomic") {
+		throw new Error(`HARNESS_EXTENSIONS requires HARNESS=atomic, not ${harness}`);
+	}
+	for (let path of extensions) {
+		if (!isAbsolute(path)) throw new Error(`HARNESS_EXTENSIONS path ${path} must be absolute`);
+		if (!existsSync(path)) throw new Error(`HARNESS_EXTENSIONS path ${path} does not exist`);
+	}
+	return extensions;
+}
+
 export function harnessFor(config: {
 	harness: string;
 	harnessAuth?: string;
+	harnessExtensions?: readonly string[];
 	host?: string;
 }): HarnessV1 {
 	if (!Object.hasOwn(harnesses, config.harness)) {
 		throw new Error(`Unknown harness: ${config.harness}`);
 	}
+	let extensions = checkedExtensions(config.harness, config.harnessExtensions);
 	let auth = config.harnessAuth;
 	let isLoopback = loopback(config.host ?? "127.0.0.1");
 	let modes = AUTH_MODES.get(config.harness);
@@ -94,6 +115,7 @@ export function harnessFor(config: {
 			return maxAiCredits === undefined ? undefined : { maxAiCredits };
 		},
 		auth,
+		extensions,
 	});
 }
 
