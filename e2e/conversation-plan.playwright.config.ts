@@ -35,6 +35,14 @@ let serverEnvironment = {
 	JEV_API_KEY: "e2e-jev-only",
 	JEV_MODEL: "jev-e2e",
 	TYPESAFE_API_KEY: "",
+	HTTP_PROXY: "",
+	HTTPS_PROXY: "",
+	ALL_PROXY: "",
+	http_proxy: "",
+	https_proxy: "",
+	all_proxy: "",
+	NO_PROXY: "*",
+	no_proxy: "*",
 	E2E_CONVERSATION_PLAN: "1",
 	E2E_PLANNER_JOBS_DIR: PLANNER_JOBS_DIR,
 	E2E_JEV_CONTROL_DIR: JEV_CONTROL_DIR,
@@ -80,7 +88,8 @@ export default defineConfig({
 		use: { ...devices["Desktop Chrome"], baseURL: origin },
 	}],
 	webServer: {
-		command: "bun --preload ./e2e/github.ts --preload ./e2e/jev.ts"
+		command: "bun --preload ./e2e/harness/scripted-network-preload.ts"
+			+ " --preload ./e2e/github.ts --preload ./e2e/jev.ts"
 			+ " --preload ./e2e/harness/scripted-preload.ts apps/server/src/main.ts",
 		cwd: ROOT,
 		url: `${origin}/`,

@@ -19,6 +19,14 @@ let approved: Record<string, string | undefined> = {
 	JEV_API_KEY: "e2e-jev-only",
 	JEV_MODEL: "jev-e2e",
 	TYPESAFE_API_KEY: "",
+	HTTP_PROXY: "",
+	HTTPS_PROXY: "",
+	ALL_PROXY: "",
+	http_proxy: "",
+	https_proxy: "",
+	all_proxy: "",
+	NO_PROXY: "*",
+	no_proxy: "*",
 	E2E_PLANNER_JOBS_DIR: join(root, "e2e", "test-results", "planner-jobs"),
 	E2E_JEV_CONTROL_DIR: join(root, "e2e", "test-results", "jev-control"),
 	STORAGE_DRIVER: "postgres",
@@ -103,5 +111,60 @@ it("accepts supplied local PostgreSQL URLs without contacting their database", (
 				}, root)
 			).not.toThrow();
 		}
+	}
+});
+
+let proxyNames = [
+	"HTTP_PROXY",
+	"HTTPS_PROXY",
+	"ALL_PROXY",
+	"http_proxy",
+	"https_proxy",
+	"all_proxy",
+];
+for (let name of proxyNames) {
+	for (
+		let value of [undefined, " ", "http://proxy-user:confidential-proxy-secret@proxy.invalid:8080"]
+	) {
+		it(`refuses transport proxy ${name} (${value === undefined ? "missing" : value === " " ? "blank" : "set"}) before caller effects`, () => {
+			let effects = 0;
+			expect(() => {
+				requireScriptedServer({ ...approved, [name]: value }, root);
+				effects++;
+			}).toThrow(name);
+			expect(effects).toBe(0);
+		});
+	}
+}
+
+for (let name of ["NO_PROXY", "no_proxy"]) {
+	for (let [index, value] of [undefined, "", "127.0.0.1", " * "].entries()) {
+		it(`requires universal transport proxy bypass ${name} (${index}) before caller effects`, () => {
+			let effects = 0;
+			expect(() => {
+				requireScriptedServer({ ...approved, [name]: value }, root);
+				effects++;
+			}).toThrow(name);
+			expect(effects).toBe(0);
+		});
+	}
+}
+
+it("never includes supplied transport proxy secrets in refusal messages", () => {
+	for (let name of [...proxyNames, "NO_PROXY", "no_proxy"]) {
+		let failure: unknown;
+		try {
+			requireScriptedServer({
+				...approved,
+				[name]: "http://proxy-user:confidential-proxy-secret@proxy.invalid:8080",
+			}, root);
+		} catch (error) {
+			failure = error;
+		}
+		expect(failure).toBeInstanceOf(Error);
+		expect((failure as Error).message).toContain(name);
+		expect((failure as Error).message).not.toContain("proxy-user");
+		expect((failure as Error).message).not.toContain("confidential-proxy-secret");
+		expect((failure as Error).message).not.toContain("proxy.invalid");
 	}
 });

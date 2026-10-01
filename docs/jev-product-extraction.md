@@ -1919,3 +1919,64 @@ profiles, original browser callbacks and existing preloads. Saved-module proofs 
 after formatting. The dedicated configuration and preload remain unimported; no
 application, listener, database, browser, network or provider is activated. Extraction
 is unfinished.
+
+## Dedicated server fetch fence
+
+The selected application command now puts a guarded fetch preload before the preserved
+GitHub/Jev wrappers and exact MCP preload. Its injected, test-only factory delegates
+only HTTP requests to the two fixed loopback application/MCP origins and rejects
+credentials, remote destinations, other protocols, wrong ports and malformed inputs.
+Unknown provider-wrapper fallbacks therefore reach a rejecting boundary instead of
+unrestricted native fetch. No ordinary runner or production module changes.
+
+Review reproduced two real defects in the initial fixture: spreading request options
+lost inherited native fields, and getters could mutate a URL after validation. The
+final implementation normalizes the original options through native Request construction,
+forces redirect-error behavior, validates the immutable final target, and delegates
+only that Request. Standard method, headers, body and propagated abort behavior are
+retained, including inherited options. Native proxy/unix/tls transport extensions are
+deliberately excluded. Preconnect snapshots supported option values before final
+validation and forwards a canonical URL string. It has the same destination guard.
+Errors remain generic without supplied URLs or secrets. All transport calls in the
+contracts are injected spies; no socket or real HTTP request is made.
+
+Local Bun type documentation also exposed ambient proxy defaults. The dedicated
+child environment explicitly clears the six uppercase/lowercase transport proxy
+variables and sets both NO_PROXY variants to universal bypass. The shared guard
+requires those exact values before any caller effects. All preceding guard statements
+and tests are retained; new missing, set, whitespace, partial-bypass and secret-safe
+proxy cases exercise the actual refusal boundary. No process environment is mutated
+by tests.
+
+This is a fetch/preconnect fixture boundary with configured proxy policy, not proof
+of total process, DNS, socket, PostgreSQL or browser network containment. The guarded
+preload and configuration remain unimported and inactive. Actual application startup,
+HTTP/authentication/MCP behavior, owned ports/database/writer lease, built-client
+freshness and browser containment still require separate evidence. Whole original
+browser assertions remain unchanged, including their known compatibility conflicts.
+
+A read-only next-suite audit inventories all seventeen whole runtime/prompt callbacks
+and eleven helpers. They remain absent and unselected in this slice. It identifies
+the separate 8789 process-restart helper as an additional execution boundary: that
+helper uses agent-off interpretation and different database/background settings,
+so blindly adding the exact 8788 scripted-server guard would reject it. The original
+runtime Save caption conflict also remains. No callbacks are trimmed, skipped or
+rewritten to conceal these requirements. Extraction is unfinished.
+
+Final offline verification passes 3,333 tests with 15,720 assertions across 544
+files; two PostgreSQL checks are skipped. Independent focused execution passes
+73 guard/network contracts with 282 assertions, including ten native Request/spied
+transport cases and all sixty-three environment cases. Actual failing regressions
+precede the getter/inherited-option/transport/proxy fixes. Full types pass after
+one test-only preconnect option annotation is corrected; a scoped proof retains
+the complete runtime callback/assertion AST and the unchanged factory/preload hashes.
+The ten network contracts are rerun and pass after that correction.
+
+Formatting and CI pass with the same two inherited lint warnings, 221 reviewed
+design exceptions and design baseline. Independent source proofs reject deliberately
+wrong preload order and ungated installation; whole configuration/guard/test comparison
+permits only the declared command prefix, eight proxy fields and appended proxy cases.
+All other preceding tracked blobs remain exact. Original suites, production, provider
+fakes, profiles and ordinary runner/discovery remain unchanged. No UI source changes,
+client build or browser rerun is claimed. The dedicated setup remains inactive; its
+configuration/preloads and original suites are never loaded or executed.
