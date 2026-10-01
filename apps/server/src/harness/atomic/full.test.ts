@@ -315,7 +315,7 @@ test("worker sessions stay isolated, even beside a full Planner session on the s
 	expect(beside.workerRequests[0]!.system).toBe("CHOPIN-INSTRUCTIONS-MARKER");
 });
 
-test("working and blocked runs are live, paused idle runs are paused, and finished runs are neither", () => {
+test("paused roots are paused, roots whose run ended are neither, and every other root is live", () => {
 	let root = (rootRunId: string, state: "working" | "idle" | "blocked", reason: string) =>
 		({
 			rootRunId,
@@ -329,9 +329,13 @@ test("working and blocked runs are live, paused idle runs are paused, and finish
 	expect(classifyRuns([
 		root("drafting", "working", "executing"),
 		root("asking", "blocked", "awaiting_input"),
+		root("between-steps", "idle", "quiescent"),
 		root("held", "idle", "paused"),
 		root("done", "idle", "quiescent"),
-	])).toEqual({ active: ["drafting", "asking"], paused: ["held"] });
+	], new Set(["done"]))).toEqual({
+		active: ["drafting", "asking", "between-steps"],
+		paused: ["held"],
+	});
 	expect(classifyRuns([])).toEqual({ active: [], paused: [] });
 });
 
