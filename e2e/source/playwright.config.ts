@@ -6,6 +6,7 @@ export default defineConfig({
 		"source-highlight.native.ts",
 		"question-actions.native.ts",
 		"question-terminal-origin.native.ts",
+		"question-view-contracts.native.ts",
 		"transcript-source.native.ts",
 		"excerpt-correction-lifecycle.native.ts",
 		"excerpt-correction-retry.native.ts",
@@ -24,6 +25,6 @@ export default defineConfig({
 	retries: 0,
 	timeout: 15_000,
 	reporter: "list",
-	outputDir: "../../test-results/source-native",
+	outputDir: "../test-results/source-native",
 	use: { browserName: "chromium", headless: true },
 });

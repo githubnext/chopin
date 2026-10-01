@@ -2492,3 +2492,57 @@ in every project, eighteen earlier exclusions remain effective, and removing onl
 the three joins reconstructs the entire normal config. Dedicated configs remain
 unchanged. No new production behavior, authentic editing race or system run is
 claimed from these source/static checks.
+
+## Actual current QuestionView contracts
+
+Six new native cases verify the real current QuestionView, SidecarCard and People
+with freshly built styles. Aggregate anatomy keeps the current header/prompt,
+native choice authority, actual aside participants, Custom control and complete
+Save/Discard/AddOption flow. Separate cases exercise empty/custom Save readiness,
+full counted Related names and question IDs, heading/button separation, actual
+parent-section hover/focus delegation and inert unlinked prose. Two terminal cases
+verify genuine discarded attribution and exactly one visible occurrence of every
+question; the multi-definition input matches the original archived initializer.
+Genuine cancellation stays distinct. These are current-design contracts, not
+unchanged original test-body retention.
+
+The first actual four-case run passed three and failed the aggregate test's wrong
+assumption that opening Discard immediately calls its callback. The corrected
+case verifies zero callbacks while confirmation is open, activates the actual
+Discard decision button and retains the one-callback assertion. All four original
+new case bodies and their other assertions remain intact when terminal coverage
+is added. No production code or historical test body changes.
+
+Fresh secure synthetic HTML serves only the exact fixture navigation; every
+other request is aborted. The bundle appends test bindings to the actual widget
+source and uses actual QuestionView/People through aside. It does not replace
+components or add a legacy API/status adapter. Local controlled drafts and direct
+view/People composition do not exercise QuestionnaireCard's durable/live
+participant aggregation, real application auth, server sockets, PostgreSQL or
+providers. Native DOM/focus/visible-text results do not establish speech output.
+
+The native config adds one explicit filename. A subsequent six-case run passed,
+but CI found its generated result JSON under the preexisting unignored root
+output path. That run's evidence was preserved outside the checkout; only its
+own generated file and empty directories were removed. Correcting the config's
+output directory to existing ignored/excluded e2e/test-results fixes the artifact
+boundary. Actual final six-case execution then passes, followed directly by CI.
+No source exclusion, assertion weakening or broader suite-selection change is
+used to obtain that result.
+
+Fresh full workspace/E2E types, client build and CI pass; the final native run
+reports six passes in 2.5 seconds. CI retains the same three existing warnings,
+221 reviewed design exceptions and existing design baseline. Independent review
+confirms original AUTH and multi-definition data, unchanged first four complete
+callbacks after the two terminal additions, all twenty-five preceding native and
+fixture sources, production code and ordinary/dedicated configs. Removing only
+the new filename and output-path correction reconstructs the native config.
+
+Six original QuestionView callbacks with eighteen assertions and the associated
+Questionnaire raw-HTML actor callback remain unresolved as exact executable
+units. They require incompatible people/aside APIs, cancelled/discarded semantics,
+heading/list/selection markup, captions and Custom presentation. Current native
+coverage must not be reported as exact archive parity. Accepting documented
+design adaptations or restoring the original contract requires a scope decision;
+these source/native results do not finish the larger extraction. Authentic
+application/persistence verification remains outstanding.
