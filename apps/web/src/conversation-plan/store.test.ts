@@ -76,3 +76,44 @@ test("a changed frame can precede a stale snapshot; jobs replace and reset with 
 	closeSecond();
 	expect(store.get()).toEqual({ enabled: false, jobs: [] });
 });
+
+test("reset advances connection generation before notifying observers without changing snapshots", () => {
+	let store = new ConversationPlanStore("room-a");
+	let observed: Array<{ generation: number; snapshot: ReturnType<typeof store.get> }> = [];
+	expect(store.generation).toBe(0);
+	let unsubscribe = store.subscribe(() => {
+		observed.push({ generation: store.generation, snapshot: store.get() });
+	});
+	store.reset();
+	store.reset();
+	expect(observed).toEqual([
+		{ generation: 1, snapshot: { enabled: false, jobs: [] } },
+		{ generation: 2, snapshot: { enabled: false, jobs: [] } },
+	]);
+	unsubscribe();
+});
+
+test("a coalesced reconnect retains a fresh generation and ignores the detached connection", () => {
+	let store = new ConversationPlanStore("room-a");
+	let first = fixture();
+	let closeFirst = store.listen(first.wire);
+	first.emit("conversation-plan:snapshot", 10);
+	let previousGeneration = store.generation;
+	first.emit("conversation-plan:changed", 11);
+	first.emitJobs([]);
+	expect(store.generation).toBe(previousGeneration);
+	closeFirst();
+	let second = fixture();
+	let closeSecond = store.listen(second.wire);
+	second.emit("conversation-plan:snapshot", 50);
+	let reconnectGeneration = store.generation;
+	expect(reconnectGeneration).toBeGreaterThan(previousGeneration);
+	expect(store.get()).toMatchObject({ enabled: true, state: { revision: 50 } });
+	first.emit("conversation-plan:changed", 100);
+	expect(store.get()).toMatchObject({ state: { revision: 50 } });
+	expect(store.generation).toBe(reconnectGeneration);
+	second.emit("conversation-plan:changed", 51);
+	second.emitJobs([]);
+	expect(store.generation).toBe(reconnectGeneration);
+	closeSecond();
+});

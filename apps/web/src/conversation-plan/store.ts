@@ -10,6 +10,7 @@ export class ConversationPlanStore {
 	#snapshot: Snapshot = { enabled: false, jobs: [] };
 	#listeners = new Set<() => void>();
 	#room: string;
+	#generation = 0;
 
 	constructor(room: string) {
 		this.#room = room;
@@ -22,6 +23,7 @@ export class ConversationPlanStore {
 	};
 
 	reset(): void {
+		this.#generation++;
 		this.#snapshot = { enabled: false, jobs: [] };
 		this.#emit();
 	}
@@ -52,6 +54,10 @@ export class ConversationPlanStore {
 			for (let unsubscribe of off) unsubscribe();
 			this.reset();
 		};
+	}
+
+	get generation(): number {
+		return this.#generation;
 	}
 
 	get room(): string {

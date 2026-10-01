@@ -21,6 +21,8 @@ import {
 
 import { Chat } from "./chat/chat";
 import { shouldShowResearchActionError, useResearchOfferLinks } from "./chat/research-offer";
+import { advanceConversationAnnouncement } from "./conversation-plan/announcements";
+import type { ConversationAnnouncementSummary } from "./conversation-plan/announcements";
 import { evidenceRows, hasEvidence } from "./conversation-plan/evidence";
 import { EvidencePopover } from "./conversation-plan/evidence-popover";
 import { threadForCard } from "./conversation-plan/links";
@@ -180,6 +182,15 @@ export function RoomWorkspace(
 	let sourceToken = useRef(0);
 	let conversationStore = useMemo(() => new ConversationPlanStore(room), [room]);
 	let conversation = useConversationPlan(conversationStore);
+	let conversationGeneration = conversationStore.generation;
+	let [announcement, setAnnouncement] = useState({ text: "", sequence: 0 });
+	let priorConversation = useRef<
+		{
+			store: ConversationPlanStore;
+			generation: number;
+			summary?: ConversationAnnouncementSummary;
+		} | undefined
+	>(undefined);
 	let {
 		onDocumentAction,
 		onDocumentChanged,
@@ -363,6 +374,27 @@ export function RoomWorkspace(
 		}, 3_000);
 		return () => window.clearTimeout(timeout);
 	}, [sourceDestination]);
+
+	useEffect(() => {
+		let previous = priorConversation.current;
+		let sameScope = previous?.store === conversationStore
+			&& previous.generation === conversationGeneration;
+		let { summary, message } = advanceConversationAnnouncement(
+			sameScope ? previous?.summary : undefined,
+			conversation.state,
+		);
+		priorConversation.current = {
+			store: conversationStore,
+			generation: conversationGeneration,
+			summary,
+		};
+		if (!sameScope || !conversation.state) {
+			setAnnouncement(current => current.text ? { ...current, text: "" } : current);
+		}
+		if (message) {
+			setAnnouncement(current => ({ text: message, sequence: current.sequence + 1 }));
+		}
+	}, [conversation.state, conversationStore, conversationGeneration]);
 
 	let showDecisionCard = (questionnaireId: string) => {
 		let entry = questions.snapshot().find(item => item.id === questionnaireId);
@@ -659,110 +691,115 @@ export function RoomWorkspace(
 	}
 
 	return (
-		<Workspace
-			chat={
-				<Chat
-					active={chatActive}
-					agent={agent}
-					connected={status === "connected" && workspaceCanEdit}
-					handle={handle}
-					onActivity={onChatActivity}
-					conversationPlan={conversation.state}
-					conversationPlanJobs={conversation.jobs}
-					onCardLink={showCard}
-					onAddExcerpt={addExcerpt}
-					onRetryAnalysis={retryAnalysis}
-					onRetryJob={retryJob}
-					sourceDestination={sourceDestination}
-					researchOffers={conversation.enabled
-						? {
-							links: researchLinks.links,
-							busy: researchBusy,
-							errors: researchErrors,
-							canAct: status === "connected" && !!wire?.connected && !!workspaceCanEdit,
-							store: research,
-							onAction: actOnResearchOffer,
-						}
-						: undefined}
-					decisions={{
-						questions,
-						meta: cardMeta,
-						wire,
-						connected: status === "connected",
-						canEdit: workspaceCanEdit,
-						onOpenCard: showDecisionCard,
-					}}
-					referencesEnabled={chatReferences.wire === wire && chatReferences.enabled}
-					repository={repository}
-					room={room}
-					sendAcknowledgements={chatSendAcks.wire === wire && chatSendAcks.enabled}
-					wire={wire}
-				/>
-			}
-			chatActivity={chatActivity}
-			header={
-				<Header
-					archivedAt={workspaceArchivedAt}
-					canManage={effectiveCanManage}
-					members={members}
-					label={metadata.title}
-					onAction={action => onDocumentAction(room, action)}
-					presentation={presentation}
-				/>
-			}
-			controls={
-				<DecisionViewControl
-					attention={attention}
-					onView={selectDestination}
-					unanswered={unanswered}
-					view={view}
-				/>
-			}
-			ids={workspaceIds}
-			identity={room}
-			mode={mode}
-			onDesktopChatOpen={setDesktopChatOpen}
-			onChatOpen={open => dispatch({ type: "set-chat", open })}
-			onDestination={selectDestination}
-			decisions={
-				<Decisions
-					cardMeta={cardMeta}
-					canEdit={workspaceCanEdit}
-					connected={status === "connected" && workspaceCanEdit}
-					headingId={workspaceIds.heading.decisions}
-					motion={motionContract("collapse")}
-					motionImmediately={settleMotionImmediately}
-					onShowPlan={showPlan}
-					questionMotion={QUESTION_MOTION}
-					reveal={reveal}
-					store={questions}
-					wire={wire}
-				/>
-			}
-			plan={
-				<PlanEditor
-					cardMeta={cardMeta}
-					evidence={showEvidence}
-					onCardSource={showCardSource}
-					commentPresentation={mode === "split" ? "popover" : "sheet"}
-					connection={status === "deleted" ? "closed" : status}
-					key={workspaceArchivedAt ? "archived" : "active"}
-					motionImmediately={settleMotionImmediately}
-					onScrollTop={setPlanScrollTop}
-					questionMotion={QUESTION_MOTION}
-					questions={questions}
-					readOnly={!workspaceCanEdit}
-					research={profile.research ? research : undefined}
-					scrollTop={planScrollTop}
-					threads={threads}
-					user={user}
-					wire={wire}
-				/>
-			}
-			state={workspace}
-			presentation={presentation}
-			unanswered={unanswered}
-			view={view}
-		/>
+		<>
+			<p aria-live="polite" className="sr-only" role="status">
+				<span key={announcement.sequence}>{announcement.text}</span>
+			</p>
+			<Workspace
+				chat={
+					<Chat
+						active={chatActive}
+						agent={agent}
+						connected={status === "connected" && workspaceCanEdit}
+						handle={handle}
+						onActivity={onChatActivity}
+						conversationPlan={conversation.state}
+						conversationPlanJobs={conversation.jobs}
+						onCardLink={showCard}
+						onAddExcerpt={addExcerpt}
+						onRetryAnalysis={retryAnalysis}
+						onRetryJob={retryJob}
+						sourceDestination={sourceDestination}
+						researchOffers={conversation.enabled
+							? {
+								links: researchLinks.links,
+								busy: researchBusy,
+								errors: researchErrors,
+								canAct: status === "connected" && !!wire?.connected && !!workspaceCanEdit,
+								store: research,
+								onAction: actOnResearchOffer,
+							}
+							: undefined}
+						decisions={{
+							questions,
+							meta: cardMeta,
+							wire,
+							connected: status === "connected",
+							canEdit: workspaceCanEdit,
+							onOpenCard: showDecisionCard,
+						}}
+						referencesEnabled={chatReferences.wire === wire && chatReferences.enabled}
+						repository={repository}
+						room={room}
+						sendAcknowledgements={chatSendAcks.wire === wire && chatSendAcks.enabled}
+						wire={wire}
+					/>
+				}
+				chatActivity={chatActivity}
+				header={
+					<Header
+						archivedAt={workspaceArchivedAt}
+						canManage={effectiveCanManage}
+						members={members}
+						label={metadata.title}
+						onAction={action => onDocumentAction(room, action)}
+						presentation={presentation}
+					/>
+				}
+				controls={
+					<DecisionViewControl
+						attention={attention}
+						onView={selectDestination}
+						unanswered={unanswered}
+						view={view}
+					/>
+				}
+				ids={workspaceIds}
+				identity={room}
+				mode={mode}
+				onDesktopChatOpen={setDesktopChatOpen}
+				onChatOpen={open => dispatch({ type: "set-chat", open })}
+				onDestination={selectDestination}
+				decisions={
+					<Decisions
+						cardMeta={cardMeta}
+						canEdit={workspaceCanEdit}
+						connected={status === "connected" && workspaceCanEdit}
+						headingId={workspaceIds.heading.decisions}
+						motion={motionContract("collapse")}
+						motionImmediately={settleMotionImmediately}
+						onShowPlan={showPlan}
+						questionMotion={QUESTION_MOTION}
+						reveal={reveal}
+						store={questions}
+						wire={wire}
+					/>
+				}
+				plan={
+					<PlanEditor
+						cardMeta={cardMeta}
+						evidence={showEvidence}
+						onCardSource={showCardSource}
+						commentPresentation={mode === "split" ? "popover" : "sheet"}
+						connection={status === "deleted" ? "closed" : status}
+						key={workspaceArchivedAt ? "archived" : "active"}
+						motionImmediately={settleMotionImmediately}
+						onScrollTop={setPlanScrollTop}
+						questionMotion={QUESTION_MOTION}
+						questions={questions}
+						readOnly={!workspaceCanEdit}
+						research={profile.research ? research : undefined}
+						scrollTop={planScrollTop}
+						threads={threads}
+						user={user}
+						wire={wire}
+					/>
+				}
+				state={workspace}
+				presentation={presentation}
+				unanswered={unanswered}
+				view={view}
+			/>
+		</>
 	);
 }

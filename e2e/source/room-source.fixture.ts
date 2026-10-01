@@ -20,12 +20,13 @@ declare global {
 			renderEvidence: (id: string) => void;
 			receive: (frame: unknown) => void;
 			setQuestions: (state: PlanQuestionnaireState) => void;
+			resetConversation: () => void;
 		};
 	}
 }
 
 export let observeRoomSource =
-	"\twindow.roomSourceProbe.observe({ room, sourceDestination, showSource, showEvidence, questions, cardMeta });\n";
+	"\twindow.roomSourceProbe.observe({ room, sourceDestination, showSource, showEvidence, questions, cardMeta, conversationStore });\n";
 export let navigationProviderBinding =
 	"\nexport let RoomSourceNavigationProvider = NavigationDocument.Provider;\n";
 
@@ -108,5 +109,6 @@ window.roomSourceProbe = {
  renderEvidence(id) { evidenceRoot.render(snapshot.showEvidence(id)); },
  receive(frame) { this.sockets.at(-1).receive(frame); },
  setQuestions(state) { snapshot.questions.set(state); },
+ resetConversation() { snapshot.conversationStore.reset(); },
 };
 `;

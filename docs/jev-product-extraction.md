@@ -2058,3 +2058,55 @@ approve the changes. Post-format source proofs preserve every prior affected
 callback plus all original restored callbacks/declarations. No ordinary browser
 suite, application listener, PostgreSQL service, migration or paid provider starts.
 The finite product extraction remains unfinished.
+
+## Conversation live announcements
+
+The missing workspace live region and historical comparison are restored through a
+small pure helper. The complete archived comparison order, captures, predicates,
+message strings and final-event exclusions are retained by an adapted-body AST
+proof with wrong-revision, swapped-priority and removed-exclusion negative controls.
+The first observed state is a silent baseline. A newly failed message wins over
+simultaneous event growth; otherwise growing events announce a card update unless
+the last event opens a thread or links a card. Equal observations still replace
+the captured summary without announcing. Failed membership is relative to the
+preceding observation, so an observed retry can become eligible again.
+
+Ruling: retain React-observed batch semantics and add a synchronous store reset
+generation — the comparison must not replay reconnect history when React coalesces
+reset and first snapshot — a mistaken scope would create a spurious announcement.
+Snapshot shape, wire behavior and all prior store members remain unchanged except
+the reset counter. The host captures the generation at render and scopes its prior
+summary by store identity and generation; room/reset baselines also clear stale text.
+Chat tokens and job updates do not drive comparison.
+
+One stable, hidden polite status region precedes the unchanged Workspace subtree.
+An eligible transition replaces its keyed descendant, allowing identical message
+text to mutate the DOM again without remounting the live region. This and stale-text
+clearing are deliberate accessibility integration improvements beyond the archived
+string-state equality behavior. Browser DOM mutation is evidence of an update;
+actual screen-reader speech is not verified.
+
+Focused checks pass eleven pure comparison cases (25 assertions), three store
+cases (18 assertions) and ten actual-host native cases. Genuine failing comparisons,
+store-generation expectations and a compiled/mounted missing-region browser case
+precede their fixes. The native cases exercise history, retries, failure priority,
+opening exclusions, quiet jobs/chat, coalesced reset, room changes and cleanup.
+An initially incorrect new test expectation about equal revisions was corrected
+to match the archived summary-capture rule; production comparison was unchanged.
+The existing synthetic HTML/inert socket/request-abort boundary remains intact.
+No application, provider or database is started. Original fixture bindings, seven
+room-source callbacks and complete existing Workspace JSX remain preserved.
+
+This restores one missing product behavior. Remaining whole browser units and
+full application verification are still outstanding; extraction remains unfinished.
+
+Final fresh verification passes 3,389 offline tests with 16,022 assertions across
+549 files; two PostgreSQL checks are skipped. All eighty-seven isolated native
+browser cases pass with fresh client assets. Full workspace types, client build,
+formatting and CI pass, retaining three existing lint warnings, 221 reviewed design
+exceptions, the existing design baseline and build chunk-size warning. Independent
+comparison review also matches 367 complete archive-effect/helper observations;
+host/native review approves scope handling and full source preservation. Existing
+ordinary browser runners, server behavior, protocol, persistence and provider
+configuration are unchanged. Whole application and actual spoken delivery are not
+verified, and remaining product extraction requirements are outstanding.

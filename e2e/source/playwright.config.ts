@@ -11,6 +11,7 @@ export default defineConfig({
 		"excerpt-correction-retry.native.ts",
 		"evidence-hover.native.ts",
 		"room-source.native.ts",
+		"conversation-announcements.native.ts",
 		"analysis-host.native.ts",
 		"analysis-host-retries.native.ts",
 		"decision-reader.native.ts",
