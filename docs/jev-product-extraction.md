@@ -2774,3 +2774,16 @@ Fresh final checks pass: 3,511 offline tests, 16,365 assertions, zero failures a
 checks pass. The clean committed image must still execute the genuine reader-denial
 case; the full offline and prior component evidence are not substituted for that
 application result.
+
+The authentic contained callback now starts and passes its writer-side card and failed-job assertions,
+but its independent reader stalls before the locked-editor assertion; retry denial has not passed.
+Source audits preserve the current read-only editor contract and do not identify a server greeting loop.
+Bounded temporary diagnostics observed reader `plan:open` and `session:hello`; the renderer accepted
+profiler startup but timed out stopping it. Those diagnostics have been removed from the final source.
+
+A separate registered-listener regression reproduces an unnecessary hidden-card correction for a
+node selection whose public key exists but resolves to no nodes. The real listener scheduled one
+`history-merge` update even though the correction returned false. The narrow nonempty-node guard
+passes the regression (nine tests, 35 assertions) and retains every prior test. This establishes that
+scheduling defect; the unchanged authentic application case must still verify whether it resolves
+reader startup. No browser pass or startup causality is inferred from the unit result.
