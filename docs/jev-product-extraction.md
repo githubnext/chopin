@@ -2666,3 +2666,43 @@ archive `446a9779a937fa5be7cd3eb52fd7f3023d691ed2` (SHA256
 These checks establish the merge and current component behavior, not execution of
 the retained inactive application suites or a complete product release. A fresh
 committed-image runtime check still follows this source milestone.
+
+### Contained runner namespace correction
+
+The clean merged image at `153d9c87b14ccf242fba261e1b5a8e0ea35a7e40`
+was built and its inspected immutable image ID recorded. A disposable derivative
+changed only a client HTML comment while retaining its build stamp. The unchanged
+supervisor rejected that derivative at the worker stamp phase, before migrations
+or application activation, and verified both owned containers absent in app-first,
+database-second order. This is a pre-target cleanup control, not a browser result.
+The genuine image then stopped safely at namespace preflight and again verified
+owned cleanup; it did not execute the target.
+
+Owned read-only network-none diagnostics established the first failure: Docker's
+Linux namespace exposes nine dormant fallback tunnels alongside loopback. Their
+observed exact types, virtual paths, DOWN state, unset UP flag, zero link and empty
+address metadata now form a narrow allowlist. The checker requires complete matching
+proc/sysfs inventories, unique interface indices, valid device headers and sixteen
+counters, and an exact IPv4 header with no routes. Allowed IPv6 route identities
+are unchanged; full-width numeric fields reject malformed input. Unknown, active,
+addressed, linked or incompletely evidenced devices still reject.
+
+Actual bounded probes also showed that Bun 1.4.2 reports ECONNREFUSED where Python
+reports kernel ENETUNREACH in the same network-none image. That observed mapping is
+accepted only for the pinned Bun version after the mandatory topology and route
+checks, followed by the independent mandatory fetch refusal. A refused socket alone
+is not containment evidence. The worker reports safe preflight stages and fixed
+namespace metadata without credentials or raw error text.
+
+Thirty-three pure regression cases pass after recorded failing controls for the
+original device-count assumption, malformed metadata and missing headers. Independent
+source review confirms the captured fixture identity, mandatory probe ordering and
+unchanged worker outside the namespace seam. Final full-check counts and the genuine
+new-commit runtime result follow separately; no application pass is inferred here.
+
+Final corrected-source checks pass: 3,504 offline tests, 16,351 assertions,
+zero failures across 557 files; two guarded PostgreSQL suites remain skipped.
+Workspace/E2E types and explicit strict runner/test types pass. The 95 passing
+native cases and client-build evidence at the merged checkpoint remain applicable
+to the unchanged application sources; the fresh contained image builds its own
+client. This correction changes only the runner, its pure tests and this ledger.

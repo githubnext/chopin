@@ -1,9 +1,10 @@
 import { SQL } from "bun";
 import { createHash } from "node:crypto";
 import { closeSync, openSync } from "node:fs";
-import { cp, lstat, readdir, readFile, writeFile } from "node:fs/promises";
+import { cp, lstat, readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { connect, createServer } from "node:net";
 import { join } from "node:path";
+import { networkInterfaces } from "node:os";
 
 const ROOT = "/work";
 const TITLE = "(?:^| )read-only collaborators cannot retry a failed Planner job$";
@@ -101,11 +102,107 @@ async function stamp(commit: string): Promise<void> {
 	await readFile(`${ROOT}/apps/web/dist/index.html`);
 }
 
-export function checkNamespace(dev: string, route: string, ipv6Route: string): void {
-	let devices = dev.split("\n").slice(2)
-		.filter(line => line.trim()).map(line => line.split(":")[0]?.trim());
-	if (devices.length !== 1 || devices[0] !== "lo") throw new Error("non-loopback interface");
-	let routes = route.trim().split("\n").slice(1);
+export type NamespaceLink = {
+	flags: string;
+	operstate: string;
+	type: string;
+	path: string;
+	index: string;
+	link: string;
+	addresses: { address: string; family: string; internal: boolean }[];
+};
+
+const FALLBACK_TYPES: Record<string, string> = {
+	tunl0: "768",
+	gre0: "778",
+	gretap0: "1",
+	erspan0: "1",
+	ip_vti0: "768",
+	ip6_vti0: "769",
+	sit0: "776",
+	ip6tnl0: "769",
+	ip6gre0: "823",
+};
+
+export function checkNamespace(
+	dev: string,
+	route: string,
+	ipv6Route: string,
+	links: Record<string, NamespaceLink>,
+): void {
+	let rows = dev.trim().split("\n");
+	let headers = rows.slice(0, 2).map(line =>
+		line.trim().replace(/\s+/g, " ").split("|").map(part => part.trim()).join("|")
+	);
+	if (
+		headers[0] !== "Inter-|Receive|Transmit" || headers[1]
+			!== "face|bytes packets errs drop fifo frame compressed multicast|bytes packets errs drop fifo colls carrier compressed"
+	) {
+		throw new Error("invalid device headers");
+	}
+	let devices = rows.slice(2).map(line => {
+		let parts = line.trim().split(":");
+		let counters = parts[1]?.trim().split(/\s+/);
+		if (
+			parts.length !== 2 || !/^[A-Za-z0-9_]+$/.test(parts[0]!)
+			|| counters?.length !== 16 || counters.some(value => !/^[0-9]+$/.test(value))
+		) {
+			throw new Error("invalid device counters");
+		}
+		return parts[0]!;
+	});
+	if (
+		!devices.includes("lo") || new Set(devices).size !== devices.length
+		|| !links || Object.keys(links).length !== devices.length
+		|| Object.keys(links).some(name => !devices.includes(name))
+	) {
+		throw new Error("interface inventory mismatch");
+	}
+	let indices = new Set<string>();
+	for (let name of devices) {
+		let entry = links[name];
+		if (
+			!entry || [entry.flags, entry.operstate, entry.type, entry.path, entry.index, entry.link]
+				.some(value => typeof value !== "string")
+			|| !/^0x[0-9a-f]{1,8}$/.test(entry.flags)
+			|| !/^[1-9][0-9]{0,9}$/.test(entry.index) || Number(entry.index) > 2147483647
+			|| !/^(?:0|[1-9][0-9]{0,9})$/.test(entry.link) || Number(entry.link) > 2147483647
+			|| !/^(?:0|[1-9][0-9]{0,4})$/.test(entry.type) || Number(entry.type) > 65535
+			|| indices.has(entry.index)
+			|| !Array.isArray(entry.addresses) || entry.path !== `/sys/devices/virtual/net/${name}`
+		) {
+			throw new Error("invalid interface evidence");
+		}
+		indices.add(entry.index);
+		let flags = Number.parseInt(entry.flags.slice(2), 16);
+		if (name === "lo") {
+			if (
+				(flags & 9) !== 9 || entry.type !== "772" || entry.link !== entry.index
+				|| !["unknown", "up"].includes(entry.operstate) || !entry.addresses.length
+				|| entry.addresses.some(address =>
+					!address || address.internal !== true
+					|| !((address.family === "IPv4" && address.address === "127.0.0.1")
+						|| (address.family === "IPv6" && address.address === "::1"))
+				)
+			) {
+				throw new Error("invalid loopback interface");
+			}
+		} else if (
+			!Object.hasOwn(FALLBACK_TYPES, name) || entry.type !== FALLBACK_TYPES[name]
+			|| entry.link !== "0" || flags & 1 || entry.operstate !== "down"
+			|| entry.addresses.length
+		) {
+			throw new Error("active or unknown non-loopback interface");
+		}
+	}
+
+	let routes = route.trim().split("\n");
+	if (
+		routes.shift()?.trim().split(/\s+/).join(" ")
+			!== "Iface Destination Gateway Flags RefCnt Use Metric Mask MTU Window IRTT"
+	) {
+		throw new Error("invalid IPv4 route header");
+	}
 	if (routes.length) throw new Error("IPv4 route outside empty namespace");
 	let ipv6 = ipv6Route.trim().split("\n").filter(Boolean);
 	for (let route of ipv6) {
@@ -115,7 +212,8 @@ export function checkNamespace(dev: string, route: string, ipv6Route: string): v
 		let reject = fields[0] === zero && fields[1] === "00"
 			&& (Number.parseInt(fields[8] ?? "", 16) & 0x200) !== 0;
 		if (
-			fields.length !== 10 || fields[9] !== "lo" || !(local || reject)
+			fields.length !== 10 || fields.slice(5, 9).some(value => !/^[0-9a-f]{8}$/.test(value))
+			|| fields[9] !== "lo" || !(local || reject)
 			|| fields[2] !== zero || fields[3] !== "00" || fields[4] !== zero
 		) {
 			throw new Error("non-loopback IPv6 route");
@@ -123,12 +221,52 @@ export function checkNamespace(dev: string, route: string, ipv6Route: string): v
 	}
 }
 
-async function namespace(): Promise<void> {
-	checkNamespace(
-		await readFile("/proc/net/dev", "utf8"),
-		await readFile("/proc/net/route", "utf8"),
-		await readFile("/proc/net/ipv6_route", "utf8"),
-	);
+async function namespaceLinks(): Promise<Record<string, NamespaceLink>> {
+	let names = await readdir("/sys/class/net");
+	let addresses = networkInterfaces();
+	if (Object.keys(addresses).some(name => !names.includes(name))) {
+		throw new Error("address inventory mismatch");
+	}
+	let entries = await Promise.all(names.map(async name => {
+		let path = `/sys/class/net/${name}`;
+		let [flags, operstate, type, index, link, resolved] = await Promise.all([
+			...["flags", "operstate", "type", "ifindex", "iflink"].map(field =>
+				readFile(`${path}/${field}`, "utf8").then(value => value.trim())
+			),
+			realpath(path),
+		]);
+		let entry: NamespaceLink = {
+			flags: flags!,
+			operstate: operstate!,
+			type: type!,
+			index: index!,
+			link: link!,
+			path: resolved!,
+			addresses: (addresses[name] ?? []).map(({ address, family, internal }) => ({
+				address,
+				family,
+				internal,
+			})),
+		};
+		let pair: [string, NamespaceLink] = [name, entry];
+		return pair;
+	}));
+	return Object.fromEntries(entries);
+}
+
+async function namespace(report: Record<string, unknown>): Promise<void> {
+	report.namespaceStep = "proc";
+	let [dev, route, ipv6Route] = await Promise.all([
+		readFile("/proc/net/dev", "utf8"),
+		readFile("/proc/net/route", "utf8"),
+		readFile("/proc/net/ipv6_route", "utf8"),
+	]);
+	report.namespaceStep = "links";
+	let links = await namespaceLinks();
+	report.namespaceEvidence = { links, dev, route, ipv6Route };
+	report.namespaceStep = "interfaces-and-routes";
+	checkNamespace(dev, route, ipv6Route, links);
+	report.namespaceStep = "socket";
 	await new Promise<void>((resolve, reject) => {
 		let socket = connect({ host: "1.1.1.1", port: 443 });
 		let timer = setTimeout(() => {
@@ -142,10 +280,15 @@ async function namespace(): Promise<void> {
 		});
 		socket.once("error", (error: NodeJS.ErrnoException) => {
 			clearTimeout(timer);
-			if (["ENETUNREACH", "EHOSTUNREACH", "EACCES", "EPERM"].includes(error.code ?? "")) resolve();
-			else reject(new Error("socket denial could not be attested"));
+			// Bun 1.4.2 maps kernel ENETUNREACH to ECONNREFUSED in this verified route-free namespace.
+			let mapped = Bun.version === "1.4.2" && error.code === "ECONNREFUSED";
+			if (mapped || ["ENETUNREACH", "EHOSTUNREACH", "EACCES", "EPERM"].includes(error.code ?? "")) {
+				report.socketDenial = mapped ? "bun-mapped-unreachable" : "routing-denial";
+				resolve();
+			} else reject(new Error("socket denial could not be attested"));
 		});
 	});
+	report.namespaceStep = "fetch";
 	try {
 		let response = await fetch("http://1.1.1.1/", {
 			redirect: "error",
@@ -158,6 +301,7 @@ async function namespace(): Promise<void> {
 			throw new Error("fetch denial could not be attested", { cause: error });
 		}
 	}
+	report.namespaceStep = "complete";
 }
 
 async function freePort(port: number): Promise<void> {
@@ -353,7 +497,7 @@ export async function main(): Promise<number> {
 		report.phase = "stamp";
 		await stamp(owned.commit);
 		report.phase = "namespace";
-		await namespace();
+		await namespace(report);
 		report.egressDenied = true;
 		report.phase = "ports";
 		await freePort(8788);
