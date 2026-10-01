@@ -36,7 +36,11 @@ export function createHumanInput(
 				question: workflow ? `${question.question}\n\n${workflow}` : question.question,
 				options: question.options.map(option => ({
 					label: option.label,
-					description: option.description,
+					// Decisions shows no preview pane, so the mockup or code a member
+					// needs to see before choosing travels in the description.
+					description: [option.description, option.preview]
+						.filter(value => value !== undefined)
+						.join("\n\n"),
 				})),
 				multiple: question.multiSelect ?? false,
 			})),

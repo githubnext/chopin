@@ -98,6 +98,14 @@ export async function submit(
 				let at = Math.floor(Date.now() / 1_000);
 				let settled = { by: ws.data.handle, at: new Date(at * 1_000).toISOString() };
 				let mutation = room.projectAnswer(stagedDocument, msg.id, answers, settled, chosen);
+				// A long answer can push the document past its size limit, after which the
+				// Planner can no longer edit it; check the staged copy so a refusal changes nothing.
+				try {
+					room.validate(room.project(stagedDocument));
+				} catch (err) {
+					invalid = err instanceof Error ? err.message : "could not record the answer";
+					return;
+				}
 				let records = new Map(plan.records);
 				let answered: Record = {
 					...record,
