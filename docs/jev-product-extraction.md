@@ -1710,3 +1710,84 @@ so client build and isolated browser checks from the preceding checkpoint are no
 rerun or presented as new evidence. The restored E2E helpers remain uninvoked; no
 application, PostgreSQL or provider was activated. The original whole browser suites, HTTP preload and dedicated
 current-Harness application adapter remain outstanding; extraction is unfinished.
+
+## Preserved Jev HTTP preload source
+
+The separately assigned `e2e/jev.ts` preload is restored as its complete natural
+371-line archive module. Fresh archive byte/full-module proofs retain both types,
+all 38 scenario entries, five whole functions, network/failure state, the entire
+request fixture and final fetch assignment. No classifier policy or scenario data
+is changed, and no reserved evaluation dataset is read or imported.
+
+This is source retention only. The module is saved and parsed, never imported,
+executed or preloaded in this slice; its fetch override is not installed. The exact
+original TypeSafe URL, method, test-credential boundary, isolated-target checks,
+failure and file-release behavior are preserved. Off-domain delegation remains
+original source behavior, not evidence of any request. No server configuration or
+browser discovery changes. Static source/type checks do not establish HTTP fixture
+execution, application, authentication, sockets, PostgreSQL or browser behavior.
+The original whole browser callbacks and current-Harness activation remain deferred.
+
+## Prompt-only scripted Planner model adapter
+
+The missing application-harness seam now has an unregistered test-only factory and
+a small strict context leaf. Unlike the earlier Memory driver, this factory receives
+only its script directory and a void result observer. It derives the job kind and
+card target from the exact current background-job prompt; malformed or ambiguous
+headers/targets fail before a tool call. String prompts and the actual SDK user-text
+message shape are supported. No Plan, Chat, host registry or direct executor supplies
+model context. Current production profiles and host authorization remain authoritative.
+
+Before each unchanged original script operation, the fake model emits an actual
+`read_plan`, waits for its tool result, validates the returned JSON revision as a
+safe nonnegative integer, then applies the preserved substitution helper. This is
+an explicit model-fixture seam: at most sixteen added reads accompany the unchanged
+sixteen-call script bound, including reads before original read-only calls. Empty
+scripts add none. Original operations are not rewritten, deduplicated or filtered
+against offered names. Failed or malformed reads block their dependent call. The
+original script parser, hold gate and captured-Plan driver remain unchanged.
+
+The factory cancels holds locally and retains admitted model workers and result
+observers until stop/destruction/factory shutdown drain. Repeated destruction is
+shared and late sessions are rejected after shutdown. Direct contracts cover all
+four prompt kinds, invalid context/read revisions, sequential returned revisions,
+unaltered foreign tool emission, empty scripts, local stop, held-observer drain and
+observer-error propagation. These contracts manually exchange model-side results;
+they do not establish SDK execution or tool authority.
+
+Two actual SDK/Memory cases use generated current prompts and static heading/refine
+profiles. Heading reads its actual revision before one durable own-tool write. Refine
+reads before retitling, then reads the genuinely increased revision before adding
+its stable-ID option and exact Planner rationale. Result observations load fenced
+stored source and complete records; actual close/reopen preserves them. Initial
+canonical restoration retains derived anchors in complete equality checks. External
+Plan-reading result observers assert storage only and supply no model decisions.
+SDK sessions, sandbox and credential disposal are counted exactly once, and tools
+or deltas do not leak into public chat. The sandbox simulates only the exact SDK
+work-directory setup; nothing executes on the host.
+
+Suggest/prose grammar contracts do not establish their actual SDK execution through
+this new factory. Existing profile evidence from prior drivers remains distinct.
+The factory is never registered, the restored HTTP preload is never imported, and
+no application or E2E project is activated. Whole original browser callbacks,
+dedicated preload/configuration, authentication/socket/PG integration and the known
+missing-script skipped/current-failed conflict remain outstanding. This advances
+necessary harness prerequisites without substituting narrow tests for those suites.
+
+Final verification passes 3,258 offline tests with 15,344 assertions across 540
+files; two PostgreSQL checks are skipped. Independent focused execution passes
+thirty direct model contracts with 109 assertions plus two actual SDK/Memory
+heading/refine cases with sixty assertions, for 32 cases and 169 assertions. The
+original missing-module checks failed before the factory existed; these do not
+claim a deployed application regression fix.
+
+Fresh archive byte/full-module preload proof, complete frozen factory/context/test
+and integration-module proofs pass after formatting. Twenty existing host, profile,
+parser, legacy/current driver, main/config and preload dependencies remain byte-exact
+to the preceding checkpoint. Independent source/data-flow/lifecycle review approves
+the bounded work. Workspace/E2E types, formatting and CI pass with two inherited
+lint warnings, 221 unchanged reviewed design exceptions and the existing design
+baseline. No UI source changes, application, preload registration, PostgreSQL,
+network or paid provider activation occurs. Suggest/prose current-factory execution
+and original whole application browser suites remain outstanding; extraction is
+unfinished.
