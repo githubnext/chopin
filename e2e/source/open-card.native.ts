@@ -21,12 +21,13 @@ test("actual read-only inline card keeps durable people and Source without allow
 	await expect(card(page).getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
 	await expect(card(page).getByRole("radio")).toHaveCount(2);
 	for (let radio of await card(page).getByRole("radio").all()) await expect(radio).toBeDisabled();
-	expect(await page.evaluate(() => window.openCardProbe.opens)).toEqual(["card-1"]);
+	expect(await page.evaluate(() => window.openCardProbe.opens)).toEqual([]);
 	expect(await page.evaluate(() => window.openCardProbe.snapshot().ids)).toEqual(["card-1"]);
 });
 
 test("durable and live people merge uniquely with three faces and accessible overflow", async ({ page }) => {
-	await loadOpenCard(page);
+	await loadOpenCard(page, { canEdit: true });
+	await expect.poll(() => page.evaluate(() => window.openCardProbe.opens)).toEqual(["card-1"]);
 	let durable = ["ana", "ben", "cara", "dee", "eli", "fay", "gia", "hal"];
 	await page.evaluate(
 		({ meta, durable }) => window.openCardProbe.meta("card-1", { ...meta, involved: durable }),
@@ -86,7 +87,7 @@ test("actual inline Source routes the current card to the first saved question s
 	expect(second.source.messageId).toBe("m2");
 	expect(second.source.quote).toBe("broad");
 	expect(second.token).toBeGreaterThan(first.token);
-	expect(await page.evaluate(() => window.openCardProbe.opens)).toEqual(["card-1", "card-2"]);
+	expect(await page.evaluate(() => window.openCardProbe.opens)).toEqual([]);
 });
 
 test("actual inline Source is absent without authoritative thread or real callback", async ({ page }) => {

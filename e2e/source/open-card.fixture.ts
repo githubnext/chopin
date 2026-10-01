@@ -5,7 +5,7 @@ declare global {
 	interface Window {
 		openCardProbe: {
 			observe(value: unknown): void;
-			mountCard(id?: string, source?: boolean): void;
+			mountCard(id?: string, source?: boolean, canEdit?: boolean): void;
 			unmountCard(): void;
 			ready(): boolean;
 			peers(handles: string[]): void;
@@ -81,14 +81,14 @@ function OpenSeed() {
 window.openCardProbe = {
  errors: [], opens: [], signals: [],
  observe(value) { openSnapshot = value; },
- mountCard(id = "card-1", source = true) {
+ mountCard(id = "card-1", source = true, canEdit = false) {
   this.unmountCard(); activeId = id;
   let realm = new Realm();
   realm.pub(widgets$, { questions: openSnapshot.questions, cardMeta: openSnapshot.cardMeta,
-   connected: true, canEdit: false, wire: openWire, onCardSource: source ? openSnapshot.showCardSource : undefined });
+   connected: true, canEdit, wire: openWire, onCardSource: source ? openSnapshot.showCardSource : undefined });
   openRoot = createRoot(document.querySelector("#open-card"));
   openRoot.render(<RealmContext.Provider value={realm}><main className="plan"><section className="plan-document" data-open-card-host>
-   <LexicalComposer initialConfig={{ namespace: "native-open-card", nodes: registry().nodes, editable: false,
+   <LexicalComposer initialConfig={{ namespace: "native-open-card", nodes: registry().nodes, editable: canEdit,
     onError: error => { window.openCardProbe.errors.push(error.message); throw error; } }}>
     <RichTextPlugin contentEditable={<ContentEditable className="plan-content" aria-label="Open card document" />}
      placeholder={null} ErrorBoundary={LexicalErrorBoundary} />

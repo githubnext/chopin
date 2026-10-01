@@ -52,7 +52,9 @@ async function load(
 		| "unlinked"
 		| "discarded-single"
 		| "discarded-multiple"
-		| "legacy-custom",
+		| "legacy-custom"
+		| "readonly-shared"
+		| "readonly-sidebar",
 ) {
 	let errors: string[] = [];
 	page.on("pageerror", error => errors.push(error.message));
@@ -76,7 +78,7 @@ async function load(
 	await page.evaluate(mode => window.questionViewContractsFixture.mount(mode), mode);
 	if (mode === "discarded-single" || mode === "discarded-multiple") {
 		await expect(page.getByText(/^Discarded by @ben —/)).toBeVisible();
-	} else {
+	} else if (mode !== "readonly-shared" && mode !== "readonly-sidebar") {
 		await expect(page.getByRole("heading", { name: /^What auth system should we use\?/, level: 4 }))
 			.toBeVisible();
 	}
@@ -240,3 +242,41 @@ test("a discarded multi-card names every original question and ben exactly once"
 	await expect(card.getByRole("button", { name: "Discard", exact: true })).toHaveCount(0);
 	expect(errors).toEqual([]);
 });
+
+for (let surface of ["chat", "sidebar"] as const) {
+	test(`readonly document and ${surface} keep shared drafts disconnected`, async ({ page }) => {
+		let errors = await load(page, surface === "chat" ? "readonly-shared" : "readonly-sidebar");
+		await page.waitForTimeout(100);
+		expect(await page.evaluate(() => window.questionViewContractsFixture.sharing())).toEqual({
+			opens: 0,
+			mutations: 0,
+			errors: [],
+		});
+		let card = page.getByRole("region", { name: "Document", exact: true }).getByRole("article", {
+			name: "Decision",
+			exact: true,
+		});
+		await expect(
+			card.getByRole("heading", { name: "What auth system should we use?", exact: true }),
+		).toBeVisible();
+		await expect(card.getByRole("radio")).toHaveCount(2);
+		for (let label of ["Auth0", "GitHub Apps from chat"]) {
+			await expect(card.getByRole("radio", { name: label, exact: true })).toBeDisabled();
+		}
+		await expect(card.getByRole("radio", { name: "GitHub Apps from chat", exact: true }))
+			.toBeChecked();
+		await expect(card.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+		await expect(card.getByRole("button", { name: "Add an option", exact: true })).toBeDisabled();
+		if (surface === "chat") {
+			await expect(page.getByRole("button", { name: "Save decision", exact: true })).toBeDisabled();
+			await expect(page.getByText("Suggested: GitHub Apps", { exact: true })).toBeVisible();
+		} else {
+			let sidebar = page.getByRole("region", { name: "Decisions", exact: true });
+			await expect(sidebar.getByRole("radio", { name: "GitHub Apps from chat", exact: true }))
+				.toBeChecked();
+			await expect(sidebar.getByRole("radio", { name: "GitHub Apps from chat", exact: true }))
+				.toBeDisabled();
+		}
+		expect(errors).toEqual([]);
+	});
+}

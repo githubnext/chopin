@@ -273,7 +273,7 @@ function Undecided(
 	let state = useQuestionnaire({
 		id: value.id,
 		bridge: wire,
-		connected,
+		connected: connected && canEdit,
 		definition: definition(value),
 	});
 

@@ -2787,3 +2787,32 @@ node selection whose public key exists but resolves to no nodes. The real listen
 passes the regression (nine tests, 35 assertions) and retains every prior test. This establishes that
 scheduling defect; the unchanged authentic application case must still verify whether it resolves
 reader startup. No browser pass or startup causality is inferred from the unit result.
+
+The diagnostic-free selection fix did not resolve the authentic reader timeout. A subsequent bounded
+stack capture received `plan:open`, then recorded 195 outgoing `question:open` frames before its
+budget closed. A single debugger interrupt allowed the profiler to stop (1,877 samples). Generated
+locations map to React passive effects and the shared questionnaire controller's configure/start/init
+chain. The independent source mapping identifies conflicting connection policies: the read-only inline
+question connects, while the Decisions pane disconnects the same bridge/id controller. This pair can
+thrash immediately after document arrival, before chat history. A live chat prompt has the same writer
+connection gate and exposes the same conflict when mounted. Repeated snapshot notifications rerun both
+configuration effects. The server reserves draft `question:open` for writers.
+
+The narrow correction therefore gates the inline draft connection with `canEdit`, as the chat prompt
+and settled document view already do. Read-only projected questions and suggestions remain visible;
+mutation controls and server authorization remain in force. The actual two-view native regression and
+unchanged authentic contained callback are the required validation. Temporary stack diagnostics are
+removed again; this observation does not itself establish a passing final case.
+
+The final refresh of main fetched `f75d6d693e896c8689835cb835e925d3b5ef5a17`, one further commit
+awaiting anchor publication before sidecar persistence. It merged without conflict and without changing
+the reader fix or current interface. Fresh backend/type/repository checks are required after that merge;
+the prior offline run is not attributed to this newer checkpoint.
+
+The full native run exposed three open-card fixture assumptions that admitted a read-only draft open,
+contrary to the real server boundary. The two reader cases now require zero opens while retaining
+all durable-people, disabled-control, source-routing and snapshot assertions. The live-people scenario
+uses explicit writer permission and waits for its real controller subscription before checking deduped
+faces, overflow and removal. The default fixture remains read-only. These are disclosed role/contract
+adaptations, not byte-preserved historical callbacks. Their scoped run passes all four cases; final
+full component and authentic application verification remain separate gates.

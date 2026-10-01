@@ -114,7 +114,7 @@ let makeThread = (
 	candidates: [],
 	version: 1,
 });
-export async function loadOpenCard(page: Page) {
+export async function loadOpenCard(page: Page, { canEdit = false }: { canEdit?: boolean } = {}) {
 	let errors: string[] = [];
 	page.on("pageerror", error => errors.push(error.message));
 	pageErrors.set(page, errors);
@@ -167,7 +167,7 @@ export async function loadOpenCard(page: Page) {
 		makeThread("thread-2", "card-2", "m2", "broad", "m1", "pilot"),
 	]);
 	await page.evaluate(meta => window.openCardProbe.meta("card-1", meta), openMeta);
-	await page.evaluate(() => window.openCardProbe.mountCard());
+	await page.evaluate(canEdit => window.openCardProbe.mountCard("card-1", true, canEdit), canEdit);
 	await expect.poll(() => page.evaluate(() => window.openCardProbe.ready())).toBe(true);
 	await expect(sourceAction(page)).toBeVisible();
 }

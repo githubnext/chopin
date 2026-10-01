@@ -389,7 +389,7 @@
 				1
 			]
 		],
-		"sourceHash": "feee775de27d457abf97c0326ce1842171d91f7dd179ea9a1d5efaf240e02d79"
+		"sourceHash": "e7ad88ee0f38dbdc8fb1bdd9e74114da447508bca13283bcd6b73de9e87fe1b2"
 	},
 	{
 		"file": "packages/editor/src/widgets/code-view.tsx",
@@ -480,7 +480,7 @@
 				1
 			]
 		],
-		"sourceHash": "feee775de27d457abf97c0326ce1842171d91f7dd179ea9a1d5efaf240e02d79"
+		"sourceHash": "e7ad88ee0f38dbdc8fb1bdd9e74114da447508bca13283bcd6b73de9e87fe1b2"
 	},
 	{
 		"file": "packages/editor/src/resolved-layer.tsx",

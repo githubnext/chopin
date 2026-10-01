@@ -7,13 +7,16 @@ type Mode =
 	| "unlinked"
 	| "discarded-single"
 	| "discarded-multiple"
-	| "legacy-custom";
+	| "legacy-custom"
+	| "readonly-shared"
+	| "readonly-sidebar";
 type Event = { kind: "enter" | "leave" | "select"; question: string };
 
 declare global {
 	interface Window {
 		questionViewContractsFixture: {
 			mount(mode: Mode): void;
+			sharing(): { opens: number; mutations: number; errors: string[] };
 			resetEvents(): void;
 			snapshot(): { draft: Draft; events: Event[]; submitted: number; discarded: number };
 		};
@@ -24,6 +27,7 @@ export let questionViewContractsBinding = `
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { AUTH } from "../../../question/src/react/question-view.test-fixtures";
+import { DecisionPrompt } from "../../../../apps/web/src/chat/decision-entry";
 let contractsRoot = createRoot(document.querySelector("#fixture"));
 let contractsGeneration = 0;
 let contractsEvents = [];
@@ -38,6 +42,35 @@ const DISCARDED_MULTIPLE = {
   options: [{ id: "anchors", label: "Anchors", description: "" }],
  }],
 };
+let sharing = { opens: 0, mutations: 0, errors: [] };
+const sharingValue = { id: "readonly-shared-card", questions: AUTH.questions.map(question => ({
+ ...question, prompt: question.question })) };
+const sharingMeta = { status: "open", origin: "conversation", involved: [], history: [],
+ optionOrigins: {}, hasProse: false, refining: false, proseOrphaned: false,
+ suggested: { optionId: "b", revision: 0, messageIds: ["fixture-suggestion"] } };
+const sharingWire = {
+ ask(kind) {
+  if (kind === "question:open") {
+   sharing.opens++;
+   if (sharing.opens === 8) { sharing.errors.push("question-open limit"); contractsRoot.unmount(); }
+  } else sharing.mutations++;
+  return new Promise(() => {});
+ },
+ send(kind) { if (kind !== "question:presence") sharing.mutations++; },
+ on() { return () => {}; },
+};
+function ReadonlySharingFixture({ mode }) {
+ return createElement("div", null,
+  createElement("section", { "aria-label": "Document" }, createElement(Undecided, { value: sharingValue, wire: sharingWire, connected: true,
+   canEdit: false, meta: sharingMeta })),
+  mode === "readonly-sidebar" ? createElement("section", { "aria-label": "Decisions" },
+   createElement(QuestionnaireCard, { value: sharingValue, wire: sharingWire, connected: false,
+    canEdit: false, meta: sharingMeta, presentation: "list", motionImmediately: () => true }))
+  : createElement(DecisionPrompt, { value: sharingValue, wire: sharingWire, connected: true,
+   canEdit: false, meta: sharingMeta, latest: true, onOpenCard() {}, entry: {
+    id: "readonly-prompt", author: { kind: "system" }, text: "Ready to decide", ts: 1,
+    decision: { questionnaireId: sharingValue.id, kind: "prompt", generation: 0 } } }));
+}
 function DiscardedContractsFixture({ mode }) {
  return createElement(SidecarCard, { label: "Decision", padded: false },
   createElement(QuestionView, {
@@ -65,10 +98,12 @@ function ContractsFixture({ mode }) {
 window.questionViewContractsFixture = {
  mount(mode) {
   contractsEvents = []; contractsSubmitted = 0; contractsDiscarded = 0;
-  let component = mode === "discarded-single" || mode === "discarded-multiple"
+  sharing = { opens: 0, mutations: 0, errors: [] };
+  let component = (mode === "readonly-shared" || mode === "readonly-sidebar") ? ReadonlySharingFixture : mode === "discarded-single" || mode === "discarded-multiple"
    ? DiscardedContractsFixture : ContractsFixture;
   contractsRoot.render(createElement(component, { mode, key: ++contractsGeneration }));
  },
+ sharing() { return structuredClone(sharing); },
  resetEvents() { contractsEvents = []; },
  snapshot() { throw new Error("QuestionView contracts not mounted"); },
 };
