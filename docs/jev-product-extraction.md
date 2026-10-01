@@ -1862,3 +1862,60 @@ Workspace/E2E types, formatting and CI pass. Existing runtime source and offline
 tests are unchanged; the preceding checkpoint's 3,260 passing tests and 15,438 assertions
 are retained evidence, not a new browser result. No application, database, browser,
 network or paid provider is started.
+
+## Dedicated current-Harness application setup source
+
+A separately selected conversation-plan Playwright configuration and scripted Planner
+preload now supply the missing application setup source. The ordinary runner, default
+configuration, original suites, production Harness map, authentication, profiles and
+startup remain unchanged. No package command activates this configuration. Its exact
+test matches contain only the two preserved jobs and prose modules, serialized under
+one project with no retries or existing-server reuse.
+
+The configuration rejects missing explicit selection, database and session inputs before
+validating its assembled server environment, checking the built client, or resetting
+the two existing fixture directories. It composes GitHub, preserved Jev HTTP and dedicated
+scripted preloads before unchanged startup. Settings explicitly select the current
+scripted Harness and conversation processing on loopback, fixed test Jev credentials,
+known root-relative fixture directories and disabled unrelated background/research work.
+
+A shared pure guard validates exact selection, host/origin/port, Harness/direct auth,
+Jev test credentials, fixture paths, PostgreSQL storage, local database URL and the
+actual authentication key shape. Database host, hostaddr and service query overrides
+are refused. Errors name configuration variables without exposing supplied values.
+Offline tests use fake environment objects and never mutate process environment.
+
+The dedicated preload runs that guard before dynamically importing the real Harness
+map, prompt-only factory and existing fake MCP module, then registering the factory,
+starting its future listener and installing its fetch wrapper. The validated script
+directory is captured before awaited imports; later environment mutations cannot
+redirect factory creation. The wrapper forwards only the exact GitHub MCP endpoint
+to the existing fake server and preserves request/init method, headers, body and abort
+signal behavior. Unknown URLs delegate to the captured previous wrappers. Existing
+factory shutdown/drain remains authoritative; fake MCP has process lifetime, so later
+execution still requires process supervision and owned port checks.
+
+These modules are saved and typechecked without being imported or activated. Pure
+guard tests and static ordering proofs establish their respective offline boundaries,
+not application startup, real authorization or HTTP behavior. Explicit flags and local
+URLs do not prove database disposability, built-client freshness, free ports, network
+containment or an owned writer lease. Even listing the dedicated tests would load its
+configuration and reset fixtures, so no listing is performed. No database is provisioned
+or migrated. The original missing-script, refining shimmer, Save caption and possible
+card-selector conflicts remain unchanged and unexecuted. Whole application verification
+and the remaining extraction requirements are still outstanding.
+
+Final verification passes 3,296 offline tests with 15,518 assertions across 543
+files, including 36 pure environment cases with eighty assertions; two PostgreSQL
+checks are skipped. Types, formatting and CI pass with the unchanged two inherited
+lint warnings, 221 reviewed design exceptions and existing design baseline. No UI
+source changed, so no client build or browser check is repeated or claimed.
+
+Independent static review approves the setup. Guard-before-effects and capture-before-await
+proofs pass; deliberate reset-before-gate and listener-before-guard negative controls
+are rejected. Fresh Git blob checks preserve all 1,443 preceding tracked files except
+this explicitly updated document, including production, ordinary discovery/runner,
+profiles, original browser callbacks and existing preloads. Saved-module proofs pass
+after formatting. The dedicated configuration and preload remain unimported; no
+application, listener, database, browser, network or provider is activated. Extraction
+is unfinished.
