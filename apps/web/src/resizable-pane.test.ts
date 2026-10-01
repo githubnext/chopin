@@ -16,9 +16,11 @@ describe("bounded pane resizing", () => {
 		expect(clampPane(401, 250, 400)).toBe(400);
 	});
 
-	it("moves each pane edge in its screen direction", () => {
-		expect(resizeDelta("left", 16)).toBe(16);
-		expect(resizeDelta("right", 16)).toBe(-16);
+	it("keeps each pane edge under the pointer", () => {
+		expect(resizeDelta("left", -16)).toBe(16);
+		expect(resizeDelta("left", 16)).toBe(-16);
+		expect(resizeDelta("right", 16)).toBe(16);
+		expect(resizeDelta("right", -16)).toBe(-16);
 	});
 
 	it("restores a valid saved width and rejects invalid persisted values", () => {
@@ -58,8 +60,10 @@ describe("bounded pane resizing", () => {
 	it("maps keyboard commands to bounded pane movements", () => {
 		let bounds = { min: 304, max: 400 };
 
-		expect(keyboardPaneDelta("left", "ArrowRight", false, 320, bounds)).toBe(16);
-		expect(keyboardPaneDelta("right", "ArrowRight", true, 384, bounds)).toBe(-64);
+		expect(keyboardPaneDelta("left", "ArrowLeft", false, 320, bounds)).toBe(16);
+		expect(keyboardPaneDelta("left", "ArrowRight", true, 384, bounds)).toBe(-64);
+		expect(keyboardPaneDelta("right", "ArrowRight", false, 320, bounds)).toBe(16);
+		expect(keyboardPaneDelta("right", "ArrowLeft", true, 384, bounds)).toBe(-64);
 		expect(keyboardPaneDelta("left", "Home", false, 360, bounds)).toBe(-56);
 		expect(keyboardPaneDelta("right", "End", false, 360, bounds)).toBe(40);
 		expect(keyboardPaneDelta("left", "Tab", false, 360, bounds)).toBeUndefined();
