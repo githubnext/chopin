@@ -669,8 +669,14 @@ test("decision cards save independently with progressive custom answers", async 
 	await added.check();
 	await scope.getByRole("checkbox", { name: /^Anchors/ }).check();
 	await saveScope.click();
-	await expect(questionnaire(page).filter({ hasText: "Which of these belong in the first cut?" }))
-		.toContainText("Only collaborative anchors");
+	let allResolved = page.getByRole("button", { name: "2 resolved" });
+	await expect(allResolved).toBeVisible();
+	await allResolved.click();
+	let resolvedScope = questionnaire(page).filter({
+		hasText: "Which of these belong in the first cut?",
+	});
+	await expect(resolvedScope).toContainText("Only collaborative anchors");
+	await expect(resolvedScope).toContainText("Answered by @ana");
 });
 
 test("Save and Next wait for a chosen answer", async ({ join, seed }) => {
