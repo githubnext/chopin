@@ -2186,3 +2186,39 @@ new exclusions reconstructs the preceding normal configuration. No production,
 unit-test or UI runtime code changes in this slice. Earlier 3,389 offline and
 eighty-seven isolated native passes remain historical evidence; no restored
 browser suite is executed or represented as passing.
+
+## Whole sidecar lifecycle and navigation browser regression source
+
+Two more original modules are retained whole: sidecar card states (316 lines,
+eight callbacks and three helpers) and sidecar navigation (508 lines, five
+callbacks and four helpers). All original fixtures, records, lifecycle and
+navigation assertions remain; there are no local types or setup/cleanup hooks
+in these modules. This slice preserves source only.
+
+Two exact Chromium exclusions precede restoration. The eight earlier exclusions
+and other projects remain unchanged, while the dedicated scripted target still
+selects only jobs and prose. No module, helper, preload or configuration is
+imported, evaluated, listed or invoked. Static source compatibility does not
+establish application, storage, browser geometry, focus or navigation outcomes.
+
+Archived exact Save selectors remain despite the current Save answer caption.
+The original two-card fixture assumptions also need a demonstrated fixture source
+before execution: current seed defaults are empty, normal DEV_QUESTIONS is empty,
+and the fixture project selects only the existing sidecar suite. No particular
+configuration is claimed to satisfy those assumptions. These original expectations
+remain intact pending separate compatibility and activation work.
+Three original browser modules remain absent, and full application verification
+and the larger extraction remain unfinished.
+
+Fresh full workspace/E2E types, formatting and CI pass with the same three
+existing lint warnings, 221 reviewed design exceptions and existing design
+baseline. Independent review confirms complete archive bytes, nested AST and
+raw declarations for both modules, with missing-helper and trimmed-callback
+negative controls rejected. All forty-four preceding browser module bytes and
+direct dependency sources remain unchanged. Ordinary selected filename sets
+remain 23/8/1/1; both new files are rejected in every project, the eight previous
+exclusions remain effective and the dedicated configuration remains byte-identical.
+Removing only the two new exclusions reconstructs the preceding normal config.
+No production, unit-test or UI runtime changes occur. Earlier 3,389 offline and
+eighty-seven isolated native passes remain historical; no retained whole browser
+case is invoked or claimed as passing.
