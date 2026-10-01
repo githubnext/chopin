@@ -1791,3 +1791,42 @@ baseline. No UI source changes, application, preload registration, PostgreSQL,
 network or paid provider activation occurs. Suggest/prose current-factory execution
 and original whole application browser suites remain outstanding; extraction is
 unfinished.
+
+## Current prompt-only suggest and prose execution
+
+The remaining two background profiles now execute through the unregistered prompt-only
+model factory, actual generated prompts, current static profiles, SDK sessions and
+scoped tools. A shared test fixture observes actual Memory commits without supplying
+model decisions. The suggest case first attempts a forbidden title change and verifies
+its complete durable record, source, document revision and live draft revision stay
+unchanged. A fresh real read then supplies the revision for one valid sourced option;
+the exact saved-message quote, rationale and Planner origin persist and survive reopen.
+
+The prose case starts from an actual answered Questionnaire projection and complete
+record with one prior decision. Current helpers derive generation two and its immutable
+trigger. A wrong-target call preserves the full record, source and revision; after
+another actual read, the scoped tool inserts exactly one paragraph with a unique live
+anchor. Complete choices, history and anchors survive document close/reopen. Result-time
+observations establish stored source and records before successful tool results return.
+
+These are direct Chat.job cases: the first own-tool refusal and subsequent successful
+call share one turn. They do not establish durable coordinator failure/retry, job or
+activity publication. Canonical restored anchors are persisted before baseline equality
+checks; no optional record field is dropped to conceal restoration behavior. Both cases
+count one session, SDK setup, sandbox disposal and credential release, with no public
+chat tool or delta leakage. Only the exact SDK directory setup is simulated; no host
+command executes. Current producers, profiles, parser, factory, configuration and
+preloads remain unchanged. Browser, deployed authentication, PostgreSQL and provider
+behavior are not exercised. Whole original application callbacks remain deferred,
+including the known missing-script outcome and current UI caption conflicts. Extraction
+is unfinished.
+
+Final verification passes 3,260 offline tests with 15,438 assertions across 542
+files; two PostgreSQL checks are skipped. Independent focused verification passes
+34 cases with 263 assertions, combining thirty direct model contracts and all four
+actual SDK/Memory profiles. Complete frozen-module/callback proofs pass after formatting;
+existing production and harness dependencies remain byte-identical. Workspace/E2E
+types and CI pass with the same two inherited lint warnings and design baseline.
+No UI source changed, so no client build or browser check is repeated or claimed.
+The factory remains unregistered and no application, preload, database, network or
+paid provider is activated.
