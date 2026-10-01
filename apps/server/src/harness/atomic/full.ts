@@ -83,12 +83,20 @@ export function fullPlanner(sessionId: string): FullPlanner | undefined {
 	return planners.get(sessionId);
 }
 
-/** Working and blocked roots are live; an idle root is paused only when Atomic says so. */
-export function classifyRuns(roots: Iterable<WorkflowRootActivity>): Omit<PlannerRuns, "cards"> {
+/**
+ * A root Atomic reports as paused is paused; one whose run has ended, as told
+ * by its lifecycle events, is neither; any other root is live. Activity alone
+ * cannot say a run ended: a root is idle and quiescent whenever nothing is
+ * counted as executing, which also happens between steps of a live run.
+ */
+export function classifyRuns(
+	roots: Iterable<WorkflowRootActivity>,
+	ended: ReadonlySet<string> = new Set(),
+): Omit<PlannerRuns, "cards"> {
 	let runs = { active: [] as string[], paused: [] as string[] };
 	for (let root of roots) {
-		if (root.state === "working" || root.state === "blocked") runs.active.push(root.rootRunId);
-		else if (root.reason === "paused") runs.paused.push(root.rootRunId);
+		if (root.reason === "paused") runs.paused.push(root.rootRunId);
+		else if (!ended.has(root.rootRunId)) runs.active.push(root.rootRunId);
 	}
 	return runs;
 }
@@ -201,7 +209,10 @@ export function workflowRuns(planner: FullPlanner): ExtensionFactory {
 		let ready = false;
 		let publish = () => {
 			if (!ready) return;
-			let split = classifyRuns(roots.values());
+			let ended = new Set(
+				[...cards.values()].filter(card => card.ended !== undefined).map(card => card.id),
+			);
+			let split = classifyRuns(roots.values(), ended);
 			for (let id of cards.keys()) {
 				if (!split.active.includes(id) && !split.paused.includes(id) && !roots.has(id)) {
 					let card = cards.get(id)!;
