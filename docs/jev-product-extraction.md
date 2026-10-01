@@ -2738,3 +2738,39 @@ checks pass. Independent review confirms all prior checker/probe/main bodies and
 existing test callbacks remain unchanged; only the validated sysfs entry policy and
 collector change. The next image binds this clean corrected checkpoint for the
 unchanged authentic target.
+
+The image at `90160e9989e73fb8ae8a672cb9f89bb66f42e571`, inspected as
+`sha256:0ede920a6e4b2c4992d19d9229fe6f2bc13d3b443a7edd4b0eab38994aeb9e41`,
+ran under nonce `7f3d827d42592fabcb3e46146bb58f90`. Source/build-stamp validation,
+complete proc/sysfs namespace checks and both bounded socket/fetch denial probes
+passed. The worker verified its fresh PostgreSQL 17 identity and migrated it.
+The actual Playwright CLI then failed discovery with
+`Unknown harness: e2e-prompt-scripted`, followed by `No tests found.` The fixture
+import chain initializes agents at top level, before the parent test process has
+registered that scripted harness. No selected callback executed; this attempt
+establishes preflight rather than an application-case pass.
+
+The failed CLI exited 1. Its process group and listeners were verified gone and
+its artifacts copied. Owned container cleanup verified application absence first
+and PostgreSQL absence second, both true, with no uncertain creations. The worker's
+complete phase records finished teardown, while its success field remains false.
+
+A guarded shared-registration correction before fixture loading is being prepared;
+it leaves the actual case body unchanged and does not load the full server preload
+in the CLI. Corrected-source validation, a fresh committed image and the genuine
+reader-denial case remain pending. No passing application runtime or complete
+release is inferred from this attempt.
+
+Guarded harness registration is now shared by the dedicated config and server
+preload. The config validates its actual process environment before registering
+the existing lazy fake factory, ahead of fixture discovery. Registration does not
+start the fake MCP listener, reset fixtures or wrap fetch; those server-only effects
+stay in the preload. An isolated agent-import regression failed with the observed
+unknown-harness error before the fix and passes with fetch/listeners blocked after
+it. The unchanged authentic callback and runner selection are retained.
+
+Fresh final checks pass: 3,511 offline tests, 16,365 assertions, zero failures across
+558 files, with two guarded PostgreSQL skips. Full workspace/E2E types and repository
+checks pass. The clean committed image must still execute the genuine reader-denial
+case; the full offline and prior component evidence are not substituted for that
+application result.

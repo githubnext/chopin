@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
 import { requireScriptedServer, SCRIPTED_HARNESS } from "./harness/scripted-environment";
+import { registerScriptedHarness } from "./harness/scripted-register";
 import { JEV_CONTROL_DIR, resetJevControl } from "./jev-control";
 import { PLANNER_JOBS_DIR, resetPlannerJobs } from "./planner-jobs";
 import { HOST, PLAIN, ROOT } from "./servers";
@@ -60,6 +61,7 @@ let serverEnvironment = {
 	DEV_COMMENTS: "",
 };
 requireScriptedServer(serverEnvironment, ROOT);
+await registerScriptedHarness(process.env, ROOT);
 
 if (!existsSync(join(ROOT, "apps/web/dist/index.html"))) {
 	throw new Error("chopin: conversation-plan tests require an existing built client");

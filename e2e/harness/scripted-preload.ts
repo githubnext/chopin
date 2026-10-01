@@ -1,15 +1,8 @@
 import { ROOT } from "../servers";
-import { requireScriptedServer, SCRIPTED_HARNESS } from "./scripted-environment";
+import { registerScriptedHarness } from "./scripted-register";
 
-requireScriptedServer(process.env, ROOT);
-let scriptDir = process.env.E2E_PLANNER_JOBS_DIR!;
-
-let { harnesses } = await import("../../apps/server/src/harness/harnesses");
-let { createPromptScriptedHarness } = await import("./scripted-planner");
+await registerScriptedHarness(process.env, ROOT);
 let { startFakeGithubMcpServer } = await import("./fake-mcp-server");
-
-(harnesses as Record<string, unknown>)[SCRIPTED_HARNESS] = () =>
-	createPromptScriptedHarness(scriptDir).fake;
 
 let mcp = startFakeGithubMcpServer();
 let network = globalThis.fetch;
