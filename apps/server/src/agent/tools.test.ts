@@ -287,7 +287,7 @@ test("read_reference accepts only ids made available by the active chat session"
 	expect(reads).toEqual([available]);
 });
 
-test("anchor_plan publishes moving a decision beside the validated prose", async () => {
+test("anchor_plan waits for decision placement before persisting and broadcasting anchors", async () => {
 	let { plan, server } = await opened(SOURCE, {
 		revision: 1,
 		questions: [{
@@ -308,14 +308,25 @@ test("anchor_plan publishes moving a decision beside the validated prose", async
 	});
 	let published: unknown[] = [];
 	let anchors = 0;
+	let started = Promise.withResolvers<void>();
+	let release = Promise.withResolvers<void>();
+	let finished = Promise.withResolvers<void>();
+	let persisted = false;
 	let anchorPlan = fixtureTools({
 		plan,
 		server,
 		room: "test",
-		persist: () => Service.persist(plan),
+		persist: async () => {
+			persisted = true;
+			await Service.persist(plan);
+		},
 		exclusive: action => Service.exclusive(plan, action),
 		publish: async mutation => {
+			started.resolve();
+			await release.promise;
+			await Service.publish(plan, server, "test", mutation);
 			published.push(mutation);
+			finished.resolve();
 		},
 		anchors: () => anchors++,
 		changes() {},
@@ -328,12 +339,18 @@ test("anchor_plan publishes moving a decision beside the validated prose", async
 		revision: plan.revision,
 		anchors: [{ widget: WIDGET, question: QUESTION, blocks: [{ index: 1, digest }] }],
 	};
-	let response = await anchorPlan.handler(args, {
+	let pending = anchorPlan.handler(args, {
 		sessionId: "session",
 		toolCallId: "call",
 		toolName: "anchor_plan",
 		arguments: args,
 	});
+	await started.promise;
+	let beforeCommit = { persisted, anchors };
+	release.resolve();
+	let response = await pending;
+	await finished.promise;
+	expect(beforeCommit).toEqual({ persisted: false, anchors: 0 });
 	if (typeof response !== "string") throw new Error("anchor_plan returned no text");
 	let result = JSON.parse(response);
 

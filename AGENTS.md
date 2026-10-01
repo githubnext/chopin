@@ -118,8 +118,7 @@ external implementation runs are durable.
 - **Repository node IDs are authoritative.** Owner and repository names resolve
   GitHub requests but never replace the stored node identity.
 - **Persistence should precede publication.** Do not acknowledge or broadcast a
-  domain mutation before its fenced durable commit. `anchor_plan` currently has
-  a known ordering race described below; do not copy that pattern.
+  domain mutation before its fenced durable commit.
 
 ## Conversation and Planner addressing
 
@@ -311,9 +310,6 @@ so merge ranges from all mounted editors before replacing a registry entry.
   does not currently remove every Planner label from the UI.
 - A success callback for persisted sidecar work is not optional. Calling it
   after persistence prevents durable transcript state from being dropped.
-- `anchor_plan` calls the asynchronous question-placement publish without
-  awaiting it before separate sidecar persistence and anchor broadcast. Fix the
-  serialization before relying on its ordering guarantee.
 
 ### Browser and editor
 
