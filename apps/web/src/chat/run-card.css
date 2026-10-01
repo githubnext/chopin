@@ -5,7 +5,7 @@
 	width: 8px;
 	height: 8px;
 	margin: 3px;
-	border-radius: 9999px;
+	border-radius: var(--radius-full);
 	background-color: var(--color-brand);
 
 	&::after {
@@ -14,7 +14,7 @@
 		border-radius: inherit;
 		background-color: inherit;
 		content: "";
-		animation: run-pulse 1.6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+		animation: run-pulse calc(var(--duration-linger) * 2.5) var(--ease-out) infinite;
 	}
 }
 
@@ -72,7 +72,7 @@
 	height: 8px;
 	margin: 3px;
 	border: 1.5px solid currentColor;
-	border-radius: 9999px;
+	border-radius: var(--radius-full);
 	color: var(--color-text-quaternary);
 }
 
