@@ -60,14 +60,19 @@ export function createHumanInput(
 			let answer = outcome.answers[0]!;
 			let question = params.questions[questionIndex]!;
 			let identity = { questionIndex, question: question.question };
-			if (answer.custom !== undefined) {
-				// Atomic accepts `custom` only where its own dialog offers a typed row.
-				let typed = !question.multiSelect && !question.options.some(option => option.preview);
-				answers.push({ ...identity, kind: typed ? "custom" : "chat", answer: answer.custom });
+			// Atomic accepts `custom` only where its own dialog offers a typed row.
+			let typed = !question.multiSelect && !question.options.some(option => option.preview);
+			let offered = new Set(question.options.map(option => option.label));
+			let choices = answer.choices ?? [];
+			// A member writes an answer by adding an option, which Atomic never offered.
+			let written = answer.custom
+				|| (choices.some(label => !offered.has(label)) ? choices.join(", ") : undefined);
+			if (written !== undefined) {
+				answers.push({ ...identity, kind: typed ? "custom" : "chat", answer: written });
 			} else if (question.multiSelect) {
-				answers.push({ ...identity, kind: "multi", answer: null, selected: answer.choices ?? [] });
+				answers.push({ ...identity, kind: "multi", answer: null, selected: choices });
 			} else {
-				let label = answer.choices![0]!;
+				let label = choices[0]!;
 				let preview = question.options.find(option => option.label === label)?.preview;
 				answers.push({
 					...identity,

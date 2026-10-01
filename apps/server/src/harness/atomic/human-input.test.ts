@@ -150,7 +150,7 @@ test("maps confirm/select dialogs without treating custom text as approval or a 
 	expect(await custom).toBeUndefined();
 });
 
-test("input and editor are editable free-text cards that round-trip through the document", async () => {
+test("input and editor are cards with no options, answered by an option a member adds", async () => {
 	let f = await fixture();
 	for (let method of ["input", "editor"] as const) {
 		let response = f.input[method]("Title", "  initial or hint\n", f.options);
@@ -163,11 +163,28 @@ test("input and editor are editable free-text cards that round-trip through the 
 		expect(Room.project(roundTrip)).toContain(
 			`header="${method === "input" ? "Input" : "Editor"}"`,
 		);
-		expect(Room.project(roundTrip)).not.toContain("<Option");
+		let projected = Room.project(roundTrip);
+		let own = projected.slice(projected.indexOf(`<Questionnaire id="${card!.id}"`));
+		expect(own.slice(0, own.indexOf("</Questionnaire>"))).not.toContain("<Option");
 		roundTrip.doc.destroy();
-		await f.answer(card!.id, method === "editor" ? "  edited\n" : "");
-		expect(await response).toBe(method === "editor" ? "  edited\n" : "");
+		let written = method === "editor" ? "Ship the refund rules first" : "Q4";
+		await f.answer(card!.id, [await f.addOption(card!.id, written)]);
+		expect(await response).toBe(written);
 	}
+});
+
+test("an option a member adds comes back as a written answer, never as one Atomic offered", async () => {
+	let f = await fixture();
+	let response = f.input.questionnaire(params, f.options);
+	let cards = await f.cards(3);
+	await f.answer(cards[0]!.id, [await f.addOption(cards[0]!.id, "Neither")]);
+	await f.answer(cards[1]!.id, [0, await f.addOption(cards[1]!.id, "G")]);
+	await f.answer(cards[2]!.id, [await f.addOption(cards[2]!.id, "Something else")]);
+	expect((await response).answers).toEqual([
+		{ questionIndex: 0, question: "  Which?  ", kind: "chat", answer: "Neither" },
+		{ questionIndex: 1, question: "Select several", kind: "chat", answer: "C, G" },
+		{ questionIndex: 2, question: "Or free text?", kind: "custom", answer: "Something else" },
+	]);
 });
 
 test("member cancellation retains answered questions and marks the batch cancelled", async () => {

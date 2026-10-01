@@ -424,7 +424,7 @@
 				1
 			]
 		],
-		"sourceHash": "57762a66f2046b26f1c87547bf45bb21e73eb1c37deda3dcb376ba7056f10b10"
+		"sourceHash": "cc142fe31440bda91979142fbbedad1de0eeef6d6748b2a1028f08823f276337"
 	},
 	{
 		"file": "packages/editor/src/widgets/code-view.tsx",
