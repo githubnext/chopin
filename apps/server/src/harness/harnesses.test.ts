@@ -1,4 +1,6 @@
 import { afterEach, expect, it } from "bun:test";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { harnesses, harnessFor, registerCredential, shutdownHarnesses } from "./harnesses";
 
@@ -64,6 +66,18 @@ it("refuses Atomic's host-login auto mode on a non-loopback bind but accepts ai-
 	}
 	expect(harnessFor({ harness: "atomic", harnessAuth: "ai-gateway", host: "0.0.0.0" }).harnessId)
 		.toBe("atomic");
+});
+
+it("accepts only existing absolute extension paths, and only for the atomic harness", () => {
+	let atomic = { harness: "atomic", harnessAuth: "auto", host: "127.0.0.1" };
+	expect(() => harnessFor({ ...atomic, harnessExtensions: ["relative/package"] }))
+		.toThrow("HARNESS_EXTENSIONS path relative/package must be absolute");
+	let missing = join(tmpdir(), `chopin-missing-${crypto.randomUUID()}`);
+	expect(() => harnessFor({ ...atomic, harnessExtensions: [missing] }))
+		.toThrow(`HARNESS_EXTENSIONS path ${missing} does not exist`);
+	expect(() => harnessFor({ harness: "pi", harnessAuth: "auto", harnessExtensions: [tmpdir()] }))
+		.toThrow("HARNESS_EXTENSIONS requires HARNESS=atomic, not pi");
+	expect(harnessFor({ ...atomic, harnessExtensions: [tmpdir()] }).harnessId).toBe("atomic");
 });
 
 it("registers credentials per session without reuse or rewriting", () => {

@@ -132,7 +132,10 @@ agent directory (including `ATOMIC_CODING_AGENT_DIR` or the legacy
 context files, and a read-only copy of its settings. A verified checkout's
 `.atomic/settings.json` is read the same way, as trusted project settings, so
 packages installed for that project load too; the document's own directory
-has none. Chopin's compaction, summary, and cache overrides still apply on top.
+has none. Paths in `HARNESS_EXTENSIONS` load in every Planner session as if
+passed to Atomic's `--extension` flag, so a package listed there adds its
+extensions, skills, and workflows without being installed in the agent
+directory. Chopin's compaction, summary, and cache overrides still apply on top.
 Chopin appends its Planner
 instructions to Atomic's assembled prompt. Session, settings, and model
 credentials remain in memory; Atomic's own enabled tools, extensions, MCP
