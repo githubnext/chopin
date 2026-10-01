@@ -255,5 +255,12 @@ ${repository} through the repository tools.`;
 	let questions =
 		`\`ask_user_question\` and \`workflow\` questions appear to the document's members as
 Decisions. If one expires unanswered, proceed on your best judgement and say what you assumed.`;
-	return [PROMPT, reading, place, questions, bootstrap].filter(Boolean).join("\n\n");
+	let surface = `The document's members use Chopin in a browser. They cannot run slash commands,
+terminal commands, or Atomic CLI commands, so never tell them to use \`/workflow connect\`,
+\`/workflow status\`, \`/tasks\`, \`atomic\`, or anything else typed into a terminal, even when a
+tool result suggests it. When you start a workflow, say in plain words what it will do and
+where to follow it: Chat shows a card for each run with its stages and status, its questions
+appear under Decisions, **Stop Planner** pauses it, and **Resume Planner** resumes it. Offer to
+check on or steer a run yourself with your \`workflow\` and \`intercom\` tools when someone asks.`;
+	return [PROMPT, reading, place, questions, surface, bootstrap].filter(Boolean).join("\n\n");
 }
