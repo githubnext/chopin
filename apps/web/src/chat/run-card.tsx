@@ -255,7 +255,9 @@ function RunRow({ run, tag, open, onToggle, onShowDecisions, onPause, onResume }
 	);
 }
 
-export function RunStack({ runs, ...controls }: RunControls & { runs: readonly Wire.Run[] }) {
+export function RunStack(
+	{ runs, onShowDecisions, onPause, onResume }: RunControls & { runs: readonly Wire.Run[] },
+) {
 	let [chosen, setChosen] = useState<ReadonlyMap<string, boolean>>(new Map());
 	let [showAll, setShowAll] = useState(false);
 	let ordered = orderRuns(runs);
@@ -276,8 +278,10 @@ export function RunStack({ runs, ...controls }: RunControls & { runs: readonly W
 					let open = chosen.get(run.id) ?? run.id === fallback;
 					return (
 						<RunRow
-							{...controls}
 							key={run.id}
+							onPause={onPause}
+							onResume={onResume}
+							onShowDecisions={onShowDecisions}
 							tag={(named.get(run.name) ?? 0) > 1 ? run.id.slice(0, 8) : undefined}
 							onToggle={() => setChosen(previous => new Map(previous).set(run.id, !open))}
 							open={open}
