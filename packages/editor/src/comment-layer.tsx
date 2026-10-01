@@ -689,6 +689,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 							aria-description={replyState(view)}
 							aria-expanded={shown}
 							className="plan-comment-button"
+							data-press="small"
 							data-plan-comment-button={view.thread.id}
 							onBlur={() => unhover(view.thread.id)}
 							onClick={event => {

@@ -18,8 +18,8 @@ import { addComposerChild$, realmPlugin } from "@mdxeditor/editor";
 
 import { ChangeObserver } from "./changes-observer";
 import { CommentLayer } from "./comment-layer";
-import { DecisionLayer } from "./decision-layer";
 import { QuestionnaireObserver } from "./questionnaires";
+import { ResolvedLayer } from "./resolved-layer";
 import { TableChrome } from "./table/chrome";
 import { ThreadObserver } from "./threads";
 import { Toolbar } from "./toolbar";
@@ -27,6 +27,7 @@ import {
 	CalloutPlugin,
 	CardGapPlugin,
 	DecisionDeletionPlugin,
+	DecoratorSelectionPlugin,
 	DiscardedNavigationPlugin,
 	EnterPlugin,
 	PreviewPlugin,
@@ -84,7 +85,7 @@ export const widgetsPlugin = realmPlugin<WidgetOptions>({
 		if (params?.questions) {
 			let store = params.questions;
 			realm.pub(addComposerChild$, () => <QuestionnaireObserver store={store} />);
-			realm.pub(addComposerChild$, () => <DecisionLayer store={store} />);
+			realm.pub(addComposerChild$, () => <ResolvedLayer store={store} />);
 		}
 		if (params?.threads) {
 			let store = params.threads;
@@ -101,6 +102,7 @@ export const widgetsPlugin = realmPlugin<WidgetOptions>({
 		realm.pub(addComposerChild$, PreviewPlugin);
 		realm.pub(addComposerChild$, CalloutPlugin);
 		realm.pub(addComposerChild$, EnterPlugin);
+		realm.pub(addComposerChild$, DecoratorSelectionPlugin);
 		realm.pub(addComposerChild$, ResearchDeletionPlugin);
 		realm.pub(addComposerChild$, DecisionDeletionPlugin);
 		// Link nodes live inside Lexical's contenteditable root, where a normal

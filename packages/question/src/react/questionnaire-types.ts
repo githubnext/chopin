@@ -1,5 +1,5 @@
 import type { Definition, Drafts } from "../index";
-import type { Collaborator } from "./question-view";
+import type { AddOptionResult, Collaborator } from "./question-view";
 
 // Archive shared state, with the current cancel API retained.
 export type Unsubscribe = () => void;
@@ -20,7 +20,8 @@ export type QuestionnaireState = {
 	/** Validation or synchronisation problem, shown to the user. */
 	error: string | undefined;
 	change: (question: string, change: Record<string, unknown>) => void;
-	addOption: (label: string) => Promise<{ ok: true } | { ok: false; message: string }>;
+	addOption: (question: string, label: string) => Promise<AddOptionResult>;
+	focusQuestion: (question: string | undefined) => void;
 	submit: (visibleSuggestion?: { optionId: string; revision: number }) => void;
 	/** Set an open decision aside. Terminal — the agent stops waiting. */
 	discard: () => void;
@@ -35,7 +36,7 @@ export type QuestionnaireState = {
 export type Snapshot =
 	& Omit<
 		QuestionnaireState,
-		"change" | "addOption" | "submit" | "discard" | "reopen" | "cancel"
+		"change" | "focusQuestion" | "addOption" | "submit" | "discard" | "reopen" | "cancel"
 	>
 	& {
 		closed: boolean;

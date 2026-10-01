@@ -1,11 +1,11 @@
 /**
  * Durable questionnaires.
  *
- * Unlike the other containers this is atomic. People may add options to an open
- * questionnaire through its sidecar record; its answer also belongs to that
- * record. The document carries only the projection. Modelling it as a decorator
- * keeps it selectable, movable and deletable as one unit while making its
- * contents unwritable by construction.
+ * Unlike the other containers this is atomic. A questionnaire's definition is
+ * fixed except for options the server appends while it is open. Its answer is
+ * owned by the sidecar record; the document carries only the projection.
+ * Modelling it as a decorator keeps it selectable, movable and deletable as one
+ * unit while making its contents unwritable by construction.
  *
  * The `<Answer>` written into source is a projection for readability. The
  * sidecar stays authoritative; a mismatch is a server-side error, not something

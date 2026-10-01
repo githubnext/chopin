@@ -13,6 +13,12 @@
  */
 
 import * as Store from "./store";
+import { addCardOption } from "./service-add-option";
+import { appendOption } from "./service-append-option";
+import type { Server } from "bun";
+import type { Question as Wire, Request } from "@chopin/protocol";
+import type { Plan } from "../plan/service";
+import type { Socket, SocketData } from "../wire";
 
 export type { CardEvent } from "./card-event";
 export { insertConversationCard } from "./card-insertion";
@@ -30,7 +36,6 @@ export {
 	questionMentionsOption,
 } from "./records";
 export type { DecisionEntry, OptionOrigin, Record } from "./records";
-export { addOption } from "./service-add-option";
 export { ask } from "./service-ask";
 export { cancel } from "./service-cancel";
 export { identify } from "./service-definition";
@@ -55,3 +60,15 @@ export type { Questions, StoredOpen } from "./store";
 export const create = Store.create;
 export const dump = Store.dump;
 export const restore = Store.restore;
+
+export function addOption(
+	plan: Plan,
+	server: Server<SocketData>,
+	roomId: string,
+	ws: Socket,
+	msg: Request<Wire.AddOption.Ask | Wire.AddCardOption.Ask>,
+): Promise<void> {
+	return msg.kind === "question:option"
+		? appendOption(plan, server, roomId, ws, msg)
+		: addCardOption(plan, server, roomId, ws, msg);
+}

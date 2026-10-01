@@ -59,7 +59,7 @@ test("authoritative reopened metadata reveals a fresh draft over the stale decid
 	await loadCollapse(page);
 	await page.evaluate(() => window.collapseFixture.status("reopened"));
 	await expect(inline(page)).toBeVisible();
-	await expect(inline(page).getByRole("button", { name: /^Save/ })).toBeDisabled();
+	await expect(inline(page).getByRole("button", { name: "Save", exact: true })).toBeDisabled();
 	await expect(marker(page)).toHaveCount(0);
 	await expect(inline(page)).toContainText("GitHub Apps");
 	await expect(inline(page)).toContainText("Auth0");
@@ -82,7 +82,9 @@ test("actual reader confirmation Keep makes no request and held discard remains 
 		payload: { id: "reader-card" },
 	}]);
 	await page.evaluate(() => window.collapseFixture.settle(false));
-	await expect(dialog(page).getByRole("alert")).toContainText("Could not discard");
+	await expect(dialog(page).getByRole("alert")).toHaveText(
+		"Could not discard this decision. Try again.",
+	);
 });
 
 test("real Backspace after a hidden card moves into its linked prose and retains both blocks", async ({ page }) => {

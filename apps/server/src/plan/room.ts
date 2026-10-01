@@ -556,6 +556,40 @@ export function insertDecision(target: Document, value: Decision): Mutation | un
 export let { projectAnswer, projectCard, hasQuestionnaire, projectOptions, projectPrompt } =
 	createCardProjections(mutate);
 
+/** Append one shared option to a question's projection in the plan. */
+export function appendQuestionOption(
+	target: Document,
+	id: string,
+	question: string,
+	option: { id: string; label: string; description: string },
+): Mutation | undefined {
+	return mutate(target, () => {
+		let found = false;
+		for (let node of $nodesOfType(QuestionnaireNode)) {
+			if (node.getId() !== id) continue;
+			let value = node.getQuestionnaire();
+			if (!value.questions.some(item => item.id === question)) continue;
+			found = true;
+			node.setQuestionnaire({
+				...value,
+				questions: value.questions.map(item =>
+					item.id === question
+						? {
+							...item,
+							options: [...item.options, {
+								id: option.id,
+								label: option.label,
+								...(option.description ? { description: option.description } : {}),
+							}],
+						}
+						: item
+				),
+			});
+		}
+		return found;
+	});
+}
+
 /** Take a questionnaire out of the plan, leaving its record as history. */
 export function removeQuestionnaire(target: Document, id: string): Mutation | undefined {
 	return mutate(target, () => {

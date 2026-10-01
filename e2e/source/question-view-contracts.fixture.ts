@@ -1,6 +1,13 @@
 import type { Draft } from "../../packages/question/src/draft";
 
-type Mode = "open" | "empty" | "linked" | "unlinked" | "discarded-single" | "discarded-multiple";
+type Mode =
+	| "open"
+	| "empty"
+	| "linked"
+	| "unlinked"
+	| "discarded-single"
+	| "discarded-multiple"
+	| "legacy-custom";
 type Event = { kind: "enter" | "leave" | "select"; question: string };
 
 declare global {
@@ -39,13 +46,14 @@ function DiscardedContractsFixture({ mode }) {
    onSubmit: () => contractsSubmitted++, onDiscard: () => contractsDiscarded++ }));
 }
 function ContractsFixture({ mode }) {
- let [draft, setDraft] = useState({ mode: "choices", choice: mode === "empty" ? null : "b",
-  options: { a: false, b: false }, custom: "" });
+ let [draft, setDraft] = useState({ mode: mode === "legacy-custom" ? "custom" : "choices",
+  choice: mode === "empty" || mode === "legacy-custom" ? null : "b",
+  options: { a: false, b: false }, custom: mode === "legacy-custom" ? "Another auth approach" : "" });
  window.questionViewContractsFixture.snapshot = () => ({ draft: structuredClone(draft),
   events: structuredClone(contractsEvents), submitted: contractsSubmitted, discarded: contractsDiscarded });
  return createElement(SidecarCard, { label: "Decision", padded: false },
   createElement(QuestionView, { definition: AUTH, drafts: { q: draft },
-   aside: createElement(People, { handles: ["ana", "bea", "ana"] }),
+   aside: createElement(PresenceFaces, { handles: ["ana", "bea", "ana"], label: "In this decision" }),
    places: { q: mode === "linked" ? 2 : 0 },
    onChange: (_, change) => setDraft(previous => ({ ...previous, ...change })),
    onSubmit: () => contractsSubmitted++, onDiscard: () => contractsDiscarded++,

@@ -17,7 +17,7 @@ test("an open card keeps durable people when nobody is currently editing", () =>
 	expect(markup).toContain('aria-label="In this decision: ana, ben"');
 });
 
-test("durable people deduplicate and retain all accessible handles beyond eight avatars", () => {
+test("durable people deduplicate and retain all accessible handles beyond three avatars", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
 		canEdit: false,
 		connected: true,
@@ -31,6 +31,6 @@ test("durable people deduplicate and retain all accessible handles beyond eight 
 	expect(markup).toContain(
 		'aria-label="In this decision: ana, ben, cam, dee, eli, flo, gia, hal, ian"',
 	);
-	expect(markup).toContain(">+1<");
-	expect((markup.match(/<img/g) ?? []).length).toBe(8);
+	expect(markup).toContain(">+6<");
+	expect((markup.match(/<img/g) ?? []).length).toBe(3);
 });

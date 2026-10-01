@@ -297,7 +297,7 @@ if (url) {
 		let storage = new PostgresStorage(url);
 		let sql = new SQL(url);
 		let suffix = crypto.randomUUID();
-		let locked = Promise.withResolvers<void>();
+		let locked = Promise.withResolvers<number>();
 		let release = Promise.withResolvers<void>();
 		try {
 			await storage.migrate();
@@ -314,13 +314,15 @@ if (url) {
 				createdBy: userId,
 				now,
 			});
-			let lease = await storage.leases.acquire(`job-lock-${suffix}`, "old-writer", 50);
+			let lease = await storage.leases.acquire(`job-lock-${suffix}`, "old-writer", 1_000);
 			let blocker = sql.begin(async transaction => {
-				await transaction`SELECT pg_advisory_xact_lock(2043237432)`;
-				locked.resolve();
+				let [row] = await transaction<{ pid: number }[]>`
+					SELECT pg_backend_pid() AS pid, pg_advisory_xact_lock(2043237432)
+				`;
+				locked.resolve(row!.pid);
 				await release.promise;
 			});
-			await locked.promise;
+			let blockerPid = await locked.promise;
 			let enqueue = storage.jobs.enqueue({
 				id: `job-lock-job-${suffix}`,
 				channelId,
@@ -335,10 +337,29 @@ if (url) {
 				now,
 				lease: lease!,
 			});
-			await Bun.sleep(75);
+			let result = enqueue.then(() => undefined, error => error);
+			let waiting = false;
+			for (let attempt = 0; attempt < 100; attempt++) {
+				let [row] = await sql<{ waiting: boolean }[]>`
+					SELECT EXISTS (
+						SELECT 1 FROM pg_stat_activity
+						WHERE ${blockerPid} = ANY(pg_blocking_pids(pid))
+					) AS waiting
+				`;
+				if (row!.waiting) {
+					waiting = true;
+					break;
+				}
+				await Bun.sleep(10);
+			}
+			expect(waiting).toBe(true);
+			await sql`
+				SELECT pg_sleep(GREATEST(0, EXTRACT(EPOCH FROM (expires_at - clock_timestamp()))))
+				FROM storage_leases WHERE name = ${lease!.name}
+			`;
 			release.resolve();
 			await blocker;
-			await expect(enqueue).rejects.toMatchObject({ failure: "conflict" });
+			expect(await result).toMatchObject({ failure: "conflict" });
 			expect((await storage.jobs.list(channelId, 10))!.jobs).toEqual([]);
 		} finally {
 			release.resolve();

@@ -332,6 +332,7 @@ export function SelectionBubble(
 						title={item.label}
 						onClick={() => convert(item.id)}
 						className={`${CELL} ${item.id === block ? CELL_ON : CELL_OFF}`}
+						data-press="small"
 					>
 						<span aria-hidden="true">{item.glyph}</span>
 					</button>
@@ -346,6 +347,7 @@ export function SelectionBubble(
 							title={`${describe(block).label} — change block type`}
 							onClick={() => setChoosing(true)}
 							className={`${CELL} ${CELL_OFF}`}
+							data-press="small"
 						>
 							<span aria-hidden="true">{describe(block).glyph}</span>
 						</button>
@@ -361,6 +363,7 @@ export function SelectionBubble(
 								title={`${mark.label} (${mark.shortcut})`}
 								onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, mark.format)}
 								className={`${CELL} ${active.has(mark.format) ? CELL_ON : CELL_OFF}`}
+								data-press="small"
 							>
 								<span aria-hidden="true">{mark.glyph}</span>
 							</button>
@@ -379,6 +382,7 @@ export function SelectionBubble(
 								editor.dispatchCommand(TOGGLE_LINK_COMMAND, url);
 							}}
 							className={`${CELL} ${CELL_OFF}`}
+							data-press="small"
 						>
 							<LinkPlusIcon aria-hidden="true" />
 						</button>
@@ -403,6 +407,7 @@ export function SelectionBubble(
 										setPosition(undefined);
 									}}
 									className={`${CELL} ${CELL_OFF}`}
+									data-press="small"
 								>
 									<MessagePlusIcon aria-hidden="true" />
 								</button>

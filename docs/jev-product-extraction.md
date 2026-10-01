@@ -2593,3 +2593,76 @@ do not prove actual namespace containment, fresh image contents, admission,
 writer lease, persistence or disposal. Image preparation, intentional failure
 cleanup and the unchanged application callback remain separate runtime gates.
 The conflicting historical view contracts and larger extraction remain unresolved.
+
+## Main integration and current-interface decision
+
+The user approved the contained runner's image build and one authentic original
+application case against its fresh disposable database. They also chose the
+current interface for prototype-contract adaptations and requested the latest
+main. The local fetch resolved origin/main to
+`04e75bff591e02cc76b9be38c653f5850a5c89a0`, twenty-three new main commits beyond
+the product branch's previous base. Integration preserves both histories through
+a merge, rather than rewriting the previously reported milestone commits.
+
+Latest main supplies keyed shared option append, full-prompt question headings,
+Save, an inline Add an option row, resolved decision markers and hidden-widget
+selection handling. New custom-answer entry is no longer offered. Existing custom
+drafts and answers remain readable, and choosing an option leaves custom mode.
+Prototype view contracts are adapted to those decisions while retaining their
+scenario, valid original data, choice readiness, participant identity, source
+navigation and authoritative attribution. An adapted test is not raw archive
+callback parity. Earlier chapters record the interface at their own checkpoint;
+they are not an instruction to restore its superseded presentation.
+
+The protocol retains main's `Question.AddOption` for explicit `question:option`
+requests and names the existing conversation-card `question:add-option` action
+separately. The server dispatches by the explicit wire kind. Both actions retain
+their fenced persistence boundary; no guessed fallback or ambient authority is
+introduced. Container runtime verification and fresh merged-checkout validation
+are still required before reporting this integration as verified.
+
+The merge keeps all thirty-two main backend callbacks and accounts for all
+forty-seven main question callbacks: forty-four exact complete callback trees,
+two with additional durable selected-option ID assertions, and one moved to the
+independent-decision creation boundary. That last adaptation retains the original
+multi-question input and rejection intent while preserving the concrete persisted
+legacy multi-question read path. Six formerly deferred view scenarios now have
+explicit current-design tests; authoritative rendered attribution replaces the
+historical contiguous raw-HTML actor assumption. Four main editor suites remain
+byte-identical. These classifications are source evidence, not SQL/browser proof.
+
+Independent review found two editor lifecycle defects during integration. Losing
+a mounted Lexical root now clears its marker, pin, intent and exact highlight.
+Owner-specific unpin and walking also check the editor; detaching or replacing a
+ThreadStore clears only its previous editor rather than another editor's pin or
+ranges. Six regressions cover that ownership correction and pass after it, including
+the actual store teardown paths; the failing controls establish the original leak. Current reader and collapse native
+fixtures now bind the single production ResolvedLayer, with main marker/dialog
+names, geometry and highlight registry. They do not exercise the unmounted
+historical DecisionLayer.
+
+The initial current-interface native run passed eighty-four cases and failed ten.
+Five expectations still targeted old captions, choice count or eight-face
+presentation; one still entered new Custom; four fixtures referenced the removed
+People helper. The corrections retain complete scenarios and original participant
+and question data, use the actual PresenceFaces component, enforce all participants
+through its accessible name and three-face overflow, and keep separate Cancel and
+Discard callbacks. The human-edit scenario now exercises current shared-option
+entry, held acknowledgement, definition delivery, no duplicate row or automatic
+selection, and Save readiness; a separate case retains legacy-custom readability.
+Native fixtures model controlled delivery and cannot prove WebSocket/SQL commits.
+The corrected twenty-four interface/collapse cases and four terminal/origin cases
+pass. Final all-native evidence and the clean image commit are recorded separately.
+
+Final merged source validation passes: 3,471 offline tests, 16,306 assertions,
+zero failures across 556 files; the two guarded PostgreSQL suites remain skipped.
+Full workspace/E2E types, client build, formatting/lint/token/design checks pass.
+CI reports four inherited warnings, 224 exact reviewed design exceptions and the
+existing design baseline. All ninety-five current native cases pass in 1.8 minutes,
+including actual root detachment and the current shared-option/legacy-answer
+scenarios. The complete original reader-denial callback remains raw-byte exact to
+archive `446a9779a937fa5be7cd3eb52fd7f3023d691ed2` (SHA256
+`f94089afd213441d03be97eeba2340968ca5f80a80d03d942b8f017be7cc688a`).
+These checks establish the merge and current component behavior, not execution of
+the retained inactive application suites or a complete product release. A fresh
+committed-image runtime check still follows this source milestone.

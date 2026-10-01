@@ -9,19 +9,18 @@
  * as they arrive rather than tracking local state.
  */
 
-import { useCallback, useEffect, useId, useReducer, useRef, useState } from "react";
-import { CheckIcon, CloseIcon } from "@chopin/icons";
+import { useEffect, useId, useReducer, useRef, useState } from "react";
+import { CheckIcon, ChevronIcon, DecisionIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 
+import { MAX_LABEL, MAX_SHARED_OPTIONS } from "../limits";
 import { answered } from "../draft";
-import * as limits from "../limits";
-import { AddOption } from "./add-option";
-import { ResolvedActions } from "./resolved-actions";
 import { projectSuggestion, reduceSuggestionEditState } from "./project-suggestion";
+import { ResolvedActions } from "./resolved-actions";
+import type { VisibleSuggestion } from "./project-suggestion";
 
-import type { KeyboardEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { Draft, Drafts } from "../draft";
 import type { Answer, Definition, Item } from "../schema";
-import type { VisibleSuggestion } from "./project-suggestion";
 
 export type Collaborator = {
 	/** Stable per connection, so one person on two devices shows twice. */
@@ -29,6 +28,8 @@ export type Collaborator = {
 	handle: string;
 	question?: string;
 };
+
+export type AddOptionResult = { ok: true } | { ok: false; message: string };
 
 export type QuestionStepRenderProps = {
 	children: ReactNode;
@@ -40,22 +41,21 @@ export type PreviousAnswer = { labels: string[]; by: string };
 export type QuestionViewProps = {
 	definition: Definition;
 	drafts: Drafts;
-	/** Keeps open-card actions visible when the host withholds mutation callbacks. */
-	showActions?: boolean;
 	/** Absent once resolved: a decision is not re-opened, a new question is asked. */
 	onChange?: (question: string, change: Partial<Draft>) => void;
 	onSubmit?: (visibleSuggestion?: VisibleSuggestion) => void;
-	/** The current advisory card option; it never changes the shared draft. */
 	suggested?: VisibleSuggestion;
-	/** Adds an option through the record that owns this decision. */
-	onAddOption?: (label: string) => Promise<{ ok: true } | { ok: false; message: string }>;
-	maxOptions?: number;
-	onCancel?: () => void;
 	onDiscard?: () => void;
-	/** Reopen a resolved decision without opening a shared draft in this view. */
 	onReopen?: () => void;
-	/** The answer a reopened decision replaces, keyed for legacy multi-question cards. */
 	previous?: PreviousAnswer | Record<string, PreviousAnswer>;
+	refining?: boolean;
+	showActions?: boolean;
+	onCancel?: () => void;
+	/**
+	 * Append an option for everyone. Absent where the viewer may not write; the
+	 * row is then shown disabled. Resolves once the server has made it durable.
+	 */
+	onAddOption?: (question: string, label: string) => Promise<AddOptionResult>;
 	disabled?: boolean;
 	submitting?: boolean;
 	status?: "open" | "answered" | "cancelled" | "discarded";
@@ -64,6 +64,8 @@ export type QuestionViewProps = {
 	resolver?: string;
 	onQuestionEnter?: (question: string) => void;
 	onQuestionLeave?: (question: string) => void;
+	/** Focus entered the open question (its id) or left it (undefined): presence for others. */
+	onQuestionFocus?: (question: string | undefined) => void;
 	/** Goes to the prose the decision lives in. */
 	onQuestionSelect?: (question: string) => void;
 	/**
@@ -75,12 +77,15 @@ export type QuestionViewProps = {
 	 */
 	places?: Record<string, number>;
 	collaborators?: Collaborator[];
+	/**
+	 * Replaces the `@handle` pills for people on the current question. The view
+	 * cannot draw faces itself, so the host supplies them.
+	 */
+	renderPeople?: (people: Collaborator[]) => ReactNode;
 	/** Validation or synchronisation problem, announced to assistive tech. */
 	error?: string;
 	/** Host-owned presentation class for an error entering the view. */
 	errorClassName?: string;
-	/** The Planner is updating this open decision card. */
-	refining?: boolean;
 	/** Rendered beside the heading; hosts use it for counts and provenance. */
 	aside?: ReactNode;
 	/** Lets a host retain bounded steps for presentation without owning question state. */
@@ -121,22 +126,31 @@ function Badges({ people }: { people: Collaborator[] }) {
 	);
 }
 
-function DecisionHeading({ refining }: { refining?: boolean } = {}) {
+function Presence(
+	{ people, render }: { people: Collaborator[]; render?: (people: Collaborator[]) => ReactNode },
+) {
+	return render ? render(people) : <Badges people={people} />;
+}
+
+function DecisionHeading() {
 	return (
-		<>
-			<header
-				data-refining={refining ? "true" : undefined}
-				className="flex items-center gap-2 px-3 py-2.5 hairline-b"
-			>
-				<CheckIcon aria-hidden="true" size={14} />
-				<span className="text-sm font-medium text-text-primary">Decision</span>
-			</header>
-			{refining && (
-				<p className="m-0 px-4 pt-1 text-sm text-text-tertiary" role="status">
-					Chopin is refining…
-				</p>
-			)}
-		</>
+		<header className="flex items-center gap-2 px-3 py-2.5 hairline-b">
+			<CheckIcon aria-hidden="true" size={14} />
+			<span className="text-sm font-medium text-text-primary">Decision</span>
+		</header>
+	);
+}
+
+function letter(index: number): string {
+	return String.fromCharCode(65 + index);
+}
+
+/** A line-tall slot, so the tile centres on the label's first line, not the whole row. */
+function Key({ children }: { children: ReactNode }) {
+	return (
+		<span aria-hidden="true" className="question-key">
+			<span>{children}</span>
+		</span>
 	);
 }
 
@@ -153,19 +167,14 @@ function Choices(
 	let custom = draft?.mode === "custom";
 
 	return (
-		<fieldset disabled={disabled} className="m-0 border-0 p-0">
-			<legend className="sr-only">{question.header}</legend>
-
-			{question.options.map(option => {
+		<>
+			{question.options.map((option, index) => {
 				let selected = question.multiple
 					? !!draft?.options[option.id]
 					: draft?.choice === option.id;
 
 				return (
-					<label
-						key={option.id}
-						className="question-choice-row flex min-w-0 items-start gap-2 rounded-md px-1 py-1.5 text-sm hover:bg-hover"
-					>
+					<label key={option.id} className="question-choice-row question-option">
 						<input
 							type={question.multiple ? "checkbox" : "radio"}
 							name={question.multiple ? undefined : name}
@@ -183,42 +192,87 @@ function Choices(
 										: { mode: "choices", choice: option.id },
 								);
 							}}
-							className="mt-0.5 size-[18px] shrink-0 choice-control"
+							className="question-input"
 						/>
-						<span className="min-w-0">
-							<span className="font-medium text-text-primary">{option.label}</span>
+						<Key>{letter(index)}</Key>
+						<span className="question-text">
+							<span className="question-label">{option.label}</span>
 							{!custom && selected && option.id === suggestedOptionId && (
 								<span className="text-sm text-text-tertiary">{" from chat"}</span>
 							)}
-							{option.description && (
-								<span className="block text-sm text-text-secondary">{option.description}</span>
-							)}
+							{option.description && <span className="question-desc">{option.description}</span>}
+						</span>
+						<span aria-hidden="true" className="question-check">
+							<CheckIcon />
 						</span>
 					</label>
 				);
 			})}
-		</fieldset>
+		</>
 	);
 }
 
-function Custom(
-	{ question, draft, disabled, name, onChange }: {
+/**
+ * An open draft that was already in free-text mode before options became
+ * shared. Shown as the selected row it was; choosing any option leaves it, and
+ * nothing new can enter this mode.
+ */
+function LegacyCustom(
+	{ question, draft, name }: { question: Item; draft: Draft; name: string },
+) {
+	return (
+		<label className="question-choice-row question-option">
+			<input
+				type={question.multiple ? "checkbox" : "radio"}
+				name={question.multiple ? undefined : name}
+				checked
+				onChange={() => {}}
+				className="question-input"
+			/>
+			<Key>{letter(question.options.length)}</Key>
+			<span className="question-text">
+				<span className="question-label">{draft.custom.trim()}</span>
+			</span>
+			<span aria-hidden="true" className="question-check">
+				<CheckIcon />
+			</span>
+		</label>
+	);
+}
+
+/**
+ * The last row: a prompt to add an option, which becomes the field for it.
+ *
+ * Enter adds it for everyone, Escape cancels. The new row is shown straight
+ * away, dimmed, until the server confirms it; a rejection reopens the field
+ * with the text intact.
+ */
+function AddOption(
+	{ question, offset, disabled, onAdd, onFailed, onEdit, onCancelEdit, onCommitEdit }: {
 		question: Item;
-		draft: Draft | undefined;
+		/** Rows already shown below the options, such as a legacy custom answer. */
+		offset: number;
 		disabled: boolean;
-		name: string;
-		onChange?: (change: Partial<Draft>) => void;
+		onAdd?: (label: string) => Promise<AddOptionResult>;
+		onFailed: (message: string | undefined) => void;
+		onEdit?: () => void;
+		onCancelEdit?: () => void;
+		onCommitEdit?: () => void;
 	},
 ) {
-	let active = draft?.mode === "custom";
-	let textarea = useRef<HTMLTextAreaElement>(null);
-	let focusOnReveal = useRef(false);
+	let [text, setText] = useState<string | null>(null);
+	let [pending, setPending] = useState<string | null>(null);
+	let input = useRef<HTMLInputElement>(null);
+	let trigger = useRef<HTMLButtonElement>(null);
+	let focus = useRef<"field" | "trigger">(undefined);
+	let letterIndex = question.options.length + offset;
 
 	useEffect(() => {
-		if (!active || !focusOnReveal.current) return;
-		focusOnReveal.current = false;
-		textarea.current?.focus();
-	}, [active]);
+		let target = focus.current;
+		focus.current = undefined;
+		if (target === "field") input.current?.focus();
+		else if (target === "trigger") trigger.current?.focus();
+	});
 
 	useEffect(() => {
 		let viewport = window.visualViewport;
@@ -227,7 +281,7 @@ function Custom(
 		let reveal = () => {
 			let previous = height;
 			height = viewport.height;
-			let control = textarea.current;
+			let control = input.current;
 			if (height >= previous || document.activeElement !== control || !control) return;
 			let bounds = control.getBoundingClientRect();
 			let top = viewport.offsetTop;
@@ -240,36 +294,106 @@ function Custom(
 		return () => viewport.removeEventListener("resize", reveal);
 	}, []);
 
-	return (
-		<div className="mt-2">
-			<label className="question-choice-row flex min-w-0 items-start gap-2 rounded-md px-1 text-sm hover:bg-hover">
-				<input
-					type={question.multiple ? "checkbox" : "radio"}
-					name={question.multiple ? undefined : name}
-					checked={active}
-					disabled={disabled}
-					onChange={event => {
-						focusOnReveal.current = event.currentTarget.checked;
-						onChange?.({ mode: event.currentTarget.checked ? "custom" : "choices" });
-					}}
-					className="mt-0.5 size-[18px] shrink-0 choice-control"
-				/>
-				<span className="font-medium">Write a custom answer</span>
-			</label>
+	let add = async () => {
+		let label = text?.trim();
+		if (!label || !onAdd || pending !== null) return;
+		setPending(label);
+		onFailed(undefined);
+		let result: AddOptionResult;
+		try {
+			result = await onAdd(label);
+		} catch {
+			result = { ok: false, message: "Could not add this option." };
+		}
+		setPending(null);
+		if (result.ok) {
+			onCommitEdit?.();
+			setText(null);
+			focus.current = "trigger";
+		} else {
+			onFailed(result.message);
+			focus.current = "field";
+		}
+	};
 
-			{active && (
-				<textarea
-					rows={2}
-					maxLength={4000}
-					value={draft?.custom ?? ""}
-					disabled={disabled}
-					aria-label={`Custom answer for ${question.header}`}
-					placeholder="Type another answer"
-					onChange={event => onChange?.({ custom: event.currentTarget.value })}
-					className="question-custom-answer field mt-1.5 min-h-16 w-full resize-y px-2.5 py-2 text-sm transition placeholder:text-text-tertiary disabled:cursor-not-allowed"
-					ref={textarea}
-				/>
-			)}
+	// Until the server confirms, the new row stands where the field was. If the
+	// broadcast beat the acknowledgement, the real row is already listed above.
+	if (pending !== null) {
+		let known = question.options.some(option =>
+			option.label.trim().toLowerCase() === pending.toLowerCase()
+		);
+		if (known) return null;
+		return (
+			<div aria-busy="true" className="question-choice-row question-option question-pending">
+				<Key>{letter(letterIndex)}</Key>
+				<span className="question-text">
+					<span className="question-label">{pending}</span>
+				</span>
+				<span className="sr-only" role="status">Adding option</span>
+			</div>
+		);
+	}
+
+	if (text === null) {
+		return (
+			<button
+				type="button"
+				className="question-choice-row question-option question-add"
+				data-press="wide"
+				disabled={disabled || !onAdd}
+				onClick={() => {
+					focus.current = "field";
+					setText("");
+				}}
+				ref={trigger}
+			>
+				<Key>
+					<PlusIcon />
+				</Key>
+				<span className="question-text">Add an option</span>
+			</button>
+		);
+	}
+
+	return (
+		<div className="question-choice-row question-option question-adding">
+			<Key>{letter(letterIndex)}</Key>
+			<input
+				aria-label="New option"
+				autoComplete="off"
+				className="question-field"
+				disabled={disabled}
+				maxLength={MAX_LABEL}
+				onBlur={() => {
+					// Only an empty field collapses by itself. Typed text is kept, because
+					// adding an option is visible to everyone and should be deliberate.
+					if (!text.trim()) {
+						onCancelEdit?.();
+						setText(null);
+					}
+				}}
+				onChange={event => {
+					onEdit?.();
+					setText(event.currentTarget.value);
+					onFailed(undefined);
+				}}
+				onKeyDown={event => {
+					if (event.key === "Escape") {
+						event.preventDefault();
+						event.stopPropagation();
+						onCancelEdit?.();
+						setText(null);
+						onFailed(undefined);
+						focus.current = "trigger";
+					} else if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+						event.preventDefault();
+						void add();
+					}
+				}}
+				placeholder="Add an option"
+				ref={input}
+				value={text}
+			/>
 		</div>
 	);
 }
@@ -296,18 +420,24 @@ const LINK = "flex w-full cursor-pointer items-start justify-between gap-2 round
  * cannot see it.
  */
 function Related(
-	{ id, count, label, className, children, onEnter, onLeave, onSelect }: {
+	{ id, count, label, className, children, inline, onEnter, onLeave, onSelect }: {
 		id: string | undefined;
 		count: number;
 		label: string;
 		className: string;
 		children: ReactNode;
+		/** Sits inside a heading, so the unlinked form must be phrasing content. */
+		inline?: boolean;
 		onEnter?: QuestionViewProps["onQuestionEnter"];
 		onLeave?: QuestionViewProps["onQuestionLeave"];
 		onSelect?: QuestionViewProps["onQuestionSelect"];
 	},
 ) {
-	if (!id || count === 0) return <div className={className}>{children}</div>;
+	if (!id || count === 0) {
+		return inline
+			? <span className={className}>{children}</span>
+			: <div className={className}>{children}</div>;
+	}
 
 	return (
 		<button
@@ -409,35 +539,56 @@ function Discarded({ definition, resolver }: { definition: Definition; resolver?
 	);
 }
 
+function Callout(
+	{ feedback, message, title }: { feedback?: string; message: string; title: string },
+) {
+	return (
+		<div
+			className={`plan-research-callout question-callout${feedback ? ` ${feedback}` : ""}`}
+			data-motion-feedback={feedback ? "alert" : undefined}
+			role="alert"
+		>
+			<span aria-hidden="true" className="plan-research-badge">
+				<WarningIcon />
+			</span>
+			<p>
+				<strong>{title}</strong>
+				{message}
+			</p>
+		</div>
+	);
+}
+
 export function QuestionView(props: QuestionViewProps) {
 	let {
 		definition,
 		drafts,
-		showActions = false,
 		onChange,
 		onSubmit,
 		onCancel,
 		onDiscard,
 		onReopen,
-		previous,
+		suggested,
+		previous: priorAnswers,
+		refining,
+		showActions = false,
 		onAddOption,
-		maxOptions = limits.MAX_DECISION_OPTIONS,
 		disabled = false,
 		submitting = false,
 		status = "open",
 		answers,
 		resolver,
 		collaborators = [],
+		renderPeople,
 		error,
 		errorClassName,
-		refining,
 		aside,
 		places,
 		onQuestionEnter,
 		onQuestionLeave,
+		onQuestionFocus,
 		onQuestionSelect,
 		renderStep,
-		suggested,
 	} = props;
 
 	let [suggestionEdits, dispatchSuggestionEdit] = useReducer(reduceSuggestionEditState, {
@@ -466,36 +617,29 @@ export function QuestionView(props: QuestionViewProps) {
 	let current = currentQuestion(definition, selected);
 	let active = current.id;
 	let panelId = `${base}-panel-${active}`;
-
 	if (active !== selected) setActive(active);
-	// Cancelling cannot be undone and the agent is waiting, so it takes a
+	// Discarding cannot be undone and the agent is waiting, so it takes a
 	// second, deliberate click rather than a modal nobody reads.
-	let [confirming, setConfirming] = useState<"cancel" | "discard">();
-	let tabs = useRef<HTMLDivElement>(null);
+	let [confirming, setConfirming] = useState<"discard" | "cancel">();
+	// Presence follows the current question and ends when it changes or the card goes.
+	let focusing = useRef(onQuestionFocus);
+	focusing.current = onQuestionFocus;
+	useEffect(() => () => focusing.current?.(undefined), [active]);
+	let [addError, setAddError] = useState<string>();
+	let previous = useRef<HTMLButtonElement>(null);
+	let next = useRef<HTMLButtonElement>(null);
+	let primary = useRef<HTMLButtonElement>(null);
+	let refocus = useRef<"previous" | "next" | "primary">(undefined);
 
+	// At either end the activated caret disables. Keep focus inside the stepper
+	// so the new question is reached instead of dropping to the body.
 	useEffect(() => {
-		if (!active) return;
-		tabs.current?.querySelector<HTMLElement>(`#${CSS.escape(`${base}-tab-${active}`)}`)
-			?.scrollIntoView({ block: "nearest", inline: "nearest" });
-	}, [active, base]);
-
-	let move = useCallback((event: KeyboardEvent, index: number) => {
-		let total = definition.questions.length;
-		let next = index;
-
-		if (event.key === "ArrowRight") next = (index + 1) % total;
-		else if (event.key === "ArrowLeft") next = (index - 1 + total) % total;
-		else if (event.key === "Home") next = 0;
-		else if (event.key === "End") next = total - 1;
-		else return;
-
-		event.preventDefault();
-		let question = definition.questions[next];
-		if (!question) return;
-		setActive(question.id);
-		tabs.current?.querySelector<HTMLElement>(`#${CSS.escape(`${base}-tab-${question.id}`)}`)
-			?.focus();
-	}, [definition, base]);
+		let target = refocus.current;
+		refocus.current = undefined;
+		if (target === "previous") previous.current?.focus();
+		else if (target === "next") next.current?.focus();
+		else if (target === "primary") primary.current?.focus();
+	}, [active]);
 
 	let projection = single
 		? projectSuggestion(
@@ -546,19 +690,9 @@ export function QuestionView(props: QuestionViewProps) {
 						/>
 					)
 					: <p className="m-0 px-3 py-2.5 text-sm text-text-secondary">Saved decision</p>}
-				{error && (
-					<p
-						className={`${
-							errorClassName ? `${errorClassName} ` : ""
-						}px-3 pb-2 text-sm text-destructive-ink`}
-						data-motion-feedback={errorClassName ? "alert" : undefined}
-						role="alert"
-					>
-						{error}
-					</p>
-				)}
+				{error && <Callout feedback={errorClassName} title="Couldn’t save" message={error} />}
 				<ResolvedActions
-					className="question-actions flex flex-wrap items-center justify-end gap-2 px-3 py-2 hairline-t"
+					className="question-actions"
 					disabled={disabled}
 					onDiscard={onDiscard}
 					onReopen={onReopen}
@@ -570,287 +704,248 @@ export function QuestionView(props: QuestionViewProps) {
 
 	let multiple = !single;
 	let index = definition.questions.findIndex(question => question.id === active);
-	let last = index === definition.questions.length - 1;
-	let unanswered = definition.questions.filter(question => !answered(question, drafts[question.id]))
-		.length;
-	let step = (offset: number) => {
+	let total = definition.questions.length;
+	let last = index === total - 1;
+	// Nothing chosen, nothing to save or move on with. Read-only hosts have no
+	// drafts to fill, so they keep free navigation.
+	let ready = answered(current, projection.draft);
+	let discard = onDiscard ?? onCancel;
+	let previousAnswer = previousFor(priorAnswers, current.id);
+	let step = (offset: number, from?: "primary") => {
 		let question = definition.questions[index + offset];
 		if (!question) return;
 		setActive(question.id);
-		// At either end the activated navigation button disappears. Move focus
-		// to the selected tab so the new question is named instead of dropping
-		// focus to the document body.
-		tabs.current?.querySelector<HTMLElement>(`#${CSS.escape(`${base}-tab-${question.id}`)}`)
-			?.focus();
+		setAddError(undefined);
+		let arrived = index + offset;
+		if (from) refocus.current = "primary";
+		else if (arrived === 0) refocus.current = "next";
+		else if (arrived === total - 1) refocus.current = "previous";
 	};
+	let titleId = `${base}-title-${active}`;
 
 	return (
-		<div>
-			{single && <DecisionHeading refining={refining} />}
-			{multiple && (
-				<div
-					ref={tabs}
-					role="tablist"
-					aria-label="Questions"
-					data-focus-boundary=""
-					className="flex gap-1 overflow-x-auto px-2 pt-2 hairline-b"
-				>
-					{definition.questions.map((question, index) => {
-						let done = answered(question, drafts[question.id]);
-						let people = collaborators.filter(person => person.question === question.id);
-
-						return (
-							<button
-								key={question.id}
-								data-ace-question-id={question.id}
-								id={`${base}-tab-${question.id}`}
-								type="button"
-								role="tab"
-								aria-selected={question.id === active}
-								aria-controls={question.id === active ? `${base}-panel-${question.id}` : undefined}
-								aria-label={done ? `${question.header}, answered` : question.header}
-								tabIndex={question.id === active ? 0 : -1}
-								// Switching question, and only that. A tab used to ask to be
-								// taken to the question's prose as well, which read as
-								// intentional for as long as nothing was listening — wired
-								// up, it scrolls the plan out from under a reader who was
-								// stepping through the tabs to read them. Hovering a tab
-								// already lights where its decision lives, and the panel
-								// below carries the control that says "show in plan".
-								onClick={() => setActive(question.id)}
-								onMouseEnter={() => onQuestionEnter?.(question.id)}
-								onMouseLeave={event =>
-									event.currentTarget !== document.activeElement
-									&& onQuestionLeave?.(question.id)}
-								onFocus={() => onQuestionEnter?.(question.id)}
-								onBlur={event =>
-									!event.currentTarget.matches(":hover") && onQuestionLeave?.(question.id)}
-								onKeyDown={event => move(event, index)}
-								className={`question-tab max-w-64 shrink-0 rounded-t-md px-2.5 py-1 text-left text-sm leading-tight font-medium whitespace-normal transition ${
-									question.id === active
-										? "bg-selected text-text-primary"
-										: "text-text-tertiary hover:text-text-primary"
-								}`}
-							>
-								<span aria-hidden="true">{done ? "✓" : index + 1}</span> {question.header}
-								{people.length > 0 && (
-									<span className="ml-1 text-sm text-text-tertiary tabular-nums">
-										{people.length}
-									</span>
-								)}
-							</button>
-						);
-					})}
-				</div>
-			)}
-
+		<div aria-busy={submitting} className="question-card" data-saving={submitting ? "" : undefined}>
 			{aside}
 
 			{(() => {
 				let panel = (
 					<section
-						aria-labelledby={multiple ? `${base}-tab-${current.id}` : undefined}
+						aria-labelledby={titleId}
 						data-ace-question-id={current.id}
 						id={panelId}
-						role={multiple ? "tabpanel" : undefined}
-						className="px-3 py-2.5"
 						onMouseEnter={() => onQuestionEnter?.(current.id)}
 						onMouseLeave={event =>
 							!event.currentTarget.contains(document.activeElement)
 							&& onQuestionLeave?.(current.id)}
-						onFocusCapture={() => onQuestionEnter?.(current.id)}
-						onBlurCapture={event =>
-							!event.currentTarget.contains(event.relatedTarget)
-							&& !event.currentTarget.matches(":hover")
-							&& onQuestionLeave?.(current.id)}
+						onFocusCapture={() => {
+							onQuestionEnter?.(current.id);
+							onQuestionFocus?.(current.id);
+						}}
+						onBlurCapture={event => {
+							if (event.currentTarget.contains(event.relatedTarget)) {
+								return;
+							}
+							onQuestionFocus?.(undefined);
+							if (!event.currentTarget.matches(":hover")) {
+								onQuestionLeave?.(current.id);
+							}
+						}}
 					>
-						<header className="flex min-w-0 flex-wrap items-baseline justify-between gap-2">
-							<h4 className="m-0 min-w-0 break-words text-sm font-semibold text-text-primary">
-								{current.header}
-							</h4>
-							<Badges people={collaborators.filter(person => person.question === current.id)} />
-						</header>
-						{(() => {
-							let replaced = previousFor(previous, current.id);
-							return replaced && (
-								<p className="m-0 mt-1 text-sm text-text-tertiary">
-									Previously: {replaced.labels.join(", ")} · @{replaced.by}
-								</p>
-							);
-						})()}
-
-						{/* Never the whole panel: below this is a form. */}
-						<Related
-							id={current.id}
-							count={places?.[current.id] ?? 0}
-							label={current.question}
-							className="mt-1 mb-2"
-							onSelect={onQuestionSelect}
-						>
-							<p className="m-0 text-sm text-text-secondary">{current.question}</p>
-						</Related>
-
-						<Choices
-							suggestedOptionId={projection.suggestion?.optionId}
-							question={current}
-							draft={projection.draft}
-							disabled={disabled}
-							name={`${base}-${current.id}`}
-							onChange={change => {
-								if (single) markHumanEdit();
-								onChange?.(current.id, change);
-							}}
-						/>
-
-						<Custom
-							question={current}
-							draft={projection.draft}
-							disabled={disabled}
-							name={`${base}-${current.id}`}
-							onChange={change => {
-								if (single) markHumanEdit();
-								onChange?.(current.id, change);
-							}}
-						/>
-						{single && (onAddOption || showActions) && current.options.length < maxOptions && (
-							<AddOption
-								disabled={disabled || !onAddOption}
-								onAdd={onAddOption}
-								onCancel={cancelComposerEdit}
-								onCommit={commitComposerEdit}
-								onEdit={markComposerEdit}
+						<header className="question-head" data-refining={refining ? "true" : undefined}>
+							<span className="question-mark" title="Decision">
+								<DecisionIcon />
+							</span>
+							<div className="question-head-text">
+								<h4 className="question-title" id={titleId}>
+									<Related
+										id={current.id}
+										count={places?.[current.id] ?? 0}
+										label={current.question}
+										className="question-title-link"
+										inline
+										onSelect={onQuestionSelect}
+									>
+										{current.question}
+									</Related>
+								</h4>
+								{current.multiple && <p className="question-hint">Choose any</p>}
+								{previousAnswer && (
+									<p className="question-hint">
+										Previously: {previousAnswer.labels.join(", ")} · @{previousAnswer.by}
+									</p>
+								)}
+								{refining && <p className="question-hint" role="status">Chopin is refining…</p>}
+							</div>
+							<Presence
+								people={collaborators.filter(person =>
+									person.question === current.id
+								)}
+								render={renderPeople}
 							/>
-						)}
+						</header>
+
+						<fieldset disabled={disabled} className="question-options">
+							<legend className="sr-only">{current.header}</legend>
+							<Choices
+								question={current}
+								draft={projection.draft}
+								disabled={disabled}
+								name={`${base}-${current.id}`}
+								onChange={change => {
+									markHumanEdit();
+									onChange?.(current.id, change);
+								}}
+								suggestedOptionId={projection.suggestion?.optionId}
+							/>
+							{drafts[current.id]?.mode === "custom" && drafts[current.id]!.custom.trim() && (
+								<LegacyCustom
+									question={current}
+									draft={drafts[current.id]!}
+									name={`${base}-${current.id}`}
+								/>
+							)}
+							{current.options.length < MAX_SHARED_OPTIONS && (
+								<AddOption
+									key={current.id}
+									question={current}
+									offset={drafts[current.id]?.mode === "custom" && drafts[current.id]!.custom.trim()
+										? 1
+										: 0}
+									disabled={disabled}
+									onAdd={onAddOption
+										? label => onAddOption(current.id, label)
+										: undefined}
+									onFailed={setAddError}
+									onEdit={markComposerEdit}
+									onCancelEdit={cancelComposerEdit}
+									onCommitEdit={commitComposerEdit}
+								/>
+							)}
+						</fieldset>
 					</section>
 				);
 
 				return renderStep ? renderStep({ children: panel, question: current.id }) : panel;
 			})()}
 
+			{addError && <Callout title="Couldn’t add option" message={addError} />}
 			{error && (
-				<p
-					className={`${
-						errorClassName ? `${errorClassName} ` : ""
-					}px-3 pb-2 text-sm text-destructive-ink`}
-					data-motion-feedback={errorClassName ? "alert" : undefined}
-					role="alert"
-				>
-					{error}
-				</p>
+				<Callout
+					feedback={errorClassName}
+					message={error}
+					title="Couldn’t save"
+				/>
 			)}
 
-			{(onSubmit || onCancel || onDiscard || multiple) && (
-				<footer className="question-actions flex flex-wrap items-center justify-end gap-2 px-3 py-2 hairline-t">
-					{multiple && !confirming && (
-						<p className="m-0 mr-auto text-sm text-text-tertiary tabular-nums">
-							{index + 1} of {definition.questions.length} · {unanswered} unanswered
-						</p>
-					)}
-					{onDiscard && confirming === "discard" && (
-						<>
-							<p className="m-0 mr-auto text-sm text-text-secondary">
-								Discard this decision?
-							</p>
-							<button
-								type="button"
-								onClick={() => setConfirming(undefined)}
-								disabled={submitting}
-								className="btn btn-sm btn-secondary"
-							>
-								Keep it
-							</button>
-							<button
-								type="button"
-								onClick={onDiscard}
-								disabled={disabled || submitting}
-								className="btn btn-sm btn-destructive"
-							>
-								<CloseIcon aria-hidden="true" size={14} />
-								{submitting ? "Discarding…" : "Discard decision"}
-							</button>
-						</>
-					)}
-					{onCancel && confirming === "cancel" && (
-						<>
-							<p className="m-0 mr-auto text-sm text-text-secondary">
-								Cancel without answering?
-							</p>
-							<button
-								type="button"
-								onClick={() => setConfirming(undefined)}
-								disabled={submitting}
-								className="btn btn-sm btn-secondary"
-							>
-								Keep it
-							</button>
-							<button
-								type="button"
-								onClick={onCancel}
-								disabled={disabled || submitting}
-								className="btn btn-sm btn-destructive"
-							>
-								<CloseIcon aria-hidden="true" size={14} />
-								{submitting ? "Cancelling…" : "Yes, cancel"}
-							</button>
-						</>
-					)}
-					{multiple && !confirming && index > 0 && (
-						<button
-							type="button"
-							onClick={() => step(-1)}
-							className="btn btn-sm btn-secondary"
-						>
-							Back
-						</button>
-					)}
-					{onCancel && !confirming && (
-						<button
-							type="button"
-							onClick={() => setConfirming("cancel")}
-							disabled={disabled || submitting}
-							className="btn btn-sm btn-secondary"
-						>
-							<CloseIcon aria-hidden="true" size={14} />
-							Cancel
-						</button>
-					)}
-					{onDiscard && !confirming && (
-						<button
-							type="button"
-							onClick={() => setConfirming("discard")}
-							disabled={disabled || submitting || !onDiscard}
-							className="btn btn-sm btn-secondary"
-						>
-							<CloseIcon aria-hidden="true" size={14} />
-							Discard
-						</button>
-					)}
-					{multiple && !confirming && !last && (
-						<button
-							type="button"
-							onClick={() => step(1)}
-							className="btn btn-sm btn-primary"
-						>
-							Next
-						</button>
-					)}
-					{onSubmit && !confirming && (!multiple || last) && (
-						<button
-							type="button"
-							onClick={() => onSubmit?.(single ? projection.suggestion : undefined)}
-							disabled={disabled || submitting || (single && !answered(current, projection.draft))}
-							className="btn btn-sm btn-primary"
-						>
-							<CheckIcon
-								aria-hidden="true"
-								data-plan-icon="check"
-								size={14}
-							/>
-							{submitting
-								? (single ? "Saving…" : "Submitting…")
-								: (single ? "Save answer" : "Submit")}
-						</button>
-					)}
+			{(onSubmit || discard || multiple || showActions) && (
+				<footer
+					className="question-actions"
+					data-confirm={discard && confirming ? "" : undefined}
+				>
+					{discard && confirming
+						? (
+							<>
+								<span className="question-confirm">
+									{confirming === "cancel" ? "Cancel without answering?" : "Discard this decision?"}
+								</span>
+								<button
+									type="button"
+									onClick={() => setConfirming(undefined)}
+									disabled={submitting}
+									className="btn btn-sm btn-outline"
+								>
+									Keep it
+								</button>
+								<button
+									type="button"
+									onClick={confirming === "cancel" ? onCancel : discard}
+									disabled={disabled || submitting}
+									className="btn btn-sm btn-destructive"
+								>
+									{submitting
+										? (confirming === "cancel" ? "Cancelling…" : "Discarding…")
+										: confirming === "cancel"
+										? "Cancel"
+										: "Discard"}
+								</button>
+							</>
+						)
+						: (
+							<>
+								{multiple && (
+									<div role="group" aria-label="Questions" className="question-stepper">
+										<button
+											type="button"
+											aria-label="Previous question"
+											className="btn btn-icon btn-ghost question-caret"
+											data-flip=""
+											disabled={index === 0}
+											onClick={() => step(-1)}
+											ref={previous}
+										>
+											<ChevronIcon size={16} />
+										</button>
+										<span className="question-count" aria-live="polite">
+											<strong>{current.header}</strong>
+											{index + 1}/{total}
+										</span>
+										<button
+											type="button"
+											aria-label="Next question"
+											className="btn btn-icon btn-ghost question-caret"
+											disabled={last}
+											onClick={() =>
+												step(1)}
+											ref={next}
+										>
+											<ChevronIcon size={16} />
+										</button>
+									</div>
+								)}
+								{onCancel && onDiscard && (
+									<button
+										type="button"
+										onClick={() => setConfirming("cancel")}
+										disabled={disabled || submitting}
+										className="btn btn-sm btn-outline"
+									>
+										Cancel
+									</button>
+								)}
+								{(discard || showActions) && (
+									<button
+										type="button"
+										onClick={() => setConfirming("discard")}
+										disabled={disabled || submitting}
+										className="btn btn-sm btn-outline"
+									>
+										Discard
+									</button>
+								)}
+								{multiple && !last && (
+									<button
+										type="button"
+										onClick={() => step(1, "primary")}
+										disabled={!!onChange && !ready}
+										className="btn btn-sm btn-primary"
+										ref={primary}
+									>
+										Next
+									</button>
+								)}
+								{(onSubmit || showActions) && (!multiple || last) && (
+									<button
+										type="button"
+										onClick={() => onSubmit?.(projection.suggestion)}
+										disabled={disabled || submitting || !onSubmit || !ready}
+										className="btn btn-sm btn-primary"
+										ref={primary}
+									>
+										{submitting ? "Saving…" : error ? "Try again" : "Save"}
+									</button>
+								)}
+							</>
+						)}
 				</footer>
 			)}
 		</div>

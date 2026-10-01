@@ -4,8 +4,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { QuestionView } from "./question-view";
 import { AUTH } from "./question-view.test-fixtures";
 
-// Whole original269/494/509/521 callbacks, archive446a9779a937fa5be7cd3eb52fd7f3023d691ed2.
-test("a multi-question card does not offer adding options", () => {
+// Original multi-card, limit, permission and lock inputs, adapted to main shared options.
+test("a multi-question card offers shared options for its active question", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionView, {
 		definition: {
 			questions: [AUTH.questions[0], {
@@ -19,7 +19,7 @@ test("a multi-question card does not offer adding options", () => {
 		drafts: {},
 		onAddOption: async () => ({ ok: true as const }),
 	}));
-	expect(markup).not.toContain("Add another option");
+	expect(markup).toContain("Add an option");
 });
 
 test("Add another is hidden at the option limit", () => {
@@ -34,10 +34,10 @@ test("Add another is hidden at the option limit", () => {
 		onAddOption: async () => ({ ok: true as const }),
 	}));
 
-	expect(markup).not.toContain("Add another option");
+	expect(markup).not.toContain("Add an option");
 });
 
-test("a temporarily locked composer trigger remains available to reopen read-only", () => {
+test("a temporarily locked composer trigger remains visible and disabled", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionView, {
 		definition: AUTH,
 		drafts: {},
@@ -45,8 +45,10 @@ test("a temporarily locked composer trigger remains available to reopen read-onl
 		onAddOption: async () => ({ ok: true as const }),
 	}));
 
-	expect(markup).toMatch(/<button[^>]*aria-label="Add another option"[^>]*>/);
-	expect(markup).not.toMatch(/<button[^>]*aria-label="Add another option"[^>]*disabled=""/);
+	expect(markup).toMatch(
+		/<button[^>]*class="[^"]*question-add"[^>]*>[\s\S]*?Add an option<\/span><\/button>/,
+	);
+	expect(markup).toMatch(/<button[^>]*class="[^"]*question-add"[^>]*disabled=""/);
 });
 
 test("a composer trigger without an add handler is natively disabled", () => {
@@ -57,5 +59,5 @@ test("a composer trigger without an add handler is natively disabled", () => {
 		showActions: true,
 	}));
 
-	expect(markup).toMatch(/<button[^>]*aria-label="Add another option"[^>]*disabled=""/);
+	expect(markup).toMatch(/<button[^>]*class="[^"]*question-add"[^>]*disabled=""/);
 });

@@ -77,7 +77,10 @@ test("interface icons default to fourteen pixels", () => {
 		for (let match of readFileSync(file, "utf8").matchAll(explicit)) {
 			let size = Number(match[1]);
 			let emptyStateException = file.endsWith("design-audit/surfaces.tsx") && size === 24;
-			if (size !== 14 && !emptyStateException) offenders.push(`${file}: ${match[0]}`);
+			let stepperCaret = file.endsWith("question/src/react/question-view.tsx") && size === 16;
+			if (size !== 14 && !emptyStateException && !stepperCaret) {
+				offenders.push(`${file}: ${match[0]}`);
+			}
 		}
 	}
 	expect(offenders).toEqual([]);

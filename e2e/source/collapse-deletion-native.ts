@@ -10,7 +10,7 @@ let nativeErrors = new WeakMap<Page, string[]>();
 export async function prepareCollapse() {
 	if (typeof Bun === "undefined") throw new Error("Run Playwright through bun --bun");
 	let entry = fileURLToPath(
-		new URL("../../packages/editor/src/decision-layer.tsx", import.meta.url),
+		new URL("../../packages/editor/src/resolved-layer.tsx", import.meta.url),
 	);
 	let result = await Bun.build({
 		entrypoints: [entry],
@@ -20,7 +20,7 @@ export async function prepareCollapse() {
 			name: "actual-decision-reader-binding",
 			setup(build) {
 				build.onLoad(
-					{ filter: /\/decision-layer\.tsx$/ },
+					{ filter: /\/resolved-layer\.tsx$/ },
 					async args => ({
 						loader: "tsx",
 						contents: await Bun.file(args.path).text() + "\n" + collapseDeletionBinding,
@@ -52,9 +52,9 @@ export let inline = (page: Page) =>
 	content(page).locator('[data-plan-sidecar-questionnaire="reader-card"]');
 export let summary = (page: Page) => page.locator("[data-list-projection]");
 export let marker = (page: Page) =>
-	host(page).getByRole("button", { name: "Decision: Which authentication?", exact: true });
+	host(page).getByRole("button", { name: "Decision: GitHub Apps", exact: true });
 export let dialog = (page: Page) =>
-	host(page).getByRole("dialog", { name: "Decision: Which authentication?", exact: true });
+	host(page).getByRole("dialog", { name: "Decision", exact: true });
 export async function loadCollapse(page: Page, readonly = false) {
 	let errors: string[] = [];
 	page.on("pageerror", error => errors.push(error.message));

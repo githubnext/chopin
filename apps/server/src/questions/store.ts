@@ -18,7 +18,7 @@ import * as Question from "@chopin/question";
 
 import { untouched } from "./store-suggestions";
 
-import type { Answer, Definition, Drafts } from "@chopin/question";
+import type { Answer, DecisionDefinition, Definition, Drafts } from "@chopin/question";
 import type {
 	Claim,
 	Closed,
@@ -159,6 +159,35 @@ export function ask(
 
 export function get(questions: Questions, id: string): Open | undefined {
 	return questions.open.get(id);
+}
+
+/**
+ * Replace an open question's definition with one that only appended options.
+ *
+ * Returns what to restore if the durable half fails, or why it is refused. The
+ * draft is untouched: its keys are created lazily, so existing drafts stay valid.
+ */
+export function redefine(
+	questions: Questions,
+	id: string,
+	definition: DecisionDefinition,
+): { ok: true; previous: Definition } | { ok: false; reason: "resolved" | "resolving" } {
+	let entry = questions.open.get(id);
+	if (!entry) return { ok: false, reason: "resolved" };
+	if (entry.claim) return { ok: false, reason: "resolving" };
+	let previous = entry.definition;
+	entry.definition = definition;
+	return { ok: true, previous };
+}
+
+/** Undo `redefine` after its durable half failed. */
+export function restoreDefinition(
+	questions: Questions,
+	id: string,
+	definition: Definition,
+): void {
+	let entry = questions.open.get(id);
+	if (entry) entry.definition = definition;
 }
 
 /** Everything still open, for a client that has just joined. */

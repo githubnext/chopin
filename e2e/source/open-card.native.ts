@@ -18,14 +18,14 @@ test("actual read-only inline card keeps durable people and Source without allow
 	await expect(people).toBeVisible();
 	await expect(people.getByRole("img")).toHaveCount(2);
 	await expect(sourceAction(page)).toBeEnabled();
-	await expect(card(page).getByRole("button", { name: "Save answer", exact: true })).toHaveCount(0);
-	await expect(card(page).getByRole("radio")).toHaveCount(3);
+	await expect(card(page).getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+	await expect(card(page).getByRole("radio")).toHaveCount(2);
 	for (let radio of await card(page).getByRole("radio").all()) await expect(radio).toBeDisabled();
 	expect(await page.evaluate(() => window.openCardProbe.opens)).toEqual(["card-1"]);
 	expect(await page.evaluate(() => window.openCardProbe.snapshot().ids)).toEqual(["card-1"]);
 });
 
-test("durable and live people merge uniquely with eight faces and accessible overflow", async ({ page }) => {
+test("durable and live people merge uniquely with three faces and accessible overflow", async ({ page }) => {
 	await loadOpenCard(page);
 	let durable = ["ana", "ben", "cara", "dee", "eli", "fay", "gia", "hal"];
 	await page.evaluate(
@@ -38,17 +38,18 @@ test("durable and live people merge uniquely with eight faces and accessible ove
 		exact: true,
 	});
 	await expect(people).toBeVisible();
-	await expect(people.getByRole("img")).toHaveCount(8);
-	await expect(people).toContainText("+2");
+	await expect(people.getByRole("img")).toHaveCount(3);
+	await expect(people).toContainText("+7");
 	await expect(people.getByRole("img", { name: "ben", exact: true })).toHaveCount(1);
 	await page.evaluate(() => window.openCardProbe.peers([]));
-	await expect(
-		card(page).getByRole("group", {
-			name: "In this decision: ana, ben, cara, dee, eli, fay, gia, hal",
-			exact: true,
-		}),
-	).toBeVisible();
-	await expect(card(page).getByText("+2", { exact: true })).toHaveCount(0);
+	let durablePeople = card(page).getByRole("group", {
+		name: "In this decision: ana, ben, cara, dee, eli, fay, gia, hal",
+		exact: true,
+	});
+	await expect(durablePeople).toBeVisible();
+	await expect(durablePeople.getByRole("img")).toHaveCount(3);
+	await expect(durablePeople).toContainText("+5");
+	await expect(durablePeople.getByText("+7", { exact: true })).toHaveCount(0);
 });
 
 test("actual inline Source routes the current card to the first saved question source in real Room Chat", async ({ page }) => {

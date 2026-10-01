@@ -50,6 +50,18 @@ export function normalizeRecord(raw: unknown): Record {
 		);
 	}
 	if (Object.hasOwn(value, "editors")) editors(value.editors);
+	if (Object.hasOwn(value, "appended")) {
+		let appended = object(value.appended);
+		let seen = new Set<string>();
+		if (Object.keys(appended).length > known.options.size) invalid();
+		for (let [key, id] of Object.entries(appended)) {
+			if (
+				!/^[A-Za-z0-9_-]{8,64}$/.test(key) || typeof id !== "string"
+				|| !known.options.has(id) || seen.has(id)
+			) invalid();
+			seen.add(id);
+		}
+	}
 	let record = value as Record;
 	return {
 		...record,

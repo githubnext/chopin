@@ -14,6 +14,11 @@ export type {
 	VisibleSuggestion,
 } from "./project-suggestion";
 export { QuestionView } from "./question-view";
-export type { Collaborator, QuestionStepRenderProps, QuestionViewProps } from "./question-view";
+export type {
+	AddOptionResult,
+	Collaborator,
+	QuestionStepRenderProps,
+	QuestionViewProps,
+} from "./question-view";
 export { forget, useQuestionnaire } from "./use-questionnaire";
 export type { QuestionnaireOptions, QuestionnaireState, Transport } from "./use-questionnaire";

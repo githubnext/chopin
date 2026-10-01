@@ -40,12 +40,19 @@ test.beforeAll(async () => {
 		readFile(assets + name, "utf8")
 	))).join("\n");
 	expect(stylesheet).toContain(".question-choice-row");
-	expect(stylesheet).toContain(".choice-control");
+	expect(stylesheet).toContain(".question-input");
 });
 
 async function load(
 	page: Page,
-	mode: "open" | "empty" | "linked" | "unlinked" | "discarded-single" | "discarded-multiple",
+	mode:
+		| "open"
+		| "empty"
+		| "linked"
+		| "unlinked"
+		| "discarded-single"
+		| "discarded-multiple"
+		| "legacy-custom",
 ) {
 	let errors: string[] = [];
 	page.on("pageerror", error => errors.push(error.message));
@@ -70,7 +77,8 @@ async function load(
 	if (mode === "discarded-single" || mode === "discarded-multiple") {
 		await expect(page.getByText(/^Discarded by @ben —/)).toBeVisible();
 	} else {
-		await expect(page.getByRole("heading", { name: "Auth", level: 4, exact: true })).toBeVisible();
+		await expect(page.getByRole("heading", { name: /^What auth system should we use\?/, level: 4 }))
+			.toBeVisible();
 	}
 	return errors;
 }
@@ -78,14 +86,13 @@ async function load(
 test("the current open card combines its header, human choice, people and actions", async ({ page }) => {
 	let errors = await load(page, "open");
 	let card = page.getByRole("article", { name: "Decision", exact: true });
-	await expect(card.getByText("Decision", { exact: true })).toBeVisible();
-	await expect(card.getByRole("heading", { name: "Auth", level: 4, exact: true })).toBeVisible();
-	let prompt = card.getByText("What auth system should we use?", { exact: true });
+	await expect(card.getByTitle("Decision", { exact: true })).toBeVisible();
+	await expect(
+		card.getByRole("heading", { name: "What auth system should we use?", level: 4, exact: true }),
+	).toBeVisible();
+	let prompt = card.getByRole("heading", { name: "What auth system should we use?", exact: true });
 	await expect(prompt).toBeVisible();
-	expect(await prompt.evaluate(element => element.tagName)).toBe("P");
-	await expect(card.getByRole("heading", { name: "What auth system should we use?" })).toHaveCount(
-		0,
-	);
+	expect(await prompt.evaluate(element => element.tagName)).toBe("H4");
 	let choices = card.getByRole("group", { name: "Auth", exact: true });
 	expect(await choices.evaluate(element => element.tagName)).toBe("FIELDSET");
 	await expect(choices.getByRole("radio")).toHaveCount(2);
@@ -95,11 +102,11 @@ test("the current open card combines its header, human choice, people and action
 	await expect(card.getByRole("group", { name: "In this decision: ana, bea", exact: true }))
 		.toBeVisible();
 	await expect(card.getByRole("radio", { name: "Write a custom answer", exact: true }))
-		.toBeVisible();
+		.toHaveCount(0);
 	await expect(card.getByRole("textbox", { name: "Custom answer for Auth", exact: true }))
 		.toHaveCount(0);
-	await expect(card.getByRole("button", { name: "Add another option", exact: true })).toBeEnabled();
-	let save = card.getByRole("button", { name: "Save answer", exact: true });
+	await expect(card.getByRole("button", { name: "Add an option", exact: true })).toBeEnabled();
+	let save = card.getByRole("button", { name: "Save", exact: true });
 	await expect(save).toBeEnabled();
 	await choices.getByRole("radio", { name: "Auth0", exact: true }).check();
 	expect((await page.evaluate(() => window.questionViewContractsFixture.snapshot())).draft.choice)
@@ -109,34 +116,42 @@ test("the current open card combines its header, human choice, people and action
 	await expect(card.getByText("Discard this decision?", { exact: true })).toBeVisible();
 	expect((await page.evaluate(() => window.questionViewContractsFixture.snapshot())).discarded)
 		.toBe(0);
-	await card.getByRole("button", { name: "Discard decision", exact: true }).click();
+	await card.getByRole("button", { name: "Discard", exact: true }).click();
 	expect(await page.evaluate(() => window.questionViewContractsFixture.snapshot())).toMatchObject({
 		submitted: 1,
 		discarded: 1,
 	});
 	await card.getByRole("button", { name: "Keep it", exact: true }).click();
 	await expect(card.getByText("Discard this decision?", { exact: true })).toHaveCount(0);
-	await card.getByRole("button", { name: "Add another option", exact: true }).click();
+	await card.getByRole("button", { name: "Add an option", exact: true }).click();
 	await expect(card.getByRole("textbox", { name: "New option", exact: true })).toBeFocused();
 	expect(errors).toEqual([]);
 });
 
-test("Save answer requires a chosen option or a nonempty current custom answer", async ({ page }) => {
+test("Save requires a choice while an existing custom draft remains readable", async ({ page }) => {
 	let errors = await load(page, "empty");
-	let save = page.getByRole("button", { name: "Save answer", exact: true });
+	let save = page.getByRole("button", { name: "Save", exact: true });
 	await expect(save).toBeDisabled();
 	await expect(page.getByRole("radio", { name: "GitHub Apps", exact: true })).not.toBeChecked();
-	await page.getByRole("radio", { name: "Write a custom answer", exact: true }).check();
-	let custom = page.getByRole("textbox", { name: "Custom answer for Auth", exact: true });
-	await expect(custom).toBeVisible();
-	await expect(save).toBeDisabled();
-	await custom.fill("Another auth approach");
+	await expect(page.getByRole("radio", { name: "Write a custom answer", exact: true })).toHaveCount(
+		0,
+	);
+	await expect(page.getByRole("textbox", { name: /Custom answer/ })).toHaveCount(0);
+	await page.getByRole("radio", { name: "GitHub Apps", exact: true }).check();
 	await expect(save).toBeEnabled();
-	expect((await page.evaluate(() => window.questionViewContractsFixture.snapshot())).draft)
-		.toMatchObject({ mode: "custom", custom: "Another auth approach", choice: null });
 	await save.click();
 	expect((await page.evaluate(() => window.questionViewContractsFixture.snapshot())).submitted)
 		.toBe(1);
+	await page.evaluate(() => window.questionViewContractsFixture.mount("legacy-custom"));
+	await expect(page.getByRole("radio", { name: "Another auth approach", exact: true }))
+		.toBeChecked();
+	await expect(save).toBeEnabled();
+	await page.getByRole("radio", { name: "Auth0", exact: true }).check();
+	await expect(page.getByRole("radio", { name: "Another auth approach", exact: true })).toHaveCount(
+		0,
+	);
+	expect((await page.evaluate(() => window.questionViewContractsFixture.snapshot())).draft)
+		.toMatchObject({ mode: "choices", choice: "a", custom: "Another auth approach" });
 	expect(errors).toEqual([]);
 });
 
@@ -150,8 +165,8 @@ test("Related preserves separate heading and counted name and forwards parent-se
 	await expect(related).toHaveAttribute("data-ace-question-id", "q");
 	await expect(related.getByRole("heading")).toHaveCount(0);
 	expect(
-		await page.getByRole("heading", { name: "Auth", exact: true }).evaluate(element =>
-			element.closest("button") === null
+		await page.getByRole("heading", { name: /^What auth system should we use\?/ }).evaluate(
+			element => element.closest("button") === null,
 		),
 	).toBe(true);
 	await page.mouse.move(0, 0);
@@ -177,14 +192,14 @@ test("Related preserves separate heading and counted name and forwards parent-se
 test("an unlinked prompt remains inert prose with no advertised Related destination", async ({ page }) => {
 	let errors = await load(page, "unlinked");
 	await expect(page.getByRole("button", { name: /show in plan/ })).toHaveCount(0);
-	let prompt = page.getByText("What auth system should we use?", { exact: true });
+	let prompt = page.getByRole("heading", { name: "What auth system should we use?", exact: true });
 	expect(
 		await prompt.evaluate(element => ({
 			tag: element.tagName,
 			linked: !!element.closest("button"),
 		})),
 	)
-		.toEqual({ tag: "P", linked: false });
+		.toEqual({ tag: "H4", linked: false });
 	await prompt.click();
 	expect((await page.evaluate(() => window.questionViewContractsFixture.snapshot())).events
 		.filter(event => event.kind === "select")).toEqual([]);
@@ -203,7 +218,7 @@ test("a discarded single card attributes ben and names its prompt exactly once",
 	expect(visible.match(/Discarded by @ben/g)).toHaveLength(1);
 	await expect(card.getByText(/Cancelled|Answered by/)).toHaveCount(0);
 	await expect(card.getByRole("radio")).toHaveCount(0);
-	await expect(card.getByRole("button", { name: "Save answer", exact: true })).toHaveCount(0);
+	await expect(card.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
 	await expect(card.getByRole("button", { name: "Discard", exact: true })).toHaveCount(0);
 	expect(errors).toEqual([]);
 });
@@ -221,7 +236,7 @@ test("a discarded multi-card names every original question and ben exactly once"
 	expect(visible.match(/Discarded by @ben/g)).toHaveLength(1);
 	await expect(card.getByText(/Cancelled|Answered by/)).toHaveCount(0);
 	await expect(card.getByRole("radio")).toHaveCount(0);
-	await expect(card.getByRole("button", { name: "Save answer", exact: true })).toHaveCount(0);
+	await expect(card.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
 	await expect(card.getByRole("button", { name: "Discard", exact: true })).toHaveCount(0);
 	expect(errors).toEqual([]);
 });

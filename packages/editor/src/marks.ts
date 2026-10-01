@@ -75,6 +75,8 @@ export function paintDecided(editor: LexicalEditor, ranges: Range[]): void {
 	if (all.length === 0) CSS.highlights.delete(DECIDED);
 	else CSS.highlights.set(DECIDED, new Highlight(...all));
 }
+/** Prose a decision produced is washed in the decision's own (success) tone. */
+const DECISION_NAME = "plan-decision";
 
 /**
  * How long a pin stays up.
@@ -87,10 +89,10 @@ export function paintDecided(editor: LexicalEditor, ranges: Range[]): void {
 const LINGER = 5_000;
 
 /** What each store wants marked, most recently declared. */
-const wanted = new Map<Owner, Points[]>();
+const wanted = new Map<LexicalEditor, Map<Owner, Points[]>>();
 
 /** Where the reader asked to be taken, until it lapses. */
-let pinned: { owner: Owner; places: Points[] } | undefined;
+let pinned: { editor: LexicalEditor; owner: Owner; places: Points[] } | undefined;
 let lapsing: ReturnType<typeof setTimeout> | undefined;
 
 /**
@@ -101,9 +103,17 @@ let lapsing: ReturnType<typeof setTimeout> | undefined;
  * it, are the parts of this worth testing and the parts that need no browser.
  */
 export function union(): Points[] {
-	let hover = [...wanted.entries()].filter(([owner]) => owner !== "decisions")
-		.flatMap(([, places]) => places);
-	return hover.length > 0 ? hover : pinned?.places ?? [];
+	return layers().flatMap(([, , places]) => places);
+}
+
+/** `union`, still divided by the store that asked, so each can keep its own tone. */
+function layers(): [LexicalEditor, Owner, Points[]][] {
+	let hover = [...wanted].flatMap(([editor, owners]) =>
+		[...owners].filter(([, places]) => places.length > 0)
+			.map(([owner, places]): [LexicalEditor, Owner, Points[]] => [editor, owner, places])
+	);
+	if (hover.length > 0) return hover;
+	return pinned ? [[pinned.editor, pinned.owner, pinned.places]] : [];
 }
 
 function available(): boolean {
@@ -139,7 +149,11 @@ export function paint(editor: LexicalEditor, owner: Owner, places: Points[]): vo
 			paintDecided(editor, ranges);
 			return;
 		}
-		wanted.set(owner, places);
+		let owners = wanted.get(editor) ?? new Map<Owner, Points[]>();
+		if (places.length > 0) owners.set(owner, places);
+		else owners.delete(owner);
+		if (owners.size > 0) wanted.set(editor, owners);
+		else wanted.delete(editor);
 		render(editor);
 	} catch (err) {
 		// This is reached from a Lexical update listener, and Lexical runs
@@ -176,7 +190,7 @@ export function pin(
 	if (owner === "decisions") return;
 	try {
 		if (lapsing !== undefined) clearTimeout(lapsing);
-		pinned = { owner, places };
+		pinned = { editor, owner, places };
 		lapsing = setTimeout(() => {
 			lapsing = undefined;
 			pinned = undefined;
@@ -195,7 +209,8 @@ export function pin(
 }
 
 /**
- * Whether the pin is currently this store's.
+ * Whether the pin is currently this store's. A bound editor also checks which
+ * mounted surface owns it, so another surface's pin cannot continue a local walk.
  *
  * Asked rather than announced. The only thing that depends on a pin having
  * lapsed is the next click on the card that set it — nothing has to be redrawn,
@@ -203,13 +218,14 @@ export function pin(
  * replacing a pin would reach a store in the middle of walking and wipe the
  * step it had just taken.
  */
-export function holds(owner: Owner): boolean {
-	return pinned?.owner === owner;
+export function holds(owner: Owner, editor?: LexicalEditor): boolean {
+	return pinned?.owner === owner && (editor === undefined || pinned.editor === editor);
 }
 
 /** Drop the pin, if it is the caller's to drop. */
 export function unpin(editor?: LexicalEditor, owner?: Owner): void {
-	if (owner !== undefined && !holds(owner)) return;
+	if (editor !== undefined && pinned?.editor !== editor) return;
+	if (owner !== undefined && (editor === undefined || !holds(owner, editor))) return;
 	release();
 	if (editor) {
 		try {
@@ -222,15 +238,25 @@ export function unpin(editor?: LexicalEditor, owner?: Owner): void {
 
 /** Take every mark down, pin included. Called when the editor goes away. */
 export function clear(editor?: LexicalEditor): void {
-	wanted.clear();
-	release();
-	if (available()) CSS.highlights.delete(NAME);
 	if (editor) {
+		wanted.delete(editor);
+		if (pinned?.editor === editor) release();
 		paintDecided(editor, []);
 		outline(editor, []);
+		try {
+			render(editor);
+		} catch (error) {
+			console.error("[plan] could not take a mark down:", error);
+		}
 	} else {
+		wanted.clear();
+		release();
 		decided.clear();
-		if (available()) CSS.highlights.delete(DECIDED);
+		if (available()) {
+			CSS.highlights.delete(NAME);
+			CSS.highlights.delete(DECISION_NAME);
+			CSS.highlights.delete(DECIDED);
+		}
 	}
 }
 
@@ -244,16 +270,20 @@ function release(): void {
 function render(editor: LexicalEditor): void {
 	if (!available()) return fallback(editor);
 
-	let ranges: Range[] = [];
-	editor.getEditorState().read(() => {
-		for (let points of union()) {
-			let range = $rangeOf(editor, points);
-			if (range) ranges.push(range);
-		}
-	});
+	let ranges: { [name: string]: Range[] } = { [NAME]: [], [DECISION_NAME]: [] };
+	for (let [source, owner, places] of layers()) {
+		source.getEditorState().read(() => {
+			for (let points of places) {
+				let range = $rangeOf(source, points);
+				if (range) ranges[owner === "questions" ? DECISION_NAME : NAME]!.push(range);
+			}
+		});
+	}
 
-	if (ranges.length === 0) CSS.highlights.delete(NAME);
-	else CSS.highlights.set(NAME, new Highlight(...ranges));
+	for (let [name, found] of Object.entries(ranges)) {
+		if (found.length === 0) CSS.highlights.delete(name);
+		else CSS.highlights.set(name, new Highlight(...found));
+	}
 }
 
 /** Blocks currently outlined by the fallback, so they can be un-outlined. */
@@ -261,7 +291,10 @@ const outlined = new WeakMap<LexicalEditor, string[]>();
 
 function fallback(editor: LexicalEditor): void {
 	let keys: string[] = [];
-	for (let points of union()) {
+	for (
+		let points of layers().filter(([source]) => source === editor)
+			.flatMap(([, , places]) => places)
+	) {
 		let block = blockOf(editor, points.anchorKey);
 		if (block && !keys.includes(block)) keys.push(block);
 	}

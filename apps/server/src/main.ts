@@ -509,6 +509,10 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			if (room.plan) await Questions.cancel(room.plan, server, room.id, ws, frame);
 			return;
 
+		case "question:option":
+			if (room.plan) await Questions.addOption(room.plan, server, room.id, ws, frame);
+			return;
+
 		case "comment:start":
 			if (room.plan) await Comments.start(room.plan, server, room.id, ws, frame);
 			return;

@@ -73,7 +73,10 @@ async function load(page: Page, mode: "editable" | "readonly" | "disabled") {
 	await page.setContent('<main><div id="fixture"></div></main>');
 	await page.addScriptTag({ content: script });
 	await page.evaluate(mode => window.questionFixture.mount(mode), mode);
-	await expect(page.getByText("Decision", { exact: true })).toBeVisible();
+	await expect(page.getByRole("heading", {
+		name: "What auth system should we use?",
+		exact: true,
+	})).toBeVisible();
 }
 
 test("Cancel and Discard open mutually exclusive confirmations", async ({ page }) => {
@@ -81,12 +84,12 @@ test("Cancel and Discard open mutually exclusive confirmations", async ({ page }
 	await page.getByRole("button", { name: "Cancel", exact: true }).click();
 	await expect(page.getByText("Cancel without answering?", { exact: true })).toBeVisible();
 	await expect(page.getByText("Discard this decision?", { exact: true })).toHaveCount(0);
-	await expect(page.getByRole("button", { name: "Discard decision", exact: true })).toHaveCount(0);
+	await expect(page.getByRole("button", { name: "Discard", exact: true })).toHaveCount(0);
 	await page.getByRole("button", { name: "Keep it", exact: true }).click();
 	await page.getByRole("button", { name: "Discard", exact: true }).click();
 	await expect(page.getByText("Discard this decision?", { exact: true })).toBeVisible();
 	await expect(page.getByText("Cancel without answering?", { exact: true })).toHaveCount(0);
-	await expect(page.getByRole("button", { name: "Yes, cancel", exact: true })).toHaveCount(0);
+	await expect(page.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
 	await page.getByRole("button", { name: "Keep it", exact: true }).click();
 	await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeEnabled();
 	await expect(page.getByRole("button", { name: "Discard", exact: true })).toBeEnabled();
@@ -96,7 +99,7 @@ test("Cancel and Discard open mutually exclusive confirmations", async ({ page }
 test("held submitting state disables duplicate callbacks and Keep", async ({ page }) => {
 	await load(page, "editable");
 	await page.getByRole("button", { name: "Discard", exact: true }).click();
-	await page.getByRole("button", { name: "Discard decision", exact: true }).click();
+	await page.getByRole("button", { name: "Discard", exact: true }).click();
 	let submitting = page.getByRole("button", { name: "Discarding…", exact: true });
 	await expect(submitting).toBeDisabled();
 	await expect(page.getByRole("button", { name: "Keep it", exact: true })).toBeDisabled();
@@ -105,7 +108,7 @@ test("held submitting state disables duplicate callbacks and Keep", async ({ pag
 	await page.evaluate(() => window.questionFixture.release());
 	await page.getByRole("button", { name: "Keep it", exact: true }).click();
 	await page.getByRole("button", { name: "Cancel", exact: true }).click();
-	await page.getByRole("button", { name: "Yes, cancel", exact: true }).click();
+	await page.getByRole("button", { name: "Cancel", exact: true }).click();
 	await expect(page.getByRole("button", { name: "Cancelling…", exact: true })).toBeDisabled();
 	expect(await page.evaluate(() => window.questionFixture.calls)).toEqual(["discard", "cancel"]);
 });

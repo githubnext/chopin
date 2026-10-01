@@ -148,6 +148,16 @@ path does not restore it after a storage error. Treat this as a known durability
 gap: a proper two-phase refactor must retain or restore the draft until the
 fenced commit succeeds.
 
+A decision's definition is frozen except for appended options. Any writer may
+send `question:option` to add one while the question is open (at most 10 options,
+no case-insensitive duplicate label). The server changes the sidecar record, the
+open entry, and the plan `Option` projection together under the plan queue,
+commits, and only then acknowledges and broadcasts `question:option-added`. The
+client's `key` makes a retry return the same option. Shared drafts need no
+rewrite: an option has a register only once someone selects it. New free-text
+custom answers are not offered; an existing `custom` draft or answer still
+renders and derives.
+
 Anchors combine Yjs relative positions with canonical block digests. A position
 survives surrounding edits; a digest can recover one unique block after a move
 or epoch replacement. Ambiguous matches must orphan rather than guess. The safe

@@ -6,8 +6,10 @@ type KIND<K extends string> = Frame & { kind: K };
 /**
  * Collaborative questions.
  *
- * A questionnaire's question is fixed once asked; people may add options to it.
- * Its answer lives in a shared CRDT owned by the server, so everyone present converges on one draft
+ * A questionnaire's definition is frozen once asked, with one exception: any
+ * member with write access may append an option while it is open (`AddOption`).
+ * Its answer is not frozen either: it lives in a
+ * shared CRDT owned by the server, so everyone present converges on one draft
  * before somebody submits it back to the agent that is waiting on it.
  *
  * There is one answer, not one per person, because there is one decision. Any
@@ -18,11 +20,12 @@ export declare namespace Question {
 	export type Incoming =
 		| Request<Open.Ask>
 		| Request<Edit.Ask>
-		| Request<AddOption.Ask>
+		| Request<AddCardOption.Ask>
 		| Request<Submit.Ask>
 		| Request<Cancel.Ask>
 		| Request<Discard.Ask>
 		| Request<Reopen.Ask>
+		| Request<AddOption.Ask>
 		| Presence.Input;
 
 	export type Outgoing =
@@ -32,12 +35,14 @@ export declare namespace Question {
 		| Metas
 		| Open.Reply
 		| Edit.Reply
-		| AddOption.Reply
+		| AddCardOption.Reply
 		| Changed
 		| Submit.Reply
 		| Cancel.Reply
 		| Discard.Reply
 		| Reopen.Reply
+		| AddOption.Reply
+		| OptionAdded
 		| Presence.Output
 		| Resolved;
 
@@ -207,7 +212,7 @@ export declare namespace Question {
 			);
 	}
 
-	export namespace AddOption {
+	export namespace AddCardOption {
 		/** A person grows the decision. The server mints the option id. */
 		export type Ask = KIND<"question:add-option"> & { id: string; label: string };
 
@@ -310,6 +315,65 @@ export declare namespace Question {
 				| { ok: false; reason: "not-decided" | "resolving" }
 			);
 	}
+	export namespace AddOption {
+		/**
+		 * Append one option to an open question, for everyone.
+		 *
+		 * `key` is an idempotency token chosen by the client: repeating a request
+		 * with the same key returns the option already added instead of adding
+		 * another. The server mints the option's identity.
+		 */
+		export type Ask = KIND<"question:option"> & {
+			id: string;
+			question: string;
+			key: string;
+			label: string;
+			description?: string;
+		};
+
+		export type Refusal =
+			/** Malformed or out-of-bounds input. */
+			| "invalid"
+			/** An option with that label already exists. */
+			| "duplicate"
+			/** The question has reached its option limit. */
+			| "full"
+			/** The questionnaire is settled, or no longer exists. */
+			| "resolved"
+			/** A submit or cancel is already in flight. */
+			| "resolving"
+			/** An implementation run forbids plan and decision changes. */
+			| "implementation";
+
+		export type Reply =
+			& KIND<"question:option">
+			& { id: string }
+			& (
+				| {
+					ok: true;
+					option: Option;
+					/** The whole definition as it now stands. */
+					definition: DecisionDefinition;
+					/** True when this key had already been applied. */
+					repeated?: boolean;
+				}
+				| { ok: false; reason: Refusal; message: string }
+			);
+	}
+
+	/**
+	 * An option was appended, after it became durable.
+	 *
+	 * Carries the complete definition rather than a delta, so a duplicate or
+	 * late delivery is harmless.
+	 */
+	export type OptionAdded = KIND<"question:option-added"> & {
+		id: string;
+		question: string;
+		option: Option;
+		definition: DecisionDefinition;
+		by: string;
+	};
 
 	/** The questionnaire is closed. Nobody may answer it further. */
 	export type Resolved = KIND<"question:resolved"> & {

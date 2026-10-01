@@ -86,7 +86,7 @@ function CollapseView({ readonly }: { readonly: boolean }) {
     onError: error => { window.collapseFixture.errors.push(error.message); throw error; } }}>
     <RichTextPlugin contentEditable={<ContentEditable className="plan-content" aria-label="Collapse document" tabIndex={0} />}
      placeholder={null} ErrorBoundary={LexicalErrorBoundary} />
-    <CollapseSeed /><QuestionnaireObserver store={collapseReader.store} /><DecisionLayer store={collapseReader.store} />
+    <CollapseSeed /><QuestionnaireObserver store={collapseReader.store} /><ResolvedLayer store={collapseReader.store} />
     <DecisionDeletionPlugin /><DiscardedNavigationPlugin />
    </LexicalComposer>
   </div></section><ListProjection readonly={readonly} />

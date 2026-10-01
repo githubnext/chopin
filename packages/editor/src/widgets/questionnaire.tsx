@@ -1,8 +1,8 @@
 /**
  * A questionnaire, as the decisions pane shows it.
  *
- * The definition is immutable and the answer is owned by the server's record,
- * so this never writes to the document — an agent rewriting the plan cannot
+ * The definition only ever grows by appended options and the answer is owned by
+ * the server's record, so this never writes to the document — an agent rewriting the plan cannot
  * overwrite a decision. What the plan node carries is a projection, kept so
  * the source reads correctly on its own.
  */
@@ -17,7 +17,8 @@ import { Provenance, SidecarCard } from "../card";
 import { useCardMeta } from "../card-meta";
 import { ContentSwapLayer } from "../content-swap";
 import { EvidenceHover } from "./evidence-hover";
-import { Face } from "../face";
+import { PresenceFaces } from "../presence-faces";
+import { useRelations } from "../questionnaires";
 import { widgets$ } from "../widget-options";
 import { useTransitionPresence } from "../transition-presence";
 
@@ -164,7 +165,14 @@ export function QuestionnaireCard(
 		&& presence.phase === "closing"
 		&& lastVisible.current?.id === presence.value;
 	if (shown === "hidden" && !closing) {
-		return <div data-plan-sidecar-questionnaire={value.id} data-card-hidden="" hidden />;
+		return (
+			<div
+				data-plan-sidecar-questionnaire={value.id}
+				data-card-hidden=""
+				data-plan-collapsed=""
+				hidden
+			/>
+		);
 	}
 	if (presentation === "list") return content;
 	let presented = closing ? lastVisible.current!.content : content;
@@ -198,30 +206,6 @@ type Pointing = {
 };
 
 type QuestionStep = { children: ReactNode; question: string };
-
-/** Who is in this decision, overlapping, at most eight. */
-function People({ handles }: { handles: string[] }) {
-	let unique = [...new Set(handles)];
-	if (unique.length === 0) return null;
-	let shown = unique.slice(0, 8);
-
-	return (
-		<span
-			aria-label={`In this decision: ${unique.join(", ")}`}
-			className="flex items-center"
-			role="group"
-		>
-			{shown.map((handle, index) => (
-				<span className={index > 0 ? "-ml-1.5" : ""} key={handle}>
-					<Face handle={handle} ring="page" size={22} />
-				</span>
-			))}
-			{unique.length > 8 && (
-				<span className="ml-1 text-sm text-text-tertiary tabular-nums">+{unique.length - 8}</span>
-			)}
-		</span>
-	);
-}
 
 function QuestionStepSwap(
 	{ children, motion, question }: {
@@ -322,7 +306,7 @@ function Undecided(
 								<MessageForwardIcon aria-hidden="true" size={14} />
 							</button>
 						)}
-						<People handles={people} />
+						<PresenceFaces handles={people} label="In this decision" />
 					</span>
 				}
 				collaborators={state.collaborators}
@@ -336,12 +320,13 @@ function Undecided(
 				suggested={meta?.suggested}
 				refining={meta?.refining}
 				previous={previous}
-				showActions
 				onAddOption={editable ? state.addOption : undefined}
 				onCancel={editable ? state.cancel : undefined}
 				onDiscard={editable ? state.discard : undefined}
 				onChange={editable ? state.change : undefined}
+				onQuestionFocus={editable ? state.focusQuestion : undefined}
 				onSubmit={editable ? state.submit : undefined}
+				renderPeople={people => <PresenceFaces handles={people.map(person => person.handle)} />}
 				renderStep={motion
 					? ({ children, question }) => (
 						<QuestionStepSwap motion={motion} question={question}>
@@ -512,12 +497,36 @@ function Decided(
 	);
 }
 
+/**
+ * Whether a resolved decision is carried entirely by a margin marker.
+ *
+ * Only when every question has prose to sit beside. Pending, deliberately
+ * empty and orphaned decisions have nowhere to put a marker, so they keep a
+ * compact card rather than vanishing from the plan.
+ */
+export function carriedByMarkers(
+	value: Questionnaire,
+	places: { [question: string]: number } | undefined,
+): boolean {
+	return !!places
+		&& value.questions.length > 0
+		&& value.questions.every(question =>
+			question.answer !== undefined && (places[question.id] ?? 0) > 0
+		);
+}
+
 function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 	let options = useCellValue(widgets$);
 	let meta = useCardMeta(options.cardMeta, value.id);
 	let evidence = value.thread && (meta?.status === "open" || meta?.status === "reopened")
 		? options.evidence?.(value.id)
 		: null;
+	// Re-render when anchors arrive: whether the card collapses depends on them.
+	useRelations(options.questions);
+	let places = options.questions?.counts(value.id);
+	if ((!meta || meta.status === "decided") && carriedByMarkers(value, places)) {
+		return <div data-plan-collapsed="" data-plan-sidecar-questionnaire={value.id} hidden />;
+	}
 
 	return (
 		<QuestionnaireCard
@@ -531,7 +540,7 @@ function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 			onQuestionEnter={question => options.questions?.highlight(value.id, question)}
 			onQuestionLeave={() => options.questions?.clear()}
 			onQuestionSelect={question => options.questions?.reveal(value.id, question)}
-			places={options.questions?.counts(value.id)}
+			places={places}
 			value={value}
 			wire={options.wire}
 		/>

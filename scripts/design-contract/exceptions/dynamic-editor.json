@@ -144,7 +144,7 @@
 				3
 			]
 		],
-		"sourceHash": "9e0f068fcf0162f1e6b70c876295c6cf7cd48dd5e9dfe53cfa5b224b34ced5a2"
+		"sourceHash": "b55b20870116c7b2dcd1d7e7f647b5f08431bc6a2a2c5666e7a4bca6a093a229"
 	},
 	{
 		"file": "packages/editor/src/toolbar/research.tsx",
@@ -207,7 +207,7 @@
 				1
 			]
 		],
-		"sourceHash": "736540dffb7041ccc154691b541ad2f1d3bf0d3eaad396b3279e3415ddf33d32"
+		"sourceHash": "c60690040f4b0911e23027b7b975596e0db27e2d4e20c4ec4ce3f1955c5b81e8"
 	},
 	{
 		"file": "packages/editor/src/comment-layer.tsx",
@@ -235,7 +235,7 @@
 				1
 			]
 		],
-		"sourceHash": "736540dffb7041ccc154691b541ad2f1d3bf0d3eaad396b3279e3415ddf33d32"
+		"sourceHash": "c60690040f4b0911e23027b7b975596e0db27e2d4e20c4ec4ce3f1955c5b81e8"
 	},
 	{
 		"file": "packages/editor/src/table/rails.tsx",
@@ -284,7 +284,7 @@
 				1
 			]
 		],
-		"sourceHash": "bd86857696930d6350727ecb37e8baedbd462e0e27fcbe0084decfcafc76e984"
+		"sourceHash": "a44190a1773d99a174d57e966a44d08265639c3e0d6237cd753586c63bbdd2dd"
 	},
 	{
 		"file": "packages/editor/src/disclosure-motion.tsx",
@@ -389,7 +389,7 @@
 				1
 			]
 		],
-		"sourceHash": "33bd0e40b9efb9e47a3cf4ff32baedf67db60fcc3dee63588e0acf8922abea0d"
+		"sourceHash": "feee775de27d457abf97c0326ce1842171d91f7dd179ea9a1d5efaf240e02d79"
 	},
 	{
 		"file": "packages/editor/src/widgets/code-view.tsx",
@@ -480,6 +480,41 @@
 				1
 			]
 		],
-		"sourceHash": "33bd0e40b9efb9e47a3cf4ff32baedf67db60fcc3dee63588e0acf8922abea0d"
+		"sourceHash": "feee775de27d457abf97c0326ce1842171d91f7dd179ea9a1d5efaf240e02d79"
+	},
+	{
+		"file": "packages/editor/src/resolved-layer.tsx",
+		"reason": "Decision marker and popover style is measured anchor geometry, sized from the first anchored block; browser positioning remains outside static token evaluation.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"current.style",
+				"unresolved style > Surface > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"markerStyle(marker, lineHeight, hit, inset)",
+				"unresolved style > ResolvedLayer > <button>",
+				1
+			]
+		],
+		"sourceHash": "1227e23d356d542bd4920f3750b870d37bbccaae8eb73f076b92fda7e3612ff6"
+	},
+	{
+		"file": "packages/editor/src/resolved-layer.tsx",
+		"reason": "Motion/presence contract returns finite semantic state classes (is-open, is-closing); imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"presence.className",
+				"class > Surface > <div>",
+				1
+			]
+		],
+		"sourceHash": "1227e23d356d542bd4920f3750b870d37bbccaae8eb73f076b92fda7e3612ff6"
 	}
 ]

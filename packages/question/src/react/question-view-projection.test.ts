@@ -5,8 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { QuestionView } from "./question-view";
 import type { Draft } from "../draft";
 
-// Original callbacks/fixture: archive446a9779a937fa5be7cd3eb52fd7f3023d691ed2,
-// packages/question/src/react/question-view.test.ts:26.
+// Original question inputs and contracts, adapted to current main choice rows and Save.
 import { AUTH } from "./question-view.test-fixtures";
 
 test("an open option includes its rationale in the clickable label", () => {
@@ -26,10 +25,10 @@ test("an open option includes its rationale in the clickable label", () => {
 	let choices = markup.match(/<label[^>]*>.*?<\/label>/g) ?? [];
 	expect(choices[0]).toContain("Auth0");
 	expect(choices[0]).toContain("Uses an external identity provider.");
-	expect(choices[0]).toContain('class="block text-sm text-text-secondary"');
+	expect(choices[0]).toContain('class="question-desc"');
 	expect(choices[0]).not.toContain('aria-hidden="true">Uses an external identity provider');
 	expect(choices[1]).toContain("GitHub Apps");
-	expect(choices[1]).not.toContain('class="block text-sm text-text-secondary"');
+	expect(choices[1]).not.toContain('class="question-desc"');
 });
 
 function empty(): Draft {
@@ -52,7 +51,7 @@ test("an empty single-card answer is not ready to save", () => {
 		drafts: { q: empty() },
 		onSubmit: () => {},
 	}));
-	expect(rendered).toMatch(/<button[^>]*disabled=""[^>]*>[\s\S]*?Save answer</);
+	expect(rendered).toMatch(/<button[^>]*disabled=""[^>]*>[^<]*Save</);
 });
 
 test("a suggestion selects the existing radio without writing the shared draft", () => {
@@ -62,7 +61,7 @@ test("a suggestion selects the existing radio without writing the shared draft",
 	let radios = rendered.match(/<input[^>]*type="radio"[^>]*>/g) ?? [];
 	expect(radios[0]).not.toContain('checked=""');
 	expect(radios[1]).toContain('checked=""');
-	expect(rendered).not.toMatch(/<button[^>]*disabled=""[^>]*>[\s\S]*?Save answer</);
+	expect(rendered).not.toMatch(/<button[^>]*disabled=""[^>]*>[^<]*Save</);
 	expect(draft).toEqual(before);
 });
 
@@ -78,12 +77,12 @@ test("a human custom answer keeps priority over a suggestion", () => {
 	let radios = rendered.match(/<input[^>]*type="radio"[^>]*>/g) ?? [];
 	expect(radios[1]).not.toContain('checked=""');
 	expect(radios[2]).toContain('checked=""');
-	expect(rendered).toContain("Use our own</textarea>");
+	expect(rendered).toContain("Use our own</span>");
 });
 
 test("an unknown suggested ID cannot make an empty draft ready to save", () => {
 	let rendered = markup(empty(), "removed");
-	expect(rendered).toMatch(/<button[^>]*disabled=""[^>]*>[\s\S]*?Save answer</);
+	expect(rendered).toMatch(/<button[^>]*disabled=""[^>]*>[^<]*Save</);
 });
 
 test("a read-only view keeps projected suggestions disabled", () => {
@@ -91,7 +90,7 @@ test("a read-only view keeps projected suggestions disabled", () => {
 	let radios = rendered.match(/<input[^>]*type="radio"[^>]*>/g) ?? [];
 	expect(radios[1]).toContain('checked=""');
 	expect(radios[1]).toContain('disabled=""');
-	expect(rendered).toMatch(/<button[^>]*disabled=""[^>]*>[\s\S]*?Save answer</);
+	expect(rendered).toMatch(/<button[^>]*disabled=""[^>]*>[^<]*Save</);
 });
 
 test("legacy multi-question navigation does not project a single-card suggestion", () => {
@@ -103,5 +102,5 @@ test("legacy multi-question navigation does not project a single-card suggestion
 	}));
 	let radios = rendered.match(/<input[^>]*type="radio"[^>]*>/g) ?? [];
 	expect(radios[1]).not.toContain('checked=""');
-	expect(rendered).toContain('role="tablist"');
+	expect(rendered).toContain('role="group" aria-label="Questions"');
 });

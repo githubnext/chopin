@@ -60,7 +60,7 @@
 				1
 			]
 		],
-		"sourceHash": "4be988b75dfd49d70c97cc9ac747bc0f29ccd6cbababc6a22979513843d476ce"
+		"sourceHash": "6a7169d131b0ec3479cf0d9f4edec8ea501d515ce7c2d1752340a5c3e67e2110"
 	},
 	{
 		"file": "apps/web/src/design-audit/icons.tsx",
@@ -186,7 +186,7 @@
 				1
 			]
 		],
-		"sourceHash": "4d9491228ad60ebd10bec71f26a83c7baab62e207e3cedc86770e6eb18b780ac"
+		"sourceHash": "358d930fa0b32ab47a1b255534804e6316298b9e62be9a39f1aac2eea93bbfc9"
 	},
 	{
 		"file": "apps/web/src/viewport.ts",
@@ -263,7 +263,7 @@
 				1
 			]
 		],
-		"sourceHash": "548439acad5973843fc7c4c1502f3646e50cff02cd5517a8caf6afdf6d7e82d6"
+		"sourceHash": "be4b1a50e021d54ae4df59f855a37590de7bfbb96876ab950ca7082764f84906"
 	},
 	{
 		"file": "apps/web/src/repository-picker.tsx",

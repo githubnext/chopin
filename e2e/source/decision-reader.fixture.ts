@@ -10,6 +10,8 @@ declare global {
 			sources: string[];
 			errors: string[];
 			ready(): boolean;
+			rootDetached(reader: number, detached: boolean): void;
+			pinned(): boolean;
 			settle(ok: boolean): void;
 			status(reader: number, status: Question.CardMeta["status"]): void;
 		};
@@ -32,10 +34,12 @@ import { CardMetaStore as NativeCardMetaStore } from "./card-meta";
 import type { Root } from "react-dom/client";
 import type { Binding, Provider } from "@lexical/yjs";
 import type { Transport } from "./transport";
+import type { LexicalEditor } from "lexical";
+import { currentDecision as activeNativeDecision } from "./decision-pin";
 
 type ReaderRequest = { reader: number; kind: string; payload?: Record<string, unknown> };
 type Reader = { realm: Realm; store: NativeQuestionnaireStore; meta: NativeCardMetaStore; wire: Transport;
-	frame: (kind: string, value: unknown) => void; ready: boolean };
+	frame: (kind: string, value: unknown) => void; ready: boolean; editor?: LexicalEditor; element?: HTMLElement };
 declare global {
 	interface Window {
 		decisionReaderFixture: {
@@ -45,6 +49,8 @@ declare global {
 			sources: string[];
 			errors: string[];
 			ready(): boolean;
+			rootDetached(reader: number, detached: boolean): void;
+			pinned(): boolean;
 			settle(ok: boolean): void;
 			status(reader: number, status: Question.CardMeta["status"]): void;
 		};
@@ -91,6 +97,7 @@ function Seed({ reader }: { reader: Reader }) {
 		reader.store.bind(binding);
 		reader.store.set({ entries: [{ id: value.id, value }], hasPlanContent: true });
 		reader.store.prose([{ widget: value.id, anchors: [anchor(binding, key)], orphaned: false }]);
+		reader.editor = editor; reader.element = editor.getRootElement() ?? undefined;
 		reader.ready = true;
 		return () => { stop(); reader.store.attach(undefined); doc.destroy(); };
 	}, [editor, reader]);
@@ -105,7 +112,7 @@ function ReaderView({ reader, index, readonly }: { reader: Reader; index: number
 					<RichTextPlugin contentEditable={<ContentEditable className="plan-content" aria-label={\`Reader \${index} document\`} />}
 						placeholder={null} ErrorBoundary={LexicalErrorBoundary} />
 					<Seed reader={reader} />
-					<DecisionLayer store={reader.store} />
+					<ResolvedLayer store={reader.store} />
 				</LexicalComposer>
 			</div>
 		</section>
@@ -143,6 +150,10 @@ window.decisionReaderFixture = {
 	},
 	unmount() { root?.unmount(); root = undefined; for (let stop of stops) stop(); stops = []; settle = undefined; },
 	ready() { return readers.length > 0 && readers.every(reader => reader.ready); },
+	rootDetached(index, detached) { let reader = readers[index]!;
+	 if (!reader.editor || !reader.element) throw new Error("Reader root not ready");
+	 reader.editor.setRootElement(detached ? null : reader.element); },
+	pinned() { return !!activeNativeDecision(); },
 	settle(ok) { let done = settle; settle = undefined; if (!done) throw new Error("No held reader request"); done({ ok }); },
 	status(index, status) { readers[index]!.frame("question:meta", { id: value.id, meta: { ...meta, status } }); },
 };

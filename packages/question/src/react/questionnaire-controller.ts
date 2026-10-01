@@ -1,11 +1,10 @@
 import { derive } from "../answer";
 import { crdt } from "../draft";
-import { identified } from "../schema";
+import { decision, identified } from "../schema";
 import type { Definition, Drafts } from "../index";
-import type { Collaborator } from "./question-view";
+import type { AddOptionResult, Collaborator } from "./question-view";
 import type { Snapshot, Transport, Unsubscribe } from "./questionnaire-types";
 
-// Exact archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2 class; current cancel retained.
 type Model = crdt.Model<crdt.JsonNode<Drafts>>;
 
 const EMPTY_DRAFTS: Drafts = Object.freeze({});
@@ -20,6 +19,39 @@ function normalize(person: {
 		handle: person.handle ?? "unknown",
 		...(person.question ? { question: person.question } : {}),
 	};
+}
+
+/**
+ * Says which question this connection is working on, once per change.
+ *
+ * Focus moves between questions, not keystrokes, so deduping against what the
+ * server last heard is all the throttling needed. The wanted question survives
+ * a reconnect and is resent when the draft reopens.
+ */
+export class FocusReporter {
+	#wanted: string | undefined;
+	#sent: string | undefined;
+	#online = false;
+
+	constructor(private readonly send: (question: string | undefined) => void) {}
+
+	set(question: string | undefined): void {
+		this.#wanted = question;
+		this.#flush();
+	}
+
+	/** The draft is open (true) or gone (false); the server forgets us when it is gone. */
+	online(online: boolean): void {
+		this.#online = online;
+		this.#sent = undefined;
+		this.#flush();
+	}
+
+	#flush(): void {
+		if (!this.#online || this.#wanted === this.#sent) return;
+		this.#sent = this.#wanted;
+		this.send(this.#wanted);
+	}
 }
 
 export class QuestionnaireController {
@@ -41,6 +73,10 @@ export class QuestionnaireController {
 	#connected: boolean;
 	#active = false;
 	#terminal = false;
+	#focus = new FocusReporter(question => {
+		this.bridge?.send("question:presence", { id: this.id, question });
+	});
+	#adding: { question: string; label: string; key: string } | undefined;
 
 	constructor(
 		bridge: Transport | undefined,
@@ -107,8 +143,15 @@ export class QuestionnaireController {
 			}
 			if (patch.options !== undefined) {
 				doc.api.val([question, "mode"]).set("choices");
+				let held = (doc.view() as Drafts)[question]?.options ?? {};
 				for (let [option, value] of Object.entries(patch.options as Record<string, boolean>)) {
-					doc.api.val([question, "options", option]).set(value);
+					// An option appended after this draft began has no register yet.
+					if (Object.hasOwn(held, option)) doc.api.val([question, "options", option]).set(value);
+					else {
+						doc.api.obj([question, "options"]).set({
+							[option]: crdt.schema.val(crdt.schema.con(value)),
+						});
+					}
 				}
 			}
 			if (patch.custom !== undefined) {
@@ -117,6 +160,11 @@ export class QuestionnaireController {
 				value.ins(0, patch.custom as string);
 			}
 		});
+	};
+
+	/** Report the question this person is working on; undefined when they leave it. */
+	focusQuestion = (question: string | undefined): void => {
+		this.#focus.set(this.#terminal ? undefined : question);
 	};
 
 	submit = (visibleSuggestion?: { optionId: string; revision: number }): void => {
@@ -159,6 +207,7 @@ export class QuestionnaireController {
 		}
 
 		this.#terminal = true;
+		this.#focus.set(undefined);
 		this.#set({ submitting: true, error: undefined });
 		let submit = async () => {
 			// The CRDT batches its change callback into a microtask. Let the final
@@ -228,6 +277,7 @@ export class QuestionnaireController {
 			return;
 		}
 		this.#terminal = true;
+		this.#focus.set(undefined);
 		this.#set({ submitting: true, error: undefined });
 
 		void this.bridge.ask("question:discard", { id: this.id })
@@ -254,6 +304,7 @@ export class QuestionnaireController {
 			return;
 		}
 		this.#terminal = true;
+		this.#focus.set(undefined);
 		this.#set({ submitting: true, error: undefined });
 
 		void this.bridge.ask("question:cancel", { id: this.id })
@@ -294,26 +345,54 @@ export class QuestionnaireController {
 		}
 	};
 
-	addOption = async (label: string): Promise<{ ok: true } | { ok: false; message: string }> => {
-		if (this.#snapshot.closed || this.#terminal) {
-			return { ok: false, message: "This decision is no longer open." };
+	addOption = async (question: string, label: string): Promise<AddOptionResult> => {
+		if (!this.bridge || this.#snapshot.closed || this.#terminal) {
+			return { ok: false, message: "This question is no longer open." };
 		}
-		if (!this.bridge || !this.#connected) {
-			return { ok: false, message: "Reconnect to add an option." };
-		}
+		if (!this.#connected) return { ok: false, message: "Reconnect to add an option." };
+		// A retry of the same text after a lost reply must not add a second option.
+		let last = this.#adding;
+		let key = last && last.question === question && last.label === label
+			? last.key
+			: crypto.randomUUID();
+		this.#adding = { question, label, key };
+
+		let reply: {
+			ok?: boolean;
+			message?: string;
+			definition?: Definition;
+		};
 		try {
-			let reply = await this.bridge.ask("question:add-option", {
+			reply = await this.bridge.ask("question:option", {
 				id: this.id,
+				question,
+				key,
 				label,
-			}) as unknown as {
-				ok: boolean;
-				message?: string;
-			};
-			return reply.ok ? { ok: true } : { ok: false, message: reply.message ?? "Could not add it." };
+			}) as never;
 		} catch {
-			return { ok: false, message: "Could not add it." };
+			return { ok: false, message: "Could not add this option. Try again." };
 		}
+		if (!reply.ok) return { ok: false, message: reply.message ?? "Could not add this option." };
+		this.#adding = undefined;
+		if (reply.definition) this.#redefine(reply.definition);
+		return { ok: true };
 	};
+
+	/** Take the server's definition when it has gained options. */
+	#redefine(next: Definition): void {
+		let current = this.#definition ?? this.#snapshot.definition;
+		let added = next.questions[0]?.options.length ?? 0;
+		let held = current?.questions[0]?.options.length ?? 0;
+		// Only ever forward: a late duplicate must not erase a newer option.
+		if (added <= held) return;
+		try {
+			let definition = decision(identified(next));
+			if (this.#definition) this.#definition = definition;
+			this.#set({ definition });
+		} catch {
+			// A definition the domain rejects is ignored; the next open resyncs.
+		}
+	}
 
 	forget(): void {
 		this.#close();
@@ -348,6 +427,8 @@ export class QuestionnaireController {
 		for (let off of this.#teardown.splice(0)) off();
 		this.#model = undefined;
 		this.#definition = undefined;
+		this.#focus.online(false);
+		if (presence) this.#focus.set(undefined);
 		// A previous generation's edit may never answer. New opens replay every
 		// unacknowledged patch through their own queue.
 		this.#pending = Promise.resolve();
@@ -358,6 +439,7 @@ export class QuestionnaireController {
 
 	#close(): void {
 		this.#terminal = true;
+		this.#focus.set(undefined);
 		this.#outbox = [];
 		this.#set({ closed: true, syncing: false, submitting: false, collaborators: [] });
 		this.#stop(false);
@@ -405,6 +487,10 @@ export class QuestionnaireController {
 				let person = normalize(event);
 				let next = this.#snapshot.collaborators.filter(item => item.client !== person.client);
 				this.#set({ collaborators: event.question ? [...next, person] : next });
+			}),
+			channel.on("question:option-added", (raw: never) => {
+				let event = raw as unknown as { id: string; definition?: Definition };
+				if (event.id === this.id && event.definition) this.#redefine(event.definition);
 			}),
 			channel.on("question:resolved", (raw: never) => {
 				let event = raw as unknown as { id: string };
@@ -498,6 +584,7 @@ export class QuestionnaireController {
 		this.#definition = definition;
 		for (let patch of this.#outbox) send(patch);
 
+		this.#focus.online(true);
 		this.#set({
 			definition,
 			drafts: doc.view() as Drafts,

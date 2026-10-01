@@ -18,12 +18,12 @@ import type { Socket, SocketData } from "../wire";
 import { announce, emit, pending } from "./card-notifications";
 
 // Exact archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2 declarations; import/export wrappers only.
-export async function addOption(
+export async function addCardOption(
 	plan: Plan,
 	server: Server<SocketData>,
 	roomId: string,
 	ws: Socket,
-	msg: Request<Wire.AddOption.Ask>,
+	msg: Request<Wire.AddCardOption.Ask>,
 ): Promise<void> {
 	if (Service.implementationActive(plan)) return fail(ws, msg.rid, "implementation is active");
 	if (typeof msg.label !== "string") {

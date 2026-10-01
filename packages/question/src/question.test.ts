@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
 import { derive, incomplete, summarize } from "./answer";
-import { answered, assertPatch, create, read } from "./draft";
+import { answered, apply, assertPatch, crdt, create, read } from "./draft";
 import * as limits from "./limits";
 import { identified } from "./index";
-import { normalize, QuestionError } from "./schema";
+import { appendOption, normalize, QuestionError } from "./schema";
 
 import type { Definition } from "./schema";
 
@@ -292,10 +292,14 @@ describe("draft", () => {
 				header: "Other",
 				question: "?",
 				multiple: false,
-				options: [{ label: "a", description: "" }],
+				options: [{ label: "a", description: "" }, { label: "b", description: "" }, {
+					label: "c",
+					description: "",
+				}],
 			}],
 		});
-		// A draft built for one definition must not validate against another.
+		// A draft built for one definition must not validate against another:
+		// it may lack keys (options appended later) but never hold unknown ones.
 		expect(() => read(create(other), definition)).toThrow(QuestionError);
 	});
 
@@ -385,5 +389,88 @@ describe("derive", () => {
 		expect(summarize({ question: "?", choices: ["Canary", "Blue-green"] }))
 			.toBe("Canary, Blue-green");
 		expect(summarize({ question: "?", custom: "Something else" })).toBe("Something else");
+	});
+});
+
+const KEY = "0123456789abcdef";
+
+describe("appendOption", () => {
+	let definition = normalize(tool());
+	let question = definition.questions[0]!.id;
+	let input = (label: unknown, extra: Record<string, unknown> = {}) => ({
+		question,
+		key: KEY,
+		label,
+		...extra,
+	});
+
+	it("returns a new frozen definition with the option last", () => {
+		let single = { questions: [definition.questions[0]!] as [(typeof definition.questions)[0]] };
+		let result = appendOption(single, input("  Shadow  ", { description: " dark " }), "NEW");
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.option).toEqual({ id: "NEW", label: "Shadow", description: "dark" });
+		expect(result.definition.questions[0].options.map(option => option.id)).toEqual([
+			"o0",
+			"o1",
+			"NEW",
+		]);
+		expect(Object.isFrozen(result.definition.questions[0].options)).toBe(true);
+		// The original is untouched.
+		expect(single.questions[0].options).toHaveLength(2);
+	});
+
+	let single = { questions: [definition.questions[0]!] as [(typeof definition.questions)[0]] };
+
+	it("rejects empty, oversized, or non-text labels", () => {
+		for (let label of ["   ", "x".repeat(limits.MAX_LABEL + 1), 4, undefined]) {
+			let result = appendOption(single, input(label), "NEW");
+			expect(result.ok ? "ok" : result.reason).toBe("invalid");
+		}
+	});
+
+	it("rejects a case-insensitive duplicate", () => {
+		let result = appendOption(single, input("  canary "), "NEW");
+		expect(result.ok ? "ok" : result.reason).toBe("duplicate");
+	});
+
+	it("rejects an unknown question and a malformed key", () => {
+		expect(appendOption(single, { ...input("x"), question: "nope" }, "NEW").ok).toBe(false);
+		expect(appendOption(single, { ...input("x"), key: "short" }, "NEW").ok).toBe(false);
+	});
+
+	it("stops at the option limit", () => {
+		let current = single;
+		for (let index = 0; index < limits.MAX_SHARED_OPTIONS - 2; index++) {
+			let result = appendOption(current, input(`Extra ${index}`), `ID${index}`);
+			expect(result.ok).toBe(true);
+			if (result.ok) current = result.definition;
+		}
+		let result = appendOption(current, input("One more"), "LAST");
+		expect(result.ok ? "ok" : result.reason).toBe("full");
+	});
+
+	it("keeps an existing draft valid and lets the new option be chosen", () => {
+		let model = create(single);
+		let result = appendOption(single, input("Shadow"), "NEW");
+		if (!result.ok) throw new Error("append failed");
+
+		// The old draft reads against the larger definition; the new option is unselected.
+		let drafts = read(model, result.definition);
+		expect(drafts[question]!.options).toEqual({ o0: false, o1: false, NEW: false });
+
+		// A client selects it by creating its key.
+		let fork = model.fork();
+		fork.api.obj([question, "options"]).set({
+			NEW: crdt.schema.val(crdt.schema.con(true)),
+		});
+		let patch = fork.api.flush();
+		let applied = apply(model, result.definition, [...patch.toBinary()]);
+		expect(applied.ok).toBe(true);
+		if (!applied.ok) return;
+		expect(read(applied.model, result.definition)[question]!.options.NEW).toBe(true);
+
+		// Against the old definition the same patch is an unknown key.
+		expect(apply(model, single, [...patch.toBinary()]).ok).toBe(false);
 	});
 });

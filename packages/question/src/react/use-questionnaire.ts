@@ -11,11 +11,11 @@
  */
 
 import { useEffect, useRef, useSyncExternalStore } from "react";
-import { QuestionnaireController } from "./questionnaire-controller";
+import { FocusReporter, QuestionnaireController } from "./questionnaire-controller";
 import type { Definition } from "../index";
 import type { QuestionnaireState, Transport } from "./questionnaire-types";
 
-export { QuestionnaireController };
+export { FocusReporter, QuestionnaireController };
 export type { QuestionnaireState, Transport } from "./questionnaire-types";
 
 const controllers = new WeakMap<Transport, Map<string, QuestionnaireController>>();
@@ -94,6 +94,7 @@ export function useQuestionnaire(options: QuestionnaireOptions): QuestionnaireSt
 		error: snapshot.error,
 		focus: snapshot.focus,
 		change: controller.change,
+		focusQuestion: controller.focusQuestion,
 		addOption: controller.addOption,
 		submit: controller.submit,
 		discard: controller.discard,

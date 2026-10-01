@@ -16,13 +16,16 @@ function hasVisibleText(button: HTMLButtonElement): boolean {
 	return false;
 }
 
-function iconButton(target: EventTarget | null): HTMLButtonElement | null {
+function iconButton(target: EventTarget | null): HTMLElement | null {
 	if (!(target instanceof Element)) return null;
+	// Non-button marks (such as presence faces) opt in with an explicit data-tooltip.
+	let marked = target.closest<HTMLElement>("[data-tooltip]:not(button)");
+	if (marked && !marked.closest("[inert]")) return marked;
 	let button = target.closest<HTMLButtonElement>("button");
 	if (
 		!button || button.disabled || button.closest("[inert]")
 		|| button.matches(
-			".sr-only, .navigation-drawer-backdrop, .navigation-modal-backdrop, .plan-comment-button",
+			".sr-only, .navigation-drawer-backdrop, .navigation-modal-backdrop, .plan-comment-button, .plan-decision-marker",
 		)
 	) {
 		return null;
@@ -35,6 +38,13 @@ function iconButton(target: EventTarget | null): HTMLButtonElement | null {
 	return button;
 }
 
+/** Names and handles opt out of capitalisation so they keep their own casing. */
+export function tooltipText(label: string, verbatim: boolean): string {
+	return verbatim
+		? label.trim()
+		: label.trim().replace(/(^|\s)([a-z])/g, (_, space, letter) => space + letter.toUpperCase());
+}
+
 export function IconTooltip() {
 	useEffect(() => {
 		let tooltip = document.createElement("div");
@@ -42,9 +52,9 @@ export function IconTooltip() {
 		tooltip.setAttribute("data-icon-tooltip", "");
 		tooltip.setAttribute("aria-hidden", "true");
 		document.body.append(tooltip);
-		let active: HTMLButtonElement | null = null;
-		let hovered: HTMLButtonElement | null = null;
-		let focused: HTMLButtonElement | null = null;
+		let active: HTMLElement | null = null;
+		let hovered: HTMLElement | null = null;
+		let focused: HTMLElement | null = null;
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		let originalTitle: string | null = null;
 
@@ -59,7 +69,7 @@ export function IconTooltip() {
 			originalTitle = null;
 		}
 
-		function enter(button: HTMLButtonElement | null) {
+		function enter(button: HTMLElement | null) {
 			if (button === active) return;
 			hide();
 			if (!button) return;
@@ -71,10 +81,7 @@ export function IconTooltip() {
 				let label = button.getAttribute("data-tooltip") ?? button.getAttribute("aria-label")
 					?? originalTitle ?? button.querySelector(".sr-only")?.textContent;
 				if (!label) return hide();
-				tooltip.textContent = label.trim().replace(
-					/(^|\s)([a-z])/g,
-					(_, space, letter) => space + letter.toUpperCase(),
-				);
+				tooltip.textContent = tooltipText(label, button.hasAttribute("data-tooltip-verbatim"));
 				let rect = button.getBoundingClientRect();
 				let below = rect.top < tooltip.offsetHeight + GAP;
 				tooltip.style.top = `${below ? rect.bottom + GAP : rect.top - GAP}px`;

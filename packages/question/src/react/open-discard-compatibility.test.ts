@@ -17,13 +17,13 @@ test("Cancel remains available when an open card also offers Discard", () => {
 	expect(markup).not.toContain("Discard this decision?");
 });
 
-test("the existing Cancel-only card retains its caption and disabled guard", () => {
+test("the main onCancel-only card uses Discard with its disabled guard", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionView, {
 		definition: AUTH,
 		drafts: {},
 		disabled: true,
 		onCancel: () => {},
 	}));
-	expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>[\s\S]*?Cancel</);
-	expect(markup).not.toContain(">Discard<");
+	expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Discard</);
+	expect(markup).not.toContain(">Cancel<");
 });

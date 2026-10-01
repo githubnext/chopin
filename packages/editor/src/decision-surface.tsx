@@ -127,6 +127,7 @@ export function DecisionDialogContent(
 							aria-label="Close"
 							className="plan-decision-icon-button"
 							onClick={onClose}
+							data-plan-decision-close=""
 							ref={closeRef}
 							type="button"
 						>

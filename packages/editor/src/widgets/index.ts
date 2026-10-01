@@ -31,6 +31,7 @@ export function register(): void {
 export { CalloutPlugin } from "./callout";
 export { CardGapPlugin } from "./card-gap";
 export { DecisionDeletionPlugin } from "./decision-deletion";
+export { DecoratorSelectionPlugin } from "./decorator-selection";
 export { DiscardedNavigationPlugin } from "./discarded-navigation";
 export { EnterPlugin } from "./enter";
 export { QuestionnaireCard } from "./questionnaire";

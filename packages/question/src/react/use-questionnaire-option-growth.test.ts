@@ -4,7 +4,7 @@ import { QuestionnaireController } from "./use-questionnaire";
 import type { Transport } from "./use-questionnaire";
 import { DEFINITION } from "./use-questionnaire.test-fixtures";
 
-// Whole archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2 callbacks, wrappers only.
+// Original replay/refusal contracts, with the current keyed shared-option request.
 describe("QuestionnaireController option-growth", () => {
 	it("replays an in-flight selection after every reopen despite late older acknowledgements", async () => {
 		let handlers = new Map<string, Set<(event: never) => void>>();
@@ -110,29 +110,30 @@ describe("QuestionnaireController option-growth", () => {
 			},
 		} as unknown as Transport;
 		let controller = new QuestionnaireController(wire, "w", DEFINITION, true);
-		expect(await controller.addOption("Canary")).toEqual({
+		expect(await controller.addOption("q0", "Canary")).toEqual({
 			ok: false,
 			message: "That is already an option",
 		});
 		result = { ok: false, message: "A decision holds at most 10 options" };
-		expect(await controller.addOption("Another")).toEqual({
+		expect(await controller.addOption("q0", "Another")).toEqual({
 			ok: false,
 			message: "A decision holds at most 10 options",
 		});
 		result = { ok: true };
-		expect(await controller.addOption("New option")).toEqual({ ok: true });
+		expect(await controller.addOption("q0", "New option")).toEqual({ ok: true });
 		expect(asked.map(call => call.kind)).toEqual([
-			"question:add-option",
-			"question:add-option",
-			"question:add-option",
+			"question:option",
+			"question:option",
+			"question:option",
 		]);
-		expect(asked[2]?.payload).toEqual({ id: "w", label: "New option" });
+		expect(asked[2]?.payload).toMatchObject({ id: "w", question: "q0", label: "New option" });
+		expect(asked[2]?.payload.key).toEqual(expect.any(String));
 
 		controller.configure(DEFINITION, false);
-		expect(await controller.addOption("Offline")).toMatchObject({ ok: false });
+		expect(await controller.addOption("q0", "Offline")).toMatchObject({ ok: false });
 		expect(asked).toHaveLength(3);
 		controller.forget();
-		expect(await controller.addOption("Closed")).toMatchObject({ ok: false });
+		expect(await controller.addOption("q0", "Closed")).toMatchObject({ ok: false });
 		expect(asked).toHaveLength(3);
 	});
 });

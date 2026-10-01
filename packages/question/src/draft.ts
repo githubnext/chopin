@@ -122,11 +122,22 @@ export function read(model: Model, definition: Definition): Drafts {
 
 		let optionNode = node.get("options");
 		if (!(optionNode instanceof crdt.ObjNode)) reject(`${question.id}.options must be an object`);
-		keys(optionNode, question.options.map(option => option.id), `${question.id}.options`);
+		// Options can be appended after a draft exists, and a draft never has to
+		// be rewritten for it: a key is present only once somebody selects that
+		// option. Keys must still belong to the definition.
+		let known = new Set(question.options.map(option => option.id));
+		for (let key of optionNode.keys.keys()) {
+			if (!known.has(key)) reject(`${question.id}.options has invalid keys`);
+		}
 
 		let options: Record<string, boolean> = {};
 		for (let option of question.options) {
-			let selected = register(optionNode.get(option.id), `${question.id}.options.${option.id}`);
+			let node = optionNode.get(option.id);
+			if (node === undefined) {
+				options[option.id] = false;
+				continue;
+			}
+			let selected = register(node, `${question.id}.options.${option.id}`);
 			if (typeof selected !== "boolean") {
 				reject(`${question.id}.options.${option.id} must be a boolean LWW register`);
 			}

@@ -65,8 +65,8 @@ test("standalone Decisions retains its editable default while explicit read-only
 	let meta = { ...META, status: "reopened" as const };
 	let writable = markup(meta, undefined);
 	let readOnly = markup(meta, false);
-	expect(writable).toContain("Save answer");
+	expect(writable).toContain(">Save<");
 	expect(writable).toContain("Cancel");
-	expect(readOnly).not.toContain("Save answer");
+	expect(readOnly).not.toContain(">Save<");
 	expect(readOnly).not.toContain("Cancel");
 });

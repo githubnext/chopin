@@ -34,4 +34,6 @@ export type Record = {
 	prose?: Wired.Anchor[];
 	optionOrigins: { [optionId: string]: OptionOrigin };
 	editors: string[];
+	/** Durable request keys for shared option appends, bounded by the option limit. */
+	appended?: { [key: string]: string };
 };

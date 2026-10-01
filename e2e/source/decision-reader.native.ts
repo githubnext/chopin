@@ -87,12 +87,12 @@ test("pin survives pointer leave, follows native scroll and retires offscreen", 
 test("hidden host retires reader intent and unmount clears its actual wash", async ({ page }) => {
 	await loadReader(page);
 	await marker(page).click();
-	await expect.poll(() => page.evaluate(() => CSS.highlights.get("plan-decided")?.size ?? 0)).toBe(
+	await expect.poll(() => page.evaluate(() => CSS.highlights.get("plan-decision")?.size ?? 0)).toBe(
 		1,
 	);
 	await reader(page).evaluate(element => element.setAttribute("hidden", ""));
 	await expect(dialog(page)).toHaveCount(0);
-	await expect.poll(() => page.evaluate(() => CSS.highlights.get("plan-decided")?.size ?? 0)).toBe(
+	await expect.poll(() => page.evaluate(() => CSS.highlights.get("plan-decision")?.size ?? 0)).toBe(
 		0,
 	);
 	await reader(page).evaluate(element => element.removeAttribute("hidden"));
@@ -101,7 +101,7 @@ test("hidden host retires reader intent and unmount clears its actual wash", asy
 	await marker(page).click();
 	await expect(dialog(page)).toBeVisible();
 	await page.evaluate(() => window.decisionReaderFixture.unmount());
-	expect(await page.evaluate(() => CSS.highlights.has("plan-decided"))).toBe(false);
+	expect(await page.evaluate(() => CSS.highlights.has("plan-decision"))).toBe(false);
 });
 
 test("two actual editors union their wash while a new reader owns only one pin", async ({ page }) => {
@@ -109,13 +109,13 @@ test("two actual editors union their wash while a new reader owns only one pin",
 	await marker(page, 0).click();
 	await marker(page, 1).hover();
 	await expect(tooltip(page, 1)).toBeVisible();
-	await expect.poll(() => page.evaluate(() => CSS.highlights.get("plan-decided")?.size ?? 0)).toBe(
+	await expect.poll(() => page.evaluate(() => CSS.highlights.get("plan-decision")?.size ?? 0)).toBe(
 		2,
 	);
 	await marker(page, 1).click();
 	await expect(dialog(page, 1)).toBeVisible();
 	await expect(dialog(page, 0)).toHaveCount(0);
-	await expect.poll(() => page.evaluate(() => CSS.highlights.get("plan-decided")?.size ?? 0)).toBe(
+	await expect.poll(() => page.evaluate(() => CSS.highlights.get("plan-decision")?.size ?? 0)).toBe(
 		1,
 	);
 });
@@ -140,4 +140,24 @@ test("actual mutation is duplicate-fenced and rejected old intent cannot paint a
 	await page.evaluate(() => window.decisionReaderFixture.settle(false));
 	await expect(dialog(page).getByRole("button", { name: "Reopen", exact: true })).toBeEnabled();
 	await expect(dialog(page).getByRole("alert")).toHaveCount(0);
+});
+
+test("detaching a mounted editor root clears its highlight and pin before reattachment", async ({ page }) => {
+	await loadReader(page);
+	await marker(page).click();
+	await expect(dialog(page)).toBeVisible();
+	await expect.poll(() => page.evaluate(() => CSS.highlights.get("plan-decision")?.size ?? 0)).toBe(
+		1,
+	);
+	expect(await page.evaluate(() => window.decisionReaderFixture.pinned())).toBe(true);
+	await page.evaluate(() => window.decisionReaderFixture.rootDetached(0, true));
+	await expect(dialog(page)).toHaveCount(0);
+	await expect.poll(() => page.evaluate(() => CSS.highlights.get("plan-decision")?.size ?? 0)).toBe(
+		0,
+	);
+	expect(await page.evaluate(() => window.decisionReaderFixture.pinned())).toBe(false);
+	await page.evaluate(() => window.decisionReaderFixture.rootDetached(0, false));
+	await expect(marker(page)).toBeVisible();
+	await expect(dialog(page)).toHaveCount(0);
+	expect(await page.evaluate(() => window.decisionReaderFixture.pinned())).toBe(false);
 });

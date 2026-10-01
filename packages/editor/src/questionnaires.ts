@@ -68,6 +68,8 @@ export class QuestionnaireStore {
 	#proseSnapshot: Plan.ProseAnchors[] | undefined;
 	#prose: Array<{ widget: string; key: string }> = [];
 	#hasBound = false;
+	#relations = 0;
+	#relationListeners = new Set<() => void>();
 	/**
 	 * Which decision the reader last asked to be taken to, and how far along
 	 * it. Never cleared: whether it is still live is the pin's answer.
@@ -173,7 +175,9 @@ export class QuestionnaireStore {
 			)
 		) return;
 		this.#prose = next;
+		this.#relations++;
 		for (let listener of this.#listeners) listener();
+		for (let listener of this.#relationListeners) listener();
 	}
 
 	/**
@@ -194,7 +198,23 @@ export class QuestionnaireStore {
 			console.error("[plan] could not resolve what decisions relate to:", err);
 			return;
 		}
+		this.#relations++;
 		for (let listener of this.#listeners) listener();
+		for (let listener of this.#relationListeners) listener();
+	}
+
+	/** Changes whenever a new snapshot of where decisions live has been resolved. */
+	relationsSnapshot = (): number => this.#relations;
+
+	subscribeRelations = (listener: () => void): () => void => {
+		this.#relationListeners.add(listener);
+		return () => this.#relationListeners.delete(listener);
+	};
+
+	/** The node keys of the blocks a decision resolves to, or none if it names none. */
+	blocks(widget: string, question: string): string[] {
+		let found = this.#related.find(item => item.widget === widget && item.question === question);
+		return !found || found.pending ? [] : found.keys;
 	}
 
 	/** How much prose each of a questionnaire's decisions resolves to. */
@@ -240,7 +260,7 @@ export class QuestionnaireStore {
 		if (!places || places.length === 0) return;
 
 		let walk = this.#walk;
-		let index = holds("questions")
+		let index = holds("questions", editor)
 				&& walk !== undefined
 				&& walk.widget === widget
 				&& walk.question === question
@@ -274,11 +294,14 @@ export class QuestionnaireStore {
 		let found = this.#related.find(item => item.widget === widget && item.question === question);
 		// Pending means nobody has checked this since the plan moved, so it is
 		// not somewhere worth sending a reader.
-		if (!found || found.pending) return undefined;
+		let prose = this.proseKey(widget);
+		if ((!found || found.pending) && !prose) return undefined;
 
+		let keys = found && !found.pending ? found.keys : [];
+		if (keys.length === 0 && prose) keys = [prose];
 		let places: Points[] = [];
 		editor.getEditorState().read(() => {
-			for (let key of found.keys) {
+			for (let key of keys) {
 				let points = $blockPoints(key);
 				if (points) places.push(points);
 			}
@@ -312,6 +335,16 @@ export function QuestionnaireObserver({ store }: { store: QuestionnaireStore }) 
 export function useQuestionnaires(store: QuestionnaireStore): QuestionnaireEntry[] {
 	let subscribe = useCallback((listener: () => void) => store.subscribe(listener), [store]);
 	return useSyncExternalStore(subscribe, store.snapshot, store.snapshot);
+}
+
+/** Re-renders when where decisions live has been re-resolved. */
+export function useRelations(store: QuestionnaireStore | undefined): number {
+	let subscribe = useCallback(
+		(listener: () => void) => store ? store.subscribeRelations(listener) : () => {},
+		[store],
+	);
+	let snapshot = useCallback(() => store?.relationsSnapshot() ?? 0, [store]);
+	return useSyncExternalStore(subscribe, snapshot, snapshot);
 }
 
 export function useHasPlanContent(store: QuestionnaireStore): boolean {

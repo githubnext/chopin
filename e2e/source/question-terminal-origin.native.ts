@@ -40,10 +40,13 @@ test.beforeAll(async () => {
 		readFile(assets + name, "utf8")
 	))).join("\n");
 	expect(stylesheet).toContain(".question-choice-row");
-	expect(stylesheet).toContain(".choice-control");
+	expect(stylesheet).toContain(".question-input");
 });
 
-async function load(page: Page, mode: "suggestion" | "discarded" | "cancelled" | "gallery") {
+async function load(
+	page: Page,
+	mode: "suggestion" | "legacy-custom" | "discarded" | "cancelled" | "gallery",
+) {
 	let errors: string[] = [];
 	page.on("pageerror", error => errors.push(error.message));
 	let url = "https://question-terminal-origin.invalid/";
@@ -87,14 +90,43 @@ test("a real human edit removes from chat until the suggestion lifecycle is clea
 	await expect(badge).toBeVisible();
 	await expect(page.getByRole("radio", { name: /GitHub Apps/ })).toBeChecked();
 	expect((await page.evaluate(() => window.terminalOriginFixture.snapshot())).choice).toBeNull();
-	await page.getByRole("radio", { name: "Write a custom answer", exact: true }).check();
-	await page.getByRole("textbox", { name: "Custom answer for Auth", exact: true }).fill(
-		"Another approach",
-	);
+	let save = page.getByRole("button", { name: "Save", exact: true });
+	await expect(save).toBeEnabled();
+	await page.getByRole("button", { name: "Add an option", exact: true }).click();
+	let field = page.getByRole("textbox", { name: "New option", exact: true });
+	await expect(field).toBeFocused();
+	await field.fill("Another approach");
 	await expect(badge).toHaveCount(0);
+	await expect(save).toBeDisabled();
+	await field.press("Enter");
+	await expect(page.getByRole("status").filter({ hasText: "Adding option" }))
+		.toBeVisible();
+	expect(await page.evaluate(() => window.terminalOriginFixture.additions())).toEqual([
+		{ question: "q", label: "Another approach" },
+	]);
+	await page.evaluate(() => window.terminalOriginFixture.publishOption());
+	let option = page.getByRole("radio", { name: "Another approach", exact: true });
+	await expect(option).toBeVisible();
+	await expect(option).not.toBeChecked();
+	await expect(page.getByText("Adding option", { exact: true })).toHaveCount(0);
+	await expect(badge).toHaveCount(0);
+	await expect(save).toBeDisabled();
 	expect(await page.evaluate(() => window.terminalOriginFixture.snapshot())).toMatchObject({
-		mode: "custom",
-		custom: "Another approach",
+		mode: "choices",
+		choice: null,
+		custom: "",
+	});
+	await page.evaluate(() => window.terminalOriginFixture.acknowledgeOption());
+	await expect(page.getByRole("button", { name: "Add an option", exact: true })).toBeVisible();
+	await expect(badge).toHaveCount(0);
+	await expect(save).toBeDisabled();
+	await option.check();
+	await expect(badge).toHaveCount(0);
+	await expect(save).toBeEnabled();
+	expect(await page.evaluate(() => window.terminalOriginFixture.snapshot())).toMatchObject({
+		mode: "choices",
+		choice: "native-added",
+		custom: "",
 	});
 	expect(errors).toEqual([]);
 });
@@ -133,5 +165,31 @@ test("genuine cancellation remains separate in the styled real component gallery
 		}),
 	).toEqual({ sameTextRole: true, muted: true });
 	await page.screenshot({ path: "/tmp/jev-question-terminal-origin.png", fullPage: true });
+	expect(errors).toEqual([]);
+});
+
+test("a persisted legacy custom answer stays readable until a human chooses an option", async ({ page }) => {
+	let errors = await load(page, "legacy-custom");
+	let legacy = page.getByRole("radio", { name: "Another approach", exact: true });
+	let save = page.getByRole("button", { name: "Save", exact: true });
+	await expect(legacy).toBeChecked();
+	await expect(page.getByText("from chat", { exact: true })).toHaveCount(0);
+	await expect(page.getByRole("radio", { name: "Write a custom answer", exact: true }))
+		.toHaveCount(0);
+	await expect(page.getByRole("textbox")).toHaveCount(0);
+	await expect(save).toBeEnabled();
+	expect(await page.evaluate(() => window.terminalOriginFixture.snapshot())).toMatchObject({
+		mode: "custom",
+		choice: null,
+		custom: "Another approach",
+	});
+	await page.getByRole("radio", { name: "Auth0", exact: true }).check();
+	await expect(legacy).toHaveCount(0);
+	await expect(page.getByRole("radio", { name: "Auth0", exact: true })).toBeChecked();
+	await expect(save).toBeEnabled();
+	expect(await page.evaluate(() => window.terminalOriginFixture.snapshot())).toMatchObject({
+		mode: "choices",
+		choice: "a",
+	});
 	expect(errors).toEqual([]);
 });

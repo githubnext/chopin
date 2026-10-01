@@ -14,7 +14,7 @@
 import { authenticate, content, expect, test } from "./room";
 import { storedQuestion } from "../apps/server/src/testing/plan";
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 /** Long enough to be marked: the injector wants twenty characters. */
 const PROSE = "Room state lives on disk as MDX beside the transcript.\n";
@@ -110,9 +110,11 @@ test("question step swaps overlap only for pointer input", async ({ join, seed }
 	let outgoing = stack.locator(
 		':scope > [data-content-swap-state="outgoing"]:not([hidden])',
 	);
-	let scope = card.getByRole("tab", { name: "Scope" });
+	let next = card.getByRole("button", { name: "Next question" });
+	let previous = card.getByRole("button", { name: "Previous question" });
+	let count = card.getByText("2/2");
 
-	await scope.click();
+	await next.click();
 	await expect(visible).toHaveCount(2);
 	await expect(stack.locator(":scope > [data-content-swap-state]:not([hidden]):not([inert])"))
 		.toHaveCount(1);
@@ -140,14 +142,12 @@ test("question step swaps overlap only for pointer input", async ({ join, seed }
 	expect(accessibility).toEqual({ duplicateIds: [], invalidReferences: [] });
 	await expect(visible).toHaveCount(1);
 
-	await scope.focus();
-	await page.keyboard.press("ArrowLeft");
+	await expect(previous).toBeFocused();
+	await previous.click();
 	await expect(visible).toHaveCount(1);
 	await expect(outgoing).toHaveCount(0);
-	await expect(card.getByRole("tab", { name: "Rollout" })).toHaveAttribute(
-		"aria-selected",
-		"true",
-	);
+	await expect(card.getByText("1/2")).toBeVisible();
+	await expect(card.getByRole("heading", { name: "How should we deploy?" })).toBeVisible();
 
 	await page.emulateMedia({ reducedMotion: "reduce" });
 	await stack.evaluate(root => {
@@ -164,7 +164,7 @@ test("question step swaps overlap only for pointer input", async ({ join, seed }
 		Reflect.set(window, "__questionStepObserver", observer);
 		recordActiveCount();
 	});
-	await scope.click();
+	await next.click();
 	await expect(visible).toHaveCount(1);
 	let activeCounts = await page.evaluate(() => {
 		let observer = Reflect.get(window, "__questionStepObserver") as MutationObserver;
@@ -172,7 +172,8 @@ test("question step swaps overlap only for pointer input", async ({ join, seed }
 		return Reflect.get(window, "__questionStepActiveCounts") as number[];
 	});
 	expect(activeCounts).not.toContain(0);
-	await expect(scope).toHaveAttribute("aria-selected", "true");
+	await expect(count).toBeVisible();
+	await expect(card.getByRole("heading", { name: "What belongs in the first cut?" })).toBeVisible();
 });
 
 async function rewriteFirstBlock(page: import("@playwright/test").Page, value: string) {
@@ -262,7 +263,9 @@ test(
 
 		await decisions.click();
 		await expect(questionnaire(page)).toHaveCount(2);
-		await expect(questionnaire(page).getByRole("heading", { name: "Storage" })).toBeVisible();
+		await expect(
+			questionnaire(page).getByRole("heading", { name: "Where should room state live?" }),
+		).toBeVisible();
 		await expect(page.locator('[data-document-view="decisions"] [data-plan-sidecar-thread]'))
 			.toHaveCount(0);
 	},
@@ -278,8 +281,10 @@ test(
 			.toHaveAttribute("aria-pressed", "true");
 		let card = questionnaire(page);
 		await expect(card).toHaveCount(2);
-		await expect(card.getByRole("heading", { name: "Storage" })).toBeVisible();
-		await expect(card.getByRole("heading", { name: "Scope" })).toBeVisible();
+		await expect(card.getByRole("heading", { name: "Where should room state live?" }))
+			.toBeVisible();
+		await expect(card.getByRole("heading", { name: "Which of these belong in the first cut?" }))
+			.toBeVisible();
 		await expect(card.getByRole("tablist")).toHaveCount(0);
 	},
 );
@@ -547,21 +552,22 @@ test("decision cards save independently with progressive custom answers", async 
 	await seed(PROSE);
 	let page = await join("ana");
 	await page.getByRole("button", { name: /^Decisions/ }).click();
-	let storage = questionnaire(page).filter({ has: page.getByRole("heading", { name: "Storage" }) });
-	let scope = questionnaire(page).filter({ has: page.getByRole("heading", { name: "Scope" }) });
-	let saveStorage = storage.getByRole("button", { name: "Save answer" });
+	let storage = questionnaire(page).filter({
+		has: page.getByRole("heading", { name: "Where should room state live?" }),
+	});
+	let scope = questionnaire(page).filter({
+		has: page.getByRole("heading", { name: "Which of these belong in the first cut?" }),
+	});
+	let saveStorage = storage.getByRole("button", { name: "Save", exact: true });
 
-	await expect(storage.getByRole("textbox", { name: /Custom answer for/ })).toHaveCount(0);
-	await expect(scope.getByRole("textbox", { name: /Custom answer for/ })).toHaveCount(0);
-	let check = saveStorage.locator('svg[data-plan-icon="check"]');
-	await expect(check).toHaveCount(1);
-	await expect(check).toHaveAttribute("aria-hidden", "true");
+	await expect(storage.getByRole("textbox", { name: "New option" })).toHaveCount(0);
+	await expect(scope.getByRole("textbox", { name: "New option" })).toHaveCount(0);
 
 	await storage.getByRole("radio", { name: /On disk as MDX/ }).check();
 	await saveStorage.click();
 	await expect(scope).toBeVisible();
 	await expect(scope).toBeFocused();
-	await expect(scope.getByRole("button", { name: "Save answer" })).toBeVisible();
+	await expect(scope.getByRole("button", { name: "Save", exact: true })).toBeVisible();
 	await expect(scope).not.toContainText("Answered by");
 	await expect(scope.getByRole("checkbox", { name: "Anchors" })).not.toBeChecked();
 
@@ -602,7 +608,7 @@ test("decision cards save independently with progressive custom answers", async 
 	let resolved = questionnaire(page).filter({ hasText: "Where should room state live?" });
 	await expect(resolved).toContainText("On disk as MDX");
 	await expect(resolved).toContainText("Answered by @ana");
-	await expect(resolved.getByRole("button", { name: "Save answer" })).toHaveCount(0);
+	await expect(resolved.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
 	let iconStarts = await page.evaluate(() => {
 		let record = Reflect.get(window, "__feedbackIconTransitions") as { starts: number };
 		return record.starts;
@@ -637,13 +643,80 @@ test("decision cards save independently with progressive custom answers", async 
 	await expect(history).not.toHaveAttribute("aria-controls");
 	await expect(historyContent).toHaveCount(0);
 
-	let customChoice = scope.getByRole("checkbox", { name: "Write a custom answer" });
-	await customChoice.focus();
-	await page.keyboard.press("Space");
-	let custom = scope.getByRole("textbox", { name: "Custom answer for Scope" });
-	await expect(custom).toBeFocused();
-	let saveScope = scope.getByRole("button", { name: "Save answer" });
-	await saveScope.hover();
+	let addRow = scope.getByRole("button", { name: "Add an option" });
+	await addRow.focus();
+	await page.keyboard.press("Enter");
+	let field = scope.getByRole("textbox", { name: "New option" });
+	await expect(field).toBeFocused();
+	let saveScope = scope.getByRole("button", { name: "Save", exact: true });
+	await expect(saveScope).toBeDisabled();
+	await field.press("Escape");
+	await expect(field).toHaveCount(0);
+	await expect(addRow).toBeFocused();
+	await addRow.click();
+	field = scope.getByRole("textbox", { name: "New option" });
+	await field.fill("Only collaborative anchors");
+	await field.press("Enter");
+	// It joins everyone's list as the next lettered row and is not chosen for anyone.
+	let added = scope.getByRole("checkbox", { name: "Only collaborative anchors" });
+	await expect(added).toBeVisible();
+	await expect(added).not.toBeChecked();
+	await expect(scope.locator("label", { hasText: "Only collaborative anchors" })).toContainText(
+		"D",
+	);
+	await expect(addRow).toBeFocused();
+	await expect(saveScope).toBeDisabled();
+	await added.check();
+	await scope.getByRole("checkbox", { name: /^Anchors/ }).check();
+	await saveScope.click();
+	await expect(questionnaire(page).filter({ hasText: "Which of these belong in the first cut?" }))
+		.toContainText("Only collaborative anchors");
+});
+
+test("Save and Next wait for a chosen answer", async ({ join, seed }) => {
+	await seed(PROSE);
+	let page = await join("ana");
+	await page.getByRole("button", { name: /^Decisions/ }).click();
+	let card = questionnaire(page).filter({
+		has: page.getByRole("heading", { name: "Which of these belong in the first cut?" }),
+	});
+	let save = card.getByRole("button", { name: "Save", exact: true });
+
+	await expect(save).toBeDisabled();
+	await card.getByRole("checkbox", { name: "Anchors" }).check();
+	await expect(save).toBeEnabled();
+	await card.getByRole("checkbox", { name: "Anchors" }).uncheck();
+	await expect(save).toBeDisabled();
+	await expect(card).not.toContainText("Answered by");
+});
+
+test("a rejected save is announced as an alert with motion feedback", async ({ join, page, seed }) => {
+	await page.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		route.onMessage(message => {
+			let frame = typeof message === "string" ? JSON.parse(message) as Record<string, unknown> : {};
+			// The server stays authoritative for everything but this one refusal.
+			if (frame.kind !== "question:submit") return server.send(message);
+			route.send(JSON.stringify({
+				kind: "question:submit",
+				rid: frame.rid,
+				id: frame.id,
+				ok: false,
+				reason: "invalid",
+				message: "Scope could not be saved.",
+			}));
+		});
+		server.onMessage(message => route.send(message));
+	});
+	await seed(PROSE);
+	await join("ana");
+	await page.getByRole("button", { name: /^Decisions/ }).click();
+	let card = questionnaire(page).filter({
+		has: page.getByRole("heading", { name: "Which of these belong in the first cut?" }),
+	});
+	await card.getByRole("checkbox", { name: "Anchors" }).check();
+	let save = card.getByRole("button", { name: "Save", exact: true });
+	await save.hover();
 	await page.evaluate(() => {
 		let record = { starts: 0 };
 		Reflect.set(window, "__feedbackAlertTransitions", record);
@@ -654,9 +727,12 @@ test("decision cards save independently with progressive custom answers", async 
 			) record.starts++;
 		}, true);
 	});
-	await saveScope.click();
-	let alert = scope.getByRole("alert");
+	await save.click();
+
+	let alert = card.getByRole("alert");
 	await expect(alert).toBeVisible();
+	await expect(alert).toContainText("Couldn’t save");
+	await expect(alert).toContainText("Scope could not be saved.");
 	expect(
 		await alert.evaluate(element =>
 			getComputedStyle(element).transitionDuration.split(",").some(duration =>
@@ -670,42 +746,153 @@ test("decision cards save independently with progressive custom answers", async 
 			return record.starts > 0;
 		})
 	).toBe(true);
-	await custom.fill("Only collaborative anchors");
-	await scope.getByRole("checkbox", { name: "Anchors" }).check();
-	await expect(custom).toHaveCount(0);
-	await customChoice.check();
-	custom = scope.getByRole("textbox", { name: "Custom answer for Scope" });
-	await expect(custom).toHaveValue("Only collaborative anchors");
-	await expect(custom).toBeFocused();
-	await scope.getByRole("button", { name: "Save answer" }).click();
-	await expect(questionnaire(page).filter({ hasText: "Which of these belong in the first cut?" }))
-		.toContainText("Only collaborative anchors");
-});
-
-test("an unanswered decision reports its own validation error", async ({ join, seed }) => {
-	await seed(PROSE);
-	let page = await join("ana");
-	await page.getByRole("button", { name: /^Decisions/ }).click();
-	let card = questionnaire(page).filter({ has: page.getByRole("heading", { name: "Scope" }) });
-
-	await card.getByRole("button", { name: "Save answer" }).click();
-
-	await expect(card.getByRole("alert")).toBeVisible();
+	await expect(card.getByRole("button", { name: "Try again" })).toBeEnabled();
 	await expect(card).not.toContainText("Answered by");
 });
 
-test("cancelling asks first", async ({ join, seed }) => {
+test("people on a decision are faces with verbatim handle tooltips", async ({ join, seed }) => {
+	await seed(PROSE);
+	let title = "Where should room state live?";
+	let open = async (handle: string) => {
+		let page = await join(handle);
+		await page.getByRole("button", { name: /^Decisions/ }).click();
+		let card = questionnaire(page).filter({ has: page.getByRole("heading", { name: title }) });
+		await expect(card).toBeVisible();
+		return { page, card };
+	};
+	let ana = await open("ana");
+	let people = ana.card.getByRole("group", { name: /^Editing this question/ });
+	await expect(people).toHaveCount(0);
+
+	// Four real peers work on the same question, one after another: three faces and a "+1".
+	let peers = [];
+	for (let handle of ["Bo", "cy", "Di", "ed"]) {
+		let peer = await open(handle);
+		await peer.card.getByRole("radio").first().focus();
+		peers.push(peer);
+		await expect(ana.card.getByRole("group", { name: new RegExp(`\\b${handle}\\b`) }))
+			.toBeVisible();
+	}
+
+	await expect(people.getByRole("img")).toHaveCount(3);
+	let more = people.getByText("+1");
+	await expect(more).toBeVisible();
+	await expect(ana.card).not.toContainText("@Bo");
+
+	// The tooltip hides on any scroll, and scroll events arrive a frame after the
+	// scroll itself. Settle the page first, then arrive with real pointer movement.
+	let tooltip = ana.page.locator("[data-icon-tooltip]");
+	let settleThenHover = async (target: Locator) => {
+		await target.scrollIntoViewIfNeeded();
+		await ana.page.evaluate(() =>
+			new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done())))
+		);
+		let box = (await target.boundingBox())!;
+		await ana.page.mouse.move(0, 0);
+		await ana.page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 8 });
+	};
+	await settleThenHover(people.getByRole("img").first());
+	await expect(tooltip).toHaveAttribute("data-visible", "");
+	await expect(tooltip).toHaveText("Bo");
+
+	await settleThenHover(more);
+	await expect(tooltip).toHaveText("ed");
+	expect(
+		await people.getByRole("img").evaluateAll(nodes =>
+			nodes.map(node => node.getAttribute("title"))
+		),
+	).toEqual([null, null, null]);
+
+	// Leaving the question clears the face; choosing is the same as being there.
+	await peers[3]!.card.getByRole("radio").first().blur();
+	await expect(more).toHaveCount(0);
+	await peers[0]!.page.close();
+	await expect(people.getByRole("img")).toHaveCount(2);
+	await expect(people).toHaveAttribute("aria-label", "Editing this question: cy, Di");
+});
+
+test("an option one member adds is shared, durable, and choosable by another", async ({ join, seed }) => {
+	await seed(PROSE);
+	let ana = await join("ana");
+	let bo = await join("bo");
+	let storage = (page: Page) =>
+		questionnaire(page).filter({
+			has: page.getByRole("heading", { name: "Where should room state live?" }),
+		});
+	for (let page of [ana, bo]) await page.getByRole("button", { name: /^Decisions/ }).click();
+	await expect(storage(bo).getByRole("radio")).toHaveCount(2);
+
+	await storage(ana).getByRole("button", { name: "Add an option" }).click();
+	let field = storage(ana).getByRole("textbox", { name: "New option" });
+	await expect(field).toBeFocused();
+	await field.fill("In PostgreSQL");
+	await field.press("Enter");
+
+	// Everyone sees it as the next lettered row, chosen by nobody.
+	for (let page of [ana, bo]) {
+		let row = storage(page).getByRole("radio", { name: "In PostgreSQL" });
+		await expect(row).toBeVisible();
+		await expect(row).not.toBeChecked();
+		await expect(storage(page).locator("label", { hasText: "In PostgreSQL" })).toContainText("C");
+	}
+	await expect(storage(ana).getByRole("textbox", { name: "New option" })).toHaveCount(0);
+
+	// The plan carries it too, which is what the Planner reads.
+	await ana.getByRole("button", { name: "Document", exact: true }).click();
+	await expect(ana.locator(`[data-document-view="plan"]`).getByText("In PostgreSQL"))
+		.toBeVisible();
+	await ana.getByRole("button", { name: /^Decisions/ }).click();
+
+	// It survives a reload, and the second member can choose and save it.
+	await bo.reload();
+	await bo.getByRole("button", { name: /^Decisions/ }).click();
+	let chosen = storage(bo).getByRole("radio", { name: "In PostgreSQL" });
+	await expect(chosen).toBeVisible();
+	await chosen.check();
+	await storage(bo).getByRole("button", { name: "Save", exact: true }).click();
+
+	for (let page of [ana, bo]) {
+		await page.getByRole("button", { name: "1 resolved" }).click();
+		await expect(questionnaire(page).filter({ hasText: "Where should room state live?" }))
+			.toContainText("In PostgreSQL");
+	}
+});
+
+test("adding a duplicate option is refused and keeps what was typed", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
 	await page.getByRole("button", { name: /^Decisions/ }).click();
-	let card = questionnaire(page).filter({ has: page.getByRole("heading", { name: "Scope" }) });
+	let card = questionnaire(page).filter({
+		has: page.getByRole("heading", { name: "Where should room state live?" }),
+	});
 
-	await card.getByRole("button", { name: "Cancel" }).click();
+	await card.getByRole("button", { name: "Add an option" }).click();
+	let field = card.getByRole("textbox", { name: "New option" });
+	await field.fill("in sqlite");
+	await field.press("Enter");
 
+	let alert = card.getByRole("alert");
+	await expect(alert).toContainText("Couldn’t add option");
+	await expect(alert).toContainText("already exists");
+	await expect(field).toHaveValue("in sqlite");
+	await expect(card.getByRole("radio")).toHaveCount(2);
+});
+
+test("discarding asks first", async ({ join, seed }) => {
+	await seed(PROSE);
+	let page = await join("ana");
+	await page.getByRole("button", { name: /^Decisions/ }).click();
+	let card = questionnaire(page).filter({
+		has: page.getByRole("heading", { name: "Which of these belong in the first cut?" }),
+	});
+
+	await card.getByRole("button", { name: "Discard", exact: true }).click();
+
+	await expect(card.getByText("Discard this decision?")).toBeVisible();
 	let keep = card.getByRole("button", { name: "Keep it" });
 	await expect(keep).toBeVisible();
 	await keep.click();
-	await expect(card.getByRole("button", { name: "Save answer" })).toBeVisible();
+	await expect(card.getByRole("button", { name: "Save", exact: true })).toBeVisible();
 });
 
 test("a marked passage has document chrome with a hover preview", async ({ join, seed }) => {
