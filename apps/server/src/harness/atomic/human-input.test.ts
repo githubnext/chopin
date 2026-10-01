@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { $nodesOfType } from "lexical";
 import { cardStatus, limits, QuestionnaireNode } from "@chopin/dialect";
 import { limits as questionLimits } from "@chopin/question";
+import * as QuestionModel from "@chopin/question";
 import * as Questions from "../../questions/service";
 import * as Store from "../../questions/store";
 import * as Plan from "../../plan/service";
@@ -68,7 +69,11 @@ test("HostInput appends one ordered questionnaire batch and returns typed answer
 	]);
 	expect(cards[0]!.definition.questions[0].options[0]).toMatchObject({
 		label: " A ",
-		description: "  first  ",
+		description: "  first  \n\npreview A",
+	});
+	expect(cards[0]!.definition.questions[0].options[1]).toMatchObject({
+		label: "B",
+		description: "second",
 	});
 	let source = Plan.source(f.plan);
 	expect(source.indexOf("Last paragraph.")).toBeLessThan(source.indexOf("<Questionnaire"));
@@ -497,4 +502,55 @@ test("a dialog that cannot fit in the document fails loudly without leaving a ca
 	expect(Store.outstanding(f.plan.questions)).toHaveLength(0);
 	expect(f.plan.records.size).toBe(0);
 	expect(Plan.source(f.plan)).toBe(before);
+});
+
+test("an answer that would make the document too large leaves it unchanged and the question open", async () => {
+	let f = await fixture();
+	let edited = Edit.apply(f.plan, f.plan.revision, [{
+		op: "replace_root",
+		source: "# Plan\n\n" + ("Prose paragraph. ".repeat(60) + "\n\n").repeat(100),
+	}]);
+	if (!edited.ok) throw new Error("fixture edit failed");
+	if (edited.mutation) await Plan.publish(f.plan, f.server, f.room.id, edited.mutation);
+	let response = f.input.questionnaire({
+		questions: [{ header: "Input", question: "Write the brief", options: [] }],
+	}, f.options);
+	let [card] = await f.cards(1);
+	let question = card!.definition.questions[0]!;
+	// Each edit stays under the per-edit limit; together they outgrow the document.
+	for (let chunk = 0; chunk < 4; chunk++) {
+		let opened = Store.snapshot(f.plan.questions, card!.id);
+		if (!opened.open) throw new Error("question closed");
+		let model = QuestionModel.restore(
+			opened.model,
+			Store.get(f.plan.questions, card!.id)!.definition,
+		);
+		if (chunk === 0) model.api.val([question.id, "mode"]).set("custom");
+		let text = model.api.str([question.id, "custom"]);
+		text.ins(text.length(), "x".repeat(50_000));
+		await Questions.edit(f.plan, f.ws, {
+			kind: "question:edit",
+			rid: `edit-${chunk}`,
+			ts: 0,
+			id: card!.id,
+			patch: [...model.api.flush()!.toBinary()],
+		});
+	}
+	let before = Plan.source(f.plan);
+	let current = Store.snapshot(f.plan.questions, card!.id);
+	if (!current.open) throw new Error("question closed");
+	await Questions.submit(f.plan, f.server, f.room.id, f.ws, {
+		kind: "question:submit",
+		rid: "submit",
+		ts: 0,
+		id: card!.id,
+		revision: current.revision,
+	});
+	expect(Plan.source(f.plan)).toBe(before);
+	expect(new TextEncoder().encode(Plan.source(f.plan)).length).toBeLessThanOrEqual(
+		limits.MAX_SOURCE_BYTES,
+	);
+	expect(Store.outstanding(f.plan.questions).map(open => open.id)).toEqual([card!.id]);
+	f.controller.abort();
+	expect((await response).cancelled).toBe(true);
 });
