@@ -1,7 +1,7 @@
 /** Planner-launched workflow runs: which are alive, which need someone, and how the last ones ended. */
 
 import { useEffect, useState } from "react";
-import { CheckIcon, ChevronIcon, CloseIcon, WarningIcon } from "@chopin/icons";
+import { CheckIcon, ChevronIcon, CloseIcon, WarningIcon, WrenchIcon } from "@chopin/icons";
 
 import plannerResume from "../assets/icons/planner-resume.svg";
 import plannerStop from "../assets/icons/planner-stop.svg";
@@ -123,8 +123,10 @@ type RunControls = {
 	onResume?: (runId: string) => void;
 };
 
-function RunRow({ run, open, onToggle, onShowDecisions, onPause, onResume }: RunControls & {
+function RunRow({ run, tag, open, onToggle, onShowDecisions, onPause, onResume }: RunControls & {
 	run: Wire.Run;
+	/** Tells apart runs of the same workflow. */
+	tag?: string;
 	open: boolean;
 	onToggle: () => void;
 }) {
@@ -135,11 +137,12 @@ function RunRow({ run, open, onToggle, onShowDecisions, onPause, onResume }: Run
 	let stages = run.stages.slice(hidden);
 	let earlier = hidden + (run.earlierStages ?? 0);
 	let stagesId = `run-stages-${run.id}`;
+	let title = tag ? `${run.name} ${tag}` : run.name;
 	let control = live && onPause
-		? { label: `Pause ${run.name}`, icon: plannerStop, act: () => onPause(run.id), kind: "pause" }
+		? { label: `Pause ${title}`, icon: plannerStop, act: () => onPause(run.id), kind: "pause" }
 		: run.status === "paused" && onResume
 		? {
-			label: `Resume ${run.name}`,
+			label: `Resume ${title}`,
 			icon: plannerResume,
 			act: () => onResume(run.id),
 			kind: "resume",
@@ -152,7 +155,7 @@ function RunRow({ run, open, onToggle, onShowDecisions, onPause, onResume }: Run
 				<button
 					aria-controls={stagesId}
 					aria-expanded={open}
-					aria-label={`${run.name}, ${STATUS[run.status]}, ${elapsed(end - run.started)}`}
+					aria-label={`${title}, ${STATUS[run.status]}, ${elapsed(end - run.started)}`}
 					className="run-toggle"
 					data-run-toggle=""
 					onClick={onToggle}
@@ -160,6 +163,9 @@ function RunRow({ run, open, onToggle, onShowDecisions, onPause, onResume }: Run
 				>
 					<RunGlyph status={run.status} />
 					<span className="min-w-0 truncate font-mono text-text-secondary">{run.name}</span>
+					{tag && (
+						<span className="shrink-0 font-mono text-text-quaternary tabular-nums">{tag}</span>
+					)}
 					<span
 						aria-live="polite"
 						className={`shrink-0 ${
@@ -207,7 +213,17 @@ function RunRow({ run, open, onToggle, onShowDecisions, onPause, onResume }: Run
 								key={stage.id}
 							>
 								<StageGlyph status={stage.status} />
-								<span className="min-w-0 truncate font-mono">{stage.name}</span>
+								{stage.kind === "tool" && (
+									<WrenchIcon
+										aria-hidden="true"
+										className="shrink-0 text-text-quaternary"
+										size={14}
+									/>
+								)}
+								<span className="min-w-0 truncate font-mono">
+									{stage.kind === "tool" && <span className="sr-only">{"tool step: "}</span>}
+									{stage.name}
+								</span>
 								<span
 									className={`shrink-0 ${
 										stage.status === "awaiting_input" ? "text-warning-ink" : "text-text-tertiary"
@@ -243,6 +259,8 @@ export function RunStack({ runs, ...controls }: RunControls & { runs: readonly W
 	let [chosen, setChosen] = useState<ReadonlyMap<string, boolean>>(new Map());
 	let [showAll, setShowAll] = useState(false);
 	let ordered = orderRuns(runs);
+	let named = new Map<string, number>();
+	for (let run of runs) named.set(run.name, (named.get(run.name) ?? 0) + 1);
 	let fallback = defaultOpen(ordered);
 	let shown = visibleRuns(ordered, showAll);
 	let folded = ordered.length - visibleRuns(ordered, false).length;
@@ -260,6 +278,7 @@ export function RunStack({ runs, ...controls }: RunControls & { runs: readonly W
 						<RunRow
 							{...controls}
 							key={run.id}
+							tag={(named.get(run.name) ?? 0) > 1 ? run.id.slice(0, 8) : undefined}
 							onToggle={() => setChosen(previous => new Map(previous).set(run.id, !open))}
 							open={open}
 							run={run}

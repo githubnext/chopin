@@ -119,6 +119,8 @@ export declare namespace Chat {
 	export type RunStage = {
 		id: string;
 		name: string;
+		/** A `ctx.tool` step rather than an agent stage. */
+		kind?: "tool";
 		status:
 			| "pending"
 			| "running"

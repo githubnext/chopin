@@ -183,3 +183,11 @@ export function MessageForwardIcon(props: IconProps) {
 		</LineIcon>
 	);
 }
+
+export function WrenchIcon(props: IconProps) {
+	return (
+		<LineIcon title="wrench" {...props}>
+			<path d="M15.07,5.07l-2.32,2.32-2.12-.38-.38-2.12,2.32-2.32c-1.4-.6-3.08-.33-4.22,.81-1.21,1.21-1.43,3.04-.67,4.48l-5.17,5.17c-.59,.59-.59,1.54,0,2.12h0c.59,.59,1.54,.59,2.12,0l5.17-5.17c1.44,.76,3.27,.54,4.48-.67,1.14-1.14,1.41-2.82,.81-4.22Z" />
+		</LineIcon>
+	);
+}

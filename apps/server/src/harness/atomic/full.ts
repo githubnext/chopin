@@ -6,6 +6,7 @@ import type {
 	WorkflowActivitySubscription,
 	WorkflowLifecycleEvent,
 	WorkflowRootActivity,
+	WorkflowToolNodeStatus,
 } from "@bastani/atomic";
 import type { Chat as Wire } from "@chopin/protocol";
 
@@ -115,6 +116,37 @@ const ENDED: Record<string, Wire.Run["status"] | undefined> = {
 	cancelled: "stopped",
 };
 
+/** A `ctx.tool` step shown with the stage statuses it corresponds to. */
+const TOOL_STEP: Record<WorkflowToolNodeStatus, Wire.RunStage["status"]> = {
+	pending: "pending",
+	running: "running",
+	completed: "completed",
+	cached: "completed",
+	failed: "failed",
+	cancelled: "skipped",
+};
+
+/** Records one stage or tool step, in the order the run first reached it. */
+function foldStep(
+	card: Card,
+	key: string,
+	name: string,
+	status: Wire.RunStage["status"],
+	seconds: number,
+	kind?: "tool",
+): void {
+	let index = card.stageIndex.get(key);
+	if (index === undefined) {
+		index = card.stages.length;
+		card.stageIndex.set(key, index);
+		card.stages.push({ id: key, name, status, ...(kind ? { kind } : {}) });
+	}
+	let stage = card.stages[index]!;
+	stage.status = status;
+	if (status === "running" && stage.started === undefined) stage.started = seconds;
+	if (status === "completed" || status === "failed" || status === "skipped") stage.ended = seconds;
+}
+
 /** Folds one lifecycle event into its root run's card. */
 export function foldLifecycle(
 	cards: Map<string, Card>,
@@ -150,21 +182,16 @@ export function foldLifecycle(
 			card.ended = seconds;
 		} else delete card.ended;
 	} else if (target.kind === "stage") {
-		let key = `${target.runId}:${target.stageId}`;
-		let index = card.stageIndex.get(key);
-		if (index === undefined) {
-			index = card.stages.length;
-			card.stageIndex.set(key, index);
-			card.stages.push({ id: key, name: target.stageName, status: target.status });
-		}
-		let stage = card.stages[index]!;
-		stage.status = target.status;
-		if (target.status === "running" && stage.started === undefined) stage.started = seconds;
-		if (
-			target.status === "completed" || target.status === "failed" || target.status === "skipped"
-		) {
-			stage.ended = seconds;
-		}
+		foldStep(card, `${target.runId}:${target.stageId}`, target.stageName, target.status, seconds);
+	} else if (target.kind === "tool") {
+		foldStep(
+			card,
+			`${target.runId}:${target.toolNodeId}`,
+			target.toolName,
+			TOOL_STEP[target.status],
+			seconds,
+			"tool",
+		);
 	} else if (target.kind === "prompt") {
 		if (target.status === "opened") card.prompts.add(target.promptId);
 		else card.prompts.delete(target.promptId);
