@@ -2,6 +2,7 @@ import type {
 	ExtensionAPI,
 	ExtensionFactory,
 	HostInput,
+	SessionWorkflows,
 	WorkflowActivitySubscription,
 	WorkflowLifecycleEvent,
 	WorkflowRootActivity,
@@ -21,88 +22,51 @@ export type FullPlanner = {
 	runs?: PlannerRuns;
 	/** Called with every change to `runs`. */
 	onRuns?: (runs: PlannerRuns) => void;
-	/** Runs the session's own `workflow` tool without a model turn; set once the session exists. */
-	control?: (params: WorkflowControl) => Promise<WorkflowControlResult>;
+	/** The live session's run control; set once the session exists. */
+	workflows?: SessionWorkflows;
+	/** The root run that owns a run, as learned from lifecycle events. */
+	rootOf?: (runId: string) => string;
+	/** Woken on every change to `runs`. */
+	waiters?: Set<() => void>;
 };
-export type WorkflowControl =
-	| { action: "pause"; all: true }
-	| { action: "quit"; runId: string }
-	| { action: "resume"; runId: string };
-
-/** The run-control outcome Atomic reports: `noop` means nothing changed, for example a run whose only stage waits on input. */
-export type WorkflowControlResult = { status: string; message: string };
 
 let planners = new Map<string, FullPlanner>();
 
-/** The text of a tool result, for errors. */
-function resultText(content: readonly { type: string; text?: string }[]): string {
-	return content.map(part => part.type === "text" ? part.text ?? "" : "").join("\n").trim();
-}
-
-/**
- * Runs one run-control action through the session's `workflow` tool with a real
- * tool context, so the outcome comes back as a result rather than a UI notice.
- */
-export async function controlWorkflows(
-	session: {
-		getToolDefinition(
-			name: string,
-		): { execute: (...args: never[]) => Promise<unknown> } | undefined;
-		extensionRunner: { createToolContext(id: string, signal: AbortSignal | undefined): unknown };
-	},
-	params: WorkflowControl,
-): Promise<WorkflowControlResult> {
-	let tool = session.getToolDefinition("workflow");
-	if (!tool) throw new Error("The Planner session has no workflow tool.");
-	let id = `chopin-${params.action}-${crypto.randomUUID()}`;
-	let signal = AbortSignal.timeout(30_000);
-	let execute = tool.execute as (
-		id: string,
-		params: WorkflowControl,
-		signal: AbortSignal,
-		onUpdate: undefined,
-		ctx: unknown,
-	) => Promise<
-		{ content?: { type: string; text?: string }[]; isError?: boolean; details?: unknown }
-	>;
-	let result = await execute(
-		id,
-		params,
-		signal,
-		undefined,
-		session.extensionRunner.createToolContext(id, signal),
-	);
-	let text = resultText(result.content ?? []);
-	let details = typeof result.details === "object" && result.details !== null
-		? result.details as { status?: unknown; message?: unknown }
-		: {};
-	let status = typeof details.status === "string"
-		? details.status
-		: /"status"\s*:\s*"(\w+)"/.exec(text)?.[1] ?? "";
-	if (result.isError === true || status === "failed" || status === "error") {
-		throw new Error(`workflow ${params.action} failed: ${text.slice(0, 500)}`);
+/** Pauses every run the session owns. A run whose stage waits on a question counts as paused. */
+export async function pauseOwnedRuns(workflows: SessionWorkflows): Promise<void> {
+	let outcome = await workflows.pause({ all: true });
+	if (outcome.status === "partial") {
+		let still = (outcome.failedRuns ?? []).map(run => `${run.runId}: ${run.message}`).join("; ");
+		throw new Error(`Some workflow runs are still active: ${still}`);
 	}
-	return { status, message: typeof details.message === "string" ? details.message : text };
+}
+
+/** Resumes every paused run the session owns. */
+export async function resumeOwnedRuns(workflows: SessionWorkflows): Promise<void> {
+	for (let run of await workflows.listRuns({ status: "paused" })) await workflows.resume(run.runId);
 }
 
 /**
- * Pauses every run a Planner session owns. Atomic pauses running and pending
- * stages only, so a run whose live stage waits on a question has nothing to
- * pause; it is quit instead, which keeps it resumable, withdraws its question
- * from Decisions, and asks it again on resume.
+ * Resolves once the root run owning `runId` is not paused. Atomic leaves a
+ * question open when its run pauses, so an answer given meanwhile is held here
+ * until the run resumes, keeping the paused run fully stopped.
  */
-export async function pauseOwnedRuns(
-	control: (params: WorkflowControl) => Promise<WorkflowControlResult>,
-	live: readonly string[],
+export async function untilUnpaused(
+	planner: FullPlanner,
+	runId: string,
+	signal: AbortSignal,
 ): Promise<void> {
-	let runs = [...live];
-	let paused = await control({ action: "pause", all: true });
-	if (paused.status === "paused") return;
-	for (let runId of runs) {
-		let quit = await control({ action: "quit", runId });
-		if (quit.status !== "paused" && quit.status !== "partial") {
-			throw new Error(`Run ${runId} could not be paused: ${quit.message || paused.message}`);
-		}
+	let paused = () => planner.runs?.paused.includes(planner.rootOf?.(runId) ?? runId) ?? false;
+	while (paused() && !signal.aborted) {
+		await new Promise<void>(resolve => {
+			let wake = () => {
+				planner.waiters?.delete(wake);
+				signal.removeEventListener("abort", wake);
+				resolve();
+			};
+			(planner.waiters ??= new Set()).add(wake);
+			signal.addEventListener("abort", wake, { once: true });
+		});
 	}
 }
 
@@ -199,14 +163,18 @@ export function foldLifecycle(
 /** The run cards to show, with the live/paused split from activity taking precedence over lifecycle. */
 export function runCards(cards: Map<string, Card>, runs: Omit<PlannerRuns, "cards">): Wire.Run[] {
 	return [...cards.values()].map(({ stageIndex: _index, prompts: _prompts, ...card }) => {
+		let waiting = Math.max(
+			card.waiting,
+			card.stages.filter(stage => stage.status === "awaiting_input").length,
+		);
 		let status: Wire.Run["status"] = runs.paused.includes(card.id)
 			? "paused"
 			: runs.active.includes(card.id)
-			? card.waiting > 0 ? "waiting" : "running"
+			? waiting > 0 ? "waiting" : "running"
 			: card.status === "running" || card.status === "waiting"
 			? "finished"
 			: card.status;
-		return { ...card, status, stages: card.stages.map(stage => ({ ...stage })) };
+		return { ...card, status, waiting, stages: card.stages.map(stage => ({ ...stage })) };
 	});
 }
 
@@ -228,6 +196,8 @@ export function workflowRuns(planner: FullPlanner): ExtensionFactory {
 		let roots = new Map<string, WorkflowRootActivity>();
 		let cards = new Map<string, Card>();
 		let names = new Map<string, string>();
+		let parents = new Map<string, string>();
+		planner.rootOf = runId => parents.get(runId) ?? runId;
 		let ready = false;
 		let publish = () => {
 			if (!ready) return;
@@ -240,6 +210,7 @@ export function workflowRuns(planner: FullPlanner): ExtensionFactory {
 			}
 			planner.runs = { ...split, cards: runCards(cards, split) };
 			planner.onRuns?.(planner.runs);
+			for (let wake of planner.waiters ?? []) wake();
 		};
 		atomic.on("session_start", (_event, ctx) => {
 			lease?.dispose();
@@ -266,6 +237,7 @@ export function workflowRuns(planner: FullPlanner): ExtensionFactory {
 			}
 		});
 		atomic.on("workflow_lifecycle", event => {
+			if (event.target.kind !== "prompt") parents.set(event.target.runId, event.rootRunId);
 			foldLifecycle(cards, event, names.get(event.rootRunId));
 			publish();
 		});

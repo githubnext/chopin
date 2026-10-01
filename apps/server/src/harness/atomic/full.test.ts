@@ -12,14 +12,16 @@ import {
 } from "./adapter";
 import {
 	classifyRuns,
-	controlWorkflows,
+	type FullPlanner,
 	pauseOwnedRuns,
 	registerFullPlanner,
-	type WorkflowControl,
+	resumeOwnedRuns,
+	runCards,
+	untilUnpaused,
 } from "./full";
 import { startStubModelServer } from "../pi/model-stub";
 import { hostInputRoom } from "../../testing/decisions";
-import type { HostInput, QuestionParams } from "@bastani/atomic";
+import type { HostInput, QuestionParams, SessionWorkflows } from "@bastani/atomic";
 
 let params: QuestionParams = {
 	questions: [{
@@ -426,79 +428,79 @@ test("run cards fold lifecycle events into ordered stages, Decisions waits, and 
 	});
 });
 
-test("run control calls the session's workflow tool with a real tool context and surfaces failures", async () => {
-	let calls: { params: unknown; ctx: unknown; aborted: boolean }[] = [];
-	let reply: { content: { type: string; text: string }[]; isError?: boolean; details?: unknown } = {
-		content: [{ type: "text", text: "Paused 1 run(s)." }],
-		details: { action: "pause", status: "paused", message: "Paused 1 run(s)." },
-	};
-	let session = {
-		getToolDefinition: (name: string) =>
-			name === "workflow"
-				? {
-					execute: (async (
-						_id: string,
-						params: unknown,
-						signal: AbortSignal,
-						_update: unknown,
-						ctx: unknown,
-					) => {
-						calls.push({ params, ctx, aborted: signal.aborted });
-						return reply;
-					}) as never,
-				}
-				: undefined,
-		extensionRunner: { createToolContext: (id: string) => ({ toolCallId: id }) },
-	};
-	expect(await controlWorkflows(session, { action: "pause", all: true })).toEqual({
-		status: "paused",
-		message: "Paused 1 run(s).",
-	});
-	await controlWorkflows(session, { action: "resume", runId: "run-1" });
-	expect(calls.map(call => call.params)).toEqual([{ action: "pause", all: true }, {
-		action: "resume",
-		runId: "run-1",
-	}]);
-	expect(
-		calls.every(call =>
-			!call.aborted && typeof (call.ctx as { toolCallId: string }).toolCallId === "string"
-		),
-	).toBe(true);
-	reply = { content: [{ type: "text", text: "Run not found" }], isError: true };
-	await expect(controlWorkflows(session, { action: "resume", runId: "gone" })).rejects.toThrow(
-		"Run not found",
-	);
-	await expect(
-		controlWorkflows({ ...session, getToolDefinition: () => undefined }, {
-			action: "pause",
-			all: true,
-		}),
-	)
-		.rejects.toThrow("no workflow tool");
+test("Stop and Resume use the session's run control, and a partial pause is reported", async () => {
+	let calls: unknown[] = [];
+	let outcome = { action: "pause", runId: "--all", status: "paused", message: "Paused 1 run(s)." };
+	let workflows = {
+		pause: async (target: unknown) => {
+			calls.push(["pause", target]);
+			return outcome;
+		},
+		listRuns: async (filter: unknown) => {
+			calls.push(["listRuns", filter]);
+			return [{ runId: "run-1" }, { runId: "run-2" }];
+		},
+		resume: async (runId: string) => {
+			calls.push(["resume", runId]);
+			return { action: "resume", runId, status: "running", message: "" };
+		},
+	} as unknown as SessionWorkflows;
+	await pauseOwnedRuns(workflows);
+	await resumeOwnedRuns(workflows);
+	expect(calls).toEqual([
+		["pause", { all: true }],
+		["listRuns", { status: "paused" }],
+		["resume", "run-1"],
+		["resume", "run-2"],
+	]);
+	outcome = {
+		...outcome,
+		status: "partial",
+		failedRuns: [{ runId: "run-2", reason: "pause_failed", message: "busy" }],
+	} as typeof outcome;
+	await expect(pauseOwnedRuns(workflows)).rejects.toThrow("run-2: busy");
 });
 
-test("pausing quits a run whose live stage waits on a question, and fails when nothing can stop it", async () => {
-	let calls: WorkflowControl[] = [];
-	let outcomes: Record<string, string> = { pause: "paused" };
-	let control = async (params: WorkflowControl) => {
-		calls.push(params);
-		return {
-			status: outcomes[params.action] ?? "noop",
-			message: `${params.action} ${outcomes[params.action] ?? "noop"}`,
-		};
+test("an answer to a paused run's question is held until the run resumes, including child runs", async () => {
+	let planner: FullPlanner = {
+		cwd: "/",
+		humanInput: {} as HostInput,
+		runs: { active: [], paused: ["root"], cards: [] },
+		rootOf: runId => runId === "child" ? "root" : runId,
 	};
-	await pauseOwnedRuns(control, ["run-1"]);
-	expect(calls).toEqual([{ action: "pause", all: true }]);
+	let released: string[] = [];
+	let controller = new AbortController();
+	let held = untilUnpaused(planner, "child", controller.signal).then(() => released.push("child"));
+	await untilUnpaused(planner, "other", controller.signal).then(() => released.push("other"));
+	await new Promise(resolve => setTimeout(resolve, 0));
+	expect(released).toEqual(["other"]);
+	planner.runs = { active: ["root"], paused: [], cards: [] };
+	for (let wake of planner.waiters ?? []) wake();
+	await held;
+	expect(released).toEqual(["other", "child"]);
 
-	calls = [];
-	outcomes = { pause: "noop", quit: "paused" };
-	await pauseOwnedRuns(control, ["run-1", "run-2"]);
-	expect(calls).toEqual([
-		{ action: "pause", all: true },
-		{ action: "quit", runId: "run-1" },
-		{ action: "quit", runId: "run-2" },
-	]);
+	planner.runs = { active: [], paused: ["root"], cards: [] };
+	let aborted = new AbortController();
+	let pending = untilUnpaused(planner, "root", aborted.signal);
+	aborted.abort();
+	await pending;
+	expect(planner.waiters?.size ?? 0).toBe(0);
+});
 
-	outcomes = { pause: "noop", quit: "noop" };
-	await expect(pauseOwnedRuns(control, ["run-1"])).rejects.toThrow("Run run-1 could not be paused");
+test("a run whose stage waits on a question counts as waiting even without prompt events", () => {
+	let cards = new Map([["root", {
+		id: "root",
+		name: "plan-review",
+		status: "running" as const,
+		started: 0,
+		updated: 0,
+		stages: [{ id: "root:s", name: "draft-1", status: "awaiting_input" as const }],
+		waiting: 0,
+		stageIndex: new Map(),
+		prompts: new Set<string>(),
+	}]]);
+	expect(runCards(cards, { active: ["root"], paused: [] })[0]).toMatchObject({
+		status: "waiting",
+		waiting: 1,
+	});
 });
