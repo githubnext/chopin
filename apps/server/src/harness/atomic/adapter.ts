@@ -459,7 +459,15 @@ export function createAtomicAdapter(
 					let session = created.session;
 					let leak = hostLeak(session, created.extensionsResult.extensions.length, hostNames);
 					if (leak || closed) {
-						await session.dispose();
+						try {
+							await session.dispose();
+						} finally {
+							// Closing during setup ran cleanup before this directory existed.
+							if (closed && directory) {
+								await rm(directory, { recursive: true, force: true });
+								directory = undefined;
+							}
+						}
 						throw leak
 							? new ToolBoundaryError(`Atomic session is not isolated: ${leak}.`)
 							: new Error("Atomic session is closed.");
