@@ -2341,3 +2341,49 @@ shared database source remain unchanged. Ordinary filename selections remain
 exclusions remain effective. The dedicated config is byte-identical, and removing
 only the new join reconstructs the preceding normal config. No production or
 current unit-test behavior changes, and no actual research recovery is executed.
+
+## Remaining responsive units and document status selectors
+
+Two small inactive source modules retain the original complete responsive
+callbacks and their required helpers. The selected-tab case preserves an interior
+scroll position, visible strip margins and exact document scrollTop through label
+growth and viewport resizing. Its two original navigation/containment helpers
+remain complete. The mobile discarded case retains its questionnaire helper,
+phone viewport, collapsed-history state, viewport containment and overflow checks.
+Existing responsive modules remain unchanged; unrelated callbacks and declarations
+are not copied into these leaves.
+
+Both files have exact Chromium exclusions and names outside the fixtures project's
+responsive pattern. Their callbacks, dependencies and configurations are never
+imported, evaluated, listed or run here. The mobile case expects the original
+question heading and separate discarded group, which differ from the current
+Storage heading and combined resolved history. Original assertions remain intact.
+The historical DEV_QUESTIONS fixture supplies sample questions on the fixture
+server; these new excluded files still require explicit compatible routing before
+any execution. No geometry, focus, containment or scroll behavior is claimed to
+pass from source restoration alone.
+
+Two existing application tests now select the polite document status by its
+always-present data-level attribute. The room's conversation announcement is also
+polite; the former page-wide selectors therefore selected multiple regions. The
+existing notice and hidden assertions remain unchanged. Removing only the added
+attribute selector and its local formatter line wrapping reconstructs each entire
+preceding module, preserving all socket, reconnection and synchronization assertions. This fixes source-level
+selector ambiguity; those real application cases have not been executed here.
+
+The larger extraction remains unfinished, including original sidecar editing
+races, deferred view units and authentic application/persistence verification.
+
+Fresh full workspace/E2E types, formatting and CI pass with the same three
+existing lint warnings, 221 reviewed design exceptions and existing design
+baseline. Fresh raw/full nested source proofs retain both complete callbacks and
+all three helpers, rejecting missing helpers and weakened or trimmed assertions.
+A separate independent status-selector review preserves the complete preceding
+modules after only selector normalization and exact local formatter expansion.
+None of these checks executes application, socket, persistence or layout behavior.
+Independent leaf/config review also confirms real consumers for every retained
+import/helper and unchanged full baseline filename selections at 23/8/1/1.
+Both leaves are rejected in all four projects, fourteen earlier exclusions remain
+effective, and removing only the two joins reconstructs the entire normal config.
+The dedicated config and all other baseline browser source/dependencies remain
+unchanged apart from the separately reviewed two status selectors.
