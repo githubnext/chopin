@@ -15,9 +15,12 @@ export function clampPane(value: number, min: number, max: number): number {
 	return Math.min(max, Math.max(min, value));
 }
 
-/** Translates an on-screen drag into the width change for the pane's edge. */
+/**
+ * Translates an on-screen drag into a width change for a pane resized from its `side` edge.
+ * Moving a left edge rightward narrows the pane; moving a right edge rightward widens it.
+ */
 export function resizeDelta(side: PaneSide, delta: number): number {
-	return side === "left" ? delta : -delta;
+	return side === "left" ? -delta : delta;
 }
 
 export function restorePaneWidth(stored: string | null, { initial, min, max }: PaneBounds): number {
