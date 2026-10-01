@@ -14,8 +14,97 @@ import {
 import type { SeedState } from "../apps/server/src/testing/plan";
 import type { Browser, BrowserContext, BrowserContextOptions, Page } from "@playwright/test";
 
+/** CDP samples the busy renderer without pausing or evaluating application code. */
+async function profileReaderStartup(
+	page: Page,
+	record: (value: unknown) => void,
+): Promise<() => Promise<void>> {
+	let commandTimeout = 1500;
+	let bounded = async <T>(operation: Promise<T>): Promise<T> => {
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		try {
+			return await Promise.race([
+				operation,
+				new Promise<never>((_, reject) => {
+					timer = setTimeout(() => reject(new Error("profile deadline")), commandTimeout);
+				}),
+			]);
+		} finally {
+			clearTimeout(timer);
+		}
+	};
+	let ended = false;
+	let session: import("@playwright/test").CDPSession | undefined;
+	let connecting = page.context().newCDPSession(page);
+	void connecting.then(value => {
+		if (ended) void bounded(value.detach()).catch(() => {});
+	}).catch(() => {});
+	let finish = async () => {
+		if (ended) return;
+		ended = true;
+		page.off("close", finish);
+		try {
+			if (!session) return;
+			let { profile } = await bounded(session.send("Profiler.stop"));
+			let counts = new Map<number, number>();
+			for (let id of profile.samples ?? []) counts.set(id, (counts.get(id) ?? 0) + 1);
+			let hot = [...profile.nodes].sort((a, b) => (counts.get(b.id) ?? 0) - (counts.get(a.id) ?? 0))
+				.slice(0, 32);
+			let selected = new Set(hot.map(node => node.id));
+			for (let pass = 0; pass < 16 && selected.size < 128; pass++) {
+				for (let node of profile.nodes) {
+					if (selected.size < 128 && node.children?.some(id => selected.has(id))) {
+						selected.add(node.id);
+					}
+				}
+			}
+			record({
+				profiler: "stopped",
+				sampleCount: profile.samples?.length ?? 0,
+				nodes: profile.nodes.filter(node => selected.has(node.id)).slice(0, 128).map(node => {
+					let path = "internal";
+					try {
+						let url = new URL(node.callFrame.url);
+						if (/^\/assets\/[a-zA-Z0-9._/-]+$/.test(url.pathname)) {
+							path = url.pathname.slice(0, 200);
+						}
+					} catch {
+					}
+					return {
+						id: node.id,
+						functionName: node.callFrame.functionName.slice(0, 96),
+						path,
+						line: node.callFrame.lineNumber,
+						column: node.callFrame.columnNumber,
+						hitCount: node.hitCount ?? 0,
+						samples: counts.get(node.id) ?? 0,
+						children: node.children?.filter(id => selected.has(id)).slice(0, 128),
+					};
+				}),
+			});
+		} catch {
+			record({ profiler: "unavailable" });
+		} finally {
+			if (session) {
+				await bounded(session.send("Profiler.disable")).catch(() => {});
+				await bounded(session.detach()).catch(() => {});
+			}
+		}
+	};
+	try {
+		session = await bounded(connecting);
+		await bounded(session.send("Profiler.enable"));
+		await bounded(session.send("Profiler.start"));
+		page.once("close", finish);
+	} catch {
+		if (!session) record({ profiler: "unavailable" });
+		await finish();
+	}
+	return finish;
+}
+
 /** Passive, bounded startup evidence for the contained readonly case. */
-function observeReaderStartup(page: Page): void {
+async function observeReaderStartup(page: Page): Promise<void> {
 	let remaining = 200;
 	let cleanups: (() => void)[] = [];
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -23,9 +112,7 @@ function observeReaderStartup(page: Page): void {
 	let sockets = 0;
 	let errors = 0;
 	let consoles = 0;
-	let emit = (value: unknown, final = false) => {
-		if (remaining <= (final ? 0 : 1)) return;
-		remaining--;
+	let write = (value: unknown) => {
 		try {
 			appendFileSync(
 				new URL("./test-results/conversation-plan/reader-startup.jsonl", import.meta.url),
@@ -33,6 +120,12 @@ function observeReaderStartup(page: Page): void {
 			);
 		} catch {}
 	};
+	let emit = (value: unknown, final = false) => {
+		if (remaining <= (final ? 0 : 1)) return;
+		remaining--;
+		write(value);
+	};
+	let finishProfile = await profileReaderStartup(page, write);
 	let stop = () => {
 		clearTimeout(timer);
 		clearTimeout(deadline);
@@ -83,6 +176,7 @@ function observeReaderStartup(page: Page): void {
 	let loaded = () => {
 		deadline = setTimeout(stop, 4000);
 		timer = setTimeout(() => {
+			void finishProfile();
 			void page.evaluate(() => {
 				let editors = Array.from(
 					document.querySelectorAll(".plan-content,[aria-label='editable markdown']"),
@@ -165,7 +259,7 @@ export async function authenticate(
 	await page.context().addCookies([{ name: name!, value: value!, url: baseURL }]);
 	if (process.env.E2E_CONVERSATION_PLAN === "1" && handle === "readonly") {
 		try {
-			observeReaderStartup(page);
+			await observeReaderStartup(page);
 		} catch {}
 	}
 	return callback.headers.get("location")!;
