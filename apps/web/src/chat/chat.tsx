@@ -15,6 +15,16 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { SendAction } from "@chopin/editor";
 import { MENTION } from "@chopin/protocol/address";
 
+import { MentionPicker } from "./mention-picker";
+import {
+	chatAuthors,
+	filterMentions,
+	insertMention,
+	mentionCandidates,
+	mentionKeyAction,
+	mentionTrigger,
+	mentionTriggerKey,
+} from "./mentions";
 import {
 	referenceOptionId,
 	ReferencePicker,
@@ -40,6 +50,7 @@ import plannerStop from "../assets/icons/planner-stop.svg";
 
 import type { Chat as Wire } from "@chopin/protocol";
 import type { Repository } from "../api";
+import type { MentionCandidate } from "./mentions";
 import type { ComposerDraft, ReferenceTarget } from "./references";
 import type { Wire as Socket } from "../wire";
 
@@ -51,6 +62,8 @@ export type ChatProps = {
 	repository: Pick<Repository, "id" | "name" | "owner">;
 	room: string;
 	sendAcknowledgements: boolean;
+	/** People connected to this document, for `@` suggestions. */
+	people?: readonly string[];
 	/** Hosted mode keeps the shared chat while repository-scoped agent work is disabled. */
 	agent?: boolean;
 	active?: boolean;
@@ -64,6 +77,7 @@ export function Chat(
 		connected,
 		handle,
 		onActivity,
+		people = [],
 		referencesEnabled,
 		repository,
 		room,
@@ -83,6 +97,7 @@ export function Chat(
 	let [sendError, setSendError] = useState<string>();
 	let [selection, setSelection] = useState({ start: 0, end: 0 });
 	let [dismissedPicker, setDismissedPicker] = useState<string>();
+	let [mentionCursor, setMentionCursor] = useState<{ key?: string; index: number }>({ index: 0 });
 	let textarea = useRef<HTMLTextAreaElement>(null);
 	let pendingCaret = useRef<number | undefined>(undefined);
 	let pendingEdit = useRef<{ start: number; end: number } | undefined>(undefined);
@@ -90,6 +105,7 @@ export function Chat(
 	let draftRef = useRef(draft);
 	draftRef.current = draft;
 	let pickerId = useId();
+	let mentionPickerId = useId();
 	let instructionsId = useId();
 	let synchronized = useRef<Socket | undefined>(undefined);
 	let activity = useRef(onActivity);
@@ -116,6 +132,27 @@ export function Chat(
 		repository,
 		room,
 	);
+	let authors = chatAuthors(entries);
+	let mention = composerReady && !submitting && !detected
+		? mentionTrigger(draft.text, selection.start, selection.end)
+		: undefined;
+	let mentionKey = mention ? mentionTriggerKey(mention) : undefined;
+	let mentionOptions = mention
+			&& !draft.references.some(reference =>
+				reference.start < mention.end && reference.end > mention.start
+			)
+		? filterMentions(
+			mentionCandidates({ authors, people, planner: agent, self: handle }),
+			mention.query,
+		)
+		: [];
+	let mentionOpen = mentionOptions.length > 0 && mentionKey !== dismissedPicker;
+	let mentionActive = mentionCursor.key === mentionKey
+		? Math.min(mentionCursor.index, mentionOptions.length - 1)
+		: 0;
+	let activeMention: MentionCandidate | undefined = mentionOpen
+		? mentionOptions[mentionActive]
+		: undefined;
 	let activeOption = picker.options.length === 0
 		? undefined
 		: picker.options[Math.min(picker.active, picker.options.length - 1)];
@@ -271,6 +308,31 @@ export function Chat(
 		pendingCaret.current = next.caret;
 	};
 
+	let chooseMention = (candidate: MentionCandidate) => {
+		if (!mention) return;
+		let next = insertMention(draft.text, mention, candidate);
+		setDraft(current =>
+			reviseComposerDraft(
+				current,
+				next.text,
+				reconcileReferenceDrafts(
+					current.text,
+					next.text,
+					current.references,
+					{ start: mention.start, end: mention.end },
+				),
+			)
+		);
+		setSelection({ start: next.caret, end: next.caret });
+		setSendError(undefined);
+		setDismissedPicker(undefined);
+		pendingEdit.current = undefined;
+		pendingCaret.current = next.caret;
+	};
+
+	let moveMention = (to: (index: number) => number) =>
+		setMentionCursor({ key: mentionKey, index: to(mentionActive) });
+
 	return (
 		<div className="flex h-full min-h-0 flex-col">
 			<Transcript
@@ -296,6 +358,15 @@ export function Chat(
 							: picker}
 					/>
 				)}
+				{mentionOpen && (
+					<MentionPicker
+						active={mentionActive}
+						id={mentionPickerId}
+						onActive={index => setMentionCursor({ key: mentionKey, index })}
+						onSelect={chooseMention}
+						options={mentionOptions}
+					/>
+				)}
 				{referencesEnabled && (
 					<p className="sr-only" id={instructionsId}>
 						Type # to reference a document.
@@ -303,18 +374,20 @@ export function Chat(
 				)}
 				<div aria-busy={submitting} className="field flex flex-col">
 					<textarea
-						aria-activedescendant={pickerOpen && activeOption
+						aria-activedescendant={mentionOpen
+							? referenceOptionId(mentionPickerId, mentionActive)
+							: pickerOpen && activeOption
 							? referenceOptionId(pickerId, picker.options.indexOf(activeOption))
 							: undefined}
-						aria-autocomplete={referencesEnabled ? "list" : undefined}
-						aria-controls={pickerOpen ? pickerId : undefined}
+						aria-autocomplete="list"
+						aria-controls={mentionOpen ? mentionPickerId : pickerOpen ? pickerId : undefined}
 						aria-describedby={referencesEnabled ? instructionsId : undefined}
 						aria-disabled={!composerReady || submitting}
-						aria-expanded={referencesEnabled ? pickerOpen : undefined}
-						aria-haspopup={referencesEnabled ? "listbox" : undefined}
+						aria-expanded={pickerOpen || mentionOpen}
+						aria-haspopup="listbox"
 						className="h-14 min-h-14 flex-1 w-full resize-none bg-transparent px-4 py-3 text-sm"
 						readOnly={!composerReady || submitting}
-						role={referencesEnabled ? "combobox" : undefined}
+						role="combobox"
 						onBeforeInput={event => {
 							let input = event.nativeEvent as InputEvent;
 							pendingEdit.current = beforeInputSelection(
@@ -349,6 +422,38 @@ export function Chat(
 						}}
 						onKeyDown={event => {
 							let composing = event.nativeEvent.isComposing || event.keyCode === 229;
+							let mentionAction = mentionOpen
+								? mentionKeyAction({
+									key: event.key,
+									keyCode: event.keyCode,
+									isComposing: event.nativeEvent.isComposing,
+									shiftKey: event.shiftKey,
+									altKey: event.altKey,
+									ctrlKey: event.ctrlKey,
+									metaKey: event.metaKey,
+								}, true)
+								: undefined;
+							if (mentionAction === "next") {
+								moveMention(index => (index + 1) % mentionOptions.length);
+								event.preventDefault();
+								return;
+							}
+							if (mentionAction === "previous") {
+								moveMention(index => (index - 1 + mentionOptions.length) % mentionOptions.length);
+								event.preventDefault();
+								return;
+							}
+							if (mentionAction === "dismiss") {
+								setDismissedPicker(mentionKey);
+								event.preventDefault();
+								event.stopPropagation();
+								return;
+							}
+							if (mentionAction === "select" && activeMention) {
+								chooseMention(activeMention);
+								event.preventDefault();
+								return;
+							}
 							let action = pickerOpen
 								? referencePickerKeyAction({
 									key: event.key,
