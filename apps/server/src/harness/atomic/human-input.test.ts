@@ -1205,3 +1205,31 @@ test(
 	},
 	30_000,
 );
+
+test("a workflow question's answer is returned only after its paused run is released", async () => {
+	let release!: () => void;
+	let gate = new Promise<void>(resolve => {
+		release = resolve;
+	});
+	let held: string[] = [];
+	let f = await hostInputRoom(undefined, async runId => {
+		held.push(runId);
+		await gate;
+	});
+	cleanups.push(f.close);
+	let settled = false;
+	let response = f.input.questionnaire(
+		{ questions: [params.questions[0]!] },
+		{ ...f.options, workflowRunId: "run-1", workflowStageId: "stage-1" },
+	).then(result => {
+		settled = true;
+		return result;
+	});
+	let [card] = await f.cards(1);
+	await f.answer(card!.id, [0]);
+	await Bun.sleep(20);
+	expect(held).toEqual(["run-1"]);
+	expect(settled).toBe(false);
+	release();
+	expect((await response).answers).toMatchObject([{ kind: "option", answer: " A " }]);
+});
