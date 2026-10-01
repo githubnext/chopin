@@ -1,6 +1,7 @@
 /** A database-backed channel of one's own, per test. */
 
 import { expect, test as base } from "@playwright/test";
+import { appendFileSync } from "node:fs";
 
 import {
 	createChannel,
@@ -12,6 +13,124 @@ import {
 
 import type { SeedState } from "../apps/server/src/testing/plan";
 import type { Browser, BrowserContext, BrowserContextOptions, Page } from "@playwright/test";
+
+/** Passive, bounded startup evidence for the contained readonly case. */
+function observeReaderStartup(page: Page): void {
+	let remaining = 200;
+	let cleanups: (() => void)[] = [];
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	let deadline: ReturnType<typeof setTimeout> | undefined;
+	let sockets = 0;
+	let errors = 0;
+	let consoles = 0;
+	let emit = (value: unknown, final = false) => {
+		if (remaining <= (final ? 0 : 1)) return;
+		remaining--;
+		try {
+			appendFileSync(
+				new URL("./test-results/conversation-plan/reader-startup.jsonl", import.meta.url),
+				JSON.stringify(value) + "\n",
+			);
+		} catch {}
+	};
+	let stop = () => {
+		clearTimeout(timer);
+		clearTimeout(deadline);
+		remaining = 0;
+		for (let cleanup of cleanups.splice(0)) cleanup();
+	};
+	let websocket = (socket: import("@playwright/test").WebSocket) => {
+		if (++sockets > 16) return;
+		for (let direction of ["framesent", "framereceived"] as const) {
+			let frame = ({ payload }: { payload: string | Buffer }) => {
+				try {
+					if (payload.length > 1_000_000 || remaining <= 0) return;
+					let value = JSON.parse(payload.toString());
+					emit({
+						direction,
+						kind: typeof value.kind === "string" && /^[a-z-]{1,32}:[a-z-]{1,32}$/.test(value.kind)
+							? value.kind
+							: "other",
+						rid: typeof value.rid === "string" && /^[a-f0-9-]{1,64}$/i.test(value.rid)
+							? value.rid
+							: undefined,
+						epoch: typeof value.epoch === "string" && /^[a-f0-9-]{1,64}$/i.test(value.epoch)
+							? value.epoch
+							: undefined,
+						updateLength: typeof value.update === "string" ? value.update.length : undefined,
+					});
+				} catch {}
+			};
+			if (direction === "framesent") {
+				socket.on("framesent", frame);
+				cleanups.push(() => socket.off("framesent", frame));
+			} else {
+				socket.on("framereceived", frame);
+				cleanups.push(() => socket.off("framereceived", frame));
+			}
+		}
+	};
+	let error = (value: Error) =>
+		emit({
+			pageErrors: ++errors,
+			name: ["Error", "TypeError", "ReferenceError", "SyntaxError"].includes(value.name)
+				? value.name
+				: "other",
+		});
+	let console = () => {
+		consoles++;
+	};
+	let loaded = () => {
+		deadline = setTimeout(stop, 4000);
+		timer = setTimeout(() => {
+			void page.evaluate(() => {
+				let editors = Array.from(
+					document.querySelectorAll(".plan-content,[aria-label='editable markdown']"),
+				);
+				let statusText = document.querySelector(".plan-status > span:not([aria-hidden])")
+					?.textContent?.trim();
+				let status =
+					["Loading", "Ready", "Reconnecting", "Could not open the plan", "Agent is working"].find(
+						label => label === statusText,
+					) ?? "other";
+				return {
+					status,
+					editors: editors.slice(0, 4).map(element => ({
+						role: element.getAttribute("role") === "textbox" ? "textbox" : "other",
+						contenteditable: element.getAttribute("contenteditable") === "false"
+							? "false"
+							: element.getAttribute("contenteditable") === "true"
+							? "true"
+							: null,
+						hidden: !element.getClientRects().length,
+						inertAncestor: !!element.closest("[inert],[hidden],[aria-hidden='true']"),
+						nodes: element.childNodes.length,
+					})),
+					editorCount: editors.length,
+					statusCount: document.querySelectorAll(".plan-status").length,
+					statusNonempty: Array.from(document.querySelectorAll(".plan-status")).some(element =>
+						!!element.textContent?.trim()
+					),
+					hasFixtureQuestion: document.body.textContent?.includes("Should we ship a small pilot?")
+						?? false,
+					chatMessages: document.querySelectorAll("[data-chat-message-id]").length,
+				};
+			}).then(dom => emit({ dom, pageErrors: errors, consoleCount: consoles }, true)).catch(
+				() => {},
+			).finally(stop);
+		}, 3000);
+	};
+	page.on("websocket", websocket).on("pageerror", error).on("console", console).once(
+		"domcontentloaded",
+		loaded,
+	).once("close", stop);
+	cleanups.push(() => {
+		page.off("websocket", websocket).off("pageerror", error).off("console", console).off(
+			"domcontentloaded",
+			loaded,
+		).off("close", stop);
+	});
+}
 
 function port(url: string): number {
 	return Number(new URL(url).port);
@@ -44,6 +163,11 @@ export async function authenticate(
 	expect(session).toBeTruthy();
 	let [name, value] = session!.split(";", 1)[0]!.split("=", 2);
 	await page.context().addCookies([{ name: name!, value: value!, url: baseURL }]);
+	if (process.env.E2E_CONVERSATION_PLAN === "1" && handle === "readonly") {
+		try {
+			observeReaderStartup(page);
+		} catch {}
+	}
 	return callback.headers.get("location")!;
 }
 
