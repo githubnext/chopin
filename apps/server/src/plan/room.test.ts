@@ -9,7 +9,7 @@
 import { describe, expect, it, spyOn } from "bun:test";
 import { createHeadlessEditor } from "@lexical/headless";
 import { createYjsBinding, syncLexicalUpdateToYjs, syncYjsChangesToLexical } from "@lexical/yjs";
-import { $getRoot, $isElementNode, $isParagraphNode } from "lexical";
+import { $createParagraphNode, $getRoot, $isElementNode, $isParagraphNode } from "lexical";
 import * as Y from "yjs";
 
 import { $importPlan, registry } from "@chopin/dialect";
@@ -267,6 +267,23 @@ describe("recovery", () => {
 			expect(destroy).toHaveBeenCalledTimes(1);
 		} finally {
 			destroy.mockRestore();
+			document.doc.destroy();
+		}
+	});
+
+	it("restores a checkpoint stored with an empty paragraph's former blank line", async () => {
+		let document = await room.create("# Title\n");
+		document.editor.update(() => $getRoot().append($createParagraphNode()), { discrete: true });
+		await room.settle();
+		let checkpoint = Y.encodeStateAsUpdate(document.doc);
+		try {
+			let restored = await room.restore(document.epoch, checkpoint, "# Title\n\n", []);
+			expect(room.project(restored)).toBe("# Title\n");
+			restored.doc.destroy();
+			await expect(room.restore(document.epoch, checkpoint, "# Other\n", [])).rejects.toThrow(
+				"stored plan source does not match its Yjs checkpoint",
+			);
+		} finally {
 			document.doc.destroy();
 		}
 	});

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { createHeadlessEditor } from "@lexical/headless";
 import { $isTableNode, TableCellNode, TableRowNode } from "@lexical/table";
-import { $getRoot, $isElementNode } from "lexical";
+import { $createParagraphNode, $getRoot, $isElementNode } from "lexical";
 
 import { $createPlanNodes, exportPlan, importPlan } from "./convert";
 import { $isCodeBlockNode } from "./nodes/content";
@@ -12,7 +12,7 @@ import { serialize } from "./serialize";
 
 import type { QuestionnaireNode } from "./nodes/questionnaire";
 
-import type { LexicalEditor } from "lexical";
+import type { ElementNode, LexicalEditor, RootNode } from "lexical";
 
 const REGISTRY = registry();
 
@@ -219,5 +219,35 @@ describe("conversion", () => {
 		let instance = editor();
 		importPlan(instance, "# Title\n", { registry: REGISTRY });
 		expect(exportPlan(instance, { registry: REGISTRY })).not.toContain("import ");
+	});
+
+	it("exports empty paragraphs as canonical source that parsing preserves", () => {
+		let research = '<Research id="d5a1b471-4788-48e3-9518-62ef6777d07e" />';
+		let cases: [source: string, place: (root: RootNode) => void, expected: string][] = [
+			["Text\n", root => root.append($createParagraphNode()), "Text\n"],
+			[
+				`Text\n\n${research}\n`,
+				root => root.append($createParagraphNode(), $createParagraphNode()),
+				`Text\n\n${research}\n`,
+			],
+			[
+				"First\n\nSecond\n",
+				root => root.getFirstChildOrThrow().insertAfter($createParagraphNode()),
+				"First\n\nSecond\n",
+			],
+			[
+				"> Quoted\n",
+				root => root.getFirstChildOrThrow<ElementNode>().append($createParagraphNode()),
+				"> Quoted\n",
+			],
+		];
+		for (let [source, place, expected] of cases) {
+			let instance = editor();
+			importPlan(instance, source, { registry: REGISTRY });
+			instance.update(() => place($getRoot()), { discrete: true });
+			let output = exportPlan(instance, { registry: REGISTRY });
+			expect(output).toBe(expected);
+			expect(serialize(parse(output))).toBe(output);
+		}
 	});
 });

@@ -279,7 +279,10 @@ export async function restore(
 	try {
 		Y.applyUpdate(restored.doc, checkpoint, REMOTE);
 		await settle();
-		if (project(restored) !== source) {
+		// Checkpoints written before empty paragraphs were dropped from projection
+		// store their former blank lines; the canonical form is the same document.
+		let projected = project(restored);
+		if (projected !== source && projected !== serialize(parse(source))) {
 			throw new Error("stored plan source does not match its Yjs checkpoint");
 		}
 
