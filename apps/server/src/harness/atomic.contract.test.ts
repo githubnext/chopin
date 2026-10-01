@@ -208,6 +208,18 @@ describe("atomic HarnessV1 lifecycle", () => {
 		});
 	}
 
+	it("leaves no working directory behind when closed while its first turn is still setting up", async () => {
+		let planners = async () =>
+			new Set((await readdir(tmpdir())).filter(name => name.startsWith("chopin-atomic-planner-")));
+		let before = await planners();
+		let session = await start();
+		let turn = session.doPromptTurn({ prompt: "plain", skills: [], tools: [], emit: () => {} });
+		await session.doDestroy();
+		await expect(turn).rejects.toThrow("Atomic session is closed.");
+		let left = [...await planners()].filter(name => !before.has(name));
+		expect(left).toEqual([]);
+	});
+
 	it("settles a pending host tool on abort and ignores a late result", async () => {
 		let session = await start();
 		let first = recorder();
