@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { ChevronIcon, CloseIcon, LoaderIcon, SignInIcon } from "@chopin/icons";
+import { parseChildDocumentPath } from "@chopin/protocol/document-url";
 
 import {
 	AgentFace,
@@ -131,14 +132,26 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 }
 
 function SystemEntry({ item }: { item: Extract<Group, { kind: "system" }> }) {
+	let readyPath = /^Research is ready\. \[Open the research document\]\((\/documents\/\S+)\)\.$/
+		.exec(item.text)?.[1];
+	let linked = readyPath !== undefined && parseChildDocumentPath(readyPath) !== undefined;
 	return (
 		<div className="flex items-start gap-3 text-text-tertiary" data-chat-system>
 			<div className="shrink-0">
 				<SignInIcon aria-hidden="true" size={14} />
 			</div>
-			<p className="m-0 min-w-0 break-words text-sm [overflow-wrap:anywhere]">
-				{displayText(item.text)}
-			</p>
+			{linked
+				? (
+					<MessageMarkdown
+						className="min-w-0 break-words text-sm [overflow-wrap:anywhere]"
+						source={item.text}
+					/>
+				)
+				: (
+					<p className="m-0 min-w-0 break-words text-sm [overflow-wrap:anywhere]">
+						{displayText(item.text)}
+					</p>
+				)}
 		</div>
 	);
 }

@@ -27,6 +27,16 @@ export function countUnanswered(
 	);
 }
 
+export function firstOpenDecision(
+	entries: QuestionnaireEntry[],
+	cardMeta?: ReadonlyMap<string, Question.CardMeta>,
+): QuestionnaireEntry | undefined {
+	return entries.find(entry => {
+		let status = cardMeta?.get(entry.id)?.status ?? cardStatus(entry.value);
+		return status === "open" || status === "reopened";
+	});
+}
+
 /** A conversation-linked card is authored document content even before prose exists. */
 export function documentHasPlanningContent(
 	hasPlanProse: boolean,

@@ -126,3 +126,98 @@ test("unmount cleans actualTranscript owner and pending source expiry", async ({
 	).toBe(0);
 	expect(errors).toEqual([]);
 });
+
+test("a conversation-linked card-only document stays in Document", async ({ page }) => {
+	let errors = await load(page);
+	await page.evaluate(() =>
+		window.roomSourceProbe.setQuestions({
+			hasPlanContent: false,
+			entries: [{
+				id: "conversation-card",
+				value: {
+					id: "conversation-card",
+					thread: "conversation-thread",
+					questions: [{
+						id: "conversation-question",
+						header: "Rollout",
+						prompt: "Which rollout?",
+						multiple: false,
+						options: [],
+					}],
+				},
+			}],
+		})
+	);
+	let control = page.getByRole("group", { name: "Document view", exact: true });
+	await expect(control.getByRole("button", { name: "Document", exact: true }))
+		.toHaveAttribute("aria-pressed", "true");
+	await expect(control.getByRole("button", { name: "Decisions, 1 unanswered", exact: true }))
+		.toHaveAttribute("aria-pressed", "false");
+	expect(errors).toEqual([]);
+});
+
+test("a Planner-only card opening still moves to Decisions", async ({ page }) => {
+	let errors = await load(page);
+	await page.evaluate(() =>
+		window.roomSourceProbe.setQuestions({
+			hasPlanContent: false,
+			entries: [{
+				id: "planner-card",
+				value: {
+					id: "planner-card",
+					questions: [{
+						id: "planner-question",
+						header: "Rollout",
+						prompt: "Which rollout?",
+						multiple: false,
+						options: [],
+					}],
+				},
+			}],
+		})
+	);
+	let control = page.getByRole("group", { name: "Document view", exact: true });
+	await expect(control.getByRole("button", { name: "Decisions, 1 unanswered", exact: true }))
+		.toHaveAttribute("aria-pressed", "true");
+	expect(errors).toEqual([]);
+});
+
+test("opening Decisions focuses reopened work ahead of settled history and later open cards", async ({ page }) => {
+	let errors = await load(page);
+	await page.evaluate(meta => {
+		let entries = ["settled", "reopened", "later"].map(id => ({
+			id,
+			value: {
+				id,
+				questions: [{
+					id: `${id}-question`,
+					header: id,
+					prompt: `Choose ${id}`,
+					multiple: false,
+					options: [],
+					...(id === "reopened" ? { answer: "Old answer" } : {}),
+				}],
+			},
+		}));
+		window.roomSourceProbe.setQuestions({ hasPlanContent: true, entries });
+		window.roomSourceProbe.receive({
+			kind: "question:meta",
+			id: "settled",
+			meta: { ...meta, status: "discarded" },
+			ts: 1,
+		});
+		window.roomSourceProbe.receive({
+			kind: "question:meta",
+			id: "reopened",
+			meta: { ...meta, status: "reopened" },
+			ts: 2,
+		});
+	}, meta);
+	await page.getByRole("group", { name: "Document view", exact: true }).getByRole("button", {
+		name: "Decisions, 2 unanswered",
+		exact: true,
+	}).click();
+	await expect(page.locator('[data-plan-sidecar-questionnaire="reopened"]')).toBeFocused();
+	await expect(page.locator('[data-plan-sidecar-questionnaire="settled"]')).toHaveCount(0);
+	expect(errors).toEqual([]);
+});

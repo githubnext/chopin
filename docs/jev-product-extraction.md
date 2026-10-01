@@ -2005,3 +2005,56 @@ lint warnings, no errors, the same 221 reviewed design exceptions and existing
 design baseline. The preceding 3,333-test offline result is retained evidence;
 unit tests are not rerun for these inactive source modules and two discovery
 exclusions. No production, unit-test or UI implementation changes in this slice.
+
+## Workspace opening, ready links and research detection
+
+A fresh implementation audit found three missing UI connections. Decisions now
+selects the first authoritative open/reopened card rather than the first unanswered
+projection. Settled metadata excludes stale unanswered definitions; reopened metadata
+includes previous answers until projection catches up. The new pure selector uses
+the archived predicate and is called by the actual workspace. Six focused assertions
+failed against the old selection before the fix. Current callbacks remain intact.
+
+The workspace also now uses the existing documentHasPlanningContent helper. A
+conversation-linked inline-card-only document stays in Document; Planner-only
+questions retain their forced Decisions opening. The actual host in the existing
+isolated native fixture reproduced the missing integration (one failure, two passes).
+After wiring the helper, all seven room-source native cases pass, including the
+four preceding cases and actual focus on reopened work ahead of settled history.
+The fixture intercepts its synthetic HTML navigation, aborts all other requests,
+injects questionnaire state and uses an inert WebSocket. This proves host view/focus
+behavior, not real socket, authentication, PostgreSQL or application startup.
+
+Ready research system notices now render their valid child-document link through
+current MessageMarkdown styling. Only the exact archived notice with a valid current
+child route is recognized; ordinary text, external URLs, malformed paths/encoding,
+queries, fragments and extra prose remain text. All three original SSR callbacks
+are retained. A regression feeds the actual ResearchWorkspaceService ready notice
+through Transcript using the existing MemoryStorage fixture. Two actual anchor
+assertions failed before the fix; fifteen SSR tests with fifty assertions then pass.
+This is rendering and memory-service evidence, not browser navigation or authorization.
+
+All twenty-three original research-offer detection callbacks and twenty-seven
+shared declarations are retained across five files below 500 lines each. Complete
+nested-node proofs and deliberate missing/trimmed callback/helper controls pass.
+The unchanged scenarios run the real processor/interpreter with injected local Jev
+responses and the original serialized durable-snapshot double: twenty-three pass,
+216 assertions. That double is not MemoryStorage. No policy, threshold, model,
+fixture identity or assertion is tuned. Original race/failure/publication tests stay
+with the product extraction. Restored scenarios passed on first execution, so their
+previous absence is not claimed as a behavior regression failure.
+
+Whole application verification, remaining original browser units, live announcements
+and the declared compatibility conflicts remain outstanding. No archived ordinary
+browser suite/configuration/preload is loaded, listed or executed by this slice.
+
+Final fresh verification passes 3,376 offline tests with 15,989 assertions across
+548 files; two PostgreSQL checks are skipped. All seventy-seven isolated native
+browser cases pass using fresh client assets, including the three new host cases.
+Workspace types, client build, formatting and CI pass. CI retains three existing
+lint warnings, 221 reviewed design exceptions and the existing design baseline;
+the build retains its existing chunk-size warning. Both independent reviews
+approve the changes. Post-format source proofs preserve every prior affected
+callback plus all original restored callbacks/declarations. No ordinary browser
+suite, application listener, PostgreSQL service, migration or paid provider starts.
+The finite product extraction remains unfinished.

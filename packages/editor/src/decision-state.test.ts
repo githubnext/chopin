@@ -4,6 +4,7 @@ import {
 	advanceDecisionView,
 	countUnanswered,
 	documentHasPlanningContent,
+	firstOpenDecision,
 	selectDecisionView,
 	visibleDecisionView,
 } from ".";
@@ -180,5 +181,59 @@ describe("decision attention", () => {
 
 		expect(state).toEqual({ phase: "complete", preferred: "plan" });
 		expect(visibleDecisionView(state, false, 2)).toBe("plan");
+	});
+});
+
+describe("Decisions opening target", () => {
+	it.each(["decided", "discarded"] as const)(
+		"skips metadata-%s cards with stale unanswered definitions",
+		status => {
+			let settled = { ...entry([undefined]), id: "settled" };
+			let open = { ...entry([undefined]), id: "open" };
+			let metadata = new Map([[settled.id, meta(status)]]);
+
+			expect(firstOpenDecision([settled, open], metadata)?.id).toBe("open");
+		},
+	);
+
+	it("reveals the first metadata-reopened card despite its previous answers", () => {
+		let reopened = { ...entry(["Previous answer"], "decided"), id: "reopened" };
+		let open = { ...entry([undefined]), id: "open" };
+		let metadata = new Map([[reopened.id, meta("reopened")]]);
+
+		expect(firstOpenDecision([reopened, open], metadata)?.id).toBe("reopened");
+	});
+
+	it("lets settled metadata override a persisted reopened status", () => {
+		let settled = { ...entry([undefined], "reopened"), id: "settled" };
+		let open = { ...entry([undefined]), id: "open" };
+		let metadata = new Map([[settled.id, meta("decided")]]);
+
+		expect(firstOpenDecision([settled, open], metadata)?.id).toBe("open");
+	});
+
+	it("uses persisted statuses without metadata in document order", () => {
+		let discarded = { ...entry([undefined], "discarded"), id: "discarded" };
+		let reopened = { ...entry(["Previous answer"], "reopened"), id: "reopened" };
+		let open = { ...entry([undefined], "open"), id: "open" };
+
+		expect(firstOpenDecision([discarded, reopened, open])?.id).toBe("reopened");
+		expect(firstOpenDecision([open, reopened])?.id).toBe("open");
+	});
+
+	it("preserves partially answered legacy multi-question cards", () => {
+		let decided = { ...entry(["Done"]), id: "decided" };
+		let partial = { ...entry(["Done", undefined]), id: "partial" };
+		let open = { ...entry([undefined]), id: "open" };
+
+		expect(firstOpenDecision([decided, partial, open])?.id).toBe("partial");
+	});
+
+	it("returns no target for empty or entirely settled documents", () => {
+		let decided = { ...entry(["Done"]), id: "decided" };
+		let discarded = { ...entry([undefined], "discarded"), id: "discarded" };
+
+		expect(firstOpenDecision([])).toBeUndefined();
+		expect(firstOpenDecision([decided, discarded])).toBeUndefined();
 	});
 });

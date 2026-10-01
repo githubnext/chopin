@@ -12,6 +12,7 @@ export {
 	advanceDecisionView,
 	countUnanswered,
 	documentHasPlanningContent,
+	firstOpenDecision,
 	selectDecisionView,
 	visibleDecisionView,
 } from "./decision-state";

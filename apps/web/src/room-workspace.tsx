@@ -7,7 +7,9 @@ import {
 	countUnanswered,
 	cursor,
 	Decisions,
+	documentHasPlanningContent,
 	Face,
+	firstOpenDecision,
 	PlanEditor,
 	QuestionnaireStore,
 	selectDecisionView,
@@ -259,7 +261,8 @@ export function RoomWorkspace(
 	let entries = useQuestionnaires(questions);
 	let cardMetadata = useSyncExternalStore(cardMeta.subscribe, cardMeta.snapshot, cardMeta.snapshot);
 	let unanswered = countUnanswered(entries, cardMetadata);
-	let hasPlanContent = useHasPlanContent(questions);
+	let hasPlanProse = useHasPlanContent(questions);
+	let hasPlanContent = documentHasPlanningContent(hasPlanProse, entries);
 	let [decisionView, setDecisionView] = useState<DecisionViewState>(() => {
 		let stored = localStorage.getItem("chopin:view:document");
 		return {
@@ -339,9 +342,7 @@ export function RoomWorkspace(
 			localStorage.setItem("chopin:view:document", next);
 		}
 		if (next === "decisions" && revealFirst) {
-			let first = entries.find(entry =>
-				entry.value.questions.some(question => question.answer === undefined)
-			);
+			let first = firstOpenDecision(entries, cardMetadata);
 			setReveal({ widget: first?.id ?? "", token: Date.now() });
 		}
 	};
