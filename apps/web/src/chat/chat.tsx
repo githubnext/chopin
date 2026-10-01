@@ -34,7 +34,7 @@ import {
 	referenceTriggerKey,
 	reviseComposerDraft,
 } from "./references";
-import { RunCard } from "./run-card";
+import { RunStack } from "./run-card";
 import { Transcript } from "./transcript";
 import { TerminalAlert } from "../terminal-alert";
 import plannerStop from "../assets/icons/planner-stop.svg";
@@ -303,8 +303,15 @@ export function Chat(
 			/>
 
 			{agent && !!runs?.length && (
-				<div className="flex shrink-0 flex-col gap-2 px-2.5 pb-2" data-chat-runs="">
-					{runs.map(run => <RunCard key={run.id} onShowDecisions={onShowDecisions} run={run} />)}
+				<div className="flex shrink-0 flex-col px-2.5 pb-2" data-chat-runs="">
+					<RunStack
+						onPause={runId =>
+							wire?.send("chat:pause-run", { runId })}
+						onResume={runId =>
+							wire?.send("chat:resume-run", { runId })}
+						onShowDecisions={onShowDecisions}
+						runs={runs}
+					/>
 				</div>
 			)}
 

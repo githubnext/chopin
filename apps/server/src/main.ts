@@ -317,6 +317,11 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			if (room.plan) await Chat.resume(chat(room, ws), ws);
 			return;
 
+		case "chat:pause-run":
+		case "chat:resume-run":
+			if (room.plan) await Chat.controlRun(chat(room, ws), ws, frame);
+			return;
+
 		case "chat:unqueue":
 			if (room.plan) Chat.unqueue(chat(room, ws), ws, frame);
 			return;
