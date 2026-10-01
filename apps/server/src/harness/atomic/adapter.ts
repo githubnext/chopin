@@ -123,6 +123,12 @@ export type AtomicSettings = {
 	model?: string;
 	/** Providers registered by code rather than discovered from the host. */
 	providers?: Record<string, ProviderConfig>;
+	/**
+	 * Extension or package paths every Planner session loads, as the CLI's
+	 * `--extension` would; their workflows and skills register too. Worker
+	 * sessions never load them.
+	 */
+	extensions?: readonly string[];
 };
 
 export class ToolBoundaryError extends Error {
@@ -475,7 +481,7 @@ export function createAtomicAdapter(
 						cwd,
 						agentDir,
 						settingsManager,
-						...(full ? {} : {
+						...(full ? { additionalExtensionPaths: [...settings.extensions ?? []] } : {
 							noExtensions: true,
 							noSkills: true,
 							noPromptTemplates: true,

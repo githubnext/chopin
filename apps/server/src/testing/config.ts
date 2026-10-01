@@ -31,6 +31,7 @@ export function configured(overrides: Record<string, string | undefined> = {}) {
 		TYPESAFE_API_KEY: undefined,
 		HARNESS: undefined,
 		HARNESS_AUTH: undefined,
+		HARNESS_EXTENSIONS: undefined,
 		AUTH_MODE: undefined,
 		SERVER_HOST: undefined,
 		PORT: undefined,
