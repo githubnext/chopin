@@ -227,7 +227,7 @@ test("Next waits for an answer to the current question, but not in a read-only v
 	)).not.toContain("disabled");
 });
 
-test("a free-text host dialog renders an editable textarea without inventing a choice", () => {
+test("a host dialog with no options is answered by adding one, without a free-text box", () => {
 	let definition = normalize({
 		questions: [{ header: "Input", question: "Write the brief", options: [], multiple: false }],
 	}, { verbatim: true });
@@ -235,33 +235,11 @@ test("a free-text host dialog renders an editable textarea without inventing a c
 		definition,
 		drafts: read(create(definition), definition),
 		onChange() {},
+		onAddOption: async () => ({ ok: true as const }),
 	}));
-	expect(markup).toContain("<textarea");
 	expect(markup).toContain("Write the brief");
-	expect(markup).not.toContain('disabled=""');
-});
-
-test("only the Planner's own questions cap the custom answer textarea", () => {
-	let question = { header: "Input", question: "Write the brief", multiple: false };
-	for (
-		let [definition, cap] of [
-			[normalize({ questions: [{ ...question, options: [] }] }, { verbatim: true }), false],
-			[
-				normalize({ questions: [{ ...question, options: [{ label: "A", description: "" }] }] }),
-				true,
-			],
-		] as const
-	) {
-		let drafts = read(create(definition), definition);
-		drafts.q0!.mode = "custom";
-		let markup = renderToStaticMarkup(createElement(QuestionView, {
-			definition,
-			drafts,
-			onChange() {},
-		}));
-		expect(markup).toContain("<textarea");
-		expect(markup.includes('maxLength="4000"')).toBe(cap);
-	}
+	expect(markup).toContain("Add an option");
+	expect(markup).not.toContain("<textarea");
 });
 
 test("an expired card keeps its question and says the Planner will proceed; a withdrawn one does not", () => {
