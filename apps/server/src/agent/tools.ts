@@ -566,7 +566,7 @@ export const documentTools = {
 					}
 				}
 				let mutation = Questions.place(context.plan, placements);
-				if (mutation) context.publish(mutation);
+				if (mutation) await context.publish(mutation);
 
 				await context.persist();
 				context.anchors();

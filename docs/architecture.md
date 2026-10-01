@@ -446,8 +446,6 @@ or route for a person to approve the draft. See
 The prototype still has several places where implementation falls short of the
 intended boundaries above:
 
-- `anchor_plan` does not await a question-placement document mutation before its
-  separate sidecar persistence and anchor broadcast, leaving an ordering race.
 - Idle-room eviction removes the registry entry before its asynchronous final
   close and checkpoint completes, so a replacement room can briefly overlap.
 - Browser CRDT updates do not cross-check record-owned decision projections, and
