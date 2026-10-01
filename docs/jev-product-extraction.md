@@ -2443,3 +2443,52 @@ exclusions remain effective, and removing only the two joins reconstructs the
 normal config bytes and AST. The dedicated config remains unchanged. These are
 source/static results; actual durable compaction and evidence absence are not
 executed or claimed to pass.
+
+## Original asynchronous sidecar editing source
+
+Three small inactive leaves retain the twelve explicitly inventoried missing
+sidecar callbacks with their complete nested asynchronous code. Draft reopen
+preserves held document/question messages, another writer's Save and an explicit
+reopen into the new shared draft. Four option-race cases preserve delayed
+refresh, Escape versus moved focus, stale duplicate errors and late replies.
+Seven contract cases preserve shared selection, unanswered draft observation,
+duplicate validation, read-only actions, Escape trigger focus, native radio focus
+and persisted legacy custom-answer readability.
+
+Every original callback, local promise/route guard and final assertion remains
+intact. Each leaf keeps only its complete required declarations and imports:
+PROSE with its original comment, questionnaire, and the contracts leaf's three
+IDs and legacy source template. The shared draft read/restore functions and
+Definition/Page types retain their genuine original consumers. Current active
+sidecar source, production code, dependency metadata and existing fixtures remain
+unchanged; no fake reference or unused-symbol suppression is introduced.
+
+Exact Chromium exclusions precede the three files. Their names avoid fixtures'
+exact sidecar filename pattern; the dedicated configuration remains unchanged.
+No restored module/helper/configuration/preload is imported, evaluated, listed or
+run. Future execution requires explicit compatible fixture-server routing,
+authentication, disposable database mapping, migrations and writer ownership.
+Held frames and direct draft/reopen wires are preserved as source, not proof of
+current socket ordering, persistence, focus or stale-completion behavior.
+
+Current AddOption still exists and retains its accessible controls and stale
+attempt handling. The original tests' question-text headings, exact Save caption
+and legacy resolved presentation differ from current Storage/Scope headings,
+Save answer and progressive Custom anatomy. Those assumptions remain intact
+pending compatibility work; no assertion is weakened or retargeted to make it
+pass. Source retention closes these twelve missing callback units, while other
+intentional main-suite adaptations, deferred view units and authentic system
+verification remain unresolved. The larger extraction remains unfinished.
+
+Fresh full workspace/E2E types, formatting and CI pass with the same three
+existing lint warnings, 221 reviewed design exceptions and existing design
+baseline. Reviewers independently check the other writers' leaves: twelve whole
+callbacks, three complete helpers, seven constant declarations and six import
+declarations match fresh archived raw/full nested source. Meaningful missing,
+trimmed, held-frame, reopen-success and duplicate-validation mutants are rejected.
+All fifty-four preceding browser suite bytes and shared dependencies remain
+unchanged. Full filename selections remain 23/8/1/1; all three suites are rejected
+in every project, eighteen earlier exclusions remain effective, and removing only
+the three joins reconstructs the entire normal config. Dedicated configs remain
+unchanged. No new production behavior, authentic editing race or system run is
+claimed from these source/static checks.
