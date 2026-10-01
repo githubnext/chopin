@@ -449,6 +449,7 @@ export function RoomWorkspace(
 					connected={status === "connected" && workspaceCanEdit}
 					handle={handle}
 					onActivity={onChatActivity}
+					people={peopleHere(members)}
 					referencesEnabled={chatReferences.wire === wire && chatReferences.enabled}
 					repository={repository}
 					room={room}
