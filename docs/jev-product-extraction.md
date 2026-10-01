@@ -1830,3 +1830,35 @@ types and CI pass with the same two inherited lint warnings and design baseline.
 No UI source changed, so no client build or browser check is repeated or claimed.
 The factory remains unregistered and no application, preload, database, network or
 paid provider is activated.
+
+## Preserved whole jobs and prose browser suites
+
+The original conversation-plan jobs and decision-prose modules are retained as whole
+archive source, including all sixteen complete test callbacks, four cleanup hooks
+and twenty-one helpers. Their assertions and selectors are unchanged. Normal browser
+discovery excludes these two exact root paths; this slice adds no project, server,
+preload registration or test command. Static source and type checks do not import
+the suites or establish browser execution.
+
+The retained jobs suite still expects a missing script to be skipped where the current
+Harness reports failure, and one callback requires the old refining shimmer. The
+prose suite still requires the exact Save caption where the current approved UI says
+Save answer; other old card anatomy may also differ. These complete callbacks remain
+assigned for later execution and conflict resolution. No assertion, current profile,
+producer behavior or UI caption is changed to hide these differences. Dedicated
+current-Harness application activation, real browser/authentication/socket/storage
+integration and the remaining original suites are outstanding. Extraction remains
+unfinished.
+
+Fresh byte and whole-AST archive proofs preserve both complete modules after
+formatting. A static proof uses the installed Playwright matcher and literal-only
+configuration analysis: all existing selections across four projects are unchanged,
+and both retained root paths are excluded. Chromium overrides the global ignore,
+so the two exact paths are added to its existing ignore list. Negative controls
+detect both accidental selection under the old configuration and ineffective global-only
+exclusion. No configuration, suite or preload is loaded by this proof.
+
+Workspace/E2E types, formatting and CI pass. Existing runtime source and offline unit
+tests are unchanged; the preceding checkpoint's 3,260 passing tests and 15,438 assertions
+are retained evidence, not a new browser result. No application, database, browser,
+network or paid provider is started.
