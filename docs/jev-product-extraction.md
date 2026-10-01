@@ -1639,3 +1639,74 @@ design-renewal proof pass. CI retains two inherited lint warnings and its existi
 design baseline. No application server, PostgreSQL, authentication or paid provider
 run is claimed. Deferred original callbacks and application Harness activation remain
 outstanding; this is one product correction within the unfinished extraction.
+
+## Definition-only browser harness helpers
+
+Four absent test-only modules are restored byte-for-byte from the preserved archive:
+`e2e/jev-control.ts`, `planner-jobs.ts`, `jev-wire.ts` and `jev-process.ts`. Their
+216 lines retain twelve whole functions, nineteen nested callbacks, all types,
+constants and imports. A fresh archive byte/whole-module syntax-tree proof and
+independent import/discovery review pass. No existing test or runtime module changes.
+
+These modules register no browser test cases. File latches, WebSockets, process
+launches, readiness fetches and timers occur only inside uninvoked functions. The
+restart declaration still selects `AGENT=off` and names the separately deferred Jev
+HTTP preload; it does not establish current-Harness job coverage. The preload is
+not restored or imported in this slice. Test discovery and server configuration
+remain unchanged. Static preservation and type compatibility do not establish
+application, authentication, sockets, PostgreSQL, browser or restart execution.
+The original whole browser callbacks and current-Harness activation remain deferred.
+
+## Scripted refine failure and explicit durable retry
+
+One new bounded SDK/Memory case exercises the durable recovery underlying the
+original failed-job browser callback. Its file-backed model script submits a
+schema-valid wrong-target `refine_decision` through the actual current refine
+profile, SDK, scoped tool, Chat job and Planner coordinator. The actual tool returns
+its different-decision error; without a successful own-tool output, current Chat
+stores its separate ended-without-calling failure reason. The full card record,
+source and revisions remain unchanged. No activity or public tool transcript leaks.
+
+After real close/reopen, a rebuilt coordinator stays idle when woken. Rewriting
+only the script target and invoking actual `jobs.retry` preserves the job identity
+and trigger, completes attempt two, and durably retitles the card and adds its exact
+option/rationale. Tool-result observations load actual storage; synchronous frame
+observations capture the snapshot read after the awaited real fenced commit. Job,
+card metadata, definition and activity publications are checked against those
+snapshots. Title and option edits have separate durable commits; this test does not
+claim atomicity of the entire refinement. A second reopen stays idle and refuses
+retry of the completed job. Executed sessions release their sandbox/credential and
+drain their driver exactly once; idle recovery starts no session.
+
+The baseline includes actual initial close/reopen so canonical derived anchors are
+compared rather than dropped. Recovery retains the same process-local Sessions and
+rebuilds actual ActiveOwnerBindings around the reopened document. It is document
+recovery, not process restart or credential restoration. Stored observation reads
+keep raw running jobs; restart normalization is not used as their snapshot value.
+The fake sandbox accepts only the exact SDK work-directory setup, executing nothing
+on the host. Existing driver, parser, legacy tests, coordinator, profiles, session
+and production modules remain unchanged.
+
+This adds one new whole test callback, not the original whole browser callback.
+Geometry, collaborator synchronization, reload/session admission, wire retry
+authorization, PostgreSQL and paid provider behavior remain unverified here. The
+original five job and eleven prose browser callbacks remain deferred; the existing
+missing-script skipped/current-stream-failed conflict remains explicit.
+
+Final verification passes 3,226 offline tests with 15,175 assertions across 538
+files; two PostgreSQL checks are skipped. The focused current-Harness/card/retry
+suite passes eight cases with 199 assertions; independent final retry verification
+passes its one case with 86 assertions. The test explicitly requires both actual
+changed-definition publications and compares the final complete definition, closing
+the review's conditional-observation gap without removing prior assertions.
+
+Fresh archive byte/full-module proofs retain all four E2E helpers exactly. Complete
+frozen new-test/fixture proofs and fresh baseline checks retain sixteen existing
+production/harness/auth/parser/coordinator dependencies byte-for-byte. Independent
+source-only and SDK/Memory reviews approve the bounded work. Workspace/E2E types,
+formatting and CI pass; the two inherited lint warnings, 221 reviewed design
+exceptions and existing design baseline remain unchanged. No UI source changed,
+so client build and isolated browser checks from the preceding checkpoint are not
+rerun or presented as new evidence. The restored E2E helpers remain uninvoked; no
+application, PostgreSQL or provider was activated. The original whole browser suites, HTTP preload and dedicated
+current-Harness application adapter remain outstanding; extraction is unfinished.
