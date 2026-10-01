@@ -2387,3 +2387,59 @@ Both leaves are rejected in all four projects, fourteen earlier exclusions remai
 effective, and removing only the two joins reconstructs the entire normal config.
 The dedicated config and all other baseline browser source/dependencies remain
 unchanged apart from the separately reviewed two status selectors.
+
+## Original sidecar document spacing and evidence absence
+
+Two small inactive suites retain three complete original callbacks. The spacing
+suite keeps both adjacent-card geometry and the persisted empty-paragraph case,
+including its nested geometry helper, real edit/backspace, synchronization and
+reload assertions. Seven original ID/source constants remain complete. The
+absence suite keeps the original PROSE constant and complete hover/wait/dialog
+absence assertion; unrelated helpers and callbacks are not copied.
+
+The spacing fixture retains the original seedCardGapChannel and
+storedCardGapDocument functions, plus the complete private database defaults,
+URL/SQL factory and snapshot seed function. Original encoder mutations, snapshot
+hash, Yjs update, sidecar SQL insert and close/finally paths remain intact. The
+headless encoder lives in a separate server testing leaf, where Lexical, Yjs and
+the dialect are declared dependencies; the E2E fixture retains the five original
+database declarations. The initial combined E2E leaf failed types because that
+package cannot resolve the encoder dependencies. No dependency aliases or new
+package declarations are introduced. Current shared database and server testing
+modules remain unchanged. Reused storedDocument/SeedState and Room imports resolve
+to current code; preserving the archived fixture source does not
+prove that the current room generates or persists its intended legacy shape.
+
+The two suite names avoid automatic fixtures matching and have exact Chromium
+exclusions. No restored suite, fixture, configuration or preload is imported,
+evaluated, listed or invoked. Archived defaults cover only 8788/8789 and require
+explicit disposable-database mapping, migrations and writer ownership before
+execution. Direct fixture snapshot insertion is not evidence of a fenced
+production mutation. Authentication, sockets, durable reload and actual geometry
+remain unexecuted in this slice.
+
+The evidence case's original causal premise has changed: DEV_QUESTIONS now asks
+through a service that creates a conversation thread and card link. The sample
+can have no popover because conversation is disabled or evidence is empty; even
+a future passing result would not establish threadless-question suppression.
+The original body and title remain intact as source. Authentic no-thread setup
+and verification remain outstanding; current runtime and fixture semantics are
+not altered to make the archived assertion pass.
+
+Original asynchronous sidecar editing units, deferred view tests and full
+application/persistence verification still remain. The larger extraction is
+unfinished.
+
+After the dependency-boundary correction, fresh full workspace/E2E types,
+formatting and CI pass with the same three existing lint warnings, 221 reviewed
+design exceptions and existing design baseline. Independent review confirms
+three complete original callbacks, eight browser constants and six full fixture
+declarations across the correct test-package boundaries, including the original
+encoder comment and nested SQL/Yjs paths. Missing/trimmed callback and fixture
+negative controls are rejected. All fifty-two preceding browser modules and
+current shared dependencies remain byte-identical. Full filename selections
+remain 23/8/1/1; both suites are rejected in all four projects, sixteen earlier
+exclusions remain effective, and removing only the two joins reconstructs the
+normal config bytes and AST. The dedicated config remains unchanged. These are
+source/static results; actual durable compaction and evidence absence are not
+executed or claimed to pass.
