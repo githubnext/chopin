@@ -88,6 +88,10 @@ and tool vocabulary remain optimized for planning.
   credentials in an OS vault or an explicitly consented local file. Documents,
   transcripts, decisions, research request staging, background-job inputs and
   artifacts, and token-free session records are stored in PostgreSQL.
+- Optional conversation-derived cards default to off. With `CONVERSATION_PLAN=on`,
+  current and recent Chat messages and selected decision context are sent to
+  TypeSafe's Jev service for interpretation. This uses the server's `JEV_API_KEY`,
+  separately from the Planner's harness credentials, and continues with `AGENT=off`.
 - One Chopin process may write to a database at a time. Horizontal application
   scaling and zero-downtime rolling deployment are not supported.
 

@@ -128,6 +128,9 @@ turns of its job stage, not as a platform-wide budget; see
 - A stable DNS name with TLS termination and WebSocket proxying.
 - Outbound HTTPS access to GitHub and the selected harness's model provider
   (the hosted Copilot service for `copilot-sdk`).
+- If `CONVERSATION_PLAN=on`, outbound HTTPS access to TypeSafe's Jev service
+  (`api.typesafe.ai`) and a server-side `JEV_API_KEY`, separate from the Planner's
+  harness credentials.
 - A GitHub App owned by the deployment.
 - At least one user with repository push or administration access.
 - For `copilot-sdk`, an active Copilot entitlement for each user who may own a
@@ -198,6 +201,11 @@ the image.
 
 See [Background jobs and workers](background-jobs.md) for the combined
 `AGENT`, `BACKGROUND_JOBS`, and `WEB_RESEARCH` behavior and recovery model.
+
+Conversation-derived cards default to off. When enabled, interpretation sends
+current and recent Chat messages and selected decision context to TypeSafe's Jev
+service. It uses `JEV_API_KEY` and `JEV_MODEL` independently of the Planner's
+provider and credentials; `AGENT=off` does not disable it.
 
 The supplied Compose file forwards `CONVERSATION_PLAN`, `JEV_MODEL` and
 `JEV_API_KEY` from the deployment environment. It uses the server's default

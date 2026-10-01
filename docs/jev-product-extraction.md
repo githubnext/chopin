@@ -2222,3 +2222,34 @@ Removing only the two new exclusions reconstructs the preceding normal config.
 No production, unit-test or UI runtime changes occur. Earlier 3,389 offline and
 eighty-seven isolated native passes remain historical; no retained whole browser
 case is invoked or claimed as passing.
+
+## Configuration isolation and conditional data sharing
+
+The older configuration-test fixture now clears the five Jev environment names
+already scoped by the conversation fixture. Existing tests genuinely fail with
+inherited invalid timeout/model settings before the change and pass afterward.
+Only fixture setup changes; all ten existing callbacks and production parsing
+remain intact, and inherited values are restored after successful or failed loads.
+
+README and self-hosting guidance now disclose the optional TypeSafe Jev service,
+its server key/outbound requirement and the Chat/decision context sent for
+interpretation. The feature defaults off and remains independent of AGENT and
+Planner provider credentials. No provider, application or database executes.
+
+Read-only completion audits identify additional original browser callback gaps
+and deferred QuestionView anatomy alongside the unexecuted authentic system
+gates. The final three absent browser modules remain unrestored after automatic
+approval rejected the layout/UI copy; direct scope approval is pending. That
+restoration has not been retried through another route. The larger extraction
+remains unfinished.
+
+Fresh focused verification passes fourteen configuration cases and eighty-five
+assertions under combined inherited invalid settings. The actual fixture also
+restores all five synthetic values after successful and throwing parser loads.
+Full workspace/E2E types, formatting and CI pass with the same three existing
+lint warnings, 221 reviewed design exceptions and existing design baseline.
+Independent review approves exact full-body preservation of all ten older tests
+and complete prior-file reconstruction after subtracting only the five entries
+and three documentation additions. Existing admission, Harness and entitlement
+wording remains intact; thirty-six public-doc relative links pass exact casing.
+No production, browser or provider behavior changes in this independent slice.
