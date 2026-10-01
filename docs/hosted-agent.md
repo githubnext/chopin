@@ -275,9 +275,10 @@ finished. The next turn reuses that session, so the Planner can still see and
 steer its runs over Intercom; people steer through Chat and Decisions, never a
 stage directly. **Stop Planner** also pauses the session's live runs, resumably,
 through Atomic's session run control, and **Resume Planner** resumes the runs it
-paused. A run waiting on a question pauses with that question still open in
-Decisions; an answer given while it is paused is recorded but returned to the
-run only after Resume, so a paused run never advances. Chat shows a card for each
+paused. A run waiting on a question pauses too: Atomic withdraws the question
+from Decisions while the run is paused and presents it again on Resume, and an
+answer that arrives during the pause reaches the run only after Resume, so a
+paused run never advances. Chat shows a card for each
 run: its name, status (running, waiting on Decisions, paused, or ended), elapsed
 time, every stage it has reached with its status and duration, and a link to the
 Decisions it is waiting on. When a run ends, Chat records a line saying how it
