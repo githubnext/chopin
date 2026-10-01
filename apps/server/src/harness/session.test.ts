@@ -183,6 +183,8 @@ describe("Planner workspaces", () => {
 			expect(registered?.humanInput.questionnaire).toBeFunction();
 			expect(instructions).toContain(`${path}, is a local checkout of owner/repo`);
 			expect(instructions).toContain("proceed on your best judgement");
+			expect(instructions).toContain("never tell them to use `/workflow connect`");
+			expect(instructions).toContain("Chat shows a card for each run");
 			expect(instructions).not.toContain("You have no shell");
 		}
 		let git = Bun.spawn(["git", "-C", path, "remote", "set-url", "origin", "workgit:other/repo"], {
@@ -214,6 +216,8 @@ describe("Planner workspaces", () => {
 			expect(instructions).toContain("holds no repository files");
 			expect(instructions).toContain("`read_repository_file`");
 			expect(instructions).toContain("proceed on your best judgement");
+			expect(instructions).toContain("never tell them to use `/workflow connect`");
+			expect(instructions).toContain("Chat shows a card for each run");
 		}
 		forgetWorkspaces();
 		expect((await stat(first.registered!.cwd)).isDirectory()).toBe(true);
@@ -236,6 +240,7 @@ describe("Planner workspaces", () => {
 			expect(registered).toBeUndefined();
 			expect(instructions).toContain("You have no shell");
 			expect(instructions).not.toContain("proceed on your best judgement");
+			expect(instructions).not.toContain("/workflow connect");
 		}
 	});
 });
