@@ -17,6 +17,7 @@
 import { COMPONENTS, DIFF_LANGUAGE, MERMAID_LANGUAGE } from "@chopin/dialect/dialect";
 
 import type { Component } from "@chopin/dialect/dialect";
+import type { PlannerWorkspace } from "../harness/atomic/workspace";
 
 /** Components the agent writes itself. The rest are created for it. */
 const AUTHORABLE = ["Callout", "Tabs", "Tab", "Underline"];
@@ -230,13 +231,36 @@ Questionnaires are created by \`ask\`, never by hand, and their answers are owne
 elsewhere — leave them alone when you rewrite around them. To take one out of
 the plan, use the \`detach_question\` operation rather than deleting the block.`;
 
-export function plannerInstructions(repository: string, bootstrap?: string): string {
-	let access = `Read before you propose. The selected repository is ${repository}. Use
+export function plannerInstructions(
+	repository: string,
+	bootstrap?: string,
+	workspace?: PlannerWorkspace,
+): string {
+	let reading = `Read before you propose. The selected repository is ${repository}. Use
 \`read_repository_file\`, \`list_repository_tree\`, \`search_repository\` and
 \`repository_history\` for its code, and \`list_pull_requests\` and
-\`pull_request_read\` for its pull requests. Every repository tool is fixed to this repository.
-
-You have no shell, checkout, host filesystem, skills or repository instructions,
+\`pull_request_read\` for its pull requests. Every repository tool is fixed to this repository.`;
+	if (!workspace) {
+		let isolated = `You have no shell, checkout, host filesystem, skills or repository instructions,
 and cannot change GitHub. Ground the plan in what those reading tools return.`;
-	return [PROMPT, access, bootstrap].filter(Boolean).join("\n\n");
+		return [PROMPT, reading, isolated, bootstrap].filter(Boolean).join("\n\n");
+	}
+	let place = workspace.checkout
+		? `Your working directory, ${workspace.cwd}, is a local checkout of ${repository}
+verified against its origin. Its branch and working tree may differ from what the
+repository tools read.`
+		: `Your working directory, ${workspace.cwd}, is a scratch directory Chopin keeps for
+this document. It is not a checkout and holds no repository files, so read
+${repository} through the repository tools.`;
+	let questions =
+		`\`ask_user_question\` and \`workflow\` questions appear to the document's members as
+Decisions. If one expires unanswered, proceed on your best judgement and say what you assumed.`;
+	let surface = `The document's members use Chopin in a browser. They cannot run slash commands,
+terminal commands, or Atomic CLI commands, so never tell them to use \`/workflow connect\`,
+\`/workflow status\`, \`/tasks\`, \`atomic\`, or anything else typed into a terminal, even when a
+tool result suggests it. When you start a workflow, say in plain words what it will do and
+where to follow it: Chat shows a card for each run with its stages and status, its questions
+appear under Decisions, **Stop Planner** pauses it, and **Resume Planner** resumes it. Offer to
+check on or steer a run yourself with your \`workflow\` and \`intercom\` tools when someone asks.`;
+	return [PROMPT, reading, place, questions, surface, bootstrap].filter(Boolean).join("\n\n");
 }

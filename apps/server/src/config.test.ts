@@ -1,46 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
-import { describe as description, load } from "./config";
-
-const REQUIRED = {
-	STORAGE_DRIVER: "postgres",
-	DATABASE_URL: "postgresql://chopin:secret@database.test/chopin",
-	APP_ORIGIN: "https://chopin.example",
-	GITHUB_APP_SLUG: "chopin-test",
-	GITHUB_APP_CLIENT_ID: "client-id",
-	GITHUB_APP_CLIENT_SECRET: "client-secret",
-	SESSION_ENCRYPTION_KEY: "11".repeat(32),
-};
-
-function configured(overrides: Record<string, string | undefined> = {}) {
-	let env: Record<string, string | undefined> = {
-		...REQUIRED,
-		AGENT: undefined,
-		BACKGROUND_JOBS: undefined,
-		WEB_RESEARCH: undefined,
-		HARNESS: undefined,
-		HARNESS_AUTH: undefined,
-		AUTH_MODE: undefined,
-		SERVER_HOST: undefined,
-		PORT: undefined,
-		MODEL: undefined,
-		CHOPIN_LOCAL_CREDENTIALS_DIR: undefined,
-		GITHUB_ALLOWED_USERS: undefined,
-		GITHUB_ALLOWED_ORGANIZATIONS: undefined,
-		...overrides,
-	};
-	let previous = { ...process.env };
-	for (let [key, value] of Object.entries(env)) {
-		if (value === undefined) delete process.env[key];
-		else process.env[key] = value;
-	}
-	try {
-		return load();
-	} finally {
-		for (let key of Object.keys(env)) delete process.env[key];
-		Object.assign(process.env, previous);
-	}
-}
+import { describe as description } from "./config";
+import { configured, LOCAL, REQUIRED } from "./testing/config";
 
 describe("configuration", () => {
 	it("loads the mandatory GitHub and PostgreSQL services without printing secrets", () => {
@@ -111,6 +72,40 @@ describe("configuration", () => {
 			.toThrow("MODEL is required when HARNESS=pi");
 		expect(configured({ HARNESS: "pi", HARNESS_AUTH: "openai", MODEL: "openai/gpt-5.6" }))
 			.toMatchObject({ harness: "pi", model: "openai/gpt-5.6" });
+	});
+
+	it("requires an explicit provider/model MODEL under the atomic harness", () => {
+		expect(() => configured({ HARNESS: "atomic", HARNESS_AUTH: "auto" }))
+			.toThrow("MODEL is required when HARNESS=atomic");
+		expect(configured({
+			HARNESS: "atomic",
+			HARNESS_AUTH: "ai-gateway",
+			MODEL: "vercel-ai-gateway/anthropic/claude-sonnet-4.6",
+		})).toMatchObject({
+			harness: "atomic",
+			model: "vercel-ai-gateway/anthropic/claude-sonnet-4.6",
+		});
+	});
+
+	it("chooses a full Atomic Planner by harness alone, in hosted and local configuration", () => {
+		let atomic = { HARNESS: "atomic", HARNESS_AUTH: "ai-gateway", MODEL: "stub/model" };
+		for (let mode of [{}, LOCAL]) {
+			let config = configured({ ...atomic, ...mode });
+			expect(config.harness).toBe("atomic");
+			expect(description(config)).toContain(
+				"Planner: full Atomic session (shell and filesystem access as this process's user)",
+			);
+		}
+		for (
+			let isolated of [
+				{},
+				{ HARNESS: "pi", HARNESS_AUTH: "ai-gateway", MODEL: "stub/model" },
+			]
+		) {
+			for (let mode of [{}, LOCAL]) {
+				expect(description(configured({ ...isolated, ...mode }))).not.toContain("full Atomic");
+			}
+		}
 	});
 
 	it("requires a valid PostgreSQL URL", () => {

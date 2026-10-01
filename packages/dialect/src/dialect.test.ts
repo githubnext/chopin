@@ -174,6 +174,19 @@ describe("components", () => {
 		);
 	});
 
+	it("accepts only `expired` as a questionnaire status", () => {
+		let questionnaire = (status: string) =>
+			`<Questionnaire id="${ID}" status="${status}" at="2026-09-28T10:30:00.000Z">\n`
+			+ `<Question id="${ID2}" header="Rollout" prompt="How?" multiple="false">\n`
+			+ `<Option id="${ID3}" label="Canary" />\n`
+			+ `</Question>\n`
+			+ `</Questionnaire>`;
+		accepts(questionnaire("expired"));
+		for (let status of ["cancelled", "answered", "open", "Expired"]) {
+			expect(codes(questionnaire(status))).toContain("bad-attribute-value");
+		}
+	});
+
 	it("accepts an accepted comment thread", () => {
 		accepts(
 			`<Decision id="${ID}" quote="Cached for 60 seconds." by="ana" at="2026-07-28T10:14:00Z">\n`
@@ -289,6 +302,20 @@ describe("limits", () => {
 		let long = "x".repeat(120);
 		expect(codes(`<Callout id="${ID}" type="note" title="${long}">y</Callout>`))
 			.toContain("attribute-too-long");
+	});
+
+	it("bounds questionnaire projections only by the source size", () => {
+		let questionnaire = (text: string) =>
+			`<Questionnaire id="${ID}">\n`
+			+ `<Question id="${ID2}" header="${text}" prompt="${text}" multiple="false">\n`
+			+ `<Option id="${ID3}" label="${text}" description="${text}" />\n`
+			+ `<Answer value="${text}" />\n`
+			+ `</Question>\n`
+			+ `</Questionnaire>`;
+		accepts(questionnaire("x".repeat(5_000)));
+		let source = questionnaire("x".repeat(limits.MAX_SOURCE_BYTES));
+		let result = validate(parse(source), { bytes: new TextEncoder().encode(source).byteLength });
+		expect(result.ok ? [] : result.issues.map(issue => issue.code)).toEqual(["source-too-large"]);
 	});
 });
 

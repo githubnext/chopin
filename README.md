@@ -47,8 +47,11 @@ appear as documents in navigation.
 https://github.com/user-attachments/assets/72a85be8-685f-4d60-9937-b3855b46cebe
 
 The Planner can inspect the selected GitHub repository and its pull requests
-through bounded, read-only tools, then co-author the document. It cannot write to
-GitHub, edit a checkout, or implement code. A separate coding agent can connect
+through bounded, read-only tools, then co-author the document. Under the default
+`copilot-sdk` harness, and under `pi`, it cannot write to GitHub, edit a checkout,
+or implement code. `HARNESS=atomic` deliberately runs it as a full Atomic session
+with shell and filesystem access as the server process's user; see
+[Self-hosting](docs/self-hosting.md#choose-and-trust-a-harness). A separate coding agent can connect
 to Chopin through MCP to create or revise documents and consume an approved
 implementation graph.
 
@@ -60,8 +63,8 @@ and tool vocabulary remain optimized for planning.
 - Chopin supports GitHub.com. GitHub Enterprise Server endpoints are not
   configurable.
 - The Planner's file, tree, and history tools read the default branch captured
-  when its session starts; code search is repository-scoped. It never reads a
-  local checkout or uncommitted changes.
+  when its session starts; code search is repository-scoped. Except under
+  `HARNESS=atomic`, it never reads a local checkout or uncommitted changes.
 - Every browser participant signs in, passes the instance admission policy, and
   needs repository access through the GitHub App installation. MCP callers also
   pass instance admission, but use their own bearer token for repository
@@ -72,14 +75,15 @@ and tool vocabulary remain optimized for planning.
 - The first eligible person to invoke the Planner or start a model-backed
   research request supplies the GitHub App user token used for that channel
   and, under the default `copilot-sdk` harness, the Copilot entitlement. With
-  `HARNESS=pi`, model access comes from the operator's `HARNESS_AUTH` instead.
+  `HARNESS=pi` or `HARNESS=atomic`, model access comes from the operator's
+  `HARNESS_AUTH` instead.
   A server restart clears every session and releases that ownership. A
   returning browser in local device mode can restore a new session, but does
   not reclaim Planner ownership.
 - Document and Chat context, along with repository material selected by
   the Planner, is sent to the harness's model provider during a turn (GitHub
-  Copilot by default; under `HARNESS=pi`, the provider chosen by
-  `HARNESS_AUTH`). Model-backed background jobs also send job-specific private
+  Copilot by default; under `HARNESS=pi` or `HARNESS=atomic`, the provider
+  chosen by `HARNESS_AUTH`). Model-backed background jobs also send job-specific private
   material, including context loaded during execution, to isolated workers on
   the same harness. The public research worker receives
   only the exact submitted brief, but may derive or refine the queries it sends

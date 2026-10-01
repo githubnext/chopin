@@ -32,7 +32,7 @@
 				1
 			]
 		],
-		"sourceHash": "8f550f655abbcd6c5264cc69a6777c267ef145d1cc6dd62ec465ba7778b03f21"
+		"sourceHash": "d52dc462e861603f9a77b4a628044f9e2efd7007e75ca96638b0d9fba9e9d1e1"
 	},
 	{
 		"file": "packages/icons/src/icon.tsx",
@@ -212,9 +212,16 @@
 				"props",
 				"unresolved JSX props > MessageForwardIcon > <LineIcon>",
 				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > WrenchIcon > <LineIcon>",
+				1
 			]
 		],
-		"sourceHash": "3f0551a94613d444137252e24f2e69af45d333a1a28aba384158b669cf3ca040"
+		"sourceHash": "659d2c375ba7322b4ecb4365b31b3d94481519700a743ae1c519302e67a9b57a"
 	},
 	{
 		"file": "packages/visuals/src/ui/mini-bars.tsx",

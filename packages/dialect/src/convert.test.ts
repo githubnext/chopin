@@ -5,8 +5,12 @@ import { $getRoot, $isElementNode } from "lexical";
 
 import { $createPlanNodes, exportPlan, importPlan } from "./convert";
 import { $isCodeBlockNode } from "./nodes/content";
+import { toElement, unanswered } from "./nodes/questionnaire";
 import { parse } from "./parse";
 import { registry } from "./registry";
+import { serialize } from "./serialize";
+
+import type { QuestionnaireNode } from "./nodes/questionnaire";
 
 import type { LexicalEditor } from "lexical";
 
@@ -103,6 +107,34 @@ describe("conversion", () => {
 
 		expect(exportPlan(instance, { registry: REGISTRY })).toBe("# Existing\n\nAdded.\n");
 		expect(instance.getEditorState().read(() => $getRoot().getFirstChild()!.getKey())).toBe(key);
+	});
+
+	it("round-trips an expired questionnaire's marker through its Lexical node", () => {
+		let value = {
+			id: "01K0N4TR8K7JGM4R1J7PW4R8YJ",
+			status: "expired" as const,
+			at: "2026-09-28T10:30:00.000Z",
+			questions: [{
+				id: "01K0N4V4E7Y6P4MJ5WD8XZF3B2",
+				header: "Confirm",
+				prompt: "Ship it?",
+				multiple: false,
+				options: [{ id: "01K0N4W3B7P27CBAEC7A8C8WEA", label: "Yes" }],
+			}],
+		};
+		let source = serialize({ type: "root", children: [toElement(value)] });
+		expect(source).toStartWith(
+			`<Questionnaire id="${value.id}" status="expired" at="2026-09-28T10:30:00.000Z">`,
+		);
+		expect(through(source)).toBe(source);
+		let instance = editor();
+		importPlan(instance, source, { registry: REGISTRY });
+		let imported = instance.getEditorState().read(() =>
+			($getRoot().getFirstChild() as QuestionnaireNode).getQuestionnaire()
+		);
+		expect(imported).toEqual(value);
+		expect(unanswered(imported)).toEqual([]);
+		expect(unanswered({ ...imported, status: undefined })).toEqual(imported.questions);
 	});
 
 	it("round-trips tables through native nodes", () => {

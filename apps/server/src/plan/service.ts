@@ -207,6 +207,7 @@ type Sidecar = {
 	openQuestions: Questions.StoredOpen[];
 	threads: Comments.Record[];
 	transcript: Chat.Chat["entries"];
+	workflowRuns?: NonNullable<Chat.Chat["runs"]>;
 };
 
 function state(plan: Plan): Sidecar {
@@ -225,6 +226,7 @@ function state(plan: Plan): Sidecar {
 		openQuestions: Questions.dump(plan.questions),
 		threads: [...plan.threads.values()],
 		transcript: plan.chat.entries,
+		...(plan.chat.runs?.length ? { workflowRuns: plan.chat.runs } : {}),
 	};
 }
 
@@ -385,6 +387,7 @@ function restoredState(
 	if (Object.hasOwn(item, "execution")) expected.push("execution");
 	if (Object.hasOwn(item, "lifecycle")) expected.push("lifecycle");
 	if (Object.hasOwn(item, "mcpUpdates")) expected.push("mcpUpdates");
+	if (Object.hasOwn(item, "workflowRuns")) expected.push("workflowRuns");
 	expected.sort();
 	if (
 		keys.length !== expected.length
@@ -418,8 +421,7 @@ function restoredState(
 	let questions = objects(item.questions, "question record");
 	for (let question of questions) {
 		if (
-			(question.status !== "open" && question.status !== "answered"
-				&& question.status !== "cancelled")
+			!["open", "answered", "cancelled", "expired"].includes(question.status as string)
 			|| !question.definition
 			|| typeof question.definition !== "object"
 			|| Array.isArray(question.definition)
@@ -473,6 +475,7 @@ function restoredState(
 		}
 	}
 	let mcpUpdates = restoreMcpUpdates(item.mcpUpdates);
+	let workflowRuns = restoreWorkflowRuns(item.workflowRuns);
 	return {
 		version: 1,
 		revision: item.revision,
@@ -486,7 +489,61 @@ function restoredState(
 		openQuestions: openQuestions as unknown as Questions.StoredOpen[],
 		threads: threads as never[],
 		transcript: transcript as unknown as Chat.Chat["entries"],
+		...(workflowRuns.length > 0 ? { workflowRuns } : {}),
 	};
+}
+
+const RUN_STATUSES = new Set([
+	"running",
+	"waiting",
+	"paused",
+	"finished",
+	"blocked",
+	"failed",
+	"stopped",
+]);
+const RUN_STAGE_STATUSES = new Set([
+	"pending",
+	"running",
+	"awaiting_input",
+	"paused",
+	"blocked",
+	"completed",
+	"failed",
+	"skipped",
+]);
+
+function seconds(value: JsonValue | undefined, optional = false): boolean {
+	if (value === undefined) return optional;
+	return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+/** Workflow run cards Chat showed, as `Chat.Run` values. */
+function restoreWorkflowRuns(value: JsonValue | undefined): NonNullable<Chat.Chat["runs"]> {
+	if (value === undefined) return [];
+	if (!Array.isArray(value)) throw new Error("hosted channel has invalid workflow runs");
+	let runs = objects(value, "workflow run");
+	for (let run of runs) {
+		let stages = run.stages;
+		if (
+			typeof run.name !== "string"
+			|| !RUN_STATUSES.has(run.status as string)
+			|| !seconds(run.started)
+			|| !seconds(run.updated)
+			|| !seconds(run.ended, true)
+			|| !seconds(run.earlierStages, true)
+			|| !seconds(run.waiting)
+			|| !Array.isArray(stages)
+			|| stages.some(stage =>
+				!stage || typeof stage !== "object" || Array.isArray(stage)
+				|| typeof stage.id !== "string" || typeof stage.name !== "string"
+				|| stage.kind !== undefined && stage.kind !== "tool"
+				|| !RUN_STAGE_STATUSES.has(stage.status as string)
+				|| !seconds(stage.started, true) || !seconds(stage.ended, true)
+			)
+		) throw new Error("hosted channel has invalid workflow runs");
+	}
+	return runs as unknown as NonNullable<Chat.Chat["runs"]>;
 }
 
 function restoreMcpUpdates(value: JsonValue | undefined): McpUpdateRecord[] {
@@ -942,7 +999,7 @@ export async function open(
 		presence: presence.create(),
 		questions: Questions.restore(sidecar.openQuestions),
 		comments: Comments.create(),
-		chat: Chat.restore(sidecar.transcript),
+		chat: Chat.restore(sidecar.transcript, sidecar.workflowRuns),
 		outlines: new Map(),
 		records: new Map(sidecar.questions.map(record => [record.id, record])),
 		threads: new Map(sidecar.threads.map(record => [record.id, record])),

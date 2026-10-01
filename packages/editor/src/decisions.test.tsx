@@ -6,15 +6,31 @@ import { Decisions } from "./decisions";
 import { QuestionnaireStore } from "./questionnaires";
 
 import type { MotionDisclosureContract } from "./disclosure-motion";
+import type { QuestionnaireEntry } from "./questionnaires";
 
 let original = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+
+const RESOLVED: QuestionnaireEntry = {
+	id: "questionnaire",
+	value: {
+		id: "questionnaire",
+		questions: [{
+			id: "question",
+			header: "Question",
+			prompt: "What did the room decide?",
+			multiple: false,
+			options: [],
+			answer: "Done",
+		}],
+	},
+};
 
 afterEach(() => {
 	if (original) Object.defineProperty(globalThis, "localStorage", original);
 	else delete (globalThis as { localStorage?: unknown }).localStorage;
 });
 
-function markup(stored?: string): string {
+function markup(stored?: string, entries = [RESOLVED]): string {
 	let values = new Map<string, string>();
 	if (stored) values.set("chopin:decisions:resolved", stored);
 	Object.defineProperty(globalThis, "localStorage", {
@@ -26,23 +42,7 @@ function markup(stored?: string): string {
 	});
 
 	let store = new QuestionnaireStore();
-	store.set({
-		entries: [{
-			id: "questionnaire",
-			value: {
-				id: "questionnaire",
-				questions: [{
-					id: "question",
-					header: "Question",
-					prompt: "What did the room decide?",
-					multiple: false,
-					options: [],
-					answer: "Done",
-				}],
-			},
-		}],
-		hasPlanContent: true,
-	});
+	store.set({ entries, hasPlanContent: true });
 	let motion: MotionDisclosureContract = {
 		className: "motion-collapse",
 		closeDuration: 250,
@@ -63,4 +63,32 @@ test("resolved history starts collapsed and restores an explicit open preference
 	expect(restored).toContain('data-motion-disclosure="decision-history"');
 	expect(restored).toContain('data-feedback-icon="open"');
 	expect(restored).toContain('data-motion-feedback="icon"');
+});
+
+test("an expired card is listed with the resolved cards and says nobody answered", () => {
+	let expired: QuestionnaireEntry = {
+		id: "expired",
+		value: {
+			id: "expired",
+			status: "expired",
+			at: "2026-09-28T10:30:00.000Z",
+			questions: [{
+				id: "confirm",
+				header: "Confirm",
+				prompt: "Ship the migration?",
+				multiple: false,
+				options: [{ id: "yes", label: "Yes" }],
+			}],
+		},
+	};
+	let history = markup("true", [expired, RESOLVED]);
+	expect(history).toMatch(/<span class="tabular-nums">2<\/span><span>resolved<\/span>/);
+	expect(history).toContain('data-plan-sidecar-questionnaire="expired"');
+	expect(history).toContain("Ship the migration?");
+	expect(history).toContain(
+		"Nobody answered within 30 minutes. The Planner will use its best judgement for this decision.",
+	);
+	for (let control of ["Save answer", "<textarea", 'type="radio"']) {
+		expect(history).not.toContain(control);
+	}
 });

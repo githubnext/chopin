@@ -26,6 +26,7 @@ import {
 	limits,
 	parse,
 	PlanValidationError,
+	questionnaireElement,
 	QuestionnaireNode,
 	registry as buildRegistry,
 	serialize,
@@ -433,6 +434,18 @@ export function insertQuestionnaires(
 	}, insertions);
 }
 
+/**
+ * Whether appending these questionnaires keeps the source within its byte limit.
+ *
+ * Measured before mutating, because Yjs cannot undo an insertion that turns out
+ * to be too large.
+ */
+export function fitsQuestionnaires(target: Document, values: Questionnaire[]): boolean {
+	let tree = parse(project(target));
+	tree.children.push(...values.map(questionnaireElement));
+	return Buffer.byteLength(serialize(tree)) <= limits.MAX_SOURCE_BYTES;
+}
+
 /** Append one questionnaire to the plan. */
 export function insertQuestionnaire(target: Document, value: Questionnaire): Mutation | undefined {
 	return insertQuestionnaires(target, [{ value }]);
@@ -527,6 +540,19 @@ export function appendQuestionOption(
 						: item
 				),
 			});
+		}
+		return found;
+	});
+}
+
+/** Mark host input nobody answered in time as expired, leaving the card where it is. */
+export function projectExpiry(target: Document, id: string, at: string): Mutation | undefined {
+	return mutate(target, () => {
+		let found = false;
+		for (let node of $nodesOfType(QuestionnaireNode)) {
+			if (node.getId() !== id) continue;
+			found = true;
+			node.setQuestionnaire({ ...node.getQuestionnaire(), status: "expired", at });
 		}
 		return found;
 	});

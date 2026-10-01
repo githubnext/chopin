@@ -9,6 +9,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { ChevronIcon } from "@chopin/icons";
 
+import { undecided } from "./decision-state";
 import { MotionDisclosure, MotionDisclosureIcon } from "./disclosure-motion";
 import { useQuestionnaires } from "./questionnaires";
 import { QuestionnaireCard } from "./widgets/questionnaire";
@@ -36,10 +37,6 @@ export type DecisionsProps = {
 	 */
 	reveal?: { widget: string; token: number };
 };
-
-function undecided(entry: QuestionnaireEntry): boolean {
-	return entry.value.questions.some(question => question.answer === undefined);
-}
 
 let HISTORY = "chopin:decisions:resolved";
 

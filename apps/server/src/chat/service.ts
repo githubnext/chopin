@@ -22,6 +22,8 @@ import { ulid } from "@chopin/dialect";
 
 import { PLANNER_TOOL_NAMES } from "../harness/tool-names";
 import type { PlannerSession } from "../harness/session";
+import { verifiedCheckout } from "../harness/atomic/checkout";
+import { rememberCheckout } from "../harness/atomic/workspace";
 import { plannerInstructions } from "../agent/planner";
 import type { ActiveOwnerBinding } from "../agent/active-owner";
 import type { DocumentRoom, ResearchWorkspaceRequest } from "../agent/tools";
@@ -30,6 +32,7 @@ import { instruction } from "@chopin/protocol/address";
 
 import { annotatedText, compose, referenceCatalog, remember } from "./address";
 import { broadcast, fail, reply, tell } from "../wire";
+import { MAX_MESSAGE_BYTES } from "./limits";
 
 import type { Server } from "bun";
 import type { TextStreamPart, ToolSet } from "ai";
@@ -46,7 +49,6 @@ import type { Socket, SocketData } from "../wire";
 /** Beyond this the queue is a backlog nobody is going to read. */
 const MAX_QUEUE = 20;
 const MAX_PENDING_SENDS = 20;
-const MAX_MESSAGE_BYTES = 64 * 1024;
 const MAX_SESSION_REFERENCES = 50;
 const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const FINGERPRINT = /^sha256:[0-9a-f]{64}$/;
@@ -82,6 +84,9 @@ type Waiting = Wire.Waiting & {
 	sessionId?: string;
 	/** Verified member identity, retained only for a queued composer message. */
 	userId?: string;
+	posted?: boolean;
+	/** MCP caller whose instruction this is; it never claims ownership without their login. */
+	invokedBy?: string;
 };
 
 export type ActiveMemberRequest = {
@@ -89,7 +94,7 @@ export type ActiveMemberRequest = {
 	userId: string;
 	handle: string;
 	text: string;
-	claimantSessionId: string;
+	claimantSessionId: string | undefined;
 	turnId: string;
 	lifecycle: number;
 };
@@ -111,8 +116,12 @@ export type Chat = {
 	pendingSends: number;
 	/** Per-turn owner for revocation and credential rotation fencing. */
 	openingOwner?: { sessionId: string; generation: number; revision: number };
-	/** Current disposable session; never reused by the next turn. */
+	/** Current session. Disposable per turn, except a full Planner session kept while it owns workflow runs. */
 	agent?: PlannerSession;
+	/** The Planner session kept past its turn, with its owner binding, until its workflow runs finish. */
+	retained?: Retained;
+	/** Live and paused workflow runs of the retained session. */
+	runs?: Wire.Runs;
 	turnController?: AbortController;
 	/** Fences a turn invalidated while opening or streaming. */
 	lifecycle: number;
@@ -174,14 +183,17 @@ export function create(): Chat {
 }
 
 /**
- * Come back with what was said before.
+ * Come back with what was said before, and the workflow runs shown then.
  *
  * An entry that was still streaming when the process went away never finished,
  * so the flag is cleared: it is as complete as it is ever going to be, and
- * leaving it set would show a spinner nothing will ever stop.
+ * leaving it set would show a spinner nothing will ever stop. Runs still live
+ * then have no session now, so they come back stopped.
  */
-export function restore(entries: Wire.Entry[]): Chat {
+export function restore(entries: Wire.Entry[], runs?: Wire.Run[]): Chat {
+	let restoredRuns = restoreRuns(runs);
 	return {
+		...(restoredRuns ? { runs: restoredRuns } : {}),
 		entries: entries.map(entry => {
 			let { streaming: _streaming, ...rest } = entry;
 			return rest;
@@ -338,6 +350,7 @@ function state(chat: Chat, server: Server<SocketData>, room: string): void {
 		ts: 0,
 		busy: chat.busy,
 		...(chat.turn ? { turn: chat.turn } : {}),
+		...(chat.runs ? { runs: chat.runs } : {}),
 	});
 }
 
@@ -390,6 +403,7 @@ export function greet(chat: Chat, ws: Socket): void {
 		entries: chat.entries.map(publicEntry),
 		busy: chat.busy,
 		...(chat.turn ? { turn: chat.turn } : {}),
+		...(chat.runs ? { runs: chat.runs } : {}),
 		queued: visible(chat),
 	});
 }
@@ -401,11 +415,17 @@ export type Room = {
 	room: string;
 	config: Config;
 	auth: HostedAuth;
-	claimantSessionId: string;
+	/**
+	 * Login session that may claim Planner ownership for this room's turns.
+	 * Absent for an MCP caller without a live browser login: their instruction
+	 * runs only under an owner the channel already has.
+	 */
+	claimantSessionId: string | undefined;
 	repository: HostedRepository;
 	activeOwner?: () => Promise<ActiveOwnerBinding | undefined>;
 	persist: () => Promise<void>;
 	openPlannerSession?: typeof import("../harness/session")["openPlannerSession"];
+	invokedBy?: string;
 	ownerAvailable?: () => Promise<void>;
 	jobs?: JobService;
 	references?: ReferenceService;
@@ -416,6 +436,14 @@ export type Room = {
 		text: string;
 		question: string;
 	}) => Promise<ResearchWorkspaceRequest>;
+	/** Keeps the room loaded while a retained Planner still owns workflow runs; returns the release. */
+	hold?: () => () => void;
+};
+
+type Retained = {
+	session: PlannerSession;
+	binding: ActiveOwnerBinding;
+	release: () => Promise<void>;
 };
 
 /**
@@ -436,6 +464,89 @@ export function send(context: Room, ws: Socket, msg: Request<Wire.Send>): Promis
 	let accepted = context.chat.sending.then(process, process);
 	let completed = accepted.finally(() => context.chat.pendingSends--);
 	context.chat.sending = completed.then(() => {}, () => {});
+	return completed;
+}
+
+/**
+ * Accept an MCP instruction without waiting for its Planner turn.
+ *
+ * The caller is attributed on the posted message, and the turn runs under the
+ * channel's Planner owner. A checkout matters only to the atomic harness, which
+ * verifies it before anything is posted and remembers it for the channel.
+ */
+export async function invoke(
+	context: Room,
+	user: { id: string; login: string },
+	text: string,
+	checkout?: string,
+): Promise<
+	| "planner-unavailable"
+	| "planner-owner-unavailable"
+	| "planner-queue-full"
+	| "checkout-unverified"
+	| undefined
+> {
+	let { chat, server, room } = context;
+	if (chat.pendingSends >= MAX_PENDING_SENDS) return "planner-queue-full";
+	chat.pendingSends++;
+	let post = async () => {
+		if (!context.config.agent || chat.closed) return "planner-unavailable" as const;
+		let verified: string | undefined;
+		if (checkout !== undefined && context.config.harness === "atomic") {
+			verified = await verifiedCheckout(context.repository, checkout);
+			if (!verified) return "checkout-unverified" as const;
+		}
+		try {
+			await resolveOwner(context.auth, context.repository, room, context.claimantSessionId);
+		} catch {
+			return "planner-owner-unavailable" as const;
+		}
+		if (chat.closed) return "planner-unavailable" as const;
+		if (chat.busy && chat.waiting.length >= MAX_QUEUE) return "planner-queue-full" as const;
+		let entry: Wire.Entry = {
+			id: ulid(),
+			author: { kind: "member", handle: user.login },
+			text,
+			ts: now(),
+		};
+		chat.entries.push(entry);
+		try {
+			await context.persist();
+		} catch (error) {
+			chat.entries = chat.entries.filter(value => value !== entry);
+			throw error;
+		}
+		if (chat.closed) return "planner-unavailable" as const;
+		if (verified) rememberCheckout(room, verified);
+		announce(server, room, entry);
+		if (chat.busy) {
+			chat.waiting.push({
+				id: entry.id,
+				handle: user.login,
+				text,
+				message: true,
+				posted: true,
+				sessionId: context.claimantSessionId,
+				userId: user.id,
+				invokedBy: user.id,
+			});
+			queued(chat, server, room);
+		} else {
+			startRun(
+				{ ...context, invokedBy: user.id },
+				user.login,
+				text,
+				undefined,
+				context.claimantSessionId,
+				false,
+				{ entryId: entry.id, userId: user.id },
+			);
+		}
+		return undefined;
+	};
+	let accepted = chat.sending.then(post, post);
+	let completed = accepted.finally(() => chat.pendingSends--);
+	chat.sending = completed.then(() => {}, () => {});
 	return completed;
 }
 
@@ -680,24 +791,194 @@ export function unqueue(context: Room, ws: Socket, msg: Request<Wire.Unqueue>): 
 	queued(chat, server, room);
 }
 
-/** Stop the running turn. Anyone may, and the transcript says who did. */
+/**
+ * Stop the running turn and pause the Planner's workflow runs, so both hold
+ * until someone resumes them. Anyone may, and the transcript says who did.
+ */
 export async function abort(context: Room, ws: Socket): Promise<void> {
 	let { chat, room, server } = context;
-	if (!chat.busy || !chat.turnController) return;
-	chat.turnController.abort();
+	let turn = chat.busy ? chat.turnController : undefined;
+	let session = chat.retained?.session ?? chat.agent;
+	let live = (session?.runs?.()?.active.length ?? 0) > 0;
+	if (!turn && !live) return;
+	turn?.abort();
+	let paused = false;
+	if (live && session?.pauseRuns) {
+		try {
+			await session.pauseRuns();
+			paused = true;
+		} catch (err) {
+			console.error("[chat] pausing workflow runs failed:", err);
+		}
+	}
 	say(chat, server, room, {
 		id: ulid(),
 		author: { kind: "system" },
-		text: `@${ws.data.handle} stopped the turn.`,
+		text: paused
+			? `@${ws.data.handle} stopped the Planner and paused its workflows.`
+			: `@${ws.data.handle} stopped the turn.`,
 		ts: now(),
 	});
+}
+
+/** Resume the workflow runs the Planner paused. Anyone may, and the transcript says who did. */
+export async function resume(context: Room, ws: Socket): Promise<void> {
+	let { chat, room, server } = context;
+	let session = chat.retained?.session;
+	if (!session?.resumeRuns || !session.runs?.()?.paused.length) return;
+	let text = `@${ws.data.handle} resumed the Planner's workflows.`;
+	try {
+		await session.resumeRuns();
+	} catch (err) {
+		console.error("[chat] resuming workflow runs failed:", err);
+		text = "The Planner's workflows could not be resumed.";
+	}
+	say(chat, server, room, { id: ulid(), author: { kind: "system" }, text, ts: now() });
+}
+
+/** Pause or resume one workflow run of the retained Planner. Anyone may, and the transcript says who did. */
+export async function controlRun(
+	context: Room,
+	ws: Socket,
+	frame: { kind: "chat:pause-run" | "chat:resume-run"; runId?: unknown },
+): Promise<void> {
+	let { chat, room, server } = context;
+	let session = chat.retained?.session;
+	let run = typeof frame.runId === "string"
+		? chat.runs?.find(candidate => candidate.id === frame.runId)
+		: undefined;
+	let runs = session?.runs?.();
+	if (!session || !run) return;
+	let pausing = frame.kind === "chat:pause-run";
+	if (pausing ? !runs?.active.includes(run.id) : !runs?.paused.includes(run.id)) return;
+	let control = pausing ? session.pauseRun : session.resumeRun;
+	if (!control) return;
+	let text = `@${ws.data.handle} ${pausing ? "paused" : "resumed"} ${run.name}.`;
+	try {
+		await control(run.id);
+	} catch (err) {
+		console.error(`[chat] ${pausing ? "pausing" : "resuming"} workflow run failed:`, err);
+		text = `${run.name} could not be ${pausing ? "paused" : "resumed"}.`;
+	}
+	say(chat, server, room, { id: ulid(), author: { kind: "system" }, text, ts: now() });
+}
+
+const ENDED_RUN: Partial<Record<Wire.Run["status"], string>> = {
+	finished: "finished",
+	blocked: "ended blocked",
+	failed: "failed",
+	stopped: "was stopped",
+};
+
+/**
+ * The run cards Chat shows after the retained session reports `incoming`. Ended
+ * cards stay until a new run starts in the document. With no report, the session
+ * was let go, so a card still marked live becomes stopped.
+ */
+export function mergeRuns(
+	previous: Wire.Run[],
+	incoming: Wire.Run[] | undefined,
+	at: number,
+): Wire.Run[] {
+	if (!incoming) return previous.map(run => ENDED_RUN[run.status] ? run : stopped(run, at));
+	let known = new Set(previous.map(run => run.id));
+	if (incoming.some(run => !known.has(run.id))) return incoming;
+	let reported = new Set(incoming.map(run => run.id));
+	return [...previous.filter(run => ENDED_RUN[run.status] && !reported.has(run.id)), ...incoming];
+}
+
+function stopped(run: Wire.Run, at: number): Wire.Run {
+	return { ...run, status: "stopped", ended: run.ended ?? at, waiting: 0 };
+}
+
+/** Run cards restored with the document; no session survives a reload of the room, so live ones were stopped. */
+export function restoreRuns(runs: Wire.Run[] | undefined): Wire.Run[] | undefined {
+	return runs?.length ? mergeRuns(runs, undefined, now()) : undefined;
+}
+
+/**
+ * Show the session's runs, keeping ended ones as summary cards until the next
+ * run starts, store them with the document so a reload keeps them, and say once
+ * in the transcript when one ends.
+ */
+function publishRuns(
+	context: Room,
+	runs: { active: string[]; paused: string[]; cards?: Wire.Run[] } | undefined,
+): void {
+	let { chat, room, server } = context;
+	let before = new Map((chat.runs ?? []).map(run => [run.id, run.status]));
+	let cards = mergeRuns(chat.runs ?? [], runs?.cards, now());
+	for (let run of cards) {
+		let ended = ENDED_RUN[run.status];
+		let previous = before.get(run.id);
+		if (!ended || !previous || ENDED_RUN[previous]) continue;
+		let minutes = Math.max(1, Math.round(((run.ended ?? run.updated) - run.started) / 60));
+		say(chat, server, room, {
+			id: ulid(),
+			author: { kind: "system" },
+			text: `${run.name} ${ended} after ${minutes} min.`,
+			ts: now(),
+		});
+	}
+	chat.runs = cards.length ? cards : undefined;
+	state(chat, server, room);
+	context.persist().catch(err => console.error("[chat] storing workflow runs failed:", err));
+}
+
+/**
+ * Keep a Planner session that still owns workflow runs instead of destroying
+ * it with its turn: the runs belong to the session, and the next turn reuses
+ * it so the Planner can still see and steer them. It is let go once every run
+ * has finished, when its owner binding ends, or when the chat closes.
+ */
+function retain(
+	context: Room,
+	opened: { session: PlannerSession; binding: ActiveOwnerBinding },
+): boolean {
+	let { chat } = context;
+	let runs = opened.session.runs?.();
+	if (chat.retained && chat.retained.session !== opened.session) return false;
+	if (!runs || !(runs.active.length || runs.paused.length) || opened.binding.signal.aborted) {
+		return false;
+	}
+	if (!chat.retained) {
+		let unhold = context.hold?.();
+		let stopWatching = opened.session.watchRuns?.(next => {
+			publishRuns(context, next);
+			if (!chat.busy && !next.active.length && !next.paused.length) void chat.retained?.release();
+		});
+		let released: Promise<void> | undefined;
+		let retained: Retained = {
+			...opened,
+			release: () =>
+				released ??= (async () => {
+					if (chat.retained === retained) chat.retained = undefined;
+					stopWatching?.();
+					opened.binding.signal.removeEventListener("abort", ended);
+					try {
+						await opened.session.destroy();
+					} finally {
+						opened.binding.release();
+						unhold?.();
+						if (chat.agent === opened.session) chat.agent = undefined;
+						if (!chat.busy) chat.owner = undefined;
+						publishRuns(context, undefined);
+					}
+				})(),
+		};
+		let ended = () => void retained.release();
+		opened.binding.signal.addEventListener("abort", ended, { once: true });
+		chat.retained = retained;
+	}
+	publishRuns(context, runs);
+	return true;
 }
 
 function currentMemberRequest(chat: Chat): ActiveMemberRequest | undefined {
 	let active = chat.activeRequest;
 	if (
 		!active || chat.closed || !chat.busy || chat.lifecycle !== active.lifecycle
-		|| chat.turn?.id !== active.turnId || !active.userId || !active.claimantSessionId
+		|| chat.turn?.id !== active.turnId || !active.userId
 	) return undefined;
 	let entry = chat.entries.find(value => value.id === active.entryId);
 	if (
@@ -840,10 +1121,18 @@ export function consumeBootstrapBackscroll(chat: Chat): void {
 
 async function repositorySession(
 	context: Room,
-	claimantSessionId: string,
+	claimantSessionId: string | undefined,
 	currentEntryId?: string,
 	currentReferences: Wire.Reference[] = [],
 ): Promise<{ session: PlannerSession; binding: ActiveOwnerBinding }> {
+	let retained = context.chat.retained;
+	if (retained) {
+		if (!retained.binding.signal.aborted && await retained.binding.revalidate()) {
+			context.chat.agent = retained.session;
+			return { session: retained.session, binding: retained.binding };
+		}
+		await retained.release();
+	}
 	let { ownership, owner, repository } = await resolveOwner(
 		context.auth,
 		context.repository,
@@ -893,11 +1182,14 @@ async function repositorySession(
 		let result = await open(binding, {
 			room: documentRoom(context),
 			repository,
-			instructions: plannerInstructions(
-				`${repository.owner}/${repository.name}`,
-				bootstrap,
-			),
+			instructions: workspace =>
+				plannerInstructions(
+					`${repository.owner}/${repository.name}`,
+					bootstrap,
+					workspace,
+				),
 			model: context.config.model,
+			harness: context.config.harness,
 		});
 		if (!result.ok) throw new Error(`Planner session unavailable (${result.error.kind})`);
 		opened = result.value;
@@ -928,19 +1220,23 @@ async function repositorySession(
 	}
 }
 
+/**
+ * The channel's Planner owner, claimed for the claimant when it has none.
+ * Without a claimant only an owner the channel already has will do.
+ */
 export async function resolveOwner(
 	auth: HostedAuth,
 	repository: HostedRepository,
 	channelId: string,
-	claimantSessionId: string,
+	claimantSessionId: string | undefined,
 ) {
-	let ownership = await auth.storage.channels.claimAgentOwner(
-		channelId,
-		claimantSessionId,
-		new Date(),
-	);
-	let ownerSessionId = ownership.ownerSessionId;
-	if (!ownerSessionId) throw new Error("This channel's Copilot owner is unavailable.");
+	let ownership = claimantSessionId
+		? await auth.storage.channels.claimAgentOwner(channelId, claimantSessionId, new Date())
+		: (await auth.storage.channels.readAgent(channelId, new Date()))?.agent;
+	let ownerSessionId = ownership?.ownerSessionId;
+	if (!ownership || !ownerSessionId) {
+		throw new Error("This channel's Copilot owner is unavailable.");
+	}
 	let owner = await auth.sessions.resolve(ownerSessionId);
 	if (!owner) {
 		throw new Error("The Copilot owner must sign in again or reset this channel's agent.");
@@ -981,7 +1277,7 @@ async function run(
 	handle: string,
 	text: string,
 	thread: string | undefined,
-	claimantSessionId: string,
+	claimantSessionId: string | undefined,
 	reserved = false,
 	member?: MemberRequest,
 	references: Wire.Reference[] = [],
@@ -1027,7 +1323,7 @@ async function run(
 		];
 		retainReferences(chat, promptReferences);
 		let available = promptReferences.filter(reference => chat.referenceCache.has(reference.id));
-		let prompt = compose(backscroll, handle, text, references, available);
+		let prompt = compose(backscroll, handle, text, references, available, !!context.invokedBy);
 
 		let result = await opened.session.stream(
 			prompt,
@@ -1052,12 +1348,16 @@ async function run(
 	} finally {
 		chat.activeRequest = undefined;
 		chat.turnController = undefined;
-		try {
-			await opened?.session.destroy();
-		} finally {
-			opened?.binding.release();
-			if (chat.agent === opened?.session) chat.agent = undefined;
-			chat.owner = undefined;
+		let kept = !!opened && !chat.closed && retain(context, opened);
+		if (!kept) {
+			try {
+				if (chat.retained?.session === opened?.session) await chat.retained?.release();
+				else await opened?.session.destroy();
+			} finally {
+				opened?.binding.release();
+				if (chat.agent === opened?.session) chat.agent = undefined;
+				chat.owner = undefined;
+			}
 		}
 		chat.messageIds = undefined;
 		chat.writing = undefined;
@@ -1090,13 +1390,13 @@ async function run(
 		if (chat.closed) return;
 		queued(chat, server, room);
 		let entry = next.message ? chat.entries.find(item => item.id === next.id) : undefined;
-		if (entry) announce(server, room, entry);
+		if (entry && !next.posted) announce(server, room, entry);
 		await run(
-			context,
+			{ ...context, invokedBy: next.invokedBy },
 			next.handle,
 			next.text,
 			next.thread,
-			next.sessionId ?? context.claimantSessionId,
+			next.invokedBy ? next.sessionId : next.sessionId ?? context.claimantSessionId,
 			false,
 			next.message && next.userId ? { entryId: next.id, userId: next.userId } : undefined,
 			next.references,
@@ -1114,7 +1414,7 @@ function startRun(
 	handle: string,
 	text: string,
 	thread: string | undefined,
-	claimantSessionId: string,
+	claimantSessionId: string | undefined,
 	reserved = false,
 	member?: MemberRequest,
 	references?: Wire.Reference[],
@@ -1138,7 +1438,7 @@ function startRun(
 export function pending(chat: Chat): Waiting | undefined {
 	let next = chat.waiting.shift();
 	while (next?.spent?.()) next = chat.waiting.shift();
-	if (next?.message) {
+	if (next?.message && !next.posted) {
 		let entry: MemberEntry = {
 			id: next.id,
 			author: { kind: "member", handle: next.handle },
@@ -1343,4 +1643,5 @@ export async function close(chat: Chat): Promise<void> {
 	clearTimeout(chat.lingering);
 	chat.lingering = undefined;
 	await Promise.all([chat.sending, chat.running]);
+	await chat.retained?.release();
 }

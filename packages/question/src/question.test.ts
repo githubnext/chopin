@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { derive, incomplete, summarize } from "./answer";
-import { answered, apply, assertPatch, crdt, create, read } from "./draft";
+import { answered, apply, assertPatch, crdt, create, read, restore } from "./draft";
 import * as limits from "./limits";
 import { appendOption, normalize, QuestionError } from "./schema";
 
@@ -40,6 +40,19 @@ describe("normalize", () => {
 		expect(definition.questions[0]!.header).toBe("Rollout");
 		expect(definition.questions[0]!.options[1]!.description).toBe("");
 	});
+	it("supports verbatim host dialogs without choices, including empty text replies", () => {
+		let definition = normalize(tool({ header: "  Title  ", options: [] }), { verbatim: true });
+		expect(definition.questions[0]!.header).toBe("  Title  ");
+		let drafts = read(create(definition), definition);
+		expect(drafts.q0!.mode).toBe("custom");
+		for (let custom of ["", "  ", "  answer\n"]) {
+			drafts.q0!.custom = custom;
+			expect(derive(definition, drafts)).toEqual({
+				ok: true,
+				answers: [{ question: "How should we deploy?", custom }],
+			});
+		}
+	});
 
 	it("rejects unknown fields instead of ignoring them", () => {
 		expect(() => normalize({ questions: [], extra: 1 })).toThrow(QuestionError);
@@ -54,8 +67,54 @@ describe("normalize", () => {
 	it("enforces the documented limits", () => {
 		expect(() => normalize({ questions: Array.from({ length: 11 }, () => tool().questions[0]) }))
 			.toThrow(/at most 10 questions/);
-		expect(() => normalize(tool({ header: "x".repeat(limits.MAX_HEADER + 1) })))
-			.toThrow(/exceeds 80 characters/);
+		let many = Array.from({ length: limits.MAX_OPTIONS + 1 }, (_, index) => ({
+			label: `${index}`,
+			description: "",
+		}));
+		for (
+			let [override, message] of [
+				[{ header: "x".repeat(limits.MAX_HEADER + 1) }, /exceeds 80 characters/],
+				[{ question: "x".repeat(limits.MAX_QUESTION + 1) }, /exceeds 1000 characters/],
+				[{ options: many }, /at most 20 options/],
+				[{ options: [{ label: "x".repeat(limits.MAX_LABEL + 1), description: "" }] }, /label/],
+				[
+					{ options: [{ label: "a", description: "x".repeat(limits.MAX_DESCRIPTION + 1) }] },
+					/description exceeds 1000 characters/,
+				],
+			] as const
+		) expect(() => normalize(tool(override))).toThrow(message);
+		let model = create(normalize(tool()));
+		model.api.val(["q0", "mode"]).set("custom");
+		model.api.str(["q0", "custom"]).ins(0, "x".repeat(limits.MAX_CUSTOM + 1));
+		expect(() => read(model, normalize(tool()))).toThrow(/custom exceeds 4000 characters/);
+	});
+
+	it("bounds verbatim host input only by the shared draft's byte limits", () => {
+		let question = {
+			header: "x".repeat(limits.MAX_HEADER + 1),
+			question: "x".repeat(limits.MAX_QUESTION + 1),
+			multiple: false,
+			options: Array.from({ length: limits.MAX_OPTIONS + 1 }, (_, index) => ({
+				label: `${index}`.padEnd(limits.MAX_LABEL + 1, " "),
+				description: "x".repeat(limits.MAX_DESCRIPTION + 1),
+			})),
+		};
+		let definition = normalize({
+			questions: Array.from({ length: limits.MAX_QUESTIONS + 1 }, () => question),
+		}, { verbatim: true });
+		expect(definition.questions).toHaveLength(limits.MAX_QUESTIONS + 1);
+		expect(definition.questions[0]).toMatchObject({
+			header: question.header,
+			question: question.question,
+			options: question.options,
+		});
+		let custom = "x".repeat(limits.MAX_CUSTOM + 1);
+		let model = create(definition);
+		model.api.val(["q0", "mode"]).set("custom");
+		model.api.str(["q0", "custom"]).ins(0, custom);
+		expect(read(model, definition).q0!.custom).toBe(custom);
+		model.api.str(["q0", "custom"]).ins(0, "x".repeat(limits.MAX_MODEL_BYTES));
+		expect(() => restore([...model.toBinary()], definition)).toThrow(/256 KiB limit/);
 	});
 
 	it("requires multiple to be a boolean", () => {

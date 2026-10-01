@@ -1,6 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
-import { advanceDecisionView, countUnanswered, selectDecisionView, visibleDecisionView } from ".";
+import {
+	advanceDecisionView,
+	countUnanswered,
+	selectDecisionView,
+	undecided,
+	visibleDecisionView,
+} from ".";
 
 import type { DecisionViewState } from ".";
 
@@ -27,6 +33,14 @@ describe("decision attention", () => {
 	it("counts unresolved questions rather than questionnaire cards", () => {
 		expect(countUnanswered([entry([undefined, undefined]), entry(["Done"])]))
 			.toBe(2);
+	});
+
+	it("never waits on an expired questionnaire", () => {
+		let waiting = entry([undefined]);
+		let expired = { ...waiting, value: { ...waiting.value, status: "expired" as const } };
+		expect([undecided(waiting), undecided(expired), undecided(entry(["Done"]))])
+			.toEqual([true, false, false]);
+		expect(countUnanswered([expired, entry([undefined, undefined])])).toBe(2);
 	});
 
 	it("forces only a questionnaire-only opening document into Decisions", () => {

@@ -48,6 +48,8 @@ export declare namespace Question {
 		question: string;
 		options: Option[];
 		multiple: boolean;
+		/** Host dialogs preserve raw text, including an explicitly submitted empty answer. */
+		verbatim?: true;
 	};
 
 	export type Definition = {
@@ -181,7 +183,7 @@ export declare namespace Question {
 				| {
 					ok: false;
 					reason: "resolved";
-					status: "answered" | "cancelled";
+					status: Status;
 					resolver: string;
 					answers?: Answer[];
 				}
@@ -201,7 +203,7 @@ export declare namespace Question {
 				| {
 					ok: false;
 					reason: "resolved";
-					status: "answered" | "cancelled";
+					status: Status;
 					resolver: string;
 					answers?: Answer[];
 				}
@@ -268,10 +270,20 @@ export declare namespace Question {
 		by: string;
 	};
 
+	/**
+	 * How a questionnaire closed.
+	 *
+	 * `cancelled` takes the card out of the document: a member declined it or
+	 * its asker withdrew it. `expired` is host input nobody answered within its
+	 * time limit; the card stays in the document, marked expired, and its asker
+	 * proceeds without an answer.
+	 */
+	export type Status = "answered" | "cancelled" | "expired";
+
 	/** The questionnaire is closed. Nobody may answer it further. */
 	export type Resolved = KIND<"question:resolved"> & {
 		id: string;
-		status: "answered" | "cancelled";
+		status: Status;
 		resolver: string;
 		answers?: Answer[];
 	};

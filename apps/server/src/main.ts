@@ -161,8 +161,21 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 	}
 }
 
-/** A room's Chat, with everything it needs to run a turn. */
 function chat(room: Rooms.Room, ws: Socket): Chat.Room {
+	return conversation(room, ws.data.sessionId, {
+		id: ws.data.repositoryId,
+		owner: ws.data.repositoryOwner,
+		name: ws.data.repositoryName,
+		defaultBranch: ws.data.repositoryDefaultBranch,
+	});
+}
+
+/** A room's Chat, shared by browser messages and MCP handoffs. */
+function conversation(
+	room: Rooms.Room,
+	claimantSessionId: string | undefined,
+	repository: Chat.Room["repository"],
+): Chat.Room {
 	return {
 		chat: room.plan!.chat,
 		plan: room.plan!,
@@ -170,18 +183,20 @@ function chat(room: Rooms.Room, ws: Socket): Chat.Room {
 		room: room.id,
 		config,
 		auth: hostedAuth,
-		claimantSessionId: ws.data.sessionId,
-		repository: {
-			id: ws.data.repositoryId,
-			owner: ws.data.repositoryOwner,
-			name: ws.data.repositoryName,
-			defaultBranch: ws.data.repositoryDefaultBranch,
-		},
+		claimantSessionId,
+		repository,
 		persist: () => Service.persist(room.plan!),
 		activeOwner: () => ownerBindings!.resolve(room.id),
 		ownerAvailable: () => jobRunner?.ownerAvailable(room.id) ?? Promise.resolve(),
 		jobs: config.backgroundJobs ? jobService : undefined,
 		references: referenceService,
+		hold: () => {
+			let held = Rooms.hold(room.id);
+			return () => {
+				held.release();
+				evict(held.room);
+			};
+		},
 		createResearch: config.agent
 			? async request => {
 				let service = researchService;
@@ -207,7 +222,7 @@ function chat(room: Rooms.Room, ws: Socket): Chat.Room {
 async function closeRoom(room: Rooms.Room, force = false): Promise<void> {
 	if (room.closing) return room.closing;
 	let closing = withDocumentLock(room.id, async () => {
-		if (!force && room.members.size > 0) return;
+		if (!force && (room.members.size > 0 || room.holds)) return;
 		let held = room.plan;
 		room.plan = undefined;
 		if (held) await Service.close(held);
@@ -222,10 +237,10 @@ async function closeRoom(room: Rooms.Room, force = false): Promise<void> {
 }
 
 function evict(room: Rooms.Room): void {
-	if (room.eviction || room.members.size > 0) return;
+	if (room.eviction || room.members.size > 0 || room.holds) return;
 	room.eviction = setTimeout(() => {
 		room.eviction = undefined;
-		if (room.members.size > 0) return;
+		if (room.members.size > 0 || room.holds) return;
 		void closeRoom(room).catch(err => {
 			console.error("chopin: room close failed -", err);
 		});
@@ -296,6 +311,15 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 
 		case "chat:abort":
 			if (room.plan) await Chat.abort(chat(room, ws), ws);
+			return;
+
+		case "chat:resume":
+			if (room.plan) await Chat.resume(chat(room, ws), ws);
+			return;
+
+		case "chat:pause-run":
+		case "chat:resume-run":
+			if (room.plan) await Chat.controlRun(chat(room, ws), ws, frame);
 			return;
 
 		case "chat:unqueue":
@@ -1110,6 +1134,31 @@ registerMcpRoutes(router, hostedAuth, {
 		return heldLease;
 	},
 }, {
+	invokePlanner: input =>
+		withDocumentTransition(input.channel.id, async () => {
+			let channel = await storage.channels.get(input.channel.id);
+			if (!channel || deletingChannels.has(channel.id)) return "document-unavailable";
+			if (channel.archivedAt) return "document-archived";
+			await Rooms.get(channel.id)?.closing;
+			let held = Rooms.hold(channel.id);
+			let release = () => {
+				held.release();
+				evict(held.room);
+			};
+			let running = false;
+			try {
+				await plan(held.room, server);
+				let context = conversation(held.room, input.session?.session.id, input.repository);
+				let code = await Chat.invoke(context, input.user, input.instruction, input.checkout);
+				if (!code && context.chat.running) {
+					running = true;
+					void context.chat.running.finally(release).catch(() => {});
+				}
+				return code;
+			} finally {
+				if (!running) release();
+			}
+		}),
 	archiveChannel,
 	isChannelDeleting: channelId => deletingChannels.has(channelId),
 	onChannelRenamed: announceChannel,

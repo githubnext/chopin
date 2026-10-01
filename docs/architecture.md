@@ -33,7 +33,8 @@ and [Self-hosting](self-hosting.md) for deployment.
   blocks starting research from a child; the API may accept the request, but
   publication validation rejects linking a grandchild.
 - The **Planner** is the current name of Chopin's hosted document agent, backed
-  by GitHub Copilot by default or by Pi under `HARNESS=pi`.
+  by GitHub Copilot by default, by Pi under `HARNESS=pi`, or by an in-process
+  Atomic session under `HARNESS=atomic`.
 - A **coding agent** is an external MCP client that creates, revises, or implements a
   document from its own local workspace.
 
@@ -53,7 +54,7 @@ flowchart LR
 	C[Local coding agent] -->|Bearer-authenticated MCP| S
 	S --> P[(PostgreSQL)]
 	S --> G[GitHub API]
-	S --> A[Harness model provider: Copilot or Pi]
+	S --> A[Harness model provider: Copilot, Pi, or Atomic]
 	S --> W[Built web client]
 ```
 
@@ -118,8 +119,11 @@ request becomes that channel's Planner owner for the lifetime of the process
 session.
 Permission callbacks recheck admission, session identity, credential revision,
 ownership generation, repository role, and App installation before execution.
-The Planner has bounded, repository-fixed read tools and no ambient checkout,
-shell, or host filesystem; no harness built-in is active. Model-backed
+Under `copilot-sdk` and `pi` the Planner has bounded, repository-fixed read tools
+and no ambient checkout, shell, or host filesystem; no harness built-in is active.
+Under `atomic` every Planner session is a
+[full Atomic session](hosted-agent.md#full-atomic-planner) with shell and
+filesystem access as the server process's user. Model-backed
 `active-planner` workers use the same owner credential but fresh isolated
 harness sessions; see [Background jobs](background-jobs.md).
 
@@ -473,6 +477,7 @@ Treat these as implementation work, not guarantees to build new behavior upon.
   `apps/server/src/harness/session.ts`, and
   `apps/server/src/harness/github-tools.ts`
 - Copilot SDK adapter: `apps/server/src/harness/copilot-sdk/adapter.ts`
+- Atomic SDK adapter: `apps/server/src/harness/atomic/adapter.ts`
 - Channel routes and IDs: `apps/server/src/channels/`
 - Research requests and child publication: `apps/server/src/research/service.ts`
 - Inline request state and anchored children: `apps/web/src/research-requests.ts`

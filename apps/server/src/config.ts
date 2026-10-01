@@ -48,12 +48,15 @@ export type Config = {
 const DEFAULT_PORT = 8787;
 const DEFAULT_MODEL = "gpt-6-luna";
 
-/** The default is a Copilot model ID. Pi resolves IDs against its own catalog,
- * so a Pi deployment must name its model rather than inherit one Pi lacks. */
+/** The default is a Copilot model ID. Pi and Atomic resolve IDs against their
+ * own catalogs, so those deployments must name a model rather than inherit one
+ * the catalog lacks. */
 function model(harness: string): string {
 	let configured = process.env.MODEL;
 	if (configured) return configured;
-	if (harness === "pi") throw new Error("MODEL is required when HARNESS=pi");
+	if (harness === "pi" || harness === "atomic") {
+		throw new Error(`MODEL is required when HARNESS=${harness}`);
+	}
 	return DEFAULT_MODEL;
 }
 export function harnessSelection(): Pick<Config, "host" | "harness" | "harnessAuth"> {
@@ -130,6 +133,9 @@ export function describe(config: Config): string {
 		config.devClient ? `client: vite (${config.devClient})` : "client: built",
 		config.agent ? `agent: ${config.model} (on demand)` : "agent: off",
 		`harness: ${config.harness}`,
+		...(config.harness === "atomic"
+			? ["Planner: full Atomic session (shell and filesystem access as this process's user)"]
+			: []),
 		config.backgroundJobs ? "background jobs: on" : "background jobs: off",
 		config.webResearch ? "web research: on" : "web research: off",
 		admission,
