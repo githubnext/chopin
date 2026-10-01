@@ -2706,3 +2706,35 @@ Workspace/E2E types and explicit strict runner/test types pass. The 95 passing
 native cases and client-build evidence at the merged checkpoint remain applicable
 to the unchanged application sources; the fresh contained image builds its own
 client. This correction changes only the runner, its pure tests and this ledger.
+
+The image built from `b1ee0a587a59f58c278f5a96f26a30b134aacf4c` has
+inspected immutable ID
+`sha256:173d1d56111889c1cec6ab086a319b419e62e7efafce2bb5411efcdb48e6635e`.
+Its genuine contained attempt, nonce `11bac40fc464d1d8fe5915045f923ded`,
+validated the stopped worker's source/build stamp but failed at namespace step
+`links`, before SQL, application activation or the selected test. Supervisor exit
+was 1; owned cleanup verified the application absent first and PostgreSQL absent
+second, with no uncertain creations. This attempt provides no runtime test pass.
+
+Read-only diagnostics identified `/sys/class/net/bonding_masters` as a regular,
+empty control file alongside ten real interface symlinks. Treating every sysfs
+entry as an interface attempted to read its nonexistent `flags` and other fields,
+which returned ENOTDIR. The control file also exists in a direct network-none
+namespace; this finding does not attribute the failure specifically to sharing
+PostgreSQL's namespace. The earlier dormant-interface and Bun socket findings
+remain separate observations.
+
+A narrow collector correction is being prepared to validate and exclude that
+specific empty regular control file before collecting interface metadata. The
+namespace checker and mandatory probes remain unchanged. Corrected-source checks,
+a fresh committed image and another genuine run are still required; no passing
+application runtime or complete release is established yet.
+
+The corrected collector passes 39 focused pure cases after its captured control-file
+regression failed before the fix. Fresh full validation passes 3,510 offline tests,
+16,363 assertions and zero failures across 557 files, with the same two guarded
+PostgreSQL skips. Full workspace/E2E types, explicit strict runner types and repository
+checks pass. Independent review confirms all prior checker/probe/main bodies and
+existing test callbacks remain unchanged; only the validated sysfs entry policy and
+collector change. The next image binds this clean corrected checkpoint for the
+unchanged authentic target.

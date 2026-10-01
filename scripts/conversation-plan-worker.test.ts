@@ -1,5 +1,10 @@
 import { expect, test } from "bun:test";
-import { checkNamespace, type NamespaceLink } from "./conversation-plan-worker";
+import {
+	checkNamespace,
+	type NamespaceLink,
+	type SysfsEntry,
+	sysfsInterfaces,
+} from "./conversation-plan-worker";
 
 // Captured from the owned network-none Linux namespace, not invented route examples.
 let observed = [
@@ -264,4 +269,63 @@ test("IPv4 header cannot be absent or replaced by a route", () => {
 	for (let route of ["", "tunl0 00000000", observed[1]!.replace("Gateway", "Changed")]) {
 		expect(() => checkNamespace(observed[0]!, route, observed[2]!, evidence)).toThrow();
 	}
+});
+
+// Captured shared-namespace inventory: ten interface symlinks plus an empty control file.
+let sysfsEntries: SysfsEntry[] = [
+	...Object.keys(evidence).map((name): SysfsEntry => ({ name, kind: "symlink" })),
+	{ name: "bonding_masters", kind: "file", content: "" },
+];
+test("empty bonding control is excluded from the actual interface inventory", () => {
+	expect(new Set(sysfsInterfaces(sysfsEntries, ["lo"]))).toEqual(new Set(Object.keys(evidence)));
+});
+
+test("configured or unread bonding control remains rejected", () => {
+	for (let content of ["bond0\n", "\n", undefined]) {
+		let entries = sysfsEntries.map(entry =>
+			entry.name === "bonding_masters" ? { ...entry, content } : entry
+		);
+		expect(() => sysfsInterfaces(entries, ["lo"])).toThrow();
+	}
+});
+test("wrong-kind or addressed bonding control remains rejected", () => {
+	for (let kind of ["other"] satisfies SysfsEntry["kind"][]) {
+		let entries = sysfsEntries.map(entry =>
+			entry.name === "bonding_masters" ? { ...entry, kind } : entry
+		);
+		expect(() => sysfsInterfaces(entries, ["lo"])).toThrow();
+	}
+	expect(() => sysfsInterfaces(sysfsEntries, ["lo", "bonding_masters"])).toThrow();
+});
+test("unknown non-interface entries and non-symlink interfaces fail closed", () => {
+	expect(() =>
+		sysfsInterfaces([...sysfsEntries, { name: "unknown_control", kind: "file", content: "" }], [
+			"lo",
+		])
+	).toThrow();
+	let entries = sysfsEntries.map((entry): SysfsEntry =>
+		entry.name === "lo" ? { ...entry, kind: "file" } : entry
+	);
+	expect(() => sysfsInterfaces(entries, ["lo"])).toThrow();
+});
+test("sysfs address coverage and duplicate entry rejection remain mandatory", () => {
+	expect(() => sysfsInterfaces(sysfsEntries, ["lo", "unknown0"])).toThrow();
+	expect(() => sysfsInterfaces([...sysfsEntries, sysfsEntries[0]!], ["lo"])).toThrow();
+});
+
+test("a symlink named bonding_masters remains a real unknown interface", () => {
+	let entries = sysfsEntries.map((entry): SysfsEntry =>
+		entry.name === "bonding_masters" ? { ...entry, kind: "symlink" } : entry
+	);
+	expect(sysfsInterfaces(entries, ["lo"])).toContain("bonding_masters");
+	let links = {
+		...evidence,
+		bonding_masters: {
+			...evidence.tunl0!,
+			index: "11",
+			path: "/sys/devices/virtual/net/bonding_masters",
+		},
+	};
+	let dev = observed[0]! + "bonding_masters: " + "0 ".repeat(16) + "\n";
+	expect(() => checkNamespace(dev, observed[1]!, observed[2]!, links)).toThrow();
 });

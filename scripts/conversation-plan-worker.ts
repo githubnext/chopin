@@ -221,13 +221,43 @@ export function checkNamespace(
 	}
 }
 
-async function namespaceLinks(): Promise<Record<string, NamespaceLink>> {
-	let names = await readdir("/sys/class/net");
-	let addresses = networkInterfaces();
-	if (Object.keys(addresses).some(name => !names.includes(name))) {
+export type SysfsEntry = { name: string; kind: "symlink" | "file" | "other"; content?: string };
+
+export function sysfsInterfaces(entries: SysfsEntry[], addressKeys: string[]): string[] {
+	let names: string[] = [];
+	if (new Set(entries.map(entry => entry.name)).size !== entries.length) {
+		throw new Error("duplicate sysfs entry");
+	}
+	for (let entry of entries) {
+		if (entry.kind === "symlink") names.push(entry.name);
+		else if (entry.name === "bonding_masters" && entry.kind === "file") {
+			if (entry.content !== "" || addressKeys.includes(entry.name)) {
+				throw new Error("invalid bonding control");
+			}
+		} else throw new Error("unknown non-interface sysfs entry");
+	}
+	if (addressKeys.some(name => !names.includes(name))) {
 		throw new Error("address inventory mismatch");
 	}
-	let entries = await Promise.all(names.map(async name => {
+	return names;
+}
+
+async function namespaceLinks(): Promise<Record<string, NamespaceLink>> {
+	let entries = await Promise.all((await readdir("/sys/class/net")).map(async name => {
+		let path = `/sys/class/net/${name}`;
+		let stat = await lstat(path);
+		let entry: SysfsEntry = {
+			name,
+			kind: stat.isSymbolicLink() ? "symlink" : stat.isFile() ? "file" : "other",
+			content: name === "bonding_masters" && stat.isFile()
+				? await readFile(path, "utf8")
+				: undefined,
+		};
+		return entry;
+	}));
+	let addresses = networkInterfaces();
+	let names = sysfsInterfaces(entries, Object.keys(addresses));
+	let links = await Promise.all(names.map(async name => {
 		let path = `/sys/class/net/${name}`;
 		let [flags, operstate, type, index, link, resolved] = await Promise.all([
 			...["flags", "operstate", "type", "ifindex", "iflink"].map(field =>
@@ -251,7 +281,7 @@ async function namespaceLinks(): Promise<Record<string, NamespaceLink>> {
 		let pair: [string, NamespaceLink] = [name, entry];
 		return pair;
 	}));
-	return Object.fromEntries(entries);
+	return Object.fromEntries(links);
 }
 
 async function namespace(report: Record<string, unknown>): Promise<void> {
