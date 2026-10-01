@@ -23,7 +23,7 @@ import {
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { controlWorkflows, fullPlanner, workflowRuns } from "./full";
+import { fullPlanner, workflowRuns } from "./full";
 
 import type {
 	HarnessV1,
@@ -506,7 +506,7 @@ export function createAtomicAdapter(
 					});
 					let session = created.session;
 					if (full) {
-						full.control = params => controlWorkflows(session, params);
+						full.workflows = session.workflows;
 					}
 					let leak = full
 						? undefined

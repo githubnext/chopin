@@ -7,7 +7,8 @@ import {
 	pauseOwnedRuns,
 	type PlannerRuns,
 	registerFullPlanner,
-	type WorkflowControl,
+	resumeOwnedRuns,
+	untilUnpaused,
 } from "./atomic/full";
 import { createHumanInput } from "./atomic/human-input";
 import { type PlannerWorkspace, plannerWorkspace } from "./atomic/workspace";
@@ -101,7 +102,11 @@ export async function openPlannerSession(
 		if (workspace) {
 			planner = {
 				cwd: workspace.cwd,
-				humanInput: createHumanInput(channel.room),
+				humanInput: createHumanInput(
+					channel.room,
+					undefined,
+					(runId, signal) => untilUnpaused(planner!, runId, signal),
+				),
 				onRuns: runs => {
 					for (let listener of listeners) listener(runs);
 				},
@@ -129,9 +134,11 @@ export async function openPlannerSession(
 		let active = session;
 		let release = unregister;
 		let stopped: Promise<void> | undefined;
-		let control = (params: WorkflowControl) => {
-			if (!planner?.control) throw new Error("The Planner has no live Atomic session to control.");
-			return planner.control(params);
+		let workflows = () => {
+			if (!planner?.workflows) {
+				throw new Error("The Planner has no live Atomic session to control.");
+			}
+			return planner.workflows;
 		};
 		let runControl = planner
 			? {
@@ -140,10 +147,8 @@ export async function openPlannerSession(
 					listeners.add(listener);
 					return () => listeners.delete(listener);
 				},
-				pauseRuns: () => pauseOwnedRuns(control, planner.runs?.active ?? []),
-				resumeRuns: async () => {
-					for (let runId of planner.runs?.paused ?? []) await control({ action: "resume", runId });
-				},
+				pauseRuns: () => pauseOwnedRuns(workflows()),
+				resumeRuns: () => resumeOwnedRuns(workflows()),
 			}
 			: {};
 		return {
