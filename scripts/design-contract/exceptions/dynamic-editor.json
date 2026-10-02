@@ -441,34 +441,6 @@
 		"sourceHash": "ed1b5eb9ac3c88e823d46d5af6a43c5d21acffe81577e07f739a4a5701c81f73"
 	},
 	{
-		"file": "packages/editor/src/decision-layer.tsx",
-		"reason": "Reader-local marker and panel positions use bounded measured browser geometry; presence classes come from the finite shared transition contract. No typography, color or other presentation values are forwarded.",
-		"cases": [
-			[
-				"dynamic",
-				"*",
-				"item.marker",
-				"unresolved style > DecisionLayer > <button>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"decisionPanelPoint(\n\t\t\tpresented.item.target,\n\t\t\tlayout.host,\n\t\t\twidth,\n\t\t\tsize?.id === presented.id && size.mode === presented.mode ? size.height : 0,\n\t\t)",
-				"unresolved style > DecisionLayer > panelStyle: CSSProperties | undefined",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"presence.className",
-				"class > DecisionLayer > <div>",
-				1
-			]
-		],
-		"sourceHash": "493f006637b8323326cce2f802c57749f530b65ff51ee28515237de72061f317"
-	},
-	{
 		"file": "packages/editor/src/widgets/questionnaire.tsx",
 		"reason": "Finite shared transition-presence state classes control the inline card collapse; no caller classes, typography or paint values enter this boundary.",
 		"cases": [
