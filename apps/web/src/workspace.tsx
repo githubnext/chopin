@@ -397,6 +397,16 @@ export function Workspace(
 							<div
 								className="flex h-[46px] shrink-0 items-center overflow-x-auto overflow-y-hidden px-2.5 hairline-b"
 								data-document-toolbar
+								onFocusCapture={event => {
+									if (!(event.target instanceof HTMLElement)) return;
+									let control = event.target.getBoundingClientRect();
+									let toolbar = event.currentTarget.getBoundingClientRect();
+									if (control.left < toolbar.left) {
+										event.currentTarget.scrollLeft += Math.floor(control.left - toolbar.left);
+									} else if (control.right > toolbar.right) {
+										event.currentTarget.scrollLeft += Math.ceil(control.right - toolbar.right);
+									}
+								}}
 							>
 								{chat && !presentation.chatVisible && (
 									<ChatToggle

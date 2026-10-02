@@ -473,7 +473,7 @@ test("an edit received while compact Plan is hidden appears when it returns", as
 
 for (
 	let example of [
-		{ compact: true, name: "compact", width: 768 },
+		{ compact: true, name: "compact", width: 390 },
 		{ compact: false, name: "desktop", width: 1280 },
 	]
 ) {

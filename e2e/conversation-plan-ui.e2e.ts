@@ -89,7 +89,7 @@ test("another message hover stays quiet and code buttons keep one analysis porta
 });
 
 test("analysis Escape dismisses before compact Chat and narrow split popovers stay in Chat", async ({ join, room }) => {
-	let page = await join("ana", { viewport: { width: 649, height: 900 } });
+	let page = await join("ana", { viewport: { width: 390, height: 900 } });
 	await openJevWire(page, room);
 	await page.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: /^Chat/ }).click();

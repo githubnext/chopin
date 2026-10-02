@@ -480,6 +480,11 @@ body {
 }
 
 /* The split workspace is one elevated surface; its panes only own the divider. */
+.workspace-root[data-workspace-mode="split"] .workspace-frame {
+	margin-left: calc(var(--spacing) * 3 + env(safe-area-inset-left));
+	margin-right: calc(var(--spacing) * 3 + env(safe-area-inset-right));
+}
+
 .workspace-frame .plan-document {
 	box-shadow: none;
 }
@@ -490,6 +495,10 @@ body {
 
 .workspace-root[data-workspace-mode="split"] .workspace-chat-panel {
 	--panel-direction: -1;
+}
+
+.workspace-root[data-workspace-mode="split"] .workspace-frame > main {
+	min-width: 9rem;
 }
 
 .motion-panel {
