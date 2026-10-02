@@ -116,7 +116,7 @@ test("the chat rail edge follows the pointer", async ({ join, page }) => {
 });
 
 test("the compact workspace keeps the document unobstructed", async ({ join, page }) => {
-	await page.setViewportSize({ width: 640, height: 800 });
+	await page.setViewportSize({ width: 499, height: 800 });
 	await join("ana");
 
 	await expect(page.getByRole("separator", { name: "Resize chat" })).toHaveCount(0);

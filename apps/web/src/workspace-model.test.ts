@@ -20,8 +20,8 @@ const documentPresentation = { type: "document" } as const;
 
 function mediaAt(width: number): MatchMedia {
 	return query => {
-		let maximum = /\(max-width: (\d+)px\)/.exec(query);
-		return { matches: maximum !== null && width <= Number(maximum[1]) };
+		let boundary = /\(width < (\d+(?:\.\d+)?)px\)/.exec(query);
+		return { matches: boundary !== null && width < Number(boundary[1]) };
 	};
 }
 
@@ -95,11 +95,18 @@ describe("adaptive workspace", () => {
 		expect(workspaceHeadingId("plan", "child-room")).toBe("child-room-workspace-plan-heading");
 	});
 
-	it("classifies the media queries production reads at each boundary", () => {
-		expect([1023, 1024].map(width => workspaceMode(mediaAt(width)))).toEqual([
-			"compact",
-			"split",
-		]);
+	it("uses the compact workspace only below 500px", () => {
+		expect([390, 499, 499.5, 500, 640, 900, 1023, 1024].map(width => workspaceMode(mediaAt(width))))
+			.toEqual([
+				"compact",
+				"compact",
+				"compact",
+				"split",
+				"split",
+				"split",
+				"split",
+				"split",
+			]);
 	});
 
 	it("closing Chat leaves the visible document view untouched", () => {
@@ -137,7 +144,7 @@ describe("adaptive workspace", () => {
 		expect(presentWorkspace(state, "split", "plan").chatVisible).toBe(true);
 	});
 
-	it("shows Chat as the only compact destination on tablets", () => {
+	it("shows Chat as the only compact destination", () => {
 		let state: WorkspaceState = {
 			chatOpen: true,
 			desktopChatOpen: true,
