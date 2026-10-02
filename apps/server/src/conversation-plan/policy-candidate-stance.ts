@@ -60,7 +60,7 @@ export function runStance(
 				)
 				&& thread.contributions.some(item =>
 					item.kind === "option" && item.id === selected.id
-					&& item.text === selected.label
+					&& (item.displayLabel ?? item.text) === selected.label
 				);
 			if (
 				!selected || !unique || linkedCard.cardId !== thread.questionnaireId

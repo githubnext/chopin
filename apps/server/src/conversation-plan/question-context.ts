@@ -54,8 +54,13 @@ export function compactThreads(
 ) {
 	return selected.map(({ thread, options }) => {
 		let pending = effectivePending(thread, events);
+		let pendingOption = pending
+			&& thread.contributions.find((item) => item.id === pending.optionId);
 		let card = linkedCards.get(thread.id);
-		let visibleOptions = options.map((item) => ({ id: item.id, text: item.text.slice(0, 100) }));
+		let visibleOptions = options.map((item) => ({
+			id: item.id,
+			text: (item.displayLabel ?? item.text).slice(0, 100),
+		}));
 		if (card && card.cardId === thread.questionnaireId) {
 			for (let option of card.options) {
 				if (!visibleOptions.some(item => item.id === option.id)) {
@@ -85,8 +90,8 @@ export function compactThreads(
 			decision: thread.decision?.text.slice(0, 160),
 			pendingSettle: pending && {
 				optionId: pending.optionId,
-				option: thread.contributions.find((item) => item.id === pending.optionId)
-					?.text.slice(0, 100),
+				option: pendingOption
+					&& (pendingOption.displayLabel ?? pendingOption.text).slice(0, 100),
 				proposer: pending.proposer,
 			},
 		};
