@@ -12,7 +12,7 @@ remains draft. One issue per fix PR; no automatic merges or direct prototype pus
 | [JEV-005](https://github.com/githubnext/chopin/blob/maggie/jev-005-click-debug-popovers/docs/jev-issues/JEV-005.md) | Click-only Jev debug popovers with code-icon buttons               | Ready for Maggie’s review                                        | [#243](https://github.com/githubnext/chopin/pull/243) |
 | [JEV-006](https://github.com/githubnext/chopin/blob/maggie/jev-006-wider-chat/docs/jev-issues/JEV-006.md)           | Default chat pane 60px wider                                       | Ready for Maggie’s review                                        | [#244](https://github.com/githubnext/chopin/pull/244) |
 | [JEV-007](https://github.com/githubnext/chopin/blob/maggie/jev-007-hide-chat-pills/docs/jev-issues/JEV-007.md)      | Remove inline Jev chat pills                                       | Ready for Maggie’s review                                        | [#245](https://github.com/githubnext/chopin/pull/245) |
-| [JEV-008](JEV-008.md)                                                                                               | Mobile workspace breakpoint triggers too early                     | Verified; preparing PR                                           | Pending                                               |
+| [JEV-008](JEV-008.md)                                                                                               | Mobile workspace breakpoint triggers too early                     | Ready for Maggie’s review                                        | [#246](https://github.com/githubnext/chopin/pull/246) |
 
 Evidence: [live browser pass](../jev-live-browser-test.md),
 [UI reconciliation](../jev-ui-reconciliation.md). Baseline:
