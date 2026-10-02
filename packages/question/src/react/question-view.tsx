@@ -88,6 +88,8 @@ export type QuestionViewProps = {
 	errorClassName?: string;
 	/** Rendered beside the heading; hosts use it for counts and provenance. */
 	aside?: ReactNode;
+	/** Controls in the trailing header, beside question-specific presence. */
+	headerActions?: ReactNode;
 	/** Lets a host retain bounded steps for presentation without owning question state. */
 	renderStep?: (props: QuestionStepRenderProps) => ReactNode;
 };
@@ -581,6 +583,7 @@ export function QuestionView(props: QuestionViewProps) {
 		error,
 		errorClassName,
 		aside,
+		headerActions,
 		places,
 		onQuestionEnter,
 		onQuestionLeave,
@@ -618,7 +621,7 @@ export function QuestionView(props: QuestionViewProps) {
 	if (active !== selected) setActive(active);
 	// Discarding cannot be undone and the agent is waiting, so it takes a
 	// second, deliberate click rather than a modal nobody reads.
-	let [confirming, setConfirming] = useState<"discard" | "cancel">();
+	let [confirming, setConfirming] = useState(false);
 	// Presence follows the current question and ends when it changes or the card goes.
 	let focusing = useRef(onQuestionFocus);
 	focusing.current = onQuestionFocus;
@@ -774,12 +777,15 @@ export function QuestionView(props: QuestionViewProps) {
 								)}
 								{refining && <p className="question-hint" role="status">Chopin is refining…</p>}
 							</div>
-							<Presence
-								people={collaborators.filter(person =>
-									person.question === current.id
-								)}
-								render={renderPeople}
-							/>
+							<span className="flex shrink-0 items-center gap-2">
+								{headerActions}
+								<Presence
+									people={collaborators.filter(person =>
+										person.question === current.id
+									)}
+									render={renderPeople}
+								/>
+							</span>
 						</header>
 
 						<fieldset disabled={disabled} className="question-options">
@@ -844,11 +850,11 @@ export function QuestionView(props: QuestionViewProps) {
 						? (
 							<>
 								<span className="question-confirm">
-									{confirming === "cancel" ? "Cancel without answering?" : "Discard this decision?"}
+									Discard this decision?
 								</span>
 								<button
 									type="button"
-									onClick={() => setConfirming(undefined)}
+									onClick={() => setConfirming(false)}
 									disabled={submitting}
 									className="btn btn-sm btn-outline"
 								>
@@ -856,15 +862,11 @@ export function QuestionView(props: QuestionViewProps) {
 								</button>
 								<button
 									type="button"
-									onClick={confirming === "cancel" ? onCancel : discard}
+									onClick={discard}
 									disabled={disabled || submitting}
 									className="btn btn-sm btn-destructive"
 								>
-									{submitting
-										? (confirming === "cancel" ? "Cancelling…" : "Discarding…")
-										: confirming === "cancel"
-										? "Cancel"
-										: "Discard"}
+									{submitting ? "Discarding…" : "Discard"}
 								</button>
 							</>
 						)
@@ -900,20 +902,10 @@ export function QuestionView(props: QuestionViewProps) {
 										</button>
 									</div>
 								)}
-								{onCancel && onDiscard && (
-									<button
-										type="button"
-										onClick={() => setConfirming("cancel")}
-										disabled={disabled || submitting}
-										className="btn btn-sm btn-outline"
-									>
-										Cancel
-									</button>
-								)}
 								{(discard || showActions) && (
 									<button
 										type="button"
-										onClick={() => setConfirming("discard")}
+										onClick={() => setConfirming(true)}
 										disabled={disabled || submitting}
 										className="btn btn-sm btn-outline"
 									>

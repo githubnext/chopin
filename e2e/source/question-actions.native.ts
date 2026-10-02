@@ -6,7 +6,7 @@ import type { Page } from "@playwright/test";
 declare global {
 	interface Window {
 		questionFixture: {
-			mount: (mode: "editable" | "readonly" | "disabled") => void;
+			mount: (mode: "editable" | "readonly" | "disabled" | "cancel-only") => void;
 			release: () => void;
 			calls: string[];
 		};
@@ -48,7 +48,7 @@ function ActionsFixture({ mode }) {
 		disabled: mode === "disabled",
 		submitting,
 		onCancel: mode === "readonly" ? undefined : () => submit("cancel"),
-		onDiscard: mode === "readonly" ? undefined : () => submit("discard"),
+		onDiscard: mode === "readonly" || mode === "cancel-only" ? undefined : () => submit("discard"),
 	});
 }
 window.questionFixture = {
@@ -68,7 +68,7 @@ window.questionFixture = {
 	script = await result.outputs[0]!.text();
 });
 
-async function load(page: Page, mode: "editable" | "readonly" | "disabled") {
+async function load(page: Page, mode: "editable" | "readonly" | "disabled" | "cancel-only") {
 	await page.route("**/*", route => route.abort());
 	await page.setContent('<main><div id="fixture"></div></main>');
 	await page.addScriptTag({ content: script });
@@ -79,21 +79,24 @@ async function load(page: Page, mode: "editable" | "readonly" | "disabled") {
 	})).toBeVisible();
 }
 
-test("Cancel and Discard open mutually exclusive confirmations", async ({ page }) => {
+test("one Discard control confirms and Keep leaves both callbacks untouched", async ({ page }) => {
 	await load(page, "editable");
-	await page.getByRole("button", { name: "Cancel", exact: true }).click();
-	await expect(page.getByText("Cancel without answering?", { exact: true })).toBeVisible();
-	await expect(page.getByText("Discard this decision?", { exact: true })).toHaveCount(0);
-	await expect(page.getByRole("button", { name: "Discard", exact: true })).toHaveCount(0);
-	await page.getByRole("button", { name: "Keep it", exact: true }).click();
+	await expect(page.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
+	await expect(page.getByRole("button", { name: "Discard", exact: true })).toHaveCount(1);
 	await page.getByRole("button", { name: "Discard", exact: true }).click();
 	await expect(page.getByText("Discard this decision?", { exact: true })).toBeVisible();
 	await expect(page.getByText("Cancel without answering?", { exact: true })).toHaveCount(0);
-	await expect(page.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
 	await page.getByRole("button", { name: "Keep it", exact: true }).click();
-	await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeEnabled();
 	await expect(page.getByRole("button", { name: "Discard", exact: true })).toBeEnabled();
 	expect(await page.evaluate(() => window.questionFixture.calls)).toEqual([]);
+});
+
+test("main's cancellation callback remains a fallback for the single Discard action", async ({ page }) => {
+	await load(page, "cancel-only");
+	await expect(page.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
+	await page.getByRole("button", { name: "Discard", exact: true }).click();
+	await page.getByRole("button", { name: "Discard", exact: true }).click();
+	expect(await page.evaluate(() => window.questionFixture.calls)).toEqual(["cancel"]);
 });
 
 test("held submitting state disables duplicate callbacks and Keep", async ({ page }) => {
@@ -107,10 +110,8 @@ test("held submitting state disables duplicate callbacks and Keep", async ({ pag
 	expect(await page.evaluate(() => window.questionFixture.calls)).toEqual(["discard"]);
 	await page.evaluate(() => window.questionFixture.release());
 	await page.getByRole("button", { name: "Keep it", exact: true }).click();
-	await page.getByRole("button", { name: "Cancel", exact: true }).click();
-	await page.getByRole("button", { name: "Cancel", exact: true }).click();
-	await expect(page.getByRole("button", { name: "Cancelling…", exact: true })).toBeDisabled();
-	expect(await page.evaluate(() => window.questionFixture.calls)).toEqual(["discard", "cancel"]);
+	await expect(page.getByRole("button", { name: "Discard", exact: true })).toBeEnabled();
+	expect(await page.evaluate(() => window.questionFixture.calls)).toEqual(["discard"]);
 });
 
 test("read-only and disabled presentations cannot invoke lifecycle callbacks", async ({ page }) => {
@@ -118,7 +119,7 @@ test("read-only and disabled presentations cannot invoke lifecycle callbacks", a
 	await expect(page.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
 	await expect(page.getByRole("button", { name: "Discard", exact: true })).toHaveCount(0);
 	await page.evaluate(() => window.questionFixture.mount("disabled"));
-	await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeDisabled();
+	await expect(page.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
 	await expect(page.getByRole("button", { name: "Discard", exact: true })).toBeDisabled();
 	await page.getByRole("button", { name: "Discard", exact: true }).evaluate((
 		button: HTMLButtonElement,

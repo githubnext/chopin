@@ -280,12 +280,6 @@ function Undecided(
 	let answerable = connected && !!state.definition;
 	let editable = canEdit && answerable;
 	let previous = previousAnswers(value);
-	let people = [
-		...new Set([
-			...(meta?.involved ?? []),
-			...state.collaborators.map(person => person.handle),
-		]),
-	];
 
 	return (
 		<SidecarCard
@@ -294,21 +288,18 @@ function Undecided(
 			padded={false}
 		>
 			<QuestionView
-				aside={
-					<span className="flex items-center gap-2">
-						{meta?.thread && onCardSource && (
-							<button
-								aria-label="Show source in chat"
-								className="btn btn-icon btn-ghost"
-								onClick={() => onCardSource(value.id)}
-								type="button"
-							>
-								<MessageForwardIcon aria-hidden="true" size={14} />
-							</button>
-						)}
-						<PresenceFaces handles={people} label="In this decision" />
-					</span>
-				}
+				headerActions={meta?.thread && onCardSource
+					? (
+						<button
+							aria-label="Show source in chat"
+							className="btn btn-icon btn-ghost"
+							onClick={() => onCardSource(value.id)}
+							type="button"
+						>
+							<MessageForwardIcon aria-hidden="true" size={14} />
+						</button>
+					)
+					: undefined}
 				collaborators={state.collaborators}
 				definition={state.definition ?? definition(value)}
 				// A draft that has not synced cannot be edited without discarding
@@ -321,12 +312,16 @@ function Undecided(
 				refining={meta?.refining}
 				previous={previous}
 				onAddOption={editable ? state.addOption : undefined}
-				onCancel={editable ? state.cancel : undefined}
 				onDiscard={editable ? state.discard : undefined}
 				onChange={editable ? state.change : undefined}
 				onQuestionFocus={editable ? state.focusQuestion : undefined}
 				onSubmit={editable ? state.submit : undefined}
-				renderPeople={people => <PresenceFaces handles={people.map(person => person.handle)} />}
+				renderPeople={people => (
+					<PresenceFaces
+						handles={[...(meta?.involved ?? []), ...people.map(person => person.handle)]}
+						label={meta ? "In this decision" : undefined}
+					/>
+				)}
 				renderStep={motion
 					? ({ children, question }) => (
 						<QuestionStepSwap motion={motion} question={question}>

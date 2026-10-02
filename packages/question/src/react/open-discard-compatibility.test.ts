@@ -4,14 +4,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { QuestionView } from "./question-view";
 import { AUTH } from "./question-view.test-fixtures";
 
-test("Cancel remains available when an open card also offers Discard", () => {
+test("an open card has one Discard action when both callbacks are supplied", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionView, {
 		definition: AUTH,
 		drafts: {},
 		onCancel: () => {},
 		onDiscard: () => {},
 	}));
-	expect(markup).toContain(">Cancel<");
+	expect(markup).not.toContain(">Cancel<");
 	expect(markup).toContain(">Discard<");
 	expect(markup).not.toContain("Cancel without answering?");
 	expect(markup).not.toContain("Discard this decision?");

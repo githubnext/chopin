@@ -12,6 +12,33 @@ test.afterEach(async ({ page }) => {
 	await assertOpenCardErrors(page);
 });
 
+for (let width of [390, 720]) {
+	test(`source and unique people share the trailing open-card header at ${width}px`, async ({ page }) => {
+		await loadOpenCard(page, { canEdit: true });
+		await page.locator("#open-card").evaluate((element, width) => {
+			element.style.width = `${width}px`;
+		}, width);
+		await page.evaluate(() => window.openCardProbe.peers(["ana", "ben"]));
+		let header = card(page).locator(".question-head");
+		let source = header.getByRole("button", { name: "Show source in chat", exact: true });
+		let people = header.getByRole("group", { name: "In this decision: ana, ben", exact: true });
+		await expect(source).toBeVisible();
+		await expect(people).toBeVisible();
+		await expect(card(page).getByRole("img", { name: "ana", exact: true })).toHaveCount(1);
+		await expect(card(page).getByRole("img", { name: "ben", exact: true })).toHaveCount(1);
+		let title = await header.getByRole("heading").boundingBox();
+		let sourceBox = await source.boundingBox();
+		let peopleBox = await people.boundingBox();
+		let headBox = await header.boundingBox();
+		expect(sourceBox!.x).toBeGreaterThanOrEqual(title!.x + title!.width);
+		expect(peopleBox!.x).toBeGreaterThanOrEqual(title!.x + title!.width);
+		expect(peopleBox!.x + peopleBox!.width).toBeLessThanOrEqual(headBox!.x + headBox!.width);
+		expect(Math.abs(sourceBox!.y - headBox!.y)).toBeLessThan(4);
+		await expect(card(page).getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
+		await expect(card(page).getByRole("button", { name: "Discard", exact: true })).toHaveCount(1);
+	});
+}
+
 test("actual read-only inline card keeps durable people and Source without allowing draft writes", async ({ page }) => {
 	await loadOpenCard(page);
 	let people = card(page).getByRole("group", { name: "In this decision: ana, ben", exact: true });
