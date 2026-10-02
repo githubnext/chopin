@@ -33,7 +33,8 @@ and [Self-hosting](self-hosting.md) for deployment.
   blocks starting research from a child; the API may accept the request, but
   publication validation rejects linking a grandchild.
 - The **Planner** is the current name of Chopin's hosted document agent, backed
-  by GitHub Copilot by default or by Pi under `HARNESS=pi`.
+  by GitHub Copilot by default, by Pi under `HARNESS=pi`, or by an in-process
+  Atomic session under `HARNESS=atomic`.
 - A **coding agent** is an external MCP client that creates, revises, or implements a
   document from its own local workspace.
 
@@ -53,7 +54,7 @@ flowchart LR
 	C[Local coding agent] -->|Bearer-authenticated MCP| S
 	S --> P[(PostgreSQL)]
 	S --> G[GitHub API]
-	S --> A[Harness model provider: Copilot or Pi]
+	S --> A[Harness model provider: Copilot, Pi, or Atomic]
 	S --> W[Built web client]
 ```
 
@@ -473,6 +474,7 @@ Treat these as implementation work, not guarantees to build new behavior upon.
   `apps/server/src/harness/session.ts`, and
   `apps/server/src/harness/github-tools.ts`
 - Copilot SDK adapter: `apps/server/src/harness/copilot-sdk/adapter.ts`
+- Atomic SDK adapter: `apps/server/src/harness/atomic/adapter.ts`
 - Channel routes and IDs: `apps/server/src/channels/`
 - Research requests and child publication: `apps/server/src/research/service.ts`
 - Inline request state and anchored children: `apps/web/src/research-requests.ts`

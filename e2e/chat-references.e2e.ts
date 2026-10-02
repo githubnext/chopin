@@ -249,11 +249,11 @@ test("a server without chat references leaves typed tokens ordinary", async ({ j
 
 	let chat = chatPane(await join("ana"));
 	let draft = chat.getByPlaceholder("Use @chopin to ask Chopin");
-	await expect(draft).toHaveRole("textbox");
-	await expect(draft).not.toHaveAttribute("aria-autocomplete", "list");
+	// The `@` list needs no server support, so the composer is a combobox either way.
+	await expect(draft).toHaveRole("combobox");
 	await draft.fill("See #Ask @chopin");
 	await page.waitForTimeout(250);
-	await expect(chat.getByRole("listbox")).toHaveCount(0);
+	await expect(chat.getByRole("listbox", { name: "Document references" })).toHaveCount(0);
 	await chat.getByRole("button", { name: "Send message" }).click();
 	await expect.poll(() => sent).toHaveLength(1);
 	expect(sent[0]).toMatchObject({ text: "See #Ask @chopin", to: "planner" });

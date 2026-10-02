@@ -708,6 +708,7 @@ export function RoomWorkspace(
 						connected={status === "connected" && workspaceCanEdit}
 						handle={handle}
 						onActivity={onChatActivity}
+						people={peopleHere(members)}
 						conversationPlan={conversation.state}
 						conversationPlanJobs={conversation.jobs}
 						onCardLink={showCard}
