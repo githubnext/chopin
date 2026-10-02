@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { Dependencies, State } from "./processor-types";
 import { type Interpretation, interpretMessage } from "./interpret";
 import { completeAnalysis } from "./domain";
-import { currentScopedProposal } from "./events";
+import { assertEventCapacity, ConversationCapacityError, currentScopedProposal } from "./events";
 import { effectsFor } from "./effects";
 import { cardCycle, linkedCardOptions } from "./processor-card-context";
 import { admitResearchOffer } from "./processor-research-admission";
@@ -105,13 +105,18 @@ export function createRun(
 							interpretInput.message,
 							interpretation.analysis,
 						);
-					} catch {
+						assertEventCapacity(next, plan.pendingCardActions.length);
+					} catch (error) {
 						next = completeAnalysis(
 							current,
 							interpretInput.message.id,
 							[],
 							interpretInput.message,
-							failure("analysis failed validation"),
+							failure(
+								error instanceof ConversationCapacityError
+									? error.message
+									: "analysis failed validation",
+							),
 						);
 					}
 					try {

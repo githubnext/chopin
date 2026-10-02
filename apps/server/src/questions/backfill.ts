@@ -3,7 +3,7 @@
 import { ULID } from "@chopin/dialect";
 import * as Y from "yjs";
 
-import { applyEvent } from "../conversation-plan/events";
+import { applyEvent, assertEventCapacity } from "../conversation-plan/events";
 import * as room from "../plan/room";
 import * as Service from "../plan/service";
 
@@ -95,6 +95,7 @@ export function backfillPlannerAskThreads(plan: Plan): Promise<number> {
 			) continue;
 			try {
 				let next = eventsFor(conversationPlan, record, threadId);
+				assertEventCapacity(next, plan.pendingCardActions.length);
 				if (
 					next === conversationPlan
 					|| !next.threads.some(thread =>

@@ -57,8 +57,9 @@ export async function ask(
 			// Widget and question identities are deliberately distinct.
 			let id = ulid();
 			// Classifier capacity must not prevent an ordinary Planner questionnaire.
+			let available = MAX_EVENTS - conversationPlan.events.length - plan.pendingCardActions.length;
 			let threadId = conversationPlan.threads.length < MAX_THREADS
-					&& conversationPlan.events.length + question.options.length + 2 <= MAX_EVENTS
+					&& question.options.length + 2 <= available
 				? ulid()
 				: undefined;
 			let at = Math.floor(Date.now() / 1_000);

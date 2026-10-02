@@ -20,6 +20,7 @@ import * as Question from "@chopin/question";
 
 import { validateSource } from "../conversation-plan/sources";
 import { restoreState as restoreConversationPlan } from "../conversation-plan/domain";
+import { assertEventCapacity } from "../conversation-plan/events";
 import { type Effect, restoreEffectOutbox } from "../conversation-plan/effects";
 import * as Jobs from "../conversation-plan/jobs";
 import { restorePendingCardActions } from "../questions/card-actions";
@@ -284,6 +285,7 @@ function jsonState(plan: Plan): { value: JsonValue; text: string } {
 }
 
 function capture(plan: Plan): Captured {
+	assertEventCapacity(plan.conversationPlan, plan.pendingCardActions.length);
 	let sidecar = jsonState(plan);
 	let source = room.project(plan.document);
 	return {

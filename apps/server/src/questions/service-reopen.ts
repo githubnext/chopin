@@ -2,6 +2,7 @@ import { rebase } from "./service-relationships";
 import { parse } from "@chopin/dialect";
 import * as Question from "@chopin/question";
 import * as Y from "yjs";
+import { ConversationCapacityError } from "../conversation-plan/events";
 
 import * as room from "../plan/room";
 import * as Store from "./store";
@@ -201,7 +202,10 @@ export async function reopen(
 		failure = err;
 	}
 	if (failure) {
-		if (failure instanceof Error && failure.message === "implementation is active") {
+		if (
+			failure instanceof ConversationCapacityError
+			|| failure instanceof Error && failure.message === "implementation is active"
+		) {
 			return fail(ws, msg.rid, failure.message);
 		}
 		console.error("[questions] could not reopen the card:", failure);

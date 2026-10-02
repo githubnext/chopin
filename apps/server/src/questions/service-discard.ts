@@ -1,4 +1,5 @@
 import * as Y from "yjs";
+import { ConversationCapacityError } from "../conversation-plan/events";
 
 import { isOpenStatus } from "./records";
 
@@ -110,7 +111,10 @@ export async function discard(
 		failure = err;
 	}
 	if (failure) {
-		if (failure instanceof Error && failure.message === "implementation is active") {
+		if (
+			failure instanceof ConversationCapacityError
+			|| failure instanceof Error && failure.message === "implementation is active"
+		) {
 			return fail(ws, msg.rid, failure.message);
 		}
 		console.error("[questions] could not discard the card:", failure);

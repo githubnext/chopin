@@ -10,6 +10,17 @@ export { activeScopedSupport, currentScopedProposal, targetsScopedProposal } fro
 type State = ConversationPlan.State;
 type Event = ConversationPlan.Event;
 
+export class ConversationCapacityError extends Error {
+	constructor() {
+		super("Conversation history is full");
+	}
+}
+
+/** Durable card actions reserve the event slots their FIFO mirror will need. */
+export function assertEventCapacity(state: State, reserved: number): void {
+	if (state.events.length + reserved > MAX_EVENTS) throw new ConversationCapacityError();
+}
+
 /** One accepted event changes a cloned view; callers persist the returned state. */
 export function applyEvent(state: State, event: Event): State {
 	if (state.events.some((accepted) => accepted.id === event.id)) return state;

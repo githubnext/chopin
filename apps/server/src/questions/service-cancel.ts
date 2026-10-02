@@ -1,4 +1,5 @@
 import * as Y from "yjs";
+import { ConversationCapacityError } from "../conversation-plan/events";
 import * as room from "../plan/room";
 import * as Store from "./store";
 import { announce, emit, pending } from "./card-notifications";
@@ -83,7 +84,8 @@ export async function cancel(
 		return fail(
 			ws,
 			msg.rid,
-			failure instanceof Error && failure.message === "implementation is active"
+			failure instanceof ConversationCapacityError
+				|| failure instanceof Error && failure.message === "implementation is active"
 				? failure.message
 				: "could not cancel the questionnaire",
 		);

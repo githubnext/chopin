@@ -2,6 +2,7 @@ import * as Question from "@chopin/question";
 import * as Y from "yjs";
 
 import { activeSettleDeferral } from "../conversation-plan/preference";
+import { ConversationCapacityError } from "../conversation-plan/events";
 
 import { isOpenStatus } from "./records";
 
@@ -173,7 +174,8 @@ export async function submit(
 		return fail(
 			ws,
 			msg.rid,
-			failure instanceof Error && failure.message === "implementation is active"
+			failure instanceof ConversationCapacityError
+				|| failure instanceof Error && failure.message === "implementation is active"
 				? failure.message
 				: "could not save the decision",
 		);
