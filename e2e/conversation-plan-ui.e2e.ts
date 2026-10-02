@@ -21,7 +21,7 @@ function decisionCard(page: Page, question = "Should we ship a small pilot?") {
 async function expectOpenCardReadOnly(card: ReturnType<typeof decisionCard>) {
 	await expect(card.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
 	await expect(card.getByRole("button", { name: "Discard", exact: true })).toBeDisabled();
-	let add = card.getByRole("button", { name: "Add another option" });
+	let add = card.getByRole("button", { name: "Add an option", exact: true });
 	await expect(add).toBeDisabled();
 }
 
@@ -318,7 +318,7 @@ test("a human choice overrides an advisory chat suggestion", async ({ join, room
 	let withOption = await waitForEvent(ana, "option.added");
 	let humanOptionId = withOption.threads[0]!.contributions.find(item => item.kind === "option")!.id;
 	let card = decisionCard(ana);
-	await card.getByRole("button", { name: "Add another option" }).click();
+	await card.getByRole("button", { name: "Add an option", exact: true }).click();
 	await card.getByRole("textbox", { name: "New option" }).fill("Ship to everyone");
 	await ana.keyboard.press("Enter");
 	let suggestion = card.getByRole("radio", { name: "Ship to everyone" });
@@ -350,7 +350,7 @@ test("typing an option before a suggestion keeps the composer intent until Escap
 	await waitForEvent(ana, "option.added");
 	let card = decisionCard(ana);
 	let option = card.getByRole("radio", { name: "Start with a small pilot." });
-	await card.getByRole("button", { name: "Add another option" }).click();
+	await card.getByRole("button", { name: "Add an option", exact: true }).click();
 	let field = card.getByRole("textbox", { name: "New option" });
 	await field.fill("Ship to everyone");
 	await sendChat(bo, "Let's just go with a small pilot.");
@@ -360,7 +360,7 @@ test("typing an option before a suggestion keeps the composer intent until Escap
 	await expect(option).not.toBeChecked();
 	await expect(card.getByText("from chat", { exact: true })).toHaveCount(0);
 	await field.press("Escape");
-	let add = card.getByRole("button", { name: "Add another option" });
+	let add = card.getByRole("button", { name: "Add an option", exact: true });
 	await expect(add).toBeFocused();
 	await expect(option).toBeChecked();
 	await expect(card.getByText("from chat", { exact: true })).toBeVisible();
@@ -376,7 +376,7 @@ test("adding an option does not suppress a later chat suggestion", async ({ join
 	await sendChat(bo, "Start with a small pilot.");
 	await waitForEvent(ana, "option.added");
 	let card = decisionCard(ana);
-	await card.getByRole("button", { name: "Add another option" }).click();
+	await card.getByRole("button", { name: "Add an option", exact: true }).click();
 	await card.getByRole("textbox", { name: "New option" }).fill("Ship to everyone");
 	await ana.keyboard.press("Enter");
 	await expect(card.getByRole("radio", { name: "Ship to everyone" })).toBeVisible();
@@ -430,7 +430,7 @@ test("failed analysis retries in Chat while editor selection survives hiding Cha
 
 	let editor = content(page);
 	await editor.click();
-	await page.keyboard.press("Meta+A");
+	await page.keyboard.press("ControlOrMeta+A");
 	let selected = await page.evaluate(() => window.getSelection()?.toString() ?? "");
 	expect(selected).toContain("selected sentence");
 	await page.getByRole("button", { name: /Hide chat pane/ }).click();

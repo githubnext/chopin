@@ -227,7 +227,7 @@ async function scriptResearch(
 async function startInlineResearch(page: Page, question: string) {
 	let editor = content(page);
 	await editor.click();
-	await page.keyboard.press("Meta+End");
+	await page.keyboard.press("ControlOrMeta+End");
 	await page.keyboard.press("Enter");
 	await page.keyboard.type("/research");
 	await page.keyboard.press("Enter");

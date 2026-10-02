@@ -22,7 +22,7 @@ type ClientNode = {
 type EditorInternals = { _nodeMap: Map<string, ClientNode> };
 
 function marker(page: Page) {
-	return page.getByRole("button", { name: `Decision: ${QUESTION}`, exact: true });
+	return page.getByRole("button", { name: `Decision: ${OPTION}`, exact: true });
 }
 
 function prose(page: Page) {
@@ -98,7 +98,7 @@ async function placeCaretAtParagraphEnd(page: Page, textContent: string) {
 	}, textContent);
 }
 
-async function expectResolvedDecision(page: Page) {
+async function expectResolvedDecision(page: Page, room: string) {
 	await expect(marker(page)).toBeVisible();
 	await page.getByRole("button", { name: /^Decisions/ }).click();
 	let history = page.getByRole("button", { name: "1 resolved", exact: true });
@@ -108,7 +108,9 @@ async function expectResolvedDecision(page: Page) {
 		'[data-document-view="decisions"] article[data-plan-sidecar-questionnaire]',
 	).filter({ has: page.getByRole("heading", { name: QUESTION, exact: true }) });
 	await expect(resolved).toContainText(OPTION);
-	await expect(resolved).not.toContainText("Prose removed");
+	let widget = await resolved.getAttribute("data-plan-sidecar-questionnaire");
+	if (!widget) throw new Error("resolved decision id missing");
+	expectLinked(await latestDocumentSnapshot(page, room), widget);
 	await page.getByRole("button", { name: "Document", exact: true }).click();
 }
 
@@ -259,7 +261,7 @@ test(
 		await editor.keyboard.type("Following detail.");
 		let following = content(editor).locator("p").filter({ hasText: "Following detail." });
 		await expect(following).toHaveText("Following detail.");
-		await editor.keyboard.press("Meta+ArrowLeft");
+		await editor.keyboard.press(process.platform === "darwin" ? "Meta+ArrowLeft" : "Home");
 		await editor.keyboard.press("Backspace");
 		await editor.keyboard.type(" More detail.");
 		await expect(prose(editor)).toContainText(`We decided: ${OPTION} More detail.`);
@@ -289,7 +291,7 @@ test(
 		await expect(prose(editor)).toContainText("Still the same decision.");
 		await expect(prose(other)).toContainText("Still the same decision.");
 		widget = expectLinked(await latestDocumentSnapshot(editor, room), widget);
-		await expectResolvedDecision(editor);
+		await expectResolvedDecision(editor, room);
 
 		// Drop the UI connection and let the provider reopen the document itself.
 		await sockets[0]!.close();
@@ -306,7 +308,7 @@ test(
 		await expect(prose(editor)).toContainText("After reconnect.");
 		await expect(prose(other)).toContainText("After reconnect.");
 		await expect(marker(other)).toBeVisible();
-		await expectResolvedDecision(editor);
+		await expectResolvedDecision(editor, room);
 		expectLinked(await latestDocumentSnapshot(editor, room), widget);
 		let followingBlock = content(editor).locator("p").filter({ hasText: "Following detail." });
 		await followingBlock.click();
