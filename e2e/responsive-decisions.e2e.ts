@@ -1,4 +1,4 @@
-import { authenticate, expect, test } from "./room";
+import { authenticate, expect, ready, roomPath, test } from "./room";
 import { storedQuestion } from "../apps/server/src/testing/plan";
 import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 import { installVisualViewport, setVisualViewport } from "./visual-viewport";
@@ -61,6 +61,15 @@ for (let viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }])
 	test(`long independent decisions preserve drafts and focus at ${viewport.width}x${viewport.height}`, async ({ baseURL, browser, room, seed }) => {
 		await seed(LONG_QUESTIONNAIRES, {
 			revision: 1,
+			questions: LONG_QUESTIONS.map((question, index) => ({
+				id: LONG_WIDGETS[index]!,
+				definition: { questions: [question] },
+				status: "open",
+				origin: "planner",
+				history: [],
+				optionOrigins: {},
+				editors: [],
+			})),
 			openQuestions: LONG_QUESTIONS.map((question, index) => {
 				let definition = { questions: [question] };
 				let id = LONG_WIDGETS[index]!;
@@ -86,8 +95,12 @@ for (let viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }])
 			});
 			let page = await context.newPage();
 			await authenticate(page, "ana", baseURL!);
-			await page.goto(`/channels/${room}`);
-			let card = questionnaire(page).filter({ hasText: LONG_QUESTIONS[0]!.header });
+			await page.goto(roomPath(room));
+			await ready(page);
+			await page.getByRole("button", { name: /^Decisions/ }).click();
+			let card = questionnaire(page).filter({
+				has: page.getByRole("heading", { name: LONG_QUESTIONS[0]!.question }),
+			});
 			await expect(card).toBeVisible();
 			await expect(card.getByRole("textbox", { name: "New option" })).toHaveCount(0);
 			await expectNoHorizontalOverflow(page);
@@ -101,7 +114,9 @@ for (let viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }])
 			await firstLabel.click();
 			await expect(firstChoice).toBeChecked();
 
-			let second = questionnaire(page).filter({ hasText: LONG_QUESTIONS[1]!.header });
+			let second = questionnaire(page).filter({
+				has: page.getByRole("heading", { name: LONG_QUESTIONS[1]!.question }),
+			});
 			let secondChoice = second.getByRole("radio", { name: "Its current state" });
 			await second.getByText("Its current state", { exact: true }).click();
 			await expect(secondChoice).toBeChecked();

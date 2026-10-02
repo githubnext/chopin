@@ -1,5 +1,8 @@
-import { authenticate, content, expect, roomPath, test } from "./room";
+import { authenticate, content, expect, ready, roomPath, test } from "./room";
 import { seedCardGapChannel } from "./sidecar-spacing-database";
+
+// Computed line-height and browser layout quantize at different precisions.
+const GEOMETRY_EPSILON = 1 / 64;
 
 const WIDGET = "01K0N4TR8K7JGM4R1J7PW4R8YJ";
 
@@ -28,6 +31,7 @@ test("adjacent decision cards keep at most one line of space around one empty pa
 	await seed(ADJACENT_CARDS);
 	await authenticate(page, "ana", baseURL!);
 	await page.goto(roomPath(room));
+	await ready(page);
 	await page.getByRole("button", { name: "Document", exact: true }).click();
 	let editor = content(page);
 	let cards = editor.locator(
@@ -43,7 +47,7 @@ test("adjacent decision cards keep at most one line of space around one empty pa
 	let lineHeight = await editor.evaluate(element =>
 		Number.parseFloat(getComputedStyle(element).lineHeight)
 	);
-	expect(await gap()).toBeLessThanOrEqual(lineHeight);
+	expect(await gap()).toBeLessThanOrEqual(lineHeight + GEOMETRY_EPSILON);
 
 	let interstitial = (count: number) =>
 		cards.nth(0).evaluate((host, count) => {
@@ -67,14 +71,16 @@ test("adjacent decision cards keep at most one line of space around one empty pa
 			return { gap: secondBox.top - firstBox.bottom, heights };
 		}, count);
 	let single = await interstitial(1);
-	expect(single.heights).toEqual([lineHeight]);
-	expect(single.gap).toBeLessThanOrEqual(lineHeight);
+	expect(single.heights).toHaveLength(1);
+	expect(Math.abs(single.heights[0]! - lineHeight)).toBeLessThanOrEqual(GEOMETRY_EPSILON);
+	expect(single.gap).toBeLessThanOrEqual(lineHeight + GEOMETRY_EPSILON);
 });
 
 test("retained empty paragraphs between decisions compact after sync and reload", async ({ baseURL, page, room }) => {
 	await seedCardGapChannel(Number(new URL(baseURL!).port), room, ADJACENT_CARDS);
 	await authenticate(page, "ana", baseURL!);
 	await page.goto(roomPath(room));
+	await ready(page);
 	let inspect = async () => {
 		await page.getByRole("button", { name: "Document", exact: true }).click();
 		let editor = content(page);
@@ -99,7 +105,7 @@ test("retained empty paragraphs between decisions compact after sync and reload"
 		let lineHeight = await editor.evaluate(element =>
 			Number.parseFloat(getComputedStyle(element).lineHeight)
 		);
-		expect(second.y - first.y - first.height).toBeLessThanOrEqual(lineHeight);
+		expect(second.y - first.y - first.height).toBeLessThanOrEqual(lineHeight + GEOMETRY_EPSILON);
 	};
 	await inspect();
 	let caret = content(page).locator(`[data-plan-questionnaire="${WIDGET}"] + p`);

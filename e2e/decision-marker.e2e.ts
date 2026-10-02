@@ -167,13 +167,13 @@ test("hovering the marker washes the prose and previews the decision", async ({ 
 	let preview = page.getByRole("tooltip");
 	await expect(preview).toContainText("How should we roll this out?");
 	await expect(preview).toContainText("Team by team");
-	await expect(preview).toContainText("ana");
-	// Folded away until pinned.
-	expect(
-		await preview.locator(".plan-decision-fold").evaluate(element =>
-			element.getBoundingClientRect().height
-		),
-	).toBe(0);
+	await expect(preview.getByRole("img", { name: "ana", exact: true })).toBeVisible();
+	await expect(
+		preview.getByRole("listitem").filter({ hasText: "Team by team" })
+			.getByRole("img", { name: "Chosen", exact: true }),
+	).toBeVisible();
+	await expect(preview.getByText("All at once", { exact: true })).toBeVisible();
+	await expect(preview.getByText("Phased over a quarter", { exact: true })).toBeVisible();
 	await expect.poll(() => washed(page)).toBeGreaterThan(0);
 
 	await page.mouse.move(5, 5);
@@ -315,7 +315,7 @@ test("a touch marker has a 44px target", async ({ baseURL, browser, room, seed }
 	}
 });
 
-test("a decision with no prose keeps a compact card instead of a marker", async ({ join, seed }) => {
+test("a decision with no prose keeps a compact settled line instead of a marker", async ({ join, seed }) => {
 	let orphan = {
 		...STATE.questions[0]!,
 		anchors: { widget: WIDGET_A, questions: { [QUESTION_A]: { anchors: [], pending: false } } },
@@ -327,9 +327,9 @@ test("a decision with no prose keeps a compact card instead of a marker", async 
 	await expect(marker(page)).toHaveCount(0);
 	await expect(
 		page.locator(
-			`[data-document-view="plan"] article[data-plan-sidecar-questionnaire="${WIDGET_A}"]`,
+			`[data-document-view="plan"] [data-card-settled][data-plan-sidecar-questionnaire="${WIDGET_A}"]`,
 		),
-	).toBeVisible();
+	).toHaveText("Decided: Team by team · @ana");
 	await expect(marker(page, "Two weeks")).toBeVisible();
 });
 

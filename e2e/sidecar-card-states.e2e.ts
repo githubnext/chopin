@@ -68,39 +68,36 @@ function questionnaire(page: Page) {
 	return page.locator('[data-document-view="decisions"] article[data-plan-sidecar-questionnaire]');
 }
 
-function group(page: Page, name: "waiting" | "resolved" | "discarded") {
-	return page.locator(`[data-document-view="decisions"] [data-decisions-group="${name}"]`);
+function cardByPrompt(page: Page, prompt: string) {
+	return questionnaire(page).filter({ hasText: prompt });
 }
 
-function groupCard(page: Page, name: "waiting" | "resolved" | "discarded", prompt: string) {
-	return group(page, name).locator("article[data-plan-sidecar-questionnaire]").filter({
-		hasText: prompt,
-	});
-}
-
-test("discarding an open card moves it into a collapsed, persistent Discarded group", async ({ join, seed }) => {
+test("discarding an open card moves it into a collapsed, persistent resolved history", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
 	await page.getByRole("button", { name: /^Decisions/ }).click();
 	let card = questionnaire(page).filter({
-		has: page.getByRole("heading", { name: "Where should room state live?" }),
+		hasText: "Where should room state live?",
 	});
 	let cardId = await card.getAttribute("data-plan-sidecar-questionnaire");
 	if (!cardId) throw new Error("questionnaire id missing");
 	await card.getByRole("button", { name: "Discard", exact: true }).click();
-	await card.getByRole("button", { name: "Discard decision" }).click();
+	await expect(card.getByText("Discard this decision?", { exact: true })).toBeVisible();
+	await card.getByRole("button", { name: "Discard", exact: true }).click();
 
-	await expect(group(page, "waiting").locator(`[data-plan-sidecar-questionnaire="${cardId}"]`))
+	await expect(
+		page.locator(`[data-document-view="decisions"] [data-plan-sidecar-questionnaire="${cardId}"]`),
+	)
 		.toHaveCount(0);
-	let discarded = page.getByRole("button", { name: "1 discarded" });
+	let discarded = page.getByRole("button", { name: "1 resolved" });
 	await expect(discarded).toHaveAttribute("aria-expanded", "false");
 	await discarded.click();
-	await expect(groupCard(page, "discarded", "Where should room state live?"))
+	await expect(cardByPrompt(page, "Where should room state live?"))
 		.toContainText("Discarded by @ana");
 
 	await page.reload();
 	await page.getByRole("button", { name: /^Decisions/ }).click();
-	await expect(page.getByRole("button", { name: "1 discarded" })).toHaveAttribute(
+	await expect(page.getByRole("button", { name: "1 resolved" })).toHaveAttribute(
 		"aria-expanded",
 		"true",
 	);
@@ -113,7 +110,7 @@ test("discarding a decided card records the person who discarded it", async ({ j
 	for (let page of [ana, ben]) await page.getByRole("button", { name: /^Decisions/ }).click();
 	let card = (page: Page) =>
 		questionnaire(page).filter({
-			has: page.getByRole("heading", { name: "Where should room state live?" }),
+			hasText: "Where should room state live?",
 		});
 
 	await card(ana).getByText("In SQLite", { exact: true }).click();
@@ -123,18 +120,18 @@ test("discarding a decided card records the person who discarded it", async ({ j
 	await card(ben).getByRole("button", { name: "Discard", exact: true }).click();
 	await card(ben).getByRole("button", { name: "Discard decision" }).click();
 
-	await expect(ben.getByRole("button", { name: "1 discarded" })).toBeVisible();
-	await ben.getByRole("button", { name: "1 discarded" }).click();
-	let discardedCard = groupCard(ben, "discarded", "Where should room state live?");
+	await expect(ben.getByRole("button", { name: "1 resolved" }))
+		.toHaveAttribute("aria-expanded", "true");
+	let discardedCard = cardByPrompt(ben, "Where should room state live?");
 	await expect(discardedCard).toContainText("Discarded by @ben");
 	await expect(discardedCard).not.toContainText("Discarded by @ana");
 	await ben.reload();
 	await ben.getByRole("button", { name: /^Decisions/ }).click();
-	await expect(ben.getByRole("button", { name: "1 discarded" })).toHaveAttribute(
+	await expect(ben.getByRole("button", { name: "1 resolved" })).toHaveAttribute(
 		"aria-expanded",
 		"true",
 	);
-	await expect(groupCard(ben, "discarded", "Where should room state live?"))
+	await expect(cardByPrompt(ben, "Where should room state live?"))
 		.toContainText("Discarded by @ben");
 });
 
@@ -145,7 +142,7 @@ test("reopening a decision shares a fresh draft and a later Save survives reload
 	for (let page of [ana, ben]) await page.getByRole("button", { name: /^Decisions/ }).click();
 	let card = (page: Page) =>
 		questionnaire(page).filter({
-			has: page.getByRole("heading", { name: "Where should room state live?" }),
+			hasText: "Where should room state live?",
 		});
 
 	await card(ana).getByText("In SQLite", { exact: true }).click();
@@ -167,7 +164,7 @@ test("reopening a decision shares a fresh draft and a later Save survives reload
 		"aria-expanded",
 		"true",
 	);
-	await expect(groupCard(ana, "resolved", "Where should room state live?"))
+	await expect(cardByPrompt(ana, "Where should room state live?"))
 		.toContainText("On disk as MDX");
 });
 
@@ -238,7 +235,7 @@ test("card metadata regroups Decisions before the document update arrives", asyn
 		}),
 	).toBeFocused();
 	await ben.getByRole("button", { name: "1 resolved" }).click();
-	let decidedCard = groupCard(ben, "resolved", "Where should room state live?");
+	let decidedCard = cardByPrompt(ben, "Where should room state live?");
 	await expect(decidedCard).toBeVisible();
 	await expect(decidedCard.getByRole("button", { name: "Reopen" })).toBeVisible();
 	await expect(decidedCard.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
@@ -287,7 +284,9 @@ test("a legacy multi card reopens with its text-only previous answer", async ({ 
 	await card.getByRole("button", { name: "Reopen" }).click();
 	await expect(card).toContainText("Previously: Only collaborative anchors · @ana");
 	await expect(card.getByRole("radio", { name: "Canary" })).not.toBeChecked();
-	await card.getByRole("tab", { name: "Scope" }).click();
+	await card.getByRole("button", { name: "Next question", exact: true }).click();
+	await expect(card.getByRole("heading", { name: "What belongs in the first cut?" }))
+		.toBeVisible();
 	await expect(card).toContainText("Previously: Anchors · @ana");
 	await expect(card.getByRole("radio", { name: "Anchors" })).not.toBeChecked();
 });
@@ -325,7 +324,7 @@ test("an orphaned prose anchor retains its authoritative state and resolved card
 	await page.getByRole("button", { name: /^Decisions/ }).click();
 	await page.getByRole("button", { name: "1 resolved" }).click();
 	await expect.poll(() => orphaned).toBe(true);
-	await expect(groupCard(page, "resolved", "How should we deploy?"))
+	await expect(cardByPrompt(page, "How should we deploy?"))
 		.toContainText("Canary");
 });
 

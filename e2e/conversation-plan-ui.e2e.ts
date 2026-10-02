@@ -19,8 +19,8 @@ function decisionCard(page: Page, question = "Should we ship a small pilot?") {
 }
 
 async function expectOpenCardReadOnly(card: ReturnType<typeof decisionCard>) {
-	await expect(card.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
-	await expect(card.getByRole("button", { name: "Discard", exact: true })).toBeDisabled();
+	await expect(card.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+	await expect(card.getByRole("button", { name: "Discard", exact: true })).toHaveCount(0);
 	let add = card.getByRole("button", { name: "Add an option", exact: true });
 	await expect(add).toBeDisabled();
 }
@@ -99,7 +99,7 @@ test("analysis Escape dismisses before compact Chat and narrow split popovers st
 	await compactMarker.press("Escape");
 	await expect(page.getByRole("complementary", { name: "Chat" })).toBeHidden();
 
-	await page.setViewportSize({ width: 650, height: 900 });
+	await page.setViewportSize({ width: 1100, height: 900 });
 	await expect(page.getByRole("complementary", { name: "Chat" })).toBeVisible();
 	let splitMessage = await sendChat(page, "Could we use a small pilot?");
 	let splitMessageElement = page.locator(`[data-chat-message-id="${splitMessage}"]`);
@@ -147,7 +147,8 @@ test("a chat question becomes an inline decision card", async ({ join, room }) =
 	let card = decisionCard(page);
 	await expect(card).toBeVisible();
 	await expect(card.getByRole("radio", { name: "Start with a small pilot." })).toBeVisible();
-	await expect(card.locator("ol")).toHaveCSS("list-style-type", "none");
+	await expect(card.locator("fieldset")).toHaveCount(1);
+	await expect(card.getByRole("list")).toHaveCount(0);
 	await expect(page.locator(`[data-chat-message-id="${questionMessage}"] [data-message-markers]`))
 		.toBeVisible();
 	let compound = page.locator(`[data-chat-message-id="${compoundMessage}"]`);

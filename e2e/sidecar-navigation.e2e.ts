@@ -460,7 +460,8 @@ test("metadata-only discard hides a stale node and routes Right into the next pr
 		`[data-document-view="decisions"] article[data-plan-sidecar-questionnaire="${WIDGET}"]`,
 	);
 	await anaCard.getByRole("button", { name: "Discard", exact: true }).click();
-	await anaCard.getByRole("button", { name: "Discard decision" }).click();
+	await expect(anaCard.getByText("Discard this decision?", { exact: true })).toBeVisible();
+	await anaCard.getByRole("button", { name: "Discard", exact: true }).click();
 	await Promise.all([updateHeld, discarded]);
 
 	try {
