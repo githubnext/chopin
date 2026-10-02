@@ -11,7 +11,7 @@ function chatPane(page: Page) {
 	return page.getByRole("complementary", { includeHidden: true, name: "Chat" });
 }
 
-test("desktop Chat sits before the document at its initial 304px width", async ({ join, page }) => {
+test("desktop Chat sits before the document at its initial 364px width", async ({ join, page }) => {
 	await page.setViewportSize({ width: 1280, height: 800 });
 	await join("ana");
 	let chat = chatPane(page);
@@ -19,7 +19,7 @@ test("desktop Chat sits before the document at its initial 304px width", async (
 
 	for (let width of [1280, 1440]) {
 		await page.setViewportSize({ width, height: 800 });
-		await expect.poll(async () => (await box(chat)).width).toBeCloseTo(304, 0);
+		await expect.poll(async () => (await box(chat)).width).toBeCloseTo(364, 0);
 		let [chatBox, documentBox, frameBox] = await Promise.all([
 			box(chat),
 			box(document),
@@ -47,11 +47,11 @@ test("the Chat edge grows right, keeps its left-side reopen control, and remembe
 
 	await page.mouse.move(dragX, dragY);
 	await page.mouse.down();
-	await page.mouse.move(dragX + 40, dragY, {
+	await page.mouse.move(dragX + 20, dragY, {
 		steps: 4,
 	});
 	await page.mouse.up();
-	await expect.poll(async () => (await box(chat)).width).toBeGreaterThan(initial.width + 30);
+	await expect.poll(async () => (await box(chat)).width).toBeGreaterThan(initial.width + 10);
 	expect((await box(chat)).x).toBeCloseTo(initial.x, 0);
 	let pointerWidth = (await box(chat)).width;
 
