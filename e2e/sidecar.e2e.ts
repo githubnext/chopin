@@ -11,7 +11,7 @@
  * test here writes the plan before anybody opens it.
  */
 
-import { authenticate, content, expect, test } from "./room";
+import { authenticate, content, expect, ready, roomPath, test } from "./room";
 import { storedQuestion } from "../apps/server/src/testing/plan";
 
 import type { Locator, Page } from "@playwright/test";
@@ -272,13 +272,19 @@ test(
 );
 
 test(
-	"an unseeded room opens Decisions with the injected unanswered questions",
+	"an unseeded document keeps linked questions inline and reveals them in Decisions",
 	async ({ baseURL, page, room }) => {
 		await authenticate(page, "ana", baseURL!);
-		await page.goto(`/channels/${room}`);
-
-		await expect(page.getByRole("button", { name: /^Decisions/ }))
+		await page.goto(roomPath(room));
+		await ready(page);
+		let decisions = page.getByRole("button", { name: /^Decisions/ });
+		await expect(decisions).toHaveAttribute("aria-pressed", "false");
+		await expect(page.getByRole("button", { name: "Document", exact: true }))
 			.toHaveAttribute("aria-pressed", "true");
+		await expect(content(page).locator("article[data-plan-sidecar-questionnaire]"))
+			.toHaveCount(2);
+		await decisions.click();
+		await expect(decisions).toHaveAttribute("aria-pressed", "true");
 		let card = questionnaire(page);
 		await expect(card).toHaveCount(2);
 		await expect(card.getByRole("heading", { name: "Where should room state live?" }))
@@ -402,27 +408,27 @@ for (
 	});
 }
 
-test("automatic Decisions changes reconcile after compact Chat closes", async ({ baseURL, browser, page: ana, room }) => {
+test("compact Chat returns to the document after a collaborator adds prose", async ({ baseURL, browser, page: ana, room }) => {
 	await ana.setViewportSize({ width: 390, height: 844 });
 	await authenticate(ana, "ana", baseURL!);
-	await ana.goto(`/channels/${room}`);
+	await ana.goto(roomPath(room));
 	await expect(ana.locator('[aria-label="editable markdown"]')).toHaveAttribute(
 		"contenteditable",
 		"true",
 		{ timeout: 20_000 },
 	);
 	let nav = ana.getByRole("navigation", { name: "Workspace view" });
-	await expect(nav.getByRole("button", { name: /^Decisions/ })).toHaveAttribute(
-		"aria-current",
-		"page",
-	);
+	await expect(nav.getByRole("button", { name: "Document", exact: true }))
+		.toHaveAttribute("aria-current", "page");
+	await expect(nav.getByRole("button", { name: "Decisions, 2 unanswered", exact: true }))
+		.toBeVisible();
 	await nav.getByRole("button", { name: /Chat/ }).click();
 
 	let boContext = await browser.newContext({ baseURL, viewport: { width: 1280, height: 800 } });
 	try {
 		let bo = await boContext.newPage();
 		await authenticate(bo, "bo", baseURL!);
-		await bo.goto(`/channels/${room}`);
+		await bo.goto(roomPath(room));
 		await expect(bo.locator('[aria-label="editable markdown"]')).toHaveAttribute(
 			"contenteditable",
 			"true",
@@ -432,7 +438,10 @@ test("automatic Decisions changes reconcile after compact Chat closes", async ({
 			.getByRole("button", { name: "Document", exact: true })
 			.click();
 		await expect(documentEditor(bo)).toBeVisible();
-		await documentEditor(bo).fill("Collaborative prose arrived.");
+		let paragraph = documentEditor(bo).locator(":scope > p").first();
+		await expect(paragraph).toBeEmpty();
+		await paragraph.click();
+		await bo.keyboard.type("Collaborative prose arrived.");
 		await expect(documentEditor(ana)).toContainText(
 			"Collaborative prose arrived.",
 		);
@@ -442,7 +451,9 @@ test("automatic Decisions changes reconcile after compact Chat closes", async ({
 
 	await ana.getByRole("heading", { name: "Chat", exact: true }).press("Escape");
 	await expect(ana.locator('[data-document-view="plan"]')).toBeVisible();
-	await expect(nav.getByRole("button", { name: "Document" })).toHaveAttribute(
+	await expect(nav.getByRole("button", { name: "Decisions, 2 unanswered", exact: true }))
+		.toBeVisible();
+	await expect(nav.getByRole("button", { name: "Document", exact: true })).toHaveAttribute(
 		"aria-current",
 		"page",
 	);
@@ -776,7 +787,9 @@ test("people on a decision are faces with verbatim handle tooltips", async ({ jo
 		let peer = await open(handle);
 		await peer.card.getByRole("radio").first().focus();
 		peers.push(peer);
-		await expect(ana.card.getByRole("group", { name: new RegExp(`\\b${handle}\\b`) }))
+		await expect(
+			ana.card.getByRole("group", { name: new RegExp(`^Editing this question:.*\\b${handle}\\b`) }),
+		)
 			.toBeVisible();
 	}
 
@@ -1021,6 +1034,7 @@ test("an unavailable comment position keeps its compact sheet mounted until geom
 		viewport: { width: 390, height: 300 },
 	});
 	let editor = content(page);
+	await expect(commentButton(page)).toHaveCount(1);
 	await editor.locator("p").first().evaluate(paragraph => {
 		let phrase = "A selected passage keeps going.";
 		let text = paragraph.querySelector("[data-lexical-text]")?.firstChild;
@@ -1037,12 +1051,25 @@ test("an unavailable comment position keeps its compact sheet mounted until geom
 	await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
 	let draft = page.getByRole("dialog", { name: "New comment" });
 	await draft.getByPlaceholder("Comment on this passage…").fill("Keep the whole passage.");
+	let knownMarkers = await page.locator("[data-plan-comment-button]").evaluateAll(buttons =>
+		buttons.map(button => button.getAttribute("data-plan-comment-button"))
+	);
 	await draft.getByRole("button", { name: "Post comment", exact: true }).click();
 
-	let marker = page.locator("[data-plan-comment-button]").last();
+	let postedId: string | null | undefined;
+	await expect.poll(async () => {
+		let ids = await page.locator("[data-plan-comment-button]").evaluateAll(buttons =>
+			buttons.map(button => button.getAttribute("data-plan-comment-button"))
+		);
+		let posted = ids.filter(id => id && !knownMarkers.includes(id));
+		postedId = posted[0];
+		return posted.length;
+	}).toBe(1);
+	let marker = page.locator(`[data-plan-comment-button="${postedId}"]`);
 	await expect(marker).toBeAttached();
 	await marker.click();
 	let sheet = page.getByRole("dialog", { name: "Comment thread" });
+	await expect(sheet).toContainText("Keep the whole passage.");
 	let grabber = sheet.getByRole("button", { name: "Resize comment sheet" });
 	await expect(grabber).toBeFocused();
 
@@ -1052,11 +1079,13 @@ test("an unavailable comment position keeps its compact sheet mounted until geom
 	await expect(marker).toBeAttached();
 	await expect(sheet).toBeVisible();
 	await expect(grabber).toBeFocused();
-	let markerBox = await marker.boundingBox();
-	let documentBox = await page.locator("[data-plan-scroll]").boundingBox();
-	expect(markerBox).not.toBeNull();
-	expect(documentBox).not.toBeNull();
-	expect(markerBox!.y).toBeGreaterThanOrEqual(documentBox!.y + documentBox!.height);
+	let host = page.locator(".plan-document");
+	await expect.poll(async () => {
+		let markerBox = await marker.boundingBox();
+		let documentBox = await host.boundingBox();
+		return !!markerBox && !!documentBox && documentBox.width < 44
+			&& markerBox.y >= documentBox.y + documentBox.height;
+	}).toBe(true);
 
 	// Recover with enough vertical room for the marker after the passage. Whether a
 	// 44px marker fits beside the wrapped text depends on platform font metrics.
@@ -1065,8 +1094,8 @@ test("an unavailable comment position keeps its compact sheet mounted until geom
 	await expect(grabber).toBeFocused();
 	await expect(marker).toBeAttached();
 	await expect.poll(async () => {
-		markerBox = await marker.boundingBox();
-		documentBox = await page.locator("[data-plan-scroll]").boundingBox();
+		let markerBox = await marker.boundingBox();
+		let documentBox = await host.boundingBox();
 		return !!markerBox && !!documentBox
 			&& markerBox.y < documentBox.y + documentBox.height
 			&& markerBox.y + markerBox.height > documentBox.y;
