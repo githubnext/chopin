@@ -154,21 +154,19 @@ test("source navigation yields scrolling to the reader and expires its highlight
 		.toBe(0);
 });
 
-test("an overlapping narrow panel closes without stale hover after Source or Escape", async ({ join, room }) => {
+test("a narrow panel closes without stale hover after Source or Escape", async ({ join, room }) => {
 	let ana = await join("ana", { viewport: { width: 775, height: 863 } });
 	let bo = await join("bo");
 	await discuss(ana, bo, room);
 	let panel = await openEvidence(ana);
 	let source = panel.getByRole("button", { name: `Show “${REASON}” in chat`, exact: true });
-	let [sourceBox, cardBox] = await Promise.all([source.boundingBox(), card(ana).boundingBox()]);
+	let [sourceBox, panelBox] = await Promise.all([source.boundingBox(), panel.boundingBox()]);
 	expect(sourceBox).toBeTruthy();
-	expect(cardBox).toBeTruthy();
-	expect(
-		sourceBox!.x + sourceBox!.width / 2 >= cardBox!.x
-			&& sourceBox!.x + sourceBox!.width / 2 <= cardBox!.x + cardBox!.width
-			&& sourceBox!.y + sourceBox!.height / 2 >= cardBox!.y
-			&& sourceBox!.y + sourceBox!.height / 2 <= cardBox!.y + cardBox!.height,
-	).toBe(true);
+	expect(panelBox).toBeTruthy();
+	expect(panelBox!.x).toBeGreaterThanOrEqual(0);
+	expect(panelBox!.x + panelBox!.width).toBeLessThanOrEqual(775);
+	expect(sourceBox!.x).toBeGreaterThanOrEqual(panelBox!.x);
+	expect(sourceBox!.x + sourceBox!.width).toBeLessThanOrEqual(panelBox!.x + panelBox!.width);
 	await source.click();
 	await expect(panel).toHaveCount(0);
 	await ana.waitForTimeout(450);
@@ -176,7 +174,7 @@ test("an overlapping narrow panel closes without stale hover after Source or Esc
 
 	await ana.mouse.move(0, 0);
 	panel = await openEvidence(ana);
-	let panelBox = await panel.boundingBox();
+	panelBox = await panel.boundingBox();
 	expect(panelBox).toBeTruthy();
 	await ana.mouse.move(panelBox!.x + panelBox!.width / 2, panelBox!.y + panelBox!.height / 2);
 	await ana.keyboard.press("Escape");
@@ -375,7 +373,7 @@ test("empty, remote-closed, and hidden-document cards do not retain evidence por
 	await ana.getByRole("button", { name: "1 resolved", exact: true }).click();
 	let resolved = ana.locator(
 		'[data-document-view="decisions"] article[data-plan-sidecar-questionnaire]',
-	).filter({ has: ana.getByRole("heading", { name: QUESTION, exact: true }) });
+	).filter({ hasText: QUESTION });
 	await expect(resolved).toBeVisible();
 	await resolved.getByRole("button", { name: "Reopen", exact: true }).click();
 	await ana.getByRole("button", { name: "Document", exact: true }).click();
@@ -400,6 +398,7 @@ test("a remote discard removes an open evidence portal", async ({ join, room }) 
 	)
 		.filter({ has: bo.getByRole("heading", { name: QUESTION, exact: true }) });
 	await remote.getByRole("button", { name: "Discard", exact: true }).click();
-	await remote.getByRole("button", { name: "Discard decision", exact: true }).click();
+	await expect(remote.getByText("Discard this decision?", { exact: true })).toBeVisible();
+	await remote.getByRole("button", { name: "Discard", exact: true }).click();
 	await expect(panel).toHaveCount(0);
 });

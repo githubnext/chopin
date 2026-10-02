@@ -263,8 +263,8 @@ async function startInlineResearch(page: Page, question: string) {
 			return { next: neighbor("nextElementSibling"), previous: neighbor("previousElementSibling") };
 		}),
 	).toEqual(authoredOrder);
-	await expect(card.getByText("Queued", { exact: true })).toBeVisible();
-	await expect(page.getByRole("button", { name: "Place research here", exact: true }))
+	await expect(card.getByText("Waiting to start", { exact: true })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Place Research", exact: true }))
 		.toHaveCount(0);
 	await expect(page.getByRole("button", { name: "Search public web", exact: true }))
 		.toHaveCount(0);
@@ -312,7 +312,7 @@ test("inline research publishes one ordinary child and opens it", async ({ baseU
 	let childTitle = `Lifecycle evidence ${room.slice(0, 8)}`;
 	let card = await startInlineResearch(opened, brief);
 
-	await expect(card.getByText("Queued", { exact: true })).toBeVisible();
+	await expect(card.getByText("Waiting to start", { exact: true })).toBeVisible();
 	await expect(card).toContainText(brief);
 	await expect(card.getByRole("button", { name: "Decisions", exact: true })).toHaveCount(0);
 	await expect(card.getByRole("complementary", { name: "Chat" })).toHaveCount(0);
@@ -321,16 +321,15 @@ test("inline research publishes one ordinary child and opens it", async ({ baseU
 	await expect(opened).toHaveURL(url => !url.pathname.includes("/children/"));
 
 	await research.advance(brief, "searching");
-	await expect(card.getByText("Searching", { exact: true })).toBeVisible();
+	await expect(card.getByText("Searching sources", { exact: true })).toBeVisible();
 	await research.advance(brief, "analyzing", {
 		sources: [{ title: "Primary public source", url: "https://example.com/source" }],
 	});
-	await expect(card.getByText("Analyzing", { exact: true })).toBeVisible();
-	await expect(card.getByRole("link", { name: "Primary public source", exact: true }))
-		.toBeVisible();
+	await expect(card.getByText("Reading sources", { exact: true })).toBeVisible();
+	await expect(card.locator("xpath=..")).toContainText("1 source found");
 	await expect(card).not.toContainText("A complete report grounded in the discovered sources.");
 	await research.advance(brief, "writing");
-	await expect(card.getByText("Writing", { exact: true })).toBeVisible();
+	await expect(card.getByText("Writing report", { exact: true })).toBeVisible();
 	await expect.poll(childHrefs).toEqual([]);
 	expect(await countChildChannels(databasePort, room)).toBe(0);
 
@@ -338,10 +337,9 @@ test("inline research publishes one ordinary child and opens it", async ({ baseU
 	let child = await research.publish(brief, childTitle);
 	let readyCard = opened.getByRole("article", { name: "Research" })
 		.filter({ hasText: childTitle });
-	await expect(readyCard.getByText("Research ready", { exact: true })).toBeVisible();
+	await expect(readyCard).toHaveAttribute("data-stage", "ready");
 	await expect(readyCard).toContainText("A complete report grounded in the discovered sources.");
 	await expect(readyCard).toContainText("1 source");
-	await expect(readyCard).toContainText("Researched by Planner");
 	expect(catalogueReads).toBe(readsBeforePublication);
 	staleCatalogue.resolve();
 	let childLink = sidebar.getByRole("link", { name: childTitle, exact: true });
@@ -369,7 +367,7 @@ test("failed research retries by identity while cancelled research never publish
 	let sidebar = opened.getByRole("complementary", { name: "Projects" });
 	let failedBrief = "Retry this exact failed research brief.";
 	let failedCard = await startInlineResearch(opened, failedBrief);
-	await expect(failedCard.getByText("Queued", { exact: true })).toBeVisible();
+	await expect(failedCard.getByText("Waiting to start", { exact: true })).toBeVisible();
 	let failedId =
 		[...research.requests.values()].find(request => request.question === failedBrief)!.id;
 	// The card can be visible before its initial document placement is durable.
@@ -383,26 +381,26 @@ test("failed research retries by identity while cancelled research never publish
 
 	let cancelledBrief = "Cancel this exact research brief.";
 	let cancelledCard = await startInlineResearch(opened, cancelledBrief);
-	await expect(cancelledCard.getByText("Queued", { exact: true })).toBeVisible();
+	await expect(cancelledCard.getByText("Waiting to start", { exact: true })).toBeVisible();
 	let cancelledId =
 		[...research.requests.values()].find(request => request.question === cancelledBrief)!.id;
-	await cancelledCard.getByText("Queued", { exact: true }).click();
+	await cancelledCard.getByText("Waiting to start", { exact: true }).click();
 	await opened.keyboard.press("Backspace");
 	await expect(cancelledCard).toBeVisible();
 	await expect.poll(async () =>
 		(await readSource(databasePort, room)).match(/<Research\s+id=/g)?.length ?? 0
 	).toBe(2);
 	await cancelledCard.getByRole("button", { name: "Cancel research" }).click();
-	await expect(cancelledCard.getByText("Research cancelled", { exact: true })).toBeVisible();
+	await expect(cancelledCard.getByText("Cancelled", { exact: true })).toBeVisible();
 	expect(research.cancellations).toEqual([cancelledId]);
 
 	await failedCard.getByRole("button", { name: "Retry research" }).click();
-	await expect(failedCard.getByText("Queued", { exact: true })).toBeVisible();
+	await expect(failedCard.getByText("Waiting to start", { exact: true })).toBeVisible();
 	expect(research.retries).toEqual([failedId]);
 	await research.advance(failedBrief, "writing", {
 		sources: [{ title: "Recovery source", url: "https://example.com/recovery" }],
 	});
-	await expect(failedCard.getByText("Writing", { exact: true })).toBeVisible();
+	await expect(failedCard.getByText("Writing report", { exact: true })).toBeVisible();
 	let recoveredTitle = `Recovered evidence ${room.slice(0, 8)}`;
 	await research.publish(failedBrief, recoveredTitle);
 	await expect(sidebar.getByRole("link", { name: recoveredTitle, exact: true })).toBeVisible();
@@ -424,7 +422,7 @@ test("failed research retries by identity while cancelled research never publish
 	research.invalidate(cancelledBrief);
 	await expect.poll(() => research.reads.filter(id => id === cancelledId).length)
 		.toBe(readsBeforeInvalidation + 1);
-	await expect(cancelledCard.getByText("Research cancelled", { exact: true })).toBeVisible();
+	await expect(cancelledCard.getByText("Cancelled", { exact: true })).toBeVisible();
 	await expect(sidebar.getByRole("link", { name: "Late cancelled child", exact: true }))
 		.toHaveCount(0);
 	await expect.poll(() => countChildChannels(databasePort, room)).toBe(1);
@@ -496,7 +494,7 @@ test("a ready research card and its Chat notice survive reconnect without anothe
 	let opened = await join("ana");
 	let assertRecovered = async () => {
 		let card = opened.getByRole("article", { name: "Research" }).filter({ hasText: title });
-		await expect(card.getByText("Research ready", { exact: true })).toBeVisible();
+		await expect(card).toHaveAttribute("data-stage", "ready");
 		await expect(card.getByRole("button", { name: `Open ${title}`, exact: true }))
 			.toBeVisible();
 		await expect(

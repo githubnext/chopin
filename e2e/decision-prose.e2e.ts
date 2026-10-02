@@ -124,7 +124,7 @@ test("hover previews and washes prose; pin exposes source and Escape restores ma
 	let popover = await openPopover(page);
 	await expect(popover).toHaveCSS("opacity", "1");
 	await expect(popover).toHaveCSS("transform", "none");
-	await expect(popover).toContainText("By ana");
+	await expect(popover.getByRole("img", { name: "ana", exact: true })).toBeVisible();
 	await popover.getByRole("button", { name: "Show source in chat", exact: true }).click();
 	await expect(page.locator(`[data-chat-message-id="${source}"][data-source-exact="true"]`))
 		.toBeVisible();
@@ -193,7 +193,7 @@ test("Backspace after a hidden decided card moves into its prose without deletin
 	await page.keyboard.type("Following detail.");
 	let following = content(page).locator("p").filter({ hasText: "Following detail." });
 	await expect(following).toHaveText("Following detail.");
-	await page.keyboard.press("Meta+ArrowLeft");
+	await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowLeft" : "Home");
 	await page.keyboard.press("Backspace");
 	await page.keyboard.type(" Updated.");
 
