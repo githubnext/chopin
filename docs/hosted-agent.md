@@ -12,21 +12,22 @@ that is an implementation limitation, not the document model's boundary.
 
 Chopin runs the Planner through `@ai-sdk/harness`: `HARNESS` selects one adapter
 from a code-owned map, defaulting to `copilot-sdk`, a host-process adapter over
-`@github/copilot-sdk`. `pi`, over `@ai-sdk/harness-pi`, is a second reviewed
-adapter and requires an explicit `HARNESS_AUTH`. The harness owns the agent
-loop and model; Chopin owns every tool the Planner can call. See
-[Self-hosting](self-hosting.md) for `HARNESS`/`HARNESS_AUTH` selection and
-adapter trust.
+`@github/copilot-sdk`. `pi`, over `@ai-sdk/harness-pi`, and `atomic`, which
+embeds Atomic's headless SDK (`@bastani/atomic`) in the server process, are
+further reviewed adapters. Both require an explicit `HARNESS_AUTH`. The
+harness owns the agent loop and model; Chopin owns every tool the Planner can
+call. See [Self-hosting](self-hosting.md) for `HARNESS`/`HARNESS_AUTH`
+selection and adapter trust.
 
 ## Ownership
 
 The first eligible editor to invoke the Planner or start a model-backed research
 request supplies the GitHub App user access token for that channel and, under
 the default `copilot-sdk` harness, the Copilot entitlement. Under `HARNESS=pi`
-the owner supplies only the GitHub token; model access comes from the
-operator's `HARNESS_AUTH` mode. The user must pass instance admission and have
-repository push or administration access. Ownership is assigned atomically in
-storage and guarded by a generation token.
+and `HARNESS=atomic` the owner supplies only the GitHub token; model access
+comes from the operator's `HARNESS_AUTH` mode. The user must pass instance
+admission and have repository push or administration access. Ownership is
+assigned atomically in storage and guarded by a generation token.
 
 That process-local login owns the channel's model usage until it expires, logs
 out, the server restarts, or the authenticated reset API releases it. The
@@ -63,6 +64,19 @@ The Planner has no:
 Under `HARNESS=pi`, Chopin patches `@ai-sdk/harness-pi` 1.0.128 so Pi does not
 load `AGENTS.md` or `CLAUDE.md` context files from the host filesystem. See
 [Self-hosting](self-hosting.md#choose-and-trust-a-harness).
+
+Under `HARNESS=atomic`, each harness session owns one in-process Atomic
+`AgentSession`. It is built with every shipped Atomic package disabled
+(workflows, subagents, MCP, web access, and Intercom). It has no Atomic coding
+tools, and its resource loader discovers no extensions, skills, prompt
+templates, themes, or context files. Its working and configuration directory is
+an empty private temporary directory, and its session, settings, and
+credentials stay in memory. A per-turn hook replaces the whole system prompt
+with the turn's instructions, so the model never receives Atomic's
+coding-agent preamble. The adapter fails the turn before any model request
+when the live session reports an extension, tool, context file, skill, prompt
+template, or system prompt beyond that set. It checks the tools offered to the
+model again before every model request.
 
 Available capabilities are:
 
@@ -213,6 +227,7 @@ current production interface lets a person approve the draft. See
 - Planner session lifecycle: `apps/server/src/harness/session.ts`
 - Host-executed GitHub MCP tools: `apps/server/src/harness/github-tools.ts`
 - Copilot SDK adapter: `apps/server/src/harness/copilot-sdk/adapter.ts`
+- Atomic SDK adapter: `apps/server/src/harness/atomic/adapter.ts`
 - Planner prompt and document tools: `apps/server/src/agent/planner.ts` and
   `apps/server/src/agent/tools.ts`
 - Repository-fixed tools: `apps/server/src/agent/repository.ts`
