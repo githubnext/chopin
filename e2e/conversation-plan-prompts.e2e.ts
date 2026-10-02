@@ -34,6 +34,16 @@ function prompt(page: Page) {
 	return page.getByRole("group", { name: `Decision prompt: ${QUESTION}` });
 }
 
+async function expectRetiredPrompts(page: Page, summary: string) {
+	let prompts = page.locator("[data-decision-prompt]");
+	await expect(prompts.first()).toBeVisible();
+	await expect.poll(async () => {
+		let summaries = await prompts.allTextContents();
+		return summaries.length > 0 && summaries.every(text => text.includes(summary));
+	}).toBe(true);
+	await expect(prompts.getByRole("button", { name: "Save decision", exact: true })).toHaveCount(0);
+}
+
 function scopedPrompt(page: Page) {
 	return page.getByRole("group", { name: "Scoped choice: Lexical for this spike" });
 }
@@ -91,7 +101,7 @@ test("one member's choice posts a live Save decision prompt for everyone", async
 		actor: { kind: "member", handle: "ana" },
 	});
 	for (let page of [ana, bo]) {
-		await expect(page.locator("[data-decision-prompt]")).toContainText(`Decided: ${OPTION} · ana`);
+		await expectRetiredPrompts(page, `Decided: ${OPTION} · ana`);
 	}
 });
 
@@ -225,8 +235,8 @@ test("a second member refreshes the scoped choice notice with both exact sources
 			event.type === "settle.agreed" || event.type === "decision.recorded"
 		),
 	).toBe(false);
-	await expect(scopedPrompt(ana)).toHaveCount(2);
-	let refreshed = scopedPrompt(ana).last();
+	await expect(scopedPrompt(ana)).toHaveCount(1);
+	let refreshed = scopedPrompt(ana);
 	await expect(refreshed).toContainText("Ana");
 	await expect(refreshed).toContainText("I'd pick Lexical for the spike;");
 	await expect(refreshed).toContainText("Bo");
@@ -363,7 +373,13 @@ test("repeated agreement does not duplicate a live prompt", async ({ join, room 
 	}).toBe(true);
 	let repeatedState = (await wireState(ana))!;
 	expect(repeatedState.events.filter(event => event.type === "settle.agreed")).toHaveLength(2);
-	await expect(ana.locator("[data-decision-prompt]")).toHaveCount(1);
+	await expect(prompt(ana)).toHaveCount(1);
+	await expect(
+		ana.locator("[data-decision-prompt]").getByRole("button", {
+			name: "Save decision",
+			exact: true,
+		}),
+	).toHaveCount(1);
 	await expect(prompt(ana)).toBeVisible();
 });
 
@@ -400,9 +416,7 @@ test("a remote human card selection overrides the live prompt", async ({ join, r
 		origin: "human",
 	});
 	for (let page of [ana, bo]) {
-		await expect(page.locator("[data-decision-prompt]")).toContainText(
-			"Decided: Ship to everyone · ana",
-		);
+		await expectRetiredPrompts(page, "Decided: Ship to everyone · ana");
 	}
 });
 
@@ -416,8 +430,9 @@ test("Open in plan focuses the card and Discard collapses the prompt", async ({ 
 	let decision = card(ana);
 	await expect(decision).toBeFocused();
 	await decision.getByRole("button", { name: "Discard", exact: true }).click();
-	await decision.getByRole("button", { name: "Discard decision" }).click();
-	await expect(ana.locator("[data-decision-prompt]")).toContainText("Discarded");
+	await expect(decision.getByText("Discard this decision?", { exact: true })).toBeVisible();
+	await decision.getByRole("button", { name: "Discard", exact: true }).click();
+	await expectRetiredPrompts(ana, "Discarded");
 });
 
 test("the proposer's own assent does not post another prompt", async ({ join, room }) => {
@@ -445,28 +460,33 @@ test("an old prompt retires after Save and Reopen before a new suggestion", asyn
 	await sendChat(ana, "Sounds good to me.");
 	await waitForEvent(ana, "settle.agreed");
 	await prompt(ana).getByRole("button", { name: "Save decision" }).click();
-	await waitForEvent(ana, "decision.recorded");
+	let decided = await waitForEvent(ana, "decision.recorded");
+	let cardId = decided.threads[0]!.questionnaireId!;
+	await expectRetiredPrompts(ana, `Decided: ${OPTION} · ana`);
+	let retiredCount = await ana.locator("[data-decision-prompt]").count();
 
 	await ana.getByRole("button", { name: /^Decisions/ }).click();
 	await ana.getByRole("button", { name: "1 resolved" }).click();
 	let resolved = ana.locator(
-		'[data-document-view="decisions"] article[data-plan-sidecar-questionnaire]',
-	)
-		.filter({ has: ana.getByRole("heading", { name: QUESTION }) });
+		`[data-document-view="decisions"] article[data-plan-sidecar-questionnaire="${cardId}"]`,
+	);
 	await resolved.getByRole("button", { name: "Reopen" }).click();
-	await expect(ana.locator("[data-decision-prompt]")).toContainText("Reopened");
+	await waitForEvent(ana, "decision.reopened");
+	await expectRetiredPrompts(ana, "Reopened");
 
 	await sendChat(bo, "Let's just go with a small pilot.");
 	await waitForEvent(ana, "settle.suggested", 2);
 	let prompts = ana.locator("[data-decision-prompt]");
-	await expect(prompts).toHaveCount(2);
-	await expect(prompts.first()).toContainText("Reopened");
-	await expect(prompts.first().getByRole("button", { name: "Save decision" })).toHaveCount(0);
+	let retired = prompts.filter({ hasText: "Reopened" });
+	await expect(prompts).toHaveCount(retiredCount + 1);
+	await expect(retired).toHaveCount(retiredCount);
+	await expect(retired.getByRole("button", { name: "Save decision" })).toHaveCount(0);
+	await expect(prompt(ana)).toHaveCount(1);
 	await expect(prompt(ana)).toBeVisible();
 	await ana.reload();
-	await expect(prompts).toHaveCount(2);
-	await expect(prompts.first()).toContainText("Reopened");
-	await expect(prompts.first().getByRole("button", { name: "Save decision" })).toHaveCount(0);
+	await expect(prompts).toHaveCount(retiredCount + 1);
+	await expect(retired).toHaveCount(retiredCount);
+	await expect(retired.getByRole("button", { name: "Save decision" })).toHaveCount(0);
 	await expect(prompt(ana)).toHaveCount(1);
 	await expect(prompt(ana)).toBeVisible();
 });

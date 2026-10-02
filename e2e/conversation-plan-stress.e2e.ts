@@ -26,6 +26,16 @@ function prompt(page: Page, question = PILOT_QUESTION) {
 	return page.getByRole("group", { name: `Decision prompt: ${question}` });
 }
 
+async function expectRetiredPrompts(page: Page, cardId: string, summary: string) {
+	let prompts = page.locator(`[data-decision-prompt="${cardId}"]`);
+	await expect(prompts.first()).toBeVisible();
+	await expect.poll(async () => {
+		let summaries = await prompts.allTextContents();
+		return summaries.length > 0 && summaries.every(text => text.includes(summary));
+	}).toBe(true);
+	await expect(prompts.getByRole("button", { name: "Save decision", exact: true })).toHaveCount(0);
+}
+
 async function stateWith(page: Page, type: ConversationPlan.Event["type"], count = 1) {
 	await expect.poll(async () =>
 		(await wireState(page))?.events.filter(event => event.type === type).length
@@ -165,7 +175,9 @@ test("three members carry two sourced questions through a suggested and a human 
 	expect(final.threads.find(thread => thread.id === access.id)?.status).toBe("decided");
 	expect(final.events.filter(event => event.type === "decision.recorded")).toHaveLength(2);
 	for (let page of [ana, bo, cam]) {
-		await expect(page.locator("[data-decision-prompt]")).toContainText(
+		await expectRetiredPrompts(
+			page,
+			first.questionnaireId!,
 			`Decided: ${humanChoice} · ana`,
 		);
 	}
@@ -181,7 +193,9 @@ test("three members carry two sourced questions through a suggested and a human 
 		.toEqual(final.events.filter(event => event.type === "decision.recorded"));
 	await bo.reload();
 	await expect(bo.locator(`[data-chat-message-id="${mixedId}"]`)).toBeVisible();
-	await expect(bo.locator("[data-decision-prompt]")).toContainText(
+	await expectRetiredPrompts(
+		bo,
+		first.questionnaireId!,
 		`Decided: ${humanChoice} · ana`,
 	);
 });
@@ -323,7 +337,9 @@ test("a direct recommendation adds and suggests a sourced choice until a member 
 		.toEqual(decided.events.filter(event => event.type === "decision.recorded"));
 	await bo.reload();
 	await expect(bo.locator(`[data-chat-message-id="${recommendationId}"]`)).toBeVisible();
-	await expect(bo.locator("[data-decision-prompt]")).toContainText(
+	await expectRetiredPrompts(
+		bo,
+		emailThread.questionnaireId!,
 		`Decided: ${EMAIL_RECOMMENDATION} · ana`,
 	);
 });

@@ -110,6 +110,13 @@ const SCENARIOS: Record<string, Scenario> = {
 			recent: ["Let's just go with a small pilot."],
 		},
 	},
+	"BYO API keys?": {
+		role: "none",
+		target: {
+			preceding: ["Sounds good to me. What about agent access? Copilot? "],
+			recent: ["Let's just go with a small pilot."],
+		},
+	},
 	"I am concerned that a small pilot will exclude keyboard-only users.": {
 		role: "objection",
 		material: true,
@@ -121,7 +128,7 @@ const SCENARIOS: Record<string, Scenario> = {
 	"Sounds good to me. What about agent access? Copilot? BYO API keys?": {
 		role: "support",
 		triageRoles: ["support", "question"],
-		owned: [true, true, true],
+		owned: [true, true, true, true],
 		triageOnly: true,
 	},
 	"Sounds good to me. I am concerned that a small pilot will exclude keyboard-only users. What about agent access?":
