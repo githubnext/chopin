@@ -44,12 +44,14 @@ test("adding an option shows it to everyone and keeps a selection", async ({ joi
 
 	await expect(card(ben).getByRole("radio", { name: "In PostgreSQL" })).toBeVisible();
 	await expect(card(ben).getByRole("radio", { name: "In SQLite" })).toBeChecked();
-	await expect(card(ana).getByRole("textbox", { name: "New option" })).toBeFocused();
+	await expect(card(ana).getByRole("textbox", { name: "New option" })).toHaveCount(0);
+	await expect(card(ana).getByRole("button", { name: "Add an option", exact: true })).toBeFocused();
 });
 
 test("adding an option leaves an unanswered decision unselected after refresh", async ({ join, page, seed }) => {
 	await seed(PROSE);
 	let snapshots: Array<{ definition: Definition; model: number[] }> = [];
+	let definition: Definition | undefined;
 	let changed = 0;
 	await page.routeWebSocket("**/ws?**", route => {
 		let server = route.connectToServer();
@@ -62,11 +64,20 @@ test("adding an option leaves an unanswered decision unselected after refresh", 
 					definition?: Definition;
 					model?: number[];
 				};
-				if (frame.kind === "question:changed") changed++;
+				if (
+					frame.kind === "question:option-added" && frame.definition
+					&& frame.definition.questions[0]?.question === "Where should room state live?"
+				) {
+					changed++;
+					definition = frame.definition;
+				}
 				if (
 					frame.kind === "question:open" && frame.open && frame.definition && frame.model
 					&& frame.definition.questions[0]?.question === "Where should room state live?"
-				) snapshots.push({ definition: frame.definition, model: frame.model });
+				) {
+					definition = frame.definition;
+					snapshots.push({ definition: frame.definition, model: frame.model });
+				}
 			}
 			route.send(message);
 		});
@@ -77,15 +88,15 @@ test("adding an option leaves an unanswered decision unselected after refresh", 
 	let card = questionnaire(ben).filter({
 		has: ben.getByRole("heading", { name: "Where should room state live?" }),
 	});
-	let options = card.locator(".question-option-list li");
+	let options = card.getByRole("radio");
 	let save = card.getByRole("button", { name: "Save", exact: true });
 	await expect(options).toHaveCount(2);
 	await expect.poll(() => snapshots.length).toBeGreaterThan(0);
 	let unanswered = () => {
 		let snapshot = snapshots.at(-1)!;
-		let question = snapshot.definition.questions[0]!;
-		let draft =
-			read(restore(snapshot.model, snapshot.definition), snapshot.definition)[question.id];
+		let current = definition!;
+		let question = current.questions[0]!;
+		let draft = read(restore(snapshot.model, current), current)[question.id];
 		expect(draft?.choice).toBeNull();
 		expect(draft?.mode).toBe("choices");
 		expect(Object.values(draft?.options ?? {})).toEqual(
@@ -94,10 +105,7 @@ test("adding an option leaves an unanswered decision unselected after refresh", 
 	};
 	let checkVisible = async (count: number) => {
 		await expect(options).toHaveCount(count);
-		for (let option of await options.all()) {
-			await expect(option.getByRole("radio")).not.toBeChecked();
-			expect(await option.locator("label").getAttribute("data-selected")).toBeNull();
-		}
+		for (let option of await options.all()) await expect(option).not.toBeChecked();
 		await expect(save).toBeDisabled();
 	};
 	let ana = await join("ana");
@@ -105,30 +113,32 @@ test("adding an option leaves an unanswered decision unselected after refresh", 
 	let author = questionnaire(ana).filter({
 		has: ana.getByRole("heading", { name: "Where should room state live?" }),
 	});
-	await author.getByRole("button", { name: "Add an option", exact: true }).click();
-	let field = author.getByRole("textbox", { name: "New option" });
-	for (let [index, label] of ["In PostgreSQL", "In MySQL", "In files", "In memory"].entries()) {
+	let add = async (label: string) => {
+		await author.getByRole("button", { name: "Add an option", exact: true }).click();
+		let field = author.getByRole("textbox", { name: "New option" });
 		await field.fill(label);
 		await ana.keyboard.press("Enter");
+		await expect(field).toHaveCount(0);
+	};
+	for (let [index, label] of ["In PostgreSQL", "In MySQL", "In files", "In memory"].entries()) {
+		await add(label);
 		await expect(options).toHaveCount(index + 3);
 	}
-	await expect.poll(() => snapshots.at(-1)?.definition.questions[0]?.options.length).toBe(6);
-	let before = snapshots.at(-1)!;
-	let beforeIds = before.definition.questions[0]!.options.map(option => option.id);
+	await expect.poll(() => definition?.questions[0]?.options.length).toBe(6);
+	let beforeIds = definition!.questions[0]!.options.map(option => option.id);
 	unanswered();
 	await checkVisible(6);
 	let previousChanges = changed;
 
-	await field.fill("In a repository");
-	await ana.keyboard.press("Enter");
+	await add("In a repository");
 
 	await expect.poll(() => changed).toBeGreaterThan(previousChanges);
-	await expect.poll(() => snapshots.at(-1)?.definition.questions[0]?.options.length).toBe(7);
-	let after = snapshots.at(-1)!;
-	expect(after.definition.questions[0]!.options.map(option => option.id).slice(0, 6)).toEqual(
+	await expect.poll(() => definition?.questions[0]?.options.length).toBe(7);
+	let after = definition!;
+	expect(after.questions[0]!.options.map(option => option.id).slice(0, 6)).toEqual(
 		beforeIds,
 	);
-	expect(after.definition.questions[0]!.options[6]?.label).toBe("In a repository");
+	expect(after.questions[0]!.options[6]?.label).toBe("In a repository");
 	unanswered();
 	await checkVisible(7);
 	await expect(card.getByText("from chat", { exact: true })).toHaveCount(0);
@@ -137,7 +147,7 @@ test("adding an option leaves an unanswered decision unselected after refresh", 
 	await ben.reload();
 	await ben.getByRole("button", { name: /^Decisions/ }).click();
 	await expect.poll(() => snapshots.length).toBeGreaterThan(previousSnapshots);
-	await expect.poll(() => snapshots.at(-1)?.definition.questions[0]?.options.length).toBe(7);
+	await expect.poll(() => definition?.questions[0]?.options.length).toBe(7);
 	unanswered();
 	await checkVisible(7);
 });
@@ -153,10 +163,11 @@ test("a duplicate option is refused inline", async ({ join, seed }) => {
 	await card.getByRole("textbox", { name: "New option" }).fill("in sqlite");
 	await page.keyboard.press("Enter");
 
-	await expect(card.getByRole("alert")).toHaveText("That is already an option");
+	await expect(card.getByRole("alert")).toContainText("That option already exists");
+	await expect(card.getByRole("textbox", { name: "New option" })).toHaveValue("in sqlite");
 });
 
-test("a read-only reader sees disabled decision controls", async ({ baseURL, browser, join, room, seed }) => {
+test("a read-only reader cannot change a decision", async ({ baseURL, browser, join, room, seed }) => {
 	await seed(PROSE);
 	await join("ana");
 	let context = await browser.newContext({ baseURL });
@@ -169,8 +180,12 @@ test("a read-only reader sees disabled decision controls", async ({ baseURL, bro
 		let card = questionnaire(reader).first();
 		await expect(card).toBeVisible();
 		await expect(card.getByRole("button", { name: "Add an option", exact: true })).toBeDisabled();
-		await expect(card.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
-		await expect(card.getByRole("button", { name: "Discard", exact: true })).toBeDisabled();
+		let options = card.getByRole("radio");
+		await expect(options).toHaveCount(2);
+		for (let option of await options.all()) await expect(option).toBeDisabled();
+		for (let name of ["Save", "Discard", "Cancel"]) {
+			await expect(card.getByRole("button", { name, exact: true })).toHaveCount(0);
+		}
 	} finally {
 		await context.close();
 	}
@@ -236,7 +251,7 @@ test("legacy saved custom answers remain readable", async ({ join, seed }) => {
 	let page = await join("ana");
 	await page.getByRole("button", { name: /^Decisions/ }).click();
 	let card = questionnaire(page).filter({
-		has: page.getByRole("heading", { name: "How should we deploy?" }),
+		has: page.getByText("How should we deploy?", { exact: true }),
 	});
 	await page.getByRole("button", { name: /resolved/ }).click();
 

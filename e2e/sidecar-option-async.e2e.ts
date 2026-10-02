@@ -1,139 +1,110 @@
 import { expect, test } from "./room";
 
+import type { Page } from "@playwright/test";
+
 /** Long enough to be marked: the injector wants twenty characters. */
 const PROSE = "Room state lives on disk as MDX beside the transcript.\n";
 
-function questionnaire(page: import("@playwright/test").Page) {
+function questionnaire(page: Page) {
 	return page.locator('[data-document-view="decisions"] article[data-plan-sidecar-questionnaire]');
 }
 
-test("adding an option keeps focus through a delayed definition refresh", async ({ join, page, seed }) => {
-	await seed(PROSE);
+async function holdOptionReply(page: Page, holdDefinition = false) {
 	let questionId: string | undefined;
-	let reopenRid: string | undefined;
-	let heldChanged: (() => void) | undefined;
-	let heldOpen: (() => void) | undefined;
-	let holdRefreshOpen = false;
-	let didReceiveChanged!: () => void;
-	let changedReceived = new Promise<void>(resolve => didReceiveChanged = resolve);
-	let didReceiveOpen!: () => void;
-	let openReceived = new Promise<void>(resolve => didReceiveOpen = resolve);
-
+	let rid: string | undefined;
+	let reply: (() => void) | undefined;
+	let definition: (() => void) | undefined;
+	let receivedReply!: () => void;
+	let receivedDefinition!: () => void;
+	let replyReceived = new Promise<void>(resolve => receivedReply = resolve);
+	let definitionReceived = new Promise<void>(resolve => receivedDefinition = resolve);
 	await page.routeWebSocket("**/ws?**", route => {
 		let server = route.connectToServer();
 		route.onMessage(message => {
-			if (holdRefreshOpen && typeof message === "string") {
+			if (typeof message === "string") {
 				let frame = JSON.parse(message) as { kind?: string; id?: string; rid?: string };
-				if (frame.kind === "question:open" && frame.id === questionId) {
-					reopenRid = frame.rid;
-				}
+				if (frame.kind === "question:option" && frame.id === questionId) rid = frame.rid;
 			}
 			server.send(message);
 		});
 		server.onMessage(message => {
 			if (typeof message !== "string") return route.send(message);
 			let frame = JSON.parse(message) as { kind?: string; id?: string; rid?: string };
-			if (frame.kind === "question:changed" && frame.id === questionId) {
-				heldChanged = () => route.send(message);
-				didReceiveChanged();
+			if (frame.kind === "question:option" && frame.id === questionId && frame.rid === rid) {
+				reply = () => route.send(message);
+				receivedReply();
 				return;
 			}
-			if (holdRefreshOpen && frame.kind === "question:open" && frame.rid === reopenRid) {
-				heldOpen = () => route.send(message);
-				didReceiveOpen();
-				return;
-			}
-			route.send(message);
-		});
-	});
-
-	let ana = await join("ana");
-	await ana.getByRole("button", { name: /^Decisions/ }).click();
-	let card = questionnaire(ana).filter({
-		has: ana.getByRole("heading", { name: "Where should room state live?" }),
-	});
-	questionId = await card.getAttribute("data-plan-sidecar-questionnaire") ?? undefined;
-	let field = card.getByRole("textbox", { name: "New option" });
-	await card.getByRole("button", { name: "Add an option", exact: true }).click();
-	await field.fill("A delayed refresh option");
-	await ana.keyboard.press("Enter");
-
-	await changedReceived;
-	await expect(field).toBeFocused();
-	holdRefreshOpen = true;
-	if (!heldChanged) throw new Error("question:changed was not held");
-	heldChanged();
-	await openReceived;
-	await expect(field).toHaveAttribute("aria-disabled", "true");
-	await expect(field).toHaveJSProperty("readOnly", true);
-	await ana.evaluate(() =>
-		new Promise<void>(resolve => {
-			requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-		})
-	);
-	if (!heldOpen) throw new Error("refresh question:open was not held");
-	heldOpen();
-	await expect(field).toBeEnabled();
-	await expect(field).not.toHaveAttribute("aria-disabled", "true");
-	await expect(field).toHaveJSProperty("readOnly", false);
-	await expect(field).toBeFocused();
-});
-
-test("Escape during a delayed refresh restores focus and respects moving away", async ({ join, page, seed }) => {
-	await seed(PROSE);
-	let questionId: string | undefined;
-	let reopenRid: string | undefined;
-	let heldChanged: (() => void) | undefined;
-	let heldOpen: (() => void) | undefined;
-	let holdRefreshOpen = false;
-	let didReceiveChanged!: () => void;
-	let changedReceived = new Promise<void>(resolve => didReceiveChanged = resolve);
-	let didReceiveOpen!: () => void;
-	let openReceived = new Promise<void>(resolve => didReceiveOpen = resolve);
-
-	await page.routeWebSocket("**/ws?**", route => {
-		let server = route.connectToServer();
-		route.onMessage(message => {
-			if (holdRefreshOpen && typeof message === "string") {
-				let frame = JSON.parse(message) as { kind?: string; id?: string; rid?: string };
-				if (frame.kind === "question:open" && frame.id === questionId) reopenRid = frame.rid;
-			}
-			server.send(message);
-		});
-		server.onMessage(message => {
-			if (typeof message !== "string") return route.send(message);
-			let frame = JSON.parse(message) as { kind?: string; id?: string; rid?: string };
-			if (frame.kind === "question:changed" && frame.id === questionId) {
-				heldChanged = () => route.send(message);
-				didReceiveChanged();
-				return;
-			}
-			if (holdRefreshOpen && frame.kind === "question:open" && frame.rid === reopenRid) {
-				heldOpen = () => route.send(message);
-				didReceiveOpen();
+			if (holdDefinition && frame.kind === "question:option-added" && frame.id === questionId) {
+				definition = () => route.send(message);
+				receivedDefinition();
 				return;
 			}
 			route.send(message);
 		});
 	});
+	return {
+		setQuestion: (id: string) => questionId = id,
+		replyReceived,
+		definitionReceived,
+		releaseReply: () => {
+			if (!reply) throw new Error("question:option reply was not held");
+			reply();
+		},
+		releaseDefinition: () => {
+			if (!definition) throw new Error("question:option-added was not held");
+			definition();
+		},
+	};
+}
 
-	let ana = await join("ana");
-	await ana.getByRole("button", { name: /^Decisions/ }).click();
-	let card = questionnaire(ana).filter({
-		has: ana.getByRole("heading", { name: "Where should room state live?" }),
+async function openOption(
+	page: Page,
+	held: Awaited<ReturnType<typeof holdOptionReply>>,
+	label: string,
+) {
+	await page.getByRole("button", { name: /^Decisions/ }).click();
+	let card = questionnaire(page).filter({
+		has: page.getByRole("heading", { name: "Where should room state live?" }),
 	});
-	questionId = await card.getAttribute("data-plan-sidecar-questionnaire") ?? undefined;
+	let id = await card.getAttribute("data-plan-sidecar-questionnaire");
+	if (!id) throw new Error("questionnaire has no ID");
+	held.setQuestion(id);
 	let trigger = card.getByRole("button", { name: "Add an option", exact: true });
 	await trigger.click();
 	let field = card.getByRole("textbox", { name: "New option" });
-	await field.fill("Escape during refresh");
-	await ana.keyboard.press("Enter");
+	await field.fill(label);
+	await page.keyboard.press("Enter");
+	await held.replyReceived;
+	return { card, field, trigger };
+}
 
-	await changedReceived;
-	holdRefreshOpen = true;
-	if (!heldChanged) throw new Error("question:changed was not held");
-	heldChanged();
-	await openReceived;
+test("adding an option keeps focus through a delayed definition update", async ({ join, page, seed }) => {
+	await seed(PROSE);
+	let held = await holdOptionReply(page, true);
+	let ana = await join("ana");
+	let { card, field, trigger } = await openOption(ana, held, "A delayed refresh option");
+	await held.definitionReceived;
+	await expect(field).toBeFocused();
+	await expect(field).toHaveAttribute("aria-disabled", "true");
+	await expect(field).toHaveJSProperty("readOnly", true);
+
+	held.releaseDefinition();
+	await expect(card.getByRole("radio", { name: "A delayed refresh option", exact: true }))
+		.toBeVisible();
+	await expect(field).toBeFocused();
+	await expect(field).toHaveJSProperty("readOnly", true);
+	held.releaseReply();
+	await expect(field).toHaveCount(0);
+	await expect(trigger).toBeFocused();
+});
+
+test("Escape during a delayed option reply restores focus and respects moving away", async ({ join, page, seed }) => {
+	await seed(PROSE);
+	let held = await holdOptionReply(page, true);
+	let ana = await join("ana");
+	let { card, field, trigger } = await openOption(ana, held, "Escape during refresh");
+	await held.definitionReceived;
 	await expect(field).toHaveAttribute("aria-disabled", "true");
 	await expect(field).toHaveJSProperty("readOnly", true);
 	await ana.keyboard.press("Escape");
@@ -143,148 +114,66 @@ test("Escape during a delayed refresh restores focus and respects moving away", 
 	await chatToggle.click();
 	await expect(chatToggle).toHaveAttribute("aria-expanded", "false");
 	await expect(chatToggle).toBeFocused();
-	if (!heldOpen) throw new Error("refresh question:open was not held");
-	heldOpen();
 
+	held.releaseDefinition();
+	held.releaseReply();
+	await expect(card.getByRole("radio", { name: "Escape during refresh", exact: true }))
+		.toBeVisible();
 	await expect(trigger).toBeEnabled();
 	await expect(chatToggle).toBeFocused();
 });
 
 test("Escape during a duplicate request clears its late error", async ({ join, page, seed }) => {
 	await seed(PROSE);
-	let questionId: string | undefined;
-	let addOptionRid: string | undefined;
-	let heldFailure: (() => void) | undefined;
-	let didReceiveFailure!: () => void;
-	let failureReceived = new Promise<void>(resolve => didReceiveFailure = resolve);
-
-	await page.routeWebSocket("**/ws?**", route => {
-		let server = route.connectToServer();
-		route.onMessage(message => {
-			if (typeof message === "string") {
-				let frame = JSON.parse(message) as { kind?: string; id?: string; rid?: string };
-				if (frame.kind === "question:add-option" && frame.id === questionId) {
-					addOptionRid = frame.rid;
-				}
-			}
-			server.send(message);
-		});
-		server.onMessage(message => {
-			if (typeof message !== "string") return route.send(message);
-			let frame = JSON.parse(message) as {
-				kind?: string;
-				id?: string;
-				rid?: string;
-				ok?: boolean;
-			};
-			if (
-				frame.kind === "question:add-option"
-				&& frame.id === questionId
-				&& frame.rid === addOptionRid
-				&& frame.ok === false
-			) {
-				heldFailure = () => route.send(message);
-				didReceiveFailure();
-				return;
-			}
-			route.send(message);
-		});
-	});
-
+	let held = await holdOptionReply(page);
 	let ana = await join("ana");
-	await ana.getByRole("button", { name: /^Decisions/ }).click();
-	let card = questionnaire(ana).filter({
-		has: ana.getByRole("heading", { name: "Where should room state live?" }),
-	});
-	questionId = await card.getAttribute("data-plan-sidecar-questionnaire") ?? undefined;
-	let trigger = card.getByRole("button", { name: "Add an option", exact: true });
-	await trigger.click();
-	let field = card.getByRole("textbox", { name: "New option" });
-	await field.fill("in sqlite");
-	await ana.keyboard.press("Enter");
-
-	await failureReceived;
+	let { card, field, trigger } = await openOption(ana, held, "in sqlite");
 	await expect(field).toHaveAttribute("aria-disabled", "true");
 	await expect(field).toHaveJSProperty("readOnly", true);
 	await ana.keyboard.press("Escape");
 	await expect(field).toHaveCount(0);
-	if (!heldFailure) throw new Error("duplicate question:add-option reply was not held");
-	heldFailure();
+	held.releaseReply();
 
 	await expect(trigger).toBeEnabled();
 	await trigger.click();
-	field = card.getByRole("textbox", { name: "New option" });
 	await expect(field).toHaveValue("");
 	await expect(card.getByRole("alert")).toHaveCount(0);
 });
 
 test("a late add reply does not steal focus after reopening and tabbing away", async ({ join, page, seed }) => {
 	await seed(PROSE);
-	let questionId: string | undefined;
-	let addOptionRid: string | undefined;
-	let heldFailure: (() => void) | undefined;
-	let didReceiveFailure!: () => void;
-	let failureReceived = new Promise<void>(resolve => didReceiveFailure = resolve);
-
-	await page.routeWebSocket("**/ws?**", route => {
-		let server = route.connectToServer();
-		route.onMessage(message => {
-			if (typeof message === "string") {
-				let frame = JSON.parse(message) as { kind?: string; id?: string; rid?: string };
-				if (frame.kind === "question:add-option" && frame.id === questionId) {
-					addOptionRid = frame.rid;
-				}
-			}
-			server.send(message);
-		});
-		server.onMessage(message => {
-			if (typeof message !== "string") return route.send(message);
-			let frame = JSON.parse(message) as {
-				kind?: string;
-				id?: string;
-				rid?: string;
-				ok?: boolean;
-			};
-			if (
-				frame.kind === "question:add-option"
-				&& frame.id === questionId
-				&& frame.rid === addOptionRid
-				&& frame.ok === false
-			) {
-				heldFailure = () => route.send(message);
-				didReceiveFailure();
-				return;
-			}
-			route.send(message);
-		});
-	});
-
+	let held = await holdOptionReply(page);
 	let ana = await join("ana");
-	await ana.getByRole("button", { name: /^Decisions/ }).click();
-	let card = questionnaire(ana).filter({
-		has: ana.getByRole("heading", { name: "Where should room state live?" }),
-	});
-	questionId = await card.getAttribute("data-plan-sidecar-questionnaire") ?? undefined;
-	let trigger = card.getByRole("button", { name: "Add an option", exact: true });
-	await trigger.click();
-	let field = card.getByRole("textbox", { name: "New option" });
-	await field.fill("in sqlite");
-	await ana.keyboard.press("Enter");
-
-	await failureReceived;
+	let { card, field, trigger } = await openOption(ana, held, "in sqlite");
 	await ana.keyboard.press("Escape");
 	await expect(field).toHaveCount(0);
 	await expect(trigger).toBeEnabled();
 	await trigger.click();
-	field = card.getByRole("textbox", { name: "New option" });
 	await expect(field).toHaveJSProperty("readOnly", true);
 	await field.focus();
 	await ana.keyboard.press("Tab");
-	let discard = card.getByRole("button", { name: "Discard", exact: true });
-	await expect(discard).toBeFocused();
-	if (!heldFailure) throw new Error("duplicate question:add-option reply was not held");
-	heldFailure();
+	let cancel = card.getByRole("button", { name: "Cancel", exact: true });
+	await expect(cancel).toBeFocused();
+	held.releaseReply();
 
 	await expect(field).toHaveJSProperty("readOnly", false);
-	await expect(discard).toBeFocused();
+	await expect(cancel).toBeFocused();
+	await expect(card.getByRole("alert")).toHaveCount(0);
+});
+
+test("a successful delayed reply does not steal focus after tabbing away", async ({ join, page, seed }) => {
+	await seed(PROSE);
+	let held = await holdOptionReply(page);
+	let ana = await join("ana");
+	let { card, field } = await openOption(ana, held, "Keep focus outside the composer");
+	await expect(field).toBeFocused();
+	await ana.keyboard.press("Tab");
+	let cancel = card.getByRole("button", { name: "Cancel", exact: true });
+	await expect(cancel).toBeFocused();
+	held.releaseReply();
+
+	await expect(field).toHaveCount(0);
+	await expect(card.getByRole("radio", { name: "Keep focus outside the composer", exact: true }))
+		.toBeVisible();
+	await expect(cancel).toBeFocused();
 });

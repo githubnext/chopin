@@ -243,9 +243,9 @@ function LegacyCustom(
 /**
  * The last row: a prompt to add an option, which becomes the field for it.
  *
- * Enter adds it for everyone, Escape cancels. The new row is shown straight
- * away, dimmed, until the server confirms it; a rejection reopens the field
- * with the text intact.
+ * Enter adds it for everyone, Escape closes the field. While confirmation is
+ * pending the field stays focusable so Escape still works; a rejection keeps
+ * the text intact.
  */
 function AddOption(
 	{ question, offset, disabled, onAdd, onFailed, onEdit, onCancelEdit, onCommitEdit }: {
@@ -265,7 +265,11 @@ function AddOption(
 	let input = useRef<HTMLInputElement>(null);
 	let trigger = useRef<HTMLButtonElement>(null);
 	let focus = useRef<"field" | "trigger">(undefined);
+	let edit = useRef(0);
 	let letterIndex = question.options.length + offset;
+	useEffect(() => () => {
+		edit.current++;
+	}, []);
 
 	useEffect(() => {
 		let target = focus.current;
@@ -297,6 +301,7 @@ function AddOption(
 	let add = async () => {
 		let label = text?.trim();
 		if (!label || !onAdd || pending !== null) return;
+		let submittedEdit = edit.current;
 		setPending(label);
 		onFailed(undefined);
 		let result: AddOptionResult;
@@ -306,33 +311,17 @@ function AddOption(
 			result = { ok: false, message: "Could not add this option." };
 		}
 		setPending(null);
+		if (edit.current !== submittedEdit) return;
+		let ownsFocus = document.activeElement === input.current;
 		if (result.ok) {
 			onCommitEdit?.();
 			setText(null);
-			focus.current = "trigger";
+			if (ownsFocus) focus.current = "trigger";
 		} else {
 			onFailed(result.message);
-			focus.current = "field";
+			if (ownsFocus) focus.current = "field";
 		}
 	};
-
-	// Until the server confirms, the new row stands where the field was. If the
-	// broadcast beat the acknowledgement, the real row is already listed above.
-	if (pending !== null) {
-		let known = question.options.some(option =>
-			option.label.trim().toLowerCase() === pending.toLowerCase()
-		);
-		if (known) return null;
-		return (
-			<div aria-busy="true" className="question-choice-row question-option question-pending">
-				<Key>{letter(letterIndex)}</Key>
-				<span className="question-text">
-					<span className="question-label">{pending}</span>
-				</span>
-				<span className="sr-only" role="status">Adding option</span>
-			</div>
-		);
-	}
 
 	if (text === null) {
 		return (
@@ -342,6 +331,7 @@ function AddOption(
 				data-press="wide"
 				disabled={disabled || !onAdd}
 				onClick={() => {
+					edit.current++;
 					focus.current = "field";
 					setText("");
 				}}
@@ -356,9 +346,13 @@ function AddOption(
 	}
 
 	return (
-		<div className="question-choice-row question-option question-adding">
+		<div
+			aria-busy={pending !== null || undefined}
+			className="question-choice-row question-option question-adding"
+		>
 			<Key>{letter(letterIndex)}</Key>
 			<input
+				aria-disabled={pending !== null || undefined}
 				aria-label="New option"
 				autoComplete="off"
 				className="question-field"
@@ -367,7 +361,8 @@ function AddOption(
 				onBlur={() => {
 					// Only an empty field collapses by itself. Typed text is kept, because
 					// adding an option is visible to everyone and should be deliberate.
-					if (!text.trim()) {
+					if (!text.trim() && pending === null) {
+						edit.current++;
 						onCancelEdit?.();
 						setText(null);
 					}
@@ -381,6 +376,7 @@ function AddOption(
 					if (event.key === "Escape") {
 						event.preventDefault();
 						event.stopPropagation();
+						edit.current++;
 						onCancelEdit?.();
 						setText(null);
 						onFailed(undefined);
@@ -391,9 +387,11 @@ function AddOption(
 					}
 				}}
 				placeholder="Add an option"
+				readOnly={pending !== null}
 				ref={input}
 				value={text}
 			/>
+			{pending !== null && <span className="sr-only" role="status">Adding option</span>}
 		</div>
 	);
 }
