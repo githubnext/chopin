@@ -224,6 +224,11 @@ for (let action of ["submit", "cancel"] as const) {
 				exclusive: action => Plan.exclusive(context.plan, action),
 				persist: () => Plan.persistExclusive(context.plan),
 				publish() {},
+				interpret: async input => ({
+					...unlinked(),
+					events: [opened(input.message)],
+					analysis: { ...unlinked().analysis, status: "applied" },
+				}),
 			});
 			await mirrorCard(context.plan, processor);
 			expect(context.plan.pendingCardActions).toEqual([]);
@@ -231,6 +236,19 @@ for (let action of ["submit", "cancel"] as const) {
 			expect(context.plan.conversationPlan.events.at(-1)?.id).toBe(
 				action === "submit" ? `card:${first.id}:decided:1` : `card:${first.id}:discarded`,
 			);
+			await processor.accept({
+				id: "m-full",
+				text: "Can we ship?",
+				ts: 1001,
+				author: { kind: "member", handle: "ana" },
+			});
+			processor.afterMessage();
+			await processor.idle();
+			expect(context.plan.conversationPlan.queue.at(-1)).toMatchObject({
+				messageId: "m-full",
+				status: "failed",
+				error: "Conversation history is full",
+			});
 			if (action === "submit") {
 				await select(context, ws, unlinkedCard.id);
 				await Questions.submit(context.plan, context.server, context.plan.id, ws, {

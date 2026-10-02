@@ -26,7 +26,7 @@ export function applyEvent(state: State, event: Event): State {
 	if (state.events.some((accepted) => accepted.id === event.id)) return state;
 	assertEventShape(event);
 	event = structuredClone(event);
-	if (state.events.length >= MAX_EVENTS) throw new Error("conversation event limit reached");
+	assertEventCapacity(state, 1);
 	let existing = state.threads.find((thread) => thread.id === event.threadId);
 	if (event.type === "thread.opened") {
 		if (existing || event.observedThreadVersion !== 0) throw new Error("stale thread opening");
