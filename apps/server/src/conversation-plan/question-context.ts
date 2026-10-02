@@ -7,11 +7,32 @@ export type VisibleThread = {
 	options: ConversationPlan.Contribution[];
 };
 
-export function visibleThreads(threads: readonly ConversationPlan.Thread[]): VisibleThread[] {
+export function visibleThreads(
+	threads: readonly ConversationPlan.Thread[],
+	events: readonly ConversationPlan.Event[] = [],
+): VisibleThread[] {
 	let ordered = [
 		...threads.filter((thread) => thread.status !== "discarded"),
 		...threads.filter((thread) => thread.status === "discarded"),
-	].slice(0, 12);
+	];
+	if (ordered.length > 12) {
+		let touched = new Map<string, number>();
+		events.forEach((event, index) => {
+			touched.set(event.threadId, index);
+			if (event.type === "card.corrected" && event.change.kind === "move") {
+				touched.set(event.change.targetThreadId, index);
+			}
+		});
+		let selected = new Set(
+			ordered.map((thread, index) => ({ thread, index }))
+				.sort((a, b) =>
+					Number(a.thread.status === "discarded") - Number(b.thread.status === "discarded")
+					|| (touched.get(b.thread.id) ?? -1) - (touched.get(a.thread.id) ?? -1)
+					|| b.index - a.index
+				).slice(0, 12).map(({ thread }) => thread.id),
+		);
+		ordered = ordered.filter(thread => selected.has(thread.id));
+	}
 	let available = ordered.map((thread) =>
 		thread.contributions.filter((item) => item.kind === "option").slice(-8).reverse()
 	);

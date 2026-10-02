@@ -33,7 +33,7 @@ export function buildTargetingRequest(
 		throw new Error("invalid targeting candidate");
 	}
 	let questions: Record<string, JevQuestion> = {};
-	let selected = visibleThreads(threads);
+	let selected = visibleThreads(threads, events);
 	// The service supplies recent as the chat prefix before this message. Source-free
 	// contributions cannot be ordered safely when an older message is retried.
 	let earlierMessageIds = new Set(

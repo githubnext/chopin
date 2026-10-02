@@ -179,7 +179,7 @@ export function buildTriageRequest(
 			"Attribution, quotation, sarcasm, or an earlier contribution withdrawn later.",
 		);
 	}
-	let selected = visibleThreads(threads);
+	let selected = visibleThreads(threads, events);
 	questions.thread_target = {
 		type: "choice",
 		instructions:

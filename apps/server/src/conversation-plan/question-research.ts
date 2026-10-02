@@ -10,9 +10,10 @@ export function buildResearchOfferRequest(
 	recent: readonly Chat.Entry[],
 	threads: readonly ConversationPlan.Thread[],
 	candidates: readonly QuoteCandidate[],
+	events: readonly ConversationPlan.Event[] = [],
 ): JevRequest {
 	assertQuoteBudget(candidates);
-	let selected = visibleThreads(threads).filter(({ thread, options }) =>
+	let selected = visibleThreads(threads, events).filter(({ thread, options }) =>
 		["exploring", "leaning", "reopened"].includes(thread.status)
 		&& [2, 3, 4].includes(thread.contributions.filter(item => item.kind === "option").length)
 		&& options.length === thread.contributions.filter(item => item.kind === "option").length
@@ -80,7 +81,7 @@ export function buildResearchOfferRequest(
 				id: entry.id,
 				text: entry.text.slice(0, 300),
 			})),
-			threads: compactThreads(selected).map((item, index) => ({
+			threads: compactThreads(selected, events).map((item, index) => ({
 				...item,
 				options: item.options.map(option => ({
 					...option,

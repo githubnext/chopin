@@ -69,6 +69,7 @@ export async function interpretMessage(input: InterpretInput): Promise<Interpret
 					input.recent,
 					input.state.threads,
 					quotes,
+					input.state.events,
 				));
 				researchOffer = selectResearchOffer(input as MemberResearchInput, first, quotes, result);
 			} catch {
