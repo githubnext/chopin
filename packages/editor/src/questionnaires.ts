@@ -213,12 +213,22 @@ export class QuestionnaireStore {
 
 	/** The node keys of the blocks a decision resolves to, or none if it names none. */
 	blocks(widget: string, question: string): string[] {
+		let saved = this.#proseSnapshot?.find(item => item.widget === widget);
+		if (saved) {
+			let key = saved.orphaned ? undefined : this.proseKey(widget);
+			return key ? [key] : [];
+		}
 		let found = this.#related.find(item => item.widget === widget && item.question === question);
 		return !found || found.pending ? [] : found.keys;
 	}
 
 	/** How much prose each of a questionnaire's decisions resolves to. */
 	counts(widget: string): { [question: string]: number } {
+		let saved = this.#proseSnapshot?.find(item => item.widget === widget);
+		let questions = this.#state.entries.find(item => item.id === widget)?.value.questions;
+		if (saved && questions?.length === 1) {
+			return { [questions[0]!.id]: saved.orphaned ? 0 : this.proseKey(widget) ? 1 : 0 };
+		}
 		return counts(this.#related, widget);
 	}
 
@@ -291,14 +301,13 @@ export class QuestionnaireStore {
 		let editor = this.#editor;
 		if (!editor) return undefined;
 
+		let saved = this.#proseSnapshot?.find(item => item.widget === widget);
 		let found = this.#related.find(item => item.widget === widget && item.question === question);
-		// Pending means nobody has checked this since the plan moved, so it is
-		// not somewhere worth sending a reader.
-		let prose = this.proseKey(widget);
-		if ((!found || found.pending) && !prose) return undefined;
-
-		let keys = found && !found.pending ? found.keys : [];
-		if (keys.length === 0 && prose) keys = [prose];
+		// A saved paragraph is the reader's target even when a later question
+		// relationship names different context. An orphan stays inert.
+		if (!saved && (!found || found.pending)) return undefined;
+		let keys = this.blocks(widget, question);
+		if (keys.length === 0) return undefined;
 		let places: Points[] = [];
 		editor.getEditorState().read(() => {
 			for (let key of keys) {

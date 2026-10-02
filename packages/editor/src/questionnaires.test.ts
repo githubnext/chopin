@@ -160,6 +160,30 @@ describe("decided prose targets", () => {
 		expect(updates).toBe(1);
 	});
 
+	it("uses saved prose for each reader despite a later conflicting question link", () => {
+		let { binding, editor, keys } = proseRoom(
+			`Monitoring prose.\n\n${QUESTIONNAIRE}\nChecklist.\n`,
+		);
+		let widget = "01K0N4TR8K7JGM4R1J7PW4R8YJ";
+		let question = "01K0N4V4E7Y6P4MJ5WD8XZF3B2";
+		let store = new QuestionnaireStore();
+		store.set(read(editor));
+		store.bind(binding);
+		store.anchors([{
+			widget,
+			questions: {
+				[question]: { anchors: [proseAnchor(binding, keys[2]!)], pending: false },
+			},
+		}]);
+		store.prose([prose(widget, proseAnchor(binding, keys[0]!))]);
+		expect(store.blocks(widget, question)).toEqual([keys[0]]);
+		expect(store.counts(widget)).toEqual({ [question]: 1 });
+
+		store.prose([prose(widget, proseAnchor(binding, keys[0]!), true)]);
+		expect(store.blocks(widget, question)).toEqual([]);
+		expect(store.counts(widget)).toEqual({ [question]: 0 });
+	});
+
 	it("clears old targets and snapshots across teardown and rebind", () => {
 		let first = proseRoom();
 		let second = proseRoom();

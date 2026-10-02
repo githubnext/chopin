@@ -407,3 +407,149 @@ test(
 		expectLinked(await latestDocumentSnapshot(page, room), widget);
 	},
 );
+
+test(
+	"saved decision prose keeps separate markers when both question links point at later checklist",
+	async ({ join, room, seed }, testInfo) => {
+		let monitoring = "Monitoring uses Sentry for errors.";
+		let alerts = "Critical errors go to Slack.";
+		let checklist = "- Browser one\n- Browser two\n- Browser three";
+		let ids = [
+			{
+				card: "01K0N4TR8K7JGM4R1J7PW4R8YJ",
+				question: "01K0N4V4E7Y6P4MJ5WD8XZF3B2",
+				option: "01K0N4W3B7P27CBAEC7A8C8WEA",
+				answer: "Sentry",
+				prose: monitoring,
+			},
+			{
+				card: "01K0N4X2M5R8T3VQ7YB6ZC4DEF",
+				question: "01K0N4Y2M5R8T3VQ7YB6ZC4DEF",
+				option: "01K0N4Z2M5R8T3VQ7YB6ZC4DEF",
+				answer: "Slack",
+				prose: alerts,
+			},
+		];
+		let source =
+			ids.map(item =>
+				`${item.prose}\n\n<Questionnaire id="${item.card}" status="decided" thread="${item.card}">\n<Question id="${item.question}" header="Decision" prompt="Where should this go?" multiple="false">\n<Option id="${item.option}" label="${item.answer}" />\n<Answer value="${item.answer}" choices="${item.option}" />\n</Question>\n</Questionnaire>\n`
+			).join("\n") + `\n${checklist}\n`;
+		let anchor = (text: string) => ({
+			epoch: "stale",
+			position: "AA==",
+			digest: PlanRoom.digest(`${text}\n`),
+		});
+		await seed(source, {
+			revision: 1,
+			questions: ids.map(item => ({
+				id: item.card,
+				status: "answered",
+				origin: "conversation",
+				threadId: item.card,
+				owner: "ana",
+				decidedAt: 1_758_645_000,
+				choices: [item.option],
+				definition: {
+					questions: [{
+						id: item.question,
+						header: "Decision",
+						question: "Where should this go?",
+						multiple: false,
+						options: [{ id: item.option, label: item.answer, description: "" }],
+					}],
+				},
+				anchors: {
+					widget: item.card,
+					questions: {
+						[item.question]: { anchors: [anchor(checklist)], pending: false },
+					},
+				},
+				prose: [anchor(item.prose)],
+			})),
+		});
+		let page = await join("ana", { viewport: { width: 893, height: 850 } });
+		for (let item of ids) {
+			await expect(page.getByRole("button", { name: `Decision: ${item.answer}`, exact: true }))
+				.toBeVisible();
+		}
+		await openJevWire(page, room);
+		await sendChat(page, QUESTION);
+		await sendChat(page, OPTION);
+		let temporary = page.locator(
+			'[data-document-view="plan"] article[data-plan-sidecar-questionnaire]',
+		).filter({ has: page.getByRole("heading", { name: QUESTION }) });
+		await expect(temporary).toBeVisible();
+		await temporary.getByRole("button", { name: "Discard", exact: true }).click();
+		await expect(temporary.getByText("Discard this decision?", { exact: true })).toBeVisible();
+		await temporary.getByRole("button", { name: "Discard", exact: true }).click();
+		await expect(temporary).toHaveCount(0);
+		let first =
+			(await page.getByRole("button", { name: "Decision: Sentry", exact: true }).boundingBox())!;
+		let second =
+			(await page.getByRole("button", { name: "Decision: Slack", exact: true }).boundingBox())!;
+		expect(Math.abs(first.y - second.y)).toBeGreaterThan(20);
+		for (let item of ids) {
+			let target = page.getByRole("button", { name: `Decision: ${item.answer}`, exact: true });
+			await target.focus();
+			await page.keyboard.press("Enter");
+			await expect(page.getByRole("dialog", { name: "Decision", exact: true })).toContainText(
+				item.answer,
+			);
+			let highlighted = await page.evaluate(() =>
+				[...CSS.highlights.get("plan-decision") ?? []]
+					.map(range => range.toString()).join(" ")
+			);
+			expect(highlighted).toContain(item.prose);
+			expect(highlighted).not.toContain(checklist);
+			expect(highlighted).not.toContain(ids.find(other => other !== item)!.prose);
+			await page.screenshot({
+				path: testInfo.outputPath(`${item.answer.toLowerCase()}-reader.png`),
+			});
+			await page.keyboard.press("Escape");
+			await target.click();
+			await expect(page.getByRole("dialog", { name: "Decision", exact: true })).toContainText(
+				item.answer,
+			);
+			await page.keyboard.press("Escape");
+		}
+		await page.reload();
+		for (
+			let viewport of [
+				{ width: 893, height: 850 },
+				{ width: 390, height: 844 },
+				{ width: 1440, height: 900 },
+			]
+		) {
+			await page.setViewportSize(viewport);
+			let targets = ids.map(item =>
+				page.getByRole("button", {
+					name: `Decision: ${item.answer}`,
+					exact: true,
+				})
+			);
+			for (let target of targets) await target.scrollIntoViewIfNeeded();
+			let bounds = await Promise.all(targets.map(target => target.boundingBox()));
+			expect(bounds[0]).toBeTruthy();
+			expect(bounds[1]).toBeTruthy();
+			expect(Math.abs(bounds[0]!.y - bounds[1]!.y)).toBeGreaterThan(20);
+			for (let [index, item] of ids.entries()) {
+				await targets[index]!.focus();
+				await page.keyboard.press("Enter");
+				await expect(page.getByRole("dialog", { name: "Decision", exact: true }))
+					.toContainText(item.answer);
+				let highlighted = await page.evaluate(() =>
+					[...CSS.highlights.get("plan-decision") ?? []]
+						.map(range => range.toString()).join(" ")
+				);
+				expect(highlighted).toContain(item.prose);
+				expect(highlighted).not.toContain(checklist);
+				expect(highlighted).not.toContain(ids[1 - index]!.prose);
+				await page.keyboard.press("Escape");
+				await targets[index]!.click();
+				await expect(page.getByRole("dialog", { name: "Decision", exact: true }))
+					.toContainText(item.answer);
+				await page.keyboard.press("Escape");
+			}
+		}
+	},
+);

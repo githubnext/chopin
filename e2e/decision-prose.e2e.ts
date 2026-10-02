@@ -12,7 +12,7 @@ const OPTION = "Start with a small pilot.";
 
 function card(page: Page) {
 	return page.locator('[data-document-view="plan"] article[data-plan-sidecar-questionnaire]')
-		.filter({ has: page.getByRole("heading", { name: QUESTION, exact: true }) });
+		.filter({ has: page.getByRole("heading", { name: QUESTION }) });
 }
 
 function marker(page: Page) {

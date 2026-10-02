@@ -16,6 +16,15 @@ test("a metadata prose target joins current markers only after a durable decisio
 		.toEqual([]);
 });
 
+test("saved decision prose takes precedence over a later unrelated question link", () => {
+	let question = DECIDED.questions[0]!;
+	let saved = { ...META, hasProse: true };
+	expect(resolvedKeys(question, ["checklist"], "monitoring-prose", saved))
+		.toEqual(["monitoring-prose"]);
+	expect(resolvedKeys(question, ["checklist"], "alert-prose", saved))
+		.toEqual(["alert-prose"]);
+});
+
 test("legacy per-question links remain exact and orphaned prose never guesses", () => {
 	let question = DECIDED.questions[0]!;
 	expect(resolvedKeys(question, ["first", "second"], "other", META)).toEqual(["first", "second"]);
