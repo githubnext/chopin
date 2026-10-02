@@ -10,7 +10,7 @@ remains draft. One issue per fix PR; no automatic merges or direct prototype pus
 | [JEV-003](https://github.com/githubnext/chopin/blob/maggie/jev-001-decision-anchors/docs/jev-issues/JEV-003.md)     | Useful questions/preferences unapplied; incomplete review recovery | Queued; determine separate recovery scopes before implementation | Pending                                               |
 | [JEV-004](https://github.com/githubnext/chopin/blob/maggie/jev-001-decision-anchors/docs/jev-issues/JEV-004.md)     | Baseline CI conversation-capacity timeouts                         | Queued                                                           | Pending                                               |
 | [JEV-005](https://github.com/githubnext/chopin/blob/maggie/jev-005-click-debug-popovers/docs/jev-issues/JEV-005.md) | Click-only Jev debug popovers with code-icon buttons               | Ready for Maggie’s review                                        | [#243](https://github.com/githubnext/chopin/pull/243) |
-| [JEV-006](JEV-006.md)                                                                                               | Default chat pane 60px wider                                       | Verified; preparing fix PR                                       | Pending                                               |
+| [JEV-006](JEV-006.md)                                                                                               | Default chat pane 60px wider                                       | Ready for Maggie’s review                                        | [#244](https://github.com/githubnext/chopin/pull/244) |
 
 Evidence: [live browser pass](../jev-live-browser-test.md),
 [UI reconciliation](../jev-ui-reconciliation.md). Baseline:
