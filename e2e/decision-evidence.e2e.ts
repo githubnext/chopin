@@ -35,7 +35,8 @@ async function discuss(ana: Page, bo: Page, room: string) {
 
 async function openEvidence(page: Page): Promise<Locator> {
 	await page.mouse.move(0, 0);
-	await card(page).hover();
+	await card(page).getByRole("button", { name: "Inspect decision evidence", exact: true })
+		.click();
 	let panel = evidence(page);
 	await expect(panel).toBeVisible();
 	return panel;
@@ -49,22 +50,23 @@ test.afterEach(async () => {
 	await resetPlannerJobs();
 });
 
-test("a card opens evidence after its delay; pending and open Escape do not leave a portal", async ({ join, room }) => {
+test("a card stays quiet on hover and evidence opens only by its code button", async ({ join, room }) => {
 	let ana = await join("ana");
 	let bo = await join("bo");
 	await discuss(ana, bo, room);
 
 	await card(ana).hover();
-	await expect(evidence(ana)).toHaveCount(0);
-	await ana.keyboard.press("Escape");
 	await ana.waitForTimeout(450);
 	await expect(evidence(ana)).toHaveCount(0);
-
-	let panel = await openEvidence(ana);
-	await panel.hover();
+	let trigger = card(ana).getByRole("button", { name: "Inspect decision evidence", exact: true });
+	await trigger.focus();
+	await expect(evidence(ana)).toHaveCount(0);
+	await trigger.press("Enter");
+	let panel = evidence(ana);
 	await expect(panel).toBeVisible();
 	await ana.keyboard.press("Escape");
 	await expect(panel).toHaveCount(0);
+	await expect(trigger).toBeFocused();
 
 	panel = await openEvidence(ana);
 	let box = await panel.boundingBox();
@@ -74,8 +76,7 @@ test("a card opens evidence after its delay; pending and open Escape do not leav
 	expect(
 		box!.x >= cardBox!.x + cardBox!.width || box!.x + box!.width <= cardBox!.x,
 	).toBe(true);
-	await ana.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
-	await ana.mouse.move(0, 0);
+	await ana.mouse.click(0, 0);
 	await expect(panel).toHaveCount(0);
 });
 
@@ -108,7 +109,7 @@ test("evidence shows exact sources and current stances, then source navigation c
 	await ana.keyboard.press("Escape");
 	await expect(panel).toHaveCount(0);
 	panel = await openEvidence(ana);
-	await ana.mouse.move(0, 0);
+	await ana.mouse.click(0, 0);
 	await expect(panel).toHaveCount(0);
 });
 
@@ -257,7 +258,7 @@ test("Planner option evidence navigates to its exact saved chat source", async (
 			| undefined;
 		return Object.values(meta?.optionOrigins ?? {}).find(origin => origin.source)?.source;
 	}).toEqual(source);
-	await refined.hover();
+	await refined.getByRole("button", { name: "Inspect decision evidence", exact: true }).click();
 	let panel = ana.getByRole("dialog", {
 		name: "Evidence for Should we run a limited pilot?",
 		exact: true,

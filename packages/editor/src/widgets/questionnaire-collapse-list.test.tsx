@@ -29,9 +29,9 @@ test("evidence hover belongs only to an open inline conversation card", () => {
 	for (let markup of [eligible, noThread, settled, noEvidence]) {
 		expect(markup).toContain("plan-evidence-host");
 	}
-	expect(eligible).toContain('data-evidence-hover=""');
+	expect(eligible).toContain('data-evidence-available=""');
 	for (let markup of [noThread, settled, list, noEvidence]) {
-		expect(markup).not.toContain('data-evidence-hover=""');
+		expect(markup).not.toContain('data-evidence-available=""');
 	}
 });
 

@@ -216,17 +216,17 @@ function MessageBody(
 		onWithdraw: (id: string) => void;
 	} & PlanMarkers,
 ) {
-	let analysisAnchor = useRef<HTMLDivElement>(null);
 	let text = displayText(message.text) ? message.text : message.author.kind === "member"
 		? "Ask Planner"
 		: "";
 
 	return (
 		<div
-			ref={analysisAnchor}
-			className={markers.sourceDestination?.source.messageId === message.id
-				? "rounded-md bg-inset px-1"
-				: undefined}
+			className={`chat-message-body relative ${
+				markers.sourceDestination?.source.messageId === message.id
+					? "rounded-md bg-inset px-1"
+					: ""
+			}`}
 			data-chat-message-id={message.id}
 			data-chat-raw={message.text}
 			data-chat-state={message.working ? "working" : undefined}
@@ -269,7 +269,6 @@ function MessageBody(
 			)}
 			{!message.queued && markers.onCardLink && markers.onRetryAnalysis && (
 				<MessageMarkers
-					anchorRef={analysisAnchor}
 					canEdit={!!markers.canEdit}
 					messageId={message.id}
 					messageText={message.text}

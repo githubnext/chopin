@@ -80,3 +80,7 @@
 	font-family: var(--font-mono);
 	font-size: var(--text-sm);
 }
+
+.chat-message-body:has([data-analysis-trigger]) {
+	padding-inline-end: 2rem;
+}

@@ -2,12 +2,28 @@ import { expect, test } from "@playwright/test";
 import { analysis, inspect, load, message, prepareAnalysisHost } from "./analysis-host-native";
 test.beforeAll(prepareAnalysisHost);
 
-test("whole message hover shares one portal owner and Escape returns native focus", async ({ page }) => {
+test("message diagnostics stay closed until the code button is activated", async ({ page }) => {
+	await load(page);
+	let anchor = message(page, "host-review");
+	await anchor.scrollIntoViewIfNeeded();
+	await anchor.hover();
+	await page.waitForTimeout(250);
+	await expect(analysis(page, "host-review")).toHaveCount(0);
+	await anchor.locator("[data-chat-message-text]").click();
+	await expect(analysis(page, "host-review")).toHaveCount(0);
+	let trigger = anchor.getByRole("button", { name: "Analysis for message: unlinked", exact: true });
+	await expect(trigger).toBeVisible();
+	await trigger.click();
+	await expect(analysis(page, "host-review")).toBeVisible();
+});
+
+test("code buttons keep one portal owner and Escape returns native focus", async ({ page }) => {
 	let errors = await load(page);
 	await message(page, "host-review").scrollIntoViewIfNeeded();
-	await message(page, "host-review").hover();
+	await message(page, "host-review").getByRole("button", { name: /^Analysis for message:/ })
+		.click();
 	await expect(analysis(page, "host-review")).toBeVisible();
-	await message(page, "host-retry").hover();
+	await message(page, "host-retry").getByRole("button", { name: /^Analysis for message:/ }).click();
 	await expect(analysis(page, "host-retry")).toBeVisible();
 	await expect(page.locator("[data-analysis-popover]")).toHaveCount(1);
 	await expect(analysis(page, "host-review")).toHaveCount(0);
@@ -19,20 +35,46 @@ test("whole message hover shares one portal owner and Escape returns native focu
 			exact: true,
 		}),
 	).toBeFocused();
-	await page.waitForTimeout(180);
-	await expect(page.locator("[data-analysis-popover]")).toHaveCount(0);
 	expect(errors).toEqual([]);
+});
+
+test("diagnostics restoration after reconnect never reopens a former pin", async ({ page }) => {
+	await load(page);
+	let trigger = message(page, "host-review").getByRole("button", {
+		name: "Analysis for message: unlinked",
+		exact: true,
+	});
+	await trigger.click();
+	await expect(analysis(page, "host-review")).toBeVisible();
+	await page.evaluate(() => window.analysisHostFixture.diagnostics(false));
+	await expect(trigger).toHaveCount(0);
+	await expect(analysis(page, "host-review")).toHaveCount(0);
+	await page.evaluate(() => window.analysisHostFixture.diagnostics(true));
+	await expect(trigger).toBeVisible();
+	await expect(analysis(page, "host-review")).toHaveCount(0);
+	await trigger.click();
+	await expect(analysis(page, "host-review")).toBeVisible();
 });
 
 test("keyboard-only inspect opens real diagnostics and pinned message survives pointer leave", async ({ page }) => {
 	let errors = await load(page);
-	await inspect(page, "host-review");
-	await page.keyboard.press("Tab");
+	let trigger = message(page, "host-review").getByRole("button", {
+		name: "Analysis for message: unlinked",
+		exact: true,
+	});
+	await trigger.focus();
+	await expect(analysis(page, "host-review")).toHaveCount(0);
+	await trigger.press("Enter");
+	await expect(analysis(page, "host-review")).toBeVisible();
 	await expect(
-		analysis(page, "host-review").getByRole("button", { name: "Close analysis", exact: true }),
+		analysis(page, "host-review").getByRole("button", { name: "Add to card", exact: true }),
 	).toBeFocused();
 	await page.keyboard.press("Escape");
+	await expect(trigger).toBeFocused();
 	await message(page, "host-review").locator("[data-chat-message-text]").click();
+	await expect(analysis(page, "host-review")).toHaveCount(0);
+	await message(page, "host-review").getByRole("button", { name: /^Analysis for message:/ })
+		.click();
 	await expect(analysis(page, "host-review")).toBeVisible();
 	await page.mouse.move(2, 2);
 	await page.waitForTimeout(180);

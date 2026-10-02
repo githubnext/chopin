@@ -33,13 +33,14 @@ test("Chat analysis diagnostics float without moving a bottom message", async ({
 	let message = page.locator(`[data-chat-message-id="${messageId}"]`);
 	let inspect = message.getByRole("button", { name: /Analysis for message/ });
 	let transcript = message.locator("xpath=ancestor::*[@data-focus-boundary][1]");
+	await expect(inspect).toBeVisible();
+	await message.hover();
 	let before = await message.boundingBox();
 	let scrollTop = await transcript.evaluate(element => element.scrollTop);
 	expect(before).not.toBeNull();
-
-	await expect(inspect).toHaveClass(/sr-only/);
-	await message.hover();
 	let popover = page.getByLabel("Message analysis");
+	await expect(popover).toHaveCount(0);
+	await inspect.click();
 	await expect(popover).toBeVisible();
 	let after = await message.boundingBox();
 	expect(after).not.toBeNull();
@@ -55,7 +56,7 @@ test("Chat analysis diagnostics float without moving a bottom message", async ({
 	expect(popoverBox!.y + popoverBox!.height).toBeLessThanOrEqual(composerBox!.y);
 });
 
-test("a hovered analysis popover stays open when another message receives hover", async ({ join, room }) => {
+test("another message hover stays quiet and code buttons keep one analysis portal", async ({ join, room }) => {
 	let page = await join("ana");
 	await openJevWire(page, room);
 	let earlierId = await sendChat(page, "Maybe that?");
@@ -67,18 +68,24 @@ test("a hovered analysis popover stays open when another message receives hover"
 	let earlier = page.locator(`[data-chat-message-id="${earlierId}"]`);
 	let active = page.locator(`[data-chat-message-id="${activeId}"]`);
 	let popover = page.locator(`[data-analysis-message="${activeId}"]`);
-	await active.hover();
+	await active.getByRole("button", { name: /Analysis for message/ }).click();
 	await expect(popover).toBeVisible();
-	await popover.hover();
-	await earlier.evaluate(element => element.dispatchEvent(new MouseEvent("mouseenter")));
+	await page.mouse.move(0, 0);
 	await expect(popover).toBeVisible();
 	await expect(page.locator("[data-analysis-popover]")).toHaveCount(1);
 	await popover.getByText("Model answers and run details").click();
 	await expect(popover).toContainText("targeting");
-	await page.mouse.move(0, 0);
-	await expect(popover).toBeHidden();
+	await popover.getByRole("button", { name: "Close analysis" }).click();
 	await earlier.hover();
+	await expect(page.locator("[data-analysis-popover]")).toHaveCount(0);
+	await earlier.getByRole("button", { name: /Analysis for message/ }).click();
+	await expect(popover).toHaveCount(0);
 	await expect(page.locator(`[data-analysis-message="${earlierId}"]`)).toBeVisible();
+	await expect(page.locator("[data-analysis-popover]")).toHaveCount(1);
+	await page.mouse.click(0, 0);
+	await expect(page.locator("[data-analysis-popover]")).toHaveCount(0);
+	await earlier.hover();
+	await expect(page.locator("[data-analysis-popover]")).toHaveCount(0);
 });
 
 test("analysis Escape dismisses before compact Chat and narrow split popovers stay in Chat", async ({ join, room }) => {
@@ -92,6 +99,8 @@ test("analysis Escape dismisses before compact Chat and narrow split popovers st
 		.getByRole("button", { name: /Analysis for message/ });
 	let analysis = page.getByLabel("Message analysis");
 	await compactMarker.focus();
+	await expect(analysis).toHaveCount(0);
+	await compactMarker.press("Enter");
 	await expect(analysis).toBeVisible();
 	await compactMarker.press("Escape");
 	await expect(analysis).toBeHidden();
@@ -108,6 +117,8 @@ test("analysis Escape dismisses before compact Chat and narrow split popovers st
 	await expect(splitMarker).toBeVisible();
 	await page.mouse.move(0, 0);
 	await splitMessageElement.hover();
+	await expect(analysis).toHaveCount(0);
+	await splitMarker.click();
 	await expect(analysis).toBeVisible();
 	let [popoverBox, chatBox] = await Promise.all([
 		analysis.boundingBox(),
@@ -165,46 +176,19 @@ test("a chat question becomes an inline decision card", async ({ join, room }) =
 	let inspect = compound.getByRole("button", { name: /Analysis for message/ });
 	await inspect.focus();
 	let analysis = page.getByLabel("Message analysis");
-	await expect(analysis).toBeVisible();
+	await expect(analysis).toHaveCount(0);
 	await inspect.press("Enter");
 	await expect(analysis).toContainText("findings applied");
 	await analysis.getByText("Model answers and run details").click();
 	await expect(analysis).toContainText("targeting");
-	let close = analysis.getByRole("button", { name: "Close analysis" });
-	await inspect.press("Tab");
-	await expect(close).toBeFocused();
-	await close.press("Shift+Tab");
+	await analysis.getByRole("button", { name: "Close analysis" }).click();
+	await expect(analysis).toHaveCount(0);
 	await expect(inspect).toBeFocused();
-	await inspect.press("Escape");
-	await expect(analysis).toBeHidden();
-	await expect(inspect).toBeFocused();
-	await compound.locator(`[data-card-link="${option.id}"]`).focus();
-	await inspect.focus();
+	await inspect.press("Space");
 	await expect(analysis).toBeVisible();
-	await inspect.press("Tab");
-	await expect(close).toBeFocused();
-	await close.press("Escape");
-	await expect(analysis).toBeHidden();
+	await page.keyboard.press("Escape");
+	await expect(analysis).toHaveCount(0);
 	await expect(inspect).toBeFocused();
-	await compound.locator(`[data-card-link="${option.id}"]`).focus();
-	await inspect.focus();
-	await expect(analysis).toBeVisible();
-	await inspect.press("Tab");
-	await expect(close).toBeFocused();
-	await close.press("Tab");
-	await expect(analysis.getByText("Model answers and run details")).toBeFocused();
-	let lastControl = analysis.getByText("Model answers and run details");
-	let jobControls = analysis.getByRole("group", { name: "Planner jobs", exact: true })
-		.locator("button:enabled");
-	for (let index = 0; index < await jobControls.count(); index++) {
-		let jobControl = jobControls.nth(index);
-		await lastControl.press("Tab");
-		await expect(jobControl).toBeFocused();
-		lastControl = jobControl;
-	}
-	await lastControl.press("Tab");
-	await expect(analysis).toBeHidden();
-	await expect(page.locator(".chat-composer textarea")).toBeFocused();
 	let unlinkedMessage = await sendChat(page, "Maybe that?");
 	await expect.poll(async () =>
 		(await wireState(page))?.analysis.find(item => item.messageId === unlinkedMessage)?.status
@@ -213,7 +197,7 @@ test("a chat question becomes an inline decision card", async ({ join, room }) =
 	await expect(unlinked.getByRole("button", { name: "Analysis for message: unlinked" }))
 		.toBeVisible();
 	await expect(unlinked.getByRole("button", { name: "Analysis for message: unlinked" }))
-		.toHaveClass(/sr-only/);
+		.toHaveAttribute("data-analysis-trigger", "true");
 	await expect(page.getByText("Unlinked", { exact: true })).toHaveCount(0);
 });
 
@@ -422,10 +406,11 @@ test("failed analysis retries in Chat while editor selection survives hiding Cha
 	let inspect = message.getByRole("button", { name: /Analysis for message/ });
 	await message.locator("[data-chat-message-text]").click();
 	let analysis = page.getByLabel("Message analysis");
+	await expect(analysis).toHaveCount(0);
+	await inspect.click();
 	let close = analysis.getByRole("button", { name: "Close analysis" });
 	let retry = analysis.getByRole("button", { name: "Retry analysis" });
 	await expect(retry).toBeVisible();
-	await inspect.press("Tab");
 	await expect(close).toBeFocused();
 	await close.press("Tab");
 	let details = analysis.getByText("Model answers and run details");
@@ -460,6 +445,8 @@ test("a second acknowledged retry uses a fresh action after analysis fails again
 	let marker = page.locator(`[data-chat-message-id="${messageId}"]`);
 	await marker.locator("[data-chat-message-text]").click();
 	let analysis = page.getByLabel("Message analysis");
+	await expect(analysis).toHaveCount(0);
+	await marker.getByRole("button", { name: /Analysis for message/ }).click();
 	await analysis.getByRole("button", { name: "Retry analysis" }).click();
 	await expect.poll(async () =>
 		(await wireState(page))?.queue.find(item => item.messageId === messageId)
@@ -479,6 +466,8 @@ test("scrolling a pinned message analysis out of Chat dismisses its portal", asy
 	let marker = page.locator(`[data-chat-message-id="${messageId}"]`);
 	await marker.locator("[data-chat-message-text]").click();
 	let analysis = page.locator(`[data-analysis-message="${messageId}"]`);
+	await expect(analysis).toHaveCount(0);
+	await marker.getByRole("button", { name: /Analysis for message/ }).click();
 	await expect(analysis).toBeVisible();
 	for (let index = 0; index < 32; index++) await sendChat(page, `Maybe that? ${index}`);
 	let transcript = marker.locator("xpath=ancestor::*[@data-focus-boundary][1]");
@@ -512,6 +501,8 @@ test("read-only and archived readers keep cards and diagnostics with disabled co
 		await expect(marker).toHaveAttribute("data-source-exact", "true");
 		await marker.locator("[data-chat-message-text]").click();
 		let analysis = reader.getByLabel("Message analysis");
+		await expect(analysis).toHaveCount(0);
+		await marker.getByRole("button", { name: /Analysis for message/ }).click();
 		await expect(analysis).toContainText("finding applied");
 		await analysis.getByText("Model answers and run details").click();
 		await expect(analysis).toContainText("triage");

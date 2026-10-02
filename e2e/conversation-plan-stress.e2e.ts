@@ -373,8 +373,9 @@ test("a writer can apply a focused Copilot subspan as an option", async ({ join,
 	await expect(review).toBeVisible();
 	let writerPanel = ana.locator(`[data-analysis-message="${messageId}"]`);
 	await writerMessage.hover();
-	await expect(writerPanel).toBeVisible();
+	await expect(writerPanel).toHaveCount(0);
 	await review.click();
+	await expect(writerPanel).toBeVisible();
 	let addToCard = writerPanel.getByRole("button", { name: "Add to card" });
 	await expect(addToCard).toBeFocused();
 	await addToCard.click();

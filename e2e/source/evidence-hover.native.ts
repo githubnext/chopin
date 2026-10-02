@@ -12,22 +12,30 @@ import {
 
 test.beforeAll(prepareEvidence);
 
-test("actual card waits to open, cancels pending hover and consumes Escape", async ({ page }) => {
+test("decision evidence stays closed on hover and opens from its code button", async ({ page }) => {
 	await load(page);
 	await card(page).hover();
-	await page.waitForTimeout(200);
-	await expect(panel(page)).toHaveCount(0);
-	await page.keyboard.press("Escape");
 	await page.waitForTimeout(450);
 	await expect(panel(page)).toHaveCount(0);
-	await moveAway(page);
+	let trigger = card(page).getByRole("button", { name: "Inspect decision evidence", exact: true });
+	await expect(trigger).toBeVisible();
+	await trigger.click();
+	await expect(panel(page)).toBeVisible();
+});
+
+test("actual card hover and focus stay closed; button activation and Escape are explicit", async ({ page }) => {
+	await load(page);
 	await card(page).hover();
-	await moveAway(page);
 	await page.waitForTimeout(450);
 	await expect(panel(page)).toHaveCount(0);
-	await open(page);
+	let trigger = card(page).getByRole("button", { name: "Inspect decision evidence", exact: true });
+	await trigger.focus();
+	await expect(panel(page)).toHaveCount(0);
+	await trigger.press("Enter");
+	await expect(panel(page)).toBeVisible();
 	await page.keyboard.press("Escape");
 	await expect(panel(page)).toHaveCount(0);
+	await expect(trigger).toBeFocused();
 });
 
 test("actual panel preserves focus after pointer leaves and Escape returns to the card", async ({ page }) => {
@@ -115,7 +123,7 @@ for (let intent of ["source", "escape"] as const) {
 	});
 }
 
-test("measured short viewport clamps the panel, own scrolling preserves it and document scrolling closes", async ({ page }) => {
+test("short viewport clamps evidence, in-view scroll repositions it and offscreen scroll closes it", async ({ page }) => {
 	await page.setViewportSize({ width: 560, height: 320 });
 	await load(page);
 	await page.evaluate(() => window.evidenceFixture.long());
@@ -128,7 +136,10 @@ test("measured short viewport clamps the panel, own scrolling preserves it and d
 	await panel(page).evaluate(element => element.scrollTop = 100);
 	expect(await panel(page).evaluate(element => element.scrollTop)).toBeGreaterThan(0);
 	await expect(panel(page)).toBeVisible();
-	await page.locator("[data-plan-scroll]").evaluate(element => element.scrollTop = 100);
+	let scroller = page.locator("[data-plan-scroll]");
+	await scroller.evaluate(element => element.scrollTop = 60);
+	await expect(panel(page)).toBeVisible();
+	await scroller.evaluate(element => element.scrollTop = 600);
 	await expect(panel(page)).toHaveCount(0);
 });
 
@@ -151,10 +162,12 @@ test("live content remains open while terminal metadata, hidden card and empty e
 	await expect(page.locator(".plan-evidence-popover")).toHaveCount(0);
 });
 
-test("missing authoritative metadata refuses hover even with an open document node", async ({ page }) => {
+test("missing authoritative metadata hides the evidence button", async ({ page }) => {
 	await load(page);
 	await page.evaluate(() => window.evidenceFixture.status(undefined));
 	await card(page).hover();
-	await page.waitForTimeout(500);
+	await expect(card(page).getByRole("button", { name: "Inspect decision evidence" })).toHaveCount(
+		0,
+	);
 	await expect(panel(page)).toHaveCount(0);
 });

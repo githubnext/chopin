@@ -1,4 +1,5 @@
 import { createPortal } from "react-dom";
+import { CodeIcon } from "@chopin/icons";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 import { analysisForMessage, jobsForMessage, messageLinks } from "./links";
@@ -7,27 +8,15 @@ import { JobsOnlyDiagnostics, PlannerJobDiagnostics } from "./planner-job-diagno
 import type { ExcerptCorrectionAction } from "./analysis-overview";
 
 import type { ConversationPlan } from "@chopin/protocol";
-import type { CSSProperties, RefObject } from "react";
+import type { CSSProperties } from "react";
 import type { CardLink } from "./links";
 
 export { JobsOnlyDiagnostics, PlannerJobDiagnostics } from "./planner-job-diagnostics";
 
-let hoverDismissedUntilPointerMoves = false;
-
-let resumeAnalysisHover = () => {
-	hoverDismissedUntilPointerMoves = false;
-};
-
-let dismissAnalysisHover = () => {
-	hoverDismissedUntilPointerMoves = true;
-	document.addEventListener("pointermove", resumeAnalysisHover, { once: true });
-};
-
-let hoverOwner: object | undefined;
+let analysisOwner: { id: object; close: () => void } | undefined;
 
 export function MessageMarkers(
 	{
-		anchorRef,
 		canEdit,
 		jobs: allJobs = [],
 		messageId,
@@ -38,7 +27,6 @@ export function MessageMarkers(
 		onRetryJob,
 		state,
 	}: {
-		anchorRef?: RefObject<HTMLDivElement | null>;
 		canEdit: boolean;
 		jobs?: ConversationPlan.Job[];
 		messageId: string;
@@ -50,7 +38,6 @@ export function MessageMarkers(
 		state?: ConversationPlan.State;
 	},
 ) {
-	let [preview, setPreview] = useState(false);
 	let [pinned, setPinned] = useState(false);
 	let [retrying, setRetrying] = useState(false);
 	let [error, setError] = useState("");
@@ -59,10 +46,7 @@ export function MessageMarkers(
 	let trigger = useRef<HTMLButtonElement>(null);
 	let popover = useRef<HTMLDivElement>(null);
 	let popoverContent = useRef<HTMLDivElement>(null);
-	let previewClose = useRef<number | undefined>(undefined);
-	let hoverOpen = useRef<number | undefined>(undefined);
-	let hoverIdentity = useRef({});
-	let restoringTriggerFocus = useRef(false);
+	let identity = useRef({});
 	let retryId = useRef<string | undefined>(undefined);
 	let popoverId = useId();
 	let links = state ? messageLinks(state, messageId) : [];
@@ -70,61 +54,29 @@ export function MessageMarkers(
 	let jobs = state
 		? jobsForMessage(state, allJobs, messageId)
 		: allJobs.filter(job => job.trigger === messageId);
-	let visible = preview || pinned;
 	let jobsOnly = !analysis && links.length === 0 && jobs.length > 0;
 	let status = analysis?.status
 		?? (links.length > 0 ? "applied" : jobsOnly ? "Planner jobs" : "unlinked");
 	let hasDiagnostics = !!analysis || links.length > 0 || jobs.length > 0;
+	let visible = pinned && hasDiagnostics;
 	let reviewableCount = analysis && ["applied", "unlinked"].includes(analysis.status)
 		? analysis.outcomes?.filter(outcome =>
 			["review", "ignored"].includes(outcome.status)
 			&& !links.some(link => link.source.start === outcome.start && link.source.end === outcome.end)
 		).length ?? 0
 		: 0;
-	let cancelPreviewClose = () => {
-		if (previewClose.current !== undefined) window.clearTimeout(previewClose.current);
-		previewClose.current = undefined;
-	};
-	let cancelHoverOpen = () => {
-		if (hoverOpen.current !== undefined) window.clearTimeout(hoverOpen.current);
-		hoverOpen.current = undefined;
-	};
 	let requestPanelFocus = () => setFocusPanelRequest(request => request + 1);
-	let openPreview = (element: HTMLElement) => {
-		if (hoverDismissedUntilPointerMoves) return;
-		cancelHoverOpen();
-		if (hoverOwner && hoverOwner !== hoverIdentity.current) {
-			hoverOpen.current = window.setTimeout(() => {
-				hoverOpen.current = undefined;
-				if (!element.matches(":hover") || (hoverOwner && hoverOwner !== hoverIdentity.current)) {
-					return;
-				}
-				hoverOwner = hoverIdentity.current;
-				cancelPreviewClose();
-				setPreview(true);
-			}, 130);
-			return;
-		}
-		hoverOwner = hoverIdentity.current;
-		cancelPreviewClose();
-		setPreview(true);
-	};
-	let schedulePreviewClose = () => {
-		cancelPreviewClose();
-		previewClose.current = window.setTimeout(() => {
-			if (hoverOwner === hoverIdentity.current) hoverOwner = undefined;
-			setPreview(false);
-			previewClose.current = undefined;
-		}, 120);
-	};
-	let closeAnalysis = () => {
-		cancelPreviewClose();
-		cancelHoverOpen();
+	let closeAnalysis = (returnFocus = false) => {
 		setFocusPanelRequest(0);
-		if (hoverOwner === hoverIdentity.current) hoverOwner = undefined;
-		dismissAnalysisHover();
 		setPinned(false);
-		setPreview(false);
+		if (analysisOwner?.id === identity.current) analysisOwner = undefined;
+		if (returnFocus) trigger.current?.focus({ preventScroll: true });
+	};
+	let openAnalysis = () => {
+		if (analysisOwner?.id !== identity.current) analysisOwner?.close();
+		analysisOwner = { id: identity.current, close: () => setPinned(false) };
+		requestPanelFocus();
+		setPinned(true);
 	};
 	let focusAfterTrigger = () => {
 		let controls = [...document.querySelectorAll<HTMLElement>(
@@ -137,48 +89,17 @@ export function MessageMarkers(
 	};
 
 	useEffect(() => () => {
-		if (previewClose.current !== undefined) window.clearTimeout(previewClose.current);
-		if (hoverOpen.current !== undefined) window.clearTimeout(hoverOpen.current);
-		if (hoverOwner === hoverIdentity.current) hoverOwner = undefined;
+		if (analysisOwner?.id === identity.current) analysisOwner = undefined;
 	}, []);
 
 	useEffect(() => {
-		let anchor = anchorRef?.current;
-		if (!anchor || !hasDiagnostics) return;
-		anchor.dataset.analysisAvailable = "";
-		let open = () => {
-			openPreview(anchor);
-		};
-		let leave = () => {
-			cancelHoverOpen();
-			schedulePreviewClose();
-		};
-		let toggle = (event: MouseEvent) => {
-			if (
-				event.target instanceof Element
-				&& event.target.closest("a, button, input, select, textarea, [contenteditable]")
-			) return;
-			if (!window.getSelection()?.isCollapsed) return;
-			cancelPreviewClose();
-			if (pinned) setFocusPanelRequest(0);
-			else requestPanelFocus();
-			setPinned(value => !value);
-		};
-		anchor.addEventListener("mouseenter", open);
-		anchor.addEventListener("mouseleave", leave);
-		anchor.addEventListener("click", toggle);
-		return () => {
-			delete anchor.dataset.analysisAvailable;
-			anchor.removeEventListener("mouseenter", open);
-			anchor.removeEventListener("mouseleave", leave);
-			anchor.removeEventListener("click", toggle);
-		};
-	});
+		if (!hasDiagnostics) closeAnalysis();
+	}, [hasDiagnostics]);
 
 	useLayoutEffect(() => {
 		if (!visible) return;
 		let place = () => {
-			let anchor = anchorRef?.current ?? trigger.current;
+			let anchor = trigger.current;
 			let panel = popover.current;
 			if (!anchor || !panel) return;
 			let anchorBox = anchor.getBoundingClientRect();
@@ -193,9 +114,7 @@ export function MessageMarkers(
 				|| anchorBox.bottom <= transcriptBox.top
 				|| anchorBox.top >= transcriptBox.bottom
 			) {
-				if (hoverOwner === hoverIdentity.current) hoverOwner = undefined;
-				setPinned(false);
-				setPreview(false);
+				closeAnalysis();
 				setPosition({ visibility: "hidden" });
 				return;
 			}
@@ -237,8 +156,7 @@ export function MessageMarkers(
 		};
 		place();
 		let observer = new ResizeObserver(place);
-		if (anchorRef?.current) observer.observe(anchorRef.current);
-		else if (trigger.current) observer.observe(trigger.current);
+		if (trigger.current) observer.observe(trigger.current);
 		if (popover.current) observer.observe(popover.current);
 		if (popoverContent.current) observer.observe(popoverContent.current);
 		window.addEventListener("resize", place);
@@ -248,7 +166,7 @@ export function MessageMarkers(
 			window.removeEventListener("resize", place);
 			document.removeEventListener("scroll", place, true);
 		};
-	}, [anchorRef, state, error, visible]);
+	}, [state, error, visible]);
 
 	useLayoutEffect(() => {
 		if (focusPanelRequest === 0) return;
@@ -274,24 +192,28 @@ export function MessageMarkers(
 			let target = event.target;
 			if (!(target instanceof Node)) return;
 			if (!trigger.current?.contains(target) && !popover.current?.contains(target)) {
-				if (hoverOwner === hoverIdentity.current) hoverOwner = undefined;
-				setPreview(false);
+				closeAnalysis();
+			}
+		};
+		let onPointerDown = (event: PointerEvent) => {
+			let target = event.target;
+			if (!(target instanceof Node)) return;
+			if (!trigger.current?.contains(target) && !popover.current?.contains(target)) {
+				closeAnalysis();
 			}
 		};
 		let onEscape = (event: KeyboardEvent) => {
 			if (event.key !== "Escape") return;
 			event.preventDefault();
 			event.stopPropagation();
-			closeAnalysis();
-			if (document.activeElement !== trigger.current) {
-				restoringTriggerFocus.current = true;
-				trigger.current?.focus();
-			}
+			closeAnalysis(true);
 		};
 		document.addEventListener("focusin", onFocus);
+		document.addEventListener("pointerdown", onPointerDown, true);
 		document.addEventListener("keydown", onEscape, true);
 		return () => {
 			document.removeEventListener("focusin", onFocus);
+			document.removeEventListener("pointerdown", onPointerDown, true);
 			document.removeEventListener("keydown", onEscape, true);
 		};
 	}, [visible]);
@@ -301,7 +223,7 @@ export function MessageMarkers(
 
 	return (
 		<div
-			className="relative mt-1 flex flex-wrap gap-1 text-sm"
+			className="mt-1 flex flex-wrap gap-1 text-sm"
 			data-message-markers={messageId}
 		>
 			{links.slice(0, 3).map(link => (
@@ -323,15 +245,7 @@ export function MessageMarkers(
 					aria-controls={visible ? popoverId : undefined}
 					aria-expanded={visible}
 					className="rounded-full bg-inset px-2 py-0.5 text-xs text-text-secondary hover:bg-hover"
-					onClick={() => {
-						requestPanelFocus();
-						cancelPreviewClose();
-						cancelHoverOpen();
-						if (hoverOwner === hoverIdentity.current) hoverOwner = undefined;
-						dismissAnalysisHover();
-						setPreview(false);
-						setPinned(true);
-					}}
+					onClick={openAnalysis}
 					type="button"
 				>
 					Review {reviewableCount} excerpt{reviewableCount === 1 ? "" : "s"}
@@ -342,42 +256,14 @@ export function MessageMarkers(
 					aria-controls={visible ? popoverId : undefined}
 					aria-expanded={visible}
 					aria-label={`Analysis for message: ${status}`}
-					className="sr-only focus:not-sr-only focus:absolute focus:right-0 focus:bottom-0 focus:z-10 focus:rounded-md focus:bg-page focus:px-2 focus:py-1"
-					onClick={() => {
-						cancelPreviewClose();
-						if (visible) setFocusPanelRequest(0);
-						else requestPanelFocus();
-						setPinned(value => !value);
-					}}
-					onFocus={() => {
-						if (restoringTriggerFocus.current) {
-							restoringTriggerFocus.current = false;
-							return;
-						}
-						cancelPreviewClose();
-						setPreview(true);
-					}}
-					onKeyDown={event => {
-						if (event.key !== "Tab" || event.shiftKey) return;
-						event.preventDefault();
-						cancelPreviewClose();
-						setPreview(true);
-						requestAnimationFrame(() => {
-							popover.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
-						});
-					}}
-					onMouseEnter={() => {
-						if (trigger.current) openPreview(trigger.current);
-					}}
-					onMouseLeave={() => {
-						cancelHoverOpen();
-						schedulePreviewClose();
-					}}
+					className="btn btn-icon btn-ghost absolute right-0 top-0"
+					data-analysis-trigger
+					onClick={() => visible ? closeAnalysis() : openAnalysis()}
 					ref={trigger}
-					title={jobsOnly ? "Inspect Planner jobs; click to pin" : "Inspect analysis; click to pin"}
+					title={jobsOnly ? "Inspect Planner jobs" : "Inspect message analysis"}
 					type="button"
 				>
-					Inspect analysis
+					<CodeIcon aria-hidden="true" size={14} />
 				</button>
 			)}
 			{visible && createPortal(
@@ -387,14 +273,6 @@ export function MessageMarkers(
 					data-analysis-message={messageId}
 					data-analysis-popover
 					id={popoverId}
-					onMouseEnter={() => {
-						cancelPreviewClose();
-						hoverOwner = hoverIdentity.current;
-					}}
-					onMouseLeave={() => {
-						if (hoverOwner === hoverIdentity.current) hoverOwner = undefined;
-						schedulePreviewClose();
-					}}
 					onKeyDown={event => {
 						if (event.key !== "Tab") return;
 						let controls = [
@@ -411,7 +289,6 @@ export function MessageMarkers(
 						}
 						if (!event.shiftKey && current === controls.length - 1) {
 							event.preventDefault();
-							if (!pinned) setPreview(false);
 							focusAfterTrigger();
 						}
 					}}
@@ -424,7 +301,7 @@ export function MessageMarkers(
 								<JobsOnlyDiagnostics
 									canEdit={canEdit}
 									jobs={jobs}
-									onClose={closeAnalysis}
+									onClose={() => closeAnalysis(true)}
 									onRetryJob={onRetryJob}
 								/>
 							)
@@ -437,7 +314,7 @@ export function MessageMarkers(
 										<button
 											aria-label="Close analysis"
 											className="btn btn-sm btn-ghost"
-											onClick={closeAnalysis}
+											onClick={() => closeAnalysis(true)}
 											type="button"
 										>
 											Close
