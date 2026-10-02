@@ -73,7 +73,7 @@ export function EvidencePopover({ rows, onSource }: {
 							</q>
 							<button
 								aria-label={`Show “${row.source.quote}” in chat`}
-								className="shrink-0 rounded-sm px-1 text-text-tertiary hover:bg-hover hover:text-text-secondary"
+								className="btn btn-icon btn-ghost shrink-0"
 								onClick={() => onSource({ source: row.source!, itemId: row.optionId! })}
 								type="button"
 							>
@@ -96,7 +96,7 @@ export function EvidencePopover({ rows, onSource }: {
 										{source && (
 											<button
 												aria-label={`Show “${item.text}” in chat`}
-												className="shrink-0 rounded-sm px-1 text-text-tertiary hover:bg-hover hover:text-text-secondary"
+												className="btn btn-icon btn-ghost shrink-0"
 												onClick={() => onSource({ source, itemId: item.id })}
 												type="button"
 											>

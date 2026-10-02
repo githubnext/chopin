@@ -4,6 +4,10 @@ Branch: `Maggie/jev-chat-product`. Reviewed application and test revision:
 `b7b79ef00c2ffe1fe1ea84a9eb7fdcc034d099e6`. The final handoff commit changes
 only documentation.
 
+The subsequent [UI reconciliation](jev-ui-reconciliation.md) integrates newer
+main and replaces the competing Jev decision reader with main's components.
+Its verification and UI findings supersede this handoff for those surfaces.
+
 The review integrated main at `bae7818597895841b0adbe9c023c0a57194af96e`
 through merge `d22862a6`, then audited the complete feature by subsystem with
 independent re-review. [The review ledger](jev-quality-review.md) records ownership
@@ -68,9 +72,9 @@ For contained checks, build `e2e/conversation-plan.Dockerfile` with
   explicit retry is required. The entire semantic edit is not an atomic batch.
 - Capacity reservations prevent new oversubscription; they do not repair legacy
   persisted histories already oversubscribed by pending actions.
-- Main advanced during this review to `3e57e40ea6da4920d8a6f8a8ee645ff6abadc898`
-  with Atomic harness and Chat mention changes. Integrate those newer commits and
-  recheck their interaction before merging this branch.
+- Main advanced during this review to `3e57e40ea6da4920d8a6f8a8ee645ff6abadc898`.
+  The subsequent UI reconciliation integrated and checked its Atomic harness
+  and Chat mention changes.
 
 Start follow-up work with [architecture](architecture.md), [storage](storage.md),
 [hosted Planner](hosted-agent.md), [background jobs](background-jobs.md), and

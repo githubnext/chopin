@@ -791,25 +791,19 @@ describe("migration", () => {
 			}],
 			["packages/question/src/react/question-view.tsx", {
 				action: "Keep it",
-				marker: "setConfirming(undefined)",
+				marker: "setConfirming(false)",
 				size: "btn-sm",
 				tiers: ["btn-outline"],
 			}],
 			["packages/question/src/react/question-view.tsx", {
 				action: "decision confirmation",
-				marker: 'onClick={confirming === "cancel" ? onCancel : discard}',
+				marker: "onClick={discard}",
 				size: "btn-sm",
 				tiers: ["btn-destructive"],
 			}],
 			["packages/question/src/react/question-view.tsx", {
-				action: "Cancel",
-				marker: 'setConfirming("cancel")',
-				size: "btn-sm",
-				tiers: ["btn-outline"],
-			}],
-			["packages/question/src/react/question-view.tsx", {
 				action: "Discard",
-				marker: 'setConfirming("discard")',
+				marker: "setConfirming(true)",
 				size: "btn-sm",
 				tiers: ["btn-outline"],
 			}],
