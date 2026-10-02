@@ -76,7 +76,7 @@ export async function load(page: Page, mode: HostMode = "editable") {
 export async function inspect(page: Page, id: string) {
 	let anchor = message(page, id);
 	await anchor.scrollIntoViewIfNeeded();
-	await anchor.getByRole("button", { name: /^Analysis for message:/ }).focus();
+	await anchor.getByRole("button", { name: /^Analysis for message:/ }).click();
 	await expect(analysis(page, id)).toBeVisible();
 }
 export async function openCorrection(page: Page) {

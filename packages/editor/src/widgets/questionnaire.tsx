@@ -16,7 +16,7 @@ import { useCellValue } from "@mdxeditor/gurx";
 import { Provenance, SidecarCard } from "../card";
 import { useCardMeta } from "../card-meta";
 import { ContentSwapLayer } from "../content-swap";
-import { EvidenceHover } from "./evidence-hover";
+import { EvidenceHover, EvidenceTrigger } from "./evidence-hover";
 import { PresenceFaces } from "../presence-faces";
 import { useRelations } from "../questionnaires";
 import { widgets$ } from "../widget-options";
@@ -288,18 +288,21 @@ function Undecided(
 			padded={false}
 		>
 			<QuestionView
-				headerActions={meta?.thread && onCardSource
-					? (
-						<button
-							aria-label="Show source in chat"
-							className="btn btn-icon btn-ghost"
-							onClick={() => onCardSource(value.id)}
-							type="button"
-						>
-							<MessageForwardIcon aria-hidden="true" size={14} />
-						</button>
-					)
-					: undefined}
+				headerActions={
+					<>
+						<EvidenceTrigger />
+						{meta?.thread && onCardSource && (
+							<button
+								aria-label="Show source in chat"
+								className="btn btn-icon btn-ghost"
+								onClick={() => onCardSource(value.id)}
+								type="button"
+							>
+								<MessageForwardIcon aria-hidden="true" size={14} />
+							</button>
+						)}
+					</>
+				}
 				collaborators={state.collaborators}
 				definition={state.definition ?? definition(value)}
 				// A draft that has not synced cannot be edited without discarding

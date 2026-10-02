@@ -14,6 +14,7 @@ export default defineConfig({
 		"room-source.native.ts",
 		"conversation-announcements.native.ts",
 		"analysis-host.native.ts",
+		"jev-005-debug-icons.native.ts",
 		"analysis-host-retries.native.ts",
 		"decision-reader.native.ts",
 		"collapse-deletion.native.ts",

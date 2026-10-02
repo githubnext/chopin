@@ -67,12 +67,12 @@ let wire: Transport = {
 let root = createRoot(document.querySelector("#fixture")!);
 let generation = 0;
 function Fixture({ editable }: { editable: boolean }) {
-	let [meta, setMeta] = useState<Question.CardMeta | undefined>({ ...META, status: "open" });
+	let [meta, setMeta] = useState<Question.CardMeta | undefined>({ ...META, thread: value.thread, status: "open" });
 	let [evidence, setEvidence] = useState(rows);
 	let [visible, setVisible] = useState(true);
 	let [destination, setDestination] = useState<ChatDestination>();
 	let [sourceText, setSourceText] = useState(quote);
-	window.evidenceFixture.status = status => setMeta(status ? { ...META, status } : undefined);
+	window.evidenceFixture.status = status => setMeta(status ? { ...META, thread: value.thread, status } : undefined);
 	window.evidenceFixture.replace = () => setEvidence(current => current.map(row => ({ ...row, supporters: ["mina", "jules"] })));
 	window.evidenceFixture.empty = () => setEvidence([]);
 	window.evidenceFixture.long = () => setEvidence(current => current.map(row => ({ ...row,
@@ -82,6 +82,7 @@ function Fixture({ editable }: { editable: boolean }) {
 	return <main>
 		<section className="plan-document"><div data-plan-scroll>
 			{visible && <QuestionnaireCard value={value} meta={meta} connected canEdit={editable} wire={wire}
+				onCardSource={() => window.evidenceFixture.sources.push("card-source")}
 				evidence={evidence.length ? <EvidencePopover rows={evidence} onSource={next => {
 					window.evidenceFixture.sources.push(next.source.quote);
 					setDestination({ ...next, token: ++window.evidenceFixture.token });

@@ -13,6 +13,7 @@ declare global {
 			append(): void;
 			version(version: number): void;
 			editable(enabled: boolean): void;
+			diagnostics(enabled: boolean): void;
 			corrections: ExcerptCorrectionAction[];
 			analyses: Array<{ messageId: string; actionId: string }>;
 			jobs: string[];
@@ -71,6 +72,8 @@ function AnalysisHost({ mode }: { mode: "editable" | "readonly" }) {
  let [entries, setEntries] = useState(analysisHostEntries);
  let [canEdit, setEditable] = useState(mode === "editable");
  let [version, setVersion] = useState(7);
+ let [diagnostics, setDiagnostics] = useState(true);
+ window.analysisHostFixture.diagnostics = setDiagnostics;
  window.analysisHostFixture.editable = setEditable;
  window.analysisHostFixture.version = setVersion;
  window.analysisHostFixture.append = () => setEntries(current => [...current, {
@@ -80,10 +83,10 @@ function AnalysisHost({ mode }: { mode: "editable" | "readonly" }) {
  let state: ConversationPlan.State = {
   schemaVersion: 1, revision: 9, events: [], queue: [],
   threads: [{ ...analysisHostThread, version }],
-  analysis: [analysisHostRecord, {
+  analysis: diagnostics ? [analysisHostRecord, {
    messageId: "host-retry", questionSetVersion: "fixture-v1", modelVersion: "fixture-m1",
    status: "failed", passes: [], eventIds: [], error: "Controlled analysis failure.",
-  }],
+  }] : [],
  };
  let addExcerpt = async (action: ExcerptCorrectionAction) => {
   window.analysisHostFixture.corrections.push(action);
@@ -100,7 +103,7 @@ function AnalysisHost({ mode }: { mode: "editable" | "readonly" }) {
  return <main>
   <section className="analysis-host-chat">
    <Transcript active entries={entries} queued={[]} handle="ana" onWithdraw={() => {}}
-    canEdit={canEdit} conversationPlan={state} conversationPlanJobs={analysisHostJobs}
+    canEdit={canEdit} conversationPlan={state} conversationPlanJobs={diagnostics ? analysisHostJobs : []}
     onCardLink={link => window.analysisHostFixture.cards.push(link.threadId)}
     onAddExcerpt={addExcerpt} onRetryAnalysis={retryAnalysis} onRetryJob={retryJob} />
    <div className="chat-composer"><textarea aria-label="Isolated host composer" /></div>
@@ -124,6 +127,6 @@ window.analysisHostFixture = {
   analysisHostPending.delete(kind);
   if (accepted) pending.resolve(); else pending.reject(new Error("Controlled held acknowledgement rejection"));
  },
- append() {}, version() {}, editable() {},
+ append() {}, version() {}, editable() {}, diagnostics() {},
 };
 `;

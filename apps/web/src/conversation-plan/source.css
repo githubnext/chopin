@@ -3,12 +3,3 @@
 	text-decoration: underline;
 	text-decoration-color: var(--color-brand);
 }
-
-[data-chat-message-id][data-analysis-available] {
-	border-radius: var(--radius-md);
-	transition: background-color var(--duration-fast) var(--ease-out);
-}
-
-[data-chat-message-id][data-analysis-available]:hover {
-	background: var(--color-hover);
-}
