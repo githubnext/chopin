@@ -168,6 +168,52 @@ describe("hosted plan persistence", () => {
 		await Service.close(restored);
 	});
 
+	it("restores workflow run cards, with runs still live then stopped", async () => {
+		let context = await hosted();
+		let plan = await Service.open(context.channel.id, context.backend, context.server);
+		let stage = { id: "run-1:draft", name: "draft-1", status: "running" as const, started: 100 };
+		plan.chat.runs = [
+			{
+				id: "run-1",
+				name: "plan-review",
+				status: "running",
+				started: 100,
+				updated: 160,
+				stages: [stage],
+				waiting: 1,
+			},
+			{
+				id: "run-0",
+				name: "docs-pass",
+				status: "finished",
+				started: 10,
+				updated: 90,
+				ended: 90,
+				stages: [{ ...stage, id: "run-0:draft", status: "completed", ended: 90 }],
+				earlierStages: 3,
+				waiting: 0,
+			},
+		];
+		await Service.persist(plan);
+		await Service.close(plan);
+
+		let restored = await Service.open(context.channel.id, context.backend, context.server);
+		expect(restored.chat.runs?.map(run => [run.id, run.status, run.waiting])).toEqual([
+			["run-1", "stopped", 0],
+			["run-0", "finished", 0],
+		]);
+		expect(restored.chat.runs?.[0]?.ended).toBeNumber();
+		expect(restored.chat.runs?.[1]).toMatchObject({ ended: 90, earlierStages: 3 });
+		await Service.close(restored);
+
+		let empty = await Service.open(context.channel.id, context.backend, context.server);
+		empty.chat.runs = undefined;
+		await Service.persist(empty);
+		await Service.close(empty);
+		expect((await Service.open(context.channel.id, context.backend, context.server)).chat.runs)
+			.toBeUndefined();
+	});
+
 	it("restores typed chat references with their observed target state", async () => {
 		let context = await hosted();
 		let plan = await Service.open(context.channel.id, context.backend, context.server);

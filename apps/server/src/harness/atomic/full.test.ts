@@ -10,10 +10,18 @@ import {
 	ATOMIC_RESULT_TOOL_NAME,
 	createAtomicAdapter,
 } from "./adapter";
-import { registerFullPlanner } from "./full";
+import {
+	classifyRuns,
+	type FullPlanner,
+	pauseOwnedRuns,
+	registerFullPlanner,
+	resumeOwnedRuns,
+	runCards,
+	untilUnpaused,
+} from "./full";
 import { startStubModelServer } from "../pi/model-stub";
 import { hostInputRoom } from "../../testing/decisions";
-import type { HostInput, QuestionParams } from "@bastani/atomic";
+import type { HostInput, QuestionParams, SessionWorkflows } from "@bastani/atomic";
 
 let params: QuestionParams = {
 	questions: [{
@@ -305,4 +313,282 @@ test("worker sessions stay isolated, even beside a full Planner session on the s
 	expect(beside.workerRequests).toHaveLength(1);
 	expect(beside.workerRequests[0]!.toolNames).toEqual(["host_tool"]);
 	expect(beside.workerRequests[0]!.system).toBe("CHOPIN-INSTRUCTIONS-MARKER");
+});
+
+test("paused roots are paused, roots whose run ended are neither, and every other root is live", () => {
+	let root = (rootRunId: string, state: "working" | "idle" | "blocked", reason: string) =>
+		({
+			rootRunId,
+			ownerSessionId: "session",
+			state,
+			reason,
+			activeExecutionCount: 0,
+			actionableBlockCount: 0,
+			needsAttention: false,
+		}) as Parameters<typeof classifyRuns>[0] extends Iterable<infer T> ? T : never;
+	expect(classifyRuns([
+		root("drafting", "working", "executing"),
+		root("asking", "blocked", "awaiting_input"),
+		root("between-steps", "idle", "quiescent"),
+		root("held", "idle", "paused"),
+		root("done", "idle", "quiescent"),
+	], new Set(["done"]))).toEqual({
+		active: ["drafting", "asking", "between-steps"],
+		paused: ["held"],
+	});
+	expect(classifyRuns([])).toEqual({ active: [], paused: [] });
+});
+
+test("run cards fold lifecycle events into ordered stages, Decisions waits, and paused or finished status", async () => {
+	let { foldLifecycle, runCards } = await import("./full");
+	let cards = new Map();
+	let event = (target: object, at: number) =>
+		({
+			type: "workflow_lifecycle",
+			eventId: `e${at}`,
+			cursor: { epoch: "e", revision: at },
+			runId: "run-1",
+			rootRunId: "run-1",
+			ownerSessionId: "session",
+			occurredAt: at * 1000,
+			observedAt: at * 1000,
+			delivery: "live",
+			target,
+		}) as never;
+	foldLifecycle(
+		cards,
+		event({ kind: "run", runId: "run-1", status: "running" }, 100),
+		"plan-review",
+	);
+	foldLifecycle(
+		cards,
+		event(
+			{ kind: "stage", runId: "run-1", stageId: "a", stageName: "draft-1", status: "running" },
+			101,
+		),
+	);
+	foldLifecycle(
+		cards,
+		event({ kind: "prompt", runId: "run-1", stageId: "a", promptId: "p1", status: "opened" }, 160),
+	);
+	foldLifecycle(
+		cards,
+		event({
+			kind: "stage",
+			runId: "run-1",
+			stageId: "a",
+			stageName: "draft-1",
+			status: "awaiting_input",
+		}, 160),
+	);
+	let [waiting] = runCards(cards, { active: ["run-1"], paused: [] });
+	expect(waiting).toMatchObject({
+		id: "run-1",
+		name: "plan-review",
+		status: "waiting",
+		waiting: 1,
+		started: 100,
+		stages: [{ id: "run-1:a", name: "draft-1", status: "awaiting_input", started: 101 }],
+	});
+	expect(runCards(cards, { active: [], paused: ["run-1"] })[0]!.status).toBe("paused");
+	foldLifecycle(
+		cards,
+		event(
+			{ kind: "prompt", runId: "run-1", stageId: "a", promptId: "p1", status: "answered" },
+			200,
+		),
+	);
+	foldLifecycle(
+		cards,
+		event({
+			kind: "stage",
+			runId: "run-1",
+			stageId: "a",
+			stageName: "draft-1",
+			status: "completed",
+		}, 300),
+	);
+	foldLifecycle(
+		cards,
+		event({
+			kind: "stage",
+			runId: "run-1",
+			stageId: "b",
+			stageName: "reviewer-a-1",
+			status: "running",
+		}, 301),
+	);
+	let [running] = runCards(cards, { active: ["run-1"], paused: [] });
+	expect(running!.status).toBe("running");
+	expect(running!.waiting).toBe(0);
+	expect(running!.stages.map(stage => [stage.name, stage.status, stage.ended])).toEqual([
+		["draft-1", "completed", 300],
+		["reviewer-a-1", "running", undefined],
+	]);
+	foldLifecycle(cards, event({ kind: "run", runId: "run-1", status: "completed" }, 900));
+	expect(runCards(cards, { active: [], paused: [] })[0]).toMatchObject({
+		status: "finished",
+		ended: 900,
+	});
+});
+
+test("Stop and Resume use the session's run control, and a partial pause is reported", async () => {
+	let calls: unknown[] = [];
+	let outcome = { action: "pause", runId: "--all", status: "paused", message: "Paused 1 run(s)." };
+	let workflows = {
+		pause: async (target: unknown) => {
+			calls.push(["pause", target]);
+			return outcome;
+		},
+		listRuns: async (filter: unknown) => {
+			calls.push(["listRuns", filter]);
+			return [{ runId: "run-1" }, { runId: "run-2" }];
+		},
+		resume: async (runId: string) => {
+			calls.push(["resume", runId]);
+			return { action: "resume", runId, status: "running", message: "" };
+		},
+	} as unknown as SessionWorkflows;
+	await pauseOwnedRuns(workflows);
+	await resumeOwnedRuns(workflows);
+	expect(calls).toEqual([
+		["pause", { all: true }],
+		["listRuns", { status: "paused" }],
+		["resume", "run-1"],
+		["resume", "run-2"],
+	]);
+	outcome = {
+		...outcome,
+		status: "partial",
+		failedRuns: [{ runId: "run-2", reason: "pause_failed", message: "busy" }],
+	} as typeof outcome;
+	await expect(pauseOwnedRuns(workflows)).rejects.toThrow("run-2: busy");
+});
+
+test("an answer to a paused run's question is held until the run resumes, including child runs", async () => {
+	let planner: FullPlanner = {
+		cwd: "/",
+		humanInput: {} as HostInput,
+		runs: { active: [], paused: ["root"], cards: [] },
+		rootOf: runId => runId === "child" ? "root" : runId,
+	};
+	let released: string[] = [];
+	let controller = new AbortController();
+	let held = untilUnpaused(planner, "child", controller.signal).then(() => released.push("child"));
+	await untilUnpaused(planner, "other", controller.signal).then(() => released.push("other"));
+	await new Promise(resolve => setTimeout(resolve, 0));
+	expect(released).toEqual(["other"]);
+	planner.runs = { active: ["root"], paused: [], cards: [] };
+	for (let wake of planner.waiters ?? []) wake();
+	await held;
+	expect(released).toEqual(["other", "child"]);
+
+	planner.runs = { active: [], paused: ["root"], cards: [] };
+	let aborted = new AbortController();
+	let pending = untilUnpaused(planner, "root", aborted.signal);
+	aborted.abort();
+	await pending;
+	expect(planner.waiters?.size ?? 0).toBe(0);
+});
+
+test("a run whose stage waits on a question counts as waiting even without prompt events", () => {
+	let cards = new Map([["root", {
+		id: "root",
+		name: "plan-review",
+		status: "running" as const,
+		started: 0,
+		updated: 0,
+		stages: [{ id: "root:s", name: "draft-1", status: "awaiting_input" as const }],
+		waiting: 0,
+		stageIndex: new Map(),
+		prompts: new Set<string>(),
+	}]]);
+	expect(runCards(cards, { active: ["root"], paused: [] })[0]).toMatchObject({
+		status: "waiting",
+		waiting: 1,
+	});
+});
+
+test("a new run clears ended cards, keeps live ones, and lists only the twelve most recent stages", async () => {
+	let { foldLifecycle } = await import("./full");
+	let cards = new Map();
+	let event = (rootRunId: string, target: object, at: number) =>
+		({
+			type: "workflow_lifecycle",
+			eventId: `${rootRunId}-${at}`,
+			cursor: { epoch: "e", revision: at },
+			runId: rootRunId,
+			rootRunId,
+			ownerSessionId: "session",
+			occurredAt: at * 1000,
+			observedAt: at * 1000,
+			delivery: "live",
+			target,
+		}) as never;
+	foldLifecycle(
+		cards,
+		event("done", { kind: "run", runId: "done", status: "running" }, 1),
+		"first",
+	);
+	foldLifecycle(cards, event("done", { kind: "run", runId: "done", status: "completed" }, 2));
+	foldLifecycle(
+		cards,
+		event("live", { kind: "run", runId: "live", status: "running" }, 3),
+		"second",
+	);
+	expect([...cards.keys()]).toEqual(["live"]);
+	foldLifecycle(
+		cards,
+		event("other", { kind: "run", runId: "other", status: "running" }, 4),
+		"third",
+	);
+	expect([...cards.keys()]).toEqual(["live", "other"]);
+
+	for (let index = 0; index < 15; index++) {
+		foldLifecycle(
+			cards,
+			event("live", {
+				kind: "stage",
+				runId: "live",
+				stageId: `s${index}`,
+				stageName: `stage-${index}`,
+				status: "completed",
+			}, 10 + index),
+		);
+	}
+	let [card] = runCards(cards, { active: ["live", "other"], paused: [] });
+	expect(card?.stages).toHaveLength(12);
+	expect(card?.stages[0]?.name).toBe("stage-3");
+	expect(card?.earlierStages).toBe(3);
+});
+
+test("ctx.tool steps appear among the stages, marked as tool steps", async () => {
+	let { foldLifecycle } = await import("./full");
+	let cards = new Map();
+	let event = (target: object, at: number) =>
+		({
+			type: "workflow_lifecycle",
+			eventId: `t${at}`,
+			cursor: { epoch: "e", revision: at },
+			runId: "run-1",
+			rootRunId: "run-1",
+			ownerSessionId: "session",
+			occurredAt: at * 1000,
+			observedAt: at * 1000,
+			delivery: "live",
+			target,
+		}) as never;
+	foldLifecycle(cards, event({ kind: "run", runId: "run-1", status: "running" }, 1), "demo");
+	let tool = (toolNodeId: string, toolName: string, status: string, at: number) =>
+		foldLifecycle(cards, event({ kind: "tool", runId: "run-1", toolNodeId, toolName, status }, at));
+	tool("t1", "prepare", "running", 2);
+	tool("t1", "prepare", "cached", 5);
+	tool("t2", "work", "running", 6);
+	tool("t3", "finish", "cancelled", 7);
+	let [card] = runCards(cards, { active: ["run-1"], paused: [] });
+	expect(card?.stages).toEqual([
+		{ id: "run-1:t1", name: "prepare", kind: "tool", status: "completed", started: 2, ended: 5 },
+		{ id: "run-1:t2", name: "work", kind: "tool", status: "running", started: 6 },
+		{ id: "run-1:t3", name: "finish", kind: "tool", status: "skipped", ended: 7 },
+	]);
 });

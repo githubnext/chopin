@@ -15,6 +15,7 @@ import "./theme.css";
 import "./navigation.css";
 import "./icon-tooltip.css";
 import "./local-login.css";
+import "./chat/run-card.css";
 
 let root = document.getElementById("root");
 if (!root) throw new Error("missing #root");

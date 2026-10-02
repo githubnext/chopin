@@ -34,9 +34,11 @@ import {
 	referenceTriggerKey,
 	reviseComposerDraft,
 } from "./references";
+import { RunStack } from "./run-card";
 import { Transcript } from "./transcript";
 import { TerminalAlert } from "../terminal-alert";
 import plannerStop from "../assets/icons/planner-stop.svg";
+import plannerResume from "../assets/icons/planner-resume.svg";
 
 import type { Chat as Wire } from "@chopin/protocol";
 import type { Repository } from "../api";
@@ -55,7 +57,18 @@ export type ChatProps = {
 	agent?: boolean;
 	active?: boolean;
 	onActivity?: (event: { type: "message" | "working"; busy: boolean }) => void;
+	/** Opens Decisions, where a waiting workflow's questions are. */
+	onShowDecisions?: () => void;
 };
+
+/** How many runs are still live, and how many are paused and resumable. */
+export function runCounts(runs: Wire.Runs | undefined): { active: number; paused: number } {
+	let list = runs ?? [];
+	return {
+		active: list.filter(run => run.status === "running" || run.status === "waiting").length,
+		paused: list.filter(run => run.status === "paused").length,
+	};
+}
 
 export function Chat(
 	{
@@ -64,6 +77,7 @@ export function Chat(
 		connected,
 		handle,
 		onActivity,
+		onShowDecisions,
 		referencesEnabled,
 		repository,
 		room,
@@ -75,6 +89,8 @@ export function Chat(
 	let [queue, setQueue] = useState<Wire.Waiting[]>([]);
 	let [busy, setBusy] = useState(false);
 	let [turn, setTurn] = useState<Wire.Turn>();
+	let [runs, setRuns] = useState<Wire.Runs>();
+	let counts = runCounts(runs);
 	let [draft, setDraft] = useState<ComposerDraft>({
 		text: "",
 		references: [],
@@ -142,6 +158,7 @@ export function Chat(
 				setBusy(frame.busy);
 				reportedBusy.current = frame.busy;
 				setTurn(frame.turn);
+				setRuns(frame.runs);
 				// History is not unread, but a turn already in progress still needs
 				// a signal outside a closed Chat destination.
 				activity.current?.({ type: "working", busy: frame.busy });
@@ -192,6 +209,7 @@ export function Chat(
 				reportedBusy.current = frame.busy;
 				setBusy(frame.busy);
 				setTurn(frame.turn);
+				setRuns(frame.runs);
 			}),
 			wire.on<Wire.Queue>("chat:queue", frame => setQueue(frame.waiting)),
 		];
@@ -283,6 +301,19 @@ export function Chat(
 					? turn
 					: undefined}
 			/>
+
+			{agent && !!runs?.length && (
+				<div className="flex shrink-0 flex-col px-2.5 pb-2" data-chat-runs="">
+					<RunStack
+						onPause={runId =>
+							wire?.send("chat:pause-run", { runId })}
+						onResume={runId =>
+							wire?.send("chat:resume-run", { runId })}
+						onShowDecisions={onShowDecisions}
+						runs={runs}
+					/>
+				</div>
+			)}
 
 			<div className="chat-composer relative shrink-0 px-2.5 pb-2.5">
 				{pickerOpen && trigger && (
@@ -412,7 +443,7 @@ export function Chat(
 								{sendError}
 							</TerminalAlert>
 						)}
-						{agent && busy && (
+						{agent && (busy || counts.active > 0) && (
 							<button
 								aria-label="Stop Planner"
 								className="btn btn-icon btn-secondary"
@@ -421,6 +452,17 @@ export function Chat(
 								type="button"
 							>
 								<img alt="" className="size-[14px]" src={plannerStop} />
+							</button>
+						)}
+						{agent && !busy && !counts.active && counts.paused > 0 && (
+							<button
+								aria-label="Resume Planner"
+								className="btn btn-icon btn-secondary"
+								onClick={() => wire?.send("chat:resume")}
+								title="Resume Planner"
+								type="button"
+							>
+								<img alt="" className="size-[14px]" src={plannerResume} />
 							</button>
 						)}
 						<SendAction

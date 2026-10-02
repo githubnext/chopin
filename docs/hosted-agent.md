@@ -131,7 +131,7 @@ agent directory (including `ATOMIC_CODING_AGENT_DIR` or the legacy
 `PI_CODING_AGENT_DIR` override) supplies extensions, skills, prompt templates,
 context files, and a read-only copy of its settings. A verified checkout's
 `.atomic/settings.json` is read the same way, as trusted project settings, so
-packages installed for that project load too; the empty per-channel directory
+packages installed for that project load too; the document's own directory
 has none. Chopin's compaction, summary, and cache overrides still apply on top.
 Chopin appends its Planner
 instructions to Atomic's assembled prompt. Session, settings, and model
@@ -152,10 +152,13 @@ and every later Planner session for the document, browser-started or MCP-started
 re-verifies it before using it as its working directory.
 
 Without a remembered checkout that still verifies, the session runs with the
-same tools in an empty working directory Chopin creates for that document alone,
-under the operating system's temporary directory with mode `0700`. It is never
-shared between documents, keeps the Planner's own files for later sessions of the
-same document, and is removed when the server shuts down cleanly. The Planner's
+same tools in a directory Chopin keeps for that document alone under its per-user state
+directory (`$XDG_STATE_HOME/chopin/planner/<document id>`, defaulting to
+`~/.local/state`; `~/Library/Application Support/Chopin/planner` on macOS;
+`%LOCALAPPDATA%\Chopin\planner` on Windows), with mode `0700`. It is never shared
+with another document, keeps what the Planner and its workflows write there
+across later sessions and server restarts, and is not placed in the shared
+temporary directory. A symlink or file at that path is refused. The Planner's
 instructions state which case applies: a verified checkout, or an empty
 directory with no repository files, in which case it reads the repository through
 Chopin's repository tools.
@@ -263,6 +266,34 @@ into one anonymous user voice.
 A harness session is disposable. A process restart, credential rotation,
 logout, or ownership reset discards it. A later turn bootstraps from the
 bounded transcript and reads the current document.
+
+The one exception is an atomic Planner session that still owns Atomic workflow
+runs when its turn ends. A workflow the Planner starts outlives the turn that
+launched it, and its runs belong to that session, so Chopin keeps the session
+and its owner binding, and keeps the document loaded, until every run has
+finished. The next turn reuses that session, so the Planner can still see and
+steer its runs over Intercom; people steer through Chat and Decisions, never a
+stage directly. **Stop Planner** also pauses the session's live runs, resumably,
+through Atomic's session run control, and **Resume Planner** resumes the runs it
+paused. A run waiting on a question pauses too: Atomic withdraws the question
+from Decisions while the run is paused and presents it again on Resume, and an
+answer that arrives during the pause reaches the run only after Resume, so a
+paused run never advances. Chat shows the session's runs as one stack, one row
+per run: its name, status (running, waiting on Decisions, paused, or ended), and
+elapsed time. Several runs can be live at once. Runs waiting on Decisions come
+first, then running, paused, and ended runs, newest first within each, and more
+than three rows fold behind "more" without ever hiding a waiting run. Only the
+first waiting run, or else the newest live one, shows its stages; any row opens
+on click to show its most recent stages with their status and duration, and a
+waiting row links to its Decisions. Each live row can be paused, and each paused
+row resumed, on its own; Chat records who did. The stack is stored with the
+document, so a reload or restart keeps it; a run that was live when the server
+stopped comes back stopped. Ended rows stay until the next workflow starts in the
+document. When a run ends, Chat also records a line saying how it ended and how
+long it took. The session is let go when its runs finish, when its owner
+binding ends, or when the document closes; run state is durable in Atomic's
+workflow store, so runs interrupted that way can be resumed from a later
+session.
 
 An interrupted turn is visible and is never replayed automatically because it
 may already have made durable document or question changes. `HarnessAgent.stream()`
