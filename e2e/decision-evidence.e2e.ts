@@ -172,6 +172,8 @@ test("a narrow panel closes without stale hover after Source or Escape", async (
 	await ana.waitForTimeout(450);
 	await expect(panel).toHaveCount(0);
 
+	await ana.getByRole("button", { name: "Document", exact: true }).click();
+	await expect(card(ana)).toBeVisible();
 	await ana.mouse.move(0, 0);
 	panel = await openEvidence(ana);
 	panelBox = await panel.boundingBox();

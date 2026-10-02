@@ -124,7 +124,7 @@ test("hover previews and washes prose; pin exposes source and Escape restores ma
 	let popover = await openPopover(page);
 	await expect(popover).toHaveCSS("opacity", "1");
 	await expect(popover).toHaveCSS("transform", "none");
-	await expect(popover.getByRole("img", { name: "ana", exact: true })).toBeVisible();
+	await expect(popover.getByText("By ana", { exact: true })).toBeVisible();
 	await popover.getByRole("button", { name: "Show source in chat", exact: true }).click();
 	await expect(page.locator(`[data-chat-message-id="${source}"][data-source-exact="true"]`))
 		.toBeVisible();

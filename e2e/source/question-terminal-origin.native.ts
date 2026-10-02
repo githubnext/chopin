@@ -108,7 +108,9 @@ test("a real human edit removes from chat until the suggestion lifecycle is clea
 	let option = page.getByRole("radio", { name: "Another approach", exact: true });
 	await expect(option).toBeVisible();
 	await expect(option).not.toBeChecked();
-	await expect(page.getByText("Adding option", { exact: true })).toHaveCount(0);
+	await expect(field).toBeFocused();
+	await expect(field).toHaveJSProperty("readOnly", true);
+	await expect(page.getByRole("status").filter({ hasText: "Adding option" })).toBeVisible();
 	await expect(badge).toHaveCount(0);
 	await expect(save).toBeDisabled();
 	expect(await page.evaluate(() => window.terminalOriginFixture.snapshot())).toMatchObject({
@@ -117,6 +119,8 @@ test("a real human edit removes from chat until the suggestion lifecycle is clea
 		custom: "",
 	});
 	await page.evaluate(() => window.terminalOriginFixture.acknowledgeOption());
+	await expect(page.getByText("Adding option", { exact: true })).toHaveCount(0);
+	await expect(field).toHaveCount(0);
 	await expect(page.getByRole("button", { name: "Add an option", exact: true })).toBeVisible();
 	await expect(badge).toHaveCount(0);
 	await expect(save).toBeDisabled();

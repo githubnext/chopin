@@ -106,7 +106,8 @@ async function expectResolvedDecision(page: Page, room: string) {
 	await expect(history).toHaveAttribute("aria-expanded", "true");
 	let resolved = page.locator(
 		'[data-document-view="decisions"] article[data-plan-sidecar-questionnaire]',
-	).filter({ has: page.getByRole("heading", { name: QUESTION, exact: true }) });
+	).filter({ has: page.getByText(QUESTION, { exact: true }) });
+	await expect(resolved.getByText(QUESTION, { exact: true })).toBeVisible();
 	await expect(resolved).toContainText(OPTION);
 	let widget = await resolved.getAttribute("data-plan-sidecar-questionnaire");
 	if (!widget) throw new Error("resolved decision id missing");
@@ -387,7 +388,20 @@ test(
 		await expect(page.getByRole("button", { name: "1 resolved", exact: true })).toBeVisible();
 		await page.getByRole("button", { name: "Document", exact: true }).click();
 		await page.screenshot({ path: testInfo.outputPath("decision-anchor-after-cut-paste.png") });
-		await moved.hover();
+		await moved.scrollIntoViewIfNeeded();
+		let glyph = await moved.evaluate(paragraph => {
+			let range = document.createRange();
+			range.selectNodeContents(paragraph);
+			let rect = [...range.getClientRects()].find(rect => rect.width > 0 && rect.height > 0);
+			if (!rect) throw new Error("moved prose has no rendered text range");
+			let x = rect.left + rect.width / 2;
+			let y = rect.top + rect.height / 2;
+			let target = document.elementFromPoint(x, y);
+			return { x, y, hitsProse: !!target && paragraph.contains(target) };
+		});
+		expect(glyph.hitsProse).toBe(true);
+		await page.mouse.move(5, 5);
+		await page.mouse.move(glyph.x, glyph.y);
 		await expect(page.getByRole("tooltip")).toContainText(QUESTION);
 		await page.screenshot({ path: testInfo.outputPath("decision-anchor-after-move-hover.png") });
 		expectLinked(await latestDocumentSnapshot(page, room), widget);

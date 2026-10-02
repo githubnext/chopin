@@ -325,11 +325,12 @@ test("a decision with no prose keeps a compact settled line instead of a marker"
 	await open(page, "Two weeks");
 
 	await expect(marker(page)).toHaveCount(0);
-	await expect(
-		page.locator(
-			`[data-document-view="plan"] [data-card-settled][data-plan-sidecar-questionnaire="${WIDGET_A}"]`,
-		),
-	).toHaveText("Decided: Team by team · @ana");
+	let settled = page.locator(
+		`[data-document-view="plan"] [data-card-settled][data-plan-sidecar-questionnaire="${WIDGET_A}"]`,
+	);
+	await expect(settled).toBeVisible();
+	await expect(settled.getByText("Decided: Team by team · @ana", { exact: true }))
+		.toBeVisible();
 	await expect(marker(page, "Two weeks")).toBeVisible();
 });
 

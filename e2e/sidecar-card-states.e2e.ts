@@ -235,12 +235,17 @@ test("card metadata regroups Decisions before the document update arrives", asyn
 		}),
 	).toBeFocused();
 	await ben.getByRole("button", { name: "1 resolved" }).click();
-	let decidedCard = cardByPrompt(ben, "Where should room state live?");
+	let decidedCard = ben.locator(
+		`[data-document-view="decisions"] article[data-plan-sidecar-questionnaire="${questionId}"]`,
+	);
 	await expect(decidedCard).toBeVisible();
+	await expect(decidedCard.getByText("Saved decision", { exact: true })).toBeVisible();
 	await expect(decidedCard.getByRole("button", { name: "Reopen" })).toBeVisible();
 	await expect(decidedCard.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
 	expect(heldUpdates.length).toBeGreaterThan(0);
 	releaseHeldUpdates();
+	await expect(decidedCard).toContainText("Where should room state live?");
+	await expect(decidedCard).toContainText("On disk as MDX");
 });
 
 test("resolved cards show no actions to a read-only viewer", async ({ baseURL, browser, join, room, seed }) => {

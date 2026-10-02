@@ -193,7 +193,16 @@ test("a chat question becomes an inline decision card", async ({ join, room }) =
 	await expect(close).toBeFocused();
 	await close.press("Tab");
 	await expect(analysis.getByText("Model answers and run details")).toBeFocused();
-	await analysis.getByText("Model answers and run details").press("Tab");
+	let lastControl = analysis.getByText("Model answers and run details");
+	let jobControls = analysis.getByRole("group", { name: "Planner jobs", exact: true })
+		.locator("button:enabled");
+	for (let index = 0; index < await jobControls.count(); index++) {
+		let jobControl = jobControls.nth(index);
+		await lastControl.press("Tab");
+		await expect(jobControl).toBeFocused();
+		lastControl = jobControl;
+	}
+	await lastControl.press("Tab");
 	await expect(analysis).toBeHidden();
 	await expect(page.locator(".chat-composer textarea")).toBeFocused();
 	let unlinkedMessage = await sendChat(page, "Maybe that?");
