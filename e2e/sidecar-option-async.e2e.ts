@@ -54,7 +54,7 @@ test("adding an option keeps focus through a delayed definition refresh", async 
 	});
 	questionId = await card.getAttribute("data-plan-sidecar-questionnaire") ?? undefined;
 	let field = card.getByRole("textbox", { name: "New option" });
-	await card.getByRole("button", { name: "Add another option" }).click();
+	await card.getByRole("button", { name: "Add an option", exact: true }).click();
 	await field.fill("A delayed refresh option");
 	await ana.keyboard.press("Enter");
 
@@ -123,7 +123,7 @@ test("Escape during a delayed refresh restores focus and respects moving away", 
 		has: ana.getByRole("heading", { name: "Where should room state live?" }),
 	});
 	questionId = await card.getAttribute("data-plan-sidecar-questionnaire") ?? undefined;
-	let trigger = card.getByRole("button", { name: "Add another option" });
+	let trigger = card.getByRole("button", { name: "Add an option", exact: true });
 	await trigger.click();
 	let field = card.getByRole("textbox", { name: "New option" });
 	await field.fill("Escape during refresh");
@@ -197,7 +197,7 @@ test("Escape during a duplicate request clears its late error", async ({ join, p
 		has: ana.getByRole("heading", { name: "Where should room state live?" }),
 	});
 	questionId = await card.getAttribute("data-plan-sidecar-questionnaire") ?? undefined;
-	let trigger = card.getByRole("button", { name: "Add another option" });
+	let trigger = card.getByRole("button", { name: "Add an option", exact: true });
 	await trigger.click();
 	let field = card.getByRole("textbox", { name: "New option" });
 	await field.fill("in sqlite");
@@ -265,7 +265,7 @@ test("a late add reply does not steal focus after reopening and tabbing away", a
 		has: ana.getByRole("heading", { name: "Where should room state live?" }),
 	});
 	questionId = await card.getAttribute("data-plan-sidecar-questionnaire") ?? undefined;
-	let trigger = card.getByRole("button", { name: "Add another option" });
+	let trigger = card.getByRole("button", { name: "Add an option", exact: true });
 	await trigger.click();
 	let field = card.getByRole("textbox", { name: "New option" });
 	await field.fill("in sqlite");

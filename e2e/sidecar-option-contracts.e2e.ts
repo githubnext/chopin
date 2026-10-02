@@ -38,7 +38,7 @@ test("adding an option shows it to everyone and keeps a selection", async ({ joi
 	let selected = card(ben).getByRole("radio", { name: "In SQLite" });
 	await card(ben).getByText("In SQLite", { exact: true }).click();
 	await expect(selected).toBeChecked();
-	await card(ana).getByRole("button", { name: "Add another option" }).click();
+	await card(ana).getByRole("button", { name: "Add an option", exact: true }).click();
 	await card(ana).getByRole("textbox", { name: "New option" }).fill("In PostgreSQL");
 	await ana.keyboard.press("Enter");
 
@@ -105,7 +105,7 @@ test("adding an option leaves an unanswered decision unselected after refresh", 
 	let author = questionnaire(ana).filter({
 		has: ana.getByRole("heading", { name: "Where should room state live?" }),
 	});
-	await author.getByRole("button", { name: "Add another option" }).click();
+	await author.getByRole("button", { name: "Add an option", exact: true }).click();
 	let field = author.getByRole("textbox", { name: "New option" });
 	for (let [index, label] of ["In PostgreSQL", "In MySQL", "In files", "In memory"].entries()) {
 		await field.fill(label);
@@ -149,7 +149,7 @@ test("a duplicate option is refused inline", async ({ join, seed }) => {
 	let card = questionnaire(page).filter({
 		has: page.getByRole("heading", { name: "Where should room state live?" }),
 	});
-	await card.getByRole("button", { name: "Add another option" }).click();
+	await card.getByRole("button", { name: "Add an option", exact: true }).click();
 	await card.getByRole("textbox", { name: "New option" }).fill("in sqlite");
 	await page.keyboard.press("Enter");
 
@@ -168,7 +168,7 @@ test("a read-only reader sees disabled decision controls", async ({ baseURL, bro
 		await reader.getByRole("button", { name: /^Decisions/ }).click();
 		let card = questionnaire(reader).first();
 		await expect(card).toBeVisible();
-		await expect(card.getByRole("button", { name: "Add another option" })).toBeDisabled();
+		await expect(card.getByRole("button", { name: "Add an option", exact: true })).toBeDisabled();
 		await expect(card.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
 		await expect(card.getByRole("button", { name: "Discard", exact: true })).toBeDisabled();
 	} finally {
@@ -184,7 +184,7 @@ test("Escape returns from adding an option to its trigger", async ({ join, seed 
 	let card = questionnaire(page).filter({
 		has: page.getByRole("heading", { name: "Where should room state live?" }),
 	});
-	let trigger = card.getByRole("button", { name: "Add another option" });
+	let trigger = card.getByRole("button", { name: "Add an option", exact: true });
 	await trigger.click();
 	let field = card.getByRole("textbox", { name: "New option" });
 	await expect(field).toBeFocused();

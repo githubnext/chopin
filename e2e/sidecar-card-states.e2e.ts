@@ -2,6 +2,7 @@
 
 import { authenticate, content, expect, roomPath, test } from "./room";
 
+import type { Question } from "../packages/protocol/index";
 import type { Page } from "@playwright/test";
 
 const PROSE = "Room state lives on disk as MDX beside the transcript.\n";
@@ -258,7 +259,7 @@ test("resolved cards show no actions to a read-only viewer", async ({ baseURL, b
 		let card = reader.locator(
 			`[data-document-view="decisions"] article[data-plan-sidecar-questionnaire="${WIDGET}"]`,
 		);
-		await expect(card).toContainText("Decided by @ana");
+		await expect(card).toContainText("Answered by @ana");
 		await expect(card.getByRole("button", { name: "Reopen" })).toHaveCount(0);
 		await expect(card.getByRole("button", { name: "Discard", exact: true })).toHaveCount(0);
 	} finally {
@@ -291,18 +292,41 @@ test("a legacy multi card reopens with its text-only previous answer", async ({ 
 	await expect(card.getByRole("radio", { name: "Anchors" })).not.toBeChecked();
 });
 
-test("an orphaned prose anchor is explained under its resolved card", async ({ join, seed }) => {
+test("an orphaned prose anchor retains its authoritative state and resolved card", async ({ join, page, seed }) => {
 	await seed(`${PROSE}\n${DECIDED_CARD}`, {
 		questions: [{
 			...DECIDED_RECORD,
 			prose: [{ epoch: "old", position: "AAAA", digest: ANCHORED_DIGEST, orphaned: true }],
 		}],
 	});
-	let page = await join("ana");
+	let orphaned: boolean | undefined;
+	await page.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		route.onMessage(message => server.send(message));
+		server.onMessage(message => {
+			if (typeof message === "string") {
+				let frame = JSON.parse(message) as {
+					kind: string;
+					id?: string;
+					meta?: Question.CardMeta;
+					cards?: Question.Metas["cards"];
+				};
+				if (frame.kind === "question:metas") {
+					orphaned = frame.cards?.find(card => card.id === WIDGET)?.meta.proseOrphaned;
+				}
+				if (frame.kind === "question:meta" && frame.id === WIDGET) {
+					orphaned = frame.meta?.proseOrphaned;
+				}
+			}
+			route.send(message);
+		});
+	});
+	await join("ana");
 	await page.getByRole("button", { name: /^Decisions/ }).click();
 	await page.getByRole("button", { name: "1 resolved" }).click();
-	await expect(group(page, "resolved").getByText("Prose removed", { exact: true }))
-		.toBeVisible();
+	await expect.poll(() => orphaned).toBe(true);
+	await expect(groupCard(page, "resolved", "How should we deploy?"))
+		.toContainText("Canary");
 });
 
 test("conversation decisions settle inline while their prose is being written up", async ({ join, seed }) => {

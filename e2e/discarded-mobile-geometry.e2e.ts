@@ -29,7 +29,7 @@ test("compact Decisions keeps its discarded group reachable", async ({ join, see
 	await discarded.click();
 	await expect(
 		page.locator('[data-document-view="decisions"] [data-decisions-group="discarded"]')
-			.getByText("Discarded by @ana", { exact: true }),
+			.getByText("Discarded by @ana — Where should room state live?", { exact: true }),
 	).toBeVisible();
 	await expectNoHorizontalOverflow(page);
 });
