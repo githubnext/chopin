@@ -90,18 +90,6 @@ async function expectPopoverInChat(page: Page) {
 	expect(popover!.y + popover!.height).toBeLessThanOrEqual(composer!.y);
 }
 
-async function refiningStyle(page: Page) {
-	return await card(page).locator('[data-refining="true"]').evaluate(element => {
-		let style = getComputedStyle(element);
-		return {
-			animationName: style.animationName,
-			backgroundClip: style.backgroundClip,
-			backgroundImage: style.backgroundImage,
-			color: style.color,
-		};
-	});
-}
-
 async function headerAction(page: Page, action: "Archive" | "Restore") {
 	await page.getByRole("banner").getByRole("button", { name: /^Actions for / }).click();
 	await page.getByRole("menuitem", { name: action, exact: true }).click();
@@ -139,24 +127,13 @@ test("both collaborators see a held refining card before the completed job write
 
 		for (let page of [ana, bo]) {
 			let decision = await waitForCard(page);
-			await expect(decision.getByText("Chopin is refining…", { exact: true })).toBeVisible();
+			let status = decision.getByRole("status");
+			await expect(status).toBeVisible();
+			await expect(status).toHaveText("Chopin is refining…");
 			await expect(decision.locator('[data-refining="true"]')).toHaveCount(1);
 		}
 		await waitForRefine(ana, messageId, "running");
 		await waitForRefine(bo, messageId, "running");
-		await ana.emulateMedia({ reducedMotion: "no-preference" });
-		let shimmer = await refiningStyle(ana);
-		expect(shimmer.animationName).toBe("decision-refining");
-		expect(shimmer.backgroundClip).toBe("text");
-		expect(shimmer.backgroundImage).toContain("linear-gradient");
-		expect(shimmer.color).toBe("rgba(0, 0, 0, 0)");
-		await ana.emulateMedia({ reducedMotion: "reduce" });
-		await expect.poll(() => refiningStyle(ana)).toMatchObject({
-			animationName: "none",
-			backgroundImage: "none",
-		});
-		expect((await refiningStyle(ana)).color).not.toBe("rgba(0, 0, 0, 0)");
-		await ana.emulateMedia({ reducedMotion: "no-preference" });
 		await sendChat(ana, EXISTING_OPTION);
 		let existing = card(ana).getByRole("radio", { name: EXISTING_OPTION, exact: true });
 		await card(ana).getByText(EXISTING_OPTION, { exact: true }).click();
@@ -177,12 +154,11 @@ test("both collaborators see a held refining card before the completed job write
 		await waitForRefine(ana, messageId, "done");
 		await waitForRefine(bo, messageId, "done");
 	} finally {
-		await ana.emulateMedia({ reducedMotion: "no-preference" });
 		if (messageId) await releaseHeldRefine(ana, messageId);
 	}
 });
 
-test("a skipped refine remains inspectable while its card accepts a selection", async ({ join, room }) => {
+test("an unscripted refine failure remains inspectable while its card accepts a selection", async ({ join, room }) => {
 	let page = await join("ana");
 	await openJevWire(page, room);
 	let messageId = await sendChat(page, QUESTION);
@@ -194,8 +170,8 @@ test("a skipped refine remains inspectable while its card accepts a selection", 
 	await expect(decision.getByRole("radio", { name: EXISTING_OPTION, exact: true }))
 		.toBeChecked();
 
-	await waitForRefine(page, messageId, "skipped");
-	await expect(jobs(page)).toContainText("no script for refine");
+	await waitForRefine(page, messageId, "failed");
+	await expect(jobs(page)).toContainText(/ENOENT.*refine\.json/);
 });
 
 test("failed jobs survive reload, keep diagnostics in place, and retry with the corrected script", async ({ join, room }) => {

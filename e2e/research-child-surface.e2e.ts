@@ -30,6 +30,10 @@ function port(baseURL: string): number {
 }
 
 test("authored links open from parent and child documents", async ({ baseURL, join, page, room, seed }) => {
+	await page.context().route(
+		"https://example.com/**",
+		route => route.fulfill({ contentType: "text/html", body: "<title>Authored source</title>" }),
+	);
 	await seed(LINKED_PARENT_SOURCE);
 	let child = await seedChildChannel(
 		port(baseURL!),

@@ -24,7 +24,7 @@ export async function startJevProcess(): Promise<ChildProcessWithoutNullStreams>
 			PORT: String(FIXTURES),
 			SERVER_HOST: HOST,
 			AGENT: "off",
-			HARNESS: "pi",
+			HARNESS: "copilot-sdk",
 			HARNESS_AUTH: "direct",
 			CONVERSATION_PLAN: "on",
 			JEV_API_KEY: "e2e-jev-only",

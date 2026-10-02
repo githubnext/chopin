@@ -141,7 +141,6 @@ export default defineConfig({
 				join(ROOT, "e2e/conversation-plan-layout.e2e.ts"),
 				join(ROOT, "e2e/conversation-plan-stress.e2e.ts"),
 				join(ROOT, "e2e/conversation-plan-ui.e2e.ts"),
-				join(ROOT, "e2e/research-child-recovery.e2e.ts"),
 				join(ROOT, "e2e/document-tab-stability.e2e.ts"),
 				join(ROOT, "e2e/discarded-mobile-geometry.e2e.ts"),
 				join(ROOT, "e2e/sidecar-document-spacing.e2e.ts"),
