@@ -56,8 +56,9 @@ export function resolvedKeys(
 	meta?: ProtocolQuestion.CardMeta,
 ): string[] {
 	if (question.answer === undefined || (meta && meta.status !== "decided")) return [];
-	if (linked.length > 0) return linked;
-	return meta?.hasProse && !meta.proseOrphaned && prose ? [prose] : [];
+	if (meta?.proseOrphaned) return [];
+	if (meta?.hasProse) return prose ? [prose] : [];
+	return linked;
 }
 
 /** Identity of one resolved decision in the document. */
