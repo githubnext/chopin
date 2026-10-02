@@ -1,10 +1,11 @@
 /** Browser coverage for chat decisions that become anchored document prose. */
 
-import { content, expect, test } from "./room";
-import { openJevWire, sendChat, wireFrames } from "./jev-wire";
+import { content, expect, ready, test } from "./room";
+import { openJevWire, sendChat, wireFrames, wireState } from "./jev-wire";
 import { resetPlannerJobs, scriptJob } from "./planner-jobs";
 
 import type { Locator, Page } from "@playwright/test";
+import type { Question } from "../packages/protocol/index";
 
 const QUESTION = "Should we ship a small pilot?";
 const OPTION = "Start with a small pilot.";
@@ -15,7 +16,21 @@ function card(page: Page) {
 }
 
 function marker(page: Page) {
-	return page.getByRole("button", { name: `Decision: ${QUESTION}`, exact: true });
+	return page.getByRole("button", { name: `Decision: ${OPTION}`, exact: true });
+}
+
+async function proseOrphaned(page: Page): Promise<boolean | undefined> {
+	let id = (await wireState(page))?.threads[0]?.questionnaireId;
+	let frames = await wireFrames(page);
+	for (let frame of frames.toReversed()) {
+		if (frame.kind === "question:meta" && frame.id === id) {
+			return (frame as Question.Meta).meta.proseOrphaned;
+		}
+		if (frame.kind === "question:metas") {
+			return (frame as Question.Metas).cards.find(card => card.id === id)?.meta.proseOrphaned;
+		}
+	}
+	return undefined;
 }
 
 function prose(page: Page, option = OPTION) {
@@ -60,7 +75,7 @@ async function decide(page: Page, room: string, option = OPTION) {
 
 async function openPopover(page: Page): Promise<Locator> {
 	await marker(page).click();
-	let popover = page.getByRole("dialog", { name: `Decision: ${QUESTION}`, exact: true });
+	let popover = page.getByRole("dialog", { name: "Decision", exact: true });
 	await expect(popover).toBeVisible();
 	return popover;
 }
@@ -89,7 +104,7 @@ test("Save writes prose, collapses the card, marks its margin, and records activ
 	expect(mark!.x + mark!.width).toBeLessThanOrEqual(paragraph!.x);
 	expect(Math.abs(mark!.y - paragraph!.y)).toBeLessThan(12);
 
-	let hidden = page.locator('[data-document-view="plan"] [data-card-hidden]');
+	let hidden = page.locator('[data-document-view="plan"] [data-plan-collapsed]');
 	await expect(hidden).toHaveCount(1);
 	await expect(hidden).toBeHidden();
 });
@@ -103,7 +118,7 @@ test("hover previews and washes prose; pin exposes source and Escape restores ma
 	await expect(preview).toContainText(QUESTION);
 	await expect(preview).toHaveCSS("opacity", "1");
 	await expect(preview).toHaveCSS("transform", "none");
-	await expect.poll(() => page.evaluate(() => CSS.highlights.get("plan-decided")?.size ?? 0))
+	await expect.poll(() => page.evaluate(() => CSS.highlights.get("plan-decision")?.size ?? 0))
 		.toBeGreaterThan(0);
 
 	let popover = await openPopover(page);
@@ -126,11 +141,11 @@ test("hiding the Document clears pinned decision chrome and its wash before mark
 	let page = await join("ana");
 	await decide(page, room);
 	await openPopover(page);
-	await expect.poll(() => page.evaluate(() => CSS.highlights.get("plan-decided")?.size ?? 0))
+	await expect.poll(() => page.evaluate(() => CSS.highlights.get("plan-decision")?.size ?? 0))
 		.toBeGreaterThan(0);
 	await page.getByRole("button", { name: "Decisions", exact: true }).click();
 	await expect(page.locator(".plan-decision-layer [role=dialog]")).toHaveCount(0);
-	await expect.poll(() => page.evaluate(() => CSS.highlights.get("plan-decided")?.size ?? 0)).toBe(
+	await expect.poll(() => page.evaluate(() => CSS.highlights.get("plan-decision")?.size ?? 0)).toBe(
 		0,
 	);
 	await page.getByRole("button", { name: "Document", exact: true }).click();
@@ -140,6 +155,7 @@ test("hiding the Document clears pinned decision chrome and its wash before mark
 test("ordinary prose edits retain the marker; deletion orphans it for both readers after reload", async ({ join, room }) => {
 	let ana = await join("ana");
 	let ben = await join("ben");
+	await openJevWire(ben, room);
 	await decide(ana, room);
 	await expect(marker(ben)).toBeVisible();
 
@@ -156,12 +172,16 @@ test("ordinary prose edits retain the marker; deletion orphans it for both reade
 	await expect(marker(ben)).toHaveCount(0);
 	await ana.getByRole("button", { name: /^Decisions/ }).click();
 	await ana.getByRole("button", { name: "1 resolved", exact: true }).click();
-	await expect(ana.locator('[data-document-view="decisions"]')).toContainText("Prose removed");
+	await expect.poll(() => proseOrphaned(ana)).toBe(true);
+	await expect(ana.locator('[data-document-view="decisions"]')).toContainText(OPTION);
 
 	await ben.reload();
+	await ready(ben);
+	await openJevWire(ben, room);
 	await ben.getByRole("button", { name: /^Decisions/ }).click();
 	await ben.getByRole("button", { name: "1 resolved", exact: true }).click();
-	await expect(ben.locator('[data-document-view="decisions"]')).toContainText("Prose removed");
+	await expect.poll(() => proseOrphaned(ben)).toBe(true);
+	await expect(ben.locator('[data-document-view="decisions"]')).toContainText(OPTION);
 });
 
 test("Backspace after a hidden decided card moves into its prose without deleting the decision", async ({ join, room }) => {
@@ -182,7 +202,7 @@ test("Backspace after a hidden decided card moves into its prose without deletin
 	await expect(marker(page)).toBeVisible();
 	await page.getByRole("button", { name: /^Decisions/ }).click();
 	await page.getByRole("button", { name: "1 resolved", exact: true }).click();
-	await expect(page.locator('[data-document-view="decisions"]')).not.toContainText("Prose removed");
+	await expect.poll(() => proseOrphaned(page)).toBe(false);
 	await page.reload();
 	await page.getByRole("button", { name: "Document", exact: true }).click();
 	await expect(proseBlock(page)).toContainText(`We decided: ${OPTION} Updated.`);
@@ -202,7 +222,7 @@ test("Backspace from an empty paragraph after resolved prose keeps the decision"
 	await expect(marker(page)).toBeVisible();
 	await page.getByRole("button", { name: /^Decisions/ }).click();
 	await page.getByRole("button", { name: "1 resolved", exact: true }).click();
-	await expect(page.locator('[data-document-view="decisions"]')).not.toContainText("Prose removed");
+	await expect.poll(() => proseOrphaned(page)).toBe(false);
 });
 
 test("Reopen leaves prose, restores the card beneath it, and a re-decision replaces it", async ({ join, room }) => {
@@ -222,7 +242,7 @@ test("Reopen leaves prose, restores the card beneath it, and a re-decision repla
 	expect(reopenedCard).toBeTruthy();
 	expect(paragraph!.y).toBeLessThan(reopenedCard!.y);
 
-	await reopened.getByRole("button", { name: "Add another option", exact: true }).click();
+	await reopened.getByRole("button", { name: "Add an option", exact: true }).click();
 	await reopened.getByRole("textbox", { name: "New option", exact: true }).fill(
 		"Run a full launch",
 	);
@@ -266,9 +286,16 @@ test("a narrow document retains its resolved-prose lane while the marker scrolls
 		),
 	).toBe(edited);
 	let scroller = page.locator("[data-plan-scroll]");
-	await expect(page.locator(".plan-document")).toHaveAttribute("data-plan-decision-lane", "");
+	let gutter = await content(page).evaluate(element =>
+		Number.parseFloat(getComputedStyle(element).paddingInlineStart)
+	);
+	expect(gutter).toBeGreaterThan(0);
 	await scroller.evaluate(element => element.scrollTop = element.scrollHeight);
-	await expect(page.locator(".plan-document")).toHaveAttribute("data-plan-decision-lane", "");
+	expect(
+		await content(page).evaluate(element =>
+			Number.parseFloat(getComputedStyle(element).paddingInlineStart)
+		),
+	).toBe(gutter);
 	await expect(marker(page)).toHaveCount(0);
 	await scroller.evaluate(element => element.scrollTop = 0);
 	await expect(marker(page)).toBeVisible();
