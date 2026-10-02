@@ -14,6 +14,7 @@ declare global {
 			snapshot: () => { room?: string; destination?: Destination };
 			mount: () => void;
 			changeRoom: (room: string) => void;
+			setChild: (child: boolean) => void;
 			unmount: () => void;
 			showSource: (messageId: string) => void;
 			evidence: (id: string) => { type: string; rows: unknown[] } | null;
@@ -95,6 +96,12 @@ window.roomSourceProbe = {
   renderRoom();
  },
  changeRoom(room) { roomName = room; renderRoom(); },
+ setChild(child) {
+  props.presentation = child
+   ? { type: "child", label: "Research", onClose() {} }
+   : { type: "document" };
+  renderRoom();
+ },
  unmount() { probeRoot.unmount(); evidenceRoot.unmount(); },
  showSource(messageId) {
   snapshot.showSource({ itemId: "thread-1", source: {

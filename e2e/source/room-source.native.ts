@@ -2,6 +2,63 @@ import { expect, test } from "@playwright/test";
 import { load, meta, prepareRoomSource, select, thread } from "./room-source-native";
 test.beforeAll(prepareRoomSource);
 
+test("child Chat keeps conversation but hides research offers", async ({ page }) => {
+	let errors = await load(page);
+	let deliver = () =>
+		page.evaluate(() => {
+			window.roomSourceProbe.receive({
+				kind: "chat:history",
+				entries: [{ id: "m1", text: "pilot", author: { kind: "member", handle: "ana" }, ts: 1 }],
+				queued: [],
+				busy: false,
+				ts: 1,
+			});
+			window.roomSourceProbe.receive({
+				kind: "conversation-plan:snapshot",
+				state: {
+					schemaVersion: 1,
+					revision: 1,
+					events: [],
+					threads: [],
+					queue: [],
+					analysis: [],
+					researchOffers: [{
+						id: "offer-1",
+						brief: "Compare current costs for the pilot.",
+						status: "offered",
+						source: {
+							messageId: "m1",
+							author: { kind: "member", handle: "ana" },
+							role: "reason",
+							quote: "pilot",
+							start: 0,
+							end: 5,
+						},
+					}],
+				},
+				jobs: [],
+				ts: 1,
+			});
+		});
+	await deliver();
+	let offer = page.getByRole("group", { name: "Research suggestion", exact: true });
+	await expect(offer).toHaveCount(1);
+	await page.evaluate(() => window.roomSourceProbe.setChild(true));
+	await expect.poll(() => page.evaluate(() => window.roomSourceProbe.sockets.length)).toBe(2);
+	await deliver();
+	await expect(offer).toHaveCount(0);
+	await expect(page.locator('[data-chat-message-id="m1"]')).toHaveCount(1);
+	await expect(
+		page.getByRole("group", { name: "Document view", exact: true })
+			.getByRole("button", { name: "Decisions", exact: true }),
+	).toHaveCount(1);
+	await page.evaluate(() => window.roomSourceProbe.setChild(false));
+	await expect.poll(() => page.evaluate(() => window.roomSourceProbe.sockets.length)).toBe(3);
+	await deliver();
+	await expect(offer).toHaveCount(1);
+	expect(errors).toEqual([]);
+});
+
 test("actual host evidence requires current metadata and sources enter actual Chat", async ({ page }) => {
 	let errors = await load(page);
 	await page.evaluate(thread => {

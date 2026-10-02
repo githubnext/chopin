@@ -634,7 +634,7 @@ export function RoomWorkspace(
 		offerId: string,
 		choice: "research" | "dismiss" | "resume",
 	) => {
-		if (!wire?.connected || status !== "connected" || !workspaceCanEdit) return;
+		if (!researchEnabled || !wire?.connected || status !== "connected" || !workspaceCanEdit) return;
 		let offer = conversationStore.get().state?.researchOffers?.find(item => item.id === offerId);
 		if (
 			!offer || (choice === "resume" ? offer.status !== "accepted" : offer.status !== "offered")
@@ -715,7 +715,7 @@ export function RoomWorkspace(
 						onRetryAnalysis={retryAnalysis}
 						onRetryJob={retryJob}
 						sourceDestination={sourceDestination}
-						researchOffers={conversation.enabled
+						researchOffers={researchEnabled && conversation.enabled
 							? {
 								links: researchLinks.links,
 								busy: researchBusy,
