@@ -127,6 +127,7 @@ export default defineConfig({
 			name: "chromium",
 			testIgnore: [
 				join(ROOT, "e2e/design/*.e2e.ts"),
+				join(ROOT, "e2e/conversation-plan-heading.e2e.ts"),
 				join(ROOT, "e2e/conversation-plan-jobs.e2e.ts"),
 				join(ROOT, "e2e/decision-prose.e2e.ts"),
 				join(ROOT, "e2e/conversation-plan-runtime.e2e.ts"),

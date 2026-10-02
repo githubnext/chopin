@@ -74,6 +74,7 @@ await resetJevControl();
 export default defineConfig({
 	testDir: ".",
 	testMatch: [
+		join(ROOT, "e2e/conversation-plan-heading.e2e.ts"),
 		join(ROOT, "e2e/conversation-plan-jobs.e2e.ts"),
 		join(ROOT, "e2e/decision-prose.e2e.ts"),
 	],

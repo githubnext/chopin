@@ -7,7 +7,7 @@ import { sourceHash } from "./conversation-plan-worker";
 
 const OWNER = "org.chopin.conversation-plan-run";
 const COMMIT = "org.chopin.source-commit";
-const LIMIT_MS = 180_000;
+const LIMIT_MS = 720_000;
 
 type Options = { image: string; postgresImage: string };
 type Container = { name: string; id?: string };

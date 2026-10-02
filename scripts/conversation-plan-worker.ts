@@ -7,7 +7,6 @@ import { join } from "node:path";
 import { networkInterfaces } from "node:os";
 
 const ROOT = "/work";
-const TITLE = "(?:^| )read-only collaborators cannot retry a failed Planner job$";
 const OMIT = new Set(["node_modules", "dist", "test-results", ".conversation-plan-build.json"]);
 
 export function sourcePath(path: string): boolean {
@@ -469,11 +468,8 @@ async function run(report: Record<string, unknown>, env: Record<string, string>)
 			"bun",
 			"node_modules/@playwright/test/cli.js",
 			"test",
-			"e2e/conversation-plan-jobs.e2e.ts",
 			"--config",
 			"e2e/conversation-plan.playwright.config.ts",
-			"--grep",
-			TITLE,
 		], { cwd: ROOT, env, detached: true, stdin: "ignore", stdout: log, stderr: log });
 	} finally {
 		closeSync(log);
@@ -488,7 +484,7 @@ async function run(report: Record<string, unknown>, env: Record<string, string>)
 	let timer = setTimeout(() => {
 		report.deadline = true;
 		wake();
-	}, 90_000);
+	}, 600_000);
 	let failure = await Promise.race([child.exited, interrupted]).then(
 		() => undefined,
 		error => error,
