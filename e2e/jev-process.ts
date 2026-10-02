@@ -24,6 +24,8 @@ export async function startJevProcess(): Promise<ChildProcessWithoutNullStreams>
 			PORT: String(FIXTURES),
 			SERVER_HOST: HOST,
 			AGENT: "off",
+			HARNESS: "pi",
+			HARNESS_AUTH: "direct",
 			CONVERSATION_PLAN: "on",
 			JEV_API_KEY: "e2e-jev-only",
 			JEV_MODEL: "jev-e2e",

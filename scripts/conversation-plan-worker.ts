@@ -345,6 +345,12 @@ async function freePort(port: number): Promise<void> {
 	});
 }
 
+function restartDatabase(url: string): string {
+	let database = new URL(url);
+	database.pathname += "_restart";
+	return database.href;
+}
+
 export function environment(owned: ReturnType<typeof inputs>): Record<string, string> {
 	return {
 		PATH: "/usr/local/bin:/usr/bin:/bin",
@@ -353,6 +359,7 @@ export function environment(owned: ReturnType<typeof inputs>): Record<string, st
 		PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright",
 		E2E_CONVERSATION_PLAN: "1",
 		E2E_DATABASE_URL_0: owned.database,
+		E2E_DATABASE_URL_1: restartDatabase(owned.database),
 		DATABASE_URL: owned.database,
 		SESSION_ENCRYPTION_KEY: owned.key,
 		STORAGE_DRIVER: "postgres",
@@ -415,6 +422,15 @@ async function database(url: string): Promise<void> {
 		if (tables.length) throw new Error("owned database is not fresh");
 		let { migrate } = await import("../apps/server/src/storage/postgres/migrations");
 		await migrate(sql);
+		let restart = restartDatabase(url);
+		// The database name comes from the validated, per-run nonce, inside the owned container.
+		await sql.unsafe(`CREATE DATABASE "${new URL(restart).pathname.slice(1)}"`);
+		let auxiliary = new SQL(restart, { max: 1, connectionTimeout: 2, idleTimeout: 2 });
+		try {
+			await migrate(auxiliary);
+		} finally {
+			await auxiliary.close();
+		}
 	} finally {
 		await sql.close();
 	}
@@ -527,6 +543,7 @@ export async function main(): Promise<number> {
 		report.egressDenied = true;
 		report.phase = "ports";
 		await freePort(8788);
+		await freePort(8789);
 		await freePort(8797);
 		report.phase = "database";
 		await database(owned.database);
@@ -536,6 +553,7 @@ export async function main(): Promise<number> {
 		let exit = await run(report, environment(owned));
 		report.phase = "cleanup";
 		await freePort(8788);
+		await freePort(8789);
 		await freePort(8797);
 		report.listenersGone = true;
 		report.success = exit === 0;
