@@ -76,6 +76,9 @@ export default defineConfig({
 	testMatch: [
 		join(ROOT, "e2e/conversation-plan-heading.e2e.ts"),
 		join(ROOT, "e2e/conversation-plan-jobs.e2e.ts"),
+		join(ROOT, "e2e/conversation-plan-prompts.e2e.ts"),
+		join(ROOT, "e2e/conversation-plan-stress.e2e.ts"),
+		join(ROOT, "e2e/decision-evidence.e2e.ts"),
 		join(ROOT, "e2e/decision-prose.e2e.ts"),
 	],
 	outputDir: "test-results/conversation-plan",

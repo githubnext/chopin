@@ -375,7 +375,7 @@ test("a remote human card selection overrides the live prompt", async ({ join, r
 	await waitForEvent(ana, "settle.agreed");
 	await expect(prompt(ana)).toBeVisible();
 	let decision = card(bo);
-	await decision.getByRole("button", { name: "Add another option" }).click();
+	await decision.getByRole("button", { name: "Add an option", exact: true }).click();
 	await decision.getByRole("textbox", { name: "New option" }).fill("Ship to everyone");
 	await bo.keyboard.press("Enter");
 	await decision.getByText("Ship to everyone", { exact: true }).click();

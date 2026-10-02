@@ -50,7 +50,7 @@ async function readonlyReader(browser: Browser, baseURL: string, room: string) {
 
 async function addOption(page: Page, question: string, option: string) {
 	let target = card(page, question);
-	await target.getByRole("button", { name: "Add another option" }).click();
+	await target.getByRole("button", { name: "Add an option", exact: true }).click();
 	await target.getByRole("textbox", { name: "New option" }).fill(option);
 	await page.keyboard.press("Enter");
 	await expect(target.getByRole("radio", { name: option, exact: true })).toBeVisible();

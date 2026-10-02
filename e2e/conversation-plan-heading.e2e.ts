@@ -38,4 +38,7 @@ test("a successful heading job preserves its decision card for both collaborator
 		.toBeVisible();
 	await expect(content(bo).getByRole("heading", { name: "Pilot release", exact: true }))
 		.toHaveCount(1);
+	await expect(content(bo)).toContainText("Evaluate a small pilot before a wider release.");
+	await expect(bo.getByRole("heading", { name: "Should we ship a small pilot?", exact: true }))
+		.toBeVisible();
 });
