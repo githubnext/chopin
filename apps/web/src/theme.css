@@ -488,9 +488,13 @@ body {
 	border-color: rgb(0 0 0 / 9%);
 }
 
+.workspace-root[data-workspace-mode="split"] .workspace-chat-panel {
+	--panel-direction: -1;
+}
+
 .motion-panel {
 	opacity: 0;
-	transform: translateX(var(--panel-distance));
+	transform: translateX(calc(var(--panel-distance) * var(--panel-direction, 1)));
 	transition:
 		opacity var(--panel-open-dur) var(--motion-smooth-out),
 		transform var(--panel-open-dur) var(--motion-smooth-out);
@@ -505,7 +509,7 @@ body {
 .motion-panel.is-closing {
 	pointer-events: none;
 	opacity: 0;
-	transform: translateX(var(--panel-distance));
+	transform: translateX(calc(var(--panel-distance) * var(--panel-direction, 1)));
 	transition-duration: var(--panel-close-dur);
 }
 
