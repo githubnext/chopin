@@ -14,6 +14,7 @@ declare global {
 			version(version: number): void;
 			editable(enabled: boolean): void;
 			diagnostics(enabled: boolean): void;
+			linked(enabled: boolean): void;
 			corrections: ExcerptCorrectionAction[];
 			analyses: Array<{ messageId: string; actionId: string }>;
 			jobs: string[];
@@ -33,6 +34,38 @@ let analysisHostThread: ConversationPlan.Thread = {
  questionAuthoring: "quoted", status: "exploring", questionnaireId: "host-card", version: 7,
  contributions: [{ id: "host-option", kind: "option", text: "S3", authoring: "quoted", sources: [], actor: { kind: "classifier" } }],
  stances: [], stanceHistory: [], decisionHistory: [], candidates: [],
+};
+let analysisHostLinkedThread: ConversationPlan.Thread = {
+ ...analysisHostThread,
+ questionSources: [{
+  messageId: "host-review", author: { kind: "member", handle: "ana" },
+  quote: "Prefix", start: 0, end: 6, role: "question",
+ }],
+ contributions: [
+  {
+   ...analysisHostThread.contributions[0]!,
+   sources: [{
+    messageId: "host-review", author: { kind: "member", handle: "ana" },
+    quote: "S3", start: 8, end: 10, role: "option",
+   }],
+  },
+  {
+   id: "host-reason", kind: "reason", text: "needs", authoring: "quoted",
+   sources: [{
+    messageId: "host-review", author: { kind: "member", handle: "ana" },
+    quote: "needs", start: 11, end: 16, role: "reason",
+   }],
+   actor: { kind: "classifier" },
+  },
+  {
+   id: "host-constraint", kind: "constraint", text: "encryption", authoring: "quoted",
+   sources: [{
+    messageId: "host-review", author: { kind: "member", handle: "ana" },
+    quote: "encryption", start: 17, end: 27, role: "constraint",
+   }],
+   actor: { kind: "classifier" },
+  },
+ ],
 };
 let analysisHostRecord: ConversationPlan.AnalysisRecord = {
  messageId: "host-review", questionSetVersion: "fixture-v1", modelVersion: "fixture-m1",
@@ -74,15 +107,17 @@ function AnalysisHost({ mode }: { mode: "editable" | "readonly" }) {
  let [version, setVersion] = useState(7);
  let [diagnostics, setDiagnostics] = useState(true);
  window.analysisHostFixture.diagnostics = setDiagnostics;
+ let [linked, setLinked] = useState(false);
  window.analysisHostFixture.editable = setEditable;
  window.analysisHostFixture.version = setVersion;
+ window.analysisHostFixture.linked = setLinked;
  window.analysisHostFixture.append = () => setEntries(current => [...current, {
   id: \`appended-\${current.length}\`, author: { kind: "member", handle: "ana" },
   text: "A new message while the analysis remains pinned.", ts: current.length + 1,
  }]);
  let state: ConversationPlan.State = {
   schemaVersion: 1, revision: 9, events: [], queue: [],
-  threads: [{ ...analysisHostThread, version }],
+  threads: [{ ...(linked ? analysisHostLinkedThread : analysisHostThread), version }],
   analysis: diagnostics ? [analysisHostRecord, {
    messageId: "host-retry", questionSetVersion: "fixture-v1", modelVersion: "fixture-m1",
    status: "failed", passes: [], eventIds: [], error: "Controlled analysis failure.",
@@ -127,6 +162,6 @@ window.analysisHostFixture = {
   analysisHostPending.delete(kind);
   if (accepted) pending.resolve(); else pending.reject(new Error("Controlled held acknowledgement rejection"));
  },
- append() {}, version() {}, editable() {}, diagnostics() {},
+ append() {}, version() {}, editable() {}, diagnostics() {}, linked() {},
 };
 `;
