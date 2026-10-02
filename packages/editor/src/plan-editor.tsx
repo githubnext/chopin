@@ -152,8 +152,13 @@ export function PlanEditor(
 	}, [questions, threads, changes]);
 
 	let onAnchors = useCallback(
-		(snapshot: { widgets: Plan.WidgetAnchors[]; threads: Plan.ThreadAnchors[] }) => {
+		(snapshot: {
+			widgets: Plan.WidgetAnchors[];
+			threads: Plan.ThreadAnchors[];
+			prose: Plan.ProseAnchors[];
+		}) => {
 			questions?.anchors(snapshot.widgets);
+			questions?.prose(snapshot.prose);
 			threads?.anchors(snapshot.threads);
 		},
 		[questions, threads],
