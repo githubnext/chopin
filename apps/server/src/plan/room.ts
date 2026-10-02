@@ -296,11 +296,9 @@ export async function restore(
 	try {
 		Y.applyUpdate(restored.doc, checkpoint, REMOTE);
 		await settle();
-		// Older checkpoints serialized caret paragraphs; accept only their exact validated export.
-		if (
-			project(restored) !== source
-			&& exportPlan(restored.editor, { registry: schema() }) !== source
-		) {
+		// Older checkpoints retain blank lines from empty caret paragraphs.
+		let projected = project(restored);
+		if (projected !== source && projected !== serialize(parse(source))) {
 			throw new Error("stored plan source does not match its Yjs checkpoint");
 		}
 
