@@ -1,3 +1,5 @@
+import { unanswered } from "@chopin/dialect";
+
 import type { QuestionnaireEntry } from "./questionnaires";
 
 export type DecisionView = "plan" | "decisions";
@@ -9,11 +11,12 @@ export type DecisionViewState = {
 };
 
 export function countUnanswered(entries: QuestionnaireEntry[]): number {
-	return entries.reduce(
-		(total, entry) =>
-			total + entry.value.questions.filter(question => question.answer === undefined).length,
-		0,
-	);
+	return entries.reduce((total, entry) => total + unanswered(entry.value).length, 0);
+}
+
+/** Whether a questionnaire still waits for the room; answered and expired ones do not. */
+export function undecided(entry: QuestionnaireEntry): boolean {
+	return unanswered(entry.value).length > 0;
 }
 
 /** A forced opening yields to Plan only when prose first arrives. */

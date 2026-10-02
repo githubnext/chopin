@@ -74,6 +74,8 @@ export {
 	$createQuestionnaireNode,
 	$isQuestionnaireNode,
 	QuestionnaireNode,
+	toElement as questionnaireElement,
+	unanswered,
 } from "./nodes/questionnaire";
 export type { Option, Question, Questionnaire } from "./nodes/questionnaire";
 

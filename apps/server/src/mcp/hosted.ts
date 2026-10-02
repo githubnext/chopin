@@ -12,10 +12,13 @@ import { implementationLifecycle } from "../tasks/lifecycle";
 import type { Server } from "bun";
 import type { HostedAuth } from "../auth/routes";
 import type { GitHubUser } from "../github/client";
+import type { AuthenticatedSession } from "../auth/session";
+import type { HostedRepository } from "../agent/repository";
 import type {
 	DocumentSummary,
 	Implementation,
 	ImplementationInput,
+	InvokePlannerError,
 	McpOptions,
 	RenameDocumentInput,
 } from "../mcp";
@@ -30,6 +33,17 @@ export type HostedCaller = {
 	user: GitHubUser;
 };
 
+export type PlannerInvocation = {
+	channel: ChannelRecord;
+	repository: HostedRepository;
+	user: GitHubUser;
+	/** The caller's live browser login, which may claim ownership for a channel without one. */
+	session?: AuthenticatedSession;
+	instruction: string;
+	/** Unverified; only the atomic harness reads it. */
+	checkout?: string;
+};
+
 export type ImplementationPersistence = { lease(): Lease };
 export type HostedCallbacks = {
 	archiveChannel?: (channelId: string, now: Date) => Promise<ChannelArchiveResult>;
@@ -38,6 +52,7 @@ export type HostedCallbacks = {
 	serializeDocument?: <T>(channelId: string, action: () => Promise<T>) => Promise<T>;
 	onChannelRenamed?: (channel: ChannelRecord) => void;
 	onDocumentPersisted?: (target: Plan.DocumentTarget) => void;
+	invokePlanner?: (input: PlannerInvocation) => Promise<InvokePlannerError | undefined>;
 };
 
 const BEARER = new RegExp("^Bearer ([A-Za-z0-9._~+/-]+=*)$", "i");
@@ -255,6 +270,47 @@ export function hosted(
 	}
 
 	return {
+		invoke: callbacks.invokePlanner
+			? {
+				async invoke(caller, input) {
+					let located = await locatedChannel(caller, input.id);
+					if (!located) return { kind: "refused", code: "document-unavailable" };
+					if (
+						located === "forbidden"
+						|| (!located.repository.permissions.push && !located.repository.permissions.admin)
+					) {
+						return { kind: "refused", code: "repository-forbidden" };
+					}
+					let { channel, repository } = located;
+					if (callbacks.isChannelDeleting?.(channel.id)) {
+						return {
+							kind: "refused",
+							code: "document-unavailable",
+						};
+					}
+					if (channel.archivedAt) return { kind: "refused", code: "document-archived" };
+					let code = await callbacks.invokePlanner!({
+						channel,
+						repository,
+						user: caller.user,
+						session: await auth.sessions.forUser(caller.user.id),
+						instruction: input.instruction,
+						...(input.checkout === undefined ? {} : { checkout: input.checkout }),
+					});
+					if (code) return { kind: "refused", code };
+					return {
+						kind: "invoked",
+						document: {
+							...summary(channel),
+							url: new URL(
+								documentPath(channel.repositoryOwner, channel.repositoryName, channel.slug),
+								auth.config.origin,
+							).href,
+						},
+					};
+				},
+			}
+			: undefined,
 		async caller(request) {
 			let match = request.headers.get("authorization")?.match(BEARER);
 			if (!match) return undefined;

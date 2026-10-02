@@ -22,6 +22,8 @@ import { ulid } from "@chopin/dialect";
 
 import { PLANNER_TOOL_NAMES } from "../harness/tool-names";
 import type { PlannerSession } from "../harness/session";
+import { verifiedCheckout } from "../harness/atomic/checkout";
+import { rememberCheckout } from "../harness/atomic/workspace";
 import { plannerInstructions } from "../agent/planner";
 import type { ActiveOwnerBinding } from "../agent/active-owner";
 import type { DocumentRoom, ResearchWorkspaceRequest } from "../agent/tools";
@@ -30,6 +32,7 @@ import { instruction } from "@chopin/protocol/address";
 
 import { annotatedText, compose, referenceCatalog, remember } from "./address";
 import { broadcast, fail, reply, tell } from "../wire";
+import { MAX_MESSAGE_BYTES } from "./limits";
 
 import type { Server } from "bun";
 import type { TextStreamPart, ToolSet } from "ai";
@@ -46,7 +49,6 @@ import type { Socket, SocketData } from "../wire";
 /** Beyond this the queue is a backlog nobody is going to read. */
 const MAX_QUEUE = 20;
 const MAX_PENDING_SENDS = 20;
-const MAX_MESSAGE_BYTES = 64 * 1024;
 const MAX_SESSION_REFERENCES = 50;
 const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const FINGERPRINT = /^sha256:[0-9a-f]{64}$/;
@@ -82,6 +84,9 @@ type Waiting = Wire.Waiting & {
 	sessionId?: string;
 	/** Verified member identity, retained only for a queued composer message. */
 	userId?: string;
+	posted?: boolean;
+	/** MCP caller whose instruction this is; it never claims ownership without their login. */
+	invokedBy?: string;
 };
 
 export type ActiveMemberRequest = {
@@ -89,7 +94,7 @@ export type ActiveMemberRequest = {
 	userId: string;
 	handle: string;
 	text: string;
-	claimantSessionId: string;
+	claimantSessionId: string | undefined;
 	turnId: string;
 	lifecycle: number;
 };
@@ -401,11 +406,17 @@ export type Room = {
 	room: string;
 	config: Config;
 	auth: HostedAuth;
-	claimantSessionId: string;
+	/**
+	 * Login session that may claim Planner ownership for this room's turns.
+	 * Absent for an MCP caller without a live browser login: their instruction
+	 * runs only under an owner the channel already has.
+	 */
+	claimantSessionId: string | undefined;
 	repository: HostedRepository;
 	activeOwner?: () => Promise<ActiveOwnerBinding | undefined>;
 	persist: () => Promise<void>;
 	openPlannerSession?: typeof import("../harness/session")["openPlannerSession"];
+	invokedBy?: string;
 	ownerAvailable?: () => Promise<void>;
 	jobs?: JobService;
 	references?: ReferenceService;
@@ -436,6 +447,89 @@ export function send(context: Room, ws: Socket, msg: Request<Wire.Send>): Promis
 	let accepted = context.chat.sending.then(process, process);
 	let completed = accepted.finally(() => context.chat.pendingSends--);
 	context.chat.sending = completed.then(() => {}, () => {});
+	return completed;
+}
+
+/**
+ * Accept an MCP instruction without waiting for its Planner turn.
+ *
+ * The caller is attributed on the posted message, and the turn runs under the
+ * channel's Planner owner. A checkout matters only to the atomic harness, which
+ * verifies it before anything is posted and remembers it for the channel.
+ */
+export async function invoke(
+	context: Room,
+	user: { id: string; login: string },
+	text: string,
+	checkout?: string,
+): Promise<
+	| "planner-unavailable"
+	| "planner-owner-unavailable"
+	| "planner-queue-full"
+	| "checkout-unverified"
+	| undefined
+> {
+	let { chat, server, room } = context;
+	if (chat.pendingSends >= MAX_PENDING_SENDS) return "planner-queue-full";
+	chat.pendingSends++;
+	let post = async () => {
+		if (!context.config.agent || chat.closed) return "planner-unavailable" as const;
+		let verified: string | undefined;
+		if (checkout !== undefined && context.config.harness === "atomic") {
+			verified = await verifiedCheckout(context.repository, checkout);
+			if (!verified) return "checkout-unverified" as const;
+		}
+		try {
+			await resolveOwner(context.auth, context.repository, room, context.claimantSessionId);
+		} catch {
+			return "planner-owner-unavailable" as const;
+		}
+		if (chat.closed) return "planner-unavailable" as const;
+		if (chat.busy && chat.waiting.length >= MAX_QUEUE) return "planner-queue-full" as const;
+		let entry: Wire.Entry = {
+			id: ulid(),
+			author: { kind: "member", handle: user.login },
+			text,
+			ts: now(),
+		};
+		chat.entries.push(entry);
+		try {
+			await context.persist();
+		} catch (error) {
+			chat.entries = chat.entries.filter(value => value !== entry);
+			throw error;
+		}
+		if (chat.closed) return "planner-unavailable" as const;
+		if (verified) rememberCheckout(room, verified);
+		announce(server, room, entry);
+		if (chat.busy) {
+			chat.waiting.push({
+				id: entry.id,
+				handle: user.login,
+				text,
+				message: true,
+				posted: true,
+				sessionId: context.claimantSessionId,
+				userId: user.id,
+				invokedBy: user.id,
+			});
+			queued(chat, server, room);
+		} else {
+			startRun(
+				{ ...context, invokedBy: user.id },
+				user.login,
+				text,
+				undefined,
+				context.claimantSessionId,
+				false,
+				{ entryId: entry.id, userId: user.id },
+			);
+		}
+		return undefined;
+	};
+	let accepted = chat.sending.then(post, post);
+	let completed = accepted.finally(() => chat.pendingSends--);
+	chat.sending = completed.then(() => {}, () => {});
 	return completed;
 }
 
@@ -697,7 +791,7 @@ function currentMemberRequest(chat: Chat): ActiveMemberRequest | undefined {
 	let active = chat.activeRequest;
 	if (
 		!active || chat.closed || !chat.busy || chat.lifecycle !== active.lifecycle
-		|| chat.turn?.id !== active.turnId || !active.userId || !active.claimantSessionId
+		|| chat.turn?.id !== active.turnId || !active.userId
 	) return undefined;
 	let entry = chat.entries.find(value => value.id === active.entryId);
 	if (
@@ -840,7 +934,7 @@ export function consumeBootstrapBackscroll(chat: Chat): void {
 
 async function repositorySession(
 	context: Room,
-	claimantSessionId: string,
+	claimantSessionId: string | undefined,
 	currentEntryId?: string,
 	currentReferences: Wire.Reference[] = [],
 ): Promise<{ session: PlannerSession; binding: ActiveOwnerBinding }> {
@@ -893,11 +987,14 @@ async function repositorySession(
 		let result = await open(binding, {
 			room: documentRoom(context),
 			repository,
-			instructions: plannerInstructions(
-				`${repository.owner}/${repository.name}`,
-				bootstrap,
-			),
+			instructions: workspace =>
+				plannerInstructions(
+					`${repository.owner}/${repository.name}`,
+					bootstrap,
+					workspace,
+				),
 			model: context.config.model,
+			harness: context.config.harness,
 		});
 		if (!result.ok) throw new Error(`Planner session unavailable (${result.error.kind})`);
 		opened = result.value;
@@ -928,19 +1025,23 @@ async function repositorySession(
 	}
 }
 
+/**
+ * The channel's Planner owner, claimed for the claimant when it has none.
+ * Without a claimant only an owner the channel already has will do.
+ */
 export async function resolveOwner(
 	auth: HostedAuth,
 	repository: HostedRepository,
 	channelId: string,
-	claimantSessionId: string,
+	claimantSessionId: string | undefined,
 ) {
-	let ownership = await auth.storage.channels.claimAgentOwner(
-		channelId,
-		claimantSessionId,
-		new Date(),
-	);
-	let ownerSessionId = ownership.ownerSessionId;
-	if (!ownerSessionId) throw new Error("This channel's Copilot owner is unavailable.");
+	let ownership = claimantSessionId
+		? await auth.storage.channels.claimAgentOwner(channelId, claimantSessionId, new Date())
+		: (await auth.storage.channels.readAgent(channelId, new Date()))?.agent;
+	let ownerSessionId = ownership?.ownerSessionId;
+	if (!ownership || !ownerSessionId) {
+		throw new Error("This channel's Copilot owner is unavailable.");
+	}
 	let owner = await auth.sessions.resolve(ownerSessionId);
 	if (!owner) {
 		throw new Error("The Copilot owner must sign in again or reset this channel's agent.");
@@ -981,7 +1082,7 @@ async function run(
 	handle: string,
 	text: string,
 	thread: string | undefined,
-	claimantSessionId: string,
+	claimantSessionId: string | undefined,
 	reserved = false,
 	member?: MemberRequest,
 	references: Wire.Reference[] = [],
@@ -1027,7 +1128,7 @@ async function run(
 		];
 		retainReferences(chat, promptReferences);
 		let available = promptReferences.filter(reference => chat.referenceCache.has(reference.id));
-		let prompt = compose(backscroll, handle, text, references, available);
+		let prompt = compose(backscroll, handle, text, references, available, !!context.invokedBy);
 
 		let result = await opened.session.stream(
 			prompt,
@@ -1090,13 +1191,13 @@ async function run(
 		if (chat.closed) return;
 		queued(chat, server, room);
 		let entry = next.message ? chat.entries.find(item => item.id === next.id) : undefined;
-		if (entry) announce(server, room, entry);
+		if (entry && !next.posted) announce(server, room, entry);
 		await run(
-			context,
+			{ ...context, invokedBy: next.invokedBy },
 			next.handle,
 			next.text,
 			next.thread,
-			next.sessionId ?? context.claimantSessionId,
+			next.invokedBy ? next.sessionId : next.sessionId ?? context.claimantSessionId,
 			false,
 			next.message && next.userId ? { entryId: next.id, userId: next.userId } : undefined,
 			next.references,
@@ -1114,7 +1215,7 @@ function startRun(
 	handle: string,
 	text: string,
 	thread: string | undefined,
-	claimantSessionId: string,
+	claimantSessionId: string | undefined,
 	reserved = false,
 	member?: MemberRequest,
 	references?: Wire.Reference[],
@@ -1138,7 +1239,7 @@ function startRun(
 export function pending(chat: Chat): Waiting | undefined {
 	let next = chat.waiting.shift();
 	while (next?.spent?.()) next = chat.waiting.shift();
-	if (next?.message) {
+	if (next?.message && !next.posted) {
 		let entry: MemberEntry = {
 			id: next.id,
 			author: { kind: "member", handle: next.handle },

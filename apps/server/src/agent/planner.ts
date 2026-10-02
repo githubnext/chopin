@@ -17,6 +17,7 @@
 import { COMPONENTS, DIFF_LANGUAGE, MERMAID_LANGUAGE } from "@chopin/dialect/dialect";
 
 import type { Component } from "@chopin/dialect/dialect";
+import type { PlannerWorkspace } from "../harness/atomic/workspace";
 
 /** Components the agent writes itself. The rest are created for it. */
 const AUTHORABLE = ["Callout", "Tabs", "Tab", "Underline"];
@@ -230,13 +231,29 @@ Questionnaires are created by \`ask\`, never by hand, and their answers are owne
 elsewhere — leave them alone when you rewrite around them. To take one out of
 the plan, use the \`detach_question\` operation rather than deleting the block.`;
 
-export function plannerInstructions(repository: string, bootstrap?: string): string {
-	let access = `Read before you propose. The selected repository is ${repository}. Use
+export function plannerInstructions(
+	repository: string,
+	bootstrap?: string,
+	workspace?: PlannerWorkspace,
+): string {
+	let reading = `Read before you propose. The selected repository is ${repository}. Use
 \`read_repository_file\`, \`list_repository_tree\`, \`search_repository\` and
 \`repository_history\` for its code, and \`list_pull_requests\` and
-\`pull_request_read\` for its pull requests. Every repository tool is fixed to this repository.
-
-You have no shell, checkout, host filesystem, skills or repository instructions,
+\`pull_request_read\` for its pull requests. Every repository tool is fixed to this repository.`;
+	if (!workspace) {
+		let isolated = `You have no shell, checkout, host filesystem, skills or repository instructions,
 and cannot change GitHub. Ground the plan in what those reading tools return.`;
-	return [PROMPT, access, bootstrap].filter(Boolean).join("\n\n");
+		return [PROMPT, reading, isolated, bootstrap].filter(Boolean).join("\n\n");
+	}
+	let place = workspace.checkout
+		? `Your working directory, ${workspace.cwd}, is a local checkout of ${repository}
+verified against its origin. Its branch and working tree may differ from what the
+repository tools read.`
+		: `Your working directory, ${workspace.cwd}, is a scratch directory Chopin created
+empty for this document. It is not a checkout and holds no repository files, so read
+${repository} through the repository tools.`;
+	let questions =
+		`\`ask_user_question\` and \`workflow\` questions appear to the document's members as
+Decisions. If one expires unanswered, proceed on your best judgement and say what you assumed.`;
+	return [PROMPT, reading, place, questions, bootstrap].filter(Boolean).join("\n\n");
 }

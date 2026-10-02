@@ -11,6 +11,7 @@ import {
 	QuestionnaireStore,
 	selectDecisionView,
 	ThreadStore,
+	undecided,
 	useHasPlanContent,
 	useQuestionnaires,
 	visibleDecisionView,
@@ -300,9 +301,7 @@ export function RoomWorkspace(
 			localStorage.setItem("chopin:view:document", next);
 		}
 		if (next === "decisions" && revealFirst) {
-			let first = entries.find(entry =>
-				entry.value.questions.some(question => question.answer === undefined)
-			);
+			let first = entries.find(undecided);
 			setReveal({ widget: first?.id ?? "", token: Date.now() });
 		}
 	};

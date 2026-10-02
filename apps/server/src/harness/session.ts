@@ -2,6 +2,9 @@ import { createJustBashNetworkSandboxSession } from "@ai-sdk/sandbox-just-bash";
 import { plannerAgent } from "./agents";
 import { githubTools, type GitHubToolsError, type Result } from "./github-tools";
 import { registerCredential } from "./harnesses";
+import { registerFullPlanner } from "./atomic/full";
+import { createHumanInput } from "./atomic/human-input";
+import { type PlannerWorkspace, plannerWorkspace } from "./atomic/workspace";
 
 import type { HarnessAgent } from "@ai-sdk/harness/agent";
 import type { ActiveOwnerBinding } from "../agent/active-owner";
@@ -18,11 +21,13 @@ type Sandbox = Awaited<ReturnType<typeof createJustBashNetworkSandboxSession>>;
 
 type PlannerAgent = typeof plannerAgent;
 
-type PlannerChannel = {
+export type PlannerChannel = {
 	room: DocumentRoom;
 	repository: HostedRepository;
-	instructions: string;
+	instructions: string | ((workspace?: PlannerWorkspace) => string);
 	model?: string;
+	/** `atomic` runs the session as a full Atomic session in the channel's workspace. */
+	harness?: string;
 };
 
 export type PlannerSession = {
@@ -67,12 +72,25 @@ export async function openPlannerSession(
 		return { ok: false, error: { kind: "Unavailable", cause } };
 	}
 	let unregister: (() => void) | undefined;
+	let unregisterFull: (() => void) | undefined;
 	let session: Awaited<ReturnType<HarnessAgent["createSession"]>> | undefined;
 	let timeout: ReturnType<typeof setTimeout> | undefined;
 	try {
 		if (owner.signal.aborted) throw new Error("Planner owner unavailable");
 		let sessionId = crypto.randomUUID();
 		unregister = (deps.registerCredential ?? registerCredential)(sessionId, owner.currentToken);
+		let workspace = channel.harness === "atomic"
+			? await plannerWorkspace(channel.room.id, channel.repository)
+			: undefined;
+		if (workspace) {
+			unregisterFull = registerFullPlanner(sessionId, {
+				cwd: workspace.cwd,
+				humanInput: createHumanInput(channel.room),
+			});
+		}
+		let instructions = typeof channel.instructions === "function"
+			? channel.instructions(workspace)
+			: channel.instructions;
 		let agent = deps.agent ?? plannerAgent;
 		let opening = agent.createSession({ sessionId, sandboxSession: sandbox });
 		let deadline = new Promise<never>((_, reject) => {
@@ -101,6 +119,7 @@ export async function openPlannerSession(
 						abortSignal,
 						options: {
 							...channel,
+							instructions,
 							owner,
 							githubTools: tools.value,
 						},
@@ -114,6 +133,7 @@ export async function openPlannerSession(
 								await sandbox.destroy();
 							} finally {
 								release();
+								unregisterFull?.();
 							}
 						}
 					})(),
@@ -131,6 +151,7 @@ export async function openPlannerSession(
 			console.error("[agent] Planner sandbox cleanup failed:", cleanupError);
 		}
 		unregister?.();
+		unregisterFull?.();
 		let message = cause instanceof Error ? cause.message : String(cause);
 		let kind: "Timeout" | "ShuttingDown" | "HarnessCapabilityUnsupported" | "Unavailable" =
 			message.includes("timed out")

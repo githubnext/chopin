@@ -249,7 +249,7 @@ class Validator {
 					break;
 
 				case "text":
-					if (!value.trim()) {
+					if (!value.trim() && !["Question", "Option", "Answer"].includes(spec.name)) {
 						this.add("empty-attribute", `\`${spec.name}.${name}\` cannot be empty`, path, node);
 					} else if (value.length > attribute.max) {
 						this.add(
@@ -302,7 +302,8 @@ class Validator {
 					}
 					found++;
 				}
-				if (found === 0) {
+				// A free-text question has no options until its answer is projected.
+				if (found === 0 && spec.name !== "Question") {
 					this.add(
 						"missing-children",
 						`\`${spec.name}\` requires at least one ${allowed.join(" or ")}`,

@@ -93,8 +93,9 @@ export function compose(
 		...backscroll.flatMap(said => said.references ?? []),
 		...references,
 	],
+	verbatim = false,
 ): string {
-	let asked = references.length > 0 ? text : instruction(text);
+	let asked = verbatim || references.length > 0 ? text : instruction(text);
 	let readableIds = new Set(catalogReferences.map(reference => reference.id));
 	let current = annotatedText(asked, references, readableIds);
 

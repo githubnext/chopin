@@ -113,8 +113,15 @@ external implementation runs are durable.
   model-backed research request supplies its GitHub App token and Copilot
   entitlement. The database stores only a token-free owner reference and durable
   context.
-- **Planner tools are repository-fixed.** The hosted runtime has no shell,
-  checkout, host filesystem, skills, plugins, or arbitrary GitHub access.
+- **Planner tools are repository-fixed under `copilot-sdk` and `pi`.** Those
+  Planners have no shell, checkout, host filesystem, skills, plugins, or arbitrary
+  GitHub access. `HARNESS=atomic` deliberately runs every Planner session, local
+  or hosted, as a full Atomic session with the operator's Atomic tools and
+  resources, including shell and filesystem access as the server process's user.
+  Its working directory is a checkout verified from `invoke_planner` and
+  remembered per channel in memory, or else an empty per-channel directory. Its
+  summary and research workers stay isolated. There is no flag for this; the
+  harness is the choice.
 - **Repository node IDs are authoritative.** Owner and repository names resolve
   GitHub requests but never replace the stored node identity.
 - **Persistence should precede publication.** Do not acknowledge or broadcast a
@@ -130,9 +137,13 @@ Planner destination without a mention.
 
 `instruction()` strips the mention before model input. Recent room messages that
 did not address the Planner still enter a bounded backscroll for the next turn.
-An accepted comment also starts an explicit Planner turn after it commits.
+An accepted comment also starts an explicit Planner turn after it commits. An MCP
+`invoke_planner` call posts its instruction as the caller's member message and
+runs under the channel's existing Planner owner; only a caller with a live
+browser login can claim an unowned channel.
 
-The Planner is a custom agent, not a general coding agent. Its turn runs
+Under `copilot-sdk` and `pi` the Planner is a custom agent, not a general coding
+agent; under `atomic` it is a full Atomic session. Either way its turn runs
 through `HarnessAgent.stream()` from `@ai-sdk/harness`; the conversation stays
 active until the returned stream finishes. An interrupted turn is never
 replayed automatically because it may already have made durable tool changes.
@@ -398,7 +409,9 @@ names and the external GitHub MCP contribution. Counts vary with SDK and remote
 MCP versions. A healthy boundary includes Chopin's document tools (currently
 plan-named), repository tools, and allowed pull-request tools, and excludes
 ambient capabilities such as `bash`, filesystem access, URL fetch, host Git,
-issues, and unrestricted search.
+issues, and unrestricted search. The exception is an `atomic` Planner session,
+which deliberately adds Atomic's builtins and coding tools; its summary and
+research worker sessions must still show only their own tools.
 
 Treat a missing required tool or an unexpected ambient tool as a security or
 configuration failure even when the overall count looks plausible.

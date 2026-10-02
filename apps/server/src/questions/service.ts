@@ -12,7 +12,7 @@
  * everyone already knows how to render.
  */
 
-import { ulid } from "@chopin/dialect";
+import { limits, ulid } from "@chopin/dialect";
 import * as Question from "@chopin/question";
 
 import * as Anchors from "./anchors";
@@ -52,8 +52,8 @@ export type { StoredOpen } from "./store";
  * a document the agent will rewrite around. Identity is minted once, here,
  * before anything references it.
  */
-export function identify(raw: unknown): Definition {
-	let definition = Question.normalize(raw);
+export function identify(raw: unknown, options?: { verbatim?: boolean }): Definition {
+	let definition = Question.normalize(raw, options);
 	return {
 		questions: definition.questions.map(question => ({
 			...question,
@@ -67,7 +67,7 @@ export function identify(raw: unknown): Definition {
 export type Record = {
 	id: string;
 	definition: Definition;
-	status: "open" | "answered" | "cancelled";
+	status: "open" | Wire.Status;
 	/** Question id to the answer as it reads, for projection into the plan. */
 	answers?: { [question: string]: string };
 	resolver?: string;
@@ -95,7 +95,12 @@ function decide(
 	return out;
 }
 
-/** Ask each decision independently; register its record before publishing its node. */
+/**
+ * Ask each decision independently; register its record before publishing its node.
+ *
+ * An abort withdraws the cards still open. After `expiresInMs` without an answer
+ * they expire instead, and stay in the document marked as such.
+ */
 export async function ask(
 	plan: Plan,
 	server: Server<SocketData>,
@@ -103,7 +108,10 @@ export async function ask(
 	definition: Definition,
 	placement?: AskPlacement,
 	created?: () => void,
+	signal?: AbortSignal,
+	expiresInMs?: number,
 ): Promise<Ended[]> {
+	if (signal?.aborted) return [];
 	if (Service.implementationActive(plan)) throw new Error("implementation is active");
 	if (definition.questions.length === 0) {
 		Question.reject("A questionnaire needs at least one question");
@@ -117,31 +125,40 @@ export async function ask(
 	}> = [];
 	await Service.exclusive(plan, async () => {
 		let anchors = placement ? validatePlacement(plan, definition, placement) : undefined;
+		// Widget and question identities are deliberately distinct.
+		let values = definition.questions.map(question => ({
+			id: ulid(),
+			questions: [{
+				id: question.id,
+				header: question.header,
+				prompt: question.question,
+				multiple: question.multiple,
+				options: question.options.map(option => ({
+					id: option.id,
+					label: option.label,
+					...(option.description ? { description: option.description } : {}),
+				})),
+			}],
+		}));
+		// Verbatim host input has no per-field limits, so the document bounds it.
+		if (
+			definition.questions.some(question => question.verbatim)
+			&& !room.fitsQuestionnaires(plan.document, values)
+		) {
+			Question.reject(
+				`This input would take the document past its ${limits.MAX_SOURCE_BYTES / 1024} KiB limit`,
+			);
+		}
 		asked = definition.questions.map((question, index) => {
 			let single = Question.decision({ questions: [question] });
-			// Widget and question identities are deliberately distinct.
-			let id = ulid();
-			let waiting = Store.ask(plan.questions, id, single, id);
-			let value = {
-				id,
-				questions: [{
-					id: question.id,
-					header: question.header,
-					prompt: question.question,
-					multiple: question.multiple,
-					options: question.options.map(option => ({
-						id: option.id,
-						label: option.label,
-						...(option.description ? { description: option.description } : {}),
-					})),
-				}],
-			};
-			let record: Record = { id, definition: single, status: "open" };
+			let value = values[index]!;
+			let waiting = Store.ask(plan.questions, value.id, single, value.id);
+			let record: Record = { id: value.id, definition: single, status: "open" };
 			if (anchors) {
 				record.anchors = Anchors.set(Anchors.read(record), question.id, anchors[index]!);
 			}
-			plan.records.set(id, record);
-			return { id, single, value, waiting, at: placement?.blocks[index]?.[0] };
+			plan.records.set(value.id, record);
+			return { id: value.id, single, value, waiting, at: placement?.blocks[index]?.[0] };
 		});
 
 		let mutation = room.insertQuestionnaires(
@@ -165,7 +182,32 @@ export async function ask(
 		created?.();
 	});
 
-	return Promise.all(asked.map(item => item.waiting));
+	let failed = Promise.withResolvers<never>();
+	let closing: Promise<unknown> | undefined;
+	let close = (status: "cancelled" | "expired") => {
+		closing ??= Promise.all(
+			asked.map(item =>
+				status === "expired"
+					? expire(plan, server, roomId, item.id)
+					: withdraw(plan, server, roomId, item.id, "chopin")
+			),
+		);
+		void closing.catch(failed.reject);
+	};
+	let abort = () => close("cancelled");
+	signal?.addEventListener("abort", abort, { once: true });
+	if (signal?.aborted) abort();
+	let timer = expiresInMs === undefined
+		? undefined
+		: setTimeout(() => close("expired"), expiresInMs);
+	try {
+		let ended = await Promise.race([Promise.all(asked.map(item => item.waiting)), failed.promise]);
+		await closing;
+		return ended;
+	} finally {
+		clearTimeout(timer);
+		signal?.removeEventListener("abort", abort);
+	}
 }
 
 /** Validate every placement before registering records or document nodes. */
@@ -289,6 +331,15 @@ export async function submit(
 	await Service.exclusive(plan, async () => {
 		let mutation: room.Mutation | undefined;
 		try {
+			// A long answer can push the document past its size limit, after which the
+			// Planner can no longer edit it; check on a copy so a refusal changes nothing.
+			let preview = await room.create(room.project(plan.document));
+			try {
+				room.projectAnswer(preview, msg.id, answers, settled);
+				room.validate(room.project(preview));
+			} finally {
+				preview.doc.destroy();
+			}
 			mutation = room.projectAnswer(plan.document, msg.id, answers, settled);
 		} catch (err) {
 			mutationError = err;
@@ -525,57 +576,87 @@ export async function cancel(
 	msg: Request<Wire.Cancel.Ask>,
 ): Promise<void> {
 	if (Service.implementationActive(plan)) return fail(ws, msg.rid, "implementation is active");
-	let claimed = Store.claimCancel(plan.questions, msg.id, ws.data.handle);
-	if (!claimed.ok) {
-		return reply(ws, msg.rid, { kind: "question:cancel", ts: 0, id: msg.id, ...claimed });
-	}
-	let mutationError: unknown;
-	let finish: (() => Store.Ended) | undefined;
-	await Service.exclusive(plan, async () => {
+	let result = await withdraw(plan, server, roomId, msg.id, ws.data.handle);
+	reply(ws, msg.rid, { kind: "question:cancel", ts: 0, id: msg.id, ...result });
+}
+
+/** Withdraw input on behalf of a member or the Planner, after its durable commit. */
+export function withdraw(
+	plan: Plan,
+	server: Server<SocketData>,
+	roomId: string,
+	id: string,
+	resolver: string,
+): Promise<Store.CancelRefusal | { ok: true; resolver: string }> {
+	return closeUnanswered(
+		plan,
+		server,
+		roomId,
+		id,
+		{ status: "cancelled", resolver },
+		() => room.removeQuestionnaire(plan.document, id),
+	);
+}
+
+/**
+ * Expire host input nobody answered in time, after its durable commit.
+ *
+ * Unlike a withdrawal the card stays in the document, marked expired, so the
+ * room can still see what was asked and that nobody answered it.
+ */
+export function expire(
+	plan: Plan,
+	server: Server<SocketData>,
+	roomId: string,
+	id: string,
+): Promise<Store.CancelRefusal | { ok: true; resolver: string }> {
+	let at = Math.floor(Date.now() / 1_000);
+	return closeUnanswered(
+		plan,
+		server,
+		roomId,
+		id,
+		{ status: "expired", resolver: "chopin", at },
+		() => room.projectExpiry(plan.document, id, new Date(at * 1_000).toISOString()),
+	);
+}
+
+async function closeUnanswered(
+	plan: Plan,
+	server: Server<SocketData>,
+	roomId: string,
+	id: string,
+	closed: { status: "cancelled" | "expired"; resolver: string; at?: number },
+	project: () => room.Mutation | undefined,
+): Promise<Store.CancelRefusal | { ok: true; resolver: string }> {
+	let { status, resolver } = closed;
+	return Service.exclusive(plan, async () => {
+		let claimed = Store.claimCancel(plan.questions, id, resolver, status);
+		if (!claimed.ok) return claimed;
 		let mutation: room.Mutation | undefined;
 		try {
-			mutation = room.removeQuestionnaire(plan.document, msg.id);
+			mutation = project();
 		} catch (err) {
-			mutationError = err;
-			return;
+			console.error(`[questions] could not project the ${status} node:`, err);
+			Store.rollback(plan.questions, claimed.claim);
+			return { ok: false, reason: "resolving" };
 		}
-		let record = plan.records.get(msg.id);
-		if (record) {
-			plan.records.set(msg.id, { ...record, status: "cancelled", resolver: ws.data.handle });
+		let record = plan.records.get(id);
+		if (record) plan.records.set(id, { ...record, ...closed });
+		let finish = Store.stage(plan.questions, claimed.claim);
+		try {
+			if (mutation) await Service.publish(plan, server, roomId, mutation);
+			else await Service.persistExclusive(plan);
+		} catch (err) {
+			plan.questions.closed.delete(id);
+			plan.questions.open.set(id, claimed.claim.entry);
+			Store.rollback(plan.questions, claimed.claim);
+			if (record) plan.records.set(id, record);
+			throw err;
 		}
-		finish = Store.stage(plan.questions, claimed.claim);
-		if (mutation) await Service.publish(plan, server, roomId, mutation);
-		else await Service.persistExclusive(plan);
-	});
-	if (mutationError) {
-		// The questionnaire stays open and answerable, which is a state every
-		// client already renders. Saying "resolving" is honest: the attempt is
-		// over, and trying again is the right move.
-		console.error("[questions] could not remove the node:", mutationError);
-		Store.rollback(plan.questions, claimed.claim);
-		return reply(ws, msg.rid, {
-			kind: "question:cancel",
-			ts: 0,
-			id: msg.id,
-			ok: false,
-			reason: "resolving",
-		});
-	}
-	finish!();
-
-	reply(ws, msg.rid, {
-		kind: "question:cancel",
-		ts: 0,
-		id: msg.id,
-		ok: true,
-		resolver: ws.data.handle,
-	});
-	broadcast(server, roomId, {
-		kind: "question:resolved",
-		ts: 0,
-		id: msg.id,
-		status: "cancelled",
-		resolver: ws.data.handle,
+		finish();
+		broadcast(server, roomId, { kind: "question:resolved", ts: 0, id, status, resolver });
+		return { ok: true, resolver };
 	});
 }
 

@@ -202,6 +202,11 @@ Each browser has its own binding; configured instance admission lists still
 apply to every authorized account. Loopback binding does not make this a mode
 for internet-facing or exposed multi-user deployments.
 
+The authentication mode does not change the Planner's tools. Under
+`HARNESS=atomic`, every Planner session, local or hosted, has shell and
+filesystem access as the server process's user; loopback binding is not a
+filesystem sandbox. See [Full Atomic Planner](hosted-agent.md#full-atomic-planner).
+
 ## Instance admission
 
 `GITHUB_ALLOWED_USERS` and `GITHUB_ALLOWED_ORGANIZATIONS` are optional,
@@ -253,6 +258,12 @@ token is authenticated independently and authorized with a direct repository
 lookup. An MCP-created document for a repository outside the App installation is
 not available through browser routes, WebSockets, or the hosted agent until
 the installation includes that repository. See [Local agent MCP](local-agent-mcp.md).
+
+`invoke_planner` is the one MCP tool that starts a hosted agent turn. It never
+lends the caller's bearer to the Planner: the turn runs under the channel's
+existing Planner owner, and a channel without one is claimed only for the
+caller's own live browser login, which must already have passed the
+installation-gated owner checks.
 
 The authorization-code flow uses state, S256 PKCE, the exact configured
 callback, and the App client secret. It does not request OAuth scopes;

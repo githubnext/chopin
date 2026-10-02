@@ -26,14 +26,14 @@ export const MAX_IMAGES = 100;
 export const MAX_TAB_LABEL = 60;
 export const MAX_CALLOUT_TITLE = 100;
 
-/** Questionnaire shape, matching the `ask` tool's contract. */
-export const MAX_QUESTIONS = 10;
-export const MAX_OPTIONS = 20;
-export const MAX_QUESTION_HEADER = 80;
-export const MAX_QUESTION_PROMPT = 1_000;
-export const MAX_OPTION_LABEL = 200;
-export const MAX_OPTION_DESCRIPTION = 1_000;
-export const MAX_CUSTOM_ANSWER = 4_000;
+/**
+ * Questionnaire text, a projection of its server-owned record.
+ *
+ * The `ask` tool bounds each field of its own questions; a verbatim host dialog
+ * keeps whatever its runtime permitted. The Planner cannot author these
+ * components, so the source size is the only bound the document adds.
+ */
+export const MAX_QUESTIONNAIRE_TEXT = MAX_SOURCE_BYTES;
 
 /**
  * Accepted comment threads, projected into the plan as `<Decision>`.

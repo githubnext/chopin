@@ -133,6 +133,9 @@ export function describe(config: Config): string {
 		config.devClient ? `client: vite (${config.devClient})` : "client: built",
 		config.agent ? `agent: ${config.model} (on demand)` : "agent: off",
 		`harness: ${config.harness}`,
+		...(config.harness === "atomic"
+			? ["Planner: full Atomic session (shell and filesystem access as this process's user)"]
+			: []),
 		config.backgroundJobs ? "background jobs: on" : "background jobs: off",
 		config.webResearch ? "web research: on" : "web research: off",
 		admission,

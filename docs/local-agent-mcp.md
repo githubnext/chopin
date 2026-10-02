@@ -24,9 +24,10 @@ authorization.
 The MCP bearer boundary is separate from Chopin's browser GitHub App session.
 Chopin authenticates the supplied token, applies the instance admission policy,
 and asks GitHub directly for that token's repository permissions. The GitHub App
-for Chopin does not need to be installed on a repository for MCP access. Browser
-routes, WebSockets, and the hosted agent still require an active App
-installation that includes the repository.
+for Chopin does not need to be installed for ordinary MCP document operations.
+Browser routes, WebSockets, and the Planner still require an active App
+installation that includes the repository. The `invoke_planner` handoff never
+lends the MCP bearer to the Planner; it runs under the document's Planner owner.
 
 ```bash
 export CHOPIN_URL="https://your-chopin-instance.example"
@@ -52,7 +53,9 @@ The current MCP contract can:
 - rename, archive, and restore documents without deleting their durable state;
 - read an approved implementation graph and its document source; and
 - claim a graph and report task, pull-request, blocker, revision, and
-  verification lifecycle transitions.
+  verification lifecycle transitions; and
+- hand an instruction to a document's Planner with `invoke_planner`, described
+  below.
 
 Chopin validates the shape of `baseBranch` and `baseCommit` during creation but
 does not resolve them against GitHub. The creating agent is responsible for
@@ -69,6 +72,75 @@ graph, but the product has no user-facing way to approve the Planner's draft.
 See
 [Experimental implementation lifecycle](implementation-lifecycle.md).
 
+## Hand an instruction to the Planner
+
+`invoke_planner` is offered on every harness and in both hosted and local
+authentication modes. It posts an instruction to an existing document's Planner
+and returns without waiting for the turn.
+
+The instruction is posted as a Chat message under the MCP caller's own handle,
+and the turn runs under the document's Planner ownership rules, exactly as a
+browser `@chopin` message would:
+
+- If the document already has a Planner owner, the turn runs under that owner,
+  even when the owner is someone other than the caller.
+- Otherwise the caller's live Chopin browser login, hosted or local, claims
+  ownership through the ordinary claim path. Sign in to Chopin in a browser as
+  the same GitHub account as the MCP bearer first.
+- Without either, the call is refused with `planner-owner-unavailable` and
+  nothing is posted.
+
+The MCP bearer never becomes the owner or supplies its credentials. The bearer
+needs repository write access; an owner must also pass the GitHub App
+installation check.
+
+Call the tool with an existing document's UUID or canonical URL, an instruction,
+and optionally an absolute checkout path:
+
+```json
+{
+	"id": "/documents/octo-org/score/release-readiness",
+	"instruction": "Run the planning workflow and ask blocking questions in Decisions.",
+	"checkout": "/absolute/path/to/score"
+}
+```
+
+The instruction must contain non-whitespace text and fit within 64 KiB in UTF-8;
+its text is preserved verbatim.
+
+`checkout` applies only when the server runs `HARNESS=atomic`, where the Planner
+is a [full Atomic session](hosted-agent.md#full-atomic-planner) with **shell and
+filesystem access as the server process's user**. The path is on the Chopin
+server's machine. Chopin verifies that its `origin` matches the document
+repository and refuses the request before posting if it does not. A verified
+path is remembered for the document until the server restarts, and every later
+Planner session for it, from the browser or through MCP, works there after
+checking the path again. Without one, the Planner works in an empty directory
+Chopin keeps for that document. Other harnesses ignore `checkout` entirely: it is
+neither verified, used, nor remembered.
+
+The result contains `id`, `title`, and the canonical `url` (plus any generated
+`description`). It returns after the instruction is durably posted, not after the
+Planner finishes. The message joins the existing Planner queue if busy. Progress
+and results appear in the document and Chat; questions appear in Decisions. Under
+`atomic`, Atomic input nobody answers within 30 minutes expires: the card stays in
+Decisions marked expired and the Planner proceeds on its own judgement. The
+browser need not already have the document open: Chopin keeps its room alive
+while the invoked turn and queue run. An interrupted turn is not replayed
+automatically on restart.
+
+Refusals return an object with `code`:
+
+- `planner-owner-unavailable`: the document has no usable Planner owner and the
+  caller has no live browser login to claim it; sign in to Chopin in a browser
+  as the MCP account, or ask the owner to sign in again.
+- `checkout-unverified`: under `atomic`, correct the supplied path or its
+  repository origin.
+- `planner-unavailable`: the Planner is disabled or the room is closing.
+- `planner-queue-full`: wait for queued work to drain before invoking again.
+- `document-unavailable`, `document-archived`, and `repository-forbidden` retain
+  their ordinary document/access meanings.
+
 ## Document URLs and IDs
 
 The `url` returned by `create_document` is the readable canonical route:
@@ -78,8 +150,8 @@ The `url` returned by `create_document` is the readable canonical route:
 ```
 
 `read_document`, `read_implementation`, `archive_document`, `restore_document`,
-and `update_document` accept either a document UUID or that canonical URL in their
-`id` input. The URL may be passed back exactly as returned; an absolute URL must
+`update_document`, and `invoke_planner` accept either a document UUID
+or that canonical URL in their `id` input. The URL may be passed back exactly as returned; an absolute URL must
 use the configured Chopin origin. Both reads return the stable UUID as the
 document `id`.
 
@@ -222,9 +294,10 @@ token's `read:org` or Members access, SSO authorization, and GitHub availability
 lacks the operation's repository permission; it does not mean the GitHub App for
 Chopin must be installed. Pull access is enough for `list_documents`,
 `read_document`, and `read_implementation`. Pull plus push or admin access is
-required for create, update, rename, archive, restore, start, and report lifecycle
-operations. Use an account with the required access or ask a repository owner to
-grant it.
+required for create, update, rename, archive, restore, invoke, start, and report
+lifecycle operations. `invoke_planner` additionally needs a Planner owner or the
+caller's live browser login, as described above. Use an account with the required access or ask a repository
+owner to grant it.
 
 Use the optional
 [creating-chopin-plans skill](../skills/creating-chopin-plans/SKILL.md) to turn a
