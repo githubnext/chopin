@@ -20,11 +20,11 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { CheckIcon, ClockIcon, CloseIcon, DecisionIcon } from "@chopin/icons";
+import { CheckIcon, ClockIcon, CloseIcon, DecisionIcon, MessageForwardIcon } from "@chopin/icons";
+import { ResolvedActions } from "@chopin/question/react";
 import { useCellValue } from "@mdxeditor/gurx";
 
 import { currentDecision, releaseDecision, subscribeDecision } from "./decision-pin";
-import { DecisionDialogContent, DecisionSummary } from "./decision-surface";
 import { useResolvedActions } from "./resolved-actions";
 import { decisionHostVisible } from "./decision-placement";
 import { when } from "./card";
@@ -51,7 +51,6 @@ import { widgets$ } from "./widget-options";
 
 import type { CSSProperties, ReactNode } from "react";
 import type { Rect } from "./comment-geometry";
-import type { Questionnaire } from "@chopin/dialect";
 import type { Question } from "@chopin/protocol";
 import type { MarkerPlace, PointerAction } from "./resolved";
 import type { PassageHit } from "./comment-hits";
@@ -70,7 +69,6 @@ type Decision = {
 	at?: string;
 	keys: string[];
 	meta?: Question.CardMeta;
-	value: Questionnaire;
 };
 
 type Placed = {
@@ -138,15 +136,33 @@ type PopoverValue = {
 };
 
 function Popover(
-	{ close, value }: { close: () => void; value: PopoverValue },
+	{ actions, close, onSource, value }: {
+		actions?: ReactNode;
+		close: () => void;
+		onSource?: () => void;
+		value: PopoverValue;
+	},
 ) {
 	let { decision, pinned } = value;
 	let others = decision.others ?? [];
+	let discussion =
+		decision.meta?.involved.filter(handle => handle.toLowerCase() !== decision.by?.toLowerCase())
+			?? [];
 	return (
 		<>
 			<div className="plan-decision-head">
 				<p className="plan-decision-question">{decision.prompt}</p>
 				<span className="plan-decision-tools" inert={!pinned}>
+					{onSource && (
+						<button
+							aria-label="Show source in chat"
+							className="btn btn-icon btn-ghost"
+							onClick={onSource}
+							type="button"
+						>
+							<MessageForwardIcon aria-hidden="true" />
+						</button>
+					)}
 					<button
 						aria-label="Close"
 						className="btn btn-icon btn-ghost"
@@ -179,7 +195,10 @@ function Popover(
 					{decision.by && (
 						<p>
 							<Face handle={decision.by} size={18} titled={false} />
-							<strong>{decision.by}</strong>
+							<span>
+								<strong>{decision.by}</strong>
+								{discussion.length > 0 && `, with ${discussion.join(", ")}`}
+							</span>
 						</p>
 					)}
 					{decision.at && when(decision.at) && (
@@ -190,6 +209,7 @@ function Popover(
 					)}
 				</div>
 			)}
+			{pinned && actions}
 		</>
 	);
 }
@@ -254,13 +274,11 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 		emptyMeta,
 	);
 	let [editable, setEditable] = useState(editor.isEditable());
-	let [confirming, setConfirming] = useState<string>();
 	let act = useCallback((action: PointerAction) => {
 		let next = ownedPoint(owner.current, pointerRef.current, action);
 		pointerRef.current = next;
 		if (action.type === "pin" || action.type === "toggle" || action.type === "dismiss") {
 			intent.current++;
-			setConfirming(undefined);
 		}
 		dispatch(action);
 	}, []);
@@ -295,11 +313,12 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 					prompt: question.prompt,
 					answer: question.answer,
 					others: unchosen(question),
-					by: entry.value.by,
-					at: entry.value.at,
+					by: card?.owner ?? entry.value.by,
+					at: card?.decidedAt !== undefined
+						? new Date(card.decidedAt * 1_000).toISOString()
+						: entry.value.at,
 					keys,
 					meta: card,
-					value: { ...entry.value, questions: [question] },
 				});
 			}
 		}
@@ -624,29 +643,36 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 				onMeasure={setHeight}
 				render={current => {
 					let decision = current.decision;
-					if (!decision.meta) return <Popover close={dismiss} value={current} />;
-					if (!current.pinned) {
-						return <DecisionSummary meta={decision.meta} value={decision.value} />;
-					}
+					let error = actions.error?.key === decision.key ? actions.error.message : undefined;
+					let pending = actions.pending?.key === decision.key ? actions.pending.kind : undefined;
 					return (
-						<DecisionDialogContent
-							confirming={confirming === decision.key}
-							editable={options.canEdit !== false && options.connected === true && editable
-								&& !!options.wire}
-							error={actions.error?.key === decision.key ? actions.error.message : undefined}
-							meta={decision.meta}
-							onClose={dismiss}
-							onDiscard={() =>
-								confirming === decision.key
-									? actions.request("discard", decision)
-									: setConfirming(decision.key)}
-							onKeep={() => setConfirming(undefined)}
-							onReopen={() => actions.request("reopen", decision)}
-							onSource={options.onCardSource
+						<Popover
+							close={dismiss}
+							onSource={decision.meta?.thread && options.onCardSource
 								? () => options.onCardSource?.(decision.widget)
 								: undefined}
-							pending={actions.pending?.key === decision.key ? actions.pending.kind : undefined}
-							value={decision.value}
+							value={current}
+							actions={decision.meta && (
+								<>
+									{error && (
+										<p className="mt-2 text-sm text-destructive-ink" role="alert">{error}</p>
+									)}
+									{pending && (
+										<p className="mt-2 text-sm text-text-tertiary" role="status">
+											{pending === "discard" ? "Discarding…" : "Reopening…"}
+										</p>
+									)}
+									<ResolvedActions
+										className="mt-3 flex flex-wrap items-center justify-end gap-2"
+										disabled={options.canEdit === false || options.connected !== true
+											|| !editable || !options.wire}
+										key={`${decision.key}:${intent.current}`}
+										onDiscard={() => actions.request("discard", decision)}
+										onReopen={() => actions.request("reopen", decision)}
+										submitting={!!pending}
+									/>
+								</>
+							)}
 						/>
 					);
 				}}

@@ -75,7 +75,7 @@ test("actual reader confirmation Keep makes no request and held discard remains 
 	expect(await page.evaluate(() => window.collapseFixture.requests)).toEqual([]);
 	await dialog(page).getByRole("button", { name: "Discard", exact: true }).click();
 	await dialog(page).getByRole("button", { name: "Discard decision", exact: true }).click();
-	await expect(dialog(page).getByRole("button", { name: "Discard decision", exact: true }))
+	await expect(dialog(page).getByRole("button", { name: "Discarding…", exact: true }))
 		.toBeDisabled();
 	expect(await page.evaluate(() => window.collapseFixture.requests)).toEqual([{
 		kind: "question:discard",

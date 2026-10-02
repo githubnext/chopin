@@ -19,7 +19,14 @@ test("real paragraph hover previews its anchored decision and Escape suppresses 
 	await prose.hover();
 	await expect(tooltip(page)).toBeVisible();
 	await expect(tooltip(page)).toContainText("Auth0");
-	await expect(tooltip(page).locator('[data-chosen="true"]')).toContainText("GitHub Apps");
+	await expect(tooltip(page).locator(".plan-decision-answer > span").first()).toHaveText(
+		"GitHub Apps",
+	);
+	await expect.poll(async () =>
+		(await tooltip(page).locator(".plan-decision-fold").boundingBox())!.height
+	).toBeLessThan(1);
+	await expect(tooltip(page).locator(".plan-decision-tools")).toHaveCSS("opacity", "0");
+	await expect(tooltip(page).locator(".plan-decision-tools")).toHaveAttribute("inert", "");
 	await page.keyboard.press("Escape");
 	await expect(tooltip(page)).toHaveCount(0);
 	await page.waitForTimeout(180);
@@ -28,6 +35,29 @@ test("real paragraph hover previews its anchored decision and Escape suppresses 
 	await prose.hover();
 	await expect(tooltip(page)).toBeVisible();
 	expect(errors).toEqual([]);
+});
+
+test("pinning the main reader expands rejected options and Jev controls in the same surface", async ({ page }) => {
+	await loadReader(page, false);
+	await marker(page).hover();
+	await expect(tooltip(page)).toBeVisible();
+	await expect.poll(async () =>
+		(await tooltip(page).locator(".plan-decision-fold").boundingBox())!.height
+	).toBeLessThan(1);
+	await marker(page).click();
+	await expect(dialog(page).getByText("Auth0", { exact: true })).toBeVisible();
+	await expect(dialog(page).locator(".plan-decision-answer > span").first()).toHaveText(
+		"GitHub Apps",
+	);
+	await expect(dialog(page).getByText("ana", { exact: true })).toBeVisible();
+	await expect(dialog(page).getByRole("button", { name: "Show source in chat", exact: true }))
+		.toBeVisible();
+	await dialog(page).getByRole("button", { name: "Discard", exact: true }).click();
+	await expect(dialog(page).getByText("Discard this decision?", { exact: true })).toBeVisible();
+	await expect(dialog(page).getByRole("button", { name: "Reopen", exact: true })).toHaveCount(0);
+	await dialog(page).getByRole("button", { name: "Keep it", exact: true }).click();
+	await expect(dialog(page).getByRole("button", { name: "Reopen", exact: true })).toBeEnabled();
+	expect(await page.evaluate(() => window.decisionReaderFixture.requests)).toEqual([]);
 });
 
 test("native marker keyboard pin focuses Close and Escape restores the same marker", async ({ page }) => {
@@ -124,8 +154,9 @@ test("actual mutation is duplicate-fenced and rejected old intent cannot paint a
 	await loadReader(page, false);
 	await marker(page).click();
 	await dialog(page).getByRole("button", { name: "Reopen", exact: true }).click();
-	await expect(dialog(page).getByRole("button", { name: "Reopen", exact: true })).toBeDisabled();
-	await dialog(page).getByRole("button", { name: "Reopen", exact: true }).evaluate(element =>
+	await expect(dialog(page).getByRole("button", { name: "Reopening…", exact: true }))
+		.toBeDisabled();
+	await dialog(page).getByRole("button", { name: "Reopening…", exact: true }).evaluate(element =>
 		(element as HTMLButtonElement).click()
 	);
 	expect(await page.evaluate(() => window.decisionReaderFixture.requests)).toEqual([{

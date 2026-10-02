@@ -168,12 +168,11 @@ test("hovering the marker washes the prose and previews the decision", async ({ 
 	await expect(preview).toContainText("How should we roll this out?");
 	await expect(preview).toContainText("Team by team");
 	await expect(preview.getByRole("img", { name: "ana", exact: true })).toBeVisible();
-	await expect(
-		preview.getByRole("listitem").filter({ hasText: "Team by team" })
-			.getByRole("img", { name: "Chosen", exact: true }),
-	).toBeVisible();
-	await expect(preview.getByText("All at once", { exact: true })).toBeVisible();
-	await expect(preview.getByText("Phased over a quarter", { exact: true })).toBeVisible();
+	await expect(preview.locator(".plan-decision-answer > span").first()).toHaveText("Team by team");
+	await expect.poll(async () =>
+		(await preview.locator(".plan-decision-fold").boundingBox())!.height
+	)
+		.toBeLessThan(1);
 	await expect.poll(() => washed(page)).toBeGreaterThan(0);
 
 	await page.mouse.move(5, 5);
