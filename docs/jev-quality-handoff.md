@@ -1,78 +1,78 @@
 # Jev feature quality handoff
 
-## Starting point
+Branch: `Maggie/jev-chat-product`. Reviewed application and test revision:
+`b7b79ef00c2ffe1fe1ea84a9eb7fdcc034d099e6`. The final handoff commit changes
+only documentation.
 
-Review and improve `Maggie/jev-chat-product` for a co-worker to continue safely.
-The last application-source commit is
-`a423b0b3ddda8877114f4a42adb6d54462b0635b`.
-The handoff adds this document only; it does not change application behavior.
+The review integrated main at `bae7818597895841b0adbe9c023c0a57194af96e`
+through merge `d22862a6`, then audited the complete feature by subsystem with
+independent re-review. [The review ledger](jev-quality-review.md) records ownership
+and confirmed fixes. The extraction ledger and source inventory remain historical
+references.
 
-Fetched origin/main on 2 October 2026:
-`bae7818597895841b0adbe9c023c0a57194af96e`.
-It contains three commits after the branch's incorporated main
-`f75d6d693e896c8689835cb835e925d3b5ef5a17`. Integrate current main, inspect its
-interaction with the feature, and rerun verification before final handoff.
+## Result
 
-## What is here
+The branch retains the conversation/decisions workflow: sourced interpretation,
+shared card drafts and choices, explicit Save, scoped Planner work, decided prose,
+and consent-based research children. The review fixed stance targeting after
+refinement, staged card mutations, bounded execution context and event capacity,
+unsupported child research offers, missing live prose-anchor forwarding, and
+pending option cancellation/focus handling. Unmounted historical UI was removed.
 
-This is a conversation/decisions workflow, not just the Jev HTTP client.
-It includes interpretation policy, message evidence and correction, durable
-conversation effects, decision records/projections, scoped Planner jobs/tools,
-research consent/offers, and integration with the current interface.
-Conversation processing is opt-in; some shared editor fixes are outside its flag.
+Retained browser scenarios now exercise the mounted interface and actual keyed
+option protocol. Duplicate research tests were consolidated without dropping
+publication, retry, cancellation, or reconnect coverage.
 
-The final diff against incorporated main at the application-source SHA had
-847 changed files, 96,485 added lines and 2,216 removed lines:
+## Fresh verification on 2 October 2026
 
-| Purpose                                           |  Added | Removed |
-| ------------------------------------------------- | -----: | ------: |
-| Application source, including retained source     | 26,202 |   1,923 |
-| Tests, fixtures, memory adapters and test runners | 67,003 |     224 |
-| Documentation/source inventory                    |  3,150 |      22 |
-| Project and reviewed design configuration         |    130 |      47 |
+| Check                                     | Result                                              |
+| ----------------------------------------- | --------------------------------------------------- |
+| Unit/domain suite                         | 3,539 passed; 3 PostgreSQL guards skipped; 0 failed |
+| Real PostgreSQL contracts/lifecycle       | 72 passed; 0 skipped; 0 failed                      |
+| Complete application Chromium suite       | 327 passed; 0 retries                               |
+| Contained Planner/research Chromium suite | 76 passed; 0 retries                                |
+| Actual-component Chromium contracts       | 98 passed; 0 retries                                |
+| Workspace and E2E types; repository CI    | Passed                                              |
+| Exact-revision image and client build     | Passed                                              |
 
-Application net growth was 24,279 lines. Gross additions include code extracted
-from existing main modules. The memory adapter, scripted runner and storage
-contract composers are test support despite their source paths. No generated
-bundle, screenshot corpus or evaluation dataset accounts for this diff.
+The PostgreSQL suite includes three fresh processes proving accepted document,
+conversation, and receipts survive; a running job becomes durably interrupted
+once. Browser coverage includes successful heading/refine/prose work, actual
+inference process restart, two/three-member collaboration, evidence, native
+cut/paste anchors, option acknowledgement races, and research recovery.
 
-One concrete cleanup candidate is the unmounted historical
-`packages/editor/src/decision-layer.tsx` (458 additions). Verify import reachability
-and preservation requirements before removing it; shared ResolvedLayer helpers
-are active. The 2,818-line extraction ledger is historical evidence, not a concise
-current onboarding guide.
+The final image is `chopin-jev-quality:66fa`, digest
+`sha256:7f57949a757ec8983beb80aee447812819887d5d93c5499e8943b4a3b21dac31`.
+The contained report is in
+`e2e/test-results/conversation-plan/a879404db95f8b9c0d528641167dc746/`.
+Its attestations confirm the source/build stamp, denied egress, successful CLI,
+no remaining worker/listeners, preserved artifacts, and both owned containers
+removed. Application/component logs and results are retained locally under
+`/private/tmp/jev-*-v3*`; unit evidence is `/private/tmp/jev-browser-fixed-unit.log`.
+CI retains four existing lint warnings and one design baseline finding.
 
-## Historical verification, not a fresh release claim
+To repeat checks, use `bun test --timeout 30000`, `bun run types`, `bun run ci`,
+and a disposable database with `TEST_DATABASE_URL` supplied to
+`bun test apps/server/src/storage/postgres`. Run the full application suite with
+`bun run e2e --workers=2 --retries=0`; run component contracts through
+`bun --bun node_modules/@playwright/test/cli.js test --config e2e/source/playwright.config.ts`.
+For contained checks, build `e2e/conversation-plan.Dockerfile` with
+`CHOPIN_SOURCE_COMMIT` set to the current full commit, then run
+`bun scripts/conversation-plan.ts --image <local-tag> --postgres-image postgres:17`.
 
-At the application-source SHA on 1 October:
+## Remaining limits
 
-- Offline suite: 3,512 passes, 2 guarded PostgreSQL skips, 0 failures.
-- Workspace/E2E types, repository CI and an exact-commit image/client build passed.
-- Real-component Chromium suite: 97 passes.
-- One unchanged PostgreSQL-backed authenticated reader-denial case passed.
+- Paid-provider semantic quality remains unverified. Deterministic model fixtures
+  exercise real authorization, storage, sockets, and Planner execution.
+- Multi-step refinement may retain earlier durable tool writes after interruption;
+  explicit retry is required. The entire semantic edit is not an atomic batch.
+- Capacity reservations prevent new oversubscription; they do not repair legacy
+  persisted histories already oversubscribed by pending actions.
+- Main advanced during this review to `3e57e40ea6da4920d8a6f8a8ee645ff6abadc898`
+  with Atomic harness and Chat mention changes. Integrate those newer commits and
+  recheck their interaction before merging this branch.
 
-The last case proves denial to a reader, not successful heading/refine/prose work.
-Its original callback SHA256 was
-`f94089afd213441d03be97eeba2340968ca5f80a80d03d942b8f017be7cc688a`.
-Paid-provider quality, successful end-to-end Planner effect execution,
-PostgreSQL process-restart reconstruction and the full release/browser matrix
-remain open. Execute fresh checks at the final review SHA, including real storage
-contracts; skipped suites do not count as verification.
-
-## Review entry points
-
-Read [architecture](architecture.md), [storage](storage.md),
-[hosted Planner](hosted-agent.md), [background jobs](background-jobs.md),
-[authentication](authentication.md) and the repository AGENTS.md before changes.
-Use [the extraction ledger](jev-product-extraction.md) and
-[owned-source inventory](jev-product-source-map.tsv) when checking intended scope
-and retained scenario coverage. Consult the
-[implementation lifecycle](implementation-lifecycle.md) when reviewing tasks and
-run claims.
-
-Review by subsystem, with explicit worker ownership and independent re-review.
-Prioritize persistence before publication, fenced/idempotent effects, restart and
-interruption semantics, authorization and tool boundaries, bounded queues/context,
-state-machine clarity, and current browser/editor behavior. Preserve useful tests
-and their assertions while simplifying unnecessary production or test scaffolding.
-Keep fixes small, verifiable and committed; leave an accurate list of open limits.
+Start follow-up work with [architecture](architecture.md), [storage](storage.md),
+[hosted Planner](hosted-agent.md), [background jobs](background-jobs.md), and
+[authentication](authentication.md). Keep fixes small and preserve the recorded
+behavioral checks.

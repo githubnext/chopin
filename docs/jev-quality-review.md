@@ -33,11 +33,19 @@ in `/private/tmp/jev-quality-coverage.tsv` and `/private/tmp/jev-*-audit.md`.
   and collaborative stress scenarios instead of one reader-denial case.
 - Added real PostgreSQL reconstruction across fresh processes: accepted document,
   conversation and receipts survive; a running job becomes durably interrupted once.
-
 - Job contexts are pruned by reachable live and committed work, preserving
   in-flight acceptance and winning Save claimants.
 - The 12-thread window selects recently touched live decisions without changing
   small-context order or model confidence thresholds.
 - Pending card actions reserve event slots before authority commits; exhaustion
-  leaves drafts available and returns an explicit failure. Final check results and remaining limits belong
-  in [the co-worker handoff](jev-quality-handoff.md).
+  leaves drafts available and returns an explicit failure.
+- Forwarded live decided-prose anchors into the editor's questionnaire store;
+  written prose now receives its marker and hover relationship.
+- Pending option requests retain an Escape-capable field. Late responses preserve
+  cancellation and the user's current focus, including a reopened composer.
+- Consolidated duplicate research fixtures while retaining publication, retry,
+  cancellation, and reconnect coverage. Updated retained browser assertions to
+  the mounted interface, keyed option protocol, and native text geometry.
+
+Final check results and remaining limits belong in
+[the co-worker handoff](jev-quality-handoff.md).
