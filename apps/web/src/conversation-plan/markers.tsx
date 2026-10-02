@@ -59,12 +59,6 @@ export function MessageMarkers(
 		?? (links.length > 0 ? "applied" : jobsOnly ? "Planner jobs" : "unlinked");
 	let hasDiagnostics = !!analysis || links.length > 0 || jobs.length > 0;
 	let visible = pinned && hasDiagnostics;
-	let reviewableCount = analysis && ["applied", "unlinked"].includes(analysis.status)
-		? analysis.outcomes?.filter(outcome =>
-			["review", "ignored"].includes(outcome.status)
-			&& !links.some(link => link.source.start === outcome.start && link.source.end === outcome.end)
-		).length ?? 0
-		: 0;
 	let requestPanelFocus = () => setFocusPanelRequest(request => request + 1);
 	let closeAnalysis = (returnFocus = false) => {
 		setFocusPanelRequest(0);
@@ -222,35 +216,7 @@ export function MessageMarkers(
 	if (state && links.length === 0 && !analysis && jobs.length === 0) return null;
 
 	return (
-		<div
-			className="mt-1 flex flex-wrap gap-1 text-sm"
-			data-message-markers={messageId}
-		>
-			{links.slice(0, 3).map(link => (
-				<button
-					aria-label={`${link.label}: show card for “${link.source.quote}”`}
-					className="rounded-full bg-inset px-2 py-0.5 text-xs text-text-secondary hover:bg-hover"
-					data-card-link={link.itemId}
-					data-card-thread={link.threadId}
-					key={`${link.itemId}-${link.source.start}-${link.source.end}`}
-					onClick={() => onCard(link)}
-					title={link.source.quote}
-					type="button"
-				>
-					{link.label}
-				</button>
-			))}
-			{reviewableCount > 0 && (
-				<button
-					aria-controls={visible ? popoverId : undefined}
-					aria-expanded={visible}
-					className="rounded-full bg-inset px-2 py-0.5 text-xs text-text-secondary hover:bg-hover"
-					onClick={openAnalysis}
-					type="button"
-				>
-					Review {reviewableCount} excerpt{reviewableCount === 1 ? "" : "s"}
-				</button>
-			)}
+		<div data-message-markers={messageId}>
 			{hasDiagnostics && (
 				<button
 					aria-controls={visible ? popoverId : undefined}
@@ -320,6 +286,31 @@ export function MessageMarkers(
 											Close
 										</button>
 									</div>
+									{links.length > 0 && (
+										<div
+											aria-label="Linked decisions"
+											className="mt-2 flex flex-wrap gap-1"
+											role="group"
+										>
+											{links.slice(0, 3).map(link => (
+												<button
+													aria-label={`${link.label}: show card for “${link.source.quote}”`}
+													className="rounded-full bg-inset px-2 py-0.5 text-xs text-text-secondary hover:bg-hover"
+													data-card-link={link.itemId}
+													data-card-thread={link.threadId}
+													key={`${link.itemId}-${link.source.start}-${link.source.end}`}
+													onClick={() => {
+														closeAnalysis();
+														onCard(link);
+													}}
+													title={link.source.quote}
+													type="button"
+												>
+													{link.label}
+												</button>
+											))}
+										</div>
+									)}
 									<AnalysisOverview
 										analysis={analysis}
 										canEdit={canEdit}

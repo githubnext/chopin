@@ -15,6 +15,7 @@ export default defineConfig({
 		"conversation-announcements.native.ts",
 		"analysis-host.native.ts",
 		"diagnostic-controls.native.ts",
+		"analysis-host-linked.native.ts",
 		"analysis-host-retries.native.ts",
 		"decision-reader.native.ts",
 		"collapse-deletion.native.ts",

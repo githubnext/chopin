@@ -180,12 +180,18 @@ test("unlinked analysis remains accessible without a status label", () => {
 	expect(html).not.toContain('class="block size-1.5 rounded-full');
 });
 
-test("message markers render at most three accepted card links", () => {
-	let html = markup(state(4, "applied"));
+test("linked and reviewable messages have no inline Jev controls", () => {
+	let current = state(4, "applied");
+	current.analysis[0]!.outcomes = [{
+		start: 0,
+		end: 1,
+		status: "review",
+		gate: "target needs review",
+		eventIds: [],
+	}];
+	let html = markup(current);
 
-	expect(html.match(/data-card-link=/g)).toHaveLength(3);
-	expect(html).toContain('data-card-link="link-1"');
-	expect(html).toContain('data-card-link="link-3"');
-	expect(html).not.toContain('data-card-link="link-4"');
+	expect(html).not.toContain("data-card-link=");
+	expect(html).not.toContain("Review 1 excerpt");
 	expect(html).toContain('aria-label="Analysis for message: applied"');
 });

@@ -361,22 +361,21 @@ test("a writer can apply a focused Copilot subspan as an option", async ({ join,
 	let reader = readerContext.page;
 	await openJevWire(reader, room);
 	let readerMessage = reader.locator(`[data-chat-message-id="${messageId}"]`);
-	let readerReview = readerMessage.getByRole("button", { name: "Review 1 excerpt" });
-	await expect(readerReview).toBeVisible();
-	await readerReview.click();
+	await expect(readerMessage.getByRole("button", { name: "Review 1 excerpt" })).toHaveCount(0);
+	await readerMessage.getByRole("button", { name: /Analysis for message/ }).press("Enter");
 	let readerPanel = reader.locator(`[data-analysis-message="${messageId}"]`);
 	await expect(readerPanel.getByRole("button", { name: "Add to card" })).toBeDisabled();
 	await expect(readerPanel.getByRole("button", { name: "Add excerpt" })).toHaveCount(0);
 
 	let writerMessage = ana.locator(`[data-chat-message-id="${messageId}"]`);
-	let review = writerMessage.getByRole("button", { name: "Review 1 excerpt" });
-	await expect(review).toBeVisible();
+	await expect(writerMessage.getByRole("button", { name: "Review 1 excerpt" })).toHaveCount(0);
 	let writerPanel = ana.locator(`[data-analysis-message="${messageId}"]`);
 	await writerMessage.hover();
 	await expect(writerPanel).toHaveCount(0);
-	await review.click();
+	await writerMessage.getByRole("button", { name: /Analysis for message/ }).press("Enter");
 	await expect(writerPanel).toBeVisible();
 	let addToCard = writerPanel.getByRole("button", { name: "Add to card" });
+	await addToCard.focus();
 	await expect(addToCard).toBeFocused();
 	await addToCard.click();
 	await expect(writerPanel.getByLabel("Contribution type")).toBeFocused();

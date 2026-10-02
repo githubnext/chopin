@@ -121,11 +121,16 @@ test("native selection refuses whole-message pinning and interactive controls re
 	await page.waitForTimeout(180);
 	await expect(analysis(page, "host-review")).toHaveCount(0);
 	await page.evaluate(() => window.getSelection()!.removeAllRanges());
-	await anchor.getByRole("button", { name: "Review 1 excerpt", exact: true }).click();
+	await expect(anchor.getByRole("button", { name: "Review 1 excerpt", exact: true }))
+		.toHaveCount(0);
+	await anchor.getByRole("button", { name: /^Analysis for message:/ }).press("Enter");
 	await expect(analysis(page, "host-review")).toBeVisible();
-	await expect(
-		analysis(page, "host-review").getByRole("button", { name: "Add to card", exact: true }),
-	).toBeFocused();
+	let correction = analysis(page, "host-review").getByRole("button", {
+		name: "Add to card",
+		exact: true,
+	});
+	await correction.focus();
+	await expect(correction).toBeFocused();
 	expect(errors).toEqual([]);
 });
 

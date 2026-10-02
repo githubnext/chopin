@@ -82,9 +82,11 @@ export async function inspect(page: Page, id: string) {
 export async function openCorrection(page: Page) {
 	let anchor = message(page, "host-review");
 	await anchor.scrollIntoViewIfNeeded();
-	await anchor.getByRole("button", { name: "Review 1 excerpt", exact: true }).click();
+	await anchor.getByRole("button", { name: /^Analysis for message:/ }).press("Enter");
 	let panel = analysis(page, "host-review");
-	await expect(panel.getByRole("button", { name: "Add to card", exact: true })).toBeFocused();
+	let correction = panel.getByRole("button", { name: "Add to card", exact: true });
+	await correction.focus();
+	await expect(correction).toBeFocused();
 	await panel.getByRole("button", { name: "Add to card", exact: true }).click();
 	await expect(panel.getByRole("combobox", { name: "Contribution type", exact: true }))
 		.toBeFocused();

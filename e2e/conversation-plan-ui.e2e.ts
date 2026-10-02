@@ -161,10 +161,16 @@ test("a chat question becomes an inline decision card", async ({ join, room }) =
 	await expect(card.locator("fieldset")).toHaveCount(1);
 	await expect(card.getByRole("list")).toHaveCount(0);
 	await expect(page.locator(`[data-chat-message-id="${questionMessage}"] [data-message-markers]`))
-		.toBeVisible();
+		.toBeAttached();
 	let compound = page.locator(`[data-chat-message-id="${compoundMessage}"]`);
-	await expect(compound.locator(`[data-card-link="${option.id}"]`)).toHaveText("Proposal");
-	await compound.locator(`[data-card-link="${option.id}"]`).click();
+	await expect(compound.locator(`[data-card-link="${option.id}"]`)).toHaveCount(0);
+	let inspect = compound.getByRole("button", { name: /Analysis for message/ });
+	await inspect.press("Enter");
+	let analysis = page.getByLabel("Message analysis");
+	let cardLink = analysis.locator(`[data-card-link="${option.id}"]`);
+	await expect(cardLink).toHaveText("Proposal");
+	await cardLink.click();
+	await expect(analysis).toHaveCount(0);
 	await expect(card).toBeFocused();
 	await card.getByRole("button", { name: "Show source in chat" }).click();
 	await expect(page.locator(`[data-chat-message-id="${questionMessage}"]`))
@@ -173,9 +179,7 @@ test("a chat question becomes an inline decision card", async ({ join, room }) =
 		true,
 	);
 
-	let inspect = compound.getByRole("button", { name: /Analysis for message/ });
 	await inspect.focus();
-	let analysis = page.getByLabel("Message analysis");
 	await expect(analysis).toHaveCount(0);
 	await inspect.press("Enter");
 	await expect(analysis).toContainText("findings applied");
@@ -189,6 +193,15 @@ test("a chat question becomes an inline decision card", async ({ join, room }) =
 	await page.keyboard.press("Escape");
 	await expect(analysis).toHaveCount(0);
 	await expect(inspect).toBeFocused();
+	await inspect.press("Enter");
+	let close = analysis.getByRole("button", { name: "Close analysis" });
+	await close.focus();
+	await close.press("Tab");
+	let keyboardCardLink = analysis.locator(`[data-card-link="${option.id}"]`);
+	await expect(keyboardCardLink).toBeFocused();
+	await keyboardCardLink.press("Enter");
+	await expect(analysis).toHaveCount(0);
+	await expect(card).toBeFocused();
 	let unlinkedMessage = await sendChat(page, "Maybe that?");
 	await expect.poll(async () =>
 		(await wireState(page))?.analysis.find(item => item.messageId === unlinkedMessage)?.status
