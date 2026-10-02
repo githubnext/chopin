@@ -34,7 +34,7 @@ import type {
 export type Pane = "chat";
 
 const CHAT_PANE = {
-	initial: 304,
+	initial: 364,
 	max: 400,
 	min: 304,
 	storageKey: "chopin:pane:chat",
