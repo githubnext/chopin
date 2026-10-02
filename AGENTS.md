@@ -139,13 +139,12 @@ replayed automatically because it may already have made durable tool changes.
 
 ## Questions, comments, and anchors
 
-Question submission currently claims the shared draft with `claimSubmit()`,
-projects the answer and authoritative record inside the room lock, calls
-`Store.stage()`, persists the document or sidecar, and invokes the returned
-finalizer. `stage()` removes the open draft before persistence, and the failure
-path does not restore it after a storage error. Treat this as a known durability
-gap: a proper two-phase refactor must retain or restore the draft until the
-fenced commit succeeds.
+Question submission claims the shared draft with `claimSubmit()`, then stages
+the document, authoritative record, and copied question maps inside the room
+lock. Publish the candidate only after its fenced commit and invoke the returned
+`Store.stage()` finalizer afterward. A failed commit releases the claim and keeps
+the accepted draft available for retry. Planner asks and cancellation follow the
+same persistence-before-publication ordering.
 
 A decision's definition is frozen except for appended options. Any writer may
 send `question:option` to add one while the question is open (at most 10 options,
