@@ -28,16 +28,18 @@ test("Resume appears only for a verified unresolved link and linked work hides s
 		get: () => undefined,
 		retain: () => () => {},
 	} as unknown as ResearchRequestStore;
-	let render = (link?: OfferLinkView) =>
+	let render = (link?: OfferLinkView, canAct = true) =>
 		renderToStaticMarkup(createElement(ResearchOfferCard, {
 			offer,
 			controls: {
 				links: link ? { [offer.id]: link } : {},
 				busy: new Set<string>(),
 				errors: { [offer.id]: "Old Resume error" },
-				canAct: true,
+				canAct,
+				canCheckLink: true,
 				store,
 				onAction: () => {},
+				onRetryLink: () => {},
 			},
 		}));
 	for (let link of [undefined, { status: "checking" }, { status: "error" }] as const) {
@@ -52,6 +54,11 @@ test("Resume appears only for a verified unresolved link and linked work hides s
 	let linked = render({ status: "linked", researchRequestId: "request-1" });
 	expect(linked).not.toContain(">Resume</button>");
 	expect(linked).not.toContain("Old Resume error");
+
+	let failedViewer = render({ status: "error", exhausted: true }, false);
+	expect(failedViewer).toContain(">Retry link check</button>");
+	expect(failedViewer).not.toContain(">Resume</button>");
+	expect(render({ status: "error" }, false)).not.toContain(">Retry link check</button>");
 });
 
 test("a deferred Resume failure cannot create an error after the link becomes linked", async () => {

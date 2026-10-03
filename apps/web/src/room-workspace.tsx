@@ -722,8 +722,10 @@ export function RoomWorkspace(
 								busy: researchBusy,
 								errors: researchErrors,
 								canAct: status === "connected" && !!wire?.connected && !!workspaceCanEdit,
+								canCheckLink: status === "connected" && !!wire?.connected,
 								store: research,
 								onAction: actOnResearchOffer,
+								onRetryLink: offerId => researchLinks.refresh(offerId, true),
 							}
 							: undefined}
 						decisions={{

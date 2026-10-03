@@ -18,8 +18,10 @@ export type ResearchOfferControls = {
 	busy: ReadonlySet<string>;
 	errors: Readonly<Record<string, string>>;
 	canAct: boolean;
+	canCheckLink: boolean;
 	store: ResearchRequestStore;
 	onAction: (offerId: string, choice: "research" | "dismiss" | "resume") => void;
+	onRetryLink: (offerId: string) => void;
 };
 
 export function shouldShowResearchActionError(
@@ -88,7 +90,12 @@ export class ResearchOfferLinkObserver {
 	refresh(id: string, restart = false): void {
 		let tracker = this.#trackers.get(id);
 		if (!tracker) return;
-		if (restart) tracker.retries = 0;
+		if (restart && tracker.status !== "linked") {
+			tracker.retries = 0;
+			tracker.status = "checking";
+			this.#links[id] = { status: "checking" };
+			this.#publish();
+		}
 		this.#read(id);
 	}
 
@@ -232,6 +239,7 @@ export function ResearchOfferCard(
 	let busy = controls.busy.has(offer.id);
 	let link = controls.links[offer.id];
 	let canResume = link?.status === "pending" || link?.status === "unlinked";
+	let canRetryLink = link?.status === "error" && link.exhausted && controls.canCheckLink;
 	return (
 		<div
 			aria-label="Research suggestion"
@@ -286,6 +294,15 @@ export function ResearchOfferCard(
 								type="button"
 							>
 								Resume
+							</button>
+						)}
+						{canRetryLink && (
+							<button
+								className="btn btn-sm btn-secondary"
+								onClick={() => controls.onRetryLink(offer.id)}
+								type="button"
+							>
+								Retry link check
 							</button>
 						)}
 					</div>

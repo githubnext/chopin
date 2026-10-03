@@ -52,8 +52,10 @@ test("the exact public brief appears under its source message and viewer control
 				busy: new Set<string>(),
 				errors: {},
 				canAct,
+				canCheckLink: true,
 				store: {} as ResearchRequestStore,
 				onAction: () => {},
+				onRetryLink: () => {},
 			},
 		}));
 	let writer = render(true);

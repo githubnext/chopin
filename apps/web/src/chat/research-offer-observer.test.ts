@@ -63,6 +63,34 @@ describe("accepted research offer link observer", () => {
 		f.observer.dispose();
 	});
 
+	test("a reader can retry an exhausted link check without restarting research", async () => {
+		let f = fixture();
+		f.observer.accept(new Set(["offer-1"]));
+		for (let ms of [2_000, 5_000, 10_000]) {
+			f.replies.at(-1)!.reject(new Error("temporary read failure"));
+			await settle();
+			f.tick(ms);
+		}
+		f.replies.at(-1)!.reject(new Error("temporary read failure"));
+		await settle();
+		expect(f.links["offer-1"]).toEqual({ status: "error", exhausted: true });
+		expect(f.timers.size).toBe(0);
+
+		f.observer.refresh("offer-1", true);
+		expect(f.reads).toHaveLength(5);
+		expect(f.links["offer-1"]).toEqual({ status: "checking" });
+		f.replies.at(-1)!.resolve({
+			kind: "conversation-plan:research-link",
+			offerId: "offer-1",
+			status: "linked",
+			researchRequestId: "request-1",
+			ts: 1,
+		});
+		await settle();
+		expect(f.links["offer-1"]).toEqual({ status: "linked", researchRequestId: "request-1" });
+		f.observer.dispose();
+	});
+
 	test("removed offers and disposal ignore stale replies and cancel timers", async () => {
 		let f = fixture();
 		f.observer.accept(new Set(["offer-1"]));
