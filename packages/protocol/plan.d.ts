@@ -46,6 +46,15 @@ export declare namespace Plan {
 		digest: string;
 		/** Kept rather than guessed at when neither position nor digest resolves. */
 		orphaned?: true;
+		/** A unique disappeared prose block may recover on the next document edit only. */
+		recoverOnNextEdit?: true;
+	};
+
+	/** The editable paragraph a decided card became, kept even when its block is lost. */
+	export type ProseAnchors = {
+		widget: string;
+		anchors: Anchor[];
+		orphaned: boolean;
 	};
 
 	/** Why a relationship is not currently trustworthy. */
@@ -133,6 +142,7 @@ export declare namespace Plan {
 		epoch: string;
 		widgets: WidgetAnchors[];
 		threads: ThreadAnchors[];
+		prose?: ProseAnchors[];
 	};
 
 	/**
@@ -231,6 +241,7 @@ export declare namespace Plan {
 			anchors: WidgetAnchors[];
 			/** Which prose each comment thread marks, on the same terms. */
 			threads: ThreadAnchors[];
+			prose?: ProseAnchors[];
 			limits: Limits;
 		};
 	}

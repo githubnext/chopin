@@ -1,3 +1,6 @@
+import type { ConversationPlan } from "@chopin/protocol";
+import { WRITE_TOOLS } from "../agent/job-scope";
+
 export const PLANNER_TOOL_NAMES = [
 	"read_plan",
 	"read_reference",
@@ -16,3 +19,17 @@ export const PLANNER_TOOL_NAMES = [
 	"list_pull_requests",
 	"pull_request_read",
 ];
+
+function jobNames(own: string): readonly string[] {
+	return Object.freeze([...PLANNER_TOOL_NAMES.filter(name => !WRITE_TOOLS.has(name)), own]);
+}
+
+export const BACKGROUND_TOOL_NAMES: Readonly<Record<ConversationPlan.JobKind, readonly string[]>> =
+	Object.freeze({
+		heading: jobNames("draft_heading"),
+		refine: jobNames("refine_decision"),
+		suggest: jobNames("refine_decision"),
+		prose: jobNames("write_decision_prose"),
+	});
+
+export const HEADING_TOOL_NAMES = BACKGROUND_TOOL_NAMES.heading;

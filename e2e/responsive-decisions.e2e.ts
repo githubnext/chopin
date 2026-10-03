@@ -1,4 +1,4 @@
-import { authenticate, expect, test } from "./room";
+import { authenticate, expect, roomPath, test } from "./room";
 import { storedQuestion } from "../apps/server/src/testing/plan";
 import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 import { installVisualViewport, setVisualViewport } from "./visual-viewport";
@@ -61,6 +61,15 @@ for (let viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }])
 	test(`long independent decisions preserve drafts and focus at ${viewport.width}x${viewport.height}`, async ({ baseURL, browser, room, seed }) => {
 		await seed(LONG_QUESTIONNAIRES, {
 			revision: 1,
+			questions: LONG_QUESTIONS.map((question, index) => ({
+				id: LONG_WIDGETS[index]!,
+				definition: { questions: [question] },
+				status: "open",
+				origin: "planner",
+				history: [],
+				optionOrigins: {},
+				editors: [],
+			})),
 			openQuestions: LONG_QUESTIONS.map((question, index) => {
 				let definition = { questions: [question] };
 				let id = LONG_WIDGETS[index]!;
@@ -86,7 +95,7 @@ for (let viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }])
 			});
 			let page = await context.newPage();
 			await authenticate(page, "ana", baseURL!);
-			await page.goto(`/channels/${room}`);
+			await page.goto(roomPath(room));
 			let card = questionnaire(page).filter({ hasText: LONG_QUESTIONS[0]!.header });
 			await expect(card).toBeVisible();
 			await expect(card.getByRole("textbox", { name: "New option" })).toHaveCount(0);

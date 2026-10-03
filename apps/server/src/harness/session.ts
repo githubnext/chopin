@@ -1,5 +1,6 @@
+import { BACKGROUND_TOOL_NAMES, PLANNER_TOOL_NAMES } from "./tool-names";
 import { createJustBashNetworkSandboxSession } from "@ai-sdk/sandbox-just-bash";
-import { plannerAgent } from "./agents";
+import { headingPlannerAgent, plannerAgent, prosePlannerAgent, refinePlannerAgent } from "./agents";
 import { githubTools, type GitHubToolsError, type Result } from "./github-tools";
 import { registerCredential } from "./harnesses";
 
@@ -26,12 +27,17 @@ type PlannerChannel = {
 };
 
 export type PlannerSession = {
+	/** Snapshot of the selected current static Planner profile. */
+	activeTools?: readonly string[];
 	stream: (prompt: string, abortSignal: AbortSignal) => ReturnType<PlannerAgent["stream"]>;
 	destroy: () => Promise<void>;
 };
 
 export type PlannerSessionDependencies = {
 	agent?: PlannerAgent;
+	headingAgent?: PlannerAgent;
+	refineAgent?: PlannerAgent;
+	proseAgent?: PlannerAgent;
 	githubTools?: typeof githubTools;
 	createSandbox?: () => Promise<Sandbox>;
 	registerCredential?: typeof registerCredential;
@@ -43,6 +49,16 @@ export async function openPlannerSession(
 	channel: PlannerChannel,
 	deps: PlannerSessionDependencies = {},
 ): Promise<Result<PlannerSession, OpenError>> {
+	let job = channel.room.plan.chat?.job;
+	if (job && !Object.hasOwn(BACKGROUND_TOOL_NAMES, job.kind)) {
+		return {
+			ok: false,
+			error: {
+				kind: "Unavailable",
+				cause: new Error(`Background ${job.kind} tools are not available`),
+			},
+		};
+	}
 	try {
 		if (owner.signal.aborted || !await owner.revalidate()) {
 			return {
@@ -73,7 +89,13 @@ export async function openPlannerSession(
 		if (owner.signal.aborted) throw new Error("Planner owner unavailable");
 		let sessionId = crypto.randomUUID();
 		unregister = (deps.registerCredential ?? registerCredential)(sessionId, owner.currentToken);
-		let agent = deps.agent ?? plannerAgent;
+		let agent = deps.agent ?? (job?.kind === "heading"
+			? deps.headingAgent ?? headingPlannerAgent
+			: job?.kind === "refine" || job?.kind === "suggest"
+			? deps.refineAgent ?? refinePlannerAgent
+			: job?.kind === "prose"
+			? deps.proseAgent ?? prosePlannerAgent
+			: plannerAgent);
 		let opening = agent.createSession({ sessionId, sandboxSession: sandbox });
 		let deadline = new Promise<never>((_, reject) => {
 			timeout = setTimeout(
@@ -94,6 +116,9 @@ export async function openPlannerSession(
 		return {
 			ok: true,
 			value: {
+				activeTools: Object.freeze([
+					...(job ? BACKGROUND_TOOL_NAMES[job.kind] : PLANNER_TOOL_NAMES),
+				]),
 				stream: (prompt, abortSignal) =>
 					agent.stream({
 						session: active,

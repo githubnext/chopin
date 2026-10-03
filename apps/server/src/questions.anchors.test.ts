@@ -51,7 +51,7 @@ function stored(anchors?: object) {
 					header: "Cache",
 					question: "How long do we cache?",
 					multiple: false,
-					options: [],
+					options: [{ id: "cache-60", label: "60 seconds", description: "" }],
 				}],
 			},
 			answers: { q1: "60 seconds" },

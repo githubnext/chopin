@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { ulid } from "@chopin/dialect";
+import { $createTextNode, $getRoot, $isParagraphNode } from "lexical";
 import * as Y from "yjs";
 
 import * as Room from "./room";
@@ -55,13 +56,14 @@ describe("hosted plan persistence", () => {
 			Service.source(plan),
 			[],
 		);
-		let mutation = Room.insertDecision(peer, {
-			id: ulid(),
-			quote: "Durable first",
-			by: "octocat",
-			at: "2026-08-13T12:00:00.000Z",
-			notes: [{ by: "octocat", text: "Do not acknowledge early" }],
-		})!;
+		let before = Y.encodeStateVector(peer.doc);
+		peer.editor.update(() => {
+			let paragraph = $getRoot().getFirstChild();
+			if (!$isParagraphNode(paragraph)) throw new Error("seed paragraph is missing");
+			paragraph.append($createTextNode(" Durable first."));
+		}, { discrete: true });
+		await Room.settle();
+		let update = Y.encodeStateAsUpdate(peer.doc, before);
 		let frames: Array<Record<string, unknown>> = [];
 		let ws = {
 			data: { room: context.channel.id, handle: "octocat", client: "client", canEdit: true },
@@ -88,7 +90,7 @@ describe("hosted plan persistence", () => {
 			rid: "request-1",
 			id: "update-1",
 			epoch: plan.document.epoch,
-			update: Buffer.from(mutation.update).toString("base64"),
+			update: Buffer.from(update).toString("base64"),
 		};
 
 		Service.submit(plan, ws, message);

@@ -1,4 +1,9 @@
 import { countChildChannels, readSource, seedChildChannel } from "./database";
+import {
+	markResearchPublished,
+	seedPendingInlineResearchRequest,
+	updateResearchJobState,
+} from "./research-recovery-database";
 import { content, expect, test } from "./room";
 
 import type { Chat, Research } from "../packages/protocol/index";
@@ -22,6 +27,7 @@ type ScriptedRequest = {
 	child?: Research.ReadyChild;
 	error?: string;
 	id: string;
+	jobId: string;
 	question: string;
 	sources: Research.Source[];
 	stage: Research.RequestStage;
@@ -106,8 +112,15 @@ async function scriptResearch(
 		let suffix = path.slice(prefix.length);
 		if (request.method() === "POST" && suffix === "") {
 			let body = request.postDataJSON() as { question: string; requestId: string };
+			let { jobId, workspaceId } = await seedPendingInlineResearchRequest(
+				databasePort,
+				room,
+				body.question,
+				body.requestId,
+			);
 			let created: ScriptedRequest = {
-				id: body.requestId,
+				id: workspaceId,
+				jobId,
 				question: body.question,
 				sources: [],
 				stage: "queued",
@@ -127,6 +140,7 @@ async function scriptResearch(
 		}
 		if (request.method() === "POST" && match?.[2] === "retry") {
 			retries.push(current.id);
+			await updateResearchJobState(databasePort, room, current.jobId, "pending");
 			current.stage = "queued";
 			current.error = undefined;
 			current.sources = [];
@@ -136,6 +150,7 @@ async function scriptResearch(
 		}
 		if (request.method() === "POST" && match?.[2] === "cancel") {
 			cancellations.push(current.id);
+			await updateResearchJobState(databasePort, room, current.jobId, "cancelled");
 			current.stage = "cancelled";
 			current.error = undefined;
 			await route.fulfill({ json: requestView(room, current) });
@@ -161,12 +176,16 @@ async function scriptResearch(
 		reads,
 		requests,
 		retries,
-		advance(
+		async advance(
 			question: string,
 			stage: Research.RequestStage,
 			overrides: Partial<ScriptedRequest> = {},
 		) {
-			Object.assign(byQuestion(question), overrides, { stage });
+			let request = byQuestion(question);
+			if (stage === "failed") {
+				await updateResearchJobState(databasePort, room, request.jobId, "failed");
+			}
+			Object.assign(request, overrides, { stage });
 		},
 		invalidate(question: string) {
 			let request = byQuestion(question);
@@ -187,6 +206,8 @@ async function scriptResearch(
 				title,
 				CHILD_SOURCE,
 			);
+			await markResearchPublished(databasePort, room, request.id, child.id);
+			await updateResearchJobState(databasePort, room, request.jobId, "completed");
 			request.stage = "ready";
 			request.error = undefined;
 			request.child = {
@@ -297,16 +318,16 @@ test("inline research publishes one ordinary child and opens it", async ({ baseU
 	expect(await countChildChannels(databasePort, room)).toBe(0);
 	await expect(opened).toHaveURL(url => !url.pathname.includes("/children/"));
 
-	research.advance(brief, "searching");
+	await research.advance(brief, "searching");
 	await expect(card.getByText("Searching sources", { exact: true })).toBeVisible();
-	research.advance(brief, "analyzing", {
+	await research.advance(brief, "analyzing", {
 		sources: [{ title: "Primary public source", url: "https://example.com/source" }],
 	});
 	await expect(card.getByText("Reading sources", { exact: true })).toBeVisible();
 	// Progress sits under the card, beside it in the tracked wrapper.
 	await expect(card.locator("xpath=..")).toContainText("1 source found");
 	await expect(card).not.toContainText("A complete report grounded in the discovered sources.");
-	research.advance(brief, "writing");
+	await research.advance(brief, "writing");
 	await expect(card.getByText("Writing report", { exact: true })).toBeVisible();
 	await expect.poll(childHrefs).toEqual([]);
 	expect(await countChildChannels(databasePort, room)).toBe(0);
@@ -346,7 +367,11 @@ test("failed research retries by identity while cancelled research never publish
 	let failedBrief = "Retry this exact failed research brief.";
 	let failedCard = await startInlineResearch(opened, failedBrief);
 	await expect(failedCard.getByText("Waiting to start", { exact: true })).toBeVisible();
-	research.advance(failedBrief, "failed", {
+	let failedId =
+		[...research.requests.values()].find(request => request.question === failedBrief)!.id;
+	// The card can be visible before its initial document placement is durable.
+	await expect.poll(async () => readSource(databasePort, room)).toContain(failedId);
+	await research.advance(failedBrief, "failed", {
 		error: "Research could not be completed safely.",
 	});
 	await expect(failedCard.getByText("Research failed", { exact: true })).toBeVisible();
@@ -368,12 +393,10 @@ test("failed research retries by identity while cancelled research never publish
 	await expect(cancelledCard.getByText("Cancelled", { exact: true })).toBeVisible();
 	expect(research.cancellations).toEqual([cancelledId]);
 
-	let failedId =
-		[...research.requests.values()].find(request => request.question === failedBrief)!.id;
 	await failedCard.getByRole("button", { name: "Retry research" }).click();
 	await expect(failedCard.getByText("Waiting to start", { exact: true })).toBeVisible();
 	expect(research.retries).toEqual([failedId]);
-	research.advance(failedBrief, "writing", {
+	await research.advance(failedBrief, "writing", {
 		sources: [{ title: "Recovery source", url: "https://example.com/recovery" }],
 	});
 	await expect(failedCard.getByText("Writing report", { exact: true })).toBeVisible();
@@ -385,7 +408,7 @@ test("failed research retries by identity while cancelled research never publish
 	expect(source.match(/<Research\s+id=/g)).toHaveLength(2);
 
 	// A late worker-shaped update is fetched after a real socket invalidation but remains unobservable.
-	research.advance(cancelledBrief, "ready", {
+	await research.advance(cancelledBrief, "ready", {
 		child: {
 			id: crypto.randomUUID(),
 			slug: "late-cancelled-child",
