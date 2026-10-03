@@ -286,8 +286,8 @@ test(
 		widget = expectLinked(await latestDocumentSnapshot(editor, room), widget);
 
 		// An edited anchored paragraph should retain the same live relation.
-		await prose(editor).click();
-		await editor.keyboard.press("End");
+		expect(await placeCaretAtParagraphEnd(editor, await prose(editor).innerText()))
+			.toMatchObject({ active: true, anchor: true, atEnd: true, contentEditable: "true" });
 		await editor.keyboard.type(" Still the same decision.");
 		await expect(prose(editor)).toContainText("Still the same decision.");
 		await expect(prose(other)).toContainText("Still the same decision.");
@@ -298,8 +298,8 @@ test(
 		await sockets[0]!.close();
 		await expect(content(editor)).toHaveAttribute("contenteditable", "false");
 		await expect(content(editor)).toHaveAttribute("contenteditable", "true", { timeout: 20_000 });
-		await prose(editor).click();
-		await editor.keyboard.press("End");
+		expect(await placeCaretAtParagraphEnd(editor, await prose(editor).innerText()))
+			.toMatchObject({ active: true, anchor: true, atEnd: true, contentEditable: "true" });
 		await editor.keyboard.type(" After reconnect.");
 		await expect(prose(editor)).toContainText("After reconnect.");
 		await expect(prose(other)).toContainText("After reconnect.");
