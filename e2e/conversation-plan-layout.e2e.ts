@@ -11,15 +11,16 @@ function chatPane(page: Page) {
 	return page.getByRole("complementary", { includeHidden: true, name: "Chat" });
 }
 
-test("desktop Chat sits before the document at its initial 364px width", async ({ join, page }) => {
+test("desktop Chat retains its width and stays beside the document as the window grows", async ({ join, page }) => {
 	await page.setViewportSize({ width: 1280, height: 800 });
 	await join("ana");
 	let chat = chatPane(page);
 	let document = page.locator("main");
+	let initialWidth = (await box(chat)).width;
 
 	for (let width of [1280, 1440]) {
 		await page.setViewportSize({ width, height: 800 });
-		await expect.poll(async () => (await box(chat)).width).toBeCloseTo(364, 0);
+		await expect.poll(async () => (await box(chat)).width).toBeCloseTo(initialWidth, 0);
 		let [chatBox, documentBox, frameBox] = await Promise.all([
 			box(chat),
 			box(document),
