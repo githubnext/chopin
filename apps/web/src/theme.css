@@ -549,6 +549,10 @@ body {
 	z-index: 10;
 }
 
+.chat-message-body:has([data-analysis-trigger]) {
+	min-height: calc(var(--spacing) * 7);
+}
+
 .chat-composer .field {
 	min-height: 98px;
 	border-color: var(--color-edge);
