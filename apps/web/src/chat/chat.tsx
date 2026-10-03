@@ -26,6 +26,7 @@ import {
 	beforeInputSelection,
 	boundedChatError,
 	chatSendPayload,
+	destinationCue,
 	insertReference,
 	MAX_REFERENCES,
 	prepareDraftSubmission,
@@ -107,6 +108,7 @@ export function Chat(
 	draftRef.current = draft;
 	let pickerId = useId();
 	let instructionsId = useId();
+	let cueId = useId();
 	let synchronized = useRef<Socket | undefined>(undefined);
 	let activity = useRef(onActivity);
 	let reportedBusy = useRef(false);
@@ -239,6 +241,10 @@ export function Chat(
 		setDismissedPicker(undefined);
 	};
 
+	let cue = sendError
+		? undefined
+		: destinationCue(draft.text, draft.references, agent, referencesEnabled);
+
 	let submit = () => {
 		if (submission.current || !composerReady || !wire) return;
 		let current = draftRef.current;
@@ -339,7 +345,11 @@ export function Chat(
 							: undefined}
 						aria-autocomplete={referencesEnabled ? "list" : undefined}
 						aria-controls={pickerOpen ? pickerId : undefined}
-						aria-describedby={referencesEnabled ? instructionsId : undefined}
+						aria-describedby={[
+							referencesEnabled ? instructionsId : undefined,
+							cue ? cueId : undefined,
+						]
+							.filter(Boolean).join(" ") || undefined}
 						aria-disabled={!composerReady || submitting}
 						aria-expanded={referencesEnabled ? pickerOpen : undefined}
 						aria-haspopup={referencesEnabled ? "listbox" : undefined}
@@ -442,6 +452,16 @@ export function Chat(
 							<TerminalAlert className="mr-auto min-w-0 text-sm text-destructive-ink [overflow-wrap:anywhere]">
 								{sendError}
 							</TerminalAlert>
+						)}
+						{cue && (
+							<p
+								className="mr-auto min-w-0 text-sm text-text-tertiary [overflow-wrap:anywhere]"
+								data-destination={cue.to}
+								id={cueId}
+								role="status"
+							>
+								{cue.text}
+							</p>
 						)}
 						{agent && (busy || counts.active > 0) && (
 							<button

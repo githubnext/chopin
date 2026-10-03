@@ -321,6 +321,24 @@ export function chatSendPayload(
 	};
 }
 
+/**
+ * Where the composer will send a draft, as the wire will see it, and how to say so
+ * before it is sent. Nothing is said for an empty draft or when the Planner is off.
+ */
+export function destinationCue(
+	text: string,
+	references: ReferenceDraft[],
+	plannerEnabled: boolean,
+	referencesEnabled = true,
+): { to: "planner" | "room"; text: string } | undefined {
+	if (!plannerEnabled) return undefined;
+	let to = chatSendPayload(text, references, plannerEnabled, "", referencesEnabled)?.to;
+	if (!to) return undefined;
+	return to === "planner"
+		? { to, text: "Sends to the Planner, which will reply" }
+		: { to, text: `Room only. Add ${MENTION} to ask the Planner` };
+}
+
 export function acknowledgeDraft(current: ComposerDraft, submitted: ComposerDraft): ComposerDraft {
 	return current === submitted ? { text: "", references: [] } : current;
 }

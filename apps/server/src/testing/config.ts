@@ -26,6 +26,7 @@ export function configured(overrides: Record<string, string | undefined> = {}) {
 		WEB_RESEARCH: undefined,
 		HARNESS: undefined,
 		HARNESS_AUTH: undefined,
+		HARNESS_EXTENSIONS: undefined,
 		AUTH_MODE: undefined,
 		SERVER_HOST: undefined,
 		PORT: undefined,

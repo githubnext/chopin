@@ -6,6 +6,7 @@ import {
 	boundedChatError,
 	chatSendPayload,
 	contiguousReplacement,
+	destinationCue,
 	insertReference,
 	MAX_REFERENCE_QUERY,
 	MAX_REFERENCES,
@@ -191,6 +192,32 @@ describe("textarea replacement reconciliation", () => {
 			start: 3,
 			end: 4,
 		});
+	});
+});
+
+describe("composer destination cue", () => {
+	test("says a message without @chopin stays in the room, and one with it goes to the Planner", () => {
+		expect(destinationCue("should we ask about auth first?", [], true)).toEqual({
+			to: "room",
+			text: "Room only. Add @chopin to ask the Planner",
+		});
+		expect(destinationCue("@chopin draft the auth section", [], true)).toEqual({
+			to: "planner",
+			text: "Sends to the Planner, which will reply",
+		});
+	});
+
+	test("follows the wire destination: a mention inside a reference does not summon the Planner", () => {
+		let text = "See #Ask @chopin";
+		expect(destinationCue(text, [documentDraft(text, "#Ask @chopin")], true)?.to).toBe("room");
+		expect(destinationCue(text, [documentDraft(text, "#Ask @chopin")], true)?.to).toBe(
+			chatSendPayload(text, [documentDraft(text, "#Ask @chopin")], true, REQUEST_ID)?.to,
+		);
+	});
+
+	test("says nothing for an empty draft or when the Planner is off", () => {
+		expect(destinationCue("  \n", [], true)).toBeUndefined();
+		expect(destinationCue("@chopin hello", [], false)).toBeUndefined();
 	});
 });
 

@@ -20,6 +20,8 @@ import {
 	untilUnpaused,
 } from "./full";
 import { startStubModelServer } from "../pi/model-stub";
+import * as Plan from "../../plan/service";
+import * as Store from "../../questions/store";
 import { hostInputRoom } from "../../testing/decisions";
 import type { HostInput, QuestionParams, SessionWorkflows } from "@bastani/atomic";
 
@@ -65,6 +67,14 @@ let stub = startStubModelServer((prompt, prior) =>
 		? { kind: "tool", name: "ask_user_question", arguments: JSON.stringify(freeText[prompt]) }
 		: prompt === "cwd"
 		? { kind: "tool", name: "bash", arguments: JSON.stringify({ command: "pwd" }) }
+		: prompt === "workflows"
+		? { kind: "tool", name: "workflow", arguments: JSON.stringify({ action: "list" }) }
+		: prompt === "launch"
+		? {
+			kind: "tool",
+			name: "workflow",
+			arguments: JSON.stringify({ action: "run", workflow: "asking-workflow", inputs: {} }),
+		}
 		: { kind: "text", text: "Ready." }
 );
 afterAll(stub.stop);
@@ -72,7 +82,15 @@ afterAll(stub.stop);
 async function run(
 	registered: boolean,
 	prompt = "plain",
-	{ host, checkout = true, worker = false, projectPackage = false }: {
+	{
+		host,
+		checkout = true,
+		worker = false,
+		projectPackage = false,
+		operatorPackage = false,
+		askingWorkflow = false,
+		afterTurn,
+	}: {
 		host?: HostInput;
 		/** False runs the Planner in an empty directory, as a channel without a checkout does. */
 		checkout?: boolean;
@@ -80,6 +98,12 @@ async function run(
 		worker?: boolean;
 		/** Install a local package through the checkout's `.atomic/settings.json`. */
 		projectPackage?: boolean;
+		/** Load a local package through the operator's extension paths, as `HARNESS_EXTENSIONS` does. */
+		operatorPackage?: boolean;
+		/** Load a workflow whose stage calls ask_user_question, through the operator's extension paths. */
+		askingWorkflow?: boolean;
+		/** Runs once the Planner's turn has ended, while its session and workflow runs are still live. */
+		afterTurn?: () => Promise<void>;
 	} = {},
 ) {
 	let root = await mkdtemp(join(tmpdir(), "chopin-atomic-full-"));
@@ -87,9 +111,11 @@ async function run(
 	let cwd = join(root, checkout ? "checkout" : "empty");
 	let previous = process.env.ATOMIC_CODING_AGENT_DIR;
 	let received: QuestionParams[] = [];
+	let operatorPackageDir = join(root, "operator-package");
 	let harness = createAtomicAdapter({
 		auth: "ai-gateway",
 		model: "stub/model",
+		extensions: operatorPackage || askingWorkflow ? [operatorPackageDir] : undefined,
 		providers: {
 			stub: {
 				baseUrl: stub.baseUrl,
@@ -157,6 +183,69 @@ async function run(
 			await mkdir(join(cwd, ".atomic"), { recursive: true });
 			await writeFile(join(cwd, ".atomic", "settings.json"), JSON.stringify({ packages: [pkg] }));
 		}
+		if (askingWorkflow) {
+			await mkdir(operatorPackageDir, { recursive: true });
+			await writeFile(
+				join(operatorPackageDir, "package.json"),
+				JSON.stringify({
+					name: "asking-package",
+					type: "module",
+					atomic: { workflows: ["./workflow.ts"] },
+				}),
+			);
+			await writeFile(
+				join(operatorPackageDir, "workflow.ts"),
+				`import { workflow } from "@bastani/atomic/workflows";
+export default workflow({
+	name: "asking-workflow",
+	description: "A stage that asks the user a question",
+	inputs: {},
+	outputs: {},
+	run: async ctx => {
+		await ctx.task("grill-me-1", { prompt: "question" });
+		return {};
+	},
+});
+`,
+			);
+		}
+		if (operatorPackage) {
+			await mkdir(join(operatorPackageDir, "skills", "operator-package-marker"), {
+				recursive: true,
+			});
+			await writeFile(
+				join(operatorPackageDir, "package.json"),
+				JSON.stringify({
+					name: "operator-package",
+					type: "module",
+					atomic: {
+						extensions: ["./extension.ts"],
+						skills: ["./skills"],
+						workflows: ["./workflow.ts"],
+					},
+				}),
+			);
+			await writeFile(
+				join(operatorPackageDir, "extension.ts"),
+				`export default api => api.registerTool({name: "operator_package_tool", label: "Operator package", description: "Marker", parameters: {type:"object"}, async execute() { return {content:[{type:"text",text:"operator package"}], details:{}}; }});`,
+			);
+			await writeFile(
+				join(operatorPackageDir, "skills", "operator-package-marker", "SKILL.md"),
+				"---\nname: operator-package-marker\ndescription: OPERATOR-PACKAGE-SKILL-MARKER\n---\nOperator package skill.\n",
+			);
+			await writeFile(
+				join(operatorPackageDir, "workflow.ts"),
+				`import { workflow } from "@bastani/atomic/workflows";
+export default workflow({
+	name: "operator-package-workflow",
+	description: "OPERATOR-PACKAGE-WORKFLOW-MARKER",
+	inputs: {},
+	outputs: {},
+	run: async () => ({}),
+});
+`,
+			);
+		}
 		process.env.ATOMIC_CODING_AGENT_DIR = agentDir;
 		let humanInput: HostInput = host ?? {
 			confirm: async () => false,
@@ -197,6 +286,7 @@ async function run(
 			let result = await agent.stream({ session, prompt });
 			await result.consumeStream();
 			await result.text;
+			await afterTurn?.();
 			let requests = [...stub.requests];
 			if (!worker) {
 				let files = {
@@ -288,6 +378,28 @@ test("a checkout's project settings add its packages without writing either sett
 	expect(plain.requests[0]!.toolNames).not.toContain("project_tool");
 });
 
+/** The first workflow tool call starts Atomic's durable backend, which falls back slowly without Postgres. */
+const WORKFLOW_TOOL_TIMEOUT_MS = 30_000;
+
+test(
+	"operator extension paths add a package's tools, skills, and workflows to Planner sessions only",
+	async () => {
+		let result = await run(true, "workflows", { operatorPackage: true, worker: true });
+		let request = result.requests[0]!;
+		expect(request.toolNames).toContain("operator_package_tool");
+		expect(request.system).toContain("OPERATOR-PACKAGE-SKILL-MARKER");
+		expect(result.requests.at(-1)!.toolResults.join("\n")).toContain("operator-package-workflow");
+		expect(result.workerRequests[0]!.toolNames).not.toContain("operator_package_tool");
+	},
+	WORKFLOW_TOOL_TIMEOUT_MS,
+);
+
+test("without operator extension paths, Planner sessions have none of that package", async () => {
+	let plain = await run(true, "workflows");
+	expect(plain.requests[0]!.toolNames).not.toContain("operator_package_tool");
+	expect(plain.requests.at(-1)!.toolResults.join("\n")).not.toContain("operator-package-workflow");
+}, WORKFLOW_TOOL_TIMEOUT_MS);
+
 test("free-text Decisions answers to multi-select and preview questions reach the model", async () => {
 	let room = await hostInputRoom();
 	try {
@@ -303,6 +415,53 @@ test("free-text Decisions answers to multi-select and preview questions reach th
 		await room.close();
 	}
 });
+
+test(
+	"a workflow stage's ask_user_question reaches Decisions and its answer returns to the stage",
+	async () => {
+		let room = await hostInputRoom();
+		// Atomic gives workflow stages a canned session under a test runtime.
+		let environment = process.env.NODE_ENV;
+		delete process.env.NODE_ENV;
+		try {
+			let seen: string[] = [];
+			await run(true, "launch", {
+				host: room.input,
+				askingWorkflow: true,
+				afterTurn: async () => {
+					// The stage starts after Atomic's workflow backend does.
+					let open = Store.outstanding(room.plan.questions);
+					for (let deadline = Date.now() + 30_000; !open.length && Date.now() < deadline;) {
+						await Bun.sleep(100);
+						open = Store.outstanding(room.plan.questions);
+					}
+					let [card] = open;
+					seen.push(card!.definition.questions[0].question);
+					seen.push(Plan.source(room.plan));
+					await room.answer(card!.id, [1]);
+					// The stage receives the answer and its model replies.
+					let deadline = Date.now() + 15_000;
+					while (
+						Date.now() < deadline
+						&& !stub.requests.some(request =>
+							request.toolResults.some(text => text.includes("Second"))
+						)
+					) await new Promise(resolve => setTimeout(resolve, 100));
+				},
+			});
+			expect(seen[0]).toContain("Which option?");
+			expect(seen[1]).toContain("<Questionnaire");
+			expect(
+				stub.requests.some(request => request.toolResults.some(text => text.includes("Second"))),
+			)
+				.toBe(true);
+		} finally {
+			if (environment !== undefined) process.env.NODE_ENV = environment;
+			await room.close();
+		}
+	},
+	60_000,
+);
 
 test("worker sessions stay isolated, even beside a full Planner session on the same harness", async () => {
 	let alone = await run(false);
