@@ -1,8 +1,5 @@
 /** A saved conversation decision's durable job identity and bounded writing context. */
 
-import { parse } from "@chopin/dialect";
-
-import * as room from "../plan/room";
 import { decisionGeneration, proseJobTrigger } from "../questions/card-actions";
 import * as Questions from "../questions/card-involved";
 import { type Effect, type JobIntent, MAX_EFFECTS } from "./effects";
@@ -57,7 +54,6 @@ export type ProsePromptInput = {
 	owner: string;
 	involved: string[];
 	reasons: string[];
-	existing?: string;
 };
 
 function quote(value: string, max: number): string {
@@ -83,15 +79,11 @@ export function prosePrompt(input: ProsePromptInput): string {
 			...input.reasons.slice(0, 12).map(reason => `- ${quote(reason, 300)}`),
 		);
 	}
-	if (input.existing) {
-		lines.push(
-			"",
-			"The decision was reopened and decided again. Its existing paragraph reads:",
-			quote(input.existing, 600),
-		);
-	}
 	lines.push(
 		"",
+		"An earlier decision paragraph may still appear in `read_plan`. It is a replacement",
+		"target, not evidence for this choice. Do not reuse its claims or reasons unless the",
+		"current saved choice and applicable discussion reasons above support them.",
 		"State only the saved choice and supported reasons. Do not add commitments, implementation",
 		"details, or claims that the conversation did not establish. Do not name people.",
 		"One ordinary paragraph, at most 600 characters. Call `read_plan` for its revision, then",
@@ -101,7 +93,6 @@ export function prosePrompt(input: ProsePromptInput): string {
 	return lines.join("\n");
 }
 
-/** Resolve any prior paragraph by live anchor identity, never by its first matching digest. */
 export function proseInput(plan: Plan, id: string): ProsePromptInput {
 	let record = plan.records.get(id);
 	if (!record || !proseIntent(record)) throw new Error("decision is no longer saved");
@@ -120,15 +111,6 @@ export function proseInput(plan: Plan, id: string): ProsePromptInput {
 				|| selected.has(item.targetId))
 		)
 		.map(item => item.text) ?? [];
-	let anchor = record.prose?.length === 1 && !record.prose[0]?.orphaned
-		? record.prose[0]
-		: undefined;
-	let index = anchor
-		? room.digests(plan.document).findIndex((_, at) =>
-			room.matchesAnchor(plan.document, anchor, at)
-		)
-		: -1;
-	let block = index >= 0 ? parse(room.project(plan.document)).children[index] : undefined;
 	return {
 		id,
 		question: question?.question ?? "",
@@ -136,6 +118,5 @@ export function proseInput(plan: Plan, id: string): ProsePromptInput {
 		owner: record.owner!,
 		involved: Questions.involved(plan, record),
 		reasons,
-		...(block?.type === "paragraph" ? { existing: room.blockText(plan.document, [index]) } : {}),
 	};
 }

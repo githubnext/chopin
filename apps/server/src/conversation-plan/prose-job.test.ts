@@ -46,12 +46,12 @@ test("prosePrompt stays bounded, grounded, and names only its own writing tool",
 		owner: "mina",
 		involved: ["mina", "jules"],
 		reasons: ["We need an organisation-level sign-in flow."],
-		existing: "The previous decision used Auth0.",
 	});
 	expect(prompt).toContain("[Background job: prose]");
 	expect(prompt).toContain(`Decision card id: ${CARD}`);
 	expect(prompt).toContain("GitHub Apps");
-	expect(prompt).toContain("The previous decision used Auth0.");
+	expect(prompt).toContain("replacement");
+	expect(prompt).toContain("not evidence for this choice");
 	expect(prompt).toContain("organisation-level sign-in flow");
 	expect(prompt).toMatch(/do not add commitments/i);
 	expect(prompt).toContain("write_decision_prose");
@@ -65,7 +65,6 @@ test("prosePrompt stays bounded, grounded, and names only its own writing tool",
 			owner: "O".repeat(1000),
 			involved: Array.from({ length: 30 }, () => "I".repeat(300)),
 			reasons: Array.from({ length: 30 }, () => "R".repeat(1000)),
-			existing: "E".repeat(10000),
 		}).length,
 	).toBeLessThan(9000);
 });
