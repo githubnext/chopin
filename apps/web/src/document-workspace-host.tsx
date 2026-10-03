@@ -286,17 +286,17 @@ export default function DocumentWorkspaceHost(
 		let updatedState = send({ kind, metadata, type: "metadata" });
 		if (updatedState.status === "empty") return;
 		let updated = updatedState.loaded;
+		let route = routeRef.current;
 		let paths = anchoredChildPaths(
 			{
 				owner: updated.parent.repository.owner,
 				repository: updated.parent.repository.name,
 				slug: updated.parent.channel.slug,
 			},
-			updated.child?.channel.slug,
+			// Parent metadata can arrive before the requested child detail finishes loading.
+			route.page === "child" ? updated.child?.channel.slug ?? route.childSlug : undefined,
 		);
-		let pathname = routeRef.current.page === "child" && updated.child
-			? paths.child!
-			: paths.parent;
+		let pathname = route.page === "child" ? paths.child! : paths.parent;
 		if (kind === "parent" && routeRef.current.page === "child") {
 			history.replaceState(rebaseChildHistoryState(history.state, paths.parent), "");
 		}
