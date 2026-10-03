@@ -822,10 +822,10 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 		return { channels: groups, truncated };
 	};
 
-	readonly get = async (
+	getCurrent(
 		channelId: string,
 		workspaceId: string,
-	): Promise<ResearchWorkspaceDetail | undefined> => {
+	): ResearchWorkspaceDetail | undefined {
 		let found = this.#workspaces.get(workspaceId);
 		if (!found || found.channelId !== channelId) return undefined;
 		return {
@@ -833,7 +833,12 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 			turns: (this.#turns.get(found.id) ?? []).map(turn),
 			messages: (this.#messages.get(found.id) ?? []).map(message),
 		};
-	};
+	}
+
+	readonly get = async (
+		channelId: string,
+		workspaceId: string,
+	): Promise<ResearchWorkspaceDetail | undefined> => this.getCurrent(channelId, workspaceId);
 
 	readonly findByIdempotencyKey = async (
 		channelId: string,
