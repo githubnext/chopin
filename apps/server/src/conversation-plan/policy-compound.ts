@@ -21,7 +21,8 @@ export function questionListCorroboration(
 		&& message.text.indexOf("?") < (input.candidates[0]?.start ?? 0);
 	let listed = explicitListQuotes(message.text);
 	if (
-		input.candidates.length >= 3 && /,\s*or\s+/i.test(message.text)
+		(listed.length >= 3 || input.candidates.length >= 3)
+		&& /,\s*or\s+/i.test(message.text)
 		&& (questionBeforeOptions
 			|| !message.text.trimEnd().endsWith("?")
 				&& multiAlternativeQuotes(message.text).length === 0)
