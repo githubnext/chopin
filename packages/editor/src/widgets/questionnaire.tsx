@@ -519,7 +519,10 @@ function InlineQuestionnaire({ value }: { value: Questionnaire }) {
 	// Re-render when anchors arrive: whether the card collapses depends on them.
 	useRelations(options.questions);
 	let places = options.questions?.counts(value.id);
-	if ((!meta || meta.status === "decided") && carriedByMarkers(value, places)) {
+	if (
+		(!meta || meta.status === "decided") && carriedByMarkers(value, places)
+		&& !options.questions?.proseKey(value.id)
+	) {
 		return <div data-plan-collapsed="" data-plan-sidecar-questionnaire={value.id} hidden />;
 	}
 
