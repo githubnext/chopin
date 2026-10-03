@@ -562,3 +562,48 @@ test("a failed research card and its Chat notice survive reconnect once", async 
 	expect(await response.json()).toMatchObject({ stage: "failed" });
 	expect(await countChildChannels(databasePort, room)).toBe(0);
 });
+
+test("parent metadata keeps a child route while its document is loading", async ({ baseURL, join, room }) => {
+	let childTitle = `Pending child ${room.slice(0, 8)}`;
+	let child = await seedChildChannel(
+		port(baseURL!),
+		room,
+		crypto.randomUUID(),
+		childTitle,
+		CHILD_SOURCE,
+	);
+	let page = await join("ana");
+	let requested!: () => void;
+	let childRequested = new Promise<void>(resolve => requested = resolve);
+	let release!: () => void;
+	let held = new Promise<void>(resolve => release = resolve);
+	await page.route(
+		url => url.pathname.endsWith(`/documents/${child.slug}`),
+		async route => {
+			requested();
+			await held;
+			await route.continue().catch(() => {});
+		},
+	);
+	try {
+		await page.getByRole("complementary", { name: "Projects" })
+			.getByRole("link", { name: childTitle, exact: true }).click();
+		await childRequested;
+		await expect(page).toHaveURL(url => url.pathname === child.path);
+		let title = `Renamed parent ${room.slice(0, 8)}`;
+		let response = await page.context().request.patch(`/api/channels/${room}`, {
+			headers: { origin: new URL(baseURL!).origin },
+			data: { title },
+		});
+		expect(response.ok()).toBe(true);
+		let renamed = (await response.json()) as { channel: { slug: string } };
+		await expect(page.locator(`[data-workspace-room="${room}"] .room-header`))
+			.toContainText(title);
+		await expect(page).toHaveURL(url =>
+			url.pathname === `/documents/octo-org/score/${renamed.channel.slug}/children/${child.slug}`
+		);
+	} finally {
+		release();
+	}
+	await expect(page.locator(`[data-workspace-room="${child.id}"]`)).toBeVisible();
+});
