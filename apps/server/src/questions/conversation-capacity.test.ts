@@ -7,6 +7,7 @@ import { openPlan } from "../testing/plan";
 import { createProcessor } from "../conversation-plan/service";
 import { mirrorCard } from "../conversation-plan/card-mirror-runner";
 import { MAX_EVENTS } from "../conversation-plan/validation";
+import { applyEvent } from "../conversation-plan/events";
 import { opened, unlinked } from "../conversation-plan/service.test-fixtures";
 import type { Socket } from "../wire";
 
@@ -32,21 +33,30 @@ async function ask(context: Awaited<ReturnType<typeof openPlan>>) {
 }
 
 function fill(context: Awaited<ReturnType<typeof openPlan>>, remaining: number) {
-	let state = structuredClone(context.plan.conversationPlan);
-	let thread = state.threads[0]!;
+	// Restoration replays all 4096 events, so keep filler IDs short and leave card threads untouched.
+	let threadId = "filler";
+	let state = applyEvent(context.plan.conversationPlan, {
+		id: "filler:opened",
+		type: "thread.opened",
+		threadId,
+		observedThreadVersion: 0,
+		origin: "planner",
+		actor: { kind: "agent" },
+		at: 0,
+		question: "Filler thread?",
+	});
+	let thread = state.threads.at(-1)!;
 	while (state.events.length < MAX_EVENTS - remaining) {
 		state.events.push({
-			id: `history:${state.events.length}`,
-			type: "card.corrected",
+			id: String(state.events.length),
+			type: "thread.discarded",
 			threadId: thread.id,
 			observedThreadVersion: thread.version++,
 			origin: "human",
 			actor: { kind: "member", handle: "ana" },
 			at: state.events.length,
-			change: { kind: "edit", field: "question", text: thread.question },
 		});
-		thread.questionAuthoring = "human-edited";
-		thread.questionEditedBy = "ana";
+		thread.status = "discarded";
 		state.revision++;
 	}
 	context.plan.conversationPlan = state;
