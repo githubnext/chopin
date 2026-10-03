@@ -4,6 +4,7 @@ import * as Y from "yjs";
 import { isDeepStrictEqual } from "node:util";
 
 import { applyEvent } from "../conversation-plan/events";
+import { OptionCapacityError } from "../conversation-plan/option-capacity";
 
 import { isOpenStatus, matchesQuestionSource, questionMentionsOption } from "./records";
 import { atomicOptionQuote } from "./option-match";
@@ -226,5 +227,10 @@ export async function addServerOption(
 			stagedDocument?.doc.destroy();
 		}
 	};
-	return locked ? body() : Service.exclusive(plan, body);
+	try {
+		return await (locked ? body() : Service.exclusive(plan, body));
+	} catch (error) {
+		if (error instanceof OptionCapacityError) return { ok: false, reason: error.reason };
+		throw error;
+	}
 }

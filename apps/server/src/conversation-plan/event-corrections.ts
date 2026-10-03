@@ -1,3 +1,4 @@
+import { MAX_CONTRIBUTIONS } from "./validation-fields";
 import type { Chat, ConversationPlan } from "@chopin/protocol";
 
 type Event = Extract<ConversationPlan.Event, { type: "card.corrected" }>;
@@ -41,7 +42,7 @@ export function applyCorrectionEvent(
 				if (!target || target.id === thread.id || target.version !== change.targetVersion) {
 					throw new Error("stale target thread version");
 				}
-				if (target.contributions.length >= 64) {
+				if (target.contributions.length >= MAX_CONTRIBUTIONS) {
 					throw new Error("conversation thread contribution limit reached");
 				}
 				let index = thread.contributions.findIndex((item) => item.id === change.contributionId);

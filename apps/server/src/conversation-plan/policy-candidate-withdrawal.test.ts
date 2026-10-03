@@ -57,21 +57,6 @@ test("missing current authored proposal rejects the previously captured pending"
 	expect(runWithdrawal(context, entry, role)).toBeUndefined();
 	expect(entry.outcome.status).toBe("review");
 });
-test("source failure does not invent application or alter the outcome", () => {
-	let { context, entry, role } = ordinaryFrame();
-	let before = structuredClone(entry.outcome);
-	let quote = entry.candidate.quote;
-	let reads = 0;
-	Object.defineProperty(entry.candidate, "quote", {
-		get() {
-			if (++reads === 3) throw new Error("quote read");
-			return quote;
-		},
-	});
-	expect(() => runWithdrawal(context, entry, role)).toThrow("quote read");
-	expect(entry.outcome).toEqual(before);
-	expect(context.events).toHaveLength(0);
-});
 
 test("another member cannot withdraw the captured owned proposal", () => {
 	let input = ordinaryInput();

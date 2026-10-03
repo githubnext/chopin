@@ -1,3 +1,4 @@
+import { MAX_CONTRIBUTIONS } from "./validation-fields";
 import type { ConversationPlan } from "@chopin/protocol";
 import { activeScopedSupport, currentScopedProposal, targetsScopedProposal } from "./event-support";
 
@@ -38,7 +39,7 @@ export function applyContributionEvent(
 					item.contributions.some((value) => value.id === event.contribution.id)
 				)
 			) throw new Error("duplicate contribution ID");
-			if (thread.contributions.length >= 64) {
+			if (thread.contributions.length >= MAX_CONTRIBUTIONS) {
 				throw new Error("conversation thread contribution limit reached");
 			}
 			if (

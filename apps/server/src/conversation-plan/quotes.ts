@@ -70,27 +70,76 @@ function startsWithClauseHead(quote: string): boolean {
 	return /^(?:as|because|if|unless|when|while|since|although|though)\b/i.test(quote.trim());
 }
 
+/** Parse only an explicit bounded list; each returned label is a source slice. */
+function listedAlternatives(
+	text: string,
+): { kind: "question" | "bare"; quotes: QuoteCandidate[] } | undefined {
+	if (text.length > 500 || /["“”‘’🙄]/u.test(text)) return;
+	let trimmed = text.trim();
+	let question = /^(?:what|which|how|where|should)\b[^.!?;]{3,160}\?\s+/i.exec(trimmed);
+	let kind: "question" | "bare" = question ? "question" : "bare";
+	if (
+		question
+		&& /\b(?:if|unless|when|according|reported|said|asked|not|never)\b|\bas\s+(?:a|an|the)\b/i
+			.test(question[0])
+	) return;
+	if (!question && /^(?:not|never|we|i|they|he|she|the|according)\b/i.test(trimmed)) return;
+	let bodyStart = text.indexOf(trimmed) + (question?.[0].length ?? 0);
+	if (question && /^our\s+/i.test(text.slice(bodyStart))) {
+		bodyStart += /^our\s+/i.exec(text.slice(bodyStart))![0].length;
+	}
+	let bodyEnd = text.indexOf(trimmed) + trimmed.length;
+	let ending = text[bodyEnd - 1];
+	if (question ? ending !== "?" && ending !== "." : ending !== ".") return;
+	bodyEnd--;
+	let body = text.slice(bodyStart, bodyEnd);
+	if (!/,\s+or\s+/i.test(body) || /[;!?]|\s\/\s/u.test(body)) return;
+	let labels = body.split(/,\s*/);
+	if (labels.length < 3 || !/^or\s+/i.test(labels.at(-1) ?? "")) return;
+	labels[labels.length - 1] = labels.at(-1)!.replace(/^or\s+/i, "");
+	if (labels.length > MAX_QUOTE_CANDIDATES) {
+		throw new Error(`source quote count exceeds ${MAX_QUOTE_CANDIDATES}`);
+	}
+	if (
+		labels.some(label =>
+			label.length < 2 || label.length > 80 || label.split(/\s+/).length > 12
+			|| !/^[\p{L}\p{N}][\p{L}\p{N}\s+&/.#'-]*$/u.test(label)
+			|| /\b(?:or|not|never|because|since|if|unless|when|while|reported|said|asked|rejected|is|are)\b/i
+				.test(label)
+			|| startsWithClauseHead(label)
+		)
+	) return;
+	if (new Set(labels.map(label => label.toLowerCase())).size !== labels.length) return;
+	let quotes: QuoteCandidate[] = [];
+	let searchFrom = bodyStart;
+	for (let label of labels) {
+		let start = text.indexOf(label, searchFrom);
+		if (start < 0 || start >= bodyEnd) return;
+		let end = start + label.length;
+		quotes.push({ quote: text.slice(start, end), start, end });
+		searchFrom = end;
+	}
+	return { kind, quotes };
+}
+
+export function explicitListQuotes(text: string): QuoteCandidate[] {
+	return listedAlternatives(text)?.quotes ?? [];
+}
+
 /** Alternatives from a direct question, excluding reported or negated choices. */
 export function directAlternativeQuotes(text: string): QuoteCandidate[] {
 	let trimmed = text.trim();
 	if (/\b(?:not|never|don't|shouldn['’]t|avoid)\b|🙄/iu.test(trimmed)) return [];
-	let topicAlternatives = trimmed.length <= 500
-		? trimmed.match(
-			/^[Ww]hat sends [\p{L}][\p{L}-]{2,39}\s+[\p{L}][\p{L}-]{2,39}(?:\s+(?:when configured|as a fallback))?\?\s+our\s+([A-Z][\p{L}\p{N}.+#-]{1,39}(?:\s+[\p{L}\p{N}][\p{L}\p{N}.+#-]{1,39})?),\s+([A-Z][\p{L}\p{N}.+#-]{1,39}(?:\s+[\p{L}\p{N}][\p{L}\p{N}.+#-]{1,39})?),\s+or\s+([A-Z][\p{L}\p{N}.+#-]{1,39}(?:\s+[\p{L}\p{N}][\p{L}\p{N}.+#-]{1,39})?)\?$/u,
-		)
-		: null;
-	if (topicAlternatives) {
-		let labels = topicAlternatives.slice(1).map(label => label.trim().toLowerCase());
-		if (new Set(labels).size !== 3 || labels.some(startsWithClauseHead)) return [];
-	}
-	if (!topicAlternatives && /[.!;]/.test(trimmed.slice(0, -1))) return [];
+	let listed = listedAlternatives(text);
+	if (listed?.kind === "question") return listed.quotes;
+	if (/[.!;]/.test(trimmed.slice(0, -1))) return [];
 	if (
 		/^Which\b/i.test(trimmed)
 		&& /\b(?:did|does|do|said|say|asked|reported|according)\b/i.test(
 			trimmed.slice(0, trimmed.indexOf(":")),
 		)
 	) return [];
-	let match = topicAlternatives ?? trimmed.match(
+	let match = trimmed.match(
 		/^Should we\s+(use\s+[^,;?]+),\s*([^,;?]+),\s*or\s+([^,;?]+)\?$/i,
 	) ?? trimmed.match(
 		/^Should we\b[^?]{1,160}\b(?:in|on|at|via|with)\s+([^,;?]+?)\s+or\s+([^,;?]+)\?$/i,
@@ -199,41 +248,6 @@ export function multiAlternativeQuotes(text: string): QuoteCandidate[] {
 	return spans;
 }
 
-/** A bare editor list whose final native-editor alternative contains its own "and". */
-export function bareEditorOptionQuotes(text: string): QuoteCandidate[] {
-	if (text.length > 500) return [];
-	let match = text.match(
-		/^([\p{L}][\p{L}\p{N}.+/-]{1,39}), (bare [\p{L}][\p{L}\p{N}.+/-]{1,39}), ([\p{L}][\p{L}\p{N}.+/-]{1,39}), or (just native Selection and Range with our own document model)\.$/iu,
-	);
-	if (!match) return [];
-	let labels = match.slice(1);
-	let names = labels.map(label => label.replace(/^bare\s+/i, "").toLowerCase());
-	if (new Set(names).size !== 4) return [];
-	let spans: QuoteCandidate[] = [];
-	let searchFrom = 0;
-	for (let label of labels) {
-		let start = text.indexOf(label, searchFrom);
-		if (start < 0) return [];
-		let end = start + label.length;
-		spans.push({ quote: text.slice(start, end), start, end });
-		searchFrom = end;
-	}
-	return spans;
-}
-
-export function isBareEditorOptionList(
-	text: string,
-	candidates: readonly QuoteCandidate[],
-): boolean {
-	let exact = bareEditorOptionQuotes(text);
-	return exact.length === 4 && candidates.length === 4
-		&& exact.every((quote, index) =>
-			quote.quote === candidates[index]?.quote
-			&& quote.start === candidates[index]?.start
-			&& quote.end === candidates[index]?.end
-		);
-}
-
 /** Explicitly scoped decisions can contain multiple independent atomic spans. */
 function scopedDecisionQuotes(text: string): QuoteCandidate[] {
 	if (text.length > 500 || /["“”]|\b(?:not|never|reject(?:ed)?|dismissed)\b/i.test(text)) {
@@ -268,10 +282,10 @@ function scopedDecisionQuotes(text: string): QuoteCandidate[] {
 export function extractQuotes(text: string): QuoteCandidate[] {
 	let scoped = scopedDecisionQuotes(text);
 	if (scoped.length) return scoped;
+	let listed = listedAlternatives(text);
+	if (listed) return listed.quotes;
 	let direct = directAlternativeQuotes(text);
 	if (direct.length === 3) return direct;
-	let bareEditor = bareEditorOptionQuotes(text);
-	if (bareEditor.length) return bareEditor;
 	let multi = multiAlternativeQuotes(text);
 	if (multi.length) return multi;
 	let declarative = declarativeAlternativeQuotes(text);

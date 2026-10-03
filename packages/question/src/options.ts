@@ -40,9 +40,12 @@ export function addOption(
 			message: `A decision holds at most ${limits.MAX_DECISION_OPTIONS} options`,
 		};
 	}
-	let folded = text.toLocaleLowerCase();
-	if (question.options.some(option => option.label.trim().toLocaleLowerCase() === folded)) {
+	let folded = text.toLowerCase();
+	if (question.options.some(option => option.label.trim().toLowerCase() === folded)) {
 		return { ok: false, reason: "duplicate", message: "That is already an option" };
+	}
+	if (question.options.some(option => option.id === id)) {
+		return { ok: false, reason: "duplicate", message: "That option ID already exists" };
 	}
 
 	let option: Option = { id, label: text, description: "" };

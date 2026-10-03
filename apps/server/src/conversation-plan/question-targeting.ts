@@ -1,6 +1,6 @@
 import type { Chat, ConversationPlan } from "@chopin/protocol";
 import type { JevQuestion, JevRequest } from "./jev";
-import { isBareEditorOptionList, isExplicitCompoundDecision, type QuoteCandidate } from "./quotes";
+import { isExplicitCompoundDecision, type QuoteCandidate } from "./quotes";
 import { assertQuoteBudget, MAX_QUOTE_CANDIDATES } from "./quote-budget";
 import { effectivePending } from "./preference";
 import {
@@ -23,7 +23,6 @@ export function buildTargetingRequest(
 	linkedCards: LinkedCardOptions = new Map(),
 ): JevRequest {
 	assertQuoteBudget(candidates);
-	let bareEditor = isBareEditorOptionList(message.text, candidates);
 	let focus = focusIndex === undefined ? undefined : candidates[focusIndex];
 	let compoundDecision = !!focus && isExplicitCompoundDecision(message.text, candidates);
 	if (
@@ -220,7 +219,7 @@ export function buildTargetingRequest(
 	}
 	let fourCandidateQuestions: Set<string> | undefined;
 	// Four isolated requests share one durable targeting pass capped at 45 answers.
-	if (candidates.length === MAX_QUOTE_CANDIDATES && !bareEditor) {
+	if (candidates.length === MAX_QUOTE_CANDIDATES) {
 		fourCandidateQuestions = new Set();
 		let include = (index: number, suffix: string) => {
 			let key = `c${index}_${suffix}`;
@@ -316,8 +315,7 @@ export function buildTargetingRequest(
 			Object.entries(questions).filter(([key]) => {
 				if (focusIndex !== undefined && !key.startsWith(`c${focusIndex}_`)) return false;
 				if (fourCandidateQuestions && !fourCandidateQuestions.has(key)) return false;
-				if (!bareEditor) return true;
-				return /_((?:role|thread|option|new_option|duplicate))$/.test(key);
+				return true;
 			}),
 		),
 	};

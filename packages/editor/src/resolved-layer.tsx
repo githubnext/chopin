@@ -425,6 +425,11 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 		host.addEventListener("scroll", measure, true);
 		let observer = new ResizeObserver(measure);
 		observer.observe(host);
+		// React card collapses move prose without resizing the host or updating Lexical.
+		let offRoot = editor.registerRootListener((element, previous) => {
+			if (previous) observer.unobserve(previous);
+			if (element) observer.observe(element);
+		});
 		let attributes = new MutationObserver(measure);
 		for (let node: HTMLElement | null = host; node; node = node.parentElement) {
 			attributes.observe(node, {
@@ -435,6 +440,7 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 		window.addEventListener("resize", measure);
 		return () => {
 			off();
+			offRoot();
 			attributes.disconnect();
 			window.removeEventListener("resize", measure);
 			host.removeEventListener("scroll", measure, true);

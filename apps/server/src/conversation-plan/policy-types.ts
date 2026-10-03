@@ -13,7 +13,6 @@ export type PolicyInput = {
 	linkedCards?: LinkedCardOptions;
 	first: Record<string, JevAnswer>;
 	candidates: CandidateJudgment[];
-	clarification?: Record<string, JevAnswer>;
 };
 export type PolicyResult = {
 	events: Event[];

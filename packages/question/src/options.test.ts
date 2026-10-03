@@ -59,6 +59,24 @@ describe("addOption", () => {
 		expect(result).toMatchObject({ ok: false, reason: "duplicate" });
 	});
 
+	it("refuses an existing option ID without clearing its draft selection", () => {
+		let { definition } = start();
+		let multiple = decision({
+			questions: [{ ...definition.questions[0]!, multiple: true }],
+		});
+		let model = create(multiple);
+		model.api.val(["q0", "options", "o1"]).set(true);
+		model.api.flush();
+		let before = [...model.toBinary()];
+
+		expect(addOption(multiple, model, "o1", "Another option")).toMatchObject({
+			ok: false,
+			reason: "duplicate",
+		});
+		expect(read(model, multiple).q0!.options.o1).toBe(true);
+		expect([...model.toBinary()]).toEqual(before);
+	});
+
 	it("refuses an empty or over-long label", () => {
 		let { definition, model } = start();
 		expect(addOption(definition, model, "o9", "   ")).toMatchObject({

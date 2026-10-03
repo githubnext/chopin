@@ -74,6 +74,47 @@ describe("Planner job queue", () => {
 		expect(grown.at(-1)?.id).toBe("refine:W129:late");
 	});
 
+	test("128 skipped jobs leave room for new Planner work", () => {
+		let jobs: Jobs.Job[] = [];
+		for (let index = 0; index < Jobs.MAX_JOBS; index++) {
+			let intent = card(`m${index}`);
+			jobs = Jobs.enqueue(jobs, intent, AT);
+			jobs = Jobs.start(jobs, Jobs.jobId(intent), AT);
+			jobs = Jobs.settle(jobs, Jobs.jobId(intent), {
+				status: "skipped",
+				reason: "The Planner is off (AGENT=off).",
+			}, AT);
+		}
+		let next = Jobs.enqueue(jobs, card("m128"), AT);
+		expect(next).toHaveLength(Jobs.MAX_JOBS);
+		expect(next.some(job => job.id === "refine:W1:m0")).toBe(false);
+		expect(next.at(-1)).toMatchObject({ id: "refine:W1:m128", status: "pending" });
+		expect(Jobs.enqueue(next, card("m128"), AT)).toBe(next);
+	});
+
+	test("evicting skipped history preserves retryable failed work", () => {
+		let failedIntent = card("failed");
+		let jobs = Jobs.enqueue([], failedIntent, AT);
+		jobs = Jobs.start(jobs, Jobs.jobId(failedIntent), AT);
+		jobs = Jobs.settle(jobs, Jobs.jobId(failedIntent), {
+			status: "failed",
+			reason: "The Planner could not be reached.",
+		}, AT);
+		for (let index = 0; index < Jobs.MAX_JOBS - 1; index++) {
+			let intent = card(`skipped-${index}`);
+			jobs = Jobs.enqueue(jobs, intent, AT);
+			jobs = Jobs.start(jobs, Jobs.jobId(intent), AT);
+			jobs = Jobs.settle(jobs, Jobs.jobId(intent), {
+				status: "skipped",
+				reason: "The Planner is off (AGENT=off).",
+			}, AT);
+		}
+		let next = Jobs.enqueue(jobs, { kind: "suggest", target: "W2", trigger: "new" }, AT);
+		expect(next.some(job => job.id === Jobs.jobId(failedIntent))).toBe(true);
+		expect(next.some(job => job.id === "refine:W1:skipped-0")).toBe(false);
+		expect(Jobs.retry(next, Jobs.jobId(failedIntent), AT)[0]?.status).toBe("pending");
+	});
+
 	test("only failed work can be retried, without forgetting its attempt", () => {
 		let jobs = Jobs.enqueue([], card("m1"), AT);
 		expect(Jobs.retry(jobs, "refine:W1:m1", AT)).toBe(jobs);

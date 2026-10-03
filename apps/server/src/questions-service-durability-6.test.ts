@@ -20,7 +20,7 @@ let fixture = createQuestionServiceFixture(() => plans, value => {
 plans = fixture.plans;
 let { opened, restart, definition, asking } = fixture;
 
-// Whole archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2 callbacks and data; import/fixture wrappers only.
+// Retained durability scenarios adapted to the keyed shared-option protocol.
 test("Planner ask links each card to a durable, targetable thread with its original options", async () => {
 	let context = await openPlan();
 	let plan = context.plan;
@@ -144,13 +144,15 @@ test("a reopened decision can still grow an option", async () => {
 	} as unknown as Socket;
 
 	await Questions.addOption(plan, context.server, "test", ws, {
-		kind: "question:add-option",
+		kind: "question:option",
+		question: plan.records.get(record.id)!.definition.questions[0]!.id,
+		key: "add-option-1",
 		ts: 0,
 		rid: "grow",
 		id: record.id,
 		label: "GitHub Apps",
 	});
-	expect(frames.find(frame => frame.kind === "question:add-option")).toMatchObject({
+	expect(frames.find(frame => frame.kind === "question:option")).toMatchObject({
 		ok: true,
 		id: record.id,
 	});

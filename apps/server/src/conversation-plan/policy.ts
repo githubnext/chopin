@@ -10,9 +10,9 @@ import { finishPolicy } from "./policy-final";
 import { runInitialTerminals } from "./policy-initial-terminals";
 import { proposeCandidate } from "./policy-proposal";
 import { runRemainingTerminals } from "./policy-remaining-terminals";
+import { explicitListQuotes } from "./quotes";
 import type { PolicyInput, PolicyResult } from "./policy-types";
 
-export { bareEditorClarificationThread } from "./policy-clarification";
 export { optionIdFor } from "./policy-identity";
 export type { PolicyInput, PolicyResult } from "./policy-types";
 
@@ -41,5 +41,40 @@ export function planEvents(input: PolicyInput): PolicyResult {
 		applyCandidateEvent(context, entry, frame, proposed);
 		if (events.length >= 12) break;
 	}
-	return finishPolicy(context);
+	let result = finishPolicy(context);
+	let listed = explicitListQuotes(input.message.text);
+	let bareList = listed.length >= 3
+		&& input.message.text.indexOf("?") < 0
+		&& listed.length === input.candidates.length
+		&& listed.every((quote, index) =>
+			quote.quote === input.candidates[index]?.quote
+			&& quote.start === input.candidates[index]?.start
+			&& quote.end === input.candidates[index]?.end
+		);
+	if (
+		bareList && !(
+			result.events.length === listed.length
+			&& result.outcomes.length === listed.length
+			&& result.outcomes.every(outcome => outcome.status === "accepted")
+			&& result.events.every((event, index) =>
+				event.type === "option.added"
+				&& event.source?.start === listed[index]!.start
+				&& event.source.end === listed[index]!.end
+			)
+		)
+	) {
+		return {
+			events: [],
+			candidates: result.candidates,
+			outcomes: listed.map(quote => ({
+				start: quote.start,
+				end: quote.end,
+				status: "review",
+				gate: "alternative list could not be applied together",
+				eventIds: [],
+			})),
+			policyGate: "alternative list could not be applied together",
+		};
+	}
+	return result;
 }

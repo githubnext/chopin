@@ -83,11 +83,10 @@ test("extracts D03's three provider alternatives as exact UTF-16 spans", () => {
 test.each([
 	"what sends transactional notifications when configured? our SMTP relay, Postmark, or SES?",
 	"what sends transactional notifications as a fallback? our SMTP relay, Postmark, or SES?",
-])("keeps valid D03 alternatives when the topic says %s", text => {
+])("keeps qualified question text together for review: %s", text => {
 	expect(extractQuotes(text).map(({ quote }) => quote)).toEqual([
-		"SMTP relay",
-		"Postmark",
-		"SES",
+		text.slice(0, text.indexOf("?") + 1),
+		text.slice(text.indexOf("?") + 2),
 	]);
 });
 

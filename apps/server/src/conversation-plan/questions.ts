@@ -4,13 +4,8 @@ import type { QuoteCandidate } from "./quotes";
 import type { LinkedCardOptions } from "./question-shared";
 import { buildTargetingRequest } from "./question-targeting";
 
-export { buildBareEditorClarificationRequest } from "./question-clarification";
 export { buildResearchOfferRequest } from "./question-research";
-export {
-	BARE_EDITOR_CLARIFICATION_VERSION,
-	hasWithdrawalCue,
-	QUESTION_SET_VERSION,
-} from "./question-shared";
+export { hasWithdrawalCue, QUESTION_SET_VERSION } from "./question-shared";
 export type { LinkedCardOptions } from "./question-shared";
 export { buildTargetingRequest } from "./question-targeting";
 export { buildTriageRequest, triageQuestions } from "./question-triage";

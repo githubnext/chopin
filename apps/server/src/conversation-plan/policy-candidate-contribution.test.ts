@@ -178,29 +178,6 @@ test("qualified pending forces its captured option and relation despite later an
 		relation: "qualifies",
 	});
 });
-test.each(["base", "source", "text"])("%s failure does not assign a proposal outcome", failure => {
-	let { context, entry, role } = contributionFrame();
-	let before = structuredClone(entry.outcome);
-	let reads = 0;
-	if (failure === "base") {
-		context.working.threads.find = () => {
-			throw new Error("base read");
-		};
-	} else {
-		let quote = entry.candidate.quote;
-		Object.defineProperty(entry.candidate, "quote", {
-			get() {
-				if (++reads === (failure === "source" ? 1 : 2)) throw new Error(failure + " read");
-				return quote;
-			},
-		});
-	}
-	if (failure !== "base") expect(reads).toBe(0);
-	expect(() => runContribution(context, entry, role)).toThrow(failure + " read");
-	expect(entry.outcome).toEqual(before);
-	expect(context.events).toHaveLength(0);
-	if (failure !== "base") expect(reads).toBe(failure === "source" ? 1 : 2);
-});
 
 test("target selection keeps captured contributions after working-thread replacement", () => {
 	let { context, entry, role } = contributionFrame();

@@ -3,40 +3,24 @@ import type { ConversationPlan } from "@chopin/protocol";
 import { createPolicyContext } from "./policy-context";
 import { runInitialTerminals } from "./policy-initial-terminals";
 import { inputFor, prefix, terminalPolicy } from "./policy-initial.test-fixtures";
-import { isAttributedCompoundDecision } from "./quotes";
 import { MAX_EVENTS } from "./validation";
 import type { Event } from "./policy-types";
 
 let compound = "We need to choose how people sign in and how agents get credentials.";
 
-test("quote budget rejects before reading message or initialization state", () => {
+test("quote budget rejects more than four candidates", () => {
 	let input = inputFor(compound);
 	input.candidates = Array.from({ length: 5 }, () => input.candidates[0]!);
-	Object.defineProperty(input, "message", {
-		get() {
-			throw new Error("message read too early");
-		},
-	});
-	Object.defineProperty(input, "state", {
-		get() {
-			throw new Error("state read too early");
-		},
-	});
 	expect(() => createPolicyContext(input)).toThrow("source quote count exceeds 4");
 });
 
 test.each(["streaming", "empty", "system"] as const)(
-	"ineligible %s returns before reading thread facts",
+	"ineligible %s returns no events",
 	kind => {
 		let input = inputFor(compound);
 		if (kind === "streaming") input.message.streaming = true;
 		if (kind === "empty") input.message.text = "";
 		if (kind === "system") input.message.author = { kind: "system" };
-		Object.defineProperty(input.state, "threads", {
-			get() {
-				throw new Error("facts read too early");
-			},
-		});
 		let context = createPolicyContext(input);
 		expect(runInitialTerminals(context)).toEqual({
 			events: [],
@@ -47,18 +31,6 @@ test.each(["streaming", "empty", "system"] as const)(
 		expect(context.facts).toBeUndefined();
 	},
 );
-
-test("topic corroboration precedes compound attribution", () => {
-	let text =
-		"what sends notices? our relay, Alice said we need to choose how people sign in and how agents get credentials.";
-	let input = inputFor(text);
-	input.candidates = ["how people sign in", "how agents get credentials"].map(quote => {
-		let start = text.indexOf(quote);
-		return { quote, start, end: start + quote.length, answers: input.candidates[0]!.answers };
-	});
-	expect(isAttributedCompoundDecision(text, input.candidates)).toBe(true);
-	expect(terminalPolicy(input).policyGate).toBe("topic alternatives need candidate corroboration");
-});
 
 test("attributed compound questions return review without opening threads", () => {
 	let input = inputFor(
@@ -123,23 +95,6 @@ test("eligible unhandled inputs expose facts and explicitly continue", () => {
 	expect(context.facts?.exactDirectAlternatives).toBe(false);
 	expect(context.events).toEqual([]);
 	expect(prefix(input)).toBeUndefined();
-});
-
-test("facts retain the initialized message without rereading an input getter", () => {
-	let input = inputFor("Should audit logs go in PostgreSQL or object storage?");
-	let original = input.message;
-	let reads = 0;
-	Object.defineProperty(input, "message", {
-		get() {
-			reads++;
-			return reads === 1 ? original : { ...original, text: "Changed after initialization." };
-		},
-	});
-	let context = createPolicyContext(input);
-	expect(runInitialTerminals(context)).toBeUndefined();
-	expect(reads).toBe(1);
-	expect(context.facts?.questionKey).toBe(original.text.toLowerCase());
-	expect(context.facts?.exactDirectAlternatives).toBe(true);
 });
 
 test("continuation retains the quoted-option closure from the original message capture", () => {

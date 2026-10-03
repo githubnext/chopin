@@ -4,6 +4,7 @@ import { type Interpretation, interpretMessage } from "./interpret";
 import { completeAnalysis } from "./domain";
 import { assertEventCapacity, ConversationCapacityError, currentScopedProposal } from "./events";
 import { effectsFor } from "./effects";
+import { assertOptionCapacity } from "./option-capacity";
 import { cardCycle, linkedCardOptions } from "./processor-card-context";
 import { admitResearchOffer } from "./processor-research-admission";
 import { appendEffects, failure, sameThreads } from "./processor-fields";
@@ -106,6 +107,7 @@ export function createRun(
 							interpretation.analysis,
 						);
 						assertEventCapacity(next, plan.pendingCardActions.length);
+						assertOptionCapacity({ ...plan, conversationPlan: next });
 					} catch (error) {
 						next = completeAnalysis(
 							current,

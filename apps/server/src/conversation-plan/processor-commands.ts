@@ -1,9 +1,10 @@
 import type { Chat, ConversationPlan } from "@chopin/protocol";
 import type { Dependencies, Member, State } from "./processor-types";
-import { applyCorrection, enqueue, restoreState, retryMessage } from "./domain";
+import { applyCorrection, enqueue, retryMessage } from "./domain";
 import { effectsFor } from "./effects";
+import { assertOptionCapacity } from "./option-capacity";
 import { applyEvent } from "./events";
-import { MAX_ANALYSIS, MAX_QUEUE } from "./validation";
+import { assertStateShape, MAX_ANALYSIS, MAX_QUEUE } from "./validation";
 import { QUESTION_SET_VERSION } from "./question-shared";
 import { appendEffects } from "./processor-fields";
 // Exact archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2, service.ts; import/export and synchronous closure wrappers only.
@@ -34,11 +35,13 @@ export function createCommands(
 						policyGate: "queue full; skipped",
 						eventIds: [],
 					};
-					plan.conversationPlan = restoreState({
+					let next = {
 						...previous,
 						revision: previous.revision + 1,
 						analysis: [...previous.analysis, skipped].slice(-MAX_ANALYSIS),
-					}, plan.chat.entries);
+					};
+					assertStateShape(next);
+					plan.conversationPlan = next;
 				}
 				await deps.persist();
 			} catch (error) {
@@ -62,6 +65,13 @@ export function createCommands(
 			let pending = plan.conversationPlanPendingEffects;
 			let next = applyCorrection(previous, action, actor, Date.now(), plan.chat.entries);
 			if (next === previous) return previous;
+			if (action.change.kind === "add-excerpt") {
+				let thread = next.threads.find(item => item.id === action.threadId);
+				let record = thread?.questionnaireId && plan.records.get(thread.questionnaireId);
+				if (!record || !["open", "reopened"].includes(record.status)) {
+					throw new Error("The decision card is no longer open");
+				}
+			}
 			plan.conversationPlan = next;
 			try {
 				let accepted = next.events.at(-1)!;
@@ -69,6 +79,7 @@ export function createCommands(
 					plan,
 					effectsFor([accepted], next, undefined, plan.records),
 				);
+				assertOptionCapacity(plan);
 				await deps.persist();
 				changed = true;
 				return next;

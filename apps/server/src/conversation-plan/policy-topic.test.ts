@@ -1,13 +1,8 @@
 import { expect, test } from "bun:test";
 import { initialState } from "./domain";
 import { directAlternativeQuotes, extractQuotes } from "./quotes";
-import {
-	confidentChoice,
-	first,
-	follow,
-	message,
-	terminalPolicy as planEvents,
-} from "./policy-initial.test-fixtures";
+import { confidentChoice, first, follow, message } from "./policy-initial.test-fixtures";
+import { planEvents } from "./policy";
 
 // Preserved from archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2,
 // apps/server/src/conversation-plan/pipeline.test.ts.

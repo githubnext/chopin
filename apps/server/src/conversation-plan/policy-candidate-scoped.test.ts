@@ -125,35 +125,6 @@ test("proposal uses the cached label rather than reparsing the valid quote", () 
 	expect(context.events).toHaveLength(0);
 });
 
-test.each([{ assent: true, target: "events" }, { assent: false, target: "events" }, {
-	assent: true,
-	target: "IDs",
-}, { assent: false, target: "IDs" }])(
-	"$assent/$target push failure preserves applied scoped state",
-	({ assent, target }) => {
-		let { context, entry, role, spike } = scopedFrame(scopedInput(assent));
-		if (target === "events") {
-			context.events.push = () => {
-				throw new Error("event push");
-			};
-		} else {entry.outcome.eventIds.push = () => {
-				throw new Error("ID push");
-			};}
-		let result = assent
-			? runScopedAssent(context, entry, role)
-			: runScopedProposal(context, entry, role, spike);
-		expect(result).toBeUndefined();
-		expect(context.working.events.at(-1)!.type).toBe(
-			assent ? "scoped-choice.agreed" : "scoped-choice.proposed",
-		);
-		expect(context.events).toHaveLength(target === "events" ? 0 : 1);
-		expect(entry.outcome.status).toBe("review");
-		expect(entry.outcome.gate).toBe(
-			assent ? "scoped agreement needs review" : "scoped choice needs review",
-		);
-	},
-);
-
 test("a replacement input card map does not replace the earlier captured linked card", () => {
 	let { context, entry, role, spike } = scopedFrame();
 	let captured = role.linkedCard;

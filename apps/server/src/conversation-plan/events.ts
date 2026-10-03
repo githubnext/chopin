@@ -59,8 +59,19 @@ export function applyEvent(state: State, event: Event): State {
 	if (!existing || existing.version !== event.observedThreadVersion) {
 		throw new Error("stale conversation thread version");
 	}
-	let next = structuredClone(state);
-	let thread = next.threads.find((item) => item.id === event.threadId)!;
+	let threads = [...state.threads];
+	let threadIndex = threads.indexOf(existing);
+	threads[threadIndex] = structuredClone(existing);
+	// A move also changes its destination. Other threads and sidecars are read-only here.
+	if (event.type === "card.corrected" && event.change.kind === "move") {
+		let targetThreadId = event.change.targetThreadId;
+		let targetIndex = threads.findIndex((item) => item.id === targetThreadId);
+		if (targetIndex >= 0 && targetIndex !== threadIndex) {
+			threads[targetIndex] = structuredClone(threads[targetIndex]);
+		}
+	}
+	let next: State = { ...state, threads, events: [...state.events] };
+	let thread = threads[threadIndex];
 	switch (event.type) {
 		case "option.added":
 		case "reason.added":

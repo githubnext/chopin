@@ -5,7 +5,6 @@ import {
 	capEvents,
 	d01RecordedOpening,
 	declarativeInput,
-	editorInput,
 	prepareRemaining,
 	remainingPrefix,
 	stateWithOption,
@@ -83,80 +82,28 @@ test("quoted-option errors propagate while direct working retains earlier succes
 	expect(input.state.events).toEqual([]);
 });
 
-test.each(["declarative", "editor"] as const)(
-	"%s batch rejection leaves staged state local",
-	kind => {
-		let input = kind === "declarative" ? declarativeInput() : editorInput();
-		capEvents(input, MAX_EVENTS - 1);
-		let before = structuredClone(input);
-		let context = prepareRemaining(input);
-		let result = runRemainingTerminals(context)!;
-		expect(result.policyGate).toBe(
-			kind === "declarative" ? "declarative options rejected" : "bare editor list rejected",
-		);
-		expect(result.events).toEqual([]);
-		expect(context.working).toBe(input.state);
-		expect(input).toEqual(before);
-	},
-);
+test("declarative batch rejection leaves staged state local", () => {
+	let input = declarativeInput();
+	capEvents(input, MAX_EVENTS - 1);
+	let before = structuredClone(input);
+	let context = prepareRemaining(input);
+	let result = runRemainingTerminals(context)!;
+	expect(result.policyGate).toBe("declarative options rejected");
+	expect(result.events).toEqual([]);
+	expect(context.working).toBe(input.state);
+	expect(input).toEqual(before);
+});
 
-test.each(["declarative", "editor"] as const)(
-	"%s quoted-option errors stay outside inference catches",
-	kind => {
-		let input = kind === "declarative" ? declarativeInput() : editorInput();
-		let context = prepareRemaining(input);
-		let original = context.quotedOption!;
-		context.quotedOption = (...args) => {
-			if (args[1] === 1) throw new Error("quoted option failure");
-			return original(...args);
-		};
-		expect(() => runRemainingTerminals(context)).toThrow("quoted option failure");
-		expect(context.working).toBe(input.state);
-	},
-);
-
-test.each(["strong", "weak", "missing"] as const)("editor joint clarification is %s", strength => {
-	let input = editorInput();
-	for (let candidate of input.candidates) {
-		candidate.answers.role = {
-			type: "choice",
-			choice: "option",
-			confidence: 0.65,
-			probabilities: { option: 0.65, none: 0.35 },
-		};
-		candidate.answers.option = {
-			type: "choice",
-			choice: "new",
-			confidence: 0.75,
-			probabilities: { new: 0.75, none: 0.25 },
-		};
-		candidate.answers.new_option = { type: "noul", noul: 0.75 };
-	}
-	if (strength !== "missing") {
-		input.clarification = {
-			list_kind: {
-				type: "choice",
-				choice: "four_distinct_options",
-				confidence: 0.95,
-				probabilities: {
-					four_distinct_options: strength === "strong" ? 0.95 : 0.7,
-					other: strength === "strong" ? 0.05 : 0.3,
-					unclear: 0,
-				},
-			},
-			...Object.fromEntries(
-				Array.from(
-					{ length: 4 },
-					(_, index) => [`c${index}_distinct_option`, { type: "noul", noul: 0.95 }],
-				),
-			),
-		};
-	}
-	let result = terminalPolicy(input);
-	expect(result.policyGate).toBe(
-		strength === "strong" ? "bare editor list accepted" : "bare editor list needs review",
-	);
-	expect(result.events).toHaveLength(strength === "strong" ? 4 : 0);
+test("declarative quoted-option errors stay outside inference catches", () => {
+	let input = declarativeInput();
+	let context = prepareRemaining(input);
+	let original = context.quotedOption!;
+	context.quotedOption = (...args) => {
+		if (args[1] === 1) throw new Error("quoted option failure");
+		return original(...args);
+	};
+	expect(() => runRemainingTerminals(context)).toThrow("quoted option failure");
+	expect(context.working).toBe(input.state);
 });
 
 test("purpose acceptance validates without replacing context working", () => {

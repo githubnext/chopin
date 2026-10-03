@@ -162,29 +162,6 @@ export function declarativeInput(): PolicyInput {
 	return input;
 }
 
-export function editorInput(): PolicyInput {
-	let opening = d01RecordedOpening();
-	let state = applyInference(opening.state, terminalPolicy(opening).events[0]!, opening.message);
-	let threadId = state.threads[0]!.id;
-	let input = inputFor(
-		"Tiptap, bare ProseMirror, Lexical, or just native Selection and Range with our own document model.",
-	);
-	input.state = state;
-	input.first = {
-		...first({ new_option: 0.95, c3_owned_unretracted: 0.95 }),
-		act: confidentChoice("proposal"),
-		thread_target: confidentChoice(threadId),
-	};
-	for (let candidate of input.candidates) {
-		candidate.answers = {
-			...follow({ role: "option", thread: threadId }),
-			option: confidentChoice("new"),
-			duplicate: { type: "noul", noul: 0.05 },
-		};
-	}
-	return input;
-}
-
 // Exercise event counts without claiming that the synthetic history is replay-consistent.
 export function capEvents(input: PolicyInput, count: number): void {
 	input.state.events = Array.from({ length: count }, (_, index): Event => ({

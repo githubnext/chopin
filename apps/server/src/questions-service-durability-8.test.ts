@@ -19,7 +19,7 @@ let fixture = createQuestionServiceFixture(() => plans, value => {
 plans = fixture.plans;
 let { restart, definition, asking } = fixture;
 
-// Whole archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2 callbacks and data; import/fixture wrappers only.
+// Retained durability scenarios adapted to the keyed shared-option protocol.
 test("a failed option commit leaves the live and durable card at their prior shape", async () => {
 	let context = await openPlan();
 	let plan = context.plan;
@@ -60,7 +60,9 @@ test("a failed option commit leaves the live and durable card at their prior sha
 	};
 	try {
 		let adding = Questions.addOption(plan, context.server, "test", ws, {
-			kind: "question:add-option",
+			kind: "question:option",
+			question: plan.records.get(id)!.definition.questions[0]!.id,
+			key: "add-option-retry",
 			ts: 0,
 			rid: "failed",
 			id,
@@ -110,7 +112,9 @@ test("a failed option commit leaves the live and durable card at their prior sha
 		)[item.id]!.choice,
 	).toBe(item.options[0]!.id);
 	await Questions.addOption(reopened, context.server, "test", ws, {
-		kind: "question:add-option",
+		kind: "question:option",
+		question: plan.records.get(id)!.definition.questions[0]!.id,
+		key: "add-option-retry",
 		ts: 0,
 		rid: "retry",
 		id,
@@ -199,14 +203,16 @@ test("adding to a card removed from the document leaves its record and draft unc
 	} as unknown as Socket;
 
 	await Questions.addOption(plan, context.server, "test", ws, {
-		kind: "question:add-option",
+		kind: "question:option",
+		question: plan.records.get(id)!.definition.questions[0]!.id,
+		key: "add-option-retry",
 		ts: 0,
 		rid: "missing",
 		id,
 		label: "GitHub Apps",
 	});
 
-	expect(frames).toMatchObject([{ ok: false, reason: "closed", rid: "missing" }]);
+	expect(frames).toMatchObject([{ kind: "session:error", rid: "missing" }]);
 	expect(Store.get(plan.questions, id)?.revision).toBe(revision);
 	expect(Store.get(plan.questions, id)?.definition.questions[0].options).toHaveLength(1);
 	expect(plan.records.get(id)?.definition.questions[0].options).toHaveLength(1);

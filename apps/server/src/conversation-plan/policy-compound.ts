@@ -1,18 +1,77 @@
 import { applyInference } from "./domain";
 import type { DirectFacts, PolicyContext } from "./policy-context";
+import { OWNED_QUOTE_MIN } from "./policy-cues";
 import { stableId } from "./policy-identity";
-import { choice, moderateChoice, noul } from "./policy-scoring";
+import { choice, moderateChoice, noul, roleChoice } from "./policy-scoring";
 import type { Event, PolicyResult } from "./policy-types";
-import { isAttributedCompoundDecision, isExplicitCompoundDecision } from "./quotes";
+import {
+	explicitListQuotes,
+	isAttributedCompoundDecision,
+	isExplicitCompoundDecision,
+	multiAlternativeQuotes,
+} from "./quotes";
 
-export function topicCorroboration(
+export function questionListCorroboration(
 	context: PolicyContext,
 	facts: DirectFacts,
 ): PolicyResult | undefined {
 	let { input, message, first, events, reviews } = context;
-	let { topicThreeWay, exactDirectAlternatives, directBounds } = facts;
+	let { questionList, exactDirectAlternatives, directBounds } = facts;
+	let questionBeforeOptions = message.text.indexOf("?") >= 0
+		&& message.text.indexOf("?") < (input.candidates[0]?.start ?? 0);
+	let listed = explicitListQuotes(message.text);
 	if (
-		topicThreeWay && !(message.author.kind === "member"
+		(listed.length >= 3 || input.candidates.length >= 3)
+		&& /,\s*or\s+/i.test(message.text)
+		&& (questionBeforeOptions
+			|| !message.text.trimEnd().endsWith("?")
+				&& multiAlternativeQuotes(message.text).length === 0)
+	) {
+		let exact = listed.length === input.candidates.length
+			&& listed.every((quote, index) =>
+				quote.quote === input.candidates[index]?.quote
+				&& quote.start === input.candidates[index]?.start
+				&& quote.end === input.candidates[index]?.end
+			);
+		let open = input.state.threads.filter(thread =>
+			!["decided", "discarded"].includes(thread.status)
+		);
+		let thread = open.length === 1 ? open[0] : undefined;
+		let card = thread && input.linkedCards?.get(thread.id);
+		let bareList = !questionBeforeOptions;
+		let supported = !bareList || message.author.kind === "member" && !!thread
+				&& (!card || card.options.length === 0)
+				&& choice(first, "thread_target") === thread.id
+				&& noul(first, "new_option") >= 0.8
+				&& input.candidates.every((candidate, index) =>
+					noul(first, `c${index}_owned_unretracted`) >= OWNED_QUOTE_MIN
+					&& roleChoice(candidate.answers, first) === "option"
+					&& choice(candidate.answers, "thread") === thread.id
+					&& choice(candidate.answers, "option") === "new"
+					&& noul(candidate.answers, "new_option") >= 0.8
+					&& noul(candidate.answers, "duplicate") < 0.3
+					&& !thread.contributions.some(item =>
+						item.kind === "option"
+						&& item.text.trim().toLowerCase() === candidate.quote.trim().toLowerCase()
+					)
+				);
+		if (!exact || !supported) {
+			return {
+				events,
+				candidates: reviews,
+				outcomes: input.candidates.map(candidate => ({
+					start: candidate.start,
+					end: candidate.end,
+					status: "review",
+					gate: "alternative list source needs review",
+					eventIds: [],
+				})),
+				policyGate: "alternative list source needs review",
+			};
+		}
+	}
+	if (
+		questionList && !(message.author.kind === "member"
 			&& exactDirectAlternatives && directBounds
 			&& input.candidates.every((candidate, index) =>
 				noul(first, `c${index}_owned_unretracted`) >= 0.8
@@ -36,10 +95,10 @@ export function topicCorroboration(
 				start: candidate.start,
 				end: candidate.end,
 				status: "review",
-				gate: "topic alternatives need candidate corroboration",
+				gate: "question alternatives need candidate corroboration",
 				eventIds: [],
 			})),
-			policyGate: "topic alternatives need candidate corroboration",
+			policyGate: "question alternatives need candidate corroboration",
 		};
 	}
 }

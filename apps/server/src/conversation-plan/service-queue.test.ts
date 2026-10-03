@@ -157,23 +157,47 @@ test("failed analysis is durable; retry keys are idempotent and collision checke
 
 test("a full analysis queue skips new work without rejecting chat", async () => {
 	let setup = harness();
+	let seed = entry("seed", "Should we use an outline?");
+	setup.plan.chat.entries.push(seed);
+	let prior = applyInference(initialState(), opened(seed), seed);
 	setup.plan.conversationPlan = {
-		...initialState(),
+		...prior,
 		queue: Array.from({ length: 128 }, (_, index) => ({
 			messageId: `old-${index}`,
 			status: "failed" as const,
 			attempts: 0,
 		})),
+		analysis: Array.from({ length: 64 }, (_, index) => ({
+			messageId: `analysis-${index}`,
+			questionSetVersion: "test",
+			modelVersion: "fake",
+			status: "unlinked" as const,
+			passes: [],
+			eventIds: [],
+		})),
 	};
 	let processor = createProcessor(setup.dependencies);
 	await processor.accept(entry("new", "A new question."));
 	expect(setup.durable.entries.at(-1)?.id).toBe("new");
+	expect(setup.durable.state.events).toEqual(prior.events);
+	expect(setup.durable.state.threads).toEqual(prior.threads);
 	expect(setup.durable.state.analysis.at(-1)).toMatchObject({
 		messageId: "new",
 		status: "unlinked",
 		policyGate: "queue full; skipped",
 	});
+	expect(setup.durable.state.analysis).toHaveLength(64);
+	expect(setup.durable.state.analysis[0]?.messageId).toBe("analysis-1");
+	expect(setup.durable.state.revision).toBe(prior.revision + 1);
 	expect(setup.durable.state.queue).toHaveLength(128);
+	expect(setup.publications).toHaveLength(0);
+	let accepted = setup.plan.conversationPlan;
+	setup.fail();
+	await expect(processor.accept(entry("newer", "Another question.")))
+		.rejects.toThrow("storage failed");
+	expect(setup.plan.conversationPlan).toBe(accepted);
+	expect(setup.plan.chat.entries.map(item => item.id)).toEqual(["seed", "new"]);
+	expect(setup.durable.entries.map(item => item.id)).toEqual(["seed", "new"]);
 });
 
 test("inactive and forged human actions cannot mutate the sidecar", async () => {

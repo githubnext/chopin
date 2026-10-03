@@ -265,4 +265,16 @@ test("moving a contribution advances both threads once and rejects stale targets
 	expect(next.threads[1]!.version).toBe(targetVersion + 1);
 	expect(next.revision).toBe(current.revision + 1);
 	expect(next.events).toHaveLength(current.events.length + 1);
+	let later = accept(
+		next,
+		{
+			type: "card.corrected",
+			change: { kind: "edit", field: "question", text: "Which editor?" },
+		},
+		"thread-2",
+		true,
+	);
+	expect(later.threads[1]!.question).toBe("Which editor?");
+	expect(next.threads[1]!.question).toBe("Which runtime?");
+	expect(current).toEqual(before);
 });

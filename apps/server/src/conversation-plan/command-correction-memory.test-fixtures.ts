@@ -1,4 +1,5 @@
 import * as Plan from "../plan/service";
+import * as Store from "../questions/store";
 import { handleConversationCommand } from "./commands";
 import { excerptAction, excerptCorrectionSetup } from "./service-correction.test-fixtures";
 import { memoryProcessor } from "./service-memory.test-fixtures";
@@ -12,6 +13,10 @@ export async function correctionCommand() {
 	let seed = excerptCorrectionSetup();
 	setup.plan.chat.entries = structuredClone(seed.setup.plan.chat.entries);
 	setup.plan.conversationPlan = structuredClone(seed.setup.plan.conversationPlan);
+	setup.plan.records = structuredClone(seed.setup.plan.records);
+	for (let record of setup.plan.records.values()) {
+		Store.reopen(setup.plan.questions, record.id, record.definition, record.id);
+	}
 	await Plan.persist(setup.plan);
 	let processor = setup.start();
 	let room: Room = { id: setup.plan.id, plan: setup.plan, members: new Map() };

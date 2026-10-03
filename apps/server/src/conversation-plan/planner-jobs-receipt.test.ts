@@ -85,6 +85,18 @@ describe("createPlannerJobs", () => {
 		expect(observed).toEqual(["done"]);
 	});
 
+	test("a durable skip wakes the effects outbox to reclaim terminal capacity", async () => {
+		let observed: string[] = [];
+		let h = harness(async () => ({ status: "skipped", reason: "AGENT=off" }), {
+			onCapacityAvailable: () => {
+				observed.push(h.commits.at(-1)?.jobs[0]?.status ?? "missing");
+			},
+		});
+		await h.service.enqueue({ kind: "refine", target: "W1", trigger: "m1" });
+		await h.service.idle();
+		expect(observed).toEqual(["skipped"]);
+	});
+
 	test("thrown runner errors become bounded, retryable failure reasons", async () => {
 		let h = harness(async () => {
 			throw new Error("x".repeat(1000));

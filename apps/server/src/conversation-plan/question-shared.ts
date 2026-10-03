@@ -1,7 +1,6 @@
 import type { JevQuestion } from "./jev";
 
 export const QUESTION_SET_VERSION = "conversation-plan-8";
-export const BARE_EDITOR_CLARIFICATION_VERSION = "bare-editor-clarification-1";
 
 export const FOUR_CANDIDATE_QUESTIONS = new Set([
 	"role",

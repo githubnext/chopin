@@ -154,7 +154,6 @@ describe("proactive current-cost research offers", () => {
 			.toBeUndefined();
 
 		let setup = harness(state, inputInterpreter(() => judgment), [message]);
-		let starts = 0;
 		await processMessage(setup, message);
 		let offer = setup.durable.state.researchOffers?.[0];
 		expect(offer).toMatchObject({
@@ -177,7 +176,6 @@ describe("proactive current-cost research offers", () => {
 		}
 		expect(setup.durable.pending).toEqual([]);
 		expect(setup.durable.receipts).toEqual([]);
-		expect(starts).toBe(0);
 		setup.processor.stop();
 	});
 

@@ -474,10 +474,6 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			if (room.plan) await Questions.edit(room.plan, ws, frame);
 			return;
 
-		case "question:add-option":
-			if (room.plan) await Questions.addOption(room.plan, server, room.id, ws, frame);
-			return;
-
 		case "question:discard":
 			if (room.plan) await Questions.discard(room.plan, server, room.id, ws, frame);
 			return;

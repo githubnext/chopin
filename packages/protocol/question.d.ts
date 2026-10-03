@@ -20,7 +20,6 @@ export declare namespace Question {
 	export type Incoming =
 		| Request<Open.Ask>
 		| Request<Edit.Ask>
-		| Request<AddCardOption.Ask>
 		| Request<Submit.Ask>
 		| Request<Cancel.Ask>
 		| Request<Discard.Ask>
@@ -35,7 +34,6 @@ export declare namespace Question {
 		| Metas
 		| Open.Reply
 		| Edit.Reply
-		| AddCardOption.Reply
 		| Changed
 		| Submit.Reply
 		| Cancel.Reply
@@ -209,23 +207,6 @@ export declare namespace Question {
 				}
 				| { open: true; accepted: false; revision: number; message: string }
 				| { open: false; revision: number }
-			);
-	}
-
-	export namespace AddCardOption {
-		/** A person grows the decision. The server mints the option id. */
-		export type Ask = KIND<"question:add-option"> & { id: string; label: string };
-
-		export type Reply =
-			& KIND<"question:add-option">
-			& { id: string }
-			& (
-				| { ok: true; option: Option; revision: number }
-				| {
-					ok: false;
-					reason: "full" | "duplicate" | "invalid" | "closed";
-					message: string;
-				}
 			);
 	}
 

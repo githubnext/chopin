@@ -87,7 +87,9 @@ test("a live conversation suggests a linked human option, and human Save commits
 		let thread = plan.conversationPlan.threads[0]!;
 		let id = thread.questionnaireId!;
 		await Questions.addOption(plan, opened.server, plan.id, socket, {
-			kind: "question:add-option",
+			kind: "question:option",
+			question: plan.records.get(id)!.definition.questions[0]!.id,
+			key: "add-option-1",
 			rid: "add",
 			ts: 0,
 			id,

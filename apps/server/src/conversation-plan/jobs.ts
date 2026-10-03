@@ -69,9 +69,9 @@ export function enqueue(jobs: Job[], intent: JobIntent, at: string): Job[] {
 	}
 	let available = jobs;
 	if (jobs.length >= MAX_JOBS) {
-		let oldestDone = jobs.findIndex(job => job.status === "done");
-		if (oldestDone < 0) throw new Error("Planner job queue is full");
-		available = jobs.filter((_, index) => index !== oldestDone);
+		let oldestTerminal = jobs.findIndex(job => job.status === "done" || job.status === "skipped");
+		if (oldestTerminal < 0) throw new Error("Planner job queue is full");
+		available = jobs.filter((_, index) => index !== oldestTerminal);
 	}
 	return [...available, { id, ...intent, status: "pending", attempts: 0, at }];
 }

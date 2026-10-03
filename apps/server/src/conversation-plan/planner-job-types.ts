@@ -29,7 +29,7 @@ export type PlannerJobDeps = {
 	activity: (text: string, questionnaireId: string, label?: string) => Promise<void>;
 	/** False when the heading job's document already has prose. */
 	headingAllowed?: () => boolean;
-	/** Wake the durable effects outbox after a done job makes queue space available. */
+	/** Wake the durable effects outbox after terminal work makes queue space available. */
 	onCapacityAvailable?: () => void;
 	onError?: (error: unknown) => void;
 	now?: () => string;

@@ -17,6 +17,7 @@ test("desktop Chat retains its width and stays beside the document as the window
 	let chat = chatPane(page);
 	let document = page.locator("main");
 	let initialWidth = (await box(chat)).width;
+	expect(initialWidth).toBeCloseTo(364, 0);
 
 	for (let width of [1280, 1440]) {
 		await page.setViewportSize({ width, height: 800 });

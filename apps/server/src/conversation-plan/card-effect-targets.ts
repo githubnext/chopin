@@ -75,11 +75,15 @@ export function createCardTargets(
 			});
 			if (!result.ok) {
 				if (Service.implementationActive(plan)) throw new Error("implementation is active");
+				// A card still closed after Save or Discard supersedes the undelivered addition.
+				if (!Questions.isOpenStatus(plan.records.get(id)?.status ?? "cancelled")) return;
 				if (
-					result.reason === "closed" && Questions.isOpenStatus(
-						plan.records.get(id)?.status ?? "cancelled",
+					plan.conversationPlan.events.some(event =>
+						event.id === input.trigger && event.origin === "human"
+						&& event.type === "option.added"
 					)
-				) throw new Error("card is temporarily unavailable");
+				) throw new Error(`Could not add the accepted excerpt option: ${result.reason}`);
+				if (result.reason === "closed") throw new Error("card is temporarily unavailable");
 				console.error("[conversation-plan] could not represent a quoted option:", result);
 			}
 		},

@@ -1,4 +1,3 @@
-import { bareEditorList } from "./policy-bare-editor";
 import type { PolicyContext } from "./policy-context";
 import { declarativePair } from "./policy-declarative";
 import { directAlternatives } from "./policy-direct-alternatives";
@@ -18,8 +17,6 @@ export function runRemainingTerminals(context: PolicyContext): PolicyResult | un
 	let result = directAlternatives(context, directQuestion);
 	if (result) return result;
 	result = declarativePair(context);
-	if (result) return result;
-	result = bareEditorList(context);
 	if (result) return result;
 	return purposeAndQuestion(context);
 }

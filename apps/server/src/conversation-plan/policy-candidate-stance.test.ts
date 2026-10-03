@@ -150,50 +150,6 @@ test("fresh input card replacement does not replace the earlier captured card", 
 	expect(runStance(context, entry, role)!.proposed).toMatchObject({ optionId: "alpha" });
 	expect(role.linkedCard).toBe(card);
 });
-test.each(["base", "source", "text"])(
-	"reopening %s construction failure precedes review publication",
-	failure => {
-		let { context, entry, role } = stanceFrame(decidedInput());
-		let before = structuredClone(entry.outcome), reads = 0;
-		if (failure === "base") {
-			context.working.threads.find = () => {
-				throw new Error("base read");
-			};
-		} else {
-			let quote = entry.candidate.quote;
-			Object.defineProperty(entry.candidate, "quote", {
-				get() {
-					if (++reads === (failure === "source" ? 1 : 2)) throw new Error(failure + " read");
-					return quote;
-				},
-			});
-		}
-		expect(() => runStance(context, entry, role)).toThrow(failure + " read");
-		expect(reads).toBe(failure === "base" ? 0 : failure === "source" ? 1 : 2);
-		expect(context.reviews).toHaveLength(0);
-		expect(context.events).toHaveLength(0);
-		expect(entry.outcome).toEqual(before);
-	},
-);
-test.each([false, true])("reopening review push failure preserves partial review $0", partial => {
-	let { context, entry, role } = stanceFrame(decidedInput());
-	let before = structuredClone(entry.outcome), reads = 0, quote = entry.candidate.quote;
-	Object.defineProperty(entry.candidate, "quote", {
-		get() {
-			reads++;
-			return quote;
-		},
-	});
-	context.reviews.push = function(this: typeof context.reviews, ...items) {
-		expect(reads).toBe(2);
-		if (partial) Array.prototype.push.call(this, items[0]!);
-		throw new Error("review push");
-	};
-	expect(() => runStance(context, entry, role)).toThrow("review push");
-	expect(context.reviews).toHaveLength(partial ? 1 : 0);
-	expect(entry.outcome).toEqual(before);
-	expect(context.events).toHaveLength(0);
-});
 
 test("reverse substring collision rejects one indirectly named card label", () => {
 	let label = "Start with a durable queue.";

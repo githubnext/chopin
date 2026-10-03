@@ -13,7 +13,7 @@ import { newChoiceInput, scopedInput } from "./policy-candidate-scoped.test-fixt
 import { stanceInput } from "./policy-candidate-stance.test-fixtures";
 import { confidentChoice, inputFor } from "./policy-initial.test-fixtures";
 import { replay } from "./domain";
-import { d01RecordedOpening, declarativeInput, editorInput } from "./policy-terminal.test-fixtures";
+import { d01RecordedOpening, declarativeInput } from "./policy-terminal.test-fixtures";
 import { verificationInput } from "./policy-candidate-verification.test-fixtures";
 
 // Complete pure dispatcher regressions; no runtime callers or original callback replacements.
@@ -119,7 +119,6 @@ test.each(
 			"direct alternatives accepted",
 		],
 		["declarative pair", declarativeInput, "declarative options accepted"],
-		["bare editor", editorInput, "bare editor list accepted"],
 		["purpose and question", d01RecordedOpening, "owned purpose and final question accepted"],
 	] as const,
 )("complete terminal path %s retains %s", (_name, make, gate) => {

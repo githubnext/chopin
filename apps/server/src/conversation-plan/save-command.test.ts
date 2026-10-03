@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { Chat, ConversationPlan } from "@chopin/protocol";
+import { handleScopedChoiceSave } from "./save-command";
 
 type Member = Extract<Chat.Author, { kind: "member" }>;
-type SaveCommandFrame = ConversationPlan.ScopedChoiceSave & {
-	kind: "conversation-plan:scoped-choice-save";
+type SaveCommandFrame = ConversationPlan.SaveScopedChoice & {
 	rid: string;
 	source?: unknown;
 	quote?: string;
@@ -25,21 +25,10 @@ type RouteDeps = {
 	reply: (rid: string, frame: unknown) => void;
 	fail: (rid: string, message: string) => void;
 };
-type HandleScopedChoiceSave = (frame: SaveCommandFrame, deps: RouteDeps) => Promise<void>;
-
-let routeUrl = new URL("./save-command.ts", import.meta.url).href;
-let route = await import(routeUrl).catch(() => undefined) as
-	| { handleScopedChoiceSave?: HandleScopedChoiceSave }
-	| undefined;
-
-function handler(): HandleScopedChoiceSave {
-	expect(route?.handleScopedChoiceSave).toBeFunction();
-	return route!.handleScopedChoiceSave!;
-}
-
 function frame(overrides: Partial<SaveCommandFrame> = {}): SaveCommandFrame {
 	return {
 		kind: "conversation-plan:scoped-choice-save",
+		ts: 0,
 		rid: "save-rid",
 		actionId: "scoped-save:proposal-1:0",
 		threadId: "thread-1",
@@ -118,7 +107,7 @@ describe("scoped-choice Save wire route", () => {
 			quote: "forged quote",
 			actor: { kind: "member", handle: "Mallory" },
 		});
-		let pending = handler()(request, setup.deps);
+		let pending = handleScopedChoiceSave(request, setup.deps);
 		await until(() => setup.calls.length === 1);
 		expect(setup.calls).toEqual([{
 			input: {
@@ -163,7 +152,7 @@ describe("scoped-choice Save wire route", () => {
 
 		for (let overrides of deniedCases) {
 			let setup = harness(overrides);
-			await handler()(frame(), setup.deps);
+			await handleScopedChoiceSave(frame(), setup.deps);
 			expect(setup.calls).toEqual([]);
 			expect(setup.replies).toEqual([]);
 			expect(setup.failures).toHaveLength(1);
@@ -180,7 +169,7 @@ describe("scoped-choice Save wire route", () => {
 			},
 		});
 		let request = frame();
-		await handler()(request, setup.deps);
+		await handleScopedChoiceSave(request, setup.deps);
 		expect(setup.calls).toHaveLength(1);
 		expect(setup.replies).toEqual([]);
 		expect(setup.failures).toEqual([{

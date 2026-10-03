@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import * as Question from "@chopin/question";
 
 import * as Questions from "./questions/service";
 import * as Store from "./questions/store";
@@ -17,7 +18,7 @@ let fixture = createQuestionServiceFixture(() => plans, value => {
 plans = fixture.plans;
 let { definition, asking } = fixture;
 
-// Whole archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2 callbacks and data; import/fixture wrappers only.
+// Retained durability scenarios adapted to the keyed shared-option protocol.
 test("adding to a card whose authoritative record is closed is refused", async () => {
 	let context = await openPlan();
 	let plan = context.plan;
@@ -38,14 +39,16 @@ test("adding to a card whose authoritative record is closed is refused", async (
 
 	try {
 		await Questions.addOption(plan, context.server, "test", ws, {
-			kind: "question:add-option",
+			kind: "question:option",
+			question: plan.records.get(id)!.definition.questions[0]!.id,
+			key: "add-option-1",
 			ts: 0,
 			rid: "closed",
 			id,
 			label: "GitHub Apps",
 		});
 
-		expect(frames).toMatchObject([{ ok: false, reason: "closed", rid: "closed" }]);
+		expect(frames).toMatchObject([{ ok: false, reason: "resolved", rid: "closed" }]);
 		expect(Store.get(plan.questions, id)?.definition.questions[0].options).toHaveLength(1);
 		expect(plan.records.get(id)?.definition.questions[0].options).toHaveLength(1);
 		expect(room.project(plan.document)).toBe(source);
@@ -56,7 +59,7 @@ test("adding to a card whose authoritative record is closed is refused", async (
 	}
 });
 
-test("non-string option labels are invalid instead of coerced into text", async () => {
+test("non-string, empty and overlong option labels are refused without a mutation", async () => {
 	let context = await openPlan();
 	let plan = context.plan;
 	plans.push(plan);
@@ -70,9 +73,18 @@ test("non-string option labels are invalid instead of coerced into text", async 
 			frames.push(JSON.parse(raw));
 		},
 	} as unknown as Socket;
-	for (let [index, label] of [123, ["Nested"], { text: "Object" }].entries()) {
+	let invalid = [
+		123,
+		["Nested"],
+		{ text: "Object" },
+		"   ",
+		"x".repeat(Question.limits.MAX_LABEL + 1),
+	];
+	for (let [index, label] of invalid.entries()) {
 		await Questions.addOption(plan, context.server, "test", ws, {
-			kind: "question:add-option",
+			kind: "question:option",
+			question: plan.records.get(id)!.definition.questions[0]!.id,
+			key: "add-option-2",
 			ts: 0,
 			rid: `invalid-${index}`,
 			id,
@@ -80,9 +92,11 @@ test("non-string option labels are invalid instead of coerced into text", async 
 		});
 	}
 
-	expect(frames).toHaveLength(3);
+	expect(frames).toHaveLength(invalid.length);
 	for (let frame of frames) expect(frame).toMatchObject({ ok: false, reason: "invalid" });
 	expect(Store.get(plan.questions, id)?.definition.questions[0].options).toHaveLength(1);
 	expect(plan.records.get(id)?.definition.questions[0].options).toHaveLength(1);
-	expect(context.broadcasts.filter(frame => frame.kind === "question:changed")).toHaveLength(0);
+	expect(context.broadcasts.filter(frame => frame.kind === "question:option-added")).toHaveLength(
+		0,
+	);
 });

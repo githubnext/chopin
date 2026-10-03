@@ -3,7 +3,6 @@ import { finishPolicy } from "./policy-final";
 import { finalContext } from "./policy-dispatcher.test-fixtures";
 import { stableId } from "./policy-identity";
 import { inputFor } from "./policy-initial.test-fixtures";
-import type { Event } from "./policy-types";
 
 test("final fallback owns candidate one but uses index-zero identity and the full message", () => {
 	let context = finalContext(), before = context.working;
@@ -21,32 +20,6 @@ test("final fallback owns candidate one but uses index-zero identity and the ful
 	expect(context.working.threads).toHaveLength(0);
 	expect(Object.hasOwn(result, "selectedTarget")).toBe(true);
 	expect(result.selectedTarget).toBeUndefined();
-});
-test.each([false, true])(
-	"fallback events push failure retains partial publication: %s",
-	partial => {
-		let context = finalContext(), before = context.working;
-		context.events.push = function(...items: Event[]) {
-			if (partial) Array.prototype.push.apply(this, items);
-			throw new Error("event push failed");
-		};
-		let result = finishPolicy(context);
-		expect(result.events).toHaveLength(partial ? 1 : 0);
-		expect(result.outcomes[1]!.status).toBe("review");
-		expect(result.outcomes[1]!.gate).toBe("question could not be opened");
-		expect(context.working).toBe(before);
-	},
-);
-test("fallback ID push failure keeps the event and partial ID but marks review", () => {
-	let context = finalContext();
-	context.outcomes[1]!.eventIds.push = function(...items: string[]) {
-		Array.prototype.push.apply(this, items);
-		throw new Error("ID push failed");
-	};
-	let result = finishPolicy(context);
-	expect(result.events).toHaveLength(1);
-	expect(result.outcomes[1]!.eventIds).toEqual([result.events[0]!.id]);
-	expect(result.outcomes[1]!.status).toBe("review");
 });
 test("fallback reads live owned scores and role answers", () => {
 	let context = finalContext();

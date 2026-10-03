@@ -1,3 +1,4 @@
+export const MAX_CONTRIBUTIONS = 64;
 export const MAX_THREADS = 20;
 export const MAX_EVENTS = 4096;
 export const MAX_ANALYSIS = 64;

@@ -1,4 +1,8 @@
-import { compoundAttribution, compoundOpenings, topicCorroboration } from "./policy-compound";
+import {
+	compoundAttribution,
+	compoundOpenings,
+	questionListCorroboration,
+} from "./policy-compound";
 import { directFacts, type PolicyContext } from "./policy-context";
 import { createQuotedOption, directRecovery } from "./policy-direct-recovery";
 import type { PolicyResult } from "./policy-types";
@@ -12,7 +16,7 @@ export function runInitialTerminals(context: PolicyContext): PolicyResult | unde
 
 	let facts = directFacts(context);
 	context.facts = facts;
-	let result = topicCorroboration(context, facts);
+	let result = questionListCorroboration(context, facts);
 	if (result) return result;
 	let quotedOption = createQuotedOption(context);
 	context.quotedOption = quotedOption;

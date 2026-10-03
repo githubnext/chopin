@@ -33,16 +33,39 @@ test("scripted registration permits agent discovery without starting transport",
 		stdout: "pipe",
 		stderr: "pipe",
 	});
-	let timer = setTimeout(() => child.kill("SIGKILL"), 8000);
+	let ready = Promise.withResolvers<void>();
+	let stdout = "";
+	let output = (async () => {
+		let reader = child.stdout.getReader();
+		let decoder = new TextDecoder();
+		while (true) {
+			let { done, value } = await reader.read();
+			if (done) break;
+			stdout += decoder.decode(value, { stream: true });
+			if (stdout.includes("scripted-discovery-ready\n")) ready.resolve();
+		}
+		stdout += decoder.decode();
+		if (!stdout.includes("scripted-discovery-ready\n")) {
+			ready.reject(new Error(`Discovery exited before ready: ${stdout}`));
+		}
+		return stdout;
+	})();
+	void output.catch(ready.reject);
+	// Cold module discovery competes with the full unit suite; only a ready child must exit promptly.
+	let timer = setTimeout(() => child.kill("SIGKILL"), 60_000);
 	try {
-		let [exit, stdout, stderr] = await Promise.all([
+		await ready.promise;
+		clearTimeout(timer);
+		timer = setTimeout(() => child.kill("SIGKILL"), 5_000);
+		let [exit, completeOutput, stderr] = await Promise.all([
 			child.exited,
-			new Response(child.stdout).text(),
+			output,
 			new Response(child.stderr).text(),
 		]);
 		expect({ exit, stderr }).toEqual({ exit: 0, stderr: "" });
-		expect(stdout.trim()).toBe("scripted-discovery-ready");
+		expect(completeOutput.trim()).toBe("scripted-discovery-ready");
 	} finally {
 		clearTimeout(timer);
+		if (child.exitCode === null) child.kill("SIGKILL");
 	}
-}, 10_000);
+}, 70_000);

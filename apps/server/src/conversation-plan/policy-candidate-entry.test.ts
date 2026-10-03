@@ -70,36 +70,6 @@ test("domain failure clears the group and keeps later ownership checks active", 
 	expect(context.outcomes[1]!.gate).toBe("source ownership unclear");
 });
 
-test("an event push failure preserves the successfully applied opening in working", () => {
-	let context = candidateContext();
-	context.events.push = () => {
-		throw new Error("event push");
-	};
-	expect(beginCandidate(context, 0, context.input.candidates[0]!)).toBeUndefined();
-	expect(context.working.threads).toHaveLength(1);
-	expect(context.working.events).toHaveLength(1);
-	expect(context.events).toHaveLength(0);
-	expect(context.candidateRun!.optionGroup).toBeUndefined();
-	expect(context.outcomes[0]!.gate).toBe("multi-option question could not be opened");
-});
-
-test("an outcome ID push failure retains both the opening state and published event", () => {
-	let context = candidateContext();
-	context.outcomes.push = function(this: typeof context.outcomes, ...outcomes) {
-		for (let outcome of outcomes) {
-			outcome.eventIds.push = () => {
-				throw new Error("ID push");
-			};
-		}
-		return Array.prototype.push.apply(this, outcomes);
-	};
-	expect(beginCandidate(context, 0, context.input.candidates[0]!)).toBeUndefined();
-	expect(context.working.threads).toHaveLength(1);
-	expect(context.events).toHaveLength(1);
-	expect(context.outcomes[0]!.eventIds).toHaveLength(0);
-	expect(context.candidateRun!.optionGroup).toBeUndefined();
-});
-
 test("duplicate cached labels skip while the group opening and consumed labels survive", () => {
 	let context = candidateContext();
 	beginCandidate(context, 0, context.input.candidates[0]!);

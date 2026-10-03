@@ -12,6 +12,7 @@ export function excerptCorrectionSetup(options: {
 	outcomeRange?: [number, number];
 	threadStatus?: "open" | "discarded";
 	duplicateSource?: boolean;
+	linked?: boolean;
 } = {}) {
 	let setup = harness();
 	let question = entry("question", "Which service should send notification emails?");
@@ -42,16 +43,18 @@ export function excerptCorrectionSetup(options: {
 			targetId: "thread-a",
 		},
 	}, option);
-	state = applyEvent(state, {
-		id: "card-link",
-		type: "card.linked",
-		threadId: "thread-a",
-		observedThreadVersion: state.threads[0]!.version,
-		origin: "classifier",
-		actor: { kind: "classifier" },
-		at: 1001,
-		questionnaireId: "01K0N4W3B7P27CBAEC7A8C8WEA",
-	});
+	if (options.linked !== false) {
+		state = applyEvent(state, {
+			id: "card-link",
+			type: "card.linked",
+			threadId: "thread-a",
+			observedThreadVersion: state.threads[0]!.version,
+			origin: "classifier",
+			actor: { kind: "classifier" },
+			at: 1001,
+			questionnaireId: "01K0N4W3B7P27CBAEC7A8C8WEA",
+		});
+	}
 	let excerpt: Chat.Entry = {
 		...entry(
 			"excerpt",
@@ -116,6 +119,31 @@ export function excerptCorrectionSetup(options: {
 			}],
 	});
 	setup.plan.conversationPlan = state;
+	let cardId = state.threads[0]!.questionnaireId;
+	if (cardId) {
+		setup.plan.records.set(cardId, {
+			id: cardId,
+			threadId: "thread-a",
+			status: options.threadStatus === "discarded" ? "cancelled" : "open",
+			origin: "conversation",
+			definition: {
+				questions: [{
+					id: "01K0N4W3B7P27CBAEC7A8C8WEC",
+					header: "Notifications",
+					question: question.text,
+					multiple: false,
+					options: [{
+						id: "01K0N4W3B7P27CBAEC7A8C8WEB",
+						label: option.text,
+						description: "",
+					}],
+				}],
+			},
+			history: [],
+			optionOrigins: {},
+			editors: [],
+		});
+	}
 	return { setup, excerpt, start, end };
 }
 

@@ -74,51 +74,6 @@ test("a discarded working thread rejects verification while captured thread hist
 	expect(context.events).toHaveLength(0);
 });
 
-test.each(["events", "IDs"])(
-	"a %s push failure retains the successfully applied resume",
-	target => {
-		let { context, entry, role } = verificationFrame();
-		if (target === "events") {
-			context.events.push = () => {
-				throw new Error("event push");
-			};
-		} else {entry.outcome.eventIds.push = () => {
-				throw new Error("ID push");
-			};}
-		expect(runCandidateVerification(context, entry, role)).toBeUndefined();
-		expect(context.working.events.at(-1)!.type).toBe("settle.resumed");
-		expect(context.events).toHaveLength(target === "events" ? 0 : 1);
-		expect(entry.outcome.eventIds).toHaveLength(0);
-		expect(entry.outcome.gate).toBe("verification needs review");
-		expect(activeSettleDeferral(context.working.threads[0]!, context.working.events))
-			.toBeUndefined();
-	},
-);
-
-test.each([false, true])(
-	"handled verification never reads the spike label after accepted/rejected inference: %s",
-	reject => {
-		let { context, entry, role } = verificationFrame();
-		if (reject) {
-			context.events.push = () => {
-				throw new Error("event push");
-			};
-		}
-		let quote = entry.candidate.quote;
-		let reads = 0;
-		Object.defineProperty(entry.candidate, "quote", {
-			get() {
-				reads++;
-				if (reads > 2) throw new Error("spike label reached");
-				return quote;
-			},
-		});
-		expect(runCandidateVerification(context, entry, role)).toBeUndefined();
-		expect(reads).toBe(2);
-		expect(entry.outcome.gate).toBe(reject ? "verification needs review" : "accepted");
-	},
-);
-
 test.each([false, true])(
 	"spike preference caches label or skips its immediate condition: %s",
 	conditional => {

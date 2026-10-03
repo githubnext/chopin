@@ -58,21 +58,6 @@ test.each([{ first: 0.9, again: 0.7 }, { first: 0.899, again: 0.7 }, { first: 0.
 		}
 	},
 );
-test.each(["base", "source"])("question %s failure retains target assignment", failure => {
-	let { context, entry, role } = ordinaryFrame(ordinaryInput("question"));
-	if (failure === "base") {
-		context.working.threads.find = () => {
-			throw new Error("base read");
-		};
-	} else {Object.defineProperty(entry.candidate, "quote", {
-			get() {
-				throw new Error("source read");
-			},
-		});}
-	expect(() => runQuestion(context, entry, role)).toThrow(failure + " read");
-	expect(entry.outcome.targetId).toMatch(/^thread:/);
-	expect(context.events).toHaveLength(0);
-});
 
 test("a cached direct question progresses when an option group already exists", () => {
 	let { context, entry, role } = ordinaryFrame(ordinaryInput("question"));

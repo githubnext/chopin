@@ -102,105 +102,71 @@ test("legacy persisted optionless withdrawal still retires scoped Save on replay
 	expect(restored.threads[0]?.pendingScopedChoice).toBeUndefined();
 });
 
-test("an unrelated optionless objection by a supporter keeps scoped evidence", async () => {
-	let fixture = await scopedNoticeFixture(true);
-	let before = fixture.context.plan.chat.entries.find(entry =>
-		entry.decision?.kind === "scoped-choice"
-	);
-	if (!before) throw new Error("scoped notice missing");
-	let previous = structuredClone(before.decision);
-	let quote = "I oppose making the toolbar blue.";
-	await fixture.deliver({
-		id: "rob-toolbar-objection",
-		type: "stance.changed",
-		scopedProposalId: null,
-		threadId: "thread-a",
-		observedThreadVersion: fixture.state().threads[0]!.version,
-		origin: "classifier",
-		actor: { kind: "classifier" },
-		at: 4,
-		source: {
+for (
+	let scenario of [
+		{
+			name: "an unrelated optionless objection by a supporter keeps scoped evidence",
+			supporter: true,
+			id: "rob-toolbar-objection",
 			messageId: "scoped-rob-toolbar",
-			author: { kind: "member", handle: "rob" },
-			quote,
-			start: 0,
-			end: quote.length,
-			role: "objection",
+			actor: "rob",
+			quote: "I oppose making the toolbar blue.",
+			at: 4,
+			optionId: undefined,
 		},
-		position: "oppose",
-	});
-	expect(fixture.context.plan.chat.entries.find(entry => entry.id === before.id)?.decision)
-		.toEqual(previous);
-	expect(fixture.state().threads[0]?.pendingScopedChoice?.proposalId)
-		.toBe(fixture.proposal.id);
-	expect(fixture.errors).toEqual([]);
-});
-
-test("an unrelated optionless objection by the proposer keeps scoped Save active", async () => {
-	let fixture = await scopedNoticeFixture(false);
-	let before = fixture.context.plan.chat.entries.find(entry =>
-		entry.decision?.kind === "scoped-choice"
-	);
-	if (!before) throw new Error("scoped notice missing");
-	let previous = structuredClone(before.decision);
-	let quote = "I oppose making the toolbar blue.";
-	await fixture.deliver({
-		id: "mei-toolbar-objection",
-		type: "stance.changed",
-		scopedProposalId: null,
-		threadId: "thread-a",
-		observedThreadVersion: fixture.state().threads[0]!.version,
-		origin: "classifier",
-		actor: { kind: "classifier" },
-		at: 3,
-		source: {
+		{
+			name: "an unrelated optionless objection by the proposer keeps scoped Save active",
+			supporter: false,
+			id: "mei-toolbar-objection",
 			messageId: "scoped-mei-toolbar",
-			author: { kind: "member", handle: "mei" },
-			quote,
-			start: 0,
-			end: quote.length,
-			role: "objection",
+			actor: "mei",
+			quote: "I oppose making the toolbar blue.",
+			at: 3,
+			optionId: undefined,
 		},
-		position: "oppose",
-	});
-	expect(fixture.state().threads[0]?.pendingScopedChoice?.proposalId)
-		.toBe(fixture.proposal.id);
-	expect(fixture.context.plan.chat.entries.find(entry => entry.id === before.id)?.decision)
-		.toEqual(previous);
-	expect(fixture.errors).toEqual([]);
-});
-
-test("an unlinked named-option objection keeps the scoped Save notice active", async () => {
-	let fixture = await scopedNoticeFixture(false);
-	let before = fixture.context.plan.chat.entries.find(entry =>
-		entry.decision?.kind === "scoped-choice"
-	);
-	if (!before) throw new Error("scoped notice missing");
-	let previous = structuredClone(before.decision);
-	let quote = "I oppose GitHub Apps.";
-	await fixture.deliver({
-		id: "mei-unlinked-named-objection",
-		type: "stance.changed",
-		scopedProposalId: null,
-		threadId: "thread-a",
-		observedThreadVersion: fixture.state().threads[0]!.version,
-		origin: "classifier",
-		actor: { kind: "classifier" },
-		at: 3,
-		source: {
+		{
+			name: "an unlinked named-option objection keeps the scoped Save notice active",
+			supporter: false,
+			id: "mei-unlinked-named-objection",
 			messageId: "scoped-mei-unlinked-named",
-			author: { kind: "member", handle: "mei" },
-			quote,
-			start: 0,
-			end: quote.length,
-			role: "objection",
+			actor: "mei",
+			quote: "I oppose GitHub Apps.",
+			at: 3,
+			optionId: OPTION,
 		},
-		optionId: OPTION,
-		position: "oppose",
+	]
+) {
+	test(scenario.name, async () => {
+		let fixture = await scopedNoticeFixture(scenario.supporter);
+		let before = fixture.context.plan.chat.entries.find(entry =>
+			entry.decision?.kind === "scoped-choice"
+		);
+		if (!before) throw new Error("scoped notice missing");
+		let previous = structuredClone(before.decision);
+		await fixture.deliver({
+			id: scenario.id,
+			type: "stance.changed",
+			scopedProposalId: null,
+			threadId: "thread-a",
+			observedThreadVersion: fixture.state().threads[0]!.version,
+			origin: "classifier",
+			actor: { kind: "classifier" },
+			at: scenario.at,
+			source: {
+				messageId: scenario.messageId,
+				author: { kind: "member", handle: scenario.actor },
+				quote: scenario.quote,
+				start: 0,
+				end: scenario.quote.length,
+				role: "objection",
+			},
+			...(scenario.optionId ? { optionId: scenario.optionId } : {}),
+			position: "oppose",
+		});
+		expect(fixture.state().threads[0]?.pendingScopedChoice?.proposalId)
+			.toBe(fixture.proposal.id);
+		expect(fixture.context.plan.chat.entries.find(entry => entry.id === before.id)?.decision)
+			.toEqual(previous);
+		expect(fixture.errors).toEqual([]);
 	});
-	expect(fixture.state().threads[0]?.pendingScopedChoice?.proposalId)
-		.toBe(fixture.proposal.id);
-	expect(fixture.context.plan.chat.entries.find(entry => entry.id === before.id)?.decision)
-		.toEqual(previous);
-	expect(fixture.errors).toEqual([]);
-});
+}

@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import * as Question from "@chopin/question";
 
 import * as Questions from "./questions/service";
 import * as Store from "./questions/store";
@@ -16,9 +15,9 @@ let fixture = createQuestionServiceFixture(() => plans, value => {
 	plans = value;
 });
 plans = fixture.plans;
-let { restart, definition, asking, member } = fixture;
+let { restart, definition, asking, selectFirstOption, member } = fixture;
 
-// Whole archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2 callbacks and data; import/fixture wrappers only.
+// Retained durability scenarios share the existing draft-selection helper.
 test("discarding an open card commits its hidden node before releasing the Planner", async () => {
 	let context = await openPlan();
 	let plan = context.plan;
@@ -83,19 +82,8 @@ test("discarding a decided card retains its answer, prose, and original decider"
 	let option = question.options[0]!.id;
 	let opened = Store.snapshot(plan.questions, id);
 	if (!opened.open) throw new Error("question was not open");
-	let model = Question.crdt.Model.fromBinary(new Uint8Array(opened.model))
-		.fork() as unknown as Question.Model;
-	model.api.val([question.id, "choice"]).set(option);
-	let patch = model.api.flush();
-	if (!patch) throw new Error("selection produced no patch");
 	let ana = member("ana");
-	await Questions.edit(plan, ana.ws, {
-		kind: "question:edit",
-		ts: 0,
-		rid: "select",
-		id,
-		patch: [...patch.toBinary()],
-	});
+	await selectFirstOption(plan, ana.ws, id);
 	await Questions.submit(plan, context.server, "test", ana.ws, {
 		kind: "question:submit",
 		ts: 0,

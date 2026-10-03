@@ -19,7 +19,7 @@ let fixture = createConversationCardFixture(() => plans, value => {
 plans = fixture.plans;
 let { OPTION, SECOND, input } = fixture;
 
-// Whole archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2 callbacks.
+// Retained scenarios use the current keyed shared-option protocol.
 test("server option growth retains the suggestion at its new card revision", async () => {
 	let context = await openPlan();
 	plans.push(context.plan);
@@ -77,13 +77,15 @@ test("a human-added option clears an advisory suggestion after commit", async ()
 		publish() {},
 	} as unknown as Socket;
 	await Questions.addOption(context.plan, context.server, "test", ws, {
-		kind: "question:add-option",
+		kind: "question:option",
+		question: context.plan.records.get(id)!.definition.questions[0]!.id,
+		key: "add-option-1",
 		ts: 0,
 		rid: "add",
 		id,
 		label: "GitHub Apps",
 	});
-	expect(replies.at(-1)).toMatchObject({ kind: "question:add-option", ok: true });
+	expect(replies.at(-1)).toMatchObject({ kind: "question:option", ok: true });
 	expect(Store.get(context.plan.questions, id)!.suggested).toBeUndefined();
 	expect(context.broadcasts.at(-1)).toMatchObject({ kind: "question:meta" });
 	expect(context.broadcasts.at(-1)).not.toHaveProperty("meta.suggested");

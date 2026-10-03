@@ -94,6 +94,12 @@ test.each(
 			expected: /open|closed|discarded/i,
 		},
 		{
+			name: "the destination has no linked decision card",
+			setup: { linked: false },
+			change: { contributionKind: "option" },
+			expected: /card.*open/i,
+		},
+		{
 			name: "the target option does not exist",
 			setup: {},
 			change: { contributionKind: "reason", targetOptionId: "missing-option" },

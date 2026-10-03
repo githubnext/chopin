@@ -136,107 +136,59 @@ describe("proactive current-cost research offers", () => {
 		setup.processor.stop();
 	});
 
-	test("does not turn a named outside alternative into an S3/R2 comparison", async () => {
-		let state = seededThread("storage", "Where should originals live?", [
-			{ id: s3Id, text: "Amazon S3" },
-			{ id: r2Id, text: "Cloudflare R2" },
-		]);
-		let message = entry("outside-option", "Compare Amazon S3 and Redis costs.", 11);
-		let judgment: ResearchJudgment = {
-			threadId: "storage",
-			optionIds: [s3Id, r2Id],
-			quote: message.text,
-		};
-		let setup = harness(state, inputInterpreter(() => judgment));
-		await processMessage(setup, message);
-		expect(setup.durable.state.researchOffers ?? []).toEqual([]);
-		expect(setup.durable.state.analysis.some(item => item.messageId === message.id)).toBe(true);
-		setup.processor.stop();
-	});
-
-	test("does not pair S3/R2 when a third provider is also named", async () => {
-		let state = seededThread("storage", "Where should originals live?", [
-			{ id: s3Id, text: "Amazon S3" },
-			{ id: r2Id, text: "Cloudflare R2" },
-		]);
-		let message = entry(
-			"multiple-named-providers",
-			"Compare Amazon S3 and Cloudflare R2 and Redis costs.",
-			11,
-		);
-		let judgment: ResearchJudgment = {
-			threadId: "storage",
-			optionIds: [s3Id, r2Id],
-			quote: message.text,
-		};
-		let setup = harness(state, inputInterpreter(() => judgment));
-		await processMessage(setup, message);
-		expect(setup.durable.state.researchOffers ?? []).toEqual([]);
-		expect(setup.durable.state.analysis.some(item => item.messageId === message.id)).toBe(true);
-		setup.processor.stop();
-	});
-
-	test("rejects an outside operand in a short explicit alternative", async () => {
-		let state = seededThread("storage", "Where should originals live?", [
-			{ id: s3Id, text: "Amazon S3" },
-			{ id: r2Id, text: "Cloudflare R2" },
-		]);
-		let message = entry("outside-or", "Amazon S3 or Redis costs?", 11);
-		let judgment: ResearchJudgment = {
-			threadId: "storage",
-			optionIds: [s3Id, r2Id],
-			quote: message.text,
-		};
-		let setup = harness(state, inputInterpreter(() => judgment));
-		await processMessage(setup, message);
-		expect(setup.durable.state.researchOffers ?? []).toEqual([]);
-		expect(setup.durable.state.analysis.some(item => item.messageId === message.id)).toBe(true);
-		setup.processor.stop();
-	});
-
-	test("rejects an outside operand in a how-do-they-compare question", async () => {
-		let state = seededThread("storage", "Where should originals live?", [
-			{ id: s3Id, text: "Amazon S3" },
-			{ id: r2Id, text: "Cloudflare R2" },
-		]);
-		let message = entry(
-			"outside-how-compare",
-			"How do Amazon S3 and Redis costs compare?",
-			12,
-		);
-		let judgment: ResearchJudgment = {
-			threadId: "storage",
-			optionIds: [s3Id, r2Id],
-			quote: message.text,
-		};
-		let setup = harness(state, inputInterpreter(() => judgment));
-		await processMessage(setup, message);
-		expect(setup.durable.state.researchOffers ?? []).toEqual([]);
-		expect(setup.durable.state.analysis.some(item => item.messageId === message.id)).toBe(true);
-		setup.processor.stop();
-	});
-
-	test("rejects an outside option in a comparative-cost statement", async () => {
-		let state = seededThread("storage", "Where should originals live?", [
-			{ id: s3Id, text: "Amazon S3" },
-			{ id: r2Id, text: "Cloudflare R2" },
-		]);
-		let message = entry(
-			"outside-than",
-			"Amazon S3 is cheaper than Redis at current prices.",
-			13,
-		);
-		let judgment: ResearchJudgment = {
-			threadId: "storage",
-			optionIds: [s3Id, r2Id],
-			quote: message.text,
-		};
-		let setup = harness(state, inputInterpreter(() => judgment));
-		await processMessage(setup, message);
-		expect(setup.durable.state.researchOffers ?? []).toEqual([]);
-		expect(setup.durable.state.analysis.some(item => item.messageId === message.id)).toBe(true);
-		setup.processor.stop();
-	});
+	for (
+		let scenario of [
+			{
+				name: "does not turn a named outside alternative into an S3/R2 comparison",
+				id: "outside-option",
+				text: "Compare Amazon S3 and Redis costs.",
+				ts: 11,
+			},
+			{
+				name: "does not pair S3/R2 when a third provider is also named",
+				id: "multiple-named-providers",
+				text: "Compare Amazon S3 and Cloudflare R2 and Redis costs.",
+				ts: 11,
+			},
+			{
+				name: "rejects an outside operand in a short explicit alternative",
+				id: "outside-or",
+				text: "Amazon S3 or Redis costs?",
+				ts: 11,
+			},
+			{
+				name: "rejects an outside operand in a how-do-they-compare question",
+				id: "outside-how-compare",
+				text: "How do Amazon S3 and Redis costs compare?",
+				ts: 12,
+			},
+			{
+				name: "rejects an outside option in a comparative-cost statement",
+				id: "outside-than",
+				text: "Amazon S3 is cheaper than Redis at current prices.",
+				ts: 13,
+			},
+		]
+	) {
+		test(scenario.name, async () => {
+			let state = seededThread("storage", "Where should originals live?", [
+				{ id: s3Id, text: "Amazon S3" },
+				{ id: r2Id, text: "Cloudflare R2" },
+			]);
+			let message = entry(scenario.id, scenario.text, scenario.ts);
+			let judgment: ResearchJudgment = {
+				threadId: "storage",
+				optionIds: [s3Id, r2Id],
+				quote: message.text,
+			};
+			let setup = harness(state, inputInterpreter(() => judgment));
+			await processMessage(setup, message);
+			expect(setup.durable.state.researchOffers ?? []).toEqual([]);
+			expect(setup.durable.state.analysis.some(item => item.messageId === message.id))
+				.toBe(true);
+			setup.processor.stop();
+		});
+	}
 
 	test("does not offer quoted cost concerns owned only by the research follow-up", async () => {
 		let state = seededThread("mail", "Which email provider should we use?", [

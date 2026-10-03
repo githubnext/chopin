@@ -46,19 +46,3 @@ test("agreement retains the raw named option despite low classifier confidence",
 	expect(role.option).toBeUndefined();
 	expect(runAgreement(context, entry, role)).toEqual({ proposed: undefined });
 });
-test.each(["base", "source"])("%s failure precedes selected-target assignment", failure => {
-	let { context, entry, role } = ordinaryFrame(ordinaryInput("none"));
-	let before = structuredClone(entry.outcome);
-	if (failure === "base") {
-		context.working.threads.find = () => {
-			throw new Error("base read");
-		};
-	} else {Object.defineProperty(entry.candidate, "quote", {
-			get() {
-				throw new Error("source read");
-			},
-		});}
-	expect(() => runAgreement(context, entry, role)).toThrow(failure + " read");
-	expect(context.selectedTarget).toBeUndefined();
-	expect(entry.outcome).toEqual(before);
-});

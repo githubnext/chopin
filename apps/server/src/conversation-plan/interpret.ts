@@ -1,9 +1,7 @@
 import type { ConversationPlan } from "@chopin/protocol";
 import { askJev, type JevAnswer } from "./jev";
-import { bareEditorClarificationThread, planEvents } from "./policy";
+import { planEvents } from "./policy";
 import {
-	BARE_EDITOR_CLARIFICATION_VERSION,
-	buildBareEditorClarificationRequest,
 	buildCandidateTargetingRequest,
 	buildResearchOfferRequest,
 	buildTriageRequest,
@@ -177,36 +175,6 @@ export async function interpretMessage(input: InterpretInput): Promise<Interpret
 			first: first.answers,
 			candidates,
 		});
-		if (planned.policyGate === "bare editor list needs review") {
-			let policyInput = {
-				channelId: input.channelId,
-				message: input.message,
-				state: input.state,
-				linkedCards,
-				first: first.answers,
-				candidates,
-			};
-			let thread = bareEditorClarificationThread(policyInput);
-			if (thread) {
-				try {
-					let clarified = await ask(buildBareEditorClarificationRequest(
-						input.message,
-						thread,
-						quotes,
-					));
-					if (clarified.model === first.model) {
-						passes.push({
-							stage: "clarification",
-							version: BARE_EDITOR_CLARIFICATION_VERSION,
-							answers: clarified.answers,
-						});
-						planned = planEvents({ ...policyInput, clarification: clarified.answers });
-					}
-				} catch {
-					// An unavailable joint judgment cannot authorize any of the four options.
-				}
-			}
-		}
 		return {
 			events: planned.events,
 			researchOffer,

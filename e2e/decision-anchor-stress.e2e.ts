@@ -387,6 +387,15 @@ test(
 		await page.getByRole("button", { name: /^Decisions/ }).click();
 		await expect(page.getByRole("button", { name: "1 resolved", exact: true })).toBeVisible();
 		await page.getByRole("button", { name: "Document", exact: true }).click();
+		await expect(page.locator("[data-decision-collapsing]")).toHaveCount(0);
+		await expect.poll(async () => {
+			let markerBox = await marker(page).boundingBox();
+			let lineCenter = await moved.evaluate(paragraph => {
+				let box = paragraph.getBoundingClientRect();
+				return box.top + Number.parseFloat(getComputedStyle(paragraph).lineHeight) / 2;
+			});
+			return markerBox ? Math.abs(markerBox.y + markerBox.height / 2 - lineCenter) : Infinity;
+		}).toBeLessThan(2);
 		await page.screenshot({ path: testInfo.outputPath("decision-anchor-after-cut-paste.png") });
 		await moved.scrollIntoViewIfNeeded();
 		let glyph = await moved.evaluate(paragraph => {

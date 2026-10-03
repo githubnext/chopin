@@ -17,9 +17,9 @@ let fixture = createQuestionServiceFixture(() => plans, value => {
 	plans = value;
 });
 plans = fixture.plans;
-let { definition, asking, member } = fixture;
+let { definition, asking, selectFirstOption, member } = fixture;
 
-// Whole archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2 callbacks and data; import/fixture wrappers only.
+// Retained durability scenarios share the existing draft-selection helper.
 test("a rejected discard commit keeps the selected draft, record, revision, and waiter", async () => {
 	let context = await openPlan();
 	let plan = context.plan;
@@ -31,19 +31,8 @@ test("a rejected discard commit keeps the selected draft, record, revision, and 
 	if (!open.open) throw new Error("question was not open");
 	let question = open.definition.questions[0]!;
 	let option = question.options[0]!.id;
-	let model = Question.crdt.Model.fromBinary(new Uint8Array(open.model))
-		.fork() as unknown as Question.Model;
-	model.api.val([question.id, "choice"]).set(option);
-	let patch = model.api.flush();
-	if (!patch) throw new Error("selection produced no patch");
 	let ana = member();
-	await Questions.edit(plan, ana.ws, {
-		kind: "question:edit",
-		ts: 0,
-		rid: "select",
-		id,
-		patch: [...patch.toBinary()],
-	});
+	await selectFirstOption(plan, ana.ws, id);
 	let source = room.project(plan.document);
 	let revision = plan.revision;
 	let draftRevision = Store.get(plan.questions, id)!.revision;
@@ -119,20 +108,9 @@ test("a queued discard reads the decision committed ahead of it", async () => {
 	if (!open.open) throw new Error("question was not open");
 	let question = open.definition.questions[0]!;
 	let option = question.options[0]!.id;
-	let model = Question.crdt.Model.fromBinary(new Uint8Array(open.model))
-		.fork() as unknown as Question.Model;
-	model.api.val([question.id, "choice"]).set(option);
-	let patch = model.api.flush();
-	if (!patch) throw new Error("selection produced no patch");
 	let ana = member("ana");
 	let ben = member("ben");
-	await Questions.edit(plan, ana.ws, {
-		kind: "question:edit",
-		ts: 0,
-		rid: "select",
-		id,
-		patch: [...patch.toBinary()],
-	});
+	await selectFirstOption(plan, ana.ws, id);
 	let entered = Promise.withResolvers<void>();
 	let release = Promise.withResolvers<void>();
 	let blocker = Service.exclusive(plan, async () => {

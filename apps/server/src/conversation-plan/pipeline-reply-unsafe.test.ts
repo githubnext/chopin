@@ -80,10 +80,6 @@ test.each(
 			"what sends transactional notifications? our SMTP relay, As Fallback, or SES?",
 		],
 		[
-			"four-item",
-			"what sends transactional notifications? our SMTP relay, Postmark, SES, or Mailgun?",
-		],
-		[
 			"duplicate-item",
 			"what sends transactional notifications? our SMTP relay, Postmark, or SMTP relay?",
 		],
@@ -107,9 +103,15 @@ test.each([
 	`Rob said, "Tiptap, bare ProseMirror, Lexical, or just native Selection and Range with our own document model."`,
 	`"Tiptap, bare ProseMirror, Lexical, or just native Selection and Range with our own document model."`,
 	"Not Tiptap, bare ProseMirror, Lexical, or just native Selection and Range with our own document model.",
-	"Tiptap, bare ProseMirror, Lexical, Slate, or just native Selection and Range with our own document model.",
 	"Tiptap, bare ProseMirror, Lexical, or Tiptap.",
-	"Red, blue, green, or yellow.",
-])("D01's four-option recovery does not split unsafe or unrelated lists: %s", text => {
+])("quoted, negated, or duplicate four-option lists stay whole: %s", text => {
 	expect(extractQuotes(text)).not.toHaveLength(4);
+});
+
+test("a fifth explicit option fails the source budget", () => {
+	expect(() =>
+		extractQuotes(
+			"Tiptap, bare ProseMirror, Lexical, Slate, or just native Selection and Range with our own document model.",
+		)
+	).toThrow("source quote count exceeds 4");
 });

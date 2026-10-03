@@ -158,7 +158,7 @@ export function createPlannerJobs(deps: PlannerJobDeps) {
 			);
 			if (!settled) continue;
 			announce(settled.find(job => job.id === running.id));
-			if (!stopped && finalResult.status === "done") {
+			if (!stopped && (finalResult.status === "done" || finalResult.status === "skipped")) {
 				try {
 					deps.onCapacityAvailable?.();
 				} catch (error) {

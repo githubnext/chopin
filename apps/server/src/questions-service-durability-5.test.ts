@@ -9,7 +9,7 @@ import * as Service from "./plan/service";
 import { openPlan } from "./testing/plan";
 
 import type { Plan } from "./plan/service";
-import type { Socket } from "./wire";
+
 import { createQuestionServiceFixture } from "./question-service.test-fixtures";
 import {
 	activateD02Deferral,
@@ -23,7 +23,7 @@ let fixture = createQuestionServiceFixture(() => plans, value => {
 plans = fixture.plans;
 let { restart, definition, asking, selectFirstOption, member } = fixture;
 
-// Whole archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2 callbacks and data; import/fixture wrappers only.
+// Retained durability scenarios share the existing draft-selection helper.
 test("submitting a chosen option projects its id and preserves it after restart", async () => {
 	let context = await openPlan();
 	let plan = context.plan;
@@ -32,28 +32,8 @@ test("submitting a chosen option projects its id and preserves it after restart"
 	await asked.created;
 	let record = [...plan.records.values()][0]!;
 	let question = record.definition.questions[0]!;
-	let opened = Store.snapshot(plan.questions, record.id);
-	if (!opened.open) throw new Error("question was not open");
-	let model = Question.crdt.Model.fromBinary(new Uint8Array(opened.model))
-		.fork() as unknown as Question.Model;
-	model.api.val([question.id, "choice"]).set(question.options[0]!.id);
-	let patch = model.api.flush();
-	if (!patch) throw new Error("selection produced no patch");
-	let frames: Array<Record<string, unknown>> = [];
-	let ws = {
-		data: { handle: "ana", client: "client-ana", room: "test" },
-		send(raw: string) {
-			frames.push(JSON.parse(raw));
-		},
-		publish() {},
-	} as unknown as Socket;
-	await Questions.edit(plan, ws, {
-		kind: "question:edit",
-		ts: 0,
-		rid: "select",
-		id: record.id,
-		patch: [...patch.toBinary()],
-	});
+	let { ws, frames } = member();
+	await selectFirstOption(plan, ws, record.id);
 	let revision = Store.get(plan.questions, record.id)!.revision;
 	await Questions.submit(plan, context.server, "test", ws, {
 		kind: "question:submit",

@@ -46,6 +46,31 @@ test("adding an option shows it to everyone and keeps a selection", async ({ joi
 	await expect(card(ben).getByRole("radio", { name: "In SQLite" })).toBeChecked();
 	await expect(card(ana).getByRole("textbox", { name: "New option" })).toHaveCount(0);
 	await expect(card(ana).getByRole("button", { name: "Add an option", exact: true })).toBeFocused();
+
+	for (let [writer, label] of [[ben, "In MySQL"], [ana, "In files"]] as const) {
+		await card(writer).getByRole("button", { name: "Add an option", exact: true }).click();
+		let field = card(writer).getByRole("textbox", { name: "New option" });
+		await field.fill(label);
+		await field.press("Enter");
+		await expect(field).toHaveCount(0);
+		for (let page of [ana, ben]) {
+			await expect(card(page).getByRole("radio", { name: label, exact: true })).toBeVisible();
+			await expect(
+				card(page).getByRole("radio", {
+					name: "In SQLite Transactional, but opaque without a client.",
+					exact: true,
+				}),
+			).toBeChecked();
+		}
+	}
+	for (let page of [ana, ben]) {
+		await expect(card(page).getByRole("radio")).toHaveCount(5);
+		for (let label of ["In PostgreSQL", "In MySQL", "In files"]) {
+			await expect(card(page).getByRole("radio", { name: label, exact: true })).not.toBeChecked();
+		}
+		await expect(card(page).getByRole("button", { name: "Add an option", exact: true }))
+			.toBeEnabled();
+	}
 });
 
 test("adding an option leaves an unanswered decision unselected after refresh", async ({ join, page, seed }) => {

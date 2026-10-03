@@ -11,7 +11,7 @@ export type DirectFacts = {
 	questionKey: string;
 	matchingThreads: ConversationPlan.Thread[];
 	directBounds: boolean;
-	topicThreeWay: boolean;
+	questionList: boolean;
 };
 export type CandidateRun = {
 	seenOptionLabels: Set<string>;
@@ -80,8 +80,9 @@ export function directFacts(context: PolicyContext): DirectFacts {
 			candidate.quote.length <= 500 && !!candidate.quote.trim()
 			&& message.text.slice(candidate.start, candidate.end) === candidate.quote
 		);
-	let topicThreeWay = /\bwhat sends\b[^?]{1,160}\?\s+our\b[^,]{1,160},/i
-		.test(message.text);
+	let questionList = directAlternatives.length >= 3
+		&& message.text.indexOf("?") >= 0
+		&& message.text.indexOf("?") < directAlternatives[0]!.start;
 
 	return {
 		optionLabels,
@@ -90,6 +91,6 @@ export function directFacts(context: PolicyContext): DirectFacts {
 		questionKey,
 		matchingThreads,
 		directBounds,
-		topicThreeWay,
+		questionList,
 	};
 }

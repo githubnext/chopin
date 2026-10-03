@@ -80,3 +80,27 @@ test("quote extraction accepts four candidates and rejects a fifth without trunc
 	expect(() => extractQuotes("First. Second. Third. Fourth. Fifth."))
 		.toThrow("source quote count exceeds 4");
 });
+
+test.each(
+	[
+		[
+			"Which queue fits our launch? Redis, SQS, Postgres, or a small in-process queue with disk replay.",
+			["Redis", "SQS", "Postgres", "a small in-process queue with disk replay"],
+		],
+		[
+			"Cedar, Elm, Ash, or browser Selection and Range with a custom model.",
+			["Cedar", "Elm", "Ash", "browser Selection and Range with a custom model"],
+		],
+		["Redis, SQS, or Postgres.", ["Redis", "SQS", "Postgres"]],
+	] as const,
+)("extracts bounded alternatives without domain vocabulary: %s", (text, labels) => {
+	let quotes = extractQuotes(text);
+	expect(quotes.map(item => item.quote)).toEqual([...labels]);
+	for (let quote of quotes) expect(text.slice(quote.start, quote.end)).toBe(quote.quote);
+});
+
+test("a fifth explicit alternative fails the budget rather than becoming one sentence", () => {
+	expect(() => extractQuotes("Cedar, Elm, Ash, Pine, or Oak.")).toThrow(
+		"source quote count exceeds 4",
+	);
+});

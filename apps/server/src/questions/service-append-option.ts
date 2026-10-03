@@ -7,6 +7,7 @@ import * as Service from "../plan/service";
 import * as Store from "./store";
 import { announce, emit, pending } from "./card-notifications";
 import { isOpenStatus } from "./records";
+import { OptionCapacityError } from "../conversation-plan/option-capacity";
 import { broadcast, fail, reply } from "../wire";
 
 import type { Server } from "bun";
@@ -137,6 +138,7 @@ export async function appendOption(
 				}),
 			};
 			let mutation = room.appendQuestionOption(stagedDocument, msg.id, msg.question, result.option);
+			if (!mutation) throw new Error("question projection is missing");
 			await Service.publishStaged(plan, server, roomId, candidate, mutation);
 			outcome = {
 				kind: "question:option",
@@ -160,8 +162,10 @@ export async function appendOption(
 			stagedDocument?.doc.destroy();
 		}
 	}).catch(err => {
-		console.error("[questions] could not save the option:", err);
-		outcome = undefined;
+		if (!(err instanceof OptionCapacityError)) {
+			console.error("[questions] could not save the option:", err);
+		}
+		outcome = err instanceof OptionCapacityError ? refuse(err.reason, err.message) : undefined;
 		added = undefined;
 	});
 	if (!outcome) return fail(ws, msg.rid, "could not save the option");

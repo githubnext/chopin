@@ -18,7 +18,7 @@ let fixture = createQuestionServiceFixture(() => plans, value => {
 plans = fixture.plans;
 let { restart, definition, asking } = fixture;
 
-// Whole archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2 callbacks and data; import/fixture wrappers only.
+// Retained durability scenarios adapted to the keyed shared-option protocol.
 test("adding an option changes the record, document, and durable state before publication", async () => {
 	let context = await openPlan();
 	let plan = context.plan;
@@ -53,7 +53,9 @@ test("adding an option changes the record, document, and durable state before pu
 	let patch = model.api.flush();
 	if (!patch) throw new Error("selection produced no patch");
 	let pending = Questions.addOption(plan, context.server, "test", ws, {
-		kind: "question:add-option",
+		kind: "question:option",
+		question: plan.records.get(id)!.definition.questions[0]!.id,
+		key: "add-option-1",
 		ts: 0,
 		rid: "add",
 		id,
@@ -70,7 +72,9 @@ test("adding an option changes the record, document, and durable state before pu
 	await Bun.sleep(10);
 	try {
 		expect(frames).toHaveLength(0);
-		expect(context.broadcasts.filter(frame => frame.kind === "question:changed")).toHaveLength(0);
+		expect(context.broadcasts.filter(frame => frame.kind === "question:option-added")).toHaveLength(
+			0,
+		);
 		expect(room.project(plan.document)).toBe(oldSource);
 		expect(Store.get(plan.questions, id)?.definition.questions[0].options).toHaveLength(1);
 		expect(plan.revision).toBe(oldRevision);
@@ -80,18 +84,18 @@ test("adding an option changes the record, document, and durable state before pu
 	await Promise.all([pending, editing]);
 	(context.storage.collaboration as { commit: typeof original }).commit = original;
 
-	let response = frames.find(frame => frame.kind === "question:add-option");
-	let changed = context.broadcasts.find(frame => frame.kind === "question:changed");
+	let response = frames.find(frame => frame.kind === "question:option");
+	let changed = context.broadcasts.find(frame => frame.kind === "question:option-added");
 	let update = context.broadcasts.findLast(frame => frame.kind === "plan:update");
 	let options = Store.get(plan.questions, id)!.definition.questions[0].options;
-	expect(response).toMatchObject({ ok: true, revision: 1, option: { label: "GitHub Apps" } });
+	expect(response).toMatchObject({ ok: true, option: { label: "GitHub Apps" } });
 	expect(frames.find(frame => frame.rid === "select")).toMatchObject({
 		open: true,
 		accepted: true,
 		applied: true,
-		revision: 2,
+		revision: 1,
 	});
-	expect(changed).toMatchObject({ id, revision: 1 });
+	expect(changed).toMatchObject({ id, option: { label: "GitHub Apps" } });
 	expect(update).toBeDefined();
 	expect(options.map(option => option.label)).toEqual(["Choose this", "GitHub Apps"]);
 	expect(plan.records.get(id)?.definition.questions[0].options).toEqual(options);
@@ -131,14 +135,18 @@ test("two competing adds with the same label commit one option", async () => {
 
 	await Promise.all([
 		Questions.addOption(plan, context.server, "test", ws, {
-			kind: "question:add-option",
+			kind: "question:option",
+			question: plan.records.get(id)!.definition.questions[0]!.id,
+			key: "add-option-2",
 			ts: 0,
 			rid: "first",
 			id,
 			label: "GitHub Apps",
 		}),
 		Questions.addOption(plan, context.server, "test", ws, {
-			kind: "question:add-option",
+			kind: "question:option",
+			question: plan.records.get(id)!.definition.questions[0]!.id,
+			key: "add-option-3",
 			ts: 0,
 			rid: "second",
 			id,
@@ -153,8 +161,10 @@ test("two competing adds with the same label commit one option", async () => {
 		reason: "duplicate",
 	});
 	expect(options.map(option => option.label)).toEqual(["Choose this", "GitHub Apps"]);
-	expect(Store.get(plan.questions, id)?.revision).toBe(1);
-	expect(context.broadcasts.filter(frame => frame.kind === "question:changed")).toHaveLength(1);
+	expect(Store.get(plan.questions, id)?.revision).toBe(0);
+	expect(context.broadcasts.filter(frame => frame.kind === "question:option-added")).toHaveLength(
+		1,
+	);
 	let reopened = await restart(context);
 	expect(Store.get(reopened.questions, id)?.definition.questions[0].options).toEqual(options);
 });
