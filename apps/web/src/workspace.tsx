@@ -34,7 +34,7 @@ import type {
 export type Pane = "chat";
 
 const CHAT_PANE = {
-	initial: 304,
+	initial: 364,
 	max: 400,
 	min: 304,
 	storageKey: "chopin:pane:chat",
@@ -326,7 +326,7 @@ export function Workspace(
 					<aside
 						aria-hidden={chatInactive || undefined}
 						aria-labelledby={ids.heading.chat}
-						className={`workspace-chat-panel motion-panel ${chatPresence.className} order-2 relative flex min-w-0 flex-col overflow-hidden bg-chat-pane ${
+						className={`workspace-chat-panel motion-panel ${chatPresence.className} relative flex min-w-0 flex-col overflow-hidden bg-chat-pane ${
 							mode === "split" ? "hairline-l hairline-r hairline-b" : ""
 						}`}
 						hidden={chatPresence.phase === "closed"}
@@ -352,7 +352,7 @@ export function Workspace(
 											max={CHAT_PANE.max}
 											min={CHAT_PANE.min}
 											onResize={resizeChat}
-											side="left"
+											side="right"
 											width={chatWidth}
 										/>
 									)}
@@ -384,20 +384,6 @@ export function Workspace(
 					</aside>
 				)}
 
-				{chat && mode === "split" && !presentation.chatVisible
-					&& !childPresentation && (
-					<div className="absolute right-2.5 top-2.5 z-20">
-						<ChatToggle
-							activity={chatActivity}
-							buttonRef={edgeTab}
-							className="rounded-l-none"
-							controls={ids.pane.chat}
-							onToggle={showDesktopChat}
-							open={false}
-						/>
-					</div>
-				)}
-
 				<main
 					aria-hidden={!presentation.documentVisible || undefined}
 					className={`order-1 relative min-w-0 w-full flex-1 ${
@@ -411,19 +397,30 @@ export function Workspace(
 							<div
 								className="flex h-[46px] shrink-0 items-center overflow-x-auto overflow-y-hidden px-2.5 hairline-b"
 								data-document-toolbar
+								onFocusCapture={event => {
+									if (!(event.target instanceof HTMLElement)) return;
+									let control = event.target.getBoundingClientRect();
+									let toolbar = event.currentTarget.getBoundingClientRect();
+									if (control.left < toolbar.left) {
+										event.currentTarget.scrollLeft += Math.floor(control.left - toolbar.left);
+									} else if (control.right > toolbar.right) {
+										event.currentTarget.scrollLeft += Math.ceil(control.right - toolbar.right);
+									}
+								}}
 							>
+								{chat && !presentation.chatVisible && (
+									<ChatToggle
+										activity={chatActivity}
+										buttonRef={edgeTab}
+										className="mr-1 shrink-0"
+										controls={ids.pane.chat}
+										onToggle={showDesktopChat}
+										open={false}
+									/>
+								)}
 								{controls}
 								{childPresentation && (
 									<div className="ml-auto flex shrink-0 items-center">
-										{chat && !presentation.chatVisible && (
-											<ChatToggle
-												activity={chatActivity}
-												buttonRef={edgeTab}
-												controls={ids.pane.chat}
-												onToggle={showDesktopChat}
-												open={false}
-											/>
-										)}
 										<button
 											aria-label={`Close ${childPresentation.label}`}
 											className="btn btn-icon btn-ghost -mr-1 shrink-0"

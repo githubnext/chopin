@@ -24,6 +24,8 @@ import { ResearchDraftStore } from "./research-draft";
 import { register } from "./widgets";
 import { widgetsPlugin } from "./widgets-plugin";
 
+import type { ReactNode } from "react";
+import type { CardMetaStore } from "./card-meta";
 import type { Binding } from "@lexical/yjs";
 import type { MDXEditorMethods } from "@mdxeditor/editor";
 import type { Plan } from "@chopin/protocol";
@@ -70,6 +72,10 @@ export type PlanEditorProps = {
 	 * editor, while the observer that finds them has to run inside it.
 	 */
 	questions?: QuestionnaireStore;
+	cardMeta?: CardMetaStore;
+	/** Open the chat message that started a conversation decision. */
+	onCardSource?: (questionnaireId: string) => void;
+	evidence?: (questionnaireId: string) => ReactNode | null;
 	/** Durable Research Workspace state and actions supplied by the host app. */
 	research?: ResearchStore;
 	/** The same arrangement for comment threads. */
@@ -100,6 +106,9 @@ export function PlanEditor(
 		onScrollTop,
 		questionMotion,
 		questions,
+		cardMeta,
+		onCardSource,
+		evidence,
 		readOnly,
 		research,
 		scrollTop,
@@ -143,8 +152,13 @@ export function PlanEditor(
 	}, [questions, threads, changes]);
 
 	let onAnchors = useCallback(
-		(snapshot: { widgets: Plan.WidgetAnchors[]; threads: Plan.ThreadAnchors[] }) => {
+		(snapshot: {
+			widgets: Plan.WidgetAnchors[];
+			threads: Plan.ThreadAnchors[];
+			prose: Plan.ProseAnchors[];
+		}) => {
 			questions?.anchors(snapshot.widgets);
+			questions?.prose(snapshot.prose);
 			threads?.anchors(snapshot.threads);
 		},
 		[questions, threads],
@@ -256,6 +270,9 @@ export function PlanEditor(
 						motionImmediately,
 						questionMotion,
 						questions,
+						cardMeta,
+						onCardSource,
+						evidence,
 						research,
 						researchDrafts,
 						threads,
@@ -263,6 +280,7 @@ export function PlanEditor(
 						wire,
 						connected: !offline,
 						canEdit: !readOnly,
+						synced: state.synced,
 					}),
 				]
 				: [],
@@ -276,6 +294,9 @@ export function PlanEditor(
 			onChanges,
 			binding,
 			questions,
+			cardMeta,
+			onCardSource,
+			evidence,
 			research,
 			researchDrafts,
 			commentPresentation,
@@ -285,6 +306,7 @@ export function PlanEditor(
 			changes,
 			offline,
 			readOnly,
+			state.synced,
 		],
 	);
 

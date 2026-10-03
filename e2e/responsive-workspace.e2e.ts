@@ -107,6 +107,124 @@ test("a representative compact phone exposes one mounted destination at a time",
 	await expectNoHorizontalOverflow(page);
 });
 
+test(
+	"the 500px boundary preserves mounted panes, drafts, and keyboard controls",
+	async ({ join, seed }) => {
+		await seed(RESPONSIVE_SOURCE);
+		let page = await join("ana", { viewport: { width: 900, height: 850 } });
+		let editor = content(page);
+		let chat = chatPane(page);
+		let draft = chat.locator("textarea");
+		await draft.fill("An unfinished thought across layouts");
+		await page.evaluate(() => {
+			let saved = window as typeof window & {
+				__workspaceEditor?: Element | null;
+				__workspaceChat?: Element | null;
+			};
+			saved.__workspaceEditor = document.querySelector('[aria-label="editable markdown"]');
+			saved.__workspaceChat = document.querySelector(".workspace-chat-panel");
+		});
+
+		let fromCompactChat = false;
+		for (let width of [500, 499, 500]) {
+			await page.setViewportSize({ width, height: 850 });
+			let split = width >= 500;
+			await expect(page.locator("[data-workspace-mode]")).toHaveAttribute(
+				"data-workspace-mode",
+				split ? "split" : "compact",
+			);
+			if (split) {
+				await expect(chat).toBeVisible();
+				await expect(page.getByRole("separator", { name: "Resize chat" })).toBeVisible();
+				await expect(page.getByRole("navigation", { name: "Workspace view" })).toHaveCount(0);
+				let views = page.getByRole("group", { name: "Document view" });
+				await expect(views).toBeVisible();
+				if (width === 500 && fromCompactChat) {
+					await page.getByRole("button", { name: "Hide chat pane" }).click();
+					await expect(chat).toBeHidden();
+					let showChat = page.getByRole("button", { name: "Show chat pane" });
+					await expect(showChat).toBeFocused();
+					await showChat.click();
+					await expect(chat).toBeVisible();
+					await expect(page.getByRole("heading", { name: "Chat", exact: true })).toBeFocused();
+					fromCompactChat = false;
+				}
+				if (width === 500) {
+					let decisions = views.getByRole("button", { name: /^Decisions/ });
+					let documentButton = views.getByRole("button", { name: "Document" });
+					await documentButton.focus();
+					await documentButton.press("Tab");
+					await expect(decisions).toBeFocused();
+					await expectInsideViewport(decisions);
+					let toolbarBounds = (await page.locator("[data-document-toolbar]").boundingBox())!;
+					let decisionBounds = (await decisions.boundingBox())!;
+					expect(decisionBounds.x).toBeGreaterThanOrEqual(toolbarBounds.x);
+					expect(decisionBounds.x + decisionBounds.width)
+						.toBeLessThanOrEqual(toolbarBounds.x + toolbarBounds.width);
+					await decisions.press("Enter");
+					await expect(page.locator('[data-document-view="decisions"]')).toBeVisible();
+					await documentButton.focus();
+					await expectInsideViewport(documentButton);
+					await documentButton.press("Enter");
+					await expect(editor).toBeEditable();
+				}
+			} else {
+				let nav = page.getByRole("navigation", { name: "Workspace view" });
+				await expect(nav).toBeVisible();
+				await expect(page.getByRole("separator", { name: "Resize chat" })).toHaveCount(0);
+				await nav.getByRole("button", { name: /^Chat/ }).click();
+				await expect(chat).toBeVisible();
+				await expect(draft).toHaveValue("An unfinished thought across layouts");
+				await nav.getByRole("button", { name: "Document" }).click();
+				await expect(editor).toBeEditable();
+				if (width === 499) {
+					await nav.getByRole("button", { name: /^Chat/ }).click();
+					fromCompactChat = true;
+				}
+			}
+			expect(
+				await page.evaluate(() => {
+					let saved = window as typeof window & {
+						__workspaceEditor?: Element | null;
+						__workspaceChat?: Element | null;
+					};
+					return saved.__workspaceEditor
+							=== document.querySelector('[aria-label="editable markdown"]')
+						&& saved.__workspaceChat === document.querySelector(".workspace-chat-panel");
+				}),
+			).toBe(true);
+			await expect(draft).toHaveValue("An unfinished thought across layouts");
+			await expectNoHorizontalOverflow(page);
+		}
+
+		await page.setViewportSize({ width: 900, height: 850 });
+		let handle = page.getByRole("separator", { name: "Resize chat" });
+		let preferredWidth = Number(await handle.getAttribute("aria-valuemax"));
+		await handle.press("End");
+		await expect.poll(async () => (await chat.boundingBox())!.width)
+			.toBeCloseTo(preferredWidth, 0);
+		await page.setViewportSize({ width: 500, height: 850 });
+		let main = page.locator(".workspace-frame main");
+		await expect.poll(async () => (await main.boundingBox())!.width).toBeGreaterThan(0);
+		let views = page.getByRole("group", { name: "Document view" });
+		let documentButton = views.getByRole("button", { name: "Document" });
+		let decisions = views.getByRole("button", { name: /^Decisions/ });
+		await documentButton.focus();
+		await documentButton.press("Tab");
+		await expect(decisions).toBeFocused();
+		await expectInsideViewport(decisions);
+		let toolbarBounds = (await page.locator("[data-document-toolbar]").boundingBox())!;
+		let decisionBounds = (await decisions.boundingBox())!;
+		expect(decisionBounds.x).toBeGreaterThanOrEqual(toolbarBounds.x);
+		expect(decisionBounds.x + decisionBounds.width)
+			.toBeLessThanOrEqual(toolbarBounds.x + toolbarBounds.width);
+		await page.setViewportSize({ width: 900, height: 850 });
+		await expect.poll(async () => (await chat.boundingBox())!.width).toBeCloseTo(preferredWidth, 0);
+		await expect.poll(() => page.evaluate(() => localStorage.getItem("chopin:pane:chat")))
+			.toBe(String(preferredWidth));
+	},
+);
+
 test("content swaps retain one interactive destination across pointer and immediate paths", async ({ join, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", { hasTouch: true, viewport: { width: 390, height: 844 } });
@@ -283,83 +401,82 @@ test("the safe area shell contains nonzero top and bottom insets on a 430px phon
 	await expectNoHorizontalOverflow(page);
 });
 
-test("phone landscape header and navigation respect inline safe areas", async ({ join, page, seed }) => {
+test("landscape split controls respect inline safe areas", async ({ join, page, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	await page.setViewportSize({ width: 844, height: 390 });
 	let cdp = await page.context().newCDPSession(page);
 	let safeArea = { bottom: 0, left: 32, right: 24, top: 0 };
 	await cdp.send("Emulation.setSafeAreaInsetsOverride", { insets: safeArea });
 	page = await join("ana");
-	let nav = page.getByRole("navigation", { name: "Workspace view" });
+	await expect(page.getByRole("navigation", { name: "Workspace view" })).toHaveCount(0);
 	let header = page.getByRole("banner");
 	let headerControls = header.getByRole("button");
-	let navControls = nav.getByRole("button");
-	let [headerFirst, headerLast, navFirst, navLast] = await Promise.all([
+	let chatToggle = page.getByRole("button", { name: "Hide chat pane" });
+	let viewControls = page.getByRole("group", { name: "Document view" }).getByRole("button");
+	let [headerFirst, headerLast, chatButton, viewFirst, viewLast] = await Promise.all([
 		headerControls.first().boundingBox(),
 		headerControls.last().boundingBox(),
-		navControls.first().boundingBox(),
-		navControls.last().boundingBox(),
+		chatToggle.boundingBox(),
+		viewControls.first().boundingBox(),
+		viewControls.last().boundingBox(),
 	]);
 	expect(headerFirst).toBeTruthy();
 	expect(headerLast).toBeTruthy();
-	expect(navFirst).toBeTruthy();
-	expect(navLast).toBeTruthy();
+	expect(chatButton).toBeTruthy();
+	expect(viewFirst).toBeTruthy();
+	expect(viewLast).toBeTruthy();
 	let viewportWidth = await page.evaluate(() => visualViewport!.width);
 	expect(headerFirst!.x).toBeGreaterThanOrEqual(safeArea.left);
 	expect(headerLast!.x + headerLast!.width).toBeLessThanOrEqual(
 		viewportWidth - safeArea.right,
 	);
-	expect(navFirst!.x).toBeGreaterThanOrEqual(safeArea.left);
-	expect(navLast!.x + navLast!.width).toBeLessThanOrEqual(viewportWidth - safeArea.right);
-	await expectInsideViewport(nav);
+	expect(chatButton!.x).toBeGreaterThanOrEqual(safeArea.left);
+	expect(viewFirst!.x).toBeGreaterThanOrEqual(safeArea.left);
+	expect(viewLast!.x + viewLast!.width).toBeLessThanOrEqual(viewportWidth - safeArea.right);
+	await expectInsideViewport(chatToggle);
+	await expectInsideViewport(viewControls.last());
 	await expectNoHorizontalOverflow(page);
 });
 
-test("a phone landscape still exposes one destination at a time", async ({ join, seed }) => {
+test("an 844px landscape viewport keeps the split workspace", async ({ join, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", { viewport: { width: 844, height: 390 } });
-	let nav = page.getByRole("navigation", { name: "Workspace view" });
-	await nav.getByRole("button", { name: /Chat/ }).click();
+	await expect(page.getByRole("navigation", { name: "Workspace view" })).toHaveCount(0);
 	await expect(page.getByRole("complementary", { name: "Chat" })).toBeVisible();
 	await expect(page.getByRole("dialog", { name: "Chat" })).toHaveCount(0);
-	await expect(content(page)).toBeHidden();
-	await expect(page.getByRole("separator", { name: "Resize chat" })).toHaveCount(0);
+	await expect(content(page)).toBeEditable();
+	await expect(page.getByRole("separator", { name: "Resize chat" })).toBeVisible();
 	await expectNoHorizontalOverflow(page);
 });
 
-test("the compact side of the Projects transition keeps phone navigation", async ({ join, seed }) => {
+test("the Projects drawer below 1024px keeps the split workspace", async ({ join, seed }) => {
 	let viewport = { width: 1023, height: 964 };
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", { viewport });
-	let nav = page.getByRole("navigation", { name: "Workspace view" });
-	let destinations = nav.getByRole("button");
-	await expect(page.getByRole("button", { name: /chat pane/ })).toHaveCount(0);
-	await expect(page.getByRole("group", { name: "Document view" })).toHaveCount(0);
-	await expect(destinations.nth(0)).toHaveAccessibleName(/^Chat/);
-	await expect(destinations.nth(1)).toHaveAccessibleName("Document");
-	await expect(destinations.nth(2)).toHaveAccessibleName(/^Decisions/);
-
-	let opener = nav.getByRole("button", { name: /^Chat/ });
-	await opener.click();
+	await expect(page.getByRole("navigation", { name: "Workspace view" })).toHaveCount(0);
+	let projects = page.getByRole("button", { name: "Open Projects sidebar" });
+	await expect(projects).toBeVisible();
+	await projects.click();
+	let drawer = page.getByRole("dialog", { name: "Projects" });
+	await expect(drawer).toBeVisible();
+	await page.keyboard.press("Escape");
+	await expect(drawer).toBeHidden();
+	await expect(projects).toBeFocused();
+	await expect(page.getByRole("group", { name: "Document view" })).toBeVisible();
 	let chat = page.getByRole("complementary", { name: "Chat" });
 	await expect(chat).toBeVisible();
 	await expect(page.getByRole("dialog", { name: "Chat" })).toHaveCount(0);
-	await expect(page.getByRole("button", { name: "Close chat" })).toHaveCount(0);
-	await expect(content(page)).toBeHidden();
-	await expect(page.getByRole("separator", { name: "Resize chat" })).toHaveCount(0);
-	await expect(page.getByRole("heading", { name: "Chat", exact: true })).toBeFocused();
-
-	await nav.getByRole("button", { name: "Document", exact: true }).click();
+	await expect(content(page)).toBeEditable();
+	await expect(page.getByRole("separator", { name: "Resize chat" })).toBeVisible();
+	await page.getByRole("button", { name: "Hide chat pane" }).click();
 	await expect(chat).toBeHidden();
-	await expect(content(page)).toBeVisible();
-	await expect(page.getByRole("heading", { name: "Document", exact: true })).toBeFocused();
-
+	let opener = page.getByRole("button", { name: "Show chat pane" });
+	await expect(opener).toBeFocused();
 	await opener.click();
 	await expect(chat).toBeVisible();
 	await expect(page.getByRole("heading", { name: "Chat", exact: true })).toBeFocused();
-	await page.keyboard.press("Escape");
-	await expect(chat).toBeHidden();
-	await expect(opener).toBeFocused();
+	await chat.locator("textarea").press("Escape");
+	await expect(chat).toBeVisible();
 	await expectNoHorizontalOverflow(page);
 });
 
@@ -415,17 +532,20 @@ test("a representative desktop retains the split Chat layout", async ({ join, se
 	await expect(content(page)).toBeEditable();
 });
 
-test("200% zoom resolves to the compact presentation without clipping", async ({ join, seed }) => {
+test("200% zoom at 640 CSS pixels keeps split controls without clipping", async ({ join, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", {
 		screen: { width: 1280, height: 900 },
 		viewport: { width: 640, height: 450 },
 	});
-	let nav = page.getByRole("navigation", { name: "Workspace view" });
-	await expect(nav).toBeVisible();
-	await nav.getByRole("button", { name: /Chat/ }).click();
+	await expect(page.getByRole("navigation", { name: "Workspace view" })).toHaveCount(0);
 	await expect(page.getByRole("complementary", { name: "Chat" })).toBeVisible();
-	await expect(content(page)).toBeHidden();
+	await expect(page.getByRole("group", { name: "Document view" })).toBeVisible();
+	await expect(content(page)).toBeEditable();
+	await expectNoHorizontalOverflow(page);
+	await page.setViewportSize({ width: 480, height: 450 });
+	await expect(page.getByRole("navigation", { name: "Workspace view" })).toBeVisible();
+	await expect(page.getByRole("separator", { name: "Resize chat" })).toHaveCount(0);
 	await expectNoHorizontalOverflow(page);
 });
 

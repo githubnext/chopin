@@ -18,6 +18,7 @@ export const PLANNER_TOOL_NAMES = [
 	"repository_history",
 	"list_pull_requests",
 	"pull_request_read",
+	"revise_open_decision",
 ];
 
 function jobNames(own: string): readonly string[] {

@@ -10,16 +10,15 @@ let fixture = createReviseOpenDecisionFixture(() => contexts, value => {
 contexts = fixture.contexts;
 let { opened } = fixture;
 
-test("the direct card tool is built but withheld from ordinary hosted turns until card sync", async () => {
+test("the direct card tool is present in the hosted model's custom tools", async () => {
 	let context = await opened([{ id: "01K0N4W3B7P27CBAEC7A8C8WEA", label: "Anchors" }]);
 	let config = plannerConfiguration({ model: "model" }, { tools: context.tools }, {
 		token: "ghu_owner",
 		repository: { id: "R_repo", owner: "octo-org", name: "score", defaultBranch: "main" },
 	});
 	expect(config.availableTools).toContain("custom:*");
-	expect(config.tools?.map(tool => tool.name)).not.toContain("revise_open_decision");
-	expect(context.tools.map(tool => tool.name)).toContain("revise_open_decision");
-	expect(context.tools.find(tool => tool.name === "revise_open_decision")?.skipPermission)
+	expect(config.tools?.map(tool => tool.name)).toContain("revise_open_decision");
+	expect(config.tools?.find(tool => tool.name === "revise_open_decision")?.skipPermission)
 		.toBe(false);
 	let read = context.tools.find(tool => tool.name === "read_plan")!;
 	let snapshot = JSON.parse(String(await read.handler!({}, {} as never)));

@@ -1,4 +1,4 @@
-import { authenticate, expect, roomPath, test } from "./room";
+import { authenticate, expect, ready, roomPath, test } from "./room";
 import { storedQuestion } from "../apps/server/src/testing/plan";
 import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 import { installVisualViewport, setVisualViewport } from "./visual-viewport";
@@ -96,7 +96,11 @@ for (let viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }])
 			let page = await context.newPage();
 			await authenticate(page, "ana", baseURL!);
 			await page.goto(roomPath(room));
-			let card = questionnaire(page).filter({ hasText: LONG_QUESTIONS[0]!.header });
+			await ready(page);
+			await page.getByRole("button", { name: /^Decisions/ }).click();
+			let card = questionnaire(page).filter({
+				has: page.getByRole("heading", { name: LONG_QUESTIONS[0]!.question }),
+			});
 			await expect(card).toBeVisible();
 			await expect(card.getByRole("textbox", { name: "New option" })).toHaveCount(0);
 			await expectNoHorizontalOverflow(page);
@@ -110,7 +114,9 @@ for (let viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }])
 			await firstLabel.click();
 			await expect(firstChoice).toBeChecked();
 
-			let second = questionnaire(page).filter({ hasText: LONG_QUESTIONS[1]!.header });
+			let second = questionnaire(page).filter({
+				has: page.getByRole("heading", { name: LONG_QUESTIONS[1]!.question }),
+			});
 			let secondChoice = second.getByRole("radio", { name: "Its current state" });
 			await second.getByText("Its current state", { exact: true }).click();
 			await expect(secondChoice).toBeChecked();

@@ -7,7 +7,9 @@
  * `resolved-layer.tsx`, which can only be tested in Chromium.
  */
 
+import { claimDecision, releaseDecision } from "./decision-pin";
 import type { Question } from "@chopin/dialect";
+import type { Question as ProtocolQuestion } from "@chopin/protocol";
 import type { Point, Rect } from "./comment-geometry";
 
 /**
@@ -44,6 +46,19 @@ export function unchosen(question: Question): string[] | undefined {
 	}
 
 	return question.options.filter((_, index) => !chosen.has(index)).map(option => option.label);
+}
+
+/** An authoritative reopen/discard supersedes the stale answered document projection. */
+export function resolvedKeys(
+	question: Question,
+	linked: string[],
+	prose: string | undefined,
+	meta?: ProtocolQuestion.CardMeta,
+): string[] {
+	if (question.answer === undefined || (meta && meta.status !== "decided")) return [];
+	if (meta?.proseOrphaned) return [];
+	if (meta?.hasProse) return prose ? [prose] : [];
+	return linked;
 }
 
 /** Identity of one resolved decision in the document. */
@@ -91,6 +106,20 @@ export function point(state: PointerState, event: PointerAction): PointerState {
 		case "dismiss":
 			return {};
 	}
+}
+
+/** Parent and child surfaces share the pin while keeping their local pointer state. */
+export function ownedPoint(
+	owner: object,
+	state: PointerState,
+	action: PointerAction,
+): PointerState {
+	let next = point(state, action);
+	if (action.type === "pin" || action.type === "toggle" || action.type === "dismiss") {
+		if (next.pinned) claimDecision(owner, next.pinned);
+		else releaseDecision(owner);
+	} else if (action.type === "prune" && !next.pinned) releaseDecision(owner);
+	return next;
 }
 
 /**

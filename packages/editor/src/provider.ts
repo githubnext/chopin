@@ -48,12 +48,18 @@ export type PlanProviderOptions = {
 	/**
 	 * Authoritative snapshot of which prose each decision and comment names.
 	 *
-	 * The whole snapshot rather than one half: the two arrive together because
+	 * The whole snapshot: these relationships arrive together because
 	 * they describe the same document at the same moment, and splitting them
-	 * into two callbacks would let a consumer act on one while holding a stale
-	 * copy of the other.
+	 * into separate callbacks would let a consumer act on one while holding a
+	 * stale copy of another.
 	 */
-	onAnchors?: (snapshot: { widgets: Plan.WidgetAnchors[]; threads: Plan.ThreadAnchors[] }) => void;
+	onAnchors?: (
+		snapshot: {
+			widgets: Plan.WidgetAnchors[];
+			threads: Plan.ThreadAnchors[];
+			prose: Plan.ProseAnchors[];
+		},
+	) => void;
 	/**
 	 * What the agent just did, to be marked in the prose.
 	 *
@@ -198,7 +204,11 @@ export class PlanProvider implements Provider {
 			}),
 			this.#wire.on<Plan.Anchors>("plan:anchors", event => {
 				if (event.epoch === this.#epoch) {
-					this.#anchors({ widgets: event.widgets, threads: event.threads });
+					this.#anchors({
+						widgets: event.widgets,
+						threads: event.threads,
+						prose: event.prose ?? [],
+					});
 				}
 			}),
 		);
@@ -284,7 +294,7 @@ export class PlanProvider implements Provider {
 		// out where a decision pointed skipped the emit — and the editor stayed
 		// locked for the rest of the session, with the rejection swallowed by
 		// the `void connect()` that started it.
-		this.#anchors({ widgets: reply.anchors, threads: reply.threads });
+		this.#anchors({ widgets: reply.anchors, threads: reply.threads, prose: reply.prose ?? [] });
 	}
 
 	/**
@@ -294,7 +304,11 @@ export class PlanProvider implements Provider {
 	 * taking the document with it. A reader losing an outline is a nuisance; a
 	 * room that cannot be edited is not.
 	 */
-	#anchors(snapshot: { widgets: Plan.WidgetAnchors[]; threads: Plan.ThreadAnchors[] }): void {
+	#anchors(snapshot: {
+		widgets: Plan.WidgetAnchors[];
+		threads: Plan.ThreadAnchors[];
+		prose: Plan.ProseAnchors[];
+	}): void {
 		try {
 			this.#options.onAnchors?.(snapshot);
 		} catch (err) {

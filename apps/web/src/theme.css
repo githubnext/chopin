@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "@chopin/visuals/theme.css";
+@import "./conversation-plan/source.css";
 
 /*
  * Sibling packages that build on these utilities.
@@ -479,6 +480,11 @@ body {
 }
 
 /* The split workspace is one elevated surface; its panes only own the divider. */
+.workspace-root[data-workspace-mode="split"] .workspace-frame {
+	margin-left: calc(var(--spacing) * 3 + env(safe-area-inset-left));
+	margin-right: calc(var(--spacing) * 3 + env(safe-area-inset-right));
+}
+
 .workspace-frame .plan-document {
 	box-shadow: none;
 }
@@ -487,9 +493,17 @@ body {
 	border-color: rgb(0 0 0 / 9%);
 }
 
+.workspace-root[data-workspace-mode="split"] .workspace-chat-panel {
+	--panel-direction: -1;
+}
+
+.workspace-root[data-workspace-mode="split"] .workspace-frame > main {
+	min-width: 9rem;
+}
+
 .motion-panel {
 	opacity: 0;
-	transform: translateX(var(--panel-distance));
+	transform: translateX(calc(var(--panel-distance) * var(--panel-direction, 1)));
 	transition:
 		opacity var(--panel-open-dur) var(--motion-smooth-out),
 		transform var(--panel-open-dur) var(--motion-smooth-out);
@@ -504,7 +518,7 @@ body {
 .motion-panel.is-closing {
 	pointer-events: none;
 	opacity: 0;
-	transform: translateX(var(--panel-distance));
+	transform: translateX(calc(var(--panel-distance) * var(--panel-direction, 1)));
 	transition-duration: var(--panel-close-dur);
 }
 
@@ -542,6 +556,10 @@ body {
 	position: absolute;
 	inset: 0;
 	z-index: 10;
+}
+
+.chat-message-body:has([data-analysis-trigger]) {
+	min-height: calc(var(--spacing) * 7);
 }
 
 .chat-composer .field {

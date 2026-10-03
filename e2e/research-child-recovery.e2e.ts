@@ -1,10 +1,12 @@
 import { countChildChannels, readSource, seedChildChannel } from "./database";
 import {
 	markResearchPublished,
+	seedCompletedResearchWorkspace,
 	seedPendingInlineResearchRequest,
 	updateResearchJobState,
 } from "./research-recovery-database";
 import { content, expect, test } from "./room";
+import { researchReportSource } from "../apps/server/src/research/publication";
 
 import type { Chat, Research } from "../packages/protocol/index";
 import type { Page } from "@playwright/test";
@@ -225,7 +227,7 @@ async function scriptResearch(
 async function startInlineResearch(page: Page, question: string) {
 	let editor = content(page);
 	await editor.click();
-	await page.keyboard.press("Meta+End");
+	await page.keyboard.press("ControlOrMeta+End");
 	await page.keyboard.press("Enter");
 	await page.keyboard.type("/research");
 	await page.keyboard.press("Enter");
@@ -324,7 +326,6 @@ test("inline research publishes one ordinary child and opens it", async ({ baseU
 		sources: [{ title: "Primary public source", url: "https://example.com/source" }],
 	});
 	await expect(card.getByText("Reading sources", { exact: true })).toBeVisible();
-	// Progress sits under the card, beside it in the tracked wrapper.
 	await expect(card.locator("xpath=..")).toContainText("1 source found");
 	await expect(card).not.toContainText("A complete report grounded in the discovered sources.");
 	await research.advance(brief, "writing");
@@ -336,7 +337,7 @@ test("inline research publishes one ordinary child and opens it", async ({ baseU
 	let child = await research.publish(brief, childTitle);
 	let readyCard = opened.getByRole("article", { name: "Research" })
 		.filter({ hasText: childTitle });
-	await expect(readyCard).toContainText(/Research\s*·\s*1 source/);
+	await expect(readyCard).toHaveAttribute("data-stage", "ready");
 	await expect(readyCard).toContainText("A complete report grounded in the discovered sources.");
 	await expect(readyCard).toContainText("1 source");
 	expect(catalogueReads).toBe(readsBeforePublication);
@@ -436,4 +437,173 @@ test("failed research retries by identity while cancelled research never publish
 	await expect.poll(async () =>
 		(await readSource(databasePort, room)).match(/<Research\s+id=/g)?.length ?? 0
 	).toBe(1);
+});
+
+test("a ready research card and its Chat notice survive reconnect without another child", async ({ baseURL, join, room, seed }) => {
+	let databasePort = port(baseURL!);
+	let brief = "Compare the evidence for a stable research document.";
+	let title = `Persisted research ${room.slice(0, 8)}`;
+	let workspaceId = `workspace-${crypto.randomUUID()}`;
+	let answerJobId = `job-${crypto.randomUUID()}`;
+	let originMessageId = crypto.randomUUID();
+	let report = {
+		title,
+		summary: "A complete report grounded in the discovered sources.",
+		findings: [{
+			text: "The source supports the report.",
+			sourceUrls: ["https://example.com/source"],
+		}],
+		caveats: ["The evidence has a limited scope."],
+	};
+	let sources = [{ title: "Primary public source", url: "https://example.com/source" }];
+	let child = await seedChildChannel(
+		databasePort,
+		room,
+		crypto.randomUUID(),
+		title,
+		researchReportSource(report, sources),
+	);
+	let notice = `Research is ready. [Open the research document](${child.path}).`;
+	await seed(`# Parent document\n\n<Research id="${workspaceId}" />\n`, {
+		transcript: [{
+			id: originMessageId,
+			author: { kind: "member", handle: "ana" },
+			text: `@chopin ${brief}`,
+			ts: 1_700_000_000,
+		}, {
+			id: `research-ready:${workspaceId}:${answerJobId}`,
+			author: { kind: "system" },
+			text: notice,
+			ts: 1_700_000_001,
+		}],
+	});
+	await seedCompletedResearchWorkspace(databasePort, room, {
+		workspaceId,
+		answerJobId,
+		plannerOriginMessageId: originMessageId,
+		question: brief,
+		report: {
+			title,
+			summary: report.summary,
+			finding: report.findings[0]!.text,
+			caveat: report.caveats[0]!,
+			source: sources[0]!,
+		},
+	});
+	await markResearchPublished(databasePort, room, workspaceId, child.id);
+	let opened = await join("ana");
+	let assertRecovered = async () => {
+		let card = opened.getByRole("article", { name: "Research" }).filter({ hasText: title });
+		await expect(card).toHaveAttribute("data-stage", "ready");
+		await expect(card.getByRole("button", { name: `Open ${title}`, exact: true }))
+			.toBeVisible();
+		await expect(
+			opened.getByRole("complementary", { name: "Projects" })
+				.getByRole("link", { name: title, exact: true }),
+		).toHaveAttribute("href", child.path);
+		let chat = opened.getByRole("complementary", { name: "Chat" });
+		await expect(chat.getByRole("link", { name: "Open the research document" }))
+			.toHaveAttribute("href", child.path);
+		await expect(chat.getByText("Research is ready.")).toHaveCount(1);
+	};
+	await assertRecovered();
+	await opened.reload();
+	await assertRecovered();
+	let response = await opened.context().request.get(
+		`/api/channels/${room}/research-requests/${workspaceId}`,
+	);
+	expect(response.ok()).toBe(true);
+	expect(await response.json()).toMatchObject({ stage: "ready", child: { id: child.id } });
+	expect(await countChildChannels(databasePort, room)).toBe(1);
+});
+
+test("a failed research card and its Chat notice survive reconnect once", async ({ baseURL, join, room, seed }) => {
+	let databasePort = port(baseURL!);
+	let brief = "Check evidence that cannot be retrieved.";
+	let originMessageId = crypto.randomUUID();
+	let { jobId, workspaceId } = await seedPendingInlineResearchRequest(
+		databasePort,
+		room,
+		brief,
+		crypto.randomUUID(),
+		"U_e2e",
+		originMessageId,
+	);
+	await updateResearchJobState(databasePort, room, jobId, "failed");
+	let notice = "Research could not be completed. You can retry it from the research card.";
+	await seed(`# Parent document\n\n<Research id="${workspaceId}" />\n`, {
+		transcript: [{
+			id: originMessageId,
+			author: { kind: "member", handle: "ana" },
+			text: `@chopin ${brief}`,
+			ts: 1_700_000_000,
+		}, {
+			id: `research-failed:${workspaceId}:${jobId}`,
+			author: { kind: "system" },
+			text: notice,
+			ts: 1_700_000_001,
+		}],
+	});
+	let opened = await join("ana");
+	let assertRecovered = async () => {
+		let card = opened.getByRole("article", { name: "Research" }).filter({ hasText: brief });
+		await expect(card.getByText("Research failed", { exact: true })).toBeVisible();
+		await expect(card.getByRole("button", { name: "Retry research" })).toBeVisible();
+		let chat = opened.getByRole("complementary", { name: "Chat" });
+		await expect(chat.getByText(notice, { exact: true })).toHaveCount(1);
+	};
+	await assertRecovered();
+	await opened.reload();
+	await assertRecovered();
+	let response = await opened.context().request.get(
+		`/api/channels/${room}/research-requests/${workspaceId}`,
+	);
+	expect(response.ok()).toBe(true);
+	expect(await response.json()).toMatchObject({ stage: "failed" });
+	expect(await countChildChannels(databasePort, room)).toBe(0);
+});
+
+test("parent metadata keeps a child route while its document is loading", async ({ baseURL, join, room }) => {
+	let childTitle = `Pending child ${room.slice(0, 8)}`;
+	let child = await seedChildChannel(
+		port(baseURL!),
+		room,
+		crypto.randomUUID(),
+		childTitle,
+		CHILD_SOURCE,
+	);
+	let page = await join("ana");
+	let requested!: () => void;
+	let childRequested = new Promise<void>(resolve => requested = resolve);
+	let release!: () => void;
+	let held = new Promise<void>(resolve => release = resolve);
+	await page.route(
+		url => url.pathname.endsWith(`/documents/${child.slug}`),
+		async route => {
+			requested();
+			await held;
+			await route.continue().catch(() => {});
+		},
+	);
+	try {
+		await page.getByRole("complementary", { name: "Projects" })
+			.getByRole("link", { name: childTitle, exact: true }).click();
+		await childRequested;
+		await expect(page).toHaveURL(url => url.pathname === child.path);
+		let title = `Renamed parent ${room.slice(0, 8)}`;
+		let response = await page.context().request.patch(`/api/channels/${room}`, {
+			headers: { origin: new URL(baseURL!).origin },
+			data: { title },
+		});
+		expect(response.ok()).toBe(true);
+		let renamed = (await response.json()) as { channel: { slug: string } };
+		await expect(page.locator(`[data-workspace-room="${room}"] .room-header`))
+			.toContainText(title);
+		await expect(page).toHaveURL(url =>
+			url.pathname === `/documents/octo-org/score/${renamed.channel.slug}/children/${child.slug}`
+		);
+	} finally {
+		release();
+	}
+	await expect(page.locator(`[data-workspace-room="${child.id}"]`)).toBeVisible();
 });

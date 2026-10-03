@@ -16,12 +16,17 @@ import {
 	useReducer,
 	useRef,
 	useState,
+	useSyncExternalStore,
 } from "react";
 import { createPortal } from "react-dom";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { CheckIcon, ClockIcon, CloseIcon, DecisionIcon } from "@chopin/icons";
+import { CheckIcon, ClockIcon, CloseIcon, DecisionIcon, MessageForwardIcon } from "@chopin/icons";
+import { ResolvedActions } from "@chopin/question/react";
 import { useCellValue } from "@mdxeditor/gurx";
 
+import { currentDecision, releaseDecision, subscribeDecision } from "./decision-pin";
+import { useResolvedActions } from "./resolved-actions";
+import { decisionHostVisible } from "./decision-placement";
 import { when } from "./card";
 import { containsHit, passageHits } from "./comment-hits";
 import { Face } from "./face";
@@ -32,8 +37,10 @@ import {
 	MARKER_SIZE,
 	MARKER_TOUCH_SIZE,
 	markerPoint,
+	ownedPoint,
 	point,
 	popoverBelow,
+	resolvedKeys,
 	shown,
 	unchosen,
 } from "./resolved";
@@ -42,9 +49,10 @@ import { blockElement } from "./scroll";
 import { useTransitionPresence } from "./transition-presence";
 import { widgets$ } from "./widget-options";
 
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { Rect } from "./comment-geometry";
-import type { MarkerPlace } from "./resolved";
+import type { Question } from "@chopin/protocol";
+import type { MarkerPlace, PointerAction } from "./resolved";
 import type { PassageHit } from "./comment-hits";
 import type { QuestionnaireStore } from "./questionnaires";
 
@@ -60,6 +68,7 @@ type Decision = {
 	by?: string;
 	at?: string;
 	keys: string[];
+	meta?: Question.CardMeta;
 };
 
 type Placed = {
@@ -71,6 +80,13 @@ type Placed = {
 };
 
 const POPOVER_WIDTH = 336;
+const EMPTY_META: ReadonlyMap<string, Question.CardMeta> = new Map();
+function emptyMeta() {
+	return EMPTY_META;
+}
+function noMeta() {
+	return () => {};
+}
 
 function rect(value: DOMRect): Rect {
 	return {
@@ -120,15 +136,33 @@ type PopoverValue = {
 };
 
 function Popover(
-	{ close, value }: { close: () => void; value: PopoverValue },
+	{ actions, close, onSource, value }: {
+		actions?: ReactNode;
+		close: () => void;
+		onSource?: () => void;
+		value: PopoverValue;
+	},
 ) {
 	let { decision, pinned } = value;
 	let others = decision.others ?? [];
+	let discussion =
+		decision.meta?.involved.filter(handle => handle.toLowerCase() !== decision.by?.toLowerCase())
+			?? [];
 	return (
 		<>
 			<div className="plan-decision-head">
 				<p className="plan-decision-question">{decision.prompt}</p>
 				<span className="plan-decision-tools" inert={!pinned}>
+					{onSource && (
+						<button
+							aria-label="Show source in chat"
+							className="btn btn-icon btn-ghost"
+							onClick={onSource}
+							type="button"
+						>
+							<MessageForwardIcon aria-hidden="true" />
+						</button>
+					)}
 					<button
 						aria-label="Close"
 						className="btn btn-icon btn-ghost"
@@ -161,7 +195,10 @@ function Popover(
 					{decision.by && (
 						<p>
 							<Face handle={decision.by} size={18} titled={false} />
-							<strong>{decision.by}</strong>
+							<span>
+								<strong>{decision.by}</strong>
+								{discussion.length > 0 && `, with ${discussion.join(", ")}`}
+							</span>
 						</p>
 					)}
 					{decision.at && when(decision.at) && (
@@ -172,16 +209,17 @@ function Popover(
 					)}
 				</div>
 			)}
+			{pinned && actions}
 		</>
 	);
 }
 
 function Surface(
-	{ close, id, immediately, onMeasure, value }: {
-		close: () => void;
+	{ id, immediately, onMeasure, render, value }: {
 		id: string;
 		immediately: boolean;
 		onMeasure: (height: number) => void;
+		render: (value: PopoverValue) => ReactNode;
 		value?: PopoverValue;
 	},
 ) {
@@ -213,7 +251,7 @@ function Surface(
 			role={current.pinned ? "dialog" : "tooltip"}
 			style={current.style}
 		>
-			<Popover close={close} value={current} />
+			{render(current)}
 		</div>
 	);
 }
@@ -225,11 +263,30 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 	let relations = useRelations(store);
 	let [host, setHost] = useState<HTMLElement>();
 	let [placed, setPlaced] = useState<Placed[]>([]);
-	let [pointer, act] = useReducer(point, {});
+	let [pointer, dispatch] = useReducer(point, {});
+	let pointerRef = useRef(pointer);
+	pointerRef.current = pointer;
+	let owner = useRef<object>({});
+	let intent = useRef(0);
+	let meta = useSyncExternalStore(
+		options.cardMeta?.subscribe ?? noMeta,
+		options.cardMeta?.snapshot ?? emptyMeta,
+		emptyMeta,
+	);
+	let [editable, setEditable] = useState(editor.isEditable());
+	let act = useCallback((action: PointerAction) => {
+		let next = ownedPoint(owner.current, pointerRef.current, action);
+		pointerRef.current = next;
+		if (action.type === "pin" || action.type === "toggle" || action.type === "dismiss") {
+			intent.current++;
+		}
+		dispatch(action);
+	}, []);
 	let [coarse, setCoarse] = useState(false);
 	let [height, setHeight] = useState(0);
 	let root = useRef<HTMLDivElement>(null);
 	let placedRef = useRef<Placed[]>([]);
+	let wasVisible = useRef(false);
 	let leaving = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 	let press = useRef<{ left: number; top: number; moved: boolean } | undefined>(undefined);
 	let painted = useRef(false);
@@ -241,9 +298,14 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 		let out: Decision[] = [];
 		for (let entry of entries) {
 			for (let question of entry.value.questions) {
-				if (question.answer === undefined) continue;
-				let keys = store.blocks(entry.id, question.id);
-				if (keys.length === 0) continue;
+				let card = meta.get(entry.id);
+				let keys = resolvedKeys(
+					question,
+					store.blocks(entry.id, question.id),
+					entry.value.questions.length === 1 ? store.proseKey(entry.id) : undefined,
+					card,
+				);
+				if (question.answer === undefined || keys.length === 0) continue;
 				out.push({
 					key: keyOf({ widget: entry.id, question: question.id }),
 					widget: entry.id,
@@ -251,17 +313,53 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 					prompt: question.prompt,
 					answer: question.answer,
 					others: unchosen(question),
-					by: entry.value.by,
-					at: entry.value.at,
+					by: card?.owner ?? entry.value.by,
+					at: card?.decidedAt !== undefined
+						? new Date(card.decidedAt * 1_000).toISOString()
+						: entry.value.at,
 					keys,
+					meta: card,
 				});
 			}
 		}
 		return out;
 		// `relations` is what says the blocks behind a decision were re-resolved.
-	}, [entries, relations, store]);
+	}, [entries, meta, relations, store]);
 	let decisionsRef = useRef(decisions);
 	decisionsRef.current = decisions;
+
+	useEffect(() => editor.registerEditableListener(setEditable), [editor]);
+	useEffect(() => {
+		let off = subscribeDecision(() => {
+			let current = currentDecision();
+			if (current && current.owner !== owner.current) {
+				intent.current++;
+				pointerRef.current = {};
+				dispatch({ type: "dismiss" });
+			}
+		});
+		return () => {
+			off();
+			releaseDecision(owner.current);
+		};
+	}, []);
+	let closeAfterReply = useCallback(() => {
+		releaseDecision(owner.current);
+		pointerRef.current = {};
+		dispatch({ type: "dismiss" });
+	}, []);
+	let actions = useResolvedActions({
+		canEdit: options.canEdit !== false && options.connected === true
+			&& editable,
+		dismiss: closeAfterReply,
+		editor,
+		entries,
+		host,
+		intent,
+		meta,
+		owner: owner.current,
+		wire: options.wire,
+	});
 
 	useEffect(() => {
 		return editor.registerRootListener(element => {
@@ -278,7 +376,14 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 	}, []);
 
 	let measure = useCallback(() => {
-		if (!host) return;
+		if (!host || !decisionHostVisible(host)) {
+			if (wasVisible.current) act({ type: "dismiss" });
+			wasVisible.current = false;
+			placedRef.current = [];
+			setPlaced([]);
+			return;
+		}
+		wasVisible.current = true;
 		let page = rect(host.getBoundingClientRect());
 		let next: Placed[] = [];
 		for (let decision of decisionsRef.current) {
@@ -291,7 +396,8 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 					),
 				];
 				let rects = elements.map(element => rect(element.getBoundingClientRect())).filter(value =>
-					value.width > 0 && value.height > 0
+					value.width > 0 && value.height > 0 && value.bottom >= page.top
+					&& value.top <= page.bottom
 				);
 				if (rects.length === 0) continue;
 				let first = rects.reduce((top, value) => value.top < top.top ? value : top);
@@ -306,7 +412,8 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 		}
 		placedRef.current = next;
 		setPlaced(next);
-	}, [editor, host]);
+		act({ type: "prune", live: new Set(next.map(item => item.decision.key)) });
+	}, [act, editor, host]);
 
 	useLayoutEffect(() => {
 		measure();
@@ -318,8 +425,24 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 		host.addEventListener("scroll", measure, true);
 		let observer = new ResizeObserver(measure);
 		observer.observe(host);
+		// React card collapses move prose without resizing the host or updating Lexical.
+		let offRoot = editor.registerRootListener((element, previous) => {
+			if (previous) observer.unobserve(previous);
+			if (element) observer.observe(element);
+		});
+		let attributes = new MutationObserver(measure);
+		for (let node: HTMLElement | null = host; node; node = node.parentElement) {
+			attributes.observe(node, {
+				attributes: true,
+				attributeFilter: ["hidden", "inert", "aria-hidden", "style", "class"],
+			});
+		}
+		window.addEventListener("resize", measure);
 		return () => {
 			off();
+			offRoot();
+			attributes.disconnect();
+			window.removeEventListener("resize", measure);
 			host.removeEventListener("scroll", measure, true);
 			observer.disconnect();
 		};
@@ -327,16 +450,16 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 
 	useEffect(() => {
 		act({ type: "prune", live: new Set(decisions.map(decision => decision.key)) });
-	}, [decisions]);
+	}, [act, decisions]);
 
 	let enter = useCallback((key: string) => {
 		clearTimeout(leaving.current);
 		act({ type: "enter", key });
-	}, []);
+	}, [act]);
 	let leave = useCallback((key: string) => {
 		clearTimeout(leaving.current);
 		leaving.current = setTimeout(() => act({ type: "leave", key }), 100);
-	}, []);
+	}, [act]);
 	useEffect(() => () => clearTimeout(leaving.current), []);
 
 	let restoreFocus = useCallback(() => {
@@ -354,7 +477,7 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 	let dismiss = useCallback(() => {
 		act({ type: "dismiss" });
 		restoreFocus();
-	}, [restoreFocus]);
+	}, [act, restoreFocus]);
 
 	useEffect(() => {
 		if (!host) return;
@@ -403,7 +526,7 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 			host.removeEventListener("click", click);
 			host.removeEventListener("pointerleave", out);
 		};
-	}, [editor, enter, host, leave]);
+	}, [act, editor, enter, host, leave]);
 
 	useEffect(() => {
 		if (!pointer.pinned || !enterPopover.current) return;
@@ -417,6 +540,7 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 	// One wash at a time, and only the one this layer put up is taken down.
 	let openKey = open?.decision.key;
 	useEffect(() => {
+		if (!host || !decisionHostVisible(host)) return;
 		let decision = decisions.find(item => item.key === openKey);
 		if (!decision) return;
 		store.highlight(decision.widget, decision.question);
@@ -426,7 +550,7 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 			painted.current = false;
 			store.clear();
 		};
-	}, [decisions, openKey, store]);
+	}, [decisions, host, openKey, store]);
 
 	useEffect(() => {
 		if (!pointer.pinned && !pointer.hover) return;
@@ -459,7 +583,7 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 			document.removeEventListener("pointerdown", outside);
 			document.removeEventListener("keydown", escape);
 		};
-	}, [dismiss, host, pointer.hover, pointer.pinned]);
+	}, [act, dismiss, host, pointer.hover, pointer.pinned]);
 
 	if (!host) return null;
 
@@ -470,10 +594,14 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 	let value: PopoverValue | undefined;
 	if (open && view) {
 		let at = popoverBelow(open.anchor, page, width, height);
+		let maxHeight = Math.max(0, page.height - 16);
+		if (open.decision.meta) {
+			at.top = Math.max(0, Math.min(at.top, page.height - Math.min(height, maxHeight) - 8));
+		}
 		value = {
 			decision: open.decision,
 			pinned: view.pinned,
-			style: { ...at, width },
+			style: { ...at, width, ...(open.decision.meta ? { maxHeight, overflowY: "auto" } : {}) },
 		};
 	}
 	let popoverId = "plan-decision-pop";
@@ -516,10 +644,44 @@ export function ResolvedLayer({ store }: { store: QuestionnaireStore }) {
 				);
 			})}
 			<Surface
-				close={dismiss}
 				id={popoverId}
 				immediately={immediately}
 				onMeasure={setHeight}
+				render={current => {
+					let decision = current.decision;
+					let error = actions.error?.key === decision.key ? actions.error.message : undefined;
+					let pending = actions.pending?.key === decision.key ? actions.pending.kind : undefined;
+					return (
+						<Popover
+							close={dismiss}
+							onSource={decision.meta?.thread && options.onCardSource
+								? () => options.onCardSource?.(decision.widget)
+								: undefined}
+							value={current}
+							actions={decision.meta && (
+								<>
+									{error && (
+										<p className="mt-2 text-sm text-destructive-ink" role="alert">{error}</p>
+									)}
+									{pending && (
+										<p className="mt-2 text-sm text-text-tertiary" role="status">
+											{pending === "discard" ? "Discarding…" : "Reopening…"}
+										</p>
+									)}
+									<ResolvedActions
+										className="mt-3 flex flex-wrap items-center justify-end gap-2"
+										disabled={options.canEdit === false || options.connected !== true
+											|| !editable || !options.wire}
+										key={`${decision.key}:${intent.current}`}
+										onDiscard={() => actions.request("discard", decision)}
+										onReopen={() => actions.request("reopen", decision)}
+										submitting={!!pending}
+									/>
+								</>
+							)}
+						/>
+					);
+				}}
 				value={value}
 			/>
 		</div>,

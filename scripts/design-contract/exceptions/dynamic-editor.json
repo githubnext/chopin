@@ -238,41 +238,6 @@
 		"sourceHash": "c60690040f4b0911e23027b7b975596e0db27e2d4e20c4ec4ce3f1955c5b81e8"
 	},
 	{
-		"file": "packages/editor/src/resolved-layer.tsx",
-		"reason": "Decision marker and popover style is measured anchor geometry, sized from the first anchored block; browser positioning remains outside static token evaluation.",
-		"cases": [
-			[
-				"dynamic",
-				"*",
-				"current.style",
-				"unresolved style > Surface > <div>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"markerStyle(marker, lineHeight, hit, inset)",
-				"unresolved style > ResolvedLayer > <button>",
-				1
-			]
-		],
-		"sourceHash": "75db0a6e19ecf2fa73d55b0082f84e85da2c51d5fac157f75d4111335e00dc3b"
-	},
-	{
-		"file": "packages/editor/src/resolved-layer.tsx",
-		"reason": "Motion/presence contract returns finite semantic state classes (is-open, is-closing); imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
-		"cases": [
-			[
-				"dynamic",
-				"class",
-				"presence.className",
-				"class > Surface > <div>",
-				1
-			]
-		],
-		"sourceHash": "75db0a6e19ecf2fa73d55b0082f84e85da2c51d5fac157f75d4111335e00dc3b"
-	},
-	{
 		"file": "packages/editor/src/table/rails.tsx",
 		"reason": "Table rail style is computed viewport geometry (position, size, transform); token policy deliberately does not ban measured dimensions.",
 		"cases": [
@@ -382,7 +347,7 @@
 				2
 			]
 		],
-		"sourceHash": "f0586a698b1e66d29c0ccb9e518603b23146e5166d78b695ba6405518ca20ba8"
+		"sourceHash": "cf48d75b9a17f3f610c270b84e3725263e14b8ae5145063378b771d65a805463"
 	},
 	{
 		"file": "packages/editor/src/collaboration.tsx",
@@ -424,7 +389,7 @@
 				1
 			]
 		],
-		"sourceHash": "57762a66f2046b26f1c87547bf45bb21e73eb1c37deda3dcb376ba7056f10b10"
+		"sourceHash": "a4b50f4686c6d44d1e034183504093a8c486ec5d848e964db121d4d587f0ab20"
 	},
 	{
 		"file": "packages/editor/src/widgets/code-view.tsx",
@@ -474,5 +439,54 @@
 			]
 		],
 		"sourceHash": "ed1b5eb9ac3c88e823d46d5af6a43c5d21acffe81577e07f739a4a5701c81f73"
+	},
+	{
+		"file": "packages/editor/src/widgets/questionnaire.tsx",
+		"reason": "Finite shared transition-presence state classes control the inline card collapse; no caller classes, typography or paint values enter this boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"presence.className",
+				"class > QuestionnaireCard > <div>",
+				1
+			]
+		],
+		"sourceHash": "a4b50f4686c6d44d1e034183504093a8c486ec5d848e964db121d4d587f0ab20"
+	},
+	{
+		"file": "packages/editor/src/resolved-layer.tsx",
+		"reason": "Decision marker and popover style is measured anchor geometry, sized from the first anchored block; browser positioning remains outside static token evaluation.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"current.style",
+				"unresolved style > Surface > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"markerStyle(marker, lineHeight, hit, inset)",
+				"unresolved style > ResolvedLayer > <button>",
+				1
+			]
+		],
+		"sourceHash": "1fd8fff50b8a2ec1103afeb234de2169a6b2a0c94bb1900d73f372eccc03fe71"
+	},
+	{
+		"file": "packages/editor/src/resolved-layer.tsx",
+		"reason": "Motion/presence contract returns finite semantic state classes (is-open, is-closing); imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"presence.className",
+				"class > Surface > <div>",
+				1
+			]
+		],
+		"sourceHash": "1fd8fff50b8a2ec1103afeb234de2169a6b2a0c94bb1900d73f372eccc03fe71"
 	}
 ]
