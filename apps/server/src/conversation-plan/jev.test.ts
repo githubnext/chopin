@@ -208,6 +208,18 @@ test("Jev rejects request bounds before invoking transport", async () => {
 	let invalid: JevRequest[] = [
 		{ ...request, questions: {} },
 		{ ...request, state: "x".repeat(24001) },
+		{
+			state: "",
+			questions: Object.fromEntries(
+				["first", "second"].map(id => [id, {
+					type: "choice",
+					instructions: "Choose",
+					criteria: Object.fromEntries(
+						Array.from({ length: 255 }, (_, index) => [String(index), "😀".repeat(250)]),
+					),
+				}]),
+			) as JevRequest["questions"],
+		},
 		{ ...request, questions: { "invalid id": request.questions.flag } },
 		{ ...request, questions: { flag: { ...request.questions.flag, instructions: "" } } },
 		{
