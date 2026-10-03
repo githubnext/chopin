@@ -778,7 +778,7 @@ test("people on a decision are faces with verbatim handle tooltips", async ({ jo
 		return { page, card };
 	};
 	let ana = await open("ana");
-	let people = ana.card.getByRole("group", { name: /^Editing this question/ });
+	let people = ana.card.getByRole("group", { name: /^In this decision/ });
 	await expect(people).toHaveCount(0);
 
 	// Four real peers work on the same question, one after another: three faces and a "+1".
@@ -788,7 +788,7 @@ test("people on a decision are faces with verbatim handle tooltips", async ({ jo
 		await peer.card.getByRole("radio").first().focus();
 		peers.push(peer);
 		await expect(
-			ana.card.getByRole("group", { name: new RegExp(`^Editing this question:.*\\b${handle}\\b`) }),
+			ana.card.getByRole("group", { name: new RegExp(`^In this decision:.*\\b${handle}\\b`) }),
 		)
 			.toBeVisible();
 	}
@@ -827,7 +827,7 @@ test("people on a decision are faces with verbatim handle tooltips", async ({ jo
 	await expect(more).toHaveCount(0);
 	await peers[0]!.page.close();
 	await expect(people.getByRole("img")).toHaveCount(2);
-	await expect(people).toHaveAttribute("aria-label", "Editing this question: cy, Di");
+	await expect(people).toHaveAttribute("aria-label", "In this decision: cy, Di");
 });
 
 test("an option one member adds is shared, durable, and choosable by another", async ({ join, seed }) => {
