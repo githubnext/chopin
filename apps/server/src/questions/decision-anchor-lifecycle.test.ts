@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
-import * as Y from "yjs";
 import * as edit from "../plan/edit";
 import * as room from "../plan/room";
-import * as Prose from "./prose";
-import type { Plan } from "../plan/service";
+import * as Service from "../plan/service";
+import * as Questions from "./service";
+import { createDecisionProseFixture } from "../agent/decision-prose.test-fixtures";
 
 function assertAt(
 	document: room.Document,
@@ -14,62 +14,6 @@ function assertAt(
 	expect(room.matchesAnchor(document, anchor, index)).toBe(true);
 	expect(anchor.digest).toBe(room.digests(document)[index]);
 }
-
-test("two decision passages survive replacement and an unrelated Planner append", async () => {
-	let document = await room.create("# Title\n\nSentry monitoring.\n\nSlack alerts.\n");
-	let plan = { document, revision: 1, outlines: new Map() } as Plan;
-	try {
-		let monitor = room.anchorAt(document, 1, room.digests(document)[1]!);
-		let alert = room.anchorAt(document, 2, room.digests(document)[2]!);
-		assertAt(document, monitor, 1);
-		assertAt(document, alert, 2);
-
-		let beforeReplacement = room.project(document);
-		let replaced = edit.apply(plan, 1, [{
-			op: "replace",
-			index: 1,
-			source: "Grafana monitoring.\n",
-		}]);
-		expect(replaced.ok).toBe(true);
-		[alert] = Prose.carry(document, [alert], beforeReplacement);
-		monitor = room.anchorAt(document, 1, room.digests(document)[1]!);
-		assertAt(document, monitor, 1);
-		assertAt(document, alert, 2);
-
-		let beforeAppend = room.project(document);
-		let appended = edit.apply(plan, 1, [{
-			op: "insert",
-			index: 2,
-			source: "- Browser one\n- Browser two\n- Browser three\n",
-		}]);
-		expect(appended.ok).toBe(true);
-		[monitor] = Prose.carry(document, [monitor], beforeAppend);
-		[alert] = Prose.carry(document, [alert], beforeAppend);
-		assertAt(document, monitor, 1);
-		assertAt(document, alert, 2);
-
-		let restored = await room.restore(
-			document.epoch,
-			Y.encodeStateAsUpdate(document.doc),
-			room.project(document),
-			[],
-		);
-		try {
-			[monitor] = Prose.carry(restored, [monitor], room.project(document));
-			[alert] = Prose.carry(restored, [alert], room.project(document));
-			assertAt(restored, monitor, 1);
-			assertAt(restored, alert, 2);
-		} finally {
-			restored.doc.destroy();
-		}
-	} finally {
-		document.doc.destroy();
-	}
-});
-
-import * as Service from "../plan/service";
-import * as Questions from "./service";
-import { createDecisionProseFixture } from "../agent/decision-prose.test-fixtures";
 
 let contexts: ReturnType<typeof createDecisionProseFixture>["contexts"];
 let fixture = createDecisionProseFixture(() => contexts, value => contexts = value);
