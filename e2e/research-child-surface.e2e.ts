@@ -160,7 +160,10 @@ test("a parent-owned child keeps the parent chrome and nested geometry", async (
 	expect(closeHandle).not.toBeNull();
 	expect(
 		await childChatToggle.evaluate(
-			(toggle, close) => toggle.nextElementSibling === close,
+			(toggle, close) => {
+				let toolbar = toggle.closest("[data-document-toolbar]");
+				return toolbar !== null && toolbar === close?.closest("[data-document-toolbar]");
+			},
 			closeHandle,
 		),
 	).toBe(true);
