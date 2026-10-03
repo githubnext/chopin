@@ -159,6 +159,22 @@ test("contribution, stance, link, and relabel replay retain exact source wording
 
 test("candidate confirmation, explicit reopening, and discard preserve decision history", () => {
 	let current = withOption();
+	current = accept(current, { type: "card.linked", questionnaireId: "card-1" });
+	current = accept(current, {
+		type: "settle.suggested",
+		source: citation("resolution", "Use Bun"),
+		optionId: "option-1",
+	});
+	current = accept(current, {
+		type: "scoped-choice.proposed",
+		source: citation("support", "I'd pick Bun for the spike."),
+		cardId: "card-1",
+		optionId: "option-1",
+		label: "Bun",
+		scope: "spike",
+	});
+	expect(current.threads[0]!.pendingSettle).toBeDefined();
+	expect(current.threads[0]!.pendingScopedChoice).toBeDefined();
 	current = accept(current, {
 		type: "candidate.proposed",
 		source: citation("resolution", "Use Bun"),
@@ -172,6 +188,8 @@ test("candidate confirmation, explicit reopening, and discard preserve decision 
 	);
 	expect(current.threads[0]!.status).toBe("decided");
 	expect(current.threads[0]!.decision!.text).toBe("Use Bun");
+	expect(current.threads[0]!.pendingSettle).toBeUndefined();
+	expect(current.threads[0]!.pendingScopedChoice).toBeUndefined();
 	current = accept(current, { type: "decision.reopened", explicit: true }, "thread-1", true);
 	expect(current.threads[0]!.decision).toBeUndefined();
 	expect(current.threads[0]!.decisionHistory).toHaveLength(1);
