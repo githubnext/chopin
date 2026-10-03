@@ -44,6 +44,9 @@ export function addOption(
 	if (question.options.some(option => option.label.trim().toLowerCase() === folded)) {
 		return { ok: false, reason: "duplicate", message: "That is already an option" };
 	}
+	if (question.options.some(option => option.id === id)) {
+		return { ok: false, reason: "duplicate", message: "That option ID already exists" };
+	}
 
 	let option: Option = { id, label: text, description: "" };
 	let next = decision({ questions: [{ ...question, options: [...question.options, option] }] });
