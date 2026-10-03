@@ -28,6 +28,7 @@ import type {
 	PublishInitialResearchReportResult,
 	ResearchMessage,
 	ResearchMessageAuthorKind,
+	ResearchTerminalRecovery,
 	ResearchTurn,
 	ResearchTurnKind,
 	ResearchWorkspace,
@@ -62,6 +63,7 @@ type WorkspaceRow = {
 	confirmedQuery: unknown;
 	origin: unknown;
 	originMessageId: unknown;
+	inlineReference: unknown;
 	createdBy: unknown;
 	confirmedBy: unknown;
 	revision: unknown;
@@ -172,6 +174,7 @@ const WORKSPACE_COLUMNS = `
 	confirmed_query AS "confirmedQuery",
 	origin,
 	origin_message_id AS "originMessageId",
+	inline_reference AS "inlineReference",
 	created_by AS "createdBy",
 	confirmed_by AS "confirmedBy",
 	revision,
@@ -309,6 +312,15 @@ function workspace(row: WorkspaceRow): ResearchWorkspace {
 		throw corrupt(`research workspace ${id} has an invalid origin`);
 	}
 	let revision = integer(row.revision, "research workspace revision");
+	let inlineReference = row.inlineReference === null ? undefined : row.inlineReference;
+	if (
+		inlineReference !== undefined && inlineReference !== "pending" && inlineReference !== "placed"
+	) {
+		throw corrupt(`research workspace ${id} has an invalid inline reference state`);
+	}
+	if (inlineReference && (row.origin !== "planner" || !row.originMessageId)) {
+		throw corrupt(`research workspace ${id} has an invalid inline reference origin`);
+	}
 	let createdAt = date(row.createdAt, "research workspace creation time");
 	let updatedAt = date(row.updatedAt, "research workspace update time");
 	if (updatedAt < createdAt) throw corrupt(`research workspace ${id} has invalid timestamps`);
@@ -324,6 +336,7 @@ function workspace(row: WorkspaceRow): ResearchWorkspace {
 		confirmedQuery,
 		origin: row.origin as ResearchWorkspaceOrigin,
 		originMessageId: optionalText(row.originMessageId, "research workspace origin message id"),
+		...(inlineReference ? { inlineReference } : {}),
 		createdBy: text(row.createdBy, "research workspace creating member"),
 		confirmedBy,
 		revision,
@@ -518,6 +531,9 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 				if (input.origin !== "inline" && input.origin !== "planner") {
 					throw conflict("research workspace start origin is invalid");
 				}
+				if (input.inlineReference && input.origin !== "planner") {
+					throw conflict("inline reference requires Planner origin");
+				}
 				let originMessageId = optionalInput(
 					input.originMessageId,
 					"workspace origin message id",
@@ -552,6 +568,15 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 							`research workspace idempotency key ${idempotencyKey} was reused`,
 						);
 					}
+					if (input.inlineReference && !repeated.inlineReference) {
+						let [upgraded] = await transaction<WorkspaceRow[]>`
+							UPDATE research_workspaces SET inline_reference = 'pending'
+							WHERE id = ${repeated.id}
+							RETURNING ${transaction.unsafe(WORKSPACE_COLUMNS)}
+						`;
+						if (!upgraded) throw corrupt("research reference upgrade returned no record");
+						repeated = workspace(upgraded);
+					}
 					return {
 						workspace: repeated,
 						turn: repeatedTurn,
@@ -574,11 +599,12 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 					INSERT INTO research_workspaces (
 						id, channel_id, title, proposed_question, confirmed_query, origin,
 						origin_message_id,
+						inline_reference,
 						created_by, confirmed_by, revision, next_turn_ordinal,
 						next_message_sequence, idempotency_key, fingerprint, created_at, updated_at
 					) VALUES (
 						${workspaceId}, ${channelId}, ${title}, ${question}, ${question},
-						${input.origin}, ${originMessageId ?? null},
+						${input.origin}, ${originMessageId ?? null}, ${input.inlineReference ?? null},
 						${createdBy}, ${createdBy}, 0, 2, 2, ${idempotencyKey}, ${fingerprint},
 						${now}, ${now}
 					)
@@ -614,6 +640,81 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 					repeated: false,
 				};
 			}));
+
+	readonly markReferencePlaced = (input: {
+		channelId: string;
+		workspaceId: string;
+		lease: Lease;
+	}): Promise<void> =>
+		this.#run("mark research reference placed", () =>
+			this.#sql.begin(async transaction => {
+				await this.#fence(transaction, input.lease);
+				let [placed] = await transaction<{ id: string }[]>`
+					UPDATE research_workspaces SET inline_reference = 'placed'
+					WHERE channel_id = ${input.channelId} AND id = ${input.workspaceId}
+						AND inline_reference IS NOT NULL
+					RETURNING id
+				`;
+				if (!placed) throw conflict("research reference placement is not required");
+			}));
+
+	readonly listReferenceRecovery = (
+		limit: number,
+		afterId?: string,
+		channelId?: string,
+	): Promise<ResearchWorkspace[]> =>
+		this.#run("list research reference recovery", async () => {
+			let rows = await this.#sql<WorkspaceRow[]>`
+				SELECT ${this.#sql.unsafe(WORKSPACE_COLUMNS)}
+				FROM research_workspaces
+				WHERE (${afterId ?? ""} = '' OR id > ${afterId ?? ""})
+					AND (${channelId ?? ""} = '' OR channel_id = ${channelId ?? ""})
+					AND (inline_reference = 'pending' OR inline_reference = 'placed'
+						AND NOT EXISTS (
+							SELECT 1 FROM research_turns
+							WHERE workspace_id = research_workspaces.id AND ordinal = 1
+								AND evidence_job_id IS NOT NULL
+						))
+				ORDER BY id ASC
+				LIMIT ${Math.min(100, Math.max(1, limit))}
+			`;
+			return rows.map(workspace);
+		});
+
+	readonly listTerminalRecovery = (
+		limit: number,
+		afterId?: string,
+		channelId?: string,
+	): Promise<ResearchTerminalRecovery[]> =>
+		this.#run("list research terminal recovery", async () => {
+			let rows = await this.#sql<{ id: string; channelId: string; jobId: string }[]>`
+				SELECT research_workspaces.id,
+					research_workspaces.channel_id AS "channelId",
+					CASE
+						WHEN answer.state = 'failed' OR
+							(answer.state = 'completed' AND published_channel_id IS NOT NULL)
+							THEN answer.id
+						ELSE evidence.id
+					END AS "jobId"
+				FROM research_workspaces
+				JOIN research_turns initial ON initial.workspace_id = research_workspaces.id
+					AND initial.kind = 'initial'
+				LEFT JOIN background_jobs answer ON answer.id = initial.answer_job_id
+					AND answer.channel_id = research_workspaces.channel_id
+				LEFT JOIN background_jobs evidence ON evidence.id = initial.evidence_job_id
+					AND evidence.channel_id = research_workspaces.channel_id
+				WHERE research_workspaces.origin = 'planner'
+					AND research_workspaces.inline_reference = 'placed'
+					AND (${afterId ?? ""} = '' OR research_workspaces.id > ${afterId ?? ""})
+					AND (${channelId ?? ""} = '' OR research_workspaces.channel_id = ${channelId ?? ""})
+					AND (answer.state = 'failed'
+						OR answer.state = 'completed' AND published_channel_id IS NOT NULL
+						OR evidence.state = 'failed')
+				ORDER BY research_workspaces.id ASC
+				LIMIT ${Math.min(100, Math.max(1, limit))}
+			`;
+			return rows;
+		});
 
 	readonly confirm = (
 		input: ConfirmResearchWorkspace,
@@ -1115,6 +1216,7 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 	readonly list = (
 		channelId: string,
 		limit: number,
+		includePlanner = true,
 	): Promise<ResearchWorkspaceSummary[]> =>
 		this.#run("list research workspaces", async () => {
 			let count = Math.min(100, Math.max(1, limit));
@@ -1122,6 +1224,7 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 				SELECT ${this.#sql.unsafe(WORKSPACE_COLUMNS)}
 				FROM research_workspaces
 				WHERE channel_id = ${channelId}
+					AND (${includePlanner} OR origin <> 'planner')
 				ORDER BY updated_at DESC, id ASC
 				LIMIT ${count}
 			`;
@@ -1132,6 +1235,7 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 		repositoryId: string,
 		limit: number,
 		includeArchived = false,
+		includePlanner = true,
 	): Promise<ResearchWorkspaceRepositoryList> =>
 		this.#run(
 			"list repository research workspaces",
@@ -1174,6 +1278,7 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 							SELECT ${transaction.unsafe(WORKSPACE_COLUMNS)}
 							FROM research_workspaces
 							WHERE research_workspaces.channel_id = repository_channels.id
+								AND (${includePlanner} OR research_workspaces.origin <> 'planner')
 							ORDER BY research_workspaces.updated_at DESC, research_workspaces.id ASC
 							LIMIT ${RESEARCH_REPOSITORY_CHANNEL_WORKSPACE_LIMIT}
 						) AS workspaces
@@ -1249,6 +1354,18 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 					return detail;
 				}),
 		);
+
+	readonly findByIdempotencyKey = (
+		channelId: string,
+		idempotencyKey: string,
+	): Promise<ResearchWorkspaceDetail | undefined> =>
+		this.#run("find research workspace by request key", async () => {
+			let [row] = await this.#sql<{ id: unknown }[]>`
+				SELECT id FROM research_workspaces
+				WHERE channel_id = ${channelId} AND idempotency_key = ${idempotencyKey}
+			`;
+			return row ? this.get(channelId, text(row.id, "research workspace id")) : undefined;
+		});
 
 	readonly findTurnByJob = (channelId: string, jobId: string): Promise<ResearchTurn | undefined> =>
 		this.#run("find research turn by job", async () => {

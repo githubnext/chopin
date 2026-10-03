@@ -1,3 +1,5 @@
+import { researchWorkspace } from "./research-inline-contract-fixtures";
+import { researchInlineContract } from "./research-inline-contract";
 import { describe, expect, it } from "bun:test";
 
 import {
@@ -11,31 +13,10 @@ import { StorageError } from "./errors";
 import { BACKGROUND_JOB_PROGRESS_LIMIT } from "./model";
 
 import type { StorageFactory as Factory } from "./contract-support";
-import type { CreateResearchWorkspace, JsonValue, Lease } from "./model";
+import type { JsonValue } from "./model";
 
 function attempt<T>(action: () => Promise<T>): Promise<T> {
 	return Promise.resolve().then(action);
-}
-
-function researchWorkspace(
-	channelId: string,
-	createdBy: string,
-	lease: Lease,
-	overrides: Partial<CreateResearchWorkspace> = {},
-): CreateResearchWorkspace {
-	return {
-		id: id("research-workspace"),
-		channelId,
-		title: "API compatibility research",
-		proposedQuestion: "Which API contracts changed?",
-		origin: "sidebar",
-		createdBy,
-		idempotencyKey: id("create-research"),
-		fingerprint: id("research-fingerprint"),
-		now: new Date("2026-01-07T03:04:05.000Z"),
-		lease,
-		...overrides,
-	};
 }
 
 /** The behavioral gate every built-in storage adapter must pass. */
@@ -1932,6 +1913,7 @@ export function storageContract(name: string, factory: Factory): void {
 		});
 
 		researchPublicationContract(factory);
+		researchInlineContract(factory);
 
 		it("rejects new archived research mutations but preserves exact replays", async () => {
 			let storage = await opened(factory);

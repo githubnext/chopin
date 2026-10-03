@@ -1,3 +1,5 @@
+import { StorageError } from "./errors";
+
 /** Values storage adapters may persist without knowing their domain schema. */
 export type JsonValue =
 	| null
@@ -236,9 +238,21 @@ export type CommitChannel = {
 	sidecar?: JsonValue;
 	events: EventInput[];
 	now: Date;
+	/** Browser Research reference changes that must remain authorized at commit time. */
+	researchProjections?: ResearchProjectionChange[];
 	/** Lifecycle and shutdown maintenance may persist after document archival. */
 	allowArchived?: boolean;
 };
+
+export type ResearchProjectionChange = { id: string; action: "add" | "remove" };
+
+/** A rejected browser projection is an invalid batch, not a storage outage. */
+export class ResearchProjectionConflict extends StorageError {
+	constructor(id: string) {
+		super("conflict", `research projection ${id} is no longer authorized`);
+		this.name = "ResearchProjectionConflict";
+	}
+}
 
 export type CommitResult = {
 	revision: number;
@@ -484,6 +498,8 @@ export type ResearchWorkspace = {
 	confirmedQuery: string | undefined;
 	origin: ResearchWorkspaceOrigin;
 	originMessageId: string | undefined;
+	/** Present only for Planner requests that must be placed in the parent document. */
+	inlineReference?: "pending" | "placed";
 	createdBy: string;
 	confirmedBy: string | undefined;
 	revision: number;
@@ -494,6 +510,12 @@ export type ResearchWorkspace = {
 };
 
 export type ResearchWorkspaceSummary = ResearchWorkspace;
+
+export type ResearchTerminalRecovery = {
+	id: string;
+	channelId: string;
+	jobId: string;
+};
 
 export const RESEARCH_REPOSITORY_CHANNEL_LIMIT = 1_000;
 export const RESEARCH_REPOSITORY_WORKSPACE_LIMIT = 500;
@@ -530,6 +552,38 @@ export type ResearchTurn = {
 	createdAt: Date;
 	updatedAt: Date;
 };
+
+export function researchProjectionAllowed(
+	channelId: string,
+	change: ResearchProjectionChange,
+	workspace:
+		| Pick<ResearchWorkspace, "id" | "channelId" | "origin" | "publishedChannelId">
+		| undefined,
+	initial:
+		| Pick<
+			ResearchTurn,
+			"id" | "workspaceId" | "kind" | "evidenceJobId" | "answerJobId"
+		>
+		| undefined,
+	job: Pick<BackgroundJob, "channelId" | "type" | "targetKey" | "state"> | undefined,
+): boolean {
+	if (!workspace || workspace.id !== change.id || workspace.channelId !== channelId) return false;
+	if (!initial || initial.kind !== "initial" || initial.workspaceId !== change.id) return false;
+	if (change.action === "add" && workspace.origin !== "inline") return false;
+	let role = initial.answerJobId ? "answer" : "evidence";
+	let jobId = initial.answerJobId ?? initial.evidenceJobId;
+	if (
+		jobId && (
+			!job || job.channelId !== channelId || job.type !== `research-${role}`
+			|| job.targetKey !== `research-${role}:workspace:${change.id}:turn:${initial.id}:${role}`
+		)
+	) return false;
+	let terminal = job && ["failed", "cancelled", "superseded"].includes(job.state);
+	return change.action === "add"
+		? !!job && !workspace.publishedChannelId
+			&& ["pending", "paused", "running", "completed"].includes(job.state)
+		: !!workspace.publishedChannelId || !!terminal || !jobId;
+}
 
 export type ResearchMessageAuthorKind = "member" | "agent" | "system";
 
@@ -578,6 +632,7 @@ export type StartResearchWorkspace = {
 	question: string;
 	origin: Extract<ResearchWorkspaceOrigin, "inline" | "planner">;
 	originMessageId?: string;
+	inlineReference?: "pending";
 	createdBy: string;
 	createdByHandle?: string;
 	turnId: string;

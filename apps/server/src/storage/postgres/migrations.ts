@@ -57,6 +57,9 @@ const MIGRATIONS = [{
 }, {
 	id: "014_inline_research",
 	path: join(import.meta.dir, "migrations/014_inline_research.sql"),
+}, {
+	id: "015_planner_inline_reference",
+	path: join(import.meta.dir, "migrations/015_planner_inline_reference.sql"),
 }] satisfies Migration[];
 
 /** Navigation shipped as 002 before document slugs claimed that number on main. */

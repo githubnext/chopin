@@ -46,7 +46,9 @@ import type {
 	RenewBackgroundJob,
 	ReplaceChannel,
 	RequeueBackgroundJob,
+	ResearchTerminalRecovery,
 	ResearchTurn,
+	ResearchWorkspace,
 	ResearchWorkspaceDetail,
 	ResearchWorkspaceRepositoryList,
 	ResearchWorkspaceSummary,
@@ -177,6 +179,21 @@ export interface BackgroundJobStore {
 export interface ResearchWorkspaceStore {
 	create(input: CreateResearchWorkspace): Promise<CreateResearchWorkspaceResult>;
 	start(input: StartResearchWorkspace): Promise<StartResearchWorkspaceResult>;
+	markReferencePlaced(input: {
+		channelId: string;
+		workspaceId: string;
+		lease: Lease;
+	}): Promise<void>;
+	listReferenceRecovery(
+		limit: number,
+		afterId?: string,
+		channelId?: string,
+	): Promise<ResearchWorkspace[]>;
+	listTerminalRecovery(
+		limit: number,
+		afterId?: string,
+		channelId?: string,
+	): Promise<ResearchTerminalRecovery[]>;
 	confirm(input: ConfirmResearchWorkspace): Promise<ConfirmResearchWorkspaceResult>;
 	appendTurn(input: AppendResearchTurn): Promise<AppendResearchTurnResult>;
 	linkJob(input: LinkResearchTurnJob): Promise<LinkResearchTurnJobResult>;
@@ -189,13 +206,22 @@ export interface ResearchWorkspaceStore {
 	publishInitialReport(
 		input: PublishInitialResearchReport,
 	): Promise<PublishInitialResearchReportResult>;
-	list(channelId: string, limit: number): Promise<ResearchWorkspaceSummary[]>;
+	list(
+		channelId: string,
+		limit: number,
+		includePlanner?: boolean,
+	): Promise<ResearchWorkspaceSummary[]>;
 	listRepository(
 		repositoryId: string,
 		limit: number,
 		includeArchived?: boolean,
+		includePlanner?: boolean,
 	): Promise<ResearchWorkspaceRepositoryList>;
 	get(channelId: string, workspaceId: string): Promise<ResearchWorkspaceDetail | undefined>;
+	findByIdempotencyKey(
+		channelId: string,
+		idempotencyKey: string,
+	): Promise<ResearchWorkspaceDetail | undefined>;
 	findTurnByJob(channelId: string, jobId: string): Promise<ResearchTurn | undefined>;
 }
 
