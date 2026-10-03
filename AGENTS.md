@@ -100,9 +100,10 @@ external implementation runs are durable.
 - **The dialect is an allowlist.** Document MDX is parsed and rendered, never
   evaluated. Keep imports, exports, expressions, raw HTML, and unknown JSX out.
 - **Records own decisions.** Question answers and accepted comment decisions live
-  in sidecar records. Their document components are projections. Planner
-  operations protect those projections, but browser CRDT validation does not
-  yet cross-check them against records; do not treat the projection as authority.
+  in sidecar records. Their document components are projections. Browser CRDT
+  validation allows unchanged projections to move but rejects their creation,
+  removal or alteration. Domain operations update records and projections together;
+  do not treat the projection as authority.
 - **Admission is not authorization.** Optional user and organization lists admit
   an identity. Browser routes, sockets, and Planner tools separately recheck the
   App installation and repository role.
@@ -159,8 +160,9 @@ renders and derives.
 Anchors combine Yjs relative positions with canonical block digests. A position
 survives surrounding edits; a digest can recover one unique block after a move
 or epoch replacement. Ambiguous matches must orphan rather than guess. The safe
-ordering is to rebase against the old document before a server-authored edit;
-the current Planner path reconciles first and is a known recovery gap.
+ordering is to rebase against the old document before a server-authored edit.
+Scoped decision-prose jobs follow that ordering. The ordinary `edit_plan` tool
+still reconciles first and remains a recovery gap.
 
 The browser starts a comment from a bounded quote locator, selected length,
 offset hint, and block indices, not an unbounded copy of selected text. The
@@ -278,9 +280,9 @@ so merge ranges from all mounted editors before replacing a registry entry.
   after `send()` loses edits on disconnect.
 - Rebuilds and reconnects must replay unacknowledged updates only when the epoch
   is still compatible.
-- Idle eviction removes a room registry entry before its asynchronous close and
-  checkpoint completes. Until that lifecycle is serialized, avoid opening a
-  replacement room during close and test revision conflicts around eviction.
+- Room opening and closing share the document lifecycle lock. Opening waits for
+  an active close; eviction forgets the room only after runtime shutdown and
+  persistence complete. Preserve that ordering.
 - Sidecar restoration currently drops an invalid optional implementation graph
   instead of rejecting the whole sidecar. Do not generalize that fail-open
   behavior to other durable fields.

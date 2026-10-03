@@ -128,8 +128,12 @@ Validation evidence is tied to the revision and environment that produced it:
   pass at `d75b2998`: nine messages and three new decisions. It confirmed useful
   flows but also observed incorrect/overlapping decision anchors, rationale from
   a previous option carried into new prose, and useful discussion left unapplied.
-  Those observations remain follow-up work; the pass is not broad model-quality
-  or collaboration stress coverage.
+  Later changes fix saved-prose anchor precedence (`9b0ad917`), ground replacement
+  prose in the current choice and reasons (`7569a727`), and refresh marker geometry
+  after editor resizing (`0084bc7f`), with regression coverage. The historical
+  real-provider pass has not been repeated to verify those same scenarios. Useful
+  discussion can still remain unapplied; deterministic checks do not establish
+  live semantic quality or broad collaboration stress coverage.
 
 Multi-step Planner refinement can leave earlier durable tool writes after an
 interruption. Explicit retry does not make the entire semantic edit atomic.
