@@ -3,6 +3,7 @@ import { documentSlug, documentSlugCandidate } from "../../channels/slug";
 import { availableChannelTitle } from "../../channels/title";
 import { MemoryBackgroundJobStore } from "./jobs";
 import { MemoryResearchWorkspaceStore } from "./research";
+import { researchProjectionAllowed, ResearchProjectionConflict } from "../model";
 
 import type {
 	AddUserProject,
@@ -742,14 +743,26 @@ export class MemoryStorage implements StorageAdapter {
 		});
 	}
 
-	#commit(input: CommitChannel): Promise<CommitResult> {
+	async #commit(input: CommitChannel): Promise<CommitResult> {
+		this.#assertLease(input.lease);
+		let replay = this.#operations.get(input.channelId)?.get(input.operationId);
+		if (replay) return { ...replay, repeated: true };
+		for (let change of input.researchProjections ?? []) {
+			let detail = await this.#research.get(input.channelId, change.id);
+			let initial = detail?.turns.find(turn => turn.kind === "initial");
+			let jobId = initial?.answerJobId ?? initial?.evidenceJobId;
+			let job = jobId ? this.#jobs.detail(input.channelId, jobId)?.job : undefined;
+			if (!researchProjectionAllowed(input.channelId, change, detail?.workspace, initial, job)) {
+				throw new ResearchProjectionConflict(change.id);
+			}
+		}
 		this.#assertLease(input.lease);
 		let found = this.#channels.get(input.channelId);
 		if (!found) throw missing(`channel ${input.channelId} does not exist`);
 		let operations = this.#operations.get(input.channelId) ?? new Map<string, Operation>();
 		this.#operations.set(input.channelId, operations);
 		let repeated = operations.get(input.operationId);
-		if (repeated) return Promise.resolve({ ...repeated, repeated: true });
+		if (repeated) return { ...repeated, repeated: true };
 		if (found.archivedAt && !input.allowArchived) {
 			throw conflict(`channel ${input.channelId} is archived`);
 		}

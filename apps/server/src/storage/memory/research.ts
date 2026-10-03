@@ -27,6 +27,7 @@ import type {
 	PublishInitialResearchReportResult,
 	ResearchJobRole,
 	ResearchMessage,
+	ResearchTerminalRecovery,
 	ResearchTurn,
 	ResearchWorkspace,
 	ResearchWorkspaceDetail,
@@ -189,6 +190,9 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 			if (input.origin !== "inline" && input.origin !== "planner") {
 				throw conflict("research workspace start origin is invalid");
 			}
+			if (input.inlineReference && input.origin !== "planner") {
+				throw conflict("inline reference requires Planner origin");
+			}
 			if (
 				input.origin === "inline" && input.originMessageId !== undefined
 				|| input.origin === "planner" && !input.originMessageId
@@ -207,6 +211,9 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 					throw conflict(
 						`research workspace idempotency key ${input.idempotencyKey} was reused`,
 					);
+				}
+				if (input.inlineReference && !repeated.inlineReference) {
+					repeated.inlineReference = "pending";
 				}
 				return {
 					workspace: workspace(repeated),
@@ -238,6 +245,7 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 				confirmedQuery: input.question,
 				origin: input.origin,
 				originMessageId: input.originMessageId,
+				...(input.inlineReference ? { inlineReference: input.inlineReference } : {}),
 				createdBy: input.createdBy,
 				confirmedBy: input.createdBy,
 				revision: 0,
@@ -279,6 +287,70 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 				repeated: false,
 			};
 		});
+
+	readonly markReferencePlaced = (input: {
+		channelId: string;
+		workspaceId: string;
+		lease: Lease;
+	}): Promise<void> =>
+		this.#mutate(async () => {
+			this.#assertChannel(input.channelId, input.lease);
+			let found = this.#requireWorkspace(input.channelId, input.workspaceId);
+			if (!found.inlineReference) throw conflict("research reference placement is not required");
+			found.inlineReference = "placed";
+		});
+
+	readonly listReferenceRecovery = async (
+		limit: number,
+		afterId?: string,
+		channelId?: string,
+	): Promise<ResearchWorkspace[]> => {
+		let count = Math.min(100, Math.max(1, limit));
+		return [...this.#workspaces.values()]
+			.filter(value => !channelId || value.channelId === channelId)
+			.filter(value =>
+				value.inlineReference === "pending"
+				|| value.inlineReference === "placed"
+					&& !(this.#turns.get(value.id) ?? [])[0]?.evidenceJobId
+			)
+			.filter(value => !afterId || compareId(value.id, afterId) > 0)
+			.sort((left, right) => compareId(left.id, right.id))
+			.slice(0, count)
+			.map(workspace);
+	};
+
+	readonly listTerminalRecovery = async (
+		limit: number,
+		afterId?: string,
+		channelId?: string,
+	): Promise<ResearchTerminalRecovery[]> => {
+		let count = Math.min(100, Math.max(1, limit));
+		let candidates = [...this.#workspaces.values()]
+			.filter(value => value.origin === "planner" && value.inlineReference === "placed")
+			.filter(value => !channelId || value.channelId === channelId)
+			.filter(value => !afterId || compareId(value.id, afterId) > 0)
+			.sort((left, right) => compareId(left.id, right.id));
+		let page: ResearchTerminalRecovery[] = [];
+		for (let value of candidates) {
+			let initial = (this.#turns.get(value.id) ?? []).find(turn => turn.kind === "initial");
+			if (!initial) continue;
+			let answer = initial.answerJobId
+				? await this.#options.job(value.channelId, initial.answerJobId)
+				: undefined;
+			let evidence = initial.evidenceJobId
+				? await this.#options.job(value.channelId, initial.evidenceJobId)
+				: undefined;
+			let jobId: string | undefined;
+			if (
+				answer?.job.state === "failed"
+				|| answer?.job.state === "completed" && value.publishedChannelId
+			) jobId = answer.job.id;
+			else if (evidence?.job.state === "failed") jobId = evidence.job.id;
+			if (jobId) page.push({ id: value.id, channelId: value.channelId, jobId });
+			if (page.length === count) break;
+		}
+		return page;
+	};
 
 	readonly confirm = (
 		input: ConfirmResearchWorkspace,
@@ -682,10 +754,14 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 	readonly list = async (
 		channelId: string,
 		limit: number,
+		includePlanner = true,
 	): Promise<ResearchWorkspaceSummary[]> => {
 		let count = Math.min(100, Math.max(1, limit));
 		return [...this.#workspaces.values()]
-			.filter(value => value.channelId === channelId)
+			.filter(value =>
+				value.channelId === channelId
+				&& (includePlanner || value.origin !== "planner")
+			)
 			.sort((left, right) =>
 				right.updatedAt.getTime() - left.updatedAt.getTime() || compareId(left.id, right.id)
 			)
@@ -697,6 +773,7 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 		repositoryId: string,
 		limit: number,
 		includeArchived = false,
+		includePlanner = true,
 	): Promise<ResearchWorkspaceRepositoryList> => {
 		let count = Math.min(RESEARCH_REPOSITORY_WORKSPACE_LIMIT, Math.max(1, limit));
 		let orderedChannels = this.#options.channels(repositoryId)
@@ -706,6 +783,7 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 			);
 		let workspacesByChannel = new Map<string, ResearchWorkspace[]>();
 		for (let saved of this.#workspaces.values()) {
+			if (!includePlanner && saved.origin === "planner") continue;
 			let values = workspacesByChannel.get(saved.channelId) ?? [];
 			values.push(saved);
 			workspacesByChannel.set(saved.channelId, values);
@@ -755,6 +833,14 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 			turns: (this.#turns.get(found.id) ?? []).map(turn),
 			messages: (this.#messages.get(found.id) ?? []).map(message),
 		};
+	};
+
+	readonly findByIdempotencyKey = async (
+		channelId: string,
+		idempotencyKey: string,
+	): Promise<ResearchWorkspaceDetail | undefined> => {
+		let workspaceId = this.#idempotency.get(key(channelId, idempotencyKey));
+		return workspaceId ? this.get(channelId, workspaceId) : undefined;
 	};
 
 	readonly findTurnByJob = async (
