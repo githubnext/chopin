@@ -41,6 +41,15 @@ function isJsx(node: Nodes): node is Jsx {
 	return node.type === "mdxJsxFlowElement" || node.type === "mdxJsxTextElement";
 }
 
+function stringAttribute(node: Jsx, name: string): string | undefined {
+	let found = node.attributes.find(attribute =>
+		attribute.type === "mdxJsxAttribute" && attribute.name === name
+	);
+	return found?.type === "mdxJsxAttribute" && typeof found.value === "string"
+		? found.value
+		: undefined;
+}
+
 function children(node: Nodes): Nodes[] {
 	return (node as Parent).children ?? [];
 }
@@ -82,7 +91,7 @@ class Validator {
 		}
 	}
 
-	#walk(node: Nodes, path: string, depth: number, ancestors: string[]): void {
+	#walk(node: Nodes, path: string, depth: number, ancestors: string[], parent?: Jsx): void {
 		if (depth > limits.MAX_DEPTH) {
 			this.add("too-deep", `Content nests deeper than ${limits.MAX_DEPTH} levels`, path, node);
 			return;
@@ -99,7 +108,7 @@ class Validator {
 		}
 
 		if (isJsx(node)) {
-			this.#component(node, path, depth, ancestors);
+			this.#component(node, path, depth, ancestors, parent);
 			return;
 		}
 
@@ -131,11 +140,17 @@ class Validator {
 			let name = label(child);
 			let index = counts.get(name) ?? 0;
 			counts.set(name, index + 1);
-			this.#walk(child, `${path} > ${name}[${index}]`, depth + 1, ancestors);
+			this.#walk(
+				child,
+				`${path} > ${name}[${index}]`,
+				depth + 1,
+				ancestors,
+				isJsx(node) ? node : undefined,
+			);
 		}
 	}
 
-	#component(node: Jsx, path: string, depth: number, ancestors: string[]): void {
+	#component(node: Jsx, path: string, depth: number, ancestors: string[], parentNode?: Jsx): void {
 		if (!node.name) {
 			this.add("fragment", "JSX fragments are not allowed in plans", path, node);
 			return;
@@ -181,9 +196,91 @@ class Validator {
 		}
 
 		this.#attributes(node, spec, path);
-		this.#content(node, spec, path);
+		this.#content(node, spec, path, parentNode);
+		if (spec.name === "Question") this.#questionChoices(node, path);
 
 		this.#descend(node, path, depth, [...ancestors, spec.name]);
+	}
+
+	#questionChoices(node: Jsx, path: string): void {
+		let elements = children(node).filter(isJsx);
+		let options = new Set(
+			elements.filter(item => item.name === "Option")
+				.map(item => stringAttribute(item, "id")),
+		);
+		for (let answer of elements.filter(item => item.name === "Answer")) {
+			let raw = stringAttribute(answer, "choices");
+			if (raw === undefined) continue;
+			let chosen = raw.trim().split(/\s+/).filter(Boolean);
+			if (chosen.length > limits.MAX_OPTIONS) {
+				this.add(
+					"too-many-answer-choices",
+					`Answer accepts at most ${limits.MAX_OPTIONS} choices`,
+					path,
+					answer,
+				);
+			}
+			if (chosen.some(id => !options.has(id))) {
+				this.add(
+					"unknown-answer-choice",
+					"Answer choices must name options in this question",
+					path,
+					answer,
+				);
+			}
+			if (new Set(chosen).size !== chosen.length) {
+				this.add("duplicate-answer-choice", "Answer choices cannot repeat an option", path, answer);
+			}
+			if (stringAttribute(node, "multiple") === "false" && chosen.length > 1) {
+				this.add("too-many-answer-choices", "This question accepts one choice", path, answer);
+			}
+		}
+
+		let previous = elements.filter(item => item.name === "Previous");
+		if (previous.length > 1) {
+			this.add("duplicate-previous", "Question accepts at most one Previous", path, node);
+		}
+		for (let item of previous) {
+			let raw = stringAttribute(item, "choices");
+			let value = stringAttribute(item, "value");
+			if ((raw === undefined) === (value === undefined)) {
+				this.add(
+					"invalid-previous-answer",
+					"Previous requires choices or value, but not both",
+					path,
+					item,
+				);
+			}
+			if (raw === undefined) continue;
+			let chosen = raw.trim().split(/\s+/).filter(Boolean);
+			if (chosen.length > limits.MAX_OPTIONS) {
+				this.add(
+					"too-many-previous-choices",
+					`Previous accepts at most ${limits.MAX_OPTIONS} choices`,
+					path,
+					item,
+				);
+			}
+			if (chosen.some(id => !options.has(id))) {
+				this.add(
+					"unknown-previous-choice",
+					"Previous choices must name options in this question",
+					path,
+					item,
+				);
+			}
+			if (new Set(chosen).size !== chosen.length) {
+				this.add(
+					"duplicate-previous-choice",
+					"Previous choices cannot repeat an option",
+					path,
+					item,
+				);
+			}
+			if (stringAttribute(node, "multiple") === "false" && chosen.length > 1) {
+				this.add("too-many-previous-choices", "This question accepts one choice", path, item);
+			}
+		}
 	}
 
 	#attributes(node: Jsx, spec: dialect.Component, path: string): void {
@@ -274,7 +371,7 @@ class Validator {
 		}
 	}
 
-	#content(node: Jsx, spec: dialect.Component, path: string): void {
+	#content(node: Jsx, spec: dialect.Component, path: string, parent?: Jsx): void {
 		let kids = children(node);
 
 		switch (spec.content.type) {
@@ -302,7 +399,15 @@ class Validator {
 					}
 					found++;
 				}
-				if (found === 0) {
+				let pendingQuestion = spec.name === "Question" && parent?.name === "Questionnaire"
+					&& !!stringAttribute(parent, "thread")
+					&& children(parent).filter(child => isJsx(child) && child.name === "Question").length
+						=== 1
+					&& ["open", "reopened", "discarded"].includes(
+						stringAttribute(parent, "status") ?? "",
+					)
+					&& stringAttribute(node, "multiple") === "false";
+				if (found === 0 && !pendingQuestion) {
 					this.add(
 						"missing-children",
 						`\`${spec.name}\` requires at least one ${allowed.join(" or ")}`,

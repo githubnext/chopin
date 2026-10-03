@@ -1,42 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { createHeadlessEditor } from "@lexical/headless";
 import { $getRoot, $isElementNode } from "lexical";
 
-import { exportPlan, importPlan } from "../convert";
-import { registry } from "../registry";
+import { importPlan } from "../convert";
 import { $isQuestionnaireNode } from "./questionnaire";
 
-import type { LexicalEditor } from "lexical";
-
-const REGISTRY = registry();
-
-const ID = "01K0N4TR8K7JGM4R1J7PW4R8YJ";
-const QUESTION = "01K0N4V4E7Y6P4MJ5WD8XZF3B2";
-const CANARY = "01K0N4W3B7P27CBAEC7A8C8WEA";
-const BLUE = "01K0N4X2M5R8T3VQ7YB6ZC4DEF";
-
-function editor(): LexicalEditor {
-	return createHeadlessEditor({
-		nodes: REGISTRY.nodes,
-		onError(err) {
-			throw err;
-		},
-	});
-}
-
-function through(source: string): string {
-	let instance = editor();
-	importPlan(instance, source, { registry: REGISTRY });
-	return exportPlan(instance, { registry: REGISTRY });
-}
-
-const OPEN = `<Questionnaire id="${ID}">\n`
-	+ `<Question id="${QUESTION}" header="Rollout" `
-	+ `prompt="How should we deploy?" multiple="false">\n`
-	+ `<Option id="${CANARY}" label="Canary" description="Small percentage first." />\n`
-	+ `<Option id="${BLUE}" label="Blue-green" />\n`
-	+ `</Question>\n`
-	+ `</Questionnaire>\n`;
+import { editor, ID, OPEN, REGISTRY, through } from "./questionnaire.test-fixtures";
 
 describe("questionnaire", () => {
 	it("round-trips an open questionnaire", () => {

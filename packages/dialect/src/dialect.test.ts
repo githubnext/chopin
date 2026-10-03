@@ -309,3 +309,22 @@ describe("diagnostics", () => {
 		expect(JSON.stringify(result.issues)).not.toContain(secret);
 	});
 });
+
+// Exact pending-card callback from archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2.
+it("accepts a pending conversation question with no options", () => {
+	let source = `<Questionnaire id="${ID}" thread="thread-a" status="open">\n`
+		+ `<Question id="${ID2}" header="Auth" prompt="Which system?" multiple="false" />\n`
+		+ `</Questionnaire>`;
+	accepts(source);
+	expect(canonical(source)).toContain("Which system?");
+	accepts(source.replace('status="open"', 'status="discarded"'));
+	expect(codes(source.replace('thread="thread-a" ', ""))).toContain("missing-children");
+	expect(
+		codes(
+			source.replace(
+				"</Questionnaire>",
+				`<Question id="${ID3}" header="Other" prompt="Another?" multiple="false" />\n</Questionnaire>`,
+			),
+		),
+	).toContain("missing-children");
+});

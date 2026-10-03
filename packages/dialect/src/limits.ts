@@ -37,6 +37,8 @@ export const MAX_QUESTION_PROMPT = 1_000;
 export const MAX_OPTION_LABEL = 200;
 export const MAX_OPTION_DESCRIPTION = 1_000;
 export const MAX_CUSTOM_ANSWER = 4_000;
+/** Up to twenty ULIDs with separators in one answer. */
+export const MAX_ANSWER_CHOICES = 600;
 
 /**
  * Accepted comment threads, projected into the plan as `<Decision>`.

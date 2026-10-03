@@ -99,6 +99,12 @@ export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
 		content: { type: "components", names: ["Question"] },
 		forbids: ["Questionnaire", "Tabs", "Callout"],
 		attributes: {
+			thread: { type: "text", required: false, max: limits.MAX_ID },
+			status: {
+				type: "enum",
+				required: false,
+				values: ["open", "decided", "reopened", "discarded"],
+			},
 			by: { type: "text", required: false, max: limits.MAX_HANDLE },
 			at: { type: "text", required: false, max: limits.MAX_TIMESTAMP },
 		},
@@ -107,7 +113,7 @@ export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
 	Question: component({
 		name: "Question",
 		kind: "flow",
-		content: { type: "components", names: ["Option", "Answer"] },
+		content: { type: "components", names: ["Option", "Answer", "Previous"] },
 		parent: ["Questionnaire"],
 		attributes: {
 			header: { type: "text", required: true, max: limits.MAX_QUESTION_HEADER },
@@ -138,6 +144,21 @@ export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
 		parent: ["Question"],
 		attributes: {
 			value: { type: "text", required: true, max: limits.MAX_CUSTOM_ANSWER },
+			choices: { type: "text", required: false, max: limits.MAX_ANSWER_CHOICES },
+		},
+	}),
+
+	/** Latest decision replaced by a reopened question; the record holds the full history. */
+	Previous: plain({
+		name: "Previous",
+		kind: "flow",
+		content: { type: "empty" },
+		parent: ["Question"],
+		attributes: {
+			choices: { type: "text", required: false, max: limits.MAX_ANSWER_CHOICES },
+			value: { type: "text", required: false, max: limits.MAX_CUSTOM_ANSWER },
+			by: { type: "text", required: true, max: limits.MAX_HANDLE },
+			at: { type: "text", required: true, max: limits.MAX_TIMESTAMP },
 		},
 	}),
 

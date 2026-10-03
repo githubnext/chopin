@@ -73,9 +73,10 @@ export type { SerializedResearch } from "./nodes/research";
 export {
 	$createQuestionnaireNode,
 	$isQuestionnaireNode,
+	cardStatus,
 	QuestionnaireNode,
 } from "./nodes/questionnaire";
-export type { Option, Question, Questionnaire } from "./nodes/questionnaire";
+export type { CardStatus, Option, Previous, Question, Questionnaire } from "./nodes/questionnaire";
 
 export { $createDecisionNode, $isDecisionNode, DecisionNode } from "./nodes/decision";
 export type { Decision, Note } from "./nodes/decision";

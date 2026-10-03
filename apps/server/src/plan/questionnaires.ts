@@ -16,6 +16,8 @@ export type QuestionnairePlacement = {
 	id: string;
 	at: BlockAddress;
 	after?: string;
+	/** Replace the decorator while moving it so an adjacent prose caret keeps its Yjs type. */
+	renew?: boolean;
 };
 
 type Actions = {
@@ -99,8 +101,12 @@ export function place(
 			let previous = placement.after ? questionnaires.get(placement.after) ?? prose : prose;
 			if (questionnaire === previous || questionnaire.getPreviousSibling() === previous) continue;
 
+			let moved = placement.renew
+				? $createQuestionnaireNode(questionnaire.getQuestionnaire())
+				: questionnaire;
 			questionnaire.remove();
-			previous.insertAfter(questionnaire);
+			previous.insertAfter(moved);
+			questionnaires.set(placement.id, moved);
 			changed = true;
 		}
 
