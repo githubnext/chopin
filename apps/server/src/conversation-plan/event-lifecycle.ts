@@ -74,6 +74,7 @@ export function applyLifecycleEvent(thread: ConversationPlan.Thread, event: Even
 			thread.decision = undefined;
 			thread.status = "reopened";
 			thread.pendingSettle = undefined;
+			thread.pendingScopedChoice = undefined;
 			break;
 		case "candidate.proposed":
 			if (event.source.role !== event.candidate.kind) {
@@ -113,6 +114,8 @@ export function applyLifecycleEvent(thread: ConversationPlan.Thread, event: Even
 					thread.decision = undefined;
 					thread.status = "reopened";
 				}
+				thread.pendingSettle = undefined;
+				thread.pendingScopedChoice = undefined;
 			}
 			break;
 		}
