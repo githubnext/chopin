@@ -53,6 +53,12 @@ function text(value: unknown, name: string, max: number, optional = false): stri
 	return result;
 }
 
+/** A stored definition keeps its original string, so enforce the bound on that string. */
+function storedText(value: unknown, name: string, max: number, optional = false): void {
+	text(value, name, max, optional);
+	if ((value as string).length > max) fail(`${name} exceeds ${max} characters`);
+}
+
 /**
  * Validate an agent's tool input into a frozen definition.
  *
@@ -122,6 +128,54 @@ export function normalize(raw: unknown): Definition {
 	Object.freeze(questions);
 
 	return Object.freeze({ questions });
+}
+
+/** Validate a stored or wire definition without changing its durable IDs or order. */
+export function identified(raw: unknown): Definition {
+	let source = record(raw, "Questionnaire definition");
+	exact(source, ["questions"], "Questionnaire definition");
+	if (
+		!Array.isArray(source.questions) || source.questions.length === 0
+		|| source.questions.length > limits.MAX_QUESTIONS
+	) {
+		fail("Questionnaire definition has an invalid question count");
+	}
+	let questionIds = new Set<string>();
+	let optionIds = new Set<string>();
+	for (let [index, candidate] of source.questions.entries()) {
+		let question = record(candidate, `Question ${index + 1}`);
+		exact(question, ["id", "header", "question", "options", "multiple"], `Question ${index + 1}`);
+		storedText(question.id, `Question ${index + 1} id`, limits.MAX_CALL_ID);
+		let id = question.id as string;
+		if (questionIds.has(id)) fail("Questionnaire has duplicate question IDs");
+		questionIds.add(id);
+		storedText(question.header, `Question ${index + 1} header`, limits.MAX_HEADER);
+		storedText(question.question, `Question ${index + 1}`, limits.MAX_QUESTION);
+		if (
+			typeof question.multiple !== "boolean"
+			|| !Array.isArray(question.options)
+			|| question.options.length === 0 && (source.questions.length !== 1 || question.multiple)
+			|| question.options.length > limits.MAX_OPTIONS
+		) {
+			fail(`Question ${index + 1} has invalid options or multiple value`);
+		}
+		for (let [position, candidate] of question.options.entries()) {
+			let option = record(candidate, `Question ${index + 1} option ${position + 1}`);
+			exact(option, ["id", "label", "description"], `Question ${index + 1} option ${position + 1}`);
+			storedText(option.id, `Question ${index + 1} option id`, limits.MAX_CALL_ID);
+			let optionId = option.id as string;
+			if (optionIds.has(optionId)) fail("Questionnaire has duplicate option IDs");
+			optionIds.add(optionId);
+			storedText(option.label, `Question ${index + 1} option label`, limits.MAX_LABEL);
+			storedText(
+				option.description,
+				`Question ${index + 1} option description`,
+				limits.MAX_DESCRIPTION,
+				true,
+			);
+		}
+	}
+	return raw as Definition;
 }
 
 /** Narrow a questionnaire to the shape owned by one durable decision card. */

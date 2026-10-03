@@ -16,63 +16,37 @@
 
 import * as Question from "@chopin/question";
 
-import type { Answer, DecisionDefinition, Definition, Drafts, Model } from "@chopin/question";
+import { untouched } from "./store-suggestions";
+
+import type { Answer, DecisionDefinition, Definition, Drafts } from "@chopin/question";
+import type {
+	Claim,
+	Closed,
+	Collaborator,
+	Ended,
+	Open,
+	Questions,
+	StoredOpen,
+} from "./store-types";
+
+export { reopen } from "./store-lifecycle";
+export {
+	addOption,
+	before,
+	relabelOption,
+	releaseEdit,
+	releaseOption,
+	reserveEdit,
+	reserveOption,
+	retitle,
+	revert,
+} from "./store-options";
+export type { AddedOption, Before, Retitled } from "./store-options";
+export { suggest } from "./store-suggestions";
+export type { Claim, Collaborator, Ended, Questions, StoredOpen } from "./store-types";
 
 /** How long a resolved questionnaire is remembered, for late arrivals. */
 const CLOSED_TTL = 5 * 60 * 1_000;
-
-export type Collaborator = {
-	client: string;
-	handle: string;
-	question?: string;
-	field?: "choices" | "custom";
-};
-
-export type Ended =
-	| { status: "answered"; answers: Answer[]; resolver: string }
-	| { status: "cancelled"; resolver: string };
-
-type Open = {
-	id: string;
-	definition: DecisionDefinition;
-	/** The plan node this belongs to, when it has one. */
-	widget?: string;
-	model: Model;
-	revision: number;
-	presence: Map<string, Collaborator>;
-	/** Set while a resolution is in flight; blocks edits and rival claims. */
-	claim?: "submit" | "cancel";
-	/** Resolves the promise the agent is waiting on. */
-	settle?: (ended: Ended) => void;
-};
-
-type Closed = { result: Ended; revision: number; expires: number };
-
-export type Claim = {
-	id: string;
-	entry: Open;
-	result: Ended;
-};
-
-export type Questions = {
-	open: Map<string, Open>;
-	/**
-	 * Tombstones.
-	 *
-	 * A submit that arrives just after somebody else's would otherwise be told
-	 * the questionnaire never existed, which reads as an error rather than as
-	 * "they got there first".
-	 */
-	closed: Map<string, Closed>;
-};
-
-export type StoredOpen = {
-	id: string;
-	definition: DecisionDefinition;
-	widget?: string;
-	model: number[];
-	revision: number;
-};
 
 export function create(): Questions {
 	return { open: new Map(), closed: new Map() };
@@ -85,6 +59,7 @@ export function dump(questions: Questions): StoredOpen[] {
 		...(entry.widget ? { widget: entry.widget } : {}),
 		model: [...entry.model.toBinary()],
 		revision: entry.revision,
+		...(entry.suggested ? { suggested: entry.suggested } : {}),
 	}));
 }
 
@@ -99,14 +74,36 @@ export function restore(entries: StoredOpen[]): Questions {
 			!Array.isArray(entry.model)
 			|| entry.model.some(value => !Number.isInteger(value) || value < 0 || value > 255)
 		) Question.reject("Questionnaire model is invalid");
-		let definition = Question.decision(entry.definition);
+		let definition = Question.identified(entry.definition);
+		if (entry.suggested !== undefined) {
+			let suggested = entry.suggested;
+			if (
+				!suggested || typeof suggested !== "object" || Array.isArray(suggested)
+				|| Object.keys(suggested).sort().join(",") !== "messageIds,optionId,revision"
+				|| typeof suggested.optionId !== "string"
+				|| !Number.isSafeInteger(suggested.revision) || suggested.revision < 1
+				|| suggested.revision !== entry.revision
+				|| !definition.questions[0]?.options.some(option => option.id === suggested.optionId)
+				|| definition.questions.length !== 1 || definition.questions[0]?.multiple
+				|| !Array.isArray(suggested.messageIds) || suggested.messageIds.length > 16
+				|| suggested.messageIds.some(id => typeof id !== "string" || !id || id.length > 200)
+				|| new Set(suggested.messageIds).size !== suggested.messageIds.length
+			) Question.reject("Questionnaire suggestion is invalid");
+		}
+		let model = Question.restore(entry.model, definition);
+		if (entry.suggested) {
+			let draft = Question.read(model, definition)[definition.questions[0]!.id]!;
+			if (!untouched(draft)) Question.reject("Questionnaire suggestion is invalid");
+		}
 		questions.open.set(entry.id, {
 			id: entry.id,
 			definition,
 			...(entry.widget ? { widget: entry.widget } : {}),
-			model: Question.restore(entry.model, definition),
+			model,
 			revision: entry.revision,
+			...(entry.suggested ? { suggested: entry.suggested } : {}),
 			presence: new Map(),
+			editors: new Set(),
 		});
 	}
 	return questions;
@@ -154,6 +151,7 @@ export function ask(
 			model,
 			revision: 0,
 			presence: new Map(),
+			editors: new Set(),
 			settle,
 		});
 	});
@@ -173,7 +171,7 @@ export function redefine(
 	questions: Questions,
 	id: string,
 	definition: DecisionDefinition,
-): { ok: true; previous: DecisionDefinition } | { ok: false; reason: "resolved" | "resolving" } {
+): { ok: true; previous: Definition } | { ok: false; reason: "resolved" | "resolving" } {
 	let entry = questions.open.get(id);
 	if (!entry) return { ok: false, reason: "resolved" };
 	if (entry.claim) return { ok: false, reason: "resolving" };
@@ -186,7 +184,7 @@ export function redefine(
 export function restoreDefinition(
 	questions: Questions,
 	id: string,
-	definition: DecisionDefinition,
+	definition: Definition,
 ): void {
 	let entry = questions.open.get(id);
 	if (entry) entry.definition = definition;
@@ -195,7 +193,7 @@ export function restoreDefinition(
 /** Everything still open, for a client that has just joined. */
 export function outstanding(
 	questions: Questions,
-): Array<{ id: string; definition: DecisionDefinition; widget?: string }> {
+): Array<{ id: string; definition: Definition; widget?: string }> {
 	return [...questions.open.values()].map(entry => ({
 		id: entry.id,
 		definition: entry.definition,
@@ -206,7 +204,7 @@ export function outstanding(
 export type Opened =
 	| {
 		open: true;
-		definition: DecisionDefinition;
+		definition: Definition;
 		model: number[];
 		revision: number;
 		presence: Collaborator[];
@@ -237,7 +235,7 @@ export type Edited =
  * `Question.apply`. What is decided here is who may ask: a questionnaire that
  * is resolving takes no more edits, because its answer has already been read.
  */
-export function edit(questions: Questions, id: string, binary: number[]): Edited {
+export function edit(questions: Questions, id: string, binary: number[], editor?: string): Edited {
 	let entry = questions.open.get(id);
 	if (!entry) {
 		let ended = questions.closed.get(id);
@@ -263,6 +261,8 @@ export function edit(questions: Questions, id: string, binary: number[]): Edited
 
 	entry.model = outcome.model;
 	entry.revision++;
+	entry.suggested = undefined;
+	if (editor) entry.editors.add(editor);
 	return { open: true, accepted: true, applied: true, revision: entry.revision };
 }
 
@@ -333,6 +333,7 @@ export function claimSubmit(
 	id: string,
 	revision: number,
 	resolver: string,
+	suggestedOptionId?: string,
 ): { ok: true; claim: Claim; answers: Answer[]; widget?: string } | SubmitRefusal {
 	let ended = questions.closed.get(id);
 	if (ended) return resolved(ended);
@@ -355,6 +356,17 @@ export function claimSubmit(
 		};
 	}
 
+	if (suggestedOptionId !== undefined) {
+		let question = entry.definition.questions[0];
+		let draft = question && drafts[question.id];
+		if (
+			entry.definition.questions.length !== 1 || !question || question.multiple || !draft
+			|| !untouched(draft) || !entry.suggested
+			|| entry.suggested.optionId !== suggestedOptionId
+			|| !question.options.some(option => option.id === suggestedOptionId)
+		) return { ok: false, reason: "invalid", message: "Suggestion is no longer current" };
+		drafts = { ...drafts, [question.id]: { ...draft, choice: suggestedOptionId } };
+	}
 	let outcome = Question.derive(entry.definition, drafts);
 	if (!outcome.ok) return { ok: false, reason: "invalid", message: outcome.message };
 

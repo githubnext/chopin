@@ -404,11 +404,12 @@ export async function addOption(
 			};
 			return;
 		}
+		let definition = Question.decision(entry.definition);
 		let applied = typeof msg.key === "string" && Object.hasOwn(record.appended ?? {}, msg.key)
 			? record.appended![msg.key]
 			: undefined;
 		let existing = applied
-			? entry.definition.questions[0].options.find(option => option.id === applied)
+			? definition.questions[0].options.find(option => option.id === applied)
 			: undefined;
 		if (existing) {
 			outcome = {
@@ -417,7 +418,7 @@ export async function addOption(
 				id: msg.id,
 				ok: true,
 				option: existing,
-				definition: entry.definition,
+				definition,
 				repeated: true,
 			};
 			return;
@@ -434,7 +435,7 @@ export async function addOption(
 			return;
 		}
 
-		let result = Question.appendOption(entry.definition, {
+		let result = Question.appendOption(definition, {
 			question: msg.question,
 			key: msg.key,
 			label: msg.label,

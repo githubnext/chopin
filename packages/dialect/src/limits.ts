@@ -20,6 +20,9 @@ export const MAX_COLLAB_BYTES = 4 * 1024 * 1024;
 export const MAX_TABLE_ROWS = 100;
 export const MAX_TABLE_COLUMNS = 20;
 
+/** Matches the conversation thread ID bound in conversation-plan validation. */
+export const MAX_ID = 200;
+
 /** Image nodes per plan. Each is a remote fetch when the plan renders. */
 export const MAX_IMAGES = 100;
 
