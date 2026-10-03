@@ -473,6 +473,7 @@ describe("consumer roles", () => {
 });
 
 type StandardAction = {
+	count?: number;
 	action: string;
 	marker: string;
 	size: "btn-sm" | "btn-md" | "btn-icon";
@@ -502,41 +503,47 @@ function classLists(button: string): string[][] {
 function standardButtonOffenders(source: string, file: string, action: StandardAction): string[] {
 	let buttons = [...source.matchAll(/<button\b[\s\S]*?<\/button>/g)]
 		.filter(button => button[0].includes(action.marker));
-	if (buttons.length !== 1) {
-		return [`${file}:1 ${action.action}: expected one button, found ${buttons.length}`];
+	let count = action.count ?? 1;
+	if (buttons.length !== count) {
+		let expected = count === 1 ? "one button" : `${count} buttons`;
+		return [`${file}:1 ${action.action}: expected ${expected}, found ${buttons.length}`];
 	}
-
-	let button = buttons[0]!;
-	let line = source.slice(0, button.index).split("\n").length;
-	let classes = classLists(button[0]);
-	if (classes.length === 0) return [`${file}:${line} ${action.action}: no static class list`];
 
 	let offenders: string[] = [];
-	let tiers: string[] = [];
-	for (let list of classes) {
-		let sizes = list.filter(name => /^(btn-sm|btn-md|btn-icon)$/.test(name));
-		let currentTiers = list.filter(name =>
-			/^(btn-primary|btn-secondary|btn-outline|btn-ghost|btn-destructive)$/.test(name)
-		);
-		let legacy = list.filter(name => /^(bg|px|py)-/.test(name));
-		tiers.push(...currentTiers);
-
-		if (!list.includes("btn") || sizes.length !== 1 || sizes[0] !== action.size) {
-			offenders.push(
-				`${file}:${line} ${action.action}: ${list.join(" ") || "no static class list"}`,
-			);
+	for (let button of buttons) {
+		let line = source.slice(0, button.index).split("\n").length;
+		let classes = classLists(button[0]);
+		if (classes.length === 0) {
+			offenders.push(`${file}:${line} ${action.action}: no static class list`);
+			continue;
 		}
-		if (currentTiers.length !== 1 || legacy.length > 0) {
-			offenders.push(
-				`${file}:${line} ${action.action}: ${
-					legacy.length > 0 ? `conflicting rest utilities ${legacy.join(" ")}` : list.join(" ")
-				}`,
-			);
-		}
-	}
 
-	if (tiers.sort().join(" ") !== [...action.tiers].sort().join(" ")) {
-		offenders.push(`${file}:${line} ${action.action}: expected ${action.tiers.join(" or ")}`);
+		let tiers: string[] = [];
+		for (let list of classes) {
+			let sizes = list.filter(name => /^(btn-sm|btn-md|btn-icon)$/.test(name));
+			let currentTiers = list.filter(name =>
+				/^(btn-primary|btn-secondary|btn-outline|btn-ghost|btn-destructive)$/.test(name)
+			);
+			let legacy = list.filter(name => /^(bg|px|py)-/.test(name));
+			tiers.push(...currentTiers);
+
+			if (!list.includes("btn") || sizes.length !== 1 || sizes[0] !== action.size) {
+				offenders.push(
+					`${file}:${line} ${action.action}: ${list.join(" ") || "no static class list"}`,
+				);
+			}
+			if (currentTiers.length !== 1 || legacy.length > 0) {
+				offenders.push(
+					`${file}:${line} ${action.action}: ${
+						legacy.length > 0 ? `conflicting rest utilities ${legacy.join(" ")}` : list.join(" ")
+					}`,
+				);
+			}
+		}
+
+		if (tiers.sort().join(" ") !== [...action.tiers].sort().join(" ")) {
+			offenders.push(`${file}:${line} ${action.action}: expected ${action.tiers.join(" or ")}`);
+		}
 	}
 	return offenders;
 }
@@ -665,6 +672,28 @@ describe("migration", () => {
 		)).toEqual(["fixture.tsx:1 fixture: conflicting rest utilities bg-brand px-2 py-1"]);
 	});
 
+	it("audits every repeated action and requires the exact button count", () => {
+		let action: StandardAction = {
+			action: "fixture",
+			marker: "Fixture",
+			count: 2,
+			size: "btn-sm",
+			tiers: ["btn-primary"],
+		};
+		let correct = '<button className="btn btn-sm btn-primary">Fixture</button>';
+		let wrongTier = '<button className="btn btn-sm btn-secondary">Fixture</button>';
+		let wrongSize = '<button className="btn btn-md btn-primary">Fixture</button>';
+		expect(standardButtonOffenders(`${correct}\n${correct}`, "fixture.tsx", action)).toEqual([]);
+		expect(standardButtonOffenders(`${correct}\n${wrongTier}`, "fixture.tsx", action))
+			.toEqual(["fixture.tsx:2 fixture: expected btn-primary"]);
+		expect(standardButtonOffenders(`${correct}\n${wrongSize}`, "fixture.tsx", action))
+			.toEqual(["fixture.tsx:2 fixture: btn btn-md btn-primary"]);
+		expect(standardButtonOffenders(correct, "fixture.tsx", action))
+			.toEqual(["fixture.tsx:1 fixture: expected 2 buttons, found 1"]);
+		expect(standardButtonOffenders(`${correct}\n${correct}\n${correct}`, "fixture.tsx", action))
+			.toEqual(["fixture.tsx:1 fixture: expected 2 buttons, found 3"]);
+	});
+
 	it("puts each standard action on one button size and tier", () => {
 		let actions = [
 			[
@@ -767,8 +796,8 @@ describe("migration", () => {
 				tiers: ["btn-outline"],
 			}],
 			["packages/question/src/react/question-view.tsx", {
-				action: "cancel confirmation",
-				marker: "onClick={onCancel}",
+				action: "decision confirmation",
+				marker: "onClick={discard}",
 				size: "btn-sm",
 				tiers: ["btn-destructive"],
 			}],
@@ -780,7 +809,7 @@ describe("migration", () => {
 			}],
 			["packages/question/src/react/question-view.tsx", {
 				action: "Save",
-				marker: "onClick={onSubmit}",
+				marker: "onClick={() => onSubmit?.(projection.suggestion)}",
 				size: "btn-sm",
 				tiers: ["btn-primary"],
 			}],

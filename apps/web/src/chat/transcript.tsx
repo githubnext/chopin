@@ -1,17 +1,56 @@
 /** The shared chat, grouped for reading rather than event delivery. */
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { ChevronIcon, CloseIcon, LoaderIcon, SignInIcon } from "@chopin/icons";
+import { parseChildDocumentPath } from "@chopin/protocol/document-url";
 
-import { AgentFace, Face, MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
+import {
+	AgentFace,
+	Face,
+	MotionDisclosure,
+	MotionDisclosureIcon,
+	useCardMeta,
+} from "@chopin/editor";
 
 import { MessageMarkdown } from "./markdown";
+import { MessageMarkers } from "../conversation-plan/markers";
+import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";
+import type { CardLink } from "../conversation-plan/links";
 import { capitalize, displayText, duration, group, summarize, toolCopy } from "./model";
+import { clearSourceHighlight, highlightSource } from "../conversation-plan/source";
+import type { ChatDestination } from "../conversation-plan/source";
 import { motionContract } from "../motion-contract";
 import { motionImmediately } from "../motion-input";
 
-import type { Chat } from "@chopin/protocol";
+import type { Chat, ConversationPlan } from "@chopin/protocol";
 import type { Group, Message } from "./model";
+import type { CardMetaStore, QuestionnaireStore } from "@chopin/editor";
+import type { Transport } from "@chopin/question/react";
+import { ActivityLine, DecisionPrompt } from "./decision-entry";
+import { ScopedChoicePrompt } from "./scoped-choice-entry";
+import { ResearchOfferCard } from "./research-offer";
+import type { ResearchOfferControls } from "./research-offer";
+
+type PlanMarkers = {
+	canEdit?: boolean;
+	conversationPlanJobs?: ConversationPlan.Job[];
+	onCardLink?: (link: CardLink) => void;
+	onAddExcerpt?: (action: ExcerptCorrectionAction) => Promise<void>;
+	onRetryAnalysis?: (messageId: string, actionId: string) => Promise<void>;
+	onRetryJob?: (jobId: string) => Promise<void>;
+	sourceDestination?: ChatDestination;
+	conversationPlan?: ConversationPlan.State;
+	researchOffers?: ResearchOfferControls;
+};
+
+export type TranscriptDecisions = {
+	questions: QuestionnaireStore;
+	meta: CardMetaStore;
+	wire?: Transport;
+	connected: boolean;
+	canEdit: boolean;
+	onOpenCard: (questionnaireId: string) => void;
+};
 
 function when(ts: number): string {
 	return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -93,34 +132,108 @@ function ToolRun({ tools }: { tools: Chat.Activity[] }) {
 }
 
 function SystemEntry({ item }: { item: Extract<Group, { kind: "system" }> }) {
+	let readyPath = /^Research is ready\. \[Open the research document\]\((\/documents\/\S+)\)\.$/
+		.exec(item.text)?.[1];
+	let linked = readyPath !== undefined && parseChildDocumentPath(readyPath) !== undefined;
 	return (
 		<div className="flex items-start gap-3 text-text-tertiary" data-chat-system>
 			<div className="shrink-0">
 				<SignInIcon aria-hidden="true" size={14} />
 			</div>
-			<p className="m-0 min-w-0 break-words text-sm [overflow-wrap:anywhere]">
-				{displayText(item.text)}
-			</p>
+			{linked
+				? (
+					<MessageMarkdown
+						className="min-w-0 break-words text-sm [overflow-wrap:anywhere]"
+						source={item.text}
+					/>
+				)
+				: (
+					<p className="m-0 min-w-0 break-words text-sm [overflow-wrap:anywhere]">
+						{displayText(item.text)}
+					</p>
+				)}
 		</div>
 	);
 }
 
+function DecisionSystemEntry(
+	{ conversationPlan, decisions, item, latest }: {
+		conversationPlan?: ConversationPlan.State;
+		decisions: TranscriptDecisions;
+		item: Extract<Group, { kind: "system" }> & { decision: NonNullable<Chat.Entry["decision"]> };
+		latest: boolean;
+	},
+) {
+	let id = item.decision.questionnaireId;
+	let values = useSyncExternalStore(
+		decisions.questions.subscribe,
+		decisions.questions.snapshot,
+		decisions.questions.snapshot,
+	);
+	let value = values.find(entry => entry.id === id)?.value;
+	let meta = useCardMeta(decisions.meta, id);
+	let entry: Chat.Entry & { decision: NonNullable<Chat.Entry["decision"]> } = {
+		id: item.id,
+		author: { kind: "system" },
+		text: item.text,
+		ts: item.ts!,
+		decision: item.decision,
+	};
+	let props = {
+		entry,
+		latest,
+		value,
+		meta,
+		wire: decisions.wire,
+		connected: decisions.connected,
+		canEdit: decisions.canEdit,
+		onOpenCard: decisions.onOpenCard,
+	};
+
+	if (entry.decision.kind === "scoped-choice") {
+		return (
+			<ScopedChoicePrompt
+				canEdit={decisions.canEdit}
+				connected={decisions.connected}
+				decision={entry.decision}
+				latest={latest}
+				meta={meta}
+				state={conversationPlan}
+				value={value}
+				wire={decisions.wire}
+			/>
+		);
+	}
+	return entry.decision.kind === "prompt"
+		? <DecisionPrompt {...props} />
+		: <ActivityLine {...props} />;
+}
+
 function MessageBody(
-	{ handle, message, onWithdraw }: {
+	{ handle, message, onWithdraw, ...markers }: {
 		handle: string;
 		message: Message;
 		onWithdraw: (id: string) => void;
-	},
+	} & PlanMarkers,
 ) {
 	let text = displayText(message.text) ? message.text : message.author.kind === "member"
 		? "Ask Planner"
 		: "";
 
 	return (
-		<div data-chat-state={message.working ? "working" : undefined}>
+		<div
+			className={`chat-message-body relative ${
+				markers.sourceDestination?.source.messageId === message.id
+					? "rounded-md bg-inset px-1"
+					: ""
+			}`}
+			data-chat-message-id={message.id}
+			data-chat-raw={message.text}
+			data-chat-state={message.working ? "working" : undefined}
+		>
 			{text && (
 				<div className="flex items-start gap-1">
-					<div className="min-w-0 flex-1">
+					<div className="min-w-0 flex-1" data-chat-message-text>
 						<MessageMarkdown
 							className="break-words text-chat-body [overflow-wrap:anywhere]"
 							references={message.references}
@@ -144,16 +257,39 @@ function MessageBody(
 				</div>
 			)}
 			{message.tools && message.tools.length > 0 && <ToolRun tools={message.tools} />}
+			{!message.queued && markers.researchOffers && markers.conversationPlan?.researchOffers
+				?.filter(offer => offer.source.messageId === message.id)
+				.map(offer => (
+					<ResearchOfferCard controls={markers.researchOffers!} key={offer.id} offer={offer} />
+				))}
+			{markers.sourceDestination?.source.messageId === message.id && (
+				<p className="m-0 mt-1 text-xs text-text-secondary" data-source-preview>
+					Source: “{markers.sourceDestination.source.quote}”
+				</p>
+			)}
+			{!message.queued && markers.onCardLink && markers.onRetryAnalysis && (
+				<MessageMarkers
+					canEdit={!!markers.canEdit}
+					messageId={message.id}
+					messageText={message.text}
+					jobs={markers.conversationPlanJobs}
+					onCard={markers.onCardLink}
+					onAddExcerpt={markers.onAddExcerpt}
+					onRetry={markers.onRetryAnalysis}
+					onRetryJob={markers.onRetryJob}
+					state={markers.conversationPlan}
+				/>
+			)}
 		</div>
 	);
 }
 
 function MessageGroup(
-	{ group: item, handle, onWithdraw }: {
+	{ group: item, handle, onWithdraw, ...markers }: {
 		group: Extract<Group, { kind: "messages" }>;
 		handle: string;
 		onWithdraw: (id: string) => void;
-	},
+	} & PlanMarkers,
 ) {
 	let first = item.messages[0]!;
 	let name = item.author.kind === "agent" ? "Planner" : capitalize(item.author.handle);
@@ -179,7 +315,21 @@ function MessageGroup(
 					</span>
 				</div>
 				{item.messages.map(message => (
-					<MessageBody handle={handle} key={message.id} message={message} onWithdraw={onWithdraw} />
+					<MessageBody
+						canEdit={markers.canEdit}
+						conversationPlanJobs={markers.conversationPlanJobs}
+						onCardLink={markers.onCardLink}
+						onAddExcerpt={markers.onAddExcerpt}
+						onRetryAnalysis={markers.onRetryAnalysis}
+						onRetryJob={markers.onRetryJob}
+						conversationPlan={markers.conversationPlan}
+						researchOffers={markers.researchOffers}
+						sourceDestination={markers.sourceDestination}
+						handle={handle}
+						key={message.id}
+						message={message}
+						onWithdraw={onWithdraw}
+					/>
 				))}
 			</div>
 		</div>
@@ -189,32 +339,82 @@ function MessageGroup(
 export function Transcript(
 	{
 		active,
+		canEdit,
+		conversationPlan,
+		conversationPlanJobs,
+		decisions,
+		researchOffers,
 		entries,
 		handle,
+		onCardLink,
+		onAddExcerpt,
+		onRetryAnalysis,
+		onRetryJob,
 		onWithdraw,
 		queued,
+		sourceDestination,
 		working,
 	}: {
 		active: boolean;
+		canEdit?: boolean;
+		conversationPlan?: ConversationPlan.State;
+		conversationPlanJobs?: ConversationPlan.Job[];
+		onCardLink?: (link: CardLink) => void;
+		onAddExcerpt?: (action: ExcerptCorrectionAction) => Promise<void>;
+		onRetryAnalysis?: (messageId: string, actionId: string) => Promise<void>;
+		onRetryJob?: (jobId: string) => Promise<void>;
+		decisions?: TranscriptDecisions;
+		researchOffers?: ResearchOfferControls;
 		entries: Chat.Entry[];
 		handle: string;
 		onWithdraw: (id: string) => void;
 		queued: Chat.Waiting[];
 		working?: Pick<Chat.Turn, "id" | "started">;
+		sourceDestination?: ChatDestination;
 	},
 ) {
 	let bottom = useRef<HTMLDivElement>(null);
+	let scroller = useRef<HTMLDivElement>(null);
 	let pinned = useRef(true);
+	let sourceOwner = useRef({});
 	let groups = group(entries, queued, working);
+	let latestPrompt = new Map<string, string>();
+	let latestScoped = new Map<string, string>();
+	for (let entry of entries) {
+		if (entry.decision?.kind === "prompt") {
+			latestPrompt.set(entry.decision.questionnaireId, entry.id);
+		}
+		if (entry.decision?.kind === "scoped-choice") {
+			latestScoped.set(entry.decision.proposalId, entry.id);
+		}
+	}
 
 	useEffect(() => {
 		if (active && pinned.current) bottom.current?.scrollIntoView({ block: "end" });
 	}, [active, entries, queued]);
 
+	useEffect(() => {
+		if (!active || !sourceDestination) return;
+		let message = Array.from(
+			scroller.current?.querySelectorAll<HTMLElement>("[data-chat-message-id]") ?? [],
+		)
+			.find(element => element.dataset.chatMessageId === sourceDestination.source.messageId);
+		if (!message) return;
+		pinned.current = false;
+		message.scrollIntoView({ block: "center", inline: "nearest" });
+		let exact = highlightSource(sourceOwner.current, message, sourceDestination.source);
+		message.dataset.sourceExact = String(exact);
+		return () => {
+			clearSourceHighlight(sourceOwner.current);
+			delete message.dataset.sourceExact;
+		};
+	}, [active, sourceDestination]);
+
 	return (
 		<div
 			className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto p-3"
 			data-focus-boundary=""
+			ref={scroller}
 			onScroll={event => {
 				let element = event.currentTarget;
 				let distance = element.scrollHeight - element.scrollTop - element.clientHeight;
@@ -227,13 +427,38 @@ export function Transcript(
 			>
 				{groups.map(item =>
 					item.kind === "system"
-						? <SystemEntry item={item} key={item.id} />
+						? decisions && item.decision && item.ts !== undefined
+							? (
+								<DecisionSystemEntry
+									conversationPlan={conversationPlan}
+									decisions={decisions}
+									item={item as Extract<Group, { kind: "system" }> & {
+										decision: NonNullable<Chat.Entry["decision"]>;
+									}}
+									key={item.id}
+									latest={item.decision.kind === "prompt"
+										? latestPrompt.get(item.decision.questionnaireId) === item.id
+										: item.decision.kind === "scoped-choice"
+										? latestScoped.get(item.decision.proposalId) === item.id
+										: true}
+								/>
+							)
+							: <SystemEntry item={item} key={item.id} />
 						: (
 							<MessageGroup
+								canEdit={canEdit}
+								conversationPlanJobs={conversationPlanJobs}
+								onCardLink={onCardLink}
+								onAddExcerpt={onAddExcerpt}
+								onRetryAnalysis={onRetryAnalysis}
+								onRetryJob={onRetryJob}
+								conversationPlan={conversationPlan}
+								researchOffers={researchOffers}
 								group={item}
 								handle={handle}
 								key={`${item.queued ? "queued" : "sent"}-${item.messages[0]!.id}`}
 								onWithdraw={onWithdraw}
+								sourceDestination={sourceDestination}
 							/>
 						)
 				)}

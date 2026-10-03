@@ -77,13 +77,13 @@ test("the chat rail has its own resize control", async ({ join, page }) => {
 	let beforeValue = Number(await handle.getAttribute("aria-valuenow"));
 
 	let before = (await box(rail)).width;
-	await handle.press("ArrowLeft");
-	await handle.press("ArrowLeft");
+	await handle.press("ArrowRight");
+	await handle.press("ArrowRight");
 	expect((await box(rail)).width).toBeGreaterThan(before);
 	expect(Number(await handle.getAttribute("aria-valuenow"))).toBeGreaterThan(beforeValue);
 
 	let widened = (await box(rail)).width;
-	await handle.press("ArrowRight");
+	await handle.press("ArrowLeft");
 	expect((await box(rail)).width).toBeLessThan(widened);
 
 	await handle.press("End");
@@ -106,17 +106,17 @@ test("the chat rail edge follows the pointer", async ({ join, page }) => {
 
 	await handle.hover();
 	await page.mouse.down();
-	await page.mouse.move(start.x - 40, y, { steps: 4 });
+	await page.mouse.move(start.x + 40, y, { steps: 4 });
 	let widened = (await box(rail)).width;
 	expect(widened).toBeGreaterThan(before);
 
-	await page.mouse.move(start.x + 20, y, { steps: 4 });
+	await page.mouse.move(start.x - 20, y, { steps: 4 });
 	await page.mouse.up();
 	expect((await box(rail)).width).toBeLessThan(widened);
 });
 
 test("the compact workspace keeps the document unobstructed", async ({ join, page }) => {
-	await page.setViewportSize({ width: 640, height: 800 });
+	await page.setViewportSize({ width: 499, height: 800 });
 	await join("ana");
 
 	await expect(page.getByRole("separator", { name: "Resize chat" })).toHaveCount(0);

@@ -17,7 +17,10 @@
 
 import { afterEach, describe, expect, it } from "bun:test";
 
-import { clear, holds, paint, pin, union, unpin } from "./marks";
+import { clear, decidedRanges, holds, paint, paintDecided, pin, union, unpin } from "./marks";
+
+import { QuestionnaireStore } from "./questionnaires";
+import { ThreadStore } from "./threads";
 
 import type { LexicalEditor } from "lexical";
 import type { Points } from "./passage";
@@ -186,5 +189,113 @@ describe("being sent somewhere", () => {
 
 		expect(union()).toEqual([]);
 		expect(holds("comments")).toBe(false);
+	});
+});
+
+describe("decided wash", () => {
+	it("keeps decisions separate from related marks and their pin", () => {
+		pin(editor, "comments", [points("comment")]);
+		paint(editor, "decisions", []);
+		pin(editor, "decisions", [points("decision")]);
+
+		expect(union()).toEqual([points("comment")]);
+		expect(holds("comments")).toBe(true);
+		expect(holds("decisions")).toBe(false);
+	});
+
+	it("keeps each mounted editor's ranges when another editor repaints or clears", () => {
+		let parent = { ...editor } as LexicalEditor;
+		let child = { ...editor } as LexicalEditor;
+		let parentRange = {} as Range;
+		let childRange = {} as Range;
+
+		paintDecided(parent, [parentRange]);
+		paintDecided(child, [childRange]);
+		expect(decidedRanges()).toEqual([parentRange, childRange]);
+
+		clear(child);
+		expect(decidedRanges()).toEqual([parentRange]);
+
+		clear();
+		expect(decidedRanges()).toEqual([]);
+	});
+});
+
+describe("mounted editor ownership", () => {
+	it("merges related marks from parent and child and clears only the departing surface", () => {
+		let child = { ...editor } as LexicalEditor;
+		paint(editor, "questions", [points("parent")]);
+		paint(child, "questions", [points("child")]);
+		expect(union()).toEqual([points("parent"), points("child")]);
+		clear(child);
+		expect(union()).toEqual([points("parent")]);
+	});
+
+	it("clearing another editor does not release the reader's current pin", () => {
+		let child = { ...editor } as LexicalEditor;
+		pin(editor, "questions", [points("parent")]);
+		clear(child);
+		expect(union()).toEqual([points("parent")]);
+		expect(holds("questions")).toBe(true);
+	});
+});
+
+describe("pin release ownership", () => {
+	it("a child store releasing questions cannot release the parent's question pin", () => {
+		let child = { ...editor } as LexicalEditor;
+		pin(editor, "questions", [points("parent")]);
+		unpin(child, "questions");
+		expect(union()).toEqual([points("parent")]);
+		expect(holds("questions")).toBe(true);
+		unpin(editor, "questions");
+		expect(union()).toEqual([]);
+	});
+});
+
+describe("sidecar editor ownership", () => {
+	it("walking continues only in the editor that still owns the pin", () => {
+		let child = { ...editor } as LexicalEditor;
+		pin(editor, "questions", [points("parent")]);
+		expect(holds("questions", editor)).toBe(true);
+		expect(holds("questions", child)).toBe(false);
+	});
+
+	it("an unbound questionnaire store cannot release another surface's question pin", () => {
+		pin(editor, "questions", [points("parent")]);
+		new QuestionnaireStore().release();
+		expect(union()).toEqual([points("parent")]);
+	});
+
+	it("detaching a child questionnaire store keeps the parent's pin", () => {
+		let child = { ...editor } as LexicalEditor;
+		let store = new QuestionnaireStore();
+		store.attach(child);
+		pin(editor, "questions", [points("parent")]);
+		store.attach(undefined);
+		expect(union()).toEqual([points("parent")]);
+	});
+
+	it("detaching a child thread store, including repeated detach, keeps the parent's pin", () => {
+		let child = { ...editor } as LexicalEditor;
+		let store = new ThreadStore();
+		store.attach(child);
+		pin(editor, "questions", [points("parent")]);
+		store.attach(undefined);
+		expect(union()).toEqual([points("parent")]);
+		store.attach(undefined);
+		expect(union()).toEqual([points("parent")]);
+	});
+
+	it("replacing a thread store's editor clears only its previous editor's ranges", () => {
+		let child = { ...editor } as LexicalEditor;
+		let replacement = { ...editor } as LexicalEditor;
+		let store = new ThreadStore();
+		store.attach(child);
+		pin(editor, "questions", [points("parent")]);
+		paint(child, "comments", [points("child")]);
+		store.attach(replacement);
+		expect(union()).toEqual([points("parent")]);
+		unpin();
+		expect(union()).toEqual([]);
 	});
 });

@@ -45,10 +45,15 @@ import {
 	reviseComposerDraft,
 } from "./references";
 import { Transcript } from "./transcript";
+import type { TranscriptDecisions } from "./transcript";
+import type { CardLink } from "../conversation-plan/links";
+import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";
+import type { ChatDestination } from "../conversation-plan/source";
+import type { ResearchOfferControls } from "./research-offer";
 import { TerminalAlert } from "../terminal-alert";
 import plannerStop from "../assets/icons/planner-stop.svg";
 
-import type { Chat as Wire } from "@chopin/protocol";
+import type { Chat as Wire, ConversationPlan } from "@chopin/protocol";
 import type { Repository } from "../api";
 import type { MentionCandidate } from "./mentions";
 import type { ComposerDraft, ReferenceTarget } from "./references";
@@ -68,6 +73,15 @@ export type ChatProps = {
 	agent?: boolean;
 	active?: boolean;
 	onActivity?: (event: { type: "message" | "working"; busy: boolean }) => void;
+	conversationPlan?: ConversationPlan.State;
+	conversationPlanJobs?: ConversationPlan.Job[];
+	onCardLink?: (link: CardLink) => void;
+	onAddExcerpt?: (action: ExcerptCorrectionAction) => Promise<void>;
+	onRetryAnalysis?: (messageId: string, actionId: string) => Promise<void>;
+	onRetryJob?: (jobId: string) => Promise<void>;
+	decisions?: TranscriptDecisions;
+	researchOffers?: ResearchOfferControls;
+	sourceDestination?: ChatDestination;
 };
 
 export function Chat(
@@ -77,6 +91,15 @@ export function Chat(
 		connected,
 		handle,
 		onActivity,
+		conversationPlan,
+		conversationPlanJobs,
+		onCardLink,
+		onAddExcerpt,
+		onRetryAnalysis,
+		onRetryJob,
+		decisions,
+		researchOffers,
+		sourceDestination,
 		people = [],
 		referencesEnabled,
 		repository,
@@ -337,6 +360,16 @@ export function Chat(
 		<div className="flex h-full min-h-0 flex-col">
 			<Transcript
 				active={active}
+				canEdit={connected}
+				conversationPlanJobs={conversationPlanJobs}
+				onCardLink={onCardLink}
+				onAddExcerpt={onAddExcerpt}
+				onRetryAnalysis={onRetryAnalysis}
+				onRetryJob={onRetryJob}
+				conversationPlan={conversationPlan}
+				decisions={decisions}
+				researchOffers={researchOffers}
+				sourceDestination={sourceDestination}
 				entries={entries}
 				handle={handle}
 				onWithdraw={id => wire?.send("chat:unqueue", { id })}

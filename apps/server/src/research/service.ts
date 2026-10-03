@@ -1,4 +1,6 @@
-import { createHash } from "node:crypto";
+import { digest, fingerprint, startIdentity } from "./start-identity";
+import type { ValidatedStartResearchRequest } from "./start-identity";
+import { childDocumentPath } from "@chopin/protocol/document-url";
 
 import { jobDetail as serializedJobDetail } from "../jobs/browser";
 import {
@@ -7,11 +9,12 @@ import {
 	parseResearchEvidenceArtifact,
 } from "../jobs/research-workspace";
 import { RESEARCH_REPOSITORY_WORKSPACE_LIMIT, researchAttemptDisposition } from "../storage/model";
+import { StorageError } from "../storage/errors";
 import { MAX_TITLE_LENGTH } from "../channels/title";
 import { publishInitialResearchChild } from "./publication";
 import { projectRequestView } from "./request-view";
 
-import type { Job, Research } from "@chopin/protocol";
+import type { ConversationPlan, Job, Research } from "@chopin/protocol";
 import type {
 	ResearchAnswerInput,
 	ResearchEvidence,
@@ -60,6 +63,7 @@ export type ResearchWorkspaceServiceOptions = {
 		workspaceId: string,
 		revision: number,
 	) => void | Promise<void>;
+	terminalNotice?: (channelId: string, id: string, text: string) => Promise<void>;
 	clock?: () => Date;
 	id?: () => string;
 };
@@ -101,15 +105,9 @@ export type StartPlannerResearchRequest = {
 	beforeStart?: () => void | Promise<void>;
 };
 
-type ValidatedStartResearchRequest = {
-	channelId: string;
-	question: string;
-	scope: string;
-	origin: "inline" | "planner";
-	originMessageId?: string;
-	requestedBy: string;
-	requestedByHandle?: string;
-	beforeStart?: () => void | Promise<void>;
+export type StartPlannerInlineResearchRequest = StartPlannerResearchRequest & {
+	/** Must durably place the canonical card before research work can be enqueued. */
+	placeReference: (workspaceId: string) => Promise<"placed" | "deferred">;
 };
 
 export type ConfirmResearchDraft = {
@@ -185,14 +183,6 @@ const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 const HANDLE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const ACTIVE_JOB_STATES = new Set(["pending", "paused", "running"]);
-
-function digest(value: string): string {
-	return createHash("sha256").update(value).digest("hex");
-}
-
-function fingerprint(kind: string, value: JsonValue): string {
-	return digest(`${kind}\0${JSON.stringify(value)}`);
-}
 
 function safeId(value: unknown, field: string, maximum = MAX_ID): string {
 	if (
@@ -364,6 +354,7 @@ export class ResearchWorkspaceService {
 	#lease: () => Lease;
 	#current: (channelId: string) => Promise<DocumentTarget | undefined>;
 	#publish: ResearchWorkspaceServiceOptions["publish"];
+	#terminalNotice: ResearchWorkspaceServiceOptions["terminalNotice"];
 	#clock: () => Date;
 	#id: () => string;
 	#tails = new Map<string, Promise<void>>();
@@ -374,6 +365,7 @@ export class ResearchWorkspaceService {
 		this.#lease = options.lease;
 		this.#current = options.current;
 		this.#publish = options.publish;
+		this.#terminalNotice = options.terminalNotice;
 		this.#clock = options.clock ?? (() => new Date());
 		this.#id = options.id ?? (() => crypto.randomUUID());
 	}
@@ -417,41 +409,114 @@ export class ResearchWorkspaceService {
 		});
 	}
 
+	async startPlannerInline(
+		input: StartPlannerInlineResearchRequest,
+	): Promise<StartResearchRequestResult> {
+		let channelId = safeId(input.channelId, "Channel id");
+		let question = researchBrief(input.question);
+		let originMessageId = safeId(
+			input.originMessageId,
+			"Origin message id",
+			MAX_ORIGIN_MESSAGE_ID,
+		);
+		let requestedBy = opaqueId(input.requestedBy, "Requesting member id");
+		let requestedByHandle = handle(input.requestedByHandle);
+		return this.#start({
+			channelId,
+			question,
+			scope: originMessageId,
+			origin: "planner-inline",
+			originMessageId,
+			requestedBy,
+			...(requestedByHandle ? { requestedByHandle } : {}),
+			...(input.beforeStart ? { beforeStart: input.beforeStart } : {}),
+			placeReference: input.placeReference,
+		});
+	}
+
+	/** Read only: accepted consent may precede request creation or job linkage. */
+	async acceptedOfferLink(
+		channelId: string,
+		offer: ConversationPlan.ResearchOffer,
+	): Promise<{ status: "pending" | "unlinked" | "linked"; researchRequestId?: string }> {
+		let verifiedChannelId = safeId(channelId, "Channel id");
+		if (offer.status !== "accepted" || offer.action?.kind !== "research") {
+			throw new ResearchWorkspaceError("invalid-request", "Research offer is not accepted.");
+		}
+		let question = researchBrief(offer.brief);
+		let originMessageId = safeId(
+			offer.source.messageId,
+			"Origin message id",
+			MAX_ORIGIN_MESSAGE_ID,
+		);
+		let requestedBy = opaqueId(offer.action.principalId, "Requesting member id");
+		let requestedByHandle = handle(offer.action.actor.handle);
+		if (!requestedByHandle) {
+			throw new ResearchWorkspaceError("invalid-state", "Research offer has no consent actor.");
+		}
+		let identity = startIdentity({
+			channelId: verifiedChannelId,
+			question,
+			scope: originMessageId,
+			origin: "planner-inline",
+			originMessageId,
+			requestedBy,
+			requestedByHandle,
+		});
+		let detail = await this.#storage.research.findByIdempotencyKey(
+			verifiedChannelId,
+			identity.idempotencyKey,
+		);
+		if (!detail) return { status: "pending" };
+		let { workspace, turns, messages } = detail;
+		let initial = turns.find(turn => turn.ordinal === 1);
+		let firstMessage = initial
+			&& messages.find(message => message.turnId === initial.id && message.authorKind === "member");
+		if (
+			workspace.channelId !== verifiedChannelId
+			|| workspace.idempotencyKey !== identity.idempotencyKey
+			|| workspace.fingerprint !== identity.fingerprint
+			|| workspace.origin !== "planner" || workspace.originMessageId !== originMessageId
+			|| workspace.proposedQuestion !== question || workspace.confirmedQuery !== question
+			|| workspace.createdBy !== requestedBy
+			|| !workspace.inlineReference
+			|| !initial || initial.kind !== "initial" || initial.workspaceId !== workspace.id
+			|| initial.requestId !== originMessageId || initial.fingerprint !== identity.fingerprint
+			|| initial.question !== question || initial.requestedBy !== requestedBy
+			|| !firstMessage || firstMessage.userId !== requestedBy
+			|| firstMessage.userHandle !== requestedByHandle || firstMessage.text !== question
+		) {
+			throw new ResearchWorkspaceError("invalid-state", "Research offer request identity differs.");
+		}
+		return {
+			status: workspace.inlineReference === "placed" && initial.evidenceJobId
+				? "linked"
+				: "unlinked",
+			researchRequestId: workspace.id,
+		};
+	}
+
 	async #start(input: ValidatedStartResearchRequest): Promise<StartResearchRequestResult> {
 		await this.#requireTopLevelChannel(input.channelId);
 		this.#requireDefinition("research-evidence");
 		this.#requireDefinition("research-answer");
-		let requestFingerprint = fingerprint(
-			`research-${input.origin}`,
-			input.origin === "inline"
-				? {
-					channelId: input.channelId,
-					question: input.question,
-					requestedBy: input.requestedBy,
-					requestedByHandle: input.requestedByHandle ?? null,
-				}
-				: {
-					channelId: input.channelId,
-					question: input.question,
-					originMessageId: input.originMessageId!,
-					requestedBy: input.requestedBy,
-					requestedByHandle: input.requestedByHandle ?? null,
-				},
-		);
+		let identity = startIdentity(input);
+		let durableOrigin = input.origin === "planner-inline" ? "planner" : input.origin;
 		let stored = await this.#storage.research.start({
 			id: this.#newId("Workspace id"),
 			channelId: input.channelId,
 			title: researchWorkspaceTitle(input.question),
 			question: input.question,
-			origin: input.origin,
+			origin: durableOrigin,
+			...(input.origin === "planner-inline" ? { inlineReference: "pending" as const } : {}),
 			...(input.originMessageId ? { originMessageId: input.originMessageId } : {}),
 			createdBy: input.requestedBy,
 			...(input.requestedByHandle ? { createdByHandle: input.requestedByHandle } : {}),
 			turnId: this.#newId("Turn id"),
 			messageId: this.#newId("Message id"),
 			requestId: input.scope,
-			idempotencyKey: `research-${input.origin}:${digest(input.scope).slice(0, 48)}`,
-			fingerprint: requestFingerprint,
+			idempotencyKey: identity.idempotencyKey,
+			fingerprint: identity.fingerprint,
 			now: this.#time(),
 			lease: this.#lease(),
 		});
@@ -461,12 +526,106 @@ export class ResearchWorkspaceService {
 			if (!initial) {
 				throw new ResearchWorkspaceError("invalid-state", "Research request has no initial work.");
 			}
+			if (current.workspace.inlineReference && !input.placeReference) {
+				throw new ResearchWorkspaceError(
+					"invalid-state",
+					"Inline Planner research requires a document placement callback.",
+				);
+			}
+			if (input.placeReference) {
+				let placement = await input.placeReference(current.workspace.id);
+				if (placement === "deferred") {
+					throw new ResearchWorkspaceError(
+						"not-ready",
+						"Research card placement is deferred while implementation is active.",
+					);
+				}
+				if (current.workspace.inlineReference === "pending") {
+					await this.#storage.research.markReferencePlaced({
+						channelId: input.channelId,
+						workspaceId: current.workspace.id,
+						lease: this.#lease(),
+					});
+				}
+			}
 			if (initial.evidenceJobId === undefined) await input.beforeStart?.();
 			await this.#ensureEvidence(current.workspace, initial);
 		});
 		let request = await this.request(input.channelId, stored.workspace.id);
 		if (!request) throw new ResearchWorkspaceError("not-found", "Research request not found.");
 		return { request, repeated: stored.repeated };
+	}
+
+	/** Recover a committed Planner request even when its initiating turn will never replay. */
+	async recoverPendingPlannerInline(
+		placeReference: (
+			channelId: string,
+			workspaceId: string,
+		) => Promise<"placed" | "deferred">,
+		channelId?: string,
+	): Promise<{ deferred: number }> {
+		if (channelId !== undefined) safeId(channelId, "Channel id");
+		let afterId: string | undefined;
+		let deferred = 0;
+		while (true) {
+			let page = await this.#storage.research.listReferenceRecovery(100, afterId, channelId);
+			for (let workspace of page) {
+				let outcome = await this.#exclusive(workspace.channelId, workspace.id, async () => {
+					let detail = await this.#stored(workspace.channelId, workspace.id);
+					if (!detail.workspace.inlineReference) return "skipped";
+					let channel = await this.#storage.channels.get(workspace.channelId);
+					if (!channel || channel.archivedAt) return "skipped";
+					let placement = await placeReference(workspace.channelId, workspace.id);
+					if (placement === "deferred") return "deferred";
+					if (detail.workspace.inlineReference === "pending") {
+						await this.#storage.research.markReferencePlaced({
+							channelId: workspace.channelId,
+							workspaceId: workspace.id,
+							lease: this.#lease(),
+						});
+					}
+					let initial = detail.turns.find(value => value.kind === "initial");
+					if (!initial) {
+						throw new ResearchWorkspaceError(
+							"invalid-state",
+							"Research request has no initial work.",
+						);
+					}
+					if (this.#hasDefinition("research-evidence") && this.#hasDefinition("research-answer")) {
+						await this.#ensureEvidence(detail.workspace, initial);
+					}
+					return "placed";
+				});
+				if (outcome === "deferred") deferred++;
+			}
+			if (page.length < 100) return { deferred };
+			afterId = page.at(-1)!.id;
+		}
+	}
+
+	/** Revisit terminal Planner cards whose Chat notice may have been missed before shutdown. */
+	async recoverTerminalPlannerInline(channelId?: string): Promise<void> {
+		if (channelId !== undefined) safeId(channelId, "Channel id");
+		let afterId: string | undefined;
+		while (true) {
+			let page = await this.#storage.research.listTerminalRecovery(100, afterId, channelId);
+			for (let candidate of page) {
+				try {
+					let channel = await this.#storage.channels.get(candidate.channelId);
+					if (!channel || channel.parentChannelId || channel.archivedAt) continue;
+					let job = await this.#jobs.get(candidate.channelId, candidate.jobId);
+					if (job) await this.jobChanged(job.job);
+				} catch (error) {
+					if (
+						!(error instanceof ResearchWorkspaceError && error.code === "invalid-state")
+						&& !(error instanceof StorageError && error.failure === "corrupt")
+					) throw error;
+					console.warn(`[research] skipped invalid terminal request ${candidate.id}:`, error);
+				}
+			}
+			if (page.length < 100) return;
+			afterId = page.at(-1)!.id;
+		}
 	}
 
 	async createDraft(input: CreateResearchDraft): Promise<CreateResearchDraftResult> {
@@ -647,7 +806,9 @@ export class ResearchWorkspaceService {
 		if (!this.#validId(channelId) || !this.#validId(workspaceId)) return undefined;
 		return this.#exclusive(channelId, workspaceId, async () => {
 			let detail = await this.#storage.research.get(channelId, workspaceId);
-			return detail && this.#browserView(detail);
+			return detail?.workspace.origin === "planner"
+				? undefined
+				: detail && this.#browserView(detail);
 		});
 	}
 
@@ -682,7 +843,7 @@ export class ResearchWorkspaceService {
 		if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
 			throw new ResearchWorkspaceError("invalid-request", "Research workspace limit is invalid.");
 		}
-		return (await this.#storage.research.list(channelId, limit)).map(summary);
+		return (await this.#storage.research.list(channelId, limit, false)).map(summary);
 	}
 
 	async listRepository(
@@ -701,6 +862,7 @@ export class ResearchWorkspaceService {
 			repositoryId,
 			limit,
 			includeArchived,
+			false,
 		);
 		return {
 			channels: listed.channels.map(group => ({
@@ -837,7 +999,7 @@ export class ResearchWorkspaceService {
 
 	async jobChanged(job: JobView): Promise<void> {
 		if (
-			job.state !== "completed"
+			(job.state !== "completed" && job.state !== "failed")
 			|| (job.type !== "research-evidence" && job.type !== "research-answer")
 			|| !this.#validId(job.channelId)
 		) return;
@@ -845,7 +1007,38 @@ export class ResearchWorkspaceService {
 		let linked = await this.#storage.research.findTurnByJob(job.channelId, job.id);
 		if (!linked) return;
 		await this.#exclusive(job.channelId, linked.workspaceId, async () => {
-			await this.#reconciled(job.channelId, linked.workspaceId);
+			let detail = await this.#reconciled(job.channelId, linked.workspaceId);
+			if (!detail || linked.kind !== "initial" || detail.workspace.inlineReference !== "placed") {
+				return;
+			}
+			let request = await this.#requestView(detail);
+			if (request.stage !== "ready" && request.stage !== "failed") return;
+			let activeTurn = detail.turns.find(value => value.id === linked.id);
+			if (
+				request.stage === "ready"
+					&& (job.state !== "completed" || job.id !== activeTurn?.answerJobId)
+				|| request.stage === "failed"
+					&& (job.state !== "failed"
+						|| job.id !== activeTurn?.answerJobId && job.id !== activeTurn?.evidenceJobId)
+			) {
+				return;
+			}
+			let id = `research-${request.stage}:${detail.workspace.id}:${job.id}`;
+			let text = "Research could not be completed. You can retry it from the research card.";
+			if (request.stage === "ready") {
+				let parent = await this.#storage.channels.get(job.channelId);
+				if (!parent) {
+					throw new ResearchWorkspaceError("invalid-state", "Parent document is missing.");
+				}
+				let path = childDocumentPath(
+					parent.repositoryOwner,
+					parent.repositoryName,
+					parent.slug,
+					request.child.slug,
+				);
+				text = `Research is ready. [Open the research document](${path}).`;
+			}
+			await this.#terminalNotice?.(job.channelId, id, text);
 		});
 	}
 
@@ -1366,10 +1559,11 @@ export class ResearchWorkspaceService {
 	}
 
 	async #requireTopLevelChannel(channelId: string): Promise<void> {
-		if (!await this.#isTopLevelChannel(channelId)) {
+		let channel = await this.#storage.channels.get(channelId);
+		if (!channel || channel.parentChannelId || channel.archivedAt) {
 			throw new ResearchWorkspaceError(
 				"invalid-request",
-				"Child documents cannot start research.",
+				"Channel cannot start research.",
 			);
 		}
 	}

@@ -20,6 +20,9 @@ export const MAX_COLLAB_BYTES = 4 * 1024 * 1024;
 export const MAX_TABLE_ROWS = 100;
 export const MAX_TABLE_COLUMNS = 20;
 
+/** Matches the conversation thread ID bound in conversation-plan validation. */
+export const MAX_ID = 200;
+
 /** Image nodes per plan. Each is a remote fetch when the plan renders. */
 export const MAX_IMAGES = 100;
 
@@ -34,6 +37,8 @@ export const MAX_QUESTION_PROMPT = 1_000;
 export const MAX_OPTION_LABEL = 200;
 export const MAX_OPTION_DESCRIPTION = 1_000;
 export const MAX_CUSTOM_ANSWER = 4_000;
+/** Up to twenty ULIDs with separators in one answer. */
+export const MAX_ANSWER_CHOICES = 600;
 
 /**
  * Accepted comment threads, projected into the plan as `<Decision>`.

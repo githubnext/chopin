@@ -9,11 +9,14 @@
  * as they arrive rather than tracking local state.
  */
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useReducer, useRef, useState } from "react";
 import { CheckIcon, ChevronIcon, DecisionIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 
 import { MAX_LABEL, MAX_SHARED_OPTIONS } from "../limits";
 import { answered } from "../draft";
+import { projectSuggestion, reduceSuggestionEditState } from "./project-suggestion";
+import { ResolvedActions } from "./resolved-actions";
+import type { VisibleSuggestion } from "./project-suggestion";
 
 import type { ReactNode } from "react";
 import type { Draft, Drafts } from "../draft";
@@ -33,12 +36,20 @@ export type QuestionStepRenderProps = {
 	question: string;
 };
 
+export type PreviousAnswer = { labels: string[]; by: string };
+
 export type QuestionViewProps = {
 	definition: Definition;
 	drafts: Drafts;
 	/** Absent once resolved: a decision is not re-opened, a new question is asked. */
 	onChange?: (question: string, change: Partial<Draft>) => void;
-	onSubmit?: () => void;
+	onSubmit?: (visibleSuggestion?: VisibleSuggestion) => void;
+	suggested?: VisibleSuggestion;
+	onDiscard?: () => void;
+	onReopen?: () => void;
+	previous?: PreviousAnswer | Record<string, PreviousAnswer>;
+	refining?: boolean;
+	showActions?: boolean;
 	onCancel?: () => void;
 	/**
 	 * Append an option for everyone. Absent where the viewer may not write; the
@@ -47,7 +58,7 @@ export type QuestionViewProps = {
 	onAddOption?: (question: string, label: string) => Promise<AddOptionResult>;
 	disabled?: boolean;
 	submitting?: boolean;
-	status?: "open" | "answered" | "cancelled";
+	status?: "open" | "answered" | "cancelled" | "discarded";
 	/** Shown instead of controls once the questionnaire has resolved. */
 	answers?: Answer[];
 	resolver?: string;
@@ -77,6 +88,8 @@ export type QuestionViewProps = {
 	errorClassName?: string;
 	/** Rendered beside the heading; hosts use it for counts and provenance. */
 	aside?: ReactNode;
+	/** Controls in the trailing header, beside question-specific presence. */
+	headerActions?: ReactNode;
 	/** Lets a host retain bounded steps for presentation without owning question state. */
 	renderStep?: (props: QuestionStepRenderProps) => ReactNode;
 };
@@ -86,6 +99,16 @@ export function currentQuestion(
 	active: string | undefined,
 ): Item {
 	return definition.questions.find(question => question.id === active) ?? definition.questions[0]!;
+}
+
+/** Find a previous decision without applying one question's answer to another. */
+export function previousFor(
+	previous: QuestionViewProps["previous"],
+	question: string,
+): PreviousAnswer | undefined {
+	if (!previous) return undefined;
+	if (Array.isArray((previous as PreviousAnswer).labels)) return previous as PreviousAnswer;
+	return (previous as Record<string, PreviousAnswer>)[question];
 }
 
 function Badges({ people }: { people: Collaborator[] }) {
@@ -134,12 +157,13 @@ function Key({ children }: { children: ReactNode }) {
 }
 
 function Choices(
-	{ question, draft, disabled, name, onChange }: {
+	{ question, draft, disabled, name, onChange, suggestedOptionId }: {
 		question: Item;
 		draft: Draft | undefined;
 		disabled: boolean;
 		name: string;
 		onChange?: (change: Partial<Draft>) => void;
+		suggestedOptionId?: string;
 	},
 ) {
 	let custom = draft?.mode === "custom";
@@ -175,6 +199,9 @@ function Choices(
 						<Key>{letter(index)}</Key>
 						<span className="question-text">
 							<span className="question-label">{option.label}</span>
+							{!custom && selected && option.id === suggestedOptionId && (
+								<span className="text-sm text-text-tertiary">{" from chat"}</span>
+							)}
 							{option.description && <span className="question-desc">{option.description}</span>}
 						</span>
 						<span aria-hidden="true" className="question-check">
@@ -218,18 +245,21 @@ function LegacyCustom(
 /**
  * The last row: a prompt to add an option, which becomes the field for it.
  *
- * Enter adds it for everyone, Escape cancels. The new row is shown straight
- * away, dimmed, until the server confirms it; a rejection reopens the field
- * with the text intact.
+ * Enter adds it for everyone, Escape closes the field. While confirmation is
+ * pending the field stays focusable so Escape still works; a rejection keeps
+ * the text intact.
  */
 function AddOption(
-	{ question, offset, disabled, onAdd, onFailed }: {
+	{ question, offset, disabled, onAdd, onFailed, onEdit, onCancelEdit, onCommitEdit }: {
 		question: Item;
 		/** Rows already shown below the options, such as a legacy custom answer. */
 		offset: number;
 		disabled: boolean;
 		onAdd?: (label: string) => Promise<AddOptionResult>;
 		onFailed: (message: string | undefined) => void;
+		onEdit?: () => void;
+		onCancelEdit?: () => void;
+		onCommitEdit?: () => void;
 	},
 ) {
 	let [text, setText] = useState<string | null>(null);
@@ -237,7 +267,11 @@ function AddOption(
 	let input = useRef<HTMLInputElement>(null);
 	let trigger = useRef<HTMLButtonElement>(null);
 	let focus = useRef<"field" | "trigger">(undefined);
+	let edit = useRef(0);
 	let letterIndex = question.options.length + offset;
+	useEffect(() => () => {
+		edit.current++;
+	}, []);
 
 	useEffect(() => {
 		let target = focus.current;
@@ -269,6 +303,7 @@ function AddOption(
 	let add = async () => {
 		let label = text?.trim();
 		if (!label || !onAdd || pending !== null) return;
+		let submittedEdit = edit.current;
 		setPending(label);
 		onFailed(undefined);
 		let result: AddOptionResult;
@@ -278,32 +313,17 @@ function AddOption(
 			result = { ok: false, message: "Could not add this option." };
 		}
 		setPending(null);
+		if (edit.current !== submittedEdit) return;
+		let ownsFocus = document.activeElement === input.current;
 		if (result.ok) {
+			onCommitEdit?.();
 			setText(null);
-			focus.current = "trigger";
+			if (ownsFocus) focus.current = "trigger";
 		} else {
 			onFailed(result.message);
-			focus.current = "field";
+			if (ownsFocus) focus.current = "field";
 		}
 	};
-
-	// Until the server confirms, the new row stands where the field was. If the
-	// broadcast beat the acknowledgement, the real row is already listed above.
-	if (pending !== null) {
-		let known = question.options.some(option =>
-			option.label.trim().toLowerCase() === pending.toLowerCase()
-		);
-		if (known) return null;
-		return (
-			<div aria-busy="true" className="question-choice-row question-option question-pending">
-				<Key>{letter(letterIndex)}</Key>
-				<span className="question-text">
-					<span className="question-label">{pending}</span>
-				</span>
-				<span className="sr-only" role="status">Adding option</span>
-			</div>
-		);
-	}
 
 	if (text === null) {
 		return (
@@ -313,6 +333,7 @@ function AddOption(
 				data-press="wide"
 				disabled={disabled || !onAdd}
 				onClick={() => {
+					edit.current++;
 					focus.current = "field";
 					setText("");
 				}}
@@ -327,9 +348,13 @@ function AddOption(
 	}
 
 	return (
-		<div className="question-choice-row question-option question-adding">
+		<div
+			aria-busy={pending !== null || undefined}
+			className="question-choice-row question-option question-adding"
+		>
 			<Key>{letter(letterIndex)}</Key>
 			<input
+				aria-disabled={pending !== null || undefined}
 				aria-label="New option"
 				autoComplete="off"
 				className="question-field"
@@ -338,9 +363,14 @@ function AddOption(
 				onBlur={() => {
 					// Only an empty field collapses by itself. Typed text is kept, because
 					// adding an option is visible to everyone and should be deliberate.
-					if (!text.trim()) setText(null);
+					if (!text.trim() && pending === null) {
+						edit.current++;
+						onCancelEdit?.();
+						setText(null);
+					}
 				}}
 				onChange={event => {
+					onEdit?.();
 					setText(event.currentTarget.value);
 					onFailed(undefined);
 				}}
@@ -348,6 +378,8 @@ function AddOption(
 					if (event.key === "Escape") {
 						event.preventDefault();
 						event.stopPropagation();
+						edit.current++;
+						onCancelEdit?.();
 						setText(null);
 						onFailed(undefined);
 						focus.current = "trigger";
@@ -357,9 +389,11 @@ function AddOption(
 					}
 				}}
 				placeholder="Add an option"
+				readOnly={pending !== null}
 				ref={input}
 				value={text}
 			/>
+			{pending !== null && <span className="sr-only" role="status">Adding option</span>}
 		</div>
 	);
 }
@@ -492,6 +526,19 @@ function Cancelled({ resolver }: { resolver?: string }) {
 	);
 }
 
+function Discarded({ definition, resolver }: { definition: Definition; resolver?: string }) {
+	let questions = definition.questions.map(question => question.question).join(", ");
+	let discarded = resolver && resolver !== "system" ? `Discarded by @${resolver}` : "Discarded";
+	return (
+		<div className="px-3 py-2.5">
+			<p className="m-0 text-sm text-text-secondary">
+				{discarded}
+				{questions ? ` — ${questions}` : ""}
+			</p>
+		</div>
+	);
+}
+
 function Callout(
 	{ feedback, message, title }: { feedback?: string; message: string; title: string },
 ) {
@@ -519,6 +566,12 @@ export function QuestionView(props: QuestionViewProps) {
 		onChange,
 		onSubmit,
 		onCancel,
+		onDiscard,
+		onReopen,
+		suggested,
+		previous: priorAnswers,
+		refining,
+		showActions = false,
 		onAddOption,
 		disabled = false,
 		submitting = false,
@@ -530,6 +583,7 @@ export function QuestionView(props: QuestionViewProps) {
 		error,
 		errorClassName,
 		aside,
+		headerActions,
 		places,
 		onQuestionEnter,
 		onQuestionLeave,
@@ -537,6 +591,26 @@ export function QuestionView(props: QuestionViewProps) {
 		onQuestionSelect,
 		renderStep,
 	} = props;
+
+	let [suggestionEdits, dispatchSuggestionEdit] = useReducer(reduceSuggestionEditState, {
+		answer: false,
+		composer: false,
+		suggestionPresent: false,
+		suggestionGeneration: 0,
+	});
+	useEffect(() => {
+		// A missing suggestion starts a new lifecycle; revision changes stay in the same one.
+		dispatchSuggestionEdit({ type: suggested ? "suggestion-visible" : "suggestion-cleared" });
+	}, [suggested]);
+	let markHumanEdit = () => {
+		if (suggested) dispatchSuggestionEdit({ type: "answer-edited" });
+	};
+
+	let markComposerEdit = () => {
+		dispatchSuggestionEdit({ type: "composer-edited" });
+	};
+	let cancelComposerEdit = () => dispatchSuggestionEdit({ type: "composer-cancelled" });
+	let commitComposerEdit = () => dispatchSuggestionEdit({ type: "composer-committed" });
 
 	let base = useId();
 	let single = definition.questions.length === 1;
@@ -568,6 +642,25 @@ export function QuestionView(props: QuestionViewProps) {
 		else if (target === "primary") primary.current?.focus();
 	}, [active]);
 
+	let projection = single
+		? projectSuggestion(
+			current,
+			drafts[current.id],
+			suggested,
+			suggestionEdits.answer || suggestionEdits.composer,
+		)
+		: { draft: drafts[current.id] };
+
+	if (status === "discarded") {
+		return (
+			<div>
+				{single && <DecisionHeading />}
+				{aside}
+				<Discarded definition={definition} resolver={resolver} />
+			</div>
+		);
+	}
+
 	// A cancelled questionnaire has no answers, so it must be matched on status
 	// alone — falling through would offer an editable form for a dead question.
 	if (status === "cancelled") {
@@ -580,19 +673,31 @@ export function QuestionView(props: QuestionViewProps) {
 		);
 	}
 
-	if (status !== "open" && answers) {
+	if (status !== "open") {
 		return (
 			<div>
 				{single && <DecisionHeading />}
 				{aside}
-				<Resolved
-					answers={answers}
-					definition={definition}
-					resolver={resolver}
-					places={places}
-					onQuestionEnter={onQuestionEnter}
-					onQuestionLeave={onQuestionLeave}
-					onQuestionSelect={onQuestionSelect}
+				{answers
+					? (
+						<Resolved
+							answers={answers}
+							definition={definition}
+							resolver={resolver}
+							places={places}
+							onQuestionEnter={onQuestionEnter}
+							onQuestionLeave={onQuestionLeave}
+							onQuestionSelect={onQuestionSelect}
+						/>
+					)
+					: <p className="m-0 px-3 py-2.5 text-sm text-text-secondary">Saved decision</p>}
+				{error && <Callout feedback={errorClassName} title="Couldn’t save" message={error} />}
+				<ResolvedActions
+					className="question-actions"
+					disabled={disabled}
+					onDiscard={onDiscard}
+					onReopen={onReopen}
+					submitting={submitting}
 				/>
 			</div>
 		);
@@ -604,7 +709,9 @@ export function QuestionView(props: QuestionViewProps) {
 	let last = index === total - 1;
 	// Nothing chosen, nothing to save or move on with. Read-only hosts have no
 	// drafts to fill, so they keep free navigation.
-	let ready = answered(current, drafts[current.id]);
+	let ready = answered(current, projection.draft);
+	let discard = onDiscard ?? onCancel;
+	let previousAnswer = previousFor(priorAnswers, current.id);
 	let step = (offset: number, from?: "primary") => {
 		let question = definition.questions[index + offset];
 		if (!question) return;
@@ -645,7 +752,7 @@ export function QuestionView(props: QuestionViewProps) {
 							}
 						}}
 					>
-						<header className="question-head">
+						<header className="question-head" data-refining={refining ? "true" : undefined}>
 							<span className="question-mark" title="Decision">
 								<DecisionIcon />
 							</span>
@@ -663,24 +770,36 @@ export function QuestionView(props: QuestionViewProps) {
 									</Related>
 								</h4>
 								{current.multiple && <p className="question-hint">Choose any</p>}
-							</div>
-							<Presence
-								people={collaborators.filter(person =>
-									person.question === current.id
+								{previousAnswer && (
+									<p className="question-hint">
+										Previously: {previousAnswer.labels.join(", ")} · @{previousAnswer.by}
+									</p>
 								)}
-								render={renderPeople}
-							/>
+								{refining && <p className="question-hint" role="status">Chopin is refining…</p>}
+							</div>
+							<span className="flex shrink-0 items-center gap-2">
+								{headerActions}
+								<Presence
+									people={collaborators.filter(person =>
+										person.question === current.id
+									)}
+									render={renderPeople}
+								/>
+							</span>
 						</header>
 
 						<fieldset disabled={disabled} className="question-options">
 							<legend className="sr-only">{current.header}</legend>
 							<Choices
 								question={current}
-								draft={drafts[current.id]}
+								draft={projection.draft}
 								disabled={disabled}
 								name={`${base}-${current.id}`}
-								onChange={change =>
-									onChange?.(current.id, change)}
+								onChange={change => {
+									markHumanEdit();
+									onChange?.(current.id, change);
+								}}
+								suggestedOptionId={projection.suggestion?.optionId}
 							/>
 							{drafts[current.id]?.mode === "custom" && drafts[current.id]!.custom.trim() && (
 								<LegacyCustom
@@ -701,6 +820,9 @@ export function QuestionView(props: QuestionViewProps) {
 										? label => onAddOption(current.id, label)
 										: undefined}
 									onFailed={setAddError}
+									onEdit={markComposerEdit}
+									onCancelEdit={cancelComposerEdit}
+									onCommitEdit={commitComposerEdit}
 								/>
 							)}
 						</fieldset>
@@ -719,15 +841,17 @@ export function QuestionView(props: QuestionViewProps) {
 				/>
 			)}
 
-			{(onSubmit || onCancel || multiple) && (
+			{(onSubmit || discard || multiple || showActions) && (
 				<footer
 					className="question-actions"
-					data-confirm={onCancel && confirming ? "" : undefined}
+					data-confirm={discard && confirming ? "" : undefined}
 				>
-					{onCancel && confirming
+					{discard && confirming
 						? (
 							<>
-								<span className="question-confirm">Discard this decision?</span>
+								<span className="question-confirm">
+									Discard this decision?
+								</span>
 								<button
 									type="button"
 									onClick={() => setConfirming(false)}
@@ -738,7 +862,7 @@ export function QuestionView(props: QuestionViewProps) {
 								</button>
 								<button
 									type="button"
-									onClick={onCancel}
+									onClick={discard}
 									disabled={disabled || submitting}
 									className="btn btn-sm btn-destructive"
 								>
@@ -770,14 +894,15 @@ export function QuestionView(props: QuestionViewProps) {
 											aria-label="Next question"
 											className="btn btn-icon btn-ghost question-caret"
 											disabled={last}
-											onClick={() => step(1)}
+											onClick={() =>
+												step(1)}
 											ref={next}
 										>
 											<ChevronIcon size={16} />
 										</button>
 									</div>
 								)}
-								{onCancel && (
+								{(discard || showActions) && (
 									<button
 										type="button"
 										onClick={() => setConfirming(true)}
@@ -798,11 +923,11 @@ export function QuestionView(props: QuestionViewProps) {
 										Next
 									</button>
 								)}
-								{onSubmit && (!multiple || last) && (
+								{(onSubmit || showActions) && (!multiple || last) && (
 									<button
 										type="button"
-										onClick={onSubmit}
-										disabled={disabled || submitting || !ready}
+										onClick={() => onSubmit?.(projection.suggestion)}
+										disabled={disabled || submitting || !onSubmit || !ready}
 										className="btn btn-sm btn-primary"
 										ref={primary}
 									>

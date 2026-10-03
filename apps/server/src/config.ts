@@ -30,6 +30,10 @@ export type Config = {
 	agent: boolean;
 	backgroundJobs: boolean;
 	webResearch: boolean;
+	/** Explicitly enables the conversation-derived cards prototype. */
+	conversationPlan?: boolean;
+	conversationPlanModel?: string;
+	conversationPlanTimeoutMs?: number;
 	/**
 	 * Origin of a running Vite, when developing.
 	 *
@@ -97,6 +101,23 @@ function storage(): StorageConfig {
 export function load(): Config {
 	let agent = process.env.AGENT !== "off";
 	let backgroundJobs = process.env.BACKGROUND_JOBS !== "off";
+	let conversationPlan = process.env.CONVERSATION_PLAN === "on";
+	let conversationPlanModel = process.env.JEV_MODEL || "jev-latest";
+	let timeoutRaw = process.env.JEV_TIMEOUT_MS;
+	let conversationPlanTimeoutMs = timeoutRaw === undefined ? 30_000 : Number(timeoutRaw);
+	if (
+		(timeoutRaw !== undefined && !/^\d+$/.test(timeoutRaw))
+		|| !Number.isSafeInteger(conversationPlanTimeoutMs)
+		|| conversationPlanTimeoutMs < 100 || conversationPlanTimeoutMs > 60_000
+	) {
+		throw new Error("JEV_TIMEOUT_MS must be an integer between 100 and 60000 milliseconds");
+	}
+	if (conversationPlan && !process.env.JEV_API_KEY) {
+		throw new Error("JEV_API_KEY is required when CONVERSATION_PLAN=on");
+	}
+	if (conversationPlan && !/^[A-Za-z0-9._-]{1,100}$/.test(conversationPlanModel)) {
+		throw new Error("JEV_MODEL must be a valid model alias");
+	}
 	let selection = harnessSelection();
 	let serverPort = port();
 	return {
@@ -106,6 +127,9 @@ export function load(): Config {
 		agent,
 		backgroundJobs,
 		webResearch: agent && backgroundJobs && process.env.WEB_RESEARCH !== "off",
+		conversationPlan,
+		conversationPlanModel,
+		conversationPlanTimeoutMs,
 		devClient: process.env.DEV_CLIENT || undefined,
 		storage: storage(),
 		auth: loadAuth(serverPort, selection.host),
@@ -135,6 +159,9 @@ export function describe(config: Config): string {
 		`harness: ${config.harness}`,
 		config.backgroundJobs ? "background jobs: on" : "background jobs: off",
 		config.webResearch ? "web research: on" : "web research: off",
+		config.conversationPlan
+			? `conversation plan: ${config.conversationPlanModel}`
+			: "conversation plan: off",
 		admission,
 		`storage: ${config.storage.driver}`,
 	];

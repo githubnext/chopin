@@ -1,21 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
-import { create, normalize } from "../index";
+import { create, decision, normalize } from "../index";
+import { DEFINITION } from "./use-questionnaire.test-fixtures";
 import { FocusReporter, QuestionnaireController } from "./use-questionnaire";
 
 import type { Transport } from "./use-questionnaire";
-
-const DEFINITION = normalize({
-	questions: [{
-		header: "Rollout",
-		question: "How should we deploy?",
-		multiple: false,
-		options: [
-			{ label: "Canary", description: "Small percentage first." },
-			{ label: "Blue-green", description: "" },
-		],
-	}],
-});
 
 const QUESTIONNAIRE = normalize({
 	questions: [
@@ -96,7 +85,16 @@ function transport(definition = DEFINITION) {
 }
 
 describe("QuestionnaireController", () => {
-	it("rejects a questionnaire returned for an independent decision record", async () => {
+	it("rejects a questionnaire returned for an independent decision record", () => {
+		let bridge = transport(QUESTIONNAIRE);
+		// Creation owns this constraint; existing persisted questionnaires remain readable.
+		expect(() => decision(QUESTIONNAIRE)).toThrow(
+			"A decision record must contain exactly one question",
+		);
+		expect(bridge.submits()).toBe(0);
+	});
+
+	it("rejects duplicate durable option IDs across questionnaire questions", async () => {
 		let bridge = transport(QUESTIONNAIRE);
 		let controller = new QuestionnaireController(
 			bridge.value,

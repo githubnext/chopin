@@ -10,6 +10,34 @@ export type Rect = {
 export type Point = { top: number; left: number };
 export type MarkerTarget = { target: Rect; passages: Rect[] };
 
+/** A decision marker sits before the first line of its decided paragraph. */
+export function marginPoint(target: Rect, host: Rect, size = 24, gap = 8): Point {
+	return {
+		top: clamp(target.top - host.top, 0, host.height - size),
+		left: clamp(target.left - host.left - size - gap, 0, host.width - size),
+	};
+}
+
+/** A decision preview and its pinned popover share a position beneath the prose. */
+export function decisionPanelPoint(
+	target: Rect,
+	host: Rect,
+	width: number,
+	height: number,
+	gap = 6,
+): Point {
+	let below = target.bottom - host.top + gap;
+	let above = target.top - host.top - height - gap;
+	return {
+		top: below + height <= host.height
+			? below
+			: above >= 0
+			? above
+			: clamp(below, 0, host.height - height),
+		left: clamp(target.left - host.left, 0, host.width - width),
+	};
+}
+
 export function markerRect(point: Point, host: Rect, size: number): Rect {
 	return {
 		top: host.top + point.top,

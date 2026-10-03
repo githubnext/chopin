@@ -167,13 +167,12 @@ test("hovering the marker washes the prose and previews the decision", async ({ 
 	let preview = page.getByRole("tooltip");
 	await expect(preview).toContainText("How should we roll this out?");
 	await expect(preview).toContainText("Team by team");
-	await expect(preview).toContainText("ana");
-	// Folded away until pinned.
-	expect(
-		await preview.locator(".plan-decision-fold").evaluate(element =>
-			element.getBoundingClientRect().height
-		),
-	).toBe(0);
+	await expect(preview.getByRole("img", { name: "ana", exact: true })).toBeVisible();
+	await expect(preview.locator(".plan-decision-answer > span").first()).toHaveText("Team by team");
+	await expect.poll(async () =>
+		(await preview.locator(".plan-decision-fold").boundingBox())!.height
+	)
+		.toBeLessThan(1);
 	await expect.poll(() => washed(page)).toBeGreaterThan(0);
 
 	await page.mouse.move(5, 5);
@@ -315,7 +314,7 @@ test("a touch marker has a 44px target", async ({ baseURL, browser, room, seed }
 	}
 });
 
-test("a decision with no prose keeps a compact card instead of a marker", async ({ join, seed }) => {
+test("a decision with no prose keeps a compact settled line instead of a marker", async ({ join, seed }) => {
 	let orphan = {
 		...STATE.questions[0]!,
 		anchors: { widget: WIDGET_A, questions: { [QUESTION_A]: { anchors: [], pending: false } } },
@@ -325,11 +324,12 @@ test("a decision with no prose keeps a compact card instead of a marker", async 
 	await open(page, "Two weeks");
 
 	await expect(marker(page)).toHaveCount(0);
-	await expect(
-		page.locator(
-			`[data-document-view="plan"] article[data-plan-sidecar-questionnaire="${WIDGET_A}"]`,
-		),
-	).toBeVisible();
+	let settled = page.locator(
+		`[data-document-view="plan"] [data-card-settled][data-plan-sidecar-questionnaire="${WIDGET_A}"]`,
+	);
+	await expect(settled).toBeVisible();
+	await expect(settled.getByText("Decided: Team by team · @ana", { exact: true }))
+		.toBeVisible();
 	await expect(marker(page, "Two weeks")).toBeVisible();
 });
 

@@ -30,6 +30,10 @@ function port(baseURL: string): number {
 }
 
 test("authored links open from parent and child documents", async ({ baseURL, join, page, room, seed }) => {
+	await page.context().route(
+		"https://example.com/**",
+		route => route.fulfill({ contentType: "text/html", body: "<title>Authored source</title>" }),
+	);
 	await seed(LINKED_PARENT_SOURCE);
 	let child = await seedChildChannel(
 		port(baseURL!),
@@ -156,7 +160,10 @@ test("a parent-owned child keeps the parent chrome and nested geometry", async (
 	expect(closeHandle).not.toBeNull();
 	expect(
 		await childChatToggle.evaluate(
-			(toggle, close) => toggle.nextElementSibling === close,
+			(toggle, close) => {
+				let toolbar = toggle.closest("[data-document-toolbar]");
+				return toolbar !== null && toolbar === close?.closest("[data-document-toolbar]");
+			},
 			closeHandle,
 		),
 	).toBe(true);

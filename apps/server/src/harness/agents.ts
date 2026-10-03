@@ -4,9 +4,12 @@ import { z } from "zod";
 
 import { type DocumentRoom, documentTools } from "../agent/tools";
 import { type HostedRepository, repositoryTools } from "../agent/repository";
+import { jobTools, scopedJobTools } from "../agent/job-tools";
+import { createScopedTools } from "../agent/scoped-tools";
+import type { ConversationPlan } from "@chopin/protocol";
 import { harnessSelection } from "../config";
 import { GITHUB_TOOL_SCHEMAS } from "./github-tools";
-import { PLANNER_TOOL_NAMES } from "./tool-names";
+import { BACKGROUND_TOOL_NAMES, PLANNER_TOOL_NAMES } from "./tool-names";
 import { harnessFor } from "./harnesses";
 
 import type { HarnessV1 } from "@ai-sdk/harness";
@@ -27,7 +30,13 @@ const githubPlaceholders: ToolSet = Object.fromEntries(
 	]),
 );
 
-const plannerTools: ToolSet = { ...documentTools, ...repositories, ...githubPlaceholders };
+const plannerTools: ToolSet = {
+	...documentTools,
+	...repositories,
+	...githubPlaceholders,
+	...jobTools,
+	...createScopedTools(),
+};
 export { PLANNER_TOOL_NAMES } from "./tool-names";
 
 type PlannerCallOptions = {
@@ -39,28 +48,34 @@ type PlannerCallOptions = {
 	model?: string;
 };
 
-export function createPlannerAgent(harness: HarnessV1) {
+export function createPlannerAgent(harness: HarnessV1, profile?: ConversationPlan.JobKind) {
+	let names = profile ? BACKGROUND_TOOL_NAMES[profile] : PLANNER_TOOL_NAMES;
 	return new HarnessAgent({
 		harness,
 		tools: plannerTools,
-		activeTools: PLANNER_TOOL_NAMES,
+		activeTools: [...names],
 		permissionMode: "allow-reads",
 		callOptionsSchema: z.custom<PlannerCallOptions>(),
-		prepareCall: ({ options, ...rest }) => ({
-			...rest,
-			model: options.model,
-			instructions: options.instructions,
-			tools: { ...rest.tools, ...options.githubTools },
-			toolsContext: Object.fromEntries(PLANNER_TOOL_NAMES.map(name => [name, {
-				room: options.room,
-				repository: options.repository,
-				owner: options.owner,
-			}])),
-		}),
+		prepareCall: ({ options, ...rest }) => {
+			return {
+				...rest,
+				model: options.model,
+				instructions: options.instructions,
+				tools: scopedJobTools({ ...rest.tools, ...options.githubTools }, options.room),
+				toolsContext: Object.fromEntries(names.map(name => [name, {
+					room: options.room,
+					repository: options.repository,
+					owner: options.owner,
+				}])),
+			};
+		},
 	});
 }
 
 export let plannerAgent = createPlannerAgent(harnessFor(harnessSelection()));
+export let headingPlannerAgent = createPlannerAgent(harnessFor(harnessSelection()), "heading");
+export let refinePlannerAgent = createPlannerAgent(harnessFor(harnessSelection()), "refine");
+export let prosePlannerAgent = createPlannerAgent(harnessFor(harnessSelection()), "prose");
 
 type WorkerCallOptions = {
 	model: string;

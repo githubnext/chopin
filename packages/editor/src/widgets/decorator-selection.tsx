@@ -285,8 +285,9 @@ export function registerDecoratorSelection(
 
 function $releaseNeeded(hidden: Hidden): boolean {
 	let selection = $getSelection();
-	return $isNodeSelection(selection)
-		&& selection.getNodes().every(node => $isHiddenBlock(node, hidden));
+	if (!$isNodeSelection(selection)) return false;
+	let nodes = selection.getNodes();
+	return nodes.length > 0 && nodes.every(node => $isHiddenBlock(node, hidden));
 }
 
 /** A collapsed decision renders `data-plan-collapsed`; see `InlineQuestionnaire`. */

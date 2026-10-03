@@ -722,5 +722,8 @@ test(
 test("an empty room settles rather than loading forever", async ({ join }) => {
 	let page = await join("ana");
 
-	await expect(page.locator('[aria-live="polite"]')).toHaveAttribute("data-level", "hidden");
+	await expect(page.locator('[aria-live="polite"][data-level]')).toHaveAttribute(
+		"data-level",
+		"hidden",
+	);
 });

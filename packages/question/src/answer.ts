@@ -18,9 +18,7 @@ export type Outcome =
 /**
  * Derive answers from a draft.
  *
- * Answers carry the question text and chosen labels rather than identifiers:
- * the agent reads them as prose, and they stay meaningful in a transcript long
- * after the definition is gone.
+ * Answers carry readable labels for the agent and identifiers for the record.
  */
 export function derive(definition: Definition, drafts: Drafts): Outcome {
 	let answers: Answer[] = [];
@@ -58,6 +56,7 @@ export function derive(definition: Definition, drafts: Drafts): Outcome {
 		answers.push({
 			question: question.question,
 			choices: selected.map(option => option.label),
+			optionIds: selected.map(option => option.id),
 		});
 	}
 

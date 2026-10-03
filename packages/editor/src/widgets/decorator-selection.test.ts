@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { createHeadlessEditor } from "@lexical/headless";
 import {
 	$createNodeSelection,
@@ -15,7 +15,13 @@ import {
 
 import { $createQuestionnaireNode, registry } from "@chopin/dialect";
 
-import { $deleteAcross, $releaseHidden, $skipHidden, skip } from "./decorator-selection";
+import {
+	$deleteAcross,
+	$releaseHidden,
+	$skipHidden,
+	registerDecoratorSelection,
+	skip,
+} from "./decorator-selection";
 
 import type { LexicalEditor } from "lexical";
 
@@ -148,4 +154,34 @@ test("a hidden card in a node selection is handed on to the next text block", ()
 		// A visible card is never released.
 		expect($releaseHidden("next", () => false)).toBe(false);
 	}, { discrete: true });
+});
+
+test("an unresolved node selection does not schedule a hidden-card correction", async () => {
+	let editor = build();
+	let unregister = registerDecoratorSelection(editor, () => false);
+	let updates = spyOn(editor, "update");
+	try {
+		editor.update(() => {
+			let selection = $createNodeSelection();
+			selection.add("missing-decorator");
+			$setSelection(selection);
+			expect(selection.has("missing-decorator")).toBe(true);
+			expect(selection.getNodes()).toEqual([]);
+			expect($releaseHidden("next", () => false)).toBe(false);
+			expect($getSelection()).toBe(selection);
+		}, { discrete: true });
+		await Promise.resolve();
+		editor.read(() => {
+			let selection = $getSelection();
+			expect($isNodeSelection(selection)).toBe(true);
+			if (!$isNodeSelection(selection)) throw new Error("Expected the unresolved selection");
+			expect(selection.has("missing-decorator")).toBe(true);
+			expect(selection.getNodes()).toEqual([]);
+		});
+		let corrections = updates.mock.calls.filter(([, options]) => options?.tag === "history-merge");
+		expect(corrections).toHaveLength(0);
+	} finally {
+		unregister();
+		updates.mockRestore();
+	}
 });

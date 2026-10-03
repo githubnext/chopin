@@ -1,4 +1,4 @@
-import type { Frame, Request } from "./index";
+import type { ConversationPlan, Frame, Request } from "./index";
 
 type KIND<K extends string> = Frame & { kind: K };
 
@@ -72,6 +72,31 @@ export declare namespace Chat {
 		author: Author;
 		text: string;
 		ts: number;
+		/** A system notice about a decision card; text remains its fallback. */
+		decision?:
+			| {
+				questionnaireId: string;
+				kind: "prompt";
+				generation: number;
+				label?: string;
+				/** Stable source identity for a refreshed advisory; absent on legacy prompts. */
+				sourceMessageIds?: string[];
+				suggestedOptionId?: string;
+			}
+			| {
+				questionnaireId: string;
+				kind: "scoped-choice";
+				threadId: string;
+				proposalId: string;
+				cardId: string;
+				optionId: string;
+				label: string;
+				scope: "spike";
+				generation: number;
+				triggerEventId: string;
+				sources: ConversationPlan.SourceRef[];
+			}
+			| { questionnaireId: string; kind: "activity"; label?: string; generation?: never };
 		/** True while the agent is still writing this one. */
 		streaming?: boolean;
 		tools?: Activity[];

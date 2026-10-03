@@ -1,5 +1,6 @@
 export { SidecarCard } from "./card";
 export type { SidecarCardProps } from "./card";
+export { CardMetaStore, useCardMeta } from "./card-meta";
 export { collaborationPlugin } from "./collaboration";
 export type { CollaborationOptions } from "./collaboration";
 export { ContentSwapLayer } from "./content-swap";
@@ -10,6 +11,8 @@ export type { Cursor } from "./cursor";
 export {
 	advanceDecisionView,
 	countUnanswered,
+	documentHasPlanningContent,
+	firstOpenDecision,
 	selectDecisionView,
 	visibleDecisionView,
 } from "./decision-state";

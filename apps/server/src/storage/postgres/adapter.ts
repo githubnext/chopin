@@ -7,6 +7,7 @@ import { migrate, verifyMigrations } from "./migrations";
 import { PostgresNavigationStore } from "./navigation";
 import { PostgresBackgroundJobStore } from "./jobs";
 import { PostgresResearchWorkspaceStore } from "./research";
+import { researchProjectionAllowed, ResearchProjectionConflict } from "../model";
 
 import type { TransactionSQL } from "bun";
 import type {
@@ -1273,6 +1274,84 @@ export class PostgresStorage implements StorageAdapter {
 					throw conflict(
 						`channel ${input.channelId} is at revision ${current}, expected ${input.expectedRevision}`,
 					);
+				}
+				for (
+					let change of [...(input.researchProjections ?? [])].sort((a, b) =>
+						a.id.localeCompare(b.id)
+					)
+				) {
+					// Publication locks channel, workspace, initial turn, then job in this order.
+					let [workspace] = await transaction<
+						Array<{
+							id: string;
+							channelId: string;
+							origin: "inline" | "sidebar" | "planner";
+							publishedChannelId: string | null;
+						}>
+					>`
+						SELECT id, channel_id AS "channelId", origin,
+							published_channel_id AS "publishedChannelId"
+						FROM research_workspaces
+						WHERE id = ${change.id} AND channel_id = ${input.channelId}
+						FOR UPDATE
+					`;
+					let [initial] = workspace
+						? await transaction<
+							Array<{
+								id: string;
+								workspaceId: string;
+								kind: "initial" | "follow-up" | "search-more";
+								evidenceJobId: string | null;
+								answerJobId: string | null;
+							}>
+						>`
+						SELECT id, workspace_id AS "workspaceId", kind,
+							evidence_job_id AS "evidenceJobId", answer_job_id AS "answerJobId"
+						FROM research_turns
+						WHERE workspace_id = ${change.id} AND ordinal = 1
+						FOR UPDATE
+					`
+						: [];
+					let jobId = initial?.answerJobId ?? initial?.evidenceJobId;
+					let [job] = jobId
+						? await transaction<
+							Array<{
+								channelId: string;
+								type: string;
+								targetKey: string;
+								state:
+									| "pending"
+									| "paused"
+									| "running"
+									| "completed"
+									| "failed"
+									| "cancelled"
+									| "superseded";
+							}>
+						>`
+						SELECT channel_id AS "channelId", type, target_key AS "targetKey", state
+						FROM background_jobs
+						WHERE id = ${jobId} AND channel_id = ${input.channelId}
+						FOR UPDATE
+					`
+						: [];
+					if (
+						!researchProjectionAllowed(
+							input.channelId,
+							change,
+							workspace
+								? { ...workspace, publishedChannelId: workspace.publishedChannelId ?? undefined }
+								: undefined,
+							initial
+								? {
+									...initial,
+									evidenceJobId: initial.evidenceJobId ?? undefined,
+									answerJobId: initial.answerJobId ?? undefined,
+								}
+								: undefined,
+							job,
+						)
+					) throw new ResearchProjectionConflict(change.id);
 				}
 				let sequence = integer(locked.nextSequence, "channel sequence");
 				let revision = current + 1;
