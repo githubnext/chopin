@@ -1,3 +1,4 @@
+import { childFixture, failInitialEvidence } from "./inline.test-fixtures";
 import { describe, expect, it, spyOn } from "bun:test";
 
 import { parse } from "@chopin/dialect";
@@ -29,38 +30,6 @@ import {
 
 import type { ResearchReport } from "../jobs/research-workspace";
 import type { JsonValue } from "../storage/model";
-
-async function failInitialEvidence(context: Awaited<ReturnType<typeof setup>>) {
-	let [claimed] = await context.storage.jobs.claim({
-		channelId: context.channelId,
-		claimOwner: "failing-worker",
-		count: 1,
-		ttlMs: 30_000,
-		now: context.advance(),
-		lease: context.lease,
-	});
-	if (!claimed) throw new Error("initial evidence job was not claimable");
-	await context.storage.jobs.fail({
-		channelId: context.channelId,
-		jobId: claimed.id,
-		claimOwner: "failing-worker",
-		claimGeneration: claimed.claimGeneration,
-		reason: "internal-provider-detail",
-		now: context.advance(),
-		lease: context.lease,
-	});
-	return claimed.id;
-}
-
-function childFixture(context: Awaited<ReturnType<typeof setup>>) {
-	return {
-		jobs: context.jobs,
-		lease: context.lease,
-		now: context.advance,
-		parent: context.channel,
-		storage: context.storage,
-	};
-}
 
 async function legacyChildEvidence(context: Awaited<ReturnType<typeof setup>>) {
 	let fixture = childFixture(context);
