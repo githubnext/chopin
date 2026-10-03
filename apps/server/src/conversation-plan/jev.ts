@@ -178,6 +178,10 @@ export async function askJev(request: JevRequest, options: JevOptions = {}): Pro
 	if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 60000) {
 		throw new Error("invalid Jev timeout");
 	}
+	let requestBody = JSON.stringify({ model, state: request.state, questions: request.questions });
+	if (Buffer.byteLength(requestBody, "utf8") > 262144) {
+		throw new Error("invalid Jev request bounds");
+	}
 	let timeout = AbortSignal.timeout(timeoutMs);
 	let signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
 	let abortListener!: () => void;
@@ -204,7 +208,7 @@ export async function askJev(request: JevRequest, options: JevOptions = {}): Pro
 					redirect: "error",
 					signal,
 					headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-					body: JSON.stringify({ model, ...request }),
+					body: requestBody,
 				}),
 				aborted,
 			]);
