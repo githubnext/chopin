@@ -445,7 +445,7 @@ describe("hosted document rewrite lifecycle", () => {
 						header: "Keep",
 						question: "What should stay?",
 						multiple: false,
-						options: [],
+						options: [{ id: "option", label: "Keep", description: "" }],
 					}],
 				},
 			}],

@@ -27,6 +27,10 @@ function record(over: Partial<Question> = {}): Question {
 	return {
 		id: "w1",
 		status: "open",
+		origin: "planner",
+		history: [],
+		optionOrigins: {},
+		editors: [],
 		definition: {
 			questions: [
 				{ id: "q1", header: "Cache", question: "Where do we cache?", multiple: false, options: [] },

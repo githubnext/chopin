@@ -1,3 +1,4 @@
+import type { ActiveMemberRequest } from "../chat/service";
 /**
  * What the planner can do.
  *
@@ -83,6 +84,8 @@ export type DocumentRoom = {
 	/** Tells the room where this batch wrote, moved and removed. */
 	changes: (found: edit.Change[]) => void;
 	jobs?: JobService;
+	/** The same verified member request that owns the current live turn. */
+	currentMemberRequest?: () => ActiveMemberRequest | undefined;
 	/** Starts the exact research request represented by the current member turn. */
 	createResearch?: (question: string) => Promise<ResearchWorkspaceRequest>;
 	/** Reads one reference retained by this room's active Planner session. */
@@ -135,6 +138,9 @@ export const documentTools = {
 					id: record.id,
 					status: record.status,
 					questions: record.definition.questions.map(question => question.question),
+					options: record.definition.questions.map(question =>
+						question.options.map(option => option.label)
+					),
 					...(record.answers ? { answers: record.answers } : {}),
 					...(record.resolver ? { answered_by: record.resolver } : {}),
 				})),

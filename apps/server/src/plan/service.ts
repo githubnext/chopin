@@ -12,8 +12,20 @@
 
 import * as Y from "yjs";
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 
+import { ULID } from "@chopin/dialect";
 import { MENTION } from "@chopin/protocol/address";
+import * as Question from "@chopin/question";
+
+import { validateSource } from "../conversation-plan/sources";
+import { restoreState as restoreConversationPlan } from "../conversation-plan/domain";
+import { assertEventCapacity } from "../conversation-plan/events";
+import { assertOptionCapacity } from "../conversation-plan/option-capacity";
+import { type Effect, restoreEffectOutbox } from "../conversation-plan/effects";
+import * as Jobs from "../conversation-plan/jobs";
+import { restorePendingCardActions } from "../questions/card-actions";
+import { validateNotice, validateScopedNotices } from "./notice-validation";
 
 import * as presence from "./presence";
 import * as edit from "./edit";
@@ -27,14 +39,22 @@ import { claimEligibility, restoreLifecycle, transition } from "../tasks/lifecyc
 import { broadcast, fail, relay, reply, tell } from "../wire";
 
 import type { Server } from "bun";
-import type { Plan as Wire, Request } from "@chopin/protocol";
+import type { ConversationPlan, Plan as Wire, Request } from "@chopin/protocol";
 import type { Socket, SocketData } from "../wire";
 import type { Presence } from "./presence";
 import type { Document } from "./room";
 import type { Block } from "./edit";
 import type { Brief, CreationOrigin } from "../mcp";
-import type { InitialChannel, JsonValue, Lease, StoredChannel } from "../storage/model";
+import { researchProjectionAllowed, ResearchProjectionConflict } from "../storage/model";
+import type {
+	InitialChannel,
+	JsonValue,
+	Lease,
+	ResearchProjectionChange,
+	StoredChannel,
+} from "../storage/model";
 import type { StorageAdapter } from "../storage/port";
+import type { PendingCardAction } from "../questions/card-actions";
 import type { ClaimInput, ClaimResult, Graph, Run } from "../tasks/graphs";
 import type { Lifecycle, LifecycleInput, LifecycleResult } from "../tasks/lifecycle";
 
@@ -139,6 +159,18 @@ export type Plan = {
 	comments: Comments.Threads;
 	/** The conversation driving the agent. */
 	chat: Chat.Chat;
+	/** Replayable conversation-derived cards and durable inference queue. */
+	conversationPlan: ConversationPlan.State;
+	/** Durable request IDs for explicit analysis retries. */
+	conversationPlanRetries: Array<{ id: string; messageId: string }>;
+	/** Background Planner work retained across restarts. */
+	conversationPlanJobs: ConversationPlan.Job[];
+	/** Completed delivery keys and unfinished durable conversation work. */
+	conversationPlanEffects: string[];
+	conversationPlanPendingEffects: Effect[];
+	/** Card actions waiting to be mirrored into their conversation thread. */
+	pendingCardActions: PendingCardAction[];
+
 	/**
 	 * Every questionnaire this plan has ever held, answered or not.
 	 *
@@ -207,6 +239,12 @@ type Sidecar = {
 	openQuestions: Questions.StoredOpen[];
 	threads: Comments.Record[];
 	transcript: Chat.Chat["entries"];
+	conversationPlan?: ConversationPlan.State;
+	conversationPlanRetries?: Array<{ id: string; messageId: string }>;
+	conversationPlanJobs?: ConversationPlan.Job[];
+	conversationPlanEffects?: string[];
+	conversationPlanPendingEffects?: Effect[];
+	pendingCardActions?: PendingCardAction[];
 };
 
 function state(plan: Plan): Sidecar {
@@ -225,6 +263,20 @@ function state(plan: Plan): Sidecar {
 		openQuestions: Questions.dump(plan.questions),
 		threads: [...plan.threads.values()],
 		transcript: plan.chat.entries,
+		conversationPlan: plan.conversationPlan,
+		...(plan.conversationPlanRetries.length
+			? { conversationPlanRetries: plan.conversationPlanRetries }
+			: {}),
+		...(plan.conversationPlanJobs.length
+			? { conversationPlanJobs: plan.conversationPlanJobs }
+			: {}),
+		...(plan.conversationPlanEffects.length
+			? { conversationPlanEffects: plan.conversationPlanEffects }
+			: {}),
+		...(plan.conversationPlanPendingEffects.length
+			? { conversationPlanPendingEffects: plan.conversationPlanPendingEffects }
+			: {}),
+		...(plan.pendingCardActions.length ? { pendingCardActions: plan.pendingCardActions } : {}),
 	};
 }
 
@@ -234,6 +286,8 @@ function jsonState(plan: Plan): { value: JsonValue; text: string } {
 }
 
 function capture(plan: Plan): Captured {
+	assertEventCapacity(plan.conversationPlan, plan.pendingCardActions.length);
+	if (plan.persistence) assertOptionCapacity(plan);
 	let sidecar = jsonState(plan);
 	let source = room.project(plan.document);
 	return {
@@ -344,6 +398,16 @@ function legacyCreation(
 	return creation({ brief, origin });
 }
 
+function definitionShape(value: Question.Definition) {
+	return value.questions.map(question => [
+		question.id,
+		question.header,
+		question.question,
+		question.multiple,
+		question.options.map(option => [option.id, option.label, option.description]),
+	]);
+}
+
 function restoredState(
 	value: JsonValue,
 	pristine: boolean,
@@ -385,6 +449,14 @@ function restoredState(
 	if (Object.hasOwn(item, "execution")) expected.push("execution");
 	if (Object.hasOwn(item, "lifecycle")) expected.push("lifecycle");
 	if (Object.hasOwn(item, "mcpUpdates")) expected.push("mcpUpdates");
+	if (Object.hasOwn(item, "conversationPlan")) expected.push("conversationPlan");
+	if (Object.hasOwn(item, "conversationPlanRetries")) expected.push("conversationPlanRetries");
+	if (Object.hasOwn(item, "conversationPlanJobs")) expected.push("conversationPlanJobs");
+	if (Object.hasOwn(item, "conversationPlanEffects")) expected.push("conversationPlanEffects");
+	if (Object.hasOwn(item, "conversationPlanPendingEffects")) {
+		expected.push("conversationPlanPendingEffects");
+	}
+	if (Object.hasOwn(item, "pendingCardActions")) expected.push("pendingCardActions");
 	expected.sort();
 	if (
 		keys.length !== expected.length
@@ -416,18 +488,24 @@ function restoredState(
 	}
 	let lifecycle = hasLifecycle ? restoredLifecycle : undefined;
 	let questions = objects(item.questions, "question record");
-	for (let question of questions) {
-		if (
-			(question.status !== "open" && question.status !== "answered"
-				&& question.status !== "cancelled")
-			|| !question.definition
-			|| typeof question.definition !== "object"
-			|| Array.isArray(question.definition)
-		) throw new Error("hosted channel has an invalid question record");
-	}
+	let records = questions.map(question => Questions.normalizeRecord(question));
 	let openQuestions = objects(item.openQuestions, "open questionnaire");
+	let recordIds = new Set(records.map(record => record.id));
 	let openIds = new Set(openQuestions.map(entry => entry.id as string));
-	if (questions.some(record => (record.status === "open") !== openIds.has(record.id as string))) {
+	let definitions = new Map(
+		records.map(record => [record.id, Question.identified(record.definition)]),
+	);
+	if (
+		[...openIds].some(id => !recordIds.has(id))
+		|| records.some(record => Questions.isOpenStatus(record.status) !== openIds.has(record.id))
+		|| openQuestions.some(entry => {
+			let record = definitions.get(entry.id as string);
+			if (!record) return true;
+			let draft = Question.identified(entry.definition);
+			return JSON.stringify(definitionShape(record))
+				!== JSON.stringify(definitionShape(draft));
+		})
+	) {
 		throw new Error("hosted channel question records disagree with their drafts");
 	}
 	let threads = objects(item.threads, "comment thread");
@@ -441,6 +519,19 @@ function restoredState(
 		) throw new Error("hosted channel has an invalid comment thread");
 	}
 	let transcript = objects(item.transcript, "transcript entry");
+	let savedMessages = new Map(transcript.map(entry => [entry.id, entry]));
+	for (let record of records) {
+		for (let origin of Object.values(record.optionOrigins)) {
+			if (!origin.source) continue;
+			let message = savedMessages.get(origin.source.messageId);
+			if (!message) throw new Error("hosted channel has option source without a message");
+			try {
+				validateSource(origin.source, message as Chat.Chat["entries"][number]);
+			} catch (err) {
+				throw new Error("hosted channel has invalid option source", { cause: err });
+			}
+		}
+	}
 	let referenceIds = new Set<string>();
 	for (let entry of transcript) {
 		if (
@@ -450,6 +541,7 @@ function restoredState(
 			|| typeof entry.author !== "object"
 			|| Array.isArray(entry.author)
 		) throw new Error("hosted channel has an invalid transcript entry");
+		validateNotice(entry, savedMessages);
 		if (Object.hasOwn(entry, "references")) {
 			let author = entry.author as Record<string, JsonValue>;
 			if (author.kind !== "member") {
@@ -473,6 +565,52 @@ function restoredState(
 		}
 	}
 	let mcpUpdates = restoreMcpUpdates(item.mcpUpdates);
+	let conversationPlan = restoreConversationPlan(
+		item.conversationPlan,
+		transcript as unknown as Chat.Chat["entries"],
+	);
+	validateScopedNotices(transcript as unknown as Chat.Chat["entries"], conversationPlan, records);
+	for (let record of records) {
+		for (let [optionId, origin] of Object.entries(record.optionOrigins)) {
+			if (
+				origin.origin === "chat" && origin.source
+				&& !conversationPlan.events.some(event =>
+					event.type === "option.added" && event.threadId === record.threadId
+					&& event.contribution.id === optionId
+					&& isDeepStrictEqual(event.source, origin.source)
+				)
+			) {
+				throw new Error("hosted channel has option source outside its card thread or evidence");
+			}
+			if (origin.source?.role !== "question") continue;
+			let thread = conversationPlan.threads.find(item =>
+				item.id === record.threadId && item.questionnaireId === record.id
+			);
+			let option = record.definition.questions.flatMap(item => item.options)
+				.find(item => item.id === optionId);
+			if (
+				!Questions.matchesQuestionSource(origin.source, thread)
+				|| !option || !Questions.questionMentionsOption(origin.source.quote, option.label)
+			) {
+				throw new Error(
+					"hosted channel has option question source outside its card thread or evidence",
+				);
+			}
+		}
+	}
+	let conversationPlanRetries = restoreConversationPlanRetries(item.conversationPlanRetries);
+	let conversationPlanJobs = Jobs.restore(item.conversationPlanJobs);
+	let outbox = restoreEffectOutbox(
+		item.conversationPlanPendingEffects,
+		item.conversationPlanEffects,
+	);
+	let pendingCardActions = restorePendingCardActions(item.pendingCardActions);
+	let messageIds = new Set(transcript.map(entry => entry.id as string));
+	if (
+		conversationPlan.queue.some(entry => !messageIds.has(entry.messageId))
+		|| conversationPlan.analysis.some(entry => !messageIds.has(entry.messageId))
+		|| conversationPlanRetries.some(entry => !messageIds.has(entry.messageId))
+	) throw new Error("hosted channel has conversation analysis without a source message");
 	return {
 		version: 1,
 		revision: item.revision,
@@ -482,11 +620,41 @@ function restoredState(
 		...(execution ? { execution } : {}),
 		...(lifecycle ? { lifecycle } : {}),
 		...(mcpUpdates.length > 0 ? { mcpUpdates } : {}),
-		questions: questions as never[],
+		questions: records,
 		openQuestions: openQuestions as unknown as Questions.StoredOpen[],
 		threads: threads as never[],
 		transcript: transcript as unknown as Chat.Chat["entries"],
+		conversationPlan,
+		...(conversationPlanRetries.length ? { conversationPlanRetries } : {}),
+		...(conversationPlanJobs.length ? { conversationPlanJobs } : {}),
+		...(outbox.receipts.length ? { conversationPlanEffects: outbox.receipts } : {}),
+		...(outbox.pending.length ? { conversationPlanPendingEffects: outbox.pending } : {}),
+		...(pendingCardActions.length ? { pendingCardActions } : {}),
 	};
+}
+
+function restoreConversationPlanRetries(
+	value: JsonValue | undefined,
+): Array<{ id: string; messageId: string }> {
+	if (value === undefined) return [];
+	if (!Array.isArray(value) || value.length > 4096) {
+		throw new Error("hosted channel has invalid conversation analysis retries");
+	}
+	let seen = new Set<string>();
+	return value.map(raw => {
+		if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+			throw new Error("hosted channel has invalid conversation analysis retry");
+		}
+		let item = raw as Record<string, JsonValue>;
+		if (
+			Object.keys(item).sort().join(",") !== "id,messageId"
+			|| typeof item.id !== "string" || !item.id || item.id.length > 250
+			|| typeof item.messageId !== "string" || !item.messageId || item.messageId.length > 200
+			|| seen.has(item.id)
+		) throw new Error("hosted channel has invalid conversation analysis retry");
+		seen.add(item.id);
+		return { id: item.id, messageId: item.messageId };
+	});
 }
 
 function restoreMcpUpdates(value: JsonValue | undefined): McpUpdateRecord[] {
@@ -598,6 +766,8 @@ async function commitHosted(
 	operationId: string,
 	captured: Captured,
 	allowArchived = false,
+	researchProjections: ResearchProjectionChange[] = [],
+	notifyDocumentPersisted = true,
 ): Promise<void> {
 	let durable = plan.persistence;
 	if (!update && captured.sidecarText === durable.lastSidecar) {
@@ -616,6 +786,7 @@ async function commitHosted(
 			sidecar: captured.sidecar,
 			events: [],
 			now: new Date(),
+			...(researchProjections.length > 0 ? { researchProjections } : {}),
 			...(allowArchived ? { allowArchived: true } : {}),
 		});
 		if (!result.repeated) {
@@ -645,7 +816,7 @@ async function commitHosted(
 		if (plan.document.epoch === captured.epoch) {
 			plan.document.checkpoint = new Uint8Array(captured.document);
 		}
-		if (update && sourceChanged && durable.onDocumentPersisted) {
+		if (update && sourceChanged && notifyDocumentPersisted && durable.onDocumentPersisted) {
 			try {
 				durable.onDocumentPersisted({
 					channelId: durable.channelId,
@@ -659,7 +830,7 @@ async function commitHosted(
 		}
 		scheduleCheckpoint(plan);
 	} catch (err) {
-		durable.fatal(err);
+		if (!(err instanceof ResearchProjectionConflict)) durable.fatal(err);
 		throw err;
 	}
 }
@@ -779,6 +950,9 @@ type RestoredHosted = {
 	document: Document;
 	needsInitialCheckpoint: boolean;
 	sidecar: Sidecar;
+	/** Exact saved sidecar, before interrupted jobs are normalized in memory. */
+	persistedSidecar: JsonValue;
+	interruptedJobs: boolean;
 };
 
 /** Prepare the sidecar half of one atomic claim for a plan that is not live. */
@@ -854,13 +1028,21 @@ async function restoreHosted(id: string, loaded: StoredChannel): Promise<Restore
 	let pristine = loaded.channel.revision === 0
 		&& loaded.latestSequence === 0
 		&& !loaded.snapshot;
+	let persistedSidecar = loaded.sidecar === null && loaded.snapshot
+			&& loaded.channel.revision === 0
+		? loaded.snapshot.sidecar
+		: loaded.sidecar;
 	let sidecar = restoredState(
-		loaded.sidecar === null && loaded.snapshot && loaded.channel.revision === 0
-			? loaded.snapshot.sidecar
-			: loaded.sidecar,
+		persistedSidecar,
 		pristine,
 		{ channelId: loaded.channel.id, repositoryId: loaded.channel.repositoryId },
 	);
+	let persistedJobs = persistedSidecar && typeof persistedSidecar === "object"
+			&& !Array.isArray(persistedSidecar)
+		? (persistedSidecar as Record<string, JsonValue>).conversationPlanJobs
+		: undefined;
+	let interruptedJobs = Array.isArray(persistedJobs)
+		&& persistedJobs.some(job => (job as { status: string }).status === "running");
 	if (loaded.snapshot) {
 		if (
 			loaded.snapshot.revision > loaded.channel.revision
@@ -893,7 +1075,7 @@ async function restoreHosted(id: string, loaded: StoredChannel): Promise<Restore
 		needsInitialCheckpoint = true;
 	}
 	document.seq = sidecar.documentSeq;
-	return { document, needsInitialCheckpoint, sidecar };
+	return { document, needsInitialCheckpoint, sidecar, persistedSidecar, interruptedJobs };
 }
 
 /** Project a closed channel without attaching it to the live room registry. */
@@ -931,7 +1113,8 @@ export async function open(
 ): Promise<Plan> {
 	let loaded = await backend.storage.collaboration.load(id, new Date());
 	if (!loaded) throw new Error(`channel ${id} does not exist`);
-	let { document, needsInitialCheckpoint, sidecar } = await restoreHosted(id, loaded);
+	let { document, needsInitialCheckpoint, sidecar, persistedSidecar, interruptedJobs } =
+		await restoreHosted(id, loaded);
 
 	let plan: Plan = {
 		id,
@@ -943,8 +1126,16 @@ export async function open(
 		questions: Questions.restore(sidecar.openQuestions),
 		comments: Comments.create(),
 		chat: Chat.restore(sidecar.transcript),
+		conversationPlan: sidecar.conversationPlan ?? restoreConversationPlan(undefined),
+		conversationPlanRetries: sidecar.conversationPlanRetries ?? [],
+		conversationPlanJobs: sidecar.conversationPlanJobs ?? [],
+		conversationPlanEffects: sidecar.conversationPlanEffects ?? [],
+		conversationPlanPendingEffects: sidecar.conversationPlanPendingEffects ?? [],
+		pendingCardActions: sidecar.pendingCardActions ?? [],
 		outlines: new Map(),
-		records: new Map(sidecar.questions.map(record => [record.id, record])),
+		records: new Map(
+			sidecar.questions.map(record => [record.id, Questions.normalizeRecord(record)]),
+		),
 		threads: new Map(sidecar.threads.map(record => [record.id, record])),
 		revision: sidecar.revision,
 		graph: sidecar.graph,
@@ -973,7 +1164,20 @@ export async function open(
 		committedSidecar: committed.sidecar,
 		closing: false,
 	};
-	if (needsInitialCheckpoint) await checkpointHosted(plan);
+	if (interruptedJobs) {
+		plan.persistence.lastSidecar = JSON.stringify(persistedSidecar);
+		plan.persistence.committedSidecar = persistedSidecar;
+	}
+	try {
+		if (interruptedJobs) await persistExclusive(plan, true);
+		if (needsInitialCheckpoint) await checkpointHosted(plan);
+	} catch (error) {
+		if (plan.persistence.checkpointTimer) clearTimeout(plan.persistence.checkpointTimer);
+		Questions.shutdown(plan.questions);
+		presence.destroy(plan.presence);
+		plan.document.doc.destroy();
+		throw error;
+	}
 
 	// Guarded because this is the last thing between a channel and being open. A
 	// plan whose highlights are stale is worth having; one that refuses to open
@@ -990,7 +1194,22 @@ export async function open(
 
 /** Cheap identity of the whole relationship snapshot, for spotting a change. */
 function signature(plan: Plan): string {
-	return JSON.stringify([Questions.anchors(plan), Comments.anchors(plan)]);
+	return JSON.stringify([Questions.anchors(plan), Comments.anchors(plan), Questions.prose(plan)]);
+}
+
+function proseOrphans(plan: Plan): Map<string, boolean> {
+	return new Map(Questions.prose(plan).map(item => [item.widget, item.orphaned]));
+}
+
+function announceProseChanges(plan: Plan, before: Map<string, boolean>): void {
+	for (let item of Questions.prose(plan)) {
+		if (before.get(item.widget) === item.orphaned) continue;
+		try {
+			Questions.announce(plan, plan.server, plan.id, item.widget);
+		} catch (err) {
+			console.error("[plan] could not announce decided prose metadata:", err);
+		}
+	}
 }
 
 /** Everything a joining client needs to start from. */
@@ -1007,6 +1226,7 @@ export function greet(plan: Plan, ws: Socket, msg: Request<Wire.Open.Ask>): void
 		revision: plan.revision,
 		anchors: Questions.anchors(plan),
 		threads: Comments.anchors(plan),
+		prose: Questions.prose(plan),
 		limits: room.LIMITS,
 		...(hello ? { awareness: encode(hello) } : {}),
 	});
@@ -1056,6 +1276,52 @@ function schedule(plan: Plan): void {
 	}, GROUP_MS);
 }
 
+async function rejectBatch(plan: Plan, batch: Queued[], issues: string[]): Promise<void> {
+	console.warn("[plan] rejected batch:", issues.join(", "));
+	let proseBefore = proseOrphans(plan);
+
+	let now = Date.now();
+	for (let item of batch) {
+		let gauge = meter(plan, item.ws);
+		gauge.invalid = [...recent(gauge.invalid, INVALID_WINDOW_MS), now];
+		if (gauge.invalid.length >= INVALID_LIMIT) {
+			item.ws.close(ABUSIVE, "repeated invalid plan updates");
+		}
+	}
+
+	let rebuilt = await room.rebuild(plan.document);
+	plan.document = rebuilt;
+	// Cursors describe positions in a history that no longer exists. The
+	// agent's is in there too, and the interval repeating it would outlive
+	// the presence it repeats.
+	clearInterval(plan.attention);
+	plan.attention = undefined;
+	presence.destroy(plan.presence);
+	plan.presence = presence.create();
+	// So do anchors and passages, and unlike a cursor nobody re-announces
+	// them. Without this every highlight in the room stays dark until the
+	// agent happens to edit.
+	//
+	// Guarded because the `plan:reset` below is what tells everyone to
+	// re-open. A throw here would strand the whole room on an epoch that no
+	// longer exists, to save some highlights that are already stale.
+	try {
+		Questions.rebase(plan);
+		Comments.rebase(plan);
+	} catch (err) {
+		console.error("[plan] could not carry anchors onto the rebuilt document:", err);
+	}
+	await replaceHosted(plan, `epoch:${rebuilt.epoch}`, capture(plan));
+
+	broadcast(plan.server, plan.id, {
+		kind: "plan:reset",
+		ts: 0,
+		epoch: rebuilt.epoch,
+		reason: "rebuilt",
+	});
+	announceProseChanges(plan, proseBefore);
+}
+
 /**
  * Apply one batch.
  *
@@ -1068,55 +1334,34 @@ async function commit(plan: Plan): Promise<void> {
 	if (batch.length === 0) return;
 	plan.queue = [];
 
-	let outcome = await room.apply(plan.document, batch.map(item => item.update));
+	let outcome = await room.apply(
+		plan.document,
+		batch.map(item => item.update),
+		async (id, action) => {
+			if (!ULID.test(id)) return false;
+			let request = await plan.persistence.storage.research.get(plan.id, id);
+			let initial = request?.turns.find(turn => turn.kind === "initial");
+			let jobId = initial?.answerJobId ?? initial?.evidenceJobId;
+			let job = jobId ? await plan.persistence.storage.jobs.get(plan.id, jobId) : undefined;
+			return researchProjectionAllowed(
+				plan.id,
+				{ id, action },
+				request?.workspace,
+				initial,
+				job?.job,
+			);
+		},
+	);
 
 	if (!outcome.ok) {
-		console.warn("[plan] rejected batch:", outcome.issues.join(", "));
-
-		let now = Date.now();
-		for (let item of batch) {
-			let gauge = meter(plan, item.ws);
-			gauge.invalid = [...recent(gauge.invalid, INVALID_WINDOW_MS), now];
-			if (gauge.invalid.length >= INVALID_LIMIT) {
-				item.ws.close(ABUSIVE, "repeated invalid plan updates");
-			}
-		}
-
-		let rebuilt = await room.rebuild(plan.document);
-		plan.document = rebuilt;
-		// Cursors describe positions in a history that no longer exists. The
-		// agent's is in there too, and the interval repeating it would outlive
-		// the presence it repeats.
-		clearInterval(plan.attention);
-		plan.attention = undefined;
-		presence.destroy(plan.presence);
-		plan.presence = presence.create();
-		// So do anchors and passages, and unlike a cursor nobody re-announces
-		// them. Without this every highlight in the room stays dark until the
-		// agent happens to edit.
-		//
-		// Guarded because the `plan:reset` below is what tells everyone to
-		// re-open. A throw here would strand the whole room on an epoch that no
-		// longer exists, to save some highlights that are already stale.
-		try {
-			Questions.rebase(plan);
-			Comments.rebase(plan);
-		} catch (err) {
-			console.error("[plan] could not carry anchors onto the rebuilt document:", err);
-		}
-		await replaceHosted(plan, `epoch:${rebuilt.epoch}`, capture(plan));
-
-		broadcast(plan.server, plan.id, {
-			kind: "plan:reset",
-			ts: 0,
-			epoch: rebuilt.epoch,
-			reason: "rebuilt",
-		});
+		await rejectBatch(plan, batch, outcome.issues);
 		return;
 	}
 
 	let relationshipsChanged = false;
 	let before = signature(plan);
+	let previousRecords = new Map(plan.records);
+	let previousThreads = new Map(plan.threads);
 	try {
 		Questions.rebase(plan);
 		Comments.rebase(plan);
@@ -1124,12 +1369,29 @@ async function commit(plan: Plan): Promise<void> {
 	} catch (err) {
 		console.error("[plan] could not carry anchors forward:", err);
 	}
+	let previousRevision = plan.revision;
 	if (room.project(plan.document) !== plan.persistence.committedSource) plan.revision++;
 	let merged = Y.mergeUpdates(batch.map(item => item.update));
 	let operationId = `plan:${plan.document.epoch}:${
 		createHash("sha256").update(merged).digest("hex")
 	}`;
-	await commitHosted(plan, merged, operationId, capture(plan));
+	try {
+		await commitHosted(
+			plan,
+			merged,
+			operationId,
+			capture(plan),
+			false,
+			outcome.researchProjections,
+		);
+	} catch (err) {
+		if (!(err instanceof ResearchProjectionConflict)) throw err;
+		plan.revision = previousRevision;
+		plan.records = previousRecords;
+		plan.threads = previousThreads;
+		await rejectBatch(plan, batch, ["research-reference-conflict"]);
+		return;
+	}
 
 	for (let item of batch) {
 		reply(item.ws, item.rid, {
@@ -1182,6 +1444,70 @@ export async function publish(
 		});
 	} catch (err) {
 		console.error("[plan] could not broadcast a persisted update:", err);
+	}
+}
+
+class ImplementationActiveError extends Error {
+	constructor() {
+		super("implementation is active");
+	}
+}
+
+/** Commit a staged document and sidecar before bringing the live room forward. */
+export async function publishStaged(
+	plan: Plan,
+	server: Server<SocketData>,
+	roomId: string,
+	candidate: Plan,
+	mutation?: room.Mutation,
+	options?: { notifyDocumentPersisted?: boolean },
+): Promise<void> {
+	if (implementationActive(plan)) throw new ImplementationActiveError();
+	let source = room.project(candidate.document);
+	if (!mutation && source !== room.project(plan.document)) {
+		throw new Error("staged document changed without a mutation");
+	}
+	if (mutation) candidate.document.seq++;
+	if (source !== plan.persistence.committedSource) candidate.revision++;
+	let operationId = mutation
+		? `server:${candidate.document.epoch}:${
+			createHash("sha256").update(mutation.update).digest("hex")
+		}`
+		: `state:${crypto.randomUUID()}`;
+	await commitHosted(
+		plan,
+		mutation?.update,
+		operationId,
+		capture(candidate),
+		false,
+		[],
+		options?.notifyDocumentPersisted !== false,
+	);
+	if (mutation) {
+		Y.applyUpdate(plan.document.doc, mutation.update);
+		await room.settle();
+	}
+	plan.document.seq = candidate.document.seq;
+	plan.revision = candidate.revision;
+	plan.records = candidate.records;
+	plan.threads = candidate.threads;
+	plan.questions = candidate.questions;
+	plan.conversationPlan = candidate.conversationPlan;
+	plan.pendingCardActions = candidate.pendingCardActions;
+	plan.conversationPlanPendingEffects = candidate.conversationPlanPendingEffects;
+	plan.conversationPlanEffects = candidate.conversationPlanEffects;
+	if (mutation) {
+		try {
+			broadcast(server, roomId, {
+				kind: "plan:update",
+				ts: 0,
+				epoch: plan.document.epoch,
+				update: encode(mutation.update),
+				seq: plan.document.seq,
+			});
+		} catch (err) {
+			console.error("[plan] could not broadcast a persisted update:", err);
+		}
 	}
 }
 
@@ -1242,7 +1568,7 @@ export async function rewrite(
 		plan.mcpUpdates.push(recorded);
 		plan.outlines = candidate.outlines;
 		if (changed) {
-			Questions.rebase(plan);
+			Questions.rebase(plan, before);
 			Questions.invalidate(plan, "plan_changed");
 			Comments.rebase(plan);
 			Comments.invalidate(plan, "plan_changed");
@@ -1356,13 +1682,24 @@ export function anchors(
 	server: Server<SocketData>,
 	roomId: string,
 ): void {
+	let prose = Questions.prose(plan);
 	broadcast(server, roomId, {
 		kind: "plan:anchors",
 		ts: 0,
 		epoch: plan.document.epoch,
 		widgets: Questions.anchors(plan),
 		threads: Comments.anchors(plan),
+		prose,
 	});
+	// Other post-commit callers also rebase prose; repeat metadata so none can
+	// publish a stale collapse state after an edit or rewrite.
+	for (let item of prose) {
+		try {
+			Questions.announce(plan, server, roomId, item.widget);
+		} catch (err) {
+			console.error("[plan] could not announce decided prose metadata:", err);
+		}
+	}
 }
 
 /**
@@ -1476,6 +1813,34 @@ export function departed(plan: Plan, ws: Socket): void {
 	});
 }
 
+/** Release a successfully opened document that has never been exposed to a room. */
+export async function abortOpening(plan: Plan): Promise<void> {
+	if (plan.timer) clearTimeout(plan.timer);
+	clearInterval(plan.attention);
+	let persistence = plan.persistence;
+	persistence.closing = true;
+	if (persistence.checkpointTimer) clearTimeout(persistence.checkpointTimer);
+	persistence.checkpointTimer = undefined;
+	try {
+		let results = await Promise.allSettled([Chat.close(plan.chat), plan.flushing]);
+		let failed = results.filter(result => result.status === "rejected");
+		if (failed.length === 1) throw failed[0]!.reason;
+		if (failed.length > 1) {
+			throw new AggregateError(failed.map(result => result.reason), "document cleanup failed");
+		}
+	} finally {
+		try {
+			Questions.shutdown(plan.questions);
+		} finally {
+			try {
+				presence.destroy(plan.presence);
+			} finally {
+				plan.document.doc.destroy();
+			}
+		}
+	}
+}
+
 /** Write anything outstanding and let go. */
 export async function close(plan: Plan): Promise<void> {
 	if (plan.timer) clearTimeout(plan.timer);
@@ -1501,4 +1866,30 @@ export function source(plan: Plan): string {
 /** Size of the Yjs history, for the idle compaction check. */
 export function size(plan: Plan): number {
 	return Y.encodeStateAsUpdate(plan.document.doc).byteLength;
+}
+
+export function placeResearchReference(plan: Plan, id: string): Promise<"placed" | "deferred"> {
+	return exclusive(plan, async () => {
+		if (implementationActive(plan)) return "deferred";
+		let document = await room.restore(
+			plan.document.epoch,
+			Y.encodeStateAsUpdate(plan.document.doc),
+			room.project(plan.document),
+			[],
+		);
+		document.seq = plan.document.seq;
+		try {
+			let mutation = room.insertResearch(document, id);
+			if (!mutation) return "placed";
+			try {
+				await publishStaged(plan, plan.server, plan.id, { ...plan, document }, mutation);
+			} catch (err) {
+				if (err instanceof ImplementationActiveError) return "deferred";
+				throw err;
+			}
+			return "placed";
+		} finally {
+			document.doc.destroy();
+		}
+	});
 }

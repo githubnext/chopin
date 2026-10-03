@@ -432,7 +432,9 @@ test("automatic Decisions changes reconcile after compact Chat closes", async ({
 			.getByRole("button", { name: "Document", exact: true })
 			.click();
 		await expect(documentEditor(bo)).toBeVisible();
-		await documentEditor(bo).fill("Collaborative prose arrived.");
+		await documentEditor(bo).focus();
+		await bo.keyboard.press("ControlOrMeta+Home");
+		await bo.keyboard.type("Collaborative prose arrived.");
 		await expect(documentEditor(ana)).toContainText(
 			"Collaborative prose arrived.",
 		);
@@ -442,6 +444,8 @@ test("automatic Decisions changes reconcile after compact Chat closes", async ({
 
 	await ana.getByRole("heading", { name: "Chat", exact: true }).press("Escape");
 	await expect(ana.locator('[data-document-view="plan"]')).toBeVisible();
+	await expect(nav.getByRole("button", { name: "Decisions, 2 unanswered", exact: true }))
+		.toBeVisible();
 	await expect(nav.getByRole("button", { name: "Document" })).toHaveAttribute(
 		"aria-current",
 		"page",

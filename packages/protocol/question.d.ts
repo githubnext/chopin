@@ -1,4 +1,5 @@
 import type { Frame, Request } from "./index";
+import type { ConversationPlan } from "./conversation-plan";
 
 type KIND<K extends string> = Frame & { kind: K };
 
@@ -21,16 +22,23 @@ export declare namespace Question {
 		| Request<Edit.Ask>
 		| Request<Submit.Ask>
 		| Request<Cancel.Ask>
+		| Request<Discard.Ask>
+		| Request<Reopen.Ask>
 		| Request<AddOption.Ask>
 		| Presence.Input;
 
 	export type Outgoing =
 		| Sync
 		| Asked
+		| Meta
+		| Metas
 		| Open.Reply
 		| Edit.Reply
+		| Changed
 		| Submit.Reply
 		| Cancel.Reply
+		| Discard.Reply
+		| Reopen.Reply
 		| AddOption.Reply
 		| OptionAdded
 		| Presence.Output
@@ -52,6 +60,49 @@ export declare namespace Question {
 
 	export type Definition = {
 		questions: Item[];
+	};
+
+	export type CardStatus = "open" | "decided" | "reopened" | "discarded";
+
+	export type OptionOrigin = {
+		origin: "chat" | "planner" | "human";
+		rationale?: string;
+		by?: string;
+		/** Exact saved option quote or a question mention from this card's thread. */
+		source?: ConversationPlan.SourceRef;
+	};
+
+	export type DecisionEntry = {
+		choices: string[];
+		answers?: { [questionId: string]: string };
+		owner: string;
+		at: number;
+	};
+
+	export type CardMeta = {
+		status: CardStatus;
+		origin: "planner" | "conversation";
+		thread?: string;
+		owner?: string;
+		decidedAt?: number;
+		/** The member who most recently resolved this card. */
+		resolver?: string;
+		/** Owner first, then other people in this decision. At most eight. */
+		involved: string[];
+		/** Advisory choice and the card revision at which it became visible. */
+		suggested?: { optionId: string; messageIds: string[]; revision: number };
+		history: DecisionEntry[];
+		optionOrigins: { [optionId: string]: OptionOrigin };
+		/** A refine job is pending or running for this card. */
+		refining: boolean;
+		hasProse: boolean;
+		proseOrphaned: boolean;
+	};
+
+	export type Meta = KIND<"question:meta"> & { id: string; meta: CardMeta };
+
+	export type Metas = KIND<"question:metas"> & {
+		cards: Array<{ id: string; meta: CardMeta }>;
 	};
 
 	/** One independently persisted decision card. */
@@ -77,9 +128,7 @@ export declare namespace Question {
 	/**
 	 * A decided answer.
 	 *
-	 * Carries the question text and the chosen labels rather than identifiers,
-	 * so it still reads as prose to an agent, and still means something in a
-	 * transcript after the definition it came from is gone.
+	 * Carries readable labels for the agent and option ids for durable decisions.
 	 */
 	export type Answer = {
 		question: string;
@@ -161,6 +210,12 @@ export declare namespace Question {
 			);
 	}
 
+	export type Changed = KIND<"question:changed"> & {
+		id: string;
+		definition: DecisionDefinition;
+		revision: number;
+	};
+
 	export namespace Presence {
 		export type Input = KIND<"question:presence"> & Focus & { id: string };
 		export type Output = Input & { client: string; handle: string };
@@ -171,6 +226,8 @@ export declare namespace Question {
 			id: string;
 			/** The draft revision being submitted, for optimistic concurrency. */
 			revision: number;
+			/** Accept this visible advisory choice only if it is still current. */
+			suggestedOptionId?: string;
 		};
 
 		export type Reply =
@@ -210,6 +267,35 @@ export declare namespace Question {
 			);
 	}
 
+	export namespace Discard {
+		/** A member sets a card aside, keeping its decision history in the document. */
+		export type Ask = KIND<"question:discard"> & { id: string };
+
+		export type Reply =
+			& KIND<"question:discard">
+			& { id: string }
+			& (
+				| { ok: true; resolver: string }
+				| { ok: false; reason: "resolving" }
+				| {
+					ok: false;
+					reason: "resolved";
+					status: "discarded";
+					resolver: string;
+				}
+			);
+	}
+
+	export namespace Reopen {
+		export type Ask = KIND<"question:reopen"> & { id: string };
+		export type Reply =
+			& KIND<"question:reopen">
+			& { id: string }
+			& (
+				| { ok: true }
+				| { ok: false; reason: "not-decided" | "resolving" }
+			);
+	}
 	export namespace AddOption {
 		/**
 		 * Append one option to an open question, for everyone.
