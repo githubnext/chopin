@@ -124,7 +124,8 @@ test("hover previews and washes prose; pin exposes source and Escape restores ma
 	let popover = await openPopover(page);
 	await expect(popover).toHaveCSS("opacity", "1");
 	await expect(popover).toHaveCSS("transform", "none");
-	await expect(popover.getByText("By ana", { exact: true })).toBeVisible();
+	await expect(popover.getByRole("img", { name: "ana", exact: true })).toBeVisible();
+	await expect(popover.getByText("ana", { exact: true })).toBeVisible();
 	await popover.getByRole("button", { name: "Show source in chat", exact: true }).click();
 	await expect(page.locator(`[data-chat-message-id="${source}"][data-source-exact="true"]`))
 		.toBeVisible();
@@ -318,7 +319,7 @@ test("a failed prose job is visible on the opening message and Retry uses the co
 	await card(page).getByRole("button", { name: "Save", exact: true }).click();
 	await waitForProseJob(page, "failed");
 	let opening = page.locator(`[data-chat-message-id="${source}"]`);
-	await opening.locator("[data-chat-message-text]").click();
+	await opening.getByRole("button", { name: /Analysis for message/ }).click();
 	let jobs = page.getByRole("group", { name: "Planner jobs" });
 	await expect(jobs).toContainText("prose · failed");
 	await scriptProse(OPTION);
