@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { QuestionnaireCard } from "./questionnaire";
 import { DECIDED, META } from "./questionnaire-metadata.test-fixtures";
 
-test("evidence hover belongs only to an open inline conversation card", () => {
+test("evidence inspection is available only on an open inline conversation card", () => {
 	let open = {
 		...DECIDED,
 		questions: [{ ...DECIDED.questions[0]!, answer: undefined, choices: undefined }],
@@ -29,9 +29,9 @@ test("evidence hover belongs only to an open inline conversation card", () => {
 	for (let markup of [eligible, noThread, settled, noEvidence]) {
 		expect(markup).toContain("plan-evidence-host");
 	}
-	expect(eligible).toContain('data-evidence-available=""');
+	expect(eligible).toContain('aria-label="Inspect decision evidence"');
 	for (let markup of [noThread, settled, list, noEvidence]) {
-		expect(markup).not.toContain('data-evidence-available=""');
+		expect(markup).not.toContain('aria-label="Inspect decision evidence"');
 	}
 });
 
