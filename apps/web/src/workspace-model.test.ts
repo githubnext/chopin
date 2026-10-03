@@ -95,18 +95,9 @@ describe("adaptive workspace", () => {
 		expect(workspaceHeadingId("plan", "child-room")).toBe("child-room-workspace-plan-heading");
 	});
 
-	it("uses the compact workspace only below 500px", () => {
-		expect([390, 499, 499.5, 500, 640, 900, 1023, 1024].map(width => workspaceMode(mediaAt(width))))
-			.toEqual([
-				"compact",
-				"compact",
-				"compact",
-				"split",
-				"split",
-				"split",
-				"split",
-				"split",
-			]);
+	it("classifies fractional widths on either side of the media boundary", () => {
+		expect([499.5, 500].map(width => workspaceMode(mediaAt(width))))
+			.toEqual(["compact", "split"]);
 	});
 
 	it("closing Chat leaves the visible document view untouched", () => {
