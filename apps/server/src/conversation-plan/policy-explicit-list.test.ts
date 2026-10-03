@@ -177,6 +177,17 @@ test("an unrelated four-option list requires every option to be well supported",
 			})),
 		}).events.map(event => event.type),
 	).toEqual(Array(3).fill("option.added"));
+	for (
+		let [source, candidates] of [
+			[current, input.candidates.slice(0, 2)],
+			[three, input.candidates.slice(0, 1)],
+		] as const
+	) {
+		let output = planEvents({ ...input, message: source, candidates });
+		expect(output.events).toEqual([]);
+		expect(output.outcomes).toHaveLength(candidates.length);
+		expect(output.outcomes.every(outcome => outcome.status === "review")).toBe(true);
+	}
 	let capped = structuredClone(input);
 	let openingEvent = capped.state.events[0]!;
 	capped.state.events = Array.from({ length: MAX_EVENTS - 1 }, (_, index) => ({
