@@ -333,3 +333,76 @@ test("an accepted link arrives from the room event, reloads, and opens its ready
 		await isolated.close();
 	}
 });
+
+test(
+	"a read-only viewer can retry an exhausted link check without starting research",
+	async ({ baseURL, browser, room, seed }, testInfo) => {
+		let spec: OfferSpec = {
+			id: "ui-retry-link",
+			brief: "Inspect the existing research link.",
+			status: "accepted",
+		};
+		let { state, transcript } = offerSources([spec], "source-author");
+		await seed("# Research link retry fixture\n", { transcript });
+		await saveConversationState(room, state);
+		let before = await researchWorkCounts(room);
+		let viewer = await browser.newContext({ baseURL });
+		let linkReads = 0;
+		let linkReplies = 0;
+		let researchActions = 0;
+		try {
+			await viewer.routeWebSocket("**/ws?**", route => {
+				let server = route.connectToServer();
+				route.onMessage(message => {
+					if (typeof message === "string") {
+						let frame = JSON.parse(message) as SocketFrame;
+						if (frame.kind === "conversation-plan:research") researchActions++;
+						if (frame.kind === "conversation-plan:research-link") {
+							linkReads++;
+							if (linkReads <= 4) {
+								route.send(JSON.stringify({
+									kind: "session:error",
+									rid: frame.rid,
+									message: "scripted temporary link read failure",
+								}));
+								return;
+							}
+						}
+					}
+					server.send(message);
+				});
+				server.onMessage(message => {
+					if (typeof message === "string") {
+						let frame = JSON.parse(message) as SocketFrame;
+						if (frame.kind === "conversation-plan:research-link") linkReplies++;
+					}
+					route.send(message);
+				});
+			});
+			let page = await viewer.newPage();
+			await page.clock.install();
+			await authenticate(page, "readonly", baseURL!);
+			await page.goto(roomPath(room));
+			let card = offerCard(page, spec.id);
+			await expect(card).toBeVisible();
+			await expect.poll(() => linkReads).toBe(1);
+			await page.clock.pauseAt(Date.now() + 100);
+			for (let [delay, count] of [[2_000, 2], [5_000, 3], [10_000, 4]] as const) {
+				await page.clock.runFor(delay);
+				await expect.poll(() => linkReads).toBe(count);
+			}
+			let retry = card.getByRole("button", { name: "Retry link check", exact: true });
+			await expect(retry).toBeVisible();
+			await expect(card.getByRole("button", { name: "Resume", exact: true })).toHaveCount(0);
+			await page.screenshot({ path: testInfo.outputPath("research-link-retry.png") });
+			await retry.click();
+			await expect.poll(() => linkReads).toBe(5);
+			await expect.poll(() => linkReplies).toBe(1);
+			await expect(retry).toHaveCount(0);
+			expect(researchActions).toBe(0);
+			expect(await researchWorkCounts(room)).toEqual(before);
+		} finally {
+			await viewer.close();
+		}
+	},
+);
