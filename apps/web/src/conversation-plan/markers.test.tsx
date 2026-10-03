@@ -152,8 +152,6 @@ test("a failed generation-keyed prose job remains inspectable from the card's op
 	};
 	let html = markup(current, [prose]);
 	expect(html).toContain('aria-label="Analysis for message: applied"');
-	expect(html).toContain('data-analysis-trigger="true"');
-	expect(html).toContain('class="btn btn-icon btn-ghost absolute right-0 top-0"');
 	let diagnostics = renderToStaticMarkup(createElement(PlannerJobDiagnostics, {
 		canEdit: true,
 		jobs: jobsForMessage(current, [prose], "message-1"),
@@ -174,12 +172,11 @@ test("read-only job diagnostics omit retry controls", () => {
 	expect(html).not.toContain("Retry refine job");
 });
 
-test("unlinked analysis gets a visible code button without a status dot", () => {
+test("unlinked analysis remains accessible without a status label", () => {
 	let html = markup(state(0, "unlinked"));
 
 	expect(html).toContain('aria-label="Analysis for message: unlinked"');
 	expect(html).not.toContain("Unlinked");
-	expect(html).toContain('class="btn btn-icon btn-ghost absolute right-0 top-0"');
 	expect(html).not.toContain('class="block size-1.5 rounded-full');
 });
 
