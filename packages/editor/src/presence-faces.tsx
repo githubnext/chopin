@@ -25,12 +25,15 @@ export function presenceSplit(
 	return { shown: unique.slice(0, max), hidden: unique.slice(max) };
 }
 
-export function PresenceFaces({ handles }: { handles: readonly string[] }) {
+export function PresenceFaces({ handles, label = "Editing this question" }: {
+	handles: readonly string[];
+	label?: string;
+}) {
 	let { shown, hidden } = presenceSplit(handles);
 	if (shown.length === 0) return null;
 	return (
 		<span
-			aria-label={`Editing this question: ${[...shown, ...hidden].join(", ")}`}
+			aria-label={`${label}: ${[...shown, ...hidden].join(", ")}`}
 			className="presence-faces"
 			role="group"
 		>

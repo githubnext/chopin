@@ -18,7 +18,7 @@ export type Message = {
 
 export type Group =
 	| { kind: "messages"; author: Speaker; messages: Message[]; queued: boolean }
-	| { kind: "system"; id: string; text: string };
+	| { kind: "system"; id: string; text: string; ts?: number; decision?: Chat.Entry["decision"] };
 
 export type ToolSummary =
 	| { state: "running"; name: string; completed: number }
@@ -79,7 +79,13 @@ export function group(
 			continue;
 		}
 		if (row.author.kind === "system") {
-			result.push({ kind: "system", id: row.id, text: row.text });
+			result.push({
+				kind: "system",
+				id: row.id,
+				text: row.text,
+				ts: row.ts,
+				decision: row.decision,
+			});
 			continue;
 		}
 		append(result, { ...row, author: row.author, queued: false });

@@ -1,5 +1,7 @@
 import { Cell } from "@mdxeditor/gurx";
 
+import type { ReactNode } from "react";
+import type { CardMetaStore } from "./card-meta";
 import type { Binding } from "@lexical/yjs";
 import type { ChangeStore } from "./changes";
 import type { ContentSwapMotion } from "./content-swap";
@@ -38,12 +40,16 @@ export type WidgetOptions = {
 	motionImmediately?: () => boolean;
 	questionMotion?: QuestionStepMotion;
 	questions?: QuestionnaireStore;
+	cardMeta?: CardMetaStore;
+	onCardSource?: (questionnaireId: string) => void;
+	evidence?: (questionnaireId: string) => ReactNode | null;
 	research?: ResearchStore;
 	researchDrafts?: ResearchDraftStore;
 	threads?: ThreadStore;
 	changes?: ChangeStore;
 	wire?: Transport;
 	connected?: boolean;
+	synced?: boolean;
 	canEdit?: boolean;
 };
 

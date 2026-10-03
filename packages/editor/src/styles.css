@@ -8,6 +8,27 @@
 
 @import "./callout.css";
 
+/* Evidence can extend beyond the clipped document column; only its panel takes hits. */
+.plan-evidence-popover {
+	pointer-events: none;
+	position: fixed;
+	inset: 0;
+	z-index: 40;
+}
+
+.plan-evidence-panel {
+	pointer-events: auto;
+	position: fixed;
+	width: min(20rem, calc(100vw - 24px));
+	max-height: calc(100dvh - 24px);
+	overflow-y: auto;
+	border-radius: var(--radius-md);
+	background: var(--color-page);
+	box-shadow: var(--shadow-overlay);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+}
+
 .plan-content [data-research-draft-anchor] {
 	margin-block-end: var(--research-draft-space, 0);
 }
@@ -393,6 +414,11 @@
 		--plan-gutter: 1rem;
 	}
 
+	/* Anchor state keeps this lane stable when its marker leaves the viewport. */
+	.plan-document[data-plan-decision-lane] .plan-content {
+		--plan-leading-gutter: 2rem;
+	}
+
 	/* Wide authored surfaces keep their own visible, keyboard-operable lane. */
 	.plan-content :is(pre, table, .plan-code-view, [role="tablist"]) {
 		overscroll-behavior-inline: contain;
@@ -760,8 +786,56 @@
 	margin-block: 1rem;
 }
 
+/* Keep the one editable caret paragraph between consecutive cards compact. */
+.plan
+	.plan-content
+	> :is([data-plan-questionnaire], [data-plan-decision]):has(+ p > br:only-child):has(+ p + :is([data-plan-questionnaire], [data-plan-decision])) {
+	margin-block-end: 0;
+}
+
+.plan
+	.plan-content
+	> :is([data-plan-questionnaire], [data-plan-decision])
+	+ p:has(> br:only-child):has(+ :is([data-plan-questionnaire], [data-plan-decision])) {
+	margin-block: 0;
+}
+
+.plan
+	.plan-content
+	> :is([data-plan-questionnaire], [data-plan-decision])
+	+ p:has(> br:only-child)
+	+ :is([data-plan-questionnaire], [data-plan-decision]) {
+	margin-block-start: 0;
+}
+
+/* The inner card is hidden after resolution, but its Lexical decorator host
+   also has document spacing. Remove that host from layout as well. */
+.plan .plan-content [data-plan-questionnaire]:has([data-card-hidden]) {
+	display: none;
+	margin-block: 0;
+}
+
 .plan .plan-content :is([data-plan-questionnaire], [data-plan-decision]) article {
 	width: 100%;
+}
+
+.decision-collapse {
+	display: grid;
+	grid-template-rows: 1fr;
+	transition:
+		grid-template-rows var(--duration-base) var(--ease-out),
+		opacity var(--duration-base) var(--ease-out);
+}
+
+.decision-collapse.is-closing {
+	grid-template-rows: 0fr;
+	opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.decision-collapse {
+		transition: none;
+	}
 }
 
 /*
@@ -874,13 +948,15 @@
  * property of how the CSS happens to be chunked, not of anything we control.
  */
 .plan .plan-content {
-	--plan-wide-inline-size: calc(100cqi - 2 * var(--plan-gutter));
+	--plan-leading-gutter: var(--plan-gutter);
+	--plan-wide-inline-size: calc(100cqi - var(--plan-leading-gutter) - var(--plan-gutter));
 	--plan-wide-inline-offset: calc((100% - var(--plan-wide-inline-size)) / 2);
 	/*
 	 * The trailing space is deliberate and large: the caret should never sit
 	 * against the bottom of the pane, and a plan is usually appended to.
 	 */
 	padding: 3rem var(--plan-gutter) 60vh;
+	padding-inline-start: var(--plan-leading-gutter);
 	margin-inline: auto;
 	max-width: calc(var(--plan-measure) + var(--plan-gutter) * 2);
 	font-size: var(--plan-body);
@@ -2012,6 +2088,9 @@
 	text-overflow: ellipsis;
 }
 
+::highlight(plan-decided) {
+	background-color: var(--color-success-wash);
+}
 /* Presence on a decision card: aligned to the 1.5rem mark beside the title. */
 .presence-faces {
 	display: flex;

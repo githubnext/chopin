@@ -1,0 +1,5 @@
+::highlight(conversation-source) {
+	background: color-mix(in srgb, var(--color-brand) 35%, transparent);
+	text-decoration: underline;
+	text-decoration-color: var(--color-brand);
+}

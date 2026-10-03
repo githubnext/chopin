@@ -37,6 +37,7 @@ function reply(): Plan.Open.Reply {
 		revision: 1,
 		anchors: [],
 		threads: [],
+		prose: [],
 		limits: { source: 1_000, update: 1_000, depth: 10 },
 	};
 }
@@ -48,9 +49,15 @@ function reply(): Plan.Open.Reply {
  * a socket has not finished its handshake by the time something mounts against
  * it — and refuses the request the way the real one does.
  */
-function wire(open = true): Transport & { sent: string[]; asked: object[]; up: boolean } {
+function wire(open = true): Transport & {
+	sent: string[];
+	asked: object[];
+	up: boolean;
+	emit: (kind: string, frame: unknown) => void;
+} {
 	let sent: string[] = [];
 	let asked: object[] = [];
+	let handlers = new Map<string, Set<(frame: never) => void>>();
 
 	return {
 		sent,
@@ -59,8 +66,14 @@ function wire(open = true): Transport & { sent: string[]; asked: object[]; up: b
 		get connected(): boolean {
 			return this.up;
 		},
-		on(): Unsubscribe {
-			return () => {};
+		on<T>(kind: string, handler: (frame: T) => void): Unsubscribe {
+			let set = handlers.get(kind);
+			if (!set) handlers.set(kind, set = new Set());
+			set.add(handler as (frame: never) => void);
+			return () => set!.delete(handler as (frame: never) => void);
+		},
+		emit(kind: string, frame: unknown) {
+			for (let handler of handlers.get(kind) ?? []) handler(frame as never);
 		},
 		send(kind: string) {
 			sent.push(kind);
@@ -119,7 +132,7 @@ describe("opening the plan", () => {
 	});
 
 	it("hands over the anchors it was given", async () => {
-		let seen: Array<{ widgets: unknown[]; threads: unknown[] }> = [];
+		let seen: Array<{ widgets: unknown[]; threads: unknown[]; prose: unknown[] }> = [];
 		let provider = new PlanProvider({
 			wire: wire(),
 			doc: new Y.Doc(),
@@ -129,6 +142,68 @@ describe("opening the plan", () => {
 		await provider.connect();
 
 		expect(seen).toHaveLength(1);
+		expect(seen[0]).toEqual({ widgets: [], threads: [], prose: [] });
+	});
+
+	it("passes current-epoch prose snapshots through and drops stale ones", async () => {
+		let transport = wire();
+		let seen: Array<{ widgets: unknown[]; threads: unknown[]; prose: unknown[] }> = [];
+		let provider = new PlanProvider({
+			wire: transport,
+			doc: new Y.Doc(),
+			onAnchors: snapshot => seen.push(snapshot),
+		});
+		await provider.connect();
+		let prose: Plan.ProseAnchors = {
+			widget: "card-a",
+			anchors: [],
+			orphaned: true,
+		};
+		transport.emit(
+			"plan:anchors",
+			{
+				kind: "plan:anchors",
+				ts: 0,
+				epoch: "old-epoch",
+				widgets: [],
+				threads: [],
+				prose: [prose],
+			} satisfies Plan.Anchors,
+		);
+		expect(seen).toHaveLength(1);
+		transport.emit(
+			"plan:anchors",
+			{
+				kind: "plan:anchors",
+				ts: 0,
+				epoch: reply().epoch,
+				widgets: [],
+				threads: [],
+				prose: [prose],
+			} satisfies Plan.Anchors,
+		);
+		expect(seen.at(-1)?.prose).toEqual([prose]);
+	});
+
+	it("treats a pre-prose anchors frame as an empty prose snapshot", async () => {
+		let transport = wire();
+		let seen: Array<{ prose: Plan.ProseAnchors[] }> = [];
+		let provider = new PlanProvider({
+			wire: transport,
+			doc: new Y.Doc(),
+			onAnchors: snapshot => seen.push(snapshot),
+		});
+		await provider.connect();
+
+		transport.emit("plan:anchors", {
+			kind: "plan:anchors",
+			ts: 0,
+			epoch: reply().epoch,
+			widgets: [],
+			threads: [],
+		} as unknown as Plan.Anchors);
+
+		expect(seen.at(-1)?.prose).toEqual([]);
 	});
 
 	/**

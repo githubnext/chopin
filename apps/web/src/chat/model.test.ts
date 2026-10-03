@@ -148,3 +148,18 @@ describe("tool-run summaries", () => {
 		])).toEqual({ state: "finished", count: 2, failures: 1, elapsed: 1_238 });
 	});
 });
+
+it("preserves decision metadata and timestamp on system groups", () => {
+	let prompt = {
+		...entry("decision-prompt", { kind: "system" }, "Ready to decide"),
+		decision: { questionnaireId: "card-1", kind: "prompt" as const, generation: 2 },
+	};
+
+	expect(group([prompt], [])).toEqual([{
+		kind: "system",
+		id: "decision-prompt",
+		text: "Ready to decide",
+		ts: 1_700_000_000,
+		decision: prompt.decision,
+	}]);
+});

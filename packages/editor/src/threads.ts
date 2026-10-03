@@ -111,8 +111,8 @@ export class ThreadStore {
 	snapshot = (): ThreadState => this.#state;
 
 	attach(editor: LexicalEditor | undefined): void {
+		if (this.#editor && this.#editor !== editor) unpaint(this.#editor);
 		this.#editor = editor;
-		if (!editor) unpaint();
 	}
 
 	bind(binding: Binding | undefined): void {
@@ -309,7 +309,7 @@ export class ThreadStore {
 		if (!editor || places.length === 0) return;
 
 		let walk = this.#walk;
-		let index = holds("comments") && walk !== undefined && walk.thread === id
+		let index = holds("comments", editor) && walk !== undefined && walk.thread === id
 			? (walk.index + 1) % places.length
 			: 0;
 

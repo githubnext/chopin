@@ -1,6 +1,13 @@
 import { expect, test } from "bun:test";
 
-import { edgePanelPoint, markerPoints, markerRect, popoverPoint } from "./comment-geometry";
+import {
+	decisionPanelPoint,
+	edgePanelPoint,
+	marginPoint,
+	markerPoints,
+	markerRect,
+	popoverPoint,
+} from "./comment-geometry";
 
 import type { Rect } from "./comment-geometry";
 
@@ -302,4 +309,22 @@ test("keeps an edge panel inside both vertical document edges", () => {
 
 	expect(above).toEqual({ top: 12, left: 468 });
 	expect(below).toEqual({ top: 348, left: 468 });
+});
+
+test("places a decision marker in the left margin at the paragraph's first line", () => {
+	let page = { top: 100, left: 200, right: 1_000, bottom: 900, width: 800, height: 800 };
+	let target = { top: 300, left: 260, right: 900, bottom: 360, width: 640, height: 60 };
+
+	expect(marginPoint(target, page, 24, 8)).toEqual({ top: 200, left: 28 });
+	expect(marginPoint({ ...target, left: 205 }, page, 24, 8).left).toBe(0);
+});
+
+test("places a decision panel below its paragraph, then flips above at the viewport edge", () => {
+	let page = { top: 100, left: 200, right: 1_000, bottom: 900, width: 800, height: 800 };
+	let target = { top: 300, left: 260, right: 900, bottom: 360, width: 640, height: 60 };
+
+	expect(decisionPanelPoint(target, page, 352, 180)).toEqual({ top: 266, left: 60 });
+	expect(decisionPanelPoint({ ...target, top: 780, bottom: 840 }, page, 352, 180))
+		.toEqual({ top: 494, left: 60 });
+	expect(decisionPanelPoint({ ...target, left: 900 }, page, 352, 180).left).toBe(448);
 });

@@ -32,7 +32,21 @@
 				1
 			]
 		],
-		"sourceHash": "8f550f655abbcd6c5264cc69a6777c267ef145d1cc6dd62ec465ba7778b03f21"
+		"sourceHash": "44f865f2e4bef65df792e5731cd26161197067f1b57e80c99b24ddd9ed161983"
+	},
+	{
+		"file": "packages/question/src/react/resolved-actions.tsx",
+		"reason": "Typed lifecycle footer forwards caller class names; static call-site classes remain scanned at their owner.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > ResolvedActions > <footer>",
+				1
+			]
+		],
+		"sourceHash": "e73b8467dde57d40dbd6f9944640601586cf4601b35c02ee7dde248da405af59"
 	},
 	{
 		"file": "packages/icons/src/icon.tsx",
@@ -106,13 +120,6 @@
 				"*",
 				"props",
 				"unresolved JSX props > CodeIcon > <LineIcon>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > DecisionIcon > <LineIcon>",
 				1
 			],
 			[
@@ -203,7 +210,7 @@
 				"dynamic",
 				"*",
 				"props",
-				"unresolved JSX props > ClockIcon > <LineIcon>",
+				"unresolved JSX props > DecisionIcon > <LineIcon>",
 				1
 			],
 			[
@@ -212,9 +219,16 @@
 				"props",
 				"unresolved JSX props > MessageForwardIcon > <LineIcon>",
 				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > ClockIcon > <LineIcon>",
+				1
 			]
 		],
-		"sourceHash": "3f0551a94613d444137252e24f2e69af45d333a1a28aba384158b669cf3ca040"
+		"sourceHash": "d7ae440d81602216ef965bf86afd5c4972d94bfaaf841cf91814dfcae870496a"
 	},
 	{
 		"file": "packages/visuals/src/ui/mini-bars.tsx",

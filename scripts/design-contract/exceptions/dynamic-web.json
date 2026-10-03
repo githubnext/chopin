@@ -18,7 +18,7 @@
 				1
 			]
 		],
-		"sourceHash": "d42348377f10de0b15c2832577625079f62e0e99709010dd9233293fe7638139"
+		"sourceHash": "290fd2e09192f125e7ac058f2085d2576428e1f2aa6e32c3cdc6386dd8048019"
 	},
 	{
 		"file": "apps/web/src/document-rename.tsx",
@@ -214,7 +214,7 @@
 				1
 			]
 		],
-		"sourceHash": "15353a61ce445c0af8ad58b6455dcf192942e3135e5fb56b51602eb5ecb26f82"
+		"sourceHash": "8d81948c327fe4ff4a739f5ddbe7940c579b871d6618ce9379dcf77afb6c404e"
 	},
 	{
 		"file": "apps/web/src/workspace.tsx",
@@ -249,7 +249,7 @@
 				2
 			]
 		],
-		"sourceHash": "15353a61ce445c0af8ad58b6455dcf192942e3135e5fb56b51602eb5ecb26f82"
+		"sourceHash": "8d81948c327fe4ff4a739f5ddbe7940c579b871d6618ce9379dcf77afb6c404e"
 	},
 	{
 		"file": "apps/web/src/navigation-dialog.tsx",
@@ -320,5 +320,19 @@
 			]
 		],
 		"sourceHash": "e9796d7c5c66ea469a4fffa8976d341f22ef4e67b6a256fbf693de763b9a4a55"
+	},
+	{
+		"file": "apps/web/src/conversation-plan/markers.tsx",
+		"reason": "Message analysis portal uses measured message, transcript and composer bounds for placement and clipping; this exact browser geometry boundary supplies position, size, visibility and motion origin without semantic color or typography values.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"position",
+				"unresolved style > MessageMarkers > <div>",
+				1
+			]
+		],
+		"sourceHash": "462f224addb47a1a0945bf8c49b49fb35f70fac66e92b81a8ed544a6c4b49ea0"
 	}
 ]

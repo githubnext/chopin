@@ -6,13 +6,16 @@
  * making a long-lived room open below the questions that still need an answer.
  */
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { cardStatus } from "@chopin/dialect";
 import { ChevronIcon } from "@chopin/icons";
 
 import { MotionDisclosure, MotionDisclosureIcon } from "./disclosure-motion";
 import { useQuestionnaires } from "./questionnaires";
 import { QuestionnaireCard } from "./widgets/questionnaire";
 
+import type { Question } from "@chopin/protocol";
+import type { CardMetaStore } from "./card-meta";
 import type { Transport } from "@chopin/question/react";
 import type { MotionDisclosureContract } from "./disclosure-motion";
 import type { QuestionnaireEntry, QuestionnaireStore } from "./questionnaires";
@@ -20,6 +23,8 @@ import type { QuestionStepMotion } from "./widget-options";
 
 export type DecisionsProps = {
 	store: QuestionnaireStore;
+	cardMeta?: CardMetaStore;
+	canEdit?: boolean;
 	motion: MotionDisclosureContract;
 	motionImmediately?: () => boolean;
 	questionMotion?: QuestionStepMotion;
@@ -37,8 +42,23 @@ export type DecisionsProps = {
 	reveal?: { widget: string; token: number };
 };
 
-function undecided(entry: QuestionnaireEntry): boolean {
-	return entry.value.questions.some(question => question.answer === undefined);
+let EMPTY_CARDS: ReadonlyMap<string, Question.CardMeta> = new Map();
+
+function noop() {
+	return () => {};
+}
+
+function emptyCards() {
+	return EMPTY_CARDS;
+}
+
+function status(entry: QuestionnaireEntry, cardMeta: ReadonlyMap<string, Question.CardMeta>) {
+	return cardMeta.get(entry.id)?.status ?? cardStatus(entry.value);
+}
+
+function waiting(entry: QuestionnaireEntry, cardMeta: ReadonlyMap<string, Question.CardMeta>) {
+	let current = status(entry, cardMeta);
+	return current === "open" || current === "reopened";
 }
 
 let HISTORY = "chopin:decisions:resolved";
@@ -56,6 +76,8 @@ function useHistory() {
 
 export function Decisions(
 	{
+		cardMeta,
+		canEdit = true,
 		connected,
 		headingId,
 		motion,
@@ -68,6 +90,11 @@ export function Decisions(
 	}: DecisionsProps,
 ) {
 	let entries = useQuestionnaires(store);
+	let metadata = useSyncExternalStore(
+		cardMeta?.subscribe ?? noop,
+		cardMeta?.snapshot ?? emptyCards,
+		cardMeta?.snapshot ?? emptyCards,
+	);
 	let content = useRef<HTMLDivElement>(null);
 	let heading = useRef<HTMLHeadingElement>(null);
 	let focusedQuestionnaire = useRef<HTMLElement | undefined>(undefined);
@@ -93,7 +120,7 @@ export function Decisions(
 			target.tabIndex = -1;
 			target.focus({ preventScroll: true });
 		} else heading.current?.focus();
-	}, [entries, reveal]);
+	}, [entries, metadata, reveal]);
 
 	// Removing a focused card sends focus to body without a blur event. Remember
 	// the actual card so its removal can hand focus to the remaining work.
@@ -101,7 +128,7 @@ export function Decisions(
 		let previous = focusedQuestionnaire.current;
 		if (!previous || previous.isConnected || document.activeElement !== document.body) return;
 		focusedQuestionnaire.current = undefined;
-		let next = entries.find(undecided);
+		let next = entries.find(entry => waiting(entry, metadata));
 		let target = next
 			? content.current?.querySelector<HTMLElement>(
 				`[data-plan-sidecar-questionnaire="${CSS.escape(next.id)}"]`,
@@ -111,16 +138,18 @@ export function Decisions(
 			target.tabIndex = -1;
 			target.focus({ preventScroll: true });
 		} else heading.current?.focus({ preventScroll: true });
-	}, [entries]);
+	}, [entries, metadata]);
 
-	let waiting = entries.filter(undecided);
-	let settled = entries.filter(entry => !undecided(entry));
+	let pending = entries.filter(entry => waiting(entry, metadata));
+	let settled = entries.filter(entry => !waiting(entry, metadata));
 
-	let outstanding = waiting.length;
+	let outstanding = pending.length;
 	let resolved = settled.length;
 
 	let question = (entry: QuestionnaireEntry) => (
 		<QuestionnaireCard
+			meta={metadata.get(entry.id)}
+			canEdit={canEdit}
 			connected={connected}
 			key={entry.id}
 			motion={questionMotion}
@@ -131,6 +160,7 @@ export function Decisions(
 				else store.reveal(entry.id, question);
 			}}
 			places={store.counts(entry.id)}
+			presentation="list"
 			value={entry.value}
 			wire={wire}
 		/>
@@ -164,7 +194,7 @@ export function Decisions(
 					)
 					: (
 						<div className="flex flex-col gap-3">
-							{waiting.map(question)}
+							{pending.map(question)}
 						</div>
 					)}
 
