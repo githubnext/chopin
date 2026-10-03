@@ -748,7 +748,8 @@ export class MemoryStorage implements StorageAdapter {
 		let replay = this.#operations.get(input.channelId)?.get(input.operationId);
 		if (replay) return { ...replay, repeated: true };
 		for (let change of input.researchProjections ?? []) {
-			let detail = await this.#research.get(input.channelId, change.id);
+			// Keep every projection check and the commit in one synchronous turn.
+			let detail = this.#research.getCurrent(input.channelId, change.id);
 			let initial = detail?.turns.find(turn => turn.kind === "initial");
 			let jobId = initial?.answerJobId ?? initial?.evidenceJobId;
 			let job = jobId ? this.#jobs.detail(input.channelId, jobId)?.job : undefined;
