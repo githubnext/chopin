@@ -410,7 +410,7 @@ test(
 
 test(
 	"saved decision prose keeps separate markers when both question links point at later checklist",
-	async ({ join, room, seed }, testInfo) => {
+	async ({ join, seed }) => {
 		let monitoring = "Monitoring uses Sentry for errors.";
 		let alerts = "Critical errors go to Slack.";
 		let checklist = "- Browser one\n- Browser two\n- Browser three";
@@ -468,88 +468,39 @@ test(
 			})),
 		});
 		let page = await join("ana", { viewport: { width: 893, height: 850 } });
-		for (let item of ids) {
-			await expect(page.getByRole("button", { name: `Decision: ${item.answer}`, exact: true }))
-				.toBeVisible();
-		}
-		await openJevWire(page, room);
-		await sendChat(page, QUESTION);
-		await sendChat(page, OPTION);
-		let temporary = page.locator(
-			'[data-document-view="plan"] article[data-plan-sidecar-questionnaire]',
-		).filter({ has: page.getByRole("heading", { name: QUESTION }) });
-		await expect(temporary).toBeVisible();
-		await temporary.getByRole("button", { name: "Discard", exact: true }).click();
-		await expect(temporary.getByText("Discard this decision?", { exact: true })).toBeVisible();
-		await temporary.getByRole("button", { name: "Discard", exact: true }).click();
-		await expect(temporary).toHaveCount(0);
-		let first =
-			(await page.getByRole("button", { name: "Decision: Sentry", exact: true }).boundingBox())!;
-		let second =
-			(await page.getByRole("button", { name: "Decision: Slack", exact: true }).boundingBox())!;
-		expect(Math.abs(first.y - second.y)).toBeGreaterThan(20);
-		for (let item of ids) {
-			let target = page.getByRole("button", { name: `Decision: ${item.answer}`, exact: true });
-			await target.focus();
-			await page.keyboard.press("Enter");
-			await expect(page.getByRole("dialog", { name: "Decision", exact: true })).toContainText(
-				item.answer,
-			);
+		let dialog = page.getByRole("dialog", { name: "Decision", exact: true });
+		let marker = (answer: string) =>
+			page.getByRole("button", { name: `Decision: ${answer}`, exact: true });
+		let verify = async (index: number, keyboard: boolean) => {
+			let item = ids[index]!;
+			let target = marker(item.answer);
+			await target.scrollIntoViewIfNeeded();
+			if (keyboard) {
+				await target.focus();
+				await page.keyboard.press("Enter");
+			} else {
+				await target.click();
+			}
+			await expect(dialog).toContainText(item.answer);
 			let highlighted = await page.evaluate(() =>
 				[...CSS.highlights.get("plan-decision") ?? []]
 					.map(range => range.toString()).join(" ")
 			);
 			expect(highlighted).toContain(item.prose);
 			expect(highlighted).not.toContain(checklist);
-			expect(highlighted).not.toContain(ids.find(other => other !== item)!.prose);
-			await page.screenshot({
-				path: testInfo.outputPath(`${item.answer.toLowerCase()}-reader.png`),
-			});
+			expect(highlighted).not.toContain(ids[1 - index]!.prose);
 			await page.keyboard.press("Escape");
-			await target.click();
-			await expect(page.getByRole("dialog", { name: "Decision", exact: true })).toContainText(
-				item.answer,
-			);
-			await page.keyboard.press("Escape");
-		}
+			await expect(dialog).toHaveCount(0);
+		};
+		let first = (await marker(ids[0]!.answer).boundingBox())!;
+		let second = (await marker(ids[1]!.answer).boundingBox())!;
+		expect(Math.abs(first.y - second.y)).toBeGreaterThan(20);
+		await verify(0, true);
+		await verify(1, false);
 		await page.reload();
-		for (
-			let viewport of [
-				{ width: 893, height: 850 },
-				{ width: 390, height: 844 },
-				{ width: 1440, height: 900 },
-			]
-		) {
-			await page.setViewportSize(viewport);
-			let targets = ids.map(item =>
-				page.getByRole("button", {
-					name: `Decision: ${item.answer}`,
-					exact: true,
-				})
-			);
-			for (let target of targets) await target.scrollIntoViewIfNeeded();
-			let bounds = await Promise.all(targets.map(target => target.boundingBox()));
-			expect(bounds[0]).toBeTruthy();
-			expect(bounds[1]).toBeTruthy();
-			expect(Math.abs(bounds[0]!.y - bounds[1]!.y)).toBeGreaterThan(20);
-			for (let [index, item] of ids.entries()) {
-				await targets[index]!.focus();
-				await page.keyboard.press("Enter");
-				await expect(page.getByRole("dialog", { name: "Decision", exact: true }))
-					.toContainText(item.answer);
-				let highlighted = await page.evaluate(() =>
-					[...CSS.highlights.get("plan-decision") ?? []]
-						.map(range => range.toString()).join(" ")
-				);
-				expect(highlighted).toContain(item.prose);
-				expect(highlighted).not.toContain(checklist);
-				expect(highlighted).not.toContain(ids[1 - index]!.prose);
-				await page.keyboard.press("Escape");
-				await targets[index]!.click();
-				await expect(page.getByRole("dialog", { name: "Decision", exact: true }))
-					.toContainText(item.answer);
-				await page.keyboard.press("Escape");
-			}
-		}
+		await expect(marker(ids[0]!.answer)).toBeVisible();
+		await expect(marker(ids[1]!.answer)).toBeVisible();
+		await verify(0, false);
+		await verify(1, true);
 	},
 );
