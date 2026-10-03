@@ -1,0 +1,32 @@
+import { defineConfig } from "@playwright/test";
+
+export default defineConfig({
+	testDir: ".",
+	testMatch: [
+		"source-highlight.native.ts",
+		"question-actions.native.ts",
+		"question-terminal-origin.native.ts",
+		"question-view-contracts.native.ts",
+		"transcript-source.native.ts",
+		"excerpt-correction-lifecycle.native.ts",
+		"excerpt-correction-retry.native.ts",
+		"evidence-hover.native.ts",
+		"room-source.native.ts",
+		"conversation-announcements.native.ts",
+		"analysis-host.native.ts",
+		"diagnostic-controls.native.ts",
+		"analysis-host-linked.native.ts",
+		"analysis-host-retries.native.ts",
+		"decision-reader.native.ts",
+		"collapse-deletion.native.ts",
+		"open-card.native.ts",
+		"card-gap.native.ts",
+	],
+	workers: 1,
+	fullyParallel: false,
+	retries: 0,
+	timeout: 15_000,
+	reporter: "list",
+	outputDir: "../test-results/source-native",
+	use: { browserName: "chromium", headless: true },
+});

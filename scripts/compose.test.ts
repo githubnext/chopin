@@ -3,6 +3,9 @@ import { describe, expect, it } from "bun:test";
 const PREVIEW_CONFIGURATION = [
 	"AGENT",
 	"BACKGROUND_JOBS",
+	"CONVERSATION_PLAN",
+	"JEV_MODEL",
+	"JEV_API_KEY",
 	"APP_ORIGIN",
 	"GITHUB_APP_SLUG",
 	"GITHUB_APP_CLIENT_ID",

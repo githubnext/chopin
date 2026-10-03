@@ -7,6 +7,9 @@ services:
       # the preview env file, so preview-overridable values stay late-bound.
       AGENT: ${AGENT}
       BACKGROUND_JOBS: ${BACKGROUND_JOBS}
+      CONVERSATION_PLAN: ${CONVERSATION_PLAN}
+      JEV_MODEL: ${JEV_MODEL}
+      JEV_API_KEY: ${JEV_API_KEY}
       APP_ORIGIN: ${APP_ORIGIN}
       DATABASE_URL: postgresql://chopin:chopin@${SERVICE_NAME_DB:-db}:5432/chopin?sslmode=disable
       GITHUB_APP_SLUG: ${GITHUB_APP_SLUG}

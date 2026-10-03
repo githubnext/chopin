@@ -370,10 +370,13 @@ sent to every turn.
 Question answers and accepted comment threads belong to durable records outside
 the document. Their `<Questionnaire>` and `<Decision>` nodes are readable MDX
 projections. Domain operations and Planner block tools update or protect the
-record and projection together. Browser Yjs validation currently checks the
-dialect but does not independently compare those projections with their records,
-so a custom client can create an inconsistent projection without changing the
-authoritative decision record.
+record and projection together. Browser Yjs validation checks the dialect and
+compares protected projections before and after the batch. Unchanged projections
+may move; creating, removing or altering a Questionnaire or Decision is rejected.
+Research references may be added or removed only with durable request authority,
+rechecked at the fenced commit. This preserves the starting projections rather
+than independently rebuilding every projection from its record on each edit;
+records remain authoritative.
 
 A relationship points from one of those records to top-level document blocks.
 Each anchor combines a Yjs relative position with a digest of the canonical block.
@@ -447,10 +450,7 @@ or route for a person to approve the draft. See
 The prototype still has several places where implementation falls short of the
 intended boundaries above:
 
-- Idle-room eviction removes the registry entry before its asynchronous final
-  close and checkpoint completes, so a replacement room can briefly overlap.
-- Browser CRDT updates do not cross-check record-owned decision projections, and
-  custom comment locators do not receive all browser-side bounds on the server.
+- Custom comment locators do not receive all browser-side bounds on the server.
 - Implementation run authorization is repository-based rather than bound to the
   original claimant; any admitted repository writer with the run ID can report
   its lifecycle.
