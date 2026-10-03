@@ -84,6 +84,8 @@ export declare namespace Question {
 	export type Answer = {
 		question: string;
 		choices?: string[];
+		/** Ids of the chosen options, alongside their labels. */
+		optionIds?: string[];
 		custom?: string;
 	};
 
@@ -106,14 +108,14 @@ export declare namespace Question {
 	/** A new questionnaire, announced to the room. */
 	export type Asked = KIND<"question:asked"> & {
 		id: string;
-		definition: DecisionDefinition;
+		definition: Definition;
 		/** Present once the questionnaire has a node in the plan. */
 		widget?: string;
 	};
 
 	/** Every open questionnaire, sent when a client joins. */
 	export type Sync = KIND<"question:sync"> & {
-		open: Array<{ id: string; definition: DecisionDefinition; widget?: string }>;
+		open: Array<{ id: string; definition: Definition; widget?: string }>;
 	};
 
 	export namespace Open {
@@ -124,7 +126,7 @@ export declare namespace Question {
 			& (
 				| {
 					open: true;
-					definition: DecisionDefinition;
+					definition: Definition;
 					/** json-joy model, as bytes. */
 					model: number[];
 					revision: number;

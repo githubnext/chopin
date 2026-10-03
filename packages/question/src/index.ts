@@ -12,7 +12,15 @@
 
 export * as limits from "./limits";
 
-export { appendOption, assertCallId, decision, normalize, QuestionError, reject } from "./schema";
+export {
+	appendOption,
+	assertCallId,
+	decision,
+	identified,
+	normalize,
+	QuestionError,
+	reject,
+} from "./schema";
 export type { Answer, Appended, DecisionDefinition, Definition, Item, Option } from "./schema";
 
 export { answered, apply, assertPatch, create, read, restore } from "./draft";
@@ -20,6 +28,9 @@ export type { Applied, Draft, Drafts, Mode, Model } from "./draft";
 
 export { derive, incomplete, summarize } from "./answer";
 export type { Outcome } from "./answer";
+
+export { addOption } from "./options";
+export type { Added } from "./options";
 
 /**
  * The CRDT itself.
