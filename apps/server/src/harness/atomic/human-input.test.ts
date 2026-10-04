@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
-import { $nodesOfType } from "lexical";
-import { cardStatus, limits, QuestionnaireNode } from "@chopin/dialect";
+import { $createParagraphNode, $createTextNode, $getRoot, $nodesOfType } from "lexical";
+import * as Y from "yjs";
+import { cardStatus, limits, QuestionnaireNode, ulid } from "@chopin/dialect";
 import { limits as questionLimits } from "@chopin/question";
 import * as QuestionModel from "@chopin/question";
 import * as Questions from "../../questions/service";
@@ -8,7 +9,9 @@ import * as Store from "../../questions/store";
 import * as Plan from "../../plan/service";
 import * as Room from "../../plan/room";
 import * as Edit from "../../plan/edit";
+import * as Comments from "../../comments/service";
 import { hostInputRoom } from "../../testing/decisions";
+import { peer } from "../../testing/peer";
 import type { QuestionParams } from "@bastani/atomic";
 
 let cleanups: Array<() => Promise<void>> = [];
@@ -554,3 +557,651 @@ test("an answer that would make the document too large leaves it unchanged and t
 	f.controller.abort();
 	expect((await response).cancelled).toBe(true);
 });
+
+test(
+	"accepting a comment cannot leave too little room for an open question to expire",
+	async () => {
+		let f = await fixture();
+		let size = () => new TextEncoder().encode(Plan.source(f.plan)).length;
+		let quote = "caches tiles for 60 seconds";
+		let seeded = Edit.apply(f.plan, f.plan.revision, [{
+			op: "replace_root",
+			source: `# Plan\n\nThe renderer ${quote}.\n`,
+		}]);
+		if (!seeded.ok || !seeded.mutation) throw new Error("fixture edit failed");
+		await Plan.publish(f.plan, f.server, f.room.id, seeded.mutation);
+
+		let response = f.input.questionnaire({
+			questions: [{
+				header: "Choice",
+				question: "Which?",
+				options: [{ label: "A", description: "" }, { label: "B", description: "" }],
+			}],
+		}, f.options);
+		await f.cards(1);
+
+		let replies: any[] = [];
+		let ana = {
+			data: { handle: "ana", client: "client-ana", room: f.room.id },
+			send: (raw: string) => replies.push(JSON.parse(raw)),
+			publish() {},
+		} as unknown as Parameters<typeof Comments.start>[3];
+		await Comments.start(f.plan, f.server, f.room.id, ana, {
+			kind: "comment:start",
+			rid: "start",
+			ts: 0,
+			blocks: [1],
+			quote,
+			offset: 0,
+			length: quote.length,
+			text: "Too long.",
+		});
+		let id = replies.findLast(frame => frame.kind === "comment:start")?.thread?.id as string;
+		expect(id).toBeString();
+
+		let scratch = await Room.create(Plan.source(f.plan));
+		let before = size();
+		Room.insertDecision(scratch, {
+			id,
+			quote,
+			by: "ana",
+			at: new Date().toISOString(),
+			notes: [{ by: "ana", text: "Too long." }],
+		});
+		let decision = new TextEncoder().encode(Room.project(scratch)).length - before;
+		scratch.doc.destroy();
+
+		let target = limits.MAX_SOURCE_BYTES - decision - 10;
+		for (let fill = 1; fill > 0;) {
+			fill = Math.min(40_000, target - size() - 2);
+			if (fill < 1) break;
+			let edited = Edit.replace(
+				f.plan,
+				f.plan.revision,
+				`${Plan.source(f.plan)}\n${"x".repeat(fill)}\n`,
+			);
+			if (!edited.ok) throw new Error(`edit refused: ${edited.reason}`);
+			if (edited.mutation) await Plan.publish(f.plan, f.server, f.room.id, edited.mutation);
+		}
+
+		let context = {
+			chat: f.plan.chat,
+			config: { agent: false },
+			plan: f.plan,
+			room: f.room.id,
+			server: f.server,
+			auth: {},
+			claimantSessionId: "session",
+			repository: { id: "repo", owner: "owner", name: "repo", defaultBranch: "main" },
+			persist: () => Plan.persist(f.plan),
+		} as unknown as Parameters<typeof Comments.accept>[0];
+		let complain = console.error;
+		console.error = () => {};
+		try {
+			await Comments.accept(context, ana, { kind: "comment:accept", rid: "accept", ts: 0, id });
+		} finally {
+			console.error = complain;
+		}
+		expect(replies.findLast(frame => frame.kind === "comment:accept")).toMatchObject({
+			ok: false,
+			reason: "invalid",
+		});
+		expect(f.plan.threads.get(id)?.status).toBe("open");
+
+		for (let { id: open } of Store.outstanding(f.plan.questions)) {
+			await Questions.expire(f.plan, f.server, f.room.id, open);
+		}
+		await response;
+
+		expect(size()).toBeLessThanOrEqual(limits.MAX_SOURCE_BYTES);
+		let retitled = Edit.replace(
+			f.plan,
+			f.plan.revision,
+			Plan.source(f.plan).replace("# Plan", "# Pla2"),
+		);
+		expect(retitled.ok).toBe(true);
+	},
+	30_000,
+);
+
+type Fixture = Awaited<ReturnType<typeof fixture>>;
+
+async function seedDocument(f: Fixture) {
+	let seeded = Edit.apply(f.plan, f.plan.revision, [{
+		op: "replace_root",
+		source: "# Plan\n\nStart.\n",
+	}]);
+	if (!seeded.ok || !seeded.mutation) throw new Error("fixture edit failed");
+	await Plan.publish(f.plan, f.server, f.room.id, seeded.mutation);
+}
+
+/** Fill the document until `fits` just holds, leaving a margin smaller than one card's expiry. */
+async function crowd(f: Fixture, fits: (scratch: Room.Document) => boolean) {
+	let size = () => new TextEncoder().encode(Plan.source(f.plan)).length;
+	let base = Plan.source(f.plan);
+	let low = 0;
+	for (let high = limits.MAX_SOURCE_BYTES; low < high;) {
+		let mid = Math.ceil((low + high) / 2);
+		let scratch = await Room.create(`${base}\n${"x".repeat(mid)}\n`).catch(() => undefined);
+		let ok = scratch ? fits(scratch) : false;
+		scratch?.doc.destroy();
+		if (ok) low = mid;
+		else high = mid - 1;
+	}
+	let target = size() + low - 10;
+	for (let fill = 1; fill > 0;) {
+		fill = Math.min(40_000, target - size() - 2);
+		if (fill < 1) break;
+		let edited = Edit.replace(
+			f.plan,
+			f.plan.revision,
+			`${Plan.source(f.plan)}\n${"x".repeat(fill)}\n`,
+		);
+		if (!edited.ok) throw new Error(`edit refused: ${edited.reason}`);
+		if (edited.mutation) await Plan.publish(f.plan, f.server, f.room.id, edited.mutation);
+	}
+}
+
+const single = (header: string): QuestionParams => ({
+	questions: [{
+		header,
+		question: "Which?",
+		options: [{ label: "A", description: "" }, { label: "B", description: "" }],
+	}],
+});
+
+const bytes = (value: string) => new TextEncoder().encode(value).length;
+const FILLER = /\n\nq{10,}(?=\n)/g;
+
+/** Resize the Planner's filler paragraphs until the document is exactly `target` bytes. */
+async function fillTo(f: Fixture, target: number) {
+	let size = () => bytes(Plan.source(f.plan));
+	let aim = target;
+	for (let pass = 0; pass < 3 && size() !== target; pass++) {
+		let base = Plan.source(f.plan).replace(FILLER, "");
+		let paragraphs: string[] = [];
+		let room = aim - bytes(base);
+		for (; room > 40_002; room -= 40_002) paragraphs.push("q".repeat(40_000));
+		if (room > 0) {
+			if (room < 12) throw new Error("filler would be too small");
+			paragraphs.push("q".repeat(room - 2));
+		}
+		let edited = Edit.replace(
+			f.plan,
+			f.plan.revision,
+			base + paragraphs.map(text => `\n${text}\n`).join(""),
+		);
+		if (!edited.ok) {
+			throw new Error(`fill refused: ${"message" in edited ? edited.message : edited.reason}`);
+		}
+		if (edited.mutation) await Plan.publish(f.plan, f.server, f.room.id, edited.mutation);
+		aim += target - size();
+	}
+	expect(size()).toBe(target);
+}
+
+/** What one step adds to the document, measured on a copy without the filler. */
+async function growth(f: Fixture, step: (scratch: Room.Document) => void) {
+	let scratch = await Room.create(Plan.source(f.plan).replace(FILLER, ""));
+	let before = bytes(Room.project(scratch));
+	step(scratch);
+	let after = bytes(Room.project(scratch));
+	scratch.doc.destroy();
+	return after - before;
+}
+
+test(
+	"questions that fit when asked still fit when they expire, however the document changed since",
+	async () => {
+		let f = await fixture();
+		let max = limits.MAX_SOURCE_BYTES;
+		let low = 0;
+		for (let high = max; low < high;) {
+			let mid = Math.ceil((low + high) / 2);
+			if (Room.fitsExpiry("a".repeat(mid), 1)) low = mid;
+			else high = mid - 1;
+		}
+		let expiry = max - low;
+		let quote = "caches tiles for 60 seconds";
+		let seeded = Edit.apply(f.plan, f.plan.revision, [{
+			op: "replace_root",
+			source: `# Plan\n\nThe renderer ${quote}.\n`,
+		}]);
+		if (!seeded.ok || !seeded.mutation) throw new Error("fixture edit failed");
+		await Plan.publish(f.plan, f.server, f.room.id, seeded.mutation);
+
+		let responses = [
+			f.input.questionnaire(single("First"), f.options),
+			f.input.questionnaire(single("Second"), { ...f.options, requestId: "second" }),
+		];
+		let [first, second] = await f.cards(2);
+
+		let replies: any[] = [];
+		let ana = {
+			data: { handle: "ana", client: "client-ana", room: f.room.id },
+			send: (raw: string) => replies.push(JSON.parse(raw)),
+			publish() {},
+		} as unknown as Parameters<typeof Comments.start>[3];
+		await Comments.start(f.plan, f.server, f.room.id, ana, {
+			kind: "comment:start",
+			rid: "start",
+			ts: 0,
+			blocks: [1],
+			quote,
+			offset: 0,
+			length: quote.length,
+			text: "Too long.",
+		});
+		let thread = replies.findLast(frame => frame.kind === "comment:start")?.thread?.id as string;
+		expect(thread).toBeString();
+		let context = {
+			chat: f.plan.chat,
+			config: { agent: false },
+			plan: f.plan,
+			room: f.room.id,
+			server: f.server,
+			auth: {},
+			claimantSessionId: "session",
+			repository: { id: "repo", owner: "owner", name: "repo", defaultBranch: "main" },
+			persist: () => Plan.persist(f.plan),
+		} as unknown as Parameters<typeof Comments.accept>[0];
+		let accept = async () => {
+			let complain = console.error;
+			console.error = () => {};
+			try {
+				await Comments.accept(context, ana, {
+					kind: "comment:accept",
+					rid: `accept-${replies.length}`,
+					ts: 0,
+					id: thread,
+				});
+			} finally {
+				console.error = complain;
+			}
+			return replies.findLast(frame => frame.kind === "comment:accept");
+		};
+
+		// Planner text edits: two questions are open, so growth stops at their reserve.
+		await fillTo(f, max - 2 * expiry);
+		let source = Plan.source(f.plan);
+		expect(Edit.apply(f.plan, f.plan.revision, [{ op: "insert", index: 0, source: "y" }]))
+			.toMatchObject({ ok: false, message: expect.stringContaining("expire") });
+		expect(Edit.replace(f.plan, f.plan.revision, `${source}\ny\n`))
+			.toMatchObject({ ok: false, message: expect.stringContaining("expire") });
+		expect(Plan.source(f.plan)).toBe(source);
+
+		// An option that would take the document into the reserve.
+		let label = "Written ".repeat(25);
+		let question = first!.definition.questions[0]!;
+		let option = await growth(
+			f,
+			scratch =>
+				Room.appendQuestionOption(scratch, first!.id, question.id, {
+					id: ulid(),
+					label,
+					description: "",
+				}),
+		);
+		await fillTo(f, max - 10 - option);
+		await expect(f.addOption(first!.id, label)).rejects.toThrow("no room");
+		await fillTo(f, max - option - 2 * expiry - 100);
+		await f.addOption(first!.id, label);
+
+		// An answer that would do the same, then one that fits.
+		let text = "a".repeat(1_500);
+		let answered = await growth(
+			f,
+			scratch =>
+				Room.projectAnswer(scratch, first!.id, { [question.id]: text }, {
+					by: "reader",
+					at: new Date().toISOString(),
+				}),
+		);
+		await fillTo(f, max - 10 - answered);
+		await expect(f.answer(first!.id, text)).rejects.toThrow("no room");
+		expect(Store.outstanding(f.plan.questions)).toHaveLength(2);
+		await fillTo(f, max - answered - expiry - 100);
+		await f.answer(first!.id, "");
+		expect(Store.outstanding(f.plan.questions).map(open => open.id)).toEqual([second!.id]);
+
+		// An accepted comment becomes a Decision in the document.
+		let decision = await growth(f, scratch =>
+			Room.insertDecision(scratch, {
+				id: thread,
+				quote,
+				by: "ana",
+				at: new Date().toISOString(),
+				notes: [{ by: "ana", text: "Too long." }],
+			}));
+		await fillTo(f, max - 10 - decision);
+		expect(await accept()).toMatchObject({ ok: false, reason: "invalid" });
+		expect(f.plan.threads.get(thread)?.status).toBe("open");
+		await fillTo(f, max - decision - expiry - 100);
+		expect(await accept()).toMatchObject({ ok: true });
+		expect(f.plan.threads.get(thread)?.status).not.toBe("open");
+
+		// A question that would take the document into the reserve, then one that fits.
+		let probe = {
+			id: ulid(),
+			questions: [{
+				id: ulid(),
+				header: "Third",
+				prompt: "Which?",
+				multiple: false,
+				options: [{ id: ulid(), label: "A" }, { id: ulid(), label: "B" }],
+			}],
+		};
+		let asked = await growth(f, scratch =>
+			Room.insertQuestionnaire(scratch, {
+				...probe,
+				status: "expired",
+				at: new Date().toISOString(),
+			}));
+		await fillTo(f, max - 10 - asked);
+		let refused = f.input.questionnaire(single("Third"), { ...f.options, requestId: "third" });
+		expect(
+			await Promise.race([
+				refused.then(() => "asked", (err: Error) => err.message),
+				Bun.sleep(300).then(() => "asked"),
+			]),
+		).toContain("KiB limit");
+		expect(Store.outstanding(f.plan.questions)).toHaveLength(1);
+		await fillTo(f, max - asked - expiry - 100);
+		responses.push(
+			f.input.questionnaire(single("Third"), { ...f.options, requestId: "third-again" }),
+		);
+		await f.cards(2);
+
+		// A person's text edit: growth into the reserve is refused, shrinking or fitting is not.
+		await fillTo(f, max - 2 * expiry);
+		let sent: any[] = [];
+		let ben = {
+			data: { handle: "ben", client: "client-ben", room: f.room.id },
+			send: (raw: string) => sent.push(JSON.parse(raw)),
+			close() {},
+			publish() {},
+		} as unknown as Parameters<typeof Plan.submit>[1];
+		let type = async (client: ReturnType<typeof peer>, change: () => void) => {
+			let before = Y.encodeStateVector(client.doc);
+			client.editor.update(change, { discrete: true });
+			let rid = `ben-${sent.length}`;
+			Plan.submit(
+				f.plan,
+				ben,
+				{
+					kind: "plan:update",
+					rid,
+					ts: 0,
+					epoch: f.plan.document.epoch,
+					id: rid,
+					update: Buffer.from(Y.encodeStateAsUpdate(client.doc, before)).toString("base64"),
+				} as Parameters<typeof Plan.submit>[2],
+			);
+			await Bun.sleep(30);
+			await Plan.drain(f.plan);
+			return sent.findLast(frame => frame.kind === "plan:ack" && frame.id === rid);
+		};
+		let grow = () => {
+			let paragraph = $createParagraphNode();
+			paragraph.append($createTextNode("More text."));
+			$getRoot().append(paragraph);
+		};
+		let epoch = f.plan.document.epoch;
+		let before = Plan.source(f.plan);
+		let ben1 = peer();
+		Y.applyUpdate(ben1.doc, Room.sync(f.plan.document), "remote");
+		await Room.settle();
+		expect(await type(ben1, grow)).toBeUndefined();
+		expect(Plan.source(f.plan)).toBe(before);
+		expect(f.plan.document.epoch).not.toBe(epoch);
+
+		let ben2 = peer();
+		Y.applyUpdate(ben2.doc, Room.sync(f.plan.document), "remote");
+		await Room.settle();
+		let shrunk = await type(ben2, () => {
+			$getRoot().getChildren().find(node => node.getTextContent().startsWith("qq"))?.remove();
+		});
+		expect(shrunk).toBeDefined();
+		expect(bytes(Plan.source(f.plan))).toBeLessThan(bytes(before));
+		let fitted = await type(ben2, grow);
+		expect(fitted).toBeDefined();
+		expect(Plan.source(f.plan)).toContain("More text.");
+
+		// Both questions expire from a document with exactly their reserve left.
+		await fillTo(f, max - 2 * expiry);
+		for (let { id } of Store.outstanding(f.plan.questions)) {
+			await Questions.expire(f.plan, f.server, f.room.id, id);
+		}
+		await Promise.allSettled(responses);
+
+		expect(Store.outstanding(f.plan.questions)).toHaveLength(0);
+		expect(bytes(Plan.source(f.plan))).toBeLessThanOrEqual(max);
+		let retitled = Edit.replace(
+			f.plan,
+			f.plan.revision,
+			Plan.source(f.plan).replace("# Plan", "# Pla2"),
+		);
+		expect(retitled.ok).toBe(true);
+	},
+	30_000,
+);
+
+test(
+	"a new question is refused when the questions already open would no longer have room to expire",
+	async () => {
+		let f = await fixture();
+		await seedDocument(f);
+		let first = f.input.questionnaire(single("First"), f.options);
+		await f.cards(1);
+		let probe = {
+			id: ulid(),
+			questions: [{
+				id: ulid(),
+				header: "Second",
+				prompt: "Which?",
+				multiple: false,
+				options: [{ id: ulid(), label: "A" }, { id: ulid(), label: "B" }],
+			}],
+		};
+		await crowd(f, scratch => Room.fitsQuestionnaires(scratch, [probe], 0));
+
+		let second = f.input.questionnaire(single("Second"), { ...f.options, requestId: "second" });
+		let outcome = await Promise.race([
+			second.then(() => "asked", (err: Error) => err.message),
+			Bun.sleep(500).then(() => "asked"),
+		]);
+		expect(outcome).toContain("KiB limit");
+		expect(Store.outstanding(f.plan.questions)).toHaveLength(1);
+		f.controller.abort();
+		await first;
+	},
+	30_000,
+);
+
+test(
+	"an option is refused when the questions open would no longer have room to expire",
+	async () => {
+		let f = await fixture();
+		await seedDocument(f);
+		let response = f.input.questionnaire({
+			questions: [{
+				header: "Choice",
+				question: "Which?",
+				options: [{ label: "A", description: "" }, { label: "B", description: "" }],
+			}],
+		}, f.options);
+		let [card] = await f.cards(1);
+		let question = card!.definition.questions[0]!;
+		await crowd(f, scratch => {
+			Room.appendQuestionOption(scratch, card!.id, question.id, {
+				id: ulid(),
+				label: "Another",
+				description: "",
+			});
+			return Room.fitsExpiry(Room.project(scratch), 0);
+		});
+
+		await expect(f.addOption(card!.id, "Another")).rejects.toThrow("no room");
+		expect(Store.get(f.plan.questions, card!.id)!.definition.questions[0]!.options).toHaveLength(2);
+		f.controller.abort();
+		await response;
+	},
+	30_000,
+);
+
+test(
+	"an answer is refused when the questions still open would no longer have room to expire",
+	async () => {
+		let f = await fixture();
+		await seedDocument(f);
+		let first = f.input.questionnaire(single("First"), f.options);
+		let second = f.input.questionnaire(single("Second"), { ...f.options, requestId: "second" });
+		let [card] = await f.cards(2);
+		let answer = "x".repeat(300);
+		let question = card!.definition.questions[0]!;
+		await crowd(f, scratch => {
+			Room.projectAnswer(scratch, card!.id, { [question.id]: answer }, {
+				by: "reader",
+				at: new Date().toISOString(),
+			});
+			return Room.fitsExpiry(Room.project(scratch), 0);
+		});
+
+		let before = Plan.source(f.plan);
+		await expect(f.answer(card!.id, answer)).rejects.toThrow("no room");
+		expect(Plan.source(f.plan)).toBe(before);
+		expect(Store.outstanding(f.plan.questions)).toHaveLength(2);
+		f.controller.abort();
+		await Promise.allSettled([first, second]);
+	},
+	30_000,
+);
+
+test(
+	"a Planner edit is refused when the open question would no longer have room to expire",
+	async () => {
+		let f = await fixture();
+		await seedDocument(f);
+		let response = f.input.questionnaire(single("First"), f.options);
+		await f.cards(1);
+		await crowd(f, scratch => Room.fitsExpiry(Room.project(scratch), 1));
+
+		let before = Plan.source(f.plan);
+		let grown = Edit.apply(f.plan, f.plan.revision, [{
+			op: "insert",
+			index: 0,
+			source: "y".repeat(30),
+		}]);
+		expect(grown).toMatchObject({
+			ok: false,
+			reason: "invalid",
+			message: expect.stringContaining("expire"),
+		});
+		expect(Plan.source(f.plan)).toBe(before);
+
+		let retitled = Edit.apply(f.plan, f.plan.revision, [{
+			op: "replace",
+			index: 0,
+			source: "# Pla2",
+		}]);
+		expect(retitled.ok).toBe(true);
+		f.controller.abort();
+		await response;
+	},
+	30_000,
+);
+
+test(
+	"a replaced plan is refused when the open question would no longer have room to expire",
+	async () => {
+		let f = await fixture();
+		await seedDocument(f);
+		let response = f.input.questionnaire(single("First"), f.options);
+		await f.cards(1);
+		await crowd(f, scratch => Room.fitsExpiry(Room.project(scratch), 1));
+
+		let before = Plan.source(f.plan);
+		let grown = Edit.replace(f.plan, f.plan.revision, `${before}\n${"y".repeat(30)}\n`);
+		expect(grown).toMatchObject({
+			ok: false,
+			reason: "invalid",
+			message: expect.stringContaining("expire"),
+		});
+		expect(Plan.source(f.plan)).toBe(before);
+
+		let retitled = Edit.replace(f.plan, f.plan.revision, before.replace("# Plan", "# Pla2"));
+		expect(retitled.ok).toBe(true);
+		f.controller.abort();
+		await response;
+	},
+	30_000,
+);
+
+/** A document already inside the reserve of its open questions, as one that has two open but room for one. */
+async function overcommitted(f: Fixture) {
+	await seedDocument(f);
+	let response = f.input.questionnaire(single("First"), f.options);
+	let [card] = await f.cards(1);
+	await crowd(f, scratch => Room.fitsExpiry(Room.project(scratch), 1));
+	void Store.ask(f.plan.questions, ulid(), Store.get(f.plan.questions, card!.id)!.definition);
+	expect(Room.fitsExpiry(Plan.source(f.plan), f.plan.questions.open.size)).toBe(false);
+	return { response };
+}
+
+test(
+	"a Planner block edit that shrinks the document is accepted even inside the expiry reserve",
+	async () => {
+		let f = await fixture();
+		let { response } = await overcommitted(f);
+		let before = new TextEncoder().encode(Plan.source(f.plan)).length;
+
+		let grown = Edit.apply(f.plan, f.plan.revision, [{
+			op: "insert",
+			index: 0,
+			source: "y".repeat(30),
+		}]);
+		expect(grown).toMatchObject({
+			ok: false,
+			reason: "invalid",
+			message: expect.stringContaining("expire"),
+		});
+
+		let shrunk = Edit.apply(f.plan, f.plan.revision, [{ op: "delete", index: 1 }]);
+		expect(shrunk.ok).toBe(true);
+		let trimmed = Edit.apply(f.plan, f.plan.revision, [{
+			op: "replace",
+			index: 0,
+			source: "# P",
+		}]);
+		expect(trimmed.ok).toBe(true);
+		if (trimmed.ok && trimmed.mutation) {
+			await Plan.publish(f.plan, f.server, f.room.id, trimmed.mutation);
+		}
+		expect(new TextEncoder().encode(Plan.source(f.plan)).length).toBeLessThan(before);
+		f.controller.abort();
+		await response;
+	},
+	30_000,
+);
+
+test(
+	"a replaced plan that shrinks the document is accepted even inside the expiry reserve",
+	async () => {
+		let f = await fixture();
+		let { response } = await overcommitted(f);
+		let before = Plan.source(f.plan);
+
+		let grown = Edit.replace(f.plan, f.plan.revision, `${before}\n${"y".repeat(30)}\n`);
+		expect(grown).toMatchObject({
+			ok: false,
+			reason: "invalid",
+			message: expect.stringContaining("expire"),
+		});
+
+		let shrunk = Edit.replace(f.plan, f.plan.revision, before.replace("Start.", "S"));
+		expect(shrunk.ok).toBe(true);
+		f.controller.abort();
+		await response;
+	},
+	30_000,
+);

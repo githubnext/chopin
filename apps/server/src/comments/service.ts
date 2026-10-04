@@ -396,13 +396,29 @@ async function settle(
 		let mutation: { update: Uint8Array; source: string } | undefined;
 		if (kind === "accept") {
 			try {
-				mutation = room.insertDecision(plan.document, {
+				let decision = {
 					id: msg.id,
 					quote: quote.slice(0, limits.MAX_QUOTE),
 					by: ws.data.handle,
 					at: new Date(claimed.claim.result.at * 1_000).toISOString(),
 					notes: claimed.thread.notes.map(note => ({ by: note.handle, text: note.text })),
-				});
+				};
+				let preview = await room.create(room.project(plan.document));
+				try {
+					room.insertDecision(preview, decision);
+					if (
+						!room.fitsOrShrinks(
+							room.project(plan.document),
+							room.project(preview),
+							plan.questions.open.size,
+						)
+					) {
+						throw new Error("The decision would leave no room for the open questions to expire");
+					}
+				} finally {
+					preview.doc.destroy();
+				}
+				mutation = room.insertDecision(plan.document, decision);
 			} catch (err) {
 				mutationError = err;
 				return;

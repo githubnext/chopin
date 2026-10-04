@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import * as edit from "./edit";
 import * as room from "./room";
 
+import * as Questions from "../questions/store";
 import type { Plan } from "./service";
 
 const SOURCE = `# Title
@@ -21,12 +22,13 @@ First paragraph.
 Second paragraph.
 `;
 
-/** Enough of a plan for the edit engine, which only needs these three fields. */
+/** Enough of a plan for the edit engine, which only needs these fields. */
 async function plan(source = SOURCE): Promise<Plan> {
 	return {
 		document: await room.create(source),
 		revision: 1,
 		outlines: new Map(),
+		questions: Questions.create(),
 	} as Plan;
 }
 

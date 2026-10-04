@@ -148,11 +148,14 @@ export async function ask(
 			records.set(id, record);
 			return { id, single, value, waiting, at: placement?.blocks[index]?.[0] };
 		});
-		// Verbatim host input has no per-field limits, so the document bounds it. Refuse before
+		// Verbatim host input has no per-field limits, and every card needs room to expire. Refuse before
 		// anything is registered or published.
 		if (
-			definition.questions.some(question => question.verbatim)
-			&& !room.fitsQuestionnaires(plan.document, asked.map(item => item.value))
+			!room.fitsQuestionnaires(
+				plan.document,
+				asked.map(item => item.value),
+				plan.questions.open.size,
+			)
 		) {
 			Question.reject(
 				`This input would take the document past its ${limits.MAX_SOURCE_BYTES / 1024} KiB limit`,

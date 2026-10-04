@@ -5,6 +5,7 @@ import * as edit from "../plan/edit";
 import * as room from "../plan/room";
 
 import * as Prose from "./prose";
+import * as Store from "./store";
 
 import type { Plan as RoomPlan } from "../plan/service";
 
@@ -37,7 +38,12 @@ it("keeps the original Yjs block when a person edits it, even beside identical p
 it("follows a moved paragraph when its old Yjs position is gone", async () => {
 	let { document, anchor } = await subject();
 	try {
-		let plan = { document, revision: 1, outlines: new Map() } as RoomPlan;
+		let plan = {
+			document,
+			revision: 1,
+			outlines: new Map(),
+			questions: Store.create(),
+		} as RoomPlan;
 		edit.apply(plan, 1, [{ op: "move", index: 2, to: 1 }]);
 		expect(room.resolveAnchor(document, anchor)).toBeUndefined();
 
