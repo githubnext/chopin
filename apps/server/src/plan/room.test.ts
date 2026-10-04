@@ -7,68 +7,19 @@
  */
 
 import { describe, expect, it, spyOn } from "bun:test";
-import { createHeadlessEditor } from "@lexical/headless";
-import { createYjsBinding, syncLexicalUpdateToYjs, syncYjsChangesToLexical } from "@lexical/yjs";
-import { $createParagraphNode, $getRoot, $isElementNode, $isParagraphNode } from "lexical";
+import {
+	$createParagraphNode,
+	$createTextNode,
+	$getRoot,
+	$isElementNode,
+	$isParagraphNode,
+} from "lexical";
 import * as Y from "yjs";
 
-import { $importPlan, registry } from "@chopin/dialect";
+import { $importPlan, limits } from "@chopin/dialect";
 
+import { peer, REGISTRY } from "../testing/peer";
 import * as room from "./room";
-
-import type { Binding, Provider } from "@lexical/yjs";
-import type { LexicalEditor } from "lexical";
-
-const REGISTRY = registry();
-
-const PROVIDER = {
-	awareness: {
-		getLocalState: () => null,
-		getStates: () => new Map(),
-		off() {},
-		on() {},
-		setLocalState() {},
-		setLocalStateField() {},
-	},
-	connect() {},
-	disconnect() {},
-	off() {},
-	on() {},
-} as unknown as Provider;
-
-/** A client: its own editor and Y.Doc, exactly as a browser would have. */
-function peer(): { editor: LexicalEditor; doc: Y.Doc; binding: Binding } {
-	let editor = createHeadlessEditor({
-		nodes: REGISTRY.nodes,
-		onError(err) {
-			throw err;
-		},
-	});
-	let doc = new Y.Doc();
-	let binding = createYjsBinding({ editor, id: "plan", doc, docMap: new Map([["plan", doc]]) });
-
-	editor.registerUpdateListener(
-		({ dirtyElements, dirtyLeaves, editorState, normalizedNodes, prevEditorState, tags }) => {
-			if (tags.has("skip-collab")) return;
-			syncLexicalUpdateToYjs(
-				binding,
-				PROVIDER,
-				prevEditorState,
-				editorState,
-				dirtyElements,
-				dirtyLeaves,
-				normalizedNodes,
-				tags,
-			);
-		},
-	);
-
-	binding.root.getSharedType().observeDeep((events, transaction) => {
-		if (transaction.origin !== binding) syncYjsChangesToLexical(binding, PROVIDER, events, false);
-	});
-
-	return { editor, doc, binding };
-}
 
 function questionnaire(id: string, question: string, option: string, header: string) {
 	return {
@@ -313,6 +264,48 @@ describe("recovery", () => {
 		expect(outcome.ok).toBe(false);
 		if (outcome.ok) return;
 		expect(outcome.issues.length).toBeGreaterThan(0);
+	});
+
+	it("with questions open, refuses a human edit that grows into the expiry reserve but allows one that shrinks", async () => {
+		let filler = "x".repeat(limits.MAX_SOURCE_BYTES - 40);
+		let document = await room.create(`# T\n\n${filler}\n\nTail.\n`);
+		room.mark(document);
+		expect(room.fitsExpiry(room.project(document), 1)).toBe(false);
+
+		let client = peer();
+		Y.applyUpdate(client.doc, room.sync(document), "remote");
+		await room.settle();
+
+		let before = Y.encodeStateVector(client.doc);
+		client.editor.update(() => {
+			let paragraph = $createParagraphNode();
+			paragraph.append($createTextNode("More."));
+			$getRoot().append(paragraph);
+		}, { discrete: true });
+		let grown = await room.apply(
+			document,
+			[Y.encodeStateAsUpdate(client.doc, before)],
+			undefined,
+			1,
+		);
+		expect(grown.ok).toBe(false);
+
+		let fresh = await room.rebuild(document);
+		let shrinker = peer();
+		Y.applyUpdate(shrinker.doc, room.sync(fresh), "remote");
+		await room.settle();
+		let start = Y.encodeStateVector(shrinker.doc);
+		shrinker.editor.update(() => {
+			$getRoot().getLastChild()?.remove();
+		}, { discrete: true });
+		let shrunk = await room.apply(
+			fresh,
+			[Y.encodeStateAsUpdate(shrinker.doc, start)],
+			undefined,
+			1,
+		);
+		expect(shrunk.ok).toBe(true);
+		expect(room.project(fresh)).not.toContain("Tail.");
 	});
 
 	it("rebuilds to the last known-good state under a fresh epoch", async () => {

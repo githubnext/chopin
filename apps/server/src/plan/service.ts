@@ -1351,6 +1351,7 @@ async function commit(plan: Plan): Promise<void> {
 				job?.job,
 			);
 		},
+		plan.questions.open.size,
 	);
 
 	if (!outcome.ok) {

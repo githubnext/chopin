@@ -101,7 +101,13 @@ export async function submit(
 				// A long answer can push the document past its size limit, after which the
 				// Planner can no longer edit it; check the staged copy so a refusal changes nothing.
 				try {
-					room.validate(room.project(stagedDocument));
+					let source = room.project(stagedDocument);
+					room.validate(source);
+					if (
+						!room.fitsOrShrinks(room.project(plan.document), source, plan.questions.open.size - 1)
+					) {
+						throw new Error("The answer would leave no room for the open questions to expire");
+					}
 				} catch (err) {
 					invalid = err instanceof Error ? err.message : "could not record the answer";
 					return;

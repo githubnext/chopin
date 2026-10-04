@@ -13,6 +13,7 @@
  * these fail rather than the highlight quietly landing a word to the left.
  */
 
+import * as Questions from "../questions/store";
 import { describe, expect, it } from "bun:test";
 import { $getNodeByKey, $getRoot, $isElementNode, $isParagraphNode } from "lexical";
 
@@ -32,7 +33,12 @@ The third paragraph.
 `;
 
 async function plan(source = SOURCE): Promise<Room> {
-	return { document: await room.create(source), revision: 1, outlines: new Map() } as Room;
+	return {
+		document: await room.create(source),
+		revision: 1,
+		outlines: new Map(),
+		questions: Questions.create(),
+	} as Room;
 }
 
 /**

@@ -8,6 +8,7 @@
  * block edited, the block deleted, and two blocks that look identical.
  */
 
+import * as Questions from "../questions/store";
 import { describe, expect, it } from "bun:test";
 import { $getAnchorAndFocusForUserState } from "@lexical/yjs";
 import { $getNodeByKey } from "lexical";
@@ -30,7 +31,12 @@ The third paragraph.
 `;
 
 async function plan(source = SOURCE): Promise<Room> {
-	return { document: await room.create(source), revision: 1, outlines: new Map() } as Room;
+	return {
+		document: await room.create(source),
+		revision: 1,
+		outlines: new Map(),
+		questions: Questions.create(),
+	} as Room;
 }
 
 /** Anchor the block at `index`, the way the agent's tool does. */
