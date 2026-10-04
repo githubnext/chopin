@@ -265,7 +265,7 @@ function conversation(
 		auth: hostedAuth,
 		claimantSessionId,
 		repository,
-		persist: () => Service.persist(opened),
+		persist: chat => Service.persist(opened, chat),
 		activeOwner: () => ownerBindings!.resolve(room.id),
 		ownerAvailable: () => jobRunner?.ownerAvailable(room.id) ?? Promise.resolve(),
 		jobs: config.backgroundJobs ? jobService : undefined,

@@ -422,6 +422,8 @@ test("HARNESS=atomic runs every Planner session full in hosted and local configu
 
 type Runs = { active: string[]; paused: string[]; cards: Wire.Run[] };
 
+const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+
 function card(status: Wire.Run["status"]): Wire.Run {
 	let ended = status === "finished" || status === "failed" || status === "stopped";
 	return {
@@ -442,8 +444,8 @@ function card(status: Wire.Run["status"]): Wire.Run {
 }
 
 /** A Planner session that owns workflow runs, driven by the test. */
-function runningSession() {
-	let runs: Runs = { active: ["run-1"], paused: [], cards: [card("running")] };
+function runningSession(initial?: Runs) {
+	let runs: Runs = initial ?? { active: ["run-1"], paused: [], cards: [card("running")] };
 	let listeners = new Set<(runs: Runs) => void>();
 	let calls: string[] = [];
 	let session = {
@@ -501,12 +503,13 @@ test("a Planner that still owns workflow runs outlives its turn, pauses, resumes
 	};
 	let ws = { data: { handle: "ana" } } as unknown as Socket;
 	let said = () => context.chat.entries.at(-1)?.text;
-	let runs = () => (events.filter(event => event.kind === "chat:state").at(-1)?.runs as
+	let runs = () => (events.findLast(event => event.kind === "chat:state")?.runs as
 		| Wire.Run[]
 		| undefined);
 
 	expect(await Chat.invoke(context, user, "Run the workflow")).toBeUndefined();
 	await context.chat.running;
+	await tick();
 	expect(planner.calls).toEqual(["stream @ana: Run the workflow"]);
 	expect(context.chat.busy).toBe(false);
 	expect(context.chat.runs).toEqual([card("running")]);
@@ -517,6 +520,7 @@ test("a Planner that still owns workflow runs outlives its turn, pauses, resumes
 	expect(planner.calls.at(-1)).toBe("pause");
 	expect(said()).toBe("@ana stopped the Planner and paused its workflows.");
 	planner.set({ active: [], paused: ["run-1"], cards: [card("paused")] });
+	await tick();
 	expect(runs()?.map(run => run.status)).toEqual(["paused"]);
 	expect(planner.calls).not.toContain("destroy");
 
@@ -524,6 +528,7 @@ test("a Planner that still owns workflow runs outlives its turn, pauses, resumes
 	expect(planner.calls.at(-1)).toBe("resume");
 	expect(said()).toBe("@ana resumed the Planner's workflows.");
 	planner.set({ active: ["run-1"], paused: [], cards: [card("waiting")] });
+	await tick();
 	expect(runs()?.[0]).toMatchObject({
 		status: "waiting",
 		waiting: 1,
@@ -537,9 +542,9 @@ test("a Planner that still owns workflow runs outlives its turn, pauses, resumes
 	expect(planner.calls).not.toContain("destroy");
 
 	planner.set({ active: [], paused: [], cards: [card("finished")] });
+	await tick();
 	expect(context.chat.entries.some(entry => entry.text === "plan-review finished after 10 min."))
 		.toBe(true);
-	await new Promise(resolve => setTimeout(resolve, 0));
 	expect(planner.calls.at(-1)).toBe("destroy");
 	expect(context.chat.retained).toBeUndefined();
 	expect(context.chat.runs).toEqual([card("finished")]);
@@ -664,4 +669,459 @@ test("one run can be paused and resumed by name while others keep going", async 
 	await Chat.controlRun(context, ws, { kind: "chat:resume-run", runId: "run-1" });
 	expect(planner.calls.at(-1)).toBe("resume run-1");
 	expect(context.chat.entries.at(-1)?.text).toBe("@ana resumed plan-review.");
+});
+
+const finishLine = (name = "plan-review") => `${name} finished after 10 min.`;
+const spoken = (context: Chat.Room, text: string) =>
+	context.chat.entries.filter(entry => entry.text === text).length;
+
+test("a workflow update that cannot be saved announces neither its card nor its finish message", async () => {
+	let { context, events, user } = await setup(configured(ATOMIC));
+	let planner = runningSession();
+	context.openPlannerSession = async () => ({ ok: true, value: planner.session });
+	let failing = false;
+	let persist = context.persist;
+	context.persist = async () => {
+		if (failing) throw new Error("storage failed");
+		await persist();
+	};
+	await Chat.invoke(context, user, "Run the workflow");
+	await context.chat.running;
+	await tick();
+	let announced = events.length;
+	failing = true;
+	planner.set({ active: [], paused: [], cards: [card("finished")] });
+	await tick();
+	expect(events.length).toBe(announced);
+	expect(spoken(context, finishLine())).toBe(0);
+	expect(context.chat.runs).toEqual([card("running")]);
+});
+
+test("overlapping workflow reports whose first save fails still save and announce the finish message with its card", async () => {
+	let { context, events, user } = await setup(configured(ATOMIC));
+	let planner = runningSession();
+	context.openPlannerSession = async () => ({ ok: true, value: planner.session });
+	let gate: PromiseWithResolvers<void> | undefined;
+	let failing = false;
+	let saved: Array<{ runs: string[]; finish: number }> = [];
+	let persist = context.persist;
+	context.persist = async () => {
+		if (gate) {
+			let held = gate;
+			gate = undefined;
+			await held.promise;
+			if (failing) throw new Error("storage failed");
+		}
+		await persist();
+		saved.push({
+			runs: (context.chat.runs ?? []).map(run => `${run.id}:${run.status}`),
+			finish: spoken(context, finishLine()),
+		});
+	};
+	await Chat.invoke(context, user, "Run the workflow");
+	await context.chat.running;
+	saved = [];
+	let announced = events.length;
+	let second = { ...card("running"), id: "run-2", name: "lint" };
+	gate = Promise.withResolvers<void>();
+	failing = true;
+	let first = gate;
+	planner.set({ active: ["run-1"], paused: [], cards: [card("finished")] });
+	await tick();
+	planner.set({ active: ["run-2"], paused: [], cards: [card("finished"), second] });
+	await tick();
+	first.resolve();
+	await tick();
+	await tick();
+	for (let entry of saved) {
+		if (entry.runs.includes("run-1:finished")) expect(entry.finish).toBe(1);
+	}
+	expect(spoken(context, finishLine())).toBe(1);
+	expect(context.chat.runs?.map(run => `${run.id}:${run.status}`)).toEqual([
+		"run-1:finished",
+		"run-2:running",
+	]);
+	let said = events.slice(announced).filter(event =>
+		event.kind === "chat:message" && (event.entry as Wire.Entry).text === finishLine()
+	);
+	expect(said).toHaveLength(1);
+});
+
+test("a quick job that ended before the reply finished keeps its card and one finish message", async () => {
+	let { context, events, user } = await setup(configured(ATOMIC));
+	let planner = runningSession();
+	let quick: Runs = { active: [], paused: [], cards: [card("finished")] };
+	planner.session.runs = () => quick;
+	context.openPlannerSession = async () => ({ ok: true, value: planner.session });
+	await Chat.invoke(context, user, "Run the workflow");
+	await context.chat.running;
+	expect(context.chat.runs).toEqual([card("finished")]);
+	expect(spoken(context, finishLine())).toBe(1);
+	expect(events.findLast(event => event.kind === "chat:state")?.runs).toEqual([
+		card("finished"),
+	]);
+	expect(context.chat.retained).toBeUndefined();
+	expect(planner.calls.at(-1)).toBe("destroy");
+});
+
+test("a run first reported as ended gets one finish message and never a repeat", async () => {
+	let { context, user } = await setup(configured(ATOMIC));
+	let planner = runningSession();
+	context.openPlannerSession = async () => ({ ok: true, value: planner.session });
+	await Chat.invoke(context, user, "Run the workflow");
+	await context.chat.running;
+	let other = { ...card("failed"), id: "run-2", name: "lint" };
+	planner.set({ active: ["run-1"], paused: [], cards: [other] });
+	await tick();
+	expect(spoken(context, "lint failed after 10 min.")).toBe(1);
+	planner.set({ active: ["run-1"], paused: [], cards: [other, card("running")] });
+	planner.set({ active: ["run-1"], paused: [], cards: [other, card("running")] });
+	await tick();
+	expect(spoken(context, "lint failed after 10 min.")).toBe(1);
+});
+
+test("the last job finishing while a reply is still being saved still lets the Planner go afterwards", async () => {
+	let { context, user } = await setup(configured(ATOMIC));
+	let planner = runningSession();
+	context.openPlannerSession = async () => ({ ok: true, value: planner.session });
+	let gate: PromiseWithResolvers<void> | undefined;
+	let persist = context.persist;
+	context.persist = async () => {
+		await gate?.promise;
+		await persist();
+	};
+	await Chat.invoke(context, user, "Run the workflow");
+	gate = Promise.withResolvers<void>();
+	while (!context.chat.retained) await tick();
+	expect(context.chat.busy).toBe(true);
+	planner.set({ active: [], paused: [], cards: [card("finished")] });
+	gate.resolve();
+	await context.chat.running;
+	await tick();
+	expect(planner.calls).toContain("destroy");
+	expect(context.chat.retained).toBeUndefined();
+	expect(context.chat.agent).toBeUndefined();
+	expect(context.chat.owner).toBeUndefined();
+});
+
+const shown = (frames: Array<{ [key: string]: unknown }>) =>
+	JSON.stringify(frames).includes("finished");
+
+test("a finished card and its message are not shown to anyone while their save is pending, and never if it fails", async () => {
+	let { context, events, user } = await setup(configured(ATOMIC));
+	let planner = runningSession();
+	context.openPlannerSession = async () => ({ ok: true, value: planner.session });
+	let gate: PromiseWithResolvers<void> | undefined;
+	let persist = context.persist;
+	let broken = false;
+	context.persist = async (...args: Parameters<typeof persist>) => {
+		if (gate) {
+			let held = gate;
+			gate = undefined;
+			await held.promise;
+		}
+		if (broken && args.length) throw new Error("storage failed");
+		await persist(...args);
+	};
+	await Chat.invoke(context, user, "Run the workflow");
+	await context.chat.running;
+	await tick();
+	let held = Promise.withResolvers<void>();
+	gate = held;
+	broken = true;
+	let announced = events.length;
+	planner.set({ active: [], paused: [], cards: [card("finished")] });
+	await tick();
+	let joined: Array<{ kind: string; [key: string]: unknown }> = [];
+	let ws = {
+		data: { handle: "ana" },
+		send: (message: string) => joined.push(JSON.parse(message)),
+	} as unknown as Socket;
+	Chat.greet(context.chat, ws);
+	await Chat.invoke(context, user, "Any news?");
+	expect(shown(joined)).toBe(false);
+	expect(shown(events.slice(announced))).toBe(false);
+	held.resolve();
+	for (let attempt = 0; attempt < 10; attempt++) await tick();
+	broken = false;
+	expect(shown(events.slice(announced))).toBe(false);
+	expect(spoken(context, finishLine())).toBe(0);
+	expect(context.chat.runs).toEqual([card("running")]);
+});
+
+test("a transient failure saving the last run's finish report still ends with the finished card and one finish message", async () => {
+	let { context, events, user } = await setup(configured(ATOMIC));
+	let planner = runningSession();
+	context.openPlannerSession = async () => ({ ok: true, value: planner.session });
+	let failing = false;
+	let persist = context.persist;
+	context.persist = async (...args: Parameters<typeof persist>) => {
+		if (failing) {
+			failing = false;
+			throw new Error("storage failed");
+		}
+		await persist(...args);
+	};
+	await Chat.invoke(context, user, "Run the workflow");
+	await context.chat.running;
+	await tick();
+	failing = true;
+	planner.set({ active: [], paused: [], cards: [card("finished")] });
+	for (let attempt = 0; attempt < 10; attempt++) await tick();
+	expect(context.chat.runs).toEqual([card("finished")]);
+	expect(spoken(context, finishLine())).toBe(1);
+	expect(spoken(context, "plan-review was stopped after 10 min.")).toBe(0);
+	expect(context.chat.entries.some(entry => entry.text.includes("was stopped"))).toBe(false);
+	expect(events.findLast(event => event.kind === "chat:state")?.runs).toEqual([
+		card("finished"),
+	]);
+	expect(planner.calls).toContain("destroy");
+	expect(context.chat.retained).toBeUndefined();
+});
+
+const stoppedLines = (context: Chat.Room) =>
+	context.chat.entries.filter(entry =>
+		/^plan-review was stopped after \d+ min\.$/.test(entry.text)
+	);
+
+test("releasing the helper after a failed save of a still-active report stops its card with one message", async () => {
+	let { context, events, user } = await setup(configured(ATOMIC));
+	let planner = runningSession();
+	context.openPlannerSession = async () => ({ ok: true, value: planner.session });
+	let failing = false;
+	let persist = context.persist;
+	context.persist = async (...args: Parameters<typeof persist>) => {
+		if (failing) {
+			failing = false;
+			throw new Error("storage failed");
+		}
+		await persist(...args);
+	};
+	await Chat.invoke(context, user, "Run the workflow");
+	await context.chat.running;
+	await tick();
+	failing = true;
+	planner.set({ active: ["run-1"], paused: [], cards: [card("waiting")] });
+	await tick();
+	await tick();
+	expect(context.chat.runs?.map(run => run.status)).toEqual(["running"]);
+	await context.chat.retained?.release();
+	expect(context.chat.runs?.map(run => run.status)).toEqual(["stopped"]);
+	expect(stoppedLines(context)).toHaveLength(1);
+	expect(context.chat.entries.filter(entry => entry.text.includes("was stopped"))).toHaveLength(1);
+	expect(events.findLast(event => event.kind === "chat:state")?.runs).toEqual(context.chat.runs);
+	expect(planner.calls).toContain("destroy");
+	expect(context.chat.retained).toBeUndefined();
+});
+
+test("a finish report whose save and release retry both fail announces nothing, and the next report stops the orphaned card", async () => {
+	let { context, events, user } = await setup(configured(ATOMIC));
+	let planner = runningSession();
+	context.openPlannerSession = async () => ({ ok: true, value: planner.session });
+	let failures = 0;
+	let persist = context.persist;
+	context.persist = async (...args: Parameters<typeof persist>) => {
+		if (failures > 0) {
+			failures--;
+			throw new Error("storage failed");
+		}
+		await persist(...args);
+	};
+	await Chat.invoke(context, user, "Run the workflow");
+	await context.chat.running;
+	await tick();
+	let announced = events.length;
+	failures = 2;
+	planner.set({ active: [], paused: [], cards: [card("finished")] });
+	for (let attempt = 0; attempt < 10; attempt++) await tick();
+	expect(planner.calls).toContain("destroy");
+	expect(context.chat.retained).toBeUndefined();
+	expect(events.length).toBe(announced);
+	expect(context.chat.entries.some(entry => entry.text.includes("after 10 min."))).toBe(false);
+	expect(context.chat.runs).toEqual([card("running")]);
+	let idle = {
+		async stream() {
+			return {
+				fullStream: (async function*() {
+					yield { type: "finish" };
+				})(),
+			} as never;
+		},
+		async destroy() {},
+		runs: () => ({ active: [], paused: [] }),
+	};
+	context.openPlannerSession = async () => ({ ok: true, value: idle as never });
+	await Chat.invoke(context, user, "Anything new?");
+	await context.chat.running;
+	for (let attempt = 0; attempt < 10; attempt++) await tick();
+	expect(context.chat.runs?.map(run => run.status)).toEqual(["stopped"]);
+	expect(stoppedLines(context)).toHaveLength(1);
+});
+
+test("an old helper whose slow release outlasts a newer helper's whole turn still stops its own running card once", async () => {
+	let { context, events, user } = await setup(configured(ATOMIC));
+	let old = runningSession();
+	let slow = Promise.withResolvers<void>();
+	let destroy = old.session.destroy;
+	old.session.destroy = async () => {
+		await slow.promise;
+		await destroy();
+	};
+	context.openPlannerSession = async () => ({ ok: true, value: old.session });
+	await Chat.invoke(context, user, "Run the workflow");
+	await context.chat.running;
+	await tick();
+	expect(context.chat.runs?.map(run => run.status)).toEqual(["running"]);
+	let releasing = context.chat.retained!.release();
+	expect(context.chat.retained).toBeUndefined();
+	let destroyed = 0;
+	let newer = {
+		async stream() {
+			return {
+				fullStream: (async function*() {
+					yield { type: "finish" };
+				})(),
+			} as never;
+		},
+		async destroy() {
+			destroyed++;
+		},
+	};
+	context.openPlannerSession = async () => ({ ok: true, value: newer as never });
+	await Chat.invoke(context, user, "Any news?");
+	await context.chat.running;
+	await tick();
+	expect(destroyed).toBe(1);
+	expect(context.chat.agent).toBeUndefined();
+	expect(context.chat.retained).toBeUndefined();
+	expect(context.chat.runs?.map(run => run.status)).toEqual(["running"]);
+	slow.resolve();
+	await releasing;
+	await tick();
+	expect(context.chat.runs?.map(run => run.status)).toEqual(["stopped"]);
+	expect(stoppedLines(context)).toHaveLength(1);
+	expect(context.chat.entries.filter(entry => entry.text.includes("was stopped"))).toHaveLength(1);
+	expect(context.chat.owner).toBeUndefined();
+	expect(context.chat.agent).toBeUndefined();
+	expect(events.findLast(event => event.kind === "chat:state")?.runs).toEqual(context.chat.runs);
+});
+
+const lint = { ...card("running"), id: "run-2", name: "lint" };
+type Newer = "none" | "run-less turn" | "own runs" | "run-less turn after a failed save";
+const NEWER: Newer[] = ["none", "run-less turn", "own runs", "run-less turn after a failed save"];
+
+test.each(NEWER)(
+	"releasing an old helper after %s stops exactly its own cards once",
+	async newer => {
+		let { context, events, user } = await setup(configured(ATOMIC));
+		let old = runningSession();
+		let slow = Promise.withResolvers<void>();
+		let destroy = old.session.destroy;
+		old.session.destroy = async () => {
+			await slow.promise;
+			await destroy();
+		};
+		context.openPlannerSession = async () => ({ ok: true, value: old.session });
+		let failing = false;
+		let persist = context.persist;
+		context.persist = async (...args: Parameters<typeof persist>) => {
+			if (failing) {
+				failing = false;
+				throw new Error("storage failed");
+			}
+			await persist(...args);
+		};
+		await Chat.invoke(context, user, "Run the workflow");
+		await context.chat.running;
+		await tick();
+		if (newer.includes("failed save")) {
+			failing = true;
+			old.set({ active: ["run-1"], paused: [], cards: [card("waiting")] });
+			await tick();
+			await tick();
+		}
+		let releasing = context.chat.retained!.release();
+		let successor = runningSession({ active: ["run-2"], paused: [], cards: [lint] });
+		if (newer !== "none") {
+			let helper = newer === "own runs" ? successor.session : {
+				async stream() {
+					return {
+						fullStream: (async function*() {
+							yield { type: "finish" };
+						})(),
+					} as never;
+				},
+				async destroy() {},
+			};
+			context.openPlannerSession = async () => ({ ok: true, value: helper as never });
+			await Chat.invoke(context, user, "Any news?");
+			await context.chat.running;
+			await tick();
+		}
+		let owner = newer === "none" ? undefined : context.chat.owner;
+		let agent = newer === "none" ? undefined : context.chat.agent;
+		if (newer === "own runs") {
+			expect(context.chat.runs?.map(run => `${run.id}:${run.status}`)).toEqual([
+				"run-1:running",
+				"run-2:running",
+			]);
+		}
+		slow.resolve();
+		await releasing;
+		await tick();
+		expect(context.chat.runs?.find(run => run.id === "run-1")?.status).toBe("stopped");
+		expect(stoppedLines(context)).toHaveLength(1);
+		expect(context.chat.entries.filter(entry => entry.text.includes("was stopped"))).toHaveLength(
+			1,
+		);
+		expect(context.chat.owner).toEqual(owner);
+		expect(context.chat.agent).toBe(agent);
+		if (newer === "own runs") {
+			expect(context.chat.runs?.find(run => run.id === "run-2")).toEqual(lint);
+			expect(context.chat.runs).toHaveLength(2);
+			expect(context.chat.retained?.session).toBe(successor.session as never);
+			expect(owner).toBeDefined();
+		} else {
+			expect(context.chat.runs?.map(run => run.id)).toEqual(["run-1"]);
+			expect(context.chat.owner).toBeUndefined();
+		}
+		expect(events.findLast(event => event.kind === "chat:state")?.runs).toEqual(context.chat.runs);
+	},
+);
+
+test("an old helper's card still gets its stop message when its release could not be saved and a newer helper starts a run", async () => {
+	let { context, events, user } = await setup(configured(ATOMIC));
+	let old = runningSession();
+	context.openPlannerSession = async () => ({ ok: true, value: old.session });
+	let failing = false;
+	let persist = context.persist;
+	context.persist = async (...args: Parameters<typeof persist>) => {
+		if (failing) {
+			failing = false;
+			throw new Error("storage failed");
+		}
+		await persist(...args);
+	};
+	await Chat.invoke(context, user, "Run the workflow");
+	await context.chat.running;
+	await tick();
+	expect(context.chat.runs?.map(run => `${run.id}:${run.status}`)).toEqual(["run-1:running"]);
+
+	failing = true;
+	await context.chat.retained!.release();
+	await tick();
+	expect(stoppedLines(context)).toHaveLength(0);
+
+	let successor = runningSession({ active: ["run-2"], paused: [], cards: [lint] });
+	context.openPlannerSession = async () => ({ ok: true, value: successor.session });
+	await Chat.invoke(context, user, "Run the lint workflow");
+	await context.chat.running;
+	await tick();
+
+	expect(stoppedLines(context)).toHaveLength(1);
+	expect(context.chat.runs?.find(run => run.id === "run-2")).toEqual(lint);
+	expect(context.chat.runs?.some(run => run.id === "run-1" && run.status === "running")).toBe(
+		false,
+	);
+	expect(events.findLast(event => event.kind === "chat:state")?.runs).toEqual(context.chat.runs);
 });

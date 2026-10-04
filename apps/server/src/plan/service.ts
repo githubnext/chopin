@@ -248,7 +248,9 @@ type Sidecar = {
 	workflowRuns?: NonNullable<Chat.Chat["runs"]>;
 };
 
-function state(plan: Plan): Sidecar {
+type ChatView = Pick<Chat.Chat, "entries" | "runs">;
+
+function state(plan: Plan, chat: ChatView = plan.chat): Sidecar {
 	return {
 		version: 1,
 		revision: plan.revision,
@@ -263,7 +265,7 @@ function state(plan: Plan): Sidecar {
 		questions: [...plan.records.values()],
 		openQuestions: Questions.dump(plan.questions),
 		threads: [...plan.threads.values()],
-		transcript: plan.chat.entries,
+		transcript: chat.entries,
 		conversationPlan: plan.conversationPlan,
 		...(plan.conversationPlanRetries.length
 			? { conversationPlanRetries: plan.conversationPlanRetries }
@@ -278,19 +280,19 @@ function state(plan: Plan): Sidecar {
 			? { conversationPlanPendingEffects: plan.conversationPlanPendingEffects }
 			: {}),
 		...(plan.pendingCardActions.length ? { pendingCardActions: plan.pendingCardActions } : {}),
-		...(plan.chat.runs?.length ? { workflowRuns: plan.chat.runs } : {}),
+		...(chat.runs?.length ? { workflowRuns: chat.runs } : {}),
 	};
 }
 
-function jsonState(plan: Plan): { value: JsonValue; text: string } {
-	let text = JSON.stringify(state(plan));
+function jsonState(plan: Plan, chat?: ChatView): { value: JsonValue; text: string } {
+	let text = JSON.stringify(state(plan, chat));
 	return { value: JSON.parse(text) as JsonValue, text };
 }
 
-function capture(plan: Plan): Captured {
+function capture(plan: Plan, chat?: ChatView): Captured {
 	assertEventCapacity(plan.conversationPlan, plan.pendingCardActions.length);
 	if (plan.persistence) assertOptionCapacity(plan);
-	let sidecar = jsonState(plan);
+	let sidecar = jsonState(plan, chat);
 	let source = room.project(plan.document);
 	return {
 		revision: plan.revision,
@@ -951,9 +953,14 @@ async function replaceHosted(plan: Plan, operationId: string, captured: Captured
 	}
 }
 
-/** Persist a sidecar-only state transition. */
-export function persist(plan: Plan): Promise<void> {
-	let commit = () => commitHosted(plan, undefined, `state:${crypto.randomUUID()}`, capture(plan));
+/**
+ * Persist a sidecar-only state transition. `chat` is read when the commit runs
+ * and stored in place of the live transcript and run cards, so a change can be
+ * saved before it becomes visible in shared chat state.
+ */
+export function persist(plan: Plan, chat?: () => ChatView): Promise<void> {
+	let commit = () =>
+		commitHosted(plan, undefined, `state:${crypto.randomUUID()}`, capture(plan, chat?.()));
 	let pending = plan.flushing.then(commit, commit);
 	plan.flushing = pending;
 	return pending;
