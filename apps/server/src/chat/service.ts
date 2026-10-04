@@ -440,7 +440,7 @@ export type Room = {
 	claimantSessionId: string | undefined;
 	repository: HostedRepository;
 	activeOwner?: () => Promise<ActiveOwnerBinding | undefined>;
-	persist: () => Promise<void>;
+	persist: (chat?: () => Pick<Chat, "entries" | "runs">) => Promise<void>;
 	commitRoomMessage?: (entry: Wire.Entry) => Promise<void>;
 	roomMessagePublished?: () => void;
 	openPlannerSession?: typeof import("../harness/session")["openPlannerSession"];
@@ -934,33 +934,94 @@ export function restoreRuns(runs: Wire.Run[] | undefined): Wire.Run[] | undefine
 	return runs?.length ? mergeRuns(runs, undefined, now()) : undefined;
 }
 
+const publishing = new WeakMap<Chat, Promise<void>>();
+const owners = new WeakMap<Chat, Map<string, PlannerSession>>();
+const unsaved = new WeakMap<PlannerSession, Runs>();
+const gone = new WeakSet<PlannerSession>();
+
+type Runs = { active: string[]; paused: string[]; cards?: Wire.Run[] };
+
 /**
  * Show the session's runs, keeping ended ones as summary cards until the next
  * run starts, store them with the document so a reload keeps them, and say once
- * in the transcript when one ends.
+ * in the transcript when one ends. A card belongs to the session that reported
+ * it: a report or release only changes its own session's cards.
  */
 function publishRuns(
 	context: Room,
-	runs: { active: string[]; paused: string[]; cards?: Wire.Run[] } | undefined,
-): void {
+	session: PlannerSession,
+	runs: Runs | undefined,
+	releasing = false,
+): Promise<void> {
+	let known = owners.get(context.chat) ?? new Map<string, PlannerSession>();
+	owners.set(context.chat, known);
+	for (let run of runs?.cards ?? []) known.set(run.id, session);
+	let turn = (publishing.get(context.chat) ?? Promise.resolve()).then(() =>
+		publishReport(context, session, runs, releasing)
+	);
+	publishing.set(context.chat, turn);
+	return turn;
+}
+
+async function publishReport(
+	context: Room,
+	session: PlannerSession,
+	runs: Runs | undefined,
+	releasing: boolean,
+): Promise<void> {
 	let { chat, room, server } = context;
-	let before = new Map((chat.runs ?? []).map(run => [run.id, run.status]));
-	let cards = mergeRuns(chat.runs ?? [], runs?.cards, now());
-	for (let run of cards) {
+	let at = now();
+	let known = owners.get(chat)!;
+	let prior = chat.runs ?? [];
+	let before = new Map(prior.map(run => [run.id, run.status]));
+	let theirs = (run: Wire.Run) => {
+		let holder = known.get(run.id);
+		return holder !== undefined && holder !== session && !gone.has(holder);
+	};
+	let others = prior.filter(theirs);
+	let mine = prior.filter(run => !theirs(run)).map(run =>
+		known.get(run.id) === session || ENDED_RUN[run.status] ? run : stopped(run, at)
+	);
+	let own = mergeRuns(mine, runs?.cards, at);
+	if (releasing) own = mergeRuns(own, undefined, at);
+	let fresh = (runs?.cards ?? []).some(run => !before.has(run.id));
+	let cards = [...others.filter(run => fresh ? !ENDED_RUN[run.status] : true), ...own];
+	let position = (run: Wire.Run) => {
+		let index = prior.findIndex(value => value.id === run.id);
+		return index < 0 ? prior.length : index;
+	};
+	cards.sort((a, b) => position(a) - position(b));
+	// A new run replaces ended cards, including ones this report has just stopped; those still
+	// get their one finish message.
+	let shown = new Set(cards.map(run => run.id));
+	let replaced = mine.filter(run => !shown.has(run.id));
+	let finished: Wire.Entry[] = [];
+	for (let run of [...cards, ...replaced]) {
 		let ended = ENDED_RUN[run.status];
 		let previous = before.get(run.id);
-		if (!ended || !previous || ENDED_RUN[previous]) continue;
+		if (!ended || (previous && ENDED_RUN[previous])) continue;
 		let minutes = Math.max(1, Math.round(((run.ended ?? run.updated) - run.started) / 60));
-		say(chat, server, room, {
+		finished.push({
 			id: ulid(),
 			author: { kind: "system" },
 			text: `${run.name} ${ended} after ${minutes} min.`,
 			ts: now(),
 		});
 	}
-	chat.runs = cards.length ? cards : undefined;
+	let next = cards.length ? cards : undefined;
+	try {
+		await context.persist(() => ({ entries: [...chat.entries, ...finished], runs: next }));
+	} catch (err) {
+		console.error("[chat] storing workflow runs failed:", err);
+		if (releasing) unsaved.delete(session);
+		else if (runs) unsaved.set(session, runs);
+		return;
+	}
+	unsaved.delete(session);
+	chat.entries.push(...finished);
+	chat.runs = next;
+	for (let entry of finished) announce(server, room, entry);
 	state(chat, server, room);
-	context.persist().catch(err => console.error("[chat] storing workflow runs failed:", err));
 }
 
 /**
@@ -976,14 +1037,28 @@ function retain(
 	let { chat } = context;
 	let runs = opened.session.runs?.();
 	if (chat.retained && chat.retained.session !== opened.session) return false;
-	if (!runs || !(runs.active.length || runs.paused.length) || opened.binding.signal.aborted) {
+	if (!runs || opened.binding.signal.aborted) return false;
+	if (!runs.active.length && !runs.paused.length) {
+		void publishRuns(context, opened.session, runs);
 		return false;
 	}
+	let report = (next: typeof runs) => publishRuns(context, opened.session, next);
 	if (!chat.retained) {
 		let unhold = context.hold?.();
 		let stopWatching = opened.session.watchRuns?.(next => {
-			publishRuns(context, next);
-			if (!chat.busy && !next.active.length && !next.paused.length) void chat.retained?.release();
+			if (chat.retained?.session !== opened.session) return;
+			void report(next);
+			if (next.active.length || next.paused.length) return;
+			let releaseWhenIdle = async () => {
+				if (chat.busy) await chat.running;
+				if (chat.busy || chat.retained?.session !== opened.session) return;
+				let current = opened.session.runs?.();
+				if (!current || current.active.length || current.paused.length) return;
+				await chat.retained.release();
+			};
+			void releaseWhenIdle().catch(err =>
+				console.error("[chat] releasing completed workflow session failed:", err)
+			);
 		});
 		let released: Promise<void> | undefined;
 		let retained: Retained = {
@@ -998,9 +1073,13 @@ function retain(
 					} finally {
 						opened.binding.release();
 						unhold?.();
-						if (chat.agent === opened.session) chat.agent = undefined;
-						if (!chat.busy) chat.owner = undefined;
-						publishRuns(context, undefined);
+						if (chat.agent === opened.session) {
+							chat.agent = undefined;
+							if (!chat.busy) chat.owner = undefined;
+						}
+						await publishing.get(chat);
+						await publishRuns(context, opened.session, unsaved.get(opened.session), true);
+						gone.add(opened.session);
 					}
 				})(),
 		};
@@ -1008,7 +1087,7 @@ function retain(
 		opened.binding.signal.addEventListener("abort", ended, { once: true });
 		chat.retained = retained;
 	}
-	publishRuns(context, runs);
+	void report(runs);
 	return true;
 }
 
