@@ -833,14 +833,32 @@ export function unqueue(context: Room, ws: Socket, msg: Request<Wire.Unqueue>): 
  * Stop the running turn and pause the Planner's workflow runs, so both hold
  * until someone resumes them. Anyone may, and the transcript says who did.
  */
+type RunsSnapshot = ReturnType<NonNullable<PlannerSession["runs"]>>;
 type StoppingRuns = {
 	pause: Promise<void>;
-	runs: ReturnType<NonNullable<PlannerSession["runs"]>>;
+	targets: Set<string>;
+	pausedTargets: Set<string>;
+	reset: boolean;
 	settled: boolean;
 	paused: boolean;
+	unwatch?: () => void;
 };
 
 const stoppingRuns = new WeakMap<PlannerSession, StoppingRuns>();
+
+function observeStoppingRuns(stopping: StoppingRuns, runs: RunsSnapshot): void {
+	if (!runs) return;
+	for (let id of runs.paused) if (stopping.targets.has(id)) stopping.pausedTargets.add(id);
+	stopping.reset = runs.active.some(id =>
+		!stopping.targets.has(id) || stopping.pausedTargets.has(id)
+	);
+}
+
+function clearStoppingRuns(session: PlannerSession, stopping: StoppingRuns): void {
+	if (stoppingRuns.get(session) !== stopping) return;
+	stoppingRuns.delete(session);
+	stopping.unwatch?.();
+}
 
 export async function abort(context: Room, ws: Socket): Promise<void> {
 	let { chat, room, server } = context;
@@ -860,9 +878,9 @@ export async function abort(context: Room, ws: Socket): Promise<void> {
 			ts: now(),
 		});
 	let stopping = session && stoppingRuns.get(session);
-	// Atomic replaces the run snapshot when workflow activity changes.
-	if (session && stopping?.settled && stopping.paused && stopping.runs !== runs) {
-		stoppingRuns.delete(session);
+	if (stopping) observeStoppingRuns(stopping, runs);
+	if (session && stopping?.settled && stopping.paused && stopping.reset) {
+		clearStoppingRuns(session, stopping);
 		stopping = undefined;
 	}
 	if (stopping) {
@@ -878,7 +896,9 @@ export async function abort(context: Room, ws: Socket): Promise<void> {
 		let pauseRuns = session.pauseRuns;
 		let stopping: StoppingRuns = {
 			pause: Promise.resolve(),
-			runs,
+			targets: new Set(runs?.active ?? []),
+			pausedTargets: new Set(),
+			reset: false,
 			settled: false,
 			paused: false,
 		};
@@ -892,15 +912,19 @@ export async function abort(context: Room, ws: Socket): Promise<void> {
 			notice(stopping.paused);
 		});
 		stoppingRuns.set(session, stopping);
+		stopping.unwatch = session.watchRuns?.(next => {
+			observeStoppingRuns(stopping, next);
+			if (stopping.settled && stopping.paused && stopping.reset) {
+				clearStoppingRuns(session, stopping);
+			}
+		});
 		turn?.abort();
 		try {
 			await stopping.pause;
 		} finally {
 			stopping.settled = true;
-			if (
-				stoppingRuns.get(session) === stopping
-				&& (!stopping.paused || session.runs?.() !== stopping.runs)
-			) stoppingRuns.delete(session);
+			observeStoppingRuns(stopping, session.runs?.());
+			if (!stopping.paused || stopping.reset) clearStoppingRuns(session, stopping);
 		}
 		return;
 	}
