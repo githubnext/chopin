@@ -69,3 +69,21 @@ test("disconnected work stays inspectable without claiming an active or interrup
 	expect(markup).not.toContain("chat-work-lattice");
 	expect(markup).not.toContain("Interrupted");
 });
+
+test("an active ask preserves the static decision wait while keeping tool details", () => {
+	let markup = renderToStaticMarkup(createElement(WorkProgress, {
+		active: true,
+		responseSeen: true,
+		streaming: false,
+		tools: [{
+			id: "ask",
+			name: "ask",
+			status: "running",
+			args: JSON.stringify({ questions: [{ question: "Which database?" }] }),
+		}],
+	}));
+	expect(markup).toContain("Waiting on your decision");
+	expect(markup).toContain("data-tool-waiting");
+	expect(markup).not.toContain("chat-work-lattice");
+	expect(markup).toContain("Details");
+});

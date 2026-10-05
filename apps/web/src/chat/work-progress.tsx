@@ -1,12 +1,37 @@
-import { useId, useState } from "react";
-import { ChevronIcon } from "@chopin/icons";
+import { useId, useState, useSyncExternalStore } from "react";
+import { ChevronIcon, DecisionIcon } from "@chopin/icons";
 import { MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
 
-import { duration, summarize, toolCopy, workPhase } from "./model";
+import {
+	duration,
+	summarize,
+	toolCopy,
+	waitingCards,
+	waitingPrompts,
+	waitingText,
+	workPhase,
+} from "./model";
 import { motionContract } from "../motion-contract";
 import { motionImmediately } from "../motion-input";
 
+import { cardStatus } from "@chopin/dialect";
+import type { Questionnaire } from "@chopin/dialect";
 import type { Chat } from "@chopin/protocol";
+import type { TranscriptDecisions } from "./transcript";
+import type { QuestionnaireStore } from "@chopin/editor";
+
+const NO_QUESTIONS: ReturnType<QuestionnaireStore["snapshot"]> = [];
+const noQuestions = () => () => {};
+const emptyQuestions = () => NO_QUESTIONS;
+
+function isOpen(value: Questionnaire): boolean {
+	try {
+		let status = cardStatus(value);
+		return status === "open" || status === "reopened";
+	} catch {
+		return false;
+	}
+}
 
 function ToolCall(
 	{ active, disconnected, tool }: { active: boolean; disconnected: boolean; tool: Chat.Activity },
@@ -81,8 +106,9 @@ function Lattice() {
 }
 
 export function WorkProgress(
-	{ active, disconnected = false, responseSeen, streaming, tools }: {
+	{ active, decisions, disconnected = false, responseSeen, streaming, tools }: {
 		active: boolean;
+		decisions?: TranscriptDecisions;
 		disconnected?: boolean;
 		responseSeen: boolean;
 		streaming: boolean;
@@ -91,12 +117,27 @@ export function WorkProgress(
 ) {
 	let [open, setOpen] = useState(false);
 	let contentId = useId();
+	let values = useSyncExternalStore(
+		decisions?.questions.subscribe ?? noQuestions,
+		decisions?.questions.snapshot ?? emptyQuestions,
+		decisions?.questions.snapshot ?? emptyQuestions,
+	);
+	let prompts = active ? waitingPrompts(tools) : undefined;
+	let waiting = prompts === undefined ? undefined : waitingCards(
+		prompts,
+		values.map(({ id, value }) => ({
+			id,
+			prompts: value.questions.map(question => question.prompt),
+			open: isOpen(value),
+		})),
+	);
+	let first = waiting?.ids[0];
 	let summary = summarize(tools, active || disconnected);
 	let phase = workPhase(tools, streaming, active, responseSeen);
 	if (!active && !disconnected && !tools.length) return null;
 
 	let headline = active
-		? phase!
+		? waiting ? waitingText(waiting.count) : phase!
 		: disconnected && !tools.length
 		? "Connection lost"
 		: `Work details · ${summary.count} ${summary.count === 1 ? "action" : "actions"}`;
@@ -113,7 +154,7 @@ export function WorkProgress(
 	let count = active && summary.finished > 0 ? `${summary.finished} finished` : undefined;
 	let row = (
 		<>
-			{active && <Lattice />}
+			{waiting ? <DecisionIcon aria-hidden="true" size={14} /> : active && <Lattice />}
 			<span className="chat-work-headline">
 				<span className="chat-work-headline-motion" key={headline}>{headline}</span>
 			</span>
@@ -124,26 +165,43 @@ export function WorkProgress(
 	);
 
 	return (
-		<div className="chat-work" data-work-active={active} data-work-disconnected={disconnected}>
-			{tools.length > 0
-				? (
+		<div
+			className="chat-work"
+			data-tool-waiting={waiting ? "" : undefined}
+			data-work-active={active}
+			data-work-disconnected={disconnected}
+		>
+			<div className="flex min-w-0 items-center gap-2">
+				{tools.length > 0
+					? (
+						<button
+							aria-controls={contentId}
+							aria-expanded={open}
+							className="chat-work-toggle"
+							onClick={() => setOpen(value => !value)}
+							type="button"
+						>
+							{row}
+							<MotionDisclosureIcon
+								className="motion-feedback chat-work-chevron"
+								closed={<ChevronIcon aria-hidden="true" size={14} />}
+								open={open}
+								opened={<ChevronIcon aria-hidden="true" className="rotate-90" size={14} />}
+							/>
+						</button>
+					)
+					: <div className="chat-work-static">{row}</div>}
+				{decisions && first && (
 					<button
-						aria-controls={contentId}
-						aria-expanded={open}
-						className="chat-work-toggle"
-						onClick={() => setOpen(value => !value)}
+						aria-label="Open decision"
+						className="btn btn-sm btn-ghost shrink-0"
+						onClick={() => decisions.onOpenCard(first)}
 						type="button"
 					>
-						{row}
-						<MotionDisclosureIcon
-							className="motion-feedback chat-work-chevron"
-							closed={<ChevronIcon aria-hidden="true" size={14} />}
-							open={open}
-							opened={<ChevronIcon aria-hidden="true" className="rotate-90" size={14} />}
-						/>
+						Open
 					</button>
-				)
-				: <div className="chat-work-static">{row}</div>}
+				)}
+			</div>
 			{tools.length > 0 && (
 				<div id={contentId}>
 					<MotionDisclosure

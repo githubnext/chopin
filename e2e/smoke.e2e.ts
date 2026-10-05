@@ -540,7 +540,7 @@ test("chat clears the Planner working row when a turn stops or fails", async ({ 
 	await chat.getByRole("button", { name: "Send message" }).click();
 	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
 	planner.tool();
-	await expect(chat.getByText("Gathering context")).toBeVisible();
+	await expect(chat.getByText("Gathering context", { exact: true })).toBeVisible();
 	planner.fail();
 	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(0);
 	await expect(chat.getByText("Planner unavailable.")).toBeVisible();
@@ -940,6 +940,14 @@ test("a Planner question waits on people and opens its card", async ({ join, pag
 	);
 	let wire = await injectChatHistory(page, frame => ({
 		...frame,
+		busy: true,
+		turn: {
+			id: "turn-wait",
+			handle: "ana",
+			started: 1_700_000_001,
+			entryOffset: 0,
+			responded: true,
+		},
 		entries: [{
 			id: "a1",
 			author: { kind: "agent" },
@@ -961,7 +969,7 @@ test("a Planner question waits on people and opens its card", async ({ join, pag
 	let chat = chatPane(page);
 	let waiting = chat.locator("[data-tool-waiting]");
 	await expect(waiting).toHaveText(/Waiting on your decision/);
-	await expect(chat.locator(".chat-tool-loader")).toHaveCount(0);
+	await expect(waiting.locator(".chat-work-lattice")).toHaveCount(0);
 	await waiting.getByRole("button", { name: "Open decision" }).click();
 	await expect(
 		page.locator(
@@ -975,8 +983,9 @@ test("a Planner question waits on people and opens its card", async ({ join, pag
 		entry: "a1",
 		activity: { id: "t2", name: "ask", status: "done", took: 4_000 },
 	});
+	wire.send({ kind: "chat:state", ts: 0, busy: false });
 	await expect(waiting).toHaveCount(0);
-	await expect(chat.getByRole("button", { name: /2 tools/ })).toBeVisible();
+	await expect(chat.getByRole("button", { name: /Work details.*2 actions/ })).toBeVisible();
 });
 
 test(

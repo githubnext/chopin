@@ -27,6 +27,7 @@ import type { ResearchOfferControls } from "./research-offer";
 import { researchTranscript } from "./research-transcript";
 
 type PlanMarkers = {
+	decisions?: TranscriptDecisions;
 	canEdit?: boolean;
 	conversationPlanJobs?: ConversationPlan.Job[];
 	onCardLink?: (link: CardLink) => void;
@@ -161,6 +162,7 @@ function MessageBody(
 		>
 			{(message.working || message.workDisconnected || !!message.tools?.length) && (
 				<WorkProgress
+					decisions={markers.decisions}
 					active={!!message.working}
 					disconnected={!!message.workDisconnected}
 					responseSeen={!!message.workResponseSeen}
@@ -256,6 +258,7 @@ function MessageGroup(
 				</div>
 				{item.messages.map(message => (
 					<MessageBody
+						decisions={markers.decisions}
 						canEdit={markers.canEdit}
 						conversationPlanJobs={markers.conversationPlanJobs}
 						onCardLink={markers.onCardLink}
@@ -439,6 +442,7 @@ export function Transcript(
 							: <SystemEntry item={item} key={item.id} />
 						: (
 							<MessageGroup
+								decisions={decisions}
 								canEdit={canEdit}
 								conversationPlanJobs={conversationPlanJobs}
 								onCardLink={onCardLink}
