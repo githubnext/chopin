@@ -97,10 +97,11 @@ export function mermaidConfig(): MermaidConfig {
 		// and a parse failure throws before Mermaid removes it. The preview
 		// already presents the error beside the source that caused it.
 		suppressErrorRendering: true,
-		// Diagrams come from collaborators and agents, so scripts, click
-		// handlers and HTML labels stay off.
+		// Diagrams come from collaborators and agents, so scripts and click
+		// handlers stay off. Strict still draws HTML labels, sanitized with
+		// DOMPurify, as GitHub, GitLab and Docusaurus do: Mermaid's SVG-text
+		// labels mangle `->`, `=>`, `<`, `&` and entity codes (mermaid#7016).
 		securityLevel: "strict",
-		htmlLabels: false,
 		theme: "neutral",
 		...(fontFamily && { fontFamily }),
 		themeCSS: THEME_CSS,
