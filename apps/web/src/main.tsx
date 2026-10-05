@@ -12,6 +12,7 @@ import "@fontsource-variable/inter/opsz.css";
 import "@fontsource-variable/inter/opsz-italic.css";
 
 import "./theme.css";
+import "@chopin/visuals/styles.css";
 import "./navigation.css";
 import "./icon-tooltip.css";
 import "./local-login.css";

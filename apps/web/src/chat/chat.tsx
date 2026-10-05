@@ -93,6 +93,8 @@ export type ChatProps = {
 	sourceDestination?: ChatDestination;
 	/** Opens Decisions, where a waiting workflow's questions are. */
 	onShowDecisions?: () => void;
+	/** Replaces the composer when this viewer cannot chat at all, such as in an archived document. */
+	notice?: string;
 };
 
 /** How many runs are still live, and how many are paused and resumable. */
@@ -123,6 +125,7 @@ export function Chat(
 		researchOffers,
 		sourceDestination,
 		people = [],
+		notice,
 		onShowDecisions,
 		referencesEnabled,
 		repository,

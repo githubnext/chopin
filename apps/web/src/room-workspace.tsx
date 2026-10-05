@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { documentPath } from "@chopin/protocol/document-url";
-import { ChevronIcon, DocumentIcon } from "@chopin/icons";
+import { ArchiveIcon, ChevronIcon, DocumentIcon } from "@chopin/icons";
+import { Badge } from "@chopin/visuals";
 import {
 	advanceDecisionView,
 	CardMetaStore,
@@ -132,8 +133,17 @@ export function Header(
 					)
 					: <span className="document-title-label truncate">{label}</span>}
 				{archivedAt && (
-					<span className="document-status-badge document-read-only-status">
-						Archived, read-only
+					<span className="document-archived-status">
+						<Badge icon={ArchiveIcon} label="Archived" />
+						{canManage && (
+							<button
+								className="btn btn-sm btn-ghost"
+								onClick={() => onAction("restore")}
+								type="button"
+							>
+								Restore
+							</button>
+						)}
 					</span>
 				)}
 			</div>
@@ -721,6 +731,13 @@ export function RoomWorkspace(
 						archived={!!workspaceArchivedAt}
 						handle={handle}
 						onActivity={onChatActivity}
+						notice={workspaceArchivedAt
+							? effectiveCanManage
+								? "This document is archived. Restore it to keep chatting."
+								: "This document is archived."
+							: !workspaceCanEdit
+							? "You have read-only access to this document."
+							: undefined}
 						onShowDecisions={() => selectDestination("decisions")}
 						people={peopleHere(members)}
 						conversationPlan={conversation.state}

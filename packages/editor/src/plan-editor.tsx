@@ -370,7 +370,9 @@ export function PlanEditor(
 							plugins={plugins}
 							lexicalTheme={PLAN_LEXICAL_THEME}
 							contentEditableClassName="plan-content focus-caret"
-							placeholder="Start writing, or ask Chopin to plan"
+							placeholder={readOnly
+								? "This document is empty."
+								: "Start writing, or ask Chopin to plan"}
 							spellCheck
 							// The dialect has no raw HTML. Left on, MDXEditor registers
 							// its HTML visitors and quietly admits `html` nodes.

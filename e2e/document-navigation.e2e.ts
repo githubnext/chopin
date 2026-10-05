@@ -518,13 +518,13 @@ test("the archive view refreshes catalogues without reopening the document", asy
 	let projects = sidebar(page);
 
 	let archived = catalogue("channels", true);
-	await projects.getByRole("button", { name: "Archived chats", exact: true }).click();
+	await projects.getByRole("button", { name: "Archived", exact: true }).click();
 	await archived;
 	expect(page.url()).toBe(path);
 	expect(sockets).toBe(initialSockets);
 
 	let active = catalogue("channels", false);
-	await projects.getByRole("button", { name: "Back to active docs", exact: true }).click();
+	await projects.getByRole("button", { name: "All documents", exact: true }).click();
 	await active;
 	expect(page.url()).toBe(path);
 	expect(sockets).toBe(initialSockets);
@@ -639,6 +639,8 @@ test("read-only visitors can browse documents and get creation guidance", async 
 		"false",
 	);
 	await expect(headerActions(page)).toHaveCount(0);
+	await expect(page.getByText("You have read-only access to this document.")).toBeVisible();
+	await expect(page.getByPlaceholder("Use @chopin to ask Chopin")).toHaveCount(0);
 	await sidebar(page).getByRole("button", { name: "New document", exact: true }).click();
 	let creation = page.getByRole("dialog", { name: "New document", exact: true });
 	await expect(
@@ -682,8 +684,11 @@ test("writers can archive, restore, and permanently delete a document", async ({
 	let projects = sidebar(ana);
 
 	await headerAction(ana, "Archive");
-	await expect(ana.getByText("Archived, read-only", { exact: true })).toBeVisible();
-	await expect(bo.getByText("Archived, read-only", { exact: true })).toBeVisible();
+	await expect(ana.getByRole("banner").getByText("Archived", { exact: true })).toBeVisible();
+	await expect(bo.getByRole("banner").getByText("Archived", { exact: true })).toBeVisible();
+	await expect(ana.getByText("This document is archived. Restore it to keep chatting."))
+		.toBeVisible();
+	await expect(ana.getByPlaceholder("Use @chopin to ask Chopin")).toHaveCount(0);
 	await expect(content(ana)).toHaveAttribute("contenteditable", "false");
 	await expect(content(bo)).toHaveAttribute("contenteditable", "false");
 	await expect(projects.getByRole("link", { name: title, exact: true })).toHaveCount(0);
@@ -692,20 +697,21 @@ test("writers can archive, restore, and permanently delete a document", async ({
 	await expect(bo).toHaveURL(path);
 	await expect(content(bo)).toHaveAttribute("contenteditable", "false");
 
-	await projects.getByRole("button", { name: "Archived chats", exact: true }).click();
-	let back = projects.getByRole("button", { name: "Back to active docs", exact: true });
+	await projects.getByRole("button", { name: "Archived", exact: true }).click();
+	let back = projects.getByRole("button", { name: "All documents", exact: true });
 	await expect(back).toBeFocused();
 	await expect(projects.getByRole("link", { name: title, exact: true })).toBeVisible();
 	await back.click();
-	let archivedChats = projects.getByRole("button", { name: "Archived chats", exact: true });
-	await expect(archivedChats).toBeFocused();
-	await archivedChats.click();
+	let archivedButton = projects.getByRole("button", { name: "Archived", exact: true });
+	await expect(archivedButton).toBeFocused();
+	await archivedButton.click();
 
-	await headerAction(ana, "Restore");
+	await ana.getByRole("banner").getByRole("button", { name: "Restore", exact: true }).click();
 	await expect(content(ana)).toHaveAttribute("contenteditable", "true");
 	await expect(content(bo)).toHaveAttribute("contenteditable", "true");
-	await expect(ana.getByText("Archived, read-only", { exact: true })).toHaveCount(0);
-	await expect(projects.getByRole("button", { name: "Archived chats", exact: true })).toBeVisible();
+	await expect(ana.getByRole("banner").getByText("Archived", { exact: true })).toHaveCount(0);
+	await expect(ana.getByPlaceholder("Use @chopin to ask Chopin")).toBeVisible();
+	await expect(projects.getByRole("button", { name: "Archived", exact: true })).toBeVisible();
 	await expect(projects.getByRole("link", { name: title, exact: true })).toBeVisible();
 
 	await headerAction(ana, "Archive");

@@ -326,8 +326,8 @@ export function ProjectSidebar(
 	let [collapsedProjectIds, setCollapsedProjectIds] = useState<ReadonlySet<string>>(
 		() => new Set(),
 	);
-	let archivedChats = useRef<HTMLButtonElement>(null);
-	let backToActiveDocs = useRef<HTMLButtonElement>(null);
+	let archivedButton = useRef<HTMLButtonElement>(null);
+	let allDocumentsButton = useRef<HTMLButtonElement>(null);
 	let archiveMode = catalogueMode === "archived";
 	let primaryActions = (
 		<div className="project-sidebar-primary-actions">
@@ -337,13 +337,13 @@ export function ProjectSidebar(
 						className="project-sidebar-primary-action"
 						onClick={() => {
 							onCatalogueModeChange("active");
-							requestAnimationFrame(() => archivedChats.current?.focus({ preventScroll: true }));
+							requestAnimationFrame(() => archivedButton.current?.focus({ preventScroll: true }));
 						}}
-						ref={backToActiveDocs}
+						ref={allDocumentsButton}
 						type="button"
 					>
 						<span aria-hidden="true">←</span>
-						<span>Back to active docs</span>
+						<span>All documents</span>
 					</button>
 				)
 				: (
@@ -386,13 +386,13 @@ export function ProjectSidebar(
 					className="project-sidebar-primary-action"
 					onClick={() => {
 						onCatalogueModeChange("archived");
-						requestAnimationFrame(() => backToActiveDocs.current?.focus({ preventScroll: true }));
+						requestAnimationFrame(() => allDocumentsButton.current?.focus({ preventScroll: true }));
 					}}
-					ref={archivedChats}
+					ref={archivedButton}
 					type="button"
 				>
 					<ArchiveIcon />
-					<span>Archived chats</span>
+					<span>Archived</span>
 				</button>
 			</div>
 		)

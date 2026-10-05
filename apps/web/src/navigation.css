@@ -764,8 +764,12 @@
 	color: var(--color-warning-ink);
 }
 
-.document-read-only-status {
-	margin-left: 6px;
+.document-archived-status {
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
+	gap: var(--spacing);
+	margin-left: calc(var(--spacing) * 1.5);
 }
 
 :root[data-plan-coarse-pointer]
