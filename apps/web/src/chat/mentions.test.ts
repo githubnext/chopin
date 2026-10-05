@@ -257,7 +257,8 @@ describe("mention picker markup", () => {
 	});
 
 	test("shows nothing but the login in a row", () => {
-		let text = html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+		let text = html.replace(/<span aria-hidden="true">[^<]*<\/span>/g, "").replace(/<[^>]*>/g, " ")
+			.replace(/\s+/g, " ").trim();
 		expect(text).toBe("chopin octocat");
 	});
 });

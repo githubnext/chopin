@@ -7,7 +7,7 @@ import { DocumentActionsMenu } from "./document-actions-menu";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
 import { canManageProject } from "./navigation-model";
-import { MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
+import { Face, MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
 import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
 
 import { useId, useRef, useState } from "react";
@@ -459,17 +459,7 @@ export function ProjectSidebar(
 					onClick={onAccount}
 					type="button"
 				>
-					{user.avatarUrl
-						? (
-							<img
-								alt=""
-								className="size-3.5 rounded-full"
-								height={14}
-								src={user.avatarUrl}
-								width={14}
-							/>
-						)
-						: <span aria-hidden="true" className="size-3.5 rounded-full bg-gray-300" />}
+					<Face decorative handle={user.login} size={20} titled={false} />
 					<span className="truncate">{user.login}</span>
 				</button>
 				{accountMenu}

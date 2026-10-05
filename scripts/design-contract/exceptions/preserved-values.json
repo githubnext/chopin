@@ -366,20 +366,6 @@
 		]
 	},
 	{
-		"file": "packages/editor/src/face.tsx",
-		"reason": "Participant identity color is derived from the account handle, not a semantic interface color; preserve collaborative presence distinction.",
-		"cases": [
-			[
-				"color",
-				"background",
-				"color(handle)",
-				"style object > Face > <span>",
-				1
-			]
-		],
-		"sourceHash": "c48b0ab153ac5d663bad5f32412551d05c0c53e805abbd43d75fb3a2b4ee6576"
-	},
-	{
 		"file": "packages/editor/src/callout.css",
 		"reason": "Callout shadow combines a local inset highlight/semantic outline with depth; no equivalent elevation role preserves the appearance.",
 		"cases": [
