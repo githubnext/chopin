@@ -139,6 +139,19 @@
 		]
 	},
 	{
+		"file": "apps/web/src/empty-workspace.tsx",
+		"reason": "The empty workspace repeats the workspace frame's intentional 12px outer radius so the layout does not change when a document opens.",
+		"cases": [
+			[
+				"utility",
+				"class",
+				"rounded-[12px]",
+				"class > EmptyWorkspace > <div>",
+				1
+			]
+		]
+	},
+	{
 		"file": "apps/web/src/navigation.css",
 		"reason": "Anchored navigation surface has settled asymmetric 240ms/170ms choreography and bespoke curves; preserve transform behavior rather than substituting a near-match.",
 		"cases": [

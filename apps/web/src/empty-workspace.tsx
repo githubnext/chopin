@@ -10,8 +10,8 @@ export function EmptyWorkspace(
 ) {
 	return (
 		<div className="h-full bg-ground p-2">
-			<div className="flex h-full flex-col items-center justify-center gap-1 overflow-hidden rounded-xl bg-page text-center shadow-resting ring-hairline">
-				<DocumentIcon className="mb-1 text-text-quaternary" size={20} />
+			<div className="overflow-hidden rounded-[12px] bg-page shadow-resting ring-hairline flex h-full flex-col items-center justify-center gap-1 text-center">
+				<DocumentIcon className="mb-1 text-text-quaternary" />
 				<h2 className="text-sm font-semibold text-text-primary">No document open</h2>
 				<p className="text-sm text-text-tertiary">
 					{hasProjects
