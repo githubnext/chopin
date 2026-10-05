@@ -55,7 +55,8 @@ export async function startAcceptedResearch(
 	try {
 		let created = await service.startPlannerInline({
 			channelId: room.id,
-			question: offer.brief,
+			question: offer.workflow?.accepted?.brief ?? offer.brief,
+			...(offer.workflow?.accepted ? { requestKey: offer.workflow.accepted.executionKey } : {}),
 			originMessageId: offer.source.messageId,
 			requestedBy: offer.action.principalId,
 			requestedByHandle: offer.action.actor.handle,
