@@ -169,12 +169,6 @@ export function canonical(source: string): { source: string } | { issues: Issue[
 	let result = validate(tree, { bytes: Buffer.byteLength(output, "utf8") });
 	if (!result.ok) return { issues: result.issues };
 	try {
-		assertIntroducedUrls([], tree.children);
-	} catch (err) {
-		if (err instanceof PlanValidationError) return { issues: err.issues };
-		throw err;
-	}
-	try {
 		room.validate(output);
 	} catch (err) {
 		return {
@@ -214,6 +208,14 @@ export function prepare(
 	if (!input) return undefined;
 	let prepared = canonical(input.plan);
 	if ("issues" in prepared) return prepared;
+	// A new document has no stored links to spare from the newer URL rules.
+	// Updates go through `edit.replace`, which judges against what is stored.
+	try {
+		assertIntroducedUrls([], parse(prepared.source).children);
+	} catch (err) {
+		if (err instanceof PlanValidationError) return { issues: err.issues };
+		throw err;
+	}
 	return {
 		input: {
 			...input,

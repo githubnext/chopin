@@ -147,6 +147,9 @@ describe("security boundary", () => {
 				"\\\\evil.com",
 				"/\\evil.com",
 				"docs\\a.md",
+				" javascript:alert(1)",
+				"https://example.com ",
+				"java script:alert(1)",
 			]
 		) {
 			expect(introduced([], [linkTo(url)])).toContain("bad-link");
@@ -154,6 +157,16 @@ describe("security boundary", () => {
 		expect(introduced([], [{ type: "image", url: "\u0001https://example.com/x.png", alt: "" }]))
 			.toContain("bad-image");
 		expect(introduced([], [linkTo("docs/a.md"), linkTo("https://example.com")])).toEqual([]);
+	});
+
+	it("names where an introduced link sits", () => {
+		try {
+			assertIntroducedUrls([], parse("Fine.\n\nSee [here](//evil.com).\n").children);
+			throw new Error("expected a refusal");
+		} catch (err) {
+			if (!(err instanceof PlanValidationError)) throw err;
+			expect(err.issues[0]?.path).toBe("root > paragraph[1] > link[0]");
+		}
 	});
 
 	/** Stored before the rule existed: refusing it on every open would lock the document. */
@@ -165,6 +178,17 @@ describe("security boundary", () => {
 		expect(introduced(stored.children, [...stored.children, linkTo("https://example.com")]))
 			.toEqual([]);
 		expect(introduced(stored.children, [linkTo("//evil.com")])).toContain("bad-link");
+	});
+
+	/** Judged by URL, not position: a stored link may move or be copied, never be new. */
+	it("allows a stored link that only the newer rules refuse to move or be duplicated", () => {
+		let stored = parse("First.\n\nRead [the notes](docs\\\\notes.md).\n").children;
+		let moved = parse("Read [the notes](docs\\\\notes.md).\n\nFirst.\n").children;
+		let copied = parse(
+			"First.\n\nRead [the notes](docs\\\\notes.md).\n\nAgain [here](docs\\\\notes.md).\n",
+		).children;
+		expect(introduced(stored, moved)).toEqual([]);
+		expect(introduced(stored, copied)).toEqual([]);
 	});
 
 	it("allows https, mailto and repo-relative paths", () => {

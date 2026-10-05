@@ -487,6 +487,34 @@ test("another writer's edit cannot move a new link onto other text", async ({ jo
 	);
 });
 
+test("a pasted link the server would refuse arrives as plain text", async ({ join, room }) => {
+	let page = await join("ana");
+
+	await content(page).click();
+	await page.keyboard.type("Start.");
+	// A protocol-relative CDN address and a zero-width character: either would
+	// sync, be refused by the server, and rebuild the room for everyone.
+	await content(page).evaluate(root => {
+		let data = new DataTransfer();
+		let hidden = `https://ex${String.fromCharCode(0x200b)}ample.com`;
+		data.setData(
+			"text/html",
+			`<p> See <a href="//cdn.example.com/x.js">cdn</a>, <a href="${hidden}">hidden</a> and `
+				+ `<a href="https://example.com/ok">ok</a>.</p>`,
+		);
+		data.setData("text/plain", " See cdn, hidden and ok.");
+		root.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true }));
+	});
+
+	await expect(content(page)).toContainText("cdn, hidden and ok.");
+	await expect(content(page).locator("a")).toHaveCount(1);
+	await expect(content(page).getByRole("link", { name: "ok" })).toHaveAttribute(
+		"href",
+		"https://example.com/ok",
+	);
+	await written(page, room, /cdn, hidden and \[ok\]\(https:\/\/example\.com\/ok\)\./);
+});
+
 test("a reader can open a link but not edit it", async ({ baseURL, browser, room, seed }) => {
 	await seed("Read [the docs](https://example.com/docs).\n");
 	let context = await browser.newContext({ baseURL });

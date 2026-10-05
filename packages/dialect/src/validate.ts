@@ -547,31 +547,27 @@ function urls(nodes: readonly Nodes[], found = new Set<string>()): Set<string> {
 export function assertIntroducedUrls(before: readonly Nodes[], after: readonly Nodes[]): void {
 	let known = urls(before);
 	let issues: Issue[] = [];
-	let visit = (nodes: readonly Nodes[]) => {
+	let visit = (nodes: readonly Nodes[], path: string) => {
+		let counts = new Map<string, number>();
 		for (let node of nodes) {
+			let name = label(node);
+			let index = counts.get(name) ?? 0;
+			counts.set(name, index + 1);
+			let here = `${path} > ${name}[${index}]`;
 			if ((node.type === "link" || node.type === "image") && !known.has(node.url)) {
-				let image = node.type === "image";
-				if (dialect.HIDDEN_URL_CHARACTERS.test(node.url)) {
+				let problem = dialect.disguisedUrl(node.url, node.type);
+				if (problem) {
 					issues.push({
-						code: image ? "bad-image" : "bad-link",
-						message: `${image ? "Image" : "Link"} URL contains hidden or control characters`,
-						path: "root",
-						...(node.position ? { offset: node.position.start.offset } : {}),
-					});
-				} else if (
-					!image && !/^[a-z][a-z0-9+.-]*:/i.test(node.url) && dialect.leavesRepository(node.url)
-				) {
-					issues.push({
-						code: "bad-link",
-						message: "Link without a protocol must stay in the repository",
-						path: "root",
+						code: node.type === "image" ? "bad-image" : "bad-link",
+						message: problem,
+						path: here,
 						...(node.position ? { offset: node.position.start.offset } : {}),
 					});
 				}
 			}
-			visit(children(node));
+			visit(children(node), here);
 		}
 	};
-	visit(after);
+	visit(after, "root");
 	if (issues.length > 0) throw new PlanValidationError(issues);
 }

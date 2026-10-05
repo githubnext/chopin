@@ -9,6 +9,7 @@ import * as Questions from "../questions/service";
 import * as Rooms from "../rooms";
 import { openPlan } from "../testing/plan";
 import { hosted } from "./hosted";
+import { prepareUpdate } from "./update";
 
 import type { HostedAuth } from "../auth/routes";
 import type { HostedCallbacks } from "./hosted";
@@ -122,6 +123,25 @@ describe("hosted document rewrite lifecycle", () => {
 			document: { source: "# Changed\n", revision: 1 },
 		});
 		expect((await stored(context)).projected).toMatchObject({ source: "# Changed\n", revision: 1 });
+	});
+
+	/** Stored before the newer URL rules: an update must keep it, not be refused for it. */
+	it("updates a stored document holding a link only the newer URL rules refuse", async () => {
+		let legacy = "# Original\n\nRead [the notes](docs\\\\notes.md).\n";
+		let context = await openPlan(legacy);
+		await Plan.close(context.plan);
+		let prepared = prepareUpdate({
+			id: context.channel.id,
+			revision: 0,
+			plan: `${legacy}\nAdded.\n`,
+			idempotencyKey: "legacy-link",
+		});
+		if (!prepared || !("input" in prepared)) throw new Error("update was refused while preparing");
+		let api = adapter(context);
+		let outcome = await api.update!.update(caller, prepared.input, client);
+		expect(outcome).toMatchObject({ kind: "updated", document: { revision: 1 } });
+		expect((await stored(context)).projected.source).toContain("(docs\\notes.md)");
+		expect((await stored(context)).projected.source).toContain("Added.");
 	});
 
 	it("serializes live reads behind a rejected rewrite and retries from durable Yjs history", async () => {
