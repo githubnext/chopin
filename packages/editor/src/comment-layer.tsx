@@ -29,7 +29,13 @@ type PlacedThread = {
 	hits: PassageHit[];
 	passages: Rect[];
 };
-type MeasuredThread = { view: ThreadView; target: Rect; passages: Rect[]; hits: Rect[] };
+type MeasuredThread = {
+	view: ThreadView;
+	target: Rect;
+	passages: Rect[];
+	hits: Rect[];
+	held: boolean;
+};
 type PassagePress = { id: string; left: number; pointer: number; top: number; moved: boolean };
 
 function rect(value: DOMRect): Rect {
@@ -247,6 +253,8 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let [preview, setPreview] = useState<string>();
 	let [previewMeasurement, setPreviewMeasurement] = useState<PreviewMeasurement>();
 	let [pinned, setPinned] = useState<string>();
+	let pinnedRef = useRef<string | undefined>(undefined);
+	pinnedRef.current = pinned;
 	let [coarse, setCoarse] = useState(false);
 	let [primaryCoarse, setPrimaryCoarse] = useState(false);
 	let [cardHeights, setCardHeights] = useState<{ [id: string]: number }>({});
@@ -365,8 +373,11 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 				if (!target || (target.bounds.width === 0 && target.bounds.height === 0)) continue;
 				let targetRect = rect(target.bounds);
 				let passages = target.hits.length > 0 ? target.hits : [targetRect];
+				let id = view.thread.id;
 				measured.push({
 					view,
+					held: pinnedRef.current === id
+						|| document.activeElement?.getAttribute("data-plan-comment-button") === id,
 					target: targetRect,
 					passages,
 					hits: target.hits,
@@ -392,7 +403,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 
 	useLayoutEffect(() => {
 		measure();
-	}, [host, state.threads, coarse]);
+	}, [host, state.threads, coarse, pinned]);
 
 	useEffect(() => {
 		if (!host) return;
@@ -691,7 +702,11 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 							className="plan-comment-button"
 							data-press="small"
 							data-plan-comment-button={view.thread.id}
-							onBlur={() => unhover(view.thread.id)}
+							onBlur={() => {
+								unhover(view.thread.id);
+								// A focused marker whose passage scrolled away hides once focus leaves it.
+								measure();
+							}}
 							onClick={event => {
 								origin.current = event.currentTarget;
 								if (shown) dismiss();

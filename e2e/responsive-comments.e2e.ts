@@ -208,3 +208,20 @@ for (
 		await expect.poll(async () => (await marker.boundingBox())!.y).toBe(resting.y);
 	});
 }
+
+test("an open comment keeps its marker and focus after its passage scrolls away", async ({ join, seed }) => {
+	await seed(PLAN);
+	let page = await join("ana", { viewport: { width: 1_440, height: 900 } });
+	let scroller = page.locator("[data-plan-scroll]");
+	let marker = page.locator("[data-plan-comment-button]").first();
+	await marker.click();
+	let card = page.getByRole("dialog", { name: "Comment thread" });
+	await expect(card).toBeVisible();
+
+	await scroller.evaluate(element => element.scrollBy(0, 1_500));
+	await expect(marker).toBeVisible();
+	await expect(card).toBeVisible();
+	let frame = (await scroller.boundingBox())!;
+	expect((await marker.boundingBox())!.y).toBeGreaterThanOrEqual(frame.y - 1);
+	expect(await page.evaluate(() => document.activeElement === document.body)).toBe(false);
+});
