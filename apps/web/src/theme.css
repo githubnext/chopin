@@ -1066,6 +1066,14 @@ button.question-add:disabled {
 	outline: none;
 }
 
+/*
+ * A palette's search field is its header and always holds the caret, and its
+ * highlighted row holds the keyboard's place, like a listbox option.
+ */
+:where(.navigation-palette-input, .navigation-palette-option):focus-visible {
+	outline: none;
+}
+
 /* The editable plan has a live caret, so a second focus marker is redundant. */
 :where(.focus-caret):focus-visible {
 	outline: none;

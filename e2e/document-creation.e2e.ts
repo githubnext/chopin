@@ -62,8 +62,8 @@ for (let action of ["global", "pencil", "empty"] as const) {
 		await authenticate(page, `document-creator-${crypto.randomUUID()}`, baseURL!);
 		let posts = creationRequests(page);
 		await page.goto("/");
-		let add = page.getByRole("dialog", { name: "Add Project", exact: true });
-		await add.getByRole("button", { name: "score octo-org Add", exact: true }).click();
+		let add = page.getByRole("dialog", { name: "Add project", exact: true });
+		await add.getByRole("button", { name: "octo-org/score", exact: true }).click();
 		let projects = sidebar(page);
 		await expect(projects.getByText("No documents", { exact: true })).toBeVisible();
 		let pencil = projects.getByRole("button", { name: "New document in score", exact: true });
@@ -301,13 +301,13 @@ test("global creation without projects explains the next step", async ({ baseURL
 	await authenticate(page, `document-creator-${crypto.randomUUID()}`, baseURL!);
 	let posts = creationRequests(page);
 	await page.goto("/");
-	await expect(page.getByRole("dialog", { name: "Add Project", exact: true })).toBeVisible();
+	await expect(page.getByRole("dialog", { name: "Add project", exact: true })).toBeVisible();
 	await page.keyboard.press("Escape");
 	await createButton(page).click();
 	let dialog = page.getByRole("dialog", { name: "New document", exact: true });
 	await expect(dialog.getByText("Add a project to create your first document.")).toBeVisible();
-	await dialog.getByRole("button", { name: "Add Project", exact: true }).click();
-	await expect(page.getByRole("dialog", { name: "Add Project", exact: true })).toBeVisible();
+	await dialog.getByRole("button", { name: "Add project", exact: true }).click();
+	await expect(page.getByRole("dialog", { name: "Add project", exact: true })).toBeVisible();
 	expect(posts).toHaveLength(0);
 });
 

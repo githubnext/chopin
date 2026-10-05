@@ -21,7 +21,7 @@ export function RenameDocumentDialog(
 		<NavigationDialog motion={motion} onDismiss={onDismiss} title="Rename document">
 			<DocumentRename
 				channel={channel}
-				className="mt-4"
+				className="mt-3"
 				onCancel={onDismiss}
 				onRenamed={detail => {
 					onRenamed(detail.channel);

@@ -415,7 +415,7 @@ export function ProjectSidebar(
 						<span>Projects</span>
 						{!archiveMode && (
 							<button
-								aria-label="Add Project"
+								aria-label="Add project"
 								data-tooltip="Add project"
 								className="project-sidebar-action"
 								data-press="small"
