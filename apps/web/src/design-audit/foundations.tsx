@@ -43,8 +43,8 @@ const TYPE = [
 	["Interface and chat", "13.4–14px · step −1", "--text-sm", "--text-sm--line-height"],
 	["Document prose", "15–16px · step 0", "--text-base", "--text-base--line-height"],
 	["Subheading", "18.8–20.8px · step +2", "--text-lg", "--text-lg--line-height"],
-	["Section heading", "23.6–27px · step +4", "--text-xl", "--text-xl--line-height"],
-	["Document title", "33.2–40px · step +7", "--text-2xl", "--text-2xl--line-height"],
+	["Section heading", "21.1–23.7px · step +3", "--text-xl", "--text-xl--line-height"],
+	["Document title", "26.4–30.8px · step +5", "--text-2xl", "--text-2xl--line-height"],
 ] as const;
 
 const SPACING = [2, 4, 6, 8, 12, 16, 24, 32] as const;

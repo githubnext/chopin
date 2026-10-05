@@ -139,7 +139,7 @@
 				"target": [
 					"div:nth-child(6) > .design-audit-type-label > code"
 				],
-				"html": "<code>23.6–27px · step +4</code>",
+				"html": "<code>21.1–23.7px · step +3</code>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
 			}
 		},
@@ -161,7 +161,7 @@
 				"target": [
 					"div:nth-child(7) > .design-audit-type-label > code"
 				],
-				"html": "<code>33.2–40px · step +7</code>",
+				"html": "<code>26.4–30.8px · step +5</code>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
 			}
 		}
@@ -306,7 +306,7 @@
 				"target": [
 					"div:nth-child(6) > .design-audit-type-label > code"
 				],
-				"html": "<code>23.6–27px · step +4</code>",
+				"html": "<code>21.1–23.7px · step +3</code>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
 			}
 		},
@@ -328,7 +328,7 @@
 				"target": [
 					"div:nth-child(7) > .design-audit-type-label > code"
 				],
-				"html": "<code>33.2–40px · step +7</code>",
+				"html": "<code>26.4–30.8px · step +5</code>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
 			}
 		}

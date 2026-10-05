@@ -505,5 +505,31 @@
 				1
 			]
 		]
+	},
+	{
+		"file": "apps/web/src/theme.css",
+		"reason": "iOS Safari zooms the page when it focuses editable text under 16px; touch devices floor the existing token at 1rem.",
+		"cases": [
+			[
+				"typography",
+				"font-size",
+				"max(1rem, var(--text-sm))",
+				"CSS > @media (pointer: coarse) > textarea,\n\tselect,\n\tinput:not([type=\"checkbox\"], [type=\"radio\"], [type=\"range\"], [type=\"color\"], [type=\"file\"])",
+				1
+			]
+		]
+	},
+	{
+		"file": "packages/editor/src/styles.css",
+		"reason": "iOS Safari zooms the page when it focuses editable text under 16px; touch devices floor the existing token at 1rem.",
+		"cases": [
+			[
+				"typography",
+				"font-size",
+				"max(1rem, var(--plan-body))",
+				"CSS > @media (pointer: coarse) > .plan .plan-content,\n\t.plan-content :is(h4, h5, h6)",
+				1
+			]
+		]
 	}
 ]
