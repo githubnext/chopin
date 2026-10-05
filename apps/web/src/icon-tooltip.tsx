@@ -32,6 +32,10 @@ function iconButton(target: EventTarget | null): HTMLElement | null {
 	) {
 		return null;
 	}
+	// A text button opts in when its tooltip adds detail its label does not say.
+	if (button.hasAttribute("data-tooltip-detail") && button.getAttribute("data-tooltip")) {
+		return button;
+	}
 	if (hasVisibleText(button)) return null;
 	if (
 		!button.getAttribute("data-tooltip") && !button.getAttribute("aria-label")

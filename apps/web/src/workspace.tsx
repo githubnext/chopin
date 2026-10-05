@@ -513,9 +513,7 @@ export function Workspace(
 								)}
 							</div>
 						)}
-						{mode !== "split" && status && (
-							<div className="workspace-status-row shrink-0">{status}</div>
-						)}
+						{mode !== "split" && status && <div className="workspace-status-row">{status}</div>}
 						<div
 							className="workspace-document-swap content-swap-stack relative min-h-0 flex-1"
 							data-workspace-document-swap
