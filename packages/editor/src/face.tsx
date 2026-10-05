@@ -59,6 +59,9 @@ export function Face({ decorative, handle, ring, size = 20, titled = true }: Fac
 
 	return (
 		<span
+			aria-hidden={decorative || undefined}
+			aria-label={decorative ? undefined : handle}
+			role={decorative ? undefined : "img"}
 			className={`relative grid shrink-0 place-items-center overflow-hidden bg-selected text-xs font-semibold text-text-secondary uppercase ${edge}`}
 			style={{ width: size, height: size }}
 			title={titled ? handle : undefined}
@@ -66,7 +69,7 @@ export function Face({ decorative, handle, ring, size = 20, titled = true }: Fac
 			{!loaded && <span aria-hidden="true">{handle.slice(0, 1)}</span>}
 			{!failed && (
 				<img
-					alt={decorative ? "" : handle}
+					alt=""
 					className={`absolute inset-0 size-full object-cover ${loaded ? "" : "opacity-0"}`}
 					onError={() => setFailed(true)}
 					onLoad={() => setLoaded(true)}
@@ -74,7 +77,6 @@ export function Face({ decorative, handle, ring, size = 20, titled = true }: Fac
 					src={photograph(handle, size)}
 				/>
 			)}
-			{failed && !decorative && <span className="sr-only">{handle}</span>}
 		</span>
 	);
 }
