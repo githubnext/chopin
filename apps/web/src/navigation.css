@@ -225,6 +225,11 @@
 		var(--color-gray-200) 75%,
 		var(--color-gray-300)
 	);
+	--project-sidebar-row: calc(var(--spacing) * 7.5);
+	--project-sidebar-inset: calc(var(--spacing) * 2);
+	--project-sidebar-gap: calc(var(--spacing) * 2);
+	/* Document names line up with the labels of the 14px icon rows above them. */
+	--project-sidebar-label: calc(var(--project-sidebar-inset) * 2 + var(--spacing) * 3.5);
 
 	display: flex;
 	width: 100%;
@@ -255,10 +260,11 @@
 .project-sidebar-primary-action {
 	display: flex;
 	width: 100%;
+	min-height: var(--project-sidebar-row);
 	align-items: center;
-	gap: 10px;
+	gap: var(--project-sidebar-gap);
 	border-radius: var(--radius-md);
-	padding: 6px 8px;
+	padding: 0 var(--project-sidebar-inset);
 	font-size: var(--text-sm);
 	font-weight: 500;
 	text-align: left;
@@ -301,30 +307,46 @@
 }
 
 .project-sidebar-project-row {
-	min-height: 32px;
-	gap: 10px;
+	min-height: var(--project-sidebar-row);
+	gap: var(--project-sidebar-gap);
 	border-radius: var(--radius-md);
-	padding: 4px 8px;
+	padding: 0 calc(var(--spacing) * 0.75) 0 var(--project-sidebar-inset);
 	font-size: var(--text-sm);
 }
 
+.project-sidebar-project-disclosure {
+	align-self: stretch;
+}
+
 .project-sidebar-document {
-	min-height: 33px;
-	border-radius: var(--radius-lg);
-	padding: 4px 4px 4px 24px;
+	min-height: var(--project-sidebar-row);
+	gap: var(--spacing);
+	border-radius: var(--radius-md);
+	padding: 0 calc(var(--spacing) * 0.75) 0 var(--project-sidebar-label);
 	font-size: var(--text-sm);
 }
 
 .project-sidebar-document-link {
 	display: flex;
+	min-width: 0;
+	flex: 1;
+	align-self: stretch;
 	align-items: center;
-	gap: 6px;
 	overflow: hidden;
+	font-size: var(--text-sm);
+	font-weight: 400;
+	line-height: 1.25rem;
+	text-align: left;
 }
 
 .project-sidebar-document-current {
 	background: var(--project-sidebar-selected);
 	color: var(--color-text-primary);
+}
+
+.project-sidebar-document-current .project-sidebar-document-link,
+.project-sidebar-child-current .project-sidebar-child-link {
+	font-weight: 500;
 }
 
 .project-sidebar-document-ancestor {
@@ -333,9 +355,10 @@
 
 .project-sidebar-child {
 	display: flex;
-	min-height: 30px;
+	min-height: var(--project-sidebar-row);
 	align-items: center;
-	margin-left: 32px;
+	padding-right: calc(var(--spacing) * 0.75);
+	margin-left: var(--project-sidebar-label);
 	border-left: var(--edge-width) solid var(--color-gray-300);
 	border-radius: 0 var(--radius-md) var(--radius-md) 0;
 }
@@ -350,10 +373,11 @@
 	min-width: 0;
 	flex: 1;
 	align-items: center;
-	padding: 5px 4px 5px 14px;
+	align-self: stretch;
+	padding: 0 var(--spacing) 0 calc(var(--spacing) * 3);
 	overflow: hidden;
 	font-size: var(--text-sm);
-	font-weight: 500;
+	font-weight: 400;
 	line-height: 1.25rem;
 }
 
@@ -405,9 +429,9 @@
 	opacity: 1;
 }
 
-:is(.group\/sidebar-header, .group\/projects-heading, .group\/project):hover
+:is(.group\/sidebar-header, .group\/projects-heading, .project-sidebar-project-row):hover
 	.project-sidebar-action,
-:is(.group\/sidebar-header, .group\/projects-heading, .group\/project):focus-within
+:is(.group\/sidebar-header, .group\/projects-heading, .project-sidebar-project-row):focus-within
 	.project-sidebar-action,
 .project-sidebar-document:hover .project-sidebar-document-action,
 .project-sidebar-document:focus-within .project-sidebar-document-action,
@@ -418,7 +442,7 @@
 
 .project-sidebar-status,
 .project-sidebar-load-more {
-	padding: 0 8px 4px 32px;
+	padding: 0 var(--project-sidebar-inset) var(--spacing) var(--project-sidebar-label);
 	font-size: var(--text-sm);
 	line-height: 1rem;
 	color: var(--color-text-quaternary);
@@ -430,7 +454,8 @@
 }
 
 .project-sidebar-empty {
-	padding: 0 8px 4px 32px;
+	padding: var(--spacing) var(--project-sidebar-inset) var(--project-sidebar-inset)
+		var(--project-sidebar-label);
 	font-size: var(--text-sm);
 	line-height: 1.25rem;
 	color: var(--color-text-tertiary);
@@ -447,10 +472,11 @@
 
 .project-sidebar-account {
 	width: 100%;
+	min-height: var(--project-sidebar-row);
 	justify-content: flex-start;
-	gap: 8px;
+	gap: var(--project-sidebar-gap);
 	border-radius: var(--radius-md);
-	padding: 8px;
+	padding: 0 var(--project-sidebar-inset);
 	font-size: var(--text-sm);
 	font-weight: 500;
 	text-align: left;
@@ -458,7 +484,7 @@
 
 .project-sidebar-account-wrap {
 	position: relative;
-	padding: 8px;
+	padding: var(--project-sidebar-inset);
 }
 
 .project-sidebar-account[aria-expanded="true"] {

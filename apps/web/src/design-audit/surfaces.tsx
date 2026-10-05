@@ -136,18 +136,24 @@ function Lists() {
 function Navigation() {
 	return (
 		<AuditPlate
-			description="Current, ancestor, archived, and loading rows in one compact rail."
+			description="Current, ancestor, archived, and loading rows in one compact rail. Descriptions appear on hover or focus."
 			item="navigation"
 			title="Navigation"
 		>
-			<nav aria-label="Audit navigation" className="design-audit-sidebar">
+			<nav aria-label="Audit navigation" className="design-audit-sidebar" data-tooltip-edge="">
 				<div className="design-audit-sidebar-heading">
 					<span>Chopin</span>
 					<button aria-label="Add document" className="btn btn-icon btn-ghost" type="button">
 						<PlusIcon size={14} />
 					</button>
 				</div>
-				<a href="#surfaces">
+				<a
+					aria-description="Where the collaborative editor goes next"
+					data-tooltip="Where the collaborative editor goes next"
+					data-tooltip-side="right"
+					data-tooltip-verbatim=""
+					href="#surfaces"
+				>
 					<DocumentIcon size={14} />Product direction
 				</a>
 				<a aria-current="page" href="#surfaces">

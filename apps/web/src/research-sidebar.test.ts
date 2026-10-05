@@ -157,11 +157,9 @@ describe("document sidebar hierarchy", () => {
 
 		expect(markup.match(/aria-current="page"/g)).toHaveLength(1);
 		expect(markup).toContain(
-			'<a aria-current="page" class="project-sidebar-document-link min-w-0 flex-1 text-left text-sm font-medium" href="/documents/acme/one/release-plan">',
+			'<a aria-current="page" aria-description="Coordinates the release readiness work." class="project-sidebar-document-link" data-tooltip="Coordinates the release readiness work." data-tooltip-side="right" data-tooltip-verbatim="" href="/documents/acme/one/release-plan"><span class="truncate">Release plan</span></a>',
 		);
 		expect(markup).not.toContain('role="tree"');
-		expect(markup).toContain("Coordinates the release readiness work.");
-		expect(markup).toContain("block truncate font-normal text-text-quaternary");
 	});
 
 	it("omits the standalone research launcher and workspace rows", () => {

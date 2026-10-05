@@ -270,6 +270,36 @@ test("sidebar titles stay readable until hover reveals controls", async ({ join,
 	expect(rowBox!.x + rowBox!.width - actionsBox!.x - actionsBox!.width).toBeLessThanOrEqual(8);
 });
 
+test("sidebar rows stay single-line and reveal descriptions beside the rail", async ({ join, page }) => {
+	let title = "Release plan";
+	let description = "Coordinates the release readiness work across every team.";
+	let listed = channel("cccccccc-0000-4000-8000-000000000000", title, description);
+	await page.route(
+		"**/api/repositories/octo-org/score/channels*",
+		route => route.fulfill({ json: { canEdit: true, channels: [listed], repository } }),
+	);
+
+	page = await join("ana");
+	let projects = sidebar(page);
+	let link = projects.getByRole("link", { name: title, exact: true });
+	await expect(link).toHaveAccessibleDescription(description);
+	await expect(projects.getByText(description)).toHaveCount(0);
+	let row = link.locator("..");
+	expect((await row.boundingBox())!.height).toBe(30);
+
+	let pencil = projects.getByRole("button", { name: "New document in score", exact: true });
+	await row.hover();
+	await expect(pencil).toHaveCSS("opacity", "0");
+	let card = page.locator("[data-icon-tooltip]");
+	await expect(card).toHaveText(description);
+	await expect(card).toBeVisible();
+	let [cardBox, railBox] = await Promise.all([card.boundingBox(), projects.boundingBox()]);
+	expect(cardBox!.x).toBeGreaterThanOrEqual(railBox!.x + railBox!.width);
+
+	await pencil.locator("..").hover();
+	await expect(pencil).toHaveCSS("opacity", "1");
+});
+
 test("a stale catalogue response cannot remove a newly created document", async ({ join, page }) => {
 	let captured = Promise.withResolvers<void>();
 	let release = Promise.withResolvers<void>();

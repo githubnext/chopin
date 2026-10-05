@@ -111,10 +111,10 @@
 
 .design-audit-sidebar-heading {
 	display: flex;
-	min-height: 2.25rem;
+	min-height: 1.875rem;
 	align-items: center;
 	justify-content: space-between;
-	padding-inline-start: 0.625rem;
+	padding-inline-start: 0.5rem;
 	font-size: var(--text-sm);
 	font-weight: 600;
 }
@@ -130,8 +130,18 @@
 	min-width: 0;
 }
 
-.design-audit-sidebar a[data-navigation-state="ancestor"] {
+.design-audit-sidebar a,
+.design-audit-navigation-loading {
+	min-height: 1.875rem;
+	padding-inline: 0.5rem;
+}
+
+.design-audit-sidebar a[aria-current="page"] {
 	font-weight: 500;
+}
+
+.design-audit-sidebar a[data-navigation-state="ancestor"] {
+	color: var(--color-text-primary);
 }
 
 .design-audit-sidebar a[data-navigation-state="archived"] {
