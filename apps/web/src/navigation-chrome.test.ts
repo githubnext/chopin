@@ -215,9 +215,11 @@ describe("the Figma navigation chrome", () => {
 		let manager = renderToStaticMarkup(createElement(Header, { ...props, canManage: true }));
 		let viewer = renderToStaticMarkup(createElement(Header, { ...props, canManage: false }));
 
-		expect(manager).toContain("Archived, read-only");
+		expect(manager).toContain(">Archived</span>");
 		expect(manager).toContain('aria-label="Actions for Archived brief"');
-		expect(viewer).toContain("Archived, read-only");
+		expect(manager).toContain(">Restore</button>");
+		expect(viewer).toContain(">Archived</span>");
 		expect(viewer).not.toContain('aria-label="Actions for Archived brief"');
+		expect(viewer).not.toContain(">Restore</button>");
 	});
 });
