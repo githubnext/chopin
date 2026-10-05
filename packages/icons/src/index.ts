@@ -9,6 +9,9 @@ export {
 	CloseIcon,
 	CodeIcon,
 	DecisionIcon,
+	DiagramIcon,
+	DiffIcon,
+	FormulaIcon,
 	ImageIcon,
 	InfoIcon,
 	LightbulbIcon,
@@ -21,6 +24,8 @@ export {
 	SignInIcon,
 	SirenIcon,
 	SparkleIcon,
+	TableIcon,
+	TabsIcon,
 	WarningIcon,
 	WrenchIcon,
 } from "./line";

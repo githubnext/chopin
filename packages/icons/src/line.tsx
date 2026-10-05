@@ -220,3 +220,61 @@ export function CircleCloseIcon(props: IconProps) {
 		</LineIcon>
 	);
 }
+
+export function TableIcon(props: IconProps) {
+	return (
+		<LineIcon title="table" {...props}>
+			<rect height="12.5" rx="2" width="12.5" x="2.75" y="2.75" />
+			<line x1="2.75" x2="15.25" y1="7" y2="7" />
+			<line x1="7.5" x2="7.5" y1="7" y2="15.25" />
+		</LineIcon>
+	);
+}
+
+export function ImageIcon(props: IconProps) {
+	return (
+		<LineIcon title="image" {...props}>
+			<rect height="12.5" rx="2" width="12.5" x="2.75" y="2.75" />
+			<circle cx="6.75" cy="6.75" r="1" />
+			<path d="M2.75,12.25l3.5-3.5c.4-.4,1.1-.4,1.5,0l5.5,5.5" />
+		</LineIcon>
+	);
+}
+
+export function DiagramIcon(props: IconProps) {
+	return (
+		<LineIcon title="diagram" {...props}>
+			<rect height="4.5" rx="1" width="5" x="6.5" y="2.25" />
+			<rect height="4.5" rx="1" width="5" x="1.75" y="11.25" />
+			<rect height="4.5" rx="1" width="5" x="11.25" y="11.25" />
+			<path d="M9,6.75v2.25M4.25,11.25V9h9.5v2.25" />
+		</LineIcon>
+	);
+}
+
+export function FormulaIcon(props: IconProps) {
+	return (
+		<LineIcon title="formula" {...props}>
+			<polyline points="14.25 3.25 3.75 3.25 9 9 3.75 14.75 14.25 14.75" />
+		</LineIcon>
+	);
+}
+
+export function TabsIcon(props: IconProps) {
+	return (
+		<LineIcon title="tabs" {...props}>
+			<path d="M2.75,15.25h12.5V6.75c0-1-.5-1.5-1.5-1.5H2.75Z" />
+			<path d="M2.75,5.25V4.25c0-.55.45-1,1-1h3c.55,0,1,.45,1,1v1" />
+		</LineIcon>
+	);
+}
+
+export function DiffIcon(props: IconProps) {
+	return (
+		<LineIcon title="diff" {...props}>
+			<line x1="6" x2="6" y1="2.75" y2="8" />
+			<line x1="3.375" x2="8.625" y1="5.375" y2="5.375" />
+			<line x1="9.375" x2="14.625" y1="12.625" y2="12.625" />
+		</LineIcon>
+	);
+}

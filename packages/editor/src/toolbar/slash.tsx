@@ -43,6 +43,18 @@ import {
 import { $createTableNodeWithDimensions } from "@lexical/table";
 import { $createParagraphNode, $createTextNode, $insertNodes } from "lexical";
 
+import {
+	CodeIcon,
+	DiagramIcon,
+	DiffIcon,
+	FormulaIcon,
+	ImageIcon,
+	InfoIcon,
+	SearchIcon,
+	TableIcon,
+	TabsIcon,
+} from "@chopin/icons";
+
 import { askForUrl } from "./url";
 import { placeSurface } from "./placement";
 import { OPEN_RESEARCH_COMMAND } from "./research";
@@ -55,6 +67,8 @@ import {
 	SHELL,
 } from "./surface";
 
+import type { ReactElement } from "react";
+import type { IconProps } from "@chopin/icons";
 import type { ElementNode, LexicalEditor, LexicalNode } from "lexical";
 import type { DOMRectLike, SurfacePlacement } from "./placement";
 import type { OpenResearch } from "./research";
@@ -64,6 +78,8 @@ const MULTI_WORD_COMMANDS = ["web search"];
 type SlashCommandBase = {
 	id: string;
 	label: string;
+	hint: string;
+	icon: (props: IconProps) => ReactElement;
 	group: string;
 	keywords: string[];
 };
@@ -125,66 +141,18 @@ function insertContainer(
  *
  * A code fence is the exception that proves it: ``` is not wired, because
  * MDXEditor's transformer builds its own code node rather than the dialect's.
+ *
+ * Order is the menu order, and the first match is preselected: ordinary blocks
+ * come first and Research stays last, so a bare `/` then Enter never starts a
+ * durable job. It becomes the first match only once the query narrows to it.
  */
 const COMMANDS: SlashCommand[] = [
 	{
-		id: "research",
-		label: "Research",
-		group: "Research",
-		keywords: ["research", "web search"],
-		kind: "action",
-		run: (editor, action) => editor.dispatchCommand(OPEN_RESEARCH_COMMAND, action),
-	},
-	{
-		id: "code",
-		label: "Code block",
-		group: "Technical",
-		keywords: ["code", "snippet", "fence"],
-		kind: "insert",
-		run: editor => replace(editor, () => $createCodeBlockNode("")),
-	},
-	{
-		id: "diff",
-		label: "Diff",
-		group: "Technical",
-		keywords: ["diff", "patch", "change"],
-		kind: "insert",
-		run: editor => replace(editor, () => $createCodeBlockNode(DIFF_LANGUAGE)),
-	},
-	{
-		id: "mermaid",
-		label: "Diagram",
-		group: "Technical",
-		keywords: ["mermaid", "diagram", "flowchart", "graph"],
-		kind: "insert",
-		run: editor => replace(editor, () => $createCodeBlockNode(MERMAID_LANGUAGE)),
-	},
-	{
-		id: "math",
-		label: "Formula",
-		group: "Technical",
-		keywords: ["math", "latex", "katex", "equation"],
-		kind: "insert",
-		run: editor => replace(editor, () => $createMathNode(false)),
-	},
-	{
-		id: "image",
-		label: "Image",
-		group: "Technical",
-		keywords: ["image", "picture", "figure", "screenshot"],
-		kind: "insert",
-		run: editor => {
-			let src = askForUrl("Image URL", { protocols: IMAGE_PROTOCOLS, relative: false });
-			if (!src) return;
-			editor.update(() => {
-				$insertNodes([$createImageNode(src, "")]);
-			});
-		},
-	},
-	{
 		id: "callout",
 		label: "Callout",
-		group: "Layout",
+		hint: "Highlight a note or warning",
+		icon: InfoIcon,
+		group: "Blocks",
 		keywords: ["note", "warning", "aside", "admonition"],
 		kind: "insert",
 		run: editor => insertContainer(editor, () => $createCalloutNode(ulid())),
@@ -192,7 +160,9 @@ const COMMANDS: SlashCommand[] = [
 	{
 		id: "table",
 		label: "Table",
-		group: "Layout",
+		hint: "Rows and columns",
+		icon: TableIcon,
+		group: "Blocks",
 		keywords: ["table", "grid", "row", "column", "spreadsheet"],
 		kind: "insert",
 		run: editor =>
@@ -209,9 +179,57 @@ const COMMANDS: SlashCommand[] = [
 			}),
 	},
 	{
+		id: "code",
+		label: "Code block",
+		hint: "Syntax-coloured code",
+		icon: CodeIcon,
+		group: "Blocks",
+		keywords: ["code", "snippet", "fence"],
+		kind: "insert",
+		run: editor => replace(editor, () => $createCodeBlockNode("")),
+	},
+	{
+		id: "image",
+		label: "Image",
+		hint: "Insert from a URL",
+		icon: ImageIcon,
+		group: "Blocks",
+		keywords: ["image", "picture", "figure", "screenshot"],
+		kind: "insert",
+		run: editor => {
+			let src = askForUrl("Image URL", { protocols: IMAGE_PROTOCOLS, relative: false });
+			if (!src) return;
+			editor.update(() => {
+				$insertNodes([$createImageNode(src, "")]);
+			});
+		},
+	},
+	{
+		id: "mermaid",
+		label: "Diagram",
+		hint: "Flowchart from Mermaid text",
+		icon: DiagramIcon,
+		group: "Blocks",
+		keywords: ["mermaid", "diagram", "flowchart", "graph"],
+		kind: "insert",
+		run: editor => replace(editor, () => $createCodeBlockNode(MERMAID_LANGUAGE)),
+	},
+	{
+		id: "math",
+		label: "Formula",
+		hint: "LaTeX equation",
+		icon: FormulaIcon,
+		group: "Blocks",
+		keywords: ["math", "latex", "katex", "equation"],
+		kind: "insert",
+		run: editor => replace(editor, () => $createMathNode(false)),
+	},
+	{
 		id: "tabs",
 		label: "Tabs",
-		group: "Layout",
+		hint: "Switch between panels",
+		icon: TabsIcon,
+		group: "Blocks",
 		keywords: ["tab", "switch", "panel"],
 		kind: "insert",
 		run: editor =>
@@ -227,6 +245,26 @@ const COMMANDS: SlashCommand[] = [
 				}
 				$insertNodes([tabs]);
 			}),
+	},
+	{
+		id: "diff",
+		label: "Diff",
+		hint: "Show added and removed lines",
+		icon: DiffIcon,
+		group: "Blocks",
+		keywords: ["diff", "patch", "change"],
+		kind: "insert",
+		run: editor => replace(editor, () => $createCodeBlockNode(DIFF_LANGUAGE)),
+	},
+	{
+		id: "research",
+		label: "Research",
+		hint: "Ask Chopin to research the web",
+		icon: SearchIcon,
+		group: "Research",
+		keywords: ["research", "web search"],
+		kind: "action",
+		run: (editor, action) => editor.dispatchCommand(OPEN_RESEARCH_COMMAND, action),
 	},
 ];
 
@@ -523,7 +561,7 @@ export function SlashMenu({ actions = NO_ACTIONS, disabled }: SlashMenuProps) {
 			aria-label="Insert block"
 			data-focus-boundary=""
 			contentEditable={false}
-			className={`${SHELL} max-h-72 w-56 overflow-y-auto`}
+			className={`${SHELL} max-h-72 w-80 overflow-y-auto`}
 			style={position
 				? { top: position.top, left: position.left, maxHeight: position.maxHeight }
 				: { top: anchor.bottom + 8, left: anchor.left, visibility: "hidden" }}
@@ -539,6 +577,8 @@ export function SlashMenu({ actions = NO_ACTIONS, disabled }: SlashMenuProps) {
 								key={command.id}
 								type="button"
 								role="option"
+								aria-label={command.label}
+								aria-description={command.hint}
 								aria-selected={position === index}
 								data-press="wide"
 								onMouseEnter={() => setIndex(position)}
@@ -546,10 +586,17 @@ export function SlashMenu({ actions = NO_ACTIONS, disabled }: SlashMenuProps) {
 								className={`${ROW} ${
 									position === index
 										? "bg-selected text-text-primary"
-										: "text-text-tertiary"
+										: "text-text-secondary"
 								}`}
 							>
-								{command.label}
+								<command.icon size={14} className="shrink-0" />
+								<span className="ml-2 shrink-0">{command.label}</span>
+								<span
+									aria-hidden="true"
+									className="ml-auto truncate pl-3 text-xs text-text-tertiary"
+								>
+									{command.hint}
+								</span>
 							</button>
 						);
 					})}
