@@ -22,6 +22,7 @@ import { documentRouteIdentity } from "./document-route-swap";
 import type { DocumentAction } from "./document-actions-menu";
 import { motionContract } from "./motion-contract";
 import { NavigationFocusScope } from "./navigation-focus";
+import { useMenuDismissal } from "./menu-dismissal";
 import { motionImmediately } from "./motion-input";
 import {
 	activeProject,
@@ -309,6 +310,14 @@ export function NavigationShell(
 		immediateMotion,
 	);
 	let dialogPresence = useTransitionPresence(dialog, 150, immediateMotion);
+	let accountWrap = useRef<HTMLDivElement>(null);
+	let closeAccount = useCallback((restoreFocus: boolean) => {
+		setAccountOpen(false);
+		if (restoreFocus) {
+			accountWrap.current?.querySelector<HTMLElement>("[aria-expanded]")?.focus();
+		}
+	}, []);
+	useMenuDismissal(accountOpen, [accountWrap], closeAccount);
 	let accountPresence = useTransitionPresence(
 		accountOpen ? true : undefined,
 		150,
@@ -779,6 +788,7 @@ export function NavigationShell(
 					</div>
 				)}
 				accountMenuOpen={accountOpen}
+				accountWrapRef={accountWrap}
 				canCreateDocument={creationTarget.type !== "loading"}
 				pendingCreations={creation.pending}
 				newDocumentPhase={creationTarget.type === "loading"

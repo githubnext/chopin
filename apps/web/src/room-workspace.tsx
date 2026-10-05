@@ -118,6 +118,7 @@ export function Header(
 					: canManage
 					? (
 						<DocumentActionsMenu
+							align="start"
 							channel={{ archivedAt, title: label }}
 							className="document-title-trigger"
 							onAction={onAction}
