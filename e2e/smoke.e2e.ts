@@ -722,7 +722,7 @@ test("a Planner question waits on people and opens its card", async ({ join, pag
 	let waiting = chat.locator("[data-tool-waiting]");
 	await expect(waiting).toHaveText(/Waiting on your decision/);
 	await expect(chat.locator(".chat-tool-loader")).toHaveCount(0);
-	await waiting.getByRole("button", { name: "Open", exact: true }).click();
+	await waiting.getByRole("button", { name: "Open decision" }).click();
 	await expect(
 		page.locator(
 			`[data-document-view="plan"] article[data-plan-sidecar-questionnaire="${widget}"]`,

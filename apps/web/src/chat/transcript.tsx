@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { ChevronIcon, CloseIcon, DecisionIcon, LoaderIcon, SignInIcon } from "@chopin/icons";
 import { cardStatus } from "@chopin/dialect";
+import type { Questionnaire } from "@chopin/dialect";
 import { parseChildDocumentPath } from "@chopin/protocol/document-url";
 
 import { Face, MotionDisclosure, MotionDisclosureIcon, useCardMeta } from "@chopin/editor";
@@ -70,6 +71,16 @@ function when(ts: number): string {
 const NO_QUESTIONS: ReturnType<QuestionnaireStore["snapshot"]> = [];
 const noQuestions = () => () => {};
 
+/** A malformed stored status must not break the transcript; it is simply not open. */
+function isOpen(value: Questionnaire): boolean {
+	try {
+		let status = cardStatus(value);
+		return status === "open" || status === "reopened";
+	} catch {
+		return false;
+	}
+}
+
 function WaitingRun(
 	{ decisions, prompts }: { decisions?: TranscriptDecisions; prompts: string[] },
 ) {
@@ -78,27 +89,26 @@ function WaitingRun(
 		decisions?.questions.snapshot ?? (() => NO_QUESTIONS),
 		decisions?.questions.snapshot ?? (() => NO_QUESTIONS),
 	);
-	let ids = waitingCards(
+	let { ids, count } = waitingCards(
 		prompts,
-		values.map(({ id, value }) => {
-			let status = cardStatus(value);
-			return {
-				id,
-				prompt: value.questions[0]?.prompt,
-				open: status === "open" || status === "reopened",
-			};
-		}),
+		values.map(({ id, value }) => ({
+			id,
+			prompts: value.questions.map(question => question.prompt),
+			open: isOpen(value),
+		})),
 	);
 	let first = ids[0];
 	return (
 		<div
 			className="flex min-h-7 min-w-0 flex-wrap items-center gap-2 py-1 text-sm text-text-quaternary"
 			data-tool-waiting
+			role="status"
 		>
 			<DecisionIcon aria-hidden="true" size={14} />
-			<span>{waitingText(ids.length || prompts.length)}</span>
+			<span>{waitingText(count)}</span>
 			{decisions && first && (
 				<button
+					aria-label="Open decision"
 					className="btn btn-sm btn-ghost -my-1"
 					onClick={() => decisions.onOpenCard(first)}
 					type="button"
