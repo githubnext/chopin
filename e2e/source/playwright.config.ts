@@ -3,6 +3,7 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
 	testDir: ".",
 	testMatch: [
+		"research-offers.native.ts",
 		"source-highlight.native.ts",
 		"question-actions.native.ts",
 		"question-terminal-origin.native.ts",
