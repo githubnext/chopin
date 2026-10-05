@@ -47,6 +47,11 @@ typography:
     fontSize: "var(--text-xs)"
     fontWeight: 400
     lineHeight: 1.35
+  small-metadata:
+    fontFamily: '"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
+    fontSize: "var(--text-2xs)"
+    fontWeight: 400
+    lineHeight: 1.35
 rounded:
   sm: "0.25rem"
   md: "0.375rem"
@@ -131,7 +136,7 @@ The original destructive button red is an intentional visual exception: white te
 
 ## Typography
 
-Inter Variable is used for interface text and document prose. The mono stack is reserved for code and technical content. The shared theme defines a fluid modular scale across 360–1440px viewports. Its base is 15–16px and its ratio grows from 1.12 to 1.14. Each role uses `base × ratio^step` at each endpoint and a CSS `clamp()` between them. The six named roles are compact `--text-xs` (step −2, 12–12.3px), common interface `--text-sm` (step −1, 13.4–14px), plan body `--text-base` (step 0, 15–16px), subheading `--text-lg` (step +2), section heading `--text-xl` (step +4), and title `--text-2xl` (step +7, 33.2–40px). The editor gives prose looser leading than the paired UI token and forwards the fluid tokens through MDXEditor's fixed variable scope.
+Inter Variable is used for interface text and document prose. The mono stack is reserved for code and technical content. The shared theme defines a fluid modular scale across 360–1440px viewports. Its base is 15–16px and its ratio grows from 1.12 to 1.14. Each role uses `base × ratio^step` at each endpoint and a CSS `clamp()` between them. The seven named roles are small metadata `--text-2xs` (step −2.5, 11.3–11.5px), compact `--text-xs` (step −2, 12–12.3px), common interface `--text-sm` (step −1, 13.4–14px), document body `--text-base` (step 0, 15–16px), subheading `--text-lg` (step +2), section heading `--text-xl` (step +4), and title `--text-2xl` (step +7, 33.2–40px). The editor gives prose looser leading than the paired UI token and forwards the fluid tokens through MDXEditor's fixed variable scope.
 
 **The Fluid Type Rule.** Use a named text utility or `--text-*` token for every font size. The CI type-scale check rejects raw CSS font sizes, arbitrary Tailwind font sizes, and literal inline font sizes. Add a role in the shared theme and update its modular-scale test when the existing roles cannot serve the need. Inline code inherits the size of surrounding prose or a heading.
 

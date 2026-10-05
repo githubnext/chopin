@@ -9,7 +9,7 @@ export type TokenPolicy = {
 	utilities?: Set<string>;
 };
 
-let roles = new Set(["xs", "sm", "base", "lg", "xl", "2xl"]);
+let roles = new Set(["2xs", "xs", "sm", "base", "lg", "xl", "2xl"]);
 let neutral = new Set(["inherit", "initial", "unset", "revert", "revert-layer"]);
 let colorWords = new Set(["transparent", "currentcolor", "none"]);
 
@@ -185,7 +185,8 @@ export function declarationProblem(
 	let family = familyOf(property);
 	if (
 		property.startsWith("--text-") && !roles.has(property.slice(7))
-		&& !/^--text-(xs|sm|base|lg|xl|2xl)--line-height$/.test(property) && property !== "--text-*"
+		&& !/^--text-(2xs|xs|sm|base|lg|xl|2xl)--line-height$/.test(property)
+		&& property !== "--text-*"
 	) {
 		return { family: "typography", reason: "custom size is outside the approved fluid scale" };
 	}

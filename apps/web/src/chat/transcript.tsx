@@ -141,7 +141,7 @@ function SystemEntry({ item }: { item: Extract<Group, { kind: "system" }> }) {
 		.exec(item.text)?.[1];
 	let linked = readyPath !== undefined && parseChildDocumentPath(readyPath) !== undefined;
 	return (
-		<div className="flex items-start gap-3 text-text-tertiary" data-chat-system>
+		<div className="flex items-center justify-start gap-3 text-text-tertiary" data-chat-system>
 			<div className="shrink-0">
 				<SignInIcon aria-hidden="true" size={14} />
 			</div>
@@ -222,7 +222,7 @@ function MessageBody(
 	} & PlanMarkers,
 ) {
 	let text = displayText(message.text) ? message.text : message.author.kind === "member"
-		? "Ask Planner"
+		? "Ask Chopin"
 		: "";
 
 	return (
@@ -310,7 +310,11 @@ function MessageGroup(
 			>
 				<div className="flex items-baseline gap-1.5 text-sm">
 					<span className="min-w-0 break-all font-semibold">{name}</span>
-					<span className="text-sm text-text-quaternary tabular-nums">
+					<span
+						className={item.queued
+							? "text-sm text-text-quaternary tabular-nums"
+							: "text-2xs text-text-tertiary tabular-nums"}
+					>
 						{item.queued ? "queued" : when(first.ts!)}
 					</span>
 				</div>

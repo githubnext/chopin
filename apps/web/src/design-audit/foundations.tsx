@@ -38,6 +38,7 @@ const COLOURS = [
 ] as const;
 
 const TYPE = [
+	["Small metadata", "11.3–11.5px · step −2.5", "--text-2xs", "--text-2xs--line-height"],
 	["Compact controls", "12–12.3px · step −2", "--text-xs", "--text-xs--line-height"],
 	["Interface and chat", "13.4–14px · step −1", "--text-sm", "--text-sm--line-height"],
 	["Document prose", "15–16px · step 0", "--text-base", "--text-base--line-height"],
@@ -151,7 +152,7 @@ export function Foundations() {
 			<AuditPlate
 				item="typography"
 				title="Typography"
-				description="The complete fluid six-rung type scale."
+				description="The complete fluid seven-rung type scale."
 			>
 				<div className="design-audit-type-stack">
 					{TYPE.map(([label, measurement, size, lineHeight]) => (

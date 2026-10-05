@@ -43,7 +43,15 @@ describe("design audit specimens", () => {
 		expect(markup).toContain("Strong resting");
 		expect(markup).toContain("--button-edge-width");
 		for (
-			let token of ["--text-xs", "--text-sm", "--text-base", "--text-lg", "--text-xl", "--text-2xl"]
+			let token of [
+				"--text-2xs",
+				"--text-xs",
+				"--text-sm",
+				"--text-base",
+				"--text-lg",
+				"--text-xl",
+				"--text-2xl",
+			]
 		) {
 			expect(markup).toContain(`var(${token})`);
 		}

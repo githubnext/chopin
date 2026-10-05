@@ -24,6 +24,7 @@ let typography: Record<string, string> = {
 	"document-body": "base",
 	chrome: "sm",
 	compact: "xs",
+	"small-metadata": "2xs",
 };
 let spacing: Record<string, number> = {
 	half: 0.5,

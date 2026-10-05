@@ -23,7 +23,7 @@ visual comparisons and updates.
 
 [`coverage.ts`](coverage.ts) is the explicit manifest. Eight specimen plates (with the button plate split into five short rows) are
 captured at 1440 × 1000 and 390 × 844, plus the open menu, disabled/error modal, and
-open Select: 32 small screenshots. Capture bounds fail if content would be clipped. Tests scan each captured state with axe after it
+open Select: 33 small screenshots. Capture bounds fail if content would be clipped. Tests scan each captured state with axe after it
 is rendered, and attach the full JSON report including incomplete/manual-review
 results. Keyboard assertions cover arrow navigation, Escape, initial focus, modal
 Tab wrapping, Select selection and focus restoration. Responsive checks cover
@@ -68,6 +68,6 @@ The optional visual suite runs 38 interface checks across the two viewport sizes
 
 On 29 September 2026, Maggie chose the original Delete red, quiet timestamps/tool metadata, muted queued/loading messages, original pierre-light code palette and supplementary audit-page labels. AA remains a preference, not a universal mandate. See `apps/web/DESIGN.md`.
 
-`approved-contrast/` records each accepted node's named role and exact rule, selector, HTML and measured evidence at each width. There are 61 accepted nodes at each width; 45 at each width are audit-page source/state/type-scale labels. Linux detects seven approved syntax tokens at each width. A controlled three-scan comparison showed the macOS browser detects one fewer narrow token regardless of vertical positioning; use Linux for authoritative contrast verification. These counts describe findings in the tested states, not complete palette or application coverage.
+`approved-contrast/` records each accepted node's named role and exact rule, selector, HTML and measured evidence at each width. There are 61 accepted nodes at each width; 47 at each width are audit-page source/state/type-scale labels. Linux detects seven approved syntax tokens at each width. A controlled three-scan comparison showed the macOS browser detects one fewer narrow token regardless of vertical positioning; use Linux for authoritative contrast verification. These counts describe findings in the tested states, not complete palette or application coverage.
 
 Full axe reports retain the findings. Equality against the reviewed records rejects new nodes, other rules, changed markup/colour/size/ratio and stale entries. Menus, dialogs and Select still require zero violations. Do not broaden this decision or refresh these records automatically to make a failure pass. Screenshot update flags do not update contrast approvals.
