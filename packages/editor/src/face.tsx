@@ -70,7 +70,7 @@ export function Face({ decorative, handle, ring, size = 20, titled = true }: Fac
 				width: size,
 				height: size,
 				background: `color-mix(in srgb, ${tone} 18%, var(--color-page))`,
-				color: `color-mix(in srgb, ${tone} 80%, black)`,
+				color: `color-mix(in srgb, ${tone} 80%, var(--color-text-primary))`,
 			}}
 			title={titled ? handle : undefined}
 		>
