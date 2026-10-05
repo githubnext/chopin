@@ -110,17 +110,17 @@ test("Escape during a delayed option reply restores focus and respects moving aw
 	await ana.keyboard.press("Escape");
 	await expect(field).toHaveCount(0);
 	await expect(trigger).toBeFocused();
-	let chatToggle = ana.getByRole("button", { name: /^(Show|Hide) chat pane/ });
-	await chatToggle.click();
-	await expect(chatToggle).toHaveAttribute("aria-expanded", "false");
-	await expect(chatToggle).toBeFocused();
+	await ana.getByRole("button", { name: "Close sidebar" }).click();
+	let chatOpener = ana.getByRole("button", { name: "Show chat pane" });
+	await expect(chatOpener).toHaveAttribute("aria-expanded", "false");
+	await expect(chatOpener).toBeFocused();
 
 	held.releaseDefinition();
 	held.releaseReply();
 	await expect(card.getByRole("radio", { name: "Escape during refresh", exact: true }))
 		.toBeVisible();
 	await expect(trigger).toBeEnabled();
-	await expect(chatToggle).toBeFocused();
+	await expect(chatOpener).toBeFocused();
 });
 
 test("Escape during a duplicate request clears its late error", async ({ join, page, seed }) => {

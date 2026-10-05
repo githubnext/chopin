@@ -527,7 +527,7 @@ test("a representative desktop retains the split Chat layout", async ({ join, se
 	await expect(chatPane(page)).toBeVisible();
 	await expect(page.getByRole("separator", { name: "Resize chat" })).toBeVisible();
 	await expect(page.getByRole("navigation", { name: "Workspace view" })).toHaveCount(0);
-	await expect(page.getByRole("button", { name: /chat pane/ })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Close sidebar" })).toBeVisible();
 	await expect(page.getByRole("group", { name: "Document view" })).toBeVisible();
 	await expect(content(page)).toBeEditable();
 });
