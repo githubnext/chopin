@@ -266,6 +266,53 @@ describe("recovery", () => {
 		expect(outcome.issues.length).toBeGreaterThan(0);
 	});
 
+	/**
+	 * The stricter URL rules arrived after documents were stored. They judge
+	 * what a change brings in, so a document already holding such a link keeps
+	 * opening, restoring and taking edits instead of failing every projection.
+	 */
+	it("keeps opening and editing a stored document with a link the newer URL rules refuse", async () => {
+		let source = "Read [the notes](docs\\notes.md).\n";
+		let document = await room.create(source);
+		let stored = room.project(document);
+		expect(stored).toContain("docs\\");
+		room.mark(document);
+
+		let restored = await room.restore(
+			document.epoch,
+			Y.encodeStateAsUpdate(document.doc),
+			stored,
+			[],
+		);
+		try {
+			let client = peer();
+			Y.applyUpdate(client.doc, room.sync(restored), "remote");
+			await room.settle();
+			let before = Y.encodeStateVector(client.doc);
+			client.editor.update(() => {
+				$importPlan(`${stored}\nAdded.\n`, { registry: REGISTRY, validate: false });
+			}, { discrete: true });
+			let outcome = await room.apply(restored, [Y.encodeStateAsUpdate(client.doc, before)]);
+			expect(outcome.ok).toBe(true);
+			expect(room.project(restored)).toBe(`${stored}\nAdded.\n`);
+
+			// A new link of the same kind is still refused.
+			before = Y.encodeStateVector(client.doc);
+			client.editor.update(() => {
+				$importPlan(`${stored}\nAdded [elsewhere](//evil.com).\n`, {
+					registry: REGISTRY,
+					validate: false,
+				});
+			}, { discrete: true });
+			let refused = await room.apply(restored, [Y.encodeStateAsUpdate(client.doc, before)]);
+			expect(refused.ok).toBe(false);
+			if (!refused.ok) expect(refused.issues).toContain("bad-link");
+		} finally {
+			restored.doc.destroy();
+			document.doc.destroy();
+		}
+	});
+
 	it("with questions open, refuses a human edit that grows into the expiry reserve but allows one that shrinks", async () => {
 		let filler = "x".repeat(limits.MAX_SOURCE_BYTES - 40);
 		let document = await room.create(`# T\n\n${filler}\n\nTail.\n`);

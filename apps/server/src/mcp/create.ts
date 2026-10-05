@@ -1,6 +1,15 @@
 import { createHash } from "node:crypto";
 
-import { limits, lookup, parse, serialize, ulid, validate } from "@chopin/dialect";
+import {
+	assertIntroducedUrls,
+	limits,
+	lookup,
+	parse,
+	PlanValidationError,
+	serialize,
+	ulid,
+	validate,
+} from "@chopin/dialect";
 
 import * as room from "../plan/room";
 
@@ -159,6 +168,12 @@ export function canonical(source: string): { source: string } | { issues: Issue[
 	let output = serialize(tree);
 	let result = validate(tree, { bytes: Buffer.byteLength(output, "utf8") });
 	if (!result.ok) return { issues: result.issues };
+	try {
+		assertIntroducedUrls([], tree.children);
+	} catch (err) {
+		if (err instanceof PlanValidationError) return { issues: err.issues };
+		throw err;
+	}
 	try {
 		room.validate(output);
 	} catch (err) {

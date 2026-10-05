@@ -3,9 +3,9 @@ import { describe, expect, it } from "bun:test";
 import * as limits from "./limits";
 import { parse } from "./parse";
 import { serialize } from "./serialize";
-import { validate } from "./validate";
+import { assertIntroducedUrls, PlanValidationError, validate } from "./validate";
 
-import type { PhrasingContent } from "mdast";
+import type { PhrasingContent, RootContent } from "mdast";
 
 const ID = "01K0N4TR8K7JGM4R1J7PW4R8YJ";
 const ID2 = "01K0N4V4E7Y6P4MJ5WD8XZF3B2";
@@ -16,9 +16,24 @@ function codes(source: string): string[] {
 	return result.ok ? [] : result.issues.map(issue => issue.code);
 }
 
-function treeCodes(phrasing: PhrasingContent): string[] {
-	let result = validate({ type: "root", children: [{ type: "paragraph", children: [phrasing] }] });
-	return result.ok ? [] : result.issues.map(issue => issue.code);
+function linkTo(url: string): PhrasingContent {
+	return { type: "link", url, children: [{ type: "text", value: "x" }] };
+}
+
+/** Issue codes for URLs that `after` brings in beyond `before`. */
+function introduced(before: RootContent[], after: Array<RootContent | PhrasingContent>): string[] {
+	let wrap = (nodes: Array<RootContent | PhrasingContent>): RootContent[] =>
+		nodes.map(node =>
+			node.type === "link" || node.type === "image"
+				? { type: "paragraph", children: [node] }
+				: node as RootContent
+		);
+	try {
+		assertIntroducedUrls(before, wrap(after));
+		return [];
+	} catch (err) {
+		return err instanceof PlanValidationError ? err.issues.map(issue => issue.code) : ["threw"];
+	}
 }
 
 function accepts(source: string): void {
@@ -120,7 +135,7 @@ describe("security boundary", () => {
 	 * Built as trees, not parsed: markdown refuses control characters in a
 	 * destination, but a Lexical export or an agent's operation does not.
 	 */
-	it("rejects links that hide a scheme or name another host", () => {
+	it("refuses introduced links that hide a scheme or name another host", () => {
 		for (
 			let url of [
 				"\u0001javascript:alert(1)",
@@ -134,11 +149,22 @@ describe("security boundary", () => {
 				"docs\\a.md",
 			]
 		) {
-			expect(treeCodes({ type: "link", url, children: [{ type: "text", value: "x" }] }))
-				.toContain("bad-link");
+			expect(introduced([], [linkTo(url)])).toContain("bad-link");
 		}
-		expect(treeCodes({ type: "image", url: "\u0001https://example.com/x.png", alt: "" }))
+		expect(introduced([], [{ type: "image", url: "\u0001https://example.com/x.png", alt: "" }]))
 			.toContain("bad-image");
+		expect(introduced([], [linkTo("docs/a.md"), linkTo("https://example.com")])).toEqual([]);
+	});
+
+	/** Stored before the rule existed: refusing it on every open would lock the document. */
+	it("leaves a stored link alone that only the newer URL rules refuse", () => {
+		let stored = parse("Read [the notes](docs\\\\notes.md).\n");
+		expect((stored.children[0] as { children: Array<{ url?: string }> }).children[1]?.url)
+			.toBe("docs\\notes.md");
+		expect(validate(stored).ok).toBe(true);
+		expect(introduced(stored.children, [...stored.children, linkTo("https://example.com")]))
+			.toEqual([]);
+		expect(introduced(stored.children, [linkTo("//evil.com")])).toContain("bad-link");
 	});
 
 	it("allows https, mailto and repo-relative paths", () => {

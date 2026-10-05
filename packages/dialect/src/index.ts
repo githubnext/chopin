@@ -25,7 +25,7 @@ export { topLevelChunks } from "./chunk";
 export type { MdxChunk } from "./chunk";
 export { parse, PlanParseError } from "./parse";
 export { serialize } from "./serialize";
-export { assert, PlanValidationError, validate } from "./validate";
+export { assert, assertIntroducedUrls, PlanValidationError, validate } from "./validate";
 export type { Issue, Options as ValidateOptions, Result as ValidateResult } from "./validate";
 
 export {

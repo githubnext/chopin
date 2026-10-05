@@ -430,17 +430,8 @@ class Validator {
 	}
 
 	#link(url: string, path: string, node: Nodes): void {
-		if (dialect.HIDDEN_URL_CHARACTERS.test(url)) {
-			this.add("bad-link", "Link contains hidden or control characters", path, node);
-			return;
-		}
 		// Relative repository paths and Ace references carry no protocol.
-		if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) {
-			if (dialect.leavesRepository(url)) {
-				this.add("bad-link", "Link without a protocol must stay in the repository", path, node);
-			}
-			return;
-		}
+		if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) return;
 
 		let protocol: string;
 		try {
@@ -457,11 +448,6 @@ class Validator {
 
 	#image(url: string, path: string, node: Nodes): void {
 		this.#images++;
-
-		if (dialect.HIDDEN_URL_CHARACTERS.test(url)) {
-			this.add("bad-image", "Image URL contains hidden or control characters", path, node);
-			return;
-		}
 
 		let protocol: string;
 		try {
@@ -533,4 +519,59 @@ export class PlanValidationError extends Error {
 export function assert(root: Root, options: Options = {}): void {
 	let result = validate(root, options);
 	if (!result.ok) throw new PlanValidationError(result.issues);
+}
+
+/** Every link and image URL under these nodes. */
+function urls(nodes: readonly Nodes[], found = new Set<string>()): Set<string> {
+	for (let node of nodes) {
+		if (node.type === "link" || node.type === "image") found.add(node.url);
+		urls(children(node), found);
+	}
+	return found;
+}
+
+/**
+ * Refuse unsafe link and image URLs that a change brings in.
+ *
+ * Hidden characters (which browsers strip or hide, so `\u0001javascript:`
+ * resolves to a scheme no pattern saw) and scheme-less links that name
+ * another host (`//host`, anything with `\`) were refused only after
+ * documents were already stored with them. Whole-document validation runs
+ * whenever a room opens, restores, rebuilds or checks a batch, so refusing
+ * them there would lock people out of their own documents. These rules judge
+ * what a change introduces instead: a URL already present in `before` is left
+ * alone, wherever it ends up.
+ *
+ * @throws {PlanValidationError}
+ */
+export function assertIntroducedUrls(before: readonly Nodes[], after: readonly Nodes[]): void {
+	let known = urls(before);
+	let issues: Issue[] = [];
+	let visit = (nodes: readonly Nodes[]) => {
+		for (let node of nodes) {
+			if ((node.type === "link" || node.type === "image") && !known.has(node.url)) {
+				let image = node.type === "image";
+				if (dialect.HIDDEN_URL_CHARACTERS.test(node.url)) {
+					issues.push({
+						code: image ? "bad-image" : "bad-link",
+						message: `${image ? "Image" : "Link"} URL contains hidden or control characters`,
+						path: "root",
+						...(node.position ? { offset: node.position.start.offset } : {}),
+					});
+				} else if (
+					!image && !/^[a-z][a-z0-9+.-]*:/i.test(node.url) && dialect.leavesRepository(node.url)
+				) {
+					issues.push({
+						code: "bad-link",
+						message: "Link without a protocol must stay in the repository",
+						path: "root",
+						...(node.position ? { offset: node.position.start.offset } : {}),
+					});
+				}
+			}
+			visit(children(node));
+		}
+	};
+	visit(after);
+	if (issues.length > 0) throw new PlanValidationError(issues);
 }
