@@ -207,3 +207,36 @@ test("Tab over a selection from a list into a paragraph leaves it alone", async 
 	expect(await content(page).innerHTML()).toBe(before);
 	await written(page, room, /^- one\n- two\n\nafter$/m);
 });
+
+test("a lost connection is said in the document header and the composer", async ({ join, page }) => {
+	let sockets: WebSocketRoute[] = [];
+	let offline = false;
+	await page.routeWebSocket("**/ws?**", route => {
+		if (offline) return route.close();
+		route.connectToServer();
+		sockets.push(route);
+	});
+
+	await join("ana");
+	let status = page.locator("[data-document-toolbar] .plan-status");
+	await expect(status).toHaveAttribute("data-level", "hidden");
+
+	offline = true;
+	await sockets.at(-1)!.close();
+
+	await expect(status).toHaveAttribute("data-level", "notice");
+	await expect(status).toContainText("Reconnecting…");
+	await expect(page.locator(".plan[data-plan-offline]")).toHaveCount(1);
+	await expect(page.getByPlaceholder("Reconnecting…")).toHaveCount(1);
+	await expect(page.getByRole("button", { name: "Send message" })).toBeDisabled();
+
+	// Lost for long enough, it stops promising and offers a way out.
+	await expect(status).toHaveAttribute("data-level", "alert", { timeout: 10_000 });
+	await expect(status.getByRole("button", { name: "Reload" })).toBeVisible();
+
+	offline = false;
+	await ready(page);
+	await expect(status).toHaveAttribute("data-level", "hidden");
+	await expect(page.locator(".plan[data-plan-offline]")).toHaveCount(0);
+	await expect(page.getByPlaceholder("Use @chopin to ask Chopin")).toHaveCount(1);
+});

@@ -106,6 +106,8 @@ export type WorkspaceProps = {
 	plan: ReactNode;
 	decisions: ReactNode;
 	controls: ReactNode;
+	/** Connection and document status, right-aligned in the document header. */
+	status?: ReactNode;
 	ids: WorkspaceIds;
 	mode: WorkspaceMode;
 	state: WorkspaceState;
@@ -236,6 +238,7 @@ export function Workspace(
 		plan,
 		presentation: workspacePresentation,
 		state,
+		status,
 		unanswered,
 		view,
 	}: WorkspaceProps,
@@ -491,6 +494,9 @@ export function Workspace(
 									/>
 								)}
 								{controls}
+								<div className="ml-auto flex shrink-0 items-center gap-2 pl-2">
+									{status}
+								</div>
 								{childPresentation && (
 									<div className="ml-auto flex shrink-0 items-center">
 										<button
@@ -506,6 +512,9 @@ export function Workspace(
 									</div>
 								)}
 							</div>
+						)}
+						{mode !== "split" && status && (
+							<div className="workspace-status-row shrink-0">{status}</div>
 						)}
 						<div
 							className="workspace-document-swap content-swap-stack relative min-h-0 flex-1"

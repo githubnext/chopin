@@ -594,6 +594,23 @@ body {
 	z-index: 10;
 }
 
+/*
+ * Without the split header row, status takes a row at the top of the document,
+ * and only while it has something to say. A quiet dot alone is not worth one.
+ */
+.workspace-status-row:has(.plan-status:is([data-level="notice"], [data-level="alert"])) {
+	display: flex;
+	justify-content: flex-end;
+	min-height: calc(var(--spacing) * 9);
+	align-items: center;
+	padding-inline: calc(var(--spacing) * 4);
+	border-bottom: var(--edge-width) solid var(--color-edge);
+}
+
+.workspace-status-row .plan-status[data-level="quiet"] .plan-status-dot {
+	display: none;
+}
+
 .chat-message-body:has([data-analysis-trigger]) {
 	min-height: calc(var(--spacing) * 7);
 }

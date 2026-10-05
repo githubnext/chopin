@@ -12,6 +12,7 @@ import {
 	Face,
 	firstOpenDecision,
 	PlanEditor,
+	PlanStatus,
 	QuestionnaireStore,
 	selectDecisionView,
 	ThreadStore,
@@ -45,7 +46,7 @@ import { useWorkspaceIds, useWorkspaceLayout, useWorkspaceState, Workspace } fro
 import { initialDocumentView, presentWorkspace, workspaceProfile } from "./workspace-model";
 
 import type { ConversationPlan, Research, Session } from "@chopin/protocol";
-import type { DecisionView, DecisionViewState } from "@chopin/editor";
+import type { DecisionView, DecisionViewState, PlanState } from "@chopin/editor";
 import type { DocumentMetadata } from "./document-actions";
 import type { DocumentAction } from "./document-actions-menu";
 import type { HostedWorkspaceProps } from "./hosted";
@@ -217,6 +218,7 @@ export function RoomWorkspace(
 		onResearchChildPublished,
 	} = useNavigationDocument();
 	let [status, setStatus] = useState<Status>("connecting");
+	let [planState, setPlanState] = useState<PlanState>({ synced: false });
 	let [members, setMembers] = useState<Session.Member[]>([]);
 	let [effectiveCanEdit, setEffectiveCanEdit] = useState(canEdit && !archivedAt);
 	let [effectiveCanManage, setEffectiveCanManage] = useState(canManage);
@@ -799,6 +801,13 @@ export function RoomWorkspace(
 						view={view}
 					/>
 				}
+				status={
+					<PlanStatus
+						connection={status === "deleted" ? "closed" : status}
+						failed={planState.failed}
+						synced={planState.synced}
+					/>
+				}
 				ids={workspaceIds}
 				identity={room}
 				mode={mode}
@@ -830,6 +839,7 @@ export function RoomWorkspace(
 						key={workspaceArchivedAt ? "archived" : "active"}
 						motionImmediately={settleMotionImmediately}
 						onScrollTop={setPlanScrollTop}
+						onState={setPlanState}
 						questionMotion={QUESTION_MOTION}
 						questions={questions}
 						readOnly={!workspaceCanEdit}
