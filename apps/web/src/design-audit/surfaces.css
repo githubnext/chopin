@@ -111,10 +111,10 @@
 
 .design-audit-sidebar-heading {
 	display: flex;
-	min-height: 1.875rem;
+	min-height: calc(var(--spacing) * 7.5);
 	align-items: center;
 	justify-content: space-between;
-	padding-inline-start: 0.5rem;
+	padding-inline-start: calc(var(--spacing) * 2);
 	font-size: var(--text-sm);
 	font-weight: 600;
 }
@@ -132,8 +132,8 @@
 
 .design-audit-sidebar a,
 .design-audit-navigation-loading {
-	min-height: 1.875rem;
-	padding-inline: 0.5rem;
+	min-height: calc(var(--spacing) * 7.5);
+	padding-inline: calc(var(--spacing) * 2);
 }
 
 .design-audit-sidebar a[aria-current="page"] {

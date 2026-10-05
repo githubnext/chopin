@@ -58,6 +58,8 @@ export function IconTooltip() {
 		let active: HTMLElement | null = null;
 		let hovered: HTMLElement | null = null;
 		let focused: HTMLElement | null = null;
+		// Escape dismisses the focused control's tooltip until focus moves.
+		let dismissed: HTMLElement | null = null;
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		let originalTitle: string | null = null;
 
@@ -92,7 +94,13 @@ export function IconTooltip() {
 					let right = (button.closest("[data-tooltip-edge]") ?? button).getBoundingClientRect()
 						.right;
 					if (right + GAP + tooltip.offsetWidth <= window.innerWidth - 8) {
-						tooltip.style.top = `${rect.top + rect.height / 2}px`;
+						let half = tooltip.offsetHeight / 2;
+						tooltip.style.top = `${
+							Math.max(
+								8 + half,
+								Math.min(rect.top + rect.height / 2, window.innerHeight - 8 - half),
+							)
+						}px`;
 						tooltip.style.left = `${right + GAP}px`;
 						tooltip.setAttribute("data-visible", "");
 						return;
@@ -141,13 +149,17 @@ export function IconTooltip() {
 		}
 
 		function focusIn(event: FocusEvent) {
-			focused = iconButton(event.target);
+			let target = event.target;
+			if (!(target instanceof Element) || !target.matches(":focus-visible")) return;
+			dismissed = null;
+			focused = iconButton(target);
 			enter(hovered ?? focused);
 		}
 
 		function scroll() {
 			hovered = null;
-			focused = iconButton(document.activeElement);
+			let current = iconButton(document.activeElement);
+			focused = current === dismissed ? null : current;
 			hide();
 			if (focused) enter(focused);
 		}
@@ -160,7 +172,10 @@ export function IconTooltip() {
 		document.addEventListener("scroll", scroll, true);
 		window.addEventListener("resize", hide);
 		let keyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") hide();
+			if (event.key !== "Escape") return;
+			if (focused) dismissed = focused;
+			focused = null;
+			hide();
 		};
 		document.addEventListener("keydown", keyDown, true);
 		return () => {
