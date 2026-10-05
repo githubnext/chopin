@@ -48,6 +48,26 @@ export function tooltipText(label: string, verbatim: boolean): string {
 		: label.trim().replace(/^[a-z]/, (letter) => letter.toUpperCase());
 }
 
+/** Hover tooltips never show on coarse pointers; focus ones only for keyboard focus. */
+export function tooltipTrigger(
+	source: "hover" | "focus",
+	state: { coarse: boolean; focusVisible: boolean },
+): boolean {
+	return source === "hover" ? !state.coarse : state.focusVisible;
+}
+
+function keyboardFocused(target: EventTarget | null): HTMLElement | null {
+	let button = iconButton(target);
+	if (!button) return null;
+	let focusVisible = false;
+	try {
+		focusVisible = button.matches(":focus-visible");
+	} catch {
+		focusVisible = true;
+	}
+	return tooltipTrigger("focus", { coarse: false, focusVisible }) ? button : null;
+}
+
 export function IconTooltip() {
 	useEffect(() => {
 		let tooltip = document.createElement("div");
@@ -122,8 +142,13 @@ export function IconTooltip() {
 			}, DELAY);
 		}
 
+		let coarse = window.matchMedia("(pointer: coarse)");
+
 		function pointerOver(event: PointerEvent) {
-			if (event.pointerType === "touch") return;
+			if (
+				event.pointerType === "touch"
+				|| !tooltipTrigger("hover", { coarse: coarse.matches, focusVisible: false })
+			) return;
 			hovered = iconButton(event.target);
 			enter(hovered ?? focused);
 		}
@@ -158,7 +183,7 @@ export function IconTooltip() {
 
 		function scroll() {
 			hovered = null;
-			let current = iconButton(document.activeElement);
+			let current = keyboardFocused(document.activeElement);
 			focused = current === dismissed ? null : current;
 			hide();
 			if (focused) enter(focused);

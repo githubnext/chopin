@@ -865,6 +865,26 @@ button.chat-tool-call-toggle {
 	}
 }
 
+/* Small controls keep their look; an invisible 44px target grows around them. */
+/* In the components layer so utilities such as `absolute` still win. */
+@layer components {
+	:root[data-plan-coarse-pointer]
+		:where(.btn-icon, .btn-sm, .project-sidebar-action, .project-sidebar-document-action) {
+		position: relative;
+	}
+
+	:root[data-plan-coarse-pointer]
+		:where(.btn-icon, .btn-sm, .project-sidebar-action, .project-sidebar-document-action)::after {
+		content: "";
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: max(100%, 44px);
+		height: max(100%, 44px);
+		transform: translate(-50%, -50%);
+	}
+}
+
 .question-field {
 	scroll-margin-block-end: calc(var(--keyboard-inset, 0px) + 1rem);
 }

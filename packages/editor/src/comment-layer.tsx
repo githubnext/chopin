@@ -788,6 +788,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let compactKey: string | undefined;
 	let compactId: string | undefined;
 	let compactLabel: string | undefined;
+	let compactTitle: string | undefined;
 	let compactClose: (() => void) | undefined;
 	let compactContent: ReactNode = undefined;
 	let previewView = preview && pinned !== preview
@@ -812,6 +813,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		compactKey = "draft";
 		compactId = "plan-comment-draft";
 		compactLabel = "New comment";
+		compactTitle = "New comment";
 		compactClose = cancelDraft;
 		compactContent = (
 			<DraftCard
@@ -825,6 +827,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		compactKey = "orphans";
 		compactId = "plan-comment-thread-orphans";
 		compactLabel = "Orphaned comments";
+		compactTitle = "Orphaned comments";
 		compactClose = dismiss;
 		compactContent = orphaned.map(view => card(view, false));
 	} else if (compact && pinned && (pinnedView || pinnedList)) {
@@ -834,6 +837,8 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			: `thread:${pinned}`;
 		compactId = dialogId(pinned);
 		compactLabel = pinnedView ? "Comment thread" : "Comments";
+		let count = pinnedView?.thread.notes.length;
+		compactTitle = count ? count === 1 ? "Comment" : `${count} comments` : "Comments";
 		compactClose = dismiss;
 		compactContent = pinnedView ? card(pinnedView, false) : (
 			<ThreadList
@@ -1049,6 +1054,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 					key={compactKey}
 					label={compactLabel}
 					onClose={compactClose}
+					title={compactTitle}
 				>
 					{compactContent}
 				</CommentSheet>
