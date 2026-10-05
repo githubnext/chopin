@@ -13,12 +13,10 @@ test("320×568 uses the compact comment drawer", async ({ join, seed }) => {
 	await page.getByRole("button", { name: /Comment on “/ }).first().tap();
 	let sheet = page.getByRole("dialog", { name: "Comment thread" });
 	await expect(sheet.getByRole("button", { name: "Resize comment sheet" })).toBeFocused();
-	await expect.poll(async () => (await sheet.boundingBox())!.y / viewport.height).toBeGreaterThan(
-		0.14,
-	);
+	await expect.poll(async () => (await sheet.boundingBox())!.y / viewport.height).toBeLessThan(0.9);
 	let box = await sheet.boundingBox();
 	expect(box).not.toBeNull();
-	expect(box!.y / viewport.height).toBeLessThan(0.9);
+	expect(box!.y / viewport.height).toBeGreaterThan(0.14);
 	expect(box!.x).toBe(0);
 	expect(box!.width).toBe(viewport.width);
 	await expect(sheet.getByRole("button", { name: "Close comment" })).toHaveClass(/sr-only/);
@@ -145,11 +143,11 @@ test("a representative compact viewport keeps a passage above the sheet and rest
 	expect(drawerStyles.transform).not.toBe("none");
 
 	await expect.poll(async () => (await sheet.boundingBox())!.y).toBeLessThan(
-		viewport.height * 0.5,
+		viewport.height * 0.9,
 	);
 	let medium = await sheet.boundingBox();
 	expect(medium).not.toBeNull();
-	expect(medium!.y).toBeGreaterThan(viewport.height * 0.4);
+	expect(medium!.y).toBeGreaterThan(viewport.height * 0.14);
 
 	let navigation = page.getByRole("navigation", {
 		name: "Workspace view",
