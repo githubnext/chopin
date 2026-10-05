@@ -847,6 +847,11 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 				let previewId = single ? `plan-comment-preview-${single.thread.id}` : undefined;
 				let width = coarse ? Math.max(TOUCH_TARGET, button.width) : button.width;
 				let height = coarse ? TOUCH_TARGET : CHIP;
+				// The touch area stays inside the document, so a chip in the padding keeps a full target.
+				let left = Math.max(
+					0,
+					Math.min(button.left - (width - button.width) / 2, page.width - width),
+				);
 				return (
 					<button
 						aria-label={single
@@ -883,15 +888,17 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 						onMouseLeave={single ? () => unhover(single.thread.id) : undefined}
 						style={{
 							top: button.top - (height - CHIP) / 2,
-							// A slim chip sits beside text, so its touch area grows away from the prose.
-							left: button.slim ? button.left : button.left - (width - button.width) / 2,
+							left,
 							width,
 							height,
 							visibility: button.offscreen ? "hidden" : undefined,
 						}}
 						type="button"
 					>
-						<span className="plan-comment-chip" style={{ width: button.width }}>
+						<span
+							className="plan-comment-chip"
+							style={{ left: button.left - left, top: (height - CHIP) / 2, width: button.width }}
+						>
 							{(single || !button.slim) && (
 								<MessageIcon aria-hidden="true" size={button.slim ? 10 : 14} />
 							)}

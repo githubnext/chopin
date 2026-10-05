@@ -1058,8 +1058,9 @@ test("an unavailable comment position keeps its compact sheet mounted until geom
 	await draft.getByRole("button", { name: "Post comment", exact: true }).click();
 
 	// Both threads mark the one block, so they share its marker.
-	let marker = page.getByRole("button", { name: /^2 comments on “A selected passage/ });
-	await expect(marker).toBeAttached();
+	// A modal sheet hides the document from the accessibility tree, so find the marker by its data.
+	let marker = page.locator("[data-plan-comment-button][data-plan-comment-count='2']");
+	await expect(marker).toHaveAttribute("aria-label", /^2 comments on “A selected passage/);
 	await expect(page.locator("[data-plan-comment-button]")).toHaveCount(1);
 	await marker.click();
 	await page.getByRole("dialog", { name: "Comments" })
@@ -1125,11 +1126,14 @@ test("a touch comment opens as a modal sheet and restores its marker", async ({ 
 			return { bottom: box.bottom, left: box.left, right: box.right, top: box.top };
 		})
 	);
+	// The visible chip never covers prose; only its invisible touch area may reach the line end.
+	let chip = await marker.locator(".plan-comment-chip").boundingBox();
+	expect(chip).not.toBeNull();
 	expect(passages.every(passage =>
-		markerBox!.x >= passage.right
-		|| markerBox!.x + markerBox!.width <= passage.left
-		|| markerBox!.y >= passage.bottom
-		|| markerBox!.y + markerBox!.height <= passage.top
+		chip!.x >= passage.right
+		|| chip!.x + chip!.width <= passage.left
+		|| chip!.y >= passage.bottom
+		|| chip!.y + chip!.height <= passage.top
 	)).toBe(true);
 
 	await marker.tap();
