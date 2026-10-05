@@ -338,7 +338,13 @@ test("a long description card stays inside the window beside a bottom row", asyn
 		route => route.fulfill({ json: { canEdit: true, channels: listed, repository } }),
 	);
 	await page.reload();
-	await sidebar(page).getByRole("link", { name: "Note 12", exact: true }).hover();
+	let link = sidebar(page).getByRole("link", { name: "Note 12", exact: true });
+	// Scrolling hides tooltips, so settle the rail before hovering.
+	await link.scrollIntoViewIfNeeded();
+	await page.evaluate(() =>
+		new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+	);
+	await link.hover();
 	let card = page.locator("[data-icon-tooltip]");
 	await expect(card).toBeVisible();
 	let box = (await card.boundingBox())!;
