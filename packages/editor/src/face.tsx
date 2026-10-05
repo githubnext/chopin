@@ -14,11 +14,13 @@
  * be the same shape as the agent.
  *
  * Until the photograph arrives, and for good if it never does, the mark is a
- * neutral square carrying the person's initial, so a dead URL never shows the
+ * square tinted with the person's cursor colour and carrying their initial, so a dead URL never shows the
  * browser's broken-image glyph.
  */
 
 import { useState } from "react";
+
+import { color } from "./cursor";
 
 /** Retina-sharp at the rendered size. */
 function photograph(handle: string, size: number): string {
@@ -55,6 +57,7 @@ export function faceCorner(size: number): keyof typeof FACE_RADIUS_CLASS {
 export function Face({ decorative, handle, ring, size = 20, titled = true }: FaceProps) {
 	let [failed, setFailed] = useState(false);
 	let [loaded, setLoaded] = useState(false);
+	let tone = color(handle);
 	let edge = `${FACE_RADIUS_CLASS[faceCorner(size)]} ${ring ? FACE_RING_CLASS[ring] : ""}`;
 
 	return (
@@ -62,8 +65,13 @@ export function Face({ decorative, handle, ring, size = 20, titled = true }: Fac
 			aria-hidden={decorative || undefined}
 			aria-label={decorative ? undefined : handle}
 			role={decorative ? undefined : "img"}
-			className={`relative grid shrink-0 place-items-center overflow-hidden bg-selected text-xs font-semibold text-text-secondary uppercase ${edge}`}
-			style={{ width: size, height: size }}
+			className={`relative grid shrink-0 place-items-center overflow-hidden text-xs font-semibold uppercase ${edge}`}
+			style={{
+				width: size,
+				height: size,
+				background: `color-mix(in srgb, ${tone} 18%, transparent)`,
+				color: `color-mix(in srgb, ${tone} 80%, black)`,
+			}}
 			title={titled ? handle : undefined}
 		>
 			{!loaded && <span aria-hidden="true">{handle.slice(0, 1)}</span>}
