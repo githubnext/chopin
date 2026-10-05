@@ -24,8 +24,8 @@ describe("comment sheet snap points", () => {
 	});
 
 	it("places the medium detent within the visual viewport", () => {
-		expect(commentSheetTop(844)).toBeCloseTo(379.8);
-		expect(commentSheetTop(844, 0.85)).toBeCloseTo(126.6);
+		expect(commentSheetTop(844)).toBeCloseTo(126.6);
+		expect(commentSheetTop(844, 0.55)).toBeCloseTo(379.8);
 	});
 
 	it("reserves the drawer for phone-sized coarse pointers", () => {

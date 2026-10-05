@@ -22,7 +22,10 @@ export function usesCommentSheet({
 	return coarse && width <= COMMENT_SHEET_MAX_WIDTH;
 }
 
-export function commentSheetTop(viewportHeight: number, fit: number = 0.55): number {
+export function commentSheetTop(
+	viewportHeight: number,
+	fit: number = COMMENT_SHEET_FIT_RANGE[1],
+): number {
 	return viewportHeight * (1 - fit);
 }
 
@@ -43,7 +46,7 @@ export type CommentSheetProps = {
 	children: ReactNode;
 	id: string;
 	label: string;
-	/** Visible heading; defaults to the accessible label. */
+	/** Visible heading, hidden from assistive tech; defaults to the label. */
 	title?: string;
 	onClose: () => void;
 	/** Show the close beside the grabber, for content with no header of its own. */

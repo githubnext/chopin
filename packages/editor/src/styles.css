@@ -449,6 +449,7 @@
 
 .plan-comment-chip,
 .plan-comment-orphan-button {
+	z-index: 1;
 	pointer-events: auto;
 	border: var(--edge-width) solid var(--color-control-edge);
 	background: var(--color-page);
