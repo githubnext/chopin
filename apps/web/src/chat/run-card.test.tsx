@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { defaultOpen, orderRuns, RunStack, visibleRuns } from "./run-card";
+import { defaultOpen, elapsed, orderRuns, RunStack, visibleRuns } from "./run-card";
 
 import type { Chat as Wire } from "@chopin/protocol";
 
@@ -116,4 +116,13 @@ test("runs of the same workflow are told apart by a short run id", () => {
 	expect(markup).toContain('aria-label="Pause demo-wait bbbbbbbb"');
 	let single = renderToStaticMarkup(createElement(RunStack, { onPause: () => {}, runs: [first] }));
 	expect(single).toContain('aria-label="Pause demo-wait"');
+});
+
+test("elapsed switches to days instead of printing hundreds of hours", () => {
+	expect(elapsed(2)).toBe("2s");
+	expect(elapsed(35 * 60)).toBe("35m");
+	expect(elapsed(23 * 3600 + 59 * 60)).toBe("23h 59m");
+	expect(elapsed(24 * 3600)).toBe("1d 0h");
+	expect(elapsed(3 * 86_400 + 4 * 3600)).toBe("3d 4h");
+	expect(elapsed(497_550 * 3600)).toBe("20731d 6h");
 });

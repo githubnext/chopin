@@ -19,9 +19,9 @@ const TABS = [
 	"Open the document in any current browser.",
 	"",
 	"</Tab>",
-	'<Tab id="01K0N4W3B7P27CBAEC7A8C8WF3" label="A deliberately long label for the third tab of this group">',
+	'<Tab id="01K0N4W3B7P27CBAEC7A8C8WF3" label="A longer label">',
 	"",
-	"Long labels wrap inside the strip.",
+	"A third tab with a longer label.",
 	"",
 	"</Tab>",
 	"</Tabs>",
@@ -258,22 +258,26 @@ export function Controls() {
 				item="tabs"
 				title="Tabs"
 			>
-				<div className="design-audit-tab-specimens">
-					<div>
-						<StateLabel>Document view switcher · Document selected</StateLabel>
-						<DecisionViewControl onView={() => {}} unanswered={3} view="plan" />
+				<div className="flex flex-col gap-4">
+					<div className="design-audit-tab-specimens">
+						<div>
+							<StateLabel>Document view switcher · Document selected</StateLabel>
+							<DecisionViewControl onView={() => {}} unanswered={3} view="plan" />
+						</div>
+						<div>
+							<StateLabel>Document view switcher · Decisions selected</StateLabel>
+							<DecisionViewControl onView={() => {}} unanswered={3} view="decisions" />
+						</div>
+						<div>
+							<StateLabel>Document view switcher · no unanswered decisions</StateLabel>
+							<DecisionViewControl onView={() => {}} unanswered={0} view="plan" />
+						</div>
 					</div>
 					<div>
-						<StateLabel>Document view switcher · Decisions selected</StateLabel>
-						<DecisionViewControl onView={() => {}} unanswered={3} view="decisions" />
-					</div>
-					<div>
-						<StateLabel>Document view switcher · no unanswered decisions</StateLabel>
-						<DecisionViewControl onView={() => {}} unanswered={0} view="plan" />
+						<StateLabel>Authored tabs · first tab selected</StateLabel>
+						<StaticPlanEditor source={TABS} />
 					</div>
 				</div>
-				<StateLabel>Authored tabs · first tab selected, long labels wrap</StateLabel>
-				<StaticPlanEditor source={TABS} />
 			</AuditPlate>
 
 			<AuditPlate
