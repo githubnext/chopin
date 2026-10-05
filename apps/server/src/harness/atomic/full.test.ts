@@ -9,6 +9,7 @@ import {
 	ATOMIC_DEFAULT_SYSTEM_PROMPT,
 	ATOMIC_RESULT_TOOL_NAME,
 	createAtomicAdapter,
+	FULL_PLANNER_TOOLS,
 } from "./adapter";
 import {
 	classifyRuns,
@@ -66,7 +67,7 @@ let stub = startStubModelServer((prompt, prior) =>
 		: freeText[prompt]
 		? { kind: "tool", name: "ask_user_question", arguments: JSON.stringify(freeText[prompt]) }
 		: prompt === "cwd"
-		? { kind: "tool", name: "bash", arguments: JSON.stringify({ command: "pwd" }) }
+		? { kind: "tool", name: "read", arguments: JSON.stringify({ path: "where.txt" }) }
 		: prompt === "workflows"
 		? { kind: "tool", name: "workflow", arguments: JSON.stringify({ action: "list" }) }
 		: prompt === "launch"
@@ -144,6 +145,7 @@ async function run(
 				join(agentDir, "prompts"),
 			]
 		) await mkdir(path, { recursive: true });
+		await writeFile(join(cwd, "where.txt"), cwd);
 		await writeFile(join(agentDir, "AGENTS.md"), "OPERATOR-CONTEXT-MARKER");
 		await writeFile(
 			join(agentDir, "skills", "marker", "SKILL.md"),
@@ -319,24 +321,28 @@ export default workflow({
 	}
 }
 
-const FULL_TOOLS = [
+const PLANNER_TOOLS = [
 	"read",
-	"bash",
-	"edit",
-	"write",
+	"find",
+	"search",
 	"ask_user_question",
 	"workflow",
-	"subagent",
 	"intercom",
 	"web_search",
-	"operator_tool",
 	"host_tool",
 ];
+const WITHHELD_TOOLS = ["bash", "edit", "write", "todo", "subagent", "operator_tool"];
 
-test("registered Planner sessions load operator resources and expose Atomic tools beside host tools", async () => {
+function expectPlannerTools(toolNames: string[]): void {
+	for (let name of PLANNER_TOOLS) expect(toolNames).toContain(name);
+	for (let name of WITHHELD_TOOLS) expect(toolNames).not.toContain(name);
+	for (let name of toolNames) expect([...FULL_PLANNER_TOOLS, "host_tool"]).toContain(name);
+}
+
+test("registered Planner sessions load operator resources and offer only read-only Atomic tools beside host tools", async () => {
 	let result = await run(true);
 	let request = result.requests[0]!;
-	for (let name of FULL_TOOLS) expect(request.toolNames).toContain(name);
+	expectPlannerTools(request.toolNames);
 	expect(request.toolNames).not.toContain(ATOMIC_RESULT_TOOL_NAME);
 	for (
 		let marker of [
@@ -361,7 +367,7 @@ test("Planner sessions use their checkout cwd and route ask_user_question throug
 
 test("a Planner session without a checkout is just as full in its empty working directory", async () => {
 	let result = await run(true, "cwd", { checkout: false });
-	for (let name of FULL_TOOLS) expect(result.requests[0]!.toolNames).toContain(name);
+	expectPlannerTools(result.requests[0]!.toolNames);
 	expect(result.requests[0]!.system).toContain(result.cwd);
 	expect(result.requests.at(-1)!.toolResults.join("\n")).toContain(result.cwd);
 });
@@ -369,24 +375,24 @@ test("a Planner session without a checkout is just as full in its empty working 
 test("a checkout's project settings add its packages without writing either settings file", async () => {
 	let result = await run(true, "plain", { projectPackage: true });
 	let request = result.requests[0]!;
-	expect(request.toolNames).toContain("project_tool");
+	expect(request.toolNames).not.toContain("project_tool");
 	expect(request.system).toContain("PROJECT-SKILL-MARKER");
-	for (let name of FULL_TOOLS) expect(request.toolNames).toContain(name);
+	expectPlannerTools(request.toolNames);
 	expect(result.files!.operator).toBe(false);
 	expect(JSON.parse(result.files!.project!).packages).toHaveLength(1);
 	let plain = await run(true);
-	expect(plain.requests[0]!.toolNames).not.toContain("project_tool");
+	expect(plain.requests[0]!.system).not.toContain("PROJECT-SKILL-MARKER");
 });
 
 /** The first workflow tool call starts Atomic's durable backend, which falls back slowly without Postgres. */
 const WORKFLOW_TOOL_TIMEOUT_MS = 30_000;
 
 test(
-	"operator extension paths add a package's tools, skills, and workflows to Planner sessions only",
+	"operator extension paths add a package's skills and workflows to Planner sessions only, but not its tools to the Planner's turns",
 	async () => {
 		let result = await run(true, "workflows", { operatorPackage: true, worker: true });
 		let request = result.requests[0]!;
-		expect(request.toolNames).toContain("operator_package_tool");
+		expect(request.toolNames).not.toContain("operator_package_tool");
 		expect(request.system).toContain("OPERATOR-PACKAGE-SKILL-MARKER");
 		expect(result.requests.at(-1)!.toolResults.join("\n")).toContain("operator-package-workflow");
 		expect(result.workerRequests[0]!.toolNames).not.toContain("operator_package_tool");
@@ -417,7 +423,7 @@ test("free-text Decisions answers to multi-select and preview questions reach th
 });
 
 test(
-	"a workflow stage's ask_user_question reaches Decisions and its answer returns to the stage",
+	"a workflow stage keeps its own tools, and its ask_user_question reaches Decisions and its answer returns to the stage",
 	async () => {
 		let room = await hostInputRoom();
 		// Atomic gives workflow stages a canned session under a test runtime.
@@ -455,6 +461,11 @@ test(
 				stub.requests.some(request => request.toolResults.some(text => text.includes("Second"))),
 			)
 				.toBe(true);
+			let stage = stub.requests.find(request =>
+				request.toolResults.some(text => text.includes("Second"))
+			)!;
+			expect(stage.toolNames).toContain("bash");
+			expect(stage.toolNames).toContain("write");
 		} finally {
 			if (environment !== undefined) process.env.NODE_ENV = environment;
 			await room.close();
@@ -468,7 +479,7 @@ test("worker sessions stay isolated, even beside a full Planner session on the s
 	expect(alone.requests[0]!.toolNames).toEqual(["host_tool"]);
 	expect(alone.requests[0]!.system).toBe("CHOPIN-INSTRUCTIONS-MARKER");
 	let beside = await run(true, "plain", { worker: true });
-	expect(beside.requests[0]!.toolNames).toContain("bash");
+	expect(beside.requests[0]!.toolNames).toContain("read");
 	expect(beside.workerRequests).toHaveLength(1);
 	expect(beside.workerRequests[0]!.toolNames).toEqual(["host_tool"]);
 	expect(beside.workerRequests[0]!.system).toBe("CHOPIN-INSTRUCTIONS-MARKER");

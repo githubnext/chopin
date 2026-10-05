@@ -2,10 +2,12 @@
  * Chopin's Atomic `HarnessV1` adapter.
  *
  * A Planner session that Chopin registers by session ID runs as a full Atomic
- * session: Atomic builtins and coding tools, the operator's Atomic resources, a
- * channel working directory, and Chopin as HostInput. Every other session (the
- * summary and research workers) stays isolated: only Chopin host tools, no host
- * resources, and a checked per-turn tool boundary.
+ * session: Atomic builtins, the operator's Atomic resources, a channel working
+ * directory, and Chopin as HostInput. Its own turns only offer the tools in
+ * `FULL_PLANNER_TOOLS` beside Chopin's; the workflows it starts keep their
+ * stages' tools. Every other session (the summary and research workers) stays
+ * isolated: only Chopin host tools, no host resources, and a checked per-turn
+ * tool boundary.
  */
 
 import { HarnessCapabilityUnsupportedError } from "@ai-sdk/harness";
@@ -57,6 +59,26 @@ export const ATOMIC_RESULT_INSTRUCTION =
 /** Replaces Atomic's coding-agent preamble on turns that bring no instructions. */
 export const ATOMIC_DEFAULT_SYSTEM_PROMPT =
 	"Respond to the user's message. Use only the tools this turn provides.";
+
+/**
+ * What a full Planner's own turns may call besides Chopin's tools: reading the
+ * checkout and the web, asking Decisions, running workflows, and Intercom. It
+ * cannot edit files or run commands, so implementing the plan goes to another
+ * session.
+ */
+export const FULL_PLANNER_TOOLS: ReadonlySet<string> = new Set([
+	"read",
+	"find",
+	"search",
+	"ast_grep",
+	"web_search",
+	"code_search",
+	"fetch_content",
+	"get_search_content",
+	"ask_user_question",
+	"workflow",
+	"intercom",
+]);
 
 const GATEWAY_PROVIDER = "vercel-ai-gateway";
 const OPERATION_TIMEOUT_MS = 10_000;
@@ -585,7 +607,9 @@ export function createAtomicAdapter(
 					let agent = await prepare(turn);
 					let structured = turn.responseFormat?.type === "json";
 					let names = full
-						? agent.getActiveToolNames().filter(name => name !== ATOMIC_RESULT_TOOL_NAME)
+						? agent.getAllTools().map(tool => tool.name).filter(name =>
+							FULL_PLANNER_TOOLS.has(name) || policy.hostNames.includes(name)
+						)
 						: policy.hostNames;
 					let expected = structured ? [...names, ATOMIC_RESULT_TOOL_NAME] : names;
 					agent.setActiveToolsByName(expected);
