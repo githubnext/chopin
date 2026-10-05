@@ -50,6 +50,12 @@ import type { CommentPresentation, QuestionStepMotion, ResearchStore } from "./w
 // happen before an editor mounts.
 register();
 
+function resume(provider: PlanProvider): void {
+	void provider.resume().catch(err => {
+		provider.fail(err instanceof Error ? err.message : "the plan could not be opened");
+	});
+}
+
 export type PlanEditorProps = {
 	wire: Transport | undefined;
 	connection?: Connection;
@@ -139,7 +145,7 @@ export function PlanEditor(
 	let onReset = useCallback((reason: Plan.Reset["reason"]) => {
 		changes.clear();
 		questions?.resetDocument();
-		setState(prev => ({ ...prev, synced: false, reset: reason }));
+		setState(prev => ({ ...prev, synced: false, reset: reason, failed: undefined }));
 		setGeneration(value => value + 1);
 	}, [changes, questions]);
 
@@ -194,14 +200,20 @@ export function PlanEditor(
 		provider.current = value;
 		setPresence(value);
 		if (!value) {
+			questions?.setRetryOpen(undefined);
 			questions?.resetDocument();
 			return;
 		}
+		questions?.setRetryOpen(() => {
+			setState(prev => ({ ...prev, failed: undefined }));
+			resume(value);
+		});
 		value.on("sync", synced => {
 			setState(prev => ({ ...prev, synced }));
 			questions?.setDocumentSynced(synced);
 		});
 		value.on("status", ({ message, status }) => {
+			if (status === "failed") questions?.failOpen();
 			// A failure is sticky until something opens the document; anything
 			// else clears it, so a reconnect that works stops saying it failed.
 			setState(prev => ({
@@ -226,7 +238,7 @@ export function PlanEditor(
 	 */
 	useEffect(() => {
 		if (connection !== undefined && connection !== "connected") return;
-		void presence?.resume();
+		if (presence) resume(presence);
 	}, [presence, connection]);
 
 	let offline = connection !== undefined && connection !== "connected";

@@ -79,7 +79,7 @@ describe("plan questionnaire state", () => {
 		let editor = open("");
 		let store = new QuestionnaireStore();
 		store.attach(editor);
-		expect(store.readySnapshot()).toBe(false);
+		expect(store.readinessSnapshot()).toBe("loading");
 
 		// The document write immediately before sync belongs to the confirmed snapshot.
 		editor.update(() => {
@@ -87,15 +87,48 @@ describe("plan questionnaire state", () => {
 		});
 		store.setDocumentSynced(true);
 		await new Promise(resolve => setTimeout(resolve, 0));
-		expect(store.readySnapshot()).toBe(true);
+		expect(store.readinessSnapshot()).toBe("ready");
 		expect(store.contentSnapshot()).toBe(true);
 
 		store.setDocumentSynced(true);
-		expect(store.readySnapshot()).toBe(true);
+		expect(store.readinessSnapshot()).toBe("ready");
 		store.setDocumentSynced(false);
-		expect(store.readySnapshot()).toBe(true);
+		expect(store.readinessSnapshot()).toBe("ready");
 		store.resetDocument();
-		expect(store.readySnapshot()).toBe(false);
+		expect(store.readinessSnapshot()).toBe("loading");
+	});
+
+	it("clears stale decisions on epoch reset but preserves them on ordinary reconnect", async () => {
+		let editor = open(QUESTIONNAIRE);
+		let store = new QuestionnaireStore();
+		store.attach(editor);
+		store.setDocumentSynced(true);
+		await new Promise(resolve => setTimeout(resolve, 0));
+		expect(store.snapshot()).toHaveLength(1);
+
+		store.setDocumentSynced(false);
+		expect(store.snapshot()).toHaveLength(1);
+		store.resetDocument();
+		expect(store.snapshot()).toEqual([]);
+		expect(store.readinessSnapshot()).toBe("loading");
+		store.readDocument(editor);
+		expect(store.snapshot()).toEqual([]);
+
+		store.setDocumentSynced(true);
+		await new Promise(resolve => setTimeout(resolve, 0));
+		expect(store.snapshot()).toHaveLength(1);
+		expect(store.readinessSnapshot()).toBe("ready");
+	});
+
+	it("offers a retry after an open fails", () => {
+		let store = new QuestionnaireStore();
+		let retries = 0;
+		store.setRetryOpen(() => retries++);
+		store.failOpen();
+		expect(store.readinessSnapshot()).toBe("unavailable");
+		store.retryOpen();
+		expect(retries).toBe(1);
+		expect(store.readinessSnapshot()).toBe("loading");
 	});
 
 	it("cancels a queued confirmation when the provider closes", () => {
@@ -110,7 +143,7 @@ describe("plan questionnaire state", () => {
 		store.setDocumentSynced(true);
 		store.setDocumentSynced(false);
 		pending?.();
-		expect(store.readySnapshot()).toBe(false);
+		expect(store.readinessSnapshot()).toBe("loading");
 	});
 });
 
