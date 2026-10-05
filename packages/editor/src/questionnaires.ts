@@ -59,6 +59,9 @@ export function collectPlanState(): PlanQuestionnaireState {
 
 export class QuestionnaireStore {
 	#state: PlanQuestionnaireState = { entries: [], hasPlanContent: false };
+	#ready = false;
+	#synced = false;
+	#readRevision = 0;
 	#listeners = new Set<() => void>();
 
 	/** Needed to turn an anchor into a node key, and a key into an element. */
@@ -83,6 +86,34 @@ export class QuestionnaireStore {
 
 	snapshot = (): QuestionnaireEntry[] => this.#state.entries;
 	contentSnapshot = (): boolean => this.#state.hasPlanContent;
+	readySnapshot = (): boolean => this.#ready;
+
+	/** Confirm emptiness only after Lexical has applied the successful document sync. */
+	setDocumentSynced(synced: boolean): void {
+		this.#synced = synced;
+		let revision = ++this.#readRevision;
+		if (!synced) return;
+		let editor = this.#editor;
+		if (!editor) return;
+		editor.update(() => {
+			if (revision !== this.#readRevision || this.#editor !== editor) return;
+			this.set(collectPlanState());
+			this.#setReady(true);
+		});
+	}
+
+	/** A replaced document must earn a fresh confirmed snapshot. */
+	resetDocument(): void {
+		this.#synced = false;
+		this.#readRevision++;
+		this.#setReady(false);
+	}
+
+	#setReady(ready: boolean): void {
+		if (this.#ready === ready) return;
+		this.#ready = ready;
+		for (let listener of this.#listeners) listener();
+	}
 
 	/**
 	 * Publish a new list, if it is actually new.
@@ -106,8 +137,14 @@ export class QuestionnaireStore {
 		if (this.#editor && this.#editor !== editor) {
 			this.release();
 			this.bind(undefined);
+			this.#synced = false;
+		}
+		if (this.#editor !== editor) {
+			this.#readRevision++;
+			this.#setReady(false);
 		}
 		this.#editor = editor;
+		if (editor && this.#synced) this.setDocumentSynced(true);
 	}
 
 	/** The Yjs binding, so a relative position can be turned into a node key. */

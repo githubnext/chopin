@@ -90,6 +90,7 @@ export function Decisions(
 	}: DecisionsProps,
 ) {
 	let entries = useQuestionnaires(store);
+	let ready = useSyncExternalStore(store.subscribe, store.readySnapshot, store.readySnapshot);
 	let metadata = useSyncExternalStore(
 		cardMeta?.subscribe ?? noop,
 		cardMeta?.snapshot ?? emptyCards,
@@ -195,8 +196,16 @@ export function Decisions(
 							<span className="plan-decisions-empty-icon" aria-hidden="true">
 								<DecisionIcon size={24} />
 							</span>
-							<h3>No decisions yet</h3>
-							<p>Questions from Chopin will appear here, with your answers kept for reference.</p>
+							{ready
+								? (
+									<>
+										<h3>No decisions yet</h3>
+										<p>
+											Questions from Chopin will appear here, with your answers kept for reference.
+										</p>
+									</>
+								)
+								: <p role="status">Loading decisions…</p>}
 						</div>
 					)
 					: (
