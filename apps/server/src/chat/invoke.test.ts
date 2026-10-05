@@ -556,6 +556,36 @@ test("a Planner that still owns workflow runs outlives its turn, pauses, resumes
 	expect(planner.calls.at(-1)).toBe("destroy");
 });
 
+test("concurrent Stop requests pause a retained Planner's workflows only once", async () => {
+	let { context, user } = await setup(configured(ATOMIC));
+	let planner = runningSession();
+	let pausing = Promise.withResolvers<void>();
+	let entered = Promise.withResolvers<void>();
+	planner.session.pauseRuns = async () => {
+		planner.calls.push("pause");
+		entered.resolve();
+		await pausing.promise;
+	};
+	context.openPlannerSession = async () => ({ ok: true, value: planner.session });
+	let ws = { data: { handle: "ana" } } as unknown as Socket;
+
+	expect(await Chat.invoke(context, user, "Run the workflow")).toBeUndefined();
+	await context.chat.running;
+	let first = Chat.abort(context, ws);
+	await entered.promise;
+	let second = Chat.abort(context, ws);
+	let callsBeforePauseSettled = planner.calls.filter(call => call === "pause").length;
+	pausing.resolve();
+	await Promise.all([first, second]);
+
+	expect(callsBeforePauseSettled).toBe(1);
+	expect(
+		context.chat.entries.filter(entry =>
+			entry.text === "@ana stopped the Planner and paused its workflows."
+		),
+	).toHaveLength(1);
+});
+
 test("a background job while a Planner is retained runs in its own session and leaves the retained one, and its references, alone", async () => {
 	let { context, user } = await setup(configured(ATOMIC));
 	let planner = runningSession();

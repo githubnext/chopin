@@ -833,6 +833,8 @@ export function unqueue(context: Room, ws: Socket, msg: Request<Wire.Unqueue>): 
  * Stop the running turn and pause the Planner's workflow runs, so both hold
  * until someone resumes them. Anyone may, and the transcript says who did.
  */
+const stoppingRuns = new WeakMap<PlannerSession, Promise<void>>();
+
 export async function abort(context: Room, ws: Socket): Promise<void> {
 	let { chat, room, server } = context;
 	let turn = chat.busy && !chat.turnController?.signal.aborted
@@ -840,25 +842,48 @@ export async function abort(context: Room, ws: Socket): Promise<void> {
 		: undefined;
 	let session = chat.retained?.session ?? chat.agent;
 	let live = (session?.runs?.()?.active.length ?? 0) > 0;
-	if (!turn && !live) return;
-	turn?.abort();
-	let paused = false;
-	if (live && session?.pauseRuns) {
-		try {
-			await session.pauseRuns();
-			paused = true;
-		} catch (err) {
-			console.error("[chat] pausing workflow runs failed:", err);
+	let notice = (paused: boolean) =>
+		say(chat, server, room, {
+			id: ulid(),
+			author: { kind: "system" },
+			text: paused
+				? `@${ws.data.handle} stopped the Planner and paused its workflows.`
+				: `@${ws.data.handle} stopped the turn.`,
+			ts: now(),
+		});
+	let stopping = session && stoppingRuns.get(session);
+	if (stopping) {
+		if (turn) {
+			turn.abort();
+			notice(false);
 		}
+		await stopping;
+		return;
 	}
-	say(chat, server, room, {
-		id: ulid(),
-		author: { kind: "system" },
-		text: paused
-			? `@${ws.data.handle} stopped the Planner and paused its workflows.`
-			: `@${ws.data.handle} stopped the turn.`,
-		ts: now(),
-	});
+	if (!turn && !live) return;
+	if (live && session?.pauseRuns) {
+		let pauseRuns = session.pauseRuns;
+		let pause = Promise.resolve().then(async () => {
+			let paused = false;
+			try {
+				await pauseRuns.call(session);
+				paused = true;
+			} catch (err) {
+				console.error("[chat] pausing workflow runs failed:", err);
+			}
+			notice(paused);
+		});
+		stoppingRuns.set(session, pause);
+		turn?.abort();
+		try {
+			await pause;
+		} finally {
+			if (stoppingRuns.get(session) === pause) stoppingRuns.delete(session);
+		}
+		return;
+	}
+	turn?.abort();
+	notice(false);
 }
 
 /** Resume the workflow runs the Planner paused. Anyone may, and the transcript says who did. */
