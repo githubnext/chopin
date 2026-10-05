@@ -33,6 +33,7 @@ export function createResearchDraftService(deps: Dependencies, active: () => boo
 				if (workflow.mode === "human") return { offer: current, revision: previous.revision };
 				workflow.mode = "human";
 				workflow.generation++;
+				workflow.generationBrief = offer.brief;
 				workflow.preparation = "ready";
 				workflow.draft = Draft.binary(Draft.create(offer.brief));
 				delete workflow.jobId;
@@ -78,7 +79,11 @@ export function createResearchDraftService(deps: Dependencies, active: () => boo
 				workflow.generation++;
 				workflow.preparation = "ready";
 			} else if (operation.kind === "retry") {
+				if (workflow.preparation !== "failed") {
+					return { offer: current, revision: previous.revision };
+				}
 				workflow.generation++;
+				workflow.generationBrief = offer.brief;
 				workflow.preparation = "pending";
 				delete workflow.jobId;
 			} else throw new Error("Invalid research edit operation");

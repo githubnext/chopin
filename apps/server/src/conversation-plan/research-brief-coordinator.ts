@@ -21,7 +21,7 @@ export function briefInput(
 		mode: workflow.mode,
 		context: workflow.context,
 		sources: workflow.sources,
-		previousBrief: offer.brief,
+		previousBrief: workflow.generationBrief,
 		parentBrief: state.researchOffers?.find(item => item.id === workflow.previousOfferId)?.brief
 			?? "",
 	};

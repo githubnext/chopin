@@ -459,7 +459,8 @@ Do not reuse the Planner conversation session. Every worker stage runs its own
 schema is fixed per agent, not per turn, so the four research stages — public
 evidence, private document analysis, private report synthesis, and private
 answer synthesis — each get their own named agent with its own result schema;
-`summaryAgent` is a fifth, for document descriptions. Generated document
+`summaryAgent` is a fifth, for document descriptions, and `researchBriefAgent`
+prepares Chat research offers in its own no-tool session. Generated document
 descriptions reuse one disposable session across multiple bounded chunk and
 reduction turns; every other stage submits one bounded structured result.
 
@@ -506,11 +507,12 @@ signals, and destroy the harness session in `finally`.
 
 ## Current definitions
 
-| Definition            | Production trigger                      | Persisted input                                                                      | Worker boundary                                                                           |
-| --------------------- | --------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| `document-summary@1`  | Open, edit, restore, or MCP persistence | Revision, source hash, generator version, and `output:"description"`; not the source | Private worker; source loaded at execution and publication rechecks current revision/hash |
-| `research-evidence@1` | Immediate research request              | Internal workspace, initial turn, exact submitted brief                              | Public evidence agent bound to a host `web_search` tool, no other tools                   |
-| `research-answer@1`   | Completed evidence                      | Parent document snapshot, evidence, and internal compatibility history               | Two no-web private agents with structured output for analysis and report synthesis        |
+| Definition            | Production trigger                      | Persisted input                                                                      | Worker boundary                                                                                |
+| --------------------- | --------------------------------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| `document-summary@1`  | Open, edit, restore, or MCP persistence | Revision, source hash, generator version, and `output:"description"`; not the source | Private worker; source loaded at execution and publication rechecks current revision/hash      |
+| `research-evidence@1` | Immediate research request              | Internal workspace, initial turn, exact submitted brief                              | Public evidence agent bound to a host `web_search` tool, no other tools                        |
+| `research-answer@1`   | Completed evidence                      | Parent document snapshot, evidence, and internal compatibility history               | Two no-web private agents with structured output for analysis and report synthesis             |
+| `research-brief@1`    | New or updated Chat research offer      | Offer generation, selected Chat sources, decision snapshots, and prior brief         | Private structured worker; no tools; source IDs and offer generation checked before projection |
 
 `document-summary@1` remains the only durable definition version; there is no
 `document-summary@2`. New V1 requests carry the output marker and use the

@@ -1,5 +1,6 @@
 /** Fake only TypeSafe HTTP. The real adapter, policy, room and wire still run. */
 import { join } from "node:path";
+import { RESEARCH_MESSAGES } from "./research-scenarios";
 
 import type { JevQuestion, JevRequest } from "../apps/server/src/conversation-plan/jev";
 
@@ -349,6 +350,51 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 	}
 	let request = JSON.parse(String(init.body)) as JevRequest & { model: string };
 	let current = (request.state as { current?: { id?: string; text?: string } }).current;
+	if (
+		"research_warranted" in request.questions
+		|| Object.values(RESEARCH_MESSAGES).includes(current?.text ?? "")
+	) {
+		let research = "research_warranted" in request.questions;
+		let recognized = Object.values(RESEARCH_MESSAGES).includes(current?.text ?? "");
+		let offers = (request.state as { offers?: Array<{ id: string }> }).offers ?? [];
+		let flags: Record<string, boolean> = {
+			research_warranted: recognized,
+			external: recognized && current?.text !== RESEARCH_MESSAGES.local,
+			owned: recognized,
+			named_subject: recognized,
+			context_subject: recognized,
+			standalone: recognized,
+			explicit_proposal: current?.text === RESEARCH_MESSAGES.propose
+				|| current?.text === RESEARCH_MESSAGES.renew,
+			material_change: current?.text === RESEARCH_MESSAGES.constraint,
+		};
+		let answers = Object.fromEntries(
+			Object.entries(request.questions).map(([id, question]) => [
+				id,
+				question.type === "noul"
+					? { type: "noul", noul: research && flags[id] ? 0.97 : 0.03 }
+					: question.type === "score"
+					? score(question, 0)
+					: choice(
+						question,
+						id === "existing_offer"
+							? offers.at(-1)?.id ?? "new"
+							: id === "research_subject"
+							? "explicit"
+							: id === "research_source"
+							? "q0"
+							: Object.hasOwn(question.criteria, "none")
+							? "none"
+							: Object.keys(question.criteria)[0]!,
+					),
+			]),
+		);
+		return Response.json({
+			model: "jev-e2e-fixture",
+			answers,
+			usage: { input_tokens: 10, output_tokens: 5 },
+		});
+	}
 	let scenario = current?.text && SCENARIOS[current.text];
 	if (!current?.id || !scenario) {
 		return Response.json({ error: "unknown Jev fixture scenario" }, { status: 501 });

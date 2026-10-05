@@ -3,7 +3,6 @@ import type { Plan } from "../plan/service";
 import type { EffectDeps } from "./effects";
 import type { Interpretation, InterpretInput } from "./interpret";
 import type { ResearchInput, ResearchInterpretation } from "./research-interpreter";
-// Exact archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2, service.ts; import/export and synchronous closure wrappers only.
 
 export type State = ConversationPlan.State;
 

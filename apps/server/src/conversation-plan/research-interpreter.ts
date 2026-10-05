@@ -76,17 +76,27 @@ export function researchRequest(input: ResearchInput) {
 	}));
 	let questions: Record<string, JevQuestion> = {
 		research_warranted: probability(
-			"Does the current speaker propose investigating a concrete topic, or raise a meaningful unresolved information gap that would benefit from external research? Tentative proposals such as 'maybe we should' count. Ordinary chatter and generic topics do not. Judge independently of whether a planning decision or alternatives already exist.",
+			"Does the current speaker propose investigation or identify a meaningful unresolved information gap? Use recent conversation and decisions to resolve the topic; it need not be repeated in current.text. Tentative proposals and statements of missing current facts count, without requiring an imperative request. Ordinary chatter and unspecified topics do not. A planning decision and known alternatives are not required.",
 		),
 		external: probability(
-			"Would published external information, documentation, alternatives, comparisons, or evidence usefully address this need? Repository-only code understanding, debugging, running experiments, and personal/team preferences are false.",
+			"Could published external facts help resolve the current speaker's question, proposal, or stated information gap? Unknown current pricing, published feature support, alternatives to a technology, and comparisons count. An explicit request is not required. Resolve the topic using recent discussion; unfamiliar product names are allowed. Reading this team's own code, debugging it, running experiments, and choosing personal preferences are not external research.",
 		),
 		owned: probability(
-			"Is the selected research source this speaker's own sincere, current proposal or information gap? Read the complete current message for later withdrawal, negation, quotation, reported speech, sarcasm, and purely hypothetical future scenarios. Tentative 'maybe we should investigate' is a genuine proposal.",
+			"Is the assertion, request, or requirement in current.text the current speaker's own sincere, still-current contribution? Judge speaker ownership only; do not require an investigation request, a new information gap, or a clear topic. First-person plural and tentative suggestions count. Read the complete message for later withdrawal, negation, quotation, reported speech, sarcasm, or a purely hypothetical future scenario.",
 		),
-		clear_subject: probability(
-			"Can the research subject be clearly identified from current text, recent messages, and decisions? Resolve shorthand only when context strongly identifies one subject. If several topics are similarly plausible, answer false.",
-		),
+		research_subject: {
+			type: "choice",
+			instructions:
+				"Where is the subject to investigate identified? Prefer explicit when the current message names the actual product(s) or a category of solutions. A factual question is explicit only if its subject is identified. An unnamed 'this library', 'that service', 'it', or similar reference needs a clear referent in recent discussion; without that, choose unclear. Unfamiliar names and missing alternatives or evaluation criteria are allowed. Use contextual for a unique subject identified only by recent discussion or decisions.",
+			criteria: {
+				explicit:
+					"The current message identifies the actual product(s), technology category, or named subject of the factual question; no missing referent.",
+				contextual:
+					"Only the preceding discussion or decisions identify one clear research topic for this message.",
+				unclear:
+					"No research topic can be identified, or several referents are similarly plausible.",
+			},
+		},
 		already_answered: probability(
 			"Is this information gap already answered in the supplied conversation or decisions? Merely having considered an option is not an answer. An existing offer is handled separately by existing_offer.",
 		),
@@ -97,7 +107,7 @@ export function researchRequest(input: ResearchInput) {
 			"Compared with the most relevant existing research offer, does this message add a substantive requirement, scope, or distinct question not covered by its brief? Rephrasing and agreement are false. Judge the research scope, not whether an option list changed.",
 		),
 		standalone: probability(
-			"Would the selected exact source excerpt alone be a self-contained research brief? It must identify its subject without relying on pronouns, unexplained shorthand, or other messages. It must contain only the intended research request, without a later withdrawal.",
+			"Does current.text itself name what to investigate and what to learn, without needing another message to resolve pronouns? 'Investigate alternatives to [named product]' is sufficient even if the product is unfamiliar and no criteria are specified. Bare 'investigate alternatives' or 'does it support offline use' is insufficient. A withdrawn proposal is false.",
 		),
 		research_source: {
 			type: "choice",
@@ -119,6 +129,8 @@ export function researchRequest(input: ResearchInput) {
 			},
 		},
 	};
+	if (!offers.length) delete questions.existing_offer;
+	if (spans.length === 1 && spans[0]!.quote === text) delete questions.research_source;
 	let state = {
 		current: context.messages.find(item => item.id === input.message.id),
 		recent: context.messages.filter(item => item.id !== input.message.id),
@@ -155,20 +167,48 @@ export async function interpretResearch(
 		analysis.modelVersion = result.model;
 		analysis.answers = result.answers;
 		let answers = result.answers;
-		let gate = noul(answers, "research_warranted") < 0.8
+		let changed = noul(answers, "material_change") >= 0.8;
+		let target = Object.hasOwn(request.questions, "existing_offer")
+			? choice(answers, "existing_offer")
+			: "new";
+		let targetAnswer = answers.existing_offer;
+		// Updating the sole known offer needs less certainty than creating another card.
+		if (
+			!target && changed && input.state.researchOffers?.length === 1
+			&& targetAnswer?.type === "choice"
+		) {
+			let only = input.state.researchOffers[0]!;
+			let probability = targetAnswer.probabilities[only.id] ?? 0;
+			let competing = Math.max(
+				0,
+				...Object.entries(targetAnswer.probabilities).filter(([id]) => id !== only.id).map((
+					[, value],
+				) => value),
+			);
+			if (only.status === "offered" && probability >= 0.7 && probability - competing >= 0.2) {
+				target = only.id;
+			}
+		}
+		let updating = changed && !!input.state.researchOffers?.some(offer => offer.id === target);
+		let subject = answers.research_subject;
+		let clarity = subject?.type === "choice"
+			? (subject.probabilities.explicit ?? 0) + (subject.probabilities.contextual ?? 0)
+			: 0;
+		let gate = noul(answers, "research_warranted") < 0.8 && !updating
 			? "no clear research need"
 			: noul(answers, "external") < 0.8
 			? "not external research"
 			: noul(answers, "owned") < 0.8
 			? "source ownership unclear"
-			: noul(answers, "clear_subject") < 0.8
+			: clarity < 0.8
 			? "research subject unclear"
 			: noul(answers, "already_answered") > 0.2
 			? "research need already answered"
 			: undefined;
-		let sourceChoice = choice(answers, "research_source");
+		let sourceChoice = Object.hasOwn(request.questions, "research_source")
+			? choice(answers, "research_source")
+			: "q0";
 		let span = sourceChoice?.match(/^q(\d+)$/) && spans[Number(sourceChoice.slice(1))];
-		let target = choice(answers, "existing_offer");
 		if (gate || !span || !target || target === "none") {
 			analysis.policyGate = gate ?? "research source or target unclear";
 			return { analysis };
@@ -184,8 +224,10 @@ export async function interpretResearch(
 				context,
 				...(target === "new" ? {} : { offerId: target }),
 				explicit: noul(answers, "explicit_proposal") >= 0.8,
-				changed: noul(answers, "material_change") >= 0.8,
-				standalone: noul(answers, "standalone") >= 0.8,
+				changed,
+				standalone: noul(answers, "standalone") >= 0.8
+					|| span.quote === input.message.text
+						&& choice(answers, "research_subject") === "explicit",
 			},
 		};
 	} catch {

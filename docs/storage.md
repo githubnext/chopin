@@ -27,6 +27,13 @@ Compatibility conversion is limited to explicitly supported former fields. An
 invalid optional implementation graph is dropped instead of rejecting the
 sidecar.
 
+Conversation state version two lives inside that sidecar and has separate
+decision/research analysis queues. Research offers retain exact source references,
+topic and placement identities, generation metadata, bounded shared text-CRDT
+checkpoints, and immutable accepted briefs. Acceptance and its pending delivery
+intent commit together; subsequent request creation is idempotent under the
+offer's stable execution key. See [Research offers from Chat](conversation-research.md).
+
 ## Adapter guarantees
 
 Every adapter must provide:

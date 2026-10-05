@@ -7,7 +7,7 @@ import type { ResearchRequestStore } from "../research-requests";
 let source: ConversationPlan.ResearchSource = { messageId: "original", author: { kind: "member", handle: "ana" }, quote: "Investigate Jev alternatives.", start: 0, end: 28 };
 let offer: ConversationPlan.ResearchOffer = {
 	id: "offer", needId: "topic", contextId: "scope", source, brief: source.quote, status: "offered",
-	workflow: { version: 1, revision: 0, generation: 0, mode: "automatic", placementMessageId: "original", sources: [source], context: { messages: [], decisions: [] }, published: true, preparation: "ready", editedBy: [], additions: [] },
+	workflow: { version: 1, revision: 0, generation: 0, generationBrief: source.quote, mode: "automatic", placementMessageId: "original", sources: [source], context: { messages: [], decisions: [] }, published: true, preparation: "ready", editedBy: [], additions: [] },
 };
 let entries: Chat.Entry[] = [
 	{ id: "original", author: source.author, text: source.quote, ts: 1 },

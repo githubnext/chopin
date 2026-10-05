@@ -11,6 +11,7 @@ async function generalOffer() {
 			version: 1,
 			revision: 0,
 			generation: 0,
+			generationBrief: offer.brief,
 			mode: "automatic",
 			placementMessageId: offer.source.messageId,
 			sources: [offer.source],

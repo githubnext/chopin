@@ -87,6 +87,7 @@ export function assertResearchWorkflow(value: unknown, offer: Record<string, unk
 		"version",
 		"revision",
 		"generation",
+		"generationBrief",
 		"mode",
 		"placementMessageId",
 		"sources",
@@ -104,6 +105,9 @@ export function assertResearchWorkflow(value: unknown, offer: Record<string, unk
 	if (item.version !== 1) throw new Error("unsupported research workflow version");
 	version(item.revision);
 	version(item.generation);
+	if (typeof item.generationBrief !== "string" || item.generationBrief.length > 2048) {
+		throw new Error("invalid generation brief");
+	}
 	if (!["automatic", "human"].includes(item.mode as string)) {
 		throw new Error("invalid research authorship");
 	}

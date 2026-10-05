@@ -146,6 +146,8 @@ export declare namespace ConversationPlan {
 		version: 1;
 		revision: number;
 		generation: number;
+		/** Frozen synthesis input; live human edits must not change a job fingerprint. */
+		generationBrief: string;
 		mode: "automatic" | "human";
 		/** Presentation only; never participates in request identity. */
 		placementMessageId: string;

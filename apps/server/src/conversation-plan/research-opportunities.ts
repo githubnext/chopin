@@ -67,6 +67,7 @@ export function applyResearchOpportunity(
 		workflow.placementMessageId = input.message.id;
 		workflow.context = candidate.context;
 		workflow.generation++;
+		workflow.generationBrief = offer.brief;
 		workflow.revision++;
 		workflow.preparation = "pending";
 		delete workflow.jobId;
@@ -94,6 +95,7 @@ export function applyResearchOpportunity(
 			version: 1,
 			revision: 0,
 			generation: 0,
+			generationBrief: candidate.source.quote,
 			mode: "automatic",
 			placementMessageId: input.message.id,
 			sources: [candidate.source],
