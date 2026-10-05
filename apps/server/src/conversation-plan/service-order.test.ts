@@ -40,6 +40,7 @@ test("processor captures plan and initial effects once before reporting dependen
 			"researchConsent",
 			"record",
 			"retry",
+			"retryResearch",
 			"setEffects",
 			"wake",
 			"stop",

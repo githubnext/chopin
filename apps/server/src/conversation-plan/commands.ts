@@ -73,10 +73,14 @@ export async function handleConversationCommand(
 				}
 				let processor = room.plan && deps.runtime.processor(room.plan);
 				if (!processor) throw new Error("document is not open");
-				let result = await processor.retry(frame.actionId, frame.messageId, {
-					kind: "member",
-					handle: ws.data.handle,
-				});
+				let result = await (frame.lane === "research" ? processor.retryResearch : processor.retry)(
+					frame.actionId,
+					frame.messageId,
+					{
+						kind: "member",
+						handle: ws.data.handle,
+					},
+				);
 				reply(ws, frame.rid, { kind: "conversation-plan:retry", ts: 0, ...result });
 			} catch (error) {
 				fail(ws, frame.rid, error instanceof Error ? error.message : "cannot retry analysis");

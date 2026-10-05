@@ -4,11 +4,11 @@ import { initialState } from "./domain";
 import { applyEvent } from "./events";
 import {
 	buildCandidateTargetingRequest,
-	buildResearchOfferRequest,
 	buildTargetingRequest,
 	buildTriageRequest,
 } from "./questions";
 import { visibleThreads } from "./question-context";
+import { researchRequest } from "./research-interpreter";
 import { message } from "./policy-initial.test-fixtures";
 import { extractQuotes } from "./quotes";
 import { interpretMessage } from "./interpret";
@@ -89,8 +89,10 @@ test("accepted corrections refresh old threads by event order across every reque
 		buildTriageRequest(current, [], state.threads, candidates, state.events),
 		buildTargetingRequest(current, [], state.threads, candidates, undefined, state.events),
 		buildCandidateTargetingRequest(current, [], state.threads, candidates, 0, state.events),
-		buildResearchOfferRequest(current, [], state.threads, candidates, state.events),
 	];
+	expect(
+		researchRequest({ message: current, recent: [], state }).context.decisions.map(item => item.id),
+	).toEqual(expected);
 	for (let request of requests) {
 		let context = request.state as { threads: Array<{ id: string; options: unknown[] }> };
 		expect(context.threads.map(thread => thread.id)).toEqual(expected);
@@ -134,7 +136,7 @@ test("a move refreshes both affected threads without promoting discarded threads
 	expect(ids(visibleThreads(state.threads, state.events))).not.toContain("thread-19");
 });
 
-test("production interpretation supplies the accepted recency to research and targeting", async () => {
+test("production decision interpretation supplies the accepted recency to targeting", async () => {
 	let state = populated();
 	state = applyEvent(state, {
 		id: "newest-touch",
@@ -157,7 +159,7 @@ test("production interpretation supplies the accepted recency to research and ta
 			return mockResult(request.questions, { research_need: 0.95, reason: 0.8 });
 		},
 	});
-	expect(requests).toHaveLength(3);
+	expect(requests).toHaveLength(2);
 	for (let request of requests) {
 		let context = request.state as { threads: Array<{ id: string }> };
 		expect(context.threads.map(thread => thread.id)).toEqual([

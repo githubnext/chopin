@@ -21,7 +21,7 @@ test.each([false, true])(
 			ask: request => {
 				let triage = "new_question" in request.questions;
 				let research = "research_kind" in request.questions;
-				if ((triage && !eligible) || research) {
+				if (triage || research) {
 					queueMicrotask(() => queueMicrotask(() => observe(targetingCalls)));
 				}
 				if (!triage && !research) targetingCalls++;

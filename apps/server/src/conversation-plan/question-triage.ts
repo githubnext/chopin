@@ -77,11 +77,6 @@ export function triageQuestions(): Record<string, JevQuestion> {
 			"A direct request to the Planner.",
 			"No direct Planner request.",
 		),
-		research_need: noul(
-			"Does the current speaker raise an unresolved need for current external cost or price information about two to four existing planning options? This may be a generic current-provider price unknown or a cost concern focused on one option. Require a useful unknown needing fresh outside research. A quoted, conditional, already answered, or merely local calculation is false. Judge this independently of whether the message adds a planning contribution.",
-			"Fresh external cost information about existing options is needed.",
-			"No grounded current external cost information is needed.",
-		),
 		act: {
 			type: "choice",
 			instructions:

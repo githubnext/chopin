@@ -62,7 +62,7 @@ test("v5 triage checks exact quote ownership while targeting isolates each claus
 	let quotes = extractQuotes(current.text);
 	let state = settledBy(seeded(), "Mina");
 	let triage = buildTriageRequest(current, recent, state.threads, quotes);
-	expect(QUESTION_SET_VERSION).toBe("conversation-plan-8");
+	expect(QUESTION_SET_VERSION).toBe("conversation-plan-9");
 	expect(Object.keys(triage.questions).filter(key => key.endsWith("_owned_unretracted")))
 		.toEqual([
 			"c0_owned_unretracted",

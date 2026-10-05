@@ -11,6 +11,7 @@ import { createPlannerJobs, interruptPlannerJobs } from "./planner-jobs";
 import { createProcessor, type Dependencies, type Processor } from "./service";
 import { interpretMessage } from "./interpret";
 import { askJev } from "./jev";
+import { interpretResearch } from "./research-interpreter";
 import type { Config } from "../config";
 import type { Server } from "bun";
 import type { SocketData } from "../wire";
@@ -24,6 +25,7 @@ type RuntimeDeps = {
 	server: () => Server<SocketData>;
 	unavailable: (id: string) => boolean;
 	interpret?: Dependencies["interpret"];
+	researchInterpret?: Dependencies["researchInterpret"];
 	onError?: (error: unknown) => void;
 };
 
@@ -66,7 +68,12 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 		mirrors.set(opened, wakeCardMirror(opened, processor).catch(report));
 	}
 
-	async function attach(room: Rooms.Room, opened: Plan.Plan, archived: boolean): Promise<void> {
+	async function attach(
+		room: Rooms.Room,
+		opened: Plan.Plan,
+		archived: boolean,
+		researchAllowed = false,
+	): Promise<void> {
 		if (!deps.config.conversationPlan) return;
 		await stop(opened);
 		let server = deps.server();
@@ -114,6 +121,16 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 			publish: state =>
 				broadcast(server, room.id, { kind: "conversation-plan:changed", ts: 0, state }),
 			active,
+			researchInterpret: researchAllowed
+				? deps.researchInterpret
+					?? ((input, signal) =>
+						interpretResearch(input, request =>
+							askJev(request, {
+								model: deps.config.conversationPlanModel,
+								timeoutMs: deps.config.conversationPlanTimeoutMs,
+								signal,
+							})))
+				: undefined,
 			interpret: deps.interpret ?? ((input, signal) =>
 				interpretMessage({
 					...input,

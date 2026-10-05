@@ -4,7 +4,6 @@ import type { QuoteCandidate } from "./quotes";
 import type { LinkedCardOptions } from "./question-shared";
 import { buildTargetingRequest } from "./question-targeting";
 
-export { buildResearchOfferRequest } from "./question-research";
 export { hasWithdrawalCue, QUESTION_SET_VERSION } from "./question-shared";
 export type { LinkedCardOptions } from "./question-shared";
 export { buildTargetingRequest } from "./question-targeting";
