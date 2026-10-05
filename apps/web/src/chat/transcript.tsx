@@ -329,8 +329,8 @@ export function Transcript(
 		group(entries, queued, working, completedWork, suspendedWork),
 		researchOffers ? conversationPlan?.researchOffers ?? [] : [],
 	);
-	let currentWork = groups.flatMap(item => item.kind === "messages" ? item.messages : [])
-		.find(message => message.working);
+	let messages = groups.flatMap(item => item.kind === "messages" ? item.messages : []);
+	let currentWork = messages.find(message => message.working);
 	let phase = currentWork
 		? workPhase(
 			currentWork.tools ?? [],
@@ -339,13 +339,21 @@ export function Transcript(
 			!!currentWork.workResponseSeen,
 		)
 		: undefined;
-	let announcement = phase
-		? workAnnouncement(phase)
-		: suspendedWork
-		? "Chopin connection lost. Work details remain available."
-		: completedWork?.length
-		? "Chopin turn ended. Work details remain available."
-		: "";
+	let announcement = "";
+	if (phase) announcement = workAnnouncement(phase);
+	else if (suspendedWork) {
+		let hasDetails = !!messages.find(message => message.id === suspendedWork.anchorId)?.tools
+			?.length;
+		announcement = hasDetails
+			? "Chopin connection lost. Work details remain available."
+			: "Chopin connection lost.";
+	} else if (completedWork?.length) {
+		let anchorId = completedWork.at(-1)?.anchorId;
+		let hasDetails = !!messages.find(message => message.id === anchorId)?.tools?.length;
+		announcement = hasDetails
+			? "Chopin turn ended. Work details remain available."
+			: "Chopin turn ended.";
+	}
 	let latestPrompt = new Map<string, string>();
 	let latestScoped = new Map<string, string>();
 	for (let entry of entries) {

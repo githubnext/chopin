@@ -52,11 +52,11 @@ export function workAnnouncement(phase: WorkPhase): string {
 		case "Getting oriented":
 			return "Chopin has started.";
 		case "Gathering context":
-			return "Chopin is inspecting the document.";
+			return "Chopin is gathering context.";
 		case "Waiting for an answer":
 			return "Chopin needs an answer.";
 		case "Making changes":
-			return "Chopin is editing the document.";
+			return "Chopin is making changes.";
 		case "Working through the request":
 			return "Chopin is working on the request.";
 		case "Writing a response":
