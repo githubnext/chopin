@@ -30,6 +30,7 @@ function offered(): ConversationPlan.State {
 			version: 1,
 			revision: 0,
 			generation: 0,
+			generationBrief: "Compare available providers.",
 			mode: "automatic",
 			placementMessageId: message.id,
 			sources: [source],

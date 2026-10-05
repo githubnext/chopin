@@ -31,13 +31,18 @@ function server(port: number, database: string, extra: Record<string, string>) {
 		 * `scripts/dev.ts` gives: the wrapper does not exit when the thing it
 		 * started dies, so Playwright would end up supervising nothing.
 		 */
-		command: "bun --preload ./e2e/github.ts apps/server/src/main.ts",
+		command: "bun --preload ./e2e/github.ts"
+			+ (process.env.E2E_RESEARCH_OFFERS === "1" ? " --preload ./e2e/jev.ts" : "")
+			+ " apps/server/src/main.ts",
 		cwd: ROOT,
 		url: `http://${HOST}:${port}/`,
 		env: {
 			PORT: String(port),
 			SERVER_HOST: HOST,
 			AGENT: "off",
+			CONVERSATION_PLAN: process.env.E2E_RESEARCH_OFFERS === "1" ? "on" : "off",
+			JEV_API_KEY: "e2e-jev-only",
+			JEV_MODEL: "jev-e2e",
 			BACKGROUND_JOBS: "on",
 			WEB_RESEARCH: "on",
 			STORAGE_DRIVER: "postgres",
@@ -70,6 +75,7 @@ function harnessServer(port: number, database: string) {
 			PORT: String(port),
 			SERVER_HOST: HOST,
 			AGENT: "on",
+			CONVERSATION_PLAN: "off",
 			HARNESS: "e2e-fake",
 			BACKGROUND_JOBS: "off",
 			WEB_RESEARCH: "off",
@@ -132,8 +138,10 @@ export default defineConfig({
 				join(ROOT, "e2e/decision-prose.e2e.ts"),
 				join(ROOT, "e2e/conversation-plan-runtime.e2e.ts"),
 				join(ROOT, "e2e/conversation-plan-prompts.e2e.ts"),
-				join(ROOT, "e2e/research-offers.e2e.ts"),
-				join(ROOT, "e2e/research-offers-ui.e2e.ts"),
+				...(process.env.E2E_RESEARCH_OFFERS === "1" ? [] : [
+					join(ROOT, "e2e/research-offers.e2e.ts"),
+					join(ROOT, "e2e/research-offers-ui.e2e.ts"),
+				]),
 				join(ROOT, "e2e/decision-anchor-stress.e2e.ts"),
 				join(ROOT, "e2e/decision-evidence.e2e.ts"),
 				join(ROOT, "e2e/sidecar-card-states.e2e.ts"),

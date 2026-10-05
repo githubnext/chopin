@@ -7,7 +7,6 @@ import { effectsFor } from "./effects";
 import { assertOptionCapacity } from "./option-capacity";
 import { cardCycle, linkedCardOptions } from "./processor-card-context";
 import { appendEffects, failure, sameThreads } from "./processor-fields";
-// Exact archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2, service.ts; import/export and synchronous closure wrappers only.
 
 export function createRun(
 	deps: Dependencies,

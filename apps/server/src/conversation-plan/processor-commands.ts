@@ -8,7 +8,6 @@ import { assertStateShape, MAX_ANALYSIS, MAX_QUEUE } from "./validation";
 import { QUESTION_SET_VERSION } from "./question-shared";
 import { appendEffects } from "./processor-fields";
 import { RESEARCH_QUESTION_SET } from "./research-interpreter";
-// Exact archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2, service.ts; import/export and synchronous closure wrappers only.
 
 export function createCommands(
 	deps: Dependencies,

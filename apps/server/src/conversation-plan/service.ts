@@ -10,8 +10,6 @@ import { createRun } from "./processor-run";
 import { createResearchProcessor } from "./research-processor";
 import { createResearchDraftService } from "./research-draft-service";
 
-// Exact archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2, service.ts; import/export and synchronous closure wrappers only.
-
 export type Processor = ReturnType<typeof createProcessor>;
 
 export function createProcessor(deps: Dependencies) {

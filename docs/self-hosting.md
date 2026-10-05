@@ -328,6 +328,14 @@ current and recent Chat messages and selected decision context to TypeSafe's Jev
 service. It uses `JEV_API_KEY` and `JEV_MODEL` independently of the Planner's
 provider and credentials; `AGENT=off` does not disable it.
 
+The same flag enables independent external-research suggestions in Chat. Their
+shared briefs can be synthesized by the `research-brief@1` background worker under
+the existing Planner owner; this uses the configured harness provider, separately
+from Jev. A self-contained source excerpt is the fallback when synthesis is
+unavailable. Actual research starts only after a writer accepts the current shared
+brief and the execution capability is enabled. See
+[Research offers from Chat](conversation-research.md).
+
 The supplied Compose file forwards `CONVERSATION_PLAN`, `JEV_MODEL` and
 `JEV_API_KEY` from the deployment environment. It uses the server's default
 30-second interpretation timeout. To override `JEV_TIMEOUT_MS`, configure it
