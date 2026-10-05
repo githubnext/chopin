@@ -208,6 +208,7 @@ test("a wide desktop comment sits in the gutter beside its passage", async ({ jo
 	let card = await thread(page);
 	let paragraph = content(page).locator("p").first();
 	let document = page.locator(".plan-document");
+	await expect(card).toHaveAttribute("data-side", "right");
 
 	await expect.poll(async () => {
 		let cardBox = await card.boundingBox();

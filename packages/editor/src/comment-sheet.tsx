@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Drawer } from "@base-ui/react/drawer";
+import { CloseIcon } from "@chopin/icons";
 
 import { currentViewport, listenToViewportChanges } from "@chopin/viewport";
 
@@ -33,9 +34,13 @@ export type CommentSheetProps = {
 	id: string;
 	label: string;
 	onClose: () => void;
+	/** Show the close beside the grabber, for content with no header of its own. */
+	closeVisible?: boolean;
 };
 
-export function CommentSheet({ children, id, label, onClose }: CommentSheetProps) {
+export function CommentSheet(
+	{ children, closeVisible, id, label, onClose }: CommentSheetProps,
+) {
 	let [open, setOpen] = useState(false);
 	let [snapPoint, setSnapPoint] = useState<number | string | null>(
 		COMMENT_SHEET_SNAP_POINTS[0],
@@ -106,17 +111,28 @@ export function CommentSheet({ children, id, label, onClose }: CommentSheetProps
 							>
 								<span aria-hidden="true" />
 							</button>
+							{closeVisible && (
+								<Drawer.Close
+									aria-label="Close comment"
+									className="plan-comment-close plan-comment-sheet-close btn btn-icon btn-ghost"
+									title="Close comment"
+								>
+									<CloseIcon aria-hidden="true" size={14} />
+								</Drawer.Close>
+							)}
 							<Drawer.Title className="sr-only">{label}</Drawer.Title>
 							<Drawer.Content
 								className="plan-comment-sheet-content"
 								data-base-ui-swipe-ignore
 							>
 								{children}
-								<Drawer.Close
-									aria-label="Close comment"
-									className="sr-only"
-									tabIndex={-1}
-								/>
+								{!closeVisible && (
+									<Drawer.Close
+										aria-label="Close comment"
+										className="sr-only"
+										tabIndex={-1}
+									/>
+								)}
 							</Drawer.Content>
 						</Drawer.Popup>
 					</Drawer.Viewport>

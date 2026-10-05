@@ -85,7 +85,18 @@ test("a representative compact viewport keeps a passage above the sheet and rest
 		let passageBox = await passage.boundingBox();
 		return sheetBox!.y >= passageBox!.y + passageBox!.height;
 	}).toBe(true);
-	await draft.getByPlaceholder("Comment on this passage…").fill("Keep this paragraph close.");
+	// The draft sheet closes visibly from its grabber row; there is no header row of its own.
+	let draftClose = draft.getByRole("button", { name: "Close comment" });
+	await expect(draftClose).toHaveCount(1);
+	await expect(draftClose).toBeVisible();
+	await expect(draftClose).not.toHaveClass(/sr-only/);
+	await expect(draft.locator("[data-plan-comment-draft-header]")).toHaveCount(0);
+	// A soft keyboard has no Shift-Enter, so Enter is a newline and the button sends.
+	let draftField = draft.getByPlaceholder("Comment on this passage…");
+	await draftField.fill("Keep this paragraph close.");
+	await draftField.press("Enter");
+	await expect(draft).toBeVisible();
+	await expect(draftField).toHaveValue("Keep this paragraph close.\n");
 	await draft.getByRole("button", { name: "Post comment", exact: true }).click();
 	await expect(draft).toHaveCount(0);
 
@@ -368,6 +379,8 @@ test("a desktop comment card opens beside its passage instead of over it", async
 	await page.getByRole("button", { name: /Comment on “/ }).first().click();
 	let card = page.getByRole("dialog", { name: "Comment thread" });
 	await expect(card).toBeVisible();
+	// The entrance comes from the passage the card sits beneath.
+	await expect(card).toHaveAttribute("data-side", "below");
 	let hits = await page.locator("[data-plan-comment-hit]").evaluateAll(elements =>
 		elements.map(element => {
 			let box = element.getBoundingClientRect();

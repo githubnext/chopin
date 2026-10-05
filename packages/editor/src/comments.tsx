@@ -18,7 +18,9 @@ import { ArrowUpIcon, CheckIcon, ChevronIcon, CloseIcon, MessageIcon } from "@ch
 import { limits } from "@chopin/dialect";
 
 import { Provenance, SidecarCard, when } from "./card";
+import { displayName } from "./display-name";
 import { Face } from "./face";
+import { PRIMARY_COARSE_POINTER_QUERY } from "./pointer";
 
 import type { KeyboardEvent, ReactNode } from "react";
 import type { Comment } from "@chopin/protocol";
@@ -30,7 +32,7 @@ export function Author({ handle, ts }: { handle: string; ts?: number }) {
 		<span className="flex min-w-0 items-center gap-2 text-sm">
 			<Face handle={handle} size={20} titled={false} />
 			<span className="min-w-0 truncate font-semibold" title={`@${handle}`}>
-				{handle ? handle[0]!.toUpperCase() + handle.slice(1) : handle}
+				{displayName(handle)}
 				<span className="sr-only">(@{handle})</span>
 			</span>
 			{ts !== undefined && (
@@ -78,14 +80,14 @@ function CloseButton({ onClose }: { onClose: () => void }) {
 	);
 }
 
-function DraftHeader({ onClose, showClose }: { onClose: () => void; showClose: boolean }) {
+function DraftHeader({ onClose }: { onClose: () => void }) {
 	return (
 		<header
 			className="flex min-h-7 items-center justify-between text-text-tertiary"
 			data-plan-comment-draft-header
 		>
 			<MessageIcon aria-hidden="true" size={14} />
-			{showClose && <CloseButton onClose={onClose} />}
+			<CloseButton onClose={onClose} />
 		</header>
 	);
 }
@@ -107,12 +109,24 @@ function Quote({ drifted, text }: { drifted?: boolean; text: string }) {
 }
 
 /**
- * A textarea with its send button inside. Enter submits and Escape cancels.
+ * What a key does in a comment composer.
  *
- * Shift-Enter is a newline, which is the convention every chat surface uses and
- * the one the composer next door already follows. New comments and replies share
- * this one shape.
+ * Enter sends and Shift-Enter is a newline, the convention the chat composer
+ * follows. A soft keyboard has no Shift-Enter, so on a coarse pointer Enter is a
+ * newline and only the send button sends. Enter that confirms an IME candidate
+ * never sends.
  */
+export function composerKey(
+	event: { key: string; shiftKey: boolean; isComposing: boolean; keyCode?: number },
+	coarse: boolean,
+): "send" | "cancel" | undefined {
+	if (event.key === "Escape") return "cancel";
+	if (event.key !== "Enter" || event.shiftKey || coarse) return undefined;
+	if (event.isComposing || event.keyCode === 229) return undefined;
+	return "send";
+}
+
+/** A textarea with its send button inside, shared by new comments and replies. */
 function Composer({
 	autoFocus,
 	busy,
@@ -161,13 +175,22 @@ function Composer({
 	};
 
 	let key = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-		if (event.key === "Escape" && onCancel) {
+		let action = composerKey(
+			{
+				key: event.key,
+				shiftKey: event.shiftKey,
+				isComposing: event.nativeEvent.isComposing,
+				keyCode: event.keyCode,
+			},
+			matchMedia(PRIMARY_COARSE_POINTER_QUERY).matches,
+		);
+		if (action === "cancel" && onCancel) {
 			event.preventDefault();
-			return onCancel();
+			onCancel();
+		} else if (action === "send") {
+			event.preventDefault();
+			send();
 		}
-		if (event.key !== "Enter" || event.shiftKey) return;
-		event.preventDefault();
-		send();
 	};
 
 	return (
@@ -499,10 +522,11 @@ export type DraftCardProps = {
 	showClose?: boolean;
 };
 
+/** A compact sheet shows its own close beside the grabber, so its draft has no header row. */
 export function DraftCard({ busy, onCancel, onSend, showClose = true }: DraftCardProps) {
 	return (
 		<SidecarCard data-plan-comment-card focused label="Comment">
-			<DraftHeader onClose={onCancel} showClose={showClose} />
+			{showClose && <DraftHeader onClose={onCancel} />}
 			<Composer
 				autoFocus
 				busy={busy}

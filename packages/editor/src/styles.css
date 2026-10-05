@@ -550,7 +550,25 @@
 	overflow: auto;
 	border-radius: var(--radius-lg);
 	box-shadow: var(--shadow-overlay);
-	animation: plan-comment-enter var(--duration-base) var(--ease-out);
+	--enter-x: 0;
+	--enter-y: 0;
+	animation: plan-comment-enter var(--duration-fast) var(--ease-out);
+}
+
+/* The card enters from its passage: across from the gutter, down from below, up from above. */
+.plan-comment-card[data-side="right"] {
+	--enter-x: 0.25rem;
+	transform-origin: top left;
+}
+
+.plan-comment-card[data-side="below"] {
+	--enter-y: -0.25rem;
+	transform-origin: top left;
+}
+
+.plan-comment-card[data-side="above"] {
+	--enter-y: 0.25rem;
+	transform-origin: bottom left;
 }
 
 [data-plan-comment-card] {
@@ -621,13 +639,13 @@
 
 @keyframes plan-comment-enter {
 	from {
-		opacity: 0.92;
-		transform: translateX(0.375rem);
+		opacity: 0;
+		transform: translate(var(--enter-x), var(--enter-y));
 	}
 
 	to {
 		opacity: 1;
-		transform: translateX(0);
+		transform: none;
 	}
 }
 
@@ -763,6 +781,16 @@
 	height: 0.3rem;
 	border-radius: var(--radius-full);
 	background: var(--color-text-tertiary);
+}
+
+/* Sits in the grabber row, so a draft needs no header row; the sheet is touch-only, so 44px. */
+.plan-comment-sheet-close {
+	position: absolute;
+	top: 0;
+	right: 0.25rem;
+	width: 2.75rem;
+	height: 2.75rem;
+	margin: 0;
 }
 
 .plan-comment-sheet-content {

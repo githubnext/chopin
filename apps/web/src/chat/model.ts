@@ -1,3 +1,4 @@
+import { displayName as capitalize } from "@chopin/editor";
 import { instruction } from "@chopin/protocol/address";
 
 import type { Chat } from "@chopin/protocol";
@@ -70,9 +71,7 @@ function speaker(author: Speaker): string {
 	return author.kind === "agent" ? "agent" : `member:${author.handle}`;
 }
 
-export function capitalize(value: string): string {
-	return value ? value[0]!.toUpperCase() + value.slice(1) : value;
-}
+export { capitalize };
 
 /** Tool names are protocol identifiers; the transcript is for people. */
 export function toolCopy(name: string): string {
