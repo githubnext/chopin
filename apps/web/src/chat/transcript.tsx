@@ -287,6 +287,7 @@ function MessageGroup(
 	} & PlanMarkers,
 ) {
 	let first = item.messages[0]!;
+	let active = item.messages.find(message => message.working);
 	let name = item.author.kind === "agent" ? "Chopin" : capitalize(item.author.handle);
 
 	return (
@@ -310,7 +311,11 @@ function MessageGroup(
 							? "text-sm text-text-quaternary tabular-nums"
 							: "text-2xs text-text-tertiary tabular-nums"}
 					>
-						{item.queued ? "queued" : when(first.ts!)}
+						{item.queued
+							? "queued"
+							: active
+							? `Started at ${when(active.ts!)}`
+								: when(first.ts!)}
 					</span>
 				</div>
 				{item.messages.map(message => (
