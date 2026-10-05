@@ -20,6 +20,7 @@ test("a single decision renders as a saveable card without a stepper", () => {
 		createElement(QuestionView, {
 			definition: SINGLE,
 			drafts: {},
+			onAddOption: async () => ({ ok: true as const }),
 			onSubmit() {},
 		}),
 	);

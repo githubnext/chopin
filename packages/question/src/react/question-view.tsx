@@ -845,7 +845,7 @@ export function QuestionView(props: QuestionViewProps) {
 									name={`${base}-${current.id}`}
 								/>
 							)}
-							{current.options.length < MAX_SHARED_OPTIONS && (
+							{onAddOption && current.options.length < MAX_SHARED_OPTIONS && (
 								<AddOption
 									key={current.id}
 									question={current}
@@ -853,9 +853,7 @@ export function QuestionView(props: QuestionViewProps) {
 										? 1
 										: 0}
 									disabled={disabled}
-									onAdd={onAddOption
-										? label => onAddOption(current.id, label)
-										: undefined}
+									onAdd={label => onAddOption(current.id, label)}
 									onFailed={setAddError}
 									onEdit={markComposerEdit}
 									onCancelEdit={cancelComposerEdit}
