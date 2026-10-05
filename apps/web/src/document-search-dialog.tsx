@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 import * as Api from "./api";
 import { NavigationDialog } from "./navigation-dialog";
+import { PaletteListbox } from "./navigation-palette";
 
 import type { NavigationDialogMotion } from "./navigation-dialog";
 
@@ -109,7 +110,7 @@ export function DocumentSearchDialog(
 	}, [includeArchived, projects, query, retry]);
 
 	let results = search.status === "ready" ? search.results : [];
-	let spansRepositories = new Set(results.map(({ project }) => project.repositoryId)).size > 1;
+	let manyProjects = projects.length > 1;
 	return (
 		<NavigationDialog
 			initialFocus={input}
@@ -132,7 +133,7 @@ export function DocumentSearchDialog(
 			</div>
 			<div className="navigation-palette-list" aria-busy={search.status === "loading"}>
 				{search.status === "loading" && (
-					<p className="navigation-palette-status">
+					<p className="navigation-palette-status" role="status">
 						<LoaderIcon aria-hidden="true" data-palette-loader="" />
 						Searching documents
 					</p>
@@ -155,38 +156,41 @@ export function DocumentSearchDialog(
 					</p>
 				)}
 				{search.status === "ready" && results.length === 0 && (
-					<p className="navigation-palette-status">
+					<p className="navigation-palette-status" role="status">
 						{query.trim() ? "No matching documents" : "No documents yet"}
 					</p>
 				)}
-				{results.map(({ channel, project }) => (
-					<button
-						className="navigation-palette-option"
-						key={channel.id}
-						onClick={() => {
+				{results.length > 0 && (
+					<PaletteListbox
+						input={input}
+						itemKey={({ channel }) => channel.id}
+						items={results}
+						label="Documents"
+						onChoose={({ channel }) => {
 							onSelect(channel.id);
 							onDismiss();
 						}}
-						type="button"
-					>
-						<span className="flex min-w-0 flex-1 items-baseline gap-2">
-							<span className="min-w-0 truncate text-text-primary">
-								{channel.title}
-							</span>
-							{channel.description && (
-								<span className="min-w-0 flex-1 truncate text-text-tertiary">
-									{channel.description}
+						query={query}
+						renderItem={({ channel, project }) => (
+							<>
+								<span className="flex min-w-0 flex-1 items-baseline gap-2">
+									<span className="min-w-0 truncate text-text-primary">{channel.title}</span>
+									{channel.description && (
+										<span className="min-w-0 flex-1 truncate text-text-tertiary">
+											{channel.description}
+										</span>
+									)}
 								</span>
-							)}
-						</span>
-						{channel.archivedAt && <span className="document-status-badge">Archived</span>}
-						{spansRepositories && (
-							<span className="shrink-0 text-xs text-text-tertiary">
-								{project.repositoryOwner}/{project.repositoryName}
-							</span>
+								{channel.archivedAt && <span className="document-status-badge">Archived</span>}
+								{manyProjects && (
+									<span className="shrink-0 text-xs text-text-tertiary">
+										{project.repositoryOwner}/{project.repositoryName}
+									</span>
+								)}
+							</>
 						)}
-					</button>
-				))}
+					/>
+				)}
 			</div>
 		</NavigationDialog>
 	);

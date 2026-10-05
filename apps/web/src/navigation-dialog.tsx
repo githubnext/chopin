@@ -3,35 +3,13 @@ import { useId, useRef } from "react";
 
 import { NavigationFocusScope } from "./navigation-focus";
 
-import type { KeyboardEvent, ReactNode, RefObject } from "react";
+import type { ReactNode, RefObject } from "react";
 import type { TransitionPresence } from "@chopin/editor/transition-presence";
 
 export type NavigationDialogMotion = Pick<
 	Exclude<TransitionPresence<unknown>, { phase: "closed" }>,
 	"className" | "phase"
 >;
-
-/** Moves focus between a palette's search field and its enabled rows with the arrow keys. */
-function movePaletteFocus(event: KeyboardEvent<HTMLElement>) {
-	if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-	let stops = Array.from(
-		event.currentTarget.querySelectorAll<HTMLElement>(
-			".navigation-palette-input, .navigation-palette-option:not(:disabled)",
-		),
-	);
-	let index = stops.indexOf(document.activeElement as HTMLElement);
-	if (index === -1) return;
-	event.preventDefault();
-	let next = stops[
-		event.key === "ArrowDown"
-			? Math.min(index + 1, stops.length - 1)
-			: Math.max(index - 1, 0)
-	]!;
-	next.focus();
-	if (next.matches(".navigation-palette-input")) {
-		event.currentTarget.querySelector(".navigation-palette-list")?.scrollTo({ top: 0 });
-	} else next.scrollIntoView({ block: "nearest" });
-}
 
 /** A small modal primitive that owns the browser-only focus contract for navigation flows. */
 export function NavigationDialog(
@@ -75,7 +53,6 @@ export function NavigationDialog(
 					aria-labelledby={titleId}
 					aria-modal="true"
 					className={`navigation-modal-content${palette ? " navigation-palette" : ""}`}
-					onKeyDown={palette ? movePaletteFocus : undefined}
 					ref={dialog}
 					role="dialog"
 					tabIndex={-1}

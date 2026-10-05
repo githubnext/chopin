@@ -714,16 +714,19 @@
 	flex-direction: column;
 	overflow: hidden;
 	padding: 0;
+	/* Anchored near the top so the field stays put while results grow and shrink. */
+	align-self: start;
+	margin-top: 15vh;
 }
 
 .navigation-palette-search {
 	display: flex;
-	height: 48px;
+	height: calc(var(--spacing) * 12);
 	flex-shrink: 0;
 	align-items: center;
-	gap: 8px;
+	gap: calc(var(--spacing) * 2);
 	border-bottom: var(--edge-width) solid var(--color-edge);
-	padding: 0 16px;
+	padding: 0 calc(var(--spacing) * 4);
 	color: var(--color-icon);
 }
 
@@ -745,24 +748,35 @@
 	max-height: min(50vh, 20rem);
 	flex-direction: column;
 	overflow-y: auto;
-	padding: 6px;
-	scroll-padding-block: 6px;
+	padding: calc(var(--spacing) * 1.5);
+	scroll-padding-block: calc(var(--spacing) * 1.5);
+}
+
+.navigation-palette-options {
+	display: flex;
+	flex-direction: column;
 }
 
 .navigation-palette-option {
 	display: flex;
-	min-height: 34px;
+	min-height: calc(var(--spacing) * 8.5);
 	width: 100%;
+	flex-shrink: 0;
 	align-items: center;
-	gap: 8px;
+	gap: calc(var(--spacing) * 2);
 	border-radius: var(--radius-md);
-	padding: 0 10px;
+	padding: 0 calc(var(--spacing) * 2.5);
+	cursor: pointer;
 	text-align: left;
 	font-size: var(--text-sm);
 }
 
-.navigation-palette-option:hover:not(:disabled),
-.navigation-palette-option:focus:not(:disabled) {
+.navigation-palette-option[aria-disabled="true"] {
+	cursor: default;
+}
+
+/* One active row: keyboard, pointer, and the pre-highlighted first match share it. */
+.navigation-palette-option[aria-selected="true"] {
 	background: var(--color-selected);
 }
 
@@ -773,17 +787,28 @@
 	font-size: var(--text-xs);
 }
 
-.navigation-palette-option:is(:hover, :focus) .navigation-palette-hint,
-.navigation-palette-option[aria-busy="true"] .navigation-palette-hint {
+.navigation-palette-option[aria-selected="true"] .navigation-palette-hint,
+.navigation-palette-hint[data-busy] {
 	visibility: visible;
+}
+
+/* Touch has no hover to disclose the action, so every addable row shows it. */
+@media (pointer: coarse) {
+	.navigation-palette-option {
+		min-height: calc(var(--spacing) * 11);
+	}
+
+	.navigation-palette-hint {
+		visibility: visible;
+	}
 }
 
 .navigation-palette-status {
 	display: flex;
-	min-height: 72px;
+	min-height: calc(var(--spacing) * 18);
 	align-items: center;
 	justify-content: center;
-	gap: 8px;
+	gap: calc(var(--spacing) * 2);
 	color: var(--color-text-tertiary);
 	font-size: var(--text-sm);
 	text-align: center;
@@ -799,7 +824,7 @@
 	display: flex;
 	flex-shrink: 0;
 	border-top: var(--edge-width) solid var(--color-edge);
-	padding: 10px 16px;
+	padding: calc(var(--spacing) * 2.5) calc(var(--spacing) * 4);
 }
 
 .navigation-palette-footer a {
