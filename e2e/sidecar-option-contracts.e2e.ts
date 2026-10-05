@@ -223,7 +223,7 @@ test("a read-only reader cannot change a decision", async ({ baseURL, browser, j
 		await reader.getByRole("button", { name: /^Decisions/ }).click();
 		let card = questionnaire(reader).first();
 		await expect(card).toBeVisible();
-		await expect(card.getByRole("button", { name: "Add an option", exact: true })).toBeDisabled();
+		await expect(card.getByRole("button", { name: "Add an option", exact: true })).toHaveCount(0);
 		let options = card.getByRole("radio");
 		await expect(options).toHaveCount(2);
 		for (let option of await options.all()) await expect(option).toBeDisabled();
