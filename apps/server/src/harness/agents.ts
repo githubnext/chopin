@@ -48,6 +48,32 @@ type PlannerCallOptions = {
 	model?: string;
 };
 
+/** Tells the chat when a host tool's own execution ends; the harness reports its result only at step end. */
+function reporting(tools: ToolSet, room: DocumentRoom): ToolSet {
+	return Object.fromEntries(
+		Object.entries(tools).map(([name, original]) => {
+			let execute = original.execute;
+			if (!execute) return [name, original];
+			return [name, {
+				...original,
+				execute: async (input, options) => {
+					let output: Awaited<ReturnType<typeof execute>>;
+					try {
+						output = await execute(input, options);
+					} catch (error) {
+						room.plan.chat?.toolFinished?.(options.toolCallId, error, false);
+						throw error;
+					}
+					if (typeof output !== "object" || output === null || !(Symbol.asyncIterator in output)) {
+						room.plan.chat?.toolFinished?.(options.toolCallId, output, true);
+					}
+					return output;
+				},
+			}];
+		}),
+	);
+}
+
 export function createPlannerAgent(harness: HarnessV1, profile?: ConversationPlan.JobKind) {
 	let names = profile ? BACKGROUND_TOOL_NAMES[profile] : PLANNER_TOOL_NAMES;
 	return new HarnessAgent({
@@ -61,7 +87,10 @@ export function createPlannerAgent(harness: HarnessV1, profile?: ConversationPla
 				...rest,
 				model: options.model,
 				instructions: options.instructions,
-				tools: scopedJobTools({ ...rest.tools, ...options.githubTools }, options.room),
+				tools: reporting(
+					scopedJobTools({ ...rest.tools, ...options.githubTools }, options.room),
+					options.room,
+				),
 				toolsContext: Object.fromEntries(names.map(name => [name, {
 					room: options.room,
 					repository: options.repository,

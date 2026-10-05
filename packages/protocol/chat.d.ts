@@ -62,10 +62,14 @@ export declare namespace Chat {
 		id: string;
 		name: string;
 		status: ToolStatus;
-		/** Rendered on demand; the arguments the model supplied. */
+		/** Truncated and redacted; the arguments the model supplied, once its input finished. */
 		args?: string;
-		/** Present once finished. */
+		/** Truncated and redacted; partial output while running, final output once finished. */
 		result?: string;
+		/** Milliseconds since the epoch, set by the server when the tool's input began. */
+		startedAt?: number;
+		/** Present, with status "failed", when the Planner was refused permission to run the tool. */
+		refused?: true;
 		/** Milliseconds, once finished. */
 		took?: number;
 	};
@@ -113,6 +117,8 @@ export declare namespace Chat {
 		started: number;
 		/** Index of the first transcript entry after this turn began; transient like the turn. */
 		entryOffset: number;
+		/** Optional so earlier clients ignore it; milliseconds since the epoch, set by the server. */
+		startedAt?: number;
 		/** True after the Planner has sent non-empty prose. */
 		responded: boolean;
 	};

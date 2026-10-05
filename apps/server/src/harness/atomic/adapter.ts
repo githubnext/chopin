@@ -328,10 +328,91 @@ function serialize(output: unknown): string {
 	return typeof output === "string" ? output : JSON.stringify(output ?? null);
 }
 
+/** Atomic's tool result as one string: its text content when it has any, else its JSON. */
+export function resultText(result: unknown): string {
+	let content = (result as { content?: unknown } | null)?.content;
+	if (Array.isArray(content)) {
+		let text = content.flatMap(part => part?.type === "text" ? [String(part.text)] : []);
+		if (text.length > 0) return text.join("\n");
+	}
+	return serialize(result);
+}
+
+/**
+ * The stream parts for a tool Atomic runs itself: a builtin, extension, workflow
+ * or subagent tool. Host tools report through `hostTool`, and a nested call
+ * belongs to its parent's row.
+ */
+export function ownToolParts(
+	event: AgentSessionEvent,
+	hostNames: readonly string[],
+): HarnessV1StreamPart[] {
+	if (
+		event.type !== "tool_execution_start" && event.type !== "tool_execution_update"
+		&& event.type !== "tool_execution_end"
+	) return [];
+	if (
+		event.parentToolCallId || hostNames.includes(event.toolName)
+		|| event.toolName === ATOMIC_RESULT_TOOL_NAME
+	) return [];
+	let own = { toolCallId: event.toolCallId, toolName: event.toolName };
+	if (event.type === "tool_execution_start") {
+		return [{
+			type: "tool-call",
+			...own,
+			input: JSON.stringify(event.args ?? {}),
+			providerExecuted: true,
+			dynamic: true,
+		}];
+	}
+	return [{
+		type: "tool-result",
+		...own,
+		result: resultText(event.type === "tool_execution_end" ? event.result : event.partialResult),
+		...(event.type === "tool_execution_end"
+			? { isError: event.isError }
+			: { preliminary: true }),
+		dynamic: true,
+	}];
+}
+
+/**
+ * The streaming input of a tool call: its row can open before its arguments
+ * finish. An isolated session streams only its host tools, so a hallucinated
+ * tool stays out of the stream.
+ */
+export function inputParts(
+	update: Extract<AgentSessionEvent, { type: "message_update" }>["assistantMessageEvent"],
+	inputs: Map<number, string>,
+	hostNames: readonly string[],
+	full: boolean,
+): HarnessV1StreamPart[] {
+	if (!update.type.startsWith("toolcall_") || !("contentIndex" in update)) return [];
+	let id = inputs.get(update.contentIndex);
+	if (update.type === "toolcall_start") {
+		let call = update.partial.content[update.contentIndex];
+		if (call?.type !== "toolCall" || !full && !hostNames.includes(call.name)) return [];
+		inputs.set(update.contentIndex, call.id);
+		return [{
+			type: "tool-input-start",
+			id: call.id,
+			toolName: call.name,
+			...(hostNames.includes(call.name) ? {} : { providerExecuted: true, dynamic: true }),
+		}];
+	}
+	if (!id) return [];
+	if (update.type === "toolcall_delta") {
+		return [{ type: "tool-input-delta", id, delta: update.delta }];
+	}
+	inputs.delete(update.contentIndex);
+	return [{ type: "tool-input-end", id }];
+}
+
 type Run = {
 	emit: (part: HarnessV1StreamPart) => void;
 	pending: Map<string, (outcome: ToolOutcome) => void>;
 	blocks: Map<number, { id: string; kind: "text" | "reasoning" }>;
+	inputs: Map<number, string>;
 	stopped: boolean;
 	failure?: Error;
 	last?: { stopReason: string; errorMessage?: string };
@@ -443,9 +524,22 @@ export function createAtomicAdapter(
 					if (run.stopped) session.agent.abort();
 					return;
 				}
+				if (full) {
+					for (let part of ownToolParts(event, policy.hostNames)) {
+						if (part.type === "tool-result") {
+							full.toolReport?.(
+								part.toolCallId,
+								part.result,
+								part.preliminary ? "running" : part.isError ? "failed" : "done",
+							);
+						}
+						run.emit(part);
+					}
+				}
 				if (!("message" in event) || event.message.role !== "assistant") return;
 				if (event.type === "message_start") {
 					run.blocks.clear();
+					run.inputs.clear();
 				} else if (event.type === "message_end") {
 					for (let block of run.blocks.values()) {
 						run.emit({ type: `${block.kind}-end`, id: block.id });
@@ -454,6 +548,7 @@ export function createAtomicAdapter(
 					run.last = event.message;
 				} else if (event.type === "message_update" && !policy.structured) {
 					let update = event.assistantMessageEvent;
+					for (let part of inputParts(update, run.inputs, policy.hostNames, !!full)) run.emit(part);
 					let kind = update.type.startsWith("text_")
 						? "text" as const
 						: update.type.startsWith("thinking_")
@@ -620,6 +715,7 @@ export function createAtomicAdapter(
 							}.`,
 						);
 					}
+					if (full) full.activeTools = names;
 					policy.structured = structured;
 					policy.systemPrompt = turnSystemPrompt(turn.instructions, turn.responseFormat);
 					policy.result = undefined;
@@ -628,6 +724,7 @@ export function createAtomicAdapter(
 						emit: turn.emit,
 						pending: new Map(),
 						blocks: new Map(),
+						inputs: new Map(),
 						stopped: false,
 						stop: () => {
 							if (run.stopped) return;
