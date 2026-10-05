@@ -137,7 +137,7 @@ export function Header(
 						<Badge icon={ArchiveIcon} label="Archived" size="sm" />
 						{canManage && (
 							<button
-								className="btn btn-sm btn-ghost"
+								className="btn btn-sm btn-outline"
 								onClick={() => onAction("restore")}
 								type="button"
 							>
@@ -733,7 +733,7 @@ export function RoomWorkspace(
 						onActivity={onChatActivity}
 						notice={workspaceArchivedAt
 							? effectiveCanManage
-								? "This document is archived. Restore it to keep chatting."
+								? "Archived. Restore it to keep chatting."
 								: "This document is archived."
 							: !workspaceCanEdit
 							? "You have read-only access to this document."

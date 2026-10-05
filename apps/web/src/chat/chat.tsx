@@ -437,28 +437,42 @@ export function Chat(
 	let moveMention = (to: (index: number) => number) =>
 		setMentionCursor({ key: mentionKey, index: to(mentionActive) });
 
+	let transcript = (
+		<Transcript
+			active={active}
+			canEdit={composerReady}
+			conversationPlanJobs={conversationPlanJobs}
+			onCardLink={onCardLink}
+			onAddExcerpt={onAddExcerpt}
+			onRetryAnalysis={onRetryAnalysis}
+			onRetryJob={onRetryJob}
+			conversationPlan={conversationPlan}
+			decisions={decisions}
+			researchOffers={researchOffers}
+			sourceDestination={sourceDestination}
+			entries={entries}
+			handle={handle}
+			onWithdraw={id => wire?.send("chat:unqueue", { id })}
+			queued={queue}
+			working={connected && synchronized.current === wire && turn
+				? turn
+				: undefined}
+		/>
+	);
+	if (notice) {
+		return (
+			<div className="flex h-full min-h-0 flex-col">
+				{transcript}
+				<div className="chat-composer shrink-0 px-2.5 pb-2.5">
+					<p className="px-4 py-3 text-sm text-text-tertiary">{notice}</p>
+				</div>
+			</div>
+		);
+	}
+
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<Transcript
-				active={active}
-				canEdit={composerReady}
-				conversationPlanJobs={conversationPlanJobs}
-				onCardLink={onCardLink}
-				onAddExcerpt={onAddExcerpt}
-				onRetryAnalysis={onRetryAnalysis}
-				onRetryJob={onRetryJob}
-				conversationPlan={conversationPlan}
-				decisions={decisions}
-				researchOffers={researchOffers}
-				sourceDestination={sourceDestination}
-				entries={entries}
-				handle={handle}
-				onWithdraw={id => wire?.send("chat:unqueue", { id })}
-				queued={queue}
-				working={connected && synchronized.current === wire && turn
-					? turn
-					: undefined}
-			/>
+			{transcript}
 
 			{agent && !!runs?.length && (
 				<div className="flex shrink-0 flex-col px-2.5 pb-2" data-chat-runs="">
