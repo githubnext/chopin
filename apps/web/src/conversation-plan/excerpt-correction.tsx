@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 
+import { plainInlineText } from "@chopin/question/react";
 import type { ConversationPlan } from "@chopin/protocol";
 import type { ExcerptCorrectionAction } from "./analysis-action";
 
@@ -85,7 +86,7 @@ export function ExcerptCorrection(
 					...(targetOptionId && kind !== "option" ? { targetOptionId } : {}),
 				},
 			});
-			setSuccess(`Added to ${thread.question} as a ${kind}.`);
+			setSuccess(`Added to ${plainInlineText(thread.question)} as a ${kind}.`);
 			setEditing(false);
 		} catch {
 			setError("Could not add this excerpt. Check the card and connection, then try again.");
@@ -159,7 +160,9 @@ export function ExcerptCorrection(
 					value={threadId}
 				>
 					<option value="">Choose a decision card</option>
-					{threads.map(item => <option key={item.id} value={item.id}>{item.question}</option>)}
+					{threads.map(item => (
+						<option key={item.id} value={item.id}>{plainInlineText(item.question)}</option>
+					))}
 				</select>
 			</label>
 			{kind !== "option" && (
