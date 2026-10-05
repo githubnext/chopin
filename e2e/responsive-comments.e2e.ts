@@ -183,3 +183,28 @@ test("a representative compact viewport keeps a passage above the sheet and rest
 		0,
 	);
 });
+
+for (
+	let [name, viewport, hasTouch] of [
+		["desktop", { width: 1_440, height: 900 }, false],
+		["phone", { width: 390, height: 844 }, true],
+	] as const
+) {
+	test(`${name} comment marker scrolls away with its passage`, async ({ join, seed }) => {
+		await seed(PLAN);
+		let page = await join("ana", { hasTouch, viewport });
+		let scroller = page.locator("[data-plan-scroll]");
+		let marker = page.locator("[data-plan-comment-button]").first();
+		await expect(marker).toBeVisible();
+		let resting = (await marker.boundingBox())!;
+
+		await scroller.evaluate(element => element.scrollBy(0, 1_500));
+		await expect(marker).toBeHidden();
+		let frame = (await scroller.boundingBox())!;
+		await expect.poll(async () => (await marker.boundingBox())!.y).toBeLessThan(frame.y);
+
+		await scroller.evaluate(element => element.scrollTo(0, 0));
+		await expect(marker).toBeVisible();
+		await expect.poll(async () => (await marker.boundingBox())!.y).toBe(resting.y);
+	});
+}

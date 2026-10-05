@@ -8,6 +8,8 @@ export type Rect = {
 };
 
 export type Point = { top: number; left: number };
+/** An offscreen marker follows its passage outside the document and is not shown. */
+export type MarkerPoint = Point & { offscreen?: true };
 export type MarkerTarget = { target: Rect; passages: Rect[] };
 
 /** A decision marker sits before the first line of its decided paragraph. */
@@ -55,12 +57,19 @@ export function markerPoints(
 	host: Rect,
 	size = 24,
 	gap = 8,
-): Point[] {
+): MarkerPoint[] {
 	let passages = targets.flatMap(({ passages, target }) =>
 		passages.length > 0 ? passages : [target]
 	);
 	let markers: Rect[] = [];
 	return targets.map(({ target }) => {
+		if (target.bottom <= host.top || target.top >= host.bottom) {
+			return {
+				top: target.top - host.top,
+				left: clamp(target.right - host.left + gap, 0, host.width - size),
+				offscreen: true,
+			};
+		}
 		let point = markerPoint(target, host, passages, markers, size, gap);
 		markers.push(markerRect(point, host, size));
 		return point;

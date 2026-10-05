@@ -19,13 +19,13 @@ import { useTransitionPresence } from "./transition-presence";
 import { widgets$ } from "./widget-options";
 
 import type { CSSProperties, ReactNode } from "react";
-import type { Point, Rect } from "./comment-geometry";
+import type { MarkerPoint, Point, Rect } from "./comment-geometry";
 import type { PassageHit } from "./comment-hits";
 import type { ThreadStore, ThreadView } from "./threads";
 
 type PlacedThread = {
 	view: ThreadView;
-	button: Point;
+	button: MarkerPoint;
 	hits: PassageHit[];
 	passages: Rect[];
 };
@@ -605,7 +605,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let compactClose: (() => void) | undefined;
 	let compactContent: ReactNode = undefined;
 	let previewEntry = preview && pinned !== preview
-		? placed.find(entry => entry.view.thread.id === preview)
+		? placed.find(entry => entry.view.thread.id === preview && !entry.button.offscreen)
 		: undefined;
 	let previewRequest: PreviewRequest | undefined = previewEntry
 		? {
@@ -700,7 +700,11 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 							onFocus={() => hover(view.thread.id)}
 							onMouseEnter={() => hover(view.thread.id)}
 							onMouseLeave={() => unhover(view.thread.id)}
-							style={button}
+							style={{
+								top: button.top,
+								left: button.left,
+								visibility: button.offscreen ? "hidden" : undefined,
+							}}
 							type="button"
 						>
 							<MessageIcon aria-hidden="true" size={14} />

@@ -111,6 +111,48 @@ test("keeps an impossible marker mounted just beyond its passage", () => {
 	expect(point).toEqual({ top: 608, left: 756 });
 });
 
+test("lets a marker scroll above the document with its passage", () => {
+	let point = place({
+		top: -1_400,
+		right: 520,
+		bottom: -1_360,
+		left: 340,
+		width: 180,
+		height: 40,
+	});
+
+	expect(point).toEqual({ top: -1_500, left: 428, offscreen: true });
+});
+
+test("lets a marker scroll below the document with its passage", () => {
+	let point = place({
+		top: 700,
+		right: 520,
+		bottom: 720,
+		left: 340,
+		width: 180,
+		height: 20,
+	});
+
+	expect(point).toEqual({ top: 600, left: 428, offscreen: true });
+});
+
+test("an off-document marker does not displace a visible one", () => {
+	let above = { top: 40, right: 520, bottom: 60, left: 340, width: 180, height: 20 };
+	let visible = { top: 100, right: 520, bottom: 120, left: 340, width: 180, height: 20 };
+
+	expect(markerPoints(
+		[
+			{ target: above, passages: [above] },
+			{ target: visible, passages: [visible] },
+		],
+		host,
+	)).toEqual([
+		{ top: -60, left: 428, offscreen: true },
+		{ top: 0, left: 428 },
+	]);
+});
+
 test("finds a safe in-host point between full-height passage columns", () => {
 	let narrowHost = {
 		top: 0,

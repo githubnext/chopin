@@ -198,13 +198,6 @@
 				"hit",
 				"unresolved style > CommentLayer > documentChrome > <div>",
 				1
-			],
-			[
-				"dynamic",
-				"*",
-				"button",
-				"unresolved style > CommentLayer > documentChrome > <button>",
-				1
 			]
 		],
 		"sourceHash": "c60690040f4b0911e23027b7b975596e0db27e2d4e20c4ec4ce3f1955c5b81e8"
