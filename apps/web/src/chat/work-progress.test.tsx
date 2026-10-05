@@ -54,3 +54,18 @@ test("active work counts failed calls as finished rather than done", () => {
 	expect(markup).toContain("2 finished");
 	expect(markup).not.toContain("2 done");
 });
+
+test("disconnected work stays inspectable without claiming an active or interrupted call", () => {
+	let markup = renderToStaticMarkup(createElement(WorkProgress, {
+		active: false,
+		disconnected: true,
+		responseSeen: true,
+		streaming: false,
+		tools: [{ id: "one", name: "read_plan", status: "running", args: "{}" }],
+	}));
+
+	expect(markup).toContain("Connection lost");
+	expect(markup).toContain('aria-expanded="false"');
+	expect(markup).not.toContain("chat-work-lattice");
+	expect(markup).not.toContain("Interrupted");
+});

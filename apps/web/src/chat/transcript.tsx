@@ -11,7 +11,7 @@ import { MessageMarkdown } from "./markdown";
 import { MessageMarkers } from "../conversation-plan/markers";
 import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";
 import type { CardLink } from "../conversation-plan/links";
-import { capitalize, displayText, group } from "./model";
+import { capitalize, displayText, group, workAnnouncement, workPhase } from "./model";
 import { WorkProgress } from "./work-progress";
 import { clearSourceHighlight, highlightSource } from "../conversation-plan/source";
 import type { ChatDestination } from "../conversation-plan/source";
@@ -153,11 +153,16 @@ function MessageBody(
 			}`}
 			data-chat-message-id={message.id}
 			data-chat-raw={message.text}
-			data-chat-state={message.working ? "working" : undefined}
+			data-chat-state={message.working
+				? "working"
+				: message.workDisconnected
+				? "disconnected"
+				: undefined}
 		>
-			{(message.working || !!message.tools?.length) && (
+			{(message.working || message.workDisconnected || !!message.tools?.length) && (
 				<WorkProgress
 					active={!!message.working}
+					disconnected={!!message.workDisconnected}
 					responseSeen={!!message.workResponseSeen}
 					streaming={!!message.workStreaming || !!message.streaming}
 					tools={message.tools ?? []}
@@ -289,6 +294,7 @@ export function Transcript(
 		onWithdraw,
 		queued,
 		sourceDestination,
+		suspendedWork,
 		working,
 	}: {
 		active: boolean;
@@ -310,6 +316,7 @@ export function Transcript(
 		handle: string;
 		onWithdraw: (id: string) => void;
 		queued: Chat.Waiting[];
+		suspendedWork?: CompletedWork;
 		working?: Pick<Chat.Turn, "id" | "started" | "entryOffset">;
 		sourceDestination?: ChatDestination;
 	},
@@ -319,9 +326,26 @@ export function Transcript(
 	let pinned = useRef(true);
 	let sourceOwner = useRef({});
 	let groups = researchTranscript(
-		group(entries, queued, working, completedWork),
+		group(entries, queued, working, completedWork, suspendedWork),
 		researchOffers ? conversationPlan?.researchOffers ?? [] : [],
 	);
+	let currentWork = groups.flatMap(item => item.kind === "messages" ? item.messages : [])
+		.find(message => message.working);
+	let phase = currentWork
+		? workPhase(
+			currentWork.tools ?? [],
+			!!currentWork.workStreaming || !!currentWork.streaming,
+			true,
+			!!currentWork.workResponseSeen,
+		)
+		: undefined;
+	let announcement = phase
+		? workAnnouncement(phase)
+		: suspendedWork
+		? "Chopin connection lost. Work details remain available."
+		: completedWork?.length
+		? "Chopin turn ended. Work details remain available."
+		: "";
 	let latestPrompt = new Map<string, string>();
 	let latestScoped = new Map<string, string>();
 	for (let entry of entries) {
@@ -365,6 +389,15 @@ export function Transcript(
 				pinned.current = distance < 40;
 			}}
 		>
+			<span
+				aria-atomic="true"
+				aria-live="polite"
+				className="sr-only"
+				data-chat-work-announcer
+				role="status"
+			>
+				{announcement}
+			</span>
 			<div
 				className="flex min-h-full flex-col gap-4 [&>*:first-child]:mt-auto"
 				data-chat-stack

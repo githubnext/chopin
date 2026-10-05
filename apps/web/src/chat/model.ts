@@ -14,6 +14,7 @@ export type Message = {
 	references?: Chat.Reference[];
 	queued: boolean;
 	working?: boolean;
+	workDisconnected?: boolean;
 	workStreaming?: boolean;
 	workResponseSeen?: boolean;
 };
@@ -46,6 +47,25 @@ export type WorkPhase =
 	| "Writing a response"
 	| "Reviewing the next step";
 
+export function workAnnouncement(phase: WorkPhase): string {
+	switch (phase) {
+		case "Getting oriented":
+			return "Chopin has started.";
+		case "Gathering context":
+			return "Chopin is inspecting the document.";
+		case "Waiting for an answer":
+			return "Chopin needs an answer.";
+		case "Making changes":
+			return "Chopin is editing the document.";
+		case "Working through the request":
+			return "Chopin is working on the request.";
+		case "Writing a response":
+			return "Chopin is writing a reply.";
+		case "Reviewing the next step":
+			return "Chopin is preparing to continue.";
+	}
+}
+
 function speaker(author: Speaker): string {
 	return author.kind === "agent" ? "agent" : `member:${author.handle}`;
 }
@@ -73,6 +93,7 @@ export function group(
 	queued: Chat.Waiting[],
 	working?: Pick<Chat.Turn, "id" | "started" | "entryOffset">,
 	completed: CompletedWork[] = [],
+	suspended?: CompletedWork,
 ): Group[] {
 	let replacements = new Map<number, Message>();
 	let hiddenTools = new Set<number>();
@@ -83,13 +104,24 @@ export function group(
 			endOffset: item.endOffset,
 			anchorId: item.anchorId,
 			active: false,
+			disconnected: false,
 		})),
+		...(suspended
+			? [{
+				entryOffset: suspended.entryOffset,
+				endOffset: suspended.endOffset,
+				anchorId: suspended.anchorId,
+				active: false,
+				disconnected: true,
+			}]
+			: []),
 		...(working
 			? [{
 				entryOffset: working.entryOffset,
 				endOffset: entries.length,
 				anchorId: "",
 				active: true,
+				disconnected: false,
 			}]
 			: []),
 	];
@@ -104,13 +136,14 @@ export function group(
 			);
 		if (!anchor) continue;
 		let tools = current.flatMap(({ entry }) => entry.tools ?? []);
-		if (!span.active && !tools.length) continue;
+		if (!span.active && !span.disconnected && !tools.length) continue;
 		if (span.active) activeIndex = anchor.index;
 		replacements.set(anchor.index, {
 			...anchor.entry,
 			author: { kind: "agent" },
 			tools,
 			queued: false,
+			...(span.disconnected ? { workDisconnected: true } : {}),
 			...(span.active
 				? {
 					working: true,

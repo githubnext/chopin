@@ -168,9 +168,19 @@ export function Chat(
 	// A socket opens before its fresh transcript arrives, and reconnects reuse
 	// the same Wire. Only that transcript makes this composer current.
 	if (!connected) synchronized.current = undefined;
-	let composerReady = connected && synchronized.current === wire && !readonly && !archived;
+	let transcriptReady = connected && synchronized.current === wire;
+	let composerReady = transcriptReady && !readonly && !archived;
 	let connectionLost = !connected && ["reconnecting", "closed"].includes(wire?.status ?? "");
 	let effectiveMode = agent && (mode || addressedOutsideReferences(draft.text, draft.references));
+	let workingTurn = transcriptReady ? turn : undefined;
+	let suspendedWork = !transcriptReady && turn && transcript.activeAnchorId
+		? {
+			turnId: turn.id,
+			entryOffset: turn.entryOffset,
+			endOffset: entries.length,
+			anchorId: transcript.activeAnchorId,
+		}
+		: undefined;
 	let detected = referencesEnabled && composerReady && !submitting
 		? referenceTrigger(draft.text, selection.start, selection.end)
 		: undefined;
@@ -428,12 +438,11 @@ export function Chat(
 			sourceDestination={sourceDestination}
 			entries={entries}
 			completedWork={transcript.completedWork}
+			suspendedWork={suspendedWork}
 			handle={handle}
 			onWithdraw={id => wire?.send("chat:unqueue", { id })}
 			queued={queue}
-			working={connected && synchronized.current === wire && turn
-				? turn
-				: undefined}
+			working={workingTurn}
 		/>
 	);
 	if (notice) {

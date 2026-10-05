@@ -564,14 +564,17 @@ test(
 		await chat.getByRole("button", { name: "Send message" }).click();
 		await planner.started;
 		await expect(chat.getByText("Getting oriented")).toBeVisible();
+		let live = chat.locator("[data-chat-work-announcer]");
+		await expect(live).toHaveText("Chopin has started.");
+		await live.evaluate(element => element.setAttribute("data-live-node", "retained"));
 
 		let read = planner.tool("read_plan", '{ "path": "<store.ts>" }');
 		let work = chat.locator('[data-chat-state="working"]');
 		let disclosure = work.getByRole("button", { name: /Gathering context/ });
 		await expect(disclosure).toBeVisible();
 		await expect(disclosure).toHaveAttribute("aria-expanded", "false");
-		let live = work.locator('[aria-live="polite"]');
-		await live.evaluate(element => element.setAttribute("data-live-node", "retained"));
+		await expect(live).toHaveText("Chopin is inspecting the document.");
+		await expect(live).toHaveAttribute("data-live-node", "retained");
 		let controlled = await disclosure.getAttribute("aria-controls");
 		await expect(chat.locator(`[id="${controlled}"]`)).toHaveCount(1);
 		await expect(work.getByText("Read plan", { exact: true })).toHaveCount(0);
@@ -590,6 +593,7 @@ test(
 
 		planner.finishTool(read, "done", "Found the storage adapter.");
 		await expect(work.getByText("Reviewing the next step")).toBeVisible();
+		await expect(live).toHaveText("Chopin is preparing to continue.");
 		await expect(live).toHaveAttribute("data-live-node", "retained");
 		await expect(work.getByText("1 finished")).toBeVisible();
 		await expect(work.getByText("Found the storage adapter.")).toBeVisible();
@@ -600,6 +604,7 @@ test(
 
 		let edit = planner.tool("edit_plan", '{ "block": "persistence" }');
 		await expect(work.getByText("Making changes")).toBeVisible();
+		await expect(live).toHaveText("Chopin is editing the document.");
 		await expect(live).toHaveAttribute("data-live-node", "retained");
 		await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(1);
 		planner.finishTool(edit, "done", "Document updated.");
@@ -612,7 +617,8 @@ test(
 		await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(0);
 		let finished = chat.getByRole("button", { name: /Work details.*2 actions/ });
 		await expect(finished).toHaveAttribute("aria-expanded", "true");
-		await expect(chat.locator('[aria-live="polite"][data-live-node="retained"]')).toHaveCount(1);
+		await expect(live).toHaveText("Chopin turn ended. Work details remain available.");
+		await expect(live).toHaveAttribute("data-live-node", "retained");
 		await expect(chat.getByText("Document updated.")).not.toBeVisible();
 		await chat.screenshot({ path: testInfo.outputPath("work-completed.png") });
 	},
@@ -672,6 +678,81 @@ test("chat keeps an opened disclosure when prose precedes a separate tool entry"
 	await expect(finished).toHaveAttribute("data-open-node", "retained");
 	await expect(prose.getByText("Read plan", { exact: true })).toBeVisible();
 	await expect(chat.getByRole("button", { name: /Work details.*1 action/ })).toHaveCount(1);
+});
+
+test("chat keeps opened work details on their prose anchor through a disconnect", async ({ join, page }) => {
+	let sockets: WebSocketRoute[] = [];
+	let reconnecting = Promise.withResolvers<void>();
+	let releaseHistory: (() => void) | undefined;
+	let turn: Chat.Turn = {
+		id: "turn-offline",
+		handle: "ana",
+		started: 1_700_000_001,
+		entryOffset: 1,
+		responded: true,
+	};
+	let entries: Chat.Entry[] = [
+		{
+			id: "prompt",
+			author: { kind: "member", handle: "ana" },
+			text: "@chopin Inspect this.",
+			ts: 1_700_000_000,
+		},
+		{ id: "prose", author: { kind: "agent" }, text: "I will inspect this.", ts: 1_700_000_001 },
+		{
+			id: "read-entry",
+			author: { kind: "agent" },
+			text: "",
+			ts: 1_700_000_001,
+			tools: [{ id: "read", name: "read_plan", status: "done", result: "Read it." }],
+		},
+		{
+			id: "edit-entry",
+			author: { kind: "agent" },
+			text: "",
+			ts: 1_700_000_001,
+			tools: [{ id: "edit", name: "edit_plan", status: "running", args: "{}" }],
+		},
+	];
+	await page.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		sockets.push(route);
+		route.onMessage(message => server.send(message));
+		server.onMessage(message => {
+			if (typeof message !== "string") return route.send(message);
+			let frame = JSON.parse(message) as Chat.History;
+			if (frame.kind !== "chat:history") return route.send(message);
+			let history = JSON.stringify({ ...frame, busy: true, turn, entries });
+			if (sockets.length === 2) {
+				releaseHistory = () => route.send(history);
+				reconnecting.resolve();
+				return;
+			}
+			route.send(history);
+		});
+	});
+
+	let chat = chatPane(await join("ana"));
+	let prose = chat.locator('[data-chat-message-id="prose"]');
+	let disclosure = prose.getByRole("button", { name: /Making changes/ });
+	await disclosure.click();
+	await disclosure.evaluate(element => element.setAttribute("data-open-node", "retained"));
+	await expect(disclosure).toHaveAttribute("aria-expanded", "true");
+	await sockets[0]!.close();
+	await reconnecting.promise;
+	await expect(prose).toHaveAttribute("data-chat-state", "disconnected");
+	let offline = prose.getByRole("button", { name: /Work details.*2 actions.*Connection lost/ });
+	await expect(offline).toHaveAttribute("data-open-node", "retained");
+	await expect(offline).toHaveAttribute("aria-expanded", "true");
+	await expect(prose.locator('[data-work-active="false"][data-work-disconnected="true"]'))
+		.toHaveCount(1);
+	await expect(prose.getByRole("button", { name: /Edit plan.*Last seen running/ })).toBeVisible();
+	releaseHistory?.();
+	await expect(prose).toHaveAttribute("data-chat-state", "working");
+	await expect(prose.getByRole("button", { name: /Making changes/ })).toHaveAttribute(
+		"data-open-node",
+		"retained",
+	);
 });
 
 test("chat history keeps one active work row after Planner prose and a later room message", async ({ join, page }) => {

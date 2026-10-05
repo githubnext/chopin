@@ -283,6 +283,31 @@ describe("transcript groups", () => {
 		expect(messages.find(item => item.id === "prose")?.tools).toMatchObject([{ id: "read" }]);
 		expect(messages.find(item => item.id === "tool-entry")?.tools).toBeUndefined();
 	});
+
+	it("keeps one inspectable work anchor while its connection is offline", () => {
+		let entries = [
+			entry("prompt", { kind: "member", handle: "ana" }),
+			entry("prose", { kind: "agent" }, "I will inspect this."),
+			{
+				...entry("tool-entry", { kind: "agent" }, ""),
+				tools: [{ id: "read", name: "read_plan", status: "running" as const }],
+			},
+		];
+		let suspended = {
+			turnId: "turn-1",
+			entryOffset: 1,
+			endOffset: 3,
+			anchorId: "prose",
+		};
+		let messages = group(entries, [], undefined, [], suspended).flatMap(item =>
+			item.kind === "messages" ? item.messages : []
+		);
+		expect(messages.find(item => item.id === "prose")).toMatchObject({
+			workDisconnected: true,
+			tools: [{ id: "read" }],
+		});
+		expect(messages.find(item => item.id === "tool-entry")?.tools).toBeUndefined();
+	});
 });
 
 describe("rail copy", () => {
