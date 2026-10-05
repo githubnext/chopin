@@ -137,6 +137,16 @@ test("lets a marker scroll below the document with its passage", () => {
 	expect(point).toEqual({ top: 600, left: 428, offscreen: true });
 });
 
+test("keeps a held marker at the nearest document edge after its passage scrolls away", () => {
+	let above = { top: -1_400, right: 520, bottom: -1_360, left: 340, width: 180, height: 40 };
+	let below = { top: 700, right: 520, bottom: 720, left: 340, width: 180, height: 20 };
+
+	expect(markerPoints([{ target: above, passages: [above], held: true }], host)[0])
+		.toEqual({ top: 0, left: 428 });
+	expect(markerPoints([{ target: below, passages: [below], held: true }], host)[0])
+		.toEqual({ top: 576, left: 428 });
+});
+
 test("an off-document marker does not displace a visible one", () => {
 	let above = { top: 40, right: 520, bottom: 60, left: 340, width: 180, height: 20 };
 	let visible = { top: 100, right: 520, bottom: 120, left: 340, width: 180, height: 20 };
