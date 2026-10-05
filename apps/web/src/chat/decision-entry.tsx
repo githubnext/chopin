@@ -1,7 +1,12 @@
 /** System entries that show or link to a live decision card. */
 
 import { DecisionIcon, DocumentIcon, SparkleIcon } from "@chopin/icons";
-import { projectSuggestion, useQuestionnaire } from "@chopin/question/react";
+import {
+	InlineCode,
+	plainInlineText,
+	projectSuggestion,
+	useQuestionnaire,
+} from "@chopin/question/react";
 
 import type { Questionnaire } from "@chopin/dialect";
 import type { Definition, Drafts } from "@chopin/question";
@@ -148,7 +153,7 @@ export function DecisionPrompt(props: DecisionEntryProps) {
 
 	return (
 		<div
-			aria-label={`Decision prompt: ${title}`}
+			aria-label={`Decision prompt: ${plainInlineText(title)}`}
 			className="flex flex-col gap-2 rounded-lg bg-inset px-3 py-2.5"
 			data-decision-prompt={id}
 			role="group"
@@ -157,12 +162,19 @@ export function DecisionPrompt(props: DecisionEntryProps) {
 				<span className="grid size-5 shrink-0 place-items-center rounded-full bg-success-wash text-success-icon">
 					<DecisionIcon aria-hidden="true" size={12} />
 				</span>
-				<p className="m-0 min-w-0 flex-1 text-sm font-medium text-text-primary">{title}</p>
+				<p className="m-0 min-w-0 flex-1 text-sm font-medium text-text-primary">
+					<InlineCode text={title} />
+				</p>
 				<OpenInPlan id={id} onOpenCard={onOpenCard} />
 			</div>
 			<p className="m-0 text-sm text-text-secondary">
 				{selection.label
-					? `${selection.visibleSuggestion ? "Suggested" : "Selected"}: ${selection.label}`
+					? (
+						<>
+							{selection.visibleSuggestion ? "Suggested" : "Selected"}:{" "}
+							<InlineCode text={selection.label} />
+						</>
+					)
 					: "Choose an option on the card"}
 			</p>
 			{state.error && <p className="m-0 text-sm text-destructive-ink" role="alert">{state.error}

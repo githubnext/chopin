@@ -21,7 +21,7 @@ import {
 import { createPortal } from "react-dom";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { CheckIcon, ClockIcon, CloseIcon, DecisionIcon, MessageForwardIcon } from "@chopin/icons";
-import { ResolvedActions } from "@chopin/question/react";
+import { InlineCode, ResolvedActions } from "@chopin/question/react";
 import { useCellValue } from "@mdxeditor/gurx";
 
 import { currentDecision, releaseDecision, subscribeDecision } from "./decision-pin";
@@ -151,7 +151,9 @@ function Popover(
 	return (
 		<>
 			<div className="plan-decision-head">
-				<p className="plan-decision-question">{decision.prompt}</p>
+				<p className="plan-decision-question">
+					<InlineCode text={decision.prompt} />
+				</p>
 				<span className="plan-decision-tools" inert={!pinned}>
 					{onSource && (
 						<button

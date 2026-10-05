@@ -852,6 +852,16 @@ label.question-option:has(.question-input:not(:disabled)) {
 	color: var(--color-text-secondary);
 }
 
+.inline-code {
+	background: var(--color-inset);
+	color: var(--color-text-primary);
+	border-radius: var(--radius-sm);
+	padding: 0.125em 0.3em;
+	font-family: var(--font-mono);
+	font-size: inherit;
+	font-weight: 400;
+}
+
 .question-check {
 	flex: none;
 	display: grid;
