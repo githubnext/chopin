@@ -266,9 +266,9 @@ for (let surface of ["chat", "sidebar"] as const) {
 		await expect(card.getByRole("radio", { name: "GitHub Apps from chat", exact: true }))
 			.toBeChecked();
 		await expect(card.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
-		await expect(card.getByRole("button", { name: "Add an option", exact: true })).toBeDisabled();
+		await expect(card.getByRole("button", { name: "Add an option", exact: true })).toHaveCount(0);
 		if (surface === "chat") {
-			await expect(page.getByRole("button", { name: "Save decision", exact: true })).toBeDisabled();
+			await expect(page.getByRole("button", { name: "Save decision", exact: true })).toHaveCount(0);
 			await expect(page.getByText("Suggested: GitHub Apps", { exact: true })).toBeVisible();
 		} else {
 			let sidebar = page.getByRole("region", { name: "Decisions", exact: true });
