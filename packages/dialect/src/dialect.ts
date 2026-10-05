@@ -303,6 +303,27 @@ export const FORBIDDEN_NODES: readonly string[] = Object.freeze([
 export const LINK_PROTOCOLS: readonly string[] = Object.freeze(["https:", "mailto:"]);
 
 /**
+ * Characters a URL must never carry: controls (C0, DEL, C1) and format
+ * characters (soft hyphen, zero-width and bidirectional marks, the byte-order
+ * mark), plus line and paragraph separators.
+ *
+ * Browsers strip some of these while parsing, so `\u0001javascript:` has no
+ * scheme to a pattern yet resolves to one; others hide a different address
+ * behind the one a reader sees.
+ */
+export const HIDDEN_URL_CHARACTERS: RegExp = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+
+/**
+ * Whether a value with no scheme still names another host.
+ *
+ * `//host` is protocol-relative, and browsers read `\` as `/`, so `\\host`
+ * and `/\host` are too. None of them is a path in the repository.
+ */
+export function leavesRepository(url: string): boolean {
+	return url.startsWith("//") || url.includes("\\");
+}
+
+/**
  * URL protocols permitted in images.
  *
  * Narrower than links, and absolute where a link need not be: there is no

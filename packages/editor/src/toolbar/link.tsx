@@ -3,13 +3,16 @@
  * change, or remove one.
  *
  * Both surfaces sit outside the contenteditable. The editor's field has to
- * take focus, which costs Lexical its DOM selection, so the selection is kept
- * on opening and put back on every way out.
+ * take focus, which costs Lexical its DOM selection, so the target is kept on
+ * opening and put back on every way out. It is kept as collaborative
+ * positions, not node keys and offsets, because someone else may type into
+ * the same paragraph while the field is open.
  */
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $isLinkNode, $toggleLink } from "@lexical/link";
+import { createDOMRange } from "@lexical/selection";
 import { LINK_PROTOCOLS } from "@chopin/dialect";
 import {
 	$findMatchingParent,
@@ -26,12 +29,21 @@ import {
 } from "lexical";
 
 import { placeSurface } from "./placement";
+import { $relativePosition, $resolveRange } from "./position";
 import { editorSurfaceViewport, listenToEditorGeometry } from "./surface";
 import { checkUrl } from "./url";
 
 import type { LinkNode } from "@lexical/link";
-import type { BaseSelection, LexicalCommand, LexicalEditor, NodeKey } from "lexical";
+import type { Binding } from "@lexical/yjs";
+import type {
+	BaseSelection,
+	LexicalCommand,
+	LexicalEditor,
+	NodeKey,
+	RangeSelection,
+} from "lexical";
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
+import type { RelativePosition } from "yjs";
 import type { DOMRectLike, SurfacePlacement } from "./placement";
 
 /** Ask for the link editor over the current selection. */
@@ -40,6 +52,8 @@ export const OPEN_LINK_EDITOR_COMMAND: LexicalCommand<void> = createCommand("OPE
 const RULES = { protocols: LINK_PROTOCOLS, relative: true };
 
 const SURFACE = "fixed z-50 rounded-lg bg-page ring-hairline shadow-overlay";
+
+const GONE = "Someone else changed this text. Select it again to add the link.";
 
 /** The one link the selection sits wholly inside, if there is one. Call inside a read. */
 export function $linkAt(selection: BaseSelection | null): LinkNode | undefined {
@@ -65,19 +79,43 @@ export function $updateLink(key: NodeKey, url: string | null): void {
 	link.remove();
 }
 
+/** The passage a link editor opened over, as positions that survive remote edits. */
+type Target = { anchor: RelativePosition; focus: RelativePosition; text: string };
+
 type Preview = { mode: "preview"; key: NodeKey; url: string };
 type Editing = {
 	mode: "edit";
+	/** The existing link, which its key identifies through any edit around it. */
 	key?: NodeKey;
 	url: string;
-	selection: BaseSelection;
-	/** A live DOM range over the passage, which keeps measuring true as the page scrolls. */
-	range?: Range;
+	/** Where the selection was; only trusted when there is no binding to say better. */
+	selection: RangeSelection;
+	target?: Target;
 };
 type Open = Preview | Editing;
 
+/** The kept selection as it stands now, or nothing if its text has gone. Call inside a read. */
+function $selectionFor(state: Editing, binding: Binding | undefined): RangeSelection | undefined {
+	if (state.target && binding) {
+		let selection = $resolveRange(binding, state.target.anchor, state.target.focus);
+		return selection?.getTextContent() === state.target.text ? selection : undefined;
+	}
+	let { anchor, focus } = state.selection;
+	if (!$getNodeByKey(anchor.key)?.isAttached() || !$getNodeByKey(focus.key)?.isAttached()) return;
+	return state.selection.clone();
+}
+
+function follow(editor: LexicalEditor, key: NodeKey, url: string): void {
+	let href = editor.getElementByKey(key)?.closest("a")?.href ?? url;
+	window.open(href, "_blank", "noopener,noreferrer");
+}
+
 export function LinkSurface(
-	{ disabled, onEditing }: { disabled?: boolean; onEditing?: (editing: boolean) => void },
+	{ binding, disabled, onEditing }: {
+		binding?: Binding;
+		disabled?: boolean;
+		onEditing?: (editing: boolean) => void;
+	},
 ) {
 	let [editor] = useLexicalComposerContext();
 	let [open, setOpen] = useState<Open>();
@@ -94,18 +132,20 @@ export function LinkSurface(
 			if (!$isRangeSelection(selection)) return;
 			let link = $linkAt(selection);
 			if (selection.isCollapsed() && !link) return;
+			let anchor = binding && $relativePosition(binding, selection.anchor);
+			let focus = binding && $relativePosition(binding, selection.focus);
 			return {
 				mode: "edit",
 				key: link?.getKey(),
 				url: link?.getURL() ?? "",
 				selection: selection.clone(),
-				range: selection.isCollapsed() ? undefined : nativeRange(),
+				target: anchor && focus ? { anchor, focus, text: selection.getTextContent() } : undefined,
 			};
 		});
 		if (!next) return false;
 		setOpen(next);
 		return true;
-	}, [editor, disabled]);
+	}, [editor, binding, disabled]);
 
 	let sync = useCallback(() => {
 		if (disabled) return;
@@ -134,9 +174,23 @@ export function LinkSurface(
 			editor.registerCommand(
 				KEY_DOWN_COMMAND,
 				(event: KeyboardEvent) => {
-					if (event.key.toLowerCase() !== "k" || event.shiftKey || event.altKey) return false;
-					if (!(event.metaKey || event.ctrlKey) || !edit()) return false;
+					if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey) return false;
+					if (event.key.toLowerCase() === "k") {
+						if (!edit()) return false;
+						event.preventDefault();
+						return true;
+					}
+					if (event.key !== "Enter") return false;
+					// ⌘↵ follows the link under the caret: the keyboard's way to Open.
+					let link = editor.getEditorState().read(() => {
+						let selection = $getSelection();
+						if (!$isRangeSelection(selection) || !selection.isCollapsed()) return;
+						let node = $linkAt(selection);
+						return node && { key: node.getKey(), url: node.getURL() };
+					});
+					if (!link) return false;
 					event.preventDefault();
+					follow(editor, link.key, link.url);
 					return true;
 				},
 				COMMAND_PRIORITY_LOW,
@@ -172,7 +226,7 @@ export function LinkSurface(
 	 * nested editor) keeps the old behaviour of opening in a new tab.
 	 */
 	useEffect(() => {
-		let follow = (event: MouseEvent) => {
+		let click = (event: MouseEvent) => {
 			if (event.defaultPrevented || (event.button !== 0 && event.button !== 1)) return;
 			if (!(event.target instanceof Element)) return;
 			let anchor = event.target.closest<HTMLAnchorElement>("a[href]");
@@ -198,12 +252,12 @@ export function LinkSurface(
 			else setOpen({ mode: "preview", ...link });
 		};
 		let middle = (event: MouseEvent) => {
-			if (event.button === 1) follow(event);
+			if (event.button === 1) click(event);
 		};
 		return editor.registerRootListener((current, previous) => {
-			previous?.removeEventListener("click", follow);
+			previous?.removeEventListener("click", click);
 			previous?.removeEventListener("mouseup", middle);
-			current?.addEventListener("click", follow);
+			current?.addEventListener("click", click);
 			current?.addEventListener("mouseup", middle);
 		});
 	}, [editor, sync]);
@@ -216,25 +270,40 @@ export function LinkSurface(
 	}, []);
 
 	/**
-	 * Put the kept selection back, apply any change against it, and hand focus
-	 * to the editor. One update, so the change cannot run before the selection
-	 * it acts on has returned.
+	 * Put the target back, apply any change to it, and hand focus to the
+	 * editor. Returns false, changing nothing, when the text a new link was
+	 * meant for has gone: a link on whatever now sits there would be wrong.
 	 */
-	let finish = useCallback((state: Editing, url: string | null | undefined) => {
-		setOpen(undefined);
+	let finish = useCallback((state: Editing, url: string | null | undefined): boolean => {
+		let applied = false;
 		editor.update(() => {
-			$setSelection(state.selection.clone());
-			if (url === undefined) return;
-			if (state.key) $updateLink(state.key, url);
-			else if (url !== null) $toggleLink(url);
-		}, { onUpdate: () => editor.focus() });
-	}, [editor]);
+			let selection = $selectionFor(state, binding);
+			if (state.key) {
+				let link = $getNodeByKey(state.key);
+				if (!$isLinkNode(link) || !link.isAttached()) return;
+				if (selection) $setSelection(selection);
+				else link.selectEnd();
+				if (url !== undefined) $updateLink(state.key, url);
+				applied = true;
+				return;
+			}
+			if (!selection) return;
+			$setSelection(selection);
+			if (url) $toggleLink(url);
+			applied = true;
+		}, { discrete: true });
+		if (!applied && url !== undefined) return false;
+		setOpen(undefined);
+		editor.focus();
+		return true;
+	}, [editor, binding]);
 
 	if (!open) return null;
 	if (open.mode === "edit") {
 		return (
 			<LinkEditor
 				key={open.key ?? "new"}
+				binding={binding}
 				editor={editor}
 				state={open}
 				onFinish={finish}
@@ -254,36 +323,65 @@ export function LinkSurface(
 }
 
 function LinkEditor(
-	{ editor, onFinish, onLeave, state }: {
+	{ binding, editor, onFinish, onLeave, state }: {
+		binding?: Binding;
 		editor: LexicalEditor;
-		onFinish: (state: Editing, url: string | null | undefined) => void;
-		/** Clicked elsewhere: close without pulling focus back from where it went. */
+		onFinish: (state: Editing, url: string | null | undefined) => boolean;
+		/** Clicked or tabbed elsewhere: close without pulling focus back. */
 		onLeave: () => void;
 		state: Editing;
 	},
 ) {
 	let [value, setValue] = useState(state.url);
 	let [problem, setProblem] = useState<string>();
+	let [gone, setGone] = useState(false);
 	let field = useRef<HTMLInputElement>(null);
 	let ref = useRef<HTMLFormElement>(null);
 	let problemId = useId();
 	let existing = state.key !== undefined;
 
+	/** The target's live DOM range, re-read so remote edits move it with the text. */
+	let measure = useCallback((): Range | undefined => {
+		if (state.key) {
+			let element = editor.getElementByKey(state.key);
+			let range = element?.ownerDocument.createRange();
+			range?.selectNodeContents(element!);
+			return range;
+		}
+		return editor.getEditorState().read(() => {
+			let selection = $selectionFor(state, binding);
+			if (!selection) return;
+			return createDOMRange(
+				editor,
+				selection.anchor.getNode(),
+				selection.anchor.offset,
+				selection.focus.getNode(),
+				selection.focus.offset,
+			) ?? undefined;
+		});
+	}, [editor, binding, state]);
+
 	let locate = useCallback(() => {
-		if (state.range) return state.range.getBoundingClientRect();
-		return state.key ? editor.getElementByKey(state.key)?.getBoundingClientRect() : undefined;
-	}, [editor, state.key, state.range]);
-	let position = usePlacement(editor, ref, locate, "centre");
+		let range = measure();
+		return range && startOf(range.getClientRects(), range.getBoundingClientRect());
+	}, [measure]);
+	let position = usePlacement(editor, ref, locate);
 
 	// The field takes the native selection, so mark the passage it will link.
 	useEffect(() => {
-		let element = state.key ? editor.getElementByKey(state.key) : undefined;
-		let range = state.range ?? element?.ownerDocument.createRange();
-		if (!range || typeof Highlight === "undefined" || !CSS.highlights) return;
-		if (!state.range && element) range.selectNodeContents(element);
-		CSS.highlights.set("plan-link-target", new Highlight(range));
-		return () => void CSS.highlights.delete("plan-link-target");
-	}, [editor, state.key, state.range]);
+		if (typeof Highlight === "undefined" || !CSS.highlights) return;
+		let mark = () => {
+			let range = measure();
+			if (range) CSS.highlights.set("plan-link-target", new Highlight(range));
+			else CSS.highlights.delete("plan-link-target");
+		};
+		mark();
+		let stop = editor.registerUpdateListener(mark);
+		return () => {
+			stop();
+			CSS.highlights.delete("plan-link-target");
+		};
+	}, [editor, measure]);
 
 	// Only once placed: the first render is hidden while it measures, and a
 	// hidden field refuses focus.
@@ -304,13 +402,31 @@ function LinkEditor(
 
 	let submit = (event: FormEvent) => {
 		event.preventDefault();
+		if (gone) return onFinish(state, undefined);
 		let checked = checkUrl(value, RULES);
 		if (checked.problem !== undefined) {
 			setProblem(checked.problem);
 			field.current?.focus();
 			return;
 		}
-		onFinish(state, checked.url);
+		if (!onFinish(state, checked.url)) setGone(true);
+	};
+
+	let key = (event: ReactKeyboardEvent<HTMLFormElement>) => {
+		if (event.key === "Escape") {
+			event.preventDefault();
+			event.stopPropagation();
+			onFinish(state, undefined);
+			return;
+		}
+		// Tab cycles inside the popover rather than wandering off and leaving it open.
+		if (event.key !== "Tab") return;
+		let stops = [...event.currentTarget.querySelectorAll<HTMLElement>("input, button")]
+			.filter(element => !(element as HTMLInputElement).disabled);
+		let index = stops.indexOf(document.activeElement as HTMLElement);
+		let next = stops[(index + (event.shiftKey ? -1 : 1) + stops.length) % stops.length];
+		event.preventDefault();
+		next?.focus();
 	};
 
 	return (
@@ -321,25 +437,21 @@ function LinkEditor(
 			data-focus-boundary=""
 			noValidate
 			onSubmit={submit}
-			onKeyDown={(event: ReactKeyboardEvent) => {
-				if (event.key !== "Escape") return;
-				event.preventDefault();
-				event.stopPropagation();
-				onFinish(state, undefined);
-			}}
+			onKeyDown={key}
 			style={position
 				? { top: position.top, left: position.left }
 				: { top: 0, left: 0, visibility: "hidden" }}
 		>
 			<input
 				ref={field}
-				aria-describedby={problem ? problemId : undefined}
+				aria-describedby={problem || gone ? problemId : undefined}
 				aria-invalid={problem ? true : undefined}
 				aria-label="Link URL"
 				autoCapitalize="off"
 				autoComplete="off"
 				autoCorrect="off"
 				className="field h-8 w-full min-w-0 px-2 text-sm"
+				disabled={gone}
 				enterKeyHint="done"
 				inputMode="url"
 				onChange={event => {
@@ -356,19 +468,38 @@ function LinkEditor(
 					{problem}
 				</p>
 			)}
+			{gone && (
+				<p id={problemId} className="m-0 text-xs text-text-secondary" role="status">
+					{GONE}
+				</p>
+			)}
 			<div className="flex items-center justify-end gap-2">
-				{existing && (
+				{existing && !gone && (
 					<button
 						className="btn btn-sm btn-ghost mr-auto"
-						onClick={() => onFinish(state, null)}
+						onClick={() => {
+							if (!onFinish(state, null)) setGone(true);
+						}}
 						type="button"
 					>
 						Remove
 					</button>
 				)}
-				<button className="btn btn-sm btn-primary" type="submit">
-					{existing ? "Save" : "Add link"}
-				</button>
+				{gone
+					? (
+						<button
+							className="btn btn-sm btn-secondary"
+							ref={button => button?.focus()}
+							type="submit"
+						>
+							Close
+						</button>
+					)
+					: (
+						<button className="btn btn-sm btn-primary" type="submit">
+							{existing ? "Save" : "Add link"}
+						</button>
+					)}
 			</div>
 		</form>
 	);
@@ -384,11 +515,11 @@ function LinkPreview(
 	},
 ) {
 	let ref = useRef<HTMLDivElement>(null);
-	let locate = useCallback(
-		() => editor.getElementByKey(preview.key)?.getBoundingClientRect(),
-		[editor, preview.key],
-	);
-	let position = usePlacement(editor, ref, locate, "start");
+	let locate = useCallback(() => {
+		let element = editor.getElementByKey(preview.key);
+		return element ? startOf(element.getClientRects(), element.getBoundingClientRect()) : undefined;
+	}, [editor, preview.key]);
+	let position = usePlacement(editor, ref, locate);
 
 	// Without a caret to move away, a read-only preview needs its own ways out.
 	useEffect(() => {
@@ -411,11 +542,6 @@ function LinkPreview(
 		};
 	}, [editor, onClose, preview.key]);
 
-	let follow = () => {
-		let href = editor.getElementByKey(preview.key)?.closest("a")?.href ?? preview.url;
-		window.open(href, "_blank", "noopener,noreferrer");
-	};
-
 	return (
 		<div
 			ref={ref}
@@ -433,11 +559,21 @@ function LinkPreview(
 			<span className="min-w-0 truncate px-2 text-sm text-text-secondary" title={preview.url}>
 				{preview.url}
 			</span>
-			<button className="btn btn-sm btn-ghost shrink-0" onClick={follow} type="button">
+			<button
+				className="btn btn-sm btn-ghost shrink-0"
+				onClick={() => follow(editor, preview.key, preview.url)}
+				title={readOnly ? "Open in a new tab" : "Open in a new tab (⌘↵)"}
+				type="button"
+			>
 				Open
 			</button>
 			{!readOnly && (
-				<button className="btn btn-sm btn-ghost shrink-0" onClick={onEdit} type="button">
+				<button
+					className="btn btn-sm btn-ghost shrink-0"
+					onClick={onEdit}
+					title="Edit link (⌘K)"
+					type="button"
+				>
 					Edit
 				</button>
 			)}
@@ -445,17 +581,29 @@ function LinkPreview(
 	);
 }
 
-function nativeRange(): Range | undefined {
-	let selection = window.getSelection();
-	return selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : undefined;
+/**
+ * The first line's left edge, over the whole passage's height.
+ *
+ * Both popovers start where the link starts, so a link that wraps does not
+ * pull them to the middle of the column, and Edit opens where the preview was.
+ */
+function startOf(lines: DOMRectList, whole: DOMRect): DOMRectLike {
+	let first = lines[0] ?? whole;
+	return {
+		top: whole.top,
+		bottom: whole.bottom,
+		height: whole.height,
+		left: first.left,
+		right: first.right,
+		width: first.width,
+	};
 }
 
-/** Keep a fixed surface under live document geometry, as the selection toolbar does. */
+/** Keep a fixed surface under the live document, as the selection toolbar does. */
 function usePlacement(
 	editor: LexicalEditor,
 	ref: RefObject<HTMLElement | null>,
 	locate: () => DOMRectLike | undefined,
-	align: "centre" | "start",
 ): SurfacePlacement | undefined {
 	let [position, setPosition] = useState<SurfacePlacement>();
 
@@ -464,27 +612,20 @@ function usePlacement(
 		let anchor = locate();
 		if (!element || !anchor) return;
 		let width = element.offsetWidth;
-		let left = align === "centre" ? anchor.left + anchor.width / 2 - width / 2 : anchor.left;
 		let next = placeSurface(
-			// Field by field: a DOMRect keeps its geometry on the prototype, out of reach of a spread.
-			{
-				top: anchor.top,
-				bottom: anchor.bottom,
-				height: anchor.height,
-				width: anchor.width,
-				left,
-				right: left + width,
-			},
+			{ ...anchor, right: anchor.left + width },
 			{ width, height: element.offsetHeight },
 			editorSurfaceViewport(editor),
 		);
 		setPosition(current =>
 			current?.left === next.left && current.top === next.top ? current : next
 		);
-	}, [editor, ref, locate, align]);
+	}, [editor, ref, locate]);
 
 	useLayoutEffect(place, [place]);
 	useEffect(() => listenToEditorGeometry(editor, place), [editor, place]);
+	// Other people's edits move the text without moving the page.
+	useEffect(() => editor.registerUpdateListener(place), [editor, place]);
 
 	return position;
 }

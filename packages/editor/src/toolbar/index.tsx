@@ -69,7 +69,7 @@ export function Toolbar() {
 	return (
 		<>
 			<SelectionBubble disabled={disabled} hidden={linking} onComment={comment} />
-			<LinkSurface disabled={disabled} onEditing={setLinking} />
+			<LinkSurface binding={options.binding} disabled={disabled} onEditing={setLinking} />
 			<SlashMenu
 				actions={options.research && options.researchDrafts ? RESEARCH_ACTIONS : undefined}
 				disabled={disabled}

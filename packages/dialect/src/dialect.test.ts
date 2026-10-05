@@ -5,12 +5,19 @@ import { parse } from "./parse";
 import { serialize } from "./serialize";
 import { validate } from "./validate";
 
+import type { PhrasingContent } from "mdast";
+
 const ID = "01K0N4TR8K7JGM4R1J7PW4R8YJ";
 const ID2 = "01K0N4V4E7Y6P4MJ5WD8XZF3B2";
 const ID3 = "01K0N4W3B7P27CBAEC7A8C8WEA";
 
 function codes(source: string): string[] {
 	let result = validate(parse(source));
+	return result.ok ? [] : result.issues.map(issue => issue.code);
+}
+
+function treeCodes(phrasing: PhrasingContent): string[] {
+	let result = validate({ type: "root", children: [{ type: "paragraph", children: [phrasing] }] });
 	return result.ok ? [] : result.issues.map(issue => issue.code);
 }
 
@@ -107,6 +114,31 @@ describe("security boundary", () => {
 	it("rejects active link protocols", () => {
 		expect(codes("[x](javascript:alert(1))")).toContain("bad-link-protocol");
 		expect(codes("[x](data:text/html;base64,PHA+)")).toContain("bad-link-protocol");
+	});
+
+	/**
+	 * Built as trees, not parsed: markdown refuses control characters in a
+	 * destination, but a Lexical export or an agent's operation does not.
+	 */
+	it("rejects links that hide a scheme or name another host", () => {
+		for (
+			let url of [
+				"\u0001javascript:alert(1)",
+				"java\u0000script:alert(1)",
+				"java\u200bscript:alert(1)",
+				"https://ex\u200bample.com",
+				"\ufeffhttps://example.com",
+				"//evil.com",
+				"\\\\evil.com",
+				"/\\evil.com",
+				"docs\\a.md",
+			]
+		) {
+			expect(treeCodes({ type: "link", url, children: [{ type: "text", value: "x" }] }))
+				.toContain("bad-link");
+		}
+		expect(treeCodes({ type: "image", url: "\u0001https://example.com/x.png", alt: "" }))
+			.toContain("bad-image");
 	});
 
 	it("allows https, mailto and repo-relative paths", () => {
