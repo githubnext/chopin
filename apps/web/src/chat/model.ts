@@ -22,6 +22,13 @@ export type Group =
 	| { kind: "messages"; author: Speaker; messages: Message[]; queued: boolean }
 	| { kind: "system"; id: string; text: string; ts?: number; decision?: Chat.Entry["decision"] };
 
+export type CompletedWork = {
+	turnId: string;
+	entryOffset: number;
+	endOffset: number;
+	anchorId: string;
+};
+
 export type ToolSummary = {
 	count: number;
 	finished: number;
@@ -64,38 +71,64 @@ export function displayText(value: string): string {
 export function group(
 	entries: Chat.Entry[],
 	queued: Chat.Waiting[],
-	working?: Pick<Chat.Turn, "id" | "started">,
+	working?: Pick<Chat.Turn, "id" | "started" | "entryOffset">,
+	completed: CompletedWork[] = [],
 ): Group[] {
-	let promptIndex = working
-		? entries.findLastIndex(entry => entry.author.kind === "member" && entry.ts <= working.started)
-		: -1;
-	let current = working
-		? entries.map((entry, index) => ({ entry, index })).filter(({ entry, index }) =>
-			index > promptIndex && entry.author.kind === "agent" && entry.ts >= working.started
-		)
-		: [];
-	let activeIndex =
-		current.find(({ entry }) => !!entry.tools?.length || !!entry.text.trim() || !!entry.streaming)
-			?.index ?? -1;
-	let activeTools = current.flatMap(({ entry }) => entry.tools ?? []);
-	let currentIndices = new Set(current.map(({ index }) => index));
-	let workStreaming = current.some(({ entry }) => !!entry.streaming);
-	let workResponseSeen = current.some(({ entry }) => !!entry.text.trim());
+	let replacements = new Map<number, Message>();
+	let hiddenTools = new Set<number>();
+	let activeIndex = -1;
+	let spans = [
+		...completed.map(item => ({
+			entryOffset: item.entryOffset,
+			endOffset: item.endOffset,
+			anchorId: item.anchorId,
+			active: false,
+		})),
+		...(working
+			? [{
+				entryOffset: working.entryOffset,
+				endOffset: entries.length,
+				anchorId: "",
+				active: true,
+			}]
+			: []),
+	];
+	for (let span of spans) {
+		let current = entries.slice(span.entryOffset, span.endOffset)
+			.map((entry, index) => ({ entry, index: index + span.entryOffset }))
+			.filter(({ entry }) => entry.author.kind === "agent");
+		let anchor = span.anchorId
+			? current.find(({ entry }) => entry.id === span.anchorId)
+			: current.find(({ entry }) =>
+				!!entry.tools?.length || !!entry.text.trim() || !!entry.streaming
+			);
+		if (!anchor) continue;
+		let tools = current.flatMap(({ entry }) => entry.tools ?? []);
+		if (!span.active && !tools.length) continue;
+		if (span.active) activeIndex = anchor.index;
+		replacements.set(anchor.index, {
+			...anchor.entry,
+			author: { kind: "agent" },
+			tools,
+			queued: false,
+			...(span.active
+				? {
+					working: true,
+					workStreaming: current.some(({ entry }) => !!entry.streaming),
+					workResponseSeen: current.some(({ entry }) => !!entry.text.trim()),
+				}
+				: {}),
+		});
+		for (let item of current) {
+			if (item.index !== anchor.index && item.entry.tools?.length) hiddenTools.add(item.index);
+		}
+	}
 	let rows: Array<Chat.Entry | Message> = [
 		...entries.map((entry, index) =>
-			index === activeIndex && entry.author.kind === "agent"
-				? {
-					...entry,
-					author: { kind: "agent" },
-					tools: activeTools,
-					queued: false,
-					working: true,
-					workStreaming,
-					workResponseSeen,
-				} satisfies Message
-				: currentIndices.has(index) && entry.author.kind === "agent" && entry.tools?.length
-				? { ...entry, tools: undefined }
-				: entry
+			replacements.get(index)
+				?? (hiddenTools.has(index) && entry.author.kind === "agent" && entry.tools?.length
+					? { ...entry, tools: undefined }
+					: entry)
 		),
 		...(working && activeIndex < 0
 			? [{

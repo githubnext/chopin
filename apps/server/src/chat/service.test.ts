@@ -36,7 +36,13 @@ function call(toolName: string, toolCallId = "t1", input: unknown = {}) {
 describe("AI SDK stream projection", () => {
 	it("counts only non-empty Planner prose as a response and streams one entry", () => {
 		let chat = create();
-		chat.turn = { id: "turn-1", handle: "ana", started: 1_700_000_000, responded: false };
+		chat.turn = {
+			id: "turn-1",
+			handle: "ana",
+			started: 1_700_000_000,
+			entryOffset: 0,
+			responded: false,
+		};
 		let { context, sent } = room(chat);
 		translate(context, call("read_plan"));
 		translate(context, part({ type: "text-start", id: "message" }));

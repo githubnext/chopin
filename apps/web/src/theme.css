@@ -637,6 +637,10 @@ body {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+.chat-work-headline-motion {
+	display: inline-block;
 	animation: chat-work-stage-in var(--duration-base) var(--motion-smooth-out) both;
 }
 
@@ -1259,7 +1263,7 @@ button.question-add:disabled {
 }
 @media (prefers-reduced-motion: reduce) {
 	.chat-work-lattice > span,
-	.chat-work-headline {
+	.chat-work-headline-motion {
 		animation: none;
 	}
 

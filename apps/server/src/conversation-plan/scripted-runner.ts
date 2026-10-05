@@ -43,6 +43,7 @@ export function scriptedRunner(
 			id: ulid(),
 			handle: "chopin",
 			started: Date.now(),
+			entryOffset: chat.entries.length,
 			responded: false,
 		};
 		chat.busy = true;

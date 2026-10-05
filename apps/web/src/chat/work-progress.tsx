@@ -105,8 +105,8 @@ export function WorkProgress(
 	let row = (
 		<>
 			{active && <Lattice />}
-			<span aria-live={active ? "polite" : undefined} className="chat-work-headline" key={headline}>
-				{headline}
+			<span aria-live="polite" className="chat-work-headline">
+				<span className="chat-work-headline-motion" key={headline}>{headline}</span>
 			</span>
 			{count && <span className="chat-work-meta tabular-nums">{count}</span>}
 			{status && <span className="chat-work-meta text-destructive-ink tabular-nums">{status}</span>}
@@ -134,7 +134,7 @@ export function WorkProgress(
 						/>
 					</button>
 				)
-				: <div className="chat-work-static" role="status">{row}</div>}
+				: <div className="chat-work-static">{row}</div>}
 			{tools.length > 0 && (
 				<div id={contentId}>
 					<MotionDisclosure

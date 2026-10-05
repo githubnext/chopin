@@ -7,7 +7,7 @@
  * nobody is silenced because a colleague prompted first.
  */
 
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from "react";
 
 import { SendAction } from "@chopin/editor";
 import { MENTION } from "@chopin/protocol/address";
@@ -48,6 +48,7 @@ import {
 } from "./references";
 import { RunStack } from "./run-card";
 import { Transcript } from "./transcript";
+import { initialTranscript, transcriptReducer } from "./transcript-state";
 import type { TranscriptDecisions } from "./transcript";
 import type { CardLink } from "../conversation-plan/links";
 import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";
@@ -134,10 +135,10 @@ export function Chat(
 		wire,
 	}: ChatProps,
 ) {
-	let [entries, setEntries] = useState<Wire.Entry[]>([]);
+	let [transcript, dispatchTranscript] = useReducer(transcriptReducer, initialTranscript);
+	let { entries, turn } = transcript;
 	let [queue, setQueue] = useState<Wire.Waiting[]>([]);
 	let [busy, setBusy] = useState(false);
-	let [turn, setTurn] = useState<Wire.Turn>();
 	let [runs, setRuns] = useState<Wire.Runs>();
 	let counts = runCounts(runs);
 	let [draft, setDraft] = useState<ComposerDraft>({
@@ -219,7 +220,7 @@ export function Chat(
 		let seen = new Set<string>();
 		let response = (agent: boolean, value: string) => {
 			if (!agent || !value.trim()) return;
-			setTurn(current => current && !current.responded ? { ...current, responded: true } : current);
+			dispatchTranscript({ kind: "responded" });
 		};
 
 		// Streaming arrives as deltas against an entry already in the list, so
@@ -229,11 +230,10 @@ export function Chat(
 				loaded = true;
 				synchronized.current = wire;
 				seen = new Set(frame.entries.map(entry => entry.id));
-				setEntries(frame.entries);
+				dispatchTranscript({ kind: "history", entries: frame.entries, turn: frame.turn });
 				setQueue(frame.queued);
 				setBusy(frame.busy);
 				reportedBusy.current = frame.busy;
-				setTurn(frame.turn);
 				setRuns(frame.runs);
 				// History is not unread, but a turn already in progress still needs
 				// a signal outside a closed Chat destination.
@@ -244,39 +244,15 @@ export function Chat(
 					activity.current?.({ type: "message", busy: reportedBusy.current });
 				}
 				seen.add(frame.entry.id);
-				setEntries(current => {
-					let index = current.findIndex(entry => entry.id === frame.entry.id);
-					if (index < 0) return [...current, frame.entry];
-					let next = [...current];
-					next[index] = frame.entry;
-					return next;
-				});
+				dispatchTranscript({ kind: "message", entry: frame.entry });
 				response(frame.entry.author.kind === "agent", frame.entry.text);
 			}),
 			wire.on<Wire.Delta>("chat:delta", frame => {
-				setEntries(current =>
-					current.map(entry =>
-						entry.id === frame.id ? { ...entry, text: entry.text + frame.text } : entry
-					)
-				);
+				dispatchTranscript({ kind: "delta", id: frame.id, text: frame.text });
 				response(true, frame.text);
 			}),
 			wire.on<Wire.Tool>("chat:tool", frame => {
-				setEntries(current => {
-					let index = current.findIndex(entry => entry.id === frame.entry);
-					if (index < 0) return current;
-					let next = [...current];
-					let entry = next[index]!;
-					let tools = entry.tools ?? [];
-					let existing = tools.findIndex(item => item.id === frame.activity.id);
-					next[index] = {
-						...entry,
-						tools: existing < 0
-							? [...tools, frame.activity]
-							: tools.map((item, at) => at === existing ? { ...item, ...frame.activity } : item),
-					};
-					return next;
-				});
+				dispatchTranscript({ kind: "tool", entryId: frame.entry, activity: frame.activity });
 			}),
 			wire.on<Wire.State>("chat:state", frame => {
 				if (loaded && reportedBusy.current !== frame.busy) {
@@ -284,7 +260,7 @@ export function Chat(
 				}
 				reportedBusy.current = frame.busy;
 				setBusy(frame.busy);
-				setTurn(frame.turn);
+				dispatchTranscript({ kind: "turn", turn: frame.turn });
 				setRuns(frame.runs);
 			}),
 			wire.on<Wire.Queue>("chat:queue", frame => setQueue(frame.waiting)),
@@ -437,7 +413,7 @@ export function Chat(
 	let moveMention = (to: (index: number) => number) =>
 		setMentionCursor({ key: mentionKey, index: to(mentionActive) });
 
-	let transcript = (
+	let transcriptView = (
 		<Transcript
 			active={active}
 			canEdit={composerReady}
@@ -451,6 +427,7 @@ export function Chat(
 			researchOffers={researchOffers}
 			sourceDestination={sourceDestination}
 			entries={entries}
+			completedWork={transcript.completedWork}
 			handle={handle}
 			onWithdraw={id => wire?.send("chat:unqueue", { id })}
 			queued={queue}
@@ -462,7 +439,7 @@ export function Chat(
 	if (notice) {
 		return (
 			<div className="flex h-full min-h-0 flex-col">
-				{transcript}
+				{transcriptView}
 				<div className="chat-composer shrink-0 px-2.5 pb-2.5">
 					<p className="px-4 py-3 text-sm text-text-tertiary">{notice}</p>
 				</div>
@@ -472,7 +449,7 @@ export function Chat(
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			{transcript}
+			{transcriptView}
 
 			{agent && !!runs?.length && (
 				<div className="flex shrink-0 flex-col px-2.5 pb-2" data-chat-runs="">

@@ -610,7 +610,7 @@ test("planner graph edits draft a revision without changing plan prose", async (
 	// started. That turn is busy by definition; readiness must not mistake it
 	// for a competing request.
 	plan.chat.busy = true;
-	plan.chat.turn = { id: "turn", handle: "ana", started: 1, responded: false };
+	plan.chat.turn = { id: "turn", handle: "ana", started: 1, entryOffset: 0, responded: false };
 	let before = room.project(plan.document);
 	let graph = fixtureTools({
 		plan,

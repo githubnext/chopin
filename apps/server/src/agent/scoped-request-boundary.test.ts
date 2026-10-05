@@ -16,7 +16,13 @@ test("raw transcript request state cannot authorize a direct tool without its ve
 			question: "Which authentication system?",
 			options: [],
 		});
-		context.plan.chat.turn = { id: "current-turn", handle: "ana", started: 1, responded: false };
+		context.plan.chat.turn = {
+			id: "current-turn",
+			handle: "ana",
+			started: 1,
+			entryOffset: 0,
+			responded: false,
+		};
 		context.plan.chat.activeRequest = {
 			entryId: "old-entry",
 			userId: "U_test",

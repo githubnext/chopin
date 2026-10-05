@@ -83,7 +83,7 @@ test("each complete background profile opens the current session with only reads
 test("the direct writer receives the same live verified member request", () => {
 	let h = harness();
 	h.chat.busy = true;
-	h.chat.turn = { id: "turn", handle: "ana", started: 1, responded: false };
+	h.chat.turn = { id: "turn", handle: "ana", started: 1, entryOffset: 0, responded: false };
 	let active: Chat.ActiveMemberRequest = {
 		entryId: "entry",
 		userId: "U_ana",

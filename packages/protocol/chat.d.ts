@@ -111,6 +111,8 @@ export declare namespace Chat {
 		id: string;
 		handle: string;
 		started: number;
+		/** Index of the first transcript entry after this turn began; transient like the turn. */
+		entryOffset: number;
 		/** True after the Planner has sent non-empty prose. */
 		responded: boolean;
 	};

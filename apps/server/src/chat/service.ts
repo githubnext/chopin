@@ -712,7 +712,13 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		delivery: savedDelivery,
 	};
 	chat.busy = true;
-	chat.turn = { id: ulid(), handle, started: now(), responded: false };
+	chat.turn = {
+		id: ulid(),
+		handle,
+		started: now(),
+		entryOffset: chat.entries.length + 1,
+		responded: false,
+	};
 	state(chat, server, room);
 	chat.entries.push(entry);
 	try {
@@ -1497,7 +1503,13 @@ async function run(
 
 	if (!reserved) {
 		chat.busy = true;
-		chat.turn = { id: ulid(), handle, started: now(), responded: false };
+		chat.turn = {
+			id: ulid(),
+			handle,
+			started: now(),
+			entryOffset: chat.entries.length,
+			responded: false,
+		};
 		chat.acting = thread;
 		(jobTurn ? jobState : state)(chat, server, room);
 	} else chat.acting = thread;
