@@ -225,3 +225,100 @@ test("an open comment keeps its marker and focus after its passage scrolls away"
 	expect((await marker.boundingBox())!.y).toBeGreaterThanOrEqual(frame.y - 1);
 	expect(await page.evaluate(() => document.activeElement === document.body)).toBe(false);
 });
+
+const GROUP = /^2 comments on “Paragraph 1 contains enough text/;
+
+async function commentOn(page: import("@playwright/test").Page, index: number, text: string) {
+	await page.locator(".plan-content > p").nth(index).selectText();
+	await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
+	let draft = page.getByRole("dialog", { name: "New comment" });
+	await draft.getByPlaceholder("Comment on this passage…").fill(text);
+	await draft.getByRole("button", { name: /^(Comment|Post comment)$/ }).click();
+	await expect(draft).toHaveCount(0);
+	await page.keyboard.press("Escape");
+}
+
+for (
+	let [name, viewport, hasTouch] of [
+		["desktop", { width: 1_440, height: 900 }, false],
+		["phone", { width: 390, height: 844 }, true],
+	] as const
+) {
+	test(`${name} threads on one block share one marker beside its first line`, async ({ join, seed }) => {
+		await seed(PLAN);
+		let page = await join("ana", { hasTouch, viewport });
+		await expect(page.locator("[data-plan-comment-button]")).toHaveCount(1);
+		await commentOn(page, 0, "A second thought on the same paragraph.");
+
+		let marker = page.getByRole("button", { name: GROUP });
+		await expect(marker).toBeVisible();
+		await expect(page.locator("[data-plan-comment-button]")).toHaveCount(1);
+		await expect(marker.locator(".plan-comment-count")).toHaveText("2");
+
+		// The visible chip sits beside the block, never over its text.
+		let chip = (await marker.locator(".plan-comment-chip").boundingBox())!;
+		let paragraph = (await page.locator(".plan-content > p").first().boundingBox())!;
+		let documentBox = (await page.locator(".plan-document").boundingBox())!;
+		expect(chip.x).toBeGreaterThanOrEqual(paragraph.x + paragraph.width);
+		expect(chip.x + chip.width).toBeLessThanOrEqual(documentBox.x + documentBox.width);
+		expect(chip.y).toBeLessThan(paragraph.y + 32);
+		expect(chip.height).toBe(24);
+		if (hasTouch) expect((await marker.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+	});
+}
+
+test("a grouped marker opens a list of its threads and keeps keyboard order", async ({ join, seed }) => {
+	await seed(PLAN);
+	let page = await join("ana", { viewport: { width: 1_440, height: 900 } });
+	await commentOn(page, 0, "A second thought on the same paragraph.");
+	let marker = page.getByRole("button", { name: GROUP });
+
+	await marker.focus();
+	await page.keyboard.press("Enter");
+	let list = page.getByRole("dialog", { name: "Comments" });
+	await expect(list).toBeVisible();
+	let items = list.locator("[data-plan-comment-group-item]");
+	await expect(items).toHaveCount(2);
+	await expect(items.first()).toBeFocused();
+	await page.keyboard.press("ArrowDown");
+	await expect(items.nth(1)).toBeFocused();
+	await expect(items.nth(1)).toContainText("A second thought on the same paragraph.");
+
+	await page.keyboard.press("Enter");
+	let thread = page.getByRole("dialog", { name: "Comment thread" });
+	await expect(thread).toContainText("A second thought on the same paragraph.");
+	let back = thread.getByRole("button", { name: "All 2 comments" });
+	await expect(back).toBeFocused();
+	await back.click();
+	await expect(list).toBeVisible();
+
+	await page.keyboard.press("Escape");
+	await expect(list).toHaveCount(0);
+	await expect(marker).toBeFocused();
+});
+
+test("an open comment card renders above every other marker", async ({ join, seed }) => {
+	await seed(PLAN);
+	let page = await join("ana", { viewport: { width: 1_440, height: 900 } });
+	for (let index = 1; index <= 4; index++) await commentOn(page, index, `Note ${index}.`);
+	let markers = page.locator("[data-plan-comment-button]");
+	await expect(markers).toHaveCount(5);
+
+	await markers.first().click();
+	let card = page.getByRole("dialog", { name: "Comment thread" });
+	await expect(card).toBeVisible();
+	await expect(page.locator("[data-plan-comment-button][data-dimmed]")).toHaveCount(4);
+	await expect(page.locator("[data-plan-comment-button][inert]")).toHaveCount(4);
+
+	let cardBox = (await card.boundingBox())!;
+	let covered = await markers.evaluateAll((buttons, box) =>
+		buttons.flatMap(button => {
+			let chip = button.querySelector(".plan-comment-chip")!.getBoundingClientRect();
+			let x = chip.left + chip.width / 2;
+			let y = chip.top + chip.height / 2;
+			let inside = x > box.x && x < box.x + box.width && y > box.y && y < box.y + box.height;
+			return inside ? [!!document.elementFromPoint(x, y)?.closest("[role=dialog]")] : [];
+		}), cardBox);
+	expect(covered.length).toBeGreaterThan(0);
+	expect(covered.every(Boolean)).toBe(true);
+});

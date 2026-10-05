@@ -8,10 +8,8 @@ export type Rect = {
 };
 
 export type Point = { top: number; left: number };
-/** An offscreen marker follows its passage outside the document and is not shown. */
+/** An offscreen marker follows its block outside the document and is not shown. */
 export type MarkerPoint = Point & { offscreen?: true };
-/** `held` keeps a focused or open thread's marker on screen at the nearest edge. */
-export type MarkerTarget = { target: Rect; passages: Rect[]; held?: boolean };
 
 /** A decision marker sits before the first line of its decided paragraph. */
 export function marginPoint(target: Rect, host: Rect, size = 24, gap = 8): Point {
@@ -52,93 +50,63 @@ export function markerRect(point: Point, host: Rect, size: number): Rect {
 	};
 }
 
-/** Place every comment marker against all prose before considering earlier markers. */
-export function markerPoints(
-	targets: MarkerTarget[],
+/**
+ * One commented block: its box, its first line, and the visible chip's width.
+ * `held` keeps a focused or open marker on screen at the nearest edge.
+ */
+export type BlockMarker = {
+	block: Rect;
+	line: { top: number; height: number };
+	width: number;
+	held?: boolean;
+};
+/** `slim` marks a chip narrowed to fit the content padding beside its block. */
+export type BlockMarkerPoint = MarkerPoint & { width: number; slim?: true };
+
+/**
+ * Place one marker per block in the right gutter, centred on the block's first line.
+ *
+ * Never over prose: when the gutter cannot hold the chip, it narrows to `slim`
+ * and sits inside the padding beside the block. Markers are given in document
+ * order; one that would overlap the marker above it moves down beneath it.
+ */
+export function blockMarkerPoints(
+	markers: BlockMarker[],
 	host: Rect,
-	size = 24,
-	gap = 8,
-): MarkerPoint[] {
-	let passages = targets.flatMap(({ passages, target }) =>
-		passages.length > 0 ? passages : [target]
-	);
-	let markers: Rect[] = [];
-	return targets.map(({ held, target }) => {
-		if (!held && (target.bottom <= host.top || target.top >= host.bottom)) {
-			return {
-				top: target.top - host.top,
-				left: clamp(target.right - host.left + gap, 0, host.width - size),
-				offscreen: true,
-			};
+	{ size = 24, gap = 8, slim = 14 }: { size?: number; gap?: number; slim?: number } = {},
+): BlockMarkerPoint[] {
+	let previous: Rect | undefined;
+	return markers.map(({ block, held, line, width }) => {
+		let gutter = host.right - block.right;
+		let wide = gutter >= width + gap * 1.5;
+		let chip = wide ? width : Math.min(width, slim, Math.max(0, gutter - 2));
+		let left = wide
+			? block.right - host.left + gap
+			: block.right - host.left + Math.max(0, (gutter - chip) / 2);
+		let top = line.top - host.top + (line.height - size) / 2;
+		if (previous && top < previous.bottom - host.top + 4 && top + size > previous.top - host.top) {
+			top = previous.bottom - host.top + 4;
 		}
-		let point = markerPoint(target, host, passages, markers, size, gap);
-		markers.push(markerRect(point, host, size));
+		let point: BlockMarkerPoint = {
+			top,
+			left: clamp(left, 0, host.width - chip),
+			width: chip,
+			...(wide ? {} : { slim: true as const }),
+		};
+		if (top + size <= 0 || top >= host.height) {
+			if (!held) return { ...point, offscreen: true };
+			point.top = clamp(top, 0, host.height - size);
+		}
+		previous = {
+			top: host.top + point.top,
+			right: host.left + point.left + chip,
+			bottom: host.top + point.top + size,
+			left: host.left + point.left,
+			width: chip,
+			height: size,
+		};
 		return point;
 	});
-}
-
-function markerPoint(
-	target: Rect,
-	host: Rect,
-	passages: Rect[],
-	markers: Rect[],
-	size = 24,
-	gap = 8,
-): Point {
-	let maxLeft = host.width - size;
-	let maxTop = host.height - size;
-	let ideal = {
-		top: clamp(target.top - host.top, 0, Math.max(0, maxTop)),
-		left: clamp(target.right - host.left + gap, 0, Math.max(0, maxLeft)),
-	};
-	let obstacles = [...passages, ...markers];
-	if (maxLeft >= 0 && maxTop >= 0) {
-		let lefts = unique([
-			ideal.left,
-			target.left - host.left - size - gap,
-			...obstacles.flatMap(obstacle => [
-				obstacle.right - host.left + gap,
-				obstacle.left - host.left - size - gap,
-			]),
-			0,
-			maxLeft,
-		])
-			.filter(left => left >= 0 && left <= maxLeft)
-			.sort((a, b) => Math.abs(a - ideal.left) - Math.abs(b - ideal.left) || a - b);
-		let tops = unique([
-			ideal.top,
-			...obstacles.flatMap(obstacle => [
-				obstacle.bottom - host.top + gap,
-				obstacle.top - host.top - size - gap,
-			]),
-			0,
-			maxTop,
-		])
-			.filter(top => top >= 0 && top <= maxTop)
-			.sort((a, b) => Math.abs(a - ideal.top) - Math.abs(b - ideal.top) || a - b);
-
-		for (let left of lefts) {
-			for (let top of tops) {
-				let candidate = {
-					top: host.top + top,
-					right: host.left + left + size,
-					bottom: host.top + top + size,
-					left: host.left + left,
-					width: size,
-					height: size,
-				};
-				if (obstacles.every(obstacle => !intersects(candidate, obstacle))) {
-					return { top, left };
-				}
-			}
-		}
-	}
-
-	// An off-viewport marker remains an affordance and cannot obscure prose.
-	return {
-		top: Math.max(target.bottom, ...obstacles.map(obstacle => obstacle.bottom)) - host.top + gap,
-		left: ideal.left,
-	};
 }
 
 export function popoverPoint(
@@ -175,12 +143,4 @@ export function edgePanelPoint(
 
 function clamp(value: number, lower: number, upper: number): number {
 	return Math.min(Math.max(value, lower), Math.max(lower, upper));
-}
-
-function intersects(a: Rect, b: Rect): boolean {
-	return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-}
-
-function unique(values: number[]): number[] {
-	return [...new Set(values)];
 }
