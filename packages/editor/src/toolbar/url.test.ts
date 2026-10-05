@@ -7,6 +7,8 @@ import { checkUrl } from "./url";
 const LINKS = { protocols: LINK_PROTOCOLS, relative: true };
 const IMAGES = { protocols: IMAGE_PROTOCOLS, relative: false };
 
+const hidden = (code: number) => String.fromCharCode(code);
+
 describe("checking a link before it becomes a node", () => {
 	it("keeps an allowed absolute URL as typed, trimmed", () => {
 		expect(checkUrl("  https://example.com/a?b#c ", LINKS)).toEqual({
@@ -39,6 +41,39 @@ describe("checking a link before it becomes a node", () => {
 		expect(refused.url).toBeUndefined();
 		expect(refused.problem).toBe("Use an https:// or mailto: link, or a path in this repository.");
 		expect(checkUrl("http://example.com", LINKS).problem).toBeDefined();
+	});
+
+	/** Browsers strip or hide these, so a pattern sees no scheme where one resolves. */
+	it("refuses control and invisible characters before anything else", () => {
+		for (
+			let value of [
+				`${hidden(0x01)}javascript:alert(1)`,
+				`java${hidden(0x00)}script:alert(1)`,
+				`java${hidden(0x200b)}script:alert(1)`,
+				`https://ex${hidden(0x200b)}ample.com`,
+				`${hidden(0xfeff)}https://example.com`,
+				`docs/${hidden(0x202e)}gpj.md`,
+				`example.com${hidden(0x7f)}`,
+			]
+		) {
+			expect(checkUrl(value, LINKS)).toEqual({
+				problem: "This URL contains hidden characters. Try typing it instead.",
+			});
+		}
+		expect(checkUrl(" https://example.com\n", LINKS)).toEqual({ url: "https://example.com" });
+	});
+
+	it("refuses a value that names another host without a scheme", () => {
+		for (let value of ["//evil.com", "\\\\evil.com", "/\\evil.com", "docs\\a.md"]) {
+			expect(checkUrl(value, LINKS).problem).toBe(
+				"Use an https:// or mailto: link, or a path in this repository.",
+			);
+		}
+	});
+
+	it("reads a host with a port as a web address", () => {
+		expect(checkUrl("example.com:8080/x", LINKS)).toEqual({ url: "https://example.com:8080/x" });
+		expect(checkUrl("localhost:3000", LINKS)).toEqual({ url: "https://localhost:3000" });
 	});
 
 	it("says what is wrong with an empty or spaced value", () => {

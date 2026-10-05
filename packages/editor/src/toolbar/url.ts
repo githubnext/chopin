@@ -8,6 +8,8 @@
  * is before it becomes a node.
  */
 
+import { HIDDEN_URL_CHARACTERS, leavesRepository } from "@chopin/dialect";
+
 export type UrlRules = {
 	protocols: readonly string[];
 	/**
@@ -19,8 +21,11 @@ export type UrlRules = {
 	relative: boolean;
 };
 
+const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+
 export function acceptable(value: string, rules: UrlRules): boolean {
-	if (!/^[a-z][a-z0-9+.-]*:/i.test(value)) return rules.relative;
+	if (HIDDEN_URL_CHARACTERS.test(value)) return false;
+	if (!SCHEME.test(value)) return rules.relative && !leavesRepository(value);
 	try {
 		return rules.protocols.includes(new URL(value).protocol);
 	} catch {
@@ -52,6 +57,7 @@ const FILES = new Set([
 
 const EMAIL = /^[^\s@/]+@[^\s@/]+\.[a-z]{2,}$/i;
 const HOST = /^((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+([a-z]{2,}))(?::\d+)?(?:[/?#]|$)/i;
+const LOCALHOST = /^localhost(?::\d+)?(?:[/?#]|$)/i;
 
 /**
  * Accept what people actually type.
@@ -61,16 +67,20 @@ const HOST = /^((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+([a-z]{2,}))(?::\d+)?(?:[/
  * plainly meant to have before the rules judge it.
  */
 export function checkUrl(entered: string, rules: UrlRules): Checked {
-	let value = entered.trim();
+	// Only ordinary whitespace is trimmed; anything stranger is refused below.
+	let value = entered.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, "");
 	if (!value) return { problem: "Enter a URL." };
+	if (HIDDEN_URL_CHARACTERS.test(value)) {
+		return { problem: "This URL contains hidden characters. Try typing it instead." };
+	}
 	if (/\s/.test(value)) return { problem: "A URL cannot contain spaces." };
 
-	if (!/^[a-z][a-z0-9+.-]*:/i.test(value)) {
-		let host = HOST.exec(value);
-		if (EMAIL.test(value) && rules.protocols.includes("mailto:")) value = `mailto:${value}`;
-		else if (host && !FILES.has(host[2]!.toLowerCase()) && rules.protocols.includes("https:")) {
-			value = `https://${value}`;
-		}
+	// Before the scheme test, which would read `example.com:8080` as one.
+	let host = HOST.exec(value);
+	let web = LOCALHOST.test(value) || (host && !FILES.has(host[2]!.toLowerCase()));
+	if (web && rules.protocols.includes("https:")) value = `https://${value}`;
+	else if (!SCHEME.test(value) && EMAIL.test(value) && rules.protocols.includes("mailto:")) {
+		value = `mailto:${value}`;
 	}
 
 	if (acceptable(value, rules)) return { url: value };

@@ -430,8 +430,17 @@ class Validator {
 	}
 
 	#link(url: string, path: string, node: Nodes): void {
+		if (dialect.HIDDEN_URL_CHARACTERS.test(url)) {
+			this.add("bad-link", "Link contains hidden or control characters", path, node);
+			return;
+		}
 		// Relative repository paths and Ace references carry no protocol.
-		if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) return;
+		if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) {
+			if (dialect.leavesRepository(url)) {
+				this.add("bad-link", "Link without a protocol must stay in the repository", path, node);
+			}
+			return;
+		}
 
 		let protocol: string;
 		try {
@@ -448,6 +457,11 @@ class Validator {
 
 	#image(url: string, path: string, node: Nodes): void {
 		this.#images++;
+
+		if (dialect.HIDDEN_URL_CHARACTERS.test(url)) {
+			this.add("bad-image", "Image URL contains hidden or control characters", path, node);
+			return;
+		}
 
 		let protocol: string;
 		try {

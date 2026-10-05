@@ -15,7 +15,6 @@ import {
 	$insertNodes,
 	$isElementNode,
 	$isRangeSelection,
-	$isTextNode,
 	$setSelection,
 	COMMAND_PRIORITY_LOW,
 	createCommand,
@@ -25,6 +24,7 @@ import * as Y from "yjs";
 
 import { blockElement } from "../scroll";
 import { ResearchComposer } from "../widgets/research";
+import { $relativePosition } from "./position";
 import { editorSurfaceViewport, listenToEditorGeometry } from "./surface";
 
 import type { Binding } from "@lexical/yjs";
@@ -48,27 +48,7 @@ export const OPEN_RESEARCH_COMMAND = createCommand<OpenResearch>("OPEN_RESEARCH_
 export function captureResearchPosition(binding: Binding): Y.RelativePosition | undefined {
 	let selection = $getSelection();
 	if (!$isRangeSelection(selection) || !selection.isCollapsed()) return;
-	let point = selection.anchor;
-	let node = point.getNode();
-	let collab = binding.collabNodeMap.get(point.key);
-	if (!collab) return;
-
-	let shared = collab.getSharedType();
-	let offset = point.offset;
-	if ($isTextNode(node)) {
-		let parent = node.getParent();
-		let parentCollab = parent && binding.collabNodeMap.get(parent.getKey());
-		let currentOffset = collab.getOffset();
-		if (!parentCollab || currentOffset < 0) return;
-		shared = parentCollab.getSharedType();
-		offset = currentOffset + 1 + point.offset;
-	} else if ($isElementNode(node) && point.type === "element") {
-		offset = 0;
-		for (let child of node.getChildren().slice(0, point.offset)) {
-			offset += $isTextNode(child) ? child.getTextContentSize() + 1 : 1;
-		}
-	}
-	return Y.createRelativePositionFromTypeIndex(shared, offset);
+	return $relativePosition(binding, selection.anchor);
 }
 
 /** Insert only when the saved collaborative position still resolves, and verify the result. */
