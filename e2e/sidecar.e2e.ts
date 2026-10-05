@@ -1105,7 +1105,9 @@ test("a touch comment opens as a modal sheet and restores its marker", async ({ 
 	let markerBox = await marker.boundingBox();
 	expect(markerBox).not.toBeNull();
 	expect(markerBox!.width).toBeGreaterThanOrEqual(44);
-	expect(markerBox!.height).toBeGreaterThanOrEqual(44);
+	// As tall as the first line, never more than 44px, so the next line keeps its taps.
+	expect(markerBox!.height).toBeGreaterThanOrEqual(24);
+	expect(markerBox!.height).toBeLessThanOrEqual(44);
 	let markerBoxes = await commentButton(page).evaluateAll(buttons =>
 		buttons.map(button => {
 			let box = button.getBoundingClientRect();

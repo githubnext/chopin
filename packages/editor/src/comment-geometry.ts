@@ -59,6 +59,8 @@ export type BlockMarker = {
 	line: { top: number; height: number };
 	width: number;
 	held?: boolean;
+	/** The narrowest slim chip that still shows its content, such as a two-digit count. */
+	minimum?: number;
 };
 /** `slim` marks a chip narrowed to fit the content padding beside its block. */
 export type BlockMarkerPoint = MarkerPoint & { width: number; slim?: true };
@@ -76,10 +78,12 @@ export function blockMarkerPoints(
 	{ size = 24, gap = 8, slim = 14 }: { size?: number; gap?: number; slim?: number } = {},
 ): BlockMarkerPoint[] {
 	let previous: Rect | undefined;
-	return markers.map(({ block, held, line, width }) => {
+	return markers.map(({ block, held, line, minimum = 0, width }) => {
 		let gutter = host.right - block.right;
 		let wide = gutter >= width + gap * 1.5;
-		let chip = wide ? width : Math.min(width, slim, Math.max(0, gutter - 2));
+		let chip = wide
+			? width
+			: Math.min(width, Math.max(minimum, Math.min(slim, gutter - 2)));
 		let left = wide
 			? block.right - host.left + gap
 			: block.right - host.left + Math.max(0, (gutter - chip) / 2);

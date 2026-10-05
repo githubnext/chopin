@@ -263,9 +263,40 @@ for (
 		expect(chip.x + chip.width).toBeLessThanOrEqual(documentBox.x + documentBox.width);
 		expect(chip.y).toBeLessThan(paragraph.y + 32);
 		expect(chip.height).toBe(24);
-		if (hasTouch) expect((await marker.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+		if (hasTouch) {
+			// The touch area keeps 44px of width but stays within the first line box, so a tap
+			// at the end of the second line reaches the text.
+			let hit = (await marker.boundingBox())!;
+			let line = await page.locator(".plan-content > p").first().evaluate(element =>
+				parseFloat(getComputedStyle(element).lineHeight)
+			);
+			expect(hit.width).toBeGreaterThanOrEqual(44);
+			expect(hit.y).toBeGreaterThanOrEqual(paragraph.y - 1);
+			expect(hit.y + hit.height).toBeLessThanOrEqual(paragraph.y + Math.max(24, line) + 1);
+			let secondLineEnd = { x: paragraph.x + paragraph.width - 2, y: paragraph.y + line * 1.5 };
+			expect(
+				await page.evaluate(
+					({ x, y }) => !document.elementFromPoint(x, y)?.closest("[data-plan-comment-button]"),
+					secondLineEnd,
+				),
+			).toBe(true);
+		}
 	});
 }
+
+test("a slim marker widens so a two-digit count is not clipped", async ({ join, seed }) => {
+	await seed(PLAN);
+	let page = await join("ana", { hasTouch: true, viewport: { width: 390, height: 844 } });
+	for (let note = 1; note <= 9; note++) await commentOn(page, 0, `Thought ${note}.`);
+	let marker = page.locator("[data-plan-comment-button][data-plan-comment-count='10']");
+	await expect(marker).toBeVisible();
+	let count = marker.locator(".plan-comment-count");
+	await expect(count).toHaveText("10");
+	let chip = (await marker.locator(".plan-comment-chip").boundingBox())!;
+	expect(chip.width).toBeGreaterThanOrEqual(18);
+	expect(await count.evaluate(element => element.scrollWidth <= element.parentElement!.clientWidth))
+		.toBe(true);
+});
 
 test("a grouped marker opens a list of its threads and keeps keyboard order", async ({ join, seed }) => {
 	await seed(PLAN);
@@ -289,8 +320,10 @@ test("a grouped marker opens a list of its threads and keeps keyboard order", as
 	await expect(thread).toContainText("A second thought on the same paragraph.");
 	let back = thread.getByRole("button", { name: "All 2 comments" });
 	await expect(back).toBeFocused();
-	await back.click();
+	await page.keyboard.press("Enter");
 	await expect(list).toBeVisible();
+	// Back returns to the item it came from, not the top of the list.
+	await expect(items.nth(1)).toBeFocused();
 
 	await page.keyboard.press("Escape");
 	await expect(list).toHaveCount(0);

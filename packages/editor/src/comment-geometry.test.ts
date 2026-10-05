@@ -65,6 +65,22 @@ test("narrows the chip into the content padding when the gutter is too narrow", 
 	expect(point!.left + phone.left + point!.width).toBeLessThanOrEqual(phone.right);
 });
 
+test("widens a slim chip to its minimum so a two-digit count never clips", () => {
+	let phone = { top: 0, right: 382, bottom: 800, left: 8, width: 374, height: 800 };
+	let [point] = blockMarkerPoints([
+		{
+			block: { top: 100, right: 366, bottom: 200, left: 24, width: 342, height: 100 },
+			line: { top: 100, height: 40 },
+			width: 44,
+			minimum: 18,
+		},
+	], phone);
+
+	// 18px is wider than the padding, so it sits flush with the document's edge.
+	expect(point).toEqual({ top: 108, left: 356, width: 18, slim: true });
+	expect(point!.left + phone.left + point!.width).toBe(phone.right);
+});
+
 test("moves a marker below the one above when short blocks sit close together", () => {
 	let points = blockMarkerPoints([marker(180, 16), marker(200, 16)], host);
 
