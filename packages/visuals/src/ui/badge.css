@@ -23,3 +23,27 @@
 	width: calc(var(--spacing) * 4);
 	height: calc(var(--spacing) * 4);
 }
+
+.cv-badge[data-size="sm"] {
+	min-height: calc(var(--spacing) * 5);
+	border-color: transparent;
+	padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 2) calc(var(--spacing) * 0.5)
+		calc(var(--spacing) * 1.5);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+}
+
+.cv-badge[data-size="sm"] .cv-icon-label {
+	font-size: inherit;
+	line-height: inherit;
+}
+
+.cv-badge[data-size="sm"] .cv-icon-label-icon-frame {
+	width: auto;
+	height: auto;
+}
+
+.cv-badge[data-size="sm"] .cv-icon-label-icon {
+	width: calc(var(--spacing) * 3);
+	height: calc(var(--spacing) * 3);
+}

@@ -768,8 +768,13 @@
 	display: inline-flex;
 	flex: 0 0 auto;
 	align-items: center;
-	gap: var(--spacing);
+	gap: calc(var(--spacing) * 2);
 	margin-left: calc(var(--spacing) * 1.5);
+}
+
+/* Inset is lighter than the header's ground, so the label sits on selected. */
+.document-archived-status .cv-badge {
+	--cv-semantic-surface: var(--color-selected);
 }
 
 :root[data-plan-coarse-pointer]

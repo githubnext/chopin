@@ -134,7 +134,7 @@ export function Header(
 					: <span className="document-title-label truncate">{label}</span>}
 				{archivedAt && (
 					<span className="document-archived-status">
-						<Badge icon={ArchiveIcon} label="Archived" />
+						<Badge icon={ArchiveIcon} label="Archived" size="sm" />
 						{canManage && (
 							<button
 								className="btn btn-sm btn-ghost"
