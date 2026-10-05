@@ -31,6 +31,7 @@ export type { FaceProps } from "./face";
 export { PlanEditor } from "./plan-editor";
 export type { PlanEditorProps, PlanState } from "./plan-editor";
 export { usePointerCapabilities } from "./pointer";
+export { usePopoverDismissal } from "./popover-dismissal";
 export { PlanProvider } from "./provider";
 export type { PlanProviderOptions } from "./provider";
 export {

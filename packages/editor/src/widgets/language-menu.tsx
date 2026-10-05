@@ -11,6 +11,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CheckIcon, ChevronIcon } from "@chopin/icons";
 
+import { usePopoverDismissal } from "../popover-dismissal";
 import { useTransitionPresence } from "../transition-presence";
 
 import type { CSSProperties, KeyboardEvent } from "react";
@@ -88,16 +89,10 @@ export function LanguageMenu(
 			?.scrollIntoView({ block: "nearest" });
 	}, [open, active]);
 
-	useEffect(() => {
-		if (!open) return;
-		let dismiss = (event: PointerEvent) => {
-			let target = event.target as Node;
-			if (panel.current?.contains(target) || trigger.current?.contains(target)) return;
-			setOpen(false);
-		};
-		document.addEventListener("pointerdown", dismiss, true);
-		return () => document.removeEventListener("pointerdown", dismiss, true);
-	}, [open]);
+	usePopoverDismissal(open, () => [panel.current, trigger.current], reason => {
+		setOpen(false);
+		if (reason === "escape") trigger.current?.focus();
+	});
 
 	let show = () => {
 		setActiveId(value);
@@ -124,7 +119,6 @@ export function LanguageMenu(
 			End: () => setActive(last),
 			Enter: () => choose(active),
 			" ": () => choose(active),
-			Escape: () => close(),
 		};
 		// The panel is portalled to the end of body, so hand focus back to the
 		// trigger and let the browser's default Tab continue from there.

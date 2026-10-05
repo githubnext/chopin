@@ -9,7 +9,7 @@
 
 import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from "react";
 
-import { SendAction } from "@chopin/editor";
+import { SendAction, usePopoverDismissal } from "@chopin/editor";
 import { MENTION } from "@chopin/protocol/address";
 import { ArchiveIcon, InfoIcon, LoaderIcon, LockIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 import { DraftInput } from "./draft-input";
@@ -219,6 +219,15 @@ export function Chat(
 	let activeMention: MentionCandidate | undefined = mentionOpen
 		? mentionOptions[mentionActive]
 		: undefined;
+	// Escape keeps the draft and the composer's focus; only the picker closes.
+	usePopoverDismissal(
+		mentionOpen || pickerOpen,
+		() => [
+			textarea.current,
+			...document.querySelectorAll("[data-chat-mention-picker], [data-chat-reference-picker]"),
+		],
+		() => setDismissedPicker(mentionOpen ? mentionKey : triggerKey),
+	);
 	let activeOption = picker.options.length === 0
 		? undefined
 		: picker.options[Math.min(picker.active, picker.options.length - 1)];
