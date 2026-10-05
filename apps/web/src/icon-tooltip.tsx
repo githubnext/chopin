@@ -38,7 +38,10 @@ function iconButton(target: EventTarget | null): HTMLElement | null {
 	return button;
 }
 
-/** Tooltips use sentence case; names and handles opt out of capitalisation so they keep their own casing. */
+/**
+ * Tooltips use sentence case.
+ * Names and handles opt out so they keep their own casing.
+ */
 export function tooltipText(label: string, verbatim: boolean): string {
 	return verbatim
 		? label.trim()
