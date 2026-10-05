@@ -43,4 +43,5 @@ export {
 	ResearchDeletionPlugin,
 	ResearchReference,
 } from "./research";
+export { TabKeyPlugin } from "./tab-key";
 export { TabsPlugin } from "./tabs";

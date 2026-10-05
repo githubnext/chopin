@@ -29,6 +29,7 @@ import {
 	EnterPlugin,
 	PreviewPlugin,
 	ResearchDeletionPlugin,
+	TabKeyPlugin,
 	TabsPlugin,
 } from "./widgets";
 import { widgets$ } from "./widget-options";
@@ -63,6 +64,7 @@ export const widgetsPlugin = realmPlugin<WidgetOptions>({
 		realm.pub(addComposerChild$, PreviewPlugin);
 		realm.pub(addComposerChild$, CalloutPlugin);
 		realm.pub(addComposerChild$, EnterPlugin);
+		realm.pub(addComposerChild$, TabKeyPlugin);
 		realm.pub(addComposerChild$, DecoratorSelectionPlugin);
 		realm.pub(addComposerChild$, ResearchDeletionPlugin);
 		realm.pub(addComposerChild$, DecisionDeletionPlugin);

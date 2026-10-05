@@ -81,3 +81,38 @@ test("losing the connection locks the plan, and getting it back unlocks it", asy
 	expect(sockets.length).toBeGreaterThan(1);
 	await expect(content(page)).toContainText("Before the wire went.");
 });
+
+test("Tab leaves a heading instead of indenting it", async ({ join, room }) => {
+	let page = await join("ana");
+
+	await content(page).click();
+	await page.keyboard.type("# Title");
+	let heading = content(page).getByRole("heading", { level: 1 });
+	await expect(heading).toHaveText("Title");
+
+	// A keyboard user has to be able to get past the editor, and trying to
+	// must not edit a document everyone else is reading.
+	await page.keyboard.press("Tab");
+	await expect(content(page)).not.toBeFocused();
+	await expect(heading).toHaveText("Title");
+	await expect(heading).not.toHaveAttribute("style", /padding/);
+	await written(page, room, /^# Title\s*$/);
+});
+
+test("Tab nests a list item and Shift+Tab brings it back", async ({ join, room }) => {
+	let page = await join("ana");
+
+	await content(page).click();
+	await page.keyboard.type("- one\ntwo");
+	await written(page, room, /^- one\n- two$/m);
+
+	// From the end of the item, not only its start.
+	await page.keyboard.press("Tab");
+	await expect(content(page).locator("li li")).toHaveText("two");
+	await expect(content(page)).toBeFocused();
+	await written(page, room, /^- one\n {2}- two$/m);
+
+	await page.keyboard.press("Shift+Tab");
+	await expect(content(page).locator("li li")).toHaveCount(0);
+	await written(page, room, /^- one\n- two$/m);
+});
