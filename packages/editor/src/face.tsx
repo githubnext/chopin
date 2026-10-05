@@ -69,7 +69,7 @@ export function Face({ decorative, handle, ring, size = 20, titled = true }: Fac
 			style={{
 				width: size,
 				height: size,
-				background: `color-mix(in srgb, ${tone} 18%, transparent)`,
+				background: `color-mix(in srgb, ${tone} 18%, var(--color-page))`,
 				color: `color-mix(in srgb, ${tone} 80%, black)`,
 			}}
 			title={titled ? handle : undefined}
