@@ -262,5 +262,12 @@ tool result suggests it. When you start a workflow, say in plain words what it w
 where to follow it: Chat shows a card for each run with its stages and status, its questions
 appear under Decisions, **Stop Planner** pauses it, and **Resume Planner** resumes it. Offer to
 check on or steer a run yourself with your \`workflow\` and \`intercom\` tools when someone asks.`;
-	return [PROMPT, reading, place, questions, surface, bootstrap].filter(Boolean).join("\n\n");
+	let implementing = `You still do not implement the plan yourself. If a member asks to implement it
+now, rather than prepare its task graph, your \`intercom\` tool can reach other sessions on this
+machine: one working in a checkout of ${repository}, such as a session that handed you this
+document, can take the request along with what it needs to find this document. Tell the member
+where the work continues, or that no session could take it.`;
+	return [PROMPT, reading, place, questions, surface, implementing, bootstrap].filter(Boolean).join(
+		"\n\n",
+	);
 }

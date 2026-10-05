@@ -185,6 +185,8 @@ describe("Planner workspaces", () => {
 			expect(instructions).toContain("proceed on your best judgement");
 			expect(instructions).toContain("never tell them to use `/workflow connect`");
 			expect(instructions).toContain("Chat shows a card for each run");
+			expect(instructions).toContain("`intercom` tool can reach other sessions");
+			expect(instructions).toContain("one working in a checkout of owner/repo");
 			expect(instructions).not.toContain("You have no shell");
 		}
 		let git = Bun.spawn(["git", "-C", path, "remote", "set-url", "origin", "workgit:other/repo"], {
@@ -218,6 +220,7 @@ describe("Planner workspaces", () => {
 			expect(instructions).toContain("proceed on your best judgement");
 			expect(instructions).toContain("never tell them to use `/workflow connect`");
 			expect(instructions).toContain("Chat shows a card for each run");
+			expect(instructions).toContain("one working in a checkout of owner/repo");
 		}
 		forgetWorkspaces();
 		expect((await stat(first.registered!.cwd)).isDirectory()).toBe(true);
@@ -241,6 +244,7 @@ describe("Planner workspaces", () => {
 			expect(instructions).toContain("You have no shell");
 			expect(instructions).not.toContain("proceed on your best judgement");
 			expect(instructions).not.toContain("/workflow connect");
+			expect(instructions).not.toContain("intercom");
 		}
 	});
 });
