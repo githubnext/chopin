@@ -28,7 +28,9 @@ function movePaletteFocus(event: KeyboardEvent<HTMLElement>) {
 			: Math.max(index - 1, 0)
 	]!;
 	next.focus();
-	next.scrollIntoView({ block: "nearest" });
+	if (next.matches(".navigation-palette-input")) {
+		event.currentTarget.querySelector(".navigation-palette-list")?.scrollTo({ top: 0 });
+	} else next.scrollIntoView({ block: "nearest" });
 }
 
 /** A small modal primitive that owns the browser-only focus contract for navigation flows. */
