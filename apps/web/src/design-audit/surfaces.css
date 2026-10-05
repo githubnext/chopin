@@ -312,8 +312,8 @@
 }
 
 .design-audit-status-grid {
-	display: flex;
-	flex-wrap: wrap;
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
 	gap: 0.75rem;
 }
 
@@ -323,16 +323,18 @@
 	min-width: 0;
 	align-content: start;
 	gap: 0.5rem;
-	min-height: 4rem;
 	padding: 0.75rem;
 	border-radius: var(--radius-lg);
 	background: var(--color-page);
 }
 
-.design-audit-status-grid .plan-status {
-	position: static;
-	inset: auto;
-	width: fit-content;
+.design-audit-status-header {
+	display: flex;
+	min-width: 0;
+	height: 46px;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
 }
 
 .design-audit-empty-grid > div {

@@ -18,7 +18,6 @@ import { plugins as dialectPlugins } from "@chopin/dialect";
 import { ChangeStore } from "./changes";
 import { PlanChanges } from "./changes-chip";
 import { collaborationPlugin } from "./collaboration";
-import { PlanStatus } from "./status";
 import { PLAN_LEXICAL_THEME } from "./plan-theme";
 import { ResearchDraftStore } from "./research-draft";
 import { register } from "./widgets";
@@ -90,6 +89,8 @@ export type PlanEditorProps = {
 	scrollTop?: number;
 	/** The document host owns persisted view position, not the editor. */
 	onScrollTop?: (top: number) => void;
+	/** Whether the document has opened, for status chrome the host renders. */
+	onState?: (state: PlanState) => void;
 	className?: string;
 };
 
@@ -110,6 +111,7 @@ export function PlanEditor(
 		connection,
 		motionImmediately,
 		onScrollTop,
+		onState,
 		questionMotion,
 		questions,
 		cardMeta,
@@ -195,6 +197,10 @@ export function PlanEditor(
 	}, [generation, scrollTop]);
 
 	useEffect(() => () => changes.dispose(), [changes]);
+
+	useEffect(() => {
+		onState?.(state);
+	}, [onState, state]);
 
 	let onProvider = useCallback((value: PlanProvider | undefined) => {
 		provider.current = value;
@@ -349,7 +355,10 @@ export function PlanEditor(
 	}
 
 	return (
-		<div className={`plan flex h-full w-full flex-col ${className ?? ""}`}>
+		<div
+			className={`plan flex h-full w-full flex-col ${className ?? ""}`}
+			data-plan-offline={offline || undefined}
+		>
 			<div className="plan-workspace">
 				<div className="plan-document">
 					<div
@@ -381,12 +390,6 @@ export function PlanEditor(
 					</div>
 					{/* In the document column, so they track the prose, not the pane. */}
 					<PlanChanges motionImmediately={motionImmediately} store={changes} />
-					<PlanStatus
-						connection={connection}
-						synced={state.synced}
-						failed={state.failed}
-						busy={busy}
-					/>
 				</div>
 			</div>
 		</div>
