@@ -133,9 +133,15 @@ test("header actions menu is start-aligned to its trigger", async ({ join }) => 
 	await trigger.click();
 	let menu = page.getByRole("menu", { name: /^Actions for / });
 	await expect(menu).toBeVisible();
-	let [triggerBox, menuBox] = await Promise.all([trigger.boundingBox(), menu.boundingBox()]);
-	expect(menuBox!.x).toBeCloseTo(triggerBox!.x, 0);
-	expect(menuBox!.y).toBeGreaterThanOrEqual(triggerBox!.y + triggerBox!.height);
+	let [triggerBox, layout] = await Promise.all([
+		trigger.boundingBox(),
+		menu.evaluate(element => ({
+			left: (element as HTMLElement).offsetLeft,
+			top: (element as HTMLElement).offsetTop,
+		})),
+	]);
+	expect(layout.left).toBeCloseTo(triggerBox!.x, 0);
+	expect(layout.top).toBeGreaterThanOrEqual(triggerBox!.y + triggerBox!.height);
 });
 
 test("account menu closes on Escape and outside click, and returns focus", async ({ join }) => {
