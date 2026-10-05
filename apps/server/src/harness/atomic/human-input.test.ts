@@ -335,7 +335,7 @@ test("host input waits the shared 30-minute limit before expiring by default", a
 	}
 });
 
-test("workflow identity labels each card while returned question text remains verbatim", async () => {
+test("a workflow card shows its question as asked, without run or stage ids", async () => {
 	let f = await fixture();
 	let response = f.input.questionnaire(params, {
 		...f.options,
@@ -344,7 +344,10 @@ test("workflow identity labels each card while returned question text remains ve
 	});
 	let cards = await f.cards(3);
 	for (let card of cards) {
-		expect(card.definition.questions[0].question).toContain("Workflow run: run-123; stage: review");
+		expect(params.questions.map(question => question.question)).toContain(
+			card.definition.questions[0].question,
+		);
+		expect(card.definition.questions[0].question).not.toContain("run-123");
 		await f.answer(card.id, [0]);
 	}
 	expect((await response).answers.map(answer => answer.question)).toEqual(
@@ -464,7 +467,7 @@ test("dialogs beyond the Planner's per-field limits become verbatim cards and an
 	]);
 });
 
-test("a workflow label never pushes a verbatim question into a rejection", async () => {
+test("a workflow question at the length limit is stored verbatim", async () => {
 	let f = await fixture();
 	let question = "Should the review stage accept this change? ".repeat(23).slice(0, 990);
 	let long: QuestionParams = {
@@ -480,9 +483,8 @@ test("a workflow label never pushes a verbatim question into a rejection", async
 		workflowStageId: "review",
 	});
 	let [card] = await f.cards(1);
-	let labelled = `${question}\n\nWorkflow run: run-123; stage: review`;
-	expect(card!.definition.questions[0].question).toBe(labelled);
-	expect(await documentQuestionnaires(Plan.source(f.plan))).toMatchObject([{ prompt: labelled }]);
+	expect(card!.definition.questions[0].question).toBe(question);
+	expect(await documentQuestionnaires(Plan.source(f.plan))).toMatchObject([{ prompt: question }]);
 	await f.answer(card!.id, [0]);
 	expect(await response).toEqual({
 		cancelled: false,

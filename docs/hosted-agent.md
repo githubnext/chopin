@@ -196,9 +196,9 @@ extension dialogs, and workflow-stage input become ordinary shared Decisions:
   choice. Input and editor use free-text cards; hints and initial editor text
   appear verbatim in the prompt. Explicitly submitted empty text is an answer,
   not cancellation.
-- Workflow cards show `Workflow run: <id>; stage: <id>` below their question.
-  The label is added to the card only; Atomic receives its question text as
-  asked. A request is appended as one adjacent batch at the end of the document.
+- Workflow cards show their question exactly as asked, with no run or stage
+  ids; Chat's run card shows which run is waiting on Decisions. A request is
+  appended as one adjacent batch at the end of the document.
 - An abort withdraws still-open cards, removes their document nodes, and records
   cancellation by `@chopin`. Member cancellations retain any answers already
   given in that batch. Late submissions cannot approve withdrawn input.
