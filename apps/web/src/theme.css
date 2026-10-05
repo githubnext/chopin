@@ -883,6 +883,11 @@ button.chat-tool-call-toggle {
 		height: max(100%, 44px);
 		transform: translate(-50%, -50%);
 	}
+
+	/* Beside a comment marker: grow vertically only so the marker keeps its taps. */
+	:root[data-plan-coarse-pointer] .plan-code-toggle::after {
+		width: 100%;
+	}
 }
 
 .question-field {

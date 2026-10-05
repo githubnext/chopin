@@ -56,16 +56,17 @@ export function tooltipTrigger(
 	return source === "hover" ? !state.coarse : state.focusVisible;
 }
 
+function focusVisible(element: Element): boolean {
+	try {
+		return element.matches(":focus-visible");
+	} catch {
+		return true;
+	}
+}
+
 function keyboardFocused(target: EventTarget | null): HTMLElement | null {
 	let button = iconButton(target);
-	if (!button) return null;
-	let focusVisible = false;
-	try {
-		focusVisible = button.matches(":focus-visible");
-	} catch {
-		focusVisible = true;
-	}
-	return tooltipTrigger("focus", { coarse: false, focusVisible }) ? button : null;
+	return button && focusVisible(button) ? button : null;
 }
 
 export function IconTooltip() {
@@ -175,7 +176,7 @@ export function IconTooltip() {
 
 		function focusIn(event: FocusEvent) {
 			let target = event.target;
-			if (!(target instanceof Element) || !target.matches(":focus-visible")) return;
+			if (!(target instanceof Element) || !focusVisible(target)) return;
 			dismissed = null;
 			focused = iconButton(target);
 			enter(hovered ?? focused);
