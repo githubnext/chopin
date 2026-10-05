@@ -1767,6 +1767,22 @@
 	font-size: var(--text-sm);
 }
 
+/*
+ * Editable code and formula source also stays at 16px on touch, so iOS does
+ * not zoom. The rendered code follows so a fence and its source still match.
+ */
+@media (pointer: coarse) {
+	.plan-content :is(pre, [data-plan-source]),
+	.plan-content [data-plan-preview]:not(:empty) ~ [data-plan-source],
+	.plan-content .planCode .plan-code-view[data-view="file"] {
+		font-size: max(1rem, var(--text-sm));
+	}
+
+	.plan-content .plan-code-view {
+		--diffs-font-size: max(1rem, var(--text-sm));
+	}
+}
+
 .plan-content .planCode [data-plan-source] {
 	margin: 0;
 	padding-inline: 0.75rem;
