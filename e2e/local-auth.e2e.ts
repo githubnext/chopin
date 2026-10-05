@@ -174,9 +174,9 @@ test("local device approval, backend fallback, restart and logout", async ({ pag
 	await expect(page.getByRole("button", { name: "octocat", exact: true }))
 		.toBeVisible({ timeout: 20_000 });
 	await expect(page.getByText("Enter one-time code:")).toHaveCount(0);
-	if (await page.getByRole("button", { name: "Close Add Project" }).isVisible()) {
+	if (await page.getByRole("button", { name: "Close Add project" }).isVisible()) {
 		await page.keyboard.press("Escape");
-		await expect(page.getByRole("button", { name: "Close Add Project" })).toHaveCount(0);
+		await expect(page.getByRole("button", { name: "Close Add project" })).toHaveCount(0);
 	}
 	await page.getByRole("button", { name: "octocat", exact: true }).click();
 	await page.getByRole("menuitem", { name: "Sign out" }).click();
@@ -231,9 +231,9 @@ test("local device approval, backend fallback, restart and logout", async ({ pag
 	await expect(page.getByRole("button", { name: "octocat", exact: true }))
 		.toBeVisible({ timeout: 20_000 });
 	await expect(page.getByRole("region", { name: "System vault not available" })).toHaveCount(0);
-	if (await page.getByRole("button", { name: "Close Add Project" }).isVisible()) {
+	if (await page.getByRole("button", { name: "Close Add project" }).isVisible()) {
 		await page.keyboard.press("Escape");
-		await expect(page.getByRole("button", { name: "Close Add Project" })).toHaveCount(0);
+		await expect(page.getByRole("button", { name: "Close Add project" })).toHaveCount(0);
 	}
 	await page.getByRole("button", { name: "octocat", exact: true }).click();
 	await page.getByRole("menuitem", { name: "Sign out" }).click();

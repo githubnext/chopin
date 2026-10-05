@@ -16,7 +16,7 @@ function chatPane(page: Page) {
 
 test("an icon button shows its label on keyboard focus", async ({ join }) => {
 	let page = await join("ana");
-	let addProject = page.getByRole("button", { exact: true, name: "Add Project" });
+	let addProject = page.getByRole("button", { exact: true, name: "Add project" });
 	await addProject.focus();
 	let tooltip = page.locator("[data-icon-tooltip]");
 	await expect(tooltip).toBeVisible();
@@ -31,7 +31,7 @@ test("an icon button shows its label on keyboard focus", async ({ join }) => {
 
 test("an icon tooltip remains visible while its button is focused", async ({ join, page }) => {
 	await join("ana");
-	let addProject = page.getByRole("button", { exact: true, name: "Add Project" });
+	let addProject = page.getByRole("button", { exact: true, name: "Add project" });
 	await addProject.hover();
 	await addProject.focus();
 	let tooltip = page.locator("[data-icon-tooltip]");
@@ -42,7 +42,7 @@ test("an icon tooltip remains visible while its button is focused", async ({ joi
 
 test("an icon tooltip preserves a title updated during hover", async ({ join, page }) => {
 	await join("ana");
-	let addProject = page.getByRole("button", { exact: true, name: "Add Project" });
+	let addProject = page.getByRole("button", { exact: true, name: "Add project" });
 	await addProject.evaluate(button => button.setAttribute("title", "Original title"));
 	await addProject.hover();
 	await addProject.evaluate(button => button.setAttribute("title", "Updated title"));

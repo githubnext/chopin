@@ -45,8 +45,9 @@ test("a chord counts as keyboard navigation, a bare modifier does not", async ({
 
 test("a text field keeps its focus ring after a click", async ({ join }) => {
 	let page = await join("ana");
-	await page.getByRole("button", { exact: true, name: "Add Project" }).click();
-	let field = page.getByPlaceholder("Search repositories");
+	await page.getByRole("banner").getByRole("button", { name: /^Actions for / }).click();
+	await page.getByRole("menuitem", { name: "Rename", exact: true }).click();
+	let field = page.getByRole("textbox", { name: "Document title" });
 	await field.click();
 	await expect(field).toBeFocused();
 	expect(await modality(page)).toBe("pointer");

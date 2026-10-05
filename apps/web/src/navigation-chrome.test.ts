@@ -80,7 +80,7 @@ describe("the Figma navigation chrome", () => {
 		expect(markup).toContain("book-bookmark");
 		expect(markup).not.toContain('src="/repository.png"');
 		expect(markup).toMatch(
-			/aria-label="Add Project"[^>]*>.*?class="size-3\.5"[^>]*add-project\.svg/s,
+			/aria-label="Add project"[^>]*>.*?class="size-3\.5"[^>]*add-project\.svg/s,
 		);
 		expect(markup).toMatch(
 			/<button[^>]*class="project-sidebar-primary-action"[^>]*>.*?search.*?Search<\/span>/s,

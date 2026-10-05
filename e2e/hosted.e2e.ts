@@ -32,7 +32,7 @@ async function showKnownChannel(page: Parameters<typeof authenticate>[0]) {
 }
 
 function addProjectDialog(page: Parameters<typeof authenticate>[0]) {
-	return page.getByRole("dialog", { name: "Add Project" });
+	return page.getByRole("dialog", { name: "Add project" });
 }
 
 function repositoryOption(page: Parameters<typeof authenticate>[0], name: string) {
@@ -312,7 +312,7 @@ test("an unknown direct channel link stays privacy-safe", async ({ baseURL, page
 	await expect(page.getByRole("link", { name: "Back to repositories" })).toBeVisible();
 });
 
-test("the Add Project dialog traps focus, dismisses, and filters repositories", async ({ baseURL, page }) => {
+test("the Add project dialog traps focus, dismisses, and filters repositories", async ({ baseURL, page }) => {
 	await authenticate(page, "project-dialog", baseURL!);
 	await page.goto("/");
 
@@ -330,9 +330,13 @@ test("the Add Project dialog traps focus, dismisses, and filters repositories", 
 	await search.fill("notes");
 	await expect(repositoryOption(page, "notes")).toBeVisible();
 	await expect(repositoryOption(page, "score")).toHaveCount(0);
+	await search.press("ArrowDown");
+	await expect(repositoryOption(page, "notes")).toBeFocused();
+	await page.keyboard.press("ArrowUp");
+	await expect(search).toBeFocused();
 });
 
-test("the Add Project dialog reuses a fresh tab cache", async ({ baseURL, page }) => {
+test("the Add project dialog reuses a fresh tab cache", async ({ baseURL, page }) => {
 	await authenticate(page, "paged", baseURL!);
 	await page.goto("/");
 	await expect(repositoryOption(page, "archive-12")).toBeVisible();
@@ -359,7 +363,7 @@ test("the Add Project dialog reuses a fresh tab cache", async ({ baseURL, page }
 	expect(requests).toBe(0);
 });
 
-test("Add Project search stays reachable in a narrow visual viewport", async ({ baseURL, page }) => {
+test("Add project search stays reachable in a narrow visual viewport", async ({ baseURL, page }) => {
 	await page.setViewportSize({ width: 320, height: 568 });
 	await installVisualViewport(page, {
 		height: 300,
@@ -427,7 +431,7 @@ test("repository search includes pages loaded in the background", async ({ baseU
 	await expect(page.getByRole("button", { name: /More from/ })).toHaveCount(0);
 });
 
-test("the Add Project dialog retries and appends unique background pages", async ({ baseURL, page }) => {
+test("the Add project dialog retries and appends unique background pages", async ({ baseURL, page }) => {
 	await authenticate(page, "retry-project-dialog", baseURL!);
 	let fail = true;
 	await page.route("**/api/github/installations?*", async route => {

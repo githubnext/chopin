@@ -708,6 +708,109 @@
 	background: var(--color-hover);
 }
 
+.navigation-modal-content.navigation-palette {
+	display: flex;
+	width: min(100%, 32rem);
+	flex-direction: column;
+	overflow: hidden;
+	padding: 0;
+}
+
+.navigation-palette-search {
+	display: flex;
+	height: 48px;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 8px;
+	border-bottom: var(--edge-width) solid var(--color-edge);
+	padding: 0 16px;
+	color: var(--color-icon);
+}
+
+.navigation-palette-input {
+	min-width: 0;
+	flex: 1;
+	align-self: stretch;
+	background: transparent;
+	color: var(--color-text-primary);
+	font-size: var(--text-sm);
+}
+
+.navigation-palette-input::placeholder {
+	color: var(--color-text-quaternary);
+}
+
+.navigation-palette-list {
+	display: flex;
+	max-height: min(50vh, 20rem);
+	flex-direction: column;
+	overflow-y: auto;
+	padding: 6px;
+}
+
+.navigation-palette-option {
+	display: flex;
+	min-height: 34px;
+	width: 100%;
+	align-items: center;
+	gap: 8px;
+	border-radius: var(--radius-md);
+	padding: 0 10px;
+	text-align: left;
+	font-size: var(--text-sm);
+}
+
+.navigation-palette-option:hover:not(:disabled),
+.navigation-palette-option:focus:not(:disabled) {
+	background: var(--color-selected);
+}
+
+.navigation-palette-hint {
+	visibility: hidden;
+	flex-shrink: 0;
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+}
+
+.navigation-palette-option:is(:hover, :focus) .navigation-palette-hint,
+.navigation-palette-option[aria-busy="true"] .navigation-palette-hint {
+	visibility: visible;
+}
+
+.navigation-palette-status {
+	display: flex;
+	min-height: 72px;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	color: var(--color-text-tertiary);
+	font-size: var(--text-sm);
+	text-align: center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.navigation-palette-status [data-palette-loader] {
+		animation: button-loader-spin var(--duration-linger) linear infinite;
+	}
+}
+
+.navigation-palette-footer {
+	display: flex;
+	flex-shrink: 0;
+	border-top: var(--edge-width) solid var(--color-edge);
+	padding: 10px 16px;
+}
+
+.navigation-palette-footer a {
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+}
+
+.navigation-palette-footer a:hover {
+	color: var(--color-text-secondary);
+	text-decoration: underline;
+}
+
 .navigation-account-menu {
 	position: absolute;
 	bottom: calc(100% - 4px);

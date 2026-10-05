@@ -37,7 +37,7 @@ export function NewDocumentDialog(
 			title="New document"
 		>
 			{error && (
-				<TerminalAlert className="mt-4 text-sm text-destructive-ink">
+				<TerminalAlert className="mt-3 text-sm text-destructive-ink">
 					{error}
 					{onRetry && (
 						<button className="btn btn-sm btn-secondary ml-2" onClick={onRetry} type="button">
@@ -49,7 +49,7 @@ export function NewDocumentDialog(
 			{eligible.length > 0
 				? (
 					<>
-						<p className="mt-4 text-sm text-text-tertiary">
+						<p className="mt-2 text-sm text-text-secondary">
 							Choose a project for your new document.
 						</p>
 						<label className="sr-only" htmlFor={searchId}>Search projects</label>
@@ -100,14 +100,14 @@ export function NewDocumentDialog(
 					</>
 				)
 				: (
-					<div className="mt-4 space-y-3">
+					<div className="mt-2 space-y-3">
 						<p className="text-sm text-text-tertiary">
 							{projects.length === 0
 								? "Add a project to create your first document."
 								: "You need write access to an available project to create a document."}
 						</p>
 						<button className="btn btn-md btn-primary" onClick={onAddProject} type="button">
-							Add Project
+							Add project
 						</button>
 						<a
 							className="block text-sm font-medium text-brand underline"
