@@ -22,7 +22,7 @@ async function expectOpenCardReadOnly(card: ReturnType<typeof decisionCard>) {
 	await expect(card.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
 	await expect(card.getByRole("button", { name: "Discard", exact: true })).toHaveCount(0);
 	let add = card.getByRole("button", { name: "Add an option", exact: true });
-	await expect(add).toBeDisabled();
+	await expect(add).toHaveCount(0);
 }
 
 test("Chat analysis diagnostics float without moving a bottom message", async ({ join, room }) => {

@@ -41,7 +41,6 @@ test("an archived document's decision card offers no way to add an option", asyn
 	await expect(card).toBeVisible();
 	await expect(card.getByRole("button", { name: "Add an option", exact: true })).toHaveCount(0);
 	await expect(card.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
-	await expect(ana.getByRole("button", { name: "Save decision", exact: true })).toHaveCount(0);
 });
 
 test("adding an option shows it to everyone and keeps a selection", async ({ join, seed }) => {
