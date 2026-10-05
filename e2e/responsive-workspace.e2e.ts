@@ -140,7 +140,7 @@ test(
 				let views = page.getByRole("group", { name: "Document view" });
 				await expect(views).toBeVisible();
 				if (width === 500 && fromCompactChat) {
-					await page.getByRole("button", { name: "Hide chat pane" }).click();
+					await page.getByRole("button", { name: "Close sidebar" }).click();
 					await expect(chat).toBeHidden();
 					let showChat = page.getByRole("button", { name: "Show chat pane" });
 					await expect(showChat).toBeFocused();
@@ -411,7 +411,7 @@ test("landscape split controls respect inline safe areas", async ({ join, page, 
 	await expect(page.getByRole("navigation", { name: "Workspace view" })).toHaveCount(0);
 	let header = page.getByRole("banner");
 	let headerControls = header.getByRole("button");
-	let chatToggle = page.getByRole("button", { name: "Hide chat pane" });
+	let chatToggle = page.getByRole("button", { name: "Close sidebar" });
 	let viewControls = page.getByRole("group", { name: "Document view" }).getByRole("button");
 	let [headerFirst, headerLast, chatButton, viewFirst, viewLast] = await Promise.all([
 		headerControls.first().boundingBox(),
@@ -468,7 +468,7 @@ test("the Projects drawer below 1024px keeps the split workspace", async ({ join
 	await expect(page.getByRole("dialog", { name: "Chat" })).toHaveCount(0);
 	await expect(content(page)).toBeEditable();
 	await expect(page.getByRole("separator", { name: "Resize chat" })).toBeVisible();
-	await page.getByRole("button", { name: "Hide chat pane" }).click();
+	await page.getByRole("button", { name: "Close sidebar" }).click();
 	await expect(chat).toBeHidden();
 	let opener = page.getByRole("button", { name: "Show chat pane" });
 	await expect(opener).toBeFocused();

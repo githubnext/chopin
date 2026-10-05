@@ -202,7 +202,7 @@ test("a desktop comment uses a stable document-edge surface", async ({ join, see
 	await seed(PROSE);
 	let page = await join("ana");
 	await page.setViewportSize({ width: 1_440, height: 900 });
-	await page.getByRole("button", { name: "Hide chat pane" }).click();
+	await page.getByRole("button", { name: "Close sidebar" }).click();
 	await page.getByRole("button", { name: "Collapse Projects sidebar" }).click();
 	let card = await thread(page);
 	let document = page.locator(".plan-document");
@@ -1212,7 +1212,7 @@ test("clicking a comment button pins its document card and preserves the related
 	await seed(PROSE);
 	let page = await join("ana");
 	await page.setViewportSize({ width: 1_440, height: 900 });
-	await page.getByRole("button", { name: "Hide chat pane" }).click();
+	await page.getByRole("button", { name: "Close sidebar" }).click();
 	await page.getByRole("button", { name: "Collapse Projects sidebar" }).click();
 	let card = await thread(page);
 	await expect(card).toContainText("@dev");

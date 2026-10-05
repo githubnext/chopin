@@ -260,7 +260,7 @@ test("a child isolates chat and decisions across every parent-owned close path",
 	await expect(parentChat).not.toContainText(childRoomMessage);
 	await expect(parentChat).not.toContainText(childPlannerTranscript);
 	await childChat.getByRole("button", {
-		name: "Hide chat pane",
+		name: "Close sidebar",
 		exact: true,
 	}).click();
 	await expect(childChat).toBeHidden();
@@ -300,7 +300,7 @@ test("a child isolates chat and decisions across every parent-owned close path",
 	await expect(childChat.getByText(childRoomMessage, { exact: true })).toBeVisible();
 	await expect(childChat.getByText(childPlannerTranscript, { exact: true })).toBeVisible();
 	await childChat.getByRole("button", {
-		name: "Hide chat pane",
+		name: "Close sidebar",
 		exact: true,
 	}).click();
 	await parentHeader.getByRole("button", { name: `Return to Test ${room.slice(0, 8)}` }).click();
@@ -411,7 +411,7 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 	await expect(childChat).toBeVisible();
 	await expect(parentChat).toBeVisible();
 	await childChat.getByRole("button", {
-		name: "Hide chat pane",
+		name: "Close sidebar",
 		exact: true,
 	}).click();
 	await expect(childChat).toBeHidden();

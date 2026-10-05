@@ -146,16 +146,18 @@ export function ChatToggle(
 	return (
 		<button
 			aria-controls={controls}
+			aria-description={open ? status : undefined}
 			aria-expanded={open}
-			aria-label={`${open ? "Hide" : "Show"} chat pane${status ? `, ${status}` : ""}`}
+			aria-label={open ? "Close sidebar" : `Show chat pane${status ? `, ${status}` : ""}`}
 			className={`chat-toggle btn btn-icon btn-ghost relative shrink-0 ${className ?? ""}`}
-			data-tooltip={open ? "Hide Chat" : "Show Chat"}
+			data-tooltip={open ? "Close sidebar" : "Show Chat"}
+			data-tooltip-verbatim={open ? "" : undefined}
 			data-activity={activity.busy ? "busy" : activity.unread > 0 ? "unread" : undefined}
 			onClick={onToggle}
 			ref={buttonRef}
 			type="button"
 		>
-			{open && swapOnHover
+			{swapOnHover
 				? (
 					<span
 						className={`${feedback} grid size-[14px]`}
@@ -168,7 +170,7 @@ export function ChatToggle(
 						/>
 						<img
 							alt=""
-							className="chat-toggle-icon chat-toggle-icon-close col-start-1 row-start-1 size-[14px]"
+							className="chat-toggle-icon chat-toggle-icon-sidebar col-start-1 row-start-1 size-[14px] rotate-180"
 							src={chatCloseIcon}
 						/>
 					</span>
@@ -182,7 +184,7 @@ export function ChatToggle(
 						src={open ? chatCloseIcon : chatIcon}
 					/>
 				)}
-			{status && (
+			{status && !open && (
 				<span
 					aria-hidden="true"
 					className={`absolute right-1 top-1 size-1.5 rounded-full bg-brand ${
@@ -345,7 +347,10 @@ export function Workspace(
 					>
 						{mode === "split"
 							? (
-								<div className="group flex h-[46px] shrink-0 items-center gap-2 px-3.5 hairline-b">
+								<div
+									className="chat-header flex h-[46px] shrink-0 items-center gap-2 px-3.5 hairline-b"
+									data-chat-header
+								>
 									{presentation.separatorVisible && (
 										<ResizeHandle
 											label="Resize chat"
@@ -356,14 +361,16 @@ export function Workspace(
 											width={chatWidth}
 										/>
 									)}
-									<ChatToggle
-										activity={chatActivity}
-										className="chat-header-control -ml-[5px] -mr-[5px]"
-										controls={ids.pane.chat}
-										onToggle={dismissChat}
-										open
-										swapOnHover
-									/>
+									<span
+										aria-hidden="true"
+										className="relative grid size-[14px] shrink-0"
+										data-chat-identity
+									>
+										<img alt="" className="size-[14px]" src={chatIcon} />
+										{(chatActivity.busy || chatActivity.unread > 0) && (
+											<span className="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-brand" />
+										)}
+									</span>
 									<h2
 										className="text-sm font-medium text-text-tertiary"
 										id={ids.heading.chat}
@@ -371,6 +378,13 @@ export function Workspace(
 									>
 										Chat
 									</h2>
+									<ChatToggle
+										activity={chatActivity}
+										className="chat-header-control -mr-[5px] ml-auto"
+										controls={ids.pane.chat}
+										onToggle={dismissChat}
+										open
+									/>
 								</div>
 							)
 							: (
@@ -416,6 +430,7 @@ export function Workspace(
 										controls={ids.pane.chat}
 										onToggle={showDesktopChat}
 										open={false}
+										swapOnHover
 									/>
 								)}
 								{controls}
