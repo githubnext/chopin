@@ -82,7 +82,15 @@ describe("Comment card hierarchy", () => {
 		expect(markup.indexOf("@ana")).toBeLessThan(markup.indexOf("Close comment"));
 		expect(markup).not.toContain("data-plan-comment-context");
 		expect(markup).not.toContain('aria-label="the rollout');
-		expect(markup).toContain("text-brand-ink");
+	});
+
+	it("shows authors as chat does: a face, a display name and the handle for assistive tech", () => {
+		let markup = render(view("open"), true);
+
+		expect(markup).toContain('alt="ana"');
+		expect(markup).toContain(">Ana<");
+		expect(markup).toContain("(@ana)");
+		expect(markup).not.toContain("text-brand-ink");
 	});
 
 	it("keeps a draft focused on writing rather than repeated context", () => {
@@ -95,7 +103,12 @@ describe("Comment card hierarchy", () => {
 
 		expect(markup).not.toContain("<h3");
 		expect(markup).toContain('aria-label="Close comment"');
+		expect(markup.split('aria-label="Close comment"')).toHaveLength(2);
 		expect(markup).toContain('data-plan-comment-draft-header="true"');
+		expect(markup).toContain('aria-label="Post comment"');
+		expect(markup).toContain('data-inset-send="true"');
+		expect(markup).not.toContain(">Comment</button>");
+		expect(markup).not.toContain(">Cancel</button>");
 		expect(markup).not.toContain("data-plan-comment-context");
 		expect(markup).not.toContain("the rollout");
 		expect(markup).not.toContain("resize-y");

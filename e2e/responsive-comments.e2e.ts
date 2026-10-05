@@ -330,7 +330,7 @@ test("a grouped marker opens a list of its threads and keeps keyboard order", as
 	await expect(marker).toBeFocused();
 });
 
-test("an open comment card renders above every other marker", async ({ join, seed }) => {
+test("an open comment card leaves every other marker uncovered", async ({ join, seed }) => {
 	await seed(PLAN);
 	let page = await join("ana", { viewport: { width: 1_440, height: 900 } });
 	for (let index = 1; index <= 4; index++) await commentOn(page, index, `Note ${index}.`);
@@ -344,14 +344,69 @@ test("an open comment card renders above every other marker", async ({ join, see
 	await expect(page.locator("[data-plan-comment-button][inert]")).toHaveCount(4);
 
 	let cardBox = (await card.boundingBox())!;
-	let covered = await markers.evaluateAll((buttons, box) =>
-		buttons.flatMap(button => {
+	let chips = await markers.evaluateAll(buttons =>
+		buttons.map(button => {
 			let chip = button.querySelector(".plan-comment-chip")!.getBoundingClientRect();
-			let x = chip.left + chip.width / 2;
-			let y = chip.top + chip.height / 2;
-			let inside = x > box.x && x < box.x + box.width && y > box.y && y < box.y + box.height;
-			return inside ? [!!document.elementFromPoint(x, y)?.closest("[role=dialog]")] : [];
-		}), cardBox);
-	expect(covered.length).toBeGreaterThan(0);
-	expect(covered.every(Boolean)).toBe(true);
+			return { x: chip.x, y: chip.y, width: chip.width, height: chip.height };
+		})
+	);
+	expect(chips.filter(chip => overlaps(cardBox, chip))).toEqual([]);
+});
+
+type Box = { x: number; y: number; width: number; height: number };
+
+function overlaps(a: Box, b: Box): boolean {
+	return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height
+		&& b.y < a.y + a.height;
+}
+
+test("a desktop comment card opens beside its passage instead of over it", async ({ join, seed }) => {
+	await seed(PLAN);
+	let page = await join("ana", { viewport: { width: 1_440, height: 900 } });
+	let paragraph = page.locator(".plan-content > p").first();
+
+	await page.getByRole("button", { name: /Comment on “/ }).first().click();
+	let card = page.getByRole("dialog", { name: "Comment thread" });
+	await expect(card).toBeVisible();
+	let hits = await page.locator("[data-plan-comment-hit]").evaluateAll(elements =>
+		elements.map(element => {
+			let box = element.getBoundingClientRect();
+			return { x: box.x, y: box.y, width: box.width, height: box.height };
+		})
+	);
+	expect(hits.length).toBeGreaterThan(0);
+	await expect.poll(async () => {
+		let box = (await card.boundingBox())!;
+		return hits.some(hit => overlaps(box, hit));
+	}).toBe(false);
+	let cardBox = (await card.boundingBox())!;
+	let paragraphBox = (await paragraph.boundingBox())!;
+	expect(cardBox.x).toBeGreaterThanOrEqual(paragraphBox.x - 1);
+	expect(cardBox.x + cardBox.width).toBeLessThanOrEqual(paragraphBox.x + paragraphBox.width + 1);
+	// Authors read as they do in Chat: a face beside a display name.
+	await expect(card.getByRole("img", { name: "dev" })).toBeVisible();
+	await page.keyboard.press("Escape");
+
+	let target = page.locator(".plan-content > p").nth(4);
+	await target.selectText();
+	await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
+	let draft = page.getByRole("dialog", { name: "New comment" });
+	let field = draft.getByPlaceholder("Comment on this passage…");
+	await expect(field).toBeFocused();
+	await expect(draft.getByRole("button", { name: "Cancel" })).toHaveCount(0);
+	await expect(draft.getByRole("button", { name: "Close comment" })).toHaveCount(1);
+	await expect.poll(async () =>
+		overlaps((await draft.boundingBox())!, (await target.boundingBox())!)
+	)
+		.toBe(false);
+
+	await field.press("Escape");
+	await expect(draft).toHaveCount(0);
+
+	await target.selectText();
+	await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
+	await field.fill("Submitted with Enter, like a reply.");
+	await field.press("Enter");
+	await expect(draft).toHaveCount(0);
+	await expect(page.getByRole("button", { name: /Comment on “Paragraph 5/ })).toBeVisible();
 });

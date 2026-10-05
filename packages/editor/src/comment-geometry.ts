@@ -131,18 +131,60 @@ export function popoverPoint(
 	};
 }
 
-/** Keep an engaged comment in one predictable document-edge surface. */
-export function edgePanelPoint(
-	anchor: Rect,
+export type CardPoint = Point & { width: number; maxHeight?: number };
+
+/**
+ * Place an open comment card where it never covers its own passage.
+ *
+ * When the gutter right of the prose column holds the card beyond the marker
+ * lane, it sits there beside the passage's first line. Otherwise it sits
+ * directly below the passage, or above it when only that side has room, aligned
+ * to the passage's left edge and kept inside the column. When neither side
+ * holds the whole card, the roomier side caps its height so it scrolls instead.
+ * A passage scrolled out of view lets the card clamp back inside the document.
+ */
+export function commentCardPoint(
+	passage: Rect,
+	column: Rect,
 	host: Rect,
 	width: number,
 	height: number,
-	inset = 12,
-): Point {
-	return {
-		top: clamp(anchor.top - host.top, inset, host.height - height - inset),
-		left: Math.max(inset, host.width - width - inset),
-	};
+	{ gap = 8, inset = 12, lane = 40, minWidth = 264 }: {
+		gap?: number;
+		inset?: number;
+		lane?: number;
+		minWidth?: number;
+	} = {},
+): CardPoint {
+	let gutter = host.right - inset - (column.right + lane);
+	if (gutter >= minWidth) {
+		let fitted = Math.min(width, gutter);
+		return {
+			top: clamp(passage.top - host.top, inset, host.height - height - inset),
+			left: column.right + lane - host.left,
+			width: fitted,
+		};
+	}
+
+	let fitted = Math.min(width, column.width);
+	let left = clamp(
+		passage.left - host.left,
+		column.left - host.left,
+		column.right - host.left - fitted,
+	);
+	let below = host.bottom - inset - (passage.bottom + gap);
+	let above = passage.top - gap - (host.top + inset);
+	let point: CardPoint = { top: passage.bottom + gap - host.top, left, width: fitted };
+	if (height > below) {
+		if (height <= above) point.top = passage.top - gap - height - host.top;
+		else if (above > below) {
+			point.top = inset;
+			point.maxHeight = above;
+		} else point.maxHeight = below;
+	}
+	let shown = Math.min(height, point.maxHeight ?? height);
+	point.top = clamp(point.top, inset, host.height - shown - inset);
+	return point;
 }
 
 function clamp(value: number, lower: number, upper: number): number {

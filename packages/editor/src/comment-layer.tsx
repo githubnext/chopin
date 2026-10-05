@@ -7,8 +7,8 @@ import { MessageIcon } from "@chopin/icons";
 import { useCellValue } from "@mdxeditor/gurx";
 import { $getNodeByKey } from "lexical";
 
-import { DraftCard, ThreadCard, ThreadList } from "./comments";
-import { blockMarkerPoints, edgePanelPoint, markerRect, popoverPoint } from "./comment-geometry";
+import { Author, DraftCard, ThreadCard, ThreadList } from "./comments";
+import { blockMarkerPoints, commentCardPoint, markerRect, popoverPoint } from "./comment-geometry";
 import { containsHit, passageHits } from "./comment-hits";
 import { CommentSheet, usesCommentSheet } from "./comment-sheet";
 import { useCommentSheetReveal } from "./comment-sheet-reveal";
@@ -27,6 +27,8 @@ import type { ThreadStore, ThreadView } from "./threads";
 /** The visible chip; a coarse pointer gets a larger, invisible hit area around it. */
 const CHIP = 24;
 const TOUCH_TARGET = 44;
+/** The gutter strip beside the prose that block markers, even grouped ones, occupy. */
+const MARKER_LANE = 56;
 
 type PlacedThread = {
 	view: ThreadView;
@@ -77,6 +79,24 @@ function firstLine(element: HTMLElement, box: Rect): { top: number; height: numb
 	let height = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2 || CHIP;
 	let inset = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.borderTopWidth) || 0);
 	return { top: box.top + inset, height: Math.min(height, box.height - inset || height) };
+}
+
+/** The prose column: the editor root inside its padding. */
+function proseColumn(root: HTMLElement): Rect {
+	let box = root.getBoundingClientRect();
+	let style = getComputedStyle(root);
+	let left = box.left + (parseFloat(style.paddingLeft) || 0);
+	let right = box.right - (parseFloat(style.paddingRight) || 0);
+	return { top: box.top, right, bottom: box.bottom, left, width: right - left, height: box.height };
+}
+
+function union(rects: Rect[]): Rect | undefined {
+	if (rects.length === 0) return undefined;
+	let top = Math.min(...rects.map(item => item.top));
+	let right = Math.max(...rects.map(item => item.right));
+	let bottom = Math.max(...rects.map(item => item.bottom));
+	let left = Math.min(...rects.map(item => item.left));
+	return { top, right, bottom, left, width: right - left, height: bottom - top };
 }
 
 function chipWidth(count: number): number {
@@ -167,11 +187,17 @@ function PreviewContent({ view }: { view: ThreadView }) {
 		<>
 			{opening && (
 				<>
-					<p className="plan-comment-preview-author">@{opening.handle}</p>
+					<p className="plan-comment-preview-author">
+						<Author handle={opening.handle} />
+					</p>
 					<p className="plan-comment-preview-note">{opening.text}</p>
 				</>
 			)}
-			{replies > 0 && <span>{replies} {replies === 1 ? "reply" : "replies"}</span>}
+			{replies > 0 && (
+				<span className="plan-comment-preview-replies">
+					{replies} {replies === 1 ? "reply" : "replies"}
+				</span>
+			)}
 		</>
 	);
 }
@@ -735,13 +761,20 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		? state.threads.find(view => view.thread.id === pinned && view.thread.status === "open")
 		: undefined;
 	let pinnedMarker = pinnedList ?? (pinnedView ? markerOf(pinnedView.thread.id) : undefined);
+	// The full content height, so a card capped to fit beside its passage keeps its true size.
 	let rememberHeight = (id: string, element: HTMLDivElement | null) => {
-		let height = element?.offsetHeight;
+		let height = element?.scrollHeight;
 		if (!height) return;
 		setCardHeights(current => current[id] === height ? current : { ...current, [id]: height });
 	};
-	let page = host.getBoundingClientRect();
+	let page = rect(host.getBoundingClientRect());
+	let editorRoot = editor.getRootElement();
+	let column = editorRoot ? proseColumn(editorRoot) : page;
 	let cardWidth = Math.min(320, host.clientWidth - 24);
+	let cardPoint = (passage: Rect, id: string) =>
+		commentCardPoint(passage, column, page, cardWidth, cardHeights[id] ?? 0, {
+			lane: MARKER_LANE,
+		});
 	let previewWidth = Math.min(288, host.clientWidth * 0.8);
 	let compactKey: string | undefined;
 	let compactId: string | undefined;
@@ -757,7 +790,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		? {
 			button: previewMarker.button,
 			id: `plan-comment-preview-${previewView.thread.id}`,
-			page: rect(page),
+			page,
 			size: CHIP,
 			view: previewView,
 			width: previewWidth,
@@ -805,7 +838,16 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	}
 
 	let pinnedCard: CommentSurfaceValue | undefined;
-	if (!compact && pinned && pinnedMarker && (pinnedView || pinnedList)) {
+	let pinnedPassage = pinnedMarker && union(
+		placed
+			.filter(entry =>
+				pinnedView
+					? entry.view.thread.id === pinnedView.thread.id
+					: entry.marker === pinnedMarker.key
+			)
+			.flatMap(entry => entry.passages),
+	);
+	if (!compact && pinned && pinnedMarker && pinnedPassage && (pinnedView || pinnedList)) {
 		let id = dialogId(pinned);
 		let hoverId = pinnedView?.thread.id;
 		pinnedCard = {
@@ -825,12 +867,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			onMeasure: element => rememberHeight(id, element),
 			onMouseEnter: hoverId ? () => hover(hoverId) : undefined,
 			onMouseLeave: hoverId ? () => unhover(hoverId) : undefined,
-			style: edgePanelPoint(
-				markerRect(pinnedMarker.button, page, CHIP),
-				page,
-				cardWidth,
-				cardHeights[id] ?? 0,
-			),
+			style: cardPoint(pinnedPassage, id),
 		};
 	}
 	// An open card keeps the reader on it: every other marker steps back.
@@ -955,12 +992,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 						),
 						className: "plan-comment-card",
 						onMeasure: element => rememberHeight("draft", element),
-						style: edgePanelPoint(
-							draft.placement,
-							page,
-							cardWidth,
-							cardHeights.draft ?? 0,
-						),
+						style: cardPoint(draft.placement, "draft"),
 					}
 					: undefined}
 			/>

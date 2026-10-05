@@ -18,15 +18,24 @@ import { ArrowUpIcon, CheckIcon, ChevronIcon, CloseIcon, MessageIcon } from "@ch
 import { limits } from "@chopin/dialect";
 
 import { Provenance, SidecarCard, when } from "./card";
+import { Face } from "./face";
 
 import type { KeyboardEvent, ReactNode } from "react";
 import type { Comment } from "@chopin/protocol";
 import type { ThreadView } from "./threads";
 
-function Who({ handle }: { handle: string }) {
+/** Chat's author row: face, display name, quiet timestamp. The handle stays in the name. */
+export function Author({ handle, ts }: { handle: string; ts?: number }) {
 	return (
-		<span className="text-sm font-semibold text-brand-ink">
-			@{handle}
+		<span className="flex min-w-0 items-center gap-2 text-sm">
+			<Face handle={handle} size={20} titled={false} />
+			<span className="min-w-0 truncate font-semibold" title={`@${handle}`}>
+				{handle ? handle[0]!.toUpperCase() + handle.slice(1) : handle}
+				<span className="sr-only">(@{handle})</span>
+			</span>
+			{ts !== undefined && (
+				<span className="shrink-0 text-text-quaternary tabular-nums">{when(ts)}</span>
+			)}
 		</span>
 	);
 }
@@ -46,15 +55,10 @@ function Note({
 			data-plan-comment-opening-note={opening || undefined}
 		>
 			<div className="flex min-h-7 items-center justify-between gap-2">
-				<div className="flex min-w-0 items-baseline gap-2">
-					<Who handle={note.handle} />
-					<span className="truncate text-sm text-text-tertiary tabular-nums">
-						{when(note.ts)}
-					</span>
-				</div>
+				<Author handle={note.handle} ts={note.ts} />
 				{action}
 			</div>
-			<p className="m-0 text-sm whitespace-pre-wrap text-text-primary">{note.text}</p>
+			<p className="m-0 pl-7 text-sm whitespace-pre-wrap text-text-primary">{note.text}</p>
 		</li>
 	);
 }
@@ -103,10 +107,11 @@ function Quote({ drifted, text }: { drifted?: boolean; text: string }) {
 }
 
 /**
- * A textarea that submits on Enter.
+ * A textarea with its send button inside. Enter submits and Escape cancels.
  *
  * Shift-Enter is a newline, which is the convention every chat surface uses and
- * the one the composer next door already follows.
+ * the one the composer next door already follows. New comments and replies share
+ * this one shape.
  */
 function Composer({
 	autoFocus,
@@ -116,7 +121,6 @@ function Composer({
 	onSend,
 	onTyping,
 	placeholder,
-	insetSend,
 	sendLabel,
 }: {
 	autoFocus?: boolean;
@@ -126,7 +130,6 @@ function Composer({
 	onSend: (text: string) => void;
 	onTyping?: (writing: boolean) => void;
 	placeholder: string;
-	insetSend?: boolean;
 	sendLabel?: string;
 }) {
 	let [text, setText] = useState("");
@@ -168,58 +171,34 @@ function Composer({
 	};
 
 	return (
-		<div className="flex flex-col gap-1.5">
-			<div
-				className="plan-comment-composer relative"
-				data-inset-send={insetSend || undefined}
-				data-plan-comment-composer-shell={insetSend || undefined}
+		<div
+			className="plan-comment-composer relative"
+			data-inset-send
+			data-plan-comment-composer-shell
+		>
+			<textarea
+				ref={ref}
+				className="plan-comment-composer-field field block min-h-16 w-full resize-none px-2 py-1.5 text-sm"
+				disabled={busy}
+				maxLength={limits.MAX_NOTE}
+				onChange={event => {
+					setText(event.target.value);
+					onTyping?.(event.target.value.length > 0);
+				}}
+				onKeyDown={key}
+				placeholder={placeholder}
+				value={text}
+			/>
+			<button
+				aria-label={sendLabel ?? `Send ${label.toLowerCase()}`}
+				className="plan-comment-send btn btn-icon btn-primary absolute right-2 bottom-2 rounded-full"
+				disabled={!text.trim() || busy}
+				onClick={send}
+				title={sendLabel ?? `Send ${label.toLowerCase()}`}
+				type="button"
 			>
-				<textarea
-					ref={ref}
-					className="plan-comment-composer-field field block min-h-16 w-full resize-none px-2 py-1.5 text-sm"
-					disabled={busy}
-					maxLength={limits.MAX_NOTE}
-					onChange={event => {
-						setText(event.target.value);
-						onTyping?.(event.target.value.length > 0);
-					}}
-					onKeyDown={key}
-					placeholder={placeholder}
-					value={text}
-				/>
-				{insetSend && (
-					<button
-						aria-label={sendLabel ?? `Send ${label.toLowerCase()}`}
-						className="plan-comment-send btn btn-icon btn-primary absolute right-2 bottom-2 rounded-full"
-						disabled={!text.trim() || busy}
-						onClick={send}
-						title={sendLabel ?? `Send ${label.toLowerCase()}`}
-						type="button"
-					>
-						<ArrowUpIcon aria-hidden="true" size={14} />
-					</button>
-				)}
-				{onCancel && (
-					<div className="mt-1.5 flex items-center gap-2">
-						<button
-							className="btn btn-sm btn-primary"
-							data-plan-comment-submit
-							disabled={!text.trim() || busy}
-							onClick={send}
-							type="button"
-						>
-							{label}
-						</button>
-						<button
-							className="btn btn-sm btn-secondary"
-							onClick={onCancel}
-							type="button"
-						>
-							Cancel
-						</button>
-					</div>
-				)}
-			</div>
+				<ArrowUpIcon aria-hidden="true" size={14} />
+			</button>
 		</div>
 	);
 }
@@ -367,7 +346,6 @@ export function ThreadCard({
 						onSend={onReply}
 						onTyping={onTyping}
 						placeholder="Reply…"
-						insetSend
 					/>
 					{confirmation
 						? (
@@ -495,14 +473,14 @@ export function ThreadList(
 								type="button"
 							>
 								<span className="flex min-w-0 items-baseline justify-between gap-2">
-									{opening && <Who handle={opening.handle} />}
+									{opening && <Author handle={opening.handle} />}
 									{replies > 0 && (
 										<span className="text-xs text-text-tertiary tabular-nums">
 											{replies} {replies === 1 ? "reply" : "replies"}
 										</span>
 									)}
 								</span>
-								<span className="plan-comment-group-note text-sm text-text-secondary">
+								<span className="plan-comment-group-note pl-7 text-sm text-text-secondary">
 									{opening?.text.split("\n")[0]}
 								</span>
 							</button>
@@ -528,9 +506,8 @@ export function DraftCard({ busy, onCancel, onSend, showClose = true }: DraftCar
 			<Composer
 				autoFocus
 				busy={busy}
-				insetSend={!showClose}
 				label="Comment"
-				onCancel={showClose ? onCancel : undefined}
+				onCancel={onCancel}
 				onSend={onSend}
 				placeholder="Comment on this passage…"
 				sendLabel="Post comment"
