@@ -131,7 +131,9 @@ export function popoverPoint(
 	};
 }
 
-export type CardPoint = Point & { width: number; maxHeight?: number };
+/** Where the card sits relative to its passage, so its entrance can come from there. */
+export type CardSide = "right" | "below" | "above";
+export type CardPoint = Point & { width: number; side: CardSide; maxHeight?: number };
 
 /**
  * Place an open comment card where it never covers its own passage.
@@ -149,7 +151,7 @@ export function commentCardPoint(
 	host: Rect,
 	width: number,
 	height: number,
-	{ gap = 8, inset = 12, lane = 40, minWidth = 264 }: {
+	{ gap = 8, inset = 12, lane = 56, minWidth = 264 }: {
 		gap?: number;
 		inset?: number;
 		lane?: number;
@@ -163,6 +165,7 @@ export function commentCardPoint(
 			top: clamp(passage.top - host.top, inset, host.height - height - inset),
 			left: column.right + lane - host.left,
 			width: fitted,
+			side: "right",
 		};
 	}
 
@@ -174,12 +177,20 @@ export function commentCardPoint(
 	);
 	let below = host.bottom - inset - (passage.bottom + gap);
 	let above = passage.top - gap - (host.top + inset);
-	let point: CardPoint = { top: passage.bottom + gap - host.top, left, width: fitted };
+	let point: CardPoint = {
+		top: passage.bottom + gap - host.top,
+		left,
+		width: fitted,
+		side: "below",
+	};
 	if (height > below) {
-		if (height <= above) point.top = passage.top - gap - height - host.top;
-		else if (above > below) {
+		if (height <= above) {
+			point.top = passage.top - gap - height - host.top;
+			point.side = "above";
+		} else if (above > below) {
 			point.top = inset;
 			point.maxHeight = above;
+			point.side = "above";
 		} else point.maxHeight = below;
 	}
 	let shown = Math.min(height, point.maxHeight ?? height);

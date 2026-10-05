@@ -203,7 +203,7 @@ function overlaps(card: CardPoint, height: number, target: Rect, page: Rect): bo
 
 test("places a comment card directly below its passage, at the passage's left edge", () => {
 	expect(commentCardPoint(passage(200), column, host, 320, 200))
-		.toEqual({ top: 132, left: 200, width: 320 });
+		.toEqual({ top: 132, left: 200, width: 320, side: "below" });
 });
 
 test("keeps a comment card inside the prose column", () => {
@@ -214,22 +214,31 @@ test("keeps a comment card inside the prose column", () => {
 
 test("flips a comment card above its passage when there is no room below", () => {
 	expect(commentCardPoint(passage(600), column, host, 320, 200))
-		.toEqual({ top: 292, left: 200, width: 320 });
+		.toEqual({ top: 292, left: 200, width: 320, side: "above" });
 });
 
 test("caps a card that fits neither side to the roomier side of its passage", () => {
 	expect(commentCardPoint(passage(300), column, host, 320, 500))
-		.toEqual({ top: 232, left: 200, width: 320, maxHeight: 356 });
+		.toEqual({ top: 232, left: 200, width: 320, side: "below", maxHeight: 356 });
 	expect(commentCardPoint(passage(500), column, host, 320, 500))
-		.toEqual({ top: 12, left: 200, width: 320, maxHeight: 380 });
+		.toEqual({ top: 12, left: 200, width: 320, side: "above", maxHeight: 380 });
 });
 
 test("puts a comment card in a wide gutter beside the passage's first line", () => {
 	let wide = { ...host, right: 1_300, width: 1_200 };
 	expect(commentCardPoint(passage(200), column, wide, 320, 200))
-		.toEqual({ top: 100, left: 640, width: 320 });
-	let snug = { ...host, right: 1_020, width: 920 };
+		.toEqual({ top: 100, left: 656, width: 320, side: "right" });
+	let snug = { ...host, right: 1_036, width: 936 };
 	expect(commentCardPoint(passage(200), column, snug, 320, 200).width).toBe(268);
+});
+
+test("keeps a gutter card clear of the 56px marker lane", () => {
+	let wide = { ...host, right: 1_300, width: 1_200 };
+	let card = commentCardPoint(passage(200), column, wide, 320, 200);
+	expect(wide.left + card.left).toBe(column.right + 56);
+	// Room for the card only if the marker lane is ignored: it goes below instead.
+	let tight = { ...host, right: 1_020, width: 920 };
+	expect(commentCardPoint(passage(200), column, tight, 320, 200).side).toBe("below");
 });
 
 test("never covers a visible passage", () => {

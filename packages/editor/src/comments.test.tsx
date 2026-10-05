@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { DraftCard, ThreadCard } from "./comments";
+import { composerKey, DraftCard, ThreadCard } from "./comments";
+import { displayName } from "./display-name";
 
 import type { Comment } from "@chopin/protocol";
 import type { ThreadView } from "./threads";
@@ -127,6 +128,9 @@ describe("Comment card hierarchy", () => {
 		expect(markup).toContain('data-inset-send="true"');
 		expect(markup).not.toContain(">Comment</button>");
 		expect(markup).not.toContain(">Cancel</button>");
+		// The sheet shows its close beside the grabber, so no empty header row remains.
+		expect(markup).not.toContain("data-plan-comment-draft-header");
+		expect(markup).not.toContain("Close comment");
 	});
 
 	it("uses one inset reply action and orders resolution outcomes", () => {
@@ -138,5 +142,35 @@ describe("Comment card hierarchy", () => {
 		expect(markup).not.toContain(">Reply</button>");
 		expect(markup).toContain("Apply feedback");
 		expect(markup.indexOf("Dismiss")).toBeLessThan(markup.indexOf("Apply feedback"));
+	});
+});
+
+describe("Comment composer keys", () => {
+	let key = (
+		name: string,
+		extra: Partial<{ shiftKey: boolean; isComposing: boolean; keyCode: number }> = {},
+	) => ({ key: name, shiftKey: false, isComposing: false, ...extra });
+
+	it("sends on Enter and keeps Shift-Enter for a newline", () => {
+		expect(composerKey(key("Enter"), false)).toBe("send");
+		expect(composerKey(key("Enter", { shiftKey: true }), false)).toBeUndefined();
+		expect(composerKey(key("Escape"), false)).toBe("cancel");
+	});
+
+	it("never sends while an IME candidate is being confirmed", () => {
+		expect(composerKey(key("Enter", { isComposing: true }), false)).toBeUndefined();
+		expect(composerKey(key("Enter", { keyCode: 229 }), false)).toBeUndefined();
+	});
+
+	it("treats Enter as a newline on a coarse pointer, leaving sending to the button", () => {
+		expect(composerKey(key("Enter"), true)).toBeUndefined();
+		expect(composerKey(key("Escape"), true)).toBe("cancel");
+	});
+});
+
+describe("displayName", () => {
+	it("names a person as Chat does", () => {
+		expect(displayName("ana")).toBe("Ana");
+		expect(displayName("")).toBe("");
 	});
 });

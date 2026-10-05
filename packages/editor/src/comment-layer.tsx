@@ -20,7 +20,7 @@ import { useTransitionPresence } from "./transition-presence";
 import { widgets$ } from "./widget-options";
 
 import type { CSSProperties, ReactNode } from "react";
-import type { BlockMarkerPoint, Point, Rect } from "./comment-geometry";
+import type { BlockMarkerPoint, CardSide, Point, Rect } from "./comment-geometry";
 import type { PassageHit } from "./comment-hits";
 import type { ThreadStore, ThreadView } from "./threads";
 
@@ -261,6 +261,7 @@ type CommentSurfaceValue = {
 	children: ReactNode;
 	className: string;
 	id?: string;
+	side?: CardSide;
 	onMeasure?: (element: HTMLDivElement | null) => void;
 	onMouseEnter?: () => void;
 	onMouseLeave?: () => void;
@@ -298,6 +299,7 @@ function CommentSurface(
 			aria-modal={!lifecycle.inert && compact ? true : undefined}
 			className={`${surface.className} motion-comment-surface ${lifecycle.presence.className}`}
 			data-motion-presentation={compact ? "sheet" : "popover"}
+			data-side={surface.side}
 			id={surface.id}
 			inert={lifecycle.inert}
 			onMouseEnter={surface.onMouseEnter}
@@ -771,10 +773,17 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let editorRoot = editor.getRootElement();
 	let column = editorRoot ? proseColumn(editorRoot) : page;
 	let cardWidth = Math.min(320, host.clientWidth - 24);
-	let cardPoint = (passage: Rect, id: string) =>
-		commentCardPoint(passage, column, page, cardWidth, cardHeights[id] ?? 0, {
-			lane: MARKER_LANE,
-		});
+	let cardPlacement = (passage: Rect, id: string) => {
+		let { side, ...style } = commentCardPoint(
+			passage,
+			column,
+			page,
+			cardWidth,
+			cardHeights[id] ?? 0,
+			{ lane: MARKER_LANE },
+		);
+		return { side, style };
+	};
 	let previewWidth = Math.min(288, host.clientWidth * 0.8);
 	let compactKey: string | undefined;
 	let compactId: string | undefined;
@@ -867,7 +876,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			onMeasure: element => rememberHeight(id, element),
 			onMouseEnter: hoverId ? () => hover(hoverId) : undefined,
 			onMouseLeave: hoverId ? () => unhover(hoverId) : undefined,
-			style: cardPoint(pinnedPassage, id),
+			...cardPlacement(pinnedPassage, id),
 		};
 	}
 	// An open card keeps the reader on it: every other marker steps back.
@@ -992,7 +1001,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 						),
 						className: "plan-comment-card",
 						onMeasure: element => rememberHeight("draft", element),
-						style: cardPoint(draft.placement, "draft"),
+						...cardPlacement(draft.placement, "draft"),
 					}
 					: undefined}
 			/>
@@ -1035,6 +1044,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			{documentChrome}
 			{compactKey && compactId && compactLabel && compactClose && (
 				<CommentSheet
+					closeVisible={compactKey === "draft"}
 					id={compactId}
 					key={compactKey}
 					label={compactLabel}

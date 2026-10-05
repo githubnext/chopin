@@ -25,6 +25,7 @@ export {
 	MotionDisclosureIcon,
 } from "./disclosure-motion";
 export type { MotionDisclosureContract } from "./disclosure-motion";
+export { displayName } from "./display-name";
 export { AgentFace, Face } from "./face";
 export type { FaceProps } from "./face";
 export { PlanEditor } from "./plan-editor";
