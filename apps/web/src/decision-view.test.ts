@@ -75,7 +75,7 @@ test("child mode renders only Document and Decisions destinations", () => {
 	expect(markup).not.toContain("Background Work");
 });
 
-test("new unanswered decisions expose an accessible actionable count", () => {
+test("unanswered decisions expose an accessible count with quiet styling", () => {
 	let markup = renderToStaticMarkup(
 		createElement(DecisionViewControl, {
 			attention: true,
@@ -86,5 +86,21 @@ test("new unanswered decisions expose an accessible actionable count", () => {
 	);
 
 	expect(markup).toContain('aria-label="Decisions, 2 unanswered"');
+	expect(markup).toContain('aria-hidden="true"');
 	expect(markup).toContain('data-motion-feedback="count"');
+	let badgeClass = markup.match(/class="([^"]+)" data-motion-feedback="count"/)?.[1];
+	let classes = badgeClass?.split(/\s+/) ?? [];
+	for (
+		let className of [
+			"h-5",
+			"min-w-5",
+			"rounded-sm",
+			"bg-inset",
+			"text-xs",
+			"text-text-tertiary",
+			"tabular-nums",
+		]
+	) {
+		expect(classes).toContain(className);
+	}
 });
