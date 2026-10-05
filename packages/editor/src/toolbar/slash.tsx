@@ -50,7 +50,7 @@ import {
 	FormulaIcon,
 	ImageIcon,
 	InfoIcon,
-	SearchIcon,
+	MagnifierIcon,
 	TableIcon,
 	TabsIcon,
 } from "@chopin/icons";
@@ -249,7 +249,7 @@ const COMMANDS: SlashCommand[] = [
 	{
 		id: "diff",
 		label: "Diff",
-		hint: "Show added and removed lines",
+		hint: "Added and removed lines",
 		icon: DiffIcon,
 		group: "Blocks",
 		keywords: ["diff", "patch", "change"],
@@ -260,7 +260,7 @@ const COMMANDS: SlashCommand[] = [
 		id: "research",
 		label: "Research",
 		hint: "Ask Chopin to research the web",
-		icon: SearchIcon,
+		icon: MagnifierIcon,
 		group: "Research",
 		keywords: ["research", "web search"],
 		kind: "action",
@@ -561,7 +561,7 @@ export function SlashMenu({ actions = NO_ACTIONS, disabled }: SlashMenuProps) {
 			aria-label="Insert block"
 			data-focus-boundary=""
 			contentEditable={false}
-			className={`${SHELL} max-h-72 w-80 overflow-y-auto`}
+			className={`${SHELL} max-h-72 w-96 max-w-[calc(100vw-2rem)] overflow-y-auto`}
 			style={position
 				? { top: position.top, left: position.left, maxHeight: position.maxHeight }
 				: { top: anchor.bottom + 8, left: anchor.left, visibility: "hidden" }}
@@ -590,10 +590,10 @@ export function SlashMenu({ actions = NO_ACTIONS, disabled }: SlashMenuProps) {
 								}`}
 							>
 								<command.icon size={14} className="shrink-0" />
-								<span className="ml-2 shrink-0">{command.label}</span>
+								<span className="ml-2 w-24 shrink-0">{command.label}</span>
 								<span
 									aria-hidden="true"
-									className="ml-auto truncate pl-3 text-xs text-text-tertiary"
+									className="min-w-0 truncate text-xs text-text-tertiary"
 								>
 									{command.hint}
 								</span>

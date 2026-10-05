@@ -263,8 +263,18 @@ export function FormulaIcon(props: IconProps) {
 export function TabsIcon(props: IconProps) {
 	return (
 		<LineIcon title="tabs" {...props}>
-			<path d="M2.75,15.25h12.5V6.75c0-1-.5-1.5-1.5-1.5H2.75Z" />
-			<path d="M2.75,5.25V4.25c0-.55.45-1,1-1h3c.55,0,1,.45,1,1v1" />
+			<rect height="9" rx="2" width="12.5" x="2.75" y="6.25" />
+			<path d="M2.75,6.25V4.75c0-.55.45-1,1-1h3.5c.55,0,1,.45,1,1v1.5" />
+			<line x1="11" x2="14" y1="4.25" y2="4.25" />
+		</LineIcon>
+	);
+}
+
+export function MagnifierIcon(props: IconProps) {
+	return (
+		<LineIcon title="magnifier" {...props}>
+			<circle cx="8" cy="8" r="5.25" />
+			<line x1="11.75" x2="15.25" y1="11.75" y2="15.25" />
 		</LineIcon>
 	);
 }
@@ -272,9 +282,10 @@ export function TabsIcon(props: IconProps) {
 export function DiffIcon(props: IconProps) {
 	return (
 		<LineIcon title="diff" {...props}>
-			<line x1="6" x2="6" y1="2.75" y2="8" />
-			<line x1="3.375" x2="8.625" y1="5.375" y2="5.375" />
-			<line x1="9.375" x2="14.625" y1="12.625" y2="12.625" />
+			<rect height="12.5" rx="2" width="12.5" x="2.75" y="2.75" />
+			<line x1="5.5" x2="8.5" y1="7" y2="7" />
+			<line x1="7" x2="7" y1="5.5" y2="8.5" />
+			<line x1="9.5" x2="12.5" y1="11" y2="11" />
 		</LineIcon>
 	);
 }
