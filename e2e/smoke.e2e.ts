@@ -469,6 +469,7 @@ test("chat replaces the Planner working row with its response", async ({ join, p
 	planner.answer();
 	await expect(working).toHaveCount(0);
 	await expect(chat.getByText("The migration is ready.")).toBeVisible();
+	await expect(chat.getByText(/^Started at /)).toHaveCount(0);
 	await expect(chat.locator("[data-chat-entry]")).toHaveCount(2);
 });
 
