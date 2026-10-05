@@ -18,3 +18,18 @@ export function edgeMask(edges: { start: boolean; end: boolean }): string | unde
 	let end = edges.end ? "transparent" : "black";
 	return `linear-gradient(to right, ${start}, black ${fade}, black calc(100% - ${fade}), ${end})`;
 }
+
+/** Scroll distance that brings an item fully inside the strip, clear of the fades. */
+export function revealDelta(
+	view: { left: number; right: number },
+	item: { left: number; right: number },
+	inset: number,
+): number {
+	if (item.left < view.left + inset) return item.left - view.left - inset;
+	// An item wider than the clear area stays start-aligned instead of flip-flopping.
+	if (item.right - item.left > view.right - view.left - 2 * inset) {
+		return item.left - view.left - inset;
+	}
+	if (item.right > view.right - inset) return item.right - view.right + inset;
+	return 0;
+}

@@ -13,7 +13,7 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { $getRoot, $isElementNode } from "lexical";
 import { $isTabNode, $isTabsNode } from "@chopin/dialect";
 
-import { edgeMask, scrollEdges } from "./tab-edges";
+import { edgeMask, revealDelta, scrollEdges } from "./tab-edges";
 
 import type { ElementNode, LexicalEditor } from "lexical";
 
@@ -25,10 +25,13 @@ type Group = {
 
 /** Reveal a tab without moving any scroll ancestor outside its own strip. */
 function revealInline(strip: HTMLElement, tab: HTMLElement): void {
-	let viewport = strip.getBoundingClientRect();
-	let item = tab.getBoundingClientRect();
-	if (item.left < viewport.left) strip.scrollLeft += item.left - viewport.left;
-	else if (item.right > viewport.right) strip.scrollLeft += item.right - viewport.right;
+	// Keep the tab clear of the edge fades (8 spacing units); the browser clamps at the ends.
+	let fade = parseFloat(getComputedStyle(document.documentElement).fontSize) * 0.25 * 8;
+	strip.scrollLeft += revealDelta(
+		strip.getBoundingClientRect(),
+		tab.getBoundingClientRect(),
+		fade,
+	);
 }
 
 /** Read the tab structure out of the document. */
