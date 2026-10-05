@@ -175,23 +175,27 @@ export function DecisionPrompt(props: DecisionEntryProps) {
 							<InlineCode text={selection.label} />
 						</>
 					)
-					: "Choose an option on the card"}
+					: canEdit
+					? "Choose an option on the card"
+					: "No option chosen yet"}
 			</p>
 			{state.error && <p className="m-0 text-sm text-destructive-ink" role="alert">{state.error}
 			</p>}
-			<div className="flex justify-end">
-				<button
-					className="btn btn-sm btn-primary"
-					disabled={!enabled}
-					onClick={() =>
-						selection.visibleSuggestion
-							? state.submit(selection.visibleSuggestion)
-							: state.submit()}
-					type="button"
-				>
-					{state.submitting ? "Saving…" : "Save decision"}
-				</button>
-			</div>
+			{canEdit && (
+				<div className="flex justify-end">
+					<button
+						className="btn btn-sm btn-primary"
+						disabled={!enabled}
+						onClick={() =>
+							selection.visibleSuggestion
+								? state.submit(selection.visibleSuggestion)
+								: state.submit()}
+						type="button"
+					>
+						{state.submitting ? "Saving…" : "Save decision"}
+					</button>
+				</div>
+			)}
 		</div>
 	);
 }

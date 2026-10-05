@@ -94,6 +94,7 @@ test("options carry letter tiles and the last row offers to add one", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionView, {
 		definition: { questions: [ROLLOUT] },
 		drafts: {},
+		onAddOption: async () => ({ ok: true as const }),
 		onCancel() {},
 		onSubmit() {},
 	}));
@@ -121,7 +122,7 @@ test("an existing custom answer still renders, as a selected row before the add 
 	expect(markup).toContain('checked=""');
 });
 
-test("the add row is disabled without a handler and hidden at the option limit", () => {
+test("the add row is hidden without a handler and at the option limit", () => {
 	let view = (options: typeof ROLLOUT.options, onAddOption?: () => Promise<{ ok: true }>) =>
 		renderToStaticMarkup(createElement(QuestionView, {
 			definition: { questions: [{ ...ROLLOUT, options }] },
@@ -129,7 +130,7 @@ test("the add row is disabled without a handler and hidden at the option limit",
 			onAddOption,
 		}));
 
-	expect(view(ROLLOUT.options)).toMatch(/question-add"[^>]*disabled/);
+	expect(view(ROLLOUT.options)).not.toContain("Add an option");
 	expect(view(ROLLOUT.options, async () => ({ ok: true }))).not.toMatch(
 		/question-add"[^>]*disabled/,
 	);

@@ -185,12 +185,27 @@ test("a missing suggestion leaves Save disabled until a human chooses an option"
 		value: VALUE,
 		meta: openMeta(),
 		connected: false,
-		canEdit: false,
+		canEdit: true,
 		onOpenCard() {},
 	}));
 
 	expect(markup).toContain("Choose an option on the card");
 	expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Save decision<\/button>/);
+});
+
+test("a viewer who cannot edit sees no Save action on a prompt", () => {
+	let markup = renderToStaticMarkup(createElement(DecisionPrompt, {
+		entry: promptEntry(0),
+		latest: true,
+		value: VALUE,
+		meta: openMeta(),
+		connected: true,
+		canEdit: false,
+		onOpenCard() {},
+	}));
+
+	expect(markup).not.toContain("Save decision");
+	expect(markup).not.toContain("Choose an option on the card");
 });
 
 test("activity labels remain text for the document sentinel and link card activities", () => {
