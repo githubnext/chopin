@@ -780,6 +780,55 @@
 	max-width: calc(var(--plan-measure) + var(--plan-gutter) * 2);
 }
 
+.plan-decisions-content--empty {
+	display: flex;
+	width: 100%;
+	max-width: none;
+	align-items: center;
+	justify-content: center;
+	padding: 3rem var(--plan-gutter);
+}
+
+.plan-decisions-empty {
+	display: flex;
+	width: min(100%, 42rem);
+	min-height: 19rem;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: 2.5rem 1.5rem;
+	border: var(--edge-width) dashed var(--color-control-edge);
+	border-radius: var(--radius-lg);
+	text-align: center;
+}
+
+.plan-decisions-empty-icon {
+	display: grid;
+	width: 3.5rem;
+	height: 3.5rem;
+	place-items: center;
+	margin-block-end: 1.5rem;
+	border-radius: var(--radius-lg);
+	background: var(--color-inset);
+	color: var(--color-text-primary);
+}
+
+.plan-decisions-empty h3 {
+	margin: 0;
+	font-size: var(--text-xl);
+	font-weight: 600;
+	line-height: 1.25;
+	color: var(--color-text-primary);
+}
+
+.plan-decisions-empty p {
+	max-width: 27rem;
+	margin: 0.5rem 0 0;
+	font-size: var(--text-base);
+	line-height: 1.5;
+	color: var(--color-text-tertiary);
+}
+
 /* Decorator hosts are block-level plan content, not zero-size anchors. */
 .plan .plan-content [data-plan-questionnaire],
 .plan .plan-content [data-plan-decision] {
