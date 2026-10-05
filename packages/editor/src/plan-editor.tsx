@@ -138,9 +138,10 @@ export function PlanEditor(
 	// describe a history that no longer exists, so they go with it.
 	let onReset = useCallback((reason: Plan.Reset["reason"]) => {
 		changes.clear();
+		questions?.resetDocument();
 		setState(prev => ({ ...prev, synced: false, reset: reason }));
 		setGeneration(value => value + 1);
-	}, [changes]);
+	}, [changes, questions]);
 
 	// The store resolves anchors itself, because a Lexical key is per-editor:
 	// the server's key for a block means nothing in this browser.
@@ -192,8 +193,14 @@ export function PlanEditor(
 	let onProvider = useCallback((value: PlanProvider | undefined) => {
 		provider.current = value;
 		setPresence(value);
-		if (!value) return;
-		value.on("sync", synced => setState(prev => ({ ...prev, synced })));
+		if (!value) {
+			questions?.resetDocument();
+			return;
+		}
+		value.on("sync", synced => {
+			setState(prev => ({ ...prev, synced }));
+			questions?.setDocumentSynced(synced);
+		});
 		value.on("status", ({ message, status }) => {
 			// A failure is sticky until something opens the document; anything
 			// else clears it, so a reconnect that works stops saying it failed.
@@ -203,7 +210,7 @@ export function PlanEditor(
 				...(status === "connected" ? { failed: undefined } : {}),
 			}));
 		});
-	}, []);
+	}, [questions]);
 
 	/*
 	 * Open the document whenever the connection says it can carry the request.

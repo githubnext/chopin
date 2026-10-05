@@ -92,3 +92,9 @@ test("an expired card is listed with the resolved cards and says nobody answered
 		expect(history).not.toContain(control);
 	}
 });
+
+test("an unsynced empty snapshot does not claim there are no decisions", () => {
+	let loading = markup(undefined, []);
+	expect(loading).toContain("Loading decisions…");
+	expect(loading).not.toContain("No decisions yet");
+});

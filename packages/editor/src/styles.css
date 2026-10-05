@@ -784,7 +784,7 @@
 	display: flex;
 	width: 100%;
 	max-width: none;
-	align-items: center;
+	align-items: safe center;
 	justify-content: center;
 	padding: 3rem var(--plan-gutter);
 }
