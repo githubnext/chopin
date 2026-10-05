@@ -18,7 +18,7 @@ test("the empty version-one snapshot validates without adding stored fields", ()
 	let before = structuredClone(snapshot);
 	expect(() => assertStateShape(snapshot)).not.toThrow();
 	expect(snapshot).toEqual(before);
-	expect(() => assertStateShape({ ...snapshot, schemaVersion: 2 })).toThrow(
+	expect(() => assertStateShape({ ...snapshot, schemaVersion: 3 })).toThrow(
 		"unsupported conversation plan schema",
 	);
 });

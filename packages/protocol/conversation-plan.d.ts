@@ -117,6 +117,62 @@ export declare namespace ConversationPlan {
 		threadId?: string;
 		status: "offered" | "dismissed" | "accepted";
 		action?: ResearchAction;
+		/** General research offers; absent on persisted pricing-only offers. */
+		workflow?: ResearchWorkflow;
+	};
+	export type ResearchContext = {
+		messages: Array<{ id: string; author: SourceAuthor; text: string }>;
+		decisions: Array<{
+			id: string;
+			version: number;
+			question: string;
+			options: Array<{ id: string; label: string }>;
+			answer?: string;
+		}>;
+	};
+	export type ResearchAddition = {
+		id: string;
+		text: string;
+		sources: ResearchSource[];
+		status: "pending" | "applied" | "dismissed";
+		actionId?: string;
+		actor?: string;
+	};
+	export type ResearchWorkflow = {
+		version: 1;
+		revision: number;
+		generation: number;
+		mode: "automatic" | "human";
+		/** Presentation only; never participates in request identity. */
+		placementMessageId: string;
+		sources: ResearchSource[];
+		context: ResearchContext;
+		published: boolean;
+		preparation: "pending" | "ready" | "failed";
+		jobId?: string;
+		modelVersion?: string;
+		/** Complete, validated string CRDT checkpoint. */
+		draft?: number[];
+		editedBy: string[];
+		additions: ResearchAddition[];
+		previousOfferId?: string;
+		accepted?: { brief: string; revision: number; executionKey: string };
+	};
+	export type ResearchAnalysis = {
+		messageId: string;
+		questionSetVersion: string;
+		modelVersion: string;
+		status: "applied" | "unlinked" | "failed";
+		answers: Record<string, AnalysisAnswer>;
+		policyGate: string;
+		offerId?: string;
+		latencyMs: number;
+	};
+	export type ResearchState = {
+		queue: QueueItem[];
+		analysis: ResearchAnalysis[];
+		/** Retry receipts survive pruning of diagnostic history. */
+		retries: Array<{ id: string; messageId: string }>;
 	};
 
 	export type Authoring = "quoted" | "scribe" | "human-edited";
@@ -388,7 +444,7 @@ export declare namespace ConversationPlan {
 		error?: string;
 	};
 	export type State = {
-		schemaVersion: 1;
+		schemaVersion: 1 | 2;
 		revision: number;
 		events: Event[];
 		threads: Thread[];
@@ -397,11 +453,17 @@ export declare namespace ConversationPlan {
 		analysis: AnalysisRecord[];
 		/** Optional for version-1 sidecars saved before research offers existed. */
 		researchOffers?: ResearchOffer[];
+		/** Required in version two; version one is upgraded on restoration. */
+		research?: ResearchState;
 	};
 
 	export type Correct = KIND<"conversation-plan:correct"> & CorrectionAction;
 	export type SaveScopedChoice = KIND<"conversation-plan:scoped-choice-save"> & ScopedChoiceSave;
-	export type Retry = KIND<"conversation-plan:retry"> & { actionId: string; messageId: string };
+	export type Retry = KIND<"conversation-plan:retry"> & {
+		actionId: string;
+		messageId: string;
+		lane?: "decision" | "research";
+	};
 	export type ResearchConsent =
 		& KIND<"conversation-plan:research">
 		& (
