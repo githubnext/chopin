@@ -525,6 +525,19 @@ describe("replacing canonical source", () => {
 		expect(survived.length).toBeGreaterThan(3);
 	});
 
+	/** A stored link the newer URL rules refuse stays; a new one is not let in. */
+	it("lets the Planner edit around a stored link only the newer URL rules refuse", async () => {
+		let stored = "# Title\n\nRead [the notes](docs\\notes.md).\n";
+		let held = await plan(stored);
+		let current = room.project(held.document);
+
+		expect(edit.replace(held, 1, `${current}\nAdded.\n`).ok).toBe(true);
+		let next = room.project(held.document);
+		expect(edit.replace(held, 1, `${next}\nSee [this](//evil.com).\n`))
+			.toMatchObject({ ok: false, reason: "invalid" });
+		expect(edit.replace(held, 1, `${next}\nSee [this](https://example.com).\n`).ok).toBe(true);
+	});
+
 	it("refuses dropping or forging a decision projection", async () => {
 		let held = await plan();
 		room.insertDecision(held.document, {

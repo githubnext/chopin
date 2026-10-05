@@ -14,7 +14,7 @@ import * as Y from "yjs";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 
-import { ULID } from "@chopin/dialect";
+import { assertIntroducedUrls, parse, ULID } from "@chopin/dialect";
 import { MENTION } from "@chopin/protocol/address";
 import * as Question from "@chopin/question";
 
@@ -784,6 +784,8 @@ export async function initial(
 	source: string,
 	creation?: CreationMetadata,
 ): Promise<InitialChannel> {
+	// A new document has no stored links to spare from the newer URL rules.
+	assertIntroducedUrls([], parse(source).children);
 	let document = await room.create(source);
 	try {
 		let canonical = room.project(document);
