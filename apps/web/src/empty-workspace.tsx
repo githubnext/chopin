@@ -1,4 +1,4 @@
-import { DocumentIcon } from "@chopin/icons";
+import { useWorkspaceMode } from "./workspace";
 
 export function EmptyWorkspace(
 	{ disabled, hasProjects, onAddProject, onNewDocument }: {
@@ -8,10 +8,17 @@ export function EmptyWorkspace(
 		onNewDocument: () => void;
 	},
 ) {
+	let mode = useWorkspaceMode();
 	return (
-		<div className="h-full bg-ground p-2">
-			<div className="overflow-hidden rounded-[12px] bg-page shadow-resting ring-hairline flex h-full flex-col items-center justify-center gap-1 text-center">
-				<DocumentIcon className="mb-1 text-text-quaternary" />
+		<div className="flex h-full flex-col bg-ground">
+			<div className="room-header shrink-0" />
+			<div
+				className={`flex min-h-0 flex-1 flex-col items-center justify-center gap-1 text-center ${
+					mode === "split"
+						? "mx-3 mb-3 overflow-hidden rounded-[12px] bg-page shadow-raised ring-hairline"
+						: "m-2 overflow-hidden rounded-[12px] bg-page shadow-resting ring-hairline"
+				}`}
+			>
 				<h2 className="text-sm font-semibold text-text-primary">No document open</h2>
 				<p className="text-sm text-text-tertiary">
 					{hasProjects

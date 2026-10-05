@@ -444,7 +444,6 @@ function Feedback() {
 			>
 				<div className="design-audit-empty-grid">
 					<div>
-						<DocumentIcon className="text-text-quaternary" />
 						<strong>No document open</strong>
 						<span>Pick one from the sidebar or start a new one.</span>
 						<button className="btn btn-sm btn-secondary" type="button">New document</button>
