@@ -90,7 +90,11 @@ export function Decisions(
 	}: DecisionsProps,
 ) {
 	let entries = useQuestionnaires(store);
-	let ready = useSyncExternalStore(store.subscribe, store.readySnapshot, store.readySnapshot);
+	let readiness = useSyncExternalStore(
+		store.subscribe,
+		store.readinessSnapshot,
+		store.readinessSnapshot,
+	);
 	let metadata = useSyncExternalStore(
 		cardMeta?.subscribe ?? noop,
 		cardMeta?.snapshot ?? emptyCards,
@@ -196,7 +200,14 @@ export function Decisions(
 							<span className="plan-decisions-empty-icon" aria-hidden="true">
 								<DecisionIcon size={24} />
 							</span>
-							{ready
+							<span aria-atomic="true" aria-live="polite" className="sr-only" role="status">
+								{readiness === "ready"
+									? "No decisions yet"
+									: readiness === "unavailable"
+									? "Decisions unavailable"
+									: "Loading decisions"}
+							</span>
+							{readiness === "ready"
 								? (
 									<>
 										<h3>No decisions yet</h3>
@@ -205,7 +216,21 @@ export function Decisions(
 										</p>
 									</>
 								)
-								: <p role="status">Loading decisions…</p>}
+								: readiness === "unavailable"
+								? (
+									<>
+										<h3>Decisions unavailable</h3>
+										<p>The document couldn’t be opened. Try again to load its decisions.</p>
+										<button
+											className="btn btn-sm btn-secondary mt-6"
+											onClick={() => store.retryOpen()}
+											type="button"
+										>
+											Try again
+										</button>
+									</>
+								)
+								: <p aria-hidden="true">Loading decisions…</p>}
 						</div>
 					)
 					: (

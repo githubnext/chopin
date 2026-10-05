@@ -38,6 +38,8 @@ export type PlanQuestionnaireState = {
 	hasPlanContent: boolean;
 };
 
+export type DecisionsReadiness = "loading" | "ready" | "unavailable";
+
 /** Read the document's questionnaires, in the order they appear in the prose. */
 export function collectQuestionnaires(): QuestionnaireEntry[] {
 	return $nodesOfType(QuestionnaireNode).map(node => ({
@@ -59,9 +61,10 @@ export function collectPlanState(): PlanQuestionnaireState {
 
 export class QuestionnaireStore {
 	#state: PlanQuestionnaireState = { entries: [], hasPlanContent: false };
-	#ready = false;
+	#readiness: DecisionsReadiness = "loading";
 	#synced = false;
 	#readRevision = 0;
+	#retryOpen: (() => void) | undefined;
 	#listeners = new Set<() => void>();
 
 	/** Needed to turn an anchor into a node key, and a key into an element. */
@@ -86,19 +89,34 @@ export class QuestionnaireStore {
 
 	snapshot = (): QuestionnaireEntry[] => this.#state.entries;
 	contentSnapshot = (): boolean => this.#state.hasPlanContent;
-	readySnapshot = (): boolean => this.#ready;
+	readinessSnapshot = (): DecisionsReadiness => this.#readiness;
+
+	setRetryOpen(retry: (() => void) | undefined): void {
+		this.#retryOpen = retry;
+	}
+
+	failOpen(): void {
+		this.#setReadiness("unavailable");
+	}
+
+	retryOpen(): void {
+		if (!this.#retryOpen) return;
+		this.#setReadiness("loading");
+		this.#retryOpen();
+	}
 
 	/** Confirm emptiness only after Lexical has applied the successful document sync. */
 	setDocumentSynced(synced: boolean): void {
 		this.#synced = synced;
 		let revision = ++this.#readRevision;
 		if (!synced) return;
+		if (this.#readiness === "unavailable") this.#setReadiness("loading");
 		let editor = this.#editor;
 		if (!editor) return;
 		editor.update(() => {
 			if (revision !== this.#readRevision || this.#editor !== editor) return;
 			this.set(collectPlanState());
-			this.#setReady(true);
+			this.#setReadiness("ready");
 		});
 	}
 
@@ -106,13 +124,25 @@ export class QuestionnaireStore {
 	resetDocument(): void {
 		this.#synced = false;
 		this.#readRevision++;
-		this.#setReady(false);
+		let changed = this.#state.entries.length > 0 || this.#state.hasPlanContent
+			|| this.#readiness !== "loading";
+		this.#state = { entries: [], hasPlanContent: false };
+		this.#readiness = "loading";
+		if (!changed) return;
+		for (let listener of this.#listeners) listener();
 	}
 
-	#setReady(ready: boolean): void {
-		if (this.#ready === ready) return;
-		this.#ready = ready;
+	#setReadiness(readiness: DecisionsReadiness): void {
+		if (this.#readiness === readiness) return;
+		this.#readiness = readiness;
 		for (let listener of this.#listeners) listener();
+	}
+
+	/** Ignore updates from an unconfirmed replacement editor. */
+	readDocument(editor: LexicalEditor): void {
+		if (!this.#synced || this.#editor !== editor) return;
+		editor.getEditorState().read(() => this.set(collectPlanState()));
+		this.refreshProse();
 	}
 
 	/**
@@ -141,7 +171,7 @@ export class QuestionnaireStore {
 		}
 		if (this.#editor !== editor) {
 			this.#readRevision++;
-			this.#setReady(false);
+			this.#setReadiness("loading");
 		}
 		this.#editor = editor;
 		if (editor && this.#synced) this.setDocumentSynced(true);
@@ -363,10 +393,7 @@ export function QuestionnaireObserver({ store }: { store: QuestionnaireStore }) 
 
 	useEffect(() => {
 		store.attach(editor);
-		let read = () => {
-			editor.getEditorState().read(() => store.set(collectPlanState()));
-			store.refreshProse();
-		};
+		let read = () => store.readDocument(editor);
 		read();
 		let off = editor.registerUpdateListener(read);
 		return () => {
