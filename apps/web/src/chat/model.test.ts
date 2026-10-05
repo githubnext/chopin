@@ -1,6 +1,14 @@
 import { describe, expect, it } from "bun:test";
 
-import { displayText, duration, group, summarize } from "./model";
+import {
+	displayText,
+	duration,
+	group,
+	runningLabel,
+	summarize,
+	waitingCards,
+	waitingText,
+} from "./model";
 
 import type { Chat } from "@chopin/protocol";
 
@@ -134,11 +142,42 @@ describe("rail copy", () => {
 });
 
 describe("tool-run summaries", () => {
-	it("names the live tool in reader-facing language", () => {
+	it("names the live tool in sentence case", () => {
 		expect(summarize([
 			{ id: "t1", name: "read_file", status: "done", took: 38 },
-			{ id: "t2", name: "ask", status: "running" },
-		])).toEqual({ state: "running", name: "Questions", completed: 1 });
+			{ id: "t2", name: "edit_plan", status: "running" },
+		])).toEqual({ state: "running", label: "Editing the document", completed: 1 });
+		expect(runningLabel("read_repository_file")).toBe("Reading a file");
+		expect(runningLabel("github/get_file_contents")).toBe("Github get file contents");
+	});
+
+	it("treats a live ask as waiting on people, with the prompts it asked", () => {
+		let args = JSON.stringify({
+			revision: 3,
+			questions: [{ question: "Which database?" }, { question: "Which region?" }],
+		});
+		expect(summarize([
+			{ id: "t1", name: "read_plan", status: "done", took: 38 },
+			{ id: "t2", name: "ask", status: "running", args },
+		])).toEqual({ state: "waiting", prompts: ["Which database?", "Which region?"] });
+		expect(summarize([{ id: "t1", name: "ask", status: "running", args: "{" }]))
+			.toEqual({ state: "waiting", prompts: [] });
+	});
+
+	it("matches waiting prompts to the latest open card for each", () => {
+		let cards = [
+			{ id: "old", prompt: "Which database?", open: true },
+			{ id: "db", prompt: "Which database?", open: true },
+			{ id: "region", prompt: "Which region?", open: false },
+		];
+		expect(waitingCards(["Which database?", "Which region?"], cards)).toEqual(["db"]);
+		expect(waitingCards(["Which database?", "Which database?"], cards)).toEqual(["db", "old"]);
+	});
+
+	it("words the wait for one or several decisions", () => {
+		expect(waitingText(1)).toBe("Waiting on your decision");
+		expect(waitingText(0)).toBe("Waiting on your decision");
+		expect(waitingText(3)).toBe("Waiting on 3 decisions");
 	});
 
 	it("reports counts, failures and elapsed time after the run", () => {

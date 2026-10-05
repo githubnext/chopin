@@ -1,7 +1,8 @@
 /** The shared chat, grouped for reading rather than event delivery. */
 
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
-import { ChevronIcon, CloseIcon, LoaderIcon, SignInIcon } from "@chopin/icons";
+import { ChevronIcon, CloseIcon, DecisionIcon, LoaderIcon, SignInIcon } from "@chopin/icons";
+import { cardStatus } from "@chopin/dialect";
 import { parseChildDocumentPath } from "@chopin/protocol/document-url";
 
 import { Face, MotionDisclosure, MotionDisclosureIcon, useCardMeta } from "@chopin/editor";
@@ -11,7 +12,16 @@ import { MessageMarkdown } from "./markdown";
 import { MessageMarkers } from "../conversation-plan/markers";
 import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";
 import type { CardLink } from "../conversation-plan/links";
-import { capitalize, displayText, duration, group, summarize, toolCopy } from "./model";
+import {
+	capitalize,
+	displayText,
+	duration,
+	group,
+	summarize,
+	toolCopy,
+	waitingCards,
+	waitingText,
+} from "./model";
 import { clearSourceHighlight, highlightSource } from "../conversation-plan/source";
 import type { ChatDestination } from "../conversation-plan/source";
 import { motionContract } from "../motion-contract";
@@ -41,6 +51,7 @@ type PlanMarkers = {
 	sourceDestination?: ChatDestination;
 	conversationPlan?: ConversationPlan.State;
 	researchOffers?: ResearchOfferControls;
+	decisions?: TranscriptDecisions;
 };
 
 export type TranscriptDecisions = {
@@ -56,17 +67,70 @@ function when(ts: number): string {
 	return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function ToolRun({ tools }: { tools: Chat.Activity[] }) {
+const NO_QUESTIONS: ReturnType<QuestionnaireStore["snapshot"]> = [];
+const noQuestions = () => () => {};
+
+function WaitingRun(
+	{ decisions, prompts }: { decisions?: TranscriptDecisions; prompts: string[] },
+) {
+	let values = useSyncExternalStore(
+		decisions?.questions.subscribe ?? noQuestions,
+		decisions?.questions.snapshot ?? (() => NO_QUESTIONS),
+		decisions?.questions.snapshot ?? (() => NO_QUESTIONS),
+	);
+	let ids = waitingCards(
+		prompts,
+		values.map(({ id, value }) => {
+			let status = cardStatus(value);
+			return {
+				id,
+				prompt: value.questions[0]?.prompt,
+				open: status === "open" || status === "reopened",
+			};
+		}),
+	);
+	let first = ids[0];
+	return (
+		<div
+			className="flex min-h-7 min-w-0 flex-wrap items-center gap-2 py-1 text-sm text-text-quaternary"
+			data-tool-waiting
+		>
+			<DecisionIcon aria-hidden="true" size={14} />
+			<span>{waitingText(ids.length || prompts.length)}</span>
+			{decisions && first && (
+				<button
+					className="btn btn-sm btn-ghost -my-1"
+					onClick={() => decisions.onOpenCard(first)}
+					type="button"
+				>
+					Open
+				</button>
+			)}
+		</div>
+	);
+}
+
+function ToolRun(
+	{ decisions, tools }: { decisions?: TranscriptDecisions; tools: Chat.Activity[] },
+) {
 	let [open, setOpen] = useState(false);
 	let contentId = useId();
 	let summary = summarize(tools);
 	let motion = motionContract("collapse");
+	if (summary.state === "waiting") {
+		return <WaitingRun decisions={decisions} prompts={summary.prompts} />;
+	}
 	if (summary.state === "running") {
 		return (
 			<div className="flex min-h-7 min-w-0 flex-wrap items-center gap-2 py-1 text-sm text-text-quaternary">
 				<LoaderIcon aria-hidden="true" className="chat-tool-loader" size={14} />
-				<span className="min-w-0 break-all font-mono text-text-secondary">{summary.name}</span>
-				<span className="tabular-nums">{summary.completed} done</span>
+				<span className="min-w-0 break-words">{summary.label}</span>
+				{summary.completed > 0 && (
+					<>
+						<span aria-hidden="true">·</span>
+						<span className="tabular-nums">{summary.completed} done</span>
+					</>
+				)}
 			</div>
 		);
 	}
@@ -256,7 +320,9 @@ function MessageBody(
 						)}
 				</div>
 			)}
-			{message.tools && message.tools.length > 0 && <ToolRun tools={message.tools} />}
+			{message.tools && message.tools.length > 0 && (
+				<ToolRun decisions={markers.decisions} tools={message.tools} />
+			)}
 			{markers.sourceDestination?.source.messageId === message.id && (
 				<p className="m-0 mt-1 text-xs text-text-secondary" data-source-preview>
 					Source: “{markers.sourceDestination.source.quote}”
@@ -328,6 +394,7 @@ function MessageGroup(
 						onRetryJob={markers.onRetryJob}
 						conversationPlan={markers.conversationPlan}
 						researchOffers={markers.researchOffers}
+						decisions={markers.decisions}
 						sourceDestination={markers.sourceDestination}
 						handle={handle}
 						key={message.id}
@@ -473,6 +540,7 @@ export function Transcript(
 								onRetryJob={onRetryJob}
 								conversationPlan={conversationPlan}
 								researchOffers={researchOffers}
+								decisions={decisions}
 								group={item}
 								handle={handle}
 								key={`${item.queued ? "queued" : "sent"}-${item.messages[0]!.id}`}
