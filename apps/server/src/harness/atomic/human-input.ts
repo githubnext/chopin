@@ -28,14 +28,10 @@ export function createHumanInput(
 		options: HostInputOptions,
 	): Promise<QuestionnaireResult> {
 		if (options.signal.aborted) return { answers: [], cancelled: true };
-		let workflow = [
-			options.workflowRunId === undefined ? undefined : `Workflow run: ${options.workflowRunId}`,
-			options.workflowStageId === undefined ? undefined : `stage: ${options.workflowStageId}`,
-		].filter(value => value !== undefined).join("; ");
 		let definition = Questions.identify({
 			questions: params.questions.map(question => ({
 				header: question.header,
-				question: workflow ? `${question.question}\n\n${workflow}` : question.question,
+				question: question.question,
 				options: question.options.map(option => ({
 					label: option.label,
 					// Decisions shows no preview pane, so the mockup or code a member
