@@ -321,6 +321,23 @@ export function chatSendPayload(
 	};
 }
 
+export const PLANNER_UNAVAILABLE_NOTICE =
+	"Chopin is off on this server. Your message went to the room only.";
+
+/** Whether a payload names the Planner, even though it was routed to the room. */
+export function addressesPlanner(payload: ChatSendPayload): boolean {
+	return addressedOutsideReferences(payload.text, payload.references ?? []);
+}
+
+/** Put each local notice directly under the message it answers; unknown messages are skipped. */
+export function withNoticesAfter(
+	entries: Chat.Entry[],
+	notices: Readonly<Record<string, Chat.Entry>>,
+): Chat.Entry[] {
+	if (Object.keys(notices).length === 0) return entries;
+	return entries.flatMap(entry => notices[entry.id] ? [entry, notices[entry.id]!] : [entry]);
+}
+
 /**
  * Where the composer will send a draft, as the wire will see it, and how to say so
  * before it is sent. Nothing is said for an empty draft or when the Planner is off.
