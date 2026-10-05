@@ -50,6 +50,11 @@ async function scriptPlanner(page: Page) {
 	let turn = 0;
 	let busy = false;
 	let queued: Chat.Waiting[] = [];
+	let toolCount = 0;
+	let toolEntry = "";
+	let toolEntrySent = false;
+	let toolNames = new Map<string, string>();
+	let toolEntries = new Map<string, string>();
 	let active = () => ({
 		id: `turn-${++turn}`,
 		handle: "ana",
@@ -69,7 +74,10 @@ async function scriptPlanner(page: Page) {
 		});
 	let start = () => {
 		busy = true;
-		send?.({ kind: "chat:state", ts: 0, busy: true, turn: active() });
+		let state = active();
+		toolEntry = `tools-${turn}`;
+		toolEntrySent = false;
+		send?.({ kind: "chat:state", ts: 0, busy: true, turn: state });
 	};
 	await page.route("**/api/session", async route => {
 		let response = await route.fetch();
@@ -149,23 +157,56 @@ async function scriptPlanner(page: Page) {
 			busy = false;
 			send?.({ kind: "chat:state", ts: 0, busy: false });
 		},
-		tool() {
+		tool(name = "read_plan", args = '{ "path": "src/store.ts" }', separateEntry = false) {
+			if (separateEntry) {
+				toolEntry = `tools-${turn}-${toolCount + 1}`;
+				toolEntrySent = false;
+			}
+			if (!toolEntrySent) {
+				send?.({
+					kind: "chat:message",
+					ts: 0,
+					entry: {
+						id: toolEntry,
+						author: { kind: "agent" },
+						text: "",
+						ts: 1_700_000_001,
+					},
+				});
+				toolEntrySent = true;
+			}
+			let id = `tool-${++toolCount}`;
+			toolNames.set(id, name);
+			toolEntries.set(id, toolEntry);
+			send?.({
+				kind: "chat:tool",
+				ts: 0,
+				entry: toolEntry,
+				activity: { id, name, status: "running", args },
+			});
+			return id;
+		},
+		finishTool(id: string, status: "done" | "failed", result: string) {
+			send?.({
+				kind: "chat:tool",
+				ts: 0,
+				entry: toolEntries.get(id),
+				activity: { id, name: toolNames.get(id), status, result, took: 38 },
+			});
+		},
+		complete() {
 			send?.({
 				kind: "chat:message",
 				ts: 0,
 				entry: {
-					id: "tools",
+					id: "answer",
 					author: { kind: "agent" },
-					text: "",
-					ts: 1_700_000_001,
+					text: "I found it.",
+					ts: 1_700_000_002,
 				},
 			});
-			send?.({
-				kind: "chat:tool",
-				ts: 0,
-				entry: "tools",
-				activity: { id: "tool-1", name: "read_plan", status: "running" },
-			});
+			busy = false;
+			send?.({ kind: "chat:state", ts: 0, busy: false });
 		},
 		stream() {
 			send?.({
@@ -450,6 +491,7 @@ test("chat replaces the Planner working row with its response", async ({ join, p
 
 	let working = chat.locator('[data-chat-state="working"]');
 	await expect(working).toBeVisible();
+	await expect(working.getByText("Getting oriented")).toBeVisible();
 	let timestamp = await page.evaluate(() =>
 		new Date(1_700_000_001 * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 	);
@@ -491,16 +533,20 @@ test("chat clears the Planner working row when a turn stops or fails", async ({ 
 	await chatInput(chat).fill("@chopin Try again.");
 	await chat.getByRole("button", { name: "Send message" }).click();
 	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
+	planner.tool();
+	await expect(chat.getByText("Gathering context")).toBeVisible();
 	planner.fail();
 	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(0);
 	await expect(chat.getByText("Planner unavailable.")).toBeVisible();
+	await chat.getByRole("button", { name: /Work details.*1 action.*1 interrupted/ }).click();
+	await expect(chat.getByRole("button", { name: /Read plan.*Interrupted/ })).toBeVisible();
 
 	await page.reload();
 	await ready(page);
 	await expect(chatPane(page).locator('[data-chat-state="working"]')).toHaveCount(0);
 });
 
-test("chat keeps Working on it through tool activity and streamed prose", async ({ join, page }) => {
+test("chat progresses through real work and reveals tool input and results", async ({ join, page }) => {
 	let planner = await scriptPlanner(page);
 	let chat = chatPane(await join("ana"));
 
@@ -509,15 +555,45 @@ test("chat keeps Working on it through tool activity and streamed prose", async 
 	);
 	await chat.getByRole("button", { name: "Send message" }).click();
 	await planner.started;
-	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
+	await expect(chat.getByText("Getting oriented")).toBeVisible();
 
-	planner.tool();
-	await expect(chat.getByText("Reading the document", { exact: true })).toBeVisible();
-	await expect(chat.getByText(/done/)).toHaveCount(0);
-	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
+	let read = planner.tool("read_plan", '{ "path": "<store.ts>" }');
+	let work = chat.locator('[data-chat-state="working"]');
+	let disclosure = work.getByRole("button", { name: /Gathering context/ });
+	await expect(disclosure).toBeVisible();
+	await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+	let controlled = await disclosure.getAttribute("aria-controls");
+	await expect(chat.locator(`[id="${controlled}"]`)).toHaveCount(1);
+	await expect(work.getByText("Read plan", { exact: true })).toHaveCount(0);
+	await chat.screenshot({ path: "/private/tmp/chopin-work-active.png" });
 
+	await disclosure.focus();
+	await page.keyboard.press("Enter");
+	await expect(disclosure).toHaveAttribute("aria-expanded", "true");
+	let tool = work.getByRole("button", { name: /Read plan.*Running/ });
+	await expect(tool).toBeVisible();
+	await expect(tool).toHaveAttribute("aria-expanded", "false");
+	await tool.click();
+	await expect(tool).toHaveAttribute("aria-expanded", "true");
+	await expect(work.getByText('"path": "<store.ts>"', { exact: false })).toBeVisible();
+	await chat.screenshot({ path: "/private/tmp/chopin-work-expanded.png" });
+
+	planner.finishTool(read, "done", "Found the storage adapter.");
+	await expect(work.getByText("Reviewing the next step")).toBeVisible();
+	await expect(work.getByText("1 finished")).toBeVisible();
+	await expect(work.getByText("Found the storage adapter.")).toBeVisible();
+	await expect(work.getByRole("button", { name: /Reviewing the next step/ })).toHaveAttribute(
+		"aria-expanded",
+		"true",
+	);
+
+	let edit = planner.tool("edit_plan", '{ "block": "persistence" }');
+	await expect(work.getByText("Making changes")).toBeVisible();
+	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(1);
+	planner.finishTool(edit, "done", "Document updated.");
 	planner.stream();
-	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
+	await expect(work.getByText("Writing a response")).toBeVisible();
+	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(1);
 	await expect(chat.getByText("I found it.")).toBeVisible();
 	await expect(
 		chat.locator('[data-chat-state="working"]')
@@ -525,11 +601,41 @@ test("chat keeps Working on it through tool activity and streamed prose", async 
 			.getByText(/^Started at /),
 	).toBeVisible();
 
-	await chat.getByRole("button", { name: "Stop Chopin" }).click();
+	planner.complete();
 	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(0);
+	let finished = chat.getByRole("button", { name: /Work details.*2 actions/ });
+	await expect(finished).toHaveAttribute("aria-expanded", "true");
+	await expect(chat.getByText("Document updated.")).not.toBeVisible();
+	await chat.screenshot({ path: "/private/tmp/chopin-work-completed.png" });
 });
 
-test("chat history keeps Working on it after Planner prose and a later room message", async ({ join, page }) => {
+test("chat anchors active work when later tools arrive on another message", async ({ join, page }) => {
+	let planner = await scriptPlanner(page);
+	let chat = chatPane(await join("ana"));
+	await chat.getByPlaceholder("Use @chopin to ask Chopin").fill("@chopin Inspect and edit.");
+	await chat.getByRole("button", { name: "Send message" }).click();
+	await planner.started;
+
+	let first = planner.tool();
+	let work = chat.locator('[data-chat-state="working"]');
+	await expect(work.getByText("Gathering context")).toBeVisible();
+	let anchor = await work.getAttribute("data-chat-message-id");
+	planner.finishTool(first, "done", "Read the document.");
+	planner.tool("edit_plan", '{ "block": "persistence" }', true);
+	await expect(work.getByText("Making changes")).toBeVisible();
+	await expect(work).toHaveAttribute("data-chat-message-id", anchor!);
+	await expect(work).toContainText("1 finished");
+	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(1);
+	await work.getByRole("button", { name: /Making changes/ }).click();
+	await expect(work.getByText("Read plan", { exact: true })).toBeVisible();
+	await expect(work.getByText("Edit plan", { exact: true })).toBeVisible();
+
+	await chat.getByRole("button", { name: "Stop Chopin" }).click();
+	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(0);
+	await expect(chat.getByRole("button", { name: /Work details.*1 action/ })).toHaveCount(2);
+});
+
+test("chat history keeps one active work row after Planner prose and a later room message", async ({ join, page }) => {
 	await injectChatHistory(page, frame => ({
 		...frame,
 		busy: true,
@@ -559,7 +665,8 @@ test("chat history keeps Working on it after Planner prose and a later room mess
 	let chat = chatPane(await join("ana"));
 	await expect(chat.getByText("I found the issue.")).toBeVisible();
 	await expect(chat.getByText("Please include the examples.")).toBeVisible();
-	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
+	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(1);
+	await expect(chat.getByText("Reviewing the next step")).toBeVisible();
 });
 
 test("chat waits for fresh history after reconnect before projecting a stale turn", async ({ join, page }) => {
@@ -606,6 +713,7 @@ test(
 		await injectChatHistory(page, frame => ({
 			...frame,
 			busy: true,
+			turn: { id: "turn-1", handle: "maggie", started: 1_700_000_001, responded: true },
 			entries: [
 				{
 					id: "m1",
@@ -638,10 +746,10 @@ test(
 
 		await join("ana");
 		let chat = chatPane(page);
-		let live = chat.getByText("Editing the document", { exact: true }).locator("..");
+		let live = chat.getByRole("button", { name: /Making changes/ });
 
-		await expect(live).toContainText("7 done");
-		await expect(chat.getByRole("button", { name: /Editing the document/ })).toHaveCount(0);
+		await expect(live).toContainText("7 finished");
+		await expect(chat.getByText("Edit plan", { exact: true })).toHaveCount(0);
 		await expect(chat.getByRole("button", { name: "Stop Chopin" })).toHaveCount(0);
 
 		let mine = chat.locator("[data-chat-entry]").filter({ hasText: "Ask Chopin" });
@@ -785,26 +893,28 @@ test(
 		await expect(chat).not.toContainText("@");
 		await expect(chat.getByText("Read file", { exact: true })).toHaveCount(0);
 
-		let run = chat.getByRole("button", { name: /4 tools.*1 failed.*1\.3s/ });
+		let run = chat.getByRole("button", {
+			name: /Work details.*4 actions.*1 failed.*1\.3s tool time/,
+		});
 		await expect(run).toBeVisible();
-		await expect(run).not.toHaveAttribute("aria-controls");
+		let controlled = await run.getAttribute("aria-controls");
+		expect(controlled).toBeTruthy();
+		await expect(chat.locator(`[id="${controlled}"]`)).toHaveCount(1);
 		await run.click();
 		let toolLog = chat.locator('[data-motion-disclosure="chat-tools"]');
 		let icon = run.locator("[data-feedback-icon]");
-		let toolLogId = await toolLog.getAttribute("id");
-		expect(toolLogId).toBeTruthy();
-		await expect(run).toHaveAttribute("aria-controls", toolLogId!);
+		await expect(run).toHaveAttribute("aria-controls", controlled!);
 		await expect(icon).toHaveAttribute("data-feedback-icon", "open");
 		await expect(chat.getByText("Read file", { exact: true })).toBeVisible();
 		await expect(chat.getByText("Run tests", { exact: true })).toBeVisible();
 		let failed = chat.getByRole("listitem").filter({ hasText: "Run tests" });
 		await expect(failed).toHaveAttribute("data-tool-status", "failed");
 		await run.click();
-		await expect(run).not.toHaveAttribute("aria-controls");
+		await expect(run).toHaveAttribute("aria-controls", controlled!);
 		await expect(toolLog).toHaveAttribute("aria-hidden", "true");
 		await expect(toolLog).toHaveAttribute("inert", "");
 		await run.click();
-		await expect(run).toHaveAttribute("aria-controls", toolLogId!);
+		await expect(run).toHaveAttribute("aria-controls", controlled!);
 		await expect(toolLog).toHaveCount(1);
 		await expect(toolLog).not.toHaveAttribute("aria-hidden", "true");
 		await expect(toolLog).not.toHaveAttribute("inert", "");
