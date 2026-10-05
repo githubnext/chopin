@@ -18,6 +18,14 @@ type FakeHarnessSettings = {
 };
 
 const SCRIPTED_TOOLS = ["read_plan", "list_pull_requests"] as const;
+const SLOW_PROMPT = "SLOW-LIVE";
+const STEP_MS = 2_500;
+
+function promptText(prompt: HarnessV1PromptTurnOptions["prompt"]): string {
+	if (typeof prompt === "string") return prompt;
+	if (typeof prompt.content === "string") return prompt.content;
+	return prompt.content.map((part: { text?: string }) => part.text ?? "").join("");
+}
 
 function unsupported(capability: string): () => Promise<never> {
 	return async () => {
@@ -87,48 +95,93 @@ export function createFakeHarness(
 					};
 					turn.abortSignal?.addEventListener("abort", onAbort, { once: true });
 
-					let callTool = (toolName: string): Promise<{ output: unknown; isError?: boolean }> => {
-						let toolCallId = crypto.randomUUID();
+					let callTool = (
+						toolName: string,
+						toolCallId = crypto.randomUUID(),
+					): Promise<{ output: unknown; isError?: boolean }> => {
 						let outcome = Promise.withResolvers<{ output: unknown; isError?: boolean }>();
 						pending.set(toolCallId, { toolName, resolve: outcome.resolve });
 						turn.emit({ type: "tool-call", toolCallId, toolName, input: "{}" });
 						return outcome.promise;
 					};
 
-					void (async () => {
-						try {
-							for (let toolName of SCRIPTED_TOOLS) {
+					let usage = {
+						inputTokens: { total: 0, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+						outputTokens: { total: 0, text: 0, reasoning: 0 },
+					};
+					let pause = () => new Promise<void>(resolve => setTimeout(resolve, STEP_MS));
+
+					if (promptText(turn.prompt).includes(SLOW_PROMPT)) {
+						void (async () => {
+							try {
+								let toolCallId = crypto.randomUUID();
+								turn.emit({ type: "reasoning-start", id: "slow-thinking" });
+								turn.emit({
+									type: "reasoning-delta",
+									id: "slow-thinking",
+									delta: "Considering the plan.",
+								});
+								turn.emit({ type: "reasoning-end", id: "slow-thinking" });
+								turn.emit({ type: "tool-input-start", id: toolCallId, toolName: "read_plan" });
+								await pause();
 								if (turn.abortSignal?.aborted) return;
-								results.set(toolName, await callTool(toolName));
+								await callTool("read_plan", toolCallId);
+								let id = crypto.randomUUID();
+								turn.emit({ type: "text-start", id });
+								turn.emit({ type: "text-delta", id, delta: "Streaming " });
+								await pause();
+								turn.emit({ type: "text-delta", id, delta: "slowly" });
+								await pause();
+								turn.emit({ type: "text-delta", id, delta: " now." });
+								turn.emit({ type: "text-end", id });
+								turn.emit({
+									type: "finish-step",
+									finishReason: { unified: "stop", raw: undefined },
+									usage,
+								});
+								turn.emit({
+									type: "finish",
+									finishReason: { unified: "stop", raw: undefined },
+									totalUsage: usage,
+								});
+								settled.resolve();
+							} catch (err) {
+								turn.emit({ type: "error", error: err });
+								settled.reject(err);
+							} finally {
+								turn.abortSignal?.removeEventListener("abort", onAbort);
 							}
-							if (turn.abortSignal?.aborted) return;
-							let chunks = deriveReply(results);
-							let id = crypto.randomUUID();
-							turn.emit({ type: "text-start", id });
-							for (let chunk of chunks) turn.emit({ type: "text-delta", id, delta: chunk });
-							turn.emit({ type: "text-end", id });
-							let usage = {
-								inputTokens: { total: 0, noCache: 0, cacheRead: 0, cacheWrite: 0 },
-								outputTokens: { total: 0, text: 0, reasoning: 0 },
-							};
-							turn.emit({
-								type: "finish-step",
-								finishReason: { unified: "stop", raw: undefined },
-								usage,
-							});
-							turn.emit({
-								type: "finish",
-								finishReason: { unified: "stop", raw: undefined },
-								totalUsage: usage,
-							});
-							settled.resolve();
-						} catch (err) {
-							turn.emit({ type: "error", error: err });
-							settled.reject(err);
-						} finally {
-							turn.abortSignal?.removeEventListener("abort", onAbort);
-						}
-					})();
+						})();
+					} else {void (async () => {
+							try {
+								for (let toolName of SCRIPTED_TOOLS) {
+									if (turn.abortSignal?.aborted) return;
+									results.set(toolName, await callTool(toolName));
+								}
+								if (turn.abortSignal?.aborted) return;
+								let chunks = deriveReply(results);
+								let id = crypto.randomUUID();
+								turn.emit({ type: "text-start", id });
+								for (let chunk of chunks) turn.emit({ type: "text-delta", id, delta: chunk });
+								turn.emit({ type: "text-end", id });
+								turn.emit({
+									type: "finish-step",
+									finishReason: { unified: "stop", raw: undefined },
+									usage,
+								});
+								turn.emit({
+									type: "finish",
+									finishReason: { unified: "stop", raw: undefined },
+									totalUsage: usage,
+								});
+								settled.resolve();
+							} catch (err) {
+								turn.emit({ type: "error", error: err });
+								settled.reject(err);
+							} finally {
+								turn.abortSignal?.removeEventListener("abort", onAbort);
+							}
+						})();}
 
 					return {
 						async submitToolResult({ toolCallId, output, isError }) {

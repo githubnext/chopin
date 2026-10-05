@@ -29,6 +29,13 @@ export type FullPlanner = {
 	rootOf?: (runId: string) => string;
 	/** Woken on every change to `runs`. */
 	waiters?: Set<() => void>;
+	/** The tools Atomic offers the running turn, set before its first stream part. */
+	activeTools?: readonly string[];
+	/**
+	 * An Atomic-run tool's own progress or end. HarnessAgent holds tool results until
+	 * its model step ends, so this is how the chat sees them as they happen.
+	 */
+	toolReport?: (id: string, output: unknown, state: "running" | "done" | "failed") => void;
 };
 
 let planners = new Map<string, FullPlanner>();

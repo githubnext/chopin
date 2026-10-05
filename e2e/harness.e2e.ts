@@ -103,3 +103,104 @@ test("the composer marks its destination in the mode switch before sending", asy
 	await draft.fill("@chopin should we ask about auth first?");
 	await expect(toggle).toHaveAttribute("aria-pressed", "true");
 });
+
+// Frame order and arrival time are the contract; the browser UI is incidental.
+type Seen = { at: number; connection: number; frame: Chat.Outgoing };
+
+async function recordChat(page: Page) {
+	let seen: Seen[] = [];
+	let connections = 0;
+	await page.routeWebSocket("**/ws?**", route => {
+		let connection = ++connections;
+		let server = route.connectToServer();
+		route.onMessage(message => server.send(message));
+		server.onMessage(message => {
+			if (typeof message === "string") {
+				let frame = JSON.parse(message) as Chat.Outgoing;
+				if (frame.kind.startsWith("chat:")) seen.push({ at: Date.now(), connection, frame });
+			}
+			route.send(message);
+		});
+	});
+	return <K extends Chat.Outgoing["kind"]>(kind: K, connection?: number) =>
+		seen.filter(item =>
+			item.frame.kind === kind && (connection ?? item.connection) === item.connection
+		) as Array<
+			Seen & { frame: Extract<Chat.Outgoing, { kind: K }> }
+		>;
+}
+
+async function sendSlowTurn(page: Page) {
+	let chat = chatPane(page);
+	await chat.getByPlaceholder("Use @chopin to ask Chopin").fill("@chopin SLOW-LIVE show your work");
+	await chat.getByRole("button", { name: "Send message" }).click();
+}
+
+test("a live Planner turn streams state and a tool row that settles at its own end", async ({ join, page, seed }) => {
+	await seed("# Live parent\nThe harp needs new strings.\n");
+	let frames = await recordChat(page);
+	let opened = await join("ana");
+	await sendSlowTurn(opened);
+
+	await expect.poll(
+		() =>
+			frames("chat:state").some(item => item.frame.busy)
+			&& frames("chat:state").some(item => !item.frame.busy && frames("chat:delta").length > 0),
+		{ timeout: 20_000 },
+	).toBe(true);
+
+	let started = frames("chat:state").find(item => item.frame.busy)!;
+	let turn = started.frame.turn!;
+	expect(turn.startedAt).toBeGreaterThan(0);
+	expect(started.at).toBeLessThan(frames("chat:delta")[0]!.at);
+	expect(frames("chat:delta").every(item => !item.frame.text.includes("Considering"))).toBe(true);
+
+	let rows = frames("chat:tool");
+	let running = rows.find(item => item.frame.activity.status === "running")!;
+	let settled = rows.find(item => item.frame.activity.status === "done")!;
+	expect(running.frame.activity.name).toBe("read_plan");
+	expect(running.frame.activity.startedAt).toBeGreaterThanOrEqual(turn.startedAt!);
+	expect(settled.frame.activity.id).toBe(running.frame.activity.id);
+
+	// The tool ends after its own 2.5s step, well before the 7.5s turn does.
+	let took = settled.frame.activity.took!;
+	expect(took).toBeGreaterThanOrEqual(2_000);
+	expect(took).toBeLessThan(4_500);
+	expect(Math.abs(settled.at - running.at - took)).toBeLessThan(1_000);
+	expect(settled.at).toBeLessThan(frames("chat:delta").at(-1)!.at);
+
+	let idle = frames("chat:state").find(item => !item.frame.busy && item.at > started.at)!;
+	expect(idle.frame.turn).toBeUndefined();
+	expect(idle.at).toBeGreaterThan(settled.at);
+});
+
+test("a reconnect mid-turn restores the running tool and turn start from history without reasoning", async ({ join, page, seed }) => {
+	await seed("# Live parent\nThe harp needs new strings.\n");
+	let frames = await recordChat(page);
+	let opened = await join("ana");
+	await sendSlowTurn(opened);
+
+	await expect.poll(() => frames("chat:tool", 1).length, { timeout: 5_000 }).toBeGreaterThan(0);
+	let started = frames("chat:state", 1).find(item => item.frame.busy)!.frame.turn!;
+	let running = frames("chat:tool", 1)[0]!.frame.activity;
+	await opened.reload();
+	await ready(opened);
+
+	await expect.poll(() => frames("chat:history", 2).length, { timeout: 5_000 }).toBeGreaterThan(0);
+	let history = frames("chat:history", 2)[0]!.frame;
+	let restored = history.entries.flatMap(entry => entry.tools ?? []);
+	expect(history.busy).toBe(true);
+	expect(history.turn).toMatchObject({ id: started.id, startedAt: started.startedAt });
+	expect(restored).toHaveLength(1);
+	expect(restored[0]).toMatchObject({
+		name: "read_plan",
+		status: "running",
+		startedAt: running.startedAt,
+	});
+	expect(JSON.stringify(history)).not.toContain("Considering");
+
+	await expect.poll(() => frames("chat:state", 2).some(item => !item.frame.busy), {
+		timeout: 20_000,
+	}).toBe(true);
+	expect(frames("chat:tool", 2).some(item => item.frame.activity.status === "done")).toBe(true);
+});

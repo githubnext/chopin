@@ -4,10 +4,14 @@ import { ulid } from "@chopin/dialect";
 import {
 	consumeBootstrapBackscroll,
 	create,
+	finished,
+	progressed,
 	retainReferences,
 	sessionBootstrap,
 	translate,
 } from "./service";
+
+import { PLANNER_TOOL_NAMES } from "../harness/tool-names";
 
 import type { Server } from "bun";
 import type { TextStreamPart, ToolSet } from "ai";
@@ -40,6 +44,7 @@ describe("AI SDK stream projection", () => {
 			id: "turn-1",
 			handle: "ana",
 			started: 1_700_000_000,
+			startedAt: 1_700_000_000_000,
 			entryOffset: 0,
 			responded: false,
 		};
@@ -127,7 +132,11 @@ describe("AI SDK stream projection", () => {
 		});
 		translate(context, call("ask", "t2"));
 		translate(context, part({ type: "tool-output-denied", toolCallId: "t2", toolName: "ask" }));
-		expect(chat.entries[0]?.tools?.[1]).toMatchObject({ status: "failed", result: "Refused." });
+		expect(chat.entries[0]?.tools?.[1]).toMatchObject({
+			status: "failed",
+			refused: true,
+			result: "Refused.",
+		});
 	});
 
 	it("aborts and logs an inactive tool call rather than projecting it", () => {
@@ -141,6 +150,210 @@ describe("AI SDK stream projection", () => {
 			expect(error).toHaveBeenCalledWith(
 				expect.stringContaining("boundary failure: inactive tool bash"),
 			);
+			expect(chat.entries).toHaveLength(0);
+		} finally {
+			error.mockRestore();
+		}
+	});
+
+	it("keeps reasoning private to the Planner: no frame, no transcript entry", () => {
+		let chat = create();
+		chat.turn = { id: "turn-1", handle: "ana", started: 1, startedAt: 1_000, entryOffset: 0, responded: false };
+		let { context, sent } = room(chat);
+		translate(context, part({ type: "reasoning-start", id: "r1" }));
+		translate(context, part({ type: "reasoning-delta", id: "r1", text: "Weighing options." }));
+		translate(context, part({ type: "reasoning-end", id: "r1" }));
+		expect(sent).toEqual([]);
+		expect(chat.entries).toHaveLength(0);
+		expect(chat.turn.responded).toBe(false);
+	});
+
+	it("opens a running row when a tool's input starts and settles the same row with its duration", () => {
+		let chat = create();
+		let { context, sent } = room(chat);
+		let before = Date.now();
+		translate(context, part({ type: "tool-input-start", id: "t1", toolName: "read_plan" }));
+		translate(context, part({ type: "tool-input-delta", id: "t1", delta: "{" }));
+		expect(sent.map(frame => frame.kind)).toEqual(["chat:message", "chat:tool"]);
+		let opened = chat.entries[0]!.tools![0]!;
+		expect(opened).toMatchObject({ id: "t1", name: "read_plan", status: "running" });
+		expect(opened.startedAt).toBeGreaterThanOrEqual(before);
+		expect(opened.args).toBeUndefined();
+
+		translate(context, call("read_plan", "t1", { revision: 2 }));
+		translate(
+			context,
+			part({ type: "tool-result", toolCallId: "t1", toolName: "read_plan", output: "ok" }),
+		);
+		let tools = chat.entries[0]!.tools!;
+		expect(tools).toHaveLength(1);
+		expect(tools[0]).toMatchObject({ status: "done", startedAt: opened.startedAt, result: "ok" });
+		expect(tools[0]!.args).toContain("revision");
+		expect(tools[0]!.took).toBeGreaterThanOrEqual(0);
+	});
+
+	it("settles a host tool with its own duration when the buffered result arrives at step end", async () => {
+		let chat = create();
+		let { context, sent } = room(chat);
+		translate(context, part({ type: "tool-input-start", id: "t1", toolName: "read_plan" }));
+		translate(context, call("read_plan", "t1"));
+		await Bun.sleep(20);
+		finished(context, "t1", "ok", true);
+		let tool = chat.entries[0]!.tools![0]!;
+		expect(tool).toMatchObject({ status: "done", result: "ok" });
+		let took = tool.took!;
+		expect(took).toBeGreaterThanOrEqual(15);
+
+		await Bun.sleep(60);
+		let frames = sent.length;
+		translate(
+			context,
+			part({ type: "tool-result", toolCallId: "t1", toolName: "read_plan", output: "ok" }),
+		);
+		expect(sent).toHaveLength(frames);
+		expect(chat.entries[0]!.tools![0]!.took).toBe(took);
+	});
+
+	it("settles an Atomic builtin at its own end and ignores the buffered step-end parts", async () => {
+		let chat = create();
+		chat.agent = {
+			activeTools: ["bash"],
+			stream: async () => undefined as never,
+			destroy: async () => {},
+		};
+		let { context, sent } = room(chat);
+		translate(
+			context,
+			part({ type: "tool-input-start", id: "b1", toolName: "bash", providerExecuted: true }),
+		);
+		translate(context, call("bash", "b1"));
+		progressed(context, "b1", "hi");
+		expect(chat.entries[0]!.tools![0]).toMatchObject({ status: "running", result: "hi" });
+		await Bun.sleep(20);
+		finished(context, "b1", "hi\n", true);
+		let tool = chat.entries[0]!.tools![0]!;
+		expect(tool).toMatchObject({ status: "done", result: "hi\n" });
+		let took = tool.took!;
+		expect(took).toBeGreaterThanOrEqual(15);
+
+		await Bun.sleep(60);
+		let frames = sent.length;
+		translate(
+			context,
+			part({
+				type: "tool-result",
+				toolCallId: "b1",
+				toolName: "bash",
+				output: "hi",
+				preliminary: true,
+			}),
+		);
+		translate(
+			context,
+			part({ type: "tool-result", toolCallId: "b1", toolName: "bash", output: "hi\n" }),
+		);
+		progressed(context, "b1", "late");
+		expect(sent).toHaveLength(frames);
+		expect(chat.entries[0]!.tools![0]).toMatchObject({ status: "done", took, result: "hi\n" });
+	});
+
+	it("keeps a builtin done when its end arrived but the buffered result never does", () => {
+		let chat = create();
+		chat.agent = {
+			activeTools: ["bash"],
+			stream: async () => undefined as never,
+			destroy: async () => {},
+		};
+		let { context } = room(chat);
+		translate(
+			context,
+			part({ type: "tool-input-start", id: "b2", toolName: "bash", providerExecuted: true }),
+		);
+		finished(context, "b2", "out", true);
+		expect(chat.entries[0]!.tools![0]).toMatchObject({ status: "done", result: "out" });
+	});
+
+	it("keeps a tool running through preliminary output and files later tools after later prose", () => {
+		let chat = create();
+		let { context } = room(chat);
+		translate(context, call("read_plan", "t1"));
+		translate(
+			context,
+			part({
+				type: "tool-result",
+				toolCallId: "t1",
+				toolName: "read_plan",
+				output: "partial",
+				preliminary: true,
+			}),
+		);
+		expect(chat.entries[0]!.tools![0]).toMatchObject({ status: "running", result: "partial" });
+		expect(chat.entries[0]!.tools![0]!.took).toBeUndefined();
+		translate(context, part({ type: "text-start", id: "m" }));
+		translate(context, part({ type: "text-delta", id: "m", text: "Then this." }));
+		translate(context, part({ type: "text-end", id: "m" }));
+		translate(context, call("edit_plan", "t2"));
+		expect(chat.entries.map(entry => entry.tools?.map(tool => tool.id))).toEqual([
+			["t1"],
+			undefined,
+			["t2"],
+		]);
+	});
+
+	it("masks secrets and bounds what a tool shows other members", () => {
+		let chat = create();
+		let { context } = room(chat);
+		translate(context, call("read_plan", "t1", { token: "abc", path: "a" }));
+		translate(
+			context,
+			part({
+				type: "tool-result",
+				toolCallId: "t1",
+				toolName: "read_plan",
+				output: `Bearer ${"s".repeat(30)} ghp_${"A".repeat(30)}`,
+			}),
+		);
+		let tool = chat.entries[0]!.tools![0]!;
+		expect(tool.args).toContain("[redacted]");
+		expect(tool.args).not.toContain("abc");
+		expect(tool.result).toBe("Bearer [redacted] [redacted]");
+	});
+
+	it("accepts the tools of a full session's active set and rejects the rest", () => {
+		let chat = create();
+		chat.agent = {
+			activeTools: ["read_plan", "bash", "workflow"],
+			stream: async () => undefined as never,
+			destroy: async () => {},
+		};
+		let controller = chat.turnController = new AbortController();
+		let { context } = room(chat);
+		translate(context, part({ type: "tool-input-start", id: "t1", toolName: "bash" }));
+		translate(context, call("workflow", "t2"));
+		expect(controller.signal.aborted).toBe(false);
+		expect(chat.entries[0]!.tools!.map(tool => tool.name)).toEqual(["bash", "workflow"]);
+		let error = spyOn(console, "error").mockImplementation(() => {});
+		try {
+			translate(context, call("subagent", "t3"));
+			expect(controller.signal.aborted).toBe(true);
+		} finally {
+			error.mockRestore();
+		}
+	});
+
+	it("keeps a fixed-profile session at the Planner tools, so an Atomic builtin still aborts", () => {
+		let chat = create();
+		chat.agent = {
+			activeTools: PLANNER_TOOL_NAMES,
+			stream: async () => undefined as never,
+			destroy: async () => {},
+		};
+		let controller = chat.turnController = new AbortController();
+		let error = spyOn(console, "error").mockImplementation(() => {});
+		try {
+			translate(room(chat).context, part({ type: "tool-input-start", id: "t1", toolName: "bash" }));
+			expect(controller.signal.aborted).toBe(true);
+			expect(chat.interruption).toContain("bash");
 			expect(chat.entries).toHaveLength(0);
 		} finally {
 			error.mockRestore();
