@@ -444,10 +444,14 @@ function Feedback() {
 			>
 				<div className="design-audit-empty-grid">
 					<div>
-						<DocumentIcon size={24} />
-						<strong>No documents yet</strong>
-						<span>Create the first shared document for this project.</span>
-						<button className="btn btn-md btn-primary" type="button">Create document</button>
+						<DocumentIcon className="text-text-quaternary" size={20} />
+						<strong>No document open</strong>
+						<span>Pick one from the sidebar or start a new one.</span>
+						<button className="btn btn-sm btn-secondary" type="button">New document</button>
+					</div>
+					<div>
+						<span className="design-audit-empty-sidebar-row">No documents</span>
+						<span className="design-audit-empty-sidebar-row">No archived documents</span>
 					</div>
 					<div>
 						<SearchIcon size={24} />
