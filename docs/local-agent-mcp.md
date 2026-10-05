@@ -149,7 +149,9 @@ return `issues`. Every one of these outcomes matches the tool's output schema.
 
 ## Document URLs and IDs
 
-The `url` returned by `create_document` is the readable canonical route:
+The `url` returned by `create_document`, `update_document`, and `read_document` is
+the readable canonical route. `read_document` always returns the current one, so a
+caller that has only the UUID can recover it:
 
 ```text
 /documents/:owner/:repository/:slug

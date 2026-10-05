@@ -4,13 +4,14 @@ import { limits } from "@chopin/dialect";
 
 import { handler } from "../mcp";
 
-import type { CreateDocumentInput, Document, DocumentReader } from "../mcp";
+import type { CreateDocumentInput, DocumentReader, LinkedDocument } from "../mcp";
 
-let document: Document = {
+let document: LinkedDocument = {
 	id: "f401c8d6-3717-4f1d-8473-cfdd0af894e4",
 	title: "Release readiness",
 	source: "# Release readiness\n",
 	revision: 4,
+	url: "/documents/githubnext/chopin/release-readiness",
 };
 
 let creation = {

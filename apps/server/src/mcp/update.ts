@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { canonical, MAX_REQUEST_BYTES } from "./create";
 
 import type { Issue } from "@chopin/dialect";
-import type { CreatedDocument } from "../mcp";
+import type { LinkedDocument } from "../mcp";
 
 export type UpdateDocumentInput = {
 	id: string;
@@ -80,7 +80,7 @@ export type UpdateDocument<Caller> = {
 		input: UpdateDocumentInput,
 		client: UpdateClient,
 	): Promise<
-		| { kind: "updated" | "replayed"; document: CreatedDocument }
+		| { kind: "updated" | "replayed"; document: LinkedDocument }
 		| { kind: "conflict" }
 		| { kind: "revision-conflict"; revision: number }
 		| { kind: "locked" }
