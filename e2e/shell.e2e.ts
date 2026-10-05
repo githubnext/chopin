@@ -23,8 +23,8 @@ test("an icon button shows its label on keyboard focus", async ({ join }) => {
 	await expect(tooltip).toHaveText("Add project");
 	await page.getByRole("button", { name: /^New document in / }).first().focus();
 	await expect(tooltip).toHaveText("New document");
-	await page.getByRole("button", { name: "Collapse Projects sidebar" }).focus();
-	await expect(tooltip).toHaveText("Close sidebar");
+	await page.getByRole("button", { name: "Hide sidebar" }).focus();
+	await expect(tooltip).toHaveText("Hide sidebar");
 	await page.keyboard.press("Tab");
 	await expect(tooltip).toBeHidden();
 });

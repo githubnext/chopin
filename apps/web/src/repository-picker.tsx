@@ -343,8 +343,8 @@ export function RepositoryPicker(
 												</span>
 												<span className="block text-sm text-text-tertiary">
 													{repository.permissions.push || repository.permissions.admin
-														? "Create and edit channels"
-														: "View channels"}
+														? "Create and edit documents"
+														: "View documents"}
 												</span>
 											</span>
 											{selected && (

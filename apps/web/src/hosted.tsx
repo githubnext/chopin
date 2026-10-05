@@ -217,7 +217,7 @@ export function HostedLogin() {
 		<div className="grid h-full bg-ground lg:grid-cols-[1.15fr_0.85fr]" data-hosted="">
 			<section className="flex items-end bg-text-primary p-6 text-page sm:p-10 lg:p-16">
 				<div className="max-w-xl pb-8">
-					<p className="text-sm font-semibold text-brand-wash">chopin</p>
+					<p className="text-sm font-semibold text-brand-wash">Chopin</p>
 					<h1 className="mt-4 text-2xl font-semibold">
 						Plan together, in the context of the code.
 					</h1>
@@ -231,7 +231,7 @@ export function HostedLogin() {
 				<div className="w-full max-w-sm">
 					<h2 className="text-xl font-semibold">Open your workspace</h2>
 					<p className="mt-2 text-sm text-text-secondary">
-						Sign in with GitHub to choose a repository and its planning channels.
+						Sign in with GitHub to open your projects and documents.
 					</p>
 					<a className="btn btn-md btn-primary mt-6 w-full" href={href}>
 						Continue with GitHub

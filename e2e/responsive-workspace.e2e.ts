@@ -30,7 +30,7 @@ async function expectCompactWorkspaceChrome(page: Page): Promise<void> {
 	let header = page.getByRole("banner");
 	let nav = page.getByRole("navigation", { name: "Workspace view" });
 	let frame = page.locator(".workspace-frame");
-	let projects = page.getByRole("button", { name: "Open Projects sidebar" });
+	let projects = page.getByRole("button", { name: "Show sidebar" });
 	let document = header.getByRole("button", { name: /^Actions for / });
 	let destinations = nav.getByRole("button");
 
@@ -89,7 +89,7 @@ test("a representative compact phone exposes one mounted destination at a time",
 	let page = await join("ana", { hasTouch: true, viewport: { width: 390, height: 844 } });
 	let nav = page.getByRole("navigation", { name: "Workspace view" });
 	await expectCompactWorkspaceChrome(page);
-	let projects = page.getByRole("button", { name: "Open Projects sidebar" });
+	let projects = page.getByRole("button", { name: "Show sidebar" });
 	await projects.click();
 	let drawer = page.getByRole("dialog", { name: "Projects" });
 	await expect(drawer).toBeVisible();
@@ -293,7 +293,7 @@ test("content swaps retain one interactive destination across pointer and immedi
 test("a pointer-dismissed Projects drawer becomes inert while it exits", async ({ join, seed }) => {
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", { hasTouch: true, viewport: { width: 390, height: 844 } });
-	let opener = page.getByRole("button", { name: "Open Projects sidebar" });
+	let opener = page.getByRole("button", { name: "Show sidebar" });
 	await opener.click();
 	let drawer = page.getByRole("dialog", { includeHidden: true, name: "Projects" }).locator("../..");
 	await page.getByRole("button", { name: "Close Projects sidebar" }).click({
@@ -310,7 +310,7 @@ test("enabling reduced motion settles an active drawer exit", async ({ join, see
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", { hasTouch: true, viewport: { width: 390, height: 844 } });
 	await page.emulateMedia({ reducedMotion: "no-preference" });
-	await page.getByRole("button", { name: "Open Projects sidebar" }).click();
+	await page.getByRole("button", { name: "Show sidebar" }).click();
 	let drawer = page.getByRole("dialog", { includeHidden: true, name: "Projects" }).locator("../..");
 	await page.getByRole("button", { name: "Close Projects sidebar" }).click({
 		position: { x: 382, y: 422 },
@@ -351,7 +351,7 @@ test("a shifted visual viewport keeps workspace controls in the exposed rectangl
 			width: 320,
 		});
 
-		let sidebarButton = page.getByRole("button", { name: "Open Projects sidebar" });
+		let sidebarButton = page.getByRole("button", { name: "Show sidebar" });
 		await expect(sidebarButton).toBeVisible();
 		await expectInsideViewport(sidebarButton);
 		let workspaceNavigation = page.getByRole("navigation", { name: "Workspace view" });
@@ -459,7 +459,7 @@ test("the Projects drawer below 1024px keeps the split workspace", async ({ join
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", { viewport });
 	await expect(page.getByRole("navigation", { name: "Workspace view" })).toHaveCount(0);
-	let projects = page.getByRole("button", { name: "Open Projects sidebar" });
+	let projects = page.getByRole("button", { name: "Show sidebar" });
 	await expect(projects).toBeVisible();
 	await projects.click();
 	let drawer = page.getByRole("dialog", { name: "Projects" });
@@ -489,7 +489,7 @@ test("the wide Projects sidebar leaves the workspace unobstructed", async ({ joi
 	await seed(RESPONSIVE_SOURCE);
 	let page = await join("ana", { viewport: { width: 1024, height: 768 } });
 	let projects = page.getByRole("complementary", { includeHidden: true, name: "Projects" });
-	let opener = page.getByRole("button", { name: "Open Projects sidebar" });
+	let opener = page.getByRole("button", { name: "Show sidebar" });
 	let track = projects.locator("../..");
 	await expect(projects).toBeVisible();
 	await expect(opener).toHaveCount(0);
@@ -505,7 +505,7 @@ test("the wide Projects sidebar leaves the workspace unobstructed", async ({ joi
 	await expect(documentView.getByRole("button", { name: "Tasks & Progress" })).toHaveCount(0);
 	await expect(documentView.getByRole("button", { name: "Background Work" })).toHaveCount(0);
 
-	await page.getByRole("button", { name: "Collapse Projects sidebar" }).click();
+	await page.getByRole("button", { name: "Hide sidebar" }).click();
 	await expect(track).toHaveAttribute("aria-hidden", "true");
 	await expect(track).toHaveAttribute("inert", "");
 	await expect(opener).toBeFocused();
@@ -516,7 +516,7 @@ test("the wide Projects sidebar leaves the workspace unobstructed", async ({ joi
 	sidebarBounds = (await track.boundingBox())!;
 	contentBounds = (await content.boundingBox())!;
 	expect(sidebarBounds.x + sidebarBounds.width).toBeLessThanOrEqual(contentBounds.x);
-	await page.getByRole("button", { name: "Collapse Projects sidebar" }).click();
+	await page.getByRole("button", { name: "Hide sidebar" }).click();
 	await expect(track).toHaveAttribute("aria-hidden", "true");
 	await opener.click();
 	await expect(track).not.toHaveAttribute("aria-hidden", "true");

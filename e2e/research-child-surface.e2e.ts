@@ -778,7 +778,7 @@ test("a direct compact child fills the canvas and reduces motion to a crossfade"
 	await navigation.getByRole("button", { name: "Document", exact: true }).click();
 	await expect(surface.getByRole("complementary", { name: "Chat" })).toBeHidden();
 	await expect(surface.locator('[data-document-view="plan"]')).toBeVisible();
-	let projects = page.getByRole("button", { name: "Open Projects sidebar" });
+	let projects = page.getByRole("button", { name: "Show sidebar" });
 	await projects.click();
 	let drawer = page.getByRole("dialog", { name: "Projects" });
 	await expect(drawer).toBeVisible();

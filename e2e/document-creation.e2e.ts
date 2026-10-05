@@ -200,7 +200,7 @@ test("the project chooser supports keyboard selection and retry in the chosen pr
 test("compact creation restores focus on dismissal and shows progress after the drawer closes", async ({ baseURL, page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
 	await start(page, baseURL!, ["score", "archive-1"]);
-	let opener = page.getByRole("button", { name: "Open Projects sidebar", exact: true });
+	let opener = page.getByRole("button", { name: "Show sidebar", exact: true });
 	await opener.click();
 	await createButton(page).click();
 	let dialog = page.getByRole("dialog", { name: "New document", exact: true });
