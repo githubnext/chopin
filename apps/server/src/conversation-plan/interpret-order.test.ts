@@ -36,6 +36,6 @@ test.each([false, true])(
 		expect(await observed).toBe(1);
 		let output = await pending;
 		expect(output.analysis.passes.map(pass => pass.stage)).toEqual(["triage", "targeting"]);
-		expect(output.researchOffer).toBeUndefined();
+		expect(output).not.toHaveProperty("researchOffer");
 	},
 );

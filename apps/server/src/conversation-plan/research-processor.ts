@@ -3,6 +3,7 @@ import type { Dependencies, Member } from "./processor-types";
 import { RESEARCH_QUESTION_SET, type ResearchInterpretation } from "./research-interpreter";
 import { assertStateShape } from "./validation";
 import { MAX_ANALYSIS } from "./validation-fields";
+import { applyResearchOpportunity, researchTargetChanged } from "./research-opportunities";
 
 export function createResearchProcessor(
 	deps: Dependencies,
@@ -13,6 +14,7 @@ export function createResearchProcessor(
 	let running: Promise<void> | undefined;
 	let wakeAgain = false;
 	async function run() {
+		let stale = 0;
 		while (active() && deps.researchInterpret) {
 			let input = await deps.exclusive(async () => {
 				let item = deps.plan.conversationPlan.research?.queue.find(item =>
@@ -53,9 +55,31 @@ export function createResearchProcessor(
 						item.messageId === input.message.id && item.status === "pending"
 					)
 				) return;
+				if (researchTargetChanged(previous, input, result)) {
+					if (++stale < 3) return;
+					result = {
+						analysis: {
+							...result.analysis,
+							status: "failed",
+							policyGate: "research context changed; retry",
+						},
+					};
+				}
+				let applied = previous;
+				try {
+					applied = applyResearchOpportunity(previous, deps.plan.id, input, result);
+				} catch {
+					result = {
+						analysis: {
+							...result.analysis,
+							status: "failed",
+							policyGate: "research offer failed validation",
+						},
+					};
+				}
 				let next: ConversationPlan.State = {
-					...previous,
-					revision: previous.revision + 1,
+					...applied,
+					revision: applied.revision + 1,
 					research: {
 						...research,
 						queue: result.analysis.status === "failed"
@@ -80,7 +104,9 @@ export function createResearchProcessor(
 					throw error;
 				}
 				publish();
+				stale = 0;
 			});
+			deps.researchChanged?.();
 		}
 	}
 	function wake() {

@@ -14,7 +14,9 @@ export function offerResearch(
 	if (
 		!proposal || typeof proposal !== "object" || Array.isArray(proposal)
 		|| Object.keys(proposal).some((key) =>
-			!["id", "needId", "contextId", "source", "brief", "threadId", "task"].includes(key)
+			!["id", "needId", "contextId", "source", "brief", "threadId", "task", "workflow"].includes(
+				key,
+			)
 		)
 	) throw new Error("invalid research offer proposal");
 	let offer: ConversationPlan.ResearchOffer = {
