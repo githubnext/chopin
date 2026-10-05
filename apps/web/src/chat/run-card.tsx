@@ -43,13 +43,15 @@ const GROUP: Record<Wire.Run["status"], number> = {
 	stopped: 3,
 };
 
-/** "45s", "6m", "1h 4m". */
+/** "45s", "6m", "1h 4m", "3d 4h". */
 export function elapsed(seconds: number): string {
 	let s = Math.max(0, Math.floor(seconds));
 	if (s < 60) return `${s}s`;
 	let m = Math.floor(s / 60);
 	if (m < 60) return `${m}m`;
-	return `${Math.floor(m / 60)}h ${m % 60}m`;
+	let h = Math.floor(m / 60);
+	if (h < 24) return `${h}h ${m % 60}m`;
+	return `${Math.floor(h / 24)}d ${h % 24}h`;
 }
 
 export function orderRuns(runs: readonly Wire.Run[]): Wire.Run[] {

@@ -303,7 +303,7 @@
 
 .design-audit-status-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
 	gap: 0.75rem;
 }
 
@@ -321,7 +321,7 @@
 .design-audit-status-grid .plan-status {
 	position: static;
 	inset: auto;
-	max-width: 100%;
+	width: fit-content;
 }
 
 .design-audit-empty-grid > div {
