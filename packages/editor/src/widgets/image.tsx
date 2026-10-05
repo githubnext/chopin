@@ -9,15 +9,21 @@
 
 import { useState } from "react";
 
+import { ImageIcon } from "@chopin/icons";
+
 import type { ImageNode } from "@chopin/dialect";
 
 function Image({ alt, src }: { alt: string; src: string }) {
 	let [failed, setFailed] = useState(false);
 
+	// One element for both placements: the stylesheet makes it a frame when the
+	// image is alone in its paragraph and a chip when it sits in a sentence.
 	if (failed) {
+		let label = alt || "Image unavailable";
 		return (
-			<span className="inline-flex items-center rounded-md px-2 py-1 text-sm text-text-secondary ring-hairline">
-				Image unavailable
+			<span aria-label={label} className="plan-image-missing" role="img">
+				<ImageIcon />
+				<span className="plan-image-missing-label">{label}</span>
 			</span>
 		);
 	}

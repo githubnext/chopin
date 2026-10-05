@@ -1214,14 +1214,14 @@
 	margin-inline: var(--plan-wide-inline-offset);
 }
 
-/* A compact table shrink-wraps around its columns and stays on the document's centre line. */
+/*
+ * A compact table shrink-wraps around its columns from the prose's start edge,
+ * like every other block; a wide one scrolls inside the prose measure. The row
+ * and column rails are fixed overlays and sit in the gutter outside it.
+ */
 .plan-content > table {
 	inline-size: max-content;
-	max-inline-size: var(--plan-wide-inline-size);
-	margin-inline: 0;
-	position: relative;
-	inset-inline-start: 50%;
-	translate: -50% 0;
+	max-inline-size: 100%;
 }
 
 /* The paragraph owns the wide row; the image keeps its intrinsic size inside it. */
@@ -1229,6 +1229,69 @@
 	> p:has(> [data-plan-src]:first-child + br[data-lexical-managed-linebreak]:last-child) {
 	display: grid;
 	place-items: center;
+}
+
+/*
+ * An image that could not load. In a sentence it is a chip like inline code,
+ * so the sentence still reads; alone in its paragraph it is a quiet frame at
+ * the prose width rather than the wide row a loaded image would use.
+ */
+.plan-content .plan-image-missing {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.3em;
+	max-inline-size: 100%;
+	vertical-align: bottom;
+	padding: 0.125em 0.3em;
+	border-radius: var(--radius-sm);
+	background: var(--color-inset);
+	color: var(--color-text-secondary);
+}
+
+.plan-content .plan-image-missing-label {
+	overflow: hidden;
+	min-inline-size: 0;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.plan-content
+	p:has(> [data-plan-src]:first-child
+		+ br[data-lexical-managed-linebreak]:last-child):has(.plan-image-missing) {
+	display: block;
+	/* Block layout honours `justify-items` too, which would still centre the frame. */
+	place-items: normal;
+	inline-size: auto;
+	max-inline-size: 100%;
+	margin-inline: 0;
+}
+
+.plan-content
+	p:has(> [data-plan-src]:first-child + br[data-lexical-managed-linebreak]:last-child)
+	> [data-plan-src]:has(> .plan-image-missing) {
+	display: block;
+}
+
+.plan-content
+	p:has(> [data-plan-src]:first-child + br[data-lexical-managed-linebreak]:last-child)
+	.plan-image-missing {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: calc(var(--spacing) * 2);
+	block-size: calc(var(--spacing) * 24);
+	padding-inline: calc(var(--spacing) * 4);
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-md);
+	color: var(--color-text-tertiary);
+	font-size: var(--plan-text-xs);
+}
+
+.plan-content
+	p:has(> [data-plan-src]:first-child + br[data-lexical-managed-linebreak]:last-child)
+	.plan-image-missing-label {
+	max-inline-size: 100%;
 }
 
 .plan-content :is([data-plan-type], [data-plan-panels], .planMath) {
@@ -1665,6 +1728,39 @@
 	border-radius: var(--radius-md);
 	padding: var(--ace-formula-inset-block) var(--ace-formula-inset-inline);
 	overflow-x: auto;
+}
+
+/*
+ * A formula has no header row, so its show-source toggle sits in the block's
+ * top-end corner instead of on a line of its own below the result. The preview's
+ * scrollport stops short of it on both sides, so a long formula scrolls without
+ * passing underneath and a centred one stays centred.
+ */
+.plan-content .planMath[data-plan-inline="false"] {
+	position: relative;
+}
+
+.plan-content .planMath[data-plan-inline="false"] [data-plan-preview]:not(:empty) {
+	margin-inline: calc(var(--spacing) * 8);
+}
+
+.plan-content .planMath[data-plan-inline="false"] [data-plan-chrome="block"] {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-end: 0;
+	z-index: 1;
+}
+
+/* Revealed on hover or focus where a pointer can hover; always shown on touch. */
+@media (hover: hover) and (pointer: fine) {
+	.plan-content .planMath[data-plan-inline="false"] .plan-code-toggle[aria-expanded="false"] {
+		opacity: 0;
+		transition: opacity var(--duration-fast) var(--ease-out);
+	}
+
+	.plan-content .planMath[data-plan-inline="false"]:is(:hover, :focus-within) .plan-code-toggle {
+		opacity: 1;
+	}
 }
 
 /*
