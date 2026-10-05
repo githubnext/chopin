@@ -456,7 +456,7 @@
 	box-shadow: var(--shadow-resting);
 }
 
-/* The button is the hit area: 44px on a coarse pointer, kept inside the document, around a 24px chip. */
+/* The button is the hit area: on a coarse pointer 44px wide and as tall as the first line, inside the document. */
 .plan-comment-button {
 	pointer-events: auto;
 	position: absolute;

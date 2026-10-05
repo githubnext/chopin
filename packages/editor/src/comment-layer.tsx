@@ -41,6 +41,8 @@ type PlacedMarker = {
 	views: ThreadView[];
 	excerpt: string;
 	button: BlockMarkerPoint;
+	/** The first line box's height; a touch target stays within it so the next line takes taps. */
+	line: number;
 };
 type MeasuredThread = {
 	view: ThreadView;
@@ -303,6 +305,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let [preview, setPreview] = useState<string>();
 	let [previewMeasurement, setPreviewMeasurement] = useState<PreviewMeasurement>();
 	let [pinned, setPinned] = useState<string>();
+	let [returnTo, setReturnTo] = useState<string>();
 	let pinnedRef = useRef<string | undefined>(undefined);
 	pinnedRef.current = pinned;
 	let [coarse, setCoarse] = useState(false);
@@ -457,6 +460,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 				block,
 				line,
 				width: chipWidth(threads.length),
+				...(threads.length >= 10 ? { minimum: 18 } : {}),
 				held: focused === key
 					|| pinnedRef.current === `${LIST}${key}`
 					|| threads.some(({ view }) => view.thread.id === pinnedRef.current),
@@ -469,6 +473,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			views: entry.threads.map(({ view }) => view),
 			excerpt: entry.excerpt,
 			button: points[index]!,
+			line: entry.line.height,
 		}));
 		let next = measured.flatMap(entry =>
 			entry.threads.map<PlacedThread>(thread => ({
@@ -592,6 +597,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	}, [editor]);
 	let dismiss = useCallback(() => {
 		setPinned(undefined);
+		setReturnTo(undefined);
 		setPreview(undefined);
 		restoreOrigin();
 	}, [restoreOrigin]);
@@ -702,7 +708,12 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 				inDocument
 				key={view.thread.id}
 				onAccept={() => store.accept(view.thread.id)}
-				onBack={back ? () => setPinned(`${LIST}${back.key}`) : undefined}
+				onBack={back
+					? () => {
+						setReturnTo(view.thread.id);
+						setPinned(`${LIST}${back.key}`);
+					}
+					: undefined}
 				onBlur={() => unhover(view.thread.id)}
 				onClose={showClose ? dismiss : undefined}
 				onDismiss={() => store.dismiss(view.thread.id)}
@@ -786,6 +797,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			<ThreadList
 				autoFocus={false}
 				onSelect={selectThread}
+				returnTo={returnTo}
 				showClose={false}
 				views={pinnedList!.views}
 			/>
@@ -800,7 +812,14 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 			ariaLabel: pinnedView ? "Comment thread" : "Comments",
 			children: pinnedView
 				? card(pinnedView)
-				: <ThreadList onClose={dismiss} onSelect={selectThread} views={pinnedMarker.views} />,
+				: (
+					<ThreadList
+						onClose={dismiss}
+						onSelect={selectThread}
+						returnTo={returnTo}
+						views={pinnedMarker.views}
+					/>
+				),
 			className: "plan-comment-card",
 			id,
 			onMeasure: element => rememberHeight(id, element),
@@ -846,7 +865,8 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 				);
 				let previewId = single ? `plan-comment-preview-${single.thread.id}` : undefined;
 				let width = coarse ? Math.max(TOUCH_TARGET, button.width) : button.width;
-				let height = coarse ? TOUCH_TARGET : CHIP;
+				// Never taller than the first line, so a tap at the end of the second line reaches the text.
+				let height = coarse ? Math.min(TOUCH_TARGET, Math.max(CHIP, marker.line)) : CHIP;
 				// The touch area stays inside the document, so a chip in the padding keeps a full target.
 				let left = Math.max(
 					0,
@@ -881,7 +901,10 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 						onClick={event => {
 							origin.current = event.currentTarget;
 							if (shown) dismiss();
-							else setPinned(single ? single.thread.id : `${LIST}${marker.key}`);
+							else {
+								setReturnTo(undefined);
+								setPinned(single ? single.thread.id : `${LIST}${marker.key}`);
+							}
 						}}
 						onFocus={single ? () => hover(single.thread.id) : undefined}
 						onMouseEnter={single ? () => hover(single.thread.id) : undefined}

@@ -429,6 +429,8 @@ export type ThreadListProps = {
 	views: ThreadView[];
 	/** A compact sheet focuses its own grabber instead. */
 	autoFocus?: boolean;
+	/** The thread just left with Back; its item takes focus, even in a sheet. */
+	returnTo?: string;
 	onSelect: (id: string) => void;
 	onClose?: () => void;
 	showClose?: boolean;
@@ -436,15 +438,22 @@ export type ThreadListProps = {
 
 /** Several threads on one block, as one stop that opens into each of them. */
 export function ThreadList(
-	{ autoFocus = true, onClose, onSelect, showClose = true, views }: ThreadListProps,
+	{ autoFocus = true, onClose, onSelect, returnTo, showClose = true, views }: ThreadListProps,
 ) {
 	let list = useRef<HTMLUListElement>(null);
 
 	useEffect(() => {
-		if (autoFocus) {
-			list.current?.querySelector<HTMLElement>("[data-plan-comment-group-item]")?.focus();
+		let items = list.current;
+		let item = returnTo
+			? items?.querySelector<HTMLElement>(`[data-plan-comment-group-item="${returnTo}"]`)
+			: undefined;
+		if (item) item.focus();
+		else if (autoFocus) {
+			items?.querySelector<HTMLElement>("[data-plan-comment-group-item]")?.focus();
 		}
-	}, [autoFocus]);
+		// Focus once, when the list opens; later changes to its threads leave focus where it is.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
 
 	let move = (event: KeyboardEvent<HTMLUListElement>) => {
 		let items = Array.from(
