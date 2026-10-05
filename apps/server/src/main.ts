@@ -17,6 +17,7 @@ import * as Chat from "./chat/service";
 import { CHAT_CAPABILITIES, incomingFrame } from "./chat/incoming";
 import { ReferenceService } from "./chat/references";
 import { createConversationRuntime } from "./conversation-plan/runtime";
+import { researchBriefDefinition } from "./jobs/research-brief";
 import {
 	greetJoinedPlan,
 	prepareOpenedPlan,
@@ -100,6 +101,7 @@ let recoveringResearch: Promise<void> | undefined;
 let referenceService: ReferenceService | undefined;
 let summaryCoordinator: DocumentSummaryCoordinator | undefined;
 let descriptionProjector: DocumentDescriptionProjector | undefined;
+let researchBriefJobs: JobService | undefined;
 let documentLocks = new Map<string, Promise<void>>();
 let documentTransitions = new Map<string, Promise<void>>();
 let archivingChannels = new Set<string>();
@@ -108,6 +110,7 @@ let conversationRuntime = createConversationRuntime({
 	config,
 	server: () => server,
 	unavailable: id => archivingChannels.has(id) || deletingChannels.has(id),
+	researchJobs: () => researchBriefJobs,
 });
 
 function withDocumentLock<T>(channelId: string, action: () => Promise<T>): Promise<T> {
@@ -1253,6 +1256,7 @@ let hostedAuth = registerAuthRoutes(router, {
 ownerBindings = new ActiveOwnerBindings(hostedAuth);
 let definitions: JobDefinition[] = [];
 if (config.backgroundJobs) {
+	definitions.push(researchBriefDefinition({ config }));
 	definitions.push(documentSummaryDefinition({
 		config,
 		current: currentDocumentTarget,
@@ -1276,6 +1280,10 @@ let jobService = new JobService({
 	},
 	onChange: job => {
 		jobRunner?.notify(job);
+		if (job.type === "research-brief") {
+			let opened = Rooms.get(job.channelId)?.plan;
+			if (opened) conversationRuntime.wake(opened);
+		}
 		if (job.state === "completed") {
 			void descriptionProjector?.jobChanged(job).catch(err => {
 				console.error("chopin: document description reconciliation failed -", err);
@@ -1287,6 +1295,7 @@ let jobService = new JobService({
 	},
 	publish: announceJobsChanged,
 });
+if (config.agent && config.backgroundJobs) researchBriefJobs = jobService;
 if (config.backgroundJobs) {
 	descriptionProjector = new DocumentDescriptionProjector({
 		storage,

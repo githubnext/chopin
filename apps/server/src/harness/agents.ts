@@ -90,6 +90,10 @@ let source = z.object({ title: z.string().min(1).max(500), url: z.string().min(1
 let urls = z.array(z.string().min(1).max(2_048));
 
 export let descriptionSchema = z.object({ description: z.string().min(1) }).strict();
+export let researchBriefSchema = z.object({
+	brief: z.string().min(1).max(2048),
+	sourceIds: z.array(z.string().min(1).max(240)).min(1).max(24),
+}).strict();
 export let publicEvidenceSchema = z.object({
 	findings: z.array(finding).max(10),
 	sources: z.array(source).max(10),
@@ -148,6 +152,11 @@ export function createResearchAgent(harness: HarnessV1) {
 }
 
 export let summaryAgent = createSummaryAgent(harnessFor(harnessSelection()));
+export let researchBriefAgent = structuredAgent(
+	harnessFor(harnessSelection()),
+	researchBriefSchema,
+	false,
+);
 export let researchAgent = createResearchAgent(harnessFor(harnessSelection()));
 export let researchPrivateAgent = structuredAgent(
 	harnessFor(harnessSelection()),

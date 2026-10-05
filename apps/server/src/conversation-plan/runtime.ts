@@ -12,6 +12,8 @@ import { createProcessor, type Dependencies, type Processor } from "./service";
 import { interpretMessage } from "./interpret";
 import { askJev } from "./jev";
 import { interpretResearch } from "./research-interpreter";
+import { createResearchBriefCoordinator } from "./research-brief-coordinator";
+import type { JobService } from "../jobs/service";
 import type { Config } from "../config";
 import type { Server } from "bun";
 import type { SocketData } from "../wire";
@@ -26,12 +28,14 @@ type RuntimeDeps = {
 	unavailable: (id: string) => boolean;
 	interpret?: Dependencies["interpret"];
 	researchInterpret?: Dependencies["researchInterpret"];
+	researchJobs?: () => JobService | undefined;
 	onError?: (error: unknown) => void;
 };
 
 export function createConversationRuntime(deps: RuntimeDeps) {
 	let processors = new WeakMap<Plan.Plan, Processor>();
 	let jobs = new WeakMap<Plan.Plan, ReturnType<typeof createPlannerJobs>>();
+	let briefs = new WeakMap<Plan.Plan, ReturnType<typeof createResearchBriefCoordinator>>();
 	let listeners = new WeakMap<Plan.Plan, () => void>();
 	let contexts = createJobContexts();
 	let mirrors = new WeakMap<Plan.Plan, Promise<void>>();
@@ -47,12 +51,15 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 		let coordinator = jobs.get(opened);
 		coordinator?.stop();
 		jobs.delete(opened);
+		let brief = briefs.get(opened);
+		brief?.stop();
+		briefs.delete(opened);
 		listeners.get(opened)?.();
 		listeners.delete(opened);
 		contexts.clear(opened);
 		let mirroring = mirrors.get(opened);
 		mirrors.delete(opened);
-		let draining = Promise.all([processor?.idle(), coordinator?.idle(), mirroring])
+		let draining = Promise.all([processor?.idle(), coordinator?.idle(), brief?.idle(), mirroring])
 			.then(() => {})
 			.finally(() => {
 				if (stopping.get(opened) === draining) stopping.delete(opened);
@@ -64,6 +71,7 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 	function wake(opened: Plan.Plan): void {
 		let processor = processors.get(opened);
 		if (!processor) return;
+		briefs.get(opened)?.wake();
 		if (!deps.unavailable(opened.id)) jobs.get(opened)?.wake();
 		mirrors.set(opened, wakeCardMirror(opened, processor).catch(report));
 	}
@@ -114,6 +122,20 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 			onError: report,
 		});
 		if (coordinator) jobs.set(opened, coordinator);
+		let researchJobs = researchAllowed ? deps.researchJobs?.() : undefined;
+		let briefCoordinator = researchJobs
+			? createResearchBriefCoordinator({
+				plan: opened,
+				jobs: researchJobs,
+				active,
+				exclusive: action => Plan.exclusive(opened, action),
+				persist: () => Plan.persistExclusive(opened),
+				publish: state =>
+					broadcast(server, room.id, { kind: "conversation-plan:changed", ts: 0, state }),
+				onError: report,
+			})
+			: undefined;
+		if (briefCoordinator) briefs.set(opened, briefCoordinator);
 		processor = createProcessor({
 			plan: opened,
 			exclusive: action => Plan.exclusive(opened, action),
@@ -121,6 +143,7 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 			publish: state =>
 				broadcast(server, room.id, { kind: "conversation-plan:changed", ts: 0, state }),
 			active,
+			researchChanged: () => briefCoordinator?.wake(),
 			researchInterpret: researchAllowed
 				? deps.researchInterpret
 					?? ((input, signal) =>
@@ -157,6 +180,7 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 			),
 		);
 		let recover = () => {
+			briefCoordinator?.wake();
 			processor.wake();
 			mirrors.set(opened, mirrorCard(opened, processor).catch(report));
 		};
