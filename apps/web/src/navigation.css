@@ -430,22 +430,17 @@
 }
 
 .project-sidebar-empty {
-	padding: 4px 8px 8px 32px;
+	padding: 0 8px 4px 32px;
 	font-size: var(--text-sm);
+	line-height: 1.25rem;
 	color: var(--color-text-tertiary);
-}
-
-.project-sidebar-empty-action {
-	margin-top: 4px;
-	color: var(--color-brand);
-	text-decoration: underline;
 }
 
 .project-sidebar-action-pending {
 	opacity: 1;
 }
 
-:is(.project-sidebar-primary-action, .project-sidebar-action, .project-sidebar-empty-action):disabled {
+:is(.project-sidebar-primary-action, .project-sidebar-action):disabled {
 	cursor: default;
 	color: var(--color-text-quaternary);
 }

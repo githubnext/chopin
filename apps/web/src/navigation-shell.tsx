@@ -88,6 +88,9 @@ class LazyDialogBoundary extends Component<{ children: ReactNode }, { failed: bo
 let ProjectSidebar = lazy(() =>
 	import("./project-sidebar").then(module => ({ default: module.ProjectSidebar }))
 );
+let EmptyWorkspace = lazy(() =>
+	import("./empty-workspace").then(module => ({ default: module.EmptyWorkspace }))
+);
 let AddProjectDialog = lazy(() =>
 	import("./add-project-dialog").then(module => ({ default: module.AddProjectDialog }))
 );
@@ -874,11 +877,14 @@ export function NavigationShell(
 				</TerminalAlert>
 			)}
 			{children ?? (
-				<div className="flex h-full items-center justify-center text-sm text-text-tertiary">
-					{navigation?.projects.length === 0
-						? "Add a Project to start your first document."
-						: "Choose or create a document."}
-				</div>
+				<Suspense fallback={null}>
+					<EmptyWorkspace
+						disabled={creationTarget.type === "loading"}
+						hasProjects={navigation?.projects.length !== 0}
+						onAddProject={() => showDialog("add")}
+						onNewDocument={newDocument}
+					/>
+				</Suspense>
 			)}
 		</>
 	);

@@ -85,21 +85,10 @@ function Project(
 	let collapseMotion = motionContract("collapse");
 	let projectContent = (
 		<>
-			{!archiveMode && documents.status === "ready" && documents.channels.length === 0
-				&& !documents.nextCursor && (
-				<div className="project-sidebar-empty">
-					<p>No documents yet.</p>
-					{project.available && canManage && (
-						<button
-							className="project-sidebar-empty-action"
-							disabled={!!phase}
-							onClick={() => onCreateDocument(project)}
-							type="button"
-						>
-							Create document
-						</button>
-					)}
-				</div>
+			{documents.status === "ready" && groups.length === 0 && !documents.nextCursor && (
+				<p className="project-sidebar-empty">
+					{archiveMode ? "No archived documents" : "No documents"}
+				</p>
 			)}
 			{documents.status === "unavailable" && (
 				<p className="project-sidebar-status" role="status">Access unavailable</p>

@@ -65,14 +65,17 @@ for (let action of ["global", "pencil", "empty"] as const) {
 		let add = page.getByRole("dialog", { name: "Add Project", exact: true });
 		await add.getByRole("button", { name: "score octo-org Add", exact: true }).click();
 		let projects = sidebar(page);
-		await expect(projects.getByText("No documents yet.", { exact: true })).toBeVisible();
+		await expect(projects.getByText("No documents", { exact: true })).toBeVisible();
 		let pencil = projects.getByRole("button", { name: "New document in score", exact: true });
 		await expect(pencil).toHaveAttribute("title", "New document in score");
 		let trigger = action === "global"
 			? createButton(page)
 			: action === "pencil"
 			? pencil
-			: projects.getByRole("button", { name: "Create document", exact: true });
+			: page.locator(".navigation-content").getByRole("button", {
+				name: "New document",
+				exact: true,
+			});
 		await trigger.click();
 		await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
 		await expect(page.getByRole("textbox", { name: "editable markdown" })).toHaveAttribute(
@@ -85,7 +88,7 @@ for (let action of ["global", "pencil", "empty"] as const) {
 
 test("first-document creation stays guarded through both POST and opening", async ({ baseURL, page }) => {
 	await start(page, baseURL!);
-	await expect(sidebar(page).getByText("No documents yet.")).toBeVisible();
+	await expect(sidebar(page).getByText("No documents", { exact: true })).toBeVisible();
 	let posted = Promise.withResolvers<void>();
 	let releasePost = Promise.withResolvers<void>();
 	let opening = Promise.withResolvers<void>();
@@ -113,7 +116,9 @@ test("first-document creation stays guarded through both POST and opening", asyn
 	await posted.promise;
 	await expect(global).toBeDisabled();
 	await expect(pencil).toBeDisabled();
-	await expect(sidebar(page).getByRole("button", { name: "Create document", exact: true }))
+	await expect(
+		page.locator(".navigation-content").getByRole("button", { name: "New document", exact: true }),
+	)
 		.toBeDisabled();
 	await expect(sidebar(page).getByRole("status").filter({ hasText: "Creating document…" }))
 		.toBeVisible();
@@ -304,7 +309,7 @@ test("global creation without projects explains the next step", async ({ baseURL
 
 test("a rejected creation refreshes project permissions and offers access guidance", async ({ baseURL, page }) => {
 	await start(page, baseURL!);
-	await expect(sidebar(page).getByText("No documents yet.")).toBeVisible();
+	await expect(sidebar(page).getByText("No documents", { exact: true })).toBeVisible();
 	let posts = creationRequests(page);
 	await page.route("**/api/navigation", async route => {
 		if (route.request().method() !== "GET") return route.fallback();

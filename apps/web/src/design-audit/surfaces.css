@@ -373,3 +373,10 @@
 		animation: none;
 	}
 }
+
+.design-audit-empty-grid .design-audit-empty-sidebar-row {
+	align-self: stretch;
+	padding-inline-start: 2rem;
+	text-align: start;
+	color: var(--color-text-tertiary);
+}
