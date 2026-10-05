@@ -171,7 +171,7 @@ test("a closed desktop Chat tab keeps unread activity visible", async ({ join, p
 	).toBe(starts);
 	await toggle.click();
 	await expect(page.getByRole("heading", { name: "Chat" })).toBeFocused();
-	await expect(page.getByRole("button", { name: "Hide chat pane" })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Close sidebar" })).toBeVisible();
 });
 
 test("completed tool names wrap in compact Chat", async ({ join, seed }) => {

@@ -420,7 +420,7 @@ body {
 	}
 }
 
-.chat-toggle-icon-close {
+.chat-toggle-icon-sidebar {
 	opacity: 0;
 }
 
@@ -428,8 +428,25 @@ body {
 	opacity: 0;
 }
 
-.chat-toggle:is(:hover, :focus-visible) .chat-toggle-icon-close {
-	opacity: 0.5;
+.chat-toggle:is(:hover, :focus-visible) .chat-toggle-icon-sidebar {
+	opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+	.chat-header-control {
+		opacity: 0;
+		transition: opacity var(--duration-fast) var(--ease-out);
+	}
+
+	.chat-header:is(:hover, :focus-within) .chat-header-control {
+		opacity: 1;
+	}
+}
+
+@media (any-pointer: coarse) {
+	.chat-header-control {
+		opacity: 1;
+	}
 }
 
 :root[data-motion-input="pointer"] .chat-toggle-icon {
@@ -1038,6 +1055,10 @@ button.question-add:disabled {
 	}
 
 	:root[data-motion-input="pointer"] .chat-toggle-icon {
+		transition: none;
+	}
+
+	.chat-header-control {
 		transition: none;
 	}
 

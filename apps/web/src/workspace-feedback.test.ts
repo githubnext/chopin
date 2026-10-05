@@ -19,21 +19,40 @@ test("chat state swaps use purposeful icon feedback", () => {
 	expect(markup).toContain("size-[14px]");
 });
 
-test("the open chat hover swap crossfades without display changes", () => {
+test("the closed chat opener swaps its glyph without display changes", () => {
 	let markup = renderToStaticMarkup(
 		createElement(ChatToggle, {
 			activity: { busy: false, unread: 0 },
 			controls: "chat",
 			onToggle: () => {},
-			open: true,
+			open: false,
 			swapOnHover: true,
 		}),
 	);
 
 	expect(markup.match(/class="chat-toggle-icon/g)).toHaveLength(2);
 	expect(markup.match(/size-\[14px\]/g)).toHaveLength(3);
+	expect(markup).toContain('aria-label="Show chat pane"');
+	expect(markup).toContain("chat-toggle-icon-sidebar");
+	expect(markup).toContain("rotate-180");
 	expect(markup).not.toContain("group-hover:hidden");
 	expect(markup).not.toContain("group-hover:block");
+});
+
+test("the open chat control has a distinct close action", () => {
+	let markup = renderToStaticMarkup(
+		createElement(ChatToggle, {
+			activity: { busy: false, unread: 0 },
+			controls: "chat",
+			onToggle: () => {},
+			open: true,
+		}),
+	);
+
+	expect(markup).toContain('aria-label="Close sidebar"');
+	expect(markup).toContain('data-tooltip="Close sidebar"');
+	expect(markup).toContain('data-tooltip-verbatim=""');
+	expect(markup).toContain("panel-close.svg");
 });
 
 test("live busy feedback stays immediate", () => {
