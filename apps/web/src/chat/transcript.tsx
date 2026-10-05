@@ -292,7 +292,7 @@ function MessageGroup(
 	} & PlanMarkers,
 ) {
 	let first = item.messages[0]!;
-	let name = item.author.kind === "agent" ? "Planner" : capitalize(item.author.handle);
+	let name = item.author.kind === "agent" ? "Chopin" : capitalize(item.author.handle);
 
 	return (
 		<div
