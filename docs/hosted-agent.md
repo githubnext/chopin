@@ -166,6 +166,12 @@ instructions state which case applies: a verified checkout, or an empty
 directory with no repository files, in which case it reads the repository through
 Chopin's repository tools.
 
+The Planner still does not implement the plan. When a member asks to implement it
+now, its instructions note that its `intercom` tool can reach other sessions on
+the same machine, such as one working in a checkout of the document's
+repository, and that it can pass the request to one of them and tell the member
+where the work continues. Chopin does not track or verify that handoff.
+
 Chopin implements Atomic's `HostInput`, bound through
 `extensionBindings.humanInput`; it does not intercept tools. `ask_user_question`,
 extension dialogs, and workflow-stage input become ordinary shared Decisions:
