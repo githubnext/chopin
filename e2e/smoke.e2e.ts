@@ -573,7 +573,7 @@ test(
 		let disclosure = work.getByRole("button", { name: /Gathering context/ });
 		await expect(disclosure).toBeVisible();
 		await expect(disclosure).toHaveAttribute("aria-expanded", "false");
-		await expect(live).toHaveText("Chopin is inspecting the document.");
+		await expect(live).toHaveText("Chopin is gathering context.");
 		await expect(live).toHaveAttribute("data-live-node", "retained");
 		let controlled = await disclosure.getAttribute("aria-controls");
 		await expect(chat.locator(`[id="${controlled}"]`)).toHaveCount(1);
@@ -604,7 +604,7 @@ test(
 
 		let edit = planner.tool("edit_plan", '{ "block": "persistence" }');
 		await expect(work.getByText("Making changes")).toBeVisible();
-		await expect(live).toHaveText("Chopin is editing the document.");
+		await expect(live).toHaveText("Chopin is making changes.");
 		await expect(live).toHaveAttribute("data-live-node", "retained");
 		await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(1);
 		planner.finishTool(edit, "done", "Document updated.");
