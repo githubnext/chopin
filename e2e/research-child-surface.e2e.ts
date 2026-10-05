@@ -272,7 +272,7 @@ test("a child isolates chat and decisions across every parent-owned close path",
 		.evaluate(button => (button as HTMLButtonElement).click());
 	let commentDraft = page.getByRole("dialog", { name: "New comment" });
 	await expect(commentDraft.getByPlaceholder("Comment on this passage…")).toBeFocused();
-	await commentDraft.getByRole("button", { name: "Cancel" }).click();
+	await commentDraft.getByRole("button", { name: "Close comment" }).click();
 	await expect(commentDraft).toHaveCount(0);
 	await surface.getByRole("button", { name: "Decisions", exact: true }).click();
 	await expect(surface.locator('[data-document-view="decisions"]')).toBeVisible();
@@ -476,7 +476,7 @@ test("an in-app child opens and submits its own comment composer", async ({ base
 
 	let draft = surface.getByRole("dialog", { name: "New comment" });
 	await draft.getByPlaceholder("Comment on this passage…").fill("Keep this child passage.");
-	await draft.getByRole("button", { name: "Comment", exact: true }).click();
+	await draft.getByRole("button", { name: "Post comment", exact: true }).click();
 	await expect(surface.getByRole("button", { name: /Comment on “This ordinary child/ }))
 		.toBeVisible();
 });
